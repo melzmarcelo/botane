@@ -592,7 +592,7 @@ correção, e o confronto entre CMV real e teórico com a variância nomeada.
 |---|---|---|
 | 0 | Mapeamento | este documento + página de apresentação ✔ |
 | 1 | Fundação ✔ | *concluída em 18/08/2026* — banco, login, papéis e permissões, empresa, lojas, auditoria |
-| 2 | Cadastros | produtos, categorias, setores, locais, fornecedores, UM |
+| 2 | Cadastros ✔ | *concluída em 19/08/2026* — produtos com tipo/conversão/lote, fornecedores, categorias em árvore, setores, locais e UM |
 | 3 | Fichas técnicas | ficha com sub-ficha e custo por porção correto |
 | 4 | Estoque | razão + custo médio; entrada manual, saída, perda, inventário |
 | 5 | Omie | importação de NF com de-para e rateio (simulado → real) |

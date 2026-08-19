@@ -40,6 +40,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | O quê | Comando |
 |---|---|
 | API (login, permissão, refresh, auditoria) | `cd api && python tests/smoke_fundacao.py` |
+| API — cadastros (produtos, fornecedores, árvore de categorias) | `cd api && python tests/smoke_cadastros.py` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -48,4 +49,6 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **Etapa 1 — fundação:** concluída em 18/08/2026 — banco, migrações, login com JWT +
   refresh rotativo, papéis e permissões por chave, empresa, lojas e parâmetros, auditoria,
   e as telas correspondentes
-- **Etapa 2 — cadastros:** a próxima
+- **Etapa 2 — cadastros:** concluída em 19/08/2026 — produtos, fornecedores, categorias em
+  árvore, setores, locais de estoque e unidades de medida
+- **Etapa 3 — fichas técnicas:** a próxima

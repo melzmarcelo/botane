@@ -16,9 +16,9 @@ para arquivo nenhum — gravar direto aqui.
 
 ## Estado
 
-- Fase 0 (mapeamento) e **etapa 1 (fundação) concluídas em 18/08/2026**.
+- Fase 0 (mapeamento), **etapa 1 (fundação)** e **etapa 2 (cadastros)** concluídas, 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Próxima: etapa 2 — cadastros** (produtos, categorias, setores, locais, UM, fornecedores).
+- **Próxima: etapa 3 — fichas técnicas** (sub-ficha recursiva, fator de correção, custo por porção).
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -29,8 +29,14 @@ para arquivo nenhum — gravar direto aqui.
 - `web/` Next.js 16 (App Router): `lib/api.ts` (cliente único, renova o token sozinho),
   `lib/sessao.tsx` (contexto + `pode()`), telas de início, empresa, lojas, usuários, papéis,
   auditoria e troca de senha.
-- Testes: `api/tests/smoke_fundacao.py` (35 checagens) e `web/scripts/verificar.mjs`
-  (15 checagens no Chrome, com fotos em `web/scripts/_fotos`).
+- `api/db_scripts/`: 004 cadastros (setores, locais, categorias, UM, fornecedores, produtos,
+  preços e produto×fornecedor), 005 semente dos cadastros.
+- Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
+  pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
+- Telas: `/produtos` (lista + `[id]` para novo e edição), `/fornecedores`, `/cadastros`.
+- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39) e `web/scripts/verificar.mjs`
+  (30 no Chrome, com fotos em `web/scripts/_fotos`). Todos idempotentes — reaproveitam o
+  que a rodada anterior desativou.
 
 ### Armadilhas já pagas
 - **`allowedDevOrigins` no `next.config.mjs`**: sem isso o dev server do Next devolve **403
@@ -38,6 +44,10 @@ para arquivo nenhum — gravar direto aqui.
   A tela renderiza, nunca hidrata, e o formulário vira submit nativo — parece bug de login.
 - **`EmailStr` recusa domínio `.local`** (reservado). Por isso o admin é `@botane.com.br`.
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).
+- **`localStorage` é do domínio, não da aba**: no teste de navegador, logar como outro
+  usuário em qualquer página troca a sessão de todas — voltar como admin antes de seguir.
+- Produto, fornecedor e categoria **não são apagados** quando já têm uso: viram inativos.
+  Os testes contam com isso (reaproveitam em vez de recriar).
 
 ## Stack e portas
 
