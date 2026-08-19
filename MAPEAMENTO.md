@@ -626,7 +626,8 @@ correção, e o confronto entre CMV real e teórico com a variância nomeada.
 Respondido em 18/08/2026: uma loja (modelo já é multi-loja), PDV Legal, lote/validade
 opcional, e os papéis reais da casa. Segue pendente:
 
-- [ ] **Credenciais do Omie** — `app_key` / `app_secret` (cliente vai verificar)
+- [ ] **Credenciais do Omie** — `app_key` / `app_secret`. O cliente gera sozinho com login de
+      administrador; caminho e perguntas em [`docs/integracoes-o-que-pedir.md`](docs/integracoes-o-que-pedir.md)
 - [ ] **Credenciais do PDV Legal / Tablet Cloud** — `username`, `password`, `client_id`,
       `client_secret` **e** o acesso à documentação dos endpoints (pedir ao suporte deles)
 - [ ] **Dados da empresa** para o cadastro: CNPJ, IE, regime tributário, endereço, contador, logo
