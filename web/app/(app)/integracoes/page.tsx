@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import EmailSmtp from "./email-smtp";
 
 type Config = {
   configurada: boolean;
@@ -143,8 +144,8 @@ export default function PaginaIntegracoes() {
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Integrações</h1>
         <p className="mt-1 max-w-[66ch] text-suave">
-          O Omie continua sendo o sistema fiscal. O Botané lê de lá as notas de entrada e as
-          transforma em estoque avaliado — que é o que o Omie não faz por ficha técnica.
+          O que o Botané troca com o mundo lá fora: as notas do Omie e o envio de e-mail. Nada
+          aqui é pré-requisito — o sistema opera inteiro sem nenhum dos dois.
         </p>
       </header>
 
@@ -352,6 +353,8 @@ export default function PaginaIntegracoes() {
           </div>
         )}
       </Cartao>
+
+      <EmailSmtp />
 
       <Cartao titulo="Últimas chamadas" descricao="O que foi pedido ao Omie, e o que voltou.">
         {!cfg.historico.length ? (

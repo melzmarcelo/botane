@@ -32,6 +32,15 @@ CORS_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3100").split(",") if o.strip()
 ]
 
+# --- endereço do sistema ---
+# Entra no link do e-mail de recuperação de senha. O primeiro CORS_ORIGINS é o
+# padrão razoável: é justamente de onde o navegador do usuário fala com a API.
+WEB_URL = os.getenv("WEB_URL", (CORS_ORIGINS[0] if CORS_ORIGINS else "http://localhost:3100"))
+
+# Quanto tempo o link de recuperação vale, e quantos pedidos cabem por hora.
+SENHA_TOKEN_MINUTOS = int(os.getenv("SENHA_TOKEN_MINUTOS", "30"))
+SENHA_PEDIDOS_HORA = int(os.getenv("SENHA_PEDIDOS_HORA", "3"))
+
 # --- primeiro acesso ---
 # Só é usado quando a tabela de usuários está vazia.
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@botane.com.br")

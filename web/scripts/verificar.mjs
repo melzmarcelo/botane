@@ -622,6 +622,109 @@ try {
   }
   await foto(p, "31-cmv-exportar");
 
+  console.log("9a. esqueci minha senha, do pedido até entrar de novo");
+  const marcaSenha = String(Date.now()).slice(-6);
+  const emailSenha = `tela.senha.${marcaSenha}@botane.com.br`;
+  const { dados: papeisSenha } = await api("GET", "/papeis", null, token);
+  const { dados: criado } = await api("POST", "/usuarios", {
+    nome: `Tela Senha ${marcaSenha}`, email: emailSenha, senha: "provisoria123",
+    papeis: [{ id_papel: papeisSenha.find((x) => x.nome === "Cozinha").id }],
+  }, token);
+
+  // O pedido público: a tela nunca conta se o e-mail existe.
+  await p.evaluate(() => localStorage.clear());
+  await irPara(p, `${WEB}/login`);
+  const temLink = await p.evaluate(() =>
+    [...document.querySelectorAll("a")].some((a) => /esqueci minha senha/i.test(a.textContent)));
+  checar("a entrada oferece 'esqueci minha senha'", temLink);
+
+  await irPara(p, `${WEB}/esqueci-senha`);
+  await p.type('input[type="email"]', `nao.existe.${marcaSenha}@botane.com.br`);
+  await p.click('button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoInventado = await p.evaluate(() => document.body.innerText);
+  checar("e-mail que não existe recebe a resposta neutra",
+    /se este e-mail estiver cadastrado/i.test(textoInventado), textoInventado.slice(0, 140));
+  checar("e a tela NÃO diz que o e-mail não existe",
+    !/não encontrad|não existe|não cadastrado/i.test(textoInventado), textoInventado.slice(0, 140));
+  await foto(p, "32-esqueci-senha");
+
+  await irPara(p, `${WEB}/esqueci-senha`);
+  await p.type('input[type="email"]', emailSenha);
+  await p.click('button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoReal = await p.evaluate(() => document.body.innerText);
+  checar("e-mail cadastrado recebe exatamente a mesma resposta",
+    /se este e-mail estiver cadastrado/i.test(textoReal));
+
+  // Link vencido/inventado: a tela recusa antes de pedir a senha.
+  await irPara(p, `${WEB}/redefinir-senha?token=isto-nao-vale-nada`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoRuim = await p.evaluate(() => document.body.innerText);
+  checar("link inválido é recusado antes do formulário",
+    /não vale mais/i.test(textoRuim), textoRuim.slice(0, 140));
+  checar("e o formulário de senha nem aparece",
+    (await p.$$('input[type="password"]')).length === 0);
+
+  // O administrador gera o link pela tela de Usuários.
+  await entrar(p, ADMIN);
+  await irPara(p, `${WEB}/usuarios`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const clicou = await p.evaluate((nome) => {
+    const linha = [...document.querySelectorAll("tr")].find((t) => t.innerText.includes(nome));
+    const b = linha && [...linha.querySelectorAll("button")]
+      .find((x) => /esqueceu a senha/i.test(x.textContent));
+    if (!b) return false;
+    b.click();
+    return true;
+  }, `Tela Senha ${marcaSenha}`);
+  checar("a tela de usuários oferece gerar o link", clicou);
+  await new Promise((r) => setTimeout(r, 1500));
+  const textoAdmin = await p.evaluate(() => document.body.innerText);
+  checar("o link aparece para o administrador copiar",
+    /redefinir-senha\?token=/.test(textoAdmin), textoAdmin.slice(0, 200));
+  await foto(p, "33-link-admin");
+
+  const linkGerado = (textoAdmin.match(/https?:\/\/\S*redefinir-senha\?token=\S+/) ?? [])[0];
+  checar("e o link está completo", !!linkGerado, linkGerado);
+
+  // A pessoa abre o link e escolhe a senha nova.
+  await p.evaluate(() => localStorage.clear());
+  await irPara(p, linkGerado);
+  await new Promise((r) => setTimeout(r, 1400));
+  const textoForm = await p.evaluate(() => document.body.innerText);
+  checar("o link abre a tela com o nome de quem é",
+    /Olá, Tela/i.test(textoForm), textoForm.slice(0, 160));
+  const campos = await p.$$('input[type="password"]');
+  checar("pede a senha duas vezes", campos.length === 2, campos.length);
+  await campos[0].type("senhanova12345");
+  await campos[1].type("senhanova-diferente");
+  await p.click('button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 900));
+  checar("senhas diferentes são recusadas na tela",
+    /precisam ser iguais/i.test(await p.evaluate(() => document.body.innerText)));
+
+  const campos2 = await p.$$('input[type="password"]');
+  await campos2[1].click({ clickCount: 3 });
+  await p.keyboard.down("Control");
+  await p.keyboard.press("KeyA");
+  await p.keyboard.up("Control");
+  await campos2[1].type("senhanova12345");
+  await foto(p, "34-redefinir-senha");
+  await p.click('button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 2000));
+  const textoPronto = await p.evaluate(() => document.body.innerText);
+  checar("a senha é trocada pela tela", /senha alterada/i.test(textoPronto),
+    textoPronto.slice(0, 160));
+  checar("e a tela avisa que as sessões caíram",
+    /sessões abertas foram encerradas/i.test(textoPronto), textoPronto.slice(0, 200));
+
+  await entrar(p, { email: emailSenha, senha: "senhanova12345" });
+  checar("a pessoa entra com a senha nova", !p.url().includes("/login"), p.url());
+
+  await api("DELETE", `/usuarios/${criado.id}`, null, token);
+  await entrar(p, ADMIN);
+
   console.log("9b. instalável no celular (PWA)");
   await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1500));

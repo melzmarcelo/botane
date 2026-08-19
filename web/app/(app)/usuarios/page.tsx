@@ -28,6 +28,7 @@ export default function PaginaUsuarios() {
   const [editando, setEditando] = useState<number | null>(null);
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
+  const [link, setLink] = useState<{ nome: string; url: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   async function carregar() {
@@ -120,6 +121,29 @@ export default function PaginaUsuarios() {
     await carregar();
   }
 
+  /**
+   * Manda o link de recuperação — e mostra o link.
+   *
+   * Enquanto não houver SMTP configurado, é assim que o dono resolve o
+   * esquecimento da equipe: copia o link e passa pela pessoa. Continua sendo
+   * melhor que escolher uma senha pela outra pessoa e mandá-la por mensagem,
+   * porque o link vale meia hora e quem escolhe a senha é o dono dela.
+   */
+  async function linkDeSenha(u: Usuario) {
+    setErro("");
+    setOk("");
+    setLink(null);
+    try {
+      const r = await api.post<{ link: string; modo: string; message: string }>(
+        `/usuarios/${u.id}/recuperar-senha`,
+      );
+      setOk(r.message);
+      if (r.modo !== "real") setLink({ nome: u.nome, url: r.link });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível gerar o link");
+    }
+  }
+
   if (erro && !usuarios) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!usuarios) return <Carregando />;
 
@@ -141,6 +165,28 @@ export default function PaginaUsuarios() {
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {ok && <Aviso tipo="ok">{ok}</Aviso>}
+
+      {link && (
+        <Cartao
+          titulo={`Link para ${link.nome}`}
+          descricao="Vale por 30 minutos e só pode ser usado uma vez."
+          acao={
+            <div className="flex items-center gap-2">
+              <button
+                className="btn btn-secundario"
+                onClick={() => void navigator.clipboard.writeText(link.url)}
+              >
+                Copiar
+              </button>
+              <button className="rotulo hover:text-erro" onClick={() => setLink(null)}>
+                fechar
+              </button>
+            </div>
+          }
+        >
+          <p className="mono break-all text-[13px]">{link.url}</p>
+        </Cartao>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Cartao titulo="Quem tem acesso">
@@ -171,6 +217,14 @@ export default function PaginaUsuarios() {
                             onClick={() => void desbloquear(u)}
                           >
                             bloqueado · desbloquear
+                          </button>
+                        )}
+                        {u.ativo && (
+                          <button
+                            className="rotulo mt-1 block hover:text-erva"
+                            onClick={() => void linkDeSenha(u)}
+                          >
+                            esqueceu a senha?
                           </button>
                         )}
                       </td>

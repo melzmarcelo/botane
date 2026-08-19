@@ -49,6 +49,15 @@ class TrocarSenhaRequest(BaseModel):
     senha_nova: str = Field(min_length=8)
 
 
+class EsqueciSenhaRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=160)
+
+
+class RedefinirSenhaRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    senha: str = Field(min_length=8)
+
+
 # ---------------------------------------------------------------- usuários
 
 

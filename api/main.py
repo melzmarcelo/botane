@@ -19,6 +19,7 @@ from routers import (
     autenticacao,
     cadastros,
     cmv,
+    email_config,
     empresa,
     estoque,
     exportacoes,
@@ -99,6 +100,7 @@ app.include_router(autenticacao.router)
 app.include_router(usuarios.router)
 app.include_router(papeis.router)
 app.include_router(empresa.router)
+app.include_router(email_config.router)
 app.include_router(historico.router)
 app.include_router(cadastros.router)
 app.include_router(fornecedores.router)

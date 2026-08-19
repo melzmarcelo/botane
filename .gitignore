@@ -18,6 +18,8 @@ _p*.png
 
 # imagens enviadas em ambiente local
 api/uploads/
+# tambem guarda os e-mails gravados em disco quando nao ha SMTP configurado
+api/arquivos/
 
 # saída dos testes de tela
 web/scripts/_fotos/

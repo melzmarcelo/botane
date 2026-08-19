@@ -1,0 +1,53 @@
+0. um usuário só deste teste
+  ok   usuário criado
+1. a tela pública não conta quem existe
+  ok   e-mail cadastrado responde 200
+  ok   e-mail inventado responde 200 igual
+  ok   e a frase é exatamente a mesma
+  ok   texto que nem parece e-mail também não vaza nada
+2. o administrador gera o link para entregar na mão
+  ok   o link é gerado
+  ok   sem SMTP, avisa que está em modo simulado
+  ok   o link aponta para a tela de redefinir
+3. a tela confere o link antes de pedir a senha nova
+  ok   link válido é aceito
+  ok   e devolve só o primeiro nome
+  ok   link inventado é recusado
+  ok   com uma frase que dá para mostrar
+4. pedir de novo mata o link anterior
+  ok   o segundo link é diferente do primeiro
+  ok   o link antigo parou de valer na hora
+  ok   o novo vale
+5. redefinir troca a senha e derruba as sessões
+  ok   a senha antiga ainda entra antes da troca
+  ok   a senha é redefinida
+  ok   e a resposta avisa que as sessões caíram
+  ok   a senha nova entra
+  ok   a senha antiga não entra mais
+  ok   a sessão aberta antes da troca foi revogada
+6. o link vale uma vez só
+  ok   usar o mesmo link de novo é recusado
+  ok   e a senha não mudou na segunda tentativa
+7. senha fraca é recusada
+  ok   senha curta é recusada (422)
+  ok   e o link continua valendo depois da recusa
+8. freio de repetição
+  ok   o excesso de pedidos é barrado
+  ok   mas a resposta pública continua a mesma
+9. a configuração de e-mail não devolve a senha
+  ok   a tela de configuração abre
+  ok   salva a configuração
+  FALHA o servidor volta em claro {'configurada': False, 'modo': 'simulado', 'ativa': False, 'servidor': None, 'porta': 587, 'seguranca': 'starttls', 'usuario': None, 'remetente_nome': None, 'remetente_email': None, 'senha': '••••••••••8400', 'ultimo_status': 'OK', 'ultima_mensagem': 'Sem SMTP configurado: a mensagem foi gravada em D:\\dsv\\botane\\api\\arquivos\\emails\\20260819-141102-admin_botane.com.br.eml', 'pasta_simulado': 'D:\\dsv\\botane\\api\\arquivos\\emails'}
+  ok   a senha volta mascarada
+  ok   a senha NÃO volta em claro
+  ok   modo real sem servidor é recusado
+  ok   o teste de envio funciona em modo simulado
+  ok   e diz onde a mensagem foi gravada
+10. quem não é administrador não mexe nisso
+  ok   cozinha não lê a configuração de e-mail
+  ok   cozinha não gera link de recuperação de ninguém
+11. limpeza
+  ok   limpeza concluída
+
+37 passaram, 1 falharam
+  - o servidor volta em claro

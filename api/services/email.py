@@ -1,0 +1,129 @@
+"""Envio de e-mail — e o modo simulado que faz o sistema funcionar sem SMTP.
+
+A recuperação de senha não pode depender de o cliente ter contratado um
+servidor de e-mail. Enquanto não houver, o sistema **grava a mensagem em
+arquivo** (`api/arquivos/emails/*.eml`, que qualquer cliente de e-mail abre) e
+segue em frente. Configurar o SMTP na tela de Integrações liga o envio real
+sem mudar mais nada.
+
+A configuração mora em `integracoes` (serviço `SMTP`): o que não é segredo vai
+em `config` (servidor, porta, remetente), e a senha vai cifrada em
+`credenciais`, do mesmo jeito que a chave do Omie — e, como ela, **nunca volta
+pela API**.
+"""
+
+import os
+import re
+import smtplib
+import ssl
+from datetime import datetime
+from email.message import EmailMessage
+from email.utils import formataddr, make_msgid
+
+from config import BASE_DIR
+from services import segredos
+
+SERVICO = "SMTP"
+PASTA = os.path.join(BASE_DIR, "arquivos", "emails")
+
+
+class ErroEmail(Exception):
+    def __init__(self, mensagem: str):
+        self.mensagem = mensagem
+        super().__init__(mensagem)
+
+
+def configuracao(cur) -> dict:
+    """Lê a configuração de SMTP. Devolve sempre um dicionário utilizável."""
+    cur.execute(
+        """SELECT config, credenciais, ativa, modo FROM integracoes
+            WHERE servico = %s AND id_unidade IS NULL""",
+        (SERVICO,),
+    )
+    linha = cur.fetchone()
+    if not linha:
+        return {"modo": "simulado", "ativa": False}
+    cfg = dict(linha["config"] or {})
+    cfg["ativa"] = linha["ativa"]
+    # Sem servidor não há como enviar, por mais que alguém marque "real".
+    cfg["modo"] = linha["modo"] if (linha["modo"] == "real" and cfg.get("servidor")) else "simulado"
+    cfg["senha"] = segredos.decifrar(linha["credenciais"]).get("senha")
+    return cfg
+
+
+def _remetente(cfg: dict) -> str:
+    email = cfg.get("remetente_email") or cfg.get("usuario") or "botane@localhost"
+    return formataddr((cfg.get("remetente_nome") or "Botané Deli e Café", email))
+
+
+def _montar(cfg: dict, para: str, assunto: str, texto: str, html: str | None) -> EmailMessage:
+    msg = EmailMessage()
+    msg["Subject"] = assunto
+    msg["From"] = _remetente(cfg)
+    msg["To"] = para
+    msg["Date"] = datetime.now().astimezone().strftime("%a, %d %b %Y %H:%M:%S %z")
+    msg["Message-ID"] = make_msgid(domain="botane.local")
+    # Sempre as duas versões: o texto puro é o que sobra em cliente antigo, em
+    # leitor de tela e no filtro de spam que desconfia de e-mail só com HTML.
+    msg.set_content(texto)
+    if html:
+        msg.add_alternative(html, subtype="html")
+    return msg
+
+
+def _gravar(msg: EmailMessage, para: str) -> str:
+    os.makedirs(PASTA, exist_ok=True)
+    seguro = re.sub(r"[^a-z0-9._-]", "_", para.lower())
+    nome = f"{datetime.now():%Y%m%d-%H%M%S}-{seguro}.eml"
+    caminho = os.path.join(PASTA, nome)
+    with open(caminho, "wb") as f:
+        f.write(bytes(msg))
+    return caminho
+
+
+def enviar(cur, para: str, assunto: str, texto: str, html: str | None = None) -> dict:
+    """Envia (ou grava, no modo simulado). Devolve o que aconteceu.
+
+    O retorno **nunca** vai para uma resposta pública: o caminho do arquivo
+    diria a quem pediu que aquele e-mail existe no sistema.
+    """
+    cfg = configuracao(cur)
+    msg = _montar(cfg, para, assunto, texto, html)
+
+    if cfg["modo"] != "real":
+        return {"modo": "simulado", "arquivo": _gravar(msg, para)}
+
+    porta = int(cfg.get("porta") or 587)
+    seguranca = (cfg.get("seguranca") or "starttls").lower()
+    contexto = ssl.create_default_context()
+    try:
+        if seguranca == "ssl":
+            with smtplib.SMTP_SSL(cfg["servidor"], porta, context=contexto, timeout=20) as s:
+                if cfg.get("usuario"):
+                    s.login(cfg["usuario"], cfg.get("senha") or "")
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(cfg["servidor"], porta, timeout=20) as s:
+                if seguranca == "starttls":
+                    s.starttls(context=contexto)
+                if cfg.get("usuario"):
+                    s.login(cfg["usuario"], cfg.get("senha") or "")
+                s.send_message(msg)
+    except (smtplib.SMTPException, OSError) as e:
+        raise ErroEmail(f"Não foi possível enviar o e-mail: {e}") from e
+    return {"modo": "real", "servidor": cfg["servidor"]}
+
+
+def testar(cur, para: str) -> dict:
+    """Manda um e-mail de teste — o botão da tela de Integrações."""
+    r = enviar(
+        cur,
+        para,
+        "Botané — teste de envio",
+        "Se você está lendo isto, o envio de e-mail do Botané está funcionando.\n",
+        "<p>Se você está lendo isto, o envio de e-mail do Botané está funcionando.</p>",
+    )
+    if r["modo"] == "simulado":
+        return {"ok": True, "modo": "simulado",
+                "detalhe": f"Sem SMTP configurado: a mensagem foi gravada em {r['arquivo']}"}
+    return {"ok": True, "modo": "real", "detalhe": f"Enviado por {r['servidor']} para {para}"}

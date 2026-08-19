@@ -8,9 +8,11 @@ import auditoria
 from config import BLOQUEIO_MINUTOS, MAX_TENTATIVAS_LOGIN
 from database import get_cursor
 from models.acesso import (
+    EsqueciSenhaRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
+    RedefinirSenhaRequest,
     RefreshRequest,
     TrocarSenhaRequest,
 )
@@ -23,6 +25,7 @@ from seguranca import (
     hash_senha,
     verificar_senha,
 )
+from services import senhas
 
 router = APIRouter(prefix="/auth", tags=["autenticação"])
 
@@ -212,3 +215,56 @@ def trocar_senha(
             cur, ctx.id_usuario, "usuario", ctx.id_usuario, "trocar_senha", ip=_ip(request)
         )
     return {"message": "Senha alterada. Entre de novo."}
+
+
+# ---------------------------------------------------------------- senha esquecida
+
+# A mesma frase para e-mail cadastrado e para e-mail inventado. Responder
+# "não encontramos esse e-mail" transformaria a tela pública num verificador de
+# quem trabalha na casa — e a lista de quem trabalha aqui não é pública.
+RESPOSTA_UNICA = (
+    "Se este e-mail estiver cadastrado, o link para redefinir a senha chega em instantes. "
+    "Confira também a caixa de spam."
+)
+
+
+@router.post("/esqueci-senha")
+def esqueci_senha(body: EsqueciSenhaRequest, request: Request) -> dict:
+    with get_cursor() as cur:
+        r = senhas.pedir(cur, body.email, _ip(request))
+        # A auditoria registra o que de fato aconteceu — é onde o dono descobre
+        # que alguém tentou recuperar a senha de um endereço que não existe.
+        auditoria.registrar(
+            cur, r.get("id_usuario"), "senha", body.email.strip().lower(), "recuperacao_pedida",
+            depois={"enviado": r["enviado"], "motivo": r.get("motivo"), "modo": r.get("modo")},
+            ip=_ip(request),
+        )
+    return {"message": RESPOSTA_UNICA}
+
+
+@router.get("/redefinir-senha/{token}")
+def conferir_token(token: str) -> dict:
+    """A tela pergunta antes de mostrar o formulário: o link ainda vale?
+
+    Sem isto, a pessoa digita a senha nova duas vezes para só então descobrir
+    que o link tinha vencido.
+    """
+    with get_cursor() as cur:
+        t = senhas.usuario_do_token(cur, token)
+    # Só o primeiro nome: o suficiente para a pessoa reconhecer a conta, sem
+    # entregar o e-mail de ninguém a quem achou o link.
+    return {"valido": True, "nome": (t["nome"] or "").split(" ")[0]}
+
+
+@router.post("/redefinir-senha")
+def redefinir_senha(body: RedefinirSenhaRequest, request: Request) -> dict:
+    with get_cursor() as cur:
+        r = senhas.redefinir(cur, body.token, body.senha)
+        auditoria.registrar(cur, r["id_usuario"], "senha", r["id_usuario"], "redefinida",
+                            ip=_ip(request))
+    return {
+        "message": "Senha alterada. Entre com a senha nova.",
+        # Quem redefine a senha porque desconfia de invasão precisa saber que as
+        # outras sessões caíram junto.
+        "detalhe": "Por segurança, todas as sessões abertas foram encerradas.",
+    }

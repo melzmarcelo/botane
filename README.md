@@ -47,6 +47,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |
+| API — recuperação de senha (token, sessões, SMTP) | `cd api && python tests/smoke_senha.py` |
 | Regras de cache do service worker (sem navegador) | `cd web && node scripts/testar-sw.mjs` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
@@ -73,4 +74,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **PWA:** concluída em 19/08/2026 — instala na tela inicial do celular (ícone próprio,
   tela cheia, atalhos para inventário e alertas) e avisa quando fica sem sinal. Sem loja de
   aplicativos
+- **Recuperação de senha:** concluída em 19/08/2026 — "esqueci minha senha" por e-mail, com
+  link de 30 minutos e uso único; sem SMTP configurado o administrador gera o link na tela de
+  Usuários
 - **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.

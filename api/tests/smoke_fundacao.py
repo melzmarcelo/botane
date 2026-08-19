@@ -142,8 +142,19 @@ checar("auditoria responde", st == 200, log)
 acoes = {(l["entidade"], l["acao"]) for l in log} if st == 200 else set()
 checar("registrou o login", ("sessao", "login") in acoes, acoes)
 checar("registrou a alteração da empresa", ("empresa", "atualizar") in acoes, acoes)
-checar("não vaza senha no log",
-       all("senha" not in json.dumps(l.get("depois") or {}) for l in log))
+# A regra é a mesma que `auditoria._limpar` promete cumprir: estes campos não
+# chegam ao histórico. Procurar a *palavra* "senha" seria mais fácil e estaria
+# errado — `trocar_senha` é um sinalizador booleano, não um segredo, e acusá-lo
+# esconderia o dia em que um segredo de verdade passar.
+PROIBIDOS = {"senha", "senha_hash", "credenciais", "refresh_hash", "app_secret",
+             "client_secret", "password"}
+checar("nenhum campo de credencial chega ao log",
+       all(not (PROIBIDOS & set((l.get("depois") or {}).keys())) for l in log),
+       [set((l.get("depois") or {}).keys()) & PROIBIDOS for l in log if
+        PROIBIDOS & set((l.get("depois") or {}).keys())])
+tudo = json.dumps(log, ensure_ascii=False)
+checar("e nenhuma senha usada neste teste aparece como valor",
+       ADMIN[1] not in tudo and TESTE_SENHA not in tudo)
 
 print("8. limpeza")
 if id_teste:

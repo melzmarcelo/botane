@@ -77,9 +77,13 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-8 text-[13px] leading-relaxed text-suave">
-          Esqueceu a senha? Peça a quem administra o sistema para gerar uma nova — ela chega
-          marcada para troca no primeiro acesso.
+        <p className="mt-6 text-[13.5px]">
+          <a href="/esqueci-senha" className="text-erva underline-offset-2 hover:underline">
+            Esqueci minha senha
+          </a>
+        </p>
+        <p className="mt-2 text-[13px] leading-relaxed text-suave">
+          O link para escolher uma senha nova chega no seu e-mail e vale por 30 minutos.
         </p>
       </div>
     </main>

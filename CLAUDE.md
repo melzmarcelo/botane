@@ -66,6 +66,14 @@ para arquivo nenhum — gravar direto aqui.
   `custo_medio_apos`). Router nenhum monta INSERT em `estoque_movimentos`.
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
+- **Recuperação de senha** (19/08/2026): `services/senhas.py` (token de 32 bytes, só o sha256
+  no banco, 30 min, **uso único**, pedido novo mata o anterior; redefinir **revoga todas as
+  sessões**), `services/email.py` + `routers/email_config.py` (SMTP em `integracoes`, senha
+  cifrada e mascarada). ⚠️ A tela pública responde **a mesma frase** para e-mail cadastrado e
+  inventado — senão vira verificador de quem trabalha na casa; o motivo real vai só para a
+  auditoria. Sem SMTP o sistema **não para**: grava o `.eml` em `api/arquivos/emails/` e o
+  admin entrega o link pela tela de Usuários (`POST /usuarios/{id}/recuperar-senha` devolve o
+  link — é o único lugar onde ele aparece).
 - **PWA instalável** (19/08/2026): `app/manifest.ts`, `public/sw.js`, `app/offline/page.tsx`,
   `components/pwa.tsx` (registro + convite) e `scripts/gerar-icones-pwa.mjs` (roda na mão,
   usa sharp). Regras do service worker que **não se afrouxam**: a API (outra origem) e
@@ -76,12 +84,23 @@ para arquivo nenhum — gravar direto aqui.
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47) e
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47), `smoke_senha.py` (40) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
 
 ### Armadilhas já pagas
+- ⚠️ **`ON CONFLICT (id_unidade, servico)` não pega linha com `id_unidade` NULL**: no Postgres
+  nulos são distintos, então o UPSERT nunca conflita e cada gravação cria outra linha (o SMTP,
+  que é da casa toda, sofreu disso). Quem garante a unicidade dessas linhas é o índice parcial
+  `ux_integracao_global` (migração 012), e o `ON CONFLICT` precisa **nomeá-lo**:
+  `ON CONFLICT (servico) WHERE id_unidade IS NULL`. Toda leitura da configuração global também
+  filtra `AND id_unidade IS NULL`.
+- ⚠️ **Matar o uvicorn no Windows pode deixar o worker órfão** segurando a 9200 — e o
+  processo novo **sobe do mesmo jeito**, sem "address already in use". Os dois respondem
+  alternadamente e metade dos pedidos volta do código velho (endpoint novo dando 404 no meio
+  de um teste que já tinha passado). Ao reiniciar a API na mão, conferir se sobrou
+  `multiprocessing-fork` órfão: `Get-CimInstance Win32_Process -Filter "Name='python.exe'"`.
 - **`allowedDevOrigins` no `next.config.mjs`**: sem isso o dev server do Next devolve **403
   nos chunks** quando a página é aberta por `127.0.0.1` (ou pelo IP, no teste em celular).
   A tela renderiza, nunca hidrata, e o formulário vira submit nativo — parece bug de login.

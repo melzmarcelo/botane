@@ -6,6 +6,8 @@ import auditoria
 from database import get_cursor
 from models.acesso import UsuarioCreate, UsuarioResponse, UsuarioUpdate
 from seguranca import Contexto, hash_senha, requer_permissao
+from services import email as correio
+from services import senhas
 
 router = APIRouter(
     prefix="/usuarios",
@@ -149,6 +151,43 @@ def atualizar(id_usuario: int, body: UsuarioUpdate, request: Request,
             ip=request.client.host if request.client else None,
         )
     return {"id": id_usuario, "message": "Usuário atualizado"}
+
+
+@router.post("/{id_usuario}/recuperar-senha")
+def recuperar_senha(id_usuario: int, request: Request,
+                    ctx: Contexto = Depends(requer_permissao("admin.usuarios"))) -> dict:
+    """Manda o e-mail de recuperação para o usuário — e devolve o link.
+
+    O link volta na resposta de propósito, e só aqui: enquanto não houver SMTP
+    configurado, é assim que o dono resolve o "esqueci minha senha" da equipe —
+    lê o link e passa pelo WhatsApp. Continua valendo meia hora e um uso só, o
+    que é bem melhor que ele escolher uma senha nova pela pessoa e mandar a
+    senha por mensagem.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT nome, email, ativo FROM usuarios WHERE id = %s", (id_usuario,))
+        u = cur.fetchone()
+        if not u:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado")
+        if not u["ativo"]:
+            raise HTTPException(status_code=400, detail="Usuário inativo")
+
+        try:
+            envio = senhas.enviar_link(
+                cur, {"id": id_usuario, "nome": u["nome"], "email": u["email"]},
+                request.client.host if request.client else None, origem="ADMIN",
+            )
+        except correio.ErroEmail as e:
+            raise HTTPException(status_code=502, detail=e.mensagem)
+        auditoria.registrar(cur, ctx.id_usuario, "senha", id_usuario, "recuperacao_pelo_admin",
+                            depois={"modo": envio["modo"]})
+
+    return {
+        "link": envio["link"],
+        "modo": envio["modo"],
+        "message": (f"E-mail enviado para {u['email']}." if envio["modo"] == "real"
+                    else "Sem SMTP configurado: passe o link abaixo para a pessoa."),
+    }
 
 
 @router.post("/{id_usuario}/desbloquear")
