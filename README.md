@@ -45,7 +45,13 @@ cd api
 python limpar_dados.py --simular    # mostra o que sairia, sem apagar
 python limpar_dados.py              # apaga (pede confirmação digitada)
 python limpar_dados.py --so-o-admin # e deixa só o administrador na equipe
+python limpar_dados.py --tabelas-de-apoio   # zera setores, locais e categorias
 ```
+
+⚠️ `--tabelas-de-apoio` deixa a base **mais vazia que uma instalação nova** (o seed
+cria setores, locais e categorias). Sem local de estoque, nenhum movimento entra
+até alguém criar o primeiro. As unidades de medida ficam sempre: elas sustentam
+toda conversão de embalagem.
 
 Sai tudo que é operação (produtos, fornecedores, fichas, razão de estoque,
 notas, vendas, inventários). Fica o cadastro base (empresa, loja, parâmetros,

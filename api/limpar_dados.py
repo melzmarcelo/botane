@@ -5,6 +5,7 @@
     python limpar_dados.py --sim         apaga sem perguntar
     python limpar_dados.py --usuarios-de-teste   leva junto os usuários smoke./tela.
     python limpar_dados.py --so-o-admin          deixa SÓ o administrador
+    python limpar_dados.py --tabelas-de-apoio    zera setores, locais e categorias
     python limpar_dados.py --manter-auditoria    preserva o histórico
 
 **O que sai:** tudo que é operação — produtos, fornecedores, fichas, o razão de
@@ -48,6 +49,21 @@ OPERACAO = [
     "sessoes", "senha_tokens",
 ]
 
+# As "tabelas de apoio" da tela de cadastros, menos as unidades de medida — que
+# não são escolha da casa (KG é KG) e cuja tabela sustenta toda conversão de
+# embalagem.
+#
+# ⚠️ Isto deixa a base MAIS VAZIA que uma instalação nova: a migração de seed
+# cria setores, locais e categorias. Sem local de estoque, nenhum movimento é
+# possível até alguém criar o primeiro — que é justamente o que se quer testar
+# quando se pede esta limpeza.
+#
+# `usuario_setores` entra junto por obrigação: ele referencia `setores`, e o
+# Postgres recusa truncar uma tabela referenciada sem levar quem a referencia.
+# Faz sentido de qualquer forma — vínculo de pessoa com um setor que deixou de
+# existir não é dado, é lixo.
+APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores"]
+
 PRESERVADAS = [
     "empresa", "unidades", "parametros", "locais_estoque",
     "setores", "categorias", "unidades_medida", "perda_motivos",
@@ -89,6 +105,7 @@ def main() -> int:
     manter_auditoria = "--manter-auditoria" in argumentos
     limpar_usuarios = "--usuarios-de-teste" in argumentos
     so_o_admin = "--so-o-admin" in argumentos
+    limpar_apoio = "--tabelas-de-apoio" in argumentos
 
     # A trava que importa: este script existe para a base LOCAL de
     # desenvolvimento. Apontado para outro servidor, ele para aqui.
@@ -98,6 +115,8 @@ def main() -> int:
         return 1
 
     alvos = list(OPERACAO) + ([] if manter_auditoria else ["auditoria"])
+    if limpar_apoio:
+        alvos += APOIO
 
     init_pool()
     with get_cursor() as cur:
@@ -113,7 +132,11 @@ def main() -> int:
     print(f"  {'':24} {'-' * 7}\n  {'total':24} {total:>7}\n")
     print("FICA (cadastro base e acesso):")
     for t, n in sorted(fica.items()):
-        print(f"  {t:24} {n:>7}")
+        if t not in alvos:
+            print(f"  {t:24} {n:>7}")
+
+    if limpar_apoio:
+        print("\n  ! sem local de estoque, nenhum movimento entra até criarem o primeiro")
 
     if limpar_usuarios or so_o_admin:
         with get_cursor() as cur:
@@ -135,9 +158,14 @@ def main() -> int:
 
     with get_cursor() as cur:
         lista = ", ".join(f'"{t}"' for t in alvos)
-        # RESTART IDENTITY para os códigos automáticos (P0001…) recomeçarem do
-        # começo: base nova com produto P0507 confundiria mais do que ajudaria.
         cur.execute(f"TRUNCATE {lista} RESTART IDENTITY")
+
+        # `RESTART IDENTITY` reinicia só as sequences que PERTENCEM às colunas
+        # das tabelas truncadas. `seq_codigo_produto` é independente (é ela que
+        # gera o P0001) e sobrevive: sem esta linha, o primeiro produto da base
+        # limpa nascia P0504 e a numeração começava no meio.
+        if "produtos" in alvos:
+            cur.execute("ALTER SEQUENCE IF EXISTS seq_codigo_produto RESTART")
 
         if limpar_usuarios or so_o_admin:
             # O vínculo com papéis cai por CASCADE; sessões e tokens já foram
