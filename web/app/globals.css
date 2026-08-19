@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* Identidade do Botane — a mesma da apresentação: papel com viés verde,
+   verde-erva como acento, latão para números e rótulos. */
+@theme {
+  --color-papel: #f3f5ef;
+  --color-superficie: #fcfdfa;
+  --color-superficie2: #ebeee5;
+  --color-tinta: #14201a;
+  --color-suave: #5d6c61;
+  --color-linha: #d8ded0;
+  --color-linha2: #bfc8b6;
+  --color-erva: #2c6a4a;
+  --color-erva-claro: #e3efe7;
+  --color-latao: #9a6e24;
+  --color-alerta: #a9711a;
+  --color-erro: #95332a;
+
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-corpo: "Newsreader", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+
+html,
+body {
+  background: var(--color-papel);
+  color: var(--color-tinta);
+  font-family: var(--font-corpo);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, th, button, label, input, select, textarea {
+  font-family: var(--font-display);
+}
+
+/* ---- peças reaproveitadas em todas as telas ---- */
+.rotulo {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-suave);
+}
+.campo {
+  width: 100%;
+  border: 1px solid var(--color-linha2);
+  border-radius: 4px;
+  background: var(--color-superficie);
+  padding: 8px 11px;
+  font-size: 15px;
+  color: var(--color-tinta);
+  font-family: var(--font-display);
+}
+.campo:focus {
+  outline: 2px solid var(--color-erva);
+  outline-offset: 1px;
+  border-color: var(--color-erva);
+}
+.campo:disabled { background: var(--color-superficie2); color: var(--color-suave); }
+.cartao {
+  border: 1px solid var(--color-linha);
+  border-radius: 4px;
+  background: var(--color-superficie);
+}
+.btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 4px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn-primario { background: var(--color-erva); color: #fff; }
+.btn-primario:hover { background: #24563c; }
+.btn-secundario {
+  background: var(--color-superficie);
+  border-color: var(--color-linha2);
+  color: var(--color-tinta);
+}
+.btn-secundario:hover { border-color: var(--color-erva); color: var(--color-erva); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.tabela { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.tabela th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--color-superficie2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-suave);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tabela td { padding: 10px 14px; border-top: 1px solid var(--color-linha); vertical-align: middle; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

@@ -1,0 +1,23 @@
+# ambiente
+api/.env
+api/__pycache__/
+**/__pycache__/
+*.pyc
+
+# node / next
+web/node_modules/
+web/.next/
+web/out/
+.env.local
+
+# temporários
+_debug.html
+_shot_*.html
+_s_*.png
+_p*.png
+
+# imagens enviadas em ambiente local
+api/uploads/
+
+# saída dos testes de tela
+web/scripts/_fotos/

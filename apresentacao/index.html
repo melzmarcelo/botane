@@ -1,0 +1,1171 @@
+<title>Botane CMV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --paper:#F3F5EF;
+  --surface:#FCFDFA;
+  --surface-2:#EBEEE5;
+  --ink:#14201A;
+  --muted:#5D6C61;
+  --line:#D8DED0;
+  --line-strong:#BFC8B6;
+  --herb:#2C6A4A;
+  --brass:#9A6E24;
+  --warn:#A9711A;
+  --crit:#95332A;
+  --ink-invert:#F0F3EC;
+
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Newsreader",Georgia,"Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+
+  --col:70ch;
+  --r:4px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1310;
+    --surface:#151C17;
+    --surface-2:#1D251E;
+    --ink:#E6ECE4;
+    --muted:#9AA99D;
+    --line:#28322A;
+    --line-strong:#3A473C;
+    --herb:#74C495;
+    --brass:#D2A659;
+    --warn:#D7A544;
+    --crit:#D9736A;
+    --ink-invert:#0E1310;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1310;
+  --surface:#151C17;
+  --surface-2:#1D251E;
+  --ink:#E6ECE4;
+  --muted:#9AA99D;
+  --line:#28322A;
+  --line-strong:#3A473C;
+  --herb:#74C495;
+  --brass:#D2A659;
+  --warn:#D7A544;
+  --crit:#D9736A;
+  --ink-invert:#0E1310;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-size:17px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *{transition:none!important}
+}
+h1,h2,h3,h4{font-family:var(--f-display);font-weight:700;text-wrap:balance;margin:0;line-height:1.15}
+p{margin:0}
+a{color:var(--herb)}
+:focus-visible{outline:2px solid var(--herb);outline-offset:3px}
+
+/* ---------- barra fixa ---------- */
+.topbar{position:sticky;top:0;z-index:40;background:var(--paper);border-bottom:1px solid var(--line)}
+.topbar .in{max-width:1640px;margin:0 auto;padding:0 24px;height:48px;display:flex;align-items:center;gap:16px}
+@media (min-width:1000px){.topbar .in{padding:0 32px}}
+@media (min-width:1440px){.topbar .in{padding:0 56px}}
+@media (min-width:1800px){.topbar .in{padding:0 72px}}
+.tb-mark{font-family:var(--f-display);font-weight:800;font-size:15px;letter-spacing:-.025em;flex:none}
+.tb-sec{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-sec b{color:var(--brass);font-weight:500}
+.tb-btn{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);flex:none;
+  background:var(--surface);border:1px solid var(--line-strong);border-radius:999px;padding:5px 13px;cursor:pointer}
+.tb-btn:hover{color:var(--ink);border-color:var(--herb)}
+.progress{position:absolute;left:0;bottom:-1px;height:2px;width:0;background:var(--herb)}
+
+/* ---------- shell ---------- */
+.shell{max-width:1640px;margin:0 auto;padding:0 24px 96px;display:grid;grid-template-columns:1fr;gap:0}
+.rail{display:none;position:sticky;top:48px;align-self:start;padding-top:44px;
+  height:calc(100vh - 48px);overflow-y:auto}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;
+  border-left:1px solid var(--line)}
+.rail a{
+  display:flex;gap:10px;align-items:baseline;
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--muted);text-decoration:none;padding:5px 0 5px 14px;margin-left:-1px;
+  border-left:1px solid transparent;
+}
+.rail a:hover{color:var(--ink);border-left-color:var(--line-strong)}
+.rail a.on{color:var(--ink);border-left-color:var(--herb)}
+.rail a.on .n{color:var(--herb)}
+.rail .n{color:var(--brass);font-variant-numeric:tabular-nums}
+
+/* as media queries vêm DEPOIS de .rail{display:none}, senão a regra base
+   (mesma especificidade, declarada por último) vence e o índice some */
+@media (min-width:1000px){
+  .shell{grid-template-columns:210px minmax(0,1fr);column-gap:48px;padding:0 32px 96px}
+  .rail{display:block}
+  .main{grid-column:2}
+}
+@media (min-width:1440px){
+  .shell{grid-template-columns:236px minmax(0,1fr);column-gap:76px;padding:0 56px 110px}
+  :root{--col:76ch}
+}
+@media (min-width:1800px){
+  .shell{column-gap:96px;padding:0 72px 110px}
+}
+
+.main{min-width:0;padding-top:44px}
+section{margin-top:76px;padding-top:34px;border-top:1px solid var(--line);scroll-margin-top:60px}
+.col{max-width:var(--col)}
+
+/* ---------- hero ---------- */
+.mark{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.mark b{font-family:var(--f-display);font-weight:800;font-size:clamp(38px,6vw,62px);letter-spacing:-.035em;line-height:1}
+.mark span{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.rule{
+  margin-top:20px;height:22px;border-bottom:1px solid var(--line-strong);
+  background:
+    repeating-linear-gradient(to right, var(--line-strong) 0 1px, transparent 1px 10px) left bottom/100% 7px no-repeat,
+    repeating-linear-gradient(to right, var(--line-strong) 0 1px, transparent 1px 50px) left bottom/100% 15px no-repeat;
+  opacity:.85;
+}
+.hero{display:grid;gap:34px;margin-top:26px;align-items:start}
+@media (min-width:1180px){.hero{grid-template-columns:1.02fr .98fr;column-gap:60px}}
+@media (min-width:1800px){.hero{column-gap:88px}}
+.lede{max-width:58ch;font-size:clamp(20px,2.2vw,26px);line-height:1.42;color:var(--ink)}
+.lede em{font-style:italic;color:var(--herb)}
+.sub{margin-top:18px;max-width:60ch;color:var(--muted)}
+
+.equation{
+  border:1px solid var(--line);border-radius:var(--r);
+  background:var(--surface);overflow-x:auto;
+}
+.equation-row{display:grid;grid-template-columns:1fr;border-bottom:1px solid var(--line)}
+@media (min-width:640px){.equation-row{grid-template-columns:148px minmax(0,1fr)}}
+.equation-row:last-child{border-bottom:0}
+.equation-row .k{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:16px 20px;border-right:1px solid var(--line);
+  display:flex;align-items:center;
+}
+.equation-row .v{padding:14px 20px;font-family:var(--f-display);font-weight:500;font-size:clamp(15px,1.5vw,18px);
+  display:flex;align-items:center;line-height:1.35}
+.equation-row.hi .v{color:var(--herb);font-weight:700}
+.op{color:var(--brass);padding:0 .45em}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.chip{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.03em;
+  border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;color:var(--muted);
+  background:var(--surface);
+}
+.chip strong{color:var(--ink);font-weight:500}
+
+/* ---------- section headings ---------- */
+.eyebrow{
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--brass);display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--line);max-width:120px}
+h2{font-size:clamp(26px,3.4vw,34px);letter-spacing:-.02em}
+h3{font-size:19px;letter-spacing:-.01em;margin-top:34px}
+h4{font-family:var(--f-mono);font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.after-h2{margin-top:16px}
+
+/* ---------- cards ---------- */
+.cards{display:grid;gap:14px;margin-top:26px}
+@media (min-width:720px){.cards.three{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:720px){.cards.two{grid-template-columns:repeat(2,1fr)}}
+.card{
+  border:1px solid var(--line);border-radius:var(--r);background:var(--surface);
+  padding:20px;min-width:0;display:flex;flex-direction:column;gap:8px;
+}
+.card .tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass)}
+.card h3{margin:0;font-size:17px}
+.card p{font-size:15.5px;color:var(--muted);line-height:1.55}
+
+/* módulos */
+.mods{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:26px}
+@media (min-width:660px){.mods{grid-template-columns:repeat(2,1fr)}}
+@media (min-width:1000px){.mods{grid-template-columns:repeat(3,1fr)}}
+.mod{background:var(--surface);padding:18px 20px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.mod .t{font-family:var(--f-display);font-weight:700;font-size:16px}
+.mod ul{margin:4px 0 0;padding-left:16px;font-size:14.5px;color:var(--muted);line-height:1.5}
+.mod li{margin-bottom:2px}
+.mod .key{font-family:var(--f-mono);font-size:11px;color:var(--herb);letter-spacing:.04em}
+.mod.nota{background:var(--surface-2)}
+.mod.nota p{font-size:14.5px;color:var(--muted);line-height:1.55;margin-top:2px}
+
+/* listas de regra */
+.rules{list-style:none;margin:26px 0 0;padding:0;display:grid;grid-template-columns:1fr;
+  border-top:1px solid var(--line)}
+@media (min-width:1240px){.rules{grid-template-columns:1fr 1fr;column-gap:64px}}
+@media (min-width:1800px){.rules{column-gap:96px}}
+.rules li{
+  display:grid;grid-template-columns:34px minmax(0,1fr);gap:14px;
+  padding:15px 0;border-bottom:1px solid var(--line);align-items:start;
+}
+.rules .num{font-family:var(--f-mono);font-size:12px;color:var(--brass);font-variant-numeric:tabular-nums;padding-top:4px}
+.rules b{font-family:var(--f-display);font-weight:700;display:block;font-size:16px;margin-bottom:2px}
+.rules span.d{color:var(--muted);font-size:15.5px;line-height:1.55}
+
+/* ---------- tabelas ---------- */
+.tw{overflow-x:auto;margin-top:24px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+/* sombra que aparece só quando há conteúdo escondido para o lado */
+.tw,.fig{
+  background-image:
+    linear-gradient(to right, var(--surface) 40%, rgba(0,0,0,0)),
+    linear-gradient(to left, var(--surface) 40%, rgba(0,0,0,0)),
+    linear-gradient(to right, rgba(0,0,0,.10), rgba(0,0,0,0)),
+    linear-gradient(to left, rgba(0,0,0,.10), rgba(0,0,0,0));
+  background-position:left center,right center,left center,right center;
+  background-repeat:no-repeat;
+  background-size:44px 100%,44px 100%,14px 100%,14px 100%;
+  background-attachment:local,local,scroll,scroll;
+}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;background:var(--surface-2);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td code,p code,li code,.mod code{font-family:var(--f-mono);font-size:.86em;color:var(--herb);
+  background:var(--surface-2);padding:1px 5px;border-radius:3px}
+.tw table code{background:transparent;padding:0}
+.tw table code + code{margin-left:16px}
+.yes{color:var(--herb);font-weight:600}
+.no{color:var(--muted);opacity:.55}
+.part{color:var(--warn);font-weight:600}
+.matrix td:not(:first-child),.matrix th:not(:first-child){text-align:center;font-family:var(--f-mono);font-size:13px}
+.matrix td:first-child{font-weight:500;white-space:nowrap}
+
+/* ---------- figuras ---------- */
+figure{margin:30px 0 0;padding:0}
+.fig{border:1px solid var(--line);border-radius:var(--r);background-color:var(--surface);padding:20px 18px 14px;overflow-x:auto}
+.fig svg{display:block;width:100%;min-width:640px;max-width:100%;height:auto;color:var(--ink)}
+figcaption{margin-top:12px;font-size:14.5px;color:var(--muted);line-height:1.5;max-width:66ch}
+.d-box{fill:var(--surface);stroke:var(--line-strong)}
+.d-box-key{fill:var(--surface-2);stroke:var(--herb);stroke-width:1.5}
+.d-box-alert{fill:none;stroke:var(--crit);stroke-dasharray:5 4}
+.d-t{font-family:var(--f-display);font-size:13px;font-weight:600;fill:var(--ink)}
+.d-s{font-family:var(--f-mono);font-size:10.5px;fill:var(--muted)}
+.d-l{font-family:var(--f-mono);font-size:10.5px;fill:var(--muted)}
+.d-l-key{font-family:var(--f-mono);font-size:10.5px;fill:var(--herb)}
+.d-l-alert{font-family:var(--f-mono);font-size:10.5px;fill:var(--crit)}
+.d-line{stroke:var(--line-strong);fill:none;stroke-width:1.2}
+.d-line-key{stroke:var(--herb);fill:none;stroke-width:1.5}
+.d-line-alert{stroke:var(--crit);fill:none;stroke-width:1.2;stroke-dasharray:5 4}
+
+/* ---------- blocos de código / árvore ---------- */
+pre{
+  margin:24px 0 0;padding:18px 20px;overflow-x:auto;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--surface);
+  font-family:var(--f-mono);font-size:13px;line-height:1.6;color:var(--ink);
+}
+pre .c{color:var(--muted)}
+pre .k{color:var(--herb)}
+
+/* ---------- exemplo numérico ---------- */
+.worked{margin-top:24px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
+.worked .head{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface-2);
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.worked table{font-family:var(--f-mono);font-size:13.5px}
+.worked td:first-child{font-family:var(--f-body);font-size:15px}
+.worked tr.total td{background:var(--surface-2);font-weight:600;color:var(--herb)}
+
+/* ---------- roadmap ---------- */
+.steps{list-style:none;margin:28px 0 0;padding:0;display:grid;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.steps li{background:var(--surface);display:grid;grid-template-columns:56px minmax(0,1fr);gap:0;align-items:stretch}
+@media (min-width:720px){.steps li{grid-template-columns:56px 210px minmax(0,1fr)}}
+.steps .s-n{font-family:var(--f-mono);font-size:12px;color:var(--brass);font-variant-numeric:tabular-nums;
+  padding:16px 0 16px 18px}
+.steps .s-t{font-family:var(--f-display);font-weight:700;font-size:16px;padding:16px 16px 4px 0}
+@media (min-width:720px){.steps .s-t{padding:16px 16px 16px 0}}
+.steps .s-d{padding:0 18px 16px 0;color:var(--muted);font-size:15px}
+@media (min-width:720px){.steps .s-d{padding:16px 18px 16px 0}}
+.steps li.done{background:var(--surface-2)}
+.steps li.done .s-n{color:var(--herb)}
+
+/* ---------- em aberto ---------- */
+.open{list-style:none;margin:24px 0 0;padding:0;display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:1240px){.open{grid-template-columns:1fr 1fr;column-gap:64px}}
+.open li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;align-items:start;font-size:16px}
+.open .bx{width:14px;height:14px;border:1.5px solid var(--line-strong);border-radius:3px;margin-top:6px}
+
+.note{
+  margin-top:24px;border-left:2px solid var(--brass);padding:2px 0 2px 18px;
+  color:var(--muted);font-size:15.5px;max-width:64ch;
+}
+.note strong{color:var(--ink);font-weight:600}
+
+footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  display:flex;flex-wrap:wrap;gap:8px 22px}
+
+/* ---------- refinos ---------- */
+.card,.mod{transition:border-color .18s ease}
+.card:hover{border-color:var(--line-strong)}
+.hint{display:none;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-top:8px}
+@media (max-width:760px){
+  body{font-size:16px}
+  .hint{display:block}
+  section{margin-top:56px;padding-top:28px}
+  .fig{padding:14px 12px 10px}
+}
+
+@media print{
+  :root{--paper:#fff;--surface:#fff;--surface-2:#f4f4f1;--ink:#111;--muted:#444;
+        --line:#ccc;--line-strong:#999;--herb:#1d4d36;--brass:#6b4d18}
+  .topbar,.rail,.hint{display:none!important}
+  .shell{display:block;max-width:none;padding:0}
+  .main{padding-top:0}
+  body{font-size:10.5pt;line-height:1.5}
+  section{margin-top:22pt;padding-top:14pt;break-inside:auto}
+  h2{font-size:16pt}
+  .card,.mod,figure,pre,.worked,.tw,.steps li,.rules li{break-inside:avoid}
+  .fig svg{min-width:0}
+  a{color:inherit;text-decoration:none}
+}
+</style>
+
+<div class="topbar">
+  <div class="in">
+    <span class="tb-mark">Botane</span>
+    <span class="tb-sec" id="secatual">Mapeamento da primeira parte</span>
+    <button type="button" class="tb-btn" id="tema">Tema: auto</button>
+  </div>
+  <div class="progress" id="progresso"></div>
+</div>
+
+<div class="shell">
+  <nav class="rail" aria-label="Índice">
+    <ol>
+      <li><a href="#problema"><span class="n">01</span> O problema</a></li>
+      <li><a href="#modulos"><span class="n">02</span> Módulos</a></li>
+      <li><a href="#fluxo"><span class="n">03</span> Fluxo do dado</a></li>
+      <li><a href="#regras"><span class="n">04</span> Regras firmes</a></li>
+      <li><a href="#dados"><span class="n">05</span> Modelo de dados</a></li>
+      <li><a href="#custo"><span class="n">06</span> Custo médio</a></li>
+      <li><a href="#fichas"><span class="n">07</span> Ficha técnica</a></li>
+      <li><a href="#acesso"><span class="n">08</span> Acesso</a></li>
+      <li><a href="#omie"><span class="n">09</span> Integrações</a></li>
+      <li><a href="#plataforma"><span class="n">10</span> Plataforma</a></li>
+      <li><a href="#ordem"><span class="n">11</span> Construção</a></li>
+      <li><a href="#aberto"><span class="n">12</span> Em aberto</a></li>
+    </ol>
+  </nav>
+
+  <main class="main">
+
+    <header>
+      <div class="mark">
+        <b>Botane</b>
+        <span>Mapeamento · fase 0 · 18 ago 2026</span>
+      </div>
+      <div class="rule" aria-hidden="true"></div>
+      <div class="hero">
+        <div>
+      <p class="lede">Um sistema de gestão para café e restaurante, construído por partes.
+        A primeira parte responde uma pergunta só: <em>quanto custou o que eu vendi — e onde
+        está a diferença entre o que custou e o que deveria ter custado.</em></p>
+      <p class="sub">CMV não é um relatório, é o resultado de um estoque bem lançado. Por isso esta
+        parte entrega, junto com o cálculo, a base cadastral que o sustenta: usuários e permissões,
+        produtos, setores, categorias, produção própria, fichas técnicas e a entrada de notas
+        fiscais vinda do Omie.</p>
+        </div>
+        <div>
+      <div class="equation" role="group" aria-label="Fórmulas do CMV">
+        <div class="equation-row">
+          <div class="k">CMV real</div>
+          <div class="v">estoque inicial <span class="op">+</span> compras <span class="op">−</span> estoque final</div>
+        </div>
+        <div class="equation-row">
+          <div class="k">CMV teórico</div>
+          <div class="v">Σ vendas do prato <span class="op">×</span> custo da ficha na data</div>
+        </div>
+        <div class="equation-row hi">
+          <div class="k">Variância</div>
+          <div class="v">real <span class="op">−</span> teórico <span class="op">=</span> perda, desvio ou ficha errada</div>
+        </div>
+      </div>
+
+      <div class="chips">
+        <span class="chip"><strong>Next.js</strong> + Tailwind</span>
+        <span class="chip"><strong>FastAPI</strong> + PostgreSQL</span>
+        <span class="chip">Custeio: <strong>médio ponderado móvel</strong></span>
+        <span class="chip">PWA no dia 1 · app na fase 8</span>
+        <span class="chip">Vendas: <strong>PDV Legal</strong></span>
+        <span class="chip">Ambiente <strong>local</strong>, sem deploy</span>
+      </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 01 -->
+    <section id="problema" data-n="01" data-nome="O problema">
+      <div class="col">
+        <div class="eyebrow">01 — Por que existe</div>
+        <h2>O dinheiro vaza em três lugares, e a contabilidade só mostra depois que o mês fechou</h2>
+        <p class="after-h2">Todo mundo chama a soma dos três de “CMV alto”. Separá-los é a razão
+        de ser do sistema — cada um se resolve de um jeito diferente, e com uma pessoa diferente.</p>
+      </div>
+
+      <div class="cards three">
+        <div class="card">
+          <span class="tag">Compra</span>
+          <h3>O preço subiu e ninguém viu</h3>
+          <p>O insumo entrou 18% mais caro e a nota foi lançada no automático. O sistema compara
+          o custo de entrada com a última compra e avisa no recebimento, não no fim do mês.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Ficha técnica</span>
+          <h3>A receita diz 80 g, a cozinha usa 110 g</h3>
+          <p>A ficha define o custo teórico do prato. A diferença entre o consumo teórico e a baixa
+          real do estoque é o que expõe a porção fora do padrão.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Perda</span>
+          <h3>Sai do estoque sem nome</h3>
+          <p>Quebra, validade vencida, cortesia, erro de preparo, desvio. Cada saída ganha um motivo
+          obrigatório — perda com nome vira decisão; perda anônima vira desconfiança.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section id="modulos" data-n="02" data-nome="Módulos">
+      <div class="col">
+        <div class="eyebrow">02 — Escopo</div>
+        <h2>O que entra nesta primeira parte</h2>
+        <p class="after-h2">Oito módulos formam a fundação. Nada aqui é opcional para o CMV
+        funcionar — é essa a razão de a base cadastral vir antes do cálculo.</p>
+      </div>
+
+      <div class="mods">
+        <div class="mod">
+          <span class="t">Identidade e acesso</span>
+          <ul>
+            <li>Usuários, papéis e permissões por chave</li>
+            <li>Vínculo escopado <b>por unidade</b> (loja)</li>
+            <li>Sessão JWT + refresh revogável</li>
+            <li>Auditoria com valor antes e depois</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Empresa e parâmetros</span>
+          <ul>
+            <li>Dados fiscais, endereço, contador e marca</li>
+            <li>Lojas com horário e CNPJ próprios</li>
+            <li>Parâmetros que mudam o comportamento: fechamento, saldo negativo, alerta de validade</li>
+            <li>Credenciais de integração <b>cifradas</b></li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Cadastros base</span>
+          <ul>
+            <li>Unidades, setores e locais de estoque</li>
+            <li>Categorias em árvore</li>
+            <li>Unidades de medida e conversões</li>
+            <li>Fornecedores com código no Omie</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Produtos</span>
+          <ul>
+            <li>Tipo: insumo, revenda, produzido, kit, embalagem</li>
+            <li>Marcação de <b>produção própria</b> → exige ficha</li>
+            <li>Unidade de compra × de estoque com fator</li>
+            <li>Preço de venda com vigência</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Fichas técnicas</span>
+          <ul>
+            <li>Sub-fichas (molho, massa, base) em cascata</li>
+            <li>Peso bruto × líquido, fator de correção e cocção</li>
+            <li>Versão, homologação e vigência</li>
+            <li>Ver custo é permissão à parte</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Estoque</span>
+          <ul>
+            <li>Razão append-only com custo médio móvel</li>
+            <li>Entrada, saída, produção, perda, transferência</li>
+            <li>Inventário com apuração de diferença</li>
+            <li>Lote e validade <b>opcionais</b>, ligados por produto</li>
+            <li>Alerta de mínimo e de vencimento</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">CMV e análise</span>
+          <ul>
+            <li>Painel real × teórico × variância</li>
+            <li>Food cost %, curva ABC, margem por prato</li>
+            <li>Evolução do custo do insumo no mês</li>
+            <li>Fechamento de período com trava</li>
+          </ul>
+        </div>
+        <div class="mod">
+          <span class="t">Integrações</span>
+          <ul>
+            <li><b>Omie</b>: NF de entrada vira estoque avaliado</li>
+            <li><b>PDV Legal</b>: vendas alimentam o CMV teórico</li>
+            <li>De-para que aprende a cada nota</li>
+            <li>Modo simulado enquanto não há credencial</li>
+          </ul>
+        </div>
+        <div class="mod nota">
+          <span class="t">Uma loja hoje</span>
+          <p>Todo movimento, saldo e fechamento já nasce carimbado com a loja. A segunda
+          unidade entra sem reescrever nada — só aparece o seletor que hoje fica escondido.</p>
+        </div>
+      </div>
+
+      <div class="col">
+        <h3>O que fica mapeado para depois</h3>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:90px">Fase</th><th>Entrega</th><th>Depende de</th></tr></thead>
+          <tbody>
+            <tr><td class="num">2</td><td>Compras: cotação, pedido de compra, conferência no recebimento</td><td>cadastro de fornecedores maduro</td></tr>
+            <tr><td class="num">3</td><td>Produção: ordem de produção, etiqueta com validade, rendimento real</td><td>fichas homologadas</td></tr>
+            <tr><td class="num">4</td><td>Vendas: API do PDV Legal alimentando o CMV teórico sozinha</td><td>credencial e documentação do PDV Legal</td></tr>
+            <tr><td class="num">5</td><td>Cardápio: precificação, simulador de margem, engenharia de cardápio</td><td>custo de ficha confiável</td></tr>
+            <tr><td class="num">6</td><td>Mobile: contagem de inventário pelo celular, offline</td><td>inventário em produção</td></tr>
+            <tr><td class="num">7</td><td>App de loja (Capacitor) sobre o mesmo front</td><td>PWA validado no salão</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 03 -->
+    <section id="fluxo" data-n="03" data-nome="Fluxo do dado">
+      <div class="col">
+        <div class="eyebrow">03 — Mecanismo</div>
+        <h2>Como o dado vira CMV</h2>
+        <p class="after-h2">Tudo converge para um único lugar: o razão de estoque. Nenhuma tela
+        escreve nele diretamente — só o motor de custo, e sempre dentro de uma transação.</p>
+      </div>
+
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 1000 430" role="img" aria-label="Notas do Omie e entradas manuais alimentam o razão de estoque; a ficha técnica gera as saídas de produção; o razão produz o CMV real e as vendas produzem o CMV teórico, cuja diferença é a variância.">
+            <defs>
+              <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+              </marker>
+            </defs>
+
+            <!-- coluna A -->
+            <rect class="d-box" x="20" y="40" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="110" y="66" text-anchor="middle">NF de entrada</text>
+            <text class="d-s" x="110" y="84" text-anchor="middle">Omie</text>
+
+            <rect class="d-box" x="20" y="120" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="110" y="146" text-anchor="middle">Entrada manual</text>
+            <text class="d-s" x="110" y="164" text-anchor="middle">sem nota</text>
+
+            <rect class="d-box" x="20" y="230" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="110" y="256" text-anchor="middle">Ficha técnica</text>
+            <text class="d-s" x="110" y="274" text-anchor="middle">versionada</text>
+
+            <rect class="d-box" x="20" y="330" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="110" y="356" text-anchor="middle">Vendas do período</text>
+            <text class="d-s" x="110" y="374" text-anchor="middle">PDV ou planilha</text>
+
+            <!-- coluna B -->
+            <rect class="d-box" x="280" y="40" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="370" y="66" text-anchor="middle">Conciliação</text>
+            <text class="d-s" x="370" y="84" text-anchor="middle">de-para + rateio</text>
+
+            <rect class="d-box" x="280" y="230" width="180" height="60" rx="4"></rect>
+            <text class="d-t" x="370" y="256" text-anchor="middle">Produção</text>
+            <text class="d-s" x="370" y="274" text-anchor="middle">consome insumo</text>
+
+            <!-- coluna C -->
+            <rect class="d-box-key" x="540" y="110" width="180" height="140" rx="4"></rect>
+            <text class="d-t" x="630" y="164" text-anchor="middle">Razão de estoque</text>
+            <text class="d-s" x="630" y="184" text-anchor="middle">append-only</text>
+            <text class="d-s" x="630" y="200" text-anchor="middle">custo médio móvel</text>
+
+            <!-- coluna D -->
+            <rect class="d-box" x="800" y="120" width="170" height="60" rx="4"></rect>
+            <text class="d-t" x="885" y="146" text-anchor="middle">CMV real</text>
+            <text class="d-s" x="885" y="164" text-anchor="middle">o que saiu</text>
+
+            <rect class="d-box" x="800" y="330" width="170" height="60" rx="4"></rect>
+            <text class="d-t" x="885" y="356" text-anchor="middle">CMV teórico</text>
+            <text class="d-s" x="885" y="374" text-anchor="middle">o que deveria</text>
+
+            <!-- ligações -->
+            <line class="d-line" x1="200" y1="70" x2="272" y2="70" marker-end="url(#a1)"></line>
+            <text class="d-l" x="236" y="60" text-anchor="middle">importa</text>
+
+            <polyline class="d-line" points="460,70 500,70 500,140 532,140" marker-end="url(#a1)"></polyline>
+            <text class="d-l" x="498" y="104" text-anchor="start">ENTRADA_NF</text>
+
+            <polyline class="d-line" points="200,150 500,150 500,175 532,175" marker-end="url(#a1)"></polyline>
+            <text class="d-l" x="350" y="142" text-anchor="middle">ENTRADA_MANUAL</text>
+
+            <line class="d-line" x1="200" y1="260" x2="272" y2="260" marker-end="url(#a1)"></line>
+            <text class="d-l" x="236" y="250" text-anchor="middle">requisita</text>
+
+            <polyline class="d-line" points="460,260 500,260 500,215 532,215" marker-end="url(#a1)"></polyline>
+            <text class="d-l" x="498" y="248" text-anchor="start">SAÍDA</text>
+
+            <polyline class="d-line-key" points="720,180 760,180 760,150 792,150" marker-end="url(#a1)"></polyline>
+            <text class="d-l-key" x="724" y="206" text-anchor="start">inicial + compras − final</text>
+
+            <line class="d-line" x1="200" y1="360" x2="792" y2="360" marker-end="url(#a1)"></line>
+            <text class="d-l" x="490" y="350" text-anchor="middle">× custo da ficha na data</text>
+
+            <line class="d-line-key" x1="885" y1="188" x2="885" y2="322" marker-end="url(#a1)" marker-start="url(#a1)"></line>
+            <text class="d-l-key" x="868" y="258" text-anchor="end">variância</text>
+          </svg>
+        </div>
+        <p class="hint">→ arraste o diagrama para o lado</p>
+        <figcaption>O razão é a única fonte de verdade do estoque. O CMV real nasce dele; o CMV
+        teórico nasce das vendas avaliadas pela ficha vigente na data. A diferença entre os dois é
+        o número que o gestor olha todo dia.</figcaption>
+      </figure>
+    </section>
+
+    <!-- 04 -->
+    <section id="regras" data-n="04" data-nome="Regras firmes">
+      <div class="col">
+        <div class="eyebrow">04 — Fundação</div>
+        <h2>As regras que não se negociam</h2>
+        <p class="after-h2">Cada uma existe porque a ausência dela já quebrou o CMV de algum
+        sistema. São decisões de estrutura: caras de mudar depois, baratas de acertar agora.</p>
+      </div>
+
+      <ol class="rules">
+          <li><span class="num">01</span><span><b>O razão é append-only</b><span class="d">Movimento não sofre alteração nem exclusão. Correção entra como estorno. Sem isso, o CMV de ontem muda quando alguém edita algo hoje — e o relatório perde a fé.</span></span></li>
+          <li><span class="num">02</span><span><b>Dinheiro em <code>numeric</code>, nunca em float</b><span class="d">Custo unitário com 6 casas, valor com 2. Arredonda só na tela. Centavo perdido em divisão vira diferença de estoque em três meses.</span></span></li>
+          <li><span class="num">03</span><span><b>Custo médio é gravado no movimento</b><span class="d">Cada linha carrega o saldo e o custo médio resultantes. Recalcular a série do zero é job de recuperação, nunca o caminho normal de leitura.</span></span></li>
+          <li><span class="num">04</span><span><b>A ficha é versionada e o custo congela no uso</b><span class="d">A produção guarda a versão e o custo do momento. Editar a receita hoje não pode reescrever o custo do prato que saiu mês passado.</span></span></li>
+          <li><span class="num">05</span><span><b>Fechamento congela o período</b><span class="d">Depois de fechado, movimento retroativo é recusado. Reabrir exige permissão própria e fica registrado na auditoria.</span></span></li>
+          <li><span class="num">06</span><span><b>Permissão é conferida no servidor</b><span class="d">A tela esconder o botão é conforto, não segurança. Toda rota declara a chave que exige.</span></span></li>
+          <li><span class="num">07</span><span><b>Toda linha carrega a unidade</b><span class="d">Multi-loja desde o primeiro dia. Acrescentar isso depois é reescrever o sistema inteiro.</span></span></li>
+          <li><span class="num">08</span><span><b>Banco em UTC, sessão em America/Sao_Paulo</b><span class="d">O fechamento do dia de um restaurante vira madrugada. Sem isso, a venda das 23h50 cai no dia errado.</span></span></li>
+      </ol>
+    </section>
+
+    <!-- 05 -->
+    <section id="dados" data-n="05" data-nome="Modelo de dados">
+      <div class="col">
+        <div class="eyebrow">05 — Estrutura</div>
+        <h2>Modelo de dados</h2>
+        <p class="after-h2">Trinta e duas tabelas em seis blocos. O rascunho completo do DDL está
+        em <code>docs/schema_draft.sql</code> — abaixo, o que cada bloco resolve.</p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:150px">Bloco</th><th>Tabelas</th><th>O ponto</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Acesso</td>
+              <td><code>unidades</code> <code>usuarios</code> <code>papeis</code> <code>permissoes</code> <code>papel_permissoes</code> <code>usuario_papeis</code> <code>sessoes</code> <code>auditoria</code></td>
+              <td>O vínculo usuário × papel leva a unidade: gerente na loja A pode ser só leitura na B.</td>
+            </tr>
+            <tr>
+              <td>Cadastros</td>
+              <td><code>setores</code> <code>locais_estoque</code> <code>categorias</code> <code>unidades_medida</code> <code>fornecedores</code></td>
+              <td>Setor é organizacional (cozinha, bar); local é físico e tem saldo (câmara fria, estoque seco). Não são a mesma coisa.</td>
+            </tr>
+            <tr>
+              <td>Produtos</td>
+              <td><code>produtos</code> <code>produto_precos</code> <code>produto_fornecedor</code></td>
+              <td><code>tipo</code> + <code>producao_propria</code> separam o mundo: insumo entra por nota e sai por ficha; produzido nasce de ficha; revenda entra e sai inteiro.</td>
+            </tr>
+            <tr>
+              <td>Fichas</td>
+              <td><code>fichas_tecnicas</code> <code>ficha_itens</code></td>
+              <td>O item aponta para um insumo <em>ou</em> para outra ficha — nunca os dois. Ciclo é recusado na gravação, não descoberto em produção.</td>
+            </tr>
+            <tr>
+              <td>Estoque</td>
+              <td><code>estoque_movimentos</code> <code>estoque_saldos</code> <code>inventarios</code> <code>inventario_itens</code> <code>perda_motivos</code></td>
+              <td>O razão é a verdade; a tabela de saldos é cache transacional, travado com <code>FOR UPDATE</code> antes de cada cálculo.</td>
+            </tr>
+            <tr>
+              <td>Notas e Omie</td>
+              <td><code>notas_entrada</code> <code>nota_itens</code> <code>omie_depara</code> <code>omie_sync_log</code></td>
+              <td>Índice único na chave da NF-e. A idempotência da importação é do banco, nunca do gatilho.</td>
+            </tr>
+            <tr>
+              <td>CMV</td>
+              <td><code>vendas</code> <code>venda_itens</code> <code>cmv_fechamentos</code></td>
+              <td>O item de venda guarda o custo da ficha usado na apuração — o teórico do passado não muda.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col">
+        <p class="note"><strong>Estados que a nota percorre:</strong>
+        <code>IMPORTADA</code> → <code>CONCILIADA</code> → <code>LANCADA</code>.
+        Só em <code>LANCADA</code> ela vira movimento de estoque. Nota com item sem vínculo
+        de produto não avança — importar errado é pior que não importar.</p>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section id="custo" data-n="06" data-nome="Custo médio">
+      <div class="col">
+        <div class="eyebrow">06 — Motor</div>
+        <h2>Custo médio ponderado móvel</h2>
+        <p class="after-h2">Cada entrada recalcula o custo médio do insumo; cada saída baixa por
+        esse custo, sem alterá-lo. É o padrão do food service brasileiro e o que permite conferir
+        contra o CMC que o próprio Omie devolve.</p>
+      </div>
+
+      <div class="worked">
+        <div class="head">Café em grão · exemplo de três movimentos</div>
+        <div class="tw" style="margin:0;border:0;border-radius:0">
+        <table>
+          <thead>
+            <tr><th>Movimento</th><th class="num">Qtd</th><th class="num">Custo un.</th><th class="num">Saldo</th><th class="num">Médio</th><th class="num">Valor em estoque</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Entrada — NF 4.812</td><td class="num">+10 kg</td><td class="num">20,00</td><td class="num">10 kg</td><td class="num">20,000000</td><td class="num">200,00</td></tr>
+            <tr><td>Entrada — NF 4.977</td><td class="num">+10 kg</td><td class="num">30,00</td><td class="num">20 kg</td><td class="num">25,000000</td><td class="num">500,00</td></tr>
+            <tr class="total"><td>Saída — produção</td><td class="num">−5 kg</td><td class="num">25,00</td><td class="num">15 kg</td><td class="num">25,000000</td><td class="num">375,00</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <p class="note" style="margin-top:14px">A saída custou <strong>R$ 125,00</strong> — esse é o
+      pedaço de CMV que aquela produção gerou. O custo médio não se move na saída.</p>
+
+      <div class="col">
+        <h3>Os quatro detalhes que decidem se o número fecha</h3>
+      </div>
+      <div class="cards two">
+        <div class="card">
+          <span class="tag">Custo de aquisição</span>
+          <h3>Não é o valor unitário da nota</h3>
+          <p>É <code>(unitário − desconto + frete rateado + IPI/ST) ÷ fator de conversão</code>.
+          Caixa de 12 unidades a R$ 60 com R$ 6 de frete dá R$ 5,50 por unidade, não R$ 5,00.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Concorrência</span>
+          <h3>Dois lançamentos ao mesmo tempo corrompem o médio</h3>
+          <p><code>SELECT … FOR UPDATE</code> na linha de saldo do produto serializa o cálculo
+          dentro da transação. Sem a trava, o segundo lançamento lê um saldo velho.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Saldo negativo</span>
+          <h3>Permitir com alerta, não bloquear</h3>
+          <p>A cozinha usa antes de a nota chegar — bloquear trava a operação, e ficar calado mente
+          no custo. A saída usa o último médio conhecido, fica marcada como provisória e o sistema
+          oferece o reajuste quando a nota entrar.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Resíduo</span>
+          <h3>Estoque zerado com centavos sobrando</h3>
+          <p>Resto de arredondamento é zerado no fechamento por um ajuste identificado. Nunca
+          escondido dentro de outro lançamento.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 -->
+    <section id="fichas" data-n="07" data-nome="Ficha técnica">
+      <div class="col">
+        <div class="eyebrow">07 — Custo teórico</div>
+        <h2>A ficha técnica é onde o custo do prato nasce</h2>
+        <p class="after-h2">Ela precisa suportar três coisas que planilha nenhuma sustenta por
+        muito tempo: preparo dentro de preparo, perda de limpeza e histórico.</p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Conceito</th><th>Como entra</th><th>Por quê</th></tr></thead>
+          <tbody>
+            <tr><td><b>Sub-ficha</b></td><td>Um item da ficha pode ser outra ficha (molho, massa, base)</td><td>O molho tem custo próprio e é usado em cinco pratos; duplicar a receita em cada um garante divergência.</td></tr>
+            <tr><td><b>Fator de correção</b></td><td><code>peso bruto ÷ peso líquido</code></td><td>1 kg de alface vira 700 g limpos. O prato custa pelo bruto comprado, não pelo líquido usado.</td></tr>
+            <tr><td><b>Fator de cocção</b></td><td>Rendimento após o calor</td><td>Arroz ganha peso, carne perde. Sem isso, o rendimento da ficha não bate com a panela.</td></tr>
+            <tr><td><b>Versão e vigência</b></td><td>Rascunho → homologada → arquivada</td><td>O custo histórico precisa continuar verdadeiro depois que a receita muda.</td></tr>
+            <tr><td><b>Rendimento</b></td><td>Quantidade produzida e nº de porções</td><td>Custo por porção é o número que vai ao cardápio; custo da batelada é o que sai do estoque.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note"><strong>Escopo por setor, opcional:</strong> ajudante lança perda e conta
+      inventário só na área dele. Sem restrição cadastrada, ninguém é limitado — não atrapalha
+      a casa pequena e já está pronto para quando crescer.</p>
+
+      <p class="note">A permissão <code>fichas.custos</code> é separada de <code>fichas.editar</code>:
+      o chef monta e corrige a receita <strong>sem ver dinheiro</strong>. Quem precisa da receita para
+      cozinhar não precisa da margem do prato.</p>
+    </section>
+
+    <!-- 08 -->
+    <section id="acesso" data-n="08" data-nome="Acesso">
+      <div class="col">
+        <div class="eyebrow">08 — Acesso</div>
+        <h2>Permissão por chave, papel por função real</h2>
+        <p class="after-h2">Cerca de 25 chaves agrupadas por módulo, combináveis em papéis. Os
+        papéis de fábrica foram desenhados sobre as pessoas que existem na casa — dono,
+        cozinheiras, garçons e ajudantes —, não sobre cargos de manual.</p>
+      </div>
+
+      <div class="tw">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Papel</th><th>Cadastros</th><th>Fichas</th><th>Custo da ficha</th>
+              <th>Estoque</th><th>Notas</th><th>CMV</th><th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Dono / Administrador</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td></tr>
+            <tr><td>Gerente <span class="no">(quando houver)</span></td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td></tr>
+            <tr><td>Cozinha <span class="no">(cozinheiras)</span></td><td class="no">—</td><td class="yes">✔</td><td class="no">—</td><td class="part">perdas e produção</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+            <tr><td>Conferente / Estoque</td><td class="part">parcial</td><td class="part">leitura</td><td class="no">—</td><td class="yes">✔</td><td class="yes">✔</td><td class="no">—</td><td class="no">—</td></tr>
+            <tr><td>Salão <span class="no">(garçons)</span></td><td class="no">—</td><td class="part">leitura</td><td class="no">—</td><td class="part">cortesia e quebra</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+            <tr><td>Contador <span class="no">(externo)</span></td><td class="part">leitura</td><td class="part">leitura</td><td class="yes">✔</td><td class="part">leitura</td><td class="part">leitura</td><td class="yes">✔</td><td class="no">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <pre><span class="c">// as chaves, por módulo</span>
+<span class="k">admin.</span>unidades   <span class="k">admin.</span>usuarios    <span class="k">admin.</span>papeis     <span class="k">admin.</span>auditoria
+<span class="k">admin.</span>parametros <span class="k">admin.</span>integracoes
+
+<span class="k">cadastros.</span>produtos   <span class="k">cadastros.</span>categorias  <span class="k">cadastros.</span>setores
+<span class="k">cadastros.</span>locais     <span class="k">cadastros.</span>fornecedores <span class="k">cadastros.</span>unidades_medida
+
+<span class="k">fichas.</span>visualizar <span class="k">fichas.</span>editar <span class="k">fichas.</span>homologar <span class="k">fichas.</span>custos
+
+<span class="k">estoque.</span>saldos  <span class="k">estoque.</span>entradas <span class="k">estoque.</span>saidas  <span class="k">estoque.</span>perdas
+<span class="k">estoque.</span>inventario <span class="k">estoque.</span>ajuste <span class="k">estoque.</span>transferencias
+<span class="k">estoque.</span>retroativo  <span class="c">// lançar em data já fechada</span>
+
+<span class="k">compras.</span>notas <span class="k">compras.</span>conciliar <span class="k">compras.</span>lancar
+
+<span class="k">cmv.</span>painel <span class="k">cmv.</span>relatorios <span class="k">cmv.</span>fechamento <span class="k">cmv.</span>reabrir
+
+<span class="k">integracao.</span>omie  <span class="k">integracao.</span>omie.config</pre>
+    </section>
+
+    <!-- 09 -->
+    <section id="omie" data-n="09" data-nome="Integrações">
+      <div class="col">
+        <div class="eyebrow">09 — Integrações</div>
+        <h2>Omie: a nota fiscal vira entrada de estoque</h2>
+        <p class="after-h2">O Omie continua sendo o sistema fiscal. O Botane lê de lá as notas de
+        entrada e as transforma em movimento de estoque avaliado — que é o que o Omie não faz por
+        ficha técnica.</p>
+      </div>
+
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 1000 300" role="img" aria-label="Um job periódico lista as notas do Omie, grava com chave única, tenta casar cada item com um produto; item sem vínculo vai para a fila de pendências e item vinculado segue para conversão de unidade, rateio de frete e lançamento no razão.">
+            <defs>
+              <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+              </marker>
+            </defs>
+
+            <rect class="d-box" x="20" y="30" width="160" height="64" rx="4"></rect>
+            <text class="d-t" x="100" y="56" text-anchor="middle">Job 30 min</text>
+            <text class="d-s" x="100" y="74" text-anchor="middle">+ botão manual</text>
+
+            <rect class="d-box" x="215" y="30" width="160" height="64" rx="4"></rect>
+            <text class="d-t" x="295" y="56" text-anchor="middle">ListarNotaEnt</text>
+            <text class="d-s" x="295" y="74" text-anchor="middle">paginado</text>
+
+            <rect class="d-box" x="410" y="30" width="160" height="64" rx="4"></rect>
+            <text class="d-t" x="490" y="56" text-anchor="middle">notas_entrada</text>
+            <text class="d-s" x="490" y="74" text-anchor="middle">chave NF-e única</text>
+
+            <rect class="d-box-key" x="605" y="30" width="160" height="64" rx="4"></rect>
+            <text class="d-t" x="685" y="56" text-anchor="middle">De-para do item</text>
+            <text class="d-s" x="685" y="74" text-anchor="middle">código Omie → produto</text>
+
+            <rect class="d-box" x="800" y="30" width="170" height="64" rx="4"></rect>
+            <text class="d-t" x="885" y="56" text-anchor="middle">Converte + rateia</text>
+            <text class="d-s" x="885" y="74" text-anchor="middle">UM, frete, desconto</text>
+
+            <rect class="d-box-key" x="800" y="200" width="170" height="64" rx="4"></rect>
+            <text class="d-t" x="885" y="226" text-anchor="middle">ENTRADA_NF</text>
+            <text class="d-s" x="885" y="244" text-anchor="middle">no razão</text>
+
+            <rect class="d-box-alert" x="565" y="200" width="180" height="64" rx="4"></rect>
+            <text class="d-t" x="655" y="226" text-anchor="middle">Fila de pendências</text>
+            <text class="d-s" x="655" y="244" text-anchor="middle">nota não avança</text>
+
+            <line class="d-line" x1="180" y1="62" x2="207" y2="62" marker-end="url(#a2)"></line>
+            <line class="d-line" x1="375" y1="62" x2="402" y2="62" marker-end="url(#a2)"></line>
+            <text class="d-l" x="488" y="112" text-anchor="middle">reimportar não duplica</text>
+            <line class="d-line" x1="570" y1="62" x2="597" y2="62" marker-end="url(#a2)"></line>
+            <line class="d-line-key" x1="765" y1="62" x2="792" y2="62" marker-end="url(#a2)"></line>
+            <text class="d-l-key" x="782" y="22" text-anchor="middle">achou</text>
+
+            <polyline class="d-line-alert" points="685,94 685,170 655,170 655,192" marker-end="url(#a2)"></polyline>
+            <text class="d-l-alert" x="694" y="130" text-anchor="start">item sem produto</text>
+
+            <polyline class="d-line" points="565,232 520,232 520,140 640,140 640,102" marker-end="url(#a2)"></polyline>
+            <text class="d-l" x="528" y="132" text-anchor="start">vincular ensina</text>
+
+            <line class="d-line-key" x1="885" y1="94" x2="885" y2="192" marker-end="url(#a2)"></line>
+            <text class="d-l-key" x="875" y="146" text-anchor="end">custo de aquisição</text>
+          </svg>
+        </div>
+        <p class="hint">→ arraste o diagrama para o lado</p>
+        <figcaption>O item que não encontra produto não entra no estoque: a nota fica parcialmente
+        conciliada e aparece na fila. Vincular uma vez grava o de-para e as próximas notas daquele
+        fornecedor entram sozinhas.</figcaption>
+      </figure>
+
+      <div class="col">
+        <h3>Como o item da nota encontra o produto daqui</h3>
+        <p class="after-h2">Uma cascata, do mais confiável para o mais frágil. Só os três
+        primeiros níveis vinculam sozinhos.</p>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:52px">#</th><th>Chave</th><th style="width:130px">Automático</th><th>Por quê</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Vínculo já confirmado antes (código Omie → produto)</td><td class="yes">sim</td><td>alguém já disse que é esse</td></tr>
+            <tr><td class="num">2</td><td><b>EAN / código de barras</b> do item da NF</td><td class="yes">sim</td><td>chave natural e global, não depende de quem digitou</td></tr>
+            <tr><td class="num">3</td><td>Código no fornecedor + CNPJ do fornecedor</td><td class="yes">sim</td><td>resolve hortifruti e distribuidor sem EAN</td></tr>
+            <tr><td class="num">4</td><td>Semelhança de descrição + NCM igual</td><td class="part">só sugere</td><td>“FILÉ FRANGO CONG” e “FILE FRANGO RESF” são parecidos e não são a mesma coisa</td></tr>
+            <tr><td class="num">5</td><td>Nada bateu</td><td class="no">—</td><td>vai para a fila de pendências</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col">
+        <p class="note"><strong>Confirmar uma vez basta.</strong> O vínculo é gravado com o
+        fator de conversão daquele fornecedor, e da segunda nota em diante o item entra
+        sozinho. Um produto daqui pode ter vários códigos externos — o mesmo café tem um
+        código em cada fornecedor e ainda outro no PDV.</p>
+
+        <h3>Produto que ainda não existe no Botane</h3>
+        <p class="after-h2">Dá para puxar do Omie, por dois caminhos, e os dois entram como
+        <b>rascunho</b>:</p>
+        <ul>
+          <li><b>Carga inicial do catálogo</b> — traz todos os produtos do Omie de uma vez, com nome, NCM, EAN e unidade. É o jeito mais barato de nascer com centenas de insumos cadastrados em vez de digitar tudo.</li>
+          <li><b>Item novo na nota</b> — o que não casou com nada vira produto a partir do que a própria NF diz: descrição, NCM, EAN, unidade, último custo e fornecedor.</li>
+        </ul>
+        <p class="note"><strong>A trava que protege o CMV:</strong> rascunho não entra no
+        estoque. Falta o que decide o custo — a unidade de estoque e o fator (a nota veio em
+        caixa, o consumo é em quilo). Enquanto houver rascunho, a nota não vira movimento.
+        Completar leva segundos, e é uma vez por produto para sempre.</p>
+
+        <h3>Serviços da API que o importador consome</h3>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Serviço</th><th>Endpoint</th><th>Métodos</th></tr></thead>
+          <tbody>
+            <tr><td>Nota de entrada</td><td><code>/api/v1/produtos/notaentrada/</code></td><td><code>ListarNotaEnt</code> <code>ConsultarNotaEnt</code></td></tr>
+            <tr><td>Recebimento de NF-e</td><td><code>/api/v1/produtos/recebimentonfe/</code></td><td><code>ListarRecebimentos</code> <code>ConsultarRecebimento</code></td></tr>
+            <tr><td>Produtos</td><td><code>/api/v1/geral/produtos/</code></td><td><code>ListarProdutos</code> <code>ConsultarProduto</code></td></tr>
+            <tr><td>Fornecedores</td><td><code>/api/v1/geral/clientes/</code></td><td><code>ListarClientes</code></td></tr>
+            <tr><td>Estoque</td><td><code>/api/v1/estoque/consulta/</code></td><td><code>ListarPosEstoque</code> <code>ListarMovimentoEstoque</code></td></tr>
+            <tr><td>Pedido de compra <span class="no">(fase 2)</span></td><td><code>/api/v1/produtos/pedidocompra/</code></td><td><code>ListarPedCompra</code></td></tr>
+            <tr><td>Contas a pagar <span class="no">(futuro)</span></td><td><code>/api/v1/financas/contapagar/</code></td><td><code>ListarContasPagar</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col">
+        <p class="note"><strong>Conferência cruzada de graça:</strong> <code>ListarPosEstoque</code>
+        devolve o CMC — o custo médio de compra calculado pelo próprio Omie. Se o custo médio do
+        Botane divergir do CMC, alguma entrada não foi conciliada. O painel de integração mostra
+        essa diferença por produto.</p>
+
+        <h3>Cuidados assumidos no desenho</h3>
+        <ul>
+          <li><b>Só leitura na fase 1.</b> Nada é escrito no ERP do cliente. Gravar (baixar pedido, gerar título) só depois que a leitura estiver confiável.</li>
+          <li><b>Paginação sempre</b> — <code>pagina</code> e <code>registros_por_pagina</code>, com janela por data de alteração.</li>
+          <li><b>Espera crescente em erro.</b> O Omie recusa consumo redundante e limita chamadas; cada tentativa fica em <code>omie_sync_log</code>.</li>
+          <li><b>Quem é dono do estoque é parâmetro.</b> Nota já lançada com movimento no Omie não pode entrar aqui de novo como entrada nova.</li>
+        </ul>
+
+        <p class="note"><strong>A credencial não bloqueia a construção.</strong> Cliente HTTP,
+        tabelas, de-para, rateio, conversão de unidade, tela de conciliação e fila de pendências
+        são lógica nossa e rodam sobre respostas gravadas em arquivo. O que só fecha com a chave
+        na mão é o nome exato de cada campo — por isso a tradução da resposta do Omie fica
+        isolada num único módulo. Quando a chave chegar, o ajuste é lá.</p>
+
+        <h3>PDV Legal — de onde vêm as vendas</h3>
+        <p class="after-h2">O PDV do cliente roda sobre a plataforma Tablet Cloud e
+        <b>tem API própria</b>: token Bearer em <code>api.tabletcloud.com.br/token</code>, com
+        usuário, senha e o par <code>client_id</code>/<code>client_secret</code> do grupo
+        econômico; o token dura seis horas. O catálogo de endpoints não é público — fica no
+        portal de parceiros, e é o cliente, como titular da conta, que pede ao suporte deles
+        junto com as credenciais.</p>
+        <p class="note"><strong>Plano B que não trava o projeto:</strong> a Retaguarda do PDV
+        Legal exporta relatório de vendas. O importador nasce lendo planilha, com o mesmo
+        destino; quando a API abrir, muda a fonte e não o resto.</p>
+        <ul>
+          <li><b>A venda não baixa estoque.</b> Quem baixa insumo é a produção. Se a venda também baixasse, o mesmo quilo de carne sairia duas vezes. A venda serve ao CMV teórico e ao food cost.</li>
+          <li><b>Cobertura de vínculo vira indicador.</b> O painel mostra quanto da receita do período está com prato vinculado a uma ficha — CMV teórico sobre 60% do faturamento é meia conta, e o número precisa dizer isso.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section id="plataforma" data-n="10" data-nome="Plataforma">
+      <div class="col">
+        <div class="eyebrow">10 — Plataforma</div>
+        <h2>Web hoje, celular no mesmo dia, app quando fizer falta</h2>
+        <p class="after-h2">Um front só. O web é responsivo e instalável como PWA desde a primeira
+        entrega — é ele que o estoquista usa na contagem, com ícone na tela inicial do celular. O app
+        de loja vem na fase 8 embrulhando esse mesmo front, e só ganha o que exige nativo: câmera
+        para código de barras e contagem offline.</p>
+      </div>
+
+      <pre>D:\dsv\botane\
+├─ api\        <span class="k">FastAPI + psycopg</span>  <span class="c">porta 9200</span>
+│  ├─ main.py            <span class="c">routers, migrações no start, jobs</span>
+│  ├─ migrations\        <span class="c">001_….sql numeradas e idempotentes</span>
+│  ├─ routers\           <span class="c">um por domínio, protegido por chave</span>
+│  ├─ services\          <span class="c">única porta de escrita no razão</span>
+│  ├─ models\            <span class="c">Pydantic de entrada e de resposta</span>
+│  └─ integracoes\omie\  <span class="c">cliente, importador, de-para</span>
+├─ web\        <span class="k">Next.js + Tailwind</span>  <span class="c">porta 3100, PWA</span>
+├─ app\        <span class="k">Capacitor</span>  <span class="c">fase 8</span>
+├─ docs\       <span class="c">schema_draft.sql, decisões</span>
+└─ iniciar_local.ps1     <span class="c">sobe banco, api e web</span></pre>
+
+      <div class="col">
+        <p class="note">Padrões herdados dos outros sistemas da casa: migração <code>.sql</code>
+        numerada que roda sozinha no start da API; rota que declara a permissão que exige; camada de
+        serviço no front (nenhuma chamada crua dentro da tela); e o service worker que
+        <strong>nunca</strong> guarda resposta de API em cache.</p>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section id="ordem" data-n="11" data-nome="Construção">
+      <div class="col">
+        <div class="eyebrow">11 — Execução</div>
+        <h2>Ordem de construção</h2>
+        <p class="after-h2">Cada etapa termina em algo que dá para abrir e conferir. Nada de duas
+        etapas em paralelo sem a anterior validada — o custo médio depende do cadastro estar certo,
+        e o CMV depende do custo médio estar certo.</p>
+      </div>
+
+      <ol class="steps">
+        <li class="done"><span class="s-n">00</span><span class="s-t">Mapeamento</span><span class="s-d">Este documento e esta página. Concluído.</span></li>
+        <li><span class="s-n">01</span><span class="s-t">Fundação</span><span class="s-d">Banco e API sobem local, login funciona, papéis e permissões aplicados na rota.</span></li>
+        <li><span class="s-n">02</span><span class="s-t">Cadastros</span><span class="s-d">Produtos, categorias, setores, locais, fornecedores e unidades de medida.</span></li>
+        <li><span class="s-n">03</span><span class="s-t">Fichas técnicas</span><span class="s-d">Ficha com sub-ficha e custo por porção conferido na mão.</span></li>
+        <li><span class="s-n">04</span><span class="s-t">Estoque</span><span class="s-d">Razão e custo médio; entrada, saída, perda, transferência e inventário.</span></li>
+        <li><span class="s-n">05</span><span class="s-t">Omie</span><span class="s-d">Importação de nota com de-para e rateio — simulado primeiro, real quando a credencial chegar.</span></li>
+        <li><span class="s-n">06</span><span class="s-t">CMV</span><span class="s-d">Painel real × teórico, variância, curva ABC e fechamento de período.</span></li>
+        <li><span class="s-n">07</span><span class="s-t">Mobile / PWA</span><span class="s-d">Contagem e consulta pelo celular, com o app instalado na tela inicial.</span></li>
+        <li><span class="s-n">08</span><span class="s-t">App de loja</span><span class="s-d">Capacitor, Android primeiro; iOS exige Mac para assinar.</span></li>
+      </ol>
+    </section>
+
+    <!-- 12 -->
+    <section id="aberto" data-n="12" data-nome="Em aberto">
+      <div class="col">
+        <div class="eyebrow">12 — Pendências</div>
+        <h2>O que preciso saber para começar a etapa 1</h2>
+        <p class="after-h2">Respondido em 18/08: uma loja (o modelo já é multi-loja), PDV Legal,
+        lote e validade opcionais, e os papéis reais da casa. O que ainda falta:</p>
+      </div>
+      <ul class="open">
+        <li><span class="bx"></span><span><b>Credenciais do Omie</b> — <code>app_key</code> e <code>app_secret</code> de um app de integração.</span></li>
+        <li><span class="bx"></span><span><b>Credenciais do PDV Legal</b> — usuário, senha, <code>client_id</code> e <code>client_secret</code>, <b>mais</b> o acesso à documentação dos endpoints.</span></li>
+        <li><span class="bx"></span><span><b>Dados da empresa</b> para o cadastro: CNPJ, IE, regime tributário, endereço, contador e logo.</span></li>
+        <li><span class="bx"></span><span><b>Quais setores e locais de estoque</b> existem de fato — é o que estrutura o inventário.</span></li>
+        <li><span class="bx"></span><span><b>Quem recebe login</b>, e quantos: o dono, cada cozinheira, os conferentes?</span></li>
+        <li><span class="bx"></span><span><b>Quantos insumos e quantas fichas</b> existem hoje, e em que formato — define o tamanho da carga inicial.</span></li>
+      </ul>
+    </section>
+
+    <footer>
+      <span>Botane · mapeamento fase 0</span>
+      <span>18 de agosto de 2026</span>
+      <span>Documento-fonte: MAPEAMENTO.md</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var KEY = 'botane-tema';
+  var modos = ['auto', 'claro', 'escuro'];
+  var btn = document.getElementById('tema');
+  var rotulo = document.getElementById('secatual');
+  var barra = document.getElementById('progresso');
+  var secoes = [].slice.call(document.querySelectorAll('main section[id]'));
+  var links = {};
+  [].forEach.call(document.querySelectorAll('.rail a'), function (a) {
+    links[a.getAttribute('href').slice(1)] = a;
+  });
+
+  function guardar(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+  function ler() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+
+  var modo = ler() || 'auto';
+  function aplicarTema(m) {
+    if (m === 'claro') root.setAttribute('data-theme', 'light');
+    else if (m === 'escuro') root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+    btn.textContent = 'Tema: ' + m;
+    btn.setAttribute('aria-label', 'Tema ' + m + '. Clique para alternar.');
+  }
+  aplicarTema(modo);
+  btn.addEventListener('click', function () {
+    modo = modos[(modos.indexOf(modo) + 1) % modos.length];
+    guardar(modo);
+    aplicarTema(modo);
+  });
+
+  var atual = null;
+  function atualizar() {
+    var y = window.pageYOffset + 140;
+    var sec = null;
+    for (var i = 0; i < secoes.length; i++) {
+      if (secoes[i].offsetTop <= y) sec = secoes[i];
+    }
+    var id = sec ? sec.id : null;
+    if (id !== atual) {
+      atual = id;
+      for (var k in links) links[k].classList.remove('on');
+      if (id && links[id]) links[id].classList.add('on');
+      rotulo.innerHTML = sec
+        ? '<b>' + sec.getAttribute('data-n') + '</b> &nbsp;' + sec.getAttribute('data-nome')
+        : 'Mapeamento da primeira parte';
+    }
+    var alcance = document.body.scrollHeight - window.innerHeight;
+    barra.style.width = (alcance > 0 ? (window.pageYOffset / alcance) * 100 : 0) + '%';
+  }
+
+  var pendente = false;
+  window.addEventListener('scroll', function () {
+    if (pendente) return;
+    pendente = true;
+    window.requestAnimationFrame(function () { pendente = false; atualizar(); });
+  }, { passive: true });
+  window.addEventListener('resize', atualizar);
+  atualizar();
+})();
+</script>
