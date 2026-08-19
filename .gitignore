@@ -21,6 +21,9 @@ api/uploads/
 # tambem guarda os e-mails gravados em disco quando nao ha SMTP configurado
 api/arquivos/
 
+# temporario de comandos longos (o C: nao aguenta)
+.tmp/
+
 # saída dos testes de tela
 web/scripts/_fotos/
 web/tsconfig.tsbuildinfo
