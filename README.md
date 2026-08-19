@@ -47,6 +47,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |
+| Regras de cache do service worker (sem navegador) | `cd web && node scripts/testar-sw.mjs` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -69,4 +70,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **Notas sem integração:** concluída em 19/08/2026 — a nota entra por **três portas** (XML
   da NF-e, digitação e Omie) e segue o mesmo caminho até o razão. A casa opera inteira sem
   depender de credencial de ninguém
+- **PWA:** concluída em 19/08/2026 — instala na tela inicial do celular (ícone próprio,
+  tela cheia, atalhos para inventário e alertas) e avisa quando fica sem sinal. Sem loja de
+  aplicativos
 - **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.

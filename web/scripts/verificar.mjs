@@ -602,6 +602,74 @@ try {
   }
   await foto(p, "31-cmv-exportar");
 
+  console.log("9b. instalável no celular (PWA)");
+  await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1500));
+
+  const manifesto = await p.evaluate(async () => {
+    const link = document.querySelector('link[rel="manifest"]');
+    if (!link) return null;
+    const r = await fetch(link.getAttribute("href"));
+    return r.ok ? r.json() : null;
+  });
+  checar("a página aponta para o manifesto", !!manifesto);
+  checar("o manifesto abre em tela cheia", manifesto?.display === "standalone", manifesto?.display);
+  checar("tem o nome curto que cabe embaixo do ícone",
+    manifesto?.short_name === "Botané", manifesto?.short_name);
+  // Sem os dois tamanhos o Chrome não oferece instalar; sem o maskable o
+  // Android corta o desenho na forma do aparelho.
+  const tamanhos = (manifesto?.icons ?? []).map((i) => `${i.sizes}:${i.purpose ?? ""}`);
+  checar("traz ícone de 192 e de 512",
+    tamanhos.some((t) => t.startsWith("192x192")) && tamanhos.some((t) => t.startsWith("512x512")),
+    tamanhos);
+  checar("traz o ícone recortável do Android",
+    tamanhos.some((t) => t.includes("maskable")), tamanhos);
+
+  const icones = await p.evaluate(async (lista) => {
+    const r = await Promise.all(lista.map((u) => fetch(u).then((x) => [u, x.status, x.headers.get("content-type")])));
+    return r;
+  }, ["/icone-192.png", "/icone-512.png", "/icone-maskable-512.png", "/apple-touch-icon.png"]);
+  checar("todos os arquivos de ícone existem de verdade",
+    icones.every(([, status, tipo]) => status === 200 && tipo?.includes("image/png")), icones);
+
+  // O nome antigo do meta é o que faz o iPhone abrir sem barra de endereço.
+  const metaApple = await p.evaluate(() =>
+    document.querySelector('meta[name="apple-mobile-web-app-capable"]')?.content);
+  checar("declara o meta que o iPhone antigo entende", metaApple === "yes", metaApple);
+  const iconeApple = await p.evaluate(() =>
+    document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute("href"));
+  checar("aponta o ícone do iPhone", !!iconeApple, iconeApple);
+
+  const registrou = await p.evaluate(async () => {
+    const r = await navigator.serviceWorker.getRegistration();
+    return r ? (r.active || r.installing || r.waiting)?.scriptURL ?? null : null;
+  });
+  checar("o service worker se registra sozinho", !!registrou, registrou);
+  checar("e sabe que está em desenvolvimento (não cacheia estático)",
+    (registrou ?? "").includes("dev=1"), registrou);
+
+  // A regra que não pode afrouxar: nada da API guardado no cache do navegador.
+  const cacheado = await p.evaluate(async () => {
+    const nomes = await caches.keys();
+    const urls = [];
+    for (const nome of nomes) {
+      const c = await caches.open(nome);
+      urls.push(...(await c.keys()).map((r) => r.url));
+    }
+    return urls;
+  });
+  checar("nenhuma resposta da API foi para o cache",
+    !cacheado.some((u) => u.includes(":9200")), cacheado.slice(0, 5));
+  checar("mas a página de sem-conexão está guardada",
+    cacheado.some((u) => u.endsWith("/offline")), cacheado);
+
+  await p.goto(`${WEB}/offline`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 700));
+  const textoOffline = await p.evaluate(() => document.body.innerText);
+  checar("a página de sem-conexão diz o que fazer",
+    /câmara fria|sinal/i.test(textoOffline), textoOffline.slice(0, 120));
+  await foto(p, "31-offline");
+
   console.log("10. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });

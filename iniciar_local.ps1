@@ -3,8 +3,9 @@
 #   .\iniciar_local.ps1              sobe os dois em janelas separadas
 #   .\iniciar_local.ps1 -SoApi       so a API
 #   .\iniciar_local.ps1 -Verificar   sobe, roda os testes e derruba
+#   .\iniciar_local.ps1 -Producao    web compilado (para testar a instalacao no celular)
 
-param([switch]$SoApi, [switch]$SoWeb, [switch]$Verificar)
+param([switch]$SoApi, [switch]$SoWeb, [switch]$Verificar, [switch]$Producao)
 
 $raiz = $PSScriptRoot
 $api = Join-Path $raiz 'api'
@@ -34,8 +35,12 @@ function Start-Web {
         Push-Location $web; npm install; Pop-Location
     }
     Write-Host 'Web   -> http://localhost:3100'
+    # O modo -Producao existe para testar o PWA de verdade: em desenvolvimento o
+    # service worker desliga o cache de estatico de proposito, para nao brigar
+    # com a recarga automatica do Next.
+    $comando = if ($Producao) { 'npm run build; npm run start' } else { 'npm run dev' }
     Start-Process powershell -ArgumentList @(
-        '-NoExit', '-Command', "Set-Location '$web'; npm run dev"
+        '-NoExit', '-Command', "Set-Location '$web'; $comando"
     )
 }
 

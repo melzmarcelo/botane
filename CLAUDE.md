@@ -66,9 +66,18 @@ para arquivo nenhum — gravar direto aqui.
   `custo_medio_apos`). Router nenhum monta INSERT em `estoque_movimentos`.
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
+- **PWA instalável** (19/08/2026): `app/manifest.ts`, `public/sw.js`, `app/offline/page.tsx`,
+  `components/pwa.tsx` (registro + convite) e `scripts/gerar-icones-pwa.mjs` (roda na mão,
+  usa sharp). Regras do service worker que **não se afrouxam**: a API (outra origem) e
+  `/api` são ignoradas por completo — cachear serviria o saldo de um usuário para o próximo
+  que entrasse no mesmo aparelho; HTML é network-first com a página `/offline` de reserva;
+  só `_next/static/*` é cache-first (o nome tem hash). ⚠️ **Em dev o cache de estático é
+  desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
+  não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
+  Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
   `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47) e
-  `web/scripts/verificar.mjs` (61 no Chrome,
+  `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
 

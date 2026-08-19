@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
+import { ConviteInstalar } from "@/components/pwa";
 
 /** O menu é montado pelas permissões de quem entrou. */
 const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string }[] }[] = [
@@ -233,7 +234,10 @@ function Casca({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
-        <div className="mx-auto max-w-[1180px]">{children}</div>
+        <div className="mx-auto max-w-[1180px]">
+          <ConviteInstalar />
+          {children}
+        </div>
       </main>
     </div>
   );
