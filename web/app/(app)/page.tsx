@@ -21,7 +21,7 @@ type Usuario = { id: number; nome: string; ativo: boolean; papeis: { papel: stri
 const CAMINHO = [
   { nome: "Acesso da equipe", detalhe: "Cada pessoa com o seu login e só o que precisa ver", pronto: true },
   { nome: "Produtos e fornecedores", detalhe: "O que se compra, em que unidade e de quem", pronto: true },
-  { nome: "Fichas técnicas", detalhe: "A receita de cada prato e quanto ela custa por porção", pronto: false },
+  { nome: "Fichas técnicas", detalhe: "A receita de cada prato e quanto ela custa por porção", pronto: true },
   { nome: "Estoque e perdas", detalhe: "Entradas, saídas, contagem e o que se perdeu — com nome", pronto: false },
   { nome: "Notas do Omie", detalhe: "A nota de compra entra sozinha e vira custo", pronto: false },
   { nome: "Painel de CMV", detalhe: "Quanto custou o que você vendeu, e onde está a diferença", pronto: false },
@@ -186,6 +186,7 @@ export default function Inicio() {
           <ul className="flex flex-col gap-2">
             {[
               { href: "/produtos", nome: "Produtos e insumos", chave: "cadastros.produtos" },
+              { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
               { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
               { href: "/empresa", nome: "Dados da empresa", chave: "admin.empresa" },
               { href: "/usuarios", nome: "Quem tem acesso", chave: "admin.usuarios" },

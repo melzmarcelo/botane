@@ -16,9 +16,10 @@ para arquivo nenhum — gravar direto aqui.
 
 ## Estado
 
-- Fase 0 (mapeamento), **etapa 1 (fundação)** e **etapa 2 (cadastros)** concluídas, 18 e 19/08/2026.
+- Mapeamento, **etapa 1 (fundação)**, **etapa 2 (cadastros)** e **etapa 3 (fichas técnicas)**
+  concluídas — 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Próxima: etapa 3 — fichas técnicas** (sub-ficha recursiva, fator de correção, custo por porção).
+- **Próxima: etapa 4 — estoque** (razão append-only, custo médio móvel, inventário, perdas).
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -33,10 +34,13 @@ para arquivo nenhum — gravar direto aqui.
   preços e produto×fornecedor), 005 semente dos cadastros.
 - Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
-- Telas: `/produtos` (lista + `[id]` para novo e edição), `/fornecedores`, `/cadastros`.
-- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39) e `web/scripts/verificar.mjs`
-  (30 no Chrome, com fotos em `web/scripts/_fotos`). Todos idempotentes — reaproveitam o
-  que a rodada anterior desativou.
+- Telas: `/produtos` (lista + `[id]`), `/fornecedores`, `/cadastros`, `/fichas` (lista + `[id]`).
+- **`services/custos.py` é o único lugar que sabe quanto custa um insumo.** Hoje responde
+  pelo último preço do fornecedor; na etapa 4 passa a responder pelo custo médio do estoque —
+  troca-se `custo_do_insumo` e nada mais. Dinheiro em `Decimal`, `float` só na borda da API.
+- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37) e
+  `web/scripts/verificar.mjs` (36 no Chrome, com fotos em `web/scripts/_fotos`). Todos
+  idempotentes — reaproveitam o que a rodada anterior desativou.
 
 ### Armadilhas já pagas
 - **`allowedDevOrigins` no `next.config.mjs`**: sem isso o dev server do Next devolve **403
@@ -48,6 +52,12 @@ para arquivo nenhum — gravar direto aqui.
   usuário em qualquer página troca a sessão de todas — voltar como admin antes de seguir.
 - Produto, fornecedor e categoria **não são apagados** quando já têm uso: viram inativos.
   Os testes contam com isso (reaproveitam em vez de recriar).
+- **Ficha homologada não se edita** (mudaria custo histórico) — só nova versão. Ciclo de
+  sub-ficha é recusado na gravação, e o cálculo ainda tem trava de profundidade por segurança.
+- **`fichas.custos` filtra o JSON, não só a tela**: sem a chave, nenhum campo de dinheiro
+  sai do servidor. Ao mexer no router de fichas, manter isso.
+- `input[type=number]` no Chrome não seleciona conteúdo com `clickCount: 3` — no teste de
+  navegador, limpar com ctrl+A, senão o valor entra colado (1 + 8 = 18).
 
 ## Stack e portas
 

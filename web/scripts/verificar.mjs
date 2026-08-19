@@ -204,7 +204,84 @@ try {
     await api("DELETE", `/produtos/${idProduto}`, null, token);
   }
 
-  console.log("5. celular (390 x 844)");
+  console.log("5. fichas técnicas (etapa 3)");
+  // Cenário montado pela API: insumo com preço + produto produzido.
+  const marca = Date.now().toString().slice(-5);
+  const { dados: forn } = await api("POST", "/fornecedores",
+    { nome: `Tela Fornecedor ${marca}` }, token);
+  const { dados: insumo } = await api("POST", "/produtos", {
+    nome: `Tela farinha ${marca}`, tipo: "INSUMO", um_estoque: "KG",
+    fornecedores: [{ id_fornecedor: forn.id, ultimo_preco: 8, fator: 1, preferencial: true }],
+  }, token);
+  const { dados: bolo } = await api("POST", "/produtos",
+    { nome: `Tela bolo ${marca}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
+
+  await p.goto(`${WEB}/fichas/nova`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1300));
+  const camposFicha = await p.$$("select");
+  await camposFicha[0].select(String(bolo.id));      // produto
+  await p.$$eval("input[type=number]", (els) => {
+    els[0].value = "";
+  });
+  // Ordem dos campos numéricos: 0 rendimento, 1 porções, 2 bruta, 3 líquida, 4 tempo.
+  const numeros = await p.$$("input[type=number]");
+  // clickCount:3 não seleciona o conteúdo de input[type=number] no Chrome —
+  // sem o ctrl+A o valor novo entra colado no que já estava (1 + 8 = 18).
+  const trocar = async (campo, valor) => {
+    await campo.click();
+    await p.keyboard.down("Control");
+    await p.keyboard.press("KeyA");
+    await p.keyboard.up("Control");
+    await campo.type(valor);
+  };
+  await trocar(numeros[0], "2");
+  await trocar(numeros[1], "8");
+  // linha 1: 500 g de farinha
+  const selectsAgora = await p.$$("select");
+  await selectsAgora[2].select(`ins:${insumo.id}`);  // 0 produto, 1 rendimento_um, 2 item
+  await numeros[2].type("500");
+  const selectsUm = await p.$$("select");
+  await selectsUm[3].select("G");                    // unidade do item
+  await Promise.all([
+    p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
+    p.click('button[type="submit"]'),
+  ]);
+  await new Promise((r) => setTimeout(r, 1800));
+  const criouFicha = /\/fichas\/\d+/.test(p.url());
+  checar("cria ficha pela tela", criouFicha, p.url());
+  await foto(p, "16-ficha");
+
+  if (criouFicha) {
+    const idFicha = p.url().match(/fichas\/(\d+)/)?.[1];
+    // 500 g × R$ 8,00/kg = R$ 4,00 ÷ 8 porções = R$ 0,50
+    const { dados: f } = await api("GET", `/fichas/${idFicha}`, null, token);
+    checar("custo da ficha calculado na tela", Math.abs(Number(f.custo_total) - 4) < 0.01,
+      f.custo_total);
+    checar("custo por porção calculado", Math.abs(Number(f.custo_por_porcao) - 0.5) < 0.01,
+      f.custo_por_porcao);
+    const textoFicha = await p.evaluate(() => document.body.innerText);
+    checar("a tela mostra o custo por porção", /0,50/.test(textoFicha),
+      textoFicha.slice(0, 60));
+
+    // A cozinha vê a receita e não vê dinheiro — na tela, não só na API.
+    await p.evaluate(() => localStorage.clear());
+    await entrar(p, COZINHA);
+    await p.goto(`${WEB}/fichas/${idFicha}`, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1300));
+    const textoCozinha = await p.evaluate(() => document.body.innerText);
+    checar("cozinha vê a receita", /Tela farinha/.test(textoCozinha), textoCozinha.slice(0, 80));
+    checar("cozinha NÃO vê custo na tela", !/R\$/.test(textoCozinha),
+      textoCozinha.match(/.{0,30}R\$.{0,20}/)?.[0]);
+    await foto(p, "17-ficha-cozinha");
+    await entrar(p, ADMIN);
+
+    await api("DELETE", `/fichas/${idFicha}`, null, token);
+  }
+  await api("DELETE", `/produtos/${insumo.id}`, null, token);
+  await api("DELETE", `/produtos/${bolo.id}`, null, token);
+  await api("DELETE", `/fornecedores/${forn.id}`, null, token);
+
+  console.log("6. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -254,7 +331,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("6. logo da empresa");
+  console.log("7. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

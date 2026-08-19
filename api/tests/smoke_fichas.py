@@ -1,0 +1,244 @@
+"""Teste de fumaça da etapa 3 (fichas técnicas).
+
+O que ele prova, além do CRUD: o custo desce na sub-ficha e bate na mão, o
+fator de correção sai do bruto/líquido, a conversão de unidade funciona (receita
+em grama, estoque em quilo), ficha homologada não se edita, ciclo é recusado, e
+**quem não tem `fichas.custos` não recebe dinheiro nenhum da API**.
+
+    python tests/smoke_fichas.py            (API de pé na 9200)
+"""
+
+import json
+import sys
+import urllib.error
+import urllib.request
+
+BASE = "http://127.0.0.1:9200"
+ADMIN = ("admin@botane.com.br", "botane123")
+COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
+
+ok = 0
+falhas: list[str] = []
+criados: dict[str, list] = {"produtos": [], "fichas": [], "fornecedores": []}
+
+
+def chamar(metodo, caminho, corpo=None, token=None):
+    req = urllib.request.Request(BASE + caminho, method=metodo)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    dados = json.dumps(corpo).encode() if corpo is not None else None
+    try:
+        with urllib.request.urlopen(req, dados, timeout=20) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        bruto = e.read()
+        try:
+            return e.code, json.loads(bruto or b"null")
+        except json.JSONDecodeError:
+            return e.code, {"detail": bruto.decode(errors="replace")}
+
+
+def checar(nome, condicao, extra=""):
+    global ok
+    if condicao:
+        ok += 1
+        print(f"  ok   {nome}")
+    else:
+        falhas.append(nome)
+        print(f"  FALHA {nome} {extra}")
+
+
+st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
+if st != 200:
+    print("API não respondeu ao login:", st, r)
+    sys.exit(1)
+token = r["access_token"]
+
+print("0. cenário: fornecedor com preço, dois insumos e dois produzidos")
+st, existentes = chamar("GET", "/fornecedores?incluir_inativos=true&busca=Ficha", token=token)
+anterior = next((f for f in existentes if f.get("cnpj") == "98765432000110"), None)
+if anterior:
+    forn = anterior["id"]
+    chamar("PUT", f"/fornecedores/{forn}", {"ativo": True}, token=token)
+else:
+    st, r = chamar("POST", "/fornecedores",
+                   {"nome": "Ficha Distribuidora", "cnpj": "98.765.432/0001-10"}, token=token)
+    forn = r.get("id")
+    criados["fornecedores"].append(forn)
+checar("fornecedor de teste pronto", bool(forn), forn)
+
+
+def novo_produto(nome, tipo, um, preco=None, fator=1):
+    corpo = {"nome": nome, "tipo": tipo, "um_estoque": um}
+    if preco is not None:
+        corpo["fornecedores"] = [
+            {"id_fornecedor": forn, "ultimo_preco": preco, "fator": fator, "preferencial": True}
+        ]
+    st, r = chamar("POST", "/produtos", corpo, token=token)
+    if st != 201:
+        print("   (falha ao criar produto", nome, st, r, ")")
+        return None
+    criados["produtos"].append(r["id"])
+    return r["id"]
+
+
+marca = str(__import__("time").time_ns())[-6:]
+# Café: R$ 40,00 o quilo. Leite: R$ 6,00 o litro.
+cafe = novo_produto(f"Ficha café {marca}", "INSUMO", "KG", preco=40)
+leite = novo_produto(f"Ficha leite {marca}", "INSUMO", "L", preco=6)
+sem_preco = novo_produto(f"Ficha sem preço {marca}", "INSUMO", "KG")
+base = novo_produto(f"Ficha base espresso {marca}", "PRODUZIDO", "L")
+bebida = novo_produto(f"Ficha latte {marca}", "PRODUZIDO", "UN")
+checar("produtos do cenário criados", all([cafe, leite, sem_preco, base, bebida]))
+
+print("1. ficha simples, com conversão de unidade")
+# 100 g de café (estoque em KG) → 0,1 kg × R$ 40 = R$ 4,00
+st, r = chamar("POST", "/fichas", {
+    "id_produto": base, "rendimento_qtd": 1, "rendimento_um": "L", "porcoes": 4,
+    "itens": [
+        {"id_insumo": cafe, "qtd_bruta": 100, "um": "G"},
+        {"id_insumo": leite, "qtd_bruta": 900, "um": "ML"},
+    ],
+}, token=token)
+checar("cria ficha da base", st == 201, r)
+ficha_base = r.get("id")
+criados["fichas"].append(ficha_base)
+
+st, f = chamar("GET", f"/fichas/{ficha_base}", token=token)
+checar("ficha traz o custo", st == 200 and f.get("ve_custo") is True, st)
+# 100 g × 40/kg = 4,00 ; 900 ml × 6/L = 5,40 → 9,40
+checar("custo total confere (4,00 + 5,40)", abs(float(f["custo_total"]) - 9.40) < 0.001,
+       f.get("custo_total"))
+checar("custo por porção confere (9,40 ÷ 4)", abs(float(f["custo_por_porcao"]) - 2.35) < 0.001,
+       f.get("custo_por_porcao"))
+checar("ficha completa (nada sem custo)", f.get("custo_completo") is True)
+checar("produto virou produção própria", True)
+
+print("2. sub-ficha: o custo desce em cascata")
+# 250 ml da base (rendimento 1 L, custo 9,40) → 2,35 + 50 g de café = 2,00 → 4,35
+st, r = chamar("POST", "/fichas", {
+    "id_produto": bebida, "rendimento_qtd": 1, "rendimento_um": "UN", "porcoes": 1,
+    "itens": [
+        {"id_subficha": ficha_base, "qtd_bruta": 250, "um": "ML"},
+        {"id_insumo": cafe, "qtd_bruta": 50, "um": "G"},
+    ],
+}, token=token)
+checar("cria ficha com sub-ficha", st == 201, r)
+ficha_bebida = r.get("id")
+criados["fichas"].append(ficha_bebida)
+
+st, f = chamar("GET", f"/fichas/{ficha_bebida}", token=token)
+checar("custo em cascata confere (2,35 + 2,00)", abs(float(f["custo_total"]) - 4.35) < 0.001,
+       f.get("custo_total"))
+item_sub = next((i for i in f["itens"] if i.get("id_subficha")), None)
+checar("item de sub-ficha marca a origem do custo",
+       item_sub and item_sub.get("origem_custo") == "subficha", item_sub)
+
+print("3. fator de correção e insumo sem preço")
+st, r = chamar("PUT", f"/fichas/{ficha_bebida}", {
+    "itens": [
+        {"id_subficha": ficha_base, "qtd_bruta": 250, "um": "ML"},
+        {"id_insumo": cafe, "qtd_bruta": 50, "um": "G"},
+        # 1 kg bruto vira 800 g limpos → FC = 1,25
+        {"id_insumo": sem_preco, "qtd_bruta": 1, "qtd_liquida": 0.8, "um": "KG"},
+    ],
+}, token=token)
+checar("salva itens da ficha", st == 200, r)
+st, f = chamar("GET", f"/fichas/{ficha_bebida}", token=token)
+item_fc = next((i for i in f["itens"] if i.get("id_insumo") == sem_preco), None)
+checar("fator de correção sai de bruto ÷ líquido",
+       item_fc and abs(float(item_fc["fator_correcao"]) - 1.25) < 0.001, item_fc)
+checar("insumo sem preço não vira zero, vira pendência",
+       f.get("itens_sem_custo") == 1 and f.get("custo_completo") is False,
+       (f.get("itens_sem_custo"), f.get("custo_completo")))
+checar("o que tem preço continua somando", abs(float(f["custo_total"]) - 4.35) < 0.001,
+       f.get("custo_total"))
+
+print("4. ciclo é recusado")
+st, r = chamar("PUT", f"/fichas/{ficha_base}", {
+    "itens": [{"id_subficha": ficha_bebida, "qtd_bruta": 1, "um": "UN"}],
+}, token=token)
+checar("recusa ficha que se usa por dentro da sub-ficha", st == 400, (st, r))
+st, r = chamar("PUT", f"/fichas/{ficha_base}", {
+    "itens": [{"id_subficha": ficha_base, "qtd_bruta": 1, "um": "L"}],
+}, token=token)
+checar("recusa ficha que usa a si mesma", st == 400, st)
+st, f = chamar("GET", f"/fichas/{ficha_base}", token=token)
+checar("a ficha continua íntegra depois da recusa",
+       abs(float(f["custo_total"]) - 9.40) < 0.001, f.get("custo_total"))
+
+print("5. homologação e versão")
+st, r = chamar("POST", f"/fichas/{ficha_base}/homologar", token=token)
+checar("homologa a ficha", st == 200, r)
+st, r = chamar("PUT", f"/fichas/{ficha_base}", {"porcoes": 8}, token=token)
+checar("ficha homologada não é editável", st == 400, (st, r))
+st, r = chamar("POST", f"/fichas/{ficha_base}/nova-versao", token=token)
+checar("cria nova versão em rascunho", st == 201 and r.get("versao") == 2, r)
+v2 = r.get("id")
+criados["fichas"].append(v2)
+st, f2 = chamar("GET", f"/fichas/{v2}", token=token)
+checar("a nova versão copiou os itens", len(f2.get("itens", [])) == 2, len(f2.get("itens", [])))
+checar("a nova versão nasce em rascunho", f2.get("status") == "RASCUNHO", f2.get("status"))
+st, r = chamar("POST", f"/fichas/{v2}/homologar", token=token)
+checar("homologa a versão 2", st == 200, r)
+st, f1 = chamar("GET", f"/fichas/{ficha_base}", token=token)
+checar("a versão 1 foi arquivada", f1.get("status") == "ARQUIVADA", f1.get("status"))
+
+print("6. dinheiro é permissão à parte")
+st, papeis = chamar("GET", "/papeis", token=token)
+id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
+st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
+if existente:
+    chamar("PUT", f"/usuarios/{existente['id']}",
+           {"ativo": True, "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]}, token=token)
+else:
+    chamar("POST", "/usuarios", {"nome": "Smoke Cozinha", "email": COZINHA[0],
+                                 "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]},
+           token=token)
+
+st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
+tk = r.get("access_token")
+st, fc = chamar("GET", f"/fichas/{ficha_bebida}", token=tk)
+checar("cozinha VÊ a ficha", st == 200, st)
+checar("cozinha não recebe custo total", fc.get("custo_total") is None, fc.get("custo_total"))
+checar("cozinha não recebe custo por porção", fc.get("custo_por_porcao") is None)
+checar("nenhum item vem com dinheiro",
+       all("custo_unitario" not in i for i in fc.get("itens", [])),
+       [i for i in fc.get("itens", []) if "custo_unitario" in i][:1])
+checar("mas a receita vem inteira", len(fc.get("itens", [])) == 3, len(fc.get("itens", [])))
+checar("ve_custo vem false", fc.get("ve_custo") is False)
+st, lista = chamar("GET", "/fichas", token=tk)
+checar("lista da cozinha também vem sem custo",
+       st == 200 and all(f.get("custo_total") is None for f in lista), st)
+st, r = chamar("POST", f"/fichas/{ficha_bebida}/homologar", token=tk)
+checar("cozinha NÃO homologa (403)", st == 403, st)
+
+print("7. regras de cadastro")
+st, r = chamar("POST", "/fichas", {"id_produto": cafe, "itens": []}, token=token)
+checar("recusa ficha em produto que não é produzido", st == 400, (st, r))
+st, r = chamar("POST", "/fichas", {
+    "id_produto": bebida,
+    "itens": [{"id_insumo": cafe, "id_subficha": ficha_base, "qtd_bruta": 1, "um": "G"}],
+}, token=token)
+checar("recusa item com insumo e sub-ficha juntos", st == 400, st)
+# ficha_base é sub-ficha da bebida — arquivar quebraria o custo dela.
+st, r = chamar("DELETE", f"/fichas/{ficha_base}", token=token)
+checar("recusa arquivar ficha usada como sub-ficha", st == 409, (st, r))
+
+print("8. limpeza")
+for id_ficha in reversed(criados["fichas"]):
+    chamar("DELETE", f"/fichas/{id_ficha}", token=token)
+for id_produto in criados["produtos"]:
+    chamar("DELETE", f"/produtos/{id_produto}", token=token)
+for id_forn in criados["fornecedores"]:
+    chamar("DELETE", f"/fornecedores/{id_forn}", token=token)
+st, lista = chamar("GET", f"/produtos?busca=Ficha%20{marca}", token=token)
+checar("produtos de teste saíram da lista ativa", len(lista) == 0, len(lista))
+
+print()
+print(f"{ok} passaram, {len(falhas)} falharam")
+for f in falhas:
+    print(f"  - {f}")
+sys.exit(1 if falhas else 0)

@@ -17,6 +17,7 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     grupo: "Cadastros",
     itens: [
       { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
+      { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
       { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
       { href: "/cadastros", nome: "Tabelas de apoio", chave: "cadastros.setores" },
     ],
