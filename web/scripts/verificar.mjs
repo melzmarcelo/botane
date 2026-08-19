@@ -58,6 +58,26 @@ async function entrar(pagina, quem) {
 
 const foto = (pagina, nome) => pagina.screenshot({ path: `${FOTOS}/${nome}.png`, fullPage: true });
 
+/**
+ * Navega tolerando o frame trocar no meio do caminho.
+ *
+ * Com o service worker no ar, a navegação logo depois do login às vezes é
+ * substituída por outra antes de terminar, e o puppeteer levanta
+ * "detached Frame". Não é problema do sistema — quem usa não vê nada — mas
+ * derruba o teste inteiro se não for tratado.
+ */
+async function irPara(pagina, url) {
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    try {
+      await pagina.goto(url, { waitUntil: "networkidle2" });
+      return;
+    } catch (e) {
+      if (!/detached|Target closed|Navigating frame/i.test(String(e)) || tentativa === 2) throw e;
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+}
+
 // ---- prepara um usuário de Cozinha, via API ----
 const login = await api("POST", "/auth/login", ADMIN);
 if (login.status !== 200) {
@@ -676,7 +696,7 @@ try {
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await c.screenshot({ path: `${FOTOS}/m1-login.png`, fullPage: true });
   await entrar(c, ADMIN);
-  await c.goto(WEB + "/", { waitUntil: "networkidle2" });
+  await irPara(c, WEB + "/");
   await new Promise((r) => setTimeout(r, 900));
 
   const larguraCorpo = await c.evaluate(() => ({
