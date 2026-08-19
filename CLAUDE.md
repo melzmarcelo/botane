@@ -45,6 +45,9 @@ para arquivo nenhum — gravar direto aqui.
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
 - Manual da equipe: `docs/manual-da-equipe.md`.
+- `api/limpar_dados.py` zera a operação e deixa a base como instalação nova (`--simular`
+  mostra sem apagar). Produtos e fornecedores saem inteiros de propósito: o seed não cria
+  nenhum. **Recusa banco que não seja local.**
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
   `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
 - **`services/nfe_xml.py`** + `routers/notas.py`: a casa opera **sem integração nenhuma**. A

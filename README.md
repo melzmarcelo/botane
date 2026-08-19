@@ -35,6 +35,22 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - API e documentação: <http://localhost:9200/docs>
 - Web: <http://localhost:3100>
 
+## Começar do zero
+
+Para percorrer o fluxo como o cliente vai percorrer — ou para preparar a base
+antes de entregar:
+
+```
+cd api
+python limpar_dados.py --simular    # mostra o que sairia, sem apagar
+python limpar_dados.py              # apaga (pede confirmação digitada)
+```
+
+Sai tudo que é operação (produtos, fornecedores, fichas, razão de estoque,
+notas, vendas, inventários). Fica o cadastro base (empresa, loja, parâmetros,
+locais, setores, categorias, unidades de medida, motivos de perda) e o acesso
+inteiro. O script **se recusa a rodar** se o banco não for local.
+
 ## Testes
 
 | O quê | Comando |
