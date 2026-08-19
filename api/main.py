@@ -14,7 +14,16 @@ import arquivos
 from config import ADMIN_EMAIL, ADMIN_NOME, ADMIN_SENHA, CORS_ORIGINS, DEBUG, PORT
 from database import close_pool, get_cursor, init_pool
 from db_updater import run_migrations
-from routers import autenticacao, empresa, historico, papeis, usuarios
+from routers import (
+    autenticacao,
+    cadastros,
+    empresa,
+    fornecedores,
+    historico,
+    papeis,
+    produtos,
+    usuarios,
+)
 from seguranca import hash_senha
 
 VERSAO = "0.1.0"
@@ -79,6 +88,9 @@ app.include_router(usuarios.router)
 app.include_router(papeis.router)
 app.include_router(empresa.router)
 app.include_router(historico.router)
+app.include_router(cadastros.router)
+app.include_router(fornecedores.router)
+app.include_router(produtos.router)
 
 
 @app.get("/saude", tags=["infra"])

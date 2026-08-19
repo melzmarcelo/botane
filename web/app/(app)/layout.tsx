@@ -14,6 +14,14 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     itens: [{ href: "/", nome: "Início" }],
   },
   {
+    grupo: "Cadastros",
+    itens: [
+      { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
+      { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
+      { href: "/cadastros", nome: "Tabelas de apoio", chave: "cadastros.setores" },
+    ],
+  },
+  {
     grupo: "Administração",
     itens: [
       { href: "/empresa", nome: "Empresa", chave: "admin.empresa" },

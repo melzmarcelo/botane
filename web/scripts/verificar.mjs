@@ -158,7 +158,53 @@ try {
   checar("nenhum erro de JavaScript nas telas de admin", erros.length === 0,
     erros.slice(0, 2).join(" | "));
 
-  console.log("4. celular (390 x 844)");
+  console.log("4. cadastros (etapa 2)");
+  // A fase 3 deixou a sessão da Cozinha no localStorage (que é do domínio, não
+  // da aba): sem voltar como admin, as telas viriam em modo leitura.
+  await entrar(p, ADMIN);
+  for (const [rota, nome] of [
+    ["/produtos", "12-produtos"],
+    ["/fornecedores", "13-fornecedores"],
+    ["/cadastros", "14-tabelas"],
+  ]) {
+    await p.goto(WEB + rota, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1000));
+    const texto = await p.evaluate(() => document.body.innerText);
+    checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
+      texto.slice(0, 90));
+    await foto(p, nome);
+  }
+
+  // Cadastro de um produto pela tela, do jeito que o cliente faria.
+  await p.goto(`${WEB}/produtos/novo`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const nomeProduto = `Teste tela ${Date.now().toString().slice(-5)}`;
+  await p.type('input[required]', nomeProduto);
+  await p.select("select", "INSUMO");
+  const selects = await p.$$("select");
+  // ordem dos selects: tipo, categoria, setor, um_estoque, um_compra
+  await selects[3].select("KG");
+  await Promise.all([
+    p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
+    p.click('button[type="submit"]'),
+  ]);
+  await new Promise((r) => setTimeout(r, 1500));
+  const criou = /\/produtos\/\d+/.test(p.url());
+  checar("cadastra produto pela tela", criou, p.url());
+  await foto(p, "15-produto");
+
+  await p.goto(`${WEB}/produtos?busca=Teste tela`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const naLista = await p.evaluate((n) => document.body.innerText.includes(n), nomeProduto);
+  checar("produto aparece na lista", naLista);
+
+  // Limpa: desativa o produto criado pelo teste.
+  if (criou) {
+    const idProduto = p.url().match(/produtos\/(\d+)/)?.[1];
+    await api("DELETE", `/produtos/${idProduto}`, null, token);
+  }
+
+  console.log("5. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -208,7 +254,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("5. logo da empresa");
+  console.log("6. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -238,6 +284,9 @@ try {
 
   const logoNoMenu = await p.evaluate(() => !!document.querySelector("aside img"));
   checar("logo aparece no topo do menu", logoNoMenu);
+
+  // Tira a logo de teste: a real é a que o cliente subir.
+  await api("DELETE", "/empresa/logo", null, token);
 } finally {
   await navegador.close();
 }

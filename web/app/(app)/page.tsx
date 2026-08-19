@@ -20,7 +20,7 @@ type Usuario = { id: number; nome: string; ativo: boolean; papeis: { papel: stri
 /** O que o sistema vai passar a fazer, em português de restaurante. */
 const CAMINHO = [
   { nome: "Acesso da equipe", detalhe: "Cada pessoa com o seu login e só o que precisa ver", pronto: true },
-  { nome: "Produtos e fornecedores", detalhe: "O que se compra, em que unidade e de quem", pronto: false },
+  { nome: "Produtos e fornecedores", detalhe: "O que se compra, em que unidade e de quem", pronto: true },
   { nome: "Fichas técnicas", detalhe: "A receita de cada prato e quanto ela custa por porção", pronto: false },
   { nome: "Estoque e perdas", detalhe: "Entradas, saídas, contagem e o que se perdeu — com nome", pronto: false },
   { nome: "Notas do Omie", detalhe: "A nota de compra entra sozinha e vira custo", pronto: false },
@@ -185,6 +185,8 @@ export default function Inicio() {
         <Cartao titulo="Atalhos">
           <ul className="flex flex-col gap-2">
             {[
+              { href: "/produtos", nome: "Produtos e insumos", chave: "cadastros.produtos" },
+              { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
               { href: "/empresa", nome: "Dados da empresa", chave: "admin.empresa" },
               { href: "/usuarios", nome: "Quem tem acesso", chave: "admin.usuarios" },
               { href: "/lojas", nome: "Ajustes da operação", chave: "admin.unidades" },

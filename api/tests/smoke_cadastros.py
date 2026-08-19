@@ -1,0 +1,215 @@
+"""Teste de fumaça da etapa 2 (cadastros), contra a API local.
+
+Cobre setores, locais, categorias (inclusive a trava de ciclo), unidades de
+medida, fornecedores e produtos — com preço, fornecedor vinculado, rascunho e
+permissão. Cria e limpa o que usa.
+
+    python tests/smoke_cadastros.py            (API de pé na 9200)
+"""
+
+import json
+import sys
+import urllib.error
+import urllib.request
+
+BASE = "http://127.0.0.1:9200"
+ADMIN = ("admin@botane.com.br", "botane123")
+COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
+
+ok = 0
+falhas: list[str] = []
+
+
+def chamar(metodo, caminho, corpo=None, token=None):
+    req = urllib.request.Request(BASE + caminho, method=metodo)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    dados = json.dumps(corpo).encode() if corpo is not None else None
+    try:
+        with urllib.request.urlopen(req, dados, timeout=15) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        bruto = e.read()
+        try:
+            return e.code, json.loads(bruto or b"null")
+        except json.JSONDecodeError:
+            return e.code, {"detail": bruto.decode(errors="replace")}
+
+
+def checar(nome, condicao, extra=""):
+    global ok
+    if condicao:
+        ok += 1
+        print(f"  ok   {nome}")
+    else:
+        falhas.append(nome)
+        print(f"  FALHA {nome} {extra}")
+
+
+st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
+if st != 200:
+    print("API não respondeu ao login:", st, r)
+    sys.exit(1)
+token = r["access_token"]
+
+print("1. cadastros de apoio vieram semeados")
+st, setores = chamar("GET", "/setores", token=token)
+checar("setores respondem", st == 200 and len(setores) >= 4, setores if st != 200 else len(setores))
+checar("tem Cozinha", any(s["nome"] == "Cozinha" for s in setores))
+
+st, locais = chamar("GET", "/locais", token=token)
+checar("locais respondem", st == 200 and len(locais) >= 3, len(locais) if st == 200 else locais)
+checar("um local é o principal", sum(1 for l in locais if l["principal"]) == 1)
+
+st, ums = chamar("GET", "/unidades-medida", token=token)
+checar("unidades de medida semeadas", st == 200 and len(ums) >= 8, len(ums) if st == 200 else ums)
+kg = next((u for u in ums if u["sigla"] == "KG"), None)
+checar("KG converte para grama", kg and float(kg["fator_base"]) == 1000, kg)
+
+st, categorias = chamar("GET", "/categorias", token=token)
+checar("categorias respondem", st == 200 and len(categorias) >= 8, len(categorias))
+
+print("2. árvore de categorias")
+st, r = chamar("POST", "/categorias", {"nome": "Smoke Raiz", "tipo": "INSUMO"}, token=token)
+checar("cria categoria raiz", st == 201, r)
+raiz = r.get("id")
+st, r = chamar("POST", "/categorias", {"nome": "Smoke Filha", "id_pai": raiz}, token=token)
+checar("cria subcategoria", st == 201, r)
+filha = r.get("id")
+st, lista = chamar("GET", "/categorias", token=token)
+item = next((c for c in lista if c["id"] == filha), None)
+checar("caminho da filha vem montado", item and item["caminho"] == "Smoke Raiz › Smoke Filha",
+       item.get("caminho") if item else None)
+checar("nível da filha é 1", item and item["nivel"] == 1)
+
+st, r = chamar("PUT", f"/categorias/{raiz}", {"id_pai": filha}, token=token)
+checar("recusa ciclo (raiz dentro da filha)", st == 400, st)
+st, r = chamar("PUT", f"/categorias/{raiz}", {"id_pai": raiz}, token=token)
+checar("recusa categoria dentro dela mesma", st == 400, st)
+st, r = chamar("DELETE", f"/categorias/{raiz}", token=token)
+checar("recusa excluir categoria com filha", st == 409, st)
+
+print("3. fornecedor")
+# A limpeza da rodada anterior DESATIVA o fornecedor (não apaga), e o CNPJ
+# continua ocupado — então aqui ele é reaproveitado.
+st, existentes = chamar("GET", "/fornecedores?incluir_inativos=true&busca=Smoke", token=token)
+anterior = next((f for f in existentes if f.get("cnpj") == "12345678000195"), None)
+if anterior:
+    forn = anterior["id"]
+    st, r = chamar("PUT", f"/fornecedores/{forn}",
+                   {"ativo": True, "prazo_entrega_dias": 2, "dias_entrega": "seg,qui"},
+                   token=token)
+    checar("reaproveita fornecedor de teste", st == 200, r)
+else:
+    st, r = chamar("POST", "/fornecedores", {
+        "nome": "Smoke Distribuidora", "cnpj": "12.345.678/0001-95",
+        "prazo_entrega_dias": 2, "dias_entrega": "seg,qui",
+    }, token=token)
+    checar("cria fornecedor", st == 201, r)
+    forn = r.get("id")
+st, r = chamar("POST", "/fornecedores", {"nome": "Outro", "cnpj": "12345678000195"}, token=token)
+checar("recusa CNPJ repetido (mesmo com máscara diferente)", st == 409, st)
+st, lista = chamar("GET", "/fornecedores?busca=smoke", token=token)
+checar("busca por nome encontra", st == 200 and any(f["id"] == forn for f in lista), lista)
+
+print("4. produto")
+st, r = chamar("POST", "/produtos", {
+    "nome": "Café em grão smoke", "tipo": "INSUMO", "id_categoria": filha,
+    "um_estoque": "KG", "um_compra": "PCT", "fator_compra": 1,
+    "perecivel": True, "validade_dias": 180, "controla_validade": True,
+    "preco_venda": None,
+    "fornecedores": [{"id_fornecedor": forn, "codigo_no_fornecedor": "CAF-1",
+                      "embalagem": "Pacote 1kg", "fator": 1, "preferencial": True}],
+}, token=token)
+checar("cria produto", st == 201, r)
+prod = r.get("id")
+checar("código foi gerado sozinho", str(r.get("codigo", "")).startswith("P"), r.get("codigo"))
+
+st, p = chamar("GET", f"/produtos/{prod}", token=token)
+checar("produto traz a categoria resolvida", p.get("categoria") == "Smoke Filha", p.get("categoria"))
+checar("produto traz o fornecedor vinculado", len(p.get("fornecedores", [])) == 1)
+checar("fornecedor preferencial marcado", p["fornecedores"][0]["preferencial"] is True)
+
+st, r = chamar("POST", "/produtos", {"nome": "Duplicado", "codigo": p["codigo"],
+                                     "um_estoque": "UN"}, token=token)
+checar("recusa código repetido", st == 409, st)
+
+st, r = chamar("POST", "/produtos", {"nome": "Prato smoke", "tipo": "INSUMO",
+                                     "producao_propria": True, "um_estoque": "UN"}, token=token)
+checar("recusa produção própria em insumo", st == 400, st)
+
+print("5. preço com vigência")
+chamar("PUT", f"/produtos/{prod}", {"preco_venda": 42.50}, token=token)
+st, p = chamar("GET", f"/produtos/{prod}", token=token)
+checar("grava preço de venda", float(p.get("preco_venda") or 0) == 42.5, p.get("preco_venda"))
+chamar("PUT", f"/produtos/{prod}", {"preco_venda": 45.00}, token=token)
+st, p = chamar("GET", f"/produtos/{prod}", token=token)
+checar("troca de preço mantém um só vigente", float(p.get("preco_venda") or 0) == 45.0,
+       p.get("preco_venda"))
+
+print("6. rascunho não vira ativo sem o que decide o custo")
+st, r = chamar("POST", "/produtos", {"nome": "Rascunho smoke", "status": "RASCUNHO"}, token=token)
+checar("cria rascunho sem unidade", st == 201, r)
+rasc = r.get("id")
+st, r = chamar("POST", f"/produtos/{rasc}/revisar", token=token)
+checar("recusa ativar rascunho sem unidade de estoque", st == 400, st)
+chamar("PUT", f"/produtos/{rasc}", {"um_estoque": "UN", "fator_compra": 12}, token=token)
+st, r = chamar("POST", f"/produtos/{rasc}/revisar", token=token)
+checar("ativa depois de completar", st == 200, r)
+
+print("7. lista, filtro e contagem")
+st, lista = chamar("GET", "/produtos?busca=smoke", token=token)
+checar("busca encontra os produtos", st == 200 and len(lista) >= 2, len(lista) if st == 200 else lista)
+st, lista = chamar("GET", "/produtos?tipo=INSUMO&busca=smoke", token=token)
+checar("filtro por tipo funciona", st == 200 and all(p["tipo"] == "INSUMO" for p in lista))
+st, c = chamar("GET", "/produtos/contagem", token=token)
+checar("contagem responde", st == 200 and c.get("total", 0) >= 2, c)
+
+print("8. permissão")
+# Garante o usuário limitado: o smoke da fundação o desativa no fim.
+st, papeis = chamar("GET", "/papeis", token=token)
+id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
+st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
+if existente:
+    chamar("PUT", f"/usuarios/{existente['id']}",
+           {"ativo": True, "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]}, token=token)
+else:
+    chamar("POST", "/usuarios", {"nome": "Smoke Cozinha", "email": COZINHA[0],
+                                 "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]},
+           token=token)
+
+st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
+if st == 200:
+    tk = r["access_token"]
+    st, r = chamar("GET", "/produtos", token=tk)
+    checar("cozinha LÊ produtos", st == 200, st)
+    st, r = chamar("POST", "/produtos", {"nome": "Invadido", "um_estoque": "UN"}, token=tk)
+    checar("cozinha NÃO cria produto (403)", st == 403, st)
+    st, r = chamar("POST", "/fornecedores", {"nome": "Invadido"}, token=tk)
+    checar("cozinha NÃO cria fornecedor (403)", st == 403, st)
+    st, r = chamar("POST", "/setores", {"nome": "Invadido"}, token=tk)
+    checar("cozinha NÃO cria setor (403)", st == 403, st)
+else:
+    print("  (usuário de cozinha ausente — rode tests/smoke_fundacao.py antes)")
+
+print("9. limpeza")
+# Categoria com produto apontando para ela é desativada, não excluída — por
+# isso o produto solta a categoria antes.
+chamar("PUT", f"/produtos/{prod}", {"id_categoria": None}, token=token)
+for caminho in (f"/produtos/{prod}", f"/produtos/{rasc}", f"/fornecedores/{forn}"):
+    chamar("DELETE", caminho, token=token)
+st, r = chamar("DELETE", f"/categorias/{filha}", token=token)
+checar("exclui a subcategoria", st == 200 and "excluída" in r.get("message", ""), r)
+st, r = chamar("DELETE", f"/categorias/{raiz}", token=token)
+checar("limpa as categorias de teste", st == 200, r)
+st, lista = chamar("GET", "/produtos?busca=smoke", token=token)
+checar("produtos de teste saíram da lista ativa", all("smoke" not in p["nome"].lower() for p in lista),
+       [p["nome"] for p in lista])
+
+print()
+print(f"{ok} passaram, {len(falhas)} falharam")
+for f in falhas:
+    print(f"  - {f}")
+sys.exit(1 if falhas else 0)
