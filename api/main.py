@@ -26,6 +26,7 @@ from routers import (
     fornecedores,
     historico,
     inventario,
+    notas,
     omie,
     papeis,
     produtos,
@@ -107,6 +108,7 @@ app.include_router(estoque.router)
 app.include_router(inventario.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
+app.include_router(notas.router)
 app.include_router(omie.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)

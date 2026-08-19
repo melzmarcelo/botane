@@ -45,6 +45,8 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — estoque (custo médio, estorno, inventário, produção) | `cd api && python tests/smoke_estoque.py` |
 | API — CMV (apuração, ABC, margem, fechamento) | `cd api && python tests/smoke_cmv.py` |
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
+| API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
+| API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -64,4 +66,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **Etapa 5 — Omie:** concluída em 19/08/2026 — importação de notas, de-para em cascata,
   rateio de frete, lançamento no estoque e conferência com o CMC. Roda em **modo simulado**
   até a credencial do cliente chegar
+- **Notas sem integração:** concluída em 19/08/2026 — a nota entra por **três portas** (XML
+  da NF-e, digitação e Omie) e segue o mesmo caminho até o razão. A casa opera inteira sem
+  depender de credencial de ninguém
 - **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.

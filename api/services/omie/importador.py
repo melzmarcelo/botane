@@ -159,7 +159,7 @@ def calcular_nota(cur, id_nota: int) -> dict:
 
     cur.execute(
         """SELECT id, quantidade, valor_unitario, valor_total, valor_desconto, um_nota,
-                  id_produto, codigo_fornecedor
+                  id_produto, codigo_fornecedor, frete_informado, outros_informado
              FROM nota_itens WHERE id_nota = %s ORDER BY seq""",
         (id_nota,),
     )
@@ -177,8 +177,13 @@ def calcular_nota(cur, id_nota: int) -> dict:
     for item in itens:
         bruto = dec(item["valor_total"]) or dec(item["quantidade"]) * dec(item["valor_unitario"])
         peso = bruto / base
-        frete_item = (frete * peso).quantize(Decimal("0.01"))
-        outros_item = (outros * peso).quantize(Decimal("0.01"))
+        # O XML da NF-e costuma trazer frete e IPI/ST **já rateados pelo
+        # emitente**, item a item. Quando vieram, valem: são o rateio de quem
+        # emitiu a nota, e refazê-lo por valor daria outro número.
+        frete_item = (dec(item["frete_informado"]) if item["frete_informado"] is not None
+                      else (frete * peso).quantize(Decimal("0.01")))
+        outros_item = (dec(item["outros_informado"]) if item["outros_informado"] is not None
+                       else (outros * peso).quantize(Decimal("0.01")))
         desconto_item = dec(item["valor_desconto"]) + (desconto_nota * peso).quantize(
             Decimal("0.01")
         )
@@ -373,47 +378,70 @@ def _fornecedor_da_nota(cur, cnpj: str | None, nome: str | None) -> int | None:
     return None
 
 
-def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None) -> tuple[int, bool]:
-    """Grava (ou reconhece) a nota. Devolve (id, nova?)."""
+def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
+                origem: str = "OMIE", xml: str | None = None,
+                id_fornecedor: int | None = None) -> tuple[int, bool]:
+    """Grava (ou reconhece) a nota. Devolve (id, nova?).
+
+    O mesmo caminho serve às três entradas — Omie, XML e digitação — porque a
+    partir daqui a nota é só uma nota. Muda a porta, não o que acontece dentro.
+    """
     chave, id_omie = nota.get("chave_nfe"), nota.get("id_omie")
     if chave:
         cur.execute("SELECT id FROM notas_entrada WHERE chave_nfe = %s", (chave,))
     elif id_omie:
         cur.execute("SELECT id FROM notas_entrada WHERE id_omie = %s", (id_omie,))
     else:
-        cur.execute("SELECT NULL AS id WHERE false")
+        # Nota digitada não tem chave: a repetição se reconhece por fornecedor +
+        # número + série. Sem isso a mesma nota entra duas vezes e dobra o custo.
+        cur.execute(
+            """SELECT id FROM notas_entrada
+                WHERE chave_nfe IS NULL AND id_unidade = %s AND id_fornecedor IS NOT DISTINCT FROM %s
+                  AND numero IS NOT DISTINCT FROM %s AND coalesce(serie, '') = coalesce(%s, '')""",
+            (id_unidade, id_fornecedor, nota.get("numero"), nota.get("serie")),
+        )
     existente = cur.fetchone()
     if existente and existente["id"]:
         return existente["id"], False
 
-    id_fornecedor = _fornecedor_da_nota(cur, nota.get("cnpj_emitente"), nota.get("nome_emitente"))
+    if id_fornecedor is None:
+        id_fornecedor = _fornecedor_da_nota(cur, nota.get("cnpj_emitente"),
+                                            nota.get("nome_emitente"))
     cur.execute(
         """INSERT INTO notas_entrada
                (id_unidade, chave_nfe, numero, serie, id_fornecedor, cnpj_emitente,
                 nome_emitente, data_emissao, data_entrada, valor_produtos, valor_frete,
-                valor_desconto, valor_outros, valor_total, origem, id_omie, bruto)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'OMIE', %s, %s)
+                valor_desconto, valor_outros, valor_total, origem, id_omie, bruto, xml_bruto,
+                id_local)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (id_unidade, chave, nota.get("numero"), nota.get("serie"), id_fornecedor,
          nota.get("cnpj_emitente"), nota.get("nome_emitente"), nota.get("data_emissao"),
          nota.get("data_entrada"), nota.get("valor_produtos"), nota.get("valor_frete"),
          nota.get("valor_desconto"), nota.get("valor_outros"), nota.get("valor_total"),
-         id_omie, __import__("json").dumps(bruto, default=str) if bruto else None),
+         origem, id_omie, __import__("json").dumps(bruto, default=str) if bruto else None,
+         xml, nota.get("id_local")),
     )
     id_nota = cur.fetchone()["id"]
 
     for item in nota.get("itens", []):
-        id_produto, sugestao, score, _como = conciliar_item(cur, item, id_fornecedor)
+        # Item digitado já nasce com o produto escolhido na tela — a cascata só
+        # trabalha quando ninguém disse qual é.
+        id_produto, sugestao, score = item.get("id_produto"), None, None
+        if not id_produto:
+            id_produto, sugestao, score, _como = conciliar_item(cur, item, id_fornecedor)
         cur.execute(
             """INSERT INTO nota_itens
                    (id_nota, seq, descricao_fornecedor, codigo_fornecedor, codigo_barras, ncm,
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
-                    lote_nf, validade_nf, id_produto, sugestao_produto, sugestao_score)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    lote_nf, validade_nf, id_produto, sugestao_produto, sugestao_score,
+                    frete_informado, outros_informado)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
-             item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score),
+             item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
+             item.get("frete_informado"), item.get("outros_informado")),
         )
 
     calcular_nota(cur, id_nota)

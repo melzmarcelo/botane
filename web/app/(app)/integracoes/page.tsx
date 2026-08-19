@@ -62,7 +62,7 @@ export default function PaginaIntegracoes() {
       const c = await api.get<Config>("/omie/config");
       setCfg(c);
       setForm({ app_key: "", app_secret: "", modo: c.modo, ativa: c.ativa });
-      setVinculos(await api.get<Vinculo[]>("/omie/vinculos"));
+      setVinculos(await api.get<Vinculo[]>("/notas/vinculos"));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }

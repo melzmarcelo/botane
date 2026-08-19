@@ -266,6 +266,28 @@ sync_log(id, servico, chamada, pagina, registros, status, mensagem,
 `status` da nota: `IMPORTADA → CONCILIADA → LANCADA`. Só em `LANCADA` ela vira
 movimento de estoque.
 
+**Três portas, um caminho.** A casa tem de operar inteira sem depender de integração
+nenhuma — a credencial pode demorar, e a compra do mercado nunca vai passar por API:
+
+```
+XML da NF-e ─┐
+digitação   ─┼─▶ notas_entrada ─▶ conciliação ─▶ conversão ─▶ rateio ─▶ ENTRADA_NF
+Omie        ─┘
+```
+
+`origem` diz por onde entrou (`XML`, `MANUAL`, `OMIE`). Da gravação em diante nada muda:
+o de-para, o rateio de frete, a conversão de embalagem e o lançamento no razão são os
+mesmos. Duas diferenças de detalhe:
+
+* **Deduplicação.** Nota com chave da NF-e é única pela chave. Nota digitada não tem chave:
+  a repetição se reconhece por fornecedor + número + série (índice único `ux_nota_manual`).
+* **Rateio.** O XML costuma trazer `vFrete` e IPI/ST **já rateados por item**. Quando vêm,
+  valem (`nota_itens.frete_informado`/`outros_informado`) — refazer o rateio por valor daria
+  outro número que o da nota. Nota digitada não traz: aí o rateio é por valor.
+
+O XML original fica guardado em `notas_entrada.xml_bruto` para auditoria, mas nunca sai no
+JSON da tela.
+
 ### 4.7 Vendas e CMV
 
 ```

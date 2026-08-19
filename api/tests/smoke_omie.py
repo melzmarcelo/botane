@@ -71,14 +71,14 @@ print("0. limpa o cenário da rodada anterior")
 # rodada passada importou, a segunda execução não teria o que conciliar.
 CHAVES = {"35260812345678000195550010000004811000004812",
           "35260812345678000195550010000004911000004913"}
-st, notas_antigas = chamar("GET", "/omie/notas", token=token)
+st, notas_antigas = chamar("GET", "/notas", token=token)
 for n in notas_antigas or []:
     if n.get("chave_nfe") in CHAVES:
         if n["status"] == "LANCADA":
-            chamar("POST", f"/omie/notas/{n['id']}/estornar", token=token)
-        chamar("DELETE", f"/omie/notas/{n['id']}", token=token)
+            chamar("POST", f"/notas/{n['id']}/estornar", token=token)
+        chamar("DELETE", f"/notas/{n['id']}", token=token)
 for codigo in ("CAF-500", "LEI-INT", "TOM-CX"):
-    chamar("DELETE", f"/omie/vinculos/{codigo}", token=token)
+    chamar("DELETE", f"/notas/vinculos/{codigo}", token=token)
 # O catálogo importado na rodada anterior deixou produtos com o MESMO EAN das
 # notas — e aí o item casaria sozinho pelo nível 2 da cascata, que é o
 # comportamento certo mas apaga o cenário de conciliação deste teste.
@@ -116,7 +116,7 @@ st, r2 = chamar("POST", "/omie/sincronizar?dias=60", token=token)
 checar("reimportar não duplica (chave da NF-e)", r2.get("novas") == 0 and r2.get("repetidas") >= 1,
        r2)
 
-st, notas = chamar("GET", "/omie/notas", token=token)
+st, notas = chamar("GET", "/notas", token=token)
 checar("as notas aparecem na lista", st == 200 and len(notas) >= 2, len(notas) if st == 200 else notas)
 nota_cafe = next((n for n in notas if n["numero"] == "4812"), None)
 checar("a nota 4812 foi importada", nota_cafe is not None)
@@ -126,11 +126,11 @@ checar("a nota nasce com pendência de de-para",
        nota_cafe and nota_cafe["pendentes"] >= 1, nota_cafe)
 
 print("3. conciliação: sem produto, sem lançamento")
-st, r = chamar("POST", f"/omie/notas/{nota_cafe['id']}/lancar", {}, token=token)
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {}, token=token)
 checar("recusa lançar com item pendente", st == 400, (st, r))
 checar("a recusa diz quantos itens faltam", "item" in str(r.get("detail", "")).lower(), r)
 
-st, pend = chamar("GET", "/omie/pendencias", token=token)
+st, pend = chamar("GET", "/notas/pendencias", token=token)
 checar("as pendências aparecem na fila", st == 200 and len(pend) >= 2, len(pend))
 item_cafe = next((p for p in pend if "CAFE" in (p["descricao_fornecedor"] or "").upper()), None)
 checar("o item de café está na fila", item_cafe is not None, pend[:1])
@@ -145,11 +145,11 @@ st, r = chamar("POST", "/produtos", {"nome": f"Omie leite {marca}", "tipo": "INS
 leite = r.get("id")
 checar("produtos do cenário criados", bool(cafe and leite))
 
-st, r = chamar("POST", f"/omie/itens/{item_cafe['id']}/vincular",
+st, r = chamar("POST", f"/notas/itens/{item_cafe['id']}/vincular",
                {"id_produto": cafe, "fator": 12}, token=token)
 checar("vincula o item de café", st == 200, r)
 
-st, nota = chamar("GET", f"/omie/notas/{nota_cafe['id']}", token=token)
+st, nota = chamar("GET", f"/notas/{nota_cafe['id']}", token=token)
 linha_cafe = next(i for i in nota["itens"] if i["id_produto"] == cafe)
 checar("quantidade convertida: 4 CX × 12 = 48 un",
        perto(linha_cafe["quantidade_convertida"], 48), linha_cafe["quantidade_convertida"])
@@ -160,10 +160,10 @@ checar("custo de aquisição do café = 10,9375 (não os 10,00 da nota)",
        linha_cafe["custo_aquisicao_unitario"])
 
 item_leite = next(i for i in nota["itens"] if i["id_produto"] is None and not i["ignorado"])
-st, r = chamar("POST", f"/omie/itens/{item_leite['id']}/vincular",
+st, r = chamar("POST", f"/notas/itens/{item_leite['id']}/vincular",
                {"id_produto": leite}, token=token)
 checar("vincula o item de leite", st == 200, r)
-st, nota = chamar("GET", f"/omie/notas/{nota_cafe['id']}", token=token)
+st, nota = chamar("GET", f"/notas/{nota_cafe['id']}", token=token)
 linha_leite = next(i for i in nota["itens"] if i["id_produto"] == leite)
 checar("custo do leite = 4,375 (160 + 15 de frete ÷ 40)",
        perto(linha_leite["custo_aquisicao_unitario"], 4.375, 0.0001),
@@ -171,7 +171,7 @@ checar("custo do leite = 4,375 (160 + 15 de frete ÷ 40)",
 checar("a nota passou para CONCILIADA", nota["status"] == "CONCILIADA", nota["status"])
 
 print("4. lançamento vira estoque avaliado")
-st, r = chamar("POST", f"/omie/notas/{nota_cafe['id']}/lancar", {}, token=token)
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {}, token=token)
 checar("lança a nota", st == 200 and r.get("itens_lancados") == 2, r)
 checar("valor lançado = 700,00 (a nota inteira)", perto(r.get("valor"), 700), r)
 
@@ -181,14 +181,14 @@ checar("café entrou com 48 un", s_cafe and perto(s_cafe["quantidade"], 48), s_c
 checar("café entrou pelo custo de aquisição", s_cafe and perto(s_cafe["custo_medio"], 10.9375, 0.001),
        s_cafe)
 
-st, r = chamar("POST", f"/omie/notas/{nota_cafe['id']}/lancar", {}, token=token)
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {}, token=token)
 checar("não lança a mesma nota duas vezes", st == 400, st)
 
 print("5. o de-para aprendeu")
 # Apaga a nota de café e reimporta: o item tem de casar sozinho agora.
 st, r = chamar("POST", "/omie/sincronizar?dias=60", token=token)
 checar("nova sincronização não traz a nota de novo", r.get("novas") == 0, r)
-st, pend = chamar("GET", "/omie/pendencias", token=token)
+st, pend = chamar("GET", "/notas/pendencias", token=token)
 checar("o item de café saiu da fila de pendências",
        not any(p["id"] == item_cafe["id"] for p in pend))
 
@@ -221,11 +221,11 @@ st, r = chamar("GET", "/omie/config", token=tk)
 checar("cozinha NÃO vê a configuração da integração (403)", st == 403, st)
 st, r = chamar("POST", "/omie/sincronizar", token=tk)
 checar("cozinha NÃO sincroniza (403)", st == 403, st)
-st, r = chamar("GET", "/omie/notas", token=tk)
+st, r = chamar("GET", "/notas", token=tk)
 checar("cozinha NÃO vê as notas (403)", st == 403, st)
 
 print("8. desfazer: estorno e desvínculo")
-st, r = chamar("POST", f"/omie/notas/{nota_cafe['id']}/estornar", token=token)
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/estornar", token=token)
 checar("estorna o lançamento da nota", st == 200 and r.get("estornados") == 2, r)
 st, saldos = chamar("GET", f"/estoque/saldos?busca={marca}", token=token)
 s_cafe2 = next((s for s in saldos if s["id_produto"] == cafe), None)
@@ -233,7 +233,7 @@ checar("o saldo do café voltou a zero", s_cafe2 is None or perto(s_cafe2["quant
        s_cafe2)
 st, mov = chamar("GET", f"/estoque/movimentos?id_produto={cafe}", token=token)
 checar("o movimento original continua no razão, com a contrapartida", len(mov) == 2, len(mov))
-st, r = chamar("DELETE", f"/omie/vinculos/CAF-500", token=token)
+st, r = chamar("DELETE", f"/notas/vinculos/CAF-500", token=token)
 checar("desfaz o vínculo aprendido", st == 200, r)
 
 print("9. limpeza")

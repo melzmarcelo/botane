@@ -375,7 +375,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
       <li><a href="#cmv"><span class="n">03</span> Painel de CMV</a></li>
       <li><a href="#fichas"><span class="n">04</span> Fichas técnicas</a></li>
       <li><a href="#estoque"><span class="n">05</span> Estoque</a></li>
-      <li><a href="#omie"><span class="n">06</span> Notas do Omie</a></li>
+      <li><a href="#omie"><span class="n">06</span> Notas de entrada</a></li>
       <li><a href="#acesso"><span class="n">07</span> Acesso</a></li>
       <li><a href="#celular"><span class="n">08</span> No celular</a></li>
       <li><a href="#regras"><span class="n">09</span> Regras firmes</a></li>
@@ -400,7 +400,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
             entre o que custou e o que deveria ter custado.</em></p>
           <p class="sub">O ciclo fecha de ponta a ponta: cadastra o insumo, monta a ficha
             técnica, recebe a nota do Omie, produz, aponta a perda, conta o inventário,
-            importa a venda e mostra o CMV. Seis etapas construídas, 321 verificações
+            importa a venda e mostra o CMV. Seis etapas construídas, 413 verificações
             automáticas passando.</p>
         </div>
         <div>
@@ -422,7 +422,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
           <div class="chips">
             <span class="chip"><strong>11 telas</strong> no ar</span>
             <span class="chip"><strong>9</strong> migrações de banco</span>
-            <span class="chip"><strong>321</strong> checagens automáticas</span>
+            <span class="chip"><strong>413</strong> checagens automáticas</span>
             <span class="chip">Custeio: <strong>médio ponderado móvel</strong></span>
             <span class="chip">Celular e desktop</span>
           </div>
@@ -445,7 +445,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
         <li class="done"><span class="s-n">02</span><span class="s-t">Cadastros</span><span class="s-d">Produtos com tipo, unidade de compra × de estoque e fator; categorias em árvore, setores, locais, fornecedores e unidades de medida.</span></li>
         <li class="done"><span class="s-n">03</span><span class="s-t">Fichas técnicas</span><span class="s-d">Preparo dentro de preparo, peso bruto × líquido, fator de correção, custo por porção e versão com homologação.</span></li>
         <li class="done"><span class="s-n">04</span><span class="s-t">Estoque</span><span class="s-d">Razão que não se apaga, custo médio ponderado móvel, perdas com motivo, transferência, produção pela ficha e inventário.</span></li>
-        <li class="done"><span class="s-n">05</span><span class="s-t">Notas do Omie</span><span class="s-d">Importação, de-para que aprende, rateio de frete e lançamento no estoque. Em modo de demonstração até a credencial do cliente chegar.</span></li>
+        <li class="done"><span class="s-n">05</span><span class="s-t">Notas de entrada</span><span class="s-d">XML da NF-e, digitação da nota e Omie — as três portas com o mesmo de-para que aprende, rateio de frete e lançamento no estoque. Só o Omie depende de credencial, e roda em demonstração até ela chegar.</span></li>
         <li class="done"><span class="s-n">06</span><span class="s-t">CMV</span><span class="s-d">Painel real × teórico, variância explicada, curva ABC, margem por prato e fechamento de mês com trava.</span></li>
       </ol>
 
@@ -465,8 +465,8 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
         </div>
         <div class="card">
           <span class="tag">Como se sabe que funciona</span>
-          <h3>321 verificações automáticas</h3>
-          <p>Seis suítes que refazem as contas do zero a cada execução, mais 61 checagens
+          <h3>413 verificações automáticas</h3>
+          <p>Oito suítes que refazem as contas do zero a cada execução, mais 78 checagens
           no navegador de verdade — inclusive no tamanho de tela do celular.</p>
         </div>
       </div>
@@ -697,14 +697,15 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
     </section>
 
     <!-- 06 -->
-    <section id="omie" data-n="06" data-nome="Notas do Omie">
+    <section id="omie" data-n="06" data-nome="Notas de entrada">
       <div class="col">
-        <div class="eyebrow">06 — Integração</div>
+        <div class="eyebrow">06 — Entrada de notas</div>
         <h2>A nota de compra vira estoque avaliado</h2>
-        <p class="after-h2">O Omie continua sendo o sistema fiscal. O Botané lê de lá as notas
-        de entrada e as transforma em custo — que é o que o Omie não faz por ficha técnica.
-        <b>O importador está pronto e rodando em modo de demonstração</b>, sobre notas de
-        exemplo, enquanto a credencial do cliente não chega.</p>
+        <p class="after-h2">A nota de compra entra por <b>três portas</b>: o <b>XML</b> que o
+        fornecedor mandou por e-mail, a <b>digitação</b> do cupom do mercado, ou o <b>Omie</b>.
+        Da entrada em diante o caminho é o mesmo — de-para, rateio de frete, conversão de
+        embalagem e lançamento no estoque. <b>A casa opera inteira sem depender de integração
+        nenhuma</b>: o Omie é conveniência, não pré-requisito.</p>
       </div>
 
       <figure>
@@ -846,7 +847,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
     <section id="prova" data-n="10" data-nome="Como sabemos">
       <div class="col">
         <div class="eyebrow">10 — Prova</div>
-        <h2>321 verificações que refazem as contas a cada alteração</h2>
+        <h2>413 verificações que refazem as contas a cada alteração</h2>
         <p class="after-h2">Não é “rodou sem erro”: cada suíte monta um cenário, executa o
         fluxo e compara com o resultado calculado à mão. Se alguém quebrar o rateio de frete
         ou o custo médio, o teste acusa antes de o cliente ver.</p>
@@ -862,7 +863,9 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
             <tr><td>Estoque</td><td class="num">57</td><td>Custo médio móvel, estorno, transferência que não cria valor, inventário e produção.</td></tr>
             <tr><td>CMV</td><td class="num">45</td><td>A conta do mês inteiro, custo congelado na venda e o bloqueio do período fechado.</td></tr>
             <tr><td>Omie</td><td class="num">47</td><td>Importação sem duplicar, de-para que aprende, rateio de frete e estorno da nota.</td></tr>
-            <tr><td><b>Navegador</b></td><td class="num"><b>61</b></td><td>As telas no Chrome de verdade: cadastra produto, cria ficha, lança entrada, importa venda, concilia nota — e confere o celular.</td></tr>
+            <tr><td>Notas sem integração</td><td class="num">47</td><td>XML da NF-e lido campo a campo, arquivo errado recusado com explicação, nota digitada que não entra duas vezes.</td></tr>
+            <tr><td>Alertas e planilhas</td><td class="num">28</td><td>O alerta nasce do problema e some quando ele acaba; o CSV abre no Excel com acento e vírgula certos.</td></tr>
+            <tr><td><b>Navegador</b></td><td class="num"><b>78</b></td><td>As telas no Chrome de verdade: cadastra produto, cria ficha, lança entrada, importa venda, concilia nota — e confere o celular.</td></tr>
           </tbody>
         </table>
       </div>
@@ -913,7 +916,7 @@ footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line);
     <footer>
       <span>Botané Deli e Café</span>
       <span>Primeira parte entregue · 19 de agosto de 2026</span>
-      <span>Etapas 1 a 6 · 321 checagens</span>
+      <span>Etapas 1 a 6 · 413 checagens</span>
     </footer>
   </main>
 </div>

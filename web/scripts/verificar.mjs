@@ -413,15 +413,15 @@ try {
 
   console.log("8. Omie (etapa 5)");
   // Limpa o que rodadas anteriores importaram das fixtures.
-  const { dados: notasAntigas } = await api("GET", "/omie/notas", null, token);
+  const { dados: notasAntigas } = await api("GET", "/notas", null, token);
   for (const n of notasAntigas ?? []) {
     if ((n.chave_nfe ?? "").startsWith("35260812345678")) {
-      if (n.status === "LANCADA") await api("POST", `/omie/notas/${n.id}/estornar`, null, token);
-      await api("DELETE", `/omie/notas/${n.id}`, null, token);
+      if (n.status === "LANCADA") await api("POST", `/notas/${n.id}/estornar`, null, token);
+      await api("DELETE", `/notas/${n.id}`, null, token);
     }
   }
   for (const c of ["CAF-500", "LEI-INT", "TOM-CX"]) {
-    await api("DELETE", `/omie/vinculos/${c}`, null, token);
+    await api("DELETE", `/notas/vinculos/${c}`, null, token);
   }
 
   for (const [rota, nome] of [["/integracoes", "26-integracoes"], ["/compras", "27-compras"]]) {
@@ -476,7 +476,98 @@ try {
   checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
   await foto(p, "29-conciliacao");
 
-  await api("DELETE", "/omie/vinculos/CAF-500", null, token);
+  await api("DELETE", "/notas/vinculos/CAF-500", null, token);
+
+  console.log("8b. a nota que entra sem integração nenhuma");
+  // A chave da NF-e é única: a marca da rodada entra nela para que a segunda
+  // execução do teste importe de verdade, em vez de bater no de-duplicador.
+  const marcaNota = String(Date.now()).slice(-6);
+  const chaveNota = `42260899888877000166550010000088881${marcaNota}0000`.slice(0, 44);
+  const caminhoXml = `${FOTOS}/_nota-exemplo.xml`;
+  writeFileSync(
+    caminhoXml,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+ <NFe><infNFe Id="NFe${chaveNota}" versao="4.00">
+  <ide><nNF>8888${marcaNota}</nNF><serie>1</serie><mod>55</mod><dhEmi>2026-08-16T09:00:00-03:00</dhEmi></ide>
+  <emit><CNPJ>99888877000166</CNPJ><xNome>Atacado do Vale ${marcaNota}</xNome></emit>
+  <dest><CNPJ>11222333000181</CNPJ><xNome>Botane Deli e Cafe</xNome></dest>
+  <det nItem="1"><prod><cProd>AZE-${marcaNota}</cProd><cEAN>SEM GTIN</cEAN>
+   <xProd>AZEITE EXTRA VIRGEM 500ML</xProd><NCM>15091000</NCM><uCom>UN</uCom>
+   <qCom>6.0000</qCom><vUnCom>32.0000</vUnCom><vProd>192.00</vProd><vFrete>12.00</vFrete>
+  </prod><imposto><ICMS><ICMS00><vICMS>0.00</vICMS></ICMS00></ICMS></imposto></det>
+  <total><ICMSTot><vProd>192.00</vProd><vFrete>12.00</vFrete><vNF>204.00</vNF></ICMSTot></total>
+ </infNFe></NFe>
+</nfeProc>`,
+  );
+
+  await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  const entradaXmlTela = await p.$('input[type="file"]');
+  checar("a tela de compras tem a porta do XML", !!entradaXmlTela);
+  await entradaXmlTela.uploadFile(caminhoXml);
+  await new Promise((r) => setTimeout(r, 2500));
+  const textoXml = await p.evaluate(() => document.body.innerText);
+  checar("o XML importa pela tela", /1 nota\(s\) importada\(s\)/i.test(textoXml),
+    textoXml.slice(0, 160));
+  checar("o arquivo aparece com o resultado", /Arquivos lidos/i.test(textoXml));
+  checar("a nota abre sozinha com o item do XML",
+    /AZEITE EXTRA VIRGEM/i.test(textoXml), textoXml.slice(0, 200));
+  await foto(p, "29b-xml-importado");
+
+  // O mesmo arquivo de novo: a chaveNota da NF-e é que impede a duplicação.
+  await (await p.$('input[type="file"]')).uploadFile(caminhoXml);
+  await new Promise((r) => setTimeout(r, 2200));
+  const textoRepetido = await p.evaluate(() => document.body.innerText);
+  checar("o mesmo XML não entra duas vezes",
+    /repetida|já tinha sido importada/i.test(textoRepetido), textoRepetido.slice(0, 160));
+
+  // Arquivo que não é nota: a recusa tem de explicar o que houve.
+  writeFileSync(`${FOTOS}/_nao-e-nota.xml`, "<retEnviNFe><nRec>1</nRec></retEnviNFe>");
+  await (await p.$('input[type="file"]')).uploadFile(`${FOTOS}/_nao-e-nota.xml`);
+  await new Promise((r) => setTimeout(r, 2000));
+  const textoRecusa = await p.evaluate(() => document.body.innerText);
+  checar("arquivo que não é a nota é recusado com explicação",
+    /recibo\/evento da nota/i.test(textoRecusa), textoRecusa.slice(0, 200));
+
+  // Agora a digitação: a compra do mercado, que não tem XML nenhum.
+  const { dados: produtosNota } = await api("GET", "/produtos", null, token);
+  const insumoNota = produtosNota.find((x) => x.controla_estoque);
+  await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => x.textContent === "Digitar nota")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const seletoresNota = await p.$$("select");
+  checar("o formulário de digitação abre", seletoresNota.length >= 3, seletoresNota.length);
+  await seletoresNota[1].select(String(insumoNota.id));
+  const numerosNota = await p.$$('input[inputmode="decimal"]');
+  await numerosNota[0].type("2");
+  await numerosNota[1].type("10");
+  await new Promise((r) => setTimeout(r, 600));
+  const textoPreviaNota = await p.evaluate(() => document.body.innerText);
+  checar("a tela mostra o custo unitário antes de gravar",
+    /R\$\s*10,00/.test(textoPreviaNota), textoPreviaNota.slice(-260));
+  await foto(p, "29c-nota-digitada");
+
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => x.textContent === "Gravar nota")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2200));
+  const textoGravadaNota = await p.evaluate(() => document.body.innerText);
+  checar("a nota digitada grava e abre para conferência",
+    /Nota registrada/i.test(textoGravadaNota), textoGravadaNota.slice(0, 160));
+  checar("e já nasce pronta para lançar (sem pendência)",
+    !/sem produto vinculado/i.test(textoGravadaNota), textoGravadaNota.slice(0, 200));
+
+  // Limpeza: as duas notas do teste saem, para a próxima rodada começar limpa.
+  const { dados: notasDoTesteXml } = await api("GET", "/notas?limite=30", null, token);
+  for (const n of notasDoTesteXml ?? []) {
+    if (n.chave_nfe === chaveNota || (n.origem === "MANUAL" && !n.numero)) {
+      await api("DELETE", `/notas/${n.id}`, null, token);
+    }
+  }
 
   console.log("9. alertas e exportação");
   await p.goto(`${WEB}/alertas`, { waitUntil: "networkidle2" });

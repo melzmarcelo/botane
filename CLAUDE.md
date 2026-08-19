@@ -39,6 +39,12 @@ para arquivo nenhum — gravar direto aqui.
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
   `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+- **`services/nfe_xml.py`** + `routers/notas.py`: a casa opera **sem integração nenhuma**. A
+  nota entra por três portas — XML da NF-e, digitação e Omie — e da gravação em diante o
+  caminho é um só (conciliação → conversão → rateio → razão). Por isso o ciclo da nota
+  (conferir, vincular, lançar, estornar) mora em `notas.py`, e `omie.py` ficou só com
+  credencial, sincronização e catálogo. Nota digitada não tem chave da NF-e: a repetição se
+  reconhece por fornecedor + número + série (índice único `ux_nota_manual`).
 - **`services/omie/`**: `cliente.py` (HTTP, paginação, back-off, modo simulado com fixtures),
   `mapeadores.py` (**o único arquivo que muda quando a credencial real chegar** — cada campo
   é lido por uma lista de nomes possíveis) e `importador.py` (de-para em cascata, rateio,
@@ -61,7 +67,7 @@ para arquivo nenhum — gravar direto aqui.
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
 - Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47) e
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47) e
   `web/scripts/verificar.mjs` (61 no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
@@ -84,6 +90,10 @@ para arquivo nenhum — gravar direto aqui.
   4 UN e engoliria a caixa de 12. No importador, **o fator da embalagem vem antes** da
   conversão de grandeza.
 - Item de nota sem produto **não entra no estoque** e barra o lançamento da nota inteira.
+- ⚠️ No XML da NF-e, `vFrete` **ausente** e `vFrete` igual a **zero** são coisas diferentes:
+  zero é o emitente dizendo "neste item não há frete". Tratar zero como ausente joga o item no
+  rateio por valor e cobra dele um frete que a nota não pôs. Se **algum** item traz o campo, o
+  rateio é do emitente e os outros recebem zero — senão o frete entraria duas vezes.
 - **Fechamento de mês bloqueia lançamento retroativo** — mas quem tem `estoque.retroativo`
   (inclusive o admin) passa. Teste da trava precisa de usuário sem a chave (o Conferente).
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o

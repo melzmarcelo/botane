@@ -1,10 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import NotaManual from "./nota-manual";
+
+/** O que o servidor devolve para cada arquivo do lote de XMLs. */
+type ResultadoXml = {
+  arquivo: string;
+  status: "nova" | "repetida" | "erro";
+  erro?: string;
+  avisos?: string[];
+  id?: number;
+  numero?: string | null;
+  fornecedor?: string | null;
+  itens?: number;
+  pendentes?: number;
+  valor_total?: number;
+};
 
 type Nota = {
   id: number;
@@ -59,11 +74,14 @@ export default function PaginaCompras() {
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [digitando, setDigitando] = useState(false);
+  const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
+  const entradaXml = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
     try {
       const [n, p, l] = await Promise.all([
-        api.get<Nota[]>("/omie/notas?limite=50"),
+        api.get<Nota[]>("/notas?limite=50"),
         api.get<ProdutoResumo[]>("/produtos"),
         api.get<Local[]>("/locais"),
       ]);
@@ -79,11 +97,20 @@ export default function PaginaCompras() {
     void carregar();
   }, [carregar]);
 
-  async function abrir(id: number) {
-    setErro("");
-    setOk("");
+  /**
+   * Abre a nota para conferência.
+   *
+   * `limparAvisos` existe porque quase toda ação (importar, digitar, lançar,
+   * estornar) termina abrindo a nota — e limpar aqui apagaria a mensagem que a
+   * ação acabou de escrever, deixando a tela muda depois de dar certo.
+   */
+  async function abrir(id: number, limparAvisos = true) {
+    if (limparAvisos) {
+      setErro("");
+      setOk("");
+    }
     try {
-      const nota = await api.get<NotaDetalhe & { itens: ItemNota[] }>(`/omie/notas/${id}`);
+      const nota = await api.get<NotaDetalhe & { itens: ItemNota[] }>(`/notas/${id}`);
       setAberta(nota);
       // Sugestão já vem marcada: confirmar é um clique, e nunca automático.
       setEscolha(
@@ -95,6 +122,34 @@ export default function PaginaCompras() {
       );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao abrir a nota");
+    }
+  }
+
+  async function importarXml(arquivos: FileList | null) {
+    if (!arquivos?.length) return;
+    setOcupado(true);
+    setErro("");
+    setOk("");
+    setImportados(null);
+    try {
+      const corpo = new FormData();
+      // O campo repete de propósito: o servidor recebe a lista inteira de uma
+      // vez, e um arquivo ruim no meio não impede os outros de entrarem.
+      Array.from(arquivos).forEach((a) => corpo.append("arquivos", a));
+      const r = await api.upload<{ resultados: ResultadoXml[]; message: string }>(
+        "/notas/importar-xml",
+        corpo,
+      );
+      setImportados(r.resultados);
+      setOk(r.message);
+      await carregar();
+      const primeira = r.resultados.find((x) => x.status === "nova" && x.id);
+      if (primeira?.id) await abrir(primeira.id, false);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível ler os arquivos");
+    } finally {
+      setOcupado(false);
+      if (entradaXml.current) entradaXml.current.value = "";
     }
   }
 
@@ -124,8 +179,8 @@ export default function PaginaCompras() {
     setOcupado(true);
     setErro("");
     try {
-      await api.post(`/omie/itens/${item.id}/vincular`, { id_produto, aprender: true });
-      await abrir(aberta!.id);
+      await api.post(`/notas/itens/${item.id}/vincular`, { id_produto, aprender: true });
+      await abrir(aberta!.id, false);
       await carregar();
       setOk("Item vinculado — as próximas notas com esse código entram sozinhas.");
     } catch (e) {
@@ -138,8 +193,8 @@ export default function PaginaCompras() {
   async function ignorar(item: ItemNota) {
     setOcupado(true);
     try {
-      await api.post(`/omie/itens/${item.id}/ignorar`);
-      await abrir(aberta!.id);
+      await api.post(`/notas/itens/${item.id}/ignorar`);
+      await abrir(aberta!.id, false);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível marcar");
@@ -155,13 +210,13 @@ export default function PaginaCompras() {
     setOk("");
     try {
       const r = await api.post<{ itens_lancados: number; valor: number }>(
-        `/omie/notas/${aberta.id}/lancar`,
+        `/notas/${aberta.id}/lancar`,
         {},
       );
       setOk(
         `${r.itens_lancados} item(ns) no estoque, ${reais(Number(r.valor))} — o custo médio de cada insumo foi recalculado.`,
       );
-      await abrir(aberta.id);
+      await abrir(aberta.id, false);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível lançar");
@@ -176,9 +231,9 @@ export default function PaginaCompras() {
     setErro("");
     setOk("");
     try {
-      const r = await api.post<{ estornados: number }>(`/omie/notas/${aberta.id}/estornar`);
+      const r = await api.post<{ estornados: number }>(`/notas/${aberta.id}/estornar`);
       setOk(`${r.estornados} movimento(s) estornado(s) — o razão guarda os dois lados.`);
-      await abrir(aberta.id);
+      await abrir(aberta.id, false);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível estornar");
@@ -198,20 +253,112 @@ export default function PaginaCompras() {
             Notas de entrada
           </h1>
           <p className="mt-1 max-w-[66ch] text-suave">
-            A nota vem do Omie e vira estoque avaliado aqui. O que decide o custo não é o valor
-            unitário da nota: é ele menos desconto, mais frete rateado, dividido pelo que
-            realmente entra na prateleira.
+            A nota entra por onde for mais fácil — o XML que o fornecedor mandou, a digitação do
+            cupom do mercado ou o Omie — e vira estoque avaliado do mesmo jeito. O que decide o
+            custo não é o valor unitário da nota: é ele menos desconto, mais frete rateado,
+            dividido pelo que realmente entra na prateleira.
           </p>
         </div>
-        {pode("integracao.omie") && (
-          <button className="btn btn-primario" onClick={sincronizar} disabled={ocupado}>
-            {ocupado ? "Sincronizando…" : "Buscar no Omie"}
-          </button>
+        {pode("compras.notas") && (
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={entradaXml}
+              type="file"
+              accept=".xml,text/xml,application/xml"
+              multiple
+              className="hidden"
+              onChange={(e) => void importarXml(e.target.files)}
+            />
+            <button
+              className="btn btn-primario"
+              onClick={() => entradaXml.current?.click()}
+              disabled={ocupado}
+            >
+              {ocupado ? "Lendo…" : "Importar XML"}
+            </button>
+            <button
+              className="btn btn-secundario"
+              onClick={() => {
+                setDigitando(true);
+                setAberta(null);
+              }}
+              disabled={ocupado}
+            >
+              Digitar nota
+            </button>
+            {pode("integracao.omie") && (
+              <button className="btn btn-secundario" onClick={sincronizar} disabled={ocupado}>
+                Buscar no Omie
+              </button>
+            )}
+          </div>
         )}
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {ok && <Aviso tipo="ok">{ok}</Aviso>}
+
+      {digitando && (
+        <NotaManual
+          produtos={produtos}
+          locais={locais}
+          aoFechar={() => setDigitando(false)}
+          aoGravar={async (id) => {
+            setDigitando(false);
+            setOk("Nota registrada. Confira os itens e lance no estoque.");
+            await carregar();
+            await abrir(id, false);
+          }}
+        />
+      )}
+
+      {importados && (
+        <Cartao
+          titulo="Arquivos lidos"
+          acao={
+            <button className="rotulo hover:text-erro" onClick={() => setImportados(null)}>
+              fechar
+            </button>
+          }
+        >
+          <ul className="flex flex-col gap-px bg-linha">
+            {importados.map((r, i) => (
+              <li key={i} className="bg-superficie py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    className="text-left"
+                    onClick={() => r.id && void abrir(r.id)}
+                    disabled={!r.id}
+                  >
+                    <span className="font-semibold">
+                      {r.numero ? `NF ${r.numero}` : r.arquivo}
+                    </span>
+                    <span className="block text-[13px] text-suave">
+                      {r.status === "erro"
+                        ? r.arquivo
+                        : `${r.fornecedor ?? ""} · ${r.itens ?? 0} item(ns)` +
+                          (r.pendentes ? ` · ${r.pendentes} a vincular` : "")}
+                    </span>
+                  </button>
+                  <Etiqueta
+                    cor={
+                      r.status === "nova" ? "erva" : r.status === "repetida" ? "neutro" : "alerta"
+                    }
+                  >
+                    {r.status === "nova" ? "importada" : r.status}
+                  </Etiqueta>
+                </div>
+                {r.erro && <p className="mt-1 text-[13px] text-erro">{r.erro}</p>}
+                {r.avisos?.map((a, j) => (
+                  <p key={j} className="mt-1 text-[13px] text-alerta">
+                    {a}
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </Cartao>
+      )}
 
       {aberta && (
         <Cartao
