@@ -23,7 +23,7 @@ const CAMINHO = [
   { nome: "Produtos e fornecedores", detalhe: "O que se compra, em que unidade e de quem", pronto: true },
   { nome: "Fichas técnicas", detalhe: "A receita de cada prato e quanto ela custa por porção", pronto: true },
   { nome: "Estoque e perdas", detalhe: "Entradas, saídas, contagem e o que se perdeu — com nome", pronto: true },
-  { nome: "Notas do Omie", detalhe: "A nota de compra entra sozinha e vira custo", pronto: false },
+  { nome: "Notas do Omie", detalhe: "A nota de compra entra sozinha e vira custo", pronto: true },
   { nome: "Painel de CMV", detalhe: "Quanto custou o que você vendeu, e onde está a diferença", pronto: true },
 ];
 
@@ -186,6 +186,7 @@ export default function Inicio() {
           <ul className="flex flex-col gap-2">
             {[
               { href: "/produtos", nome: "Produtos e insumos", chave: "cadastros.produtos" },
+              { href: "/compras", nome: "Notas de entrada", chave: "compras.notas" },
               { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
               { href: "/estoque", nome: "Estoque", chave: "estoque.saldos" },
               { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },

@@ -411,7 +411,74 @@ try {
   await api("DELETE", `/produtos/${ins6.id}`, null, token);
   await api("DELETE", `/produtos/${prod6.id}`, null, token);
 
-  console.log("8. celular (390 x 844)");
+  console.log("8. Omie (etapa 5)");
+  // Limpa o que rodadas anteriores importaram das fixtures.
+  const { dados: notasAntigas } = await api("GET", "/omie/notas", null, token);
+  for (const n of notasAntigas ?? []) {
+    if ((n.chave_nfe ?? "").startsWith("35260812345678")) {
+      if (n.status === "LANCADA") await api("POST", `/omie/notas/${n.id}/estornar`, null, token);
+      await api("DELETE", `/omie/notas/${n.id}`, null, token);
+    }
+  }
+  for (const c of ["CAF-500", "LEI-INT", "TOM-CX"]) {
+    await api("DELETE", `/omie/vinculos/${c}`, null, token);
+  }
+
+  for (const [rota, nome] of [["/integracoes", "26-integracoes"], ["/compras", "27-compras"]]) {
+    await p.goto(WEB + rota, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1200));
+    const texto = await p.evaluate(() => document.body.innerText);
+    checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
+      texto.slice(0, 90));
+    await foto(p, nome);
+  }
+
+  // O texto tem de vir da tela de integrações, não da última do laço.
+  await p.goto(`${WEB}/integracoes`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoInt = await p.evaluate(() => document.body.innerText);
+  checar("a tela avisa que está em modo simulado", /modo simulado/i.test(textoInt),
+    textoInt.slice(0, 120));
+  checar("a credencial aparece mascarada",
+    /•/.test(textoInt) || /não configurada/i.test(textoInt), textoInt.slice(0, 200));
+
+  // Sincroniza pela tela de compras e concilia um item.
+  await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      x.textContent === "Buscar no Omie");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const textoCompras = await p.evaluate(() => document.body.innerText);
+  checar("sincroniza pela tela", /nota\(s\) nova\(s\)/i.test(textoCompras),
+    textoCompras.slice(0, 120));
+  checar("a nota chega com pendência de de-para", /pendente/i.test(textoCompras));
+  await foto(p, "28-compras-sincronizado");
+
+  // Abre a primeira nota e confere que o lançamento está barrado.
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      x.textContent.includes("NF 4812"));
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoNota = await p.evaluate(() => document.body.innerText);
+  checar("a nota abre com os itens", /CAFE EM GRAO/i.test(textoNota), textoNota.slice(0, 100));
+  checar("a tela explica por que não dá para lançar",
+    /sem produto vinculado/i.test(textoNota), textoNota.slice(0, 150));
+  const lancarDesabilitado = await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      x.textContent === "Lançar no estoque");
+    return b ? b.disabled : null;
+  });
+  checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
+  await foto(p, "29-conciliacao");
+
+  await api("DELETE", "/omie/vinculos/CAF-500", null, token);
+
+  console.log("9. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -461,7 +528,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("9. logo da empresa");
+  console.log("10. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

@@ -1,0 +1,21 @@
+{
+  "pagina": 1,
+  "total_de_paginas": 1,
+  "total_de_registros": 2,
+  "clientes_cadastro": [
+    {
+      "codigo_cliente_omie": 800001,
+      "razao_social": "Distribuidora Simulada LTDA",
+      "cnpj_cpf": "12.345.678/0001-95",
+      "cidade": "Blumenau",
+      "estado": "SC"
+    },
+    {
+      "codigo_cliente_omie": 800002,
+      "razao_social": "Hortifruti Simulado ME",
+      "cnpj_cpf": "98.765.432/0001-10",
+      "cidade": "Gaspar",
+      "estado": "SC"
+    }
+  ]
+}

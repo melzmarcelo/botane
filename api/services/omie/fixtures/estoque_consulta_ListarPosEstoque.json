@@ -1,0 +1,18 @@
+{
+  "pagina": 1,
+  "total_de_paginas": 1,
+  "produtos": [
+    {
+      "cCodigo": "CAF-500",
+      "cDescricao": "Café em grão especial 500g",
+      "nSaldo": 12,
+      "nCMC": 30.5
+    },
+    {
+      "cCodigo": "LEI-INT",
+      "cDescricao": "Leite integral 1L",
+      "nSaldo": 40,
+      "nCMC": 4.1
+    }
+  ]
+}

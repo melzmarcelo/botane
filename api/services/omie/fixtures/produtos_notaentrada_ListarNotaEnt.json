@@ -1,0 +1,93 @@
+{
+  "pagina": 1,
+  "total_de_paginas": 1,
+  "registros": 2,
+  "total_de_registros": 2,
+  "nfe_encontradas": [
+    {
+      "nCodNotaEnt": 90001,
+      "nfCabecalho": {
+        "cChaveNFe": "35260812345678000195550010000004811000004812",
+        "nNumero": "4812",
+        "cSerie": "1",
+        "dDtEmissao": "16/08/2026",
+        "dDtEntrada": "17/08/2026"
+      },
+      "nfEmitente": {
+        "cnpj_cpf": "12.345.678/0001-95",
+        "razao_social": "Distribuidora Simulada LTDA"
+      },
+      "nfTotais": {
+        "nValorProdutos": 640.0,
+        "nValorFrete": 60.0,
+        "nValorDesconto": 0.0,
+        "nValorIPI": 0.0,
+        "nValorTotal": 700.0
+      },
+      "det": [
+        {
+          "nSeqItem": 1,
+          "produto": {
+            "cCodigo": "CAF-500",
+            "cDescricao": "CAFE EM GRAO ESPECIAL CX 12X500G",
+            "cEAN": "7891234500017",
+            "cNCM": "09011110",
+            "nQuantidade": 4,
+            "cUnidade": "CX",
+            "nValorUnitario": 120.0,
+            "nValorTotal": 480.0
+          }
+        },
+        {
+          "nSeqItem": 2,
+          "produto": {
+            "cCodigo": "LEI-INT",
+            "cDescricao": "LEITE INTEGRAL CAIXA 1L",
+            "cEAN": "7891234500024",
+            "cNCM": "04012010",
+            "nQuantidade": 40,
+            "cUnidade": "UN",
+            "nValorUnitario": 4.0,
+            "nValorTotal": 160.0
+          }
+        }
+      ]
+    },
+    {
+      "nCodNotaEnt": 90002,
+      "nfCabecalho": {
+        "cChaveNFe": "35260812345678000195550010000004911000004913",
+        "nNumero": "4913",
+        "cSerie": "1",
+        "dDtEmissao": "18/08/2026",
+        "dDtEntrada": "19/08/2026"
+      },
+      "nfEmitente": {
+        "cnpj_cpf": "98.765.432/0001-10",
+        "razao_social": "Hortifruti Simulado ME"
+      },
+      "nfTotais": {
+        "nValorProdutos": 300.0,
+        "nValorFrete": 0.0,
+        "nValorDesconto": 30.0,
+        "nValorTotal": 270.0
+      },
+      "det": [
+        {
+          "nSeqItem": 1,
+          "produto": {
+            "cCodigo": "TOM-CX",
+            "cDescricao": "TOMATE ITALIANO CAIXA 20KG",
+            "cNCM": "07020000",
+            "nQuantidade": 2,
+            "cUnidade": "CX",
+            "nValorUnitario": 150.0,
+            "nValorTotal": 300.0
+          },
+          "cLote": "L-2026-08",
+          "dValidade": "29/08/2026"
+        }
+      ]
+    }
+  ]
+}

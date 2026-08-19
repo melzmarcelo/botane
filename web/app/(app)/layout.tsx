@@ -31,6 +31,10 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     ],
   },
   {
+    grupo: "Compras",
+    itens: [{ href: "/compras", nome: "Notas de entrada", chave: "compras.notas" }],
+  },
+  {
     grupo: "CMV",
     itens: [
       { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
@@ -44,6 +48,7 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
       { href: "/lojas", nome: "Lojas e parâmetros", chave: "admin.unidades" },
       { href: "/usuarios", nome: "Usuários", chave: "admin.usuarios" },
       { href: "/papeis", nome: "Papéis e permissões", chave: "admin.papeis" },
+      { href: "/integracoes", nome: "Integrações", chave: "admin.integracoes" },
       { href: "/auditoria", nome: "Auditoria", chave: "admin.auditoria" },
     ],
   },
@@ -119,7 +124,7 @@ function Casca({ children }: { children: React.ReactNode }) {
         const itens = g.itens.filter((i) => !i.chave || pode(i.chave));
         if (!itens.length) return null;
         return (
-          <div key={g.grupo} className="mb-4">
+          <div key={g.grupo} className="mb-4 shrink-0">
             <p className="rotulo px-2 pb-1.5">{g.grupo}</p>
             <ul className="flex flex-col gap-0.5">
               {itens.map((i) => {
@@ -193,7 +198,7 @@ function Casca({ children }: { children: React.ReactNode }) {
           aberto ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between gap-2 px-5 pb-4 pt-5">
+        <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-4 pt-5">
           <Marca logo={marca.logo} nome={marca.nome} />
           <button
             className="rotulo lg:hidden"
@@ -206,7 +211,7 @@ function Casca({ children }: { children: React.ReactNode }) {
 
         {/* Com uma loja só o seletor não aparece — mas o dado já é por loja. */}
         {loja && eu.unidades.length === 1 && (
-          <p className="rotulo truncate px-5 pb-3">{loja.apelido ?? loja.nome}</p>
+          <p className="rotulo shrink-0 truncate px-5 pb-3">{loja.apelido ?? loja.nome}</p>
         )}
         {eu.unidades.length > 1 && (
           <div className="px-5 pb-3">
@@ -218,8 +223,10 @@ function Casca({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        <div className="flex-1">{navegacao}</div>
-        {rodapeUsuario}
+        {/* min-h-0 + overflow no meio: sem isso o flex comprime os grupos do menu
+            quando ele cresce, e os rótulos se sobrepõem. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">{navegacao}</div>
+        <div className="shrink-0">{rodapeUsuario}</div>
       </aside>
 
       <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">

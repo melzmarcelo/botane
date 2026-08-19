@@ -7,3 +7,5 @@ PyJWT
 bcrypt
 python-multipart
 Pillow
+httpx
+cryptography

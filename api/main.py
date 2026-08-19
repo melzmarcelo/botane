@@ -24,6 +24,7 @@ from routers import (
     fornecedores,
     historico,
     inventario,
+    omie,
     papeis,
     produtos,
     usuarios,
@@ -101,6 +102,7 @@ app.include_router(estoque.router)
 app.include_router(inventario.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
+app.include_router(omie.router)
 
 
 @app.get("/saude", tags=["infra"])

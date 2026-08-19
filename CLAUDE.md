@@ -16,11 +16,13 @@ para arquivo nenhum — gravar direto aqui.
 
 ## Estado
 
-- Mapeamento e **etapas 1 a 4 + 6** (fundação, cadastros, fichas, estoque e **CMV**)
-  concluídas — 18 e 19/08/2026.
+- Mapeamento e **etapas 1 a 6 — a primeira parte inteira** (fundação, cadastros, fichas,
+  estoque, Omie e CMV) concluídas em 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Próxima: etapa 5 — Omie** (importar nota de entrada, de-para, rateio). Depende da
-  credencial; o resto do ciclo já fecha sem ela.
+- **Falta só a credencial do Omie**: o importador roda em **modo simulado** sobre fixtures.
+  Ao configurar `app_key`/`app_secret` em Integrações e mudar o modo para `real`, o mesmo
+  código passa a falar com a conta do cliente — o que pode precisar de ajuste é só
+  `services/omie/mapeadores.py`.
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -36,7 +38,14 @@ para arquivo nenhum — gravar direto aqui.
 - Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
-  `/inventario`, `/cmv`, `/vendas`.
+  `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+- **`services/omie/`**: `cliente.py` (HTTP, paginação, back-off, modo simulado com fixtures),
+  `mapeadores.py` (**o único arquivo que muda quando a credencial real chegar** — cada campo
+  é lido por uma lista de nomes possíveis) e `importador.py` (de-para em cascata, rateio,
+  conversão, lançamento).
+- Credenciais ficam cifradas (`services/segredos.py`, Fernet com chave derivada do
+  `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
+  as credenciais guardadas.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
@@ -52,7 +61,8 @@ para arquivo nenhum — gravar direto aqui.
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
 - Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45) e `web/scripts/verificar.mjs` (52 no Chrome,
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47) e
+  `web/scripts/verificar.mjs` (61 no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
 
@@ -70,6 +80,10 @@ para arquivo nenhum — gravar direto aqui.
   sub-ficha é recusado na gravação, e o cálculo ainda tem trava de profundidade por segurança.
 - **`fichas.custos` filtra o JSON, não só a tela**: sem a chave, nenhum campo de dinheiro
   sai do servidor. Ao mexer no router de fichas, manter isso.
+- ⚠️ **CX e UN são as duas "unidade" com fator 1**: a conversão de grandeza diria que 4 CX =
+  4 UN e engoliria a caixa de 12. No importador, **o fator da embalagem vem antes** da
+  conversão de grandeza.
+- Item de nota sem produto **não entra no estoque** e barra o lançamento da nota inteira.
 - **Fechamento de mês bloqueia lançamento retroativo** — mas quem tem `estoque.retroativo`
   (inclusive o admin) passa. Teste da trava precisa de usuário sem a chave (o Conferente).
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o

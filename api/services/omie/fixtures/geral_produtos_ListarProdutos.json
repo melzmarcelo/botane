@@ -1,0 +1,36 @@
+{
+  "pagina": 1,
+  "total_de_paginas": 1,
+  "total_de_registros": 3,
+  "produto_servico_cadastro": [
+    {
+      "codigo_produto": 700001,
+      "codigo": "CAF-500",
+      "descricao": "Café em grão especial 500g",
+      "unidade": "PCT",
+      "ncm": "09011110",
+      "ean": "7891234500017",
+      "valor_unitario": 30.0,
+      "inativo": "N"
+    },
+    {
+      "codigo_produto": 700002,
+      "codigo": "LEI-INT",
+      "descricao": "Leite integral 1L",
+      "unidade": "UN",
+      "ncm": "04012010",
+      "ean": "7891234500024",
+      "valor_unitario": 4.5,
+      "inativo": "N"
+    },
+    {
+      "codigo_produto": 700003,
+      "codigo": "TOM-CX",
+      "descricao": "Tomate italiano",
+      "unidade": "KG",
+      "ncm": "07020000",
+      "valor_unitario": 7.5,
+      "inativo": "N"
+    }
+  ]
+}

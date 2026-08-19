@@ -44,6 +44,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — fichas técnicas (custo em cascata, ciclo, permissão de custo) | `cd api && python tests/smoke_fichas.py` |
 | API — estoque (custo médio, estorno, inventário, produção) | `cd api && python tests/smoke_estoque.py` |
 | API — CMV (apuração, ABC, margem, fechamento) | `cd api && python tests/smoke_cmv.py` |
+| API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -60,4 +61,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
   perdas com motivo, transferência, produção pela ficha e inventário
 - **Etapa 6 — CMV:** concluída em 19/08/2026 — painel real × teórico, variância, curva ABC,
   margem por prato, importação de vendas e fechamento de período
-- **Etapa 5 — Omie:** a próxima (depende da credencial)
+- **Etapa 5 — Omie:** concluída em 19/08/2026 — importação de notas, de-para em cascata,
+  rateio de frete, lançamento no estoque e conferência com o CMC. Roda em **modo simulado**
+  até a credencial do cliente chegar
+- **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.
