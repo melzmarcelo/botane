@@ -28,8 +28,13 @@ export default function Login() {
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
       <div className="w-full max-w-[380px]">
-        <h1 className="text-[44px] font-extrabold leading-none tracking-[-0.035em]">Botane</h1>
-        <p className="rotulo mt-2">Gestão de custo · CMV</p>
+        <h1 className="text-[42px] font-extrabold leading-[0.95] tracking-[-0.035em]">
+          Botané
+          <span className="block text-[26px] font-semibold tracking-[-0.02em] text-erva">
+            Deli e Café
+          </span>
+        </h1>
+        <p className="rotulo mt-3">Gestão de custo · CMV</p>
 
         <div
           className="mt-5 h-[18px] border-b border-linha2 opacity-80"

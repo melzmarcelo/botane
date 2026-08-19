@@ -3,7 +3,7 @@
 -- funciona nem para o primeiro login. Os dados reais entram pela tela.
 
 INSERT INTO empresa (id, razao_social, nome_fantasia)
-VALUES (1, 'Botane', 'Botane')
+VALUES (1, 'Botané Deli e Café', 'Botané Deli e Café')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO unidades (nome, apelido, matriz, ativo)

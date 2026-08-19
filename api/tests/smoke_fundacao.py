@@ -55,7 +55,9 @@ checar("login do admin devolve 200", st == 200, r)
 token = r.get("access_token")
 refresh = r.get("refresh_token")
 checar("veio access e refresh", bool(token and refresh))
-checar("admin nasce com trocar_senha", r.get("usuario", {}).get("trocar_senha") is True)
+# O admin so nasce com trocar_senha=True; depois que ele troca, fica False.
+checar("login informa se a senha precisa ser trocada",
+       isinstance(r.get("usuario", {}).get("trocar_senha"), bool))
 
 print("2. identidade e permissões")
 st, me = chamar("GET", "/auth/me", token=token)
@@ -73,10 +75,14 @@ checar("token inválido devolve 401", st == 401, st)
 print("3. empresa")
 st, emp = chamar("GET", "/empresa", token=token)
 checar("GET /empresa responde", st == 200, emp)
-st, r = chamar("PUT", "/empresa", {"nome_fantasia": "Botane Café", "uf": "SC"}, token=token)
+nome_original = emp.get("nome_fantasia")   # o teste devolve o valor no fim
+st, r = chamar("PUT", "/empresa", {"nome_fantasia": "Teste de gravação"}, token=token)
 checar("PUT /empresa grava", st == 200, r)
 st, emp = chamar("GET", "/empresa", token=token)
-checar("gravou mesmo", emp.get("nome_fantasia") == "Botane Café", emp.get("nome_fantasia"))
+checar("gravou mesmo", emp.get("nome_fantasia") == "Teste de gravação", emp.get("nome_fantasia"))
+chamar("PUT", "/empresa", {"nome_fantasia": nome_original}, token=token)
+st, emp = chamar("GET", "/empresa", token=token)
+checar("restaurou o nome da casa", emp.get("nome_fantasia") == nome_original, emp.get("nome_fantasia"))
 
 print("4. papéis e usuário limitado")
 st, papeis = chamar("GET", "/papeis", token=token)

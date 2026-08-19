@@ -1,4 +1,4 @@
-"""Botane — API da fase 1 (fundação).
+"""Botané Deli e Café — API da fase 1 (fundação).
 
 Sobe o pool, roda as migrações e garante que exista um administrador.
 """
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Botane API",
+    title="Botané Deli e Café · API",
     version=VERSAO,
     description="Base cadastral e CMV para café/restaurante.",
     lifespan=lifespan,

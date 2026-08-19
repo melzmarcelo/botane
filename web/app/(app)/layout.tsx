@@ -42,7 +42,7 @@ function Casca({ children }: { children: React.ReactNode }) {
   const caminho = usePathname();
   const [aberto, setAberto] = useState(false);
   const [marca, setMarca] = useState<{ nome: string; logo: string | null }>({
-    nome: "Botane",
+    nome: "Botané Deli e Café",
     logo: null,
   });
 
@@ -64,7 +64,7 @@ function Casca({ children }: { children: React.ReactNode }) {
         )
         .then((e) =>
           setMarca({
-            nome: e.nome_fantasia || e.razao_social || "Botane",
+            nome: e.nome_fantasia || e.razao_social || "Botané Deli e Café",
             logo: urlArquivo(e.logo_url),
           }),
         )

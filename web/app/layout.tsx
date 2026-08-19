@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Botane",
-  description: "Gestão de custo para café e restaurante",
-  applicationName: "Botane",
+  title: "Botané Deli e Café",
+  description: "Gestão de custo, fichas técnicas e CMV",
+  applicationName: "Botané Deli e Café",
 };
 
 export const viewport: Viewport = {
