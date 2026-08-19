@@ -4,6 +4,7 @@
     python limpar_dados.py               apaga (pede confirmação digitada)
     python limpar_dados.py --sim         apaga sem perguntar
     python limpar_dados.py --usuarios-de-teste   leva junto os usuários smoke./tela.
+    python limpar_dados.py --so-o-admin          deixa SÓ o administrador
     python limpar_dados.py --manter-auditoria    preserva o histórico
 
 **O que sai:** tudo que é operação — produtos, fornecedores, fichas, o razão de
@@ -26,7 +27,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from config import DB_HOST, DB_NAME  # noqa: E402
+from config import ADMIN_EMAIL, DB_HOST, DB_NAME  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 
 # A ordem não importa: o TRUNCATE é um só, e o conjunto é fechado — nenhuma
@@ -55,6 +56,24 @@ PRESERVADAS = [
 ]
 
 
+def _sql_usuarios(so_o_admin: bool, contar: bool = False) -> str:
+    """Quem sai da tabela de usuários.
+
+    Dois modos: só o resíduo dos testes, ou **tudo menos o administrador** —
+    este último é o que prepara a base para entregar ao cliente, que vai criar a
+    própria equipe.
+    """
+    filtro = (
+        "email <> %s"
+        if so_o_admin
+        else """(email LIKE 'smoke.%%' OR email LIKE 'tela.%%'
+                 OR email LIKE '%%.teste@%%' OR email LIKE 'cozinha.teste@%%')
+                AND email <> %s"""
+    )
+    alvo = "SELECT count(*) AS n" if contar else "DELETE"
+    return f"{alvo} FROM usuarios WHERE {filtro}"
+
+
 def contar(cur, tabelas: list[str]) -> dict[str, int]:
     contagem = {}
     for t in tabelas:
@@ -69,6 +88,7 @@ def main() -> int:
     sem_perguntar = "--sim" in argumentos
     manter_auditoria = "--manter-auditoria" in argumentos
     limpar_usuarios = "--usuarios-de-teste" in argumentos
+    so_o_admin = "--so-o-admin" in argumentos
 
     # A trava que importa: este script existe para a base LOCAL de
     # desenvolvimento. Apontado para outro servidor, ele para aqui.
@@ -95,13 +115,12 @@ def main() -> int:
     for t, n in sorted(fica.items()):
         print(f"  {t:24} {n:>7}")
 
-    if limpar_usuarios:
+    if limpar_usuarios or so_o_admin:
         with get_cursor() as cur:
-            cur.execute(
-                """SELECT count(*) AS n FROM usuarios
-                    WHERE email LIKE 'smoke.%' OR email LIKE 'tela.%'
-                       OR email LIKE '%.teste@%' OR email LIKE 'cozinha.teste@%'""")
-            print(f"\n  + {cur.fetchone()['n']} usuário(s) de teste também sairão")
+            cur.execute(_sql_usuarios(so_o_admin, contar=True), (ADMIN_EMAIL,))
+            quantos = cur.fetchone()["n"]
+        rotulo = "além do administrador" if so_o_admin else "de teste"
+        print(f"\n  + {quantos} usuário(s) {rotulo} também sairão")
 
     if simular:
         print("\n(--simular: nada foi apagado)")
@@ -120,14 +139,11 @@ def main() -> int:
         # começo: base nova com produto P0507 confundiria mais do que ajudaria.
         cur.execute(f"TRUNCATE {lista} RESTART IDENTITY")
 
-        if limpar_usuarios:
-            cur.execute(
-                """DELETE FROM usuarios
-                    WHERE (email LIKE 'smoke.%' OR email LIKE 'tela.%'
-                           OR email LIKE '%.teste@%' OR email LIKE 'cozinha.teste@%')
-                      AND email <> %s""",
-                (__import__("config").ADMIN_EMAIL,),
-            )
+        if limpar_usuarios or so_o_admin:
+            # O vínculo com papéis cai por CASCADE; sessões e tokens já foram
+            # truncados acima. O administrador nunca entra na conta: sem ele
+            # ninguém entra para criar os outros.
+            cur.execute(_sql_usuarios(so_o_admin), (ADMIN_EMAIL,))
 
         depois = contar(cur, alvos)
 

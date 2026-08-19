@@ -44,6 +44,7 @@ antes de entregar:
 cd api
 python limpar_dados.py --simular    # mostra o que sairia, sem apagar
 python limpar_dados.py              # apaga (pede confirmação digitada)
+python limpar_dados.py --so-o-admin # e deixa só o administrador na equipe
 ```
 
 Sai tudo que é operação (produtos, fornecedores, fichas, razão de estoque,
