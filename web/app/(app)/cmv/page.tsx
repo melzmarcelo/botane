@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import RelatoriosDono from "./relatorios-dono";
 
 type Apuracao = {
   inicio: string;
@@ -79,7 +80,7 @@ export default function PaginaCmv() {
   const [abc, setAbc] = useState<LinhaAbc[] | null>(null);
   const [margem, setMargem] = useState<LinhaMargem[] | null>(null);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
-  const [aba, setAba] = useState<"abc" | "margem">("abc");
+  const [aba, setAba] = useState<"abc" | "margem" | "dono">("abc");
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -298,7 +299,7 @@ export default function PaginaCmv() {
           </Cartao>
 
           <nav className="flex gap-1 border-b border-linha">
-            {(["abc", "margem"] as const).map((x) => (
+            {(["abc", "margem", "dono"] as const).map((x) => (
               <button
                 key={x}
                 onClick={() => setAba(x)}
@@ -308,7 +309,11 @@ export default function PaginaCmv() {
                     : "border-transparent text-suave hover:text-tinta"
                 }`}
               >
-                {x === "abc" ? "Curva ABC de insumos" : "Margem por prato"}
+                {x === "abc"
+                  ? "Curva ABC de insumos"
+                  : x === "margem"
+                    ? "Margem por prato"
+                    : "Onde pesa e o que subiu"}
               </button>
             ))}
             <button
@@ -317,13 +322,17 @@ export default function PaginaCmv() {
                 void baixar(
                   aba === "abc"
                     ? `/exportar/abc.csv?inicio=${inicio}&fim=${fim}`
-                    : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
+                    : aba === "dono"
+                      ? `/exportar/precos.csv?inicio=${inicio}&fim=${fim}`
+                      : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
                 )
               }
             >
               baixar esta tabela
             </button>
           </nav>
+
+          {aba === "dono" && <RelatoriosDono inicio={inicio} fim={fim} />}
 
           {aba === "abc" && (
             <Cartao

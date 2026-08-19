@@ -47,6 +47,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |
+| API — relatórios do dono (CMV por setor, evolução de preço) | `cd api && python tests/smoke_relatorios.py` |
 | API — FEFO (lote na saída, estorno, alerta que não mente) | `cd api && python tests/smoke_lotes.py` |
 | API — recuperação de senha (token, sessões, SMTP) | `cd api && python tests/smoke_senha.py` |
 | Regras de cache do service worker (sem navegador) | `cd web && node scripts/testar-sw.mjs` |
@@ -81,4 +82,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **FEFO:** concluído em 19/08/2026 — a saída escolhe o lote que vence primeiro, o saldo por
   lote passa a diminuir (o alerta de vencimento parou de mentir) e o estorno volta para o
   mesmo lote
+- **Relatórios do dono:** concluídos em 19/08/2026 — CMV por setor e por categoria (a soma
+  fecha com o total) e evolução de preço por insumo, ordenada pelo impacto em reais, com a
+  planilha para levar ao fornecedor
 - **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.

@@ -52,6 +52,12 @@ para arquivo nenhum — gravar direto aqui.
 - Credenciais ficam cifradas (`services/segredos.py`, Fernet com chave derivada do
   `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
   as credenciais guardadas.
+- **`services/relatorios.py`** (19/08/2026): os dois relatórios do dono. `cmv_por_grupo`
+  quebra a MESMA conta do CMV por setor ou categoria — **não é rateio**, e a soma dos grupos
+  fecha com o CMV do período (o teste confere isso). Produto sem grupo aparece como "Sem
+  setor" em vez de sumir na junção. `evolucao_de_preco` ordena pelo **impacto em reais**, não
+  pelo percentual: 8% num item semanal dói mais que 60% num trimestral. Base é o **custo de
+  aquisição** (frete dentro), não o valor de tabela.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
@@ -93,7 +99,7 @@ para arquivo nenhum — gravar direto aqui.
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
   `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47),
-  `smoke_senha.py` (40), `smoke_lotes.py` (28) e
+  `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.

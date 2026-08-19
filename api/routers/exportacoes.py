@@ -14,6 +14,7 @@ from database import get_cursor
 from seguranca import Contexto, contexto_atual
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
+from services import relatorios
 from services import exportacao
 from services import estoque as estoque_motor
 
@@ -185,6 +186,41 @@ def abc(inicio: date | None = None, fim: date | None = None,
                 ("Valor consumido", round(sum(l["valor"] for l in linhas), 2))],
     )
     return _resposta(conteudo, exportacao.nome_arquivo("curva-abc", inicio, fim))
+
+
+@router.get("/precos.csv")
+def precos(inicio: date | None = None, fim: date | None = None,
+           ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """A planilha que vai para a reunião com o fornecedor."""
+    _exige(ctx, "cmv.relatorios")
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        linhas = relatorios.evolucao_de_preco(cur, id_unidade, inicio, fim, 500)
+        grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, "setor")
+
+    conteudo = exportacao.csv_de(
+        linhas,
+        [("codigo", "Código"), ("produto", "Insumo"), ("um_estoque", "Unidade"),
+         ("compras", "Compras"), ("quantidade", "Quantidade comprada"),
+         ("primeiro", "Primeiro preço"), ("ultimo", "Último preço"),
+         ("variacao_pct", "Variação %"), ("impacto", "Impacto R$"),
+         ("menor", "Menor preço"), ("fornecedor_mais_barato", "Mais barato com"),
+         ("economia_possivel", "Economia possível"),
+         ("fornecedor_ultimo", "Última compra com"), ("data_ultimo", "Data da última")],
+        titulo=f"Evolução de preço — {inicio.strftime('%d/%m/%Y')} a {fim.strftime('%d/%m/%Y')}",
+        resumo=[("Insumos com variação", len(linhas)),
+                ("Impacto somado", round(sum(l["impacto"] for l in linhas), 2)),
+                ("Economia possível", round(sum(l["economia_possivel"] for l in linhas), 2))],
+    )
+    conteudo += exportacao.csv_de(
+        grupos,
+        [("grupo", "Setor"), ("estoque_inicial", "Estoque inicial"), ("compras", "Compras"),
+         ("estoque_final", "Estoque final"), ("cmv", "CMV"), ("perdas", "Perdas"),
+         ("participacao_pct", "Participação %")],
+        titulo="Onde o custo pesa (por setor)",
+    )
+    return _resposta(conteudo, exportacao.nome_arquivo("precos-e-setores", inicio, fim))
 
 
 @router.get("/produtos.csv")

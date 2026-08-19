@@ -9,6 +9,7 @@ from database import get_cursor
 from models.cmv import ApuracaoResponse, FechamentoRequest, FechamentoResponse
 from seguranca import Contexto, requer_permissao
 from services import cmv as motor
+from services import relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
 
@@ -86,6 +87,42 @@ def margem(
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
         return motor.margem_por_prato(cur, _unidade(cur, ctx), inicio, fim, limite)
+
+
+@router.get("/por-grupo")
+def por_grupo(
+    agrupar: str = Query(default="setor", pattern="^(setor|categoria)$"),
+    inicio: date | None = None,
+    fim: date | None = None,
+    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+) -> list[dict]:
+    """O CMV do período quebrado por setor ou por categoria."""
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        return relatorios.cmv_por_grupo(cur, _unidade(cur, ctx), inicio, fim, agrupar)
+
+
+@router.get("/precos")
+def precos(
+    inicio: date | None = None,
+    fim: date | None = None,
+    limite: int = Query(default=40, ge=5, le=200),
+    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+) -> list[dict]:
+    """O que subiu e o que caiu entre as notas — ordenado pelo impacto em reais."""
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        return relatorios.evolucao_de_preco(cur, _unidade(cur, ctx), inicio, fim, limite)
+
+
+@router.get("/precos/{id_produto}")
+def preco_do_produto(
+    id_produto: int,
+    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+) -> list[dict]:
+    """Cada compra do insumo, da mais recente para a mais antiga."""
+    with get_cursor() as cur:
+        return relatorios.historico_de_preco(cur, _unidade(cur, ctx), id_produto)
 
 
 @router.get("/fechamentos", response_model=list[FechamentoResponse])

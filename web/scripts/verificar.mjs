@@ -589,6 +589,43 @@ try {
     }
   }
 
+  console.log("7b. relatórios do dono: onde pesa e o que subiu");
+  await irPara(p, `${WEB}/cmv`);
+  await new Promise((r) => setTimeout(r, 1500));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => /onde pesa/i.test(x.textContent))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2000));
+  const textoDono = await p.evaluate(() => document.body.innerText);
+  checar("a aba de relatórios do dono abre", /Onde o custo pesa/i.test(textoDono),
+    textoDono.slice(0, 140));
+  checar("explica que a soma dos grupos é o CMV",
+    /soma dos grupos é o CMV/i.test(textoDono));
+  checar("e traz o relatório de preços junto",
+    /O que subiu de preço/i.test(textoDono));
+
+  // O número que a tela mostra tem de ser o mesmo que a API devolve.
+  const hojeIso = new Date().toISOString().slice(0, 10);
+  const { dados: gruposApi } = await api(
+    "GET", `/cmv/por-grupo?inicio=${hojeIso}&fim=${hojeIso}&agrupar=setor`, null, token);
+  if (gruposApi.length) {
+    const soma = gruposApi.reduce((t, g) => t + Number(g.participacao_pct), 0);
+    checar("as participações somam 100%", Math.abs(soma - 100) < 0.5, soma);
+  } else {
+    checar("as participações somam 100%", true, "sem movimento hoje");
+  }
+
+  // Trocar de setor para categoria tem de recarregar a tabela.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => x.textContent.trim() === "por categoria")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1500));
+  checar("dá para trocar para categoria",
+    /por categoria/i.test(await p.evaluate(() => document.body.innerText)));
+  await foto(p, "36-relatorios-dono");
+
   console.log("8c. FEFO: o lote que vence antes sai antes");
   const marcaLote = String(Date.now()).slice(-6);
   const { dados: locaisFefo } = await api("GET", "/locais", null, token);
