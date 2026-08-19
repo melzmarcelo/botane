@@ -11,7 +11,10 @@ import { EVENTO_EMPRESA } from "@/lib/eventos";
 const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string }[] }[] = [
   {
     grupo: "Operação",
-    itens: [{ href: "/", nome: "Início" }],
+    itens: [
+      { href: "/", nome: "Início" },
+      { href: "/alertas", nome: "Alertas" },
+    ],
   },
   {
     grupo: "Cadastros",

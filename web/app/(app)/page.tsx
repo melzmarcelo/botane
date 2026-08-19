@@ -16,6 +16,15 @@ type Empresa = {
   logo_url: string | null;
 };
 type Usuario = { id: number; nome: string; ativo: boolean; papeis: { papel: string }[] };
+type Alerta = {
+  chave: string;
+  severidade: "critico" | "atencao" | "aviso";
+  titulo: string;
+  quantidade: number;
+  detalhe: string;
+  acao: string;
+  href: string;
+};
 
 /** O que o sistema vai passar a fazer, em português de restaurante. */
 const CAMINHO = [
@@ -67,10 +76,12 @@ export default function Inicio() {
   const { eu, pode } = useSessao();
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [equipe, setEquipe] = useState<Usuario[] | null>(null);
+  const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
     api.get<Empresa>("/empresa").then(setEmpresa).catch((e) => setErro(e.message));
+    api.get<Alerta[]>("/alertas").then(setAlertas).catch(() => {});
     if (pode("admin.usuarios")) {
       api.get<Usuario[]>("/usuarios").then(setEquipe).catch(() => {});
     }
@@ -107,6 +118,46 @@ export default function Inicio() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {!!alertas.length && (
+        <Cartao
+          titulo="Precisa da sua atenção"
+          descricao={
+            alertas.some((x) => x.severidade === "critico")
+              ? "Tem coisa que pede ação hoje."
+              : "Nada crítico — mas vale olhar."
+          }
+          acao={
+            <Link href="/alertas" className="rotulo hover:text-erva">
+              ver tudo ›
+            </Link>
+          }
+        >
+          <ul className="flex flex-col gap-px bg-linha">
+            {alertas.slice(0, 4).map((x) => (
+              <li key={x.chave} className="flex flex-wrap items-center gap-3 bg-superficie py-2.5">
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                    x.severidade === "critico"
+                      ? "bg-erro"
+                      : x.severidade === "atencao"
+                        ? "bg-alerta"
+                        : "bg-linha2"
+                  }`}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 text-[14.5px]">
+                  <b>{x.titulo}</b>
+                  <span className="mono ml-2 text-[13px] text-suave">{x.quantidade}</span>
+                </span>
+                <Link href={x.href} className="rotulo whitespace-nowrap text-erva hover:underline">
+                  {x.acao} ›
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Cartao>
+      )}
 
       {admin && (
         <Cartao
@@ -186,6 +237,7 @@ export default function Inicio() {
           <ul className="flex flex-col gap-2">
             {[
               { href: "/produtos", nome: "Produtos e insumos", chave: "cadastros.produtos" },
+              { href: "/alertas", nome: "O que precisa de atenção" },
               { href: "/compras", nome: "Notas de entrada", chave: "compras.notas" },
               { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
               { href: "/estoque", nome: "Estoque", chave: "estoque.saldos" },

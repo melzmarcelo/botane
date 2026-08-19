@@ -68,6 +68,19 @@ export default function PaginaEstoque() {
     lote: "", validade: "",
   });
   const [salvando, setSalvando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+
+  async function baixar(caminho: string) {
+    setBaixando(true);
+    setErro("");
+    try {
+      await api.baixar(caminho);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+    } finally {
+      setBaixando(false);
+    }
+  }
 
   const carregar = useCallback(async () => {
     try {
@@ -208,6 +221,13 @@ export default function PaginaEstoque() {
               Transferir
             </button>
           )}
+          <button
+            className="btn btn-secundario"
+            onClick={() => void baixar(aba === "saldos" ? "/exportar/saldos.csv" : "/exportar/movimentos.csv")}
+            disabled={baixando}
+          >
+            {baixando ? "Baixando…" : "Baixar planilha"}
+          </button>
         </div>
       </header>
 

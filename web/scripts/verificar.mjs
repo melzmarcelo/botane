@@ -478,7 +478,40 @@ try {
 
   await api("DELETE", "/omie/vinculos/CAF-500", null, token);
 
-  console.log("9. celular (390 x 844)");
+  console.log("9. alertas e exportação");
+  await p.goto(`${WEB}/alertas`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoAlertas = await p.evaluate(() => document.body.innerText);
+  checar("/alertas carrega",
+    !/Erro 5|Não autenticado|Falha ao carregar/.test(textoAlertas), textoAlertas.slice(0, 90));
+  checar("a tela lista pontos de atenção (ou diz que não há)",
+    /ponto\(s\) de atenção|Nada pendente/i.test(textoAlertas), textoAlertas.slice(0, 140));
+  await foto(p, "30-alertas");
+
+  const { dados: listaAlertas } = await api("GET", "/alertas", null, token);
+  checar("a API devolve alerta com ação e link",
+    listaAlertas.length === 0 || (listaAlertas[0].acao && listaAlertas[0].href),
+    listaAlertas[0]);
+
+  // O resumo tem de aparecer no Início, que é a tela que o dono abre.
+  await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoInicio = await p.evaluate(() => document.body.innerText);
+  checar("o Início mostra o resumo de alertas",
+    listaAlertas.length === 0 || /Precisa da sua atenção/i.test(textoInicio),
+    textoInicio.slice(0, 160));
+
+  // Botão de exportar presente nas telas que o oferecem.
+  for (const [rota, nome] of [["/estoque", "estoque"], ["/cmv", "CMV"], ["/produtos", "produtos"]]) {
+    await p.goto(WEB + rota, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1100));
+    const tem = await p.evaluate(() =>
+      [...document.querySelectorAll("button")].some((b) => /Baixar planilha/i.test(b.textContent)));
+    checar(`${nome} oferece baixar planilha`, tem);
+  }
+  await foto(p, "31-cmv-exportar");
+
+  console.log("10. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -528,7 +561,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("10. logo da empresa");
+  console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

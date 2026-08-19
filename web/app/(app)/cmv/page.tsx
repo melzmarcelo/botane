@@ -106,6 +106,18 @@ export default function PaginaCmv() {
     void carregar();
   }, [carregar]);
 
+  async function baixar(caminho: string) {
+    setOcupado(true);
+    setErro("");
+    try {
+      await api.baixar(caminho);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function fechar() {
     setOcupado(true);
     setErro("");
@@ -152,7 +164,17 @@ export default function PaginaCmv() {
             diferença entre os dois é o número que vale olhar todo dia.
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="nao-imprimir flex flex-wrap items-end gap-2">
+          <button
+            className="btn btn-secundario"
+            onClick={() => void baixar(`/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`)}
+            disabled={ocupado}
+          >
+            Baixar planilha
+          </button>
+          <button className="btn btn-secundario" onClick={() => window.print()}>
+            Imprimir / PDF
+          </button>
           <label>
             <span className="rotulo">De</span>
             <input
@@ -289,6 +311,18 @@ export default function PaginaCmv() {
                 {x === "abc" ? "Curva ABC de insumos" : "Margem por prato"}
               </button>
             ))}
+            <button
+              className="rotulo nao-imprimir ml-auto self-center hover:text-erva"
+              onClick={() =>
+                void baixar(
+                  aba === "abc"
+                    ? `/exportar/abc.csv?inicio=${inicio}&fim=${fim}`
+                    : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
+                )
+              }
+            >
+              baixar esta tabela
+            </button>
           </nav>
 
           {aba === "abc" && (

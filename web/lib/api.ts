@@ -139,6 +139,44 @@ export const api = {
     return dados as T;
   },
 
+  /**
+   * Baixa um arquivo da API. Não dá para usar um link simples: o endpoint exige
+   * o token no cabeçalho, e o navegador não manda cabeçalho em navegação.
+   */
+  async baixar(caminho: string): Promise<void> {
+    const pegar = async () =>
+      fetch(BASE + caminho, {
+        headers: { Authorization: `Bearer ${localStorage.getItem(CHAVE_ACCESS)}` },
+      });
+
+    let r = await pegar();
+    if (r.status === 401 && (await renovar())) r = await pegar();
+    if (!r.ok) {
+      const texto = await r.text();
+      let dados: unknown = null;
+      try {
+        dados = texto ? JSON.parse(texto) : null;
+      } catch {
+        dados = null;
+      }
+      throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
+    }
+
+    // O nome vem do servidor, no Content-Disposition.
+    const cabecalho = r.headers.get("Content-Disposition") ?? "";
+    const nome = /filename="?([^"]+)"?/.exec(cabecalho)?.[1] ?? "botane.csv";
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revogar na hora cancela o download em alguns navegadores.
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  },
+
   async login(email: string, senha: string): Promise<Sessao> {
     const r = await bruto("POST", "/auth/login", { email, senha });
     const texto = await r.text();

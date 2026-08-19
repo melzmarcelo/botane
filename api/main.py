@@ -15,11 +15,13 @@ from config import ADMIN_EMAIL, ADMIN_NOME, ADMIN_SENHA, CORS_ORIGINS, DEBUG, PO
 from database import close_pool, get_cursor, init_pool
 from db_updater import run_migrations
 from routers import (
+    alertas,
     autenticacao,
     cadastros,
     cmv,
     empresa,
     estoque,
+    exportacoes,
     fichas,
     fornecedores,
     historico,
@@ -82,6 +84,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Sem isto o navegador não deixa o front ler o nome do arquivo exportado:
+    # em requisição de outra origem, só os cabeçalhos expostos são visíveis.
+    expose_headers=["Content-Disposition"],
 )
 
 # Imagens enviadas pela tela (logo). Local por enquanto.
@@ -103,6 +108,8 @@ app.include_router(inventario.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
 app.include_router(omie.router)
+app.include_router(alertas.router)
+app.include_router(exportacoes.router)
 
 
 @app.get("/saude", tags=["infra"])

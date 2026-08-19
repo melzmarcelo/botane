@@ -195,7 +195,13 @@ export default function PaginaInventario() {
           descricao={`${aberto.contados} de ${aberto.total_itens} item(ns) contado(s)`}
           acao={
             aberto.status === "ABERTO" ? (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="btn btn-secundario"
+                  onClick={() => void api.baixar(`/exportar/inventario/${aberto.id}.csv`)}
+                >
+                  Folha de contagem
+                </button>
                 <button
                   className="btn btn-secundario"
                   onClick={salvarContagem}

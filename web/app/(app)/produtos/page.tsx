@@ -63,11 +63,25 @@ export default function PaginaProdutos() {
             embalagem. É daqui que a ficha técnica e o estoque vão puxar.
           </p>
         </div>
-        {podeEditar && (
-          <Link href="/produtos/novo" className="btn btn-primario">
-            Novo produto
-          </Link>
-        )}
+        <div className="flex gap-2">
+          <button
+            className="btn btn-secundario"
+            onClick={async () => {
+              try {
+                await api.baixar("/exportar/produtos.csv");
+              } catch (e) {
+                setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+              }
+            }}
+          >
+            Baixar planilha
+          </button>
+          {podeEditar && (
+            <Link href="/produtos/novo" className="btn btn-primario">
+              Novo produto
+            </Link>
+          )}
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
