@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 import auditoria
 from database import get_cursor
-from seguranca import Contexto, contexto_atual, requer_permissao
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import segredos
 from services.omie import importador
 from services.omie.cliente import ClienteOmie, testar
@@ -28,16 +28,6 @@ class ConfigOmie(BaseModel):
     app_secret: str | None = Field(default=None, max_length=200)
     modo: str = "simulado"          # simulado | real
     ativa: bool = False
-
-
-def _unidade(cur, ctx: Contexto) -> int:
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
 
 
 def _cliente(cur, id_unidade: int) -> ClienteOmie:
@@ -58,7 +48,7 @@ def _cliente(cur, id_unidade: int) -> ClienteOmie:
 @router.get("/config")
 def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.integracoes"))):
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT modo, ativa, credenciais, ultima_sincronizacao, ultimo_status,
                       ultima_mensagem
@@ -94,7 +84,7 @@ def salvar_config(body: ConfigOmie,
     if body.modo not in ("simulado", "real"):
         raise HTTPException(status_code=400, detail="Modo deve ser 'simulado' ou 'real'.")
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
             (id_unidade, SERVICO),
@@ -134,7 +124,7 @@ def salvar_config(body: ConfigOmie,
 def testar_conexao(ctx: Contexto = Depends(requer_permissao("integracao.omie",
                                                             "admin.integracoes"))) -> dict:
     with get_cursor() as cur:
-        cliente = _cliente(cur, _unidade(cur, ctx))
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
     return testar(cliente)
 
 
@@ -145,7 +135,7 @@ def testar_conexao(ctx: Contexto = Depends(requer_permissao("integracao.omie",
 def sincronizar(dias: int = Query(default=30, ge=1, le=365),
                 ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cliente = _cliente(cur, id_unidade)
         r = importador.sincronizar(cur, id_unidade, cliente, dias)
         cur.execute(
@@ -167,7 +157,7 @@ def sincronizar(dias: int = Query(default=30, ge=1, le=365),
 def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
     """Traz os produtos do Omie como rascunho — a carga inicial do cadastro."""
     with get_cursor() as cur:
-        cliente = _cliente(cur, _unidade(cur, ctx))
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
         r = importador.importar_catalogo(cur, cliente, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "importar_catalogo",
                             depois=r)
@@ -178,5 +168,5 @@ def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"
 def conferencia(ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> list[dict]:
     """Custo médio daqui × CMC do Omie. Divergência = entrada não conciliada."""
     with get_cursor() as cur:
-        cliente = _cliente(cur, _unidade(cur, ctx))
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
         return importador.conferir_estoque(cur, cliente)

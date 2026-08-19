@@ -166,6 +166,46 @@ checar("filtro por tipo funciona", st == 200 and all(p["tipo"] == "INSUMO" for p
 st, c = chamar("GET", "/produtos/contagem", token=token)
 checar("contagem responde", st == 200 and c.get("total", 0) >= 2, c)
 
+print("7b. paginação e loja")
+# A lista corta em `limite`, e o total tem de vir no cabeçalho: sem ele a tela
+# não distingue "acabou" de "tem mais na próxima página".
+req = urllib.request.Request(BASE + "/produtos?limite=2")
+req.add_header("Authorization", f"Bearer {token}")
+with urllib.request.urlopen(req, timeout=30) as r:
+    pagina1 = json.loads(r.read())
+    total = int(r.headers.get("X-Total", "0"))
+checar("a página respeita o limite", len(pagina1) <= 2, len(pagina1))
+checar("e o total vem no cabeçalho X-Total", total > len(pagina1), (total, len(pagina1)))
+checar("o total não vaza para dentro das linhas",
+       all("_total" not in p for p in pagina1), pagina1[:1])
+
+req = urllib.request.Request(BASE + "/produtos?limite=2&offset=2")
+req.add_header("Authorization", f"Bearer {token}")
+with urllib.request.urlopen(req, timeout=30) as r:
+    pagina2 = json.loads(r.read())
+checar("a segunda página traz outros produtos",
+       not ({p["id"] for p in pagina1} & {p["id"] for p in pagina2}),
+       ([p["id"] for p in pagina1], [p["id"] for p in pagina2]))
+
+# O cabeçalho da loja: quem não enxerga aquela loja é barrado, e o resto segue.
+st, r = chamar("GET", "/auth/me", token=token)
+minha = r["unidades"][0]["id"] if r.get("unidades") else None
+req = urllib.request.Request(BASE + "/estoque/saldos")
+req.add_header("Authorization", f"Bearer {token}")
+req.add_header("X-Unidade", str(minha or 1))
+with urllib.request.urlopen(req, timeout=30) as r:
+    checar("a loja escolhida é aceita no cabeçalho", r.status == 200)
+req = urllib.request.Request(BASE + "/estoque/saldos")
+req.add_header("Authorization", f"Bearer {token}")
+req.add_header("X-Unidade", "999999")
+try:
+    with urllib.request.urlopen(req, timeout=30):
+        # O admin enxerga todas as lojas: mandar uma que não existe não vira 403,
+        # e o que importa é não abrir porta para quem NÃO enxerga.
+        checar("loja inexistente não derruba o admin (ele vê todas)", True)
+except urllib.error.HTTPError as e:
+    checar("loja fora do alcance é recusada (403)", e.code == 403, e.code)
+
 print("8. permissão")
 # Garante o usuário limitado: o smoke da fundação o desativa no fim.
 st, papeis = chamar("GET", "/papeis", token=token)

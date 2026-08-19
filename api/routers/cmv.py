@@ -7,21 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import auditoria
 from database import get_cursor
 from models.cmv import ApuracaoResponse, FechamentoRequest, FechamentoResponse
-from seguranca import Contexto, requer_permissao
+from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
-
-
-def _unidade(cur, ctx: Contexto) -> int:
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
 
 
 def _periodo(inicio: date | None, fim: date | None) -> tuple[date, date]:
@@ -48,7 +38,7 @@ def apuracao(
 ) -> dict:
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         r = motor.apurar(cur, id_unidade, inicio, fim)
         cur.execute(
             """SELECT 1 FROM cmv_fechamentos
@@ -74,7 +64,7 @@ def abc(
 ) -> list[dict]:
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        return motor.curva_abc(cur, _unidade(cur, ctx), inicio, fim, limite)
+        return motor.curva_abc(cur, unidade_atual(cur, ctx), inicio, fim, limite)
 
 
 @router.get("/margem")
@@ -86,7 +76,7 @@ def margem(
 ) -> list[dict]:
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        return motor.margem_por_prato(cur, _unidade(cur, ctx), inicio, fim, limite)
+        return motor.margem_por_prato(cur, unidade_atual(cur, ctx), inicio, fim, limite)
 
 
 @router.get("/por-grupo")
@@ -99,7 +89,7 @@ def por_grupo(
     """O CMV do período quebrado por setor ou por categoria."""
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        return relatorios.cmv_por_grupo(cur, _unidade(cur, ctx), inicio, fim, agrupar)
+        return relatorios.cmv_por_grupo(cur, unidade_atual(cur, ctx), inicio, fim, agrupar)
 
 
 @router.get("/precos")
@@ -112,7 +102,7 @@ def precos(
     """O que subiu e o que caiu entre as notas — ordenado pelo impacto em reais."""
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        return relatorios.evolucao_de_preco(cur, _unidade(cur, ctx), inicio, fim, limite)
+        return relatorios.evolucao_de_preco(cur, unidade_atual(cur, ctx), inicio, fim, limite)
 
 
 @router.get("/precos/{id_produto}")
@@ -122,7 +112,7 @@ def preco_do_produto(
 ) -> list[dict]:
     """Cada compra do insumo, da mais recente para a mais antiga."""
     with get_cursor() as cur:
-        return relatorios.historico_de_preco(cur, _unidade(cur, ctx), id_produto)
+        return relatorios.historico_de_preco(cur, unidade_atual(cur, ctx), id_produto)
 
 
 @router.get("/fechamentos", response_model=list[FechamentoResponse])
@@ -152,7 +142,7 @@ def fechar(body: FechamentoRequest,
     fim = proximo - timedelta(days=1)
 
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT status FROM cmv_fechamentos
                 WHERE id_unidade = %s AND competencia = %s""",

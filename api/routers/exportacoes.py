@@ -11,7 +11,7 @@ from fastapi.responses import Response
 
 import auditoria
 from database import get_cursor
-from seguranca import Contexto, contexto_atual
+from seguranca import Contexto, contexto_atual, unidade_atual
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import relatorios
@@ -19,16 +19,6 @@ from services import exportacao
 from services import estoque as estoque_motor
 
 router = APIRouter(prefix="/exportar", tags=["exportações"])
-
-
-def _unidade(cur, ctx: Contexto) -> int:
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
 
 
 def _exige(ctx: Contexto, chave: str) -> None:
@@ -53,7 +43,7 @@ def _periodo(inicio: date | None, fim: date | None) -> tuple[date, date]:
 def saldos(ctx: Contexto = Depends(contexto_atual)) -> Response:
     _exige(ctx, "estoque.saldos")
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT p.codigo, p.nome AS produto, c.nome AS categoria, l.nome AS local,
                       p.um_estoque, s.quantidade, s.custo_medio,
@@ -89,7 +79,7 @@ def movimentos(inicio: date | None = None, fim: date | None = None,
     _exige(ctx, "estoque.saldos")
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT m.data_movimento, m.tipo, p.codigo, p.nome AS produto, l.nome AS local,
                       m.quantidade, m.custo_unitario, m.custo_total, m.saldo_apos,
@@ -129,7 +119,7 @@ def cmv(inicio: date | None = None, fim: date | None = None,
     _exige(ctx, "cmv.relatorios")
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         a = cmv_motor.apurar(cur, id_unidade, inicio, fim)
         margem = cmv_motor.margem_por_prato(cur, id_unidade, inicio, fim, 500)
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", "cmv", "exportar",
@@ -173,7 +163,7 @@ def abc(inicio: date | None = None, fim: date | None = None,
     _exige(ctx, "cmv.relatorios")
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        linhas = cmv_motor.curva_abc(cur, _unidade(cur, ctx), inicio, fim, 500)
+        linhas = cmv_motor.curva_abc(cur, unidade_atual(cur, ctx), inicio, fim, 500)
 
     conteudo = exportacao.csv_de(
         linhas,
@@ -195,7 +185,7 @@ def precos(inicio: date | None = None, fim: date | None = None,
     _exige(ctx, "cmv.relatorios")
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         linhas = relatorios.evolucao_de_preco(cur, id_unidade, inicio, fim, 500)
         grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, "setor")
 
@@ -262,7 +252,7 @@ def vencimentos(dias: int | None = Query(default=None, ge=0, le=365),
                 ctx: Contexto = Depends(contexto_atual)) -> Response:
     _exige(ctx, "estoque.saldos")
     with get_cursor() as cur:
-        linhas = alertas_motor.vencimentos(cur, _unidade(cur, ctx), dias)
+        linhas = alertas_motor.vencimentos(cur, unidade_atual(cur, ctx), dias)
 
     conteudo = exportacao.csv_de(
         linhas,

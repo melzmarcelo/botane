@@ -4,7 +4,7 @@ Leitura só exige autenticação: a cozinha consulta produto sem poder editar.
 Escrita exige `cadastros.produtos`.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
@@ -20,6 +20,21 @@ from models.produtos import (
 )
 from seguranca import Contexto, contexto_atual, requer_permissao
 from services import kits
+
+def _com_total(linhas: list[dict], resposta, offset: int) -> list[dict]:
+    """Tira o `_total` das linhas e o devolve no cabeçalho `X-Total`.
+
+    A tela precisa saber que existe mais coisa além da página — sem isso, uma
+    lista cheia e uma lista cortada são indistinguíveis, e o usuário conclui que
+    o produto não existe quando ele está na página seguinte.
+    """
+    total = linhas[0].pop("_total", len(linhas)) if linhas else offset
+    for l in linhas[1:]:
+        l.pop("_total", None)
+    if resposta is not None:
+        resposta.headers["X-Total"] = str(total)
+    return linhas
+
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -101,6 +116,7 @@ def listar(
     incluir_inativos: bool = False,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(contexto_atual),
 ) -> list[dict]:
     with get_cursor() as cur:
@@ -110,7 +126,11 @@ def listar(
                    p.um_estoque, p.producao_propria, p.controla_estoque, p.status, p.ativo,
                    (SELECT pp.preco_venda FROM produto_precos pp
                      WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda,
+                   -- Quantos existiriam sem o LIMIT. Sai na mesma varredura: uma
+                   -- segunda consulta de count repetiria o filtro inteiro e
+                   -- poderia até discordar desta, se algo mudasse no meio.
+                   count(*) OVER () AS _total
               FROM produtos p
               LEFT JOIN categorias c ON c.id = p.id_categoria
               LEFT JOIN setores s ON s.id = p.id_setor
@@ -129,7 +149,8 @@ def listar(
             (incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
              status, status, busca, busca, busca, busca, limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return _com_total(linhas, resposta, offset)
 
 
 @router.get("/contagem", response_model=ContagemProdutos)

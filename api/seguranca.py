@@ -74,13 +74,17 @@ class Contexto:
     """Quem está chamando, e o que essa pessoa pode fazer."""
 
     def __init__(self, id_usuario: int, email: str, nome: str, permissoes: set[str],
-                 unidades: set[int], todas_unidades: bool):
+                 unidades: set[int], todas_unidades: bool, unidade_pedida: int | None = None):
         self.id_usuario = id_usuario
         self.email = email
         self.nome = nome
         self.permissoes = permissoes
         self.unidades = unidades
         self.todas_unidades = todas_unidades
+        # A loja escolhida no seletor da tela, se houver. Vem do cabeçalho
+        # `X-Unidade` — nunca do corpo: assim vale para GET também, e uma tela
+        # não precisa lembrar de repassá-la em cada chamada.
+        self.unidade_pedida = unidade_pedida
 
     def pode(self, chave: str) -> bool:
         return chave in self.permissoes
@@ -130,6 +134,16 @@ def contexto_atual(request: Request) -> Contexto:
         raise HTTPException(status_code=401, detail="Não autenticado")
     dados = decodificar_token(auth[7:])
     ctx = carregar_contexto(int(dados["sub"]))
+
+    pedida = request.headers.get("X-Unidade")
+    if pedida and pedida.isdigit():
+        # Quem não enxerga a loja não passa a enxergar por mandar o cabeçalho:
+        # a validação é a mesma do resto do sistema.
+        if ctx.ve_unidade(int(pedida)):
+            ctx.unidade_pedida = int(pedida)
+        else:
+            raise HTTPException(status_code=403, detail="Sem acesso a esta loja")
+
     request.state.contexto = ctx
     return ctx
 
@@ -155,3 +169,21 @@ def exige(ctx: Contexto, *chaves: Iterable[str]) -> None:
     """Checagem no meio de um service, quando a regra depende do corpo."""
     if not any(ctx.pode(c) for c in chaves):
         raise HTTPException(status_code=403, detail="Sem permissão para esta ação")
+
+
+def unidade_atual(cur, ctx: Contexto) -> int:
+    """A loja em que a operação acontece.
+
+    Em ordem: a escolhida no seletor da tela, a única do usuário, a matriz.
+    Estava copiada em sete routers — e uma cópia sempre fica para trás quando a
+    regra muda, que foi o que aconteceu ao existir o seletor.
+    """
+    if ctx.unidade_pedida:
+        return ctx.unidade_pedida
+    if ctx.unidades:
+        return sorted(ctx.unidades)[0]
+    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
+    linha = cur.fetchone()
+    if not linha:
+        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
+    return linha["id"]

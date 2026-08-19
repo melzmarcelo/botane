@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 import auditoria
 from database import get_cursor
-from seguranca import Contexto, contexto_atual, requer_permissao
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import nfe_xml
 from services.omie import importador
 
@@ -66,16 +66,6 @@ class NotaManual(BaseModel):
     itens: list[ItemManual] = Field(min_length=1)
 
 
-def _unidade(cur, ctx: Contexto) -> int:
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
-
-
 def _resumo(cur, id_nota: int) -> dict:
     cur.execute(
         """SELECT n.id, n.chave_nfe, n.numero, n.serie, n.nome_emitente, n.data_emissao,
@@ -104,7 +94,7 @@ async def importar_xml(arquivos: list[UploadFile] = File(...),
     caso normal é selecionar a pasta inteira do mês e deixar rodar.
     """
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute("SELECT cnpj FROM empresa WHERE id = 1")
         linha = cur.fetchone()
         cnpj_empresa = linha["cnpj"] if linha else None
@@ -170,7 +160,7 @@ def criar_manual(body: NotaManual,
     pela cascata de de-para, porque quem digitou já disse o que era.
     """
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         if body.id_fornecedor:
             cur.execute("SELECT id FROM fornecedores WHERE id = %s", (body.id_fornecedor,))
             if not cur.fetchone():

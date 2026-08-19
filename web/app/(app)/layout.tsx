@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
-import { api, urlArquivo } from "@/lib/api";
+import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
 import { ConviteInstalar } from "@/components/pwa";
 
@@ -219,9 +219,22 @@ function Casca({ children }: { children: React.ReactNode }) {
         )}
         {eu.unidades.length > 1 && (
           <div className="px-5 pb-3">
-            <select className="campo mono py-1.5 text-[12px]">
+            <select
+              className="campo mono py-1.5 text-[12px]"
+              value={unidadeAtual() ?? String(eu.unidades[0].id)}
+              onChange={(e) => {
+                definirUnidade(Number(e.target.value));
+                // Recarrega a página inteira de propósito: cada tela já buscou
+                // saldo, alerta e apuração da loja anterior, e atualizar uma por
+                // uma deixaria número de loja trocada na tela até a próxima
+                // navegação.
+                window.location.reload();
+              }}
+            >
               {eu.unidades.map((u) => (
-                <option key={u.id}>{u.apelido ?? u.nome}</option>
+                <option key={u.id} value={u.id}>
+                  {u.apelido ?? u.nome}
+                </option>
               ))}
             </select>
           </div>

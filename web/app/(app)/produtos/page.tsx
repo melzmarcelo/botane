@@ -27,19 +27,49 @@ export default function PaginaProdutos() {
   const [idCategoria, setIdCategoria] = useState("");
   const [inativos, setInativos] = useState(false);
   const [erro, setErro] = useState("");
+  const [total, setTotal] = useState(0);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+
+  const PAGINA = 100;
+
+  const buscarPagina = useCallback(
+    async (offset: number) => {
+      const q = new URLSearchParams();
+      if (busca.trim()) q.set("busca", busca.trim());
+      if (tipo) q.set("tipo", tipo);
+      if (idCategoria) q.set("id_categoria", idCategoria);
+      if (inativos) q.set("incluir_inativos", "true");
+      q.set("limite", String(PAGINA));
+      q.set("offset", String(offset));
+      return api.listar<ProdutoResumo>(`/produtos?${q}`);
+    },
+    [busca, tipo, idCategoria, inativos],
+  );
 
   const carregar = useCallback(async () => {
-    const q = new URLSearchParams();
-    if (busca.trim()) q.set("busca", busca.trim());
-    if (tipo) q.set("tipo", tipo);
-    if (idCategoria) q.set("id_categoria", idCategoria);
-    if (inativos) q.set("incluir_inativos", "true");
     try {
-      setLista(await api.get<ProdutoResumo[]>(`/produtos?${q}`));
+      const r = await buscarPagina(0);
+      setLista(r.itens);
+      setTotal(r.total);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [busca, tipo, idCategoria, inativos]);
+  }, [buscarPagina]);
+
+  /** Traz a próxima página e emenda na lista — sem perder o que já está na tela. */
+  async function carregarMais() {
+    if (!lista) return;
+    setCarregandoMais(true);
+    try {
+      const r = await buscarPagina(lista.length);
+      setLista([...lista, ...r.itens]);
+      setTotal(r.total);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao carregar mais");
+    } finally {
+      setCarregandoMais(false);
+    }
+  }
 
   useEffect(() => {
     api.get<Categoria[]>("/categorias").then(setCategorias).catch(() => {});
@@ -219,6 +249,24 @@ export default function PaginaProdutos() {
                 </tbody>
               </table>
             </div>
+
+            {/* Sem isto, lista cheia e lista cortada são indistinguíveis — e
+                quem procura um produto conclui que ele não existe. */}
+            <p className="mt-3 flex flex-wrap items-center gap-3 text-[13.5px] text-suave">
+              <span>
+                mostrando {lista.length} de {total}
+              </span>
+              {lista.length < total && (
+                <button
+                  type="button"
+                  className="btn btn-secundario"
+                  onClick={carregarMais}
+                  disabled={carregandoMais}
+                >
+                  {carregandoMais ? "Carregando…" : `Carregar mais ${Math.min(100, total - lista.length)}`}
+                </button>
+              )}
+            </p>
           </>
         )}
       </Cartao>

@@ -13,23 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import auditoria
 from database import get_cursor
 from models.cmv import ImportarVendasRequest, VendaResponse
-from seguranca import Contexto, requer_permissao
+from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 
 router = APIRouter(prefix="/vendas", tags=["vendas"])
 
 _ver = requer_permissao("cmv.painel", "cmv.relatorios")
 _editar = requer_permissao("cmv.fechamento", "cmv.painel")
-
-
-def _unidade(cur, ctx: Contexto) -> int:
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
 
 
 @router.get("", response_model=list[VendaResponse])
@@ -66,7 +56,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     custos_cache: dict[int, tuple] = {}
 
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
 
         for venda in body.vendas:
             if venda.documento:

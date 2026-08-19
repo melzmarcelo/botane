@@ -37,6 +37,14 @@ para arquivo nenhum — gravar direto aqui.
   preços e produto×fornecedor), 005 semente dos cadastros.
 - Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
+- **Loja atual em `seguranca.unidade_atual(cur, ctx)`** (19/08/2026): estava copiado em SETE
+  routers, e a cópia ficou para trás quando o seletor passou a existir. A escolha vem do
+  cabeçalho **`X-Unidade`** (não do corpo: vale para GET e nenhuma tela precisa repassá-la),
+  validada com `ctx.ve_unidade` — mandar o cabeçalho não dá acesso a loja nenhuma.
+- **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
+  na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
+  `expose_headers` do CORS, senão o navegador não o entrega à tela.
+- Manual da equipe: `docs/manual-da-equipe.md`.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
   `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
 - **`services/nfe_xml.py`** + `routers/notas.py`: a casa opera **sem integração nenhuma**. A

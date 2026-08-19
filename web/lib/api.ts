@@ -10,6 +10,23 @@ const BASE = process.env.NEXT_PUBLIC_API ?? "http://127.0.0.1:9200";
 
 const CHAVE_ACCESS = "botane.access";
 const CHAVE_REFRESH = "botane.refresh";
+const CHAVE_UNIDADE = "botane.unidade";
+
+/**
+ * A loja escolhida no seletor.
+ *
+ * Vai em cabeçalho, não em parâmetro de cada chamada: assim vale para toda a
+ * API de uma vez e nenhuma tela precisa lembrar de repassá-la. O servidor
+ * confere se a pessoa enxerga aquela loja — mandar o cabeçalho não dá acesso a
+ * nada.
+ */
+export const unidadeAtual = () =>
+  typeof window === "undefined" ? null : localStorage.getItem(CHAVE_UNIDADE);
+
+export const definirUnidade = (id: number | null) => {
+  if (id === null) localStorage.removeItem(CHAVE_UNIDADE);
+  else localStorage.setItem(CHAVE_UNIDADE, String(id));
+};
 
 export type Sessao = { access_token: string; refresh_token: string; usuario: Usuario };
 
@@ -49,6 +66,9 @@ export const guardarSessao = (s: { access_token: string; refresh_token: string }
 export const limparSessao = () => {
   localStorage.removeItem(CHAVE_ACCESS);
   localStorage.removeItem(CHAVE_REFRESH);
+  // A loja escolhida é da sessão: quem entra depois não herda a escolha de
+  // quem saiu — e pode nem enxergar aquela loja.
+  localStorage.removeItem(CHAVE_UNIDADE);
 };
 
 /** Caminho de imagem devolvido pela API (`/arquivos/...`) vira URL completa. */
@@ -64,6 +84,7 @@ async function bruto(metodo: string, caminho: string, corpo?: unknown, token?: s
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(unidadeAtual() ? { "X-Unidade": unidadeAtual()! } : {}),
     },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
     cache: "no-store",
@@ -117,6 +138,21 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
 
 export const api = {
   get: <T,>(caminho: string) => pedir<T>("GET", caminho),
+
+  /** Como `get`, mas devolve também quantos existem no total (cabeçalho X-Total). */
+  async listar<T>(caminho: string): Promise<{ itens: T[]; total: number }> {
+    let token = localStorage.getItem(CHAVE_ACCESS);
+    let r = await bruto("GET", caminho, undefined, token);
+    if (r.status === 401 && (await renovar())) {
+      token = localStorage.getItem(CHAVE_ACCESS);
+      r = await bruto("GET", caminho, undefined, token);
+    }
+    const texto = await r.text();
+    const dados = texto ? JSON.parse(texto) : [];
+    if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
+    const total = Number(r.headers.get("X-Total") ?? (dados as T[]).length);
+    return { itens: dados as T[], total };
+  },
   post: <T,>(caminho: string, corpo?: unknown) => pedir<T>("POST", caminho, corpo ?? {}),
   put: <T,>(caminho: string, corpo?: unknown) => pedir<T>("PUT", caminho, corpo ?? {}),
   delete: <T,>(caminho: string) => pedir<T>("DELETE", caminho),

@@ -88,7 +88,8 @@ app.add_middleware(
     allow_headers=["*"],
     # Sem isto o navegador não deixa o front ler o nome do arquivo exportado:
     # em requisição de outra origem, só os cabeçalhos expostos são visíveis.
-    expose_headers=["Content-Disposition"],
+    # X-Total sustenta a paginação: sem expor, o navegador não o entrega à tela.
+    expose_headers=["Content-Disposition", "X-Total"],
 )
 
 # Imagens enviadas pela tela (logo). Local por enquanto.

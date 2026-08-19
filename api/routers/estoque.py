@@ -6,7 +6,7 @@ Nenhum endpoint aqui escreve em `estoque_movimentos` na mão — todos passam po
 
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
@@ -19,21 +19,10 @@ from models.estoque import (
     SaldoResponse,
     TransferenciaRequest,
 )
-from seguranca import Contexto, contexto_atual, requer_permissao
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import estoque as motor
 
 router = APIRouter(prefix="/estoque", tags=["estoque"])
-
-
-def _unidade(cur, ctx: Contexto) -> int:
-    """A loja do contexto. Com uma só, é ela; com várias, a primeira do usuário."""
-    if ctx.unidades:
-        return sorted(ctx.unidades)[0]
-    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
-    linha = cur.fetchone()
-    if not linha:
-        raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
-    return linha["id"]
 
 
 @router.get("/saldos", response_model=list[SaldoResponse])
@@ -48,7 +37,7 @@ def saldos(
     ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
 ) -> list[dict]:
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """
             SELECT s.id_produto, p.codigo, p.nome AS produto, p.um_estoque, p.estoque_minimo,
@@ -81,6 +70,7 @@ def movimentos(
     tipo: str | None = None,
     limite: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
 ) -> list[dict]:
     with get_cursor() as cur:
@@ -90,7 +80,8 @@ def movimentos(
                    l.nome AS local, m.quantidade, m.custo_unitario, m.custo_total,
                    m.saldo_apos, m.custo_medio_apos, m.custo_provisorio, m.documento,
                    pm.nome AS motivo, m.observacao, u.nome AS usuario, m.id_estorno_de,
-                   EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id) AS estornado
+                   EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id) AS estornado,
+                   count(*) OVER () AS _total
               FROM estoque_movimentos m
               JOIN produtos p ON p.id = m.id_produto
               JOIN locais_estoque l ON l.id = m.id_local
@@ -105,8 +96,12 @@ def movimentos(
             (id_produto, id_produto, id_local, id_local, tipo, tipo, limite, offset),
         )
         linhas = [dict(r) for r in cur.fetchall()]
+    total = linhas[0].pop("_total", len(linhas)) if linhas else offset
     for l in linhas:
+        l.pop("_total", None)
         l["rotulo"] = motor.ROTULOS.get(l["tipo"], l["tipo"])
+    if resposta is not None:
+        resposta.headers["X-Total"] = str(total)
     return linhas
 
 
@@ -152,7 +147,7 @@ def vencimentos(dias: int = Query(default=None, ge=0, le=365),
                 ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
     """Lotes vencendo dentro da janela dos parâmetros (ou da informada)."""
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         if dias is None:
             cur.execute(
                 "SELECT alerta_validade_dias FROM parametros WHERE id_unidade = %s", (id_unidade,)
@@ -204,7 +199,7 @@ def _qtd(valor) -> str:
 def entrada(body: EntradaRequest,
             ctx: Contexto = Depends(requer_permissao("estoque.entradas"))) -> dict:
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         r = motor.lancar(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, tipo="ENTRADA_MANUAL",
             quantidade=body.quantidade, id_local=body.id_local,
@@ -232,7 +227,7 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
         raise HTTPException(status_code=400, detail="Tipo de saída inválido para este endpoint.")
 
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         r = motor.lancar(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, tipo=body.tipo,
             quantidade=body.quantidade, id_local=body.id_local,
@@ -257,7 +252,7 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
 def transferencia(body: TransferenciaRequest,
                   ctx: Contexto = Depends(requer_permissao("estoque.transferencias"))) -> dict:
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         r = motor.transferir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local_origem=body.id_local_origem, id_local_destino=body.id_local_destino,
@@ -287,7 +282,7 @@ def produzir(body: ProducaoRequest,
              ctx: Contexto = Depends(requer_permissao("estoque.saidas"))) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque."""
     with get_cursor() as cur:
-        id_unidade = _unidade(cur, ctx)
+        id_unidade = unidade_atual(cur, ctx)
         r = motor.produzir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local=body.id_local, id_usuario=ctx.id_usuario, observacao=body.observacao,
