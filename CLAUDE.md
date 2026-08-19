@@ -16,10 +16,11 @@ para arquivo nenhum — gravar direto aqui.
 
 ## Estado
 
-- Mapeamento, **etapa 1 (fundação)**, **etapa 2 (cadastros)** e **etapa 3 (fichas técnicas)**
+- Mapeamento e **etapas 1 a 4** (fundação, cadastros, fichas técnicas e estoque)
   concluídas — 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Próxima: etapa 4 — estoque** (razão append-only, custo médio móvel, inventário, perdas).
+- **Próxima: etapa 5 — Omie** (importar nota de entrada, de-para, rateio) ou **etapa 6 — CMV**
+  (real × teórico) se a credencial do Omie ainda não tiver chegado.
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -34,13 +35,18 @@ para arquivo nenhum — gravar direto aqui.
   preços e produto×fornecedor), 005 semente dos cadastros.
 - Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
-- Telas: `/produtos` (lista + `[id]`), `/fornecedores`, `/cadastros`, `/fichas` (lista + `[id]`).
-- **`services/custos.py` é o único lugar que sabe quanto custa um insumo.** Hoje responde
-  pelo último preço do fornecedor; na etapa 4 passa a responder pelo custo médio do estoque —
-  troca-se `custo_do_insumo` e nada mais. Dinheiro em `Decimal`, `float` só na borda da API.
-- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37) e
-  `web/scripts/verificar.mjs` (36 no Chrome, com fotos em `web/scripts/_fotos`). Todos
-  idempotentes — reaproveitam o que a rodada anterior desativou.
+- Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
+  `/inventario`.
+- **`services/custos.py` é o único lugar que sabe quanto custa um insumo**: custo médio do
+  estoque, com o último preço do fornecedor como reserva. Dinheiro em `Decimal`.
+- **`services/estoque.py` é a única porta de escrita no razão.** `lancar()` trava a linha de
+  saldo (`FOR UPDATE`), calcula o médio e grava a fotografia (`saldo_apos`,
+  `custo_medio_apos`). Router nenhum monta INSERT em `estoque_movimentos`.
+- **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
+  recalcular por data faria o CMV de ontem mudar sozinho.
+- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
+  `smoke_estoque.py` (57) e `web/scripts/verificar.mjs` (42 no Chrome, com fotos em
+  `web/scripts/_fotos`). Todos idempotentes — reaproveitam o que a rodada anterior desativou.
 
 ### Armadilhas já pagas
 - **`allowedDevOrigins` no `next.config.mjs`**: sem isso o dev server do Next devolve **403
@@ -56,6 +62,9 @@ para arquivo nenhum — gravar direto aqui.
   sub-ficha é recusado na gravação, e o cálculo ainda tem trava de profundidade por segurança.
 - **`fichas.custos` filtra o JSON, não só a tela**: sem a chave, nenhum campo de dinheiro
   sai do servidor. Ao mexer no router de fichas, manter isso.
+- **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o
+  original. Produto desativado mantém saldo e razão (a lista de saldos filtra por padrão).
+- Teste que usa acento ou espaço na query precisa de `urllib.parse.quote` — o urllib recusa.
 - `input[type=number]` no Chrome não seleciona conteúdo com `clickCount: 3` — no teste de
   navegador, limpar com ctrl+A, senão o valor entra colado (1 + 8 = 18).
 

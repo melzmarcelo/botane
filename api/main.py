@@ -18,9 +18,11 @@ from routers import (
     autenticacao,
     cadastros,
     empresa,
+    estoque,
     fichas,
     fornecedores,
     historico,
+    inventario,
     papeis,
     produtos,
     usuarios,
@@ -93,6 +95,8 @@ app.include_router(cadastros.router)
 app.include_router(fornecedores.router)
 app.include_router(produtos.router)
 app.include_router(fichas.router)
+app.include_router(estoque.router)
+app.include_router(inventario.router)
 
 
 @app.get("/saude", tags=["infra"])

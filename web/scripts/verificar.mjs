@@ -281,7 +281,56 @@ try {
   await api("DELETE", `/produtos/${bolo.id}`, null, token);
   await api("DELETE", `/fornecedores/${forn.id}`, null, token);
 
-  console.log("6. celular (390 x 844)");
+  console.log("6. estoque (etapa 4)");
+  const m4 = Date.now().toString().slice(-5);
+  const { dados: insumo4 } = await api("POST", "/produtos",
+    { nome: `Est tela ${m4}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+
+  for (const [rota, nome] of [
+    ["/estoque", "18-estoque"],
+    ["/producao", "19-producao"],
+    ["/inventario", "20-inventario"],
+  ]) {
+    await p.goto(WEB + rota, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1100));
+    const texto = await p.evaluate(() => document.body.innerText);
+    checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
+      texto.slice(0, 90));
+    await foto(p, nome);
+  }
+
+  // Entrada pela tela: 10 kg a R$ 20,00.
+  await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Entrada");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 600));
+  const selEstoque = await p.$$("select");
+  await selEstoque[0].select(String(insumo4.id));
+  const numEstoque = await p.$$("input[type=number]");
+  await numEstoque[0].type("10");
+  await numEstoque[1].type("20");
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Lançar");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  const textoEstoque = await p.evaluate(() => document.body.innerText);
+  checar("entrada pela tela mostra o novo custo médio", /custo médio: R\$\s?20,00/i.test(textoEstoque),
+    textoEstoque.match(/.{0,60}custo médio.{0,20}/i)?.[0]);
+  await foto(p, "21-estoque-entrada");
+
+  const { dados: saldos } = await api("GET", `/estoque/saldos?busca=${m4}`, null, token);
+  checar("saldo gravado pela tela", saldos.length === 1 && Number(saldos[0].quantidade) === 10,
+    saldos);
+  checar("valor em estoque = 200,00", saldos[0] && Number(saldos[0].valor) === 200,
+    saldos[0]?.valor);
+
+  await api("DELETE", `/produtos/${insumo4.id}`, null, token);
+
+  console.log("7. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -331,7 +380,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("7. logo da empresa");
+  console.log("8. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",

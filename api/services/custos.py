@@ -1,8 +1,9 @@
 """Cálculo de custo — o coração do sistema.
 
-**Uma fonte só para o custo do insumo.** Hoje ela é o último preço de compra
-conhecido; na etapa 4 passa a ser o custo médio do estoque. Quando isso mudar,
-muda `custo_do_insumo` e nada mais — é por isso que ela existe sozinha aqui.
+**Uma fonte só para o custo do insumo.** Desde a etapa 4 ela é o custo médio do
+estoque, com o último preço de compra como reserva para quem ainda não teve
+entrada. Tudo que precisa saber quanto custa um insumo pergunta aqui — ficha
+técnica, produção e CMV.
 
 Dinheiro em `Decimal`, sempre. `float` em custo unitário de insumo vira
 diferença de centavos que reaparece multiplicada por mil no fim do mês.
@@ -30,10 +31,27 @@ def dec(valor) -> Decimal:
 def custo_do_insumo(cur, id_produto: int) -> tuple[Decimal | None, str]:
     """Custo de UMA unidade de estoque do insumo, e de onde ele veio.
 
-    Ordem: último preço do fornecedor preferencial → último preço de qualquer
-    fornecedor. Devolve (None, "sem_custo") quando ninguém sabe quanto custa —
-    o que a tela precisa dizer em vez de mostrar zero.
+    Ordem: **custo médio do estoque** → último preço do fornecedor. Devolve
+    (None, "sem_custo") quando ninguém sabe quanto custa — o que a tela precisa
+    dizer em vez de mostrar zero.
+
+    O custo médio ganha do preço de tabela porque é o que a casa realmente pagou
+    pelo que está na prateleira, frete e desconto já embutidos.
     """
+    cur.execute(
+        """
+        SELECT sum(quantidade * custo_medio) AS valor, sum(quantidade) AS qtd
+          FROM estoque_saldos
+         WHERE id_produto = %s AND quantidade > 0 AND custo_medio > 0
+        """,
+        (id_produto,),
+    )
+    linha = cur.fetchone()
+    if linha and linha["qtd"] and dec(linha["qtd"]) > 0:
+        # Médio ponderado entre os locais: o mesmo insumo pode estar na câmara
+        # fria e no bar com custos diferentes.
+        return (dec(linha["valor"]) / dec(linha["qtd"])).quantize(CASAS_CUSTO), "custo_medio"
+
     cur.execute(
         """
         SELECT pf.ultimo_preco, pf.fator, pf.preferencial

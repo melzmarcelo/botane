@@ -23,6 +23,14 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     ],
   },
   {
+    grupo: "Estoque",
+    itens: [
+      { href: "/estoque", nome: "Saldos e movimentos", chave: "estoque.saldos" },
+      { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
+      { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },
+    ],
+  },
+  {
     grupo: "Administração",
     itens: [
       { href: "/empresa", nome: "Empresa", chave: "admin.empresa" },

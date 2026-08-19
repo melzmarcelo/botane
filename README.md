@@ -42,6 +42,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API (login, permissão, refresh, auditoria) | `cd api && python tests/smoke_fundacao.py` |
 | API — cadastros (produtos, fornecedores, árvore de categorias) | `cd api && python tests/smoke_cadastros.py` |
 | API — fichas técnicas (custo em cascata, ciclo, permissão de custo) | `cd api && python tests/smoke_fichas.py` |
+| API — estoque (custo médio, estorno, inventário, produção) | `cd api && python tests/smoke_estoque.py` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -54,4 +55,6 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
   árvore, setores, locais de estoque e unidades de medida
 - **Etapa 3 — fichas técnicas:** concluída em 19/08/2026 — sub-ficha em cascata, fator de
   correção, custo por porção, versão com homologação
-- **Etapa 4 — estoque:** a próxima
+- **Etapa 4 — estoque:** concluída em 19/08/2026 — razão append-only, custo médio móvel,
+  perdas com motivo, transferência, produção pela ficha e inventário
+- **Etapa 5 — Omie / etapa 6 — CMV:** as próximas

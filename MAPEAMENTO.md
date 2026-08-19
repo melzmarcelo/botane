@@ -594,7 +594,7 @@ correção, e o confronto entre CMV real e teórico com a variância nomeada.
 | 1 | Fundação ✔ | *concluída em 18/08/2026* — banco, login, papéis e permissões, empresa, lojas, auditoria |
 | 2 | Cadastros ✔ | *concluída em 19/08/2026* — produtos com tipo/conversão/lote, fornecedores, categorias em árvore, setores, locais e UM |
 | 3 | Fichas técnicas ✔ | *concluída em 19/08/2026* — sub-ficha em cascata, fator de correção, custo por porção, versão e homologação |
-| 4 | Estoque | razão + custo médio; entrada manual, saída, perda, inventário |
+| 4 | Estoque ✔ | *concluída em 19/08/2026* — razão append-only, custo médio móvel com trava, perdas, transferência, produção pela ficha e inventário |
 | 5 | Omie | importação de NF com de-para e rateio (simulado → real) |
 | 6 | CMV | painel real × teórico, variância, ABC, fechamento |
 | 7 | Mobile/PWA | contagem e consulta pelo celular |
