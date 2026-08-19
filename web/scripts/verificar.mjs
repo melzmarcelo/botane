@@ -589,6 +589,65 @@ try {
     }
   }
 
+  console.log("8c. FEFO: o lote que vence antes sai antes");
+  const marcaLote = String(Date.now()).slice(-6);
+  const { dados: locaisFefo } = await api("GET", "/locais", null, token);
+  const localFefo = (locaisFefo.find((l) => l.principal) ?? locaisFefo[0]).id;
+  const { dados: perecivel } = await api("POST", "/produtos", {
+    nome: `Creme FEFO ${marcaLote}`, tipo: "INSUMO", um_estoque: "UN",
+    controla_lote: true, controla_validade: true, perecivel: true,
+  }, token);
+  // O lote que vence DEPOIS entra primeiro, de propósito: se o sistema seguisse
+  // a ordem de entrada em vez da validade, o teste passaria por engano.
+  for (const [lote, validade] of [[`TARDE${marcaLote}`, "2026-11-30"],
+                                  [`CEDO${marcaLote}`, "2026-09-08"]]) {
+    await api("POST", "/estoque/entradas", {
+      id_produto: perecivel.id, quantidade: 6, custo_unitario: 4,
+      id_local: localFefo, lote, validade,
+    }, token);
+  }
+
+  await irPara(p, `${WEB}/estoque`);
+  await new Promise((r) => setTimeout(r, 1400));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => /movimentos/i.test(x.textContent))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoLotes = await p.evaluate(() => document.body.innerText);
+  checar("a tela lista os lotes em estoque", /Lotes em estoque/i.test(textoLotes),
+    textoLotes.slice(0, 120));
+  checar("e explica que a ordem é a da saída",
+    /vence antes sai antes/i.test(textoLotes));
+  // A ordem na tela é a ordem da fila: o que vence antes aparece antes.
+  const ordem = await p.evaluate((m) => {
+    const linhas = [...document.querySelectorAll("tr")].map((t) => t.innerText);
+    return linhas.filter((t) => t.includes(m)).map((t) => (t.includes("CEDO") ? "CEDO" : "TARDE"));
+  }, marcaLote);
+  checar("o que vence antes aparece primeiro na fila",
+    ordem[0] === "CEDO", ordem);
+  await foto(p, "35-lotes");
+
+  // A baixa tem de dizer de qual pote saiu.
+  const { dados: baixa } = await api("POST", "/estoque/saidas", {
+    tipo: "SAIDA_PERDA", id_produto: perecivel.id, quantidade: 8,
+    id_local: localFefo, id_motivo_perda: 1,
+  }, token);
+  checar("a saída quebra em dois lotes", (baixa.lotes ?? []).length === 2, baixa.lotes);
+  checar("começando pelo que vence antes",
+    (baixa.lotes?.[0]?.lote ?? "").startsWith("CEDO"), baixa.lotes);
+  // "6", não "6.0000": a frase é lida pela cozinha, não por um sistema.
+  checar("e a resposta já vem em português de prateleira",
+    /Saída lançada: 6 do lote CEDO/.test(baixa.message ?? ""), baixa.message);
+
+  const { dados: sobrou } = await api(
+    "GET", `/estoque/lotes?id_produto=${perecivel.id}`, null, token);
+  checar("o lote consumido some da lista", !sobrou.some((l) => l.lote.startsWith("CEDO")),
+    sobrou.map((l) => l.lote));
+  checar("e o outro fica com o que sobrou",
+    Number(sobrou.find((l) => l.lote.startsWith("TARDE"))?.quantidade) === 4, sobrou);
+
+  await api("DELETE", `/produtos/${perecivel.id}`, null, token);
+
   console.log("9. alertas e exportação");
   await p.goto(`${WEB}/alertas`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));

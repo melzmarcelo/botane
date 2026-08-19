@@ -4,6 +4,8 @@ Nenhum endpoint aqui escreve em `estoque_movimentos` na mão — todos passam po
 `services.estoque.lancar`, que é onde ficam a trava e o cálculo do médio.
 """
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auditoria
@@ -115,6 +117,36 @@ def motivos_perda(ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
         return [dict(r) for r in cur.fetchall()]
 
 
+@router.get("/lotes")
+def lotes(id_produto: int | None = None,
+          incluir_zerados: bool = False,
+          incluir_inativos: bool = False,
+          ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
+    """Os lotes em estoque, na ordem em que o FEFO vai consumi-los.
+
+    Diferente de `/vencimentos`, que só olha a janela de alerta: aqui entra
+    também o lote sem validade — que existe, ocupa prateleira, e é o último da
+    fila justamente por não ter data.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT el.id, el.id_produto, el.lote, el.validade, el.quantidade,
+                      p.nome AS produto, p.codigo, p.um_estoque, l.nome AS local,
+                      (el.validade - current_date) AS dias_restantes
+                 FROM estoque_lotes el
+                 JOIN produtos p ON p.id = el.id_produto
+                 JOIN locais_estoque l ON l.id = el.id_local
+                WHERE (%s::int IS NULL OR el.id_produto = %s)
+                  AND (%s OR el.quantidade > 0)
+                  -- Produto desativado guarda saldo e razão, mas não tem o que
+                  -- fazer na fila de separação: ninguém vai buscar aquele pote.
+                  AND (%s OR p.ativo)
+                ORDER BY p.nome, el.validade NULLS LAST, el.id""",
+            (id_produto, id_produto, incluir_zerados, incluir_inativos),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
 @router.get("/vencimentos")
 def vencimentos(dias: int = Query(default=None, ge=0, le=365),
                 ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
@@ -142,6 +174,32 @@ def vencimentos(dias: int = Query(default=None, ge=0, le=365),
         return [dict(r) for r in cur.fetchall()]
 
 
+def _frase_dos_lotes(r: dict) -> str | None:
+    """Diz de qual lote a mercadoria saiu — a conferência que se faz na prateleira."""
+    lotes = r.get("lotes") or []
+    if not lotes:
+        return None
+    partes = []
+    for l in lotes:
+        nome = l.get("lote") or "sem identificação"
+        venc = f" (vence {l['validade'].strftime('%d/%m')})" if l.get("validade") else ""
+        partes.append(f"{_qtd(l['quantidade'])} do lote {nome}{venc}")
+    return "Saída lançada: " + ", ".join(partes)
+
+
+def _qtd(valor) -> str:
+    """6.0000 vira "6"; 2.5 vira "2,5".
+
+    `:g` não serve: em `Decimal` ele preserva as casas do coeficiente, e a tela
+    mostrava "6.0000 do lote" — número de sistema no meio de uma frase que a
+    cozinha lê.
+    """
+    d = Decimal(str(valor)).normalize()
+    if d == d.to_integral_value():
+        d = d.quantize(Decimal(1))
+    return f"{d:f}".replace(".", ",")
+
+
 @router.post("/entradas", status_code=201)
 def entrada(body: EntradaRequest,
             ctx: Contexto = Depends(requer_permissao("estoque.entradas"))) -> dict:
@@ -159,7 +217,8 @@ def entrada(body: EntradaRequest,
                             depois={"produto": body.id_produto, "qtd": body.quantidade,
                                     "custo": body.custo_unitario}, id_unidade=id_unidade)
     return {"id": r["id"], "saldo": float(r["saldo_apos"]),
-            "custo_medio": float(r["custo_medio_apos"]), "message": "Entrada lançada"}
+            "custo_medio": float(r["custo_medio_apos"]),
+            "lotes": r.get("lotes") or [], "message": "Entrada lançada"}
 
 
 @router.post("/saidas", status_code=201)
@@ -187,7 +246,11 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
                             id_unidade=id_unidade)
     return {"id": r["id"], "saldo": float(r["saldo_apos"]),
             "custo_unitario": float(r["custo_unitario"]),
-            "custo_provisorio": r["custo_provisorio"], "message": "Saída lançada"}
+            "custo_provisorio": r["custo_provisorio"],
+            # De quais lotes saiu: quem deu baixa precisa poder conferir na
+            # prateleira que pegou o pote certo.
+            "lotes": r.get("lotes") or [],
+            "message": _frase_dos_lotes(r) or "Saída lançada"}
 
 
 @router.post("/transferencias", status_code=201)
@@ -215,7 +278,8 @@ def estornar(id_movimento: int, body: EstornoRequest,
         r = motor.estornar(cur, id_movimento, ctx.id_usuario, body.motivo)
         auditoria.registrar(cur, ctx.id_usuario, "estoque", id_movimento, "estornar",
                             depois={"movimento_estorno": r["id"], "motivo": body.motivo})
-    return {"id": r["id"], "saldo": float(r["saldo_apos"]), "message": "Movimento estornado"}
+    return {"id": r["id"], "saldo": float(r["saldo_apos"]),
+            "lotes": r.get("lotes") or [], "message": "Movimento estornado"}
 
 
 @router.post("/producoes", status_code=201)

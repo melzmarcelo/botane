@@ -162,6 +162,7 @@ def lancar(
     lote: str | None = None,
     validade=None,
     pode_retroativo: bool = False,
+    _lotes_espelho: list | None = None,
 ) -> dict:
     """Grava UM movimento e devolve o que ficou. Quantidade sempre positiva."""
     if tipo not in TIPOS:
@@ -249,9 +250,22 @@ def lancar(
         (saldo_novo, medio_novo, id_unidade, id_local, id_produto),
     )
 
-    if produto["controla_lote"] and (lote or validade):
-        _mover_lote(cur, movimento["id"], id_unidade, id_local, id_produto,
-                    lote, validade, qtd if tipo in ENTRADAS else -qtd)
+    lotes_movidos = []
+    if produto["controla_lote"]:
+        if _lotes_espelho is not None:
+            # Estorno: desfaz exatamente os lotes do movimento original. Deixar o
+            # FEFO escolher aqui devolveria a mercadoria ao lote errado.
+            lotes_movidos = _espelhar_lotes(cur, movimento["id"], _lotes_espelho,
+                                            entrada=tipo in ENTRADAS)
+        elif lote or validade:
+            _mover_lote(cur, movimento["id"], id_unidade, id_local, id_produto,
+                        lote, validade, qtd if tipo in ENTRADAS else -qtd)
+            lotes_movidos = _lotes_do_movimento(cur, movimento["id"])
+        elif tipo not in ENTRADAS:
+            # Saída sem lote informado: o sistema escolhe — o que vence antes
+            # sai antes.
+            lotes_movidos = _consumir_fefo(cur, movimento["id"], id_unidade, id_local,
+                                           id_produto, qtd)
 
     return {
         "id": movimento["id"],
@@ -261,7 +275,83 @@ def lancar(
         "saldo_apos": saldo_novo,
         "custo_medio_apos": medio_novo,
         "custo_provisorio": provisorio,
+        "lotes": lotes_movidos,
     }
+
+
+def _espelhar_lotes(cur, id_movimento: int, lotes: list, entrada: bool) -> list[dict]:
+    """Repete os lotes de um movimento, com o sinal trocado. É o estorno."""
+    movidos = []
+    for l in lotes:
+        qtd = dec(l["quantidade"]) * (1 if entrada else -1)
+        cur.execute(
+            "UPDATE estoque_lotes SET quantidade = quantidade + %s WHERE id = %s RETURNING lote, validade",
+            (qtd, l["id_lote"]),
+        )
+        linha = cur.fetchone()
+        cur.execute(
+            "INSERT INTO movimento_lotes (id_movimento, id_lote, quantidade) VALUES (%s, %s, %s)",
+            (id_movimento, l["id_lote"], qtd),
+        )
+        movidos.append({"id_lote": l["id_lote"], "lote": linha["lote"],
+                        "validade": linha["validade"], "quantidade": abs(qtd)})
+    return movidos
+
+
+def _lotes_do_movimento(cur, id_movimento: int) -> list[dict]:
+    cur.execute(
+        """SELECT l.lote, l.validade, abs(ml.quantidade) AS quantidade, l.id AS id_lote
+             FROM movimento_lotes ml JOIN estoque_lotes l ON l.id = ml.id_lote
+            WHERE ml.id_movimento = %s
+            ORDER BY l.validade NULLS LAST, l.id""",
+        (id_movimento,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _consumir_fefo(cur, id_movimento: int, id_unidade: int, id_local: int, id_produto: int,
+                   qtd) -> list[dict]:
+    """Baixa a saída dos lotes, o que vence primeiro na frente (FEFO).
+
+    Três decisões que valem mais que o algoritmo:
+
+    * **Isto nunca barra a saída.** O lote é camada de CONTROLE; quem manda no
+      saldo é o razão. Entrada antiga sem lote informado (o campo é opcional) faz
+      a soma dos lotes ser menor que o saldo — e a cozinha não pode ficar
+      impedida de produzir por causa de um papel que ninguém preencheu. O que
+      sobra sai como "sem lote" e pronto.
+    * **Sem validade vai para o fim da fila.** Lote sem data não se sabe se vence
+      antes ou depois; consumir o que tem data conhecida primeiro é o que faz o
+      alerta de vencimento parar de mentir.
+    * **Uma saída pode quebrar em vários lotes.** Cada pedaço vira uma linha em
+      `movimento_lotes`, então dá para responder "essas 8 unidades saíram 5 do
+      lote que vence dia 20 e 3 do que vence dia 27".
+    """
+    restante = dec(qtd)
+    cur.execute(
+        """SELECT id, lote, validade, quantidade FROM estoque_lotes
+            WHERE id_unidade = %s AND id_local = %s AND id_produto = %s AND quantidade > 0
+            ORDER BY validade NULLS LAST, id
+            FOR UPDATE""",
+        (id_unidade, id_local, id_produto),
+    )
+    consumidos = []
+    for linha in cur.fetchall():
+        if restante <= 0:
+            break
+        leva = min(restante, dec(linha["quantidade"]))
+        cur.execute(
+            "UPDATE estoque_lotes SET quantidade = quantidade - %s WHERE id = %s",
+            (leva, linha["id"]),
+        )
+        cur.execute(
+            "INSERT INTO movimento_lotes (id_movimento, id_lote, quantidade) VALUES (%s, %s, %s)",
+            (id_movimento, linha["id"], -leva),
+        )
+        consumidos.append({"id_lote": linha["id"], "lote": linha["lote"],
+                           "validade": linha["validade"], "quantidade": leva})
+        restante -= leva
+    return consumidos
 
 
 def _mover_lote(cur, id_movimento, id_unidade, id_local, id_produto, lote, validade, qtd) -> None:
@@ -274,10 +364,14 @@ def _mover_lote(cur, id_movimento, id_unidade, id_local, id_produto, lote, valid
         (id_unidade, id_local, id_produto, lote, validade),
     )
     cur.execute(
+        # O `::date` no parâmetro não é enfeite: sem ele, `validade` nula chega
+        # ao Postgres sem tipo, o COALESCE vira texto e a comparação estoura com
+        # "operador não existe: date = text". Lote com validade passava; lote
+        # SEM validade dava erro 500 — e nenhum teste passava por esse caminho.
         """UPDATE estoque_lotes SET quantidade = quantidade + %s
             WHERE id_unidade = %s AND id_local = %s AND id_produto = %s
               AND COALESCE(lote, '') = COALESCE(%s, '')
-              AND COALESCE(validade, '9999-12-31') = COALESCE(%s, '9999-12-31')
+              AND COALESCE(validade, '9999-12-31') = COALESCE(%s::date, '9999-12-31')
           RETURNING id""",
         (qtd, id_unidade, id_local, id_produto, lote, validade),
     )
@@ -310,6 +404,14 @@ def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None)
         raise HTTPException(status_code=400, detail="Este movimento já foi estornado.")
 
     era_entrada = m["tipo"] in ENTRADAS
+    # Os lotes do original vêm junto: o estorno tem de devolver (ou retirar) do
+    # MESMO lote, não de um que o FEFO escolhesse agora.
+    cur.execute(
+        "SELECT id_lote, abs(quantidade) AS quantidade FROM movimento_lotes WHERE id_movimento = %s",
+        (id_movimento,),
+    )
+    lotes_originais = [dict(r) for r in cur.fetchall()]
+
     return lancar(
         cur,
         id_unidade=m["id_unidade"],
@@ -323,6 +425,7 @@ def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None)
         id_estorno_de=id_movimento,
         observacao=motivo or f"Estorno do movimento #{id_movimento}",
         id_usuario=id_usuario,
+        _lotes_espelho=lotes_originais or None,
     )
 
 

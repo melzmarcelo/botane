@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import LotesEmEstoque from "./lotes";
 
 type Saldo = {
   id_produto: number;
@@ -151,16 +152,20 @@ export default function PaginaEstoque() {
         });
         setOk("Transferência lançada.");
       } else {
-        const r = await api.post<{ custo_unitario: number; custo_provisorio: boolean }>(
-          "/estoque/saidas",
-          {
-            ...base,
-            tipo: lancamento === "perda" ? "SAIDA_PERDA" : "SAIDA_CONSUMO_INTERNO",
-            id_motivo_perda: f.id_motivo_perda ? Number(f.id_motivo_perda) : null,
-          },
-        );
+        const r = await api.post<{
+          custo_unitario: number;
+          custo_provisorio: boolean;
+          message: string;
+        }>("/estoque/saidas", {
+          ...base,
+          tipo: lancamento === "perda" ? "SAIDA_PERDA" : "SAIDA_CONSUMO_INTERNO",
+          id_motivo_perda: f.id_motivo_perda ? Number(f.id_motivo_perda) : null,
+        });
+        // A frase de qual lote saiu vem pronta do servidor: é a mesma que qualquer
+        // outro consumidor da API recebe, e escrevê-la de novo aqui seria a
+        // segunda versão da mesma regra.
         setOk(
-          `Saída lançada a ${reais(Number(r.custo_unitario))} por unidade.` +
+          `${r.message ?? "Saída lançada"} — ${reais(Number(r.custo_unitario))} por unidade.` +
             (r.custo_provisorio ? " Custo provisório: não havia saldo suficiente." : ""),
         );
       }
@@ -493,6 +498,9 @@ export default function PaginaEstoque() {
       )}
 
       {aba === "movimentos" && (
+        <>
+        <LotesEmEstoque />
+
         <Cartao titulo="Razão de estoque" descricao="Os 100 últimos lançamentos.">
           {!movimentos ? (
             <Carregando />
@@ -570,6 +578,7 @@ export default function PaginaEstoque() {
             </div>
           )}
         </Cartao>
+        </>
       )}
     </div>
   );

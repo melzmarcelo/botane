@@ -61,6 +61,14 @@ para arquivo nenhum — gravar direto aqui.
   transformação interna e se anulam na conta.
 - **`services/custos.py` é o único lugar que sabe quanto custa um insumo**: custo médio do
   estoque, com o último preço do fornecedor como reserva. Dinheiro em `Decimal`.
+- **FEFO (19/08/2026):** a saída de produto com `controla_lote` **escolhe o lote sozinha** —
+  o que vence antes sai antes, quebrando em vários lotes se preciso (`_consumir_fefo`).
+  Sem validade fica no fim da fila. ⚠️ **Lote nunca barra a operação**: a soma dos lotes pode
+  ser menor que o saldo (o campo é opcional na entrada) e o que falta sai como "sem lote" —
+  quem manda no saldo é o razão, lote é camada de controle. ⚠️ O **estorno espelha os lotes do
+  movimento original** (`_lotes_espelho`), nunca o FEFO — senão devolveria ao lote errado.
+  Antes disso a saída não baixava `estoque_lotes`: o saldo por lote só crescia e **o alerta de
+  vencimento mentia**.
 - **`services/estoque.py` é a única porta de escrita no razão.** `lancar()` trava a linha de
   saldo (`FOR UPDATE`), calcula o médio e grava a fotografia (`saldo_apos`,
   `custo_medio_apos`). Router nenhum monta INSERT em `estoque_movimentos`.
@@ -83,8 +91,9 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47), `smoke_senha.py` (40) e
+- Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47),
+  `smoke_senha.py` (40), `smoke_lotes.py` (28) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
@@ -126,6 +135,10 @@ para arquivo nenhum — gravar direto aqui.
   (inclusive o admin) passa. Teste da trava precisa de usuário sem a chave (o Conferente).
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o
   original. Produto desativado mantém saldo e razão (a lista de saldos filtra por padrão).
+- ⚠️ **Parâmetro NULL sem tipo dentro de `COALESCE` estoura no Postgres**: em
+  `COALESCE(validade, '9999-12-31') = COALESCE(%s, '9999-12-31')`, um `None` vira `text` e dá
+  "operador não existe: date = text". Entrada com lote **sem validade** dava 500 desde a etapa
+  4 porque nenhum teste passava por esse caminho. Corrigido com `%s::date`.
 - Teste que usa acento ou espaço na query precisa de `urllib.parse.quote` — o urllib recusa.
 - `input[type=number]` no Chrome não seleciona conteúdo com `clickCount: 3` — no teste de
   navegador, limpar com ctrl+A, senão o valor entra colado (1 + 8 = 18).
