@@ -47,6 +47,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |
+| API — kit/combo (custo somado, ficha vigente, ciclo) | `cd api && python tests/smoke_kits.py` |
 | API — relatórios do dono (CMV por setor, evolução de preço) | `cd api && python tests/smoke_relatorios.py` |
 | API — FEFO (lote na saída, estorno, alerta que não mente) | `cd api && python tests/smoke_lotes.py` |
 | API — recuperação de senha (token, sessões, SMTP) | `cd api && python tests/smoke_senha.py` |
@@ -85,4 +86,6 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 - **Relatórios do dono:** concluídos em 19/08/2026 — CMV por setor e por categoria (a soma
   fecha com o total) e evolução de preço por insumo, ordenada pelo impacto em reais, com a
   planilha para levar ao fornecedor
+- **Kit/combo:** concluído em 19/08/2026 — o combo do PDV deixa de entrar sem custo no CMV
+  teórico: a composição aponta para produtos e cada um custa pela regra dele
 - **A primeira parte está completa.** O que segue são as fases 2 em diante do mapeamento.

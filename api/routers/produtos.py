@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    KitRequest,
     ContagemProdutos,
     ProdutoCreate,
     ProdutoResponse,
@@ -18,6 +19,7 @@ from models.produtos import (
     TIPOS,
 )
 from seguranca import Contexto, contexto_atual, requer_permissao
+from services import kits
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -262,6 +264,43 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "atualizar",
                             antes=dict(antes), depois=campos)
     return {"message": "Produto atualizado"}
+
+
+@router.get("/{id_produto}/kit")
+def obter_kit(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
+    """A composição do combo e quanto ele custa hoje.
+
+    O custo vem junto de propósito: montar a composição sem ver o custo sair é
+    trabalhar às cegas — o combo existe para ter preço, e o preço depende disto.
+    """
+    with get_cursor() as cur:
+        itens = kits.componentes(cur, id_produto)
+        valor, origem, detalhe = kits.custo(cur, id_produto)
+        # Dinheiro só para quem pode ver custo de ficha: a mesma chave que
+        # esconde o custo da receita esconde o do combo.
+        if not ctx.pode("fichas.custos"):
+            return {"itens": itens, "custo": None, "origem": None, "detalhe": []}
+    return {
+        "itens": itens,
+        "custo": float(valor) if valor is not None else None,
+        "origem": origem,
+        "detalhe": detalhe,
+    }
+
+
+@router.put("/{id_produto}/kit")
+def gravar_kit(id_produto: int, body: KitRequest,
+               ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    with get_cursor() as cur:
+        r = kits.gravar(cur, id_produto, [i.model_dump() for i in body.itens])
+        valor, origem, _ = kits.custo(cur, id_produto)
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "kit_composicao",
+                            depois={"itens": r["itens"]})
+    return r | {
+        "custo": float(valor) if valor is not None else None,
+        "origem": origem,
+        "message": f"Composição gravada com {r['itens']} componente(s)",
+    }
 
 
 @router.post("/{id_produto}/revisar")

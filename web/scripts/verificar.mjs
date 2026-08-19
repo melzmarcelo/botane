@@ -589,6 +589,51 @@ try {
     }
   }
 
+  console.log("7a. combo: uma linha do PDV que vale por dois produtos");
+  const marcaKit = String(Date.now()).slice(-6);
+  const { dados: localKit } = await api("GET", "/locais", null, token);
+  const idLocalKit = (localKit.find((l) => l.principal) ?? localKit[0]).id;
+  const { dados: bebida } = await api("POST", "/produtos", {
+    nome: `Combo bebida ${marcaKit}`, tipo: "REVENDA", um_estoque: "UN",
+  }, token);
+  await api("POST", "/estoque/entradas", {
+    id_produto: bebida.id, quantidade: 10, custo_unitario: 3, id_local: idLocalKit,
+  }, token);
+  const { dados: comboTela } = await api("POST", "/produtos", {
+    nome: `Combo tela ${marcaKit}`, tipo: "KIT", um_estoque: "UN",
+  }, token);
+
+  await irPara(p, `${WEB}/produtos/${comboTela.id}`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const textoKit = await p.evaluate(() => document.body.innerText);
+  checar("produto KIT ganha o cartão de composição", /O que vai no combo/i.test(textoKit),
+    textoKit.slice(0, 140));
+  checar("e avisa que sem composição não há custo",
+    /monte a composição/i.test(textoKit), textoKit.slice(-200));
+
+  // Monta a composição pela tela, do jeito que o cliente faria.
+  const seletoresKit = await p.$$("select");
+  const seletorComponente = seletoresKit[seletoresKit.length - 1];
+  await seletorComponente.select(String(bebida.id));
+  await new Promise((r) => setTimeout(r, 400));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => /gravar composição/i.test(x.textContent))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  const textoGravado = await p.evaluate(() => document.body.innerText);
+  checar("a composição grava pela tela", /componente\(s\)/i.test(textoGravado),
+    textoGravado.slice(0, 160));
+  checar("e o custo do combo aparece", /R\$\s*3,00/.test(textoGravado),
+    textoGravado.slice(-260));
+  await foto(p, "37-combo");
+
+  const { dados: kitApi } = await api("GET", `/produtos/${comboTela.id}/kit`, null, token);
+  checar("a API confirma o custo somado", Number(kitApi.custo) === 3, kitApi.custo);
+  checar("e diz que a composição está completa", kitApi.origem === "kit", kitApi.origem);
+
+  for (const id of [comboTela.id, bebida.id]) await api("DELETE", `/produtos/${id}`, null, token);
+
   console.log("7b. relatórios do dono: onde pesa e o que subiu");
   await irPara(p, `${WEB}/cmv`);
   await new Promise((r) => setTimeout(r, 1500));

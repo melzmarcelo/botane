@@ -194,13 +194,26 @@ def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int 
     return linhas
 
 
-def custo_teorico_do_produto(cur, id_produto: int) -> tuple[Decimal | None, str]:
+def custo_teorico_do_produto(cur, id_produto: int,
+                            _nivel: int = 0) -> tuple[Decimal | None, str]:
     """Quanto uma unidade vendida deste produto deveria custar.
 
-    Produção própria: pela ficha homologada. Revenda: pelo custo médio do
-    estoque, que é o que ela custou de verdade.
+    Três regras, nesta ordem:
+
+    * **Kit/combo**: a soma dos componentes, cada um resolvido por esta mesma
+      função — é o que faz o combo do PDV deixar de entrar sem custo.
+    * **Produção própria**: pela ficha homologada vigente.
+    * **Revenda**: pelo custo médio do estoque, que é o que ela custou mesmo.
     """
     from services import custos  # ciclo de import: só aqui dentro
+
+    cur.execute("SELECT tipo FROM produtos WHERE id = %s", (id_produto,))
+    linha = cur.fetchone()
+    if linha and linha["tipo"] == "KIT":
+        from services import kits
+
+        valor, origem, _detalhe = kits.custo(cur, id_produto, _nivel)
+        return valor, origem
 
     cur.execute(
         """SELECT f.id, f.rendimento_qtd

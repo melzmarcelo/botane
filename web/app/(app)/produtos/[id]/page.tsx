@@ -13,6 +13,7 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import ComposicaoKit from "./kit";
 
 type VinculoFornecedor = {
   id_fornecedor: number;
@@ -595,6 +596,16 @@ export default function FormularioProduto() {
           </ul>
         )}
       </Cartao>
+
+      {/* Combo só faz sentido depois de o produto existir: a composição aponta
+          para ele, e produto novo ainda não tem id. */}
+      {!novo && f.tipo === "KIT" && (
+        <ComposicaoKit
+          idProduto={Number(id)}
+          podeEditar={podeEditar}
+          podeVerCusto={pode("fichas.custos")}
+        />
+      )}
 
       <Cartao titulo="Observações">
         <textarea

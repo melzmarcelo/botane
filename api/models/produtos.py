@@ -40,6 +40,16 @@ class ProdutoBase(BaseModel):
     observacao: str | None = None
 
 
+class KitItem(BaseModel):
+    id_componente: int
+    quantidade: float = Field(default=1, gt=0)
+    observacao: str | None = Field(default=None, max_length=120)
+
+
+class KitRequest(BaseModel):
+    itens: list[KitItem] = Field(default_factory=list)
+
+
 class ProdutoCreate(ProdutoBase):
     # Em branco, o sistema gera um sequencial — ninguém precisa inventar código.
     codigo: str | None = Field(default=None, max_length=40)
