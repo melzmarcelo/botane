@@ -51,7 +51,8 @@ ROTULOS = {
 
 def _parametros(cur, id_unidade: int) -> dict:
     cur.execute(
-        """SELECT permitir_saldo_negativo, exigir_motivo_perda, exigir_local_movimento
+        """SELECT permitir_saldo_negativo, exigir_motivo_perda, exigir_local_movimento,
+                  bloquear_retroativo
              FROM parametros WHERE id_unidade = %s""",
         (id_unidade,),
     )
@@ -60,6 +61,7 @@ def _parametros(cur, id_unidade: int) -> dict:
         "permitir_saldo_negativo": True,
         "exigir_motivo_perda": True,
         "exigir_local_movimento": True,
+        "bloquear_retroativo": True,
     }
 
 
@@ -73,6 +75,30 @@ def local_padrao(cur, id_unidade: int) -> int:
     if not linha:
         raise HTTPException(status_code=400, detail="Nenhum local de estoque cadastrado.")
     return linha["id"]
+
+
+def _travar_periodo_fechado(cur, id_unidade: int, quando, pode_retroativo: bool) -> None:
+    """Mês fechado não recebe lançamento novo — é o que dá sentido ao fechamento.
+
+    Quem tem `estoque.retroativo` passa; a auditoria registra quem foi.
+    """
+    if pode_retroativo:
+        return
+    data = quando.date() if hasattr(quando, "date") else quando
+    cur.execute(
+        """SELECT competencia FROM cmv_fechamentos
+            WHERE id_unidade = %s AND status = 'FECHADO' AND %s BETWEEN inicio AND fim""",
+        (id_unidade, data),
+    )
+    fechado = cur.fetchone()
+    if fechado:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"O período de {fechado['competencia'].strftime('%m/%Y')} está fechado. "
+                "Reabra o período ou lance na data de hoje."
+            ),
+        )
 
 
 def _travar_saldo(cur, id_unidade: int, id_local: int, id_produto: int) -> dict:
@@ -135,6 +161,7 @@ def lancar(
     id_estorno_de: int | None = None,
     lote: str | None = None,
     validade=None,
+    pode_retroativo: bool = False,
 ) -> dict:
     """Grava UM movimento e devolve o que ficou. Quantidade sempre positiva."""
     if tipo not in TIPOS:
@@ -160,6 +187,8 @@ def lancar(
     par = _parametros(cur, id_unidade)
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
+    if data_movimento is not None and par.get("bloquear_retroativo", True):
+        _travar_periodo_fechado(cur, id_unidade, data_movimento, pode_retroativo)
     if tipo == "SAIDA_PERDA" and par["exigir_motivo_perda"] and not id_motivo_perda:
         raise HTTPException(status_code=400, detail="Informe o motivo da perda.")
 

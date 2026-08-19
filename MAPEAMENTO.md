@@ -596,7 +596,7 @@ correção, e o confronto entre CMV real e teórico com a variância nomeada.
 | 3 | Fichas técnicas ✔ | *concluída em 19/08/2026* — sub-ficha em cascata, fator de correção, custo por porção, versão e homologação |
 | 4 | Estoque ✔ | *concluída em 19/08/2026* — razão append-only, custo médio móvel com trava, perdas, transferência, produção pela ficha e inventário |
 | 5 | Omie | importação de NF com de-para e rateio (simulado → real) |
-| 6 | CMV | painel real × teórico, variância, ABC, fechamento |
+| 6 | CMV ✔ | *concluída em 19/08/2026* — painel real × teórico, variância, ABC, margem por prato, vendas por planilha e fechamento com trava |
 | 7 | Mobile/PWA | contagem e consulta pelo celular |
 | 8 | App | Capacitor, Android primeiro |
 

@@ -31,6 +31,13 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     ],
   },
   {
+    grupo: "CMV",
+    itens: [
+      { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
+      { href: "/vendas", nome: "Vendas", chave: "cmv.painel" },
+    ],
+  },
+  {
     grupo: "Administração",
     itens: [
       { href: "/empresa", nome: "Empresa", chave: "admin.empresa" },

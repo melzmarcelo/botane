@@ -43,6 +43,7 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
 | API — cadastros (produtos, fornecedores, árvore de categorias) | `cd api && python tests/smoke_cadastros.py` |
 | API — fichas técnicas (custo em cascata, ciclo, permissão de custo) | `cd api && python tests/smoke_fichas.py` |
 | API — estoque (custo médio, estorno, inventário, produção) | `cd api && python tests/smoke_estoque.py` |
+| API — CMV (apuração, ABC, margem, fechamento) | `cd api && python tests/smoke_cmv.py` |
 | Telas no Chrome de verdade, com fotos | `cd web && node scripts/verificar.mjs` |
 
 ## Status
@@ -57,4 +58,6 @@ Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da A
   correção, custo por porção, versão com homologação
 - **Etapa 4 — estoque:** concluída em 19/08/2026 — razão append-only, custo médio móvel,
   perdas com motivo, transferência, produção pela ficha e inventário
-- **Etapa 5 — Omie / etapa 6 — CMV:** as próximas
+- **Etapa 6 — CMV:** concluída em 19/08/2026 — painel real × teórico, variância, curva ABC,
+  margem por prato, importação de vendas e fechamento de período
+- **Etapa 5 — Omie:** a próxima (depende da credencial)

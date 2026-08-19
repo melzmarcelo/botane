@@ -16,11 +16,11 @@ para arquivo nenhum — gravar direto aqui.
 
 ## Estado
 
-- Mapeamento e **etapas 1 a 4** (fundação, cadastros, fichas técnicas e estoque)
+- Mapeamento e **etapas 1 a 4 + 6** (fundação, cadastros, fichas, estoque e **CMV**)
   concluídas — 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Próxima: etapa 5 — Omie** (importar nota de entrada, de-para, rateio) ou **etapa 6 — CMV**
-  (real × teórico) se a credencial do Omie ainda não tiver chegado.
+- **Próxima: etapa 5 — Omie** (importar nota de entrada, de-para, rateio). Depende da
+  credencial; o resto do ciclo já fecha sem ela.
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -36,7 +36,14 @@ para arquivo nenhum — gravar direto aqui.
 - Routers da etapa 2: `cadastros.py` (as quatro tabelas de apoio no mesmo arquivo — são
   pequenas e sempre lidas juntas), `fornecedores.py`, `produtos.py`.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
-  `/inventario`.
+  `/inventario`, `/cmv`, `/vendas`.
+- **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
+  estoque numa data sai do próprio razão (último movimento antes do corte já traz
+  `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
+- **O custo da ficha é congelado no item de venda** (`venda_itens.custo_ficha_unitario`):
+  corrigir receita hoje não reescreve o CMV teórico do mês passado.
+- Compras contam só `ENTRADA_NF` e `ENTRADA_MANUAL`; produção e transferência são
+  transformação interna e se anulam na conta.
 - **`services/custos.py` é o único lugar que sabe quanto custa um insumo**: custo médio do
   estoque, com o último preço do fornecedor como reserva. Dinheiro em `Decimal`.
 - **`services/estoque.py` é a única porta de escrita no razão.** `lancar()` trava a linha de
@@ -45,8 +52,9 @@ para arquivo nenhum — gravar direto aqui.
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
 - Testes: `smoke_fundacao.py` (35), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57) e `web/scripts/verificar.mjs` (42 no Chrome, com fotos em
-  `web/scripts/_fotos`). Todos idempotentes — reaproveitam o que a rodada anterior desativou.
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45) e `web/scripts/verificar.mjs` (52 no Chrome,
+  com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
+  apuração anterior, porque o banco local já tem dado de outras rodadas.
 
 ### Armadilhas já pagas
 - **`allowedDevOrigins` no `next.config.mjs`**: sem isso o dev server do Next devolve **403
@@ -62,6 +70,8 @@ para arquivo nenhum — gravar direto aqui.
   sub-ficha é recusado na gravação, e o cálculo ainda tem trava de profundidade por segurança.
 - **`fichas.custos` filtra o JSON, não só a tela**: sem a chave, nenhum campo de dinheiro
   sai do servidor. Ao mexer no router de fichas, manter isso.
+- **Fechamento de mês bloqueia lançamento retroativo** — mas quem tem `estoque.retroativo`
+  (inclusive o admin) passa. Teste da trava precisa de usuário sem a chave (o Conferente).
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o
   original. Produto desativado mantém saldo e razão (a lista de saldos filtra por padrão).
 - Teste que usa acento ou espaço na query precisa de `urllib.parse.quote` — o urllib recusa.

@@ -153,6 +153,7 @@ def entrada(body: EntradaRequest,
             custo_unitario=body.custo_unitario, data_movimento=body.data_movimento,
             origem_tipo="MANUAL", documento=body.documento, observacao=body.observacao,
             id_usuario=ctx.id_usuario, lote=body.lote, validade=body.validade,
+            pode_retroativo=ctx.pode("estoque.retroativo"),
         )
         auditoria.registrar(cur, ctx.id_usuario, "estoque", r["id"], "entrada",
                             depois={"produto": body.id_produto, "qtd": body.quantidade,
@@ -179,6 +180,7 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
             data_movimento=body.data_movimento, origem_tipo="MANUAL",
             id_motivo_perda=body.id_motivo_perda, observacao=body.observacao,
             id_usuario=ctx.id_usuario, lote=body.lote, validade=body.validade,
+            pode_retroativo=ctx.pode("estoque.retroativo"),
         )
         auditoria.registrar(cur, ctx.id_usuario, "estoque", r["id"], body.tipo.lower(),
                             depois={"produto": body.id_produto, "qtd": body.quantidade},

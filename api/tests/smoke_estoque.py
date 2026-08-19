@@ -238,6 +238,12 @@ st, r = chamar("POST", "/estoque/producoes", {"id_produto": cafe, "quantidade": 
 checar("recusa produzir sem ficha homologada", st == 400, (st, r))
 
 print("8. inventário acerta pela diferença")
+# Rodada anterior interrompida pode ter deixado contagem aberta no local.
+st, abertos = chamar("GET", "/inventarios", token=token)
+for i in abertos or []:
+    if i["status"] == "ABERTO" and i["id_local"] == principal["id"]:
+        chamar("DELETE", f"/inventarios/{i['id']}", token=token)
+
 st, inv = chamar("POST", "/inventarios", {
     "id_local": principal["id"], "produtos": [cafe], "observacao": f"smoke {marca}",
 }, token=token)

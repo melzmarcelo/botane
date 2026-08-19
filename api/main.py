@@ -17,6 +17,7 @@ from db_updater import run_migrations
 from routers import (
     autenticacao,
     cadastros,
+    cmv,
     empresa,
     estoque,
     fichas,
@@ -26,6 +27,7 @@ from routers import (
     papeis,
     produtos,
     usuarios,
+    vendas,
 )
 from seguranca import hash_senha
 
@@ -97,6 +99,8 @@ app.include_router(produtos.router)
 app.include_router(fichas.router)
 app.include_router(estoque.router)
 app.include_router(inventario.router)
+app.include_router(vendas.router)
+app.include_router(cmv.router)
 
 
 @app.get("/saude", tags=["infra"])

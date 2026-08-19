@@ -330,7 +330,88 @@ try {
 
   await api("DELETE", `/produtos/${insumo4.id}`, null, token);
 
-  console.log("7. celular (390 x 844)");
+  console.log("7. CMV (etapa 6)");
+  const m6 = Date.now().toString().slice(-5);
+  const hoje6 = new Date().toISOString().slice(0, 10);
+  // Cenário: insumo comprado, ficha homologada, produção e venda pela planilha.
+  const { dados: ins6 } = await api("POST", "/produtos",
+    { nome: `Cmv tela insumo ${m6}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+  const { dados: prod6 } = await api("POST", "/produtos",
+    { nome: `Cmv tela prato ${m6}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
+  await api("POST", "/estoque/entradas",
+    { id_produto: ins6.id, quantidade: 20, custo_unitario: 10 }, token);
+  const { dados: fic6 } = await api("POST", "/fichas", {
+    id_produto: prod6.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+    itens: [{ id_insumo: ins6.id, qtd_bruta: 0.5, um: "KG" }],
+  }, token);
+  await api("POST", `/fichas/${fic6.id}/homologar`, null, token);
+  await api("POST", "/estoque/producoes",
+    { id_produto: prod6.id, quantidade: 10 }, token);
+
+  for (const [rota, nome] of [["/vendas", "22-vendas"], ["/cmv", "23-cmv"]]) {
+    await p.goto(WEB + rota, { waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1200));
+    const texto = await p.evaluate(() => document.body.innerText);
+    checar(`${rota} carrega`, !/Erro 5|Não autenticado|Falha ao carregar/.test(texto),
+      texto.slice(0, 90));
+    await foto(p, nome);
+  }
+
+  // Importa a venda colando a planilha, do jeito que o cliente faria.
+  await p.goto(`${WEB}/vendas`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const doc6 = `TELA-${m6}`;
+  await p.evaluate((d) => {
+    const campos = [...document.querySelectorAll("input")];
+    const alvo = campos.find((c) => c.placeholder?.includes("fechamento-"));
+    if (alvo) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(alvo, d);
+      alvo.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, doc6);
+  const area = await p.$("textarea");
+  await area.type(`${prod6.codigo}; Prato de teste; 10; 30,00`);
+  await new Promise((r) => setTimeout(r, 400));
+  const textoPrevia = await p.evaluate(() => document.body.innerText);
+  checar("a tela reconhece a linha colada", /1 linha\(s\) reconhecida/.test(textoPrevia),
+    textoPrevia.match(/.{0,40}reconhecid.{0,30}/)?.[0]);
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Importar");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  const textoImport = await p.evaluate(() => document.body.innerText);
+  checar("importa a venda pela tela", /1 venda\(s\), 1 item/.test(textoImport),
+    textoImport.slice(0, 120));
+  await foto(p, "24-vendas-importada");
+
+  // A conta: 10 pratos a 5,00 de custo = 50,00 de CMV teórico; receita 300,00.
+  const { dados: ap } = await api("GET", `/cmv/apuracao?inicio=${hoje6}&fim=${hoje6}`, null, token);
+  checar("CMV teórico entra na apuração", Number(ap.cmv_teorico) >= 50,
+    ap.cmv_teorico);
+  checar("receita entra na apuração", Number(ap.receita) >= 300, ap.receita);
+
+  await p.goto(`${WEB}/cmv?`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1500));
+  const textoCmv = await p.evaluate(() => document.body.innerText);
+  checar("painel mostra CMV real e teórico",
+    /CMV REAL/i.test(textoCmv) && /CMV TEÓRICO/i.test(textoCmv), textoCmv.slice(0, 80));
+  checar("painel mostra a variância", /VARIÂNCIA/i.test(textoCmv));
+  checar("painel mostra food cost", /FOOD COST/i.test(textoCmv));
+  checar("curva ABC aparece com classe", /Curva ABC/i.test(textoCmv));
+  await foto(p, "25-cmv-painel");
+
+  // Limpeza do cenário.
+  const { dados: vendas6 } = await api("GET", `/vendas?inicio=${hoje6}&fim=${hoje6}`, null, token);
+  for (const v of vendas6.filter((x) => x.documento === doc6)) {
+    await api("DELETE", `/vendas/${v.id}`, null, token);
+  }
+  await api("DELETE", `/fichas/${fic6.id}`, null, token);
+  await api("DELETE", `/produtos/${ins6.id}`, null, token);
+  await api("DELETE", `/produtos/${prod6.id}`, null, token);
+
+  console.log("8. celular (390 x 844)");
   const c = await navegador.newPage();
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -380,7 +461,7 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
-  console.log("8. logo da empresa");
+  console.log("9. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
