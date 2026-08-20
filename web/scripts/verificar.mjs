@@ -113,6 +113,11 @@ if (jaExiste) {
       papeis: [{ id_papel: idCozinha }] }, token);
 }
 
+// A suíte precisa de um local de estoque para existir: sem ele o formulário de
+// entrada não tem o que selecionar e metade das fases cai. Garantir uma vez, no
+// começo, vale para todas — inclusive numa instalação virgem.
+await garantirLocal();
+
 mkdirSync(FOTOS, { recursive: true });
 const navegador = await puppeteer.launch({
   executablePath: CHROME,
@@ -668,11 +673,15 @@ try {
   const hojeIso = new Date().toISOString().slice(0, 10);
   const { dados: gruposApi } = await api(
     "GET", `/cmv/por-grupo?inicio=${hojeIso}&fim=${hojeIso}&agrupar=setor`, null, token);
-  if (gruposApi.length) {
+  // Só faz sentido somar 100% quando há CMV no período: numa base recém-limpa,
+  // entrada sem saída dá CMV zero, e a participação de cada grupo é zero também
+  // — o que está certo, não é falha.
+  const totalCmv = gruposApi.reduce((t, g) => t + Math.abs(Number(g.cmv)), 0);
+  if (totalCmv > 0.01) {
     const soma = gruposApi.reduce((t, g) => t + Number(g.participacao_pct), 0);
     checar("as participações somam 100%", Math.abs(soma - 100) < 0.5, soma);
   } else {
-    checar("as participações somam 100%", true, "sem movimento hoje");
+    checar("as participações somam 100%", true, "sem CMV no período");
   }
 
   // Trocar de setor para categoria tem de recarregar a tabela.

@@ -173,11 +173,6 @@ function Casca({ children }: { children: React.ReactNode }) {
                       strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {!expandido && (
-              // Grupo fechado ainda diz quantas telas guarda: sem isso, quem
-              // não conhece o sistema não sabe se vale abrir.
-              <p className="px-2 pb-1 text-[11.5px] text-suave">{itens.length} tela(s)</p>
-            )}
             <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
               {itens.map((i) => {
                 const ativo = caminho === i.href;
@@ -203,16 +198,28 @@ function Casca({ children }: { children: React.ReactNode }) {
     </nav>
   );
 
+  // Trocar senha e sair são AÇÕES: em maiúsculas miúdas pareciam legenda, e
+  // ninguém clica no que parece rótulo. Botão com borda, texto na caixa normal
+  // e alvo grande o bastante para o dedo.
   const rodapeUsuario = (
-    <div className="border-t border-linha px-5 py-4">
-      <p className="truncate text-[14px] font-semibold">{eu.nome}</p>
-      <p className="truncate text-[12.5px] text-suave">{eu.papeis.join(", ") || "sem papel"}</p>
-      <div className="mt-2 flex gap-4">
-        <Link href="/trocar-senha" className="rotulo hover:text-erva">
-          trocar senha
+    <div className="border-t border-linha px-4 py-4">
+      <p className="truncate px-1 text-[14px] font-semibold">{eu.nome}</p>
+      <p className="truncate px-1 text-[12.5px] text-suave">
+        {eu.papeis.join(", ") || "sem papel"}
+      </p>
+      <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+        <Link
+          href="/trocar-senha"
+          className="btn btn-secundario whitespace-nowrap px-3 text-center text-[13px] no-underline"
+        >
+          Trocar senha
         </Link>
-        <button className="rotulo hover:text-erva" onClick={() => void sair()}>
-          sair
+        <button
+          type="button"
+          className="btn btn-secundario whitespace-nowrap px-4 text-[13px] hover:border-erro hover:text-erro"
+          onClick={() => void sair()}
+        >
+          Sair
         </button>
       </div>
     </div>
