@@ -258,6 +258,29 @@ custos = {i["seq"]: i["custo_aquisicao_unitario"] for i in nota["itens"]}
 checar("sem frete por item, rateia por valor: (40 + 10) ÷ 5 = 10,00",
        perto(custos[1], 10) and perto(custos[2], 10), custos)
 
+print("6b. a nota digitada se corrige enquanto não virou estoque")
+st, r = chamar("PUT", f"/notas/{id_manual}", {
+    "id_fornecedor": fornecedor["id"], "numero": f"M{marca}", "serie": "1",
+    "data_emissao": "2026-08-17", "valor_frete": 20, "id_local": local["id"],
+    "itens": [
+        # o segundo item some, o primeiro muda de quantidade e preço
+        {"id_produto": farinha["id"], "quantidade": 10, "valor_unitario": 9},
+    ],
+}, token=token)
+checar("a correção passa", st == 200, r)
+checar("agora tem um item só", r.get("itens") == 1, r)
+checar("e o total refez a conta: 90 + 20 = 110", perto(r.get("valor_total"), 110), r)
+st, nota = chamar("GET", f"/notas/{id_manual}", token=token)
+checar("o custo unitário foi recalculado: (90 + 20) ÷ 10 = 11,00",
+       perto(nota["itens"][0]["custo_aquisicao_unitario"], 11), nota["itens"])
+
+# Nota que veio do XML é o documento do fornecedor: não se edita.
+st, r = chamar("PUT", f"/notas/{id_nota}", {
+    "numero": "outro", "itens": [{"id_produto": farinha["id"], "quantidade": 1,
+                                  "valor_unitario": 1}]}, token=token)
+checar("nota de XML recusa correção", st == 400, st)
+checar("dizendo que ela é o documento", "documento" in (r.get("detail") or "").lower(), r)
+
 print("7. a mesma nota digitada duas vezes é barrada")
 st, r = chamar("POST", "/notas", manual, token=token)
 checar("segunda digitação é recusada (409)", st == 409, st)

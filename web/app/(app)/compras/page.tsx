@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
-import NotaManual from "./nota-manual";
+import NotaManual, { NotaParaEditar } from "./nota-manual";
 
 /** O que o servidor devolve para cada arquivo do lote de XMLs. */
 type ResultadoXml = {
@@ -54,9 +54,22 @@ type ItemNota = {
   sugestao_nome: string | null;
   sugestao_score: number | null;
   ignorado: boolean;
+  lote_nf: string | null;
+  validade_nf: string | null;
 };
 
-type NotaDetalhe = Nota & { itens_lista?: ItemNota[]; valor_frete: number; id_local: number | null };
+type NotaDetalhe = Nota & {
+  itens_lista?: ItemNota[];
+  // O detalhe traz o cabeçalho inteiro: é dele que o formulário de correção
+  // se enche.
+  origem: string;
+  id_fornecedor: number | null;
+  serie: string | null;
+  valor_frete: number;
+  valor_desconto: number;
+  valor_outros: number;
+  id_local: number | null;
+};
 
 const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   LANCADA: "erva",
@@ -75,6 +88,7 @@ export default function PaginaCompras() {
   const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [digitando, setDigitando] = useState(false);
+  const [corrigindo, setCorrigindo] = useState<NotaParaEditar | null>(null);
   const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
   const entradaXml = useRef<HTMLInputElement>(null);
 
@@ -298,6 +312,21 @@ export default function PaginaCompras() {
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
+      {corrigindo && (
+        <NotaManual
+          produtos={produtos}
+          locais={locais}
+          editando={corrigindo}
+          aoFechar={() => setCorrigindo(null)}
+          aoGravar={async (id) => {
+            setCorrigindo(null);
+            setOk("Nota corrigida. Confira e lance no estoque.");
+            await carregar();
+            await abrir(id, false);
+          }}
+        />
+      )}
+
       {digitando && (
         <NotaManual
           produtos={produtos}
@@ -376,6 +405,40 @@ export default function PaginaCompras() {
                   Estornar
                 </button>
               )}
+              {/* Nota digitada e ainda não lançada se corrige: quem digitou vinte
+                  itens acha o erro no item três, e descartar tudo era a única
+                  saída. A que veio do XML não entra aqui — ela é o documento. */}
+              {aberta.origem === "MANUAL" && aberta.status !== "LANCADA" &&
+                pode("compras.notas") && (
+                  <button
+                    className="btn btn-secundario"
+                    onClick={() => {
+                      setCorrigindo({
+                        id: aberta.id,
+                        id_fornecedor: aberta.id_fornecedor ?? null,
+                        numero: aberta.numero,
+                        serie: aberta.serie ?? null,
+                        data_emissao: aberta.data_emissao,
+                        valor_frete: Number(aberta.valor_frete ?? 0),
+                        valor_desconto: Number(aberta.valor_desconto ?? 0),
+                        valor_outros: Number(aberta.valor_outros ?? 0),
+                        id_local: aberta.id_local,
+                        itens: aberta.itens.map((i) => ({
+                          id_produto: i.id_produto,
+                          descricao_fornecedor: i.descricao_fornecedor,
+                          quantidade: Number(i.quantidade),
+                          valor_unitario: Number(i.valor_unitario),
+                          lote_nf: i.lote_nf ?? null,
+                          validade_nf: i.validade_nf ?? null,
+                        })),
+                      });
+                      setAberta(null);
+                      setDigitando(false);
+                    }}
+                  >
+                    Corrigir
+                  </button>
+                )}
               {aberta.status !== "LANCADA" && pode("compras.lancar") && (
                 <button
                   className="btn btn-primario"

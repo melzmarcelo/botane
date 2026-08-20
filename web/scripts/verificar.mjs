@@ -653,6 +653,28 @@ try {
   checar("e já nasce pronta para lançar (sem pendência)",
     !/sem produto vinculado/i.test(textoGravadaNota), textoGravadaNota.slice(0, 200));
 
+  // Corrigir a nota digitada, pela tela, antes de ela virar estoque.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => x.textContent === "Corrigir")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const textoCorrigir = await p.evaluate(() => document.body.innerText);
+  checar("a nota digitada oferece correção", /Corrigir a nota/i.test(textoCorrigir),
+    textoCorrigir.slice(0, 160));
+  checar("e explica que dá para mexer antes de lançar",
+    /ainda não virou estoque/i.test(textoCorrigir));
+  // O formulário volta preenchido: é o que separa corrigir de digitar de novo.
+  const veioPreenchido = await p.evaluate(() => {
+    const qtd = [...document.querySelectorAll('input[inputmode="decimal"]')][0];
+    return qtd ? qtd.value : null;
+  });
+  checar("o formulário volta com o que foi digitado", Number(veioPreenchido) > 0, veioPreenchido);
+  await foto(p, "29d-corrigir-nota");
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => /cancelar/i.test(x.textContent))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
+
   // Limpeza: as duas notas do teste saem, para a próxima rodada começar limpa.
   const { dados: notasDoTesteXml } = await api("GET", "/notas?limite=30", null, token);
   for (const n of notasDoTesteXml ?? []) {

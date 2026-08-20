@@ -67,6 +67,10 @@ para arquivo nenhum — gravar direto aqui.
   (conferir, vincular, lançar, estornar) mora em `notas.py`, e `omie.py` ficou só com
   credencial, sincronização e catálogo. Nota digitada não tem chave da NF-e: a repetição se
   reconhece por fornecedor + número + série (índice único `ux_nota_manual`).
+  ⚠️ **Só a nota MANUAL se edita** (`PUT /notas/{id}`), e só antes de lançar: a que veio do
+  XML/Omie é o documento do fornecedor, e mudar valor ali faria o sistema divergir da nota
+  fiscal sem rastro. Os itens são reescritos inteiros — nada virou movimento ainda, e casar
+  linha a linha só abriria caminho para item órfão.
 - **`services/omie/`**: `cliente.py` (HTTP, paginação, back-off, modo simulado com fixtures),
   `mapeadores.py` (**o único arquivo que muda quando a credencial real chegar** — cada campo
   é lido por uma lista de nomes possíveis) e `importador.py` (de-para em cascata, rateio,

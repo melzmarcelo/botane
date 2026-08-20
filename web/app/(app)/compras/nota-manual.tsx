@@ -34,27 +34,66 @@ const LINHA: Linha = {
 
 const numero = (texto: string) => Number((texto || "0").replace(",", ".")) || 0;
 
+/** A nota que está sendo corrigida, quando for o caso. */
+export type NotaParaEditar = {
+  id: number;
+  id_fornecedor: number | null;
+  numero: string | null;
+  serie: string | null;
+  data_emissao: string | null;
+  valor_frete: number;
+  valor_desconto: number;
+  valor_outros: number;
+  id_local: number | null;
+  itens: {
+    id_produto: number | null;
+    descricao_fornecedor: string;
+    quantidade: number;
+    valor_unitario: number;
+    lote_nf: string | null;
+    validade_nf: string | null;
+  }[];
+};
+
 export default function NotaManual({
   produtos,
   locais,
   aoGravar,
   aoFechar,
+  editando,
 }: {
   produtos: ProdutoResumo[];
   locais: Local[];
   aoGravar: (id: number) => void;
   aoFechar: () => void;
+  /** Quando vem preenchida, o formulário corrige em vez de criar. */
+  editando?: NotaParaEditar | null;
 }) {
+  const texto = (n: number | null | undefined) => (n ? String(n) : "");
+
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
-  const [idFornecedor, setIdFornecedor] = useState("");
-  const [numeroNota, setNumeroNota] = useState("");
-  const [serie, setSerie] = useState("");
-  const [dataEmissao, setDataEmissao] = useState(() => new Date().toISOString().slice(0, 10));
-  const [frete, setFrete] = useState("");
-  const [desconto, setDesconto] = useState("");
-  const [outros, setOutros] = useState("");
-  const [idLocal, setIdLocal] = useState("");
-  const [linhas, setLinhas] = useState<Linha[]>([{ ...LINHA }, { ...LINHA }]);
+  const [idFornecedor, setIdFornecedor] = useState(texto(editando?.id_fornecedor));
+  const [numeroNota, setNumeroNota] = useState(editando?.numero ?? "");
+  const [serie, setSerie] = useState(editando?.serie ?? "");
+  const [dataEmissao, setDataEmissao] = useState(
+    () => editando?.data_emissao?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+  );
+  const [frete, setFrete] = useState(texto(editando?.valor_frete));
+  const [desconto, setDesconto] = useState(texto(editando?.valor_desconto));
+  const [outros, setOutros] = useState(texto(editando?.valor_outros));
+  const [idLocal, setIdLocal] = useState(texto(editando?.id_local));
+  const [linhas, setLinhas] = useState<Linha[]>(
+    editando?.itens.length
+      ? editando.itens.map((i) => ({
+          id_produto: texto(i.id_produto),
+          descricao: i.descricao_fornecedor ?? "",
+          quantidade: String(Number(i.quantidade)),
+          valor_unitario: String(Number(i.valor_unitario)),
+          lote: i.lote_nf ?? "",
+          validade: i.validade_nf?.slice(0, 10) ?? "",
+        }))
+      : [{ ...LINHA }, { ...LINHA }],
+  );
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -108,7 +147,7 @@ export default function NotaManual({
     }
     setOcupado(true);
     try {
-      const r = await api.post<{ id: number }>("/notas", {
+      const corpo = {
         id_fornecedor: idFornecedor ? Number(idFornecedor) : null,
         numero: numeroNota || null,
         serie: serie || null,
@@ -126,8 +165,11 @@ export default function NotaManual({
           lote: l.lote || null,
           validade: l.validade || null,
         })),
-      });
-      aoGravar(r.id);
+      };
+      const r = editando
+        ? await api.put<{ id: number }>(`/notas/${editando.id}`, corpo)
+        : await api.post<{ id: number }>("/notas", corpo);
+      aoGravar(r.id ?? editando?.id ?? 0);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível gravar a nota");
     } finally {
@@ -137,12 +179,16 @@ export default function NotaManual({
 
   return (
     <Cartao
-      titulo="Digitar nota de entrada"
-      descricao="Para a compra que não tem XML: mercado, feira, açougue."
+      titulo={editando ? `Corrigir a nota ${editando.numero ?? ""}`.trim() : "Digitar nota de entrada"}
+      descricao={
+        editando
+          ? "Ela ainda não virou estoque: dá para mexer em tudo antes de lançar."
+          : "Para a compra que não tem XML: mercado, feira, açougue."
+      }
       acao={
         <div className="flex items-center gap-2">
           <button className="btn btn-primario" onClick={gravar} disabled={ocupado}>
-            {ocupado ? "Gravando…" : "Gravar nota"}
+            {ocupado ? "Gravando…" : editando ? "Gravar correção" : "Gravar nota"}
           </button>
           <button className="rotulo hover:text-erro" onClick={aoFechar}>
             cancelar

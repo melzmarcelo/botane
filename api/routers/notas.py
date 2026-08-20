@@ -151,6 +151,72 @@ async def importar_xml(arquivos: list[UploadFile] = File(...),
 # ------------------------------------------------------------ porta 2: digitação
 
 
+def _montar(cur, body: "NotaManual") -> dict:
+    """Traduz o que foi digitado na tela para o formato que o importador grava.
+
+    Vale para a nota nova e para a correção dela: os dois caminhos montam o
+    mesmo objeto, e é por isso que a conferência de fornecedor, produto e
+    descrição mora aqui e não em cada endpoint.
+    """
+    if body.id_fornecedor:
+        cur.execute("SELECT id FROM fornecedores WHERE id = %s", (body.id_fornecedor,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=400, detail="Fornecedor não encontrado")
+
+    itens, produtos = [], Decimal(0)
+    for seq, item in enumerate(body.itens, start=1):
+        descricao, um = item.descricao, item.um
+        if item.id_produto:
+            cur.execute("SELECT nome, um_estoque FROM produtos WHERE id = %s AND ativo",
+                        (item.id_produto,))
+            produto = cur.fetchone()
+            if not produto:
+                raise HTTPException(status_code=400,
+                                    detail=f"Item {seq}: produto não encontrado")
+            descricao = descricao or produto["nome"]
+            um = um or produto["um_estoque"]
+        if not descricao:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item {seq}: escolha o produto ou escreva a descrição.",
+            )
+        total = (Decimal(str(item.quantidade)) * Decimal(str(item.valor_unitario))
+                 ).quantize(Decimal("0.01"))
+        produtos += total
+        itens.append({
+            "seq": seq,
+            "descricao_fornecedor": descricao[:200],
+            "codigo_fornecedor": item.codigo_fornecedor,
+            "codigo_barras": None,
+            "ncm": None,
+            "quantidade": item.quantidade,
+            "um_nota": um,
+            "valor_unitario": item.valor_unitario,
+            "valor_total": total,
+            "valor_desconto": item.valor_desconto,
+            "lote_nf": item.lote,
+            "validade_nf": item.validade,
+            "id_produto": item.id_produto,
+        })
+
+    hoje = date.today()
+    return {
+        "numero": body.numero,
+        "serie": body.serie,
+        "data_emissao": body.data_emissao or body.data_entrada or hoje,
+        "data_entrada": body.data_entrada or body.data_emissao or hoje,
+        "valor_produtos": produtos,
+        "valor_frete": body.valor_frete,
+        "valor_desconto": body.valor_desconto,
+        "valor_outros": body.valor_outros,
+        "valor_total": (produtos + Decimal(str(body.valor_frete))
+                        + Decimal(str(body.valor_outros))
+                        - Decimal(str(body.valor_desconto))),
+        "id_local": body.id_local,
+        "itens": itens,
+    }
+
+
 @router.post("")
 def criar_manual(body: NotaManual,
                  ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
@@ -161,63 +227,7 @@ def criar_manual(body: NotaManual,
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        if body.id_fornecedor:
-            cur.execute("SELECT id FROM fornecedores WHERE id = %s", (body.id_fornecedor,))
-            if not cur.fetchone():
-                raise HTTPException(status_code=400, detail="Fornecedor não encontrado")
-
-        itens, produtos = [], Decimal(0)
-        for seq, item in enumerate(body.itens, start=1):
-            descricao, um = item.descricao, item.um
-            if item.id_produto:
-                cur.execute("SELECT nome, um_estoque FROM produtos WHERE id = %s AND ativo",
-                            (item.id_produto,))
-                produto = cur.fetchone()
-                if not produto:
-                    raise HTTPException(status_code=400,
-                                        detail=f"Item {seq}: produto não encontrado")
-                descricao = descricao or produto["nome"]
-                um = um or produto["um_estoque"]
-            if not descricao:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Item {seq}: escolha o produto ou escreva a descrição.",
-                )
-            total = (Decimal(str(item.quantidade)) * Decimal(str(item.valor_unitario))
-                     ).quantize(Decimal("0.01"))
-            produtos += total
-            itens.append({
-                "seq": seq,
-                "descricao_fornecedor": descricao[:200],
-                "codigo_fornecedor": item.codigo_fornecedor,
-                "codigo_barras": None,
-                "ncm": None,
-                "quantidade": item.quantidade,
-                "um_nota": um,
-                "valor_unitario": item.valor_unitario,
-                "valor_total": total,
-                "valor_desconto": item.valor_desconto,
-                "lote_nf": item.lote,
-                "validade_nf": item.validade,
-                "id_produto": item.id_produto,
-            })
-
-        hoje = date.today()
-        nota = {
-            "numero": body.numero,
-            "serie": body.serie,
-            "data_emissao": body.data_emissao or body.data_entrada or hoje,
-            "data_entrada": body.data_entrada or body.data_emissao or hoje,
-            "valor_produtos": produtos,
-            "valor_frete": body.valor_frete,
-            "valor_desconto": body.valor_desconto,
-            "valor_outros": body.valor_outros,
-            "valor_total": (produtos + Decimal(str(body.valor_frete))
-                            + Decimal(str(body.valor_outros))
-                            - Decimal(str(body.valor_desconto))),
-            "id_local": body.id_local,
-            "itens": itens,
-        }
+        nota = _montar(cur, body)
         id_nota, nova = importador.gravar_nota(cur, id_unidade, nota, origem="MANUAL",
                                                id_fornecedor=body.id_fornecedor)
         if not nova:
@@ -228,10 +238,101 @@ def criar_manual(body: NotaManual,
             )
         resumo = _resumo(cur, id_nota)
         auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "digitar",
-                            depois={"numero": body.numero, "itens": len(itens),
+                            depois={"numero": body.numero, "itens": len(nota["itens"]),
                                     "valor": float(nota["valor_total"])},
                             id_unidade=id_unidade)
     return resumo | {"message": "Nota registrada — confira e lance no estoque"}
+
+
+@router.put("/{id_nota}")
+def editar_manual(id_nota: int, body: NotaManual,
+                  ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Corrige a nota digitada enquanto ela não virou estoque.
+
+    Quem digita uma nota de vinte itens acha o erro no item três — e antes
+    disto a saída era descartar tudo e digitar de novo.
+
+    **Só nota digitada se edita.** A que veio do XML ou do Omie é o documento
+    do fornecedor: mudar valor ali faria o sistema divergir da nota fiscal
+    sem deixar rastro. E **só antes de lançar**: depois de virar movimento no
+    razão, o caminho é estornar.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            "SELECT origem, status, numero FROM notas_entrada WHERE id = %s", (id_nota,)
+        )
+        atual = cur.fetchone()
+        if not atual:
+            raise HTTPException(status_code=404, detail="Nota não encontrada")
+        if atual["origem"] != "MANUAL":
+            raise HTTPException(
+                status_code=400,
+                detail=("Esta nota veio do XML/Omie e não se edita — ela é o documento do "
+                        "fornecedor. Corrija na origem ou descarte a nota."),
+            )
+        if atual["status"] == "LANCADA":
+            raise HTTPException(
+                status_code=400,
+                detail="Nota já lançada no estoque. Estorne o lançamento antes de corrigir.",
+            )
+
+        nota = _montar(cur, body)
+
+        # Número repetido: a unicidade é do banco (ux_nota_manual), e conferir
+        # antes rende uma frase melhor que o erro de constraint.
+        cur.execute(
+            """SELECT id FROM notas_entrada
+                WHERE id <> %s AND chave_nfe IS NULL AND id_unidade = %s
+                  AND id_fornecedor IS NOT DISTINCT FROM %s
+                  AND numero IS NOT DISTINCT FROM %s
+                  AND coalesce(serie, '') = coalesce(%s, '')""",
+            (id_nota, id_unidade, body.id_fornecedor, body.numero, body.serie),
+        )
+        repetida = cur.fetchone()
+        if repetida:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Já existe outra nota com este número deste fornecedor (nº {repetida['id']}).",
+            )
+
+        cur.execute(
+            """UPDATE notas_entrada
+                  SET id_fornecedor = %s, numero = %s, serie = %s,
+                      data_emissao = %s, data_entrada = %s, valor_produtos = %s,
+                      valor_frete = %s, valor_desconto = %s, valor_outros = %s,
+                      valor_total = %s, id_local = %s
+                WHERE id = %s""",
+            (body.id_fornecedor, nota["numero"], nota["serie"], nota["data_emissao"],
+             nota["data_entrada"], nota["valor_produtos"], nota["valor_frete"],
+             nota["valor_desconto"], nota["valor_outros"], nota["valor_total"],
+             nota["id_local"], id_nota),
+        )
+
+        # Os itens são reescritos inteiros: nada aqui virou movimento ainda, e
+        # casar linha a linha só criaria caminho para item órfão.
+        cur.execute("DELETE FROM nota_itens WHERE id_nota = %s", (id_nota,))
+        for item in nota["itens"]:
+            cur.execute(
+                """INSERT INTO nota_itens
+                       (id_nota, seq, descricao_fornecedor, codigo_fornecedor, quantidade,
+                        um_nota, valor_unitario, valor_total, valor_desconto,
+                        lote_nf, validade_nf, id_produto)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (id_nota, item["seq"], item["descricao_fornecedor"],
+                 item["codigo_fornecedor"], item["quantidade"], item["um_nota"],
+                 item["valor_unitario"], item["valor_total"], item["valor_desconto"],
+                 item["lote_nf"], item["validade_nf"], item["id_produto"]),
+            )
+
+        importador.calcular_nota(cur, id_nota)
+        resumo = _resumo(cur, id_nota)
+        auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "corrigir",
+                            antes={"numero": atual["numero"]},
+                            depois={"numero": body.numero, "itens": len(nota["itens"]),
+                                    "valor": float(nota["valor_total"])},
+                            id_unidade=id_unidade)
+    return resumo | {"message": "Nota corrigida"}
 
 
 # ---------------------------------------------------------------- consulta
