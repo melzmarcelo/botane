@@ -170,6 +170,40 @@ try {
   checar("menu do admin traz Papéis", menu.includes("Papéis"));
   checar("menu do admin traz Auditoria", menu.includes("Auditoria"));
 
+  // O grupo da tela aberta começa expandido — mas é só o padrão. Quem quer o
+  // menu enxuto tem de conseguir recolhê-lo mesmo estando dentro dele.
+  await irPara(p, `${WEB}/empresa`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const grupoDaTela = () =>
+    p.evaluate(() => {
+      const b = [...document.querySelectorAll("aside button")]
+        .find((x) => /administra/i.test(x.innerText));
+      const link = [...document.querySelectorAll("aside a")]
+        .find((x) => x.textContent === "Empresa");
+      return { aberto: b?.getAttribute("aria-expanded"), visivel: link?.offsetParent !== null };
+    });
+  const antesDoClique = await grupoDaTela();
+  checar("o grupo da tela aberta começa expandido", antesDoClique.aberto === "true",
+    antesDoClique);
+  await p.evaluate(() => {
+    [...document.querySelectorAll("aside button")]
+      .find((x) => /administra/i.test(x.innerText))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
+  const depoisDoClique = await grupoDaTela();
+  checar("mas pode ser recolhido mesmo com a tela dele aberta",
+    depoisDoClique.aberto === "false" && depoisDoClique.visivel === false, depoisDoClique);
+  await irPara(p, `${WEB}/empresa`);
+  await new Promise((r) => setTimeout(r, 1200));
+  checar("e continua recolhido ao voltar para a tela",
+    (await grupoDaTela()).aberto === "false");
+  // Deixa aberto de novo: as fases seguintes clicam em links do menu.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("aside button")]
+      .find((x) => /administra/i.test(x.innerText))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 400));
+
   console.log("3. usuário de Cozinha");
   coletando = false;
   await p.evaluate(() => localStorage.clear());

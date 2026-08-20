@@ -88,9 +88,17 @@ function Casca({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const alternarGrupo = (grupo: string) =>
+  /**
+   * Abre ou fecha um grupo.
+   *
+   * Recebe o estado que está na tela, e não só o que está guardado: o grupo da
+   * página aberta começa expandido sem ninguém ter clicado nele, e sem isso o
+   * primeiro clique gravaria "abrir" no que já está aberto — o grupo não
+   * fecharia.
+   */
+  const alternarGrupo = (grupo: string, expandidoAgora: boolean) =>
     setAbertos((atuais) => {
-      const novos = { ...atuais, [grupo]: !(atuais[grupo] ?? false) };
+      const novos = { ...atuais, [grupo]: !expandidoAgora };
       localStorage.setItem(CHAVE_MENU, JSON.stringify(novos));
       return novos;
     });
@@ -148,15 +156,17 @@ function Casca({ children }: { children: React.ReactNode }) {
         const itens = g.itens.filter((i) => !i.chave || pode(i.chave));
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);
-        // O grupo da tela aberta fica sempre visível: recolhê-lo esconderia
-        // justamente onde a pessoa está.
-        const expandido = temAtivo || (abertos[g.grupo] ?? false);
+        // O grupo da tela aberta começa expandido — mas é só o padrão: se a
+        // pessoa o recolher, ele fica recolhido, inclusive nela. Quem quer o
+        // menu enxuto não deve ser obrigado a manter um grupo aberto. A pista
+        // de "você está aqui" não se perde: o título do grupo fica verde.
+        const expandido = abertos[g.grupo] ?? temAtivo;
         return (
           <div key={g.grupo} className="mb-1.5 shrink-0">
             <button
               type="button"
               aria-expanded={expandido}
-              onClick={() => alternarGrupo(g.grupo)}
+              onClick={() => alternarGrupo(g.grupo, expandido)}
               className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-superficie2 ${
                 temAtivo ? "text-erva" : ""
               }`}
