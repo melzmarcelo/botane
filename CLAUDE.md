@@ -44,6 +44,13 @@ para arquivo nenhum — gravar direto aqui.
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
+- **O razão filtra por período, produto, tipo e local** (20/08/2026): `GET /estoque/movimentos`
+  ganhou `inicio`/`fim`/`busca` (os mesmos nomes do CSV) e a tela ganhou a barra de filtro com
+  paginação de 100 por `X-Total`. ⚠️ `fim` é dia **cheio** (`< fim + 1`): `<= fim` cortaria o que
+  foi lançado às 14h do próprio dia, porque `data_movimento` guarda data e hora. O CSV aceita os
+  mesmos filtros — filtrar na tela e baixar outra coisa faria quem conferisse achar que um dos
+  dois mente. Os rótulos dos tipos saem de `GET /estoque/tipos-movimento`, não de uma lista
+  copiada no front.
 - **Aviso de ação flutua** (`components/aviso-flutuante.tsx`, 20/08/2026): sucesso e erro de
   AÇÃO saem por `useAviso()` e aparecem presos ao canto inferior — a mensagem ficava no topo e
   o botão de salvar está no fim de um formulário longo, então quem clicava não via confirmação

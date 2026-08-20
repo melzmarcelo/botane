@@ -49,6 +49,8 @@ type Lancamento = "entrada" | "saida" | "perda" | "transferencia" | null;
 const qtd = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
+type TipoMovimento = { tipo: string; rotulo: string };
+
 export default function PaginaEstoque() {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -62,6 +64,17 @@ export default function PaginaEstoque() {
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
   const [erro, setErro] = useState("");
+
+  // Filtros do razão. Separados dos saldos de propósito: são perguntas
+  // diferentes — "quanto tenho hoje" e "o que aconteceu com o café em agosto".
+  const [movBusca, setMovBusca] = useState("");
+  const [movTipo, setMovTipo] = useState("");
+  const [movLocal, setMovLocal] = useState("");
+  const [movInicio, setMovInicio] = useState("");
+  const [movFim, setMovFim] = useState("");
+  const [movTotal, setMovTotal] = useState(0);
+  const [movPagina, setMovPagina] = useState(1);
+  const [tipos, setTipos] = useState<TipoMovimento[]>([]);
 
   const [lancamento, setLancamento] = useState<Lancamento>(null);
   const [f, setF] = useState({
@@ -91,11 +104,40 @@ export default function PaginaEstoque() {
       if (idLocal) q.set("id_local", idLocal);
       if (comSaldo) q.set("apenas_com_saldo", "true");
       setSaldos(await api.get<Saldo[]>(`/estoque/saldos?${q}`));
-      setMovimentos(await api.get<Movimento[]>("/estoque/movimentos?limite=100"));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
   }, [busca, idLocal, comSaldo]);
+
+  const POR_PAGINA = 100;
+  const temFiltroMov = !!(movBusca || movTipo || movLocal || movInicio || movFim);
+
+  const carregarMovimentos = useCallback(async () => {
+    try {
+      const q = new URLSearchParams({ limite: String(POR_PAGINA * movPagina) });
+      if (movBusca.trim()) q.set("busca", movBusca.trim());
+      if (movTipo) q.set("tipo", movTipo);
+      if (movLocal) q.set("id_local", movLocal);
+      if (movInicio) q.set("inicio", movInicio);
+      if (movFim) q.set("fim", movFim);
+      const { itens, total } = await api.listar<Movimento>(`/estoque/movimentos?${q}`);
+      setMovimentos(itens);
+      setMovTotal(total);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao carregar");
+    }
+  }, [movBusca, movTipo, movLocal, movInicio, movFim, movPagina]);
+
+  // Trocar o filtro volta para a primeira página: manter a 3ª página de um
+  // filtro no outro mostraria uma lista vazia sem explicação.
+  useEffect(() => {
+    setMovPagina(1);
+  }, [movBusca, movTipo, movLocal, movInicio, movFim]);
+
+  useEffect(() => {
+    const t = setTimeout(() => void carregarMovimentos(), movBusca ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [carregarMovimentos, movBusca]);
 
   useEffect(() => {
     api.get<ProdutoResumo[]>("/produtos").then((p) =>
@@ -103,6 +145,7 @@ export default function PaginaEstoque() {
     ).catch(() => {});
     api.get<Local[]>("/locais").then(setLocais).catch(() => {});
     api.get<Motivo[]>("/estoque/motivos-perda").then(setMotivos).catch(() => {});
+    api.get<TipoMovimento[]>("/estoque/tipos-movimento").then(setTipos).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -190,6 +233,19 @@ export default function PaginaEstoque() {
 
   const valorTotal = saldos?.reduce((s, x) => s + Number(x.valor), 0) ?? 0;
 
+  /** A planilha do razão sai com os MESMOS filtros da tela — filtrar aqui e
+      baixar outra coisa faria quem conferisse achar que um dos dois mente. */
+  function csvDoRazao() {
+    const q = new URLSearchParams();
+    if (movBusca.trim()) q.set("busca", movBusca.trim());
+    if (movTipo) q.set("tipo", movTipo);
+    if (movLocal) q.set("id_local", movLocal);
+    if (movInicio) q.set("inicio", movInicio);
+    if (movFim) q.set("fim", movFim);
+    const s = q.toString();
+    return `/exportar/movimentos.csv${s ? `?${s}` : ""}`;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -226,7 +282,7 @@ export default function PaginaEstoque() {
           )}
           <button
             className="btn btn-secundario"
-            onClick={() => void baixar(aba === "saldos" ? "/exportar/saldos.csv" : "/exportar/movimentos.csv")}
+            onClick={() => void baixar(aba === "saldos" ? "/exportar/saldos.csv" : csvDoRazao())}
             disabled={baixando}
           >
             {baixando ? "Baixando…" : "Baixar planilha"}
@@ -498,11 +554,101 @@ export default function PaginaEstoque() {
         <>
         <LotesEmEstoque />
 
-        <Cartao titulo="Razão de estoque" descricao="Os 100 últimos lançamentos.">
+        <Cartao>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <label className="min-w-0 flex-1 sm:min-w-[190px]">
+              <span className="rotulo">Produto</span>
+              <input
+                className="campo mt-1.5"
+                placeholder="nome ou código"
+                value={movBusca}
+                onChange={(e) => setMovBusca(e.target.value)}
+              />
+            </label>
+            <label className="sm:w-[168px]">
+              <span className="rotulo">De</span>
+              <input
+                className="campo mt-1.5"
+                type="date"
+                value={movInicio}
+                onChange={(e) => setMovInicio(e.target.value)}
+              />
+            </label>
+            <label className="sm:w-[168px]">
+              <span className="rotulo">Até</span>
+              <input
+                className="campo mt-1.5"
+                type="date"
+                value={movFim}
+                onChange={(e) => setMovFim(e.target.value)}
+              />
+            </label>
+            <label className="sm:w-[200px]">
+              <span className="rotulo">Movimento</span>
+              <select
+                className="campo mt-1.5"
+                value={movTipo}
+                onChange={(e) => setMovTipo(e.target.value)}
+              >
+                <option value="">todos</option>
+                {tipos.map((t) => (
+                  <option key={t.tipo} value={t.tipo}>
+                    {t.rotulo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="sm:w-[170px]">
+              <span className="rotulo">Local</span>
+              <select
+                className="campo mt-1.5"
+                value={movLocal}
+                onChange={(e) => setMovLocal(e.target.value)}
+              >
+                <option value="">todos</option>
+                {locais.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {temFiltroMov && (
+              <button
+                type="button"
+                className="btn btn-secundario"
+                onClick={() => {
+                  setMovBusca("");
+                  setMovTipo("");
+                  setMovLocal("");
+                  setMovInicio("");
+                  setMovFim("");
+                }}
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        </Cartao>
+
+        <Cartao
+          titulo="Razão de estoque"
+          descricao={
+            movimentos
+              ? `${movimentos.length} de ${movTotal} lançamento(s)${
+                  temFiltroMov ? " no filtro" : ""
+                }.`
+              : undefined
+          }
+        >
           {!movimentos ? (
             <Carregando />
           ) : !movimentos.length ? (
-            <Vazio>Nenhum movimento ainda.</Vazio>
+            <Vazio>
+              {temFiltroMov
+                ? "Nenhum movimento com esses filtros."
+                : "Nenhum movimento ainda."}
+            </Vazio>
           ) : (
             <div className="overflow-x-auto">
               <table className="tabela">
@@ -572,6 +718,23 @@ export default function PaginaEstoque() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Página de 100. O razão cresce todo dia e trazer tudo de uma vez
+              trava a tela justamente na casa que mais movimenta. */}
+          {!!movimentos && movimentos.length < movTotal && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                className="btn btn-secundario"
+                onClick={() => setMovPagina((n) => n + 1)}
+              >
+                Mostrar mais 100
+              </button>
+              <span className="text-[13px] text-suave">
+                faltam {movTotal - movimentos.length}
+              </span>
             </div>
           )}
         </Cartao>

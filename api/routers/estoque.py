@@ -4,6 +4,7 @@ Nenhum endpoint aqui escreve em `estoque_movimentos` na mão — todos passam po
 `services.estoque.lancar`, que é onde ficam a trava e o cálculo do médio.
 """
 
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -68,6 +69,12 @@ def movimentos(
     id_produto: int | None = None,
     id_local: int | None = None,
     tipo: str | None = None,
+    # `inicio`/`fim` com os mesmos nomes do CSV do razão: o período é a
+    # pergunta mais comum aqui ("o que entrou de café em agosto?") e ter dois
+    # nomes para a mesma coisa em duas portas só confunde.
+    inicio: date | None = None,
+    fim: date | None = None,
+    busca: str | None = None,
     limite: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -90,10 +97,18 @@ def movimentos(
              WHERE (%s::int IS NULL OR m.id_produto = %s)
                AND (%s::int IS NULL OR m.id_local = %s)
                AND (%s::varchar IS NULL OR m.tipo = %s)
+               AND (%s::date IS NULL OR m.data_movimento >= %s)
+               -- `fim` é dia CHEIO: `<= fim` cortaria o que foi lançado às 14h
+               -- do próprio dia, porque a coluna guarda data e hora.
+               AND (%s::date IS NULL OR m.data_movimento < %s::date + 1)
+               AND (%s::varchar IS NULL
+                    OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                    OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY m.id DESC
              LIMIT %s OFFSET %s
             """,
-            (id_produto, id_produto, id_local, id_local, tipo, tipo, limite, offset),
+            (id_produto, id_produto, id_local, id_local, tipo, tipo,
+             inicio, inicio, fim, fim, busca, busca, busca, limite, offset),
         )
         linhas = [dict(r) for r in cur.fetchall()]
     total = linhas[0].pop("_total", len(linhas)) if linhas else offset
@@ -103,6 +118,16 @@ def movimentos(
     if resposta is not None:
         resposta.headers["X-Total"] = str(total)
     return linhas
+
+
+@router.get("/tipos-movimento")
+def tipos_movimento(ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
+    """Os tipos de movimento e como se chamam na tela.
+
+    Vem do servidor para o filtro do razão não repetir a lista à mão: um tipo
+    novo apareceria nos lançamentos e não no filtro, e ninguém notaria.
+    """
+    return [{"tipo": t, "rotulo": r} for t, r in motor.ROTULOS.items()]
 
 
 @router.get("/motivos-perda")

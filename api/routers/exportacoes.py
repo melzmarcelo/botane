@@ -75,7 +75,14 @@ def saldos(ctx: Contexto = Depends(contexto_atual)) -> Response:
 
 @router.get("/movimentos.csv")
 def movimentos(inicio: date | None = None, fim: date | None = None,
+               tipo: str | None = None, id_local: int | None = None,
+               busca: str | None = None,
                ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """O razão em CSV, com os MESMOS filtros da tela.
+
+    Sem eles, filtrar na tela e clicar em baixar dava outro arquivo — e quem
+    conferisse os dois acharia que um dos dois está errado.
+    """
     _exige(ctx, "estoque.saldos")
     inicio, fim = _periodo(inicio, fim)
     with get_cursor() as cur:
@@ -91,8 +98,14 @@ def movimentos(inicio: date | None = None, fim: date | None = None,
                  LEFT JOIN perda_motivos pm ON pm.id = m.id_motivo_perda
                  LEFT JOIN usuarios u ON u.id = m.id_usuario
                 WHERE m.id_unidade = %s AND m.data_movimento >= %s AND m.data_movimento < %s
+                  AND (%s::varchar IS NULL OR m.tipo = %s)
+                  AND (%s::int IS NULL OR m.id_local = %s)
+                  AND (%s::varchar IS NULL
+                       OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                       OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
                 ORDER BY m.id""",
-            (id_unidade, inicio, fim + timedelta(days=1)),
+            (id_unidade, inicio, fim + timedelta(days=1), tipo, tipo,
+             id_local, id_local, busca, busca, busca),
         )
         linhas = [dict(r) for r in cur.fetchall()]
     for l in linhas:

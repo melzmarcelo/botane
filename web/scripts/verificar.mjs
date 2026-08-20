@@ -450,6 +450,43 @@ try {
     textoInv.slice(0, 140));
   await foto(p, "20b-inventario-aberto");
 
+  // Filtrar o razão. O razão cresce todo dia; sem filtro, achar um movimento
+  // vira rolagem — e a planilha tem de sair com o MESMO recorte da tela.
+  await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Movimentos");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const filtrosRazao = await p.evaluate(() => {
+    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    return { rotulos, temData: !!document.querySelector('input[type="date"]') };
+  });
+  checar("o razão tem filtro de período",
+    filtrosRazao.rotulos.includes("De") && filtrosRazao.rotulos.includes("Até")
+      && filtrosRazao.temData, filtrosRazao);
+  checar("e filtro por produto e tipo de movimento",
+    filtrosRazao.rotulos.includes("Produto") && filtrosRazao.rotulos.includes("Movimento"),
+    filtrosRazao.rotulos);
+  const antesFiltro = await p.evaluate(() =>
+    document.querySelectorAll("table tbody tr").length);
+  await p.evaluate(() => {
+    const campos = [...document.querySelectorAll('input[type="date"]')];
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    for (const c of campos) {
+      set.call(c, "1999-01-01");
+      c.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+  await new Promise((r) => setTimeout(r, 1400));
+  const depoisFiltro = await p.evaluate(() => document.body.innerText);
+  checar("filtrar por um período sem movimento esvazia a lista",
+    /Nenhum movimento com esses filtros/.test(depoisFiltro),
+    [antesFiltro, depoisFiltro.slice(0, 120)]);
+  await foto(p, "18b-razao-filtrado");
+
   // Entrada pela tela: 10 kg a R$ 20,00.
   await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));

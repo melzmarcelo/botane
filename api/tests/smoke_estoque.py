@@ -15,6 +15,7 @@ produção consome a ficha e o custo do insumo passa a vir do estoque.
 
 import json
 import sys
+from datetime import date
 import time
 import urllib.error
 import urllib.parse
@@ -119,6 +120,27 @@ checar("CMV da saída = 125,00", perto(saida["custo_total"], 125), saida["custo_
 checar("saída não mexeu no médio", perto(saida["custo_medio_apos"], 25),
        saida["custo_medio_apos"])
 checar("razão guarda a fotografia do saldo", perto(saida["saldo_apos"], 15))
+
+# O razão cresce todo dia; sem filtro, achar um movimento vira rolagem.
+print("4b. filtros do razão")
+hoje = date.today().isoformat()
+st, r = chamar("GET", f"/estoque/movimentos?inicio={hoje}&fim={hoje}", token=token)
+checar("filtra pelo período", st == 200 and all(
+    m["data_movimento"][:10] == hoje for m in r), st)
+# `fim` é dia CHEIO: com `<= fim` o que foi lançado hoje às 14h ficaria de fora.
+checar("e o dia de hoje entra inteiro", any(m["id_produto"] == cafe for m in r),
+       len(r))
+st, r = chamar("GET", f"/estoque/movimentos?tipo=SAIDA_CONSUMO_INTERNO", token=token)
+checar("filtra pelo tipo de movimento",
+       st == 200 and all(m["tipo"] == "SAIDA_CONSUMO_INTERNO" for m in r), st)
+st, r = chamar("GET", f"/estoque/movimentos?busca=Est café {marca}", token=token)
+checar("filtra pelo nome do produto",
+       st == 200 and r and all(m["id_produto"] == cafe for m in r), len(r))
+st, r = chamar("GET", "/estoque/movimentos?inicio=1999-01-01&fim=1999-01-02", token=token)
+checar("período sem movimento devolve lista vazia", r == [], r)
+st, tipos = chamar("GET", "/estoque/tipos-movimento", token=token)
+checar("os tipos vêm do servidor, com rótulo",
+       any(t["tipo"] == "SAIDA_PERDA" and t["rotulo"] == "Perda" for t in tipos), tipos)
 
 st, saldos = chamar("GET", f"/estoque/saldos?busca=Est café {marca}",
                     token=token)
