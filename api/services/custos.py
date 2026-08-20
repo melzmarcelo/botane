@@ -66,20 +66,83 @@ def custo_do_insumo(cur, id_produto: int) -> tuple[Decimal | None, str]:
     if not linha:
         return None, "sem_custo"
 
-    fator = dec(linha["fator"]) or Decimal(1)
-    # O preço do fornecedor é pela embalagem dele; o fator traz para a unidade
-    # de estoque (caixa de 12 → custo por unidade).
-    return (dec(linha["ultimo_preco"]) / fator).quantize(CASAS_CUSTO), "ultima_compra"
+    # `ultimo_preco` é gravado pelo lançamento da nota JÁ por unidade de estoque
+    # (o `custo_aquisicao_unitario`, com frete e desconto dentro). Dividir pelo
+    # fator de novo aplicaria a caixa duas vezes: 12,00 a caixa de 12 viraria
+    # 0,08 o pacote.
+    return dec(linha["ultimo_preco"]).quantize(CASAS_CUSTO), "ultima_compra"
 
 
 def converter(qtd: Decimal, de: str | None, para: str | None, ums: dict) -> Decimal | None:
-    """Converte dentro da mesma grandeza (kg↔g, L↔ml). Fora dela, devolve None."""
+    """Converte dentro da mesma grandeza (kg↔g, L↔ml). Fora dela, devolve None.
+
+    ⚠️ **Caixa, fardo, pacote e bandeja NÃO convertem entre si por aqui.** Todas
+    são grandeza UNIDADE com fator 1, então a conta diria que 1 CX = 1 PCT — e
+    engoliria a caixa de 12 sem avisar ninguém. Quantas unidades cabem numa
+    caixa depende do PRODUTO, e quem sabe é o cadastro dele
+    (`converter_para_estoque`). Dúzia continua convertendo: doze é doze em
+    qualquer produto, e é o fator ≠ 1 que separa um caso do outro.
+    """
     if not de or not para or de == para:
         return qtd
     a, b = ums.get(de), ums.get(para)
     if not a or not b or a["grandeza"] != b["grandeza"]:
         return None
+    if a["grandeza"] == "UNIDADE" and dec(a["fator_base"]) == dec(b["fator_base"]):
+        return None
     return qtd * dec(a["fator_base"]) / dec(b["fator_base"])
+
+
+def fator_de_embalagem(cur, id_produto: int, um: str | None) -> Decimal | None:
+    """Quantas unidades de estoque cabem em uma unidade `um` DESTE produto.
+
+    Sai do cadastro do produto: `produto_unidades` (a caixa desta água tem 12) e,
+    como reserva, o par `um_compra`/`fator_compra` de quem só tinha um.
+    """
+    if not um:
+        return None
+    cur.execute(
+        """SELECT fator FROM produto_unidades
+            WHERE id_produto = %s AND upper(um) = upper(%s)""",
+        (id_produto, um),
+    )
+    linha = cur.fetchone()
+    if linha and dec(linha["fator"]) > 0:
+        return dec(linha["fator"])
+    cur.execute(
+        "SELECT um_compra, fator_compra FROM produtos WHERE id = %s", (id_produto,)
+    )
+    linha = cur.fetchone()
+    if linha and (linha["um_compra"] or "").upper() == um.upper() and dec(linha["fator_compra"]) > 0:
+        return dec(linha["fator_compra"])
+    return None
+
+
+def converter_para_estoque(cur, qtd: Decimal, id_produto: int, um: str | None,
+                           um_estoque: str | None, ums: dict) -> tuple[Decimal | None, str]:
+    """A ÚNICA regra de conversão do sistema. Devolve (quantidade, de onde veio).
+
+    A ordem importa e é sempre esta — ficha, produção e nota de entrada passam
+    todas por aqui, senão a mesma caixa vale 12 num lugar e 1 no outro:
+
+    1. **mesma unidade** — nada a fazer.
+    2. **embalagem do produto** — o cadastro dele diz que a caixa tem 12. Vem
+       antes da grandeza porque CX e PCT têm o mesmo fator base: a conta genérica
+       diria 1 CX = 1 PCT e a caixa sumiria.
+    3. **grandeza** — kg↔g, L↔ml, dúzia↔unidade.
+
+    Sem nenhum dos três devolve `(None, "desconhecida")`: é melhor a tela dizer
+    "cadastre a caixa deste produto" do que o razão baixar 1 onde saíram 12.
+    """
+    if not um or not um_estoque or um == um_estoque:
+        return qtd, "mesma"
+    fator = fator_de_embalagem(cur, id_produto, um)
+    if fator:
+        return qtd * fator, "embalagem"
+    direta = converter(qtd, um, um_estoque, ums)
+    if direta is not None:
+        return direta, "grandeza"
+    return None, "desconhecida"
 
 
 def _carregar_ums(cur) -> dict:
@@ -155,16 +218,26 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
             "custo_total": None,
             "origem_custo": "sem_custo",
             "aviso": None,
+            # Preenchidos abaixo: quanto isto vale na unidade de estoque e por
+            # qual regra. Ficam aqui para a sub-ficha também sair com as chaves.
+            "qtd_estoque": None,
+            "conversao": None,
+            "um_estoque": l["um_estoque"] or l["sub_rendimento_um"],
         }
 
         if l["id_insumo"]:
             unitario, origem = custo_do_insumo(cur, l["id_insumo"])
             detalhe["origem_custo"] = origem
-            # A receita pode estar em grama e o estoque em quilo.
-            convertida = converter(qtd, l["um"], l["um_estoque"], ums)
+            # A receita pode estar em grama e o estoque em quilo — ou em caixa,
+            # e aí quem sabe o tamanho da caixa é o cadastro do produto.
+            convertida, como = converter_para_estoque(
+                cur, qtd, l["id_insumo"], l["um"], l["um_estoque"], ums)
+            detalhe["qtd_estoque"] = convertida
+            detalhe["conversao"] = como
             if convertida is None:
                 detalhe["aviso"] = (
-                    f"{l['um'] or '?'} não converte para {l['um_estoque'] or '?'}"
+                    f"{l['um'] or '?'} não converte para {l['um_estoque'] or '?'} — "
+                    f"cadastre esta unidade de compra no produto"
                 )
             elif unitario is not None:
                 detalhe["custo_unitario"] = unitario
@@ -172,7 +245,11 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
         else:
             sub = custo_da_ficha(cur, l["id_subficha"], visitadas, ums, _nivel + 1)
             rendimento = dec(l["sub_rendimento"]) or Decimal(1)
+            # Sub-ficha rende numa unidade de verdade (2 KG de molho), não numa
+            # embalagem — aqui a conversão de grandeza basta.
             convertida = converter(qtd, l["um"], l["sub_rendimento_um"], ums)
+            detalhe["qtd_estoque"] = convertida
+            detalhe["conversao"] = "grandeza" if convertida is not None else None
             if sub.get("ciclo"):
                 detalhe["aviso"] = "sub-ficha em ciclo"
             elif convertida is None:

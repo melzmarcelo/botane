@@ -138,6 +138,12 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
             "observacao": i["observacao"],
             "ordem": i["ordem"],
             "aviso": i["aviso"],
+            # Quanto isto vira na unidade do ESTOQUE: a receita pede 1 CX e o
+            # razão baixa 12 PCT. Sem mostrar, a divergência só aparece no
+            # inventário do fim do mês.
+            "qtd_estoque": _num(i.get("qtd_estoque")),
+            "conversao": i.get("conversao"),
+            "um_estoque": i.get("um_estoque"),
         }
         if ve_custo:
             # Sem esta chave o dinheiro nem sai do servidor.

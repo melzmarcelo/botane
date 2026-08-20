@@ -20,7 +20,8 @@ from difflib import SequenceMatcher
 from fastapi import HTTPException
 
 from services import estoque as motor
-from services.custos import CASAS_CUSTO, converter, dec
+from services import custos
+from services.custos import CASAS_CUSTO, dec
 from services.omie import mapeadores
 from services.omie.cliente import ClienteOmie, ErroOmie
 
@@ -144,15 +145,9 @@ def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str 
         linha = cur.fetchone()
         if linha and dec(linha["fator"]) > 0:
             return dec(linha["fator"])
-    if um_nota:
-        cur.execute(
-            """SELECT fator FROM produto_unidades
-                WHERE id_produto = %s AND upper(um) = upper(%s)""",
-            (id_produto, um_nota),
-        )
-        linha = cur.fetchone()
-        if linha and dec(linha["fator"]) > 0:
-            return dec(linha["fator"])
+    da_embalagem = custos.fator_de_embalagem(cur, id_produto, um_nota)
+    if da_embalagem:
+        return da_embalagem
     if id_fornecedor:
         cur.execute(
             """SELECT fator FROM produto_fornecedor
@@ -233,7 +228,11 @@ def calcular_nota(cur, id_nota: int) -> dict:
             elif fator and fator != 1:
                 convertida = qtd_nota * fator
             else:
-                direta = converter(qtd_nota, item["um_nota"], um_estoque, ums)
+                direta, _como = custos.converter_para_estoque(
+                    cur, qtd_nota, item["id_produto"], item["um_nota"], um_estoque, ums)
+                # Aqui a nota NÃO para: o item já está vinculado a um produto, e
+                # 1:1 com a unidade da nota à vista na tela é melhor que recusar
+                # o lançamento inteiro por falta de uma linha de cadastro.
                 convertida = direta if direta is not None else qtd_nota
 
             liquido = bruto - desconto_item + acrescimo_item + frete_item + outros_item
@@ -364,13 +363,21 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
         valor += dec(r["custo_total"])
 
         # O preço do fornecedor passa a valer para a próxima ficha e cotação.
+        # É INSERT quando ainda não havia vínculo: um UPDATE só não pegava nada
+        # na primeira compra, e a reserva de custo (produto sem saldo) ficava
+        # vazia justamente para quem acabou de comprar pela primeira vez.
+        # O valor é o custo POR UNIDADE DE ESTOQUE, não o da embalagem —
+        # `custo_do_insumo` lê daqui sem dividir por fator nenhum.
         if nota["id_fornecedor"]:
             cur.execute(
-                """UPDATE produto_fornecedor
-                      SET ultimo_preco = %s, ultima_compra = %s
-                    WHERE id_produto = %s AND id_fornecedor = %s""",
-                (item["custo_aquisicao_unitario"], nota["data_entrada"] or date.today(),
-                 item["id_produto"], nota["id_fornecedor"]),
+                """INSERT INTO produto_fornecedor (id_produto, id_fornecedor,
+                                                   ultimo_preco, ultima_compra)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (id_produto, id_fornecedor) DO UPDATE
+                       SET ultimo_preco = EXCLUDED.ultimo_preco,
+                           ultima_compra = EXCLUDED.ultima_compra""",
+                (item["id_produto"], nota["id_fornecedor"],
+                 item["custo_aquisicao_unitario"], nota["data_entrada"] or date.today()),
             )
 
     cur.execute(

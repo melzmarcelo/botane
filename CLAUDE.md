@@ -159,7 +159,7 @@ para arquivo nenhum — gravar direto aqui.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
   `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (70), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
-  `smoke_kits.py` (29) e
+  `smoke_kits.py` (29), `smoke_conversao.py` (23) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.
@@ -198,9 +198,28 @@ para arquivo nenhum — gravar direto aqui.
 - ⚠️ **A prévia de custo da nota digitada divide pela quantidade EM ESTOQUE**, não pela da
   nota: mostrava R$ 20,60 por caixa onde o custo real era R$ 1,72 por unidade. A tela busca
   o fator em `/produtos/{id}/unidades` e diz "por UN" no número.
-- ⚠️ **CX e UN são as duas "unidade" com fator 1**: a conversão de grandeza diria que 4 CX =
-  4 UN e engoliria a caixa de 12. No importador, **o fator da embalagem vem antes** da
-  conversão de grandeza.
+- ⚠️ **CX, FD, PCT, BDJ e UN são todas grandeza UNIDADE com fator 1**: a conversão de
+  grandeza diria que 1 CX = 1 PCT e engoliria a caixa de 12. `custos.converter()` agora
+  **recusa** o par (devolve `None`) quando os dois lados são UNIDADE com o mesmo fator base —
+  quem sabe o tamanho da caixa é o cadastro do PRODUTO. Dúzia continua convertendo: o fator
+  12 é que separa "unidade de medida" de "nome de embalagem".
+- **`custos.converter_para_estoque()` é a única regra de conversão** (20/08/2026):
+  mesma unidade → **embalagem do produto** (`produto_unidades`, depois `um_compra/fator_compra`)
+  → grandeza → `(None, "desconhecida")`. Ficha, produção e nota de entrada passam **todas** por
+  ela. Antes só a nota consultava a embalagem: a mesma caixa valia 12 na entrada e 1 na ficha,
+  e a produção baixava 1 pacote onde a receita pedia uma caixa de 12 — some com 11 do razão sem
+  ninguém ver. Sem conversão conhecida a ficha **avisa** e a produção **recusa**; 1:1 calado é
+  o que não pode acontecer. A ficha devolve `qtd_estoque`/`conversao` por item, e a tela mostra
+  "no estoque 12 PCT".
+- ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
+  grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
+  `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes
+  (12,00 a caixa de 12 virava 0,08 o pacote). O lançamento faz UPSERT: com `UPDATE` só, a
+  primeira compra de um insumo não gravava preço nenhum.
+- ⚠️ **Salvar o produto pela tela não pode apagar o que a tela não manda**: `_gravar_fornecedores`
+  apagava tudo e reinseria, levando junto `ultima_compra` e `ultimo_preco` — e com eles o custo
+  de reserva de toda ficha de insumo sem entrada no estoque. Agora só sai da tabela quem saiu
+  da lista.
 - Item de nota sem produto **não entra no estoque** e barra o lançamento da nota inteira.
 - ⚠️ No XML da NF-e, `vFrete` **ausente** e `vFrete` igual a **zero** são coisas diferentes:
   zero é o emitente dizendo "neste item não há frete". Tratar zero como ausente joga o item no

@@ -21,6 +21,9 @@ type Item = {
   custo_unitario?: number | null;
   origem_custo?: string;
   aviso?: string | null;
+  qtd_estoque?: number | null;
+  conversao?: string | null;
+  um_estoque?: string | null;
 };
 
 type Ficha = {
@@ -124,6 +127,9 @@ export default function EditorFicha() {
         custo_unitario: i.custo_unitario as number | null,
         origem_custo: i.origem_custo as string,
         aviso: i.aviso as string | null,
+        qtd_estoque: i.qtd_estoque as number | null,
+        conversao: i.conversao as string | null,
+        um_estoque: i.um_estoque as string | null,
       })),
     );
   };
@@ -479,6 +485,18 @@ export default function EditorFicha() {
                   {fc && (
                     <span>
                       fator de correção <b className="mono text-tinta">{fc}</b>
+                    </span>
+                  )}
+                  {/* Quanto a receita tira do estoque. A receita fala em caixa,
+                      o razão baixa pacote — sem isto à vista, a diferença só
+                      aparece no inventário do fim do mês. */}
+                  {item.conversao && item.conversao !== "mesma" && item.qtd_estoque != null && (
+                    <span>
+                      no estoque{" "}
+                      <b className="mono text-tinta">
+                        {item.qtd_estoque.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}{" "}
+                        {item.um_estoque}
+                      </b>
                     </span>
                   )}
                   {veCusto && item.origem_custo === "sem_custo" && (

@@ -89,7 +89,21 @@ def _gravar_preco(cur, id_produto: int, preco: float | None, id_usuario: int) ->
 
 
 def _gravar_fornecedores(cur, id_produto: int, lista) -> None:
-    cur.execute("DELETE FROM produto_fornecedor WHERE id_produto = %s", (id_produto,))
+    """Só sai da tabela quem saiu da lista.
+
+    Apagar tudo e reinserir levava junto o que a tela não manda: `ultima_compra`
+    (e o `ultimo_preco`, quando a linha é nova) são escritos pelo LANÇAMENTO da
+    nota, não pelo formulário. Salvar o produto zerava o preço de compra e, com
+    ele, o custo de reserva de toda ficha do insumo sem entrada no estoque.
+    """
+    ids = [f.id_fornecedor for f in lista]
+    if ids:
+        cur.execute(
+            "DELETE FROM produto_fornecedor WHERE id_produto = %s AND id_fornecedor <> ALL(%s)",
+            (id_produto, ids),
+        )
+    else:
+        cur.execute("DELETE FROM produto_fornecedor WHERE id_produto = %s", (id_produto,))
     for f in lista:
         cur.execute(
             """INSERT INTO produto_fornecedor
@@ -100,7 +114,8 @@ def _gravar_fornecedores(cur, id_produto: int, lista) -> None:
                    SET codigo_no_fornecedor = EXCLUDED.codigo_no_fornecedor,
                        embalagem = EXCLUDED.embalagem,
                        fator = EXCLUDED.fator,
-                       ultimo_preco = EXCLUDED.ultimo_preco,
+                       ultimo_preco = coalesce(EXCLUDED.ultimo_preco,
+                                               produto_fornecedor.ultimo_preco),
                        preferencial = EXCLUDED.preferencial""",
             (id_produto, f.id_fornecedor, f.codigo_no_fornecedor, f.embalagem,
              f.fator, f.ultimo_preco, f.preferencial),

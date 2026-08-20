@@ -529,11 +529,16 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             )
 
         bruta = dec(item["qtd_bruta"]) * lotes
-        convertida = custos.converter(bruta, um_origem, um_destino, ums)
+        # A MESMA regra da ficha e da nota de entrada: embalagem do produto
+        # primeiro, grandeza depois. Baixar 1 onde a receita pede uma caixa de
+        # 12 some com 11 do razão sem ninguém ver.
+        convertida, _como = custos.converter_para_estoque(
+            cur, bruta, id_alvo, um_origem, um_destino, ums)
         if convertida is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"{nome}: {um_origem or '?'} não converte para {um_destino or '?'}.",
+                detail=(f"{nome}: {um_origem or '?'} não converte para "
+                        f"{um_destino or '?'}. Cadastre esta unidade de compra no produto."),
             )
         r = lancar(
             cur, id_unidade=id_unidade, id_local=id_local, id_produto=id_alvo,
