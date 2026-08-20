@@ -197,7 +197,17 @@ if alvo_item:
            alvo_item["codigo_fornecedor"])
     st, r2 = chamar("POST", f"/notas/itens/{alvo_item['id']}/criar-produto", {}, token=token)
     checar("e criar de novo no mesmo item é recusado", st == 400, st)
-    if not reaproveitou:
+    # Desfaz o que esta fase criou. Quando o produto foi REAPROVEITADO não há o
+    # que apagar — mas fica no cadastro dele o código do fornecedor, e é por ele
+    # que a cascata resolve. Sem tirar, a próxima rodada acha o item já
+    # conciliado e esta fase inteira deixa de ter o que provar.
+    chamar("DELETE", f"/notas/vinculos/{alvo_item['codigo_fornecedor']}", token=token)
+    if reaproveitou:
+        st, prod = chamar("GET", f"/produtos/{r['id_produto']}", token=token)
+        sobra = [f for f in (prod.get("fornecedores") or [])
+                 if (f.get("codigo_no_fornecedor") or "") != alvo_item["codigo_fornecedor"]]
+        chamar("PUT", f"/produtos/{r['id_produto']}", {"fornecedores": sobra}, token=token)
+    else:
         chamar("DELETE", f"/produtos/{r['id_produto']}", token=token)
 
 print("2d. cadastro de fornecedores vindo do Omie")

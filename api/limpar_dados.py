@@ -44,7 +44,7 @@ OPERACAO = [
     "venda_itens", "vendas", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
     "kit_itens", "ficha_itens", "fichas_tecnicas",
-    "produto_precos", "produto_fornecedor", "produtos", "fornecedores",
+    "produto_precos", "produto_fornecedor", "produto_unidades", "produtos", "fornecedores",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]

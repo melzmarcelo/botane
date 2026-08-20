@@ -512,8 +512,20 @@ try {
       await api("DELETE", `/notas/${n.id}`, null, token);
     }
   }
-  for (const c of ["CAF-500", "LEI-INT", "TOM-CX"]) {
+  const codigosDaFixture = ["CAF-500", "LEI-INT", "TOM-CX"];
+  for (const c of codigosDaFixture) {
     await api("DELETE", `/notas/vinculos/${c}`, null, token);
+  }
+  // O de-para resolve por código do fornecedor, por código do Omie e por EAN —
+  // apagar só o vínculo não basta. A suíte de API cria produtos a partir dos
+  // itens destas mesmas fixtures; se algum sobrar, a nota entra conciliada e a
+  // fase abaixo (que prova a pendência) não tem o que provar.
+  for (const c of codigosDaFixture) {
+    const { dados: achados } = await api(
+      "GET", `/produtos?busca=${c}&incluir_inativos=true`, null, token);
+    for (const pr of achados ?? []) {
+      if (pr.codigo === c) await api("DELETE", `/produtos/${pr.id}`, null, token);
+    }
   }
 
   for (const [rota, nome] of [["/integracoes", "26-integracoes"], ["/compras", "27-compras"]]) {

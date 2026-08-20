@@ -89,10 +89,13 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
         if achado:
             return achado["id"], None, 100.0, "ean"
 
-    # 3. código no fornecedor — resolve hortifrúti e distribuidor sem EAN
+    # 3. código no fornecedor — resolve hortifrúti e distribuidor sem EAN.
+    # Só produto ativo, como no EAN: produto desativado guarda saldo e razão, mas
+    # amarrar nota nova nele o ressuscitaria na compra sem ninguém ter decidido.
     if codigo and id_fornecedor:
         cur.execute(
             """SELECT pf.id_produto FROM produto_fornecedor pf
+                JOIN produtos p ON p.id = pf.id_produto AND p.ativo
                 WHERE pf.id_fornecedor = %s AND lower(pf.codigo_no_fornecedor) = lower(%s)""",
             (id_fornecedor, codigo),
         )

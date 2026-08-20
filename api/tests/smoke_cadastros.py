@@ -171,6 +171,18 @@ st, c = chamar("GET", "/produtos/contagem", token=token)
 checar("contagem responde", st == 200 and c.get("total", 0) >= 2, c)
 
 print("7b. paginação e loja")
+# Página de 2 só prova alguma coisa se houver uma TERCEIRA linha: numa base
+# recém-limpa a suíte tinha criado exatamente 2 produtos, o total batia com o
+# tamanho da página e a checagem acusava falha sem haver defeito. A suíte
+# garante o que precisa, como faz com local e setor.
+extras_pagina = []
+st, quantos = chamar("GET", "/produtos/contagem", token=token)
+while (quantos.get("total") or 0) < 3:
+    st, r = chamar("POST", "/produtos", {"nome": f"Pagina smoke {len(extras_pagina)}",
+                                         "tipo": "INSUMO", "um_estoque": "UN"}, token=token)
+    extras_pagina.append(r.get("id"))
+    st, quantos = chamar("GET", "/produtos/contagem", token=token)
+
 # A lista corta em `limite`, e o total tem de vir no cabeçalho: sem ele a tela
 # não distingue "acabou" de "tem mais na próxima página".
 req = urllib.request.Request(BASE + "/produtos?limite=2")
@@ -242,7 +254,8 @@ print("9. limpeza")
 # Categoria com produto apontando para ela é desativada, não excluída — por
 # isso o produto solta a categoria antes.
 chamar("PUT", f"/produtos/{prod}", {"id_categoria": None}, token=token)
-for caminho in (f"/produtos/{prod}", f"/produtos/{rasc}", f"/fornecedores/{forn}"):
+for caminho in (f"/produtos/{prod}", f"/produtos/{rasc}", f"/fornecedores/{forn}",
+                *[f"/produtos/{i}" for i in extras_pagina]):
     chamar("DELETE", caminho, token=token)
 st, r = chamar("DELETE", f"/categorias/{filha}", token=token)
 checar("exclui a subcategoria", st == 200 and "excluída" in r.get("message", ""), r)

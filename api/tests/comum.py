@@ -9,6 +9,18 @@ Cada suíte **garante** o que precisa, do mesmo jeito que já cria os próprios
 produtos. Rodar contra uma instalação virgem passou a ser parte do contrato.
 """
 
+import sys
+
+# Redirecionar a saída para arquivo troca o console (cp1252 aqui) por uma
+# codificação que não tem o sinal de menos tipográfico e outros. A suíte morria
+# ao IMPRIMIR o resultado, depois de já ter testado tudo — e o relatório se
+# perdia inteiro por causa de um caractere de rótulo.
+for _saida in (sys.stdout, sys.stderr):
+    try:
+        _saida.reconfigure(errors="replace")
+    except (AttributeError, ValueError):  # pragma: no cover - saída redirecionada
+        pass
+
 
 def garantir_local(chamar, token) -> dict:
     """O local principal, criando um se não houver nenhum.
