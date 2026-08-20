@@ -329,11 +329,17 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
             ),
         )
 
+    # `id_local_padrao` vem junto: o local é do PRODUTO. Uma nota traz congelado
+    # e seco na mesma folha, e um local só para a nota inteira obrigaria a
+    # lançar duas vezes ou a aceitar o sorvete no estoque seco. O local da nota
+    # é a reserva de quem ainda não tem um definido.
     cur.execute(
-        """SELECT id, id_produto, quantidade_convertida, custo_aquisicao_unitario,
-                  lote_nf, validade_nf
-             FROM nota_itens
-            WHERE id_nota = %s AND id_produto IS NOT NULL AND NOT ignorado ORDER BY seq""",
+        """SELECT i.id, i.id_produto, i.quantidade_convertida, i.custo_aquisicao_unitario,
+                  i.lote_nf, i.validade_nf, p.id_local_padrao
+             FROM nota_itens i
+             JOIN produtos p ON p.id = i.id_produto
+            WHERE i.id_nota = %s AND i.id_produto IS NOT NULL AND NOT i.ignorado
+            ORDER BY i.seq""",
         (id_nota,),
     )
     itens = [dict(r) for r in cur.fetchall()]
@@ -345,7 +351,7 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
         r = motor.lancar(
             cur,
             id_unidade=nota["id_unidade"],
-            id_local=id_local or nota["id_local"],
+            id_local=item["id_local_padrao"] or id_local or nota["id_local"],
             id_produto=item["id_produto"],
             tipo="ENTRADA_NF",
             quantidade=item["quantidade_convertida"],

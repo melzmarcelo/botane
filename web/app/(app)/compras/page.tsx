@@ -50,6 +50,7 @@ type ItemNota = {
   id_produto: number | null;
   produto: string | null;
   um_estoque: string | null;
+  local_destino: string | null;
   sugestao_produto: number | null;
   sugestao_nome: string | null;
   sugestao_score: number | null;
@@ -287,6 +288,8 @@ export default function PaginaCompras() {
   }
 
   const pendentes = aberta?.itens.filter((i) => !i.id_produto && !i.ignorado) ?? [];
+  // O local da nota é a reserva de quem não tem local no cadastro do produto.
+  const localDaNota = locais.find((l) => l.id === aberta?.id_local)?.nome ?? "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -506,6 +509,7 @@ export default function PaginaCompras() {
                   <th className="num">Valor un.</th>
                   <th className="num">Frete rateado</th>
                   <th>Produto no Botané</th>
+                  <th>Entra em</th>
                   <th className="num">Custo real</th>
                 </tr>
               </thead>
@@ -581,6 +585,23 @@ export default function PaginaCompras() {
                         </div>
                       ) : (
                         <Etiqueta cor="alerta">pendente</Etiqueta>
+                      )}
+                    </td>
+                    {/* Cada item vai para o local do CADASTRO do produto: a
+                        mesma nota traz congelado e seco. Sem local no produto,
+                        vale o da nota — e a coluna diz qual é. */}
+                    <td className="whitespace-nowrap text-[13px]">
+                      {i.id_produto ? (
+                        i.local_destino ? (
+                          <span>{i.local_destino}</span>
+                        ) : (
+                          <span className="text-suave">
+                            {localDaNota || "local da nota"}
+                            <span className="block text-[11.5px]">sem local no cadastro</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-suave">—</span>
                       )}
                     </td>
                     <td className="num">

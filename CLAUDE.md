@@ -211,6 +211,12 @@ para arquivo nenhum — gravar direto aqui.
   ninguém ver. Sem conversão conhecida a ficha **avisa** e a produção **recusa**; 1:1 calado é
   o que não pode acontecer. A ficha devolve `qtd_estoque`/`conversao` por item, e a tela mostra
   "no estoque 12 PCT".
+- **O local de estoque é do PRODUTO** (`produtos.id_local_padrao`, migração 017): uma nota traz
+  congelado e seco na mesma folha, e um local por NOTA obrigaria a lançar duas vezes ou a
+  aceitar o sorvete no estoque seco. O local da nota virou **reserva** — vale para o produto
+  que ainda não tem um definido, e a tela da nota mostra o destino item a item antes de lançar
+  (`local_destino`). Ordem no lançamento: local do produto → local passado no lançar → local da
+  nota.
 - ⚠️ **O primeiro local da loja nasce principal** (migração 016), marque-se a caixinha ou não:
   estoque, produção e inventário usam o principal como padrão, e sem nenhum marcado o seletor
   mostrava o nome do local (era o único da lista) enquanto o pedido saía **sem** local — 404

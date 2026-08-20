@@ -8,6 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import {
   Categoria,
   Fornecedor,
+  Local,
   Setor,
   TIPOS_PRODUTO,
   UnidadeMedida,
@@ -38,6 +39,7 @@ type Form = {
   um_estoque: string;
   um_compra: string;
   fator_compra: string;
+  id_local_padrao: string;
   perecivel: boolean;
   validade_dias: string;
   controla_lote: boolean;
@@ -55,7 +57,7 @@ type Form = {
 const VAZIO: Form = {
   codigo: "", nome: "", nome_curto: "", tipo: "INSUMO", id_categoria: "", id_setor: "",
   producao_propria: false, controla_estoque: true, um_estoque: "", um_compra: "",
-  fator_compra: "1", perecivel: false, validade_dias: "", controla_lote: false,
+  fator_compra: "1", id_local_padrao: "", perecivel: false, validade_dias: "", controla_lote: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   codigo_barras: "", observacao: "", preco_venda: "", status: "ATIVO", ativo: true,
 };
@@ -76,6 +78,7 @@ export default function FormularioProduto() {
   const [setores, setSetores] = useState<Setor[]>([]);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [locais, setLocais] = useState<Local[]>([]);
   const [carregando, setCarregando] = useState(!novo);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -87,12 +90,14 @@ export default function FormularioProduto() {
       api.get<Setor[]>("/setores"),
       api.get<UnidadeMedida[]>("/unidades-medida"),
       api.get<Fornecedor[]>("/fornecedores"),
+      api.get<Local[]>("/locais"),
     ])
-      .then(([c, s, u, fo]) => {
+      .then(([c, s, u, fo, lo]) => {
         setCategorias(c);
         setSetores(s);
         setUms(u);
         setFornecedores(fo);
+        setLocais(lo);
       })
       .catch((e) => setErro(e.message));
   }, []);
@@ -150,6 +155,7 @@ export default function FormularioProduto() {
       um_estoque: texto(f.um_estoque),
       um_compra: texto(f.um_compra),
       fator_compra: num(f.fator_compra) ?? 1,
+      id_local_padrao: num(f.id_local_padrao),
       perecivel: f.perecivel,
       validade_dias: num(f.validade_dias),
       controla_lote: f.controla_lote,
@@ -383,6 +389,23 @@ export default function FormularioProduto() {
 
       <Cartao titulo="Estoque">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* O local é do PRODUTO: uma nota traz congelado e seco na mesma
+              folha, e um local por nota obrigaria a lançar duas vezes. */}
+          <Campo rotulo="Local de estoque" dica="onde este produto entra">
+            <select
+              className="campo"
+              disabled={!podeEditar}
+              value={f.id_local_padrao}
+              onChange={(e) => set("id_local_padrao", e.target.value)}
+            >
+              <option value="">— o local da nota —</option>
+              {locais.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nome}
+                </option>
+              ))}
+            </select>
+          </Campo>
           <Campo rotulo="Estoque mínimo" dica="alerta de ruptura">
             <input
               className="campo mono"

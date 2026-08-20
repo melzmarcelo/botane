@@ -28,6 +28,9 @@ class ProdutoBase(BaseModel):
     um_estoque: str | None = Field(default=None, max_length=6)
     um_compra: str | None = Field(default=None, max_length=6)
     fator_compra: float = Field(default=1, gt=0)
+    # Onde este produto entra quando chega numa nota. O congelado e o seco vêm
+    # na mesma folha: um local por NOTA obrigaria a lançar duas vezes.
+    id_local_padrao: int | None = None
     perecivel: bool = False
     validade_dias: int | None = Field(default=None, ge=0, le=3650)
     controla_lote: bool = False
@@ -75,6 +78,7 @@ class ProdutoUpdate(ProdutoBase):
     codigo: str | None = Field(default=None, max_length=40)
     tipo: str | None = None
     fator_compra: float | None = Field(default=None, gt=0)
+    id_local_padrao: int | None = None
     producao_propria: bool | None = None
     controla_estoque: bool | None = None
     perecivel: bool | None = None
@@ -101,6 +105,8 @@ class ProdutoResponse(BaseModel):
     um_estoque: str | None = None
     um_compra: str | None = None
     fator_compra: float
+    id_local_padrao: int | None = None
+    local_padrao: str | None = None
     perecivel: bool
     validade_dias: int | None = None
     controla_lote: bool

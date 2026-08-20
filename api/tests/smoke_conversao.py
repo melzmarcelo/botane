@@ -185,9 +185,52 @@ if vinculo:
     checar("salvar o produto não apaga o preço de compra",
            v2 and perto(v2.get("ultimo_preco"), 1), p2.get("fornecedores"))
 
-print("8. limpeza")
+print("8. o local de estoque é do produto, não da nota")
+# Uma nota traz congelado e seco na mesma folha. O local do CADASTRO manda; o
+# da nota é a reserva de quem ainda não tem um.
+locais = chamar("GET", "/locais", token=token)[1]
+if len(locais) < 2:
+    chamar("POST", "/locais", {"nome": f"Camara fria {suf}", "tipo": "REFRIGERADO"}, token=token)
+    locais = chamar("GET", "/locais", token=token)[1]
+reserva = next(l for l in locais if l["principal"])
+camara = next(l for l in locais if l["id"] != reserva["id"])
+
+st, r = chamar("POST", "/produtos", {"nome": f"Conversao congelado {suf}", "tipo": "INSUMO",
+                                     "um_estoque": "KG", "id_local_padrao": camara["id"]},
+               token=token)
+congelado = r["id"]
+st, p = chamar("GET", f"/produtos/{congelado}", token=token)
+checar("o produto guarda o local dele", p.get("id_local_padrao") == camara["id"],
+       p.get("id_local_padrao"))
+checar("e devolve o nome para a tela", p.get("local_padrao") == camara["nome"],
+       p.get("local_padrao"))
+
+st, r = chamar("POST", "/produtos", {"nome": f"Conversao seco {suf}", "tipo": "INSUMO",
+                                     "um_estoque": "KG"}, token=token)
+seco = r["id"]
+st, r = chamar("POST", "/notas", {"id_fornecedor": forn, "numero": f"8{suf[:4]}", "serie": "1",
+                                  "data_emissao": "2026-08-20", "id_local": reserva["id"],
+                                  "itens": [
+                                      {"descricao_fornecedor": "Congelado", "id_produto": congelado,
+                                       "quantidade": 2, "um": "KG", "valor_unitario": 10},
+                                      {"descricao_fornecedor": "Seco", "id_produto": seco,
+                                       "quantidade": 3, "um": "KG", "valor_unitario": 5}]},
+               token=token)
+nota2 = r["id"]
+st, det = chamar("GET", f"/notas/{nota2}", token=token)
+destinos = {i["id_produto"]: i.get("local_destino") for i in det["itens"]}
+checar("a tela mostra o destino de cada item antes de lançar",
+       destinos.get(congelado) == camara["nome"] and destinos.get(seco) is None, destinos)
+st, r = chamar("POST", f"/notas/{nota2}/lancar", {}, token=token)
+checar("lança a nota inteira de uma vez", st == 200, r)
+st, saldos = chamar("GET", "/estoque/saldos", token=token)
+onde = {s["id_produto"]: s["id_local"] for s in saldos}
+checar("o congelado entra na câmara", onde.get(congelado) == camara["id"], onde)
+checar("e o seco no local da nota", onde.get(seco) == reserva["id"], onde)
+
+print("9. limpeza")
 for caminho in (f"/produtos/{prod}", f"/produtos/{prato}", f"/produtos/{sem_caixa}",
-                f"/produtos/{ovo}"):
+                f"/produtos/{ovo}", f"/produtos/{congelado}", f"/produtos/{seco}"):
     chamar("DELETE", caminho, token=token)
 checar("limpeza concluída", True)
 

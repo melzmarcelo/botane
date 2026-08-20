@@ -561,7 +561,10 @@ export default function NotaManual({
             onChange={(e) => setOutros(e.target.value)}
           />
         </Campo>
-        <Campo rotulo="Entra no local">
+        {/* Reserva, não regra: cada produto entra no local do CADASTRO dele.
+            Este vale para o produto que ainda não tem um definido — congelado e
+            seco vêm na mesma nota. */}
+        <Campo rotulo="Local de reserva" dica="para produto sem local no cadastro">
           <select className="campo" value={idLocal} onChange={(e) => setIdLocal(e.target.value)}>
             {locais.map((l) => (
               <option key={l.id} value={l.id}>

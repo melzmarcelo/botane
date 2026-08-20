@@ -438,10 +438,15 @@ def obter(id_nota: int,
 
         cur.execute(
             """SELECT i.*, p.nome AS produto, p.um_estoque, p.codigo AS codigo_produto,
-                      s.nome AS sugestao_nome
+                      s.nome AS sugestao_nome,
+                      -- Para onde ESTE item vai: o local do produto, ou o da
+                      -- nota como reserva. A tela mostra antes de lançar, senão
+                      -- só o inventário conta onde o congelado foi parar.
+                      l.nome AS local_destino, p.id_local_padrao
                  FROM nota_itens i
                  LEFT JOIN produtos p ON p.id = i.id_produto
                  LEFT JOIN produtos s ON s.id = i.sugestao_produto
+                 LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                 WHERE i.id_nota = %s ORDER BY i.seq""",
             (id_nota,),
         )

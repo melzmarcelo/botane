@@ -42,6 +42,7 @@ router = APIRouter(prefix="/produtos", tags=["produtos"])
 _EDITAVEIS = (
     "codigo", "nome", "nome_curto", "tipo", "id_categoria", "id_setor",
     "producao_propria", "controla_estoque", "um_estoque", "um_compra", "fator_compra",
+    "id_local_padrao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
     "observacao", "status", "ativo",
@@ -192,10 +193,11 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
 def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
         cur.execute(
-            """SELECT p.*, c.nome AS categoria, s.nome AS setor
+            """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao
                  FROM produtos p
                  LEFT JOIN categorias c ON c.id = p.id_categoria
                  LEFT JOIN setores s ON s.id = p.id_setor
+                 LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                 WHERE p.id = %s""",
             (id_produto,),
         )
