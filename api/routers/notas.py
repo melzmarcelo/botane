@@ -460,6 +460,118 @@ def vincular(id_item: int, body: VincularRequest,
                 + (" — as próximas notas deste fornecedor entram sozinhas" if body.aprender else "")}
 
 
+class ProdutoDoItem(BaseModel):
+    """O que dá para ajustar antes de criar. Tudo opcional: o padrão vem da nota."""
+    nome: str | None = Field(default=None, max_length=160)
+    tipo: str = "INSUMO"
+    um_estoque: str | None = Field(default=None, max_length=6)
+    fator: float | None = Field(default=None, gt=0)
+
+
+@router.post("/itens/{id_item}/criar-produto")
+def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
+                          ctx: Contexto = Depends(
+                              requer_permissao("cadastros.produtos"))) -> dict:
+    """Cria o produto a partir do item da nota e já vincula os dois.
+
+    Quando o insumo não existe, o caminho era sair da conciliação, ir a
+    Produtos, cadastrar, voltar e vincular — quatro passos para uma linha de
+    nota. Aqui a descrição, o código de barras e o NCM que vieram na nota já
+    entram no cadastro, e o de-para nasce junto: a próxima nota do mesmo
+    fornecedor reconhece o item sozinha.
+
+    **Nasce RASCUNHO de propósito.** Produto criado às pressas não tem preço de
+    venda, categoria nem fator conferido; rascunho não entra em ficha nem em
+    venda até alguém completar. É a mesma trava do catálogo importado do Omie.
+    """
+    body = body or ProdutoDoItem()
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT i.id, i.descricao_fornecedor, i.codigo_fornecedor, i.codigo_barras,
+                      i.ncm, i.um_nota, i.id_produto, i.id_nota, n.id_fornecedor
+                 FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
+                WHERE i.id = %s""",
+            (id_item,),
+        )
+        item = cur.fetchone()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        if item["id_produto"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Este item já está vinculado a um produto.",
+            )
+
+        # A unidade da nota serve de ponto de partida, mas só se for uma sigla
+        # que existe: nota traz "CX", "FD", e às vezes coisa que não é unidade.
+        um = (body.um_estoque or item["um_nota"] or "").strip().upper() or None
+        if um:
+            cur.execute("SELECT sigla FROM unidades_medida WHERE upper(sigla) = %s", (um,))
+            if not cur.fetchone():
+                um = None
+
+        nome = (body.nome or item["descricao_fornecedor"] or "").strip()[:160]
+        if not nome:
+            raise HTTPException(status_code=400, detail="Sem descrição para virar nome.")
+
+        # O código de barras é chave natural: se já existe produto com ele, o
+        # produto É aquele. Criar um segundo partiria o custo do mesmo insumo em
+        # dois cadastros — e é o caso comum de quem importou o catálogo do Omie
+        # e o de-para não casou pelo código do fornecedor.
+        if item["codigo_barras"]:
+            cur.execute("SELECT id, nome, codigo FROM produtos WHERE codigo_barras = %s",
+                        (item["codigo_barras"],))
+            existente = cur.fetchone()
+            if existente:
+                r = importador.vincular_item(cur, id_item, existente["id"], body.fator,
+                                             ctx.id_usuario, True)
+                auditoria.registrar(cur, ctx.id_usuario, "produto", existente["id"],
+                                    "vinculo_por_ean", depois={"id_item": id_item})
+                return r | {
+                    "id_produto": existente["id"],
+                    "codigo": existente["codigo"],
+                    "nome": existente["nome"],
+                    "message": (f"O código de barras já é de {existente['nome']} "
+                                f"({existente['codigo']}) — vinculei a ele em vez de criar "
+                                "um segundo cadastro."),
+                }
+
+        cur.execute("SELECT nextval('seq_codigo_produto') AS n")
+        codigo = f"P{cur.fetchone()['n']:04d}"
+        cur.execute(
+            """INSERT INTO produtos (codigo, nome, tipo, um_estoque, um_compra, fator_compra,
+                                     codigo_barras, ncm, status, origem, controla_estoque,
+                                     criado_por)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'RASCUNHO', 'NOTA', true, %s)
+               RETURNING id""",
+            (codigo, nome, body.tipo, um, item["um_nota"], body.fator or 1,
+             item["codigo_barras"], item["ncm"], ctx.id_usuario),
+        )
+        id_produto = cur.fetchone()["id"]
+
+        # O código do fornecedor vira de-para no cadastro do produto: é o nível 3
+        # da cascata, o que resolve hortifrúti e distribuidor sem EAN.
+        if item["id_fornecedor"] and item["codigo_fornecedor"]:
+            cur.execute(
+                """INSERT INTO produto_fornecedor (id_produto, id_fornecedor,
+                                                   codigo_no_fornecedor, fator)
+                   VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING""",
+                (id_produto, item["id_fornecedor"], item["codigo_fornecedor"], body.fator or 1),
+            )
+
+        r = importador.vincular_item(cur, id_item, id_produto, body.fator, ctx.id_usuario, True)
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "criar_do_item",
+                            depois={"nome": nome, "codigo": codigo, "id_item": id_item})
+
+    return r | {
+        "id_produto": id_produto,
+        "codigo": codigo,
+        "nome": nome,
+        "message": (f"{nome} criado como rascunho ({codigo}) e vinculado. "
+                    "Complete a unidade e o fator no cadastro antes de ativar."),
+    }
+
+
 @router.post("/itens/{id_item}/ignorar")
 def ignorar(id_item: int,
             ctx: Contexto = Depends(requer_permissao("compras.conciliar"))) -> dict:

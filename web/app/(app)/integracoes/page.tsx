@@ -263,6 +263,32 @@ export default function PaginaIntegracoes() {
             >
               Importar catálogo de produtos
             </button>
+            <button
+              className="btn btn-secundario"
+              disabled={ocupado}
+              onClick={() =>
+                acao(
+                  "/omie/importar-fornecedores",
+                  (r) =>
+                    `${r.criados} fornecedor(es) criado(s), ${r.completados} completado(s)`,
+                )
+              }
+            >
+              Importar fornecedores
+            </button>
+            <button
+              className="btn btn-secundario"
+              disabled={ocupado}
+              onClick={() =>
+                acao(
+                  "/omie/importar-fornecedores?apenas_completar=true",
+                  (r) => `${r.completados} fornecedor(es) completado(s)`,
+                )
+              }
+              title="Não cria ninguém: só preenche o que está em branco nos que já existem"
+            >
+              Só completar os que já existem
+            </button>
             <button className="btn btn-secundario" onClick={conferir} disabled={ocupado}>
               Conferir estoque com o Omie
             </button>

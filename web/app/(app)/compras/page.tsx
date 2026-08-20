@@ -206,6 +206,32 @@ export default function PaginaCompras() {
     }
   }
 
+  /**
+   * Cria o produto a partir do item da nota e vincula os dois.
+   *
+   * Nasce rascunho: a descrição, o NCM e o código de barras vêm da nota, mas
+   * unidade e fator ninguém conferiu ainda — e rascunho não entra em ficha nem
+   * em venda até alguém completar.
+   */
+  async function criarProduto(item: ItemNota) {
+    setOcupado(true);
+    setErro("");
+    setOk("");
+    try {
+      const r = await api.post<{ message: string }>(
+        `/notas/itens/${item.id}/criar-produto`,
+        {},
+      );
+      setOk(r.message);
+      await abrir(aberta!.id, false);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível criar o produto");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function ignorar(item: ItemNota) {
     setOcupado(true);
     try {
@@ -531,6 +557,16 @@ export default function PaginaCompras() {
                             >
                               vincular
                             </button>
+                            {/* O insumo ainda não existe no cadastro: criar daqui
+                                poupa sair da tela, cadastrar e voltar. */}
+                            {pode("cadastros.produtos") && (
+                              <button
+                                className="rotulo hover:text-erva"
+                                onClick={() => void criarProduto(i)}
+                              >
+                                criar produto
+                              </button>
+                            )}
                             <button
                               className="rotulo hover:text-erro"
                               onClick={() => void ignorar(i)}

@@ -166,6 +166,63 @@ if alvo_conf:
                       token=token)
     checar("a conferência fecha em zero", conf.get("faltando") == [], conf)
 
+print("2c. criar o produto direto do item da nota")
+st, pendencias = chamar("GET", "/notas/pendencias", token=token)
+# Não pode ser o café nem o leite: a fase 3 conta com os dois ainda pendentes
+# para provar que nota com pendência não é lançada.
+alvo_item = next((i for i in pendencias
+                  if i.get("codigo_fornecedor") not in (None, "CAF-500", "LEI-INT")), None)
+if alvo_item:
+    st, r = chamar("POST", f"/notas/itens/{alvo_item['id']}/criar-produto", {}, token=token)
+    checar("cria o produto a partir do item", st == 200 and r.get("id_produto"), r)
+    st, novo_p = chamar("GET", f"/produtos/{r['id_produto']}", token=token)
+    # Se o EAN já era de outro produto, o certo é vincular ao que existe — dois
+    # cadastros para o mesmo insumo partiriam o custo dele em dois.
+    reaproveitou = "já é de" in (r.get("message") or "")
+    checar("nasce RASCUNHO — unidade e fator ninguém conferiu ainda",
+           reaproveitou or novo_p.get("status") == "RASCUNHO", novo_p.get("status"))
+    checar("com o nome que veio na nota",
+           reaproveitou or novo_p.get("nome") == alvo_item["descricao_fornecedor"],
+           novo_p.get("nome"))
+    checar("e o NCM da nota, quando veio",
+           reaproveitou or not alvo_item.get("ncm") or novo_p.get("ncm") == alvo_item["ncm"],
+           novo_p.get("ncm"))
+    st, depois_pend = chamar("GET", "/notas/pendencias", token=token)
+    checar("o item sai da fila de conciliação",
+           not any(i["id"] == alvo_item["id"] for i in depois_pend))
+    # O de-para nasce junto: a próxima nota reconhece sozinha.
+    st, vinculos = chamar("GET", "/notas/vinculos", token=token)
+    checar("o de-para do código do fornecedor nasce junto",
+           any(v["codigo"] == alvo_item["codigo_fornecedor"] for v in vinculos),
+           alvo_item["codigo_fornecedor"])
+    st, r2 = chamar("POST", f"/notas/itens/{alvo_item['id']}/criar-produto", {}, token=token)
+    checar("e criar de novo no mesmo item é recusado", st == 400, st)
+    if not reaproveitou:
+        chamar("DELETE", f"/produtos/{r['id_produto']}", token=token)
+
+print("2d. cadastro de fornecedores vindo do Omie")
+st, r = chamar("POST", "/omie/importar-fornecedores", token=token)
+checar("importa fornecedores", st == 200, r)
+checar("e conta o que criou e o que completou",
+       "criados" in r and "completados" in r, r)
+# Incluindo inativos: o smoke_cadastros usa o mesmo CNPJ e o desativa na
+# limpeza. O que se prova aqui é o preenchimento, não a situação do cadastro.
+st, fornecedores = chamar("GET", "/fornecedores?incluir_inativos=true", token=token)
+vindo = next((f for f in fornecedores if (f.get("cnpj") or "").endswith("000195")), None)
+checar("o fornecedor da nota ficou completo",
+       vindo and vindo.get("cidade") and vindo.get("codigo_omie"), vindo)
+
+# Importar de novo não pode desfazer correção feita à mão.
+if vindo:
+    chamar("PUT", f"/fornecedores/{vindo['id']}", {"telefone": "(47) 3333-0000"}, token=token)
+    chamar("POST", "/omie/importar-fornecedores", token=token)
+    st, depois_f = chamar("GET", f"/fornecedores/{vindo['id']}", token=token)
+    checar("importar de novo NÃO sobrescreve o que foi digitado aqui",
+           depois_f.get("telefone") == "(47) 3333-0000", depois_f.get("telefone"))
+
+st, r = chamar("POST", "/omie/importar-fornecedores?apenas_completar=true", token=token)
+checar("'apenas completar' não cria ninguém", r.get("criados") == 0, r)
+
 print("3. conciliação: sem produto, sem lançamento")
 st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {}, token=token)
 checar("recusa lançar com item pendente", st == 400, (st, r))

@@ -78,6 +78,16 @@ para arquivo nenhum — gravar direto aqui.
   XML/Omie é o documento do fornecedor, e mudar valor ali faria o sistema divergir da nota
   fiscal sem rastro. Os itens são reescritos inteiros — nada virou movimento ainda, e casar
   linha a linha só abriria caminho para item órfão.
+- **Cadastro pode vir do Omie por três caminhos** (20/08/2026): catálogo de produtos (já
+  existia, nasce RASCUNHO), **catálogo de fornecedores** (`importar_fornecedores`) e
+  **criar produto direto do item da nota** (`POST /notas/itens/{id}/criar-produto`, que já
+  cria o de-para e o `produto_fornecedor`). ⚠️ O importador de fornecedores **só preenche o
+  que está em branco** — nunca sobrescreve o que alguém digitou aqui, senão reimportar
+  desfaria correção. ⚠️ No Omie **cliente e fornecedor moram na mesma lista**: daí o
+  `apenas_completar`. ⚠️ Criar produto do item **vincula ao existente quando o EAN já é de
+  outro produto** — dois cadastros para o mesmo insumo partiriam o custo dele em dois (antes
+  disso era 500). Depois de cada sincronização com nota nova, os fornecedores da leva são
+  completados sozinhos.
 - ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
   **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
   antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e
@@ -147,7 +157,7 @@ para arquivo nenhum — gravar direto aqui.
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (58), `smoke_notas.py` (47),
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (63), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
   `smoke_kits.py` (29) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,

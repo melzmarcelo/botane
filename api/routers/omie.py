@@ -174,6 +174,28 @@ def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"
     return r | {"message": f"{r['criados']} produto(s) criado(s) em rascunho"}
 
 
+@router.post("/importar-fornecedores")
+def importar_fornecedores(
+    apenas_completar: bool = False,
+    ctx: Contexto = Depends(requer_permissao("integracao.omie")),
+) -> dict:
+    """Traz (ou completa) o cadastro de fornecedores do Omie.
+
+    ⚠️ No Omie, cliente e fornecedor moram na mesma lista. Com
+    `apenas_completar`, nada novo é criado: só se preenche o que está em branco
+    nos fornecedores que já existem aqui — útil na conta com centenas de
+    clientes.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = importador.importar_fornecedores(
+            cur, _cliente(cur, id_unidade), ctx.id_usuario, apenas_completar)
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO,
+                            "importar_fornecedores", depois=r)
+    return r | {"message": (f"{r['criados']} fornecedor(es) criado(s), "
+                            f"{r['completados']} completado(s)")}
+
+
 @router.get("/conferencia-notas")
 def conferencia_notas(
     inicio: date | None = None,

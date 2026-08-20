@@ -514,8 +514,24 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
     _registrar(cur, "produtos/notaentrada", "ListarNotaEnt",
                "OK" if novas or repetidas else "VAZIO", novas + repetidas,
                f"{novas} nova(s), {repetidas} já existiam — {motivo}", cliente.modo, paginas)
+
+    # Fornecedor que nasce da nota entra com nome e CNPJ e mais nada. Completar
+    # agora custa uma chamada e evita a lista de fornecedores pela metade.
+    # `apenas_completar`: a lista do Omie mistura cliente e fornecedor, e não é
+    # aqui que se decide quem entra no cadastro.
+    completados = 0
+    if novas:
+        try:
+            completados = importar_fornecedores(
+                cur, cliente, None, apenas_completar=True)["completados"]
+        except Exception:
+            # As notas já estão gravadas; falhar aqui desfaria o que deu certo.
+            # O log de sincronização registra, e a importação manual resolve.
+            _registrar(cur, "geral/clientes", "ListarClientes", "ERRO", 0,
+                       "não deu para completar os fornecedores desta leva", cliente.modo)
+
     return {"novas": novas, "repetidas": repetidas, "paginas": paginas, "modo": cliente.modo,
-            "desde": inicio, "janela": motivo}
+            "desde": inicio, "janela": motivo, "fornecedores_completados": completados}
 
 
 def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,
@@ -627,6 +643,98 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
     _registrar(cur, "geral/produtos", "ListarProdutos", "OK", criados + atualizados,
                f"{criados} criado(s) em rascunho", cliente.modo, paginas)
     return {"criados": criados, "ja_existiam": atualizados, "modo": cliente.modo}
+
+
+# O que o Omie sabe do fornecedor e vale a pena trazer. Fica de fora o que é
+# decisão da casa (prazo de entrega, pedido mínimo, dias de entrega): isso o
+# dono negocia, não vem de cadastro fiscal.
+CAMPOS_FORNECEDOR = ("nome_fantasia", "email", "telefone", "cidade", "uf")
+
+
+def _completar_fornecedor(cur, atual: dict, vindo: dict) -> bool:
+    """Preenche só o que está em branco aqui. Devolve se mexeu em algo.
+
+    Nunca sobrescreve: o telefone que alguém digitou porque o do Omie estava
+    desatualizado é mais confiável que o do Omie. Importar duas vezes não pode
+    desfazer correção feita à mão.
+    """
+    mudancas = {c: vindo.get(c) for c in CAMPOS_FORNECEDOR
+                if vindo.get(c) and not atual.get(c)}
+    if vindo.get("codigo_omie") and not atual.get("codigo_omie"):
+        mudancas["codigo_omie"] = vindo["codigo_omie"]
+    # Nome genérico ("Fornecedor 12345678000195") é o que a nota cria quando não
+    # veio o nome: esse vale trocar pela razão social de verdade.
+    if vindo.get("nome") and (atual.get("nome") or "").startswith("Fornecedor "):
+        mudancas["nome"] = vindo["nome"]
+    if not mudancas:
+        return False
+    campos = ", ".join(f"{c} = %s" for c in mudancas)
+    cur.execute(f"UPDATE fornecedores SET {campos} WHERE id = %s",
+                (*mudancas.values(), atual["id"]))
+    return True
+
+
+def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
+                          apenas_completar: bool = False) -> dict:
+    """Traz o cadastro de fornecedores do Omie.
+
+    Faz duas coisas de uma vez: cria quem não existe aqui e **completa** quem já
+    existe — os que nasceram da nota entram com nome e CNPJ e mais nada, e o
+    Omie tem cidade, telefone e e-mail.
+
+    ⚠️ **No Omie, cliente e fornecedor moram na mesma lista.** `apenas_completar`
+    existe por isso: numa conta com 800 clientes e 40 fornecedores, trazer todo
+    mundo enche o cadastro de quem nunca vendeu nada para a casa. O filtro certo
+    do lado do Omie é coisa a confirmar com a conta real.
+    """
+    criados, completados, ja_ok, paginas = 0, 0, 0, 0
+    try:
+        for _dados, registros in cliente.paginar(
+            "geral/clientes", "ListarClientes", "clientes_cadastro",
+        ):
+            paginas += 1
+            for bruto in registros:
+                f = mapeadores.fornecedor_do_cadastro(bruto)
+                cnpj = f.get("cnpj")
+                atual = None
+                if cnpj:
+                    cur.execute(
+                        "SELECT * FROM fornecedores WHERE regexp_replace(coalesce(cnpj,''),"
+                        " '[^0-9]', '', 'g') = %s", (cnpj,))
+                    atual = cur.fetchone()
+                if not atual and f.get("nome"):
+                    cur.execute("SELECT * FROM fornecedores WHERE lower(nome) = lower(%s)",
+                                (f["nome"],))
+                    atual = cur.fetchone()
+
+                if atual:
+                    if _completar_fornecedor(cur, dict(atual), f):
+                        completados += 1
+                    else:
+                        ja_ok += 1
+                    continue
+
+                if apenas_completar:
+                    continue
+                cur.execute(
+                    """INSERT INTO fornecedores (nome, nome_fantasia, cnpj, email, telefone,
+                                                 cidade, uf, codigo_omie, criado_por)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING RETURNING id""",
+                    (f["nome"], f.get("nome_fantasia"), cnpj, f.get("email"), f.get("telefone"),
+                     f.get("cidade"), f.get("uf"), f.get("codigo_omie"), id_usuario),
+                )
+                if cur.fetchone():
+                    criados += 1
+    except ErroOmie as e:
+        _registrar(cur, "geral/clientes", "ListarClientes", "ERRO", criados, e.mensagem,
+                   cliente.modo, paginas)
+        raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
+
+    _registrar(cur, "geral/clientes", "ListarClientes", "OK", criados + completados,
+               f"{criados} criado(s), {completados} completado(s)", cliente.modo, paginas)
+    return {"criados": criados, "completados": completados, "ja_estavam": ja_ok,
+            "modo": cliente.modo}
 
 
 def conferir_estoque(cur, cliente: ClienteOmie) -> list[dict]:
