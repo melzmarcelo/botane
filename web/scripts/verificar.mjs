@@ -391,6 +391,32 @@ try {
     await foto(p, nome);
   }
 
+  // Abrir a contagem PELO BOTÃO. Só carregar a tela não bastava: o seletor de
+  // local mostrava o nome do local e mandava o pedido sem ele, e a resposta era
+  // "Local não encontrado" com o local à vista.
+  const { dados: invAbertos } = await api("GET", "/inventarios", null, token);
+  for (const i of invAbertos ?? []) {
+    if (i.status === "ABERTO") await api("DELETE", `/inventarios/${i.id}`, null, token);
+  }
+  await p.goto(`${WEB}/inventario`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1100));
+  const localEscolhido = await p.evaluate(() => {
+    const s = document.querySelector("select");
+    return s ? { valor: s.value, texto: s.options[s.selectedIndex]?.text } : null;
+  });
+  checar("o seletor de local vem preenchido", !!localEscolhido?.valor, localEscolhido);
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => x.textContent === "Abrir inventário");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  const textoInv = await p.evaluate(() => document.body.innerText);
+  checar("a contagem abre sem dizer que o local não existe",
+    !/Local não encontrado/i.test(textoInv) && /Inventário #/.test(textoInv),
+    textoInv.slice(0, 140));
+  await foto(p, "20b-inventario-aberto");
+
   // Entrada pela tela: 10 kg a R$ 20,00.
   await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));

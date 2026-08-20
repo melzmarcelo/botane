@@ -64,7 +64,7 @@ export default function PaginaProducao() {
       setHistorico(h);
       setF((atual) => ({
         ...atual,
-        id_local: atual.id_local || (ls.find((l) => l.principal)?.id.toString() ?? ""),
+        id_local: atual.id_local || String(ls.find((l) => l.principal)?.id ?? ls[0]?.id ?? ""),
       }));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");

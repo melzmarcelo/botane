@@ -20,6 +20,8 @@ from comum import (  # noqa: E402
     garantir_setores,
 )
 
+import uuid  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
@@ -71,7 +73,20 @@ checar("o setor criado aparece na lista", any(s.get("nome") for s in setores), s
 
 locais = garantir_locais(chamar, token, 2)
 checar("locais respondem", isinstance(locais, list) and len(locais) >= 2, locais)
-checar("um local é o principal", sum(1 for l in locais if l["principal"]) == 1)
+# Ninguém marcou a caixinha: quem elegeu foi o servidor. Sem principal, as
+# telas de estoque, produção e inventário mandavam o pedido sem local e a
+# resposta era "Local não encontrado" — com o nome do local à vista no seletor.
+checar("um local é o principal, mesmo sem ninguém marcar",
+       sum(1 for l in locais if l["principal"]) == 1,
+       [(l["nome"], l["principal"]) for l in locais])
+st, r = chamar("POST", "/locais", {"nome": f"Local extra {uuid.uuid4().hex[:6]}", "tipo": "SECO"}, token=token)
+extra = r.get("id")
+st, locais2 = chamar("GET", "/locais", token=token)
+checar("o segundo local NÃO rouba o principal",
+       sum(1 for l in locais2 if l["principal"]) == 1
+       and not next((l["principal"] for l in locais2 if l["id"] == extra), True),
+       [(l["nome"], l["principal"]) for l in locais2])
+chamar("DELETE", f"/locais/{extra}", token=token)
 
 st, ums = chamar("GET", "/unidades-medida", token=token)
 checar("unidades de medida semeadas", st == 200 and len(ums) >= 8, len(ums) if st == 200 else ums)

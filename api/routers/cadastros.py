@@ -159,10 +159,19 @@ def criar_local(body: LocalCreate,
             cur.execute(
                 "UPDATE locais_estoque SET principal = false WHERE id_unidade = %s", (id_unidade,)
             )
+        # O PRIMEIRO local da loja é o principal, marque-se ou não a caixinha.
+        # Quem cadastra "Balcão" e vai contar o estoque não tem por que saber o
+        # que "principal" quer dizer — e as telas usam o principal como padrão.
+        principal = body.principal
+        if not principal:
+            cur.execute(
+                "SELECT 1 FROM locais_estoque WHERE id_unidade = %s AND principal", (id_unidade,)
+            )
+            principal = cur.fetchone() is None
         cur.execute(
             """INSERT INTO locais_estoque (id_unidade, nome, tipo, principal, ativo)
                VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (id_unidade, body.nome.strip(), body.tipo, body.principal, body.ativo),
+            (id_unidade, body.nome.strip(), body.tipo, principal, body.ativo),
         )
         novo = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "local", novo, "criar",

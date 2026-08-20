@@ -31,20 +31,26 @@ def garantir_local(chamar, token) -> dict:
     st, locais = chamar("GET", "/locais", token=token)
     if locais:
         return next((l for l in locais if l["principal"]), locais[0])
-    chamar("POST", "/locais",
-           {"nome": "Estoque seco", "tipo": "SECO", "principal": True}, token=token)
+    # Sem `principal`: é o servidor que elege o primeiro local da loja, e é esse
+    # caminho — o de quem não marca a caixinha — que precisa ser exercitado.
+    chamar("POST", "/locais", {"nome": "Estoque seco", "tipo": "SECO"}, token=token)
     st, locais = chamar("GET", "/locais", token=token)
     return next((l for l in locais if l["principal"]), locais[0])
 
 
 def garantir_locais(chamar, token, quantos: int = 2) -> list[dict]:
-    """Pelo menos `quantos` locais — para transferência, que precisa de dois."""
+    """Pelo menos `quantos` locais — para transferência, que precisa de dois.
+
+    Não manda `principal`: **de propósito**. O helper marcava a caixinha no
+    primeiro local, coisa que quem cadastra "Balcão" não faz, e por isso
+    nenhuma suíte passava pelo caminho de quem não marca. Quem elege o
+    principal é o servidor, no primeiro local da loja.
+    """
     st, locais = chamar("GET", "/locais", token=token)
     faltam = quantos - len(locais or [])
     for i in range(faltam):
         chamar("POST", "/locais",
-               {"nome": f"Local {len(locais or []) + i + 1}", "tipo": "SECO",
-                "principal": not locais and i == 0},
+               {"nome": f"Local {len(locais or []) + i + 1}", "tipo": "SECO"},
                token=token)
     st, locais = chamar("GET", "/locais", token=token)
     return locais

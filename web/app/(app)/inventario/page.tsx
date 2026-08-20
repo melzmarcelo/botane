@@ -56,7 +56,11 @@ export default function PaginaInventario() {
       ]);
       setLista(l);
       setLocais(ls);
-      setIdLocal((atual) => atual || (ls.find((x) => x.principal)?.id.toString() ?? ""));
+      // Sem principal, vale o primeiro: uma casa com um local só não tem por
+      // que marcar caixinha nenhuma, e o padrão vazio virava "Local não
+      // encontrado" com o nome do local à vista no seletor.
+      setIdLocal((atual) =>
+        atual || String(ls.find((x) => x.principal)?.id ?? ls[0]?.id ?? ""));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -175,6 +179,7 @@ export default function PaginaInventario() {
                 value={idLocal}
                 onChange={(e) => setIdLocal(e.target.value)}
               >
+                {!locais.length && <option value="">nenhum local cadastrado</option>}
                 {locais.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.nome}
@@ -182,7 +187,11 @@ export default function PaginaInventario() {
                 ))}
               </select>
             </Campo>
-            <button className="btn btn-primario" onClick={abrirInventario} disabled={ocupado}>
+            <button
+              className="btn btn-primario"
+              onClick={abrirInventario}
+              disabled={ocupado || !idLocal}
+            >
               Abrir inventário
             </button>
           </div>

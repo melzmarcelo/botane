@@ -115,7 +115,7 @@ export default function PaginaEstoque() {
     setOk("");
     setF({
       id_produto: "", quantidade: "", custo_unitario: "",
-      id_local: locais.find((l) => l.principal)?.id.toString() ?? "",
+      id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""),
       id_local_destino: "", id_motivo_perda: "", documento: "", observacao: "",
       lote: "", validade: "",
     });

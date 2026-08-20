@@ -211,6 +211,12 @@ para arquivo nenhum — gravar direto aqui.
   ninguém ver. Sem conversão conhecida a ficha **avisa** e a produção **recusa**; 1:1 calado é
   o que não pode acontecer. A ficha devolve `qtd_estoque`/`conversao` por item, e a tela mostra
   "no estoque 12 PCT".
+- ⚠️ **O primeiro local da loja nasce principal** (migração 016), marque-se a caixinha ou não:
+  estoque, produção e inventário usam o principal como padrão, e sem nenhum marcado o seletor
+  mostrava o nome do local (era o único da lista) enquanto o pedido saía **sem** local — 404
+  "Local não encontrado" com o local à vista na tela. As telas também caem para o primeiro
+  local quando não há principal. ⚠️ Nenhuma suíte pegou isso porque `garantir_locais` mandava
+  `principal: true` — mais cuidado do que quem cadastra "Balcão" tem. O helper parou de mandar.
 - ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
   grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
   `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes
