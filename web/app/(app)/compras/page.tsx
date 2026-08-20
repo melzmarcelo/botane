@@ -430,6 +430,7 @@ export default function PaginaCompras() {
                           valor_unitario: Number(i.valor_unitario),
                           lote_nf: i.lote_nf ?? null,
                           validade_nf: i.validade_nf ?? null,
+                          um_nota: i.um_nota ?? null,
                         })),
                       });
                       setAberta(null);

@@ -633,6 +633,29 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   const seletoresNota = await p.$$("select");
   checar("o formulário de digitação abre", seletoresNota.length >= 3, seletoresNota.length);
+
+  // Digitar o código e dar Tab tem de trazer o produto: quem copia de um papel
+  // não quer soltar o teclado para caçar no combo.
+  const codigoNota = (await api("GET", `/produtos/${insumoNota.id}`, null, token)).dados.codigo;
+  const campoCodigo = (await p.$$('input[placeholder="P0001"]'))[0];
+  checar("a linha tem campo de código", !!campoCodigo);
+  await campoCodigo.type(codigoNota.toLowerCase());
+  await p.keyboard.press("Tab");
+  await new Promise((r) => setTimeout(r, 700));
+  const porCodigo = await p.evaluate(() => {
+    const selects = [...document.querySelectorAll("main table select")];
+    return {
+      codigo: document.querySelector('input[placeholder="P0001"]')?.value,
+      produto: selects[0]?.value,
+      unidade: selects[1]?.value,
+    };
+  });
+  checar("o código traz o produto ao sair do campo",
+    porCodigo.produto === String(insumoNota.id), porCodigo);
+  checar("e normaliza o que foi digitado", porCodigo.codigo === codigoNota, porCodigo);
+  checar("a unidade vem preenchida com a do estoque",
+    porCodigo.unidade === (insumoNota.um_estoque ?? "UN"), porCodigo);
+
   await seletoresNota[1].select(String(insumoNota.id));
   const numerosNota = await p.$$('input[inputmode="decimal"]');
   await numerosNota[0].type("2");

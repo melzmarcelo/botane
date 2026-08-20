@@ -258,6 +258,23 @@ custos = {i["seq"]: i["custo_aquisicao_unitario"] for i in nota["itens"]}
 checar("sem frete por item, rateia por valor: (40 + 10) ÷ 5 = 10,00",
        perto(custos[1], 10) and perto(custos[2], 10), custos)
 
+print("6a. a unidade da nota pode ser diferente da do estoque")
+# A farinha é KG no estoque; a nota veio em CX. O que se guarda é a unidade DA
+# NOTA — é ela que a conversão do lançamento usa.
+st, r = chamar("POST", "/notas", {
+    "id_fornecedor": fornecedor["id"], "numero": f"U{marca}",
+    "id_local": local["id"],
+    "itens": [{"id_produto": farinha["id"], "quantidade": 3, "um": "CX",
+               "valor_unitario": 90}],
+}, token=token)
+checar("aceita unidade diferente da do produto", st == 200, r)
+st, nota_um = chamar("GET", f"/notas/{r['id']}", token=token)
+checar("guarda a unidade da nota, não a do estoque",
+       nota_um["itens"][0]["um_nota"] == "CX", nota_um["itens"][0])
+checar("e a do produto continua sendo a do estoque",
+       nota_um["itens"][0]["um_estoque"] == "UN", nota_um["itens"][0])
+chamar("DELETE", f"/notas/{r['id']}", token=token)
+
 print("6b. a nota digitada se corrige enquanto não virou estoque")
 st, r = chamar("PUT", f"/notas/{id_manual}", {
     "id_fornecedor": fornecedor["id"], "numero": f"M{marca}", "serie": "1",

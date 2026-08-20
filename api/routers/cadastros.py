@@ -60,6 +60,13 @@ def listar_setores(incluir_inativos: bool = False, ctx: Contexto = Depends(conte
 def criar_setor(body: SetorCreate,
                 ctx: Contexto = Depends(requer_permissao("cadastros.setores"))) -> dict:
     with get_cursor() as cur:
+        _recusar_repetido(
+            cur,
+            """SELECT 1 FROM setores
+                WHERE lower(nome) = lower(%s) AND coalesce(id_unidade, 0) = coalesce(%s, 0)""",
+            (body.nome.strip(), body.id_unidade),
+            f"Já existe um setor chamado {body.nome.strip()}.",
+        )
         cur.execute(
             """INSERT INTO setores (nome, cor, ordem, id_unidade, ativo)
                VALUES (%s, %s, %s, %s, %s) RETURNING id""",
@@ -118,6 +125,18 @@ def listar_locais(incluir_inativos: bool = False, ctx: Contexto = Depends(contex
     return [l for l in linhas if ctx.ve_unidade(l["id_unidade"])]
 
 
+def _recusar_repetido(cur, sql: str, parametros: tuple, mensagem: str) -> None:
+    """Nome repetido é 409 com frase, não 500.
+
+    A unicidade é do banco (é o certo), mas deixar a constraint estourar
+    devolvia "Internal Server Error" para quem só digitou duas vezes o mesmo
+    nome — e isso acontece no primeiro dia, cadastrando as tabelas de apoio.
+    """
+    cur.execute(sql, parametros)
+    if cur.fetchone():
+        raise HTTPException(status_code=409, detail=mensagem)
+
+
 @router.post("/locais", status_code=201)
 def criar_local(body: LocalCreate,
                 ctx: Contexto = Depends(requer_permissao("cadastros.locais"))) -> dict:
@@ -130,6 +149,12 @@ def criar_local(body: LocalCreate,
             if not linha:
                 raise HTTPException(status_code=400, detail="Nenhuma loja cadastrada")
             id_unidade = linha["id"]
+        _recusar_repetido(
+            cur,
+            "SELECT 1 FROM locais_estoque WHERE id_unidade = %s AND lower(nome) = lower(%s)",
+            (id_unidade, body.nome.strip()),
+            f"Já existe um local chamado {body.nome.strip()}.",
+        )
         if body.principal:
             cur.execute(
                 "UPDATE locais_estoque SET principal = false WHERE id_unidade = %s", (id_unidade,)

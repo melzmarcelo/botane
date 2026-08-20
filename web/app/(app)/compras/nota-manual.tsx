@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { Fornecedor, Local, ProdutoResumo, reais } from "@/lib/cadastros";
+import { Fornecedor, Local, ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Cartao } from "@/components/ui";
 
 /**
@@ -15,8 +15,13 @@ import { Aviso, Campo, Cartao } from "@/components/ui";
  */
 
 type Linha = {
+  /** O código do produto, digitado ou preenchido ao escolher no combo. */
+  codigo: string;
   id_produto: string;
   descricao: string;
+  /** A unidade DA NOTA. Nasce igual à do estoque e muda quando a nota vem em
+   *  outra: caixa, fardo, dúzia. É ela que manda na conversão do lançamento. */
+  um: string;
   quantidade: string;
   valor_unitario: string;
   lote: string;
@@ -24,8 +29,10 @@ type Linha = {
 };
 
 const LINHA: Linha = {
+  codigo: "",
   id_produto: "",
   descricao: "",
+  um: "",
   quantidade: "",
   valor_unitario: "",
   lote: "",
@@ -52,6 +59,7 @@ export type NotaParaEditar = {
     valor_unitario: number;
     lote_nf: string | null;
     validade_nf: string | null;
+    um_nota: string | null;
   }[];
 };
 
@@ -72,6 +80,7 @@ export default function NotaManual({
   const texto = (n: number | null | undefined) => (n ? String(n) : "");
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [idFornecedor, setIdFornecedor] = useState(texto(editando?.id_fornecedor));
   const [numeroNota, setNumeroNota] = useState(editando?.numero ?? "");
   const [serie, setSerie] = useState(editando?.serie ?? "");
@@ -85,6 +94,8 @@ export default function NotaManual({
   const [linhas, setLinhas] = useState<Linha[]>(
     editando?.itens.length
       ? editando.itens.map((i) => ({
+          codigo: produtos.find((p) => p.id === i.id_produto)?.codigo ?? "",
+          um: i.um_nota ?? "",
           id_produto: texto(i.id_produto),
           descricao: i.descricao_fornecedor ?? "",
           quantidade: String(Number(i.quantidade)),
@@ -102,6 +113,10 @@ export default function NotaManual({
       .get<Fornecedor[]>("/fornecedores")
       .then(setFornecedores)
       .catch(() => setFornecedores([]));
+    void api
+      .get<UnidadeMedida[]>("/unidades-medida")
+      .then(setUms)
+      .catch(() => setUms([]));
     setIdLocal((atual) => atual || String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""));
   }, [locais]);
 
@@ -124,18 +139,53 @@ export default function NotaManual({
     [preenchidas, totalProdutos, frete, outros, desconto],
   );
 
+  /**
+   * Acha o produto pelo código digitado.
+   *
+   * Compara sem caixa e sem espaço porque o código vem de um papel: quem digita
+   * escreve "p12" e o cadastro guarda "P0012".
+   */
+  const porCodigo = (codigo: string) => {
+    const alvo = codigo.trim().toLowerCase();
+    if (!alvo) return undefined;
+    return produtos.find((p) => (p.codigo ?? "").toLowerCase() === alvo);
+  };
+
+  /** Preenche a linha inteira a partir do produto: descrição, unidade e código. */
+  const comProduto = (linha: Linha, p: ProdutoResumo | undefined): Linha =>
+    !p
+      ? linha
+      : {
+          ...linha,
+          id_produto: String(p.id),
+          codigo: p.codigo ?? "",
+          // A unidade da nota nasce igual à do estoque — é o caso comum. Quando
+          // a nota vier em caixa, quem digita troca aqui e a conversão do
+          // lançamento faz o resto.
+          um: linha.um || p.um_estoque || "",
+          descricao: linha.descricao || p.nome,
+        };
+
   function mudar(indice: number, campo: keyof Linha, valor: string) {
     setLinhas((atuais) =>
       atuais.map((l, i) => {
         if (i !== indice) return l;
         const nova = { ...l, [campo]: valor };
-        // Escolher o produto preenche a descrição: a nota digitada guarda o que
-        // estava escrito no papel, e o padrão razoável é o nome do produto.
-        if (campo === "id_produto" && valor && !l.descricao) {
-          nova.descricao = produtos.find((p) => String(p.id) === valor)?.nome ?? "";
+        // Escolher o produto no combo preenche código, unidade e descrição.
+        if (campo === "id_produto") {
+          return valor
+            ? comProduto(nova, produtos.find((p) => String(p.id) === valor))
+            : { ...nova, codigo: "" };
         }
         return nova;
       }),
+    );
+  }
+
+  /** Tab no campo de código: acha o produto e preenche o resto da linha. */
+  function buscarPeloCodigo(indice: number) {
+    setLinhas((atuais) =>
+      atuais.map((l, i) => (i === indice ? comProduto(l, porCodigo(l.codigo)) : l)),
     );
   }
 
@@ -161,6 +211,7 @@ export default function NotaManual({
           id_produto: l.id_produto ? Number(l.id_produto) : null,
           descricao: l.descricao || null,
           quantidade: numero(l.quantidade),
+          um: l.um || null,
           valor_unitario: numero(l.valor_unitario),
           lote: l.lote || null,
           validade: l.validade || null,
@@ -241,14 +292,22 @@ export default function NotaManual({
       <div className="mt-5 overflow-x-auto">
         <table className="tabela">
           <thead>
+            {/* A largura mora na COLUNA, não no campo: `.campo` é width:100% e
+                vence a utilitária do Tailwind, então `w-[110px]` no input não
+                fazia nada — o campo virava 100% de uma coluna estreita. */}
             <tr>
-              <th className="w-[34%]">Produto</th>
-              <th>Descrição na nota</th>
-              <th className="num">Qtd</th>
-              <th className="num">Valor un.</th>
-              <th>Lote</th>
-              <th>Validade</th>
-              <th className="num">Custo un.</th>
+              {/* `min-w` e não só `w`: com `table-layout: auto` o navegador
+                  ignora a largura sugerida quando falta espaço, e o select de
+                  unidade chegou a 42px — estreito demais para caber "KG". */}
+              <th className="w-[112px] min-w-[112px]">Código</th>
+              <th className="w-[24%] min-w-[180px]">Produto</th>
+              <th className="min-w-[150px]">Descrição na nota</th>
+              <th className="num w-[92px] min-w-[92px]">Qtd</th>
+              <th className="w-[92px] min-w-[92px]">Un.</th>
+              <th className="num w-[112px] min-w-[112px]">Valor un.</th>
+              <th className="w-[104px] min-w-[104px]">Lote</th>
+              <th className="w-[160px] min-w-[160px]">Validade</th>
+              <th className="num w-[104px] min-w-[104px]">Custo un.</th>
             </tr>
           </thead>
           <tbody>
@@ -256,6 +315,30 @@ export default function NotaManual({
               const previsto = custos.find((c) => c.linha === linha);
               return (
                 <tr key={i}>
+                  <td>
+                    <input
+                      className={`campo mono ${
+                        linha.codigo && !linha.id_produto ? "border-erro text-erro" : ""
+                      }`}
+                      value={linha.codigo}
+                      placeholder="P0001"
+                      onChange={(e) => mudar(i, "codigo", e.target.value)}
+                      // Tab (ou sair do campo) já traz o produto: quem digita do
+                      // papel não quer soltar o teclado para caçar no combo.
+                      onBlur={() => buscarPeloCodigo(i)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          buscarPeloCodigo(i);
+                        }
+                      }}
+                    />
+                    {linha.codigo && !linha.id_produto && (
+                      <span className="mt-1 block text-[11.5px] text-erro">
+                        código não encontrado
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <select
                       className="campo"
@@ -281,15 +364,31 @@ export default function NotaManual({
                   </td>
                   <td>
                     <input
-                      className="campo mono w-[90px] text-right"
+                      className="campo mono text-right"
                       inputMode="decimal"
                       value={linha.quantidade}
                       onChange={(e) => mudar(i, "quantidade", e.target.value)}
                     />
                   </td>
                   <td>
+                    {/* A unidade DA NOTA. Vem a do estoque por padrão; muda
+                        quando o fornecedor vendeu em caixa, fardo ou dúzia. */}
+                    <select
+                      className="campo"
+                      value={linha.um}
+                      onChange={(e) => mudar(i, "um", e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {ums.map((u) => (
+                        <option key={u.sigla} value={u.sigla}>
+                          {u.sigla}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
                     <input
-                      className="campo mono w-[100px] text-right"
+                      className="campo mono text-right"
                       inputMode="decimal"
                       value={linha.valor_unitario}
                       onChange={(e) => mudar(i, "valor_unitario", e.target.value)}
@@ -297,14 +396,14 @@ export default function NotaManual({
                   </td>
                   <td>
                     <input
-                      className="campo w-[100px]"
+                      className="campo"
                       value={linha.lote}
                       onChange={(e) => mudar(i, "lote", e.target.value)}
                     />
                   </td>
                   <td>
                     <input
-                      className="campo w-[140px]"
+                      className="campo"
                       type="date"
                       value={linha.validade}
                       onChange={(e) => mudar(i, "validade", e.target.value)}

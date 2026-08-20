@@ -42,11 +42,30 @@ def garantir_setores(chamar, token, quantos: int = 2) -> list[dict]:
     """Pelo menos `quantos` setores — o CMV por grupo precisa de mais de um
     para provar que cada grupo fica com o seu."""
     st, setores = chamar("GET", "/setores", token=token)
-    padrao = ["Cozinha", "Bar", "Confeitaria", "Salão"]
-    for i in range(quantos - len(setores or [])):
-        chamar("POST", "/setores", {"nome": padrao[i % len(padrao)], "ordem": i}, token=token)
+    existentes = {(s["nome"] or "").lower() for s in (setores or [])}
+    # Pula o nome que já está lá: repetir é 409 agora (antes era 500), e o
+    # helper ficaria sem criar nada achando que criou.
+    padrao = [n for n in ("Cozinha", "Bar", "Confeitaria", "Salão")
+              if n.lower() not in existentes]
+    for i in range(max(0, quantos - len(setores or []))):
+        if i < len(padrao):
+            chamar("POST", "/setores", {"nome": padrao[i], "ordem": i}, token=token)
     st, setores = chamar("GET", "/setores", token=token)
     return setores
+
+
+def garantir_categorias(chamar, token, quantos: int = 2) -> list[dict]:
+    """Pelo menos `quantos` categorias — a base nova não traz nenhuma."""
+    st, categorias = chamar("GET", "/categorias", token=token)
+    existentes = {(c["nome"] or "").lower() for c in (categorias or [])}
+    padrao = [n for n in ("Mercearia", "Laticínios", "Hortifrúti", "Bebidas", "Descartáveis",
+                          "Carnes", "Padaria", "Limpeza")
+              if n.lower() not in existentes]
+    for i in range(max(0, quantos - len(categorias or []))):
+        if i < len(padrao):
+            chamar("POST", "/categorias", {"nome": padrao[i], "tipo": "INSUMO"}, token=token)
+    st, categorias = chamar("GET", "/categorias", token=token)
+    return categorias
 
 
 def garantir_fornecedor(chamar, token, nome: str, cnpj: str) -> int:

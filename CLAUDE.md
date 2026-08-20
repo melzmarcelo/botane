@@ -45,6 +45,13 @@ para arquivo nenhum — gravar direto aqui.
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
 - Manual da equipe: `docs/manual-da-equipe.md`.
+- ⚠️ **`.campo` é `width:100%` e vence a utilitária de largura do Tailwind.** `w-[110px]` num
+  input com `campo` não faz nada — a largura tem de ir na COLUNA (`<th>`), e com `min-w` além
+  do `w`: em `table-layout: auto` o navegador ignora a largura sugerida quando falta espaço.
+- ⚠️ **Nome repetido em tabela de apoio devolvia 500.** A unicidade é do banco (é o certo),
+  mas deixar a constraint estourar dava "Internal Server Error" para quem só digitou duas
+  vezes o mesmo nome — no primeiro dia, cadastrando setores e locais. `_recusar_repetido()`
+  em `routers/cadastros.py` confere antes e devolve 409 com frase.
 - ⚠️ **As suítes rodam contra base virgem.** `tests/comum.py` tem `garantir_local`,
   `garantir_locais`, `garantir_setores` e `garantir_fornecedor` — nenhuma suíte pode supor
   que existe local, setor ou fornecedor, nem contar linhas de semente. `garantir_fornecedor`
@@ -132,7 +139,7 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (39), `smoke_fichas.py` (37),
+- Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
   `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
   `smoke_kits.py` (29) e

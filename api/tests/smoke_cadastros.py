@@ -13,7 +13,12 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_fornecedor, garantir_locais, garantir_setores  # noqa: E402
+from comum import (  # noqa: E402
+    garantir_categorias,
+    garantir_fornecedor,
+    garantir_locais,
+    garantir_setores,
+)
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -73,8 +78,8 @@ checar("unidades de medida semeadas", st == 200 and len(ums) >= 8, len(ums) if s
 kg = next((u for u in ums if u["sigla"] == "KG"), None)
 checar("KG converte para grama", kg and float(kg["fator_base"]) == 1000, kg)
 
-st, categorias = chamar("GET", "/categorias", token=token)
-checar("categorias respondem", st == 200 and len(categorias) >= 8, len(categorias))
+categorias = garantir_categorias(chamar, token, 2)
+checar("categorias respondem", isinstance(categorias, list) and len(categorias) >= 2, categorias)
 
 print("2. árvore de categorias")
 st, r = chamar("POST", "/categorias", {"nome": "Smoke Raiz", "tipo": "INSUMO"}, token=token)
