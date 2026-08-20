@@ -767,13 +767,38 @@ try {
     listaAlertas.length === 0 || (listaAlertas[0].acao && listaAlertas[0].href),
     listaAlertas[0]);
 
-  // O resumo tem de aparecer no Início, que é a tela que o dono abre.
+  // O Início é a tela que o dono abre: tem de responder o mês inteiro de um
+  // olhar, e responder com número verdadeiro.
   await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await new Promise((r) => setTimeout(r, 1600));
   const textoInicio = await p.evaluate(() => document.body.innerText);
   checar("o Início mostra o resumo de alertas",
     listaAlertas.length === 0 || /Precisa da sua atenção/i.test(textoInicio),
     textoInicio.slice(0, 160));
+  checar("e traz os indicadores do mês", /Custo do que saiu/i.test(textoInicio),
+    textoInicio.slice(0, 200));
+  checar("com o valor parado em estoque", /Parado na prateleira/i.test(textoInicio));
+  checar("e o peso de cada setor", /Onde o custo pesa/i.test(textoInicio));
+
+  // A regra que não pode afrouxar: sem venda importada, food cost é
+  // DESCONHECIDO. Zero ali pareceria um resultado excelente.
+  const { dados: painel } = await api("GET", "/inicio", null, token);
+  const semVenda = (painel.dinheiro?.receita_mes ?? 0) === 0;
+  checar("sem venda no mês, o food cost não vira 0%",
+    !semVenda || painel.dinheiro?.food_cost_pct === null, painel.dinheiro?.food_cost_pct);
+  checar("e a tela mostra o traço em vez do zero",
+    !semVenda || /—/.test(textoInicio), semVenda);
+
+  // Quem não pode ver dinheiro não recebe dinheiro — nem zerado.
+  const { dados: sessaoCoz } = await api(
+    "POST", "/auth/login", { email: COZINHA.email, senha: COZINHA.senha });
+  if (sessaoCoz?.access_token) {
+    const { dados: painelCoz } = await api("GET", "/inicio", null, sessaoCoz.access_token);
+    checar("cozinha não recebe os números de dinheiro no Início",
+      painelCoz.dinheiro === null, painelCoz.dinheiro);
+    checar("mas continua vendo o que precisa fazer",
+      Array.isArray(painelCoz.alertas), painelCoz.alertas);
+  }
 
   // Botão de exportar presente nas telas que o oferecem.
   for (const [rota, nome] of [["/estoque", "estoque"], ["/cmv", "CMV"], ["/produtos", "produtos"]]) {

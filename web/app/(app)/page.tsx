@@ -4,18 +4,22 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
-import { Aviso, Cartao } from "@/components/ui";
+import { reais } from "@/lib/cadastros";
+import { Aviso, Carregando, Cartao } from "@/components/ui";
 
-type Empresa = {
-  nome_fantasia: string | null;
-  razao_social: string | null;
-  cnpj: string | null;
-  cidade: string | null;
-  uf: string | null;
-  contador_nome: string | null;
-  logo_url: string | null;
-};
-type Usuario = { id: number; nome: string; ativo: boolean; papeis: { papel: string }[] };
+/**
+ * A tela inicial: a casa inteira num olhar.
+ *
+ * Duas regras que governam tudo aqui:
+ *
+ * 1. **Número verdadeiro ou nenhum.** Food cost sem venda importada não é 0%,
+ *    é desconhecido — e aparece como "—" com o motivo ao lado. Zero ali
+ *    pareceria um resultado excelente.
+ * 2. **Cada número traz o que fazer com ele.** Um valor sozinho não decide
+ *    nada; por isso cada cartão tem uma linha em português dizendo o que
+ *    aquilo significa, e leva para a tela onde se age.
+ */
+
 type Alerta = {
   chave: string;
   severidade: "critico" | "atencao" | "aviso";
@@ -26,132 +30,169 @@ type Alerta = {
   href: string;
 };
 
-/** O que o sistema vai passar a fazer, em português de restaurante. */
-const CAMINHO = [
-  { nome: "Acesso da equipe", detalhe: "Cada pessoa com o seu login e só o que precisa ver", pronto: true },
-  { nome: "Produtos e fornecedores", detalhe: "O que se compra, em que unidade e de quem", pronto: true },
-  { nome: "Fichas técnicas", detalhe: "A receita de cada prato e quanto ela custa por porção", pronto: true },
-  { nome: "Estoque e perdas", detalhe: "Entradas, saídas, contagem e o que se perdeu — com nome", pronto: true },
-  { nome: "Notas do Omie", detalhe: "A nota de compra entra sozinha e vira custo", pronto: true },
-  { nome: "Painel de CMV", detalhe: "Quanto custou o que você vendeu, e onde está a diferença", pronto: true },
-];
+type Painel = {
+  periodo: { inicio: string; fim: string; rotulo: string };
+  operacao: {
+    produtos: number;
+    fichas: number;
+    notas_abertas: number;
+    itens_a_vincular: number;
+    vencendo: number;
+    abaixo_minimo: number;
+    movimentos_mes: number;
+  };
+  alertas: Alerta[];
+  dinheiro: {
+    estoque_agora: number;
+    compras_mes: number;
+    cmv_mes: number;
+    perdas_mes: number;
+    receita_mes: number;
+    vendas: number;
+    food_cost_pct: number | null;
+    variancia: number | null;
+    cobertura_ficha_pct: number;
+    cmv_teorico: number;
+  } | null;
+  pesos: { grupo: string; cmv: number; participacao_pct: number }[];
+};
 
-function Passo({
-  feito,
-  titulo,
-  detalhe,
+function Indicador({
+  rotulo,
+  valor,
+  nota,
   href,
-  acao,
+  tom = "normal",
 }: {
-  feito: boolean;
-  titulo: string;
-  detalhe: string;
+  rotulo: string;
+  valor: string;
+  nota: string;
   href?: string;
-  acao?: string;
+  tom?: "normal" | "alerta" | "erva";
 }) {
-  return (
-    <li className="flex items-start gap-3 bg-superficie p-4">
-      <span
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
-          feito ? "border-erva bg-erva text-white" : "border-linha2 text-suave"
-        }`}
-        aria-hidden
-      >
-        {feito ? "✓" : ""}
-      </span>
-      <div className="min-w-0">
-        <p className="text-[15px] font-semibold">{titulo}</p>
-        <p className="mt-0.5 text-[13.5px] leading-snug text-suave">{detalhe}</p>
-        {href && !feito && (
-          <Link href={href} className="rotulo mt-1.5 inline-block text-erva hover:underline">
-            {acao ?? "preencher"}
-          </Link>
-        )}
-      </div>
-    </li>
+  const cor =
+    tom === "alerta" ? "text-erro" : tom === "erva" ? "text-erva" : "text-tinta";
+  const conteudo = (
+    <>
+      <p className="rotulo">{rotulo}</p>
+      <p className={`mono mt-1.5 text-[26px] font-bold leading-none ${cor}`}>{valor}</p>
+      <p className="mt-2 text-[13px] leading-snug text-suave">{nota}</p>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="cartao block p-4 no-underline transition-colors hover:border-erva">
+      {conteudo}
+    </Link>
+  ) : (
+    <div className="cartao p-4">{conteudo}</div>
   );
 }
 
+const pct = (n: number) => `${n.toFixed(1).replace(".", ",")}%`;
+
 export default function Inicio() {
-  const { eu, pode } = useSessao();
-  const [empresa, setEmpresa] = useState<Empresa | null>(null);
-  const [equipe, setEquipe] = useState<Usuario[] | null>(null);
-  const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const { eu } = useSessao();
+  const [p, setP] = useState<Painel | null>(null);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.get<Empresa>("/empresa").then(setEmpresa).catch((e) => setErro(e.message));
-    api.get<Alerta[]>("/alertas").then(setAlertas).catch(() => {});
-    if (pode("admin.usuarios")) {
-      api.get<Usuario[]>("/usuarios").then(setEquipe).catch(() => {});
-    }
-  }, [pode]);
+    api
+      .get<Painel>("/inicio")
+      .then(setP)
+      .catch((e) => setErro(e instanceof Error ? e.message : "Falha ao carregar"));
+  }, []);
 
-  const hoje = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-  });
-  const nome = eu?.nome.split(" ")[0] ?? "";
-  // Enquanto a empresa não chega, some com a linha inteira em vez de mostrar
-  // um nome genérico que pisca e troca.
-  const casa = empresa ? empresa.nome_fantasia || empresa.razao_social || "sua casa" : null;
+  if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
+  if (!p) return <Carregando />;
 
-  const temIdentificacao = !!empresa?.cnpj;
-  const temEndereco = !!empresa?.cidade;
-  const temContador = !!empresa?.contador_nome;
-  const temEquipe = (equipe?.filter((u) => u.ativo).length ?? 0) > 1;
-  const faltando = [temIdentificacao, temEndereco, temContador, temEquipe].filter((x) => !x).length;
-  const admin = pode("admin.empresa") || pode("admin.usuarios");
+  const d = p.dinheiro;
+  const o = p.operacao;
+  const primeiroNome = (eu?.nome ?? "").split(" ")[0];
+  const semMovimento = o.movimentos_mes === 0 && o.produtos === 0;
 
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <p className="rotulo">{hoje}</p>
+        <p className="rotulo">{p.periodo.rotulo}</p>
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
-          Bom trabalho, {nome}
+          {primeiroNome ? `Olá, ${primeiroNome}` : "Bom dia"}
         </h1>
-        <p className="mt-1 min-h-[24px] text-[15px] text-suave sm:text-[16px]">
-          {casa && `${casa} · `}
-          {casa === null ? "" : `você entrou como ${eu?.papeis.join(", ").toLowerCase() || "usuário"}`}
+        <p className="mt-1 max-w-[62ch] text-suave">
+          O mês corrente, do jeito que está agora.
         </p>
       </header>
 
-      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+      {semMovimento && (
+        <Aviso tipo="info">
+          A casa ainda não tem movimento. Comece cadastrando os insumos em{" "}
+          <Link href="/produtos" className="text-erva underline-offset-2 hover:underline">
+            Produtos
+          </Link>{" "}
+          e dando entrada na primeira nota em{" "}
+          <Link href="/compras" className="text-erva underline-offset-2 hover:underline">
+            Notas de entrada
+          </Link>
+          .
+        </Aviso>
+      )}
 
-      {!!alertas.length && (
+      {d && (
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Indicador
+            rotulo="Custo do que saiu"
+            valor={reais(d.cmv_mes)}
+            nota="O CMV do mês: estoque inicial + compras − o que sobrou."
+            href="/cmv"
+          />
+          <Indicador
+            rotulo="Food cost"
+            valor={d.food_cost_pct === null ? "—" : pct(d.food_cost_pct)}
+            nota={
+              d.food_cost_pct === null
+                ? "Sem vendas importadas no mês — sem receita não há percentual."
+                : `Sobre ${reais(d.receita_mes)} de receita em ${d.vendas} venda(s).`
+            }
+            tom={d.food_cost_pct !== null && d.food_cost_pct > 40 ? "alerta" : "normal"}
+            href="/cmv"
+          />
+          <Indicador
+            rotulo="Parado na prateleira"
+            valor={reais(d.estoque_agora)}
+            nota="Quanto dinheiro está em estoque neste momento."
+            href="/estoque"
+          />
+          <Indicador
+            rotulo="Perdas do mês"
+            valor={reais(d.perdas_mes)}
+            nota={
+              d.cmv_mes > 0
+                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo do mês.`
+                : "Quebra, validade e cortesia apontadas."
+            }
+            tom={d.perdas_mes > 0 ? "alerta" : "normal"}
+            href="/estoque"
+          />
+        </section>
+      )}
+
+      {!!p.alertas.length && (
         <Cartao
           titulo="Precisa da sua atenção"
-          descricao={
-            alertas.some((x) => x.severidade === "critico")
-              ? "Tem coisa que pede ação hoje."
-              : "Nada crítico — mas vale olhar."
-          }
-          acao={
-            <Link href="/alertas" className="rotulo hover:text-erva">
-              ver tudo ›
-            </Link>
-          }
+          descricao="O que muda o número deste mês se ficar sem resposta."
         >
           <ul className="flex flex-col gap-px bg-linha">
-            {alertas.slice(0, 4).map((x) => (
-              <li key={x.chave} className="flex flex-wrap items-center gap-3 bg-superficie py-2.5">
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    x.severidade === "critico"
-                      ? "bg-erro"
-                      : x.severidade === "atencao"
-                        ? "bg-alerta"
-                        : "bg-linha2"
-                  }`}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 text-[14.5px]">
-                  <b>{x.titulo}</b>
-                  <span className="mono ml-2 text-[13px] text-suave">{x.quantidade}</span>
-                </span>
-                <Link href={x.href} className="rotulo whitespace-nowrap text-erva hover:underline">
-                  {x.acao} ›
+            {p.alertas.slice(0, 5).map((a) => (
+              <li key={a.chave} className="bg-superficie py-3">
+                <Link href={a.href} className="flex flex-wrap items-baseline gap-x-2 no-underline">
+                  <span
+                    className={`mono text-[13px] font-bold ${
+                      a.severidade === "critico" ? "text-erro" : "text-alerta"
+                    }`}
+                  >
+                    {a.quantidade}
+                  </span>
+                  <span className="font-semibold hover:text-erva">{a.titulo}</span>
+                  <span className="text-[13.5px] text-suave">— {a.acao}</span>
                 </Link>
               </li>
             ))}
@@ -159,111 +200,74 @@ export default function Inicio() {
         </Cartao>
       )}
 
-      {admin && (
-        <Cartao
-          titulo={faltando ? "Falta pouco para deixar tudo pronto" : "Sua casa está configurada"}
-          descricao={
-            faltando
-              ? `${faltando} ${faltando === 1 ? "item pendente" : "itens pendentes"} — leva poucos minutos.`
-              : "Os dados básicos estão no lugar. O próximo passo é cadastrar o que você compra."
-          }
-        >
-          <ol className="grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2">
-            <Passo
-              feito={temIdentificacao}
-              titulo="Dados da empresa"
-              detalhe="CNPJ, inscrição e regime — usados nos relatórios e nas notas."
-              href="/empresa"
-            />
-            <Passo
-              feito={temEndereco}
-              titulo="Endereço e contato"
-              detalhe="Onde a casa fica e por onde falam com você."
-              href="/empresa"
-            />
-            <Passo
-              feito={temContador}
-              titulo="Contabilidade"
-              detalhe="O escritório que vai receber os números do mês."
-              href="/empresa"
-            />
-            <Passo
-              feito={temEquipe}
-              titulo="Equipe com acesso"
-              detalhe={
-                equipe
-                  ? `${equipe.filter((u) => u.ativo).length} pessoa(s) com login hoje.`
-                  : "Cozinha, salão e quem confere as entregas."
-              }
-              href="/usuarios"
-              acao="dar acesso a alguém"
-            />
-          </ol>
-        </Cartao>
+      {d && d.cobertura_ficha_pct < 80 && d.vendas > 0 && (
+        <Aviso tipo="info">
+          <b>{pct(d.cobertura_ficha_pct)} das vendas têm ficha técnica.</b> Enquanto essa
+          cobertura não subir, a comparação entre o custo real e o previsto pelas receitas
+          fica incompleta — e a diferença parece maior do que é.
+        </Aviso>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Cartao
-          titulo="O caminho até o CMV"
-          descricao="Cada peça depende da anterior — é por isso que a ordem é essa."
-        >
-          <ol className="flex flex-col">
-            {CAMINHO.map((c, i) => (
-              <li
-                key={c.nome}
-                className={`flex items-start gap-3 py-3 ${
-                  i < CAMINHO.length - 1 ? "border-b border-linha" : ""
-                }`}
-              >
-                <span
-                  className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
-                    c.pronto ? "bg-erva" : "border border-linha2 bg-papel"
-                  }`}
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className={`text-[15px] ${c.pronto ? "font-semibold" : ""}`}>
-                    {c.nome}
-                    {c.pronto && <span className="rotulo ml-2 text-erva">disponível</span>}
-                  </p>
-                  <p className="mt-0.5 text-[13.5px] leading-snug text-suave">{c.detalhe}</p>
-                </div>
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Cartao titulo="A casa hoje" descricao="O que está cadastrado e o que está esperando.">
+          <ul className="flex flex-col gap-px bg-linha text-[14.5px]">
+            {[
+              { rotulo: "Insumos e produtos", valor: o.produtos, href: "/produtos" },
+              { rotulo: "Fichas técnicas prontas", valor: o.fichas, href: "/fichas" },
+              { rotulo: "Notas esperando conferência", valor: o.notas_abertas, href: "/compras" },
+              { rotulo: "Itens de nota a vincular", valor: o.itens_a_vincular, href: "/compras" },
+              { rotulo: "Lotes vencendo em 7 dias", valor: o.vencendo, href: "/alertas" },
+              { rotulo: "Abaixo do estoque mínimo", valor: o.abaixo_minimo, href: "/alertas" },
+            ].map((l) => (
+              <li key={l.rotulo} className="flex items-center justify-between bg-superficie py-2.5">
+                <Link href={l.href} className="no-underline hover:text-erva">
+                  {l.rotulo}
+                </Link>
+                <span className={`mono font-semibold ${l.valor > 0 ? "" : "text-suave"}`}>
+                  {l.valor}
+                </span>
               </li>
             ))}
-          </ol>
-        </Cartao>
-
-        <Cartao titulo="Atalhos">
-          <ul className="flex flex-col gap-2">
-            {[
-              { href: "/produtos", nome: "Produtos e insumos", chave: "cadastros.produtos" },
-              { href: "/alertas", nome: "O que precisa de atenção" },
-              { href: "/compras", nome: "Notas de entrada", chave: "compras.notas" },
-              { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
-              { href: "/estoque", nome: "Estoque", chave: "estoque.saldos" },
-              { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
-              { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
-              { href: "/empresa", nome: "Dados da empresa", chave: "admin.empresa" },
-              { href: "/usuarios", nome: "Quem tem acesso", chave: "admin.usuarios" },
-              { href: "/lojas", nome: "Ajustes da operação", chave: "admin.unidades" },
-              { href: "/auditoria", nome: "O que mudou no sistema", chave: "admin.auditoria" },
-              { href: "/trocar-senha", nome: "Trocar minha senha" },
-            ]
-              .filter((a) => !a.chave || pode(a.chave))
-              .map((a) => (
-                <li key={a.href}>
-                  <Link
-                    href={a.href}
-                    className="flex items-center justify-between rounded border border-linha px-3 py-2.5 text-[14.5px] hover:border-erva hover:text-erva"
-                  >
-                    {a.nome}
-                    <span aria-hidden>›</span>
-                  </Link>
-                </li>
-              ))}
           </ul>
         </Cartao>
-      </div>
+
+        {d && (
+          <Cartao
+            titulo="Onde o custo pesa"
+            descricao={
+              p.pesos.length
+                ? "A participação de cada setor no custo do mês."
+                : "Ainda não há custo apurado neste mês."
+            }
+          >
+            {!p.pesos.length ? (
+              <p className="text-[14.5px] text-suave">
+                Assim que houver compra e consumo, o peso de cada setor aparece aqui.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {p.pesos.map((g) => (
+                  <li key={g.grupo}>
+                    <div className="flex items-baseline justify-between gap-3 text-[14.5px]">
+                      <span className="font-semibold">{g.grupo}</span>
+                      <span className="mono text-suave">{reais(g.cmv)}</span>
+                    </div>
+                    <div className="mt-1 h-2 w-full rounded bg-superficie2">
+                      <div
+                        className="h-2 rounded bg-erva"
+                        style={{ width: `${Math.min(100, Math.abs(g.participacao_pct))}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-4 text-[13px] text-suave">
+              Compras do mês: <b className="mono">{reais(d.compras_mes)}</b>
+            </p>
+          </Cartao>
+        )}
+      </section>
     </div>
   );
 }
