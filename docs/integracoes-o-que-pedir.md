@@ -44,11 +44,22 @@ Elas definem se vai dar trabalho ou não. Melhor perguntar junto:
 1. **As notas de compra são lançadas como "Nota de Entrada" no Omie, ou só
    chega o XML do fornecedor?** São dois lugares diferentes na API; hoje leio o
    primeiro.
+1b. **De quando o cliente quer o histórico?** A busca comum vai desde a última
+   sincronização; a carga inicial é uma escolha dele (o CMV dos meses passados
+   depende dela).
 2. **O Omie dele já controla estoque?** Se sim, precisamos decidir quem é o dono
    do saldo — senão a mesma compra baixa dos dois lados.
 3. **Ele consegue exportar uma resposta de exemplo** de uma nota pelo portal do
    desenvolvedor (a tela de teste online devolve o JSON)? Com esse arquivo eu
    ajusto o sistema **antes** de a chave chegar, e a virada vira só o cadastro.
+
+### Uma dúvida que só a conta real resolve
+
+⚠️ **Qual data o `dDtInicial` filtra** — emissão ou entrada? Importa porque a
+janela da busca é por data: se filtrar pela emissão, uma nota emitida há 90 dias
+e lançada no Omie hoje precisa de uma carga com data escolhida para entrar. O
+sistema já tem o botão para isso e a conferência que **nomeia** as notas que
+faltam, mas vale confirmar o comportamento na primeira semana de uso real.
 
 ### O que acontece depois que a chave chegar
 

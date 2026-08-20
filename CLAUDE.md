@@ -78,6 +78,13 @@ para arquivo nenhum — gravar direto aqui.
   XML/Omie é o documento do fornecedor, e mudar valor ali faria o sistema divergir da nota
   fiscal sem rastro. Os itens são reescritos inteiros — nada virou movimento ainda, e casar
   linha a linha só abriria caminho para item órfão.
+- ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
+  **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
+  antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e
+  ninguém veria (o resultado seria "0 novas"). `desde=` faz a carga inicial do histórico;
+  `dias=` fixa. O controle do que já veio continua sendo a **chave da NF-e**, nunca um
+  marcador. `GET /omie/conferencia-notas` compara período a período e **nomeia** as notas que
+  faltam — "0 novas" sozinho não distingue "nada mudou" de "passou batido".
 - **`services/omie/`**: `cliente.py` (HTTP, paginação, back-off, modo simulado com fixtures),
   `mapeadores.py` (**o único arquivo que muda quando a credencial real chegar** — cada campo
   é lido por uma lista de nomes possíveis) e `importador.py` (de-para em cascata, rateio,
@@ -140,7 +147,7 @@ para arquivo nenhum — gravar direto aqui.
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (47), `smoke_notas.py` (47),
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (58), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
   `smoke_kits.py` (29) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,

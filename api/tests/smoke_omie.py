@@ -20,6 +20,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_cozinha  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 
@@ -125,6 +128,44 @@ checar("o fornecedor foi criado a partir da nota",
 checar("a nota nasce com pendência de de-para",
        nota_cafe and nota_cafe["pendentes"] >= 1, nota_cafe)
 
+print("2b. a janela da busca e a conferência do período")
+# Sem parâmetro, a janela sai da última sincronização com folga — é o padrão, e
+# é o que impede a nota lançada com atraso de cair fora para sempre.
+st, r = chamar("POST", "/omie/sincronizar", token=token)
+checar("busca sem período usa a janela automática", st == 200, r)
+checar("e diz qual janela usou",
+       "última sincronização" in (r.get("janela") or ""), r.get("janela"))
+st, r = chamar("POST", "/omie/sincronizar?desde=2026-01-01", token=token)
+checar("a carga do histórico aceita a data escolhida",
+       r.get("janela") == "desde 01/01/2026", r.get("janela"))
+st, r = chamar("POST", "/omie/sincronizar?dias=15", token=token)
+checar("e a janela fixa continua valendo", r.get("janela") == "últimos 15 dias", r.get("janela"))
+
+# A conferência responde "quais faltam", não só "quantas".
+st, conf = chamar("GET", "/omie/conferencia-notas?inicio=2026-01-01&fim=2026-12-31", token=token)
+checar("a conferência de notas responde", st == 200, conf)
+checar("com nada faltando depois de sincronizar",
+       conf.get("faltando") == [], conf.get("faltando"))
+no_omie = conf.get("no_omie", 0)
+checar("e contando o que o Omie tem", no_omie >= 2, conf)
+
+# Apaga uma e confere que ela é NOMEADA como faltante.
+st, notas = chamar("GET", "/notas?limite=50", token=token)
+alvo_conf = next((n for n in notas if n["origem"] == "OMIE" and n["status"] != "LANCADA"), None)
+if alvo_conf:
+    chamar("DELETE", f"/notas/{alvo_conf['id']}", token=token)
+    st, conf = chamar("GET", "/omie/conferencia-notas?inicio=2026-01-01&fim=2026-12-31",
+                      token=token)
+    checar("a nota apagada aparece como faltante", len(conf.get("faltando") or []) == 1, conf)
+    faltante = (conf.get("faltando") or [{}])[0]
+    checar("com número e emitente, para dar para ir atrás",
+           faltante.get("numero") and faltante.get("emitente"), faltante)
+    st, r = chamar("POST", "/omie/sincronizar?desde=2026-01-01", token=token)
+    checar("e 'trazer as que faltam' a devolve", r.get("novas") == 1, r)
+    st, conf = chamar("GET", "/omie/conferencia-notas?inicio=2026-01-01&fim=2026-12-31",
+                      token=token)
+    checar("a conferência fecha em zero", conf.get("faltando") == [], conf)
+
 print("3. conciliação: sem produto, sem lançamento")
 st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {}, token=token)
 checar("recusa lançar com item pendente", st == 400, (st, r))
@@ -206,17 +247,7 @@ st, conf = chamar("GET", "/omie/conferencia", token=token)
 checar("conferência com o CMC responde", st == 200, conf if st != 200 else len(conf))
 
 print("7. permissão")
-st, papeis = chamar("GET", "/papeis", token=token)
-id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
-existente = next((u for u in usuarios if u["email"] == "smoke.cozinha@botane.com.br"), None)
-if existente:
-    chamar("PUT", f"/usuarios/{existente['id']}",
-           {"ativo": True, "senha": "smoke12345", "papeis": [{"id_papel": id_cozinha}]},
-           token=token)
-st, r = chamar("POST", "/auth/login",
-               {"email": "smoke.cozinha@botane.com.br", "senha": "smoke12345"})
-tk = r.get("access_token")
+tk = garantir_cozinha(chamar, token)
 st, r = chamar("GET", "/omie/config", token=tk)
 checar("cozinha NÃO vê a configuração da integração (403)", st == 403, st)
 st, r = chamar("POST", "/omie/sincronizar", token=tk)

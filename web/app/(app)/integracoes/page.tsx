@@ -6,6 +6,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import EmailSmtp from "./email-smtp";
+import NotasOmie from "./notas-omie";
 
 type Config = {
   configurada: boolean;
@@ -238,9 +239,11 @@ export default function PaginaIntegracoes() {
         </form>
       </Cartao>
 
+      {pode("integracao.omie") && <NotasOmie />}
+
       {pode("integracao.omie") && (
         <Cartao
-          titulo="Trazer dados do Omie"
+          titulo="Trazer outros dados do Omie"
           descricao={
             cfg.ultima_sincronizacao
               ? `última sincronização em ${new Date(cfg.ultima_sincronizacao).toLocaleString("pt-BR")}`
@@ -248,15 +251,6 @@ export default function PaginaIntegracoes() {
           }
         >
           <div className="flex flex-wrap gap-2">
-            <button
-              className="btn btn-secundario"
-              disabled={ocupado}
-              onClick={() =>
-                acao("/omie/sincronizar?dias=60", (r) => `${r.novas} nota(s) nova(s) importada(s)`)
-              }
-            >
-              Buscar notas de entrada
-            </button>
             <button
               className="btn btn-secundario"
               disabled={ocupado}

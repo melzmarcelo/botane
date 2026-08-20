@@ -95,3 +95,30 @@ def garantir_fornecedor(chamar, token, nome: str, cnpj: str) -> int:
     st, achados = chamar("GET", f"/fornecedores?incluir_inativos=true&busca={digitos}",
                          token=token)
     return (achados or [{}])[0].get("id")
+
+
+def garantir_cozinha(chamar, token, email: str = "smoke.cozinha@botane.com.br",
+                     senha: str = "smoke12345") -> str | None:
+    """O usuário de Cozinha das suítes, criado se não existir. Devolve o token dele.
+
+    Várias suítes só REATIVAVAM o usuário quando ele já estava lá. Numa base
+    recém-instalada ele não está, o login falhava com 401 e as checagens de
+    permissão passavam a comparar 401 com 403 — testando outra coisa.
+    """
+    st, papeis = chamar("GET", "/papeis", token=token)
+    id_cozinha = next((p["id"] for p in (papeis or []) if p["nome"] == "Cozinha"), None)
+    if not id_cozinha:
+        return None
+
+    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+    existente = next((u for u in (usuarios or []) if u["email"] == email), None)
+    if existente:
+        chamar("PUT", f"/usuarios/{existente['id']}",
+               {"ativo": True, "senha": senha, "papeis": [{"id_papel": id_cozinha}]}, token=token)
+    else:
+        chamar("POST", "/usuarios",
+               {"nome": "Smoke Cozinha", "email": email, "senha": senha,
+                "papeis": [{"id_papel": id_cozinha}]}, token=token)
+
+    st, r = chamar("POST", "/auth/login", {"email": email, "senha": senha})
+    return r.get("access_token")

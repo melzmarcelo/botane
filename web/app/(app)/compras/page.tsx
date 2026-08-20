@@ -172,11 +172,13 @@ export default function PaginaCompras() {
     setErro("");
     setOk("");
     try {
-      const r = await api.post<{ novas: number; repetidas: number; modo: string }>(
-        "/omie/sincronizar?dias=60",
+      // Sem período: a janela vai desde a última sincronização, com folga. A
+      // resposta já vem com a frase de qual janela foi usada.
+      const r = await api.post<{ novas: number; modo: string; message: string }>(
+        "/omie/sincronizar",
       );
       setOk(
-        `${r.novas} nota(s) nova(s), ${r.repetidas} já existia(m).` +
+        (r.message ?? "Busca concluída") +
           (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
       );
       await carregar();

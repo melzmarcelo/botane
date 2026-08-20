@@ -8,6 +8,8 @@ gravadas em arquivo — o que permite construir, testar e demonstrar o importado
 inteiro. Ao configurar a chave, o mesmo código passa a falar com a conta real.
 """
 
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -132,12 +134,19 @@ def testar_conexao(ctx: Contexto = Depends(requer_permissao("integracao.omie",
 
 
 @router.post("/sincronizar")
-def sincronizar(dias: int = Query(default=30, ge=1, le=365),
+def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
+                desde: date | None = None,
                 ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
+    """Puxa as notas de entrada do Omie.
+
+    Sem parâmetro nenhum, a janela **se adapta**: vai desde a última
+    sincronização, com folga. `desde` faz a carga inicial do histórico; `dias`
+    fixa uma janela.
+    """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cliente = _cliente(cur, id_unidade)
-        r = importador.sincronizar(cur, id_unidade, cliente, dias)
+        r = importador.sincronizar(cur, id_unidade, cliente, dias, desde)
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, modo, ultima_sincronizacao,
                                         ultimo_status, ultima_mensagem)
@@ -146,11 +155,12 @@ def sincronizar(dias: int = Query(default=30, ge=1, le=365),
                    SET ultima_sincronizacao = now(), ultimo_status = 'OK',
                        ultima_mensagem = EXCLUDED.ultima_mensagem""",
             (id_unidade, SERVICO, cliente.modo,
-             f"{r['novas']} nova(s), {r['repetidas']} já existiam"),
+             f"{r['novas']} nova(s), {r['repetidas']} já existiam ({r['janela']})"),
         )
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "sincronizar", depois=r,
                             id_unidade=id_unidade)
-    return r | {"message": f"{r['novas']} nota(s) nova(s) importada(s)"}
+    return r | {"message": (f"{r['novas']} nota(s) nova(s) importada(s) — "
+                           f"{r['janela']}, {r['repetidas']} já existiam")}
 
 
 @router.post("/importar-catalogo")
@@ -162,6 +172,28 @@ def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "importar_catalogo",
                             depois=r)
     return r | {"message": f"{r['criados']} produto(s) criado(s) em rascunho"}
+
+
+@router.get("/conferencia-notas")
+def conferencia_notas(
+    inicio: date | None = None,
+    fim: date | None = None,
+    ctx: Contexto = Depends(requer_permissao("integracao.omie")),
+) -> dict:
+    """Quais notas o Omie tem no período e não existem aqui.
+
+    "0 novas" é ambíguo — pode não haver nada novo, ou a janela pode ter passado
+    por cima de uma nota lançada com atraso. Isto responde a pergunta certa:
+    **quais** faltam.
+    """
+    hoje = date.today()
+    fim = fim or hoje
+    inicio = inicio or (fim - timedelta(days=30))
+    if inicio > fim:
+        raise HTTPException(status_code=400, detail="O início não pode ser depois do fim.")
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        return importador.conferir_notas(cur, id_unidade, _cliente(cur, id_unidade), inicio, fim)
 
 
 @router.get("/conferencia")

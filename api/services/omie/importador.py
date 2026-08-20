@@ -448,9 +448,52 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
     return id_nota, True
 
 
-def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int = 30) -> dict:
+# Folga sobre a última sincronização. Nota emitida antes e lançada no Omie
+# depois entraria fora da janela se ela começasse exatamente onde a anterior
+# parou — e ninguém perceberia, porque o resultado seria "0 novas".
+FOLGA_DIAS = 7
+
+# Quando nunca se sincronizou, não há de onde partir: dois meses cobrem o
+# giro de compras de um restaurante sem puxar o histórico inteiro.
+JANELA_PADRAO = 60
+
+
+def janela(cur, id_unidade: int, desde: date | None = None,
+           dias: int | None = None) -> tuple[date, str]:
+    """De quando buscar, e por quê — a frase vai para a tela e para o log.
+
+    Três casos, nesta ordem:
+
+    * `desde` — a data que a pessoa escolheu (a carga inicial do histórico);
+    * `dias` — janela fixa pedida na chamada;
+    * nada — **desde a última sincronização, com folga**. É o padrão, e é o que
+      impede a nota lançada com atraso de cair fora da janela para sempre.
+    """
+    if desde:
+        return desde, f"desde {desde.strftime('%d/%m/%Y')}"
+    if dias:
+        return date.today() - timedelta(days=dias), f"últimos {dias} dias"
+
+    cur.execute(
+        """SELECT ultima_sincronizacao FROM integracoes
+            WHERE id_unidade = %s AND servico = 'OMIE'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    ultima = linha["ultima_sincronizacao"] if linha else None
+    if not ultima:
+        return (date.today() - timedelta(days=JANELA_PADRAO),
+                f"primeira vez: últimos {JANELA_PADRAO} dias")
+    inicio = ultima.date() - timedelta(days=FOLGA_DIAS)
+    return inicio, (f"desde a última sincronização ({ultima.strftime('%d/%m/%Y')}), "
+                    f"com {FOLGA_DIAS} dias de folga")
+
+
+def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = None,
+                desde: date | None = None) -> dict:
     """Puxa as notas de entrada da janela e grava o que ainda não existe aqui."""
-    desde = (date.today() - timedelta(days=dias)).strftime("%d/%m/%Y")
+    inicio, motivo = janela(cur, id_unidade, desde, dias)
+    desde = inicio.strftime("%d/%m/%Y")
     novas, repetidas, paginas = 0, 0, 0
     try:
         for dados, registros in cliente.paginar(
@@ -470,8 +513,77 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int = 30) -> d
 
     _registrar(cur, "produtos/notaentrada", "ListarNotaEnt",
                "OK" if novas or repetidas else "VAZIO", novas + repetidas,
-               f"{novas} nova(s), {repetidas} já existiam", cliente.modo, paginas)
-    return {"novas": novas, "repetidas": repetidas, "paginas": paginas, "modo": cliente.modo}
+               f"{novas} nova(s), {repetidas} já existiam — {motivo}", cliente.modo, paginas)
+    return {"novas": novas, "repetidas": repetidas, "paginas": paginas, "modo": cliente.modo,
+            "desde": inicio, "janela": motivo}
+
+
+def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,
+                   inicio: date, fim: date) -> dict:
+    """As notas que o Omie tem no período contra as que existem aqui.
+
+    Existe porque "0 novas" é ambíguo: pode ser que não haja nada novo, ou que a
+    janela tenha passado por cima de uma nota lançada com atraso. Aqui a
+    pergunta é outra — **quais** faltam, com número e emitente, para dar para ir
+    atrás de cada uma.
+    """
+    do_omie: dict[str, dict] = {}
+    try:
+        for _dados, registros in cliente.paginar(
+            "produtos/notaentrada", "ListarNotaEnt", "nfe_encontradas",
+            {"dDtInicial": inicio.strftime("%d/%m/%Y"),
+             "dDtFinal": fim.strftime("%d/%m/%Y"), "apenas_importado": "N"},
+        ):
+            for bruto in registros:
+                n = mapeadores.nota_de_entrada(bruto)
+                data = n.get("data_entrada") or n.get("data_emissao")
+                # A janela do Omie pode vir mais larga que a pedida; o corte
+                # final é nosso, senão a conta compara períodos diferentes.
+                if data and not (inicio <= _como_data(data) <= fim):
+                    continue
+                chave = n.get("chave_nfe") or f"omie:{n.get('id_omie')}"
+                do_omie[chave] = {
+                    "chave_nfe": n.get("chave_nfe"),
+                    "numero": n.get("numero"),
+                    "emitente": n.get("nome_emitente"),
+                    "data": data,
+                    "valor_total": float(dec(n.get("valor_total"))),
+                }
+    except ErroOmie as e:
+        raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
+
+    cur.execute(
+        """SELECT chave_nfe, id_omie, numero, nome_emitente, status,
+                  coalesce(data_entrada, data_emissao) AS data
+             FROM notas_entrada
+            WHERE id_unidade = %s AND origem = 'OMIE'
+              AND coalesce(data_entrada, data_emissao) BETWEEN %s AND %s""",
+        (id_unidade, inicio, fim),
+    )
+    aqui = {(r["chave_nfe"] or f"omie:{r['id_omie']}"): dict(r) for r in cur.fetchall()}
+
+    faltando = [v for k, v in do_omie.items() if k not in aqui]
+    return {
+        "inicio": inicio,
+        "fim": fim,
+        "no_omie": len(do_omie),
+        "aqui": len(aqui),
+        "faltando": sorted(faltando, key=lambda x: (x["data"] or date.min), reverse=True)[:100],
+        "modo": cliente.modo,
+        # Nota que existe aqui e não veio na lista do Omie: quase sempre é nota
+        # cancelada lá depois de importada. Vale mostrar, não vale alarmar.
+        "so_aqui": [
+            {"numero": v["numero"], "emitente": v["nome_emitente"], "status": v["status"]}
+            for k, v in aqui.items() if k not in do_omie
+        ][:50],
+    }
+
+
+def _como_data(valor):
+    """A data pode chegar como `date` ou como texto ISO, conforme o mapeador."""
+    if isinstance(valor, date):
+        return valor
+    return date.fromisoformat(str(valor)[:10])
 
 
 def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
