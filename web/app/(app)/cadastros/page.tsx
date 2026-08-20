@@ -143,7 +143,36 @@ export default function PaginaCadastros() {
             <Carregando />
           ) : (
             <>
-              <ul className="flex flex-col gap-px bg-linha">
+              {podeAba("setores") && (
+                <form
+                  className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+                  onSubmit={(e: FormEvent) => {
+                    e.preventDefault();
+                    void acao(async () => {
+                      await api.post("/setores", { nome: novoSetor });
+                      setNovoSetor("");
+                    }, "Setor criado.");
+                  }}
+                >
+                  <label className="min-w-0 flex-1">
+                    <span className="rotulo">Novo setor</span>
+                    <input
+                      className="campo mt-1.5"
+                      required
+                      minLength={2}
+                      value={novoSetor}
+                      onChange={(e) => setNovoSetor(e.target.value)}
+                    />
+                  </label>
+                  <button className="btn btn-secundario" type="submit">
+                    Adicionar
+                  </button>
+                </form>
+              )}
+              {/* A lista pinta o próprio fundo para separar as linhas; vazia, ela
+                  virava um bloco cinza sem conteúdo. Sem itens, não há lista. */}
+              {!setores.length && <Vazio>Nenhum setor.</Vazio>}
+              <ul className="flex flex-col gap-px bg-linha empty:hidden">
                 {setores.map((s) => (
                   <li
                     key={s.id}
@@ -169,34 +198,8 @@ export default function PaginaCadastros() {
                     )}
                   </li>
                 ))}
-                {!setores.length && <Vazio>Nenhum setor.</Vazio>}
               </ul>
-              {podeAba("setores") && (
-                <form
-                  className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
-                  onSubmit={(e: FormEvent) => {
-                    e.preventDefault();
-                    void acao(async () => {
-                      await api.post("/setores", { nome: novoSetor });
-                      setNovoSetor("");
-                    }, "Setor criado.");
-                  }}
-                >
-                  <label className="min-w-0 flex-1">
-                    <span className="rotulo">Novo setor</span>
-                    <input
-                      className="campo mt-1.5"
-                      required
-                      minLength={2}
-                      value={novoSetor}
-                      onChange={(e) => setNovoSetor(e.target.value)}
-                    />
-                  </label>
-                  <button className="btn btn-secundario" type="submit">
-                    Adicionar
-                  </button>
-                </form>
-              )}
+
             </>
           )}
         </Cartao>
@@ -209,7 +212,48 @@ export default function PaginaCadastros() {
             <Carregando />
           ) : (
             <>
-              <ul className="flex flex-col gap-px bg-linha">
+              {podeAba("locais") && (
+                <form
+                  className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+                  onSubmit={(e: FormEvent) => {
+                    e.preventDefault();
+                    void acao(async () => {
+                      await api.post("/locais", novoLocal);
+                      setNovoLocal({ nome: "", tipo: "SECO" });
+                    }, "Local criado.");
+                  }}
+                >
+                  <label className="min-w-0 flex-1">
+                    <span className="rotulo">Novo local</span>
+                    <input
+                      className="campo mt-1.5"
+                      required
+                      minLength={2}
+                      value={novoLocal.nome}
+                      onChange={(e) => setNovoLocal({ ...novoLocal, nome: e.target.value })}
+                    />
+                  </label>
+                  <label className="sm:w-[180px]">
+                    <span className="rotulo">Tipo</span>
+                    <select
+                      className="campo mt-1.5"
+                      value={novoLocal.tipo}
+                      onChange={(e) => setNovoLocal({ ...novoLocal, tipo: e.target.value })}
+                    >
+                      {TIPOS_LOCAL.map((t) => (
+                        <option key={t} value={t}>
+                          {t.toLowerCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="btn btn-secundario" type="submit">
+                    Adicionar
+                  </button>
+                </form>
+              )}
+              {!locais.length && <Vazio>Nenhum local de estoque.</Vazio>}
+              <ul className="flex flex-col gap-px bg-linha empty:hidden">
                 {locais.map((l) => (
                   <li
                     key={l.id}
@@ -253,46 +297,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
-              {podeAba("locais") && (
-                <form
-                  className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
-                  onSubmit={(e: FormEvent) => {
-                    e.preventDefault();
-                    void acao(async () => {
-                      await api.post("/locais", novoLocal);
-                      setNovoLocal({ nome: "", tipo: "SECO" });
-                    }, "Local criado.");
-                  }}
-                >
-                  <label className="min-w-0 flex-1">
-                    <span className="rotulo">Novo local</span>
-                    <input
-                      className="campo mt-1.5"
-                      required
-                      minLength={2}
-                      value={novoLocal.nome}
-                      onChange={(e) => setNovoLocal({ ...novoLocal, nome: e.target.value })}
-                    />
-                  </label>
-                  <label className="sm:w-[180px]">
-                    <span className="rotulo">Tipo</span>
-                    <select
-                      className="campo mt-1.5"
-                      value={novoLocal.tipo}
-                      onChange={(e) => setNovoLocal({ ...novoLocal, tipo: e.target.value })}
-                    >
-                      {TIPOS_LOCAL.map((t) => (
-                        <option key={t} value={t}>
-                          {t.toLowerCase()}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button className="btn btn-secundario" type="submit">
-                    Adicionar
-                  </button>
-                </form>
-              )}
+
             </>
           )}
         </Cartao>
@@ -305,39 +310,9 @@ export default function PaginaCadastros() {
             <Carregando />
           ) : (
             <>
-              <ul className="flex flex-col gap-px bg-linha">
-                {categorias.map((c) => (
-                  <li
-                    key={c.id}
-                    className={`flex flex-wrap items-center justify-between gap-3 bg-superficie py-2.5 ${
-                      c.ativo ? "" : "opacity-55"
-                    }`}
-                    style={{ paddingLeft: `${c.nivel * 20}px` }}
-                  >
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{c.nome}</span>
-                      <Etiqueta>{c.tipo.toLowerCase()}</Etiqueta>
-                      {!!c.produtos && <Etiqueta cor="erva">{c.produtos} produto(s)</Etiqueta>}
-                    </span>
-                    {podeAba("categorias") && (
-                      <button
-                        className="rotulo hover:text-erva"
-                        onClick={() =>
-                          acao(
-                            () => api.put(`/categorias/${c.id}`, { ativo: !c.ativo }),
-                            c.ativo ? "Categoria desativada." : "Categoria reativada.",
-                          )
-                        }
-                      >
-                        {c.ativo ? "desativar" : "reativar"}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
               {podeAba("categorias") && (
                 <form
-                  className="mt-4 grid gap-3 sm:grid-cols-[1fr_200px_160px_auto] sm:items-end"
+                  className="mb-4 grid gap-3 sm:grid-cols-[1fr_200px_160px_auto] sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
                     void acao(async () => {
@@ -395,6 +370,38 @@ export default function PaginaCadastros() {
                   </button>
                 </form>
               )}
+              {!categorias.length && <Vazio>Nenhuma categoria.</Vazio>}
+              <ul className="flex flex-col gap-px bg-linha empty:hidden">
+                {categorias.map((c) => (
+                  <li
+                    key={c.id}
+                    className={`flex flex-wrap items-center justify-between gap-3 bg-superficie py-2.5 ${
+                      c.ativo ? "" : "opacity-55"
+                    }`}
+                    style={{ paddingLeft: `${c.nivel * 20}px` }}
+                  >
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{c.nome}</span>
+                      <Etiqueta>{c.tipo.toLowerCase()}</Etiqueta>
+                      {!!c.produtos && <Etiqueta cor="erva">{c.produtos} produto(s)</Etiqueta>}
+                    </span>
+                    {podeAba("categorias") && (
+                      <button
+                        className="rotulo hover:text-erva"
+                        onClick={() =>
+                          acao(
+                            () => api.put(`/categorias/${c.id}`, { ativo: !c.ativo }),
+                            c.ativo ? "Categoria desativada." : "Categoria reativada.",
+                          )
+                        }
+                      >
+                        {c.ativo ? "desativar" : "reativar"}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+
             </>
           )}
         </Cartao>
@@ -407,48 +414,9 @@ export default function PaginaCadastros() {
             <Carregando />
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="tabela">
-                  <thead>
-                    <tr>
-                      <th>Sigla</th>
-                      <th>Nome</th>
-                      <th>Grandeza</th>
-                      <th className="num">Fator base</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ums.map((u) => (
-                      <tr key={u.sigla} className={u.ativo ? "" : "opacity-55"}>
-                        <td className="mono font-semibold">{u.sigla}</td>
-                        <td>{u.nome}</td>
-                        <td className="text-suave">{u.grandeza.toLowerCase()}</td>
-                        <td className="num">{Number(u.fator_base)}</td>
-                        <td className="text-right">
-                          {podeAba("unidades") && (
-                            <button
-                              className="rotulo hover:text-erva"
-                              onClick={() =>
-                                acao(
-                                  () =>
-                                    api.put(`/unidades-medida/${u.sigla}`, { ativo: !u.ativo }),
-                                  u.ativo ? "Unidade desativada." : "Unidade reativada.",
-                                )
-                              }
-                            >
-                              {u.ativo ? "desativar" : "reativar"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
               {podeAba("unidades") && (
                 <form
-                  className="mt-4 grid gap-3 sm:grid-cols-[110px_1fr_180px_140px_auto] sm:items-end"
+                  className="mb-4 grid gap-3 sm:grid-cols-[110px_1fr_180px_140px_auto] sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
                     void acao(async () => {
@@ -506,6 +474,46 @@ export default function PaginaCadastros() {
                   </button>
                 </form>
               )}
+              <div className="overflow-x-auto">
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th>Sigla</th>
+                      <th>Nome</th>
+                      <th>Grandeza</th>
+                      <th className="num">Fator base</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ums.map((u) => (
+                      <tr key={u.sigla} className={u.ativo ? "" : "opacity-55"}>
+                        <td className="mono font-semibold">{u.sigla}</td>
+                        <td>{u.nome}</td>
+                        <td className="text-suave">{u.grandeza.toLowerCase()}</td>
+                        <td className="num">{Number(u.fator_base)}</td>
+                        <td className="text-right">
+                          {podeAba("unidades") && (
+                            <button
+                              className="rotulo hover:text-erva"
+                              onClick={() =>
+                                acao(
+                                  () =>
+                                    api.put(`/unidades-medida/${u.sigla}`, { ativo: !u.ativo }),
+                                  u.ativo ? "Unidade desativada." : "Unidade reativada.",
+                                )
+                              }
+                            >
+                              {u.ativo ? "desativar" : "reativar"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
             </>
           )}
         </Cartao>

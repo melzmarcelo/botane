@@ -278,6 +278,24 @@ try {
     await api("DELETE", `/produtos/${idProduto}`, null, token);
   }
 
+  // Nas tabelas de apoio o formulário fica ACIMA da lista: cadastrar é o que se
+  // vai fazer ali, e rolar a lista inteira para achar o campo é atrito bobo.
+  await irPara(p, `${WEB}/cadastros`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const ordemCadastro = await p.evaluate(() => {
+    const form = document.querySelector("main form");
+    const lista = document.querySelector("main ul, main table");
+    if (!form) return { erro: "sem formulário" };
+    if (!lista || lista.offsetParent === null) return { formY: 0, listaY: null };
+    return {
+      formY: Math.round(form.getBoundingClientRect().top),
+      listaY: Math.round(lista.getBoundingClientRect().top),
+    };
+  });
+  checar("o cadastro fica acima da lista nas tabelas de apoio",
+    ordemCadastro.listaY === null || ordemCadastro.formY < ordemCadastro.listaY,
+    ordemCadastro);
+
   console.log("5. fichas técnicas (etapa 3)");
   // Cenário montado pela API: insumo com preço + produto produzido.
   const marca = Date.now().toString().slice(-5);
