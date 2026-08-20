@@ -3,9 +3,12 @@
 /* Identidade do Botane — a mesma da apresentação: papel com viés verde,
    verde-erva como acento, latão para números e rótulos. */
 @theme {
-  --color-papel: #f3f5ef;
+  /* O papel é o fundo da página; a superfície é o cartão que pousa sobre ele.
+     A distância entre os dois é o que faz o cartão existir — com os dois quase
+     brancos, a tela virava uma folha só e a hierarquia sumia. */
+  --color-papel: #dee6d3;
   --color-superficie: #fcfdfa;
-  --color-superficie2: #ebeee5;
+  --color-superficie2: #edf0e7;
   --color-tinta: #14201a;
   --color-suave: #5d6c61;
   --color-linha: #d8ded0;

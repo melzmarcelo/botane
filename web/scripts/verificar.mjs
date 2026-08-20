@@ -56,6 +56,21 @@ async function entrar(pagina, quem) {
   await new Promise((r) => setTimeout(r, 1200));
 }
 
+/**
+ * O local principal, criando um se a base não tiver nenhum.
+ *
+ * Base recém-instalada não tem local de estoque, e sem local nenhum movimento
+ * entra. Supor que existe fazia a suíte quebrar num ponto que não tem nada a
+ * ver com o que ela testa.
+ */
+async function garantirLocal() {
+  const { dados } = await api("GET", "/locais", null, token);
+  if (dados?.length) return (dados.find((l) => l.principal) ?? dados[0]).id;
+  const { dados: novo } = await api(
+    "POST", "/locais", { nome: "Estoque seco", tipo: "SECO", principal: true }, token);
+  return novo.id;
+}
+
 const foto = (pagina, nome) => pagina.screenshot({ path: `${FOTOS}/${nome}.png`, fullPage: true });
 
 /**
@@ -591,8 +606,7 @@ try {
 
   console.log("7a. combo: uma linha do PDV que vale por dois produtos");
   const marcaKit = String(Date.now()).slice(-6);
-  const { dados: localKit } = await api("GET", "/locais", null, token);
-  const idLocalKit = (localKit.find((l) => l.principal) ?? localKit[0]).id;
+  const idLocalKit = await garantirLocal();
   const { dados: bebida } = await api("POST", "/produtos", {
     nome: `Combo bebida ${marcaKit}`, tipo: "REVENDA", um_estoque: "UN",
   }, token);
@@ -673,8 +687,7 @@ try {
 
   console.log("8c. FEFO: o lote que vence antes sai antes");
   const marcaLote = String(Date.now()).slice(-6);
-  const { dados: locaisFefo } = await api("GET", "/locais", null, token);
-  const localFefo = (locaisFefo.find((l) => l.principal) ?? locaisFefo[0]).id;
+  const localFefo = await garantirLocal();
   const { dados: perecivel } = await api("POST", "/produtos", {
     nome: `Creme FEFO ${marcaLote}`, tipo: "INSUMO", um_estoque: "UN",
     controla_lote: true, controla_validade: true, perecivel: true,
@@ -965,6 +978,25 @@ try {
   });
   checar("hambúrguer abre a gaveta", gavetaAberta);
   await c.screenshot({ path: `${FOTOS}/m3-menu.png` });
+
+  // O menu tem submenus: o grupo precisa ser aberto antes de o link existir na
+  // tela. O teste passa pelo mesmo caminho que a pessoa passa.
+  const grupoFechado = await c.evaluate(() => {
+    const b = [...document.querySelectorAll("aside button")]
+      .find((x) => /administra/i.test(x.innerText));
+    return b ? b.getAttribute("aria-expanded") === "false" : null;
+  });
+  checar("grupo do menu começa recolhido", grupoFechado === true, grupoFechado);
+  await c.evaluate(() => {
+    [...document.querySelectorAll("aside button")]
+      .find((x) => /administra/i.test(x.innerText))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
+  const abriu = await c.evaluate(() =>
+    [...document.querySelectorAll("aside a")].some(
+      (x) => x.textContent === "Empresa" && x.offsetParent !== null,
+    ));
+  checar("e abre ao tocar no grupo", abriu);
 
   // Navegar fecha a gaveta sozinho.
   await c.evaluate(() => {

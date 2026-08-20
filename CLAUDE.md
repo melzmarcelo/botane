@@ -45,6 +45,11 @@ para arquivo nenhum — gravar direto aqui.
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
 - Manual da equipe: `docs/manual-da-equipe.md`.
+- ⚠️ **As suítes rodam contra base virgem.** `tests/comum.py` tem `garantir_local`,
+  `garantir_locais`, `garantir_setores` e `garantir_fornecedor` — nenhuma suíte pode supor
+  que existe local, setor ou fornecedor, nem contar linhas de semente. `garantir_fornecedor`
+  procura pelo **CNPJ**, não pelo nome: o CNPJ é a chave única, e buscar por nome falhava
+  quando o Omie simulado criava outro fornecedor com o mesmo documento.
 - `api/limpar_dados.py` zera a operação e deixa a base como instalação nova (`--simular`
   mostra sem apagar). Produtos e fornecedores saem inteiros de propósito: o seed não cria
   nenhum. **Recusa banco que não seja local.**

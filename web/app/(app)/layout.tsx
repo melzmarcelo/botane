@@ -58,6 +58,8 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
   },
 ];
 
+const CHAVE_MENU = "botane.menu";
+
 function Marca({ logo, nome }: { logo: string | null; nome: string }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -74,6 +76,24 @@ function Casca({ children }: { children: React.ReactNode }) {
   const { eu, carregando, pode, sair } = useSessao();
   const caminho = usePathname();
   const [aberto, setAberto] = useState(false);
+  // Quais grupos do menu estão abertos. Fica no navegador porque é preferência
+  // de quem usa: quem só mexe em estoque abre estoque uma vez e pronto.
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      setAbertos(JSON.parse(localStorage.getItem(CHAVE_MENU) ?? "{}"));
+    } catch {
+      setAbertos({});
+    }
+  }, []);
+
+  const alternarGrupo = (grupo: string) =>
+    setAbertos((atuais) => {
+      const novos = { ...atuais, [grupo]: !(atuais[grupo] ?? false) };
+      localStorage.setItem(CHAVE_MENU, JSON.stringify(novos));
+      return novos;
+    });
   const [marca, setMarca] = useState<{ nome: string; logo: string | null }>({
     nome: "Botané Deli e Café",
     logo: null,
@@ -127,17 +147,45 @@ function Casca({ children }: { children: React.ReactNode }) {
       {MENU.map((g) => {
         const itens = g.itens.filter((i) => !i.chave || pode(i.chave));
         if (!itens.length) return null;
+        const temAtivo = itens.some((i) => i.href === caminho);
+        // O grupo da tela aberta fica sempre visível: recolhê-lo esconderia
+        // justamente onde a pessoa está.
+        const expandido = temAtivo || (abertos[g.grupo] ?? false);
         return (
-          <div key={g.grupo} className="mb-4 shrink-0">
-            <p className="rotulo px-2 pb-1.5">{g.grupo}</p>
-            <ul className="flex flex-col gap-0.5">
+          <div key={g.grupo} className="mb-1.5 shrink-0">
+            <button
+              type="button"
+              aria-expanded={expandido}
+              onClick={() => alternarGrupo(g.grupo)}
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-superficie2 ${
+                temAtivo ? "text-erva" : ""
+              }`}
+            >
+              <span className="rotulo">{g.grupo}</span>
+              <svg
+                viewBox="0 0 10 6"
+                aria-hidden="true"
+                className={`h-[6px] w-[10px] shrink-0 transition-transform duration-150 ${
+                  expandido ? "" : "-rotate-90"
+                }`}
+              >
+                <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
+                      strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {!expandido && (
+              // Grupo fechado ainda diz quantas telas guarda: sem isso, quem
+              // não conhece o sistema não sabe se vale abrir.
+              <p className="px-2 pb-1 text-[11.5px] text-suave">{itens.length} tela(s)</p>
+            )}
+            <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
               {itens.map((i) => {
                 const ativo = caminho === i.href;
                 return (
                   <li key={i.href}>
                     <Link
                       href={i.href}
-                      className={`block rounded px-2 py-2.5 text-[15px] lg:py-1.5 lg:text-[14.5px] ${
+                      className={`block rounded py-2.5 pl-4 pr-2 text-[15px] lg:py-1.5 lg:text-[14.5px] ${
                         ativo
                           ? "bg-erva-claro font-semibold text-erva"
                           : "text-tinta hover:bg-superficie2"
@@ -173,7 +221,7 @@ function Casca({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
       {/* ---------- celular: barra fixa + gaveta ---------- */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-linha bg-papel px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-linha bg-superficie px-4 py-3 lg:hidden">
         <button
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-linha2 bg-superficie"
           onClick={() => setAberto(true)}

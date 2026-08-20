@@ -22,6 +22,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, "tests")
+from comum import garantir_local, garantir_setores  # noqa: E402
 from datetime import date, timedelta
 
 BASE = "http://127.0.0.1:9200"
@@ -76,9 +79,9 @@ marca = str(time.time_ns())[-6:]
 hoje = date.today()
 periodo = f"?inicio={hoje}&fim={hoje}"
 
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
-st, setores = chamar("GET", "/setores", token=token)
+local = garantir_local(chamar, token)
+# O relatório por grupo só prova o que promete com mais de um setor.
+setores = garantir_setores(chamar, token, 2)
 setor_a, setor_b = setores[0], setores[1] if len(setores) > 1 else setores[0]
 
 print("0. dois setores, valores diferentes")

@@ -20,6 +20,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_locais  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
@@ -69,7 +72,8 @@ if st != 200:
 token = r["access_token"]
 
 marca = str(time.time_ns())[-6:]
-st, locais = chamar("GET", "/locais", token=token)
+# Transferência precisa de dois locais: a base nova tem zero.
+locais = garantir_locais(chamar, token, 2)
 principal = next((l for l in locais if l["principal"]), locais[0])
 outro = next((l for l in locais if l["id"] != principal["id"]), None)
 

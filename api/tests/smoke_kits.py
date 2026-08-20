@@ -29,6 +29,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, "tests")
+from comum import garantir_local  # noqa: E402
 from datetime import date
 
 BASE = "http://127.0.0.1:9200"
@@ -79,8 +82,7 @@ token = r["access_token"]
 marca = str(time.time_ns())[-6:]
 hoje = date.today()
 
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
+local = garantir_local(chamar, token)
 
 print("0. o prato, o refrigerante e o combo")
 st, arroz = chamar("POST", "/produtos", {

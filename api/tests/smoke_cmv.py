@@ -18,6 +18,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, "tests")
+from comum import garantir_local  # noqa: E402
 from datetime import date
 
 BASE = "http://127.0.0.1:9200"
@@ -75,8 +78,7 @@ st, saldos_antes = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 checar("apuração responde antes de tudo", st == 200, saldos_antes)
 base = saldos_antes  # a loja já tem dado de outros testes; medimos o DELTA
 
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
+local = garantir_local(chamar, token)
 
 
 def novo_produto(nome, tipo="INSUMO", um="KG"):

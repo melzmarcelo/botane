@@ -14,6 +14,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_local  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
@@ -77,8 +80,7 @@ st, r = chamar("POST", "/produtos", {
     "estoque_minimo": 10,
 }, token=token)
 produto = r.get("id")
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
+local = garantir_local(chamar, token)
 chamar("POST", "/estoque/entradas", {
     "id_produto": produto, "quantidade": 2, "custo_unitario": 5, "id_local": local["id"],
 }, token=token)

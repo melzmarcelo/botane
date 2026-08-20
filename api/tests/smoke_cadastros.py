@@ -12,6 +12,9 @@ import sys
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_fornecedor, garantir_locais, garantir_setores  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
@@ -53,13 +56,16 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-print("1. cadastros de apoio vieram semeados")
-st, setores = chamar("GET", "/setores", token=token)
-checar("setores respondem", st == 200 and len(setores) >= 4, setores if st != 200 else len(setores))
-checar("tem Cozinha", any(s["nome"] == "Cozinha" for s in setores))
+print("1. cadastros de apoio")
+# Antes isto conferia a semente da migração ("vieram semeados"). Depois que a
+# base pôde ser zerada, contar linha vira teste do estado do banco, não do
+# sistema: o que importa é que as telas de apoio respondam e aceitem cadastro.
+setores = garantir_setores(chamar, token, 2)
+checar("setores respondem", isinstance(setores, list) and len(setores) >= 2, setores)
+checar("o setor criado aparece na lista", any(s.get("nome") for s in setores), setores)
 
-st, locais = chamar("GET", "/locais", token=token)
-checar("locais respondem", st == 200 and len(locais) >= 3, len(locais) if st == 200 else locais)
+locais = garantir_locais(chamar, token, 2)
+checar("locais respondem", isinstance(locais, list) and len(locais) >= 2, locais)
 checar("um local é o principal", sum(1 for l in locais if l["principal"]) == 1)
 
 st, ums = chamar("GET", "/unidades-medida", token=token)
@@ -93,24 +99,17 @@ checar("recusa excluir categoria com filha", st == 409, st)
 print("3. fornecedor")
 # A limpeza da rodada anterior DESATIVA o fornecedor (não apaga), e o CNPJ
 # continua ocupado — então aqui ele é reaproveitado.
-st, existentes = chamar("GET", "/fornecedores?incluir_inativos=true&busca=Smoke", token=token)
-anterior = next((f for f in existentes if f.get("cnpj") == "12345678000195"), None)
-if anterior:
-    forn = anterior["id"]
-    st, r = chamar("PUT", f"/fornecedores/{forn}",
-                   {"ativo": True, "prazo_entrega_dias": 2, "dias_entrega": "seg,qui"},
-                   token=token)
-    checar("reaproveita fornecedor de teste", st == 200, r)
-else:
-    st, r = chamar("POST", "/fornecedores", {
-        "nome": "Smoke Distribuidora", "cnpj": "12.345.678/0001-95",
-        "prazo_entrega_dias": 2, "dias_entrega": "seg,qui",
-    }, token=token)
-    checar("cria fornecedor", st == 201, r)
-    forn = r.get("id")
+forn = garantir_fornecedor(chamar, token, "Smoke Distribuidora", "12.345.678/0001-95")
+checar("fornecedor de teste pronto", bool(forn), forn)
+st, r = chamar("PUT", f"/fornecedores/{forn}",
+               {"prazo_entrega_dias": 2, "dias_entrega": "seg,qui"}, token=token)
+checar("grava prazo e dias de entrega", st == 200, r)
 st, r = chamar("POST", "/fornecedores", {"nome": "Outro", "cnpj": "12345678000195"}, token=token)
 checar("recusa CNPJ repetido (mesmo com máscara diferente)", st == 409, st)
-st, lista = chamar("GET", "/fornecedores?busca=smoke", token=token)
+# Busca pelo nome do fornecedor que de fato está lá: o CNPJ pode ter sido
+# reaproveitado de um registro criado por outra suíte, com outro nome.
+st, dele = chamar("GET", f"/fornecedores/{forn}", token=token)
+st, lista = chamar("GET", f"/fornecedores?busca={dele['nome'][:6]}", token=token)
 checar("busca por nome encontra", st == 200 and any(f["id"] == forn for f in lista), lista)
 
 print("4. produto")

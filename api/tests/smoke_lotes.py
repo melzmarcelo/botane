@@ -30,6 +30,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_local  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 
@@ -76,8 +79,7 @@ if st != 200:
 token = r["access_token"]
 marca = str(time.time_ns())[-6:]
 
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
+local = garantir_local(chamar, token)
 LOTE_A, LOTE_B, LOTE_C = f"A{marca}", f"B{marca}", f"C{marca}"
 
 

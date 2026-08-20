@@ -13,6 +13,9 @@ import sys
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, "tests")
+from comum import garantir_fornecedor  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 COZINHA = ("smoke.cozinha@botane.com.br", "smoke12345")
@@ -56,16 +59,7 @@ if st != 200:
 token = r["access_token"]
 
 print("0. cenário: fornecedor com preço, dois insumos e dois produzidos")
-st, existentes = chamar("GET", "/fornecedores?incluir_inativos=true&busca=Ficha", token=token)
-anterior = next((f for f in existentes if f.get("cnpj") == "98765432000110"), None)
-if anterior:
-    forn = anterior["id"]
-    chamar("PUT", f"/fornecedores/{forn}", {"ativo": True}, token=token)
-else:
-    st, r = chamar("POST", "/fornecedores",
-                   {"nome": "Ficha Distribuidora", "cnpj": "98.765.432/0001-10"}, token=token)
-    forn = r.get("id")
-    criados["fornecedores"].append(forn)
+forn = garantir_fornecedor(chamar, token, "Ficha Distribuidora", "98.765.432/0001-10")
 checar("fornecedor de teste pronto", bool(forn), forn)
 
 

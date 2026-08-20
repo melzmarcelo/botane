@@ -29,6 +29,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, "tests")
+from comum import garantir_local  # noqa: E402
 import uuid
 
 BASE = "http://127.0.0.1:9200"
@@ -209,8 +212,7 @@ checar("item com frete informado custa 13,00 (não 11,50 do rateio por valor)",
 checar("item sem frete custa os 10,00 da nota", perto(custos[2], 10), custos)
 checar("a nota ficou conciliada", nota["status"] == "CONCILIADA", nota["status"])
 
-st, locais = chamar("GET", "/locais", token=token)
-local = next((l for l in locais if l["principal"]), locais[0])
+local = garantir_local(chamar, token)
 st, r = chamar("POST", f"/notas/{id_nota}/lancar", {"id_local": local["id"]}, token=token)
 checar("lança os dois itens no estoque", st == 200 and r.get("itens_lancados") == 2, r)
 checar("o valor lançado é 230,00 (200 de produto + 30 de frete)", perto(r.get("valor"), 230), r)
