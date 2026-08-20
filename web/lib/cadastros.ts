@@ -58,6 +58,7 @@ export type ProdutoResumo = {
   um_estoque: string | null;
   producao_propria: boolean;
   controla_estoque: boolean;
+  controla_lote?: boolean;
   status: string;
   ativo: boolean;
   preco_venda: number | null;

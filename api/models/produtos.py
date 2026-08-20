@@ -40,6 +40,18 @@ class ProdutoBase(BaseModel):
     observacao: str | None = None
 
 
+class UnidadeCompra(BaseModel):
+    um: str = Field(min_length=1, max_length=6)
+    # Quantas unidades de ESTOQUE vêm em uma desta.
+    fator: float = Field(gt=0)
+    padrao: bool = False
+    observacao: str | None = Field(default=None, max_length=120)
+
+
+class UnidadesCompraRequest(BaseModel):
+    itens: list[UnidadeCompra] = Field(default_factory=list)
+
+
 class KitItem(BaseModel):
     id_componente: int
     quantidade: float = Field(default=1, gt=0)

@@ -157,7 +157,7 @@ para arquivo nenhum — gravar direto aqui.
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (63), `smoke_notas.py` (47),
+  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (70), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
   `smoke_kits.py` (29) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
@@ -189,6 +189,15 @@ para arquivo nenhum — gravar direto aqui.
   sub-ficha é recusado na gravação, e o cálculo ainda tem trava de profundidade por segurança.
 - **`fichas.custos` filtra o JSON, não só a tela**: sem a chave, nenhum campo de dinheiro
   sai do servidor. Ao mexer no router de fichas, manter isso.
+- **Um produto tem UMA unidade de estoque e N de compra** (20/08/2026, migração 015):
+  `produto_unidades` (CX=12, FD=6, palete=480). `produtos.um_compra/fator_compra` continuam
+  como reserva e são mantidos em dia pela unidade padrão. ⚠️ A ordem em `_fator_do_item`:
+  de-para confirmado → **unidade da nota no cadastro** → fator do fornecedor → fator de
+  compra. A unidade da nota vem antes do fornecedor porque casa pela UNIDADE; o número do
+  fornecedor não diz em que embalagem.
+- ⚠️ **A prévia de custo da nota digitada divide pela quantidade EM ESTOQUE**, não pela da
+  nota: mostrava R$ 20,60 por caixa onde o custo real era R$ 1,72 por unidade. A tela busca
+  o fator em `/produtos/{id}/unidades` e diz "por UN" no número.
 - ⚠️ **CX e UN são as duas "unidade" com fator 1**: a conversão de grandeza diria que 4 CX =
   4 UN e engoliria a caixa de 12. No importador, **o fator da embalagem vem antes** da
   conversão de grandeza.

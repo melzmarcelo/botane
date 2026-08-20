@@ -14,6 +14,7 @@ import {
 } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import ComposicaoKit from "./kit";
+import UnidadesDeCompra from "./unidades";
 
 type VinculoFornecedor = {
   id_fornecedor: number;
@@ -596,6 +597,15 @@ export default function FormularioProduto() {
           </ul>
         )}
       </Cartao>
+
+      {/* A conversão também só existe depois do produto: ela aponta para ele. */}
+      {!novo && f.controla_estoque && (
+        <UnidadesDeCompra
+          idProduto={Number(id)}
+          umEstoque={f.um_estoque || null}
+          podeEditar={podeEditar}
+        />
+      )}
 
       {/* Combo só faz sentido depois de o produto existir: a composição aponta
           para ele, e produto novo ainda não tem id. */}

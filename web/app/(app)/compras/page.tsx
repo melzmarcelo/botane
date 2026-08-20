@@ -56,6 +56,8 @@ type ItemNota = {
   ignorado: boolean;
   lote_nf: string | null;
   validade_nf: string | null;
+  valor_desconto: number;
+  valor_acrescimo: number;
 };
 
 type NotaDetalhe = Nota & {
@@ -459,6 +461,8 @@ export default function PaginaCompras() {
                           lote_nf: i.lote_nf ?? null,
                           validade_nf: i.validade_nf ?? null,
                           um_nota: i.um_nota ?? null,
+                          valor_desconto: Number(i.valor_desconto ?? 0),
+                          valor_acrescimo: Number(i.valor_acrescimo ?? 0),
                         })),
                       });
                       setAberta(null);

@@ -24,6 +24,8 @@ type Linha = {
   um: string;
   quantidade: string;
   valor_unitario: string;
+  desconto: string;
+  acrescimo: string;
   lote: string;
   validade: string;
 };
@@ -35,6 +37,8 @@ const LINHA: Linha = {
   um: "",
   quantidade: "",
   valor_unitario: "",
+  desconto: "",
+  acrescimo: "",
   lote: "",
   validade: "",
 };
@@ -60,6 +64,8 @@ export type NotaParaEditar = {
     lote_nf: string | null;
     validade_nf: string | null;
     um_nota: string | null;
+    valor_desconto: number;
+    valor_acrescimo: number;
   }[];
 };
 
@@ -81,6 +87,11 @@ export default function NotaManual({
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
+  // Fator de conversão por produto: { idProduto: { CX: 12, FD: 6 } }. Sem isto
+  // a prévia do custo dividia pelo número de CAIXAS e mostrava R$ 20,60 onde o
+  // custo real por unidade de estoque é R$ 1,72 — prévia que mente é pior que
+  // prévia nenhuma.
+  const [fatores, setFatores] = useState<Record<string, Record<string, number>>>({});
   const [idFornecedor, setIdFornecedor] = useState(texto(editando?.id_fornecedor));
   const [numeroNota, setNumeroNota] = useState(editando?.numero ?? "");
   const [serie, setSerie] = useState(editando?.serie ?? "");
@@ -100,6 +111,8 @@ export default function NotaManual({
           descricao: i.descricao_fornecedor ?? "",
           quantidade: String(Number(i.quantidade)),
           valor_unitario: String(Number(i.valor_unitario)),
+          desconto: Number(i.valor_desconto) ? String(Number(i.valor_desconto)) : "",
+          acrescimo: Number(i.valor_acrescimo) ? String(Number(i.valor_acrescimo)) : "",
           lote: i.lote_nf ?? "",
           validade: i.validade_nf?.slice(0, 10) ?? "",
         }))
@@ -120,12 +133,54 @@ export default function NotaManual({
     setIdLocal((atual) => atual || String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""));
   }, [locais]);
 
+  /** Busca a tabela de conversão do produto uma vez e guarda. */
+  const carregarFatores = (idProduto: string) => {
+    if (!idProduto || fatores[idProduto]) return;
+    void api
+      .get<{ um: string; fator: number }[]>(`/produtos/${idProduto}/unidades`)
+      .then((us) =>
+        setFatores((atuais) => ({
+          ...atuais,
+          [idProduto]: Object.fromEntries(us.map((u) => [u.um.toUpperCase(), Number(u.fator)])),
+        })),
+      )
+      .catch(() => setFatores((atuais) => ({ ...atuais, [idProduto]: {} })));
+  };
+
+  /** Quantas unidades de estoque a linha traz de fato. */
+  const quantidadeEmEstoque = (l: Linha) => {
+    const fator = fatores[l.id_produto]?.[(l.um || "").toUpperCase()] ?? 1;
+    return numero(l.quantidade) * fator;
+  };
+
+  const unidadeDeEstoque = (l: Linha) =>
+    produtos.find((p) => String(p.id) === l.id_produto)?.um_estoque ?? "";
+
+  // Lote e validade só aparecem quando algum item pede: numa nota de mercearia
+  // são duas colunas vazias empurrando o resto para fora da tela.
+  const temLote = linhas.some(
+    (l) =>
+      (l.lote || l.validade) ||
+      produtos.find((p) => String(p.id) === l.id_produto)?.controla_lote,
+  );
+
   const preenchidas = linhas.filter((l) => (l.id_produto || l.descricao) && numero(l.quantidade) > 0);
+
+  /** O que a linha custa: quantidade x preço, menos desconto, mais acréscimo. */
+  const totalDaLinha = (l: Linha) =>
+    numero(l.quantidade) * numero(l.valor_unitario) - numero(l.desconto) + numero(l.acrescimo);
+
   const totalProdutos = preenchidas.reduce(
     (soma, l) => soma + numero(l.quantidade) * numero(l.valor_unitario),
     0,
   );
-  const total = totalProdutos + numero(frete) + numero(outros) - numero(desconto);
+  // Os ajustes de item entram no total da nota junto com os da nota inteira.
+  const ajustesDosItens = preenchidas.reduce(
+    (soma, l) => soma - numero(l.desconto) + numero(l.acrescimo),
+    0,
+  );
+  const total =
+    totalProdutos + ajustesDosItens + numero(frete) + numero(outros) - numero(desconto);
 
   /** O mesmo rateio por valor que o backend faz — para conferir antes de gravar. */
   const custos = useMemo(
@@ -133,10 +188,19 @@ export default function NotaManual({
       preenchidas.map((l) => {
         const bruto = numero(l.quantidade) * numero(l.valor_unitario);
         const peso = totalProdutos > 0 ? bruto / totalProdutos : 0;
-        const liquido = bruto + numero(frete) * peso + numero(outros) * peso - numero(desconto) * peso;
-        return { linha: l, unitario: numero(l.quantidade) > 0 ? liquido / numero(l.quantidade) : 0 };
+        const liquido =
+          bruto -
+          numero(l.desconto) +
+          numero(l.acrescimo) +
+          numero(frete) * peso +
+          numero(outros) * peso -
+          numero(desconto) * peso;
+        // Divide pela quantidade EM ESTOQUE: é por unidade de estoque que o
+        // custo médio vive, não por caixa.
+        const emEstoque = quantidadeEmEstoque(l);
+        return { linha: l, unitario: emEstoque > 0 ? liquido / emEstoque : 0 };
       }),
-    [preenchidas, totalProdutos, frete, outros, desconto],
+    [preenchidas, totalProdutos, frete, outros, desconto, fatores],
   );
 
   /**
@@ -152,10 +216,10 @@ export default function NotaManual({
   };
 
   /** Preenche a linha inteira a partir do produto: descrição, unidade e código. */
-  const comProduto = (linha: Linha, p: ProdutoResumo | undefined): Linha =>
-    !p
-      ? linha
-      : {
+  const comProduto = (linha: Linha, p: ProdutoResumo | undefined): Linha => {
+    if (!p) return linha;
+    carregarFatores(String(p.id));
+    return {
           ...linha,
           id_produto: String(p.id),
           codigo: p.codigo ?? "",
@@ -163,8 +227,9 @@ export default function NotaManual({
           // a nota vier em caixa, quem digita troca aqui e a conversão do
           // lançamento faz o resto.
           um: linha.um || p.um_estoque || "",
-          descricao: linha.descricao || p.nome,
-        };
+      descricao: linha.descricao || p.nome,
+    };
+  };
 
   function mudar(indice: number, campo: keyof Linha, valor: string) {
     setLinhas((atuais) =>
@@ -177,6 +242,7 @@ export default function NotaManual({
             ? comProduto(nova, produtos.find((p) => String(p.id) === valor))
             : { ...nova, codigo: "" };
         }
+        if (campo === "um" && nova.id_produto) carregarFatores(nova.id_produto);
         return nova;
       }),
     );
@@ -213,6 +279,8 @@ export default function NotaManual({
           quantidade: numero(l.quantidade),
           um: l.um || null,
           valor_unitario: numero(l.valor_unitario),
+          valor_desconto: numero(l.desconto),
+          valor_acrescimo: numero(l.acrescimo),
           lote: l.lote || null,
           validade: l.validade || null,
         })),
@@ -304,10 +372,13 @@ export default function NotaManual({
               <th className="min-w-[150px]">Descrição na nota</th>
               <th className="num w-[92px] min-w-[92px]">Qtd</th>
               <th className="w-[92px] min-w-[92px]">Un.</th>
-              <th className="num w-[112px] min-w-[112px]">Valor un.</th>
-              <th className="w-[104px] min-w-[104px]">Lote</th>
-              <th className="w-[160px] min-w-[160px]">Validade</th>
-              <th className="num w-[104px] min-w-[104px]">Custo un.</th>
+              <th className="num w-[104px] min-w-[104px]">Valor un.</th>
+              <th className="num w-[92px] min-w-[92px]">Desc.</th>
+              <th className="num w-[92px] min-w-[92px]">Acrésc.</th>
+              <th className="num w-[110px] min-w-[110px]">Total do item</th>
+              <th className="num w-[100px] min-w-[100px]">Custo un.</th>
+              {temLote && <th className="w-[100px] min-w-[100px]">Lote</th>}
+              {temLote && <th className="w-[150px] min-w-[150px]">Validade</th>}
             </tr>
           </thead>
           <tbody>
@@ -396,22 +467,61 @@ export default function NotaManual({
                   </td>
                   <td>
                     <input
-                      className="campo"
-                      value={linha.lote}
-                      onChange={(e) => mudar(i, "lote", e.target.value)}
+                      className="campo mono text-right"
+                      inputMode="decimal"
+                      value={linha.desconto}
+                      onChange={(e) => mudar(i, "desconto", e.target.value)}
                     />
                   </td>
                   <td>
                     <input
-                      className="campo"
-                      type="date"
-                      value={linha.validade}
-                      onChange={(e) => mudar(i, "validade", e.target.value)}
+                      className="campo mono text-right"
+                      inputMode="decimal"
+                      value={linha.acrescimo}
+                      onChange={(e) => mudar(i, "acrescimo", e.target.value)}
                     />
                   </td>
-                  <td className="num mono text-suave">
-                    {previsto ? reais(previsto.unitario) : "—"}
+                  {/* O que a linha custa de fato — a conferência contra o papel
+                      é aqui, antes de somar a nota inteira. */}
+                  <td className="num mono font-semibold">
+                    {totalDaLinha(linha) ? reais(totalDaLinha(linha)) : "—"}
                   </td>
+                  {/* O custo por unidade de ESTOQUE: já com o frete rateado e a
+                      conversão da embalagem. É outro número que o total da
+                      linha, e é ele que vira custo médio. */}
+                  <td className="num mono text-suave">
+                    {previsto ? (
+                      <>
+                        {reais(previsto.unitario)}
+                        {unidadeDeEstoque(linha) && (
+                          <span className="block text-[11px]">
+                            por {unidadeDeEstoque(linha)}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  {temLote && (
+                    <td>
+                      <input
+                        className="campo"
+                        value={linha.lote}
+                        onChange={(e) => mudar(i, "lote", e.target.value)}
+                      />
+                    </td>
+                  )}
+                  {temLote && (
+                    <td>
+                      <input
+                        className="campo"
+                        type="date"
+                        value={linha.validade}
+                        onChange={(e) => mudar(i, "validade", e.target.value)}
+                      />
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -467,7 +577,8 @@ export default function NotaManual({
         <b className="mono">{reais(total)}</b>
         <span className="text-suave">
           {" "}
-          — o frete já está dividido entre os itens na coluna “custo un.”.
+          — o “custo un.” já traz o frete rateado e a conversão da embalagem: é ele que vira
+          custo médio.
         </span>
       </p>
     </Cartao>

@@ -118,12 +118,34 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
     return None, None, None, "pendente"
 
 
-def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str | None) -> Decimal:
-    """Quantas unidades de estoque vêm em uma unidade da nota."""
+def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str | None,
+                   um_nota: str | None = None) -> Decimal:
+    """Quantas unidades de estoque vêm em uma unidade da nota.
+
+    A ordem é da resposta mais específica para a mais genérica:
+
+    1. **de-para confirmado** — alguém disse que este código deste fornecedor é
+       este produto, com este fator. Ninguém sabe mais que quem confirmou.
+    2. **a unidade da nota no cadastro do produto** — a caixa desta água tem 12.
+       Vem antes do fator do fornecedor porque casa pela UNIDADE: o fornecedor
+       pode ter mudado de embalagem, e o número dele ficou para trás.
+    3. **fator do fornecedor** — a embalagem que aquele fornecedor costuma
+       mandar, sem dizer em que unidade.
+    4. **fator de compra do produto** — o padrão antigo, de quando havia um só.
+    """
     if codigo:
         cur.execute(
             "SELECT fator FROM codigos_externos WHERE sistema = %s AND codigo = %s",
             (SISTEMA, codigo),
+        )
+        linha = cur.fetchone()
+        if linha and dec(linha["fator"]) > 0:
+            return dec(linha["fator"])
+    if um_nota:
+        cur.execute(
+            """SELECT fator FROM produto_unidades
+                WHERE id_produto = %s AND upper(um) = upper(%s)""",
+            (id_produto, um_nota),
         )
         linha = cur.fetchone()
         if linha and dec(linha["fator"]) > 0:
@@ -158,8 +180,9 @@ def calcular_nota(cur, id_nota: int) -> dict:
         raise HTTPException(status_code=404, detail="Nota não encontrada")
 
     cur.execute(
-        """SELECT id, quantidade, valor_unitario, valor_total, valor_desconto, um_nota,
-                  id_produto, codigo_fornecedor, frete_informado, outros_informado
+        """SELECT id, quantidade, valor_unitario, valor_total, valor_desconto,
+                  valor_acrescimo, um_nota, id_produto, codigo_fornecedor,
+                  frete_informado, outros_informado
              FROM nota_itens WHERE id_nota = %s ORDER BY seq""",
         (id_nota,),
     )
@@ -187,13 +210,16 @@ def calcular_nota(cur, id_nota: int) -> dict:
         desconto_item = dec(item["valor_desconto"]) + (desconto_nota * peso).quantize(
             Decimal("0.01")
         )
+        # Acréscimo do item: taxa de entrega, embalagem cobrada à parte. Entra
+        # no custo como o frete entra — encarece o que chega na prateleira.
+        acrescimo_item = dec(item.get("valor_acrescimo"))
 
         convertida, custo_unitario, variacao = None, None, None
         if item["id_produto"]:
             cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (item["id_produto"],))
             um_estoque = cur.fetchone()["um_estoque"]
             fator = _fator_do_item(cur, item["id_produto"], nota["id_fornecedor"],
-                                   item["codigo_fornecedor"])
+                                   item["codigo_fornecedor"], item["um_nota"])
             # A quantidade da nota vira quantidade de estoque por um de dois
             # caminhos, e a ORDEM importa: CX e UN são as duas "unidade" com
             # fator 1, então a conversão de grandeza diria que 4 CX = 4 UN e
@@ -207,7 +233,7 @@ def calcular_nota(cur, id_nota: int) -> dict:
                 direta = converter(qtd_nota, item["um_nota"], um_estoque, ums)
                 convertida = direta if direta is not None else qtd_nota
 
-            liquido = bruto - desconto_item + frete_item + outros_item
+            liquido = bruto - desconto_item + acrescimo_item + frete_item + outros_item
             if convertida and convertida > 0:
                 custo_unitario = (liquido / convertida).quantize(CASAS_CUSTO)
 
@@ -434,12 +460,13 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
             """INSERT INTO nota_itens
                    (id_nota, seq, descricao_fornecedor, codigo_fornecedor, codigo_barras, ncm,
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
-                    lote_nf, validade_nf, id_produto, sugestao_produto, sugestao_score,
-                    frete_informado, outros_informado)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
+                    sugestao_score, frete_informado, outros_informado)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
+             item.get("valor_acrescimo") or 0,
              item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
              item.get("frete_informado"), item.get("outros_informado")),
         )

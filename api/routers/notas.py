@@ -49,6 +49,8 @@ class ItemManual(BaseModel):
     um: str | None = Field(default=None, max_length=10)
     valor_unitario: float = Field(ge=0)
     valor_desconto: float = Field(default=0, ge=0)
+    # O outro lado do desconto: taxa de entrega, embalagem cobrada à parte.
+    valor_acrescimo: float = Field(default=0, ge=0)
     lote: str | None = Field(default=None, max_length=40)
     validade: date | None = None
 
@@ -194,6 +196,7 @@ def _montar(cur, body: "NotaManual") -> dict:
             "valor_unitario": item.valor_unitario,
             "valor_total": total,
             "valor_desconto": item.valor_desconto,
+            "valor_acrescimo": item.valor_acrescimo,
             "lote_nf": item.lote,
             "validade_nf": item.validade,
             "id_produto": item.id_produto,
@@ -316,13 +319,14 @@ def editar_manual(id_nota: int, body: NotaManual,
             cur.execute(
                 """INSERT INTO nota_itens
                        (id_nota, seq, descricao_fornecedor, codigo_fornecedor, quantidade,
-                        um_nota, valor_unitario, valor_total, valor_desconto,
+                        um_nota, valor_unitario, valor_total, valor_desconto, valor_acrescimo,
                         lote_nf, validade_nf, id_produto)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (id_nota, item["seq"], item["descricao_fornecedor"],
                  item["codigo_fornecedor"], item["quantidade"], item["um_nota"],
                  item["valor_unitario"], item["valor_total"], item["valor_desconto"],
-                 item["lote_nf"], item["validade_nf"], item["id_produto"]),
+                 item["valor_acrescimo"], item["lote_nf"], item["validade_nf"],
+                 item["id_produto"]),
             )
 
         importador.calcular_nota(cur, id_nota)

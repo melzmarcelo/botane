@@ -275,6 +275,59 @@ checar("e a do produto continua sendo a do estoque",
        nota_um["itens"][0]["um_estoque"] == "UN", nota_um["itens"][0])
 chamar("DELETE", f"/notas/{r['id']}", token=token)
 
+print("6a2. várias unidades de compra por produto")
+# A mesma água vem em caixa de 12, fardo de 6 e palete de 480. Antes só cabia
+# um fator por produto, e quem comprava no palete corrigia a conta à mão.
+st, agua = chamar("POST", "/produtos", {
+    "nome": f"Água FEFO {marca}", "tipo": "REVENDA", "um_estoque": "UN"}, token=token)
+st, r = chamar("PUT", f"/produtos/{agua['id']}/unidades", {"itens": [
+    {"um": "UN", "fator": 1},
+    {"um": "CX", "fator": 12, "padrao": True},
+    {"um": "FD", "fator": 6},
+]}, token=token)
+checar("grava três unidades de compra", st == 200 and r.get("itens") == 3, r)
+st, us = chamar("GET", f"/produtos/{agua['id']}/unidades", token=token)
+checar("a padrão vem primeiro", us and us[0]["um"] == "CX" and us[0]["padrao"], us)
+
+for um, qtd, preco, esperado in (("CX", 5, 21, 60), ("FD", 2, 11, 12), ("UN", 10, 2, 10)):
+    st, n = chamar("POST", "/notas", {
+        "numero": f"UM{um}{marca}", "id_local": local["id"],
+        "itens": [{"id_produto": agua["id"], "quantidade": qtd, "um": um,
+                   "valor_unitario": preco}],
+    }, token=token)
+    st, nota_um2 = chamar("GET", f"/notas/{n['id']}", token=token)
+    item_um = nota_um2["itens"][0]
+    checar(f"{qtd} {um} viram {esperado} UN",
+           perto(item_um["quantidade_convertida"], esperado, 0.01), item_um)
+    chamar("DELETE", f"/notas/{n['id']}", token=token)
+
+checar("unidade repetida é recusada",
+       chamar("PUT", f"/produtos/{agua['id']}/unidades", {"itens": [
+           {"um": "CX", "fator": 12}, {"um": "cx", "fator": 6}]}, token=token)[0] == 400)
+checar("fator diferente de 1 na unidade de estoque é recusado",
+       chamar("PUT", f"/produtos/{agua['id']}/unidades", {"itens": [
+           {"um": "UN", "fator": 5}]}, token=token)[0] == 400)
+checar("unidade que não existe no cadastro é recusada",
+       chamar("PUT", f"/produtos/{agua['id']}/unidades", {"itens": [
+           {"um": "XYZ", "fator": 2}]}, token=token)[0] == 400)
+
+print("6a3. desconto e acréscimo no item")
+st, n = chamar("POST", "/notas", {
+    "numero": f"AJ{marca}", "id_local": local["id"],
+    "itens": [{"id_produto": agua["id"], "quantidade": 1, "um": "CX", "valor_unitario": 100,
+               "valor_desconto": 10, "valor_acrescimo": 22}],
+}, token=token)
+st, nota_aj = chamar("GET", f"/notas/{n['id']}", token=token)
+item_aj = nota_aj["itens"][0]
+# 100 - 10 + 22 = 112, em 12 unidades de estoque
+checar("o acréscimo entra no custo como o frete entra",
+       perto(item_aj["custo_aquisicao_unitario"], 112 / 12, 0.001), item_aj)
+checar("e o desconto do item continua abatendo",
+       float(item_aj["valor_desconto"]) == 10 and float(item_aj["valor_acrescimo"]) == 22,
+       item_aj)
+chamar("DELETE", f"/notas/{n['id']}", token=token)
+chamar("DELETE", f"/produtos/{agua['id']}", token=token)
+
 print("6b. a nota digitada se corrige enquanto não virou estoque")
 st, r = chamar("PUT", f"/notas/{id_manual}", {
     "id_fornecedor": fornecedor["id"], "numero": f"M{marca}", "serie": "1",

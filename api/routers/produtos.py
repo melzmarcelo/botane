@@ -10,6 +10,7 @@ import auditoria
 from database import get_cursor
 from models.produtos import (
     KitRequest,
+    UnidadesCompraRequest,
     ContagemProdutos,
     ProdutoCreate,
     ProdutoResponse,
@@ -123,7 +124,8 @@ def listar(
         cur.execute(
             """
             SELECT p.id, p.codigo, p.nome, p.tipo, c.nome AS categoria, s.nome AS setor,
-                   p.um_estoque, p.producao_propria, p.controla_estoque, p.status, p.ativo,
+                   p.um_estoque, p.producao_propria, p.controla_estoque, p.controla_lote,
+                   p.status, p.ativo,
                    (SELECT pp.preco_venda FROM produto_precos pp
                      WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
                      ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda,
@@ -285,6 +287,85 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "atualizar",
                             antes=dict(antes), depois=campos)
     return {"message": "Produto atualizado"}
+
+
+@router.get("/{id_produto}/unidades")
+def unidades_de_compra(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
+    """Em que unidades este produto é comprado, e quantas de estoque vêm em cada.
+
+    O saldo e o custo vivem numa unidade só — a de estoque. Isto aqui é a
+    tabela de conversão: a mesma água vem em caixa de 12, fardo de 6 e palete
+    de 480, e a nota chega em qualquer uma delas.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT u.id, u.um, u.fator, u.padrao, u.observacao, m.nome AS unidade_nome
+                 FROM produto_unidades u
+                 LEFT JOIN unidades_medida m ON m.sigla = u.um
+                WHERE u.id_produto = %s
+                ORDER BY u.padrao DESC, u.fator""",
+            (id_produto,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.put("/{id_produto}/unidades")
+def gravar_unidades(id_produto: int, body: UnidadesCompraRequest,
+                    ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Substitui a tabela de conversão inteira."""
+    with get_cursor() as cur:
+        cur.execute("SELECT nome, um_estoque FROM produtos WHERE id = %s", (id_produto,))
+        produto = cur.fetchone()
+        if not produto:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+        vistas, padroes = set(), 0
+        for u in body.itens:
+            sigla = u.um.strip().upper()
+            if sigla in vistas:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{sigla} aparece duas vezes — some numa linha só.",
+                )
+            vistas.add(sigla)
+            padroes += 1 if u.padrao else 0
+            cur.execute("SELECT sigla FROM unidades_medida WHERE upper(sigla) = %s", (sigla,))
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{sigla} não é uma unidade cadastrada em Tabelas de apoio.",
+                )
+            # A unidade de estoque com fator diferente de 1 seria o produto
+            # valendo outro tanto dele mesmo.
+            if produto["um_estoque"] and sigla == produto["um_estoque"].upper() and u.fator != 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"{sigla} é a unidade de estoque: nela o fator é sempre 1."),
+                )
+        if padroes > 1:
+            raise HTTPException(status_code=400, detail="Só uma unidade pode ser a padrão.")
+
+        cur.execute("DELETE FROM produto_unidades WHERE id_produto = %s", (id_produto,))
+        for u in body.itens:
+            cur.execute(
+                """INSERT INTO produto_unidades (id_produto, um, fator, padrao, observacao)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (id_produto, u.um.strip().upper(), u.fator, u.padrao, u.observacao),
+            )
+
+        # `um_compra`/`fator_compra` continuam existindo e sustentam o cálculo
+        # quando a nota vem numa unidade que ninguém cadastrou: a padrão daqui
+        # mantém os dois em dia.
+        padrao = next((u for u in body.itens if u.padrao), None) or (
+            body.itens[0] if body.itens else None)
+        if padrao:
+            cur.execute(
+                "UPDATE produtos SET um_compra = %s, fator_compra = %s WHERE id = %s",
+                (padrao.um.strip().upper(), padrao.fator, id_produto),
+            )
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "unidades_compra",
+                            depois={"unidades": len(body.itens)})
+    return {"itens": len(body.itens), "message": f"{len(body.itens)} unidade(s) de compra gravada(s)"}
 
 
 @router.get("/{id_produto}/kit")
