@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { UnidadeMedida } from "@/lib/cadastros";
 import { Aviso, Cartao } from "@/components/ui";
 
@@ -35,10 +36,10 @@ export default function UnidadesDeCompra({
   umEstoque: string | null;
   podeEditar: boolean;
 }) {
+  const aviso = useAviso();
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [linhas, setLinhas] = useState<Linha[] | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -70,7 +71,6 @@ export default function UnidadesDeCompra({
   async function salvar() {
     setSalvando(true);
     setErro("");
-    setOk("");
     try {
       const itens = (linhas ?? [])
         .filter((l) => l.um && numero(l.fator) > 0)
@@ -81,10 +81,10 @@ export default function UnidadesDeCompra({
           observacao: l.observacao || null,
         }));
       const r = await api.put<{ message: string }>(`/produtos/${idProduto}/unidades`, { itens });
-      setOk(r.message);
+      aviso.sucesso(r.message);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gravar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar");
     } finally {
       setSalvando(false);
     }
@@ -120,11 +120,6 @@ export default function UnidadesDeCompra({
       {erro && (
         <div className="mb-4">
           <Aviso tipo="erro">{erro}</Aviso>
-        </div>
-      )}
-      {ok && (
-        <div className="mb-4">
-          <Aviso tipo="ok">{ok}</Aviso>
         </div>
       )}
 

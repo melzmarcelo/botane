@@ -7,6 +7,7 @@ import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
 import { ConviteInstalar } from "@/components/pwa";
+import { ProvedorAvisos } from "@/components/aviso-flutuante";
 
 /** O menu é montado pelas permissões de quem entrou. */
 const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string }[] }[] = [
@@ -324,7 +325,9 @@ function Casca({ children }: { children: React.ReactNode }) {
 export default function LayoutApp({ children }: { children: React.ReactNode }) {
   return (
     <ProvedorSessao>
-      <Casca>{children}</Casca>
+      <ProvedorAvisos>
+        <Casca>{children}</Casca>
+      </ProvedorAvisos>
     </ProvedorSessao>
   );
 }

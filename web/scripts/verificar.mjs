@@ -265,7 +265,40 @@ try {
   await new Promise((r) => setTimeout(r, 1500));
   const criou = /\/produtos\/\d+/.test(p.url());
   checar("cadastra produto pela tela", criou, p.url());
+
+  // O aviso de "criado" ficava no TOPO, e o botão de salvar está no fim de um
+  // formulário longo: quem clicava não via confirmação nenhuma. Agora ele
+  // flutua preso ao rodapé — e leva junto o caminho para cadastrar o próximo.
+  const avisoCriou = await p.evaluate(() => {
+    const el = document.querySelector("[data-aviso]");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      tipo: el.getAttribute("data-aviso"),
+      texto: el.innerText,
+      fixo: getComputedStyle(el.parentElement).position === "fixed",
+      naTela: r.top >= 0 && r.bottom <= window.innerHeight && r.width > 0,
+    };
+  });
+  checar("o aviso de sucesso aparece", avisoCriou?.tipo === "ok", avisoCriou);
+  checar("preso à tela, à vista de qualquer rolagem",
+    avisoCriou?.fixo === true && avisoCriou?.naTela === true, avisoCriou);
+  checar("com o nome do que foi criado",
+    (avisoCriou?.texto ?? "").includes(nomeProduto), avisoCriou?.texto);
+  checar("e o caminho para cadastrar o próximo",
+    /cadastrar outro/i.test(avisoCriou?.texto ?? ""), avisoCriou?.texto);
   await foto(p, "15-produto");
+
+  // Voltar tem de parecer um controle, não legenda da tela.
+  const voltar = await p.evaluate(() => {
+    const el = document.querySelector(".link-voltar");
+    if (!el) return null;
+    const e = getComputedStyle(el);
+    return { borda: e.borderTopWidth, tag: el.tagName, tamanho: e.fontSize };
+  });
+  checar("o voltar é um controle, não um rótulo",
+    voltar?.tag === "A" && parseFloat(voltar?.borda ?? "0") > 0
+      && parseFloat(voltar?.tamanho ?? "0") >= 13, voltar);
 
   await p.goto(`${WEB}/produtos?busca=Teste tela`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));

@@ -3,23 +3,23 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Cartao } from "@/components/ui";
 
 export default function TrocarSenha() {
+  const aviso = useAviso();
   const { eu, sair } = useSessao();
   const router = useRouter();
   const [atual, setAtual] = useState("");
   const [nova, setNova] = useState("");
   const [repetida, setRepetida] = useState("");
-  const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
-    setErro("");
     if (nova !== repetida) {
-      setErro("A confirmação não confere com a nova senha");
+      aviso.erro("A confirmação não confere com a nova senha");
       return;
     }
     setEnviando(true);
@@ -29,7 +29,7 @@ export default function TrocarSenha() {
       await sair();
       router.replace("/login");
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível trocar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível trocar");
       setEnviando(false);
     }
   }
@@ -84,7 +84,6 @@ export default function TrocarSenha() {
             />
           </Campo>
 
-          {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
           <button className="btn btn-primario" type="submit" disabled={enviando}>
             {enviando ? "Trocando…" : "Trocar senha"}

@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
  * Buscar notas no Omie e conferir se não ficou nenhuma para trás.
@@ -47,9 +48,8 @@ const dataBr = (d: string | null) =>
   d ? new Date(d.slice(0, 10) + "T00:00").toLocaleDateString("pt-BR") : "—";
 
 export default function NotasOmie() {
+  const aviso = useAviso();
   const [ocupado, setOcupado] = useState("");
-  const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [desde, setDesde] = useState("");
   const [inicio, setInicio] = useState(mesPassado);
   const [fim, setFim] = useState(hoje);
@@ -57,15 +57,13 @@ export default function NotasOmie() {
 
   async function buscar(caminho: string, oQue: string) {
     setOcupado(oQue);
-    setErro("");
-    setOk("");
     try {
       const r = await api.post<Resultado & { message: string }>(caminho);
-      setOk(r.message);
+      aviso.sucesso(r.message);
       // Depois de buscar, a conferência aberta na tela está velha.
       if (conf) await conferir();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível buscar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível buscar");
     } finally {
       setOcupado("");
     }
@@ -73,11 +71,10 @@ export default function NotasOmie() {
 
   async function conferir() {
     setOcupado("conferencia");
-    setErro("");
     try {
       setConf(await api.get<Conferencia>(`/omie/conferencia-notas?inicio=${inicio}&fim=${fim}`));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível conferir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível conferir");
     } finally {
       setOcupado("");
     }
@@ -97,16 +94,6 @@ export default function NotasOmie() {
         </button>
       }
     >
-      {erro && (
-        <div className="mb-4">
-          <Aviso tipo="erro">{erro}</Aviso>
-        </div>
-      )}
-      {ok && (
-        <div className="mb-4">
-          <Aviso tipo="ok">{ok}</Aviso>
-        </div>
-      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div>

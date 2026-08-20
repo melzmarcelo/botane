@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
@@ -63,11 +64,11 @@ export default function ComposicaoKit({
   podeEditar: boolean;
   podeVerCusto: boolean;
 }) {
+  const aviso = useAviso();
   const [dados, setDados] = useState<Composicao | null>(null);
   const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [linhas, setLinhas] = useState<{ id: string; qtd: string }[]>([]);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -95,7 +96,6 @@ export default function ComposicaoKit({
   async function salvar() {
     setSalvando(true);
     setErro("");
-    setOk("");
     try {
       const itens = linhas
         .filter((l) => l.id && Number(l.qtd.replace(",", ".")) > 0)
@@ -104,10 +104,10 @@ export default function ComposicaoKit({
           quantidade: Number(l.qtd.replace(",", ".")),
         }));
       const r = await api.put<{ message: string }>(`/produtos/${idProduto}/kit`, { itens });
-      setOk(r.message);
+      aviso.sucesso(r.message);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gravar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar");
     } finally {
       setSalvando(false);
     }
@@ -138,11 +138,6 @@ export default function ComposicaoKit({
       {erro && (
         <div className="mb-4">
           <Aviso tipo="erro">{erro}</Aviso>
-        </div>
-      )}
-      {ok && (
-        <div className="mb-4">
-          <Aviso tipo="ok">{ok}</Aviso>
         </div>
       )}
       {incompleto && (

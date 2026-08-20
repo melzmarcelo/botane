@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -81,6 +82,7 @@ const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
 };
 
 export default function PaginaCompras() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const [notas, setNotas] = useState<Nota[] | null>(null);
   const [aberta, setAberta] = useState<(NotaDetalhe & { itens: ItemNota[] }) | null>(null);
@@ -88,7 +90,6 @@ export default function PaginaCompras() {
   const [locais, setLocais] = useState<Local[]>([]);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [digitando, setDigitando] = useState(false);
   const [corrigindo, setCorrigindo] = useState<NotaParaEditar | null>(null);
@@ -124,7 +125,6 @@ export default function PaginaCompras() {
   async function abrir(id: number, limparAvisos = true) {
     if (limparAvisos) {
       setErro("");
-      setOk("");
     }
     try {
       const nota = await api.get<NotaDetalhe & { itens: ItemNota[] }>(`/notas/${id}`);
@@ -138,7 +138,7 @@ export default function PaginaCompras() {
         ),
       );
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao abrir a nota");
+      aviso.erro(e instanceof Error ? e.message : "Falha ao abrir a nota");
     }
   }
 
@@ -146,7 +146,6 @@ export default function PaginaCompras() {
     if (!arquivos?.length) return;
     setOcupado(true);
     setErro("");
-    setOk("");
     setImportados(null);
     try {
       const corpo = new FormData();
@@ -158,12 +157,12 @@ export default function PaginaCompras() {
         corpo,
       );
       setImportados(r.resultados);
-      setOk(r.message);
+      aviso.sucesso(r.message);
       await carregar();
       const primeira = r.resultados.find((x) => x.status === "nova" && x.id);
       if (primeira?.id) await abrir(primeira.id, false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível ler os arquivos");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível ler os arquivos");
     } finally {
       setOcupado(false);
       if (entradaXml.current) entradaXml.current.value = "";
@@ -173,20 +172,19 @@ export default function PaginaCompras() {
   async function sincronizar() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       // Sem período: a janela vai desde a última sincronização, com folga. A
       // resposta já vem com a frase de qual janela foi usada.
       const r = await api.post<{ novas: number; modo: string; message: string }>(
         "/omie/sincronizar",
       );
-      setOk(
+      aviso.sucesso(
         (r.message ?? "Busca concluída") +
           (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
       );
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível sincronizar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível sincronizar");
     } finally {
       setOcupado(false);
     }
@@ -201,9 +199,9 @@ export default function PaginaCompras() {
       await api.post(`/notas/itens/${item.id}/vincular`, { id_produto, aprender: true });
       await abrir(aberta!.id, false);
       await carregar();
-      setOk("Item vinculado — as próximas notas com esse código entram sozinhas.");
+      aviso.sucesso("Item vinculado — as próximas notas com esse código entram sozinhas.");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível vincular");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível vincular");
     } finally {
       setOcupado(false);
     }
@@ -219,17 +217,16 @@ export default function PaginaCompras() {
   async function criarProduto(item: ItemNota) {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ message: string }>(
         `/notas/itens/${item.id}/criar-produto`,
         {},
       );
-      setOk(r.message);
+      aviso.sucesso(r.message);
       await abrir(aberta!.id, false);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível criar o produto");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível criar o produto");
     } finally {
       setOcupado(false);
     }
@@ -242,7 +239,7 @@ export default function PaginaCompras() {
       await abrir(aberta!.id, false);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível marcar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível marcar");
     } finally {
       setOcupado(false);
     }
@@ -252,19 +249,18 @@ export default function PaginaCompras() {
     if (!aberta) return;
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ itens_lancados: number; valor: number }>(
         `/notas/${aberta.id}/lancar`,
         {},
       );
-      setOk(
+      aviso.sucesso(
         `${r.itens_lancados} item(ns) no estoque, ${reais(Number(r.valor))} — o custo médio de cada insumo foi recalculado.`,
       );
       await abrir(aberta.id, false);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível lançar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível lançar");
     } finally {
       setOcupado(false);
     }
@@ -274,14 +270,13 @@ export default function PaginaCompras() {
     if (!aberta) return;
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ estornados: number }>(`/notas/${aberta.id}/estornar`);
-      setOk(`${r.estornados} movimento(s) estornado(s) — o razão guarda os dois lados.`);
+      aviso.sucesso(`${r.estornados} movimento(s) estornado(s) — o razão guarda os dois lados.`);
       await abrir(aberta.id, false);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível estornar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível estornar");
     } finally {
       setOcupado(false);
     }
@@ -343,7 +338,6 @@ export default function PaginaCompras() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {corrigindo && (
         <NotaManual
@@ -353,7 +347,7 @@ export default function PaginaCompras() {
           aoFechar={() => setCorrigindo(null)}
           aoGravar={async (id) => {
             setCorrigindo(null);
-            setOk("Nota corrigida. Confira e lance no estoque.");
+            aviso.sucesso("Nota corrigida. Confira e lance no estoque.");
             await carregar();
             await abrir(id, false);
           }}
@@ -367,7 +361,7 @@ export default function PaginaCompras() {
           aoFechar={() => setDigitando(false)}
           aoGravar={async (id) => {
             setDigitando(false);
-            setOk("Nota registrada. Confira os itens e lance no estoque.");
+            aviso.sucesso("Nota registrada. Confira os itens e lance no estoque.");
             await carregar();
             await abrir(id, false);
           }}

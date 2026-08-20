@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 
 type Permissao = { chave: string; modulo: string; descricao: string; ordem: number };
@@ -15,13 +16,13 @@ type Papel = {
 };
 
 export default function PaginaPapeis() {
+  const aviso = useAviso();
   const [papeis, setPapeis] = useState<Papel[] | null>(null);
   const [permissoes, setPermissoes] = useState<Permissao[]>([]);
   const [sel, setSel] = useState<Papel | null>(null);
   const [novoNome, setNovoNome] = useState("");
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   async function carregar() {
     try {
@@ -43,7 +44,6 @@ export default function PaginaPapeis() {
 
   useEffect(() => {
     setMarcadas(new Set(sel?.permissoes ?? []));
-    setOk("");
   }, [sel]);
 
   const porModulo = useMemo(() => {
@@ -65,13 +65,12 @@ export default function PaginaPapeis() {
   async function salvar() {
     if (!sel) return;
     setErro("");
-    setOk("");
     try {
       await api.put(`/papeis/${sel.id}`, { permissoes: [...marcadas] });
-      setOk("Permissões do papel salvas.");
+      aviso.sucesso("Permissões do papel salvas.");
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar");
     }
   }
 
@@ -83,7 +82,7 @@ export default function PaginaPapeis() {
       setNovoNome("");
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível criar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível criar");
     }
   }
 
@@ -97,7 +96,7 @@ export default function PaginaPapeis() {
       });
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível copiar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível copiar");
     }
   }
 
@@ -116,7 +115,6 @@ export default function PaginaPapeis() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">

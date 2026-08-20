@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
   Categoria,
@@ -16,6 +17,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
 
 export default function PaginaProdutos() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeEditar = pode("cadastros.produtos");
 
@@ -100,7 +102,7 @@ export default function PaginaProdutos() {
               try {
                 await api.baixar("/exportar/produtos.csv");
               } catch (e) {
-                setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+                aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
               }
             }}
           >

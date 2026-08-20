@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -73,6 +74,7 @@ const primeiroDiaDoMes = () => {
 };
 
 export default function PaginaCmv() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const [inicio, setInicio] = useState(primeiroDiaDoMes());
   const [fim, setFim] = useState(new Date().toISOString().slice(0, 10));
@@ -82,7 +84,6 @@ export default function PaginaCmv() {
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
   const [aba, setAba] = useState<"abc" | "margem" | "dono">("abc");
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -113,7 +114,7 @@ export default function PaginaCmv() {
     try {
       await api.baixar(caminho);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
     } finally {
       setOcupado(false);
     }
@@ -122,17 +123,16 @@ export default function PaginaCmv() {
   async function fechar() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ competencia: string; variancia: number }>("/cmv/fechamentos", {
         competencia: inicio,
       });
-      setOk(
+      aviso.sucesso(
         `Período de ${r.competencia} fechado. A partir de agora, lançamento com data dentro dele exige permissão de retroativo.`,
       );
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível fechar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível fechar");
     } finally {
       setOcupado(false);
     }
@@ -140,13 +140,12 @@ export default function PaginaCmv() {
 
   async function reabrir(id: number) {
     setErro("");
-    setOk("");
     try {
       await api.post(`/cmv/fechamentos/${id}/reabrir`);
-      setOk("Período reaberto — e isso ficou registrado na auditoria.");
+      aviso.sucesso("Período reaberto — e isso ficou registrado na auditoria.");
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível reabrir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível reabrir");
     }
   }
 
@@ -198,7 +197,6 @@ export default function PaginaCmv() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {!a ? (
         <Carregando />

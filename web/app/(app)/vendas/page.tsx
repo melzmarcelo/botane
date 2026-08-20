@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -63,6 +64,7 @@ function lerPlanilha(texto: string): { linhas: Linha[]; erros: string[] } {
 }
 
 export default function PaginaVendas() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeImportar = pode("cmv.painel") || pode("cmv.fechamento");
 
@@ -70,7 +72,6 @@ export default function PaginaVendas() {
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
@@ -102,12 +103,11 @@ export default function PaginaVendas() {
   async function importar(e: FormEvent) {
     e.preventDefault();
     if (!previa.linhas.length) {
-      setErro("Nada para importar.");
+      aviso.erro("Nada para importar.");
       return;
     }
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{
         importadas: number;
@@ -129,7 +129,7 @@ export default function PaginaVendas() {
           },
         ],
       });
-      setOk(
+      aviso.sucesso(
         `${r.importadas} venda(s), ${r.itens} item(ns).` +
           (r.itens_sem_vinculo
             ? ` ${r.itens_sem_vinculo} item(ns) não encontraram produto — veja a fila abaixo.`
@@ -140,7 +140,7 @@ export default function PaginaVendas() {
       setDocumento("");
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível importar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível importar");
     } finally {
       setOcupado(false);
     }
@@ -150,7 +150,6 @@ export default function PaginaVendas() {
     e.preventDefault();
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       await api.post("/vendas/importar", {
         vendas: [
@@ -167,11 +166,11 @@ export default function PaginaVendas() {
           },
         ],
       });
-      setOk("Venda lançada.");
+      aviso.sucesso("Venda lançada.");
       setManual({ id_produto: "", quantidade: "", valor_unitario: "" });
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível lançar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
     } finally {
       setOcupado(false);
     }
@@ -182,7 +181,7 @@ export default function PaginaVendas() {
       await api.delete(`/vendas/${v.id}`);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível cancelar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível cancelar");
     }
   }
 
@@ -199,7 +198,6 @@ export default function PaginaVendas() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {!!pendencias.length && (
         <Cartao

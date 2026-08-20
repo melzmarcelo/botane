@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
@@ -60,6 +61,7 @@ const ITEM_VAZIO: Item = {
 };
 
 export default function EditorFicha() {
+  const aviso = useAviso();
   const { id } = useParams<{ id: string }>();
   const nova = id === "nova";
   const router = useRouter();
@@ -82,7 +84,6 @@ export default function EditorFicha() {
   const [carregando, setCarregando] = useState(!nova);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -163,7 +164,6 @@ export default function EditorFicha() {
     e.preventDefault();
     setSalvando(true);
     setErro("");
-    setOk("");
     const corpo = {
       rendimento_qtd: num(cabecalho.rendimento_qtd) ?? 1,
       rendimento_um: texto(cabecalho.rendimento_um),
@@ -181,13 +181,19 @@ export default function EditorFicha() {
           id_produto: Number(idProduto),
         });
         router.replace(`/fichas/${r.id}`);
+        // Criar uma ficha e não dizer nada era o pior caso: a tela trocava de
+        // endereço e nada confirmava que gravou.
+        aviso.sucesso("Ficha criada.", {
+          texto: "criar outra",
+          ao: () => router.push("/fichas/nova"),
+        });
       } else {
         await api.put(`/fichas/${id}`, corpo);
         await carregar();
-        setOk("Ficha salva.");
+        aviso.sucesso("Ficha salva.");
       }
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setSalvando(false);
     }
@@ -195,16 +201,15 @@ export default function EditorFicha() {
 
   async function acao(caminho: string, mensagem: string, irPara?: (r: { id: number }) => string) {
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ id: number }>(`/fichas/${id}/${caminho}`);
       if (irPara) router.push(irPara(r));
       else {
         await carregar();
-        setOk(mensagem);
+        aviso.sucesso(mensagem);
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível concluir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível concluir");
     }
   }
 
@@ -219,8 +224,8 @@ export default function EditorFicha() {
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link href="/fichas" className="rotulo hover:text-erva">
-            ‹ fichas técnicas
+          <Link href="/fichas" className="link-voltar">
+            fichas técnicas
           </Link>
           <h1 className="mt-1 break-words text-[26px] font-bold tracking-tight sm:text-[30px]">
             {nova ? "Nova ficha" : ficha?.produto}
@@ -265,7 +270,6 @@ export default function EditorFicha() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
       {travada && (
         <Aviso tipo="info">
           {ficha?.status === "HOMOLOGADA"

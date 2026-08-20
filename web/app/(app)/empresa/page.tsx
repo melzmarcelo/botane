@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { api, ErroApi, urlArquivo } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { avisarEmpresaMudou } from "@/lib/eventos";
 import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
@@ -11,12 +12,12 @@ type Empresa = Record<string, string | null>;
 const REGIMES = ["SIMPLES", "PRESUMIDO", "REAL", "MEI"];
 
 export default function PaginaEmpresa() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeEditar = pode("admin.empresa");
 
   const [dados, setDados] = useState<Empresa | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const seletor = useRef<HTMLInputElement>(null);
@@ -30,7 +31,6 @@ export default function PaginaEmpresa() {
 
   function set(campo: string, valor: string) {
     setDados((d) => (d ? { ...d, [campo]: valor } : d));
-    setOk("");
   }
 
   async function salvar(e: FormEvent) {
@@ -38,7 +38,6 @@ export default function PaginaEmpresa() {
     if (!dados) return;
     setSalvando(true);
     setErro("");
-    setOk("");
     try {
       const { id, ...resto } = dados as Empresa & { id?: number };
       // string vazia vira null: campo em branco não é "vazio", é sem informação
@@ -47,9 +46,9 @@ export default function PaginaEmpresa() {
       );
       await api.put("/empresa", limpo);
       avisarEmpresaMudou();
-      setOk("Dados da empresa salvos.");
+      aviso.sucesso("Dados da empresa salvos.");
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setSalvando(false);
     }
@@ -60,16 +59,15 @@ export default function PaginaEmpresa() {
     if (!arquivo) return;
     setEnviandoLogo(true);
     setErro("");
-    setOk("");
     try {
       const corpo = new FormData();
       corpo.append("arquivo", arquivo);
       const r = await api.upload<{ logo_url: string }>("/empresa/logo", corpo);
       setDados((d) => (d ? { ...d, logo_url: r.logo_url } : d));
       avisarEmpresaMudou();
-      setOk("Logo enviada.");
+      aviso.sucesso("Logo enviada.");
     } catch (err) {
-      setErro(err instanceof ErroApi ? err.message : "Não foi possível enviar a imagem");
+      aviso.erro(err instanceof ErroApi ? err.message : "Não foi possível enviar a imagem");
     } finally {
       setEnviandoLogo(false);
       if (seletor.current) seletor.current.value = "";
@@ -78,14 +76,13 @@ export default function PaginaEmpresa() {
 
   async function removerLogo() {
     setErro("");
-    setOk("");
     try {
       await api.delete("/empresa/logo");
       setDados((d) => (d ? { ...d, logo_url: null } : d));
       avisarEmpresaMudou();
-      setOk("Logo removida.");
+      aviso.sucesso("Logo removida.");
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível remover");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível remover");
     }
   }
 
@@ -122,7 +119,6 @@ export default function PaginaEmpresa() {
 
       {!podeEditar && <Aviso tipo="info">Você tem acesso de leitura a esta tela.</Aviso>}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <Cartao titulo="Identificação fiscal">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

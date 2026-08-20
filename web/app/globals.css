@@ -45,6 +45,33 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   text-transform: uppercase;
   color: var(--color-suave);
 }
+/* Voltar tem de PARECER um controle. Escrito com a classe de rótulo — 10,5px,
+   maiúsculas, cinza — ele lia como legenda da tela, e quem acabava de cadastrar
+   não achava o caminho de volta para cadastrar o próximo. */
+.link-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--color-linha2);
+  border-radius: 999px;
+  background: var(--color-superficie);
+  color: var(--color-suave);
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.link-voltar:hover {
+  border-color: var(--color-erva);
+  color: var(--color-erva);
+  background: var(--color-erva-claro);
+}
+.link-voltar::before {
+  content: "←";
+  font-size: 15px;
+  line-height: 1;
+}
 .campo {
   width: 100%;
   border: 1px solid var(--color-linha2);

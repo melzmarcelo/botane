@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
@@ -45,6 +46,7 @@ const CORES = { critico: "erro", atencao: "alerta", aviso: "suave" } as const;
 const ROTULOS = { critico: "agir hoje", atencao: "atenção", aviso: "quando puder" } as const;
 
 export default function PaginaAlertas() {
+  const aviso = useAviso();
   const [alertas, setAlertas] = useState<Alerta[] | null>(null);
   const [vencimentos, setVencimentos] = useState<Vencimento[]>([]);
   const [minimos, setMinimos] = useState<Minimo[]>([]);
@@ -76,7 +78,7 @@ export default function PaginaAlertas() {
     try {
       await api.baixar(caminho);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
     } finally {
       setBaixando("");
     }

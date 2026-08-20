@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
@@ -21,13 +22,13 @@ type Usuario = {
 const vazio = { nome: "", email: "", telefone: "", senha: "", papeis: [] as number[] };
 
 export default function PaginaUsuarios() {
+  const aviso = useAviso();
   const { eu } = useSessao();
   const [usuarios, setUsuarios] = useState<Usuario[] | null>(null);
   const [papeis, setPapeis] = useState<Papel[]>([]);
   const [form, setForm] = useState({ ...vazio });
   const [editando, setEditando] = useState<number | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [link, setLink] = useState<{ nome: string; url: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -51,7 +52,6 @@ export default function PaginaUsuarios() {
   function novo() {
     setEditando(null);
     setForm({ ...vazio });
-    setOk("");
     setErro("");
   }
 
@@ -64,7 +64,6 @@ export default function PaginaUsuarios() {
       senha: "",
       papeis: u.papeis.map((v) => v.id_papel),
     });
-    setOk("");
     setErro("");
   }
 
@@ -72,7 +71,6 @@ export default function PaginaUsuarios() {
     e.preventDefault();
     setSalvando(true);
     setErro("");
-    setOk("");
     // id_unidade nulo = vale em todas as lojas; com uma loja só é o que faz sentido
     const vinculos = form.papeis.map((id) => ({ id_papel: id, id_unidade: null }));
     try {
@@ -85,7 +83,7 @@ export default function PaginaUsuarios() {
         };
         if (form.senha) corpo.senha = form.senha;
         await api.put(`/usuarios/${editando}`, corpo);
-        setOk("Usuário atualizado.");
+        aviso.sucesso("Usuário atualizado.");
       } else {
         await api.post("/usuarios", {
           nome: form.nome,
@@ -94,12 +92,12 @@ export default function PaginaUsuarios() {
           senha: form.senha,
           papeis: vinculos,
         });
-        setOk("Usuário criado. A senha precisa ser trocada no primeiro acesso.");
+        aviso.sucesso("Usuário criado. A senha precisa ser trocada no primeiro acesso.");
       }
       novo();
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setSalvando(false);
     }
@@ -112,7 +110,7 @@ export default function PaginaUsuarios() {
       else await api.put(`/usuarios/${u.id}`, { ativo: true });
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao mudar a situação");
+      aviso.erro(e instanceof Error ? e.message : "Falha ao mudar a situação");
     }
   }
 
@@ -131,16 +129,15 @@ export default function PaginaUsuarios() {
    */
   async function linkDeSenha(u: Usuario) {
     setErro("");
-    setOk("");
     setLink(null);
     try {
       const r = await api.post<{ link: string; modo: string; message: string }>(
         `/usuarios/${u.id}/recuperar-senha`,
       );
-      setOk(r.message);
+      aviso.sucesso(r.message);
       if (r.modo !== "real") setLink({ nome: u.nome, url: r.link });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gerar o link");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gerar o link");
     }
   }
 
@@ -164,7 +161,6 @@ export default function PaginaUsuarios() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {link && (
         <Cartao

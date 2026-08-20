@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -40,6 +41,7 @@ type Resultado = {
 };
 
 export default function PaginaProducao() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeProduzir = pode("estoque.saidas");
   const veCusto = pode("fichas.custos");
@@ -93,7 +95,7 @@ export default function PaginaProducao() {
       setF({ ...f, quantidade: "", observacao: "" });
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível produzir");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível produzir");
     } finally {
       setSalvando(false);
     }

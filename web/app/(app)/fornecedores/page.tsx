@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -32,6 +33,7 @@ const texto = (v: string) => (v.trim() === "" ? null : v.trim());
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
 
 export default function PaginaFornecedores() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeEditar = pode("cadastros.fornecedores");
 
@@ -41,7 +43,6 @@ export default function PaginaFornecedores() {
   const [f, setF] = useState<Form>(VAZIO);
   const [editando, setEditando] = useState<number | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -64,7 +65,6 @@ export default function PaginaFornecedores() {
     setEditando(null);
     setF(VAZIO);
     setErro("");
-    setOk("");
   }
 
   function editar(x: Fornecedor) {
@@ -85,14 +85,12 @@ export default function PaginaFornecedores() {
       observacao: x.observacao ?? "",
     });
     setErro("");
-    setOk("");
   }
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
     setErro("");
-    setOk("");
     const corpo = {
       nome: f.nome.trim(),
       nome_fantasia: texto(f.nome_fantasia),
@@ -111,15 +109,15 @@ export default function PaginaFornecedores() {
     try {
       if (editando) {
         await api.put(`/fornecedores/${editando}`, corpo);
-        setOk("Fornecedor atualizado.");
+        aviso.sucesso("Fornecedor atualizado.");
       } else {
         await api.post("/fornecedores", corpo);
-        setOk("Fornecedor criado.");
+        aviso.sucesso("Fornecedor criado.");
       }
       novo();
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setSalvando(false);
     }
@@ -132,7 +130,7 @@ export default function PaginaFornecedores() {
       else await api.put(`/fornecedores/${x.id}`, { ativo: true });
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao mudar a situação");
+      aviso.erro(e instanceof Error ? e.message : "Falha ao mudar a situação");
     }
   }
 
@@ -155,7 +153,6 @@ export default function PaginaFornecedores() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-4">

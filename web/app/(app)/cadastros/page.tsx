@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
   Categoria,
@@ -48,6 +49,7 @@ const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
 ];
 
 export default function PaginaCadastros() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const [aba, setAba] = useState<Aba>("setores");
   const [setores, setSetores] = useState<Setor[] | null>(null);
@@ -55,7 +57,6 @@ export default function PaginaCadastros() {
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
   const [ums, setUms] = useState<UnidadeMedida[] | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   // formulários de criação, um por aba
   const [novoSetor, setNovoSetor] = useState("");
@@ -86,13 +87,12 @@ export default function PaginaCadastros() {
 
   async function acao(fn: () => Promise<unknown>, mensagem: string) {
     setErro("");
-    setOk("");
     try {
       await fn();
-      setOk(mensagem);
+      aviso.sucesso(mensagem);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível concluir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível concluir");
     }
   }
 
@@ -113,7 +113,6 @@ export default function PaginaCadastros() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <nav className="flex flex-wrap gap-1 border-b border-linha">
         {ABAS.map((a) => (
@@ -121,7 +120,6 @@ export default function PaginaCadastros() {
             key={a.id}
             onClick={() => {
               setAba(a.id);
-              setOk("");
             }}
             className={`-mb-px border-b-2 px-3 py-2 text-[14.5px] ${
               aba === a.id

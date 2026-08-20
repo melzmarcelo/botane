@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -49,6 +50,7 @@ const qtd = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function PaginaEstoque() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const [aba, setAba] = useState<"saldos" | "movimentos">("saldos");
   const [saldos, setSaldos] = useState<Saldo[] | null>(null);
@@ -60,7 +62,6 @@ export default function PaginaEstoque() {
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   const [lancamento, setLancamento] = useState<Lancamento>(null);
   const [f, setF] = useState({
@@ -77,7 +78,7 @@ export default function PaginaEstoque() {
     try {
       await api.baixar(caminho);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível baixar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
     } finally {
       setBaixando(false);
     }
@@ -112,7 +113,6 @@ export default function PaginaEstoque() {
   function abrir(tipo: Lancamento) {
     setLancamento(tipo);
     setErro("");
-    setOk("");
     setF({
       id_produto: "", quantidade: "", custo_unitario: "",
       id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""),
@@ -125,7 +125,6 @@ export default function PaginaEstoque() {
     e.preventDefault();
     setSalvando(true);
     setErro("");
-    setOk("");
     const base = {
       id_produto: Number(f.id_produto),
       quantidade: Number(f.quantidade.replace(",", ".")),
@@ -141,7 +140,7 @@ export default function PaginaEstoque() {
           lote: f.lote || null,
           validade: f.validade || null,
         });
-        setOk(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
+        aviso.sucesso(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
       } else if (lancamento === "transferencia") {
         await api.post("/estoque/transferencias", {
           id_produto: base.id_produto,
@@ -150,7 +149,7 @@ export default function PaginaEstoque() {
           id_local_destino: Number(f.id_local_destino),
           observacao: base.observacao,
         });
-        setOk("Transferência lançada.");
+        aviso.sucesso("Transferência lançada.");
       } else {
         const r = await api.post<{
           custo_unitario: number;
@@ -164,7 +163,7 @@ export default function PaginaEstoque() {
         // A frase de qual lote saiu vem pronta do servidor: é a mesma que qualquer
         // outro consumidor da API recebe, e escrevê-la de novo aqui seria a
         // segunda versão da mesma regra.
-        setOk(
+        aviso.sucesso(
           `${r.message ?? "Saída lançada"} — ${reais(Number(r.custo_unitario))} por unidade.` +
             (r.custo_provisorio ? " Custo provisório: não havia saldo suficiente." : ""),
         );
@@ -172,7 +171,7 @@ export default function PaginaEstoque() {
       setLancamento(null);
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível lançar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
     } finally {
       setSalvando(false);
     }
@@ -180,13 +179,12 @@ export default function PaginaEstoque() {
 
   async function estornar(m: Movimento) {
     setErro("");
-    setOk("");
     try {
       await api.post(`/estoque/movimentos/${m.id}/estornar`, { motivo: "estorno pela tela" });
-      setOk("Movimento estornado — o original continua no razão, com a contrapartida.");
+      aviso.sucesso("Movimento estornado — o original continua no razão, com a contrapartida.");
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível estornar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível estornar");
     }
   }
 
@@ -237,7 +235,6 @@ export default function PaginaEstoque() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {lancamento && (
         <Cartao

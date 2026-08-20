@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
   Categoria,
@@ -66,6 +67,7 @@ const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", "."))
 const texto = (v: string) => (v.trim() === "" ? null : v.trim());
 
 export default function FormularioProduto() {
+  const aviso = useAviso();
   const { id } = useParams<{ id: string }>();
   const novo = id === "novo";
   const router = useRouter();
@@ -82,7 +84,6 @@ export default function FormularioProduto() {
   const [carregando, setCarregando] = useState(!novo);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -135,14 +136,12 @@ export default function FormularioProduto() {
       }
       return proximo;
     });
-    setOk("");
   }
 
   async function salvar(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
     setErro("");
-    setOk("");
     const corpo = {
       codigo: texto(f.codigo),
       nome: f.nome.trim(),
@@ -179,13 +178,22 @@ export default function FormularioProduto() {
       if (novo) {
         const r = await api.post<{ id: number }>("/produtos", corpo);
         router.replace(`/produtos/${r.id}`);
-        setOk("Produto criado.");
+        // Quem cadastra um produto costuma cadastrar o próximo. O caminho para
+        // isso vai junto do aviso, em vez de exigir voltar à lista e achar o
+        // botão de novo.
+        aviso.sucesso(`${f.nome.trim()} criado.`, {
+          texto: "cadastrar outro",
+          ao: () => router.push("/produtos/novo"),
+        });
       } else {
         await api.put(`/produtos/${id}`, { ...corpo, ativo: f.ativo });
-        setOk("Produto salvo.");
+        aviso.sucesso(`${f.nome.trim()} salvo.`, {
+          texto: "voltar para a lista",
+          ao: () => router.push("/produtos"),
+        });
       }
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setSalvando(false);
     }
@@ -195,9 +203,9 @@ export default function FormularioProduto() {
     try {
       await api.post(`/produtos/${id}/revisar`);
       setF((a) => ({ ...a, status: "ATIVO" }));
-      setOk("Produto revisado — agora ele pode entrar no estoque.");
+      aviso.sucesso("Produto revisado — agora ele pode entrar no estoque.");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível revisar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível revisar");
     }
   }
 
@@ -211,8 +219,8 @@ export default function FormularioProduto() {
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link href="/produtos" className="rotulo hover:text-erva">
-            ‹ produtos
+          <Link href="/produtos" className="link-voltar">
+            produtos
           </Link>
           <h1 className="mt-1 break-words text-[26px] font-bold tracking-tight sm:text-[30px]">
             {novo ? "Novo produto" : f.nome || "Produto"}
@@ -239,7 +247,6 @@ export default function FormularioProduto() {
 
       {!podeEditar && <Aviso tipo="info">Você tem acesso de leitura a esta tela.</Aviso>}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <Cartao titulo="Identificação">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -44,6 +44,15 @@ para arquivo nenhum — gravar direto aqui.
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
+- **Aviso de ação flutua** (`components/aviso-flutuante.tsx`, 20/08/2026): sucesso e erro de
+  AÇÃO saem por `useAviso()` e aparecem presos ao canto inferior — a mensagem ficava no topo e
+  o botão de salvar está no fim de um formulário longo, então quem clicava não via confirmação
+  nenhuma e clicava de novo. Sucesso some em 6 s; **erro fica até fecharem**. O aviso pode levar
+  UMA ação ("cadastrar outro"), que é a resposta ao "cadastrei, e agora?".
+  ⚠️ Erro de **carregamento** continua inline no cartão (é ele que explica a tela vazia) — a
+  regra de bolso: mensagem com "Falha ao carregar" fica; o resto flutua.
+- ⚠️ **Voltar tem de parecer um controle**: era `class="rotulo"` (10,5px, maiúsculas, cinza) e
+  lia como legenda. Virou `.link-voltar`, pílula com borda e seta.
 - Manual da equipe: `docs/manual-da-equipe.md`.
 - ⚠️ **`.campo` é `width:100%` e vence a utilitária de largura do Tailwind.** `w-[110px]` num
   input com `campo` não faz nada — a largura tem de ir na COLUNA (`<th>`), e com `min-w` além

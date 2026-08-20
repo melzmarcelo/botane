@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { Fornecedor, Local, ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
-import { Aviso, Campo, Cartao } from "@/components/ui";
+import { Campo, Cartao } from "@/components/ui";
 
 /**
  * Digitar a nota inteira na mão — o caminho de quem comprou no mercado, no
@@ -83,6 +84,7 @@ export default function NotaManual({
   /** Quando vem preenchida, o formulário corrige em vez de criar. */
   editando?: NotaParaEditar | null;
 }) {
+  const aviso = useAviso();
   const texto = (n: number | null | undefined) => (n ? String(n) : "");
 
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -118,7 +120,6 @@ export default function NotaManual({
         }))
       : [{ ...LINHA }, { ...LINHA }],
   );
-  const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => {
@@ -256,9 +257,8 @@ export default function NotaManual({
   }
 
   async function gravar() {
-    setErro("");
     if (!preenchidas.length) {
-      setErro("Coloque ao menos um item com quantidade.");
+      aviso.erro("Coloque ao menos um item com quantidade.");
       return;
     }
     setOcupado(true);
@@ -290,7 +290,7 @@ export default function NotaManual({
         : await api.post<{ id: number }>("/notas", corpo);
       aoGravar(r.id ?? editando?.id ?? 0);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gravar a nota");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar a nota");
     } finally {
       setOcupado(false);
     }
@@ -315,11 +315,6 @@ export default function NotaManual({
         </div>
       }
     >
-      {erro && (
-        <div className="mb-4">
-          <Aviso tipo="erro">{erro}</Aviso>
-        </div>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo rotulo="Fornecedor">

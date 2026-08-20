@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -48,6 +49,7 @@ type Vinculo = {
 };
 
 export default function PaginaIntegracoes() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeConfigurar = pode("admin.integracoes");
 
@@ -56,7 +58,6 @@ export default function PaginaIntegracoes() {
   const [conferencia, setConferencia] = useState<Conferencia[] | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -78,7 +79,6 @@ export default function PaginaIntegracoes() {
     e.preventDefault();
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       await api.put("/omie/config", {
         app_key: form.app_key || null,
@@ -86,10 +86,10 @@ export default function PaginaIntegracoes() {
         modo: form.modo,
         ativa: form.ativa,
       });
-      setOk("Integração salva. A chave fica cifrada e não volta pela tela.");
+      aviso.sucesso("Integração salva. A chave fica cifrada e não volta pela tela.");
       await carregar();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível salvar");
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
       setOcupado(false);
     }
@@ -98,13 +98,12 @@ export default function PaginaIntegracoes() {
   async function testar() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ ok: boolean; modo: string; detalhe: string }>("/omie/testar");
-      if (r.ok) setOk(`Conexão ${r.modo}: ${r.detalhe}`);
-      else setErro(`Não respondeu (${r.modo}): ${r.detalhe}`);
+      if (r.ok) aviso.sucesso(`Conexão ${r.modo}: ${r.detalhe}`);
+      else aviso.erro(`Não respondeu (${r.modo}): ${r.detalhe}`);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha no teste");
+      aviso.erro(e instanceof Error ? e.message : "Falha no teste");
     } finally {
       setOcupado(false);
     }
@@ -113,13 +112,12 @@ export default function PaginaIntegracoes() {
   async function acao(caminho: string, mensagem: (r: Record<string, number>) => string) {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<Record<string, number>>(caminho);
-      setOk(mensagem(r));
+      aviso.sucesso(mensagem(r));
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível concluir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível concluir");
     } finally {
       setOcupado(false);
     }
@@ -131,7 +129,7 @@ export default function PaginaIntegracoes() {
     try {
       setConferencia(await api.get<Conferencia[]>("/omie/conferencia"));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha na conferência");
+      aviso.erro(e instanceof Error ? e.message : "Falha na conferência");
     } finally {
       setOcupado(false);
     }
@@ -151,7 +149,6 @@ export default function PaginaIntegracoes() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {cfg.modo === "simulado" && (
         <Aviso tipo="info">

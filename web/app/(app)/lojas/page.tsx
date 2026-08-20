@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 
@@ -61,6 +62,7 @@ const NUMEROS: { campo: string; nome: string; dica: string }[] = [
 ];
 
 export default function PaginaLojas() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeEditar = pode("admin.unidades");
 
@@ -68,7 +70,6 @@ export default function PaginaLojas() {
   const [sel, setSel] = useState<number | null>(null);
   const [param, setParam] = useState<Parametros | null>(null);
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
 
   useEffect(() => {
     api
@@ -92,13 +93,12 @@ export default function PaginaLojas() {
   async function salvarParametros() {
     if (!param) return;
     setErro("");
-    setOk("");
     try {
       const { id_unidade, ...resto } = param;
       await api.put(`/unidades/${id_unidade}/parametros`, resto);
-      setOk("Parâmetros salvos.");
+      aviso.sucesso("Parâmetros salvos.");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar");
     }
   }
 
@@ -117,7 +117,6 @@ export default function PaginaLojas() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       <Cartao titulo="Lojas">
         <div className="overflow-x-auto">

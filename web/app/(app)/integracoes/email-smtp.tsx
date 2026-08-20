@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Cartao } from "@/components/ui";
 
 /**
@@ -29,10 +30,10 @@ type Config = {
 };
 
 export default function EmailSmtp() {
+  const aviso = useAviso();
   const [cfg, setCfg] = useState<Config | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -61,7 +62,6 @@ export default function EmailSmtp() {
   async function salvar() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       await api.put("/email/config", {
         servidor: form.servidor || null,
@@ -75,10 +75,10 @@ export default function EmailSmtp() {
         modo: form.modo,
         ativa: form.modo === "real",
       });
-      setOk("Configuração salva.");
+      aviso.sucesso("Configuração salva.");
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar");
     } finally {
       setOcupado(false);
     }
@@ -87,14 +87,13 @@ export default function EmailSmtp() {
   async function testar() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const eu = await api.get<{ email: string }>("/auth/me");
       const r = await api.post<{ detalhe: string }>("/email/testar", { para: eu.email });
-      setOk(r.detalhe);
+      aviso.sucesso(r.detalhe);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "O envio de teste falhou");
+      aviso.erro(e instanceof Error ? e.message : "O envio de teste falhou");
     } finally {
       setOcupado(false);
     }
@@ -120,11 +119,6 @@ export default function EmailSmtp() {
       {erro && (
         <div className="mb-4">
           <Aviso tipo="erro">{erro}</Aviso>
-        </div>
-      )}
-      {ok && (
-        <div className="mb-4">
-          <Aviso tipo="ok">{ok}</Aviso>
         </div>
       )}
 

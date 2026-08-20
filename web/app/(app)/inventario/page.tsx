@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -36,6 +37,7 @@ const qtd = (n: number | string | null) =>
   n === null ? "" : Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function PaginaInventario() {
+  const aviso = useAviso();
   const { pode } = useSessao();
   const podeFechar = pode("estoque.ajuste");
 
@@ -45,7 +47,6 @@ export default function PaginaInventario() {
   const [idLocal, setIdLocal] = useState("");
   const [contagem, setContagem] = useState<Record<number, string>>({});
   const [erro, setErro] = useState("");
-  const [ok, setOk] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -73,14 +74,13 @@ export default function PaginaInventario() {
   async function abrirInventario() {
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const inv = await api.post<Inventario>("/inventarios", { id_local: Number(idLocal) });
       setAberto(inv);
       setContagem({});
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível abrir");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível abrir");
     } finally {
       setOcupado(false);
     }
@@ -88,7 +88,6 @@ export default function PaginaInventario() {
 
   async function ver(id: number) {
     setErro("");
-    setOk("");
     try {
       const inv = await api.get<Inventario>(`/inventarios/${id}`);
       setAberto(inv);
@@ -100,7 +99,7 @@ export default function PaginaInventario() {
         ),
       );
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao abrir");
+      aviso.erro(e instanceof Error ? e.message : "Falha ao abrir");
     }
   }
 
@@ -108,7 +107,6 @@ export default function PaginaInventario() {
     if (!aberto) return;
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const itens = Object.entries(contagem)
         .filter(([, v]) => v.trim() !== "")
@@ -118,9 +116,9 @@ export default function PaginaInventario() {
         }));
       const inv = await api.put<Inventario>(`/inventarios/${aberto.id}/contagem`, { itens });
       setAberto(inv);
-      setOk("Contagem salva. Nada foi lançado no razão ainda.");
+      aviso.sucesso("Contagem salva. Nada foi lançado no razão ainda.");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar");
     } finally {
       setOcupado(false);
     }
@@ -130,12 +128,11 @@ export default function PaginaInventario() {
     if (!aberto) return;
     setOcupado(true);
     setErro("");
-    setOk("");
     try {
       const r = await api.post<{ ajustes: number; diferenca_valor: number }>(
         `/inventarios/${aberto.id}/fechar`,
       );
-      setOk(
+      aviso.sucesso(
         `Inventário fechado: ${r.ajustes} ajuste(s), diferença de ${reais(
           Number(r.diferenca_valor),
         )}.`,
@@ -143,7 +140,7 @@ export default function PaginaInventario() {
       await ver(aberto.id);
       await carregar();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível fechar");
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível fechar");
     } finally {
       setOcupado(false);
     }
@@ -168,7 +165,6 @@ export default function PaginaInventario() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-      {ok && <Aviso tipo="ok">{ok}</Aviso>}
 
       {pode("estoque.inventario") && (
         <Cartao titulo="Nova contagem">
