@@ -46,6 +46,7 @@ export default function PaginaInventario() {
   const [locais, setLocais] = useState<Local[]>([]);
   const [idLocal, setIdLocal] = useState("");
   const [contagem, setContagem] = useState<Record<number, string>>({});
+  const [filtroItem, setFiltroItem] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -146,8 +147,22 @@ export default function PaginaInventario() {
     }
   }
 
-  const itens = aberto?.itens ?? [];
-  const diferencaPrevista = itens.reduce((soma, i) => {
+  const todosItens = aberto?.itens ?? [];
+  // Achar o produto que está na mão, numa contagem de centenas de linhas. Aqui
+  // o filtro é de TEXTO e local: a lista inteira já está na tela e é ela que se
+  // percorre — abrir uma janela para escolher UM item seria perder a contagem
+  // de vista, que é o oposto do que quem conta precisa.
+  const alvoFiltro = filtroItem.trim().toLowerCase();
+  const itens = alvoFiltro
+    ? todosItens.filter(
+        (i) =>
+          i.produto.toLowerCase().includes(alvoFiltro) ||
+          (i.codigo ?? "").toLowerCase().includes(alvoFiltro),
+      )
+    : todosItens;
+  // Sobre TODOS os itens, nunca sobre os filtrados: o impacto é o da contagem
+  // inteira, e filtrar a vista não pode mudar o número que se leva ao dono.
+  const diferencaPrevista = todosItens.reduce((soma, i) => {
     const contado = contagem[i.id_produto];
     if (contado === undefined || contado === "") return soma;
     return soma + (Number(contado.replace(",", ".")) - Number(i.qtd_sistema)) * Number(i.custo_medio);
@@ -225,10 +240,29 @@ export default function PaginaInventario() {
             )
           }
         >
-          {!itens.length ? (
+          {!todosItens.length ? (
             <Vazio>Nenhum item neste local ainda.</Vazio>
           ) : (
             <>
+              <div className="mb-4 flex flex-wrap items-end gap-3">
+                <label className="min-w-0 flex-1 sm:max-w-[320px]">
+                  <span className="rotulo">Achar na contagem</span>
+                  <input
+                    className="campo mt-1.5"
+                    placeholder="produto ou código"
+                    value={filtroItem}
+                    onChange={(e) => setFiltroItem(e.target.value)}
+                  />
+                </label>
+                <span className="pb-2 text-[13px] text-suave">
+                  {alvoFiltro
+                    ? `${itens.length} de ${todosItens.length} item(ns)`
+                    : `${todosItens.length} item(ns)`}
+                </span>
+              </div>
+              {!itens.length ? (
+                <Vazio>Nenhum item com “{filtroItem}”.</Vazio>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="tabela">
                   <thead>
@@ -294,6 +328,7 @@ export default function PaginaInventario() {
                   </tbody>
                 </table>
               </div>
+              )}
               {aberto.status === "ABERTO" && (
                 <p className="mt-3 text-[14px]">
                   Impacto previsto no estoque:{" "}

@@ -472,6 +472,15 @@ try {
   for (const i of invAbertos ?? []) {
     if (i.status === "ABERTO") await api("DELETE", `/inventarios/${i.id}`, null, token);
   }
+  // A contagem congela o que TEM saldo no local: sem nada em estoque ela nasce
+  // vazia, e a checagem do filtro passaria por não ter o que filtrar.
+  const { dados: locaisInv } = await api("GET", "/locais", null, token);
+  const localInv = (locaisInv ?? []).find((l) => l.principal) ?? (locaisInv ?? [])[0];
+  const { dados: insumoInv } = await api("POST", "/produtos",
+    { nome: `Inv tela ${m4}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+  await api("POST", "/estoque/entradas",
+    { id_produto: insumoInv.id, quantidade: 3, custo_unitario: 5, id_local: localInv?.id },
+    token);
   await p.goto(`${WEB}/inventario`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
   const localEscolhido = await p.evaluate(() => {
@@ -486,6 +495,14 @@ try {
   });
   await new Promise((r) => setTimeout(r, 1600));
   const textoInv = await p.evaluate(() => document.body.innerText);
+  // Achar o produto na contagem: com centenas de linhas, rolar não é opção.
+  const filtroContagem = await p.evaluate(() => {
+    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    return rotulos.includes("Achar na contagem");
+  });
+  checar("a contagem tem como achar o produto", filtroContagem, filtroContagem);
+  await api("DELETE", `/produtos/${insumoInv.id}`, null, token);
+
   checar("a contagem abre sem dizer que o local não existe",
     !/Local não encontrado/i.test(textoInv) && /Inventário #/.test(textoInv),
     textoInv.slice(0, 140));
@@ -510,6 +527,32 @@ try {
   checar("e filtro por produto e tipo de movimento",
     filtrosRazao.rotulos.includes("Produto") && filtrosRazao.rotulos.includes("Movimento"),
     filtrosRazao.rotulos);
+  // A lupa também nos FILTROS: texto traz os cinco cafés, a lupa fixa um só.
+  const temLupaNoFiltro = await p.evaluate(
+    () => document.querySelectorAll('button[aria-label="Buscar produto"]').length);
+  checar("o filtro do razão tem a lupa de busca", temLupaNoFiltro > 0, temLupaNoFiltro);
+  await p.evaluate(() => {
+    document.querySelector('button[aria-label="Buscar produto"]')?.click();
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    d?.querySelector("li button")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const fixado = await p.evaluate(() => ({
+    etiqueta: !!document.querySelector('button[aria-label="tirar o filtro de produto"]'),
+    texto: document.body.innerText,
+  }));
+  checar("escolher na lupa fixa o produto como etiqueta", fixado.etiqueta === true, fixado.etiqueta);
+  checar("e o razão passa a mostrar só ele",
+    /lançamento\(s\) no filtro/.test(fixado.texto), fixado.texto.slice(0, 200));
+  await foto(p, "18e-razao-produto-fixado");
+  await p.evaluate(() => {
+    document.querySelector('button[aria-label="tirar o filtro de produto"]')?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1000));
+
   const antesFiltro = await p.evaluate(() =>
     document.querySelectorAll("table tbody tr").length);
   await p.evaluate(() => {

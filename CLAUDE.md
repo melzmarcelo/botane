@@ -95,6 +95,14 @@ para arquivo nenhum — gravar direto aqui.
   ⚠️ Na ficha o item aceita insumo OU preparo com ficha; **o id do preparo entra negativo**,
   que é o que deixa produto 5 e ficha 5 conviverem na mesma lista.
   ⚠️ Ficha só de leitura mostra o nome como TEXTO, não campo desabilitado.
+- **Filtrar ≠ escolher** (`FiltroCadastro`): nos saldos e no razão o texto continua filtrando
+  solto ("café" traz os cinco), e a **lupa FIXA** um produto — que vira etiqueta com ×, para
+  ninguém achar que a lista está curta por acaso. Fixado manda `id_produto`; texto manda
+  `busca`. Na **contagem de inventário** o filtro é só texto e local: a lista já está na tela e
+  é ela que se percorre — abrir janela para escolher um item seria perder a contagem de vista.
+  ⚠️ O impacto previsto soma **todos** os itens, nunca os filtrados.
+- **`fonteDaLista()`** serve a janela a partir de uma lista já carregada (as receitas da
+  produção). Mesma janela, outra origem.
 - ⚠️ **`innerText` não enxerga valor de campo.** Depois que a escolha virou input, "o nome
   aparece na tela" ficou falso no teste e verdadeiro no monitor — `verificar.mjs` tem
   `textoVisivel()`, que junta `innerText` com o valor dos inputs.

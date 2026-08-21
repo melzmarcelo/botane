@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
+import { FiltroCadastro } from "@/components/busca-cadastro";
+import { fonteProdutos } from "@/lib/busca-cadastro";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import LotesEmEstoque from "./lotes";
 
@@ -50,6 +52,8 @@ const qtd = (n: number | string) =>
 
 type TipoMovimento = { tipo: string; rotulo: string };
 
+const PRODUTOS = fonteProdutos();
+
 export default function PaginaEstoque() {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -61,6 +65,9 @@ export default function PaginaEstoque() {
   const [movimentos, setMovimentos] = useState<Movimento[] | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
   const [busca, setBusca] = useState("");
+  // Texto filtra solto ("café" traz os cinco); a lupa FIXA um produto, para
+  // quem quer o saldo — ou o razão — de um só.
+  const [produtoSaldo, setProdutoSaldo] = useState<{ id: number; rotulo: string } | null>(null);
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
   const [erro, setErro] = useState("");
@@ -68,6 +75,7 @@ export default function PaginaEstoque() {
   // Filtros do razão. Separados dos saldos de propósito: são perguntas
   // diferentes — "quanto tenho hoje" e "o que aconteceu com o café em agosto".
   const [movBusca, setMovBusca] = useState("");
+  const [produtoMov, setProdutoMov] = useState<{ id: number; rotulo: string } | null>(null);
   const [movTipo, setMovTipo] = useState("");
   const [movLocal, setMovLocal] = useState("");
   const [movInicio, setMovInicio] = useState("");
@@ -93,22 +101,24 @@ export default function PaginaEstoque() {
   const carregar = useCallback(async () => {
     try {
       const q = new URLSearchParams();
-      if (busca.trim()) q.set("busca", busca.trim());
+      if (produtoSaldo) q.set("id_produto", String(produtoSaldo.id));
+      else if (busca.trim()) q.set("busca", busca.trim());
       if (idLocal) q.set("id_local", idLocal);
       if (comSaldo) q.set("apenas_com_saldo", "true");
       setSaldos(await api.get<Saldo[]>(`/estoque/saldos?${q}`));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [busca, idLocal, comSaldo]);
+  }, [busca, produtoSaldo, idLocal, comSaldo]);
 
   const POR_PAGINA = 100;
-  const temFiltroMov = !!(movBusca || movTipo || movLocal || movInicio || movFim);
+  const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio || movFim);
 
   const carregarMovimentos = useCallback(async () => {
     try {
       const q = new URLSearchParams({ limite: String(POR_PAGINA * movPagina) });
-      if (movBusca.trim()) q.set("busca", movBusca.trim());
+      if (produtoMov) q.set("id_produto", String(produtoMov.id));
+      else if (movBusca.trim()) q.set("busca", movBusca.trim());
       if (movTipo) q.set("tipo", movTipo);
       if (movLocal) q.set("id_local", movLocal);
       if (movInicio) q.set("inicio", movInicio);
@@ -119,13 +129,13 @@ export default function PaginaEstoque() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [movBusca, movTipo, movLocal, movInicio, movFim, movPagina]);
+  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim, movPagina]);
 
   // Trocar o filtro volta para a primeira página: manter a 3ª página de um
   // filtro no outro mostraria uma lista vazia sem explicação.
   useEffect(() => {
     setMovPagina(1);
-  }, [movBusca, movTipo, movLocal, movInicio, movFim]);
+  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregarMovimentos(), movBusca ? 300 : 0);
@@ -159,7 +169,8 @@ export default function PaginaEstoque() {
       baixar outra coisa faria quem conferisse achar que um dos dois mente. */
   function csvDoRazao() {
     const q = new URLSearchParams();
-    if (movBusca.trim()) q.set("busca", movBusca.trim());
+    if (produtoMov) q.set("id_produto", String(produtoMov.id));
+    else if (movBusca.trim()) q.set("busca", movBusca.trim());
     if (movTipo) q.set("tipo", movTipo);
     if (movLocal) q.set("id_local", movLocal);
     if (movInicio) q.set("inicio", movInicio);
@@ -221,15 +232,19 @@ export default function PaginaEstoque() {
         <>
           <Cartao>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-              <label className="min-w-0 flex-1 sm:min-w-[200px]">
-                <span className="rotulo">Buscar</span>
-                <input
-                  className="campo mt-1.5"
-                  placeholder="produto ou código"
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                />
-              </label>
+              <div className="min-w-0 flex-1 sm:min-w-[240px]">
+                <span className="rotulo">Produto</span>
+                <div className="mt-1.5">
+                  <FiltroCadastro
+                    fonte={PRODUTOS}
+                    texto={busca}
+                    aoMudarTexto={setBusca}
+                    fixado={produtoSaldo}
+                    aoFixar={setProdutoSaldo}
+                    placeholder="produto ou código"
+                  />
+                </div>
+              </div>
               <label className="sm:w-[200px]">
                 <span className="rotulo">Local</span>
                 <select
@@ -311,15 +326,19 @@ export default function PaginaEstoque() {
 
         <Cartao>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-            <label className="min-w-0 flex-1 sm:min-w-[190px]">
+            <div className="min-w-0 flex-1 sm:min-w-[230px]">
               <span className="rotulo">Produto</span>
-              <input
-                className="campo mt-1.5"
-                placeholder="nome ou código"
-                value={movBusca}
-                onChange={(e) => setMovBusca(e.target.value)}
-              />
-            </label>
+              <div className="mt-1.5">
+                <FiltroCadastro
+                  fonte={PRODUTOS}
+                  texto={movBusca}
+                  aoMudarTexto={setMovBusca}
+                  fixado={produtoMov}
+                  aoFixar={setProdutoMov}
+                  placeholder="nome ou código"
+                />
+              </div>
+            </div>
             <label className="sm:w-[168px]">
               <span className="rotulo">De</span>
               <input
@@ -374,6 +393,7 @@ export default function PaginaEstoque() {
                 className="btn btn-secundario"
                 onClick={() => {
                   setMovBusca("");
+                  setProdutoMov(null);
                   setMovTipo("");
                   setMovLocal("");
                   setMovInicio("");

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import BuscaCadastro from "@/components/busca-cadastro";
+import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 
 type Ficha = {
   id: number;
@@ -76,6 +78,24 @@ export default function PaginaProducao() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  // As receitas já estão carregadas e são poucas por natureza: a janela é a
+  // mesma da busca de produto, só que servida da lista da própria tela.
+  const fonteReceitas = useMemo(
+    () =>
+      fonteDaLista(
+        "Buscar receita",
+        "receita",
+        fichas.map((x) => ({
+          id: x.id_produto,
+          codigo: null,
+          nome: x.produto,
+          detalhe: `ficha v${x.versao}`,
+        })),
+        "nome do prato",
+      ),
+    [fichas],
+  );
 
   const escolhida = fichas.find((x) => String(x.id_produto) === f.id_produto);
 
@@ -168,19 +188,18 @@ export default function PaginaProducao() {
           ) : (
             <form onSubmit={produzir} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo rotulo="O que foi produzido" className="sm:col-span-2">
-                <select
-                  className="campo"
+                <BuscaCadastro
+                  fonte={fonteReceitas}
                   required
-                  value={f.id_produto}
-                  onChange={(e) => setF({ ...f, id_produto: e.target.value })}
-                >
-                  <option value="">— escolha —</option>
-                  {fichas.map((x) => (
-                    <option key={x.id} value={x.id_produto}>
-                      {x.produto} (ficha v{x.versao})
-                    </option>
-                  ))}
-                </select>
+                  selecionado={
+                    f.id_produto
+                      ? { id: Number(f.id_produto), rotulo: escolhida?.produto ?? "" }
+                      : null
+                  }
+                  aoEscolher={(item: ItemBusca | null) =>
+                    setF({ ...f, id_produto: item ? String(item.id) : "" })
+                  }
+                />
                 {escolhida && (
                   <span className="mt-1 block text-[12.5px] text-suave">
                     A receita rende {Number(escolhida.rendimento_qtd)}{" "}

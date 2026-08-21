@@ -29,6 +29,9 @@ router = APIRouter(prefix="/estoque", tags=["estoque"])
 @router.get("/saldos", response_model=list[SaldoResponse])
 def saldos(
     busca: str | None = Query(default=None, max_length=80),
+    # Fixar UM produto é diferente de buscar por texto: "café" traz cinco
+    # cafés, e quem quer o saldo de um deles não quer conferir os outros.
+    id_produto: int | None = None,
     id_local: int | None = None,
     apenas_com_saldo: bool = False,
     abaixo_do_minimo: bool = False,
@@ -50,6 +53,7 @@ def saldos(
               JOIN locais_estoque l ON l.id = s.id_local
              WHERE s.id_unidade = %s
                AND (%s OR p.ativo)
+               AND (%s::int IS NULL OR s.id_produto = %s)
                AND (%s::int IS NULL OR s.id_local = %s)
                AND (NOT %s OR s.quantidade <> 0)
                AND (NOT %s OR (p.estoque_minimo IS NOT NULL AND s.quantidade < p.estoque_minimo))
@@ -58,8 +62,8 @@ def saldos(
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY lower(p.nome), l.nome
             """,
-            (id_unidade, incluir_inativos, id_local, id_local, apenas_com_saldo,
-             abaixo_do_minimo, busca, busca, busca),
+            (id_unidade, incluir_inativos, id_produto, id_produto, id_local, id_local,
+             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca),
         )
         return [dict(r) for r in cur.fetchall()]
 

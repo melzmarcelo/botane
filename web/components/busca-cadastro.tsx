@@ -286,3 +286,88 @@ function Janela({
     </Modal>
   );
 }
+
+/**
+ * A mesma busca, agora como FILTRO de lista.
+ *
+ * Filtrar é diferente de escolher: "café" tem de trazer os cinco cafés, senão
+ * quem está conferindo o estoque perde a visão do grupo. Mas quem quer o razão
+ * de UM produto não quer conferir os outros quatro.
+ *
+ * Por isso os dois convivem: o texto filtra solto, e a lupa **fixa** um
+ * registro — que aparece como etiqueta, para ninguém achar que a lista está
+ * curta por acaso.
+ */
+export function FiltroCadastro({
+  fonte,
+  texto,
+  aoMudarTexto,
+  fixado,
+  aoFixar,
+  placeholder,
+  className = "",
+}: {
+  fonte: FonteBusca;
+  texto: string;
+  aoMudarTexto: (t: string) => void;
+  fixado: { id: number; rotulo: string } | null;
+  aoFixar: (item: { id: number; rotulo: string } | null) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+
+  if (fixado) {
+    return (
+      <div className={`flex items-center gap-2 ${className}`}>
+        <span className="flex min-w-0 items-center gap-2 rounded border border-erva bg-erva-claro px-2.5 py-[7px]">
+          <span className="truncate text-[14px] text-erva">{fixado.rotulo}</span>
+          <button
+            type="button"
+            aria-label="tirar o filtro de produto"
+            className="text-[16px] leading-none text-erva hover:text-tinta"
+            onClick={() => aoFixar(null)}
+          >
+            ×
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className={`flex gap-1.5 ${className}`}>
+        <input
+          className="campo"
+          placeholder={placeholder ?? fonte.placeholder}
+          value={texto}
+          onChange={(e) => aoMudarTexto(e.target.value)}
+          aria-label={fonte.titulo}
+        />
+        <button
+          type="button"
+          className="btn btn-secundario shrink-0 px-2.5"
+          onClick={() => setAberto(true)}
+          aria-label={fonte.titulo}
+          title={fonte.titulo}
+        >
+          <Lupa />
+        </button>
+      </div>
+
+      {aberto && (
+        <Janela
+          fonte={fonte}
+          termoInicial={texto}
+          aoFechar={() => setAberto(false)}
+          aoEscolher={(item) => {
+            aoFixar({ id: item.id, rotulo: rotuloDe(item) });
+            aoMudarTexto("");
+            setAberto(false);
+          }}
+        />
+      )}
+    </>
+  );
+}

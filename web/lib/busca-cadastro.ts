@@ -105,3 +105,33 @@ export function fonteFornecedores(): FonteBusca {
     },
   };
 }
+
+/**
+ * Fonte a partir de uma lista JÁ CARREGADA.
+ *
+ * Nem tudo vem do servidor: as fichas homologadas, por exemplo, já estão na
+ * tela e são poucas por natureza. A janela de pesquisa é a mesma — o que muda
+ * é de onde os registros vêm, e quem usa não precisa saber a diferença.
+ */
+export function fonteDaLista(
+  titulo: string,
+  singular: string,
+  itens: ItemBusca[],
+  placeholder = "código ou nome",
+): FonteBusca {
+  return {
+    titulo,
+    placeholder,
+    singular,
+    async buscar(termo, limite) {
+      const alvo = termo.trim().toLowerCase();
+      const casam = itens.filter(
+        (i) =>
+          !alvo ||
+          i.nome.toLowerCase().includes(alvo) ||
+          (i.codigo ?? "").toLowerCase().includes(alvo),
+      );
+      return { itens: casam.slice(0, limite), total: casam.length };
+    },
+  };
+}

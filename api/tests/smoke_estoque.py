@@ -138,6 +138,14 @@ checar("filtra pelo nome do produto",
        st == 200 and r and all(m["id_produto"] == cafe for m in r), len(r))
 st, r = chamar("GET", "/estoque/movimentos?inicio=1999-01-01&fim=1999-01-02", token=token)
 checar("período sem movimento devolve lista vazia", r == [], r)
+# Fixar UM produto é diferente de buscar por texto: "café" traz cinco cafés, e
+# quem quer o saldo de um deles não quer conferir os outros.
+st, r = chamar("GET", f"/estoque/saldos?id_produto={cafe}", token=token)
+checar("o saldo filtra por um produto só",
+       st == 200 and r and all(s["id_produto"] == cafe for s in r), len(r) if st == 200 else r)
+st, r = chamar("GET", "/estoque/saldos?id_produto=999999", token=token)
+checar("produto que não existe devolve lista vazia", r == [], r)
+
 st, tipos = chamar("GET", "/estoque/tipos-movimento", token=token)
 checar("os tipos vêm do servidor, com rótulo",
        any(t["tipo"] == "SAIDA_PERDA" and t["rotulo"] == "Perda" for t in tipos), tipos)
