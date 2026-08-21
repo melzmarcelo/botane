@@ -8,6 +8,8 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import BuscaCadastro from "@/components/busca-cadastro";
+import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 
 type Item = {
   id_insumo: number | null;
@@ -78,7 +80,6 @@ export default function EditorFicha() {
   });
   const [itens, setItens] = useState<Item[]>([{ ...ITEM_VAZIO }]);
   const [produzidos, setProduzidos] = useState<ProdutoResumo[]>([]);
-  const [insumos, setInsumos] = useState<ProdutoResumo[]>([]);
   const [fichas, setFichas] = useState<FichaListada[]>([]);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [carregando, setCarregando] = useState(!nova);
@@ -88,13 +89,11 @@ export default function EditorFicha() {
   useEffect(() => {
     Promise.all([
       api.get<ProdutoResumo[]>("/produtos?tipo=PRODUZIDO"),
-      api.get<ProdutoResumo[]>("/produtos"),
       api.get<UnidadeMedida[]>("/unidades-medida"),
       api.get<FichaListada[]>("/fichas"),
     ])
-      .then(([prod, todos, u, fs]) => {
+      .then(([prod, u, fs]) => {
         setProduzidos(prod);
-        setInsumos(todos.filter((p) => p.controla_estoque));
         setUms(u);
         setFichas(fs);
       })
@@ -217,6 +216,37 @@ export default function EditorFicha() {
     () => fichas.filter((f) => String(f.id) !== id && f.status !== "ARQUIVADA"),
     [fichas, id],
   );
+
+  /**
+   * A linha da ficha aceita duas coisas: um insumo do cadastro ou um preparo
+   * com ficha própria. Os insumos são muitos e vêm do servidor; os preparos são
+   * poucos e já estão carregados — a busca junta os dois numa lista só.
+   *
+   * ⚠️ O id do preparo entra NEGATIVO. É o que deixa produto 5 e ficha 5
+   * conviverem na mesma lista sem se confundirem, e decodificar é só olhar o
+   * sinal.
+   */
+  const fonteInsumoOuPreparo = useMemo<FonteBusca>(() => {
+    const produtos = fonteProdutos((p) => p.controla_estoque);
+    return {
+      titulo: "Buscar insumo ou preparo",
+      placeholder: "código ou nome",
+      singular: "insumo",
+      async buscar(termo, limite) {
+        const alvo = termo.trim().toLowerCase();
+        const preparos: ItemBusca[] = opcoesSubficha
+          .filter((f) => !alvo || (f.produto ?? "").toLowerCase().includes(alvo))
+          .map((f) => ({
+            id: -f.id,
+            codigo: null,
+            nome: f.produto,
+            detalhe: `preparo com ficha · v${f.versao}`,
+          }));
+        const r = await produtos.buscar(termo, limite);
+        return { itens: [...preparos, ...r.itens], total: r.total + preparos.length };
+      },
+    };
+  }, [opcoesSubficha]);
 
   if (carregando) return <Carregando />;
 
@@ -373,46 +403,48 @@ export default function EditorFicha() {
             return (
               <div key={i} className="rounded border border-linha p-3">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_90px_90px_90px_auto]">
-                  <label className="min-w-0">
+                  <div className="min-w-0">
                     <span className="rotulo">Insumo ou preparo</span>
-                    <select
-                      className="campo mt-1.5"
-                      disabled={!editavel}
-                      value={alvo}
-                      onChange={(e) => {
-                        const [tipo, valor] = e.target.value.split(":");
-                        setItens((l) =>
-                          l.map((x, j) =>
-                            j === i
-                              ? {
-                                  ...x,
-                                  id_insumo: tipo === "ins" ? Number(valor) : null,
-                                  id_subficha: tipo === "sub" ? Number(valor) : null,
-                                }
-                              : x,
-                          ),
-                        );
-                      }}
-                    >
-                      <option value="">— escolha —</option>
-                      <optgroup label="Insumos e produtos">
-                        {insumos.map((p) => (
-                          <option key={`ins:${p.id}`} value={`ins:${p.id}`}>
-                            {p.nome} {p.um_estoque ? `(${p.um_estoque})` : ""}
-                          </option>
-                        ))}
-                      </optgroup>
-                      {!!opcoesSubficha.length && (
-                        <optgroup label="Preparos com ficha">
-                          {opcoesSubficha.map((f) => (
-                            <option key={`sub:${f.id}`} value={`sub:${f.id}`}>
-                              {f.produto} (v{f.versao})
-                            </option>
-                          ))}
-                        </optgroup>
+                    <div className="mt-1.5">
+                      {/* Ficha homologada é para LER: a cozinha quer o nome do
+                          insumo, não um campo de busca desabilitado — e texto
+                          dentro de input não é texto para quem lê a tela. */}
+                      {!editavel ? (
+                        <p className="py-1.5 text-[15px] font-medium">
+                          {item.nome || "—"}
+                        </p>
+                      ) : (
+                      <BuscaCadastro
+                        fonte={fonteInsumoOuPreparo}
+                        selecionado={
+                          alvo
+                            ? {
+                                id: item.id_subficha ? -item.id_subficha : item.id_insumo!,
+                                rotulo: item.nome ?? "",
+                              }
+                            : null
+                        }
+                        aoEscolher={(escolhido: ItemBusca | null) =>
+                          setItens((l) =>
+                            l.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    // Negativo é preparo; positivo é insumo.
+                                    id_insumo:
+                                      escolhido && escolhido.id > 0 ? escolhido.id : null,
+                                    id_subficha:
+                                      escolhido && escolhido.id < 0 ? -escolhido.id : null,
+                                    nome: escolhido?.nome ?? "",
+                                  }
+                                : x,
+                            ),
+                          )
+                        }
+                      />
                       )}
-                    </select>
-                  </label>
+                    </div>
+                  </div>
                   <label>
                     <span className="rotulo">Bruta</span>
                     <input

@@ -84,6 +84,20 @@ para arquivo nenhum — gravar direto aqui.
   de ficha viaja junto porque é ela que diz o quanto dá para confiar na variância.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/ajustes`,
   `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+- **Busca de cadastro é o padrão onde havia combobox** (21/08/2026):
+  `components/busca-cadastro.tsx` + `lib/busca-cadastro.ts`. Digita-se código ou nome e dá
+  **Tab**: um resultado preenche e segue; mais de um (ou nenhum) abre a janela de pesquisa já
+  filtrada; a lupa abre direto. A busca vai ao SERVIDOR (`?busca=`), então não depende da
+  página carregada — combobox só serve até umas dezenas de linhas. Aplicado em produto
+  (ajustes, nota manual, conciliação, ficha, kit, venda) e fornecedor (nota manual, vínculo do
+  produto). ⚠️ Categoria, setor, local e unidade **continuam `<select>`**: são poucos por
+  natureza, e trocar por busca ali seria atrito sem ganho.
+  ⚠️ Na ficha o item aceita insumo OU preparo com ficha; **o id do preparo entra negativo**,
+  que é o que deixa produto 5 e ficha 5 conviverem na mesma lista.
+  ⚠️ Ficha só de leitura mostra o nome como TEXTO, não campo desabilitado.
+- ⚠️ **`innerText` não enxerga valor de campo.** Depois que a escolha virou input, "o nome
+  aparece na tela" ficou falso no teste e verdadeiro no monitor — `verificar.mjs` tem
+  `textoVisivel()`, que junta `innerText` com o valor dos inputs.
 - **Consultar e lançar são telas separadas** (21/08/2026): entrada, saída, perda e
   transferência eram quatro botões no cabeçalho de `/estoque`, que é onde se CONSULTA.
   Viraram **Estoque ▸ Ajustes** (`/ajustes`): escolhe-se o tipo e o formulário se molda a ele.

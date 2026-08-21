@@ -5,6 +5,8 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import NotaManual, { NotaParaEditar } from "./nota-manual";
 
@@ -81,6 +83,9 @@ const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   IMPORTADA: "neutro",
 };
 
+// Item de nota vira movimento de estoque: só produto que controla estoque.
+const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+
 export default function PaginaCompras() {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -89,6 +94,9 @@ export default function PaginaCompras() {
   const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
+  // O que mostrar no campo de cada item: a busca devolve o rótulo, e guardá-lo
+  // evita ter de ir buscar o nome de novo só para desenhar a linha.
+  const [rotuloEscolhido, setRotuloEscolhido] = useState<Record<number, string>>({});
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [digitando, setDigitando] = useState(false);
@@ -534,18 +542,24 @@ export default function PaginaCompras() {
                         <Etiqueta>fora do estoque</Etiqueta>
                       ) : pode("compras.conciliar") ? (
                         <div className="flex flex-col gap-1.5">
-                          <select
-                            className="campo py-1 text-[13px]"
-                            value={escolha[i.id] ?? ""}
-                            onChange={(e) => setEscolha({ ...escolha, [i.id]: e.target.value })}
-                          >
-                            <option value="">— escolha o produto —</option>
-                            {produtos.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.nome} {p.um_estoque ? `(${p.um_estoque})` : ""}
-                              </option>
-                            ))}
-                          </select>
+                          <BuscaCadastro
+                            fonte={PRODUTOS}
+                            selecionado={
+                              escolha[i.id]
+                                ? {
+                                    id: Number(escolha[i.id]),
+                                    rotulo: rotuloEscolhido[i.id] ?? "",
+                                  }
+                                : null
+                            }
+                            aoEscolher={(item: ItemBusca | null) => {
+                              setEscolha({ ...escolha, [i.id]: item ? String(item.id) : "" });
+                              setRotuloEscolhido((r) => ({
+                                ...r,
+                                [i.id]: item ? rotuloDe(item) : "",
+                              }));
+                            }}
+                          />
                           {i.sugestao_nome && (
                             <span className="text-[12px] text-suave">
                               palpite: {i.sugestao_nome} ({Number(i.sugestao_score).toFixed(0)}%)

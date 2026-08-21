@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
-import { ProdutoResumo, reais } from "@/lib/cadastros";
+import { reais } from "@/lib/cadastros";
 import { Aviso, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
 /**
  * A composição do combo.
@@ -55,6 +57,9 @@ const ORIGEM: Record<string, string> = {
   sem_custo: "sem custo",
 };
 
+// Componente de combo é o que se vende: o próprio combo fica de fora.
+const PRODUTOS = fonteProdutos();
+
 export default function ComposicaoKit({
   idProduto,
   podeEditar,
@@ -66,23 +71,22 @@ export default function ComposicaoKit({
 }) {
   const aviso = useAviso();
   const [dados, setDados] = useState<Composicao | null>(null);
-  const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
-  const [linhas, setLinhas] = useState<{ id: string; qtd: string }[]>([]);
+  const [linhas, setLinhas] = useState<{ id: string; qtd: string; rotulo: string }[]>([]);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
-      const [c, p] = await Promise.all([
-        api.get<Composicao>(`/produtos/${idProduto}/kit`),
-        api.get<ProdutoResumo[]>("/produtos"),
-      ]);
+      const c = await api.get<Composicao>(`/produtos/${idProduto}/kit`);
       setDados(c);
-      setProdutos(p.filter((x) => x.id !== idProduto));
       setLinhas(
         c.itens.length
-          ? c.itens.map((i) => ({ id: String(i.id_componente), qtd: String(i.quantidade) }))
-          : [{ id: "", qtd: "1" }],
+          ? c.itens.map((i) => ({
+              id: String(i.id_componente),
+              qtd: String(i.quantidade),
+              rotulo: i.componente ?? "",
+            }))
+          : [{ id: "", qtd: "1", rotulo: "" }],
       );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar a composição");
@@ -167,30 +171,37 @@ export default function ComposicaoKit({
               {(podeEditar ? linhas : dados.itens.map((i) => ({
                 id: String(i.id_componente),
                 qtd: String(i.quantidade),
+                rotulo: i.componente ?? "",
               }))).map((linha, i) => {
                 const d = porComponente.get(Number(linha.id));
                 return (
                   <tr key={i}>
                     <td>
                       {podeEditar ? (
-                        <select
-                          className="campo"
-                          value={linha.id}
-                          onChange={(e) =>
+                        <BuscaCadastro
+                          fonte={PRODUTOS}
+                          selecionado={
+                            linha.id
+                              ? {
+                                  id: Number(linha.id),
+                                  rotulo: linha.rotulo || d?.componente || "",
+                                }
+                              : null
+                          }
+                          aoEscolher={(item: ItemBusca | null) =>
                             setLinhas(
                               linhas.map((l, j) =>
-                                j === i ? { ...l, id: e.target.value } : l,
+                                j === i
+                                  ? {
+                                      ...l,
+                                      id: item ? String(item.id) : "",
+                                      rotulo: item ? rotuloDe(item) : "",
+                                    }
+                                  : l,
                               ),
                             )
                           }
-                        >
-                          <option value="">— escolher —</option>
-                          {produtos.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.nome}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         <span className="font-semibold">{d?.componente ?? "—"}</span>
                       )}
@@ -243,7 +254,7 @@ export default function ComposicaoKit({
           <button
             type="button"
             className="btn btn-secundario"
-            onClick={() => setLinhas([...linhas, { id: "", qtd: "1" }])}
+            onClick={() => setLinhas([...linhas, { id: "", qtd: "1", rotulo: "" }])}
           >
             + componente
           </button>

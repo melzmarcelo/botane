@@ -4,8 +4,10 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { ProdutoResumo, reais } from "@/lib/cadastros";
+import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
 type Venda = {
   id: number;
@@ -63,6 +65,8 @@ function lerPlanilha(texto: string): { linhas: Linha[]; erros: string[] } {
   return { linhas, erros };
 }
 
+const PRODUTOS = fonteProdutos();
+
 export default function PaginaVendas() {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -70,25 +74,22 @@ export default function PaginaVendas() {
 
   const [lista, setLista] = useState<Venda[] | null>(null);
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
-  const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [documento, setDocumento] = useState("");
   const [texto, setTexto] = useState("");
-  const [manual, setManual] = useState({ id_produto: "", quantidade: "", valor_unitario: "" });
+  const [manual, setManual] = useState({ id_produto: "", quantidade: "", valor_unitario: "", rotulo: "" });
 
   const carregar = useCallback(async () => {
     try {
-      const [v, p, pr] = await Promise.all([
+      const [v, p] = await Promise.all([
         api.get<Venda[]>("/vendas?limite=100"),
         api.get<Pendencia[]>("/vendas/sem-vinculo"),
-        api.get<ProdutoResumo[]>("/produtos"),
       ]);
       setLista(v);
       setPendencias(p);
-      setProdutos(pr);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -167,7 +168,7 @@ export default function PaginaVendas() {
         ],
       });
       aviso.sucesso("Venda lançada.");
-      setManual({ id_produto: "", quantidade: "", valor_unitario: "" });
+      setManual({ id_produto: "", quantidade: "", valor_unitario: "", rotulo: "" });
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
@@ -298,19 +299,22 @@ export default function PaginaVendas() {
           <Cartao titulo="Lançar uma venda" descricao="Para acerto pontual.">
             <form onSubmit={lancarManual} className="flex flex-col gap-4">
               <Campo rotulo="Produto">
-                <select
-                  className="campo"
+                <BuscaCadastro
+                  fonte={PRODUTOS}
                   required
-                  value={manual.id_produto}
-                  onChange={(e) => setManual({ ...manual, id_produto: e.target.value })}
-                >
-                  <option value="">— escolha —</option>
-                  {produtos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome}
-                    </option>
-                  ))}
-                </select>
+                  selecionado={
+                    manual.id_produto
+                      ? { id: Number(manual.id_produto), rotulo: manual.rotulo }
+                      : null
+                  }
+                  aoEscolher={(item: ItemBusca | null) =>
+                    setManual({
+                      ...manual,
+                      id_produto: item ? String(item.id) : "",
+                      rotulo: item ? rotuloDe(item) : "",
+                    })
+                  }
+                />
               </Campo>
               <div className="grid grid-cols-2 gap-4">
                 <Campo rotulo="Quantidade">

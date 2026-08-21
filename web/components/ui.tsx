@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 
 export function Cartao({
   titulo,
@@ -84,5 +84,74 @@ export function Etiqueta({ cor = "neutro", children }: { cor?: "neutro" | "erva"
     <span className={`mono inline-block rounded-full border px-2 py-0.5 text-[11px] ${estilo}`}>
       {children}
     </span>
+  );
+}
+
+/**
+ * Janela sobre a tela. Fecha no Esc e no clique fora — as duas saídas que todo
+ * mundo tenta antes de procurar o X.
+ */
+export function Modal({
+  titulo,
+  descricao,
+  aoFechar,
+  children,
+  largura = "760px",
+}: {
+  titulo: string;
+  descricao?: string;
+  aoFechar: () => void;
+  children: ReactNode;
+  largura?: string;
+}) {
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        aoFechar();
+      }
+    };
+    document.addEventListener("keydown", tecla);
+    // Enquanto a janela está aberta a página atrás não rola: rolar o que está
+    // por baixo dá a impressão de que o clique passou direto.
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", tecla);
+      document.body.style.overflow = antes;
+    };
+  }, [aoFechar]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-tinta/45 p-4 sm:p-8"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) aoFechar();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        className="cartao w-full shadow-[0_16px_48px_rgba(20,32,26,0.28)]"
+        style={{ maxWidth: largura }}
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-linha px-5 py-4">
+          <div>
+            <h2 className="text-[17px] font-bold tracking-tight">{titulo}</h2>
+            {descricao && <p className="mt-1 text-[13.5px] text-suave">{descricao}</p>}
+          </div>
+          <button
+            type="button"
+            aria-label="fechar"
+            className="-mt-1 px-1 text-[20px] leading-none text-suave hover:text-tinta"
+            onClick={aoFechar}
+          >
+            ×
+          </button>
+        </header>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
   );
 }

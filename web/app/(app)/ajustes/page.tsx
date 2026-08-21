@@ -4,8 +4,10 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
+import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
@@ -78,6 +80,9 @@ const TIPOS: {
 const TIPOS_DA_MAO = ["ENTRADA_MANUAL", "SAIDA_CONSUMO_INTERNO", "SAIDA_PERDA",
                       "TRANSFERENCIA_SAIDA", "TRANSFERENCIA_ENTRADA"];
 
+// Ajuste mexe no razão: produto que não controla estoque não tem o que ajustar.
+const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+
 const VAZIO = {
   id_produto: "",
   quantidade: "",
@@ -100,7 +105,7 @@ export default function PaginaAjustes() {
 
   const permitidos = TIPOS.filter((t) => pode(t.chave));
   const [tipo, setTipo] = useState<Tipo | null>(null);
-  const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
+  const [produto, setProduto] = useState<{ id: number; rotulo: string } | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
   const [motivos, setMotivos] = useState<Motivo[]>([]);
   const [recentes, setRecentes] = useState<Movimento[] | null>(null);
@@ -124,10 +129,6 @@ export default function PaginaAjustes() {
   }, []);
 
   useEffect(() => {
-    api
-      .get<ProdutoResumo[]>("/produtos")
-      .then((p) => setProdutos(p.filter((x) => x.controla_estoque)))
-      .catch(() => {});
     api.get<Local[]>("/locais").then(setLocais).catch(() => {});
     api.get<Motivo[]>("/estoque/motivos-perda").then(setMotivos).catch(() => {});
     void carregarRecentes();
@@ -142,6 +143,7 @@ export default function PaginaAjustes() {
 
   function escolher(novo: Tipo) {
     setTipo(novo);
+    setProduto(null);
     setF({
       ...VAZIO,
       id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""),
@@ -205,6 +207,7 @@ export default function PaginaAjustes() {
       // O formulário fica ABERTO e limpo: quem ajusta um item costuma ajustar o
       // próximo, e fechar obrigaria a escolher o tipo de novo.
       setF((a) => ({ ...VAZIO, id_local: a.id_local }));
+      setProduto(null);
       await carregarRecentes();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
@@ -285,20 +288,16 @@ export default function PaginaAjustes() {
       {atual && (
         <Cartao titulo={`Lançar ${atual.nome.toLowerCase()}`}>
           <form onSubmit={lancar} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Campo rotulo="Produto" className="sm:col-span-2">
-              <select
-                className="campo"
+            <Campo rotulo="Produto" className="sm:col-span-2" dica="código ou nome, e Tab">
+              <BuscaCadastro
+                fonte={PRODUTOS}
                 required
-                value={f.id_produto}
-                onChange={(e) => setF({ ...f, id_produto: e.target.value })}
-              >
-                <option value="">— escolha —</option>
-                {produtos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} {p.um_estoque ? `(${p.um_estoque})` : ""}
-                  </option>
-                ))}
-              </select>
+                selecionado={produto}
+                aoEscolher={(i: ItemBusca | null) => {
+                  setProduto(i ? { id: i.id, rotulo: rotuloDe(i) } : null);
+                  setF((a) => ({ ...a, id_produto: i ? String(i.id) : "" }));
+                }}
+              />
             </Campo>
             <Campo rotulo="Quantidade">
               <input

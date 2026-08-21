@@ -15,6 +15,8 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import BuscaCadastro from "@/components/busca-cadastro";
+import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import ComposicaoKit from "./kit";
 import UnidadesDeCompra from "./unidades";
 
@@ -65,6 +67,8 @@ const VAZIO: Form = {
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
 const texto = (v: string) => (v.trim() === "" ? null : v.trim());
+
+const FORNECEDORES = fonteFornecedores();
 
 export default function FormularioProduto() {
   const aviso = useAviso();
@@ -546,24 +550,36 @@ export default function FormularioProduto() {
               <li key={i} className="grid gap-3 rounded border border-linha p-3 sm:grid-cols-5">
                 <label className="sm:col-span-2">
                   <span className="rotulo">Fornecedor</span>
-                  <select
-                    className="campo mt-1.5"
-                    disabled={!podeEditar}
-                    value={v.id_fornecedor}
-                    onChange={(e) =>
-                      setVinculos((l) =>
-                        l.map((x, j) =>
-                          j === i ? { ...x, id_fornecedor: Number(e.target.value) } : x,
-                        ),
-                      )
-                    }
-                  >
-                    {fornecedores.map((fo) => (
-                      <option key={fo.id} value={fo.id}>
-                        {fo.nome}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-1.5">
+                    <BuscaCadastro
+                      fonte={FORNECEDORES}
+                      disabled={!podeEditar}
+                      selecionado={
+                        v.id_fornecedor
+                          ? {
+                              id: v.id_fornecedor,
+                              rotulo:
+                                v.fornecedor ??
+                                fornecedores.find((fo) => fo.id === v.id_fornecedor)?.nome ??
+                                "",
+                            }
+                          : null
+                      }
+                      aoEscolher={(item: ItemBusca | null) =>
+                        setVinculos((l) =>
+                          l.map((x, j) =>
+                            j === i
+                              ? {
+                                  ...x,
+                                  id_fornecedor: item?.id ?? 0,
+                                  fornecedor: item?.nome ?? "",
+                                }
+                              : x,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
                 </label>
                 <label>
                   <span className="rotulo">Código deles</span>

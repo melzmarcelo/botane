@@ -93,6 +93,22 @@ async function irPara(pagina, url) {
   }
 }
 
+/** Tudo o que está à vista, inclusive o que mora dentro de campo.
+ *
+ * `innerText` não enxerga o valor de um `<input>`. Depois que a escolha de
+ * cadastro virou campo de busca, "o nome do insumo aparece na tela" passou a
+ * ser falso pelo `innerText` e verdadeiro para quem olha o monitor.
+ */
+async function textoVisivel(pagina) {
+  return pagina.evaluate(() => {
+    const campos = [...document.querySelectorAll("input, textarea")]
+      .map((c) => c.value)
+      .filter(Boolean)
+      .join(" | ");
+    return document.body.innerText + " | " + campos;
+  });
+}
+
 /** Espera um texto aparecer na tela, em vez de dormir um tempo fixo.
  *
  * A lista de produtos carrega por XHR depois do `networkidle2`, com debounce na
@@ -103,7 +119,7 @@ async function irPara(pagina, url) {
 async function esperarTexto(pagina, texto, limite = 6000) {
   const ate = Date.now() + limite;
   while (Date.now() < ate) {
-    const tem = await pagina.evaluate((t) => document.body.innerText.includes(t), texto);
+    const tem = (await textoVisivel(pagina)).includes(texto);
     if (tem) return true;
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -377,12 +393,20 @@ try {
   };
   await trocar(numeros[0], "2");
   await trocar(numeros[1], "8");
-  // linha 1: 500 g de farinha
-  const selectsAgora = await p.$$("select");
-  await selectsAgora[2].select(`ins:${insumo.id}`);  // 0 produto, 1 rendimento_um, 2 item
+  // linha 1: 500 g de farinha. O item da ficha também virou busca: insumos do
+  // servidor e preparos com ficha na mesma lista.
+  const buscaItem = await p.$('input[aria-label="Buscar insumo ou preparo"]');
+  checar("o item da ficha se escolhe por busca", !!buscaItem);
+  await buscaItem.type(`Tela farinha ${marca}`);
+  await p.keyboard.press("Tab");
+  await new Promise((r) => setTimeout(r, 1200));
+  const itemEscolhido = await p.evaluate(
+    () => document.querySelector('input[aria-label="Buscar insumo ou preparo"]')?.value ?? "");
+  checar("e o Tab preenche a linha", itemEscolhido.includes(`Tela farinha ${marca}`),
+    itemEscolhido);
   await numeros[2].type("500");
   const selectsUm = await p.$$("select");
-  await selectsUm[3].select("G");                    // unidade do item
+  await selectsUm[2].select("G");                    // 0 produto, 1 rendimento_um, 2 unidade
   await Promise.all([
     p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     p.click('button[type="submit"]'),
@@ -409,7 +433,7 @@ try {
     await entrar(p, COZINHA);
     await p.goto(`${WEB}/fichas/${idFicha}`, { waitUntil: "networkidle2" });
     await new Promise((r) => setTimeout(r, 1300));
-    const textoCozinha = await p.evaluate(() => document.body.innerText);
+    const textoCozinha = await textoVisivel(p);
     checar("cozinha vê a receita", /Tela farinha/.test(textoCozinha), textoCozinha.slice(0, 80));
     checar("cozinha NÃO vê custo na tela", !/R\$/.test(textoCozinha),
       textoCozinha.match(/.{0,30}R\$.{0,20}/)?.[0]);
@@ -535,9 +559,55 @@ try {
   checar("com um já escolhido e o formulário montado para ele",
     telaAjustes.escolhido?.startsWith("Entrada") && telaAjustes.temCusto, telaAjustes);
 
+  // A busca de cadastro: digitar o nome e dar Tab preenche sozinho, sem combo.
+  // Combobox serve até umas dezenas de linhas; com dois mil insumos vira rolo.
+  const campoBusca = await p.$('input[aria-label="Buscar produto"]');
+  checar("o produto se escolhe por busca, não por combobox", !!campoBusca);
+  await campoBusca.type(`Est tela ${m4}`);
+  await p.keyboard.press("Tab");
+  await new Promise((r) => setTimeout(r, 1200));
+  const preencheu = await p.evaluate(
+    () => document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "");
+  checar("um resultado só: o Tab preenche e segue",
+    preencheu.includes(`Est tela ${m4}`), preencheu);
+
+  // Mais de um resultado tem de abrir a janela de pesquisa, já filtrada.
+  await p.evaluate(() => {
+    const c = document.querySelector('input[aria-label="Buscar produto"]');
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    set.call(c, "Est");
+    c.dispatchEvent(new Event("input", { bubbles: true }));
+    // O Tab anterior levou o foco para a lupa: sem devolvê-lo ao campo, o
+    // próximo Tab não dispara blur nenhum e a busca nunca acontece.
+    c.focus();
+  });
+  await p.keyboard.press("Tab");
+  await new Promise((r) => setTimeout(r, 1400));
+  const janela = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return d ? { titulo: d.getAttribute("aria-label"), linhas: d.querySelectorAll("li").length }
+             : null;
+  });
+  checar("mais de um resultado abre a janela de pesquisa", janela?.titulo === "Buscar produto",
+    janela);
+  checar("e a janela já vem com o filtro digitado", (janela?.linhas ?? 0) > 1, janela);
+  await foto(p, "18d-busca-cadastro");
+  // Escolher na janela devolve o foco ao campo, para seguir no teclado.
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    if (!d) return;
+    [...d.querySelectorAll("li button")].find((b) => b.textContent.includes("Est tela"))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const depoisDaJanela = await p.evaluate(() => ({
+    fechou: !document.querySelector('[role="dialog"]'),
+    campo: document.activeElement?.getAttribute("aria-label"),
+  }));
+  checar("escolher fecha a janela e devolve o foco ao campo",
+    depoisDaJanela.fechou && depoisDaJanela.campo === "Buscar produto", depoisDaJanela);
+
   // Entrada pela tela: 10 kg a R$ 20,00.
-  const selEstoque = await p.$$("select");
-  await selEstoque[0].select(String(insumo4.id));
   const numEstoque = await p.$$("input[type=number]");
   await numEstoque[0].type("10");
   await numEstoque[1].type("20");
@@ -801,22 +871,22 @@ try {
   checar("a linha tem campo de código", !!campoCodigo);
   await campoCodigo.type(codigoNota.toLowerCase());
   await p.keyboard.press("Tab");
-  await new Promise((r) => setTimeout(r, 700));
+  // A busca do código vai ao SERVIDOR agora — não adianta olhar antes da volta.
+  await esperarTexto(p, insumoNota.nome ?? codigoNota, 6000);
   const porCodigo = await p.evaluate(() => {
     const selects = [...document.querySelectorAll("main table select")];
     return {
       codigo: document.querySelector('input[placeholder="P0001"]')?.value,
-      produto: selects[0]?.value,
-      unidade: selects[1]?.value,
+      produto: document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "",
+      unidade: selects[0]?.value,
     };
   });
   checar("o código traz o produto ao sair do campo",
-    porCodigo.produto === String(insumoNota.id), porCodigo);
+    porCodigo.produto.includes(insumoNota.nome ?? ""), porCodigo);
   checar("e normaliza o que foi digitado", porCodigo.codigo === codigoNota, porCodigo);
   checar("a unidade vem preenchida com a do estoque",
     porCodigo.unidade === (insumoNota.um_estoque ?? "UN"), porCodigo);
 
-  await seletoresNota[1].select(String(insumoNota.id));
   const numerosNota = await p.$$('input[inputmode="decimal"]');
   await numerosNota[0].type("2");
   await numerosNota[1].type("10");
@@ -887,10 +957,14 @@ try {
   checar("e avisa que sem composição não há custo",
     /monte a composição/i.test(textoKit), textoKit.slice(-200));
 
-  // Monta a composição pela tela, do jeito que o cliente faria.
-  const seletoresKit = await p.$$("select");
-  const seletorComponente = seletoresKit[seletoresKit.length - 1];
-  await seletorComponente.select(String(bebida.id));
+  // Monta a composição pela tela, do jeito que o cliente faria. O componente
+  // também virou busca: um combo pode apontar para qualquer produto da casa.
+  const buscasKit = await p.$$('input[aria-label="Buscar produto"]');
+  const buscaComponente = buscasKit[buscasKit.length - 1];
+  checar("o componente do combo se escolhe por busca", !!buscaComponente);
+  await buscaComponente.type(`Combo bebida ${marcaKit}`);
+  await p.keyboard.press("Tab");
+  await esperarTexto(p, `Combo bebida ${marcaKit}`, 6000);
   await new Promise((r) => setTimeout(r, 400));
   await p.evaluate(() => {
     [...document.querySelectorAll("button")]

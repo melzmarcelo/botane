@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Fornecedor, Local, ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fonteFornecedores, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { Campo, Cartao } from "@/components/ui";
 
 /**
@@ -70,6 +72,10 @@ export type NotaParaEditar = {
   }[];
 };
 
+// Só produto que controla estoque entra numa nota de entrada.
+const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+const FORNECEDORES = fonteFornecedores();
+
 export default function NotaManual({
   produtos,
   locais,
@@ -104,6 +110,7 @@ export default function NotaManual({
   const [desconto, setDesconto] = useState(texto(editando?.valor_desconto));
   const [outros, setOutros] = useState(texto(editando?.valor_outros));
   const [idLocal, setIdLocal] = useState(texto(editando?.id_local));
+  const [rotuloFornecedor, setRotuloFornecedor] = useState("");
   const [linhas, setLinhas] = useState<Linha[]>(
     editando?.itens.length
       ? editando.itens.map((i) => ({
@@ -148,21 +155,33 @@ export default function NotaManual({
       .catch(() => setFatores((atuais) => ({ ...atuais, [idProduto]: {} })));
   };
 
+  /**
+   * O que se sabe sobre cada produto CITADO nas linhas.
+   *
+   * A lista de `/produtos` traz uma página; a busca no servidor pode trazer
+   * qualquer outro. Sem guardar o que a busca achou, a linha ficava sem
+   * unidade de estoque e sem saber se controla lote — o combo antigo escondia
+   * isso porque só oferecia o que já estava carregado.
+   */
+  const [cache, setCache] = useState<Record<string, ProdutoResumo>>({});
+  const conhecido = (id: string): ProdutoResumo | undefined =>
+    cache[id] ?? produtos.find((p) => String(p.id) === id);
+  const guardar = (p: ProdutoResumo) => setCache((c) => ({ ...c, [String(p.id)]: p }));
+
   /** Quantas unidades de estoque a linha traz de fato. */
   const quantidadeEmEstoque = (l: Linha) => {
     const fator = fatores[l.id_produto]?.[(l.um || "").toUpperCase()] ?? 1;
     return numero(l.quantidade) * fator;
   };
 
-  const unidadeDeEstoque = (l: Linha) =>
-    produtos.find((p) => String(p.id) === l.id_produto)?.um_estoque ?? "";
+  const unidadeDeEstoque = (l: Linha) => conhecido(l.id_produto)?.um_estoque ?? "";
 
   // Lote e validade só aparecem quando algum item pede: numa nota de mercearia
   // são duas colunas vazias empurrando o resto para fora da tela.
   const temLote = linhas.some(
     (l) =>
       (l.lote || l.validade) ||
-      produtos.find((p) => String(p.id) === l.id_produto)?.controla_lote,
+      conhecido(l.id_produto)?.controla_lote,
   );
 
   const preenchidas = linhas.filter((l) => (l.id_produto || l.descricao) && numero(l.quantidade) > 0);
@@ -205,16 +224,21 @@ export default function NotaManual({
   );
 
   /**
-   * Acha o produto pelo código digitado.
+   * Acha o produto pelo código digitado, PERGUNTANDO AO SERVIDOR.
    *
-   * Compara sem caixa e sem espaço porque o código vem de um papel: quem digita
-   * escreve "p12" e o cadastro guarda "P0012".
+   * Procurar na lista carregada só funcionava enquanto ela cabia inteira na
+   * tela: com dois mil produtos, o código de um item da página seguinte
+   * simplesmente "não existia". Compara sem caixa porque o código vem de um
+   * papel — quem digita escreve "p12" e o cadastro guarda "P0012".
    */
-  const porCodigo = (codigo: string) => {
+  async function porCodigo(codigo: string): Promise<ProdutoResumo | undefined> {
     const alvo = codigo.trim().toLowerCase();
     if (!alvo) return undefined;
-    return produtos.find((p) => (p.codigo ?? "").toLowerCase() === alvo);
-  };
+    const { itens } = await PRODUTOS.buscar(alvo, 25);
+    const exato = itens.find((i) => (i.codigo ?? "").toLowerCase() === alvo);
+    const achado = exato ?? (itens.length === 1 ? itens[0] : undefined);
+    return achado?.bruto as ProdutoResumo | undefined;
+  }
 
   /** Preenche a linha inteira a partir do produto: descrição, unidade e código. */
   const comProduto = (linha: Linha, p: ProdutoResumo | undefined): Linha => {
@@ -239,9 +263,7 @@ export default function NotaManual({
         const nova = { ...l, [campo]: valor };
         // Escolher o produto no combo preenche código, unidade e descrição.
         if (campo === "id_produto") {
-          return valor
-            ? comProduto(nova, produtos.find((p) => String(p.id) === valor))
-            : { ...nova, codigo: "" };
+          return valor ? comProduto(nova, conhecido(valor)) : { ...nova, codigo: "" };
         }
         if (campo === "um" && nova.id_produto) carregarFatores(nova.id_produto);
         return nova;
@@ -250,10 +272,12 @@ export default function NotaManual({
   }
 
   /** Tab no campo de código: acha o produto e preenche o resto da linha. */
-  function buscarPeloCodigo(indice: number) {
-    setLinhas((atuais) =>
-      atuais.map((l, i) => (i === indice ? comProduto(l, porCodigo(l.codigo)) : l)),
-    );
+  async function buscarPeloCodigo(indice: number) {
+    const codigo = linhas[indice]?.codigo ?? "";
+    if (!codigo.trim()) return;
+    const p = await porCodigo(codigo);
+    if (p) guardar(p);
+    setLinhas((atuais) => atuais.map((l, i) => (i === indice ? comProduto(l, p) : l)));
   }
 
   async function gravar() {
@@ -318,18 +342,24 @@ export default function NotaManual({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo rotulo="Fornecedor">
-          <select
-            className="campo"
-            value={idFornecedor}
-            onChange={(e) => setIdFornecedor(e.target.value)}
-          >
-            <option value="">— sem fornecedor —</option>
-            {fornecedores.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
+          <BuscaCadastro
+            fonte={FORNECEDORES}
+            selecionado={
+              idFornecedor
+                ? {
+                    id: Number(idFornecedor),
+                    rotulo:
+                      rotuloFornecedor ||
+                      fornecedores.find((f) => String(f.id) === idFornecedor)?.nome ||
+                      "",
+                  }
+                : null
+            }
+            aoEscolher={(item: ItemBusca | null) => {
+              setIdFornecedor(item ? String(item.id) : "");
+              setRotuloFornecedor(item ? item.nome : "");
+            }}
+          />
         </Campo>
         <Campo rotulo="Número">
           <input
@@ -391,11 +421,11 @@ export default function NotaManual({
                       onChange={(e) => mudar(i, "codigo", e.target.value)}
                       // Tab (ou sair do campo) já traz o produto: quem digita do
                       // papel não quer soltar o teclado para caçar no combo.
-                      onBlur={() => buscarPeloCodigo(i)}
+                      onBlur={() => void buscarPeloCodigo(i)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          buscarPeloCodigo(i);
+                          void buscarPeloCodigo(i);
                         }
                       }}
                     />
@@ -406,19 +436,21 @@ export default function NotaManual({
                     )}
                   </td>
                   <td>
-                    <select
-                      className="campo"
-                      value={linha.id_produto}
-                      onChange={(e) => mudar(i, "id_produto", e.target.value)}
-                    >
-                      <option value="">— escolher depois —</option>
-                      {produtos.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nome}
-                          {p.um_estoque ? ` (${p.um_estoque})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                    <BuscaCadastro
+                      fonte={PRODUTOS}
+                      selecionado={
+                        linha.id_produto
+                          ? {
+                              id: Number(linha.id_produto),
+                              rotulo: conhecido(linha.id_produto)?.nome ?? linha.descricao,
+                            }
+                          : null
+                      }
+                      aoEscolher={(item: ItemBusca | null) => {
+                        if (item) guardar(item.bruto as unknown as ProdutoResumo);
+                        mudar(i, "id_produto", item ? String(item.id) : "");
+                      }}
+                    />
                   </td>
                   <td>
                     <input
