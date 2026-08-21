@@ -82,8 +82,14 @@ para arquivo nenhum — gravar direto aqui.
   tela mostra "—" com o motivo; zero ali pareceria um resultado excelente. Dinheiro só sai
   com `cmv.painel` — quem não tem recebe `dinheiro: null`, não um valor zerado. A cobertura
   de ficha viaja junto porque é ela que diz o quanto dá para confiar na variância.
-- Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/producao`,
-  `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+- Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/ajustes`,
+  `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+- **Consultar e lançar são telas separadas** (21/08/2026): entrada, saída, perda e
+  transferência eram quatro botões no cabeçalho de `/estoque`, que é onde se CONSULTA.
+  Viraram **Estoque ▸ Ajustes** (`/ajustes`): escolhe-se o tipo e o formulário se molda a ele.
+  Depois de lançar o formulário **fica aberto e limpo** — quem ajusta um item ajusta o
+  próximo. ⚠️ O item de menu aceita **lista** de chaves (`chave: string | string[]`): Ajustes
+  serve a quatro permissões e quem só tem a de perda também precisa chegar nele.
 - **`services/nfe_xml.py`** + `routers/notas.py`: a casa opera **sem integração nenhuma**. A
   nota entra por três portas — XML da NF-e, digitação e Omie — e da gravação em diante o
   caminho é um só (conciliação → conversão → rateio → razão). Por isso o ciclo da nota

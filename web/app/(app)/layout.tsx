@@ -10,7 +10,12 @@ import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
 
 /** O menu é montado pelas permissões de quem entrou. */
-const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string }[] }[] = [
+/** `chave` pode ser uma lista: a tela de Ajustes serve a quatro permissões e
+    quem tem só a de perda também precisa chegar nela. */
+const MENU: {
+  grupo: string;
+  itens: { href: string; nome: string; chave?: string | string[] }[];
+}[] = [
   {
     grupo: "Operação",
     itens: [
@@ -31,6 +36,12 @@ const MENU: { grupo: string; itens: { href: string; nome: string; chave?: string
     grupo: "Estoque",
     itens: [
       { href: "/estoque", nome: "Saldos e movimentos", chave: "estoque.saldos" },
+      {
+        href: "/ajustes",
+        nome: "Ajustes",
+        chave: ["estoque.entradas", "estoque.saidas", "estoque.perdas",
+                "estoque.transferencias"],
+      },
       { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
       { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },
     ],
@@ -154,7 +165,9 @@ function Casca({ children }: { children: React.ReactNode }) {
   const navegacao = (
     <nav className="px-3 pb-5">
       {MENU.map((g) => {
-        const itens = g.itens.filter((i) => !i.chave || pode(i.chave));
+        const itens = g.itens.filter(
+          (i) => !i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave)),
+        );
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);
         // O grupo da tela aberta começa expandido — mas é só o padrão: se a

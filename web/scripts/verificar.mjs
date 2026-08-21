@@ -93,6 +93,23 @@ async function irPara(pagina, url) {
   }
 }
 
+/** Espera um texto aparecer na tela, em vez de dormir um tempo fixo.
+ *
+ * A lista de produtos carrega por XHR depois do `networkidle2`, com debounce na
+ * busca: um `setTimeout` de 1,2 s acertava quase sempre e falhava de vez em
+ * quando — e teste que falha "às vezes" é pior que teste que não existe,
+ * porque ensina a ignorar o vermelho.
+ */
+async function esperarTexto(pagina, texto, limite = 6000) {
+  const ate = Date.now() + limite;
+  while (Date.now() < ate) {
+    const tem = await pagina.evaluate((t) => document.body.innerText.includes(t), texto);
+    if (tem) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
 // ---- prepara um usuário de Cozinha, via API ----
 const login = await api("POST", "/auth/login", ADMIN);
 if (login.status !== 200) {
@@ -301,9 +318,8 @@ try {
       && parseFloat(voltar?.tamanho ?? "0") >= 13, voltar);
 
   await p.goto(`${WEB}/produtos?busca=Teste tela`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
-  const naLista = await p.evaluate((n) => document.body.innerText.includes(n), nomeProduto);
-  checar("produto aparece na lista", naLista);
+  const naLista = await esperarTexto(p, nomeProduto);
+  checar("produto aparece na lista", naLista, nomeProduto);
 
   // Limpa: desativa o produto criado pelo teste.
   if (criou) {
@@ -413,6 +429,7 @@ try {
 
   for (const [rota, nome] of [
     ["/estoque", "18-estoque"],
+    ["/ajustes", "18c-ajustes"],
     ["/producao", "19-producao"],
     ["/inventario", "20-inventario"],
   ]) {
@@ -487,28 +504,63 @@ try {
     [antesFiltro, depoisFiltro.slice(0, 120)]);
   await foto(p, "18b-razao-filtrado");
 
-  // Entrada pela tela: 10 kg a R$ 20,00.
+  // Lançar é tela própria: saldos é onde se CONSULTA. Os quatro botões viraram
+  // Estoque ▸ Ajustes, e da tela de saldos sobra o atalho.
   await p.goto(`${WEB}/estoque`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
-  await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Entrada");
-    b?.click();
+  const saldosSemForm = await p.evaluate(() => {
+    const textos = [...document.querySelectorAll("button, a")].map((x) => x.textContent?.trim());
+    return {
+      lancar: textos.includes("Lançar ajuste"),
+      antigos: ["Entrada", "Saída", "Perda", "Transferir"].filter((t) => textos.includes(t)),
+    };
   });
-  await new Promise((r) => setTimeout(r, 600));
+  checar("saldos deixou de ter os botões de lançamento",
+    saldosSemForm.antigos.length === 0, saldosSemForm.antigos);
+  checar("e ganhou o atalho para os ajustes", saldosSemForm.lancar === true, saldosSemForm);
+
+  await irPara(p, `${WEB}/ajustes`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const telaAjustes = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const escolhido = document.querySelector('[aria-pressed="true"]');
+    return {
+      tipos: ["Entrada", "Saída", "Perda", "Transferência"].filter((t) => texto.includes(t)),
+      escolhido: escolhido?.textContent?.trim().slice(0, 8) ?? null,
+      temCusto: /custo unit[áa]rio/i.test(texto),
+    };
+  });
+  checar("a tela de ajustes oferece os quatro tipos", telaAjustes.tipos.length === 4,
+    telaAjustes.tipos);
+  checar("com um já escolhido e o formulário montado para ele",
+    telaAjustes.escolhido?.startsWith("Entrada") && telaAjustes.temCusto, telaAjustes);
+
+  // Entrada pela tela: 10 kg a R$ 20,00.
   const selEstoque = await p.$$("select");
   await selEstoque[0].select(String(insumo4.id));
   const numEstoque = await p.$$("input[type=number]");
   await numEstoque[0].type("10");
   await numEstoque[1].type("20");
   await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Lançar");
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => x.textContent === "Lançar entrada");
     b?.click();
   });
   await new Promise((r) => setTimeout(r, 1600));
   const textoEstoque = await p.evaluate(() => document.body.innerText);
   checar("entrada pela tela mostra o novo custo médio", /custo médio: R\$\s?20,00/i.test(textoEstoque),
     textoEstoque.match(/.{0,60}custo médio.{0,20}/i)?.[0]);
-  await foto(p, "21-estoque-entrada");
+  await foto(p, "21-ajuste-entrada");
+
+  // O formulário fica aberto e limpo: quem ajusta um item ajusta o próximo.
+  const depoisDeLancar = await p.evaluate(() => {
+    const qtd = [...document.querySelectorAll("input[type=number]")][0];
+    return { limpo: qtd?.value === "", aindaTem: !!qtd };
+  });
+  checar("o formulário continua aberto e limpo para o próximo",
+    depoisDeLancar.aindaTem && depoisDeLancar.limpo, depoisDeLancar);
+  const nosRecentes = await p.evaluate(() => document.body.innerText.includes("Últimos ajustes"));
+  checar("e o ajuste aparece na lista dos últimos", nosRecentes);
 
   const { dados: saldos } = await api("GET", `/estoque/saldos?busca=${m4}`, null, token);
   checar("saldo gravado pela tela", saldos.length === 1 && Number(saldos[0].quantidade) === 10,

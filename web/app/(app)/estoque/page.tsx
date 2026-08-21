@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
@@ -43,8 +44,6 @@ type Movimento = {
   id_estorno_de: number | null;
 };
 
-type Motivo = { id: number; nome: string };
-type Lancamento = "entrada" | "saida" | "perda" | "transferencia" | null;
 
 const qtd = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
@@ -54,12 +53,13 @@ type TipoMovimento = { tipo: string; rotulo: string };
 export default function PaginaEstoque() {
   const aviso = useAviso();
   const { pode } = useSessao();
+  // Quem pode lançar qualquer um dos quatro ajustes vê o atalho para a tela.
+  const podeAjustar = ["estoque.entradas", "estoque.saidas", "estoque.perdas",
+                       "estoque.transferencias"].some(pode);
   const [aba, setAba] = useState<"saldos" | "movimentos">("saldos");
   const [saldos, setSaldos] = useState<Saldo[] | null>(null);
   const [movimentos, setMovimentos] = useState<Movimento[] | null>(null);
-  const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
-  const [motivos, setMotivos] = useState<Motivo[]>([]);
   const [busca, setBusca] = useState("");
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
@@ -76,13 +76,6 @@ export default function PaginaEstoque() {
   const [movPagina, setMovPagina] = useState(1);
   const [tipos, setTipos] = useState<TipoMovimento[]>([]);
 
-  const [lancamento, setLancamento] = useState<Lancamento>(null);
-  const [f, setF] = useState({
-    id_produto: "", quantidade: "", custo_unitario: "", id_local: "",
-    id_local_destino: "", id_motivo_perda: "", documento: "", observacao: "",
-    lote: "", validade: "",
-  });
-  const [salvando, setSalvando] = useState(false);
   const [baixando, setBaixando] = useState(false);
 
   async function baixar(caminho: string) {
@@ -140,11 +133,7 @@ export default function PaginaEstoque() {
   }, [carregarMovimentos, movBusca]);
 
   useEffect(() => {
-    api.get<ProdutoResumo[]>("/produtos").then((p) =>
-      setProdutos(p.filter((x) => x.controla_estoque)),
-    ).catch(() => {});
     api.get<Local[]>("/locais").then(setLocais).catch(() => {});
-    api.get<Motivo[]>("/estoque/motivos-perda").then(setMotivos).catch(() => {});
     api.get<TipoMovimento[]>("/estoque/tipos-movimento").then(setTipos).catch(() => {});
   }, []);
 
@@ -152,73 +141,6 @@ export default function PaginaEstoque() {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);
     return () => clearTimeout(t);
   }, [carregar, busca]);
-
-  function abrir(tipo: Lancamento) {
-    setLancamento(tipo);
-    setErro("");
-    setF({
-      id_produto: "", quantidade: "", custo_unitario: "",
-      id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""),
-      id_local_destino: "", id_motivo_perda: "", documento: "", observacao: "",
-      lote: "", validade: "",
-    });
-  }
-
-  async function lancar(e: FormEvent) {
-    e.preventDefault();
-    setSalvando(true);
-    setErro("");
-    const base = {
-      id_produto: Number(f.id_produto),
-      quantidade: Number(f.quantidade.replace(",", ".")),
-      id_local: f.id_local ? Number(f.id_local) : null,
-      observacao: f.observacao || null,
-    };
-    try {
-      if (lancamento === "entrada") {
-        const r = await api.post<{ custo_medio: number }>("/estoque/entradas", {
-          ...base,
-          custo_unitario: Number(f.custo_unitario.replace(",", ".")),
-          documento: f.documento || null,
-          lote: f.lote || null,
-          validade: f.validade || null,
-        });
-        aviso.sucesso(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
-      } else if (lancamento === "transferencia") {
-        await api.post("/estoque/transferencias", {
-          id_produto: base.id_produto,
-          quantidade: base.quantidade,
-          id_local_origem: Number(f.id_local),
-          id_local_destino: Number(f.id_local_destino),
-          observacao: base.observacao,
-        });
-        aviso.sucesso("Transferência lançada.");
-      } else {
-        const r = await api.post<{
-          custo_unitario: number;
-          custo_provisorio: boolean;
-          message: string;
-        }>("/estoque/saidas", {
-          ...base,
-          tipo: lancamento === "perda" ? "SAIDA_PERDA" : "SAIDA_CONSUMO_INTERNO",
-          id_motivo_perda: f.id_motivo_perda ? Number(f.id_motivo_perda) : null,
-        });
-        // A frase de qual lote saiu vem pronta do servidor: é a mesma que qualquer
-        // outro consumidor da API recebe, e escrevê-la de novo aqui seria a
-        // segunda versão da mesma regra.
-        aviso.sucesso(
-          `${r.message ?? "Saída lançada"} — ${reais(Number(r.custo_unitario))} por unidade.` +
-            (r.custo_provisorio ? " Custo provisório: não havia saldo suficiente." : ""),
-        );
-      }
-      setLancamento(null);
-      await carregar();
-    } catch (err) {
-      aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
-    } finally {
-      setSalvando(false);
-    }
-  }
 
   async function estornar(m: Movimento) {
     setErro("");
@@ -260,25 +182,12 @@ export default function PaginaEstoque() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {pode("estoque.entradas") && (
-            <button className="btn btn-primario" onClick={() => abrir("entrada")}>
-              Entrada
-            </button>
-          )}
-          {pode("estoque.saidas") && (
-            <button className="btn btn-secundario" onClick={() => abrir("saida")}>
-              Saída
-            </button>
-          )}
-          {pode("estoque.perdas") && (
-            <button className="btn btn-secundario" onClick={() => abrir("perda")}>
-              Perda
-            </button>
-          )}
-          {pode("estoque.transferencias") && locais.length > 1 && (
-            <button className="btn btn-secundario" onClick={() => abrir("transferencia")}>
-              Transferir
-            </button>
+          {/* Lançar tem tela própria: aqui se CONSULTA. Os quatro botões de
+              entrada, saída, perda e transferência viraram Estoque ▸ Ajustes. */}
+          {podeAjustar && (
+            <Link href="/ajustes" className="btn btn-primario">
+              Lançar ajuste
+            </Link>
           )}
           <button
             className="btn btn-secundario"
@@ -291,160 +200,6 @@ export default function PaginaEstoque() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
-
-      {lancamento && (
-        <Cartao
-          titulo={
-            {
-              entrada: "Entrada de estoque",
-              saida: "Saída / consumo",
-              perda: "Apontar perda",
-              transferencia: "Transferir entre locais",
-            }[lancamento]
-          }
-          descricao={
-            lancamento === "entrada"
-              ? "O custo informado é o de aquisição: já com frete e desconto rateados."
-              : lancamento === "perda"
-                ? "Perda com nome vira decisão; perda anônima vira desconfiança."
-                : undefined
-          }
-          acao={
-            <button className="rotulo hover:text-erro" onClick={() => setLancamento(null)}>
-              cancelar
-            </button>
-          }
-        >
-          <form onSubmit={lancar} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Campo rotulo="Produto" className="sm:col-span-2">
-              <select
-                className="campo"
-                required
-                value={f.id_produto}
-                onChange={(e) => setF({ ...f, id_produto: e.target.value })}
-              >
-                <option value="">— escolha —</option>
-                {produtos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} {p.um_estoque ? `(${p.um_estoque})` : ""}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo rotulo="Quantidade">
-              <input
-                className="campo mono"
-                type="number"
-                step="0.001"
-                min="0.001"
-                required
-                value={f.quantidade}
-                onChange={(e) => setF({ ...f, quantidade: e.target.value })}
-              />
-            </Campo>
-            {lancamento === "entrada" && (
-              <Campo rotulo="Custo unitário (R$)">
-                <input
-                  className="campo mono"
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  required
-                  value={f.custo_unitario}
-                  onChange={(e) => setF({ ...f, custo_unitario: e.target.value })}
-                />
-              </Campo>
-            )}
-            <Campo rotulo={lancamento === "transferencia" ? "De qual local" : "Local"}>
-              <select
-                className="campo"
-                value={f.id_local}
-                onChange={(e) => setF({ ...f, id_local: e.target.value })}
-              >
-                {locais.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.nome}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            {lancamento === "transferencia" && (
-              <Campo rotulo="Para qual local">
-                <select
-                  className="campo"
-                  required
-                  value={f.id_local_destino}
-                  onChange={(e) => setF({ ...f, id_local_destino: e.target.value })}
-                >
-                  <option value="">— escolha —</option>
-                  {locais
-                    .filter((l) => l.id.toString() !== f.id_local)
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.nome}
-                      </option>
-                    ))}
-                </select>
-              </Campo>
-            )}
-            {lancamento === "perda" && (
-              <Campo rotulo="Motivo">
-                <select
-                  className="campo"
-                  required
-                  value={f.id_motivo_perda}
-                  onChange={(e) => setF({ ...f, id_motivo_perda: e.target.value })}
-                >
-                  <option value="">— escolha —</option>
-                  {motivos.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nome}
-                    </option>
-                  ))}
-                </select>
-              </Campo>
-            )}
-            {lancamento === "entrada" && (
-              <>
-                <Campo rotulo="Documento" dica="nº da nota, se houver">
-                  <input
-                    className="campo"
-                    value={f.documento}
-                    onChange={(e) => setF({ ...f, documento: e.target.value })}
-                  />
-                </Campo>
-                <Campo rotulo="Lote" dica="opcional">
-                  <input
-                    className="campo mono"
-                    value={f.lote}
-                    onChange={(e) => setF({ ...f, lote: e.target.value })}
-                  />
-                </Campo>
-                <Campo rotulo="Validade" dica="opcional">
-                  <input
-                    className="campo"
-                    type="date"
-                    value={f.validade}
-                    onChange={(e) => setF({ ...f, validade: e.target.value })}
-                  />
-                </Campo>
-              </>
-            )}
-            <Campo rotulo="Observação" className="sm:col-span-2">
-              <input
-                className="campo"
-                value={f.observacao}
-                onChange={(e) => setF({ ...f, observacao: e.target.value })}
-              />
-            </Campo>
-            <div className="flex items-end">
-              <button className="btn btn-primario" type="submit" disabled={salvando}>
-                {salvando ? "Lançando…" : "Lançar"}
-              </button>
-            </div>
-          </form>
-        </Cartao>
-      )}
 
       <nav className="flex gap-1 border-b border-linha">
         {(["saldos", "movimentos"] as const).map((a) => (

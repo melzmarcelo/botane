@@ -1,0 +1,492 @@
+"use client";
+
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { useAviso } from "@/components/aviso-flutuante";
+import { useSessao } from "@/lib/sessao";
+import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
+import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+
+/**
+ * Ajuste de estoque — o lançamento feito À MÃO.
+ *
+ * Entrada, saída, perda e transferência moravam como botões na tela de saldos,
+ * que é onde se CONSULTA. Consultar e lançar são gestos diferentes: um é do dia
+ * a dia de quem confere, o outro é do momento em que alguém precisa acertar o
+ * estoque. Aqui a pessoa escolhe o tipo primeiro e o formulário se molda a ele.
+ *
+ * O que NÃO entra aqui: o que tem porta própria — nota de entrada (Compras),
+ * produção (Produção), contagem (Inventário) e venda (importação do PDV). Este
+ * é o caminho do que não nasce de um documento.
+ */
+
+type Motivo = { id: number; nome: string };
+type Tipo = "entrada" | "saida" | "perda" | "transferencia";
+
+type Movimento = {
+  id: number;
+  data_movimento: string;
+  tipo: string;
+  rotulo: string;
+  produto: string;
+  local: string;
+  quantidade: number;
+  custo_unitario: number;
+  custo_total: number;
+  motivo: string | null;
+  observacao: string | null;
+  usuario: string | null;
+  estornado: boolean;
+};
+
+const TIPOS: {
+  id: Tipo;
+  nome: string;
+  chave: string;
+  descricao: string;
+}[] = [
+  {
+    id: "entrada",
+    nome: "Entrada",
+    chave: "estoque.entradas",
+    descricao:
+      "Compra sem nota, sobra de contagem, devolução do cliente. O custo informado é o de aquisição: já com frete e desconto dentro.",
+  },
+  {
+    id: "saida",
+    nome: "Saída",
+    chave: "estoque.saidas",
+    descricao:
+      "Consumo interno, cortesia, degustação. Sai pelo custo médio do estoque, sem passar por ficha.",
+  },
+  {
+    id: "perda",
+    nome: "Perda",
+    chave: "estoque.perdas",
+    descricao: "Quebra, vencimento, sobra descartada. Perda com nome vira decisão; perda anônima vira desconfiança.",
+  },
+  {
+    id: "transferencia",
+    nome: "Transferência",
+    chave: "estoque.transferencias",
+    descricao:
+      "Mudar de local sem mudar de dono. Não cria nem destrói valor: sai de um lado pelo médio e entra do outro pelo mesmo.",
+  },
+];
+
+// Só os movimentos que nascem AQUI. O razão inteiro tem tela própria.
+const TIPOS_DA_MAO = ["ENTRADA_MANUAL", "SAIDA_CONSUMO_INTERNO", "SAIDA_PERDA",
+                      "TRANSFERENCIA_SAIDA", "TRANSFERENCIA_ENTRADA"];
+
+const VAZIO = {
+  id_produto: "",
+  quantidade: "",
+  custo_unitario: "",
+  id_local: "",
+  id_local_destino: "",
+  id_motivo_perda: "",
+  documento: "",
+  observacao: "",
+  lote: "",
+  validade: "",
+};
+
+const qtd = (n: number | string) =>
+  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+
+export default function PaginaAjustes() {
+  const aviso = useAviso();
+  const { pode } = useSessao();
+
+  const permitidos = TIPOS.filter((t) => pode(t.chave));
+  const [tipo, setTipo] = useState<Tipo | null>(null);
+  const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
+  const [locais, setLocais] = useState<Local[]>([]);
+  const [motivos, setMotivos] = useState<Motivo[]>([]);
+  const [recentes, setRecentes] = useState<Movimento[] | null>(null);
+  const [f, setF] = useState({ ...VAZIO });
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const carregarRecentes = useCallback(async () => {
+    try {
+      const tudo = await Promise.all(
+        TIPOS_DA_MAO.map((t) =>
+          api.get<Movimento[]>(`/estoque/movimentos?tipo=${t}&limite=10`),
+        ),
+      );
+      setRecentes(
+        tudo.flat().sort((a, b) => b.id - a.id).slice(0, 12),
+      );
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao carregar");
+    }
+  }, []);
+
+  useEffect(() => {
+    api
+      .get<ProdutoResumo[]>("/produtos")
+      .then((p) => setProdutos(p.filter((x) => x.controla_estoque)))
+      .catch(() => {});
+    api.get<Local[]>("/locais").then(setLocais).catch(() => {});
+    api.get<Motivo[]>("/estoque/motivos-perda").then(setMotivos).catch(() => {});
+    void carregarRecentes();
+  }, [carregarRecentes]);
+
+  // O primeiro tipo permitido já vem escolhido: quem abriu esta tela veio
+  // lançar alguma coisa, e um formulário fechado seria um clique a mais.
+  useEffect(() => {
+    if (!tipo && permitidos.length) escolher(permitidos[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permitidos.length]);
+
+  function escolher(novo: Tipo) {
+    setTipo(novo);
+    setF({
+      ...VAZIO,
+      id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? ""),
+    });
+  }
+
+  // O local padrão só existe depois que a lista chega.
+  useEffect(() => {
+    setF((a) =>
+      a.id_local
+        ? a
+        : { ...a, id_local: String(locais.find((l) => l.principal)?.id ?? locais[0]?.id ?? "") },
+    );
+  }, [locais]);
+
+  async function lancar(e: FormEvent) {
+    e.preventDefault();
+    setSalvando(true);
+    const base = {
+      id_produto: Number(f.id_produto),
+      quantidade: Number(f.quantidade.replace(",", ".")),
+      id_local: f.id_local ? Number(f.id_local) : null,
+      observacao: f.observacao || null,
+    };
+    try {
+      if (tipo === "entrada") {
+        const r = await api.post<{ custo_medio: number }>("/estoque/entradas", {
+          ...base,
+          custo_unitario: Number(f.custo_unitario.replace(",", ".")),
+          documento: f.documento || null,
+          lote: f.lote || null,
+          validade: f.validade || null,
+        });
+        aviso.sucesso(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
+      } else if (tipo === "transferencia") {
+        await api.post("/estoque/transferencias", {
+          id_produto: base.id_produto,
+          quantidade: base.quantidade,
+          id_local_origem: Number(f.id_local),
+          id_local_destino: Number(f.id_local_destino),
+          observacao: base.observacao,
+        });
+        aviso.sucesso("Transferência lançada.");
+      } else {
+        const r = await api.post<{
+          custo_unitario: number;
+          custo_provisorio: boolean;
+          message: string;
+        }>("/estoque/saidas", {
+          ...base,
+          tipo: tipo === "perda" ? "SAIDA_PERDA" : "SAIDA_CONSUMO_INTERNO",
+          id_motivo_perda: f.id_motivo_perda ? Number(f.id_motivo_perda) : null,
+        });
+        // A frase de qual lote saiu vem pronta do servidor: escrevê-la de novo
+        // aqui seria a segunda versão da mesma regra.
+        aviso.sucesso(
+          `${r.message ?? "Saída lançada"} — ${reais(Number(r.custo_unitario))} por unidade.` +
+            (r.custo_provisorio ? " Custo provisório: não havia saldo suficiente." : ""),
+        );
+      }
+      // O formulário fica ABERTO e limpo: quem ajusta um item costuma ajustar o
+      // próximo, e fechar obrigaria a escolher o tipo de novo.
+      setF((a) => ({ ...VAZIO, id_local: a.id_local }));
+      await carregarRecentes();
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function estornar(m: Movimento) {
+    try {
+      await api.post(`/estoque/movimentos/${m.id}/estornar`, { motivo: "estorno pela tela" });
+      aviso.sucesso("Movimento estornado — o original continua no razão, com a contrapartida.");
+      await carregarRecentes();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível estornar");
+    }
+  }
+
+  if (!permitidos.length) {
+    return (
+      <Cartao titulo="Ajustes de estoque">
+        <Vazio>Você não tem permissão para lançar ajustes.</Vazio>
+      </Cartao>
+    );
+  }
+
+  const atual = TIPOS.find((t) => t.id === tipo);
+  const semLocalDestino = locais.length < 2;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header>
+        <p className="rotulo">Estoque</p>
+        <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
+          Ajustes de estoque
+        </h1>
+        <p className="mt-1 max-w-[68ch] text-suave">
+          O lançamento feito à mão, para o que não nasce de um documento. Nota de entrada,
+          produção, contagem e venda têm caminho próprio — e nada aqui é apagado: correção
+          entra como estorno.
+        </p>
+      </header>
+
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      <Cartao titulo="Que ajuste é este?">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {permitidos.map((t) => {
+            const escolhido = t.id === tipo;
+            const bloqueado = t.id === "transferencia" && semLocalDestino;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                disabled={bloqueado}
+                onClick={() => escolher(t.id)}
+                aria-pressed={escolhido}
+                className={`rounded border p-3 text-left transition-colors ${
+                  escolhido
+                    ? "border-erva bg-erva-claro"
+                    : "border-linha2 bg-superficie hover:border-erva"
+                } ${bloqueado ? "cursor-not-allowed opacity-55" : ""}`}
+              >
+                <span
+                  className={`block text-[15px] font-semibold ${escolhido ? "text-erva" : ""}`}
+                >
+                  {t.nome}
+                </span>
+                <span className="mt-1 block text-[12.5px] leading-snug text-suave">
+                  {bloqueado ? "Precisa de mais de um local de estoque." : t.descricao}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Cartao>
+
+      {atual && (
+        <Cartao titulo={`Lançar ${atual.nome.toLowerCase()}`}>
+          <form onSubmit={lancar} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Campo rotulo="Produto" className="sm:col-span-2">
+              <select
+                className="campo"
+                required
+                value={f.id_produto}
+                onChange={(e) => setF({ ...f, id_produto: e.target.value })}
+              >
+                <option value="">— escolha —</option>
+                {produtos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} {p.um_estoque ? `(${p.um_estoque})` : ""}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            <Campo rotulo="Quantidade">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.001"
+                min="0.001"
+                required
+                value={f.quantidade}
+                onChange={(e) => setF({ ...f, quantidade: e.target.value })}
+              />
+            </Campo>
+            {tipo === "entrada" && (
+              <Campo rotulo="Custo unitário (R$)">
+                <input
+                  className="campo mono"
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  required
+                  value={f.custo_unitario}
+                  onChange={(e) => setF({ ...f, custo_unitario: e.target.value })}
+                />
+              </Campo>
+            )}
+            <Campo rotulo={tipo === "transferencia" ? "De qual local" : "Local"}>
+              <select
+                className="campo"
+                value={f.id_local}
+                onChange={(e) => setF({ ...f, id_local: e.target.value })}
+              >
+                {locais.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            {tipo === "transferencia" && (
+              <Campo rotulo="Para qual local">
+                <select
+                  className="campo"
+                  required
+                  value={f.id_local_destino}
+                  onChange={(e) => setF({ ...f, id_local_destino: e.target.value })}
+                >
+                  <option value="">— escolha —</option>
+                  {locais
+                    .filter((l) => l.id.toString() !== f.id_local)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.nome}
+                      </option>
+                    ))}
+                </select>
+              </Campo>
+            )}
+            {tipo === "perda" && (
+              <Campo rotulo="Motivo">
+                <select
+                  className="campo"
+                  required
+                  value={f.id_motivo_perda}
+                  onChange={(e) => setF({ ...f, id_motivo_perda: e.target.value })}
+                >
+                  <option value="">— escolha —</option>
+                  {motivos.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nome}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            )}
+            {tipo === "entrada" && (
+              <>
+                <Campo rotulo="Documento" dica="nº da nota, se houver">
+                  <input
+                    className="campo"
+                    value={f.documento}
+                    onChange={(e) => setF({ ...f, documento: e.target.value })}
+                  />
+                </Campo>
+                <Campo rotulo="Lote" dica="opcional">
+                  <input
+                    className="campo mono"
+                    value={f.lote}
+                    onChange={(e) => setF({ ...f, lote: e.target.value })}
+                  />
+                </Campo>
+                <Campo rotulo="Validade" dica="opcional">
+                  <input
+                    className="campo"
+                    type="date"
+                    value={f.validade}
+                    onChange={(e) => setF({ ...f, validade: e.target.value })}
+                  />
+                </Campo>
+              </>
+            )}
+            <Campo rotulo="Observação" className="sm:col-span-2">
+              <input
+                className="campo"
+                placeholder="o que aconteceu"
+                value={f.observacao}
+                onChange={(e) => setF({ ...f, observacao: e.target.value })}
+              />
+            </Campo>
+            <div className="flex items-end">
+              <button className="btn btn-primario" type="submit" disabled={salvando}>
+                {salvando ? "Lançando…" : `Lançar ${atual.nome.toLowerCase()}`}
+              </button>
+            </div>
+          </form>
+        </Cartao>
+      )}
+
+      <Cartao
+        titulo="Últimos ajustes"
+        descricao="O que foi lançado à mão — conferir aqui evita o ajuste em dobro."
+      >
+        {!recentes ? (
+          <Carregando />
+        ) : !recentes.length ? (
+          <Vazio>Nenhum ajuste lançado ainda.</Vazio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>O quê</th>
+                  <th>Produto</th>
+                  <th className="num">Qtd</th>
+                  <th className="num">Custo total</th>
+                  <th>Quem</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentes.map((m) => (
+                  <tr key={m.id} className={m.estornado ? "opacity-55" : ""}>
+                    <td className="mono whitespace-nowrap text-[13px]">
+                      {new Date(m.data_movimento).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td>
+                      <span className="whitespace-nowrap">{m.rotulo}</span>
+                      {m.motivo && (
+                        <span className="block text-[12.5px] text-suave">{m.motivo}</span>
+                      )}
+                      {m.estornado && (
+                        <span className="block">
+                          <Etiqueta cor="alerta">estornado</Etiqueta>
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {m.produto}
+                      <span className="block text-[12.5px] text-suave">{m.local}</span>
+                    </td>
+                    <td className={`num ${Number(m.quantidade) < 0 ? "text-erro" : "text-erva"}`}>
+                      {Number(m.quantidade) > 0 ? "+" : ""}
+                      {qtd(m.quantidade)}
+                    </td>
+                    <td className="num">{reais(Number(m.custo_total))}</td>
+                    <td className="text-[13px] text-suave">{m.usuario ?? "—"}</td>
+                    <td className="num">
+                      {!m.estornado && pode("estoque.ajuste") && (
+                        <button
+                          className="rotulo hover:text-erro"
+                          onClick={() => void estornar(m)}
+                        >
+                          estornar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Cartao>
+    </div>
+  );
+}
