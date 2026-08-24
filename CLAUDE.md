@@ -103,6 +103,15 @@ para arquivo nenhum — gravar direto aqui.
   ⚠️ O impacto previsto soma **todos** os itens, nunca os filtrados.
 - **`fonteDaLista()`** serve a janela a partir de uma lista já carregada (as receitas da
   produção). Mesma janela, outra origem.
+- ⚠️ **"Tabelas de apoio" não era o nome de nada que se procura** (21/08/2026): quem precisava
+  cadastrar o local de estoque procurava "local de estoque" no menu e não achava — as quatro
+  tabelas estavam atrás de um rótulo genérico. Agora cada uma tem entrada própria apontando
+  para `/cadastros?aba=…`, e a tela abre na aba pedida. ⚠️ O item de menu ativo compara
+  **caminho + query**, e `useSearchParams` obriga uma fronteira de **Suspense**: ela envolve só
+  o `MenuLateral`. Envolvendo a casca inteira, toda tela ficava em branco até o roteador
+  resolver a query — e o `next build` recusa a pré-renderização sem a fronteira.
+  ⚠️ A gaveta do celular fecha por mudança de CAMINHO; como as quatro abas compartilham o
+  mesmo, os links do menu também chamam `aoNavegar`.
 - ⚠️ **`innerText` não enxerga valor de campo.** Depois que a escolha virou input, "o nome
   aparece na tela" ficou falso no teste e verdadeiro no monitor — `verificar.mjs` tem
   `textoVisivel()`, que junta `innerText` com o valor dos inputs.

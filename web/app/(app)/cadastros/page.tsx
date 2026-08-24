@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
@@ -51,7 +52,13 @@ const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
 export default function PaginaCadastros() {
   const aviso = useAviso();
   const { pode } = useSessao();
-  const [aba, setAba] = useState<Aba>("setores");
+  // A aba vem da URL: é o que permite o menu apontar direto para "Locais de
+  // estoque" e o endereço continuar valendo quando alguém o guarda.
+  const busca = useSearchParams();
+  const router = useRouter();
+  const pedida = busca.get("aba") as Aba | null;
+  const aba: Aba = ABAS.some((a) => a.id === pedida) ? (pedida as Aba) : "locais";
+  const setAba = (nova: Aba) => router.replace(`/cadastros?aba=${nova}`);
   const [setores, setSetores] = useState<Setor[] | null>(null);
   const [locais, setLocais] = useState<Local[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
@@ -104,11 +111,11 @@ export default function PaginaCadastros() {
       <header>
         <p className="rotulo">Cadastros</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
-          Tabelas de apoio
+          {atual.nome}
         </h1>
         <p className="mt-1 max-w-[64ch] text-suave">
-          As quatro listas que o cadastro de produto usa. Mexer aqui muda como o estoque e o
-          CMV vão se organizar depois — vale acertar antes de cadastrar o primeiro insumo.
+          Uma das quatro listas que o cadastro de produto usa. Mexer aqui muda como o estoque e
+          o CMV vão se organizar depois — vale acertar antes de cadastrar o primeiro insumo.
         </p>
       </header>
 

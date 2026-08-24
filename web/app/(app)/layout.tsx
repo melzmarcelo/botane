@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
@@ -29,7 +29,21 @@ const MENU: {
       { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
       { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
       { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
-      { href: "/cadastros", nome: "Tabelas de apoio", chave: "cadastros.setores" },
+      // "Tabelas de apoio" não é o nome de nada que se procura. Quem precisa
+      // cadastrar o local de estoque procura "local de estoque" — e não achava,
+      // porque as quatro tabelas estavam atrás de um rótulo genérico.
+      { href: "/cadastros?aba=locais", nome: "Locais de estoque", chave: "cadastros.locais" },
+      { href: "/cadastros?aba=setores", nome: "Setores", chave: "cadastros.setores" },
+      {
+        href: "/cadastros?aba=categorias",
+        nome: "Categorias",
+        chave: "cadastros.categorias",
+      },
+      {
+        href: "/cadastros?aba=unidades",
+        nome: "Unidades de medida",
+        chave: "cadastros.unidades_medida",
+      },
     ],
   },
   {
@@ -163,63 +177,18 @@ function Casca({ children }: { children: React.ReactNode }) {
   const loja = eu.unidades[0];
 
   const navegacao = (
-    <nav className="px-3 pb-5">
-      {MENU.map((g) => {
-        const itens = g.itens.filter(
-          (i) => !i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave)),
-        );
-        if (!itens.length) return null;
-        const temAtivo = itens.some((i) => i.href === caminho);
-        // O grupo da tela aberta começa expandido — mas é só o padrão: se a
-        // pessoa o recolher, ele fica recolhido, inclusive nela. Quem quer o
-        // menu enxuto não deve ser obrigado a manter um grupo aberto. A pista
-        // de "você está aqui" não se perde: o título do grupo fica verde.
-        const expandido = abertos[g.grupo] ?? temAtivo;
-        return (
-          <div key={g.grupo} className="mb-1.5 shrink-0">
-            <button
-              type="button"
-              aria-expanded={expandido}
-              onClick={() => alternarGrupo(g.grupo, expandido)}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-superficie2 ${
-                temAtivo ? "text-erva" : ""
-              }`}
-            >
-              <span className="rotulo">{g.grupo}</span>
-              <svg
-                viewBox="0 0 10 6"
-                aria-hidden="true"
-                className={`h-[6px] w-[10px] shrink-0 transition-transform duration-150 ${
-                  expandido ? "" : "-rotate-90"
-                }`}
-              >
-                <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
-                      strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
-              {itens.map((i) => {
-                const ativo = caminho === i.href;
-                return (
-                  <li key={i.href}>
-                    <Link
-                      href={i.href}
-                      className={`block rounded py-2.5 pl-4 pr-2 text-[15px] lg:py-1.5 lg:text-[14.5px] ${
-                        ativo
-                          ? "bg-erva-claro font-semibold text-erva"
-                          : "text-tinta hover:bg-superficie2"
-                      }`}
-                    >
-                      {i.nome}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
-      })}
-    </nav>
+    // `useSearchParams` obriga uma fronteira de Suspense. Ela envolve SÓ o
+    // menu: envolvendo a casca inteira, toda tela ficava em branco até o
+    // roteador resolver a query — meio segundo de nada em cada navegação.
+    <Suspense fallback={<nav className="px-3 pb-5" />}>
+      <MenuLateral
+        caminho={caminho}
+        pode={pode}
+        abertos={abertos}
+        alternarGrupo={alternarGrupo}
+        aoNavegar={() => setAberto(false)}
+      />
+    </Suspense>
   );
 
   // Trocar senha e sair são AÇÕES: em maiúsculas miúdas pareciam legenda, e
@@ -342,5 +311,94 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
         <Casca>{children}</Casca>
       </ProvedorAvisos>
     </ProvedorSessao>
+  );
+}
+
+/**
+ * O menu, num componente à parte porque ele lê a QUERY.
+ *
+ * As quatro tabelas de apoio moram na mesma tela e se distinguem por `?aba=`;
+ * sem olhar a query o "você está aqui" apontaria as quatro ao mesmo tempo.
+ * `useSearchParams` obriga uma fronteira de Suspense — daí o componente: assim
+ * ela envolve só o menu, e não a tela inteira.
+ */
+function MenuLateral({
+  caminho,
+  pode,
+  abertos,
+  alternarGrupo,
+  aoNavegar,
+}: {
+  caminho: string;
+  pode: (chave: string) => boolean;
+  abertos: Record<string, boolean>;
+  alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
+  aoNavegar: () => void;
+}) {
+  const busca = useSearchParams();
+  const enderecoAtual = busca?.toString() ? `${caminho}?${busca}` : caminho;
+
+  return (
+    <nav className="px-3 pb-5">
+      {MENU.map((g) => {
+        const itens = g.itens.filter(
+          (i) => !i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave)),
+        );
+        if (!itens.length) return null;
+        const temAtivo = itens.some((i) => i.href === enderecoAtual);
+        // O grupo da tela aberta começa expandido — mas é só o padrão: se a
+        // pessoa o recolher, ele fica recolhido, inclusive nela. Quem quer o
+        // menu enxuto não deve ser obrigado a manter um grupo aberto. A pista
+        // de "você está aqui" não se perde: o título do grupo fica verde.
+        const expandido = abertos[g.grupo] ?? temAtivo;
+        return (
+          <div key={g.grupo} className="mb-1.5 shrink-0">
+            <button
+              type="button"
+              aria-expanded={expandido}
+              onClick={() => alternarGrupo(g.grupo, expandido)}
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-superficie2 ${
+                temAtivo ? "text-erva" : ""
+              }`}
+            >
+              <span className="rotulo">{g.grupo}</span>
+              <svg
+                viewBox="0 0 10 6"
+                aria-hidden="true"
+                className={`h-[6px] w-[10px] shrink-0 transition-transform duration-150 ${
+                  expandido ? "" : "-rotate-90"
+                }`}
+              >
+                <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
+                      strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
+              {itens.map((i) => {
+                const ativo = enderecoAtual === i.href;
+                return (
+                  <li key={i.href}>
+                    <Link
+                      href={i.href}
+                      // A gaveta do celular fecha por mudança de CAMINHO, e as
+                      // quatro tabelas de apoio compartilham o mesmo: sem
+                      // fechar aqui, trocar de aba deixava o menu por cima.
+                      onClick={aoNavegar}
+                      className={`block rounded py-2.5 pl-4 pr-2 text-[15px] lg:py-1.5 lg:text-[14.5px] ${
+                        ativo
+                          ? "bg-erva-claro font-semibold text-erva"
+                          : "text-tinta hover:bg-superficie2"
+                      }`}
+                    >
+                      {i.nome}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </nav>
   );
 }

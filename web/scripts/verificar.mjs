@@ -28,7 +28,11 @@ const checar = (nome, condicao, extra = "") => {
     console.log(`  ok   ${nome}`);
   } else {
     falhas.push(nome);
-    console.log(`  FALHA ${nome} ${extra}`);
+    // Objeto imprimia "[object Object]" e a falha vinha sem a evidência —
+    // justamente quando ela é mais necessária.
+    const detalhe =
+      extra && typeof extra === "object" ? JSON.stringify(extra) : String(extra ?? "");
+    console.log(`  FALHA ${nome} ${detalhe}`);
   }
 };
 
@@ -342,6 +346,27 @@ try {
     const idProduto = p.url().match(/produtos\/(\d+)/)?.[1];
     await api("DELETE", `/produtos/${idProduto}`, null, token);
   }
+
+  // "Tabelas de apoio" não é o nome de nada que se procura: quem precisa do
+  // local de estoque procura "local de estoque" no menu.
+  const menuCadastros = await p.evaluate(() =>
+    [...document.querySelectorAll("nav a")].map((a) => a.textContent?.trim()));
+  checar("o menu nomeia cada tabela de apoio",
+    ["Locais de estoque", "Setores", "Categorias", "Unidades de medida"].every((n) =>
+      menuCadastros.includes(n)), menuCadastros);
+  const semRotuloVago = !menuCadastros.includes("Tabelas de apoio");
+  checar("e não esconde nada atrás de um rótulo vago", semRotuloVago, menuCadastros);
+
+  // Cada uma abre direto na sua aba, e o endereço vale por si.
+  await irPara(p, `${WEB}/cadastros?aba=locais`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const abaLocais = await p.evaluate(() => ({
+    titulo: document.querySelector("h1")?.textContent?.trim(),
+    cartao: [...document.querySelectorAll("h2")].map((h) => h.textContent?.trim()),
+  }));
+  checar("o endereço abre direto na aba pedida",
+    abaLocais.titulo === "Locais de estoque"
+      && abaLocais.cartao.includes("Locais de estoque"), abaLocais);
 
   // Nas tabelas de apoio o formulário fica ACIMA da lista: cadastrar é o que se
   // vai fazer ali, e rolar a lista inteira para achar o campo é atrito bobo.
@@ -914,21 +939,37 @@ try {
   checar("a linha tem campo de código", !!campoCodigo);
   await campoCodigo.type(codigoNota.toLowerCase());
   await p.keyboard.press("Tab");
-  // A busca do código vai ao SERVIDOR agora — não adianta olhar antes da volta.
-  await esperarTexto(p, insumoNota.nome ?? codigoNota, 6000);
-  const porCodigo = await p.evaluate(() => {
-    const selects = [...document.querySelectorAll("main table select")];
-    return {
-      codigo: document.querySelector('input[placeholder="P0001"]')?.value,
-      produto: document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "",
-      unidade: selects[0]?.value,
-    };
-  });
+  // A busca do código vai ao SERVIDOR — não adianta olhar antes da volta. Duas
+  // armadilhas aqui, as duas do TESTE e não do produto:
+  //   1. esperar pelo NOME não serve: "Café" já está no cabeçalho da casa, e a
+  //      espera terminava no mesmo instante em que começava;
+  //   2. o primeiro `input[aria-label="Buscar produto"]` da página pode ser o
+  //      da CONCILIAÇÃO de uma nota aberta, que fica vazio para sempre.
+  // Por isso tudo sai da LINHA do código digitado, e com espera de verdade.
+  const naLinhaDoCodigo = () =>
+    p.evaluate(() => {
+      const linha = document.querySelector('input[placeholder="P0001"]')?.closest("tr");
+      if (!linha) return null;
+      const valor = (sel) => linha.querySelector(sel)?.value ?? null;
+      return {
+        codigo: valor('input[placeholder="P0001"]'),
+        produto: valor('input[aria-label="Buscar produto"]'),
+        unidade: valor("select"),
+      };
+    });
+
+  let porCodigo = null;
+  for (const ate = Date.now() + 8000; Date.now() < ate; ) {
+    porCodigo = await naLinhaDoCodigo();
+    if (porCodigo?.produto) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  await foto(p, "30b-codigo-na-linha");
   checar("o código traz o produto ao sair do campo",
-    porCodigo.produto.includes(insumoNota.nome ?? ""), porCodigo);
-  checar("e normaliza o que foi digitado", porCodigo.codigo === codigoNota, porCodigo);
+    (porCodigo?.produto ?? "").includes(insumoNota.nome ?? ""), porCodigo);
+  checar("e normaliza o que foi digitado", porCodigo?.codigo === codigoNota, porCodigo);
   checar("a unidade vem preenchida com a do estoque",
-    porCodigo.unidade === (insumoNota.um_estoque ?? "UN"), porCodigo);
+    porCodigo?.unidade === (insumoNota.um_estoque ?? "UN"), porCodigo);
 
   const numerosNota = await p.$$('input[inputmode="decimal"]');
   await numerosNota[0].type("2");
