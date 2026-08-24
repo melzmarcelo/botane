@@ -41,7 +41,7 @@ OPERACAO = [
     # compras
     "nota_itens", "notas_entrada", "codigos_externos", "sync_log",
     # vendas e apuração
-    "venda_itens", "vendas", "cmv_fechamentos",
+    "venda_itens", "vendas", "cmv_movimentacao", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
     "kit_itens", "ficha_itens", "fichas_tecnicas",
     "produto_precos", "produto_fornecedor", "produto_unidades", "produtos", "fornecedores",
@@ -98,6 +98,26 @@ def contar(cur, tabelas: list[str]) -> dict[str, int]:
     return contagem
 
 
+def referenciam(cur, alvos: list[str]) -> set[str]:
+    """Quem aponta para as tabelas que vão ser limpas e ficou de fora da lista.
+
+    O Postgres recusa truncar uma tabela referenciada por outra que não esteja
+    no mesmo comando. Descobrir isso ANTES é a diferença entre uma frase que
+    diz o que fazer e um traceback no meio da limpeza.
+    """
+    cur.execute(
+        """
+        SELECT DISTINCT filha.relname AS tabela
+          FROM pg_constraint c
+          JOIN pg_class filha ON filha.oid = c.conrelid
+          JOIN pg_class mae ON mae.oid = c.confrelid
+         WHERE c.contype = 'f' AND mae.relname = ANY(%s) AND filha.relname <> ALL(%s)
+        """,
+        (alvos, alvos),
+    )
+    return {r["tabela"] for r in cur.fetchall()}
+
+
 def main() -> int:
     argumentos = set(sys.argv[1:])
     simular = "--simular" in argumentos
@@ -120,6 +140,20 @@ def main() -> int:
 
     init_pool()
     with get_cursor() as cur:
+        # Tabela nova que aponta para uma das alvos derruba o TRUNCATE inteiro,
+        # e a mensagem do Postgres passa longe de "atualize a lista deste
+        # script". Já aconteceu duas vezes (produto_unidades, cmv_movimentacao):
+        # a limpeza estourava e quem rodou achava que tinha limpado.
+        faltando = referenciam(cur, alvos)
+        if faltando:
+            print("Recusado: estas tabelas apontam para as que seriam limpas e")
+            print("não estão na lista — o TRUNCATE falharia no meio:")
+            for t in sorted(faltando):
+                print(f"  {t}")
+            print()
+            print("Adicione-as a OPERACAO (ou a APOIO) em limpar_dados.py.")
+            return 1
+
         antes = contar(cur, alvos)
         fica = contar(cur, PRESERVADAS)
 

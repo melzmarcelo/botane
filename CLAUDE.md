@@ -73,6 +73,11 @@ para arquivo nenhum — gravar direto aqui.
   que existe local, setor ou fornecedor, nem contar linhas de semente. `garantir_fornecedor`
   procura pelo **CNPJ**, não pelo nome: o CNPJ é a chave única, e buscar por nome falhava
   quando o Omie simulado criava outro fornecedor com o mesmo documento.
+- ⚠️ **Tabela nova que aponta para as tabelas limpas derruba `limpar_dados.py`** — e a
+  mensagem do Postgres passa longe de "atualize a lista do script". Aconteceu com
+  `produto_unidades` e com `cmv_movimentacao`: a limpeza estourava no meio e quem rodou achava
+  que tinha limpado. O script agora **confere antes** (`referenciam()`) e recusa nomeando o que
+  falta na lista.
 - `api/limpar_dados.py` zera a operação e deixa a base como instalação nova (`--simular`
   mostra sem apagar). Produtos e fornecedores saem inteiros de propósito: o seed não cria
   nenhum. **Recusa banco que não seja local.**
