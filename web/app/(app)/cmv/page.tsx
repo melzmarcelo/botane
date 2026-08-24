@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
 
@@ -83,6 +83,11 @@ export default function PaginaCmv() {
   const [abc, setAbc] = useState<LinhaAbc[] | null>(null);
   const [margem, setMargem] = useState<LinhaMargem[] | null>(null);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
+  // Fechar e reabrir mês são as duas ações que mudam o que já foi contado ao
+  // dono — as duas perguntam antes.
+  const [confirmando, setConfirmando] = useState<
+    { tipo: "fechar" } | { tipo: "reabrir"; id: number; competencia: string } | null
+  >(null);
   const [aba, setAba] = useState<"abc" | "margem" | "movimentacao" | "dono">("abc");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -262,7 +267,11 @@ export default function PaginaCmv() {
               a.fechado ? (
                 <Etiqueta cor="erva">período fechado</Etiqueta>
               ) : pode("cmv.fechamento") ? (
-                <button className="btn btn-secundario" onClick={fechar} disabled={ocupado}>
+                <button
+                  className="btn btn-secundario"
+                  onClick={() => setConfirmando({ tipo: "fechar" })}
+                  disabled={ocupado}
+                >
                   Fechar o mês
                 </button>
               ) : undefined
@@ -491,7 +500,10 @@ export default function PaginaCmv() {
                           {f.status === "FECHADO" && pode("cmv.reabrir") && (
                             <button
                               className="rotulo hover:text-erro"
-                              onClick={() => void reabrir(f.id)}
+                              onClick={() =>
+                                setConfirmando({ tipo: "reabrir", id: f.id,
+                                                 competencia: f.competencia })
+                              }
                             >
                               reabrir
                             </button>
@@ -505,6 +517,48 @@ export default function PaginaCmv() {
             )}
           </Cartao>
         </>
+      )}
+
+      {confirmando?.tipo === "fechar" && (
+        <Confirmacao
+          titulo="Fechar o mês"
+          rotuloConfirmar="Fechar"
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            setConfirmando(null);
+            void fechar();
+          }}
+        >
+          <p>Fechar a apuração do período e congelar os números?</p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            A movimentação por produto é congelada junto, e movimento com data dentro do mês
+            passa a ser recusado — só quem tem a permissão de lançamento retroativo passa.
+          </p>
+        </Confirmacao>
+      )}
+
+      {confirmando?.tipo === "reabrir" && (
+        <Confirmacao
+          titulo="Reabrir o mês"
+          rotuloConfirmar="Reabrir"
+          perigo
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            const alvo = confirmando;
+            setConfirmando(null);
+            void reabrir(alvo.id);
+          }}
+        >
+          <p>
+            Reabrir a competência <b>{confirmando.competencia}</b>?
+          </p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            O mês volta a aceitar lançamento retroativo — e o número que já foi levado ao dono
+            pode mudar. Fechar de novo recalcula tudo.
+          </p>
+        </Confirmacao>
       )}
     </div>
   );

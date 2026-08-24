@@ -8,7 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { FiltroCadastro } from "@/components/busca-cadastro";
 import { fonteProdutos } from "@/lib/busca-cadastro";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import LotesEmEstoque from "./lotes";
 
 type Saldo = {
@@ -71,6 +71,8 @@ export default function PaginaEstoque() {
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
   const [erro, setErro] = useState("");
+  // O que mexe no razão pergunta antes: estorno não se desfaz, ele contrapõe.
+  const [confirmando, setConfirmando] = useState<Movimento | null>(null);
 
   // Filtros do razão. Separados dos saldos de propósito: são perguntas
   // diferentes — "quanto tenho hoje" e "o que aconteceu com o café em agosto".
@@ -483,7 +485,7 @@ export default function PaginaEstoque() {
                         {pode("estoque.ajuste") && !m.estornado && !m.id_estorno_de && (
                           <button
                             className="rotulo whitespace-nowrap hover:text-erro"
-                            onClick={() => void estornar(m)}
+                            onClick={() => setConfirmando(m)}
                           >
                             estornar
                           </button>
@@ -514,6 +516,28 @@ export default function PaginaEstoque() {
           )}
         </Cartao>
         </>
+      )}
+
+      {confirmando && (
+        <Confirmacao
+          titulo="Confirmar o estorno"
+          rotuloConfirmar="Estornar"
+          perigo
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            const m = confirmando;
+            setConfirmando(null);
+            void estornar(m);
+          }}
+        >
+          <p>
+            Estornar <b>{confirmando.rotulo}</b> de <b>{confirmando.produto}</b>?
+          </p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            O movimento original CONTINUA no razão — o estorno entra como a contrapartida,
+            apontando para ele. É assim que o histórico segue fiel ao que aconteceu.
+          </p>
+        </Confirmacao>
       )}
     </div>
   );

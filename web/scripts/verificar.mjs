@@ -1201,6 +1201,42 @@ try {
 
   for (const id of [comboTela.id, bebida.id]) await api("DELETE", `/produtos/${id}`, null, token);
 
+  // O que mexe no razão pergunta antes — e a pergunta é do sistema, não do
+  // navegador: `window.confirm` não tem onde dizer o que a ação faz.
+  await irPara(p, `${WEB}/estoque`);
+  await new Promise((r) => setTimeout(r, 1200));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((x) => x.textContent === "Movimentos")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1400));
+  const clicouEstornar = await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => x.textContent?.trim() === "estornar");
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  checar("o razão oferece estornar", clicouEstornar, clicouEstornar);
+  if (clicouEstornar) {
+    await new Promise((r) => setTimeout(r, 700));
+    const d = await p.evaluate(() => {
+      const el = document.querySelector('[role="dialog"]');
+      return el ? { titulo: el.getAttribute("aria-label"), texto: el.innerText } : null;
+    });
+    checar("estornar pergunta antes, no padrão do sistema",
+      d?.titulo === "Confirmar o estorno", d);
+    checar("explicando que o original continua no razão",
+      /continua no razão/i.test(d?.texto ?? ""), d?.texto?.slice(0, 120));
+    await p.evaluate(() => {
+      const el = document.querySelector('[role="dialog"]');
+      [...(el?.querySelectorAll("button") ?? [])].find(
+        (b) => b.textContent === "Cancelar")?.click();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    const fechou = await p.evaluate(() => !document.querySelector('[role="dialog"]'));
+    checar("e cancelar não estorna nada", fechou, fechou);
+  }
+
   // A movimentação por produto: a conta que EXPLICA o CMV, e que fecha o mês
   // junto com ele.
   await irPara(p, `${WEB}/cmv`);

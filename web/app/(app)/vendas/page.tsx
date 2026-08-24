@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
@@ -75,6 +75,7 @@ export default function PaginaVendas() {
   const [lista, setLista] = useState<Venda[] | null>(null);
   const [pendencias, setPendencias] = useState<Pendencia[]>([]);
   const [erro, setErro] = useState("");
+  const [confirmando, setConfirmando] = useState<Venda | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
@@ -390,7 +391,7 @@ export default function PaginaVendas() {
                       {!v.cancelada && podeImportar && (
                         <button
                           className="rotulo hover:text-erro"
-                          onClick={() => void cancelar(v)}
+                          onClick={() => setConfirmando(v)}
                         >
                           cancelar
                         </button>
@@ -404,6 +405,28 @@ export default function PaginaVendas() {
           </div>
         )}
       </Cartao>
+
+      {confirmando && (
+        <Confirmacao
+          titulo="Cancelar a venda"
+          rotuloConfirmar="Cancelar a venda"
+          perigo
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            const v = confirmando;
+            setConfirmando(null);
+            void cancelar(v);
+          }}
+        >
+          <p>
+            Cancelar a venda <b>{confirmando.documento ?? `#${confirmando.id}`}</b>?
+          </p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            Ela sai do CMV e da receita, mas NÃO é apagada — o histórico continua fiel ao que
+            o PDV mandou.
+          </p>
+        </Confirmacao>
+      )}
     </div>
   );
 }

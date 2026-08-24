@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
@@ -111,6 +111,7 @@ export default function PaginaAjustes() {
   const [recentes, setRecentes] = useState<Movimento[] | null>(null);
   const [f, setF] = useState({ ...VAZIO });
   const [erro, setErro] = useState("");
+  const [confirmando, setConfirmando] = useState<Movimento | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const carregarRecentes = useCallback(async () => {
@@ -473,7 +474,7 @@ export default function PaginaAjustes() {
                       {!m.estornado && pode("estoque.ajuste") && (
                         <button
                           className="rotulo hover:text-erro"
-                          onClick={() => void estornar(m)}
+                          onClick={() => setConfirmando(m)}
                         >
                           estornar
                         </button>
@@ -486,6 +487,28 @@ export default function PaginaAjustes() {
           </div>
         )}
       </Cartao>
+
+      {confirmando && (
+        <Confirmacao
+          titulo="Confirmar o estorno"
+          rotuloConfirmar="Estornar"
+          perigo
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            const m = confirmando;
+            setConfirmando(null);
+            void estornar(m);
+          }}
+        >
+          <p>
+            Estornar <b>{confirmando.rotulo}</b> de <b>{confirmando.produto}</b>?
+          </p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            O movimento original CONTINUA no razão — o estorno entra como a contrapartida,
+            apontando para ele. É assim que o histórico segue fiel ao que aconteceu.
+          </p>
+        </Confirmacao>
+      )}
     </div>
   );
 }

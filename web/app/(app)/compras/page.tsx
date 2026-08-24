@@ -7,7 +7,7 @@ import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import NotaManual, { NotaParaEditar } from "./nota-manual";
 
 /** O que o servidor devolve para cada arquivo do lote de XMLs. */
@@ -94,6 +94,8 @@ export default function PaginaCompras() {
   const [produtos, setProdutos] = useState<ProdutoResumo[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
+  // Desfazer o lançamento de uma nota mexe no razão inteiro dela: pergunta antes.
+  const [confirmando, setConfirmando] = useState<"estornar" | null>(null);
   // O que mostrar no campo de cada item: a busca devolve o rótulo, e guardá-lo
   // evita ter de ir buscar o nome de novo só para desenhar a linha.
   const [rotuloEscolhido, setRotuloEscolhido] = useState<Record<number, string>>({});
@@ -436,7 +438,11 @@ export default function PaginaCompras() {
             <div className="flex flex-wrap items-center gap-2">
               <Etiqueta cor={CORES[aberta.status]}>{aberta.status.toLowerCase()}</Etiqueta>
               {aberta.status === "LANCADA" && pode("estoque.ajuste") && (
-                <button className="btn btn-secundario" onClick={estornar} disabled={ocupado}>
+                <button
+                  className="btn btn-secundario"
+                  onClick={() => setConfirmando("estornar")}
+                  disabled={ocupado}
+                >
                   Estornar
                 </button>
               )}
@@ -676,6 +682,28 @@ export default function PaginaCompras() {
           </ul>
         )}
       </Cartao>
+
+      {confirmando === "estornar" && aberta && (
+        <Confirmacao
+          titulo="Desfazer o lançamento da nota"
+          rotuloConfirmar="Estornar"
+          perigo
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => {
+            setConfirmando(null);
+            void estornar();
+          }}
+        >
+          <p>
+            Estornar a <b>NF {aberta.numero ?? "—"}</b> de <b>{aberta.fornecedor ?? "—"}</b>?
+          </p>
+          <p className="mt-3 text-[13.5px] text-suave">
+            Cada movimento da nota ganha a contrapartida — o custo médio dos insumos volta a
+            ser recalculado. Os movimentos originais continuam no razão.
+          </p>
+        </Confirmacao>
+      )}
     </div>
   );
 }

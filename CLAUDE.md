@@ -217,7 +217,12 @@ para arquivo nenhum — gravar direto aqui.
 - ⚠️ **Nada de `window.prompt`/`confirm`**: é a caixa do NAVEGADOR — fonte de sistema, botão
   em inglês, sem espaço para explicar o que a ação faz. O que não se desfaz pergunta pelo
   `Confirmacao` de `components/ui.tsx`, e o número que a ação usa fica num campo **na linha**,
-  à vista antes do clique.
+  à vista antes do clique. Aplicado em: estornar movimento (razão e ajustes), estornar nota,
+  fechar contagem, fechar e reabrir mês, cancelar venda e produzir da agenda.
+  ⚠️ **Confirmação só onde mexe no razão ou fecha período.** Lançar a nota NÃO pergunta — a
+  tela inteira é a conferência (itens, custos e destinos à vista) e um diálogo no caminho
+  comum treina a clicar sem ler. Cancelar linha da agenda também não: é plano, não é razão.
+  Cada diálogo diz **o que a ação faz**, não só "tem certeza".
 - **Agenda de produção** (`producao_agenda` + `services/producao_agenda.py`): o PLANO, que
   não mexe no estoque — quem mexe é a produção, quando a linha é cumprida. ⚠️ A quantidade
   produzida pode sair diferente da planejada (a cozinha rendeu outra coisa) e as duas ficam

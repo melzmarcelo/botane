@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais, UnidadeMedida } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
  * A contagem — tela própria, feita para o celular na mão de quem conta.
@@ -78,6 +78,7 @@ export default function PaginaContagem() {
   const [rascunho, setRascunho] = useState<Record<number, { qtd: string; um: string }>>({});
   const [gravando, setGravando] = useState<number | null>(null);
   const [fechando, setFechando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
 
   const carregar = useCallback(async () => {
@@ -340,12 +341,40 @@ export default function PaginaContagem() {
           </p>
           <button
             className="btn btn-primario mt-4"
-            onClick={() => void fechar()}
+            onClick={() => setConfirmando(true)}
             disabled={fechando || !inv.contados}
           >
             {fechando ? "Fechando…" : "Fechar e acertar o estoque"}
           </button>
         </Cartao>
+      )}
+
+      {confirmando && (
+        <Confirmacao
+          titulo="Fechar a contagem"
+          rotuloConfirmar="Fechar e acertar"
+          ocupado={fechando}
+          aoCancelar={() => setConfirmando(false)}
+          aoConfirmar={() => {
+            setConfirmando(false);
+            void fechar();
+          }}
+        >
+          <p>
+            Fechar a contagem de <b>{inv.local}</b>, com{" "}
+            <b className="mono">{inv.contados}</b> de{" "}
+            <b className="mono">{inv.total_itens}</b> item(ns) contado(s)?
+          </p>
+          {faltam > 0 && (
+            <p className="mt-2 text-[13.5px] text-alerta">
+              {faltam} produto(s) sem contar ficam como estão — não viram zero.
+            </p>
+          )}
+          <p className="mt-3 text-[13.5px] text-suave">
+            Cada diferença vira um movimento de ajuste no razão, com o custo médio do momento.
+            Depois disso a contagem não se reabre.
+          </p>
+        </Confirmacao>
       )}
     </div>
   );
