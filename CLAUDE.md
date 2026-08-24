@@ -164,6 +164,29 @@ para arquivo nenhum — gravar direto aqui.
   outro produto** — dois cadastros para o mesmo insumo partiriam o custo dele em dois (antes
   disso era 500). Depois de cada sincronização com nota nova, os fornecedores da leva são
   completados sozinhos.
+- **Achados da PRIMEIRA conta real** (24/08/2026) — cada um derrubava ou falseava a
+  importação, e nenhum aparecia no modo simulado:
+  1. ⚠️ **Fornecedor se separa de cliente por ETIQUETA.** Sem filtro, uma conta de 919
+     cadastros trouxe **888 clientes** (pessoas físicas) para dentro dos fornecedores. O
+     filtro vai no servidor: `clientesFiltro: {"tags": [{"tag": "Fornecedor"}]}` — desce 648
+     em vez de 919. A etiqueta é configurável na tela (em branco = traz todo mundo).
+  2. ⚠️ **`ListarProdutos` sem `filtrar_apenas_omiepdv: "N"` devolve ZERO.** A conta tinha
+     2.198 produtos e a importação dizia "0 criado(s)" — indistinguível de "não tem catálogo".
+  3. ⚠️ **Unidade que a casa não tem derrubava a carga inteira** pela FK (o catálogo trazia
+     "M", de metro). Agora o produto nasce **sem unidade** e a mensagem conta quantos foram —
+     é rascunho, e rascunho existe para lembrar que falta conferir unidade e fator.
+  4. ⚠️ **O mundo real não respeita largura de coluna.** O "código" de um produto era a
+     descrição inteira (42 caracteres) e o NCM vinha `2202.99.00.05`. Todo texto sai **aparado
+     no tamanho da coluna** no mapeador, e NCM só em dígitos (pontuado num lado só nunca casaria
+     com o do XML).
+  5. ⚠️ **O teto de páginas truncava calado**: 992 de 2.198, e a mensagem dizia só "992
+     criado(s)". `paginar` agora avisa por `ao_truncar(trazidos, total)`.
+  6. ⚠️ **O Omie BLOQUEIA a conta por consumo indevido** quando as chamadas vêm rápido demais
+     — e o bloqueio pega a integração inteira. Há `INTERVALO_MINIMO` entre chamadas, a espera
+     que ele pede ("Aguarde 56 segundos") é obedecida, e **erro de estrutura não é repetido**:
+     parâmetro errado continua errado na quarta tentativa e só gasta a cota.
+  7. ⚠️ **`ListarNotaEnt` não aceita `apenas_importado`** — foi esse parâmetro inválido que
+     consumiu cota até o bloqueio.
 - ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
   **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
   antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e

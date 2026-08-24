@@ -30,6 +30,11 @@ class ConfigOmie(BaseModel):
     app_secret: str | None = Field(default=None, max_length=200)
     modo: str = "simulado"          # simulado | real
     ativa: bool = False
+    # ⚠️ No Omie, cliente e fornecedor moram na MESMA lista, separados por
+    # etiqueta. Sem esta, importar o cadastro trazia os clientes da casa como
+    # fornecedores — numa conta real, 888 pessoas físicas viraram fornecedor.
+    # Vazio = traz todo mundo (para conta que não usa etiqueta).
+    tag_fornecedor: str | None = Field(default="Fornecedor", max_length=60)
 
 
 def _cliente(cur, id_unidade: int) -> ClienteOmie:
@@ -73,6 +78,9 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         # A chave nunca sai daqui em claro — só o suficiente para reconhecê-la.
         "app_key": segredos.mascarar(cred.get("app_key")),
         "app_secret": segredos.mascarar(cred.get("app_secret")),
+        # Não é segredo: é a regra que separa fornecedor de cliente, e quem
+        # configura precisa vê-la para saber por que faltou alguém.
+        "tag_fornecedor": cred.get("tag_fornecedor", "Fornecedor"),
         "ultima_sincronizacao": linha["ultima_sincronizacao"] if linha else None,
         "ultimo_status": linha["ultimo_status"] if linha else None,
         "ultima_mensagem": linha["ultima_mensagem"] if linha else None,
@@ -98,6 +106,7 @@ def salvar_config(body: ConfigOmie,
             cred["app_key"] = body.app_key.strip()
         if body.app_secret:
             cred["app_secret"] = body.app_secret.strip()
+        cred["tag_fornecedor"] = (body.tag_fornecedor or "").strip() or None
         # A tela mostra a chave mascarada; trocar para "real" não pode exigir
         # redigitar o que já está guardado.
         if body.modo == "real" and not (cred.get("app_key") and cred.get("app_secret")):
@@ -171,7 +180,13 @@ def importar_catalogo(ctx: Contexto = Depends(requer_permissao("integracao.omie"
         r = importador.importar_catalogo(cur, cliente, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "importar_catalogo",
                             depois=r)
-    return r | {"message": f"{r['criados']} produto(s) criado(s) em rascunho"}
+    faltou = r.get("faltou_varrer") or {}
+    return r | {"message": f"{r['criados']} produto(s) criado(s) em rascunho"
+                + (f" — {r['sem_unidade']} sem unidade conhecida, para conferir"
+                   if r.get("sem_unidade") else "")
+                + (f". ⚠️ A varredura parou no limite: {faltou['trazidos']} de "
+                   f"{faltou['total_no_omie']} — rode de novo para trazer o resto"
+                   if faltou else "")}
 
 
 @router.post("/importar-fornecedores")
@@ -181,19 +196,28 @@ def importar_fornecedores(
 ) -> dict:
     """Traz (ou completa) o cadastro de fornecedores do Omie.
 
-    ⚠️ No Omie, cliente e fornecedor moram na mesma lista. Com
+    ⚠️ No Omie, cliente e fornecedor moram na mesma lista, separados por
+    ETIQUETA — e é a etiqueta configurada que decide quem desce. Com
     `apenas_completar`, nada novo é criado: só se preenche o que está em branco
-    nos fornecedores que já existem aqui — útil na conta com centenas de
-    clientes.
+    nos fornecedores que já existem aqui.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO),
+        )
+        linha = cur.fetchone()
+        cred = segredos.decifrar(linha["credenciais"]) if linha else {}
         r = importador.importar_fornecedores(
-            cur, _cliente(cur, id_unidade), ctx.id_usuario, apenas_completar)
+            cur, _cliente(cur, id_unidade), ctx.id_usuario, apenas_completar,
+            tag=cred.get("tag_fornecedor", "Fornecedor"))
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO,
                             "importar_fornecedores", depois=r)
     return r | {"message": (f"{r['criados']} fornecedor(es) criado(s), "
-                            f"{r['completados']} completado(s)")}
+                            f"{r['completados']} completado(s)"
+                            + (f" — só os marcados como “{r['tag']}” no Omie"
+                               if r.get("tag") else " — sem filtro de etiqueta"))}
 
 
 @router.get("/conferencia-notas")

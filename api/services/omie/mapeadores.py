@@ -90,12 +90,16 @@ def item_da_nota(bruto: dict, seq: int) -> dict:
         "descricao_fornecedor": str(
             _pega(prod, "cDescricao", "descricao", "descr", padrao="(sem descrição)")
         )[:200],
-        "codigo_fornecedor": str(_pega(prod, "cCodigo", "codigo", "cCodProd", padrao="") or "")
+        "codigo_fornecedor": str(_pega(prod, "cCodigo", "codigo", "cCodProd", padrao="") or "")[:60]
         or None,
-        "codigo_barras": _so_digitos(_pega(prod, "cEAN", "codigo_barras", "cCodigoBarras")),
-        "ncm": str(_pega(prod, "cNCM", "ncm", padrao="") or "") or None,
+        "codigo_barras": (_so_digitos(_pega(prod, "cEAN", "codigo_barras", "cCodigoBarras"))
+                          or "")[:20] or None,
+        # Dígitos, pelo mesmo motivo do cadastro: é por ele que o item da
+        # nota reconhece o produto, e pontuado num lado só nunca casaria.
+        "ncm": (_so_digitos(_pega(prod, "cNCM", "ncm")) or "")[:10] or None,
         "quantidade": _numero(_pega(prod, "nQuantidade", "quantidade", "qtde")),
-        "um_nota": str(_pega(prod, "cUnidade", "unidade", "und", padrao="") or "").upper() or None,
+        "um_nota": str(_pega(prod, "cUnidade", "unidade", "und", padrao="") or "").upper()[:6]
+        or None,
         "valor_unitario": _numero(_pega(prod, "nValorUnitario", "valor_unitario", "vUnCom")),
         "valor_total": _numero(_pega(prod, "nValorTotal", "valor_total", "vProd")),
         "valor_desconto": _numero(_pega(prod, "nValorDesconto", "valor_desconto")),
@@ -105,14 +109,29 @@ def item_da_nota(bruto: dict, seq: int) -> dict:
 
 
 def produto_do_catalogo(bruto: dict) -> dict:
-    """Um produto do `ListarProdutos`, para a carga inicial do cadastro."""
+    """Um produto do `ListarProdutos`, para a carga inicial do cadastro.
+
+    ⚠️ **Todo texto sai aparado no tamanho da coluna.** O mundo real não
+    respeita largura de campo: numa conta de verdade o "código" do produto era
+    a descrição inteira ("Impermeabilizante 300g Veda Tudo Milagroso", 42
+    caracteres) e derrubava a importação dos 2.198 no `varchar(40)`. Aparar
+    aqui — na fronteira, onde o dado externo entra — é o que impede um cadastro
+    esquisito de um fornecedor de parar a carga da casa inteira.
+    """
     return {
-        "codigo_omie": str(_pega(bruto, "codigo_produto", "nCodProd", padrao="") or "") or None,
-        "codigo": str(_pega(bruto, "codigo", "cCodigo", padrao="") or "") or None,
+        "codigo_omie": str(_pega(bruto, "codigo_produto", "nCodProd", padrao="") or "")[:40]
+        or None,
+        "codigo": str(_pega(bruto, "codigo", "cCodigo", padrao="") or "")[:40] or None,
         "nome": str(_pega(bruto, "descricao", "cDescricao", padrao="(sem nome)"))[:160],
-        "um": str(_pega(bruto, "unidade", "cUnidade", padrao="") or "").upper() or None,
-        "ncm": str(_pega(bruto, "ncm", "cNCM", padrao="") or "") or None,
-        "codigo_barras": _so_digitos(_pega(bruto, "ean", "codigo_barras", "cEAN")),
+        "um": str(_pega(bruto, "unidade", "cUnidade", padrao="") or "").upper()[:6] or None,
+        # ⚠️ NCM só em DÍGITOS. O Omie devolve pontuado ("0405.10.00") e às
+        # vezes com sufixo ("2202.99.00.05", 13 caracteres) — um só desses
+        # derrubava a importação inteira no varchar(10). Guardar pontuado
+        # também tornaria impossível comparar com o NCM que vem no XML da nota,
+        # que vem sem pontos.
+        "ncm": (_so_digitos(_pega(bruto, "ncm", "cNCM")) or "")[:10] or None,
+        "codigo_barras": (_so_digitos(_pega(bruto, "ean", "codigo_barras", "cEAN")) or "")[:20]
+        or None,
         "valor_unitario": _numero(_pega(bruto, "valor_unitario", "nValorUnitario")),
         "inativo": str(_pega(bruto, "inativo", padrao="N")).upper() == "S",
     }
@@ -121,14 +140,14 @@ def produto_do_catalogo(bruto: dict) -> dict:
 def fornecedor_do_cadastro(bruto: dict) -> dict:
     """Um cadastro do `ListarClientes` — no Omie, fornecedor é cliente com tag."""
     return {
-        "codigo_omie": str(_pega(bruto, "codigo_cliente_omie", "nCodCliente", padrao="") or "")
+        "codigo_omie": str(_pega(bruto, "codigo_cliente_omie", "nCodCliente", padrao="") or "")[:40]
         or None,
         "nome": str(_pega(bruto, "razao_social", "cRazaoSocial", padrao="(sem nome)"))[:160],
-        "nome_fantasia": _pega(bruto, "nome_fantasia", "cNomeFantasia"),
-        "cnpj": _so_digitos(_pega(bruto, "cnpj_cpf", "cCNPJCPF")),
-        "email": _pega(bruto, "email", "cEmail"),
-        "telefone": _pega(bruto, "telefone1_numero", "cTelefone"),
-        "cidade": _pega(bruto, "cidade", "cCidade"),
+        "nome_fantasia": (_pega(bruto, "nome_fantasia", "cNomeFantasia") or "")[:160] or None,
+        "cnpj": (_so_digitos(_pega(bruto, "cnpj_cpf", "cCNPJCPF")) or "")[:20] or None,
+        "email": (_pega(bruto, "email", "cEmail") or "")[:160] or None,
+        "telefone": (_pega(bruto, "telefone1_numero", "cTelefone") or "")[:30] or None,
+        "cidade": (_pega(bruto, "cidade", "cCidade") or "")[:80] or None,
         "uf": (_pega(bruto, "estado", "cUF", padrao="") or "")[:2] or None,
     }
 

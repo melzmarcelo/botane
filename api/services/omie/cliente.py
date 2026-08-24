@@ -15,6 +15,7 @@ real**. Por isso a tradução vive em `mapeadores.py`, e não aqui.
 """
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -26,9 +27,20 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 # O Omie recusa consumo redundante e limita chamadas: espera crescente entre as
 # tentativas, e nunca mais do que isso.
-TENTATIVAS = 3
+TENTATIVAS = 4
 ESPERA_INICIAL = 2.0
 TEMPO_LIMITE = 40.0
+# Quando o Omie limita, ele DIZ quanto esperar ("Aguarde 56 segundos"). Obedecer
+# é mais barato que insistir: numa carga real, ignorar isso fez a sincronização
+# desistir depois de três tentativas de dois segundos.
+ESPERA_MAXIMA = 90.0
+# ⚠️ O Omie BLOQUEIA a conta por "consumo indevido" quando as chamadas vêm
+# rápido demais — e o bloqueio pega a integração inteira, não só a varredura
+# que exagerou. Varrer um catálogo de 2.198 produtos derrubou a conta numa
+# tarde. Um intervalo mínimo entre chamadas custa segundos e evita horas.
+INTERVALO_MINIMO = 0.6
+_ultima_chamada = 0.0
+_SEGUNDOS_PEDIDOS = re.compile(r"[Aa]guarde\s+(\d+)\s*segundo")
 
 
 class ErroOmie(Exception):
@@ -63,6 +75,7 @@ class ClienteOmie:
         espera = ESPERA_INICIAL
         ultimo_erro = ""
         for tentativa in range(1, TENTATIVAS + 1):
+            self._respirar()
             try:
                 r = httpx.post(f"{BASE}/{servico}/", json=corpo, timeout=TEMPO_LIMITE)
             except httpx.HTTPError as e:
@@ -79,10 +92,22 @@ class ClienteOmie:
                     raise ErroOmie(f"o Omie recusou a chamada ({r.status_code}): {r.text[:200]}",
                                    r.status_code)
                 ultimo_erro = f"HTTP {r.status_code}: {r.text[:200]}"
+                # Erro de ESTRUTURA não melhora com insistência: o parâmetro
+                # errado continua errado na quarta tentativa, e cada tentativa
+                # gasta a cota que faz o Omie bloquear a conta. (Foi assim que
+                # um "apenas_importado" indevido virou bloqueio de API.)
+                if "Client-5001" in (r.text or "") or "não faz parte da estrutura" in (r.text or ""):
+                    raise ErroOmie(f"o Omie recusou os parâmetros de {call}: "
+                                   f"{r.text[:200]}", r.status_code)
+                # "Aguarde N segundos": o Omie diz o tempo. Chutar menos é
+                # garantir outra recusa; chutar mais é perder tempo à toa.
+                pedidos = _SEGUNDOS_PEDIDOS.search(r.text or "")
+                if pedidos:
+                    espera = min(float(pedidos.group(1)) + 2, ESPERA_MAXIMA)
 
             if tentativa < TENTATIVAS:
                 time.sleep(espera)
-                espera *= 2
+                espera = min(espera * 2, ESPERA_MAXIMA)
         raise ErroOmie(f"{call} falhou após {TENTATIVAS} tentativas — {ultimo_erro}")
 
     def _fixture(self, servico: str, call: str, param: dict) -> Any:
@@ -99,23 +124,46 @@ class ClienteOmie:
                     dados = {**dados, chave: [], "pagina": pagina}
         return dados
 
+    def _respirar(self) -> None:
+        """Segura o ritmo entre chamadas — o Omie bloqueia quem corre demais."""
+        global _ultima_chamada
+        if self.modo != "real":
+            return
+        agora = time.monotonic()
+        falta = INTERVALO_MINIMO - (agora - _ultima_chamada)
+        if falta > 0:
+            time.sleep(falta)
+        _ultima_chamada = time.monotonic()
+
     # ---------------------------------------------------------------- páginas
 
     def paginar(self, servico: str, call: str, chave_lista: str,
-                param: dict | None = None, por_pagina: int = 50, maximo: int = 20):
-        """Percorre as páginas. Nunca puxa tudo de uma vez — o Omie não gosta."""
-        pagina = 1
+                param: dict | None = None, por_pagina: int = 50, maximo: int = 60,
+                ao_truncar=None):
+        """Percorre as páginas. Nunca puxa tudo de uma vez — o Omie não gosta.
+
+        ⚠️ O teto existe para não varrer uma conta inteira sem querer, mas ele
+        **precisa ser dito**: num catálogo real de 2.198 produtos, o teto de 20
+        páginas trouxe 992 e a mensagem foi "992 criado(s)" — indistinguível de
+        "o catálogo tem 992". `ao_truncar` recebe (trazidos, total_no_omie)
+        quando a varredura para pelo teto, para quem chamou poder contar.
+        """
+        pagina, trazidos, total = 1, 0, 0
         while pagina <= maximo:
             corpo = {**(param or {}), "pagina": pagina, "registros_por_pagina": por_pagina}
             dados = self.chamar(servico, call, corpo)
             registros = dados.get(chave_lista) or []
+            total = int(dados.get("total_de_registros") or 0)
             if not registros:
                 return
+            trazidos += len(registros)
             yield dados, registros
             total_paginas = int(dados.get("total_de_paginas") or 1)
             if pagina >= total_paginas:
                 return
             pagina += 1
+        if ao_truncar:
+            ao_truncar(trazidos, total)
 
 
 def testar(cliente: ClienteOmie) -> dict:

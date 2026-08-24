@@ -540,8 +540,12 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
     novas, repetidas, paginas = 0, 0, 0
     try:
         for dados, registros in cliente.paginar(
+            # ⚠️ `ListarNotaEnt` NÃO aceita `apenas_importado`: a conta real
+            # devolveu "Tag [APENAS_IMPORTADO] não faz parte da estrutura".
+            # Cada chamada com parâmetro inválido gasta cota — e cota gasta é o
+            # que faz o Omie bloquear a conta inteira.
             "produtos/notaentrada", "ListarNotaEnt", "nfe_encontradas",
-            {"dDtInicial": desde, "apenas_importado": "N"},
+            {"dDtInicial": desde},
         ):
             paginas += 1
             for bruto in registros:
@@ -651,17 +655,41 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
     É o jeito mais barato de nascer com centenas de insumos cadastrados. Rascunho
     não entra no estoque enquanto não tiver unidade e fator — a trava que protege
     o custo.
+
+    ⚠️ **`filtrar_apenas_omiepdv: "N"` não é opcional.** Sem ele, o
+    `ListarProdutos` de uma conta real devolveu **zero** produto onde havia
+    2.198 — e "0 criado(s)" não se distingue de "a conta não tem catálogo".
+    O padrão do Omie devolve só o que veio do PDV dele.
     """
-    criados, atualizados, paginas = 0, 0, 0
+    criados, atualizados, paginas, sem_unidade = 0, 0, 0, 0
+    truncou: dict = {}
+
+    def parou_no_teto(trazidos, total):
+        truncou.update({"trazidos": trazidos, "total_no_omie": total})
+
     try:
         for _dados, registros in cliente.paginar(
             "geral/produtos", "ListarProdutos", "produto_servico_cadastro",
+            param={"apenas_importado_api": "N", "filtrar_apenas_omiepdv": "N"},
+            ao_truncar=parou_no_teto,
         ):
             paginas += 1
             for bruto in registros:
                 p = mapeadores.produto_do_catalogo(bruto)
                 if not p["codigo_omie"]:
                     continue
+                # ⚠️ A unidade do fornecedor pode não existir na casa (um
+                # catálogo real trouxe "M", de metro). Deixar entrar rebentava a
+                # chave estrangeira e derrubava a importação INTEIRA — 2.198
+                # produtos parados por um. Sem unidade conhecida, o produto
+                # nasce sem ela: é rascunho, e rascunho existe justamente para
+                # lembrar que alguém precisa conferir unidade e fator.
+                if p["um"]:
+                    cur.execute("SELECT 1 FROM unidades_medida WHERE upper(sigla) = upper(%s)",
+                                (p["um"],))
+                    if not cur.fetchone():
+                        sem_unidade += 1
+                        p["um"] = None
                 cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (p["codigo_omie"],))
                 existente = cur.fetchone()
                 if existente:
@@ -685,7 +713,11 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
 
     _registrar(cur, "geral/produtos", "ListarProdutos", "OK", criados + atualizados,
                f"{criados} criado(s) em rascunho", cliente.modo, paginas)
-    return {"criados": criados, "ja_existiam": atualizados, "modo": cliente.modo}
+    return {"criados": criados, "ja_existiam": atualizados,
+            "sem_unidade": sem_unidade, "modo": cliente.modo,
+            # Preenchido só quando a varredura parou no teto: sem isso, "992
+            # criado(s)" não se distingue de "o catálogo tem 992".
+            "faltou_varrer": truncou or None}
 
 
 # O que o Omie sabe do fornecedor e vale a pena trazer. Fica de fora o que é
@@ -718,22 +750,28 @@ def _completar_fornecedor(cur, atual: dict, vindo: dict) -> bool:
 
 
 def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
-                          apenas_completar: bool = False) -> dict:
+                          apenas_completar: bool = False,
+                          tag: str | None = "Fornecedor") -> dict:
     """Traz o cadastro de fornecedores do Omie.
 
     Faz duas coisas de uma vez: cria quem não existe aqui e **completa** quem já
     existe — os que nasceram da nota entram com nome e CNPJ e mais nada, e o
     Omie tem cidade, telefone e e-mail.
 
-    ⚠️ **No Omie, cliente e fornecedor moram na mesma lista.** `apenas_completar`
-    existe por isso: numa conta com 800 clientes e 40 fornecedores, trazer todo
-    mundo enche o cadastro de quem nunca vendeu nada para a casa. O filtro certo
-    do lado do Omie é coisa a confirmar com a conta real.
+    ⚠️ **No Omie, cliente e fornecedor moram na mesma lista**, separados por
+    ETIQUETA. Sem filtrar, uma conta real trouxe 888 pessoas físicas — os
+    clientes da casa — para o cadastro de fornecedores. O filtro vai no
+    SERVIDOR (`clientesFiltro.tags`): numa conta de 919 cadastros ele desce 648,
+    e o que não é fornecedor nem trafega.
+
+    `tag=None` traz todo mundo, para a conta que não usa etiqueta — e aí a
+    responsabilidade de separar é de quem configurou.
     """
     criados, completados, ja_ok, paginas = 0, 0, 0, 0
+    filtro = {"clientesFiltro": {"tags": [{"tag": tag}]}} if tag else {}
     try:
         for _dados, registros in cliente.paginar(
-            "geral/clientes", "ListarClientes", "clientes_cadastro",
+            "geral/clientes", "ListarClientes", "clientes_cadastro", param=filtro,
         ):
             paginas += 1
             for bruto in registros:
@@ -777,7 +815,7 @@ def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
     _registrar(cur, "geral/clientes", "ListarClientes", "OK", criados + completados,
                f"{criados} criado(s), {completados} completado(s)", cliente.modo, paginas)
     return {"criados": criados, "completados": completados, "ja_estavam": ja_ok,
-            "modo": cliente.modo}
+            "tag": tag, "modo": cliente.modo}
 
 
 def conferir_estoque(cur, cliente: ClienteOmie) -> list[dict]:

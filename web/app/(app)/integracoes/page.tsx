@@ -15,6 +15,7 @@ type Config = {
   ativa: boolean;
   app_key: string | null;
   app_secret: string | null;
+  tag_fornecedor: string | null;
   ultima_sincronizacao: string | null;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
@@ -54,7 +55,10 @@ export default function PaginaIntegracoes() {
   const podeConfigurar = pode("admin.integracoes");
 
   const [cfg, setCfg] = useState<Config | null>(null);
-  const [form, setForm] = useState({ app_key: "", app_secret: "", modo: "simulado", ativa: false });
+  const [form, setForm] = useState({
+    app_key: "", app_secret: "", modo: "simulado", ativa: false,
+    tag_fornecedor: "Fornecedor",
+  });
   const [conferencia, setConferencia] = useState<Conferencia[] | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [erro, setErro] = useState("");
@@ -64,7 +68,8 @@ export default function PaginaIntegracoes() {
     try {
       const c = await api.get<Config>("/omie/config");
       setCfg(c);
-      setForm({ app_key: "", app_secret: "", modo: c.modo, ativa: c.ativa });
+      setForm({ app_key: "", app_secret: "", modo: c.modo, ativa: c.ativa,
+                tag_fornecedor: c.tag_fornecedor ?? "" });
       setVinculos(await api.get<Vinculo[]>("/notas/vinculos"));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
@@ -83,6 +88,7 @@ export default function PaginaIntegracoes() {
       await api.put("/omie/config", {
         app_key: form.app_key || null,
         app_secret: form.app_secret || null,
+        tag_fornecedor: form.tag_fornecedor || null,
         modo: form.modo,
         ativa: form.ativa,
       });
@@ -193,6 +199,21 @@ export default function PaginaIntegracoes() {
                 placeholder={cfg.app_secret ? "deixe em branco para manter" : ""}
                 value={form.app_secret}
                 onChange={(e) => setForm({ ...form, app_secret: e.target.value })}
+              />
+            </Campo>
+            {/* ⚠️ No Omie, cliente e fornecedor moram na MESMA lista, separados
+                por etiqueta. Sem esta, importar o cadastro trouxe 888 clientes
+                de uma conta real para dentro dos fornecedores. */}
+            <Campo
+              rotulo="Etiqueta de fornecedor no Omie"
+              dica="lá, cliente e fornecedor estão na mesma lista — em branco traz todo mundo"
+            >
+              <input
+                className="campo"
+                disabled={!podeConfigurar}
+                placeholder="Fornecedor"
+                value={form.tag_fornecedor}
+                onChange={(e) => setForm({ ...form, tag_fornecedor: e.target.value })}
               />
             </Campo>
             <Campo rotulo="Modo" dica="simulado usa dados de demonstração">
