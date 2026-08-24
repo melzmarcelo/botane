@@ -42,17 +42,26 @@ class CancelarRequest(BaseModel):
 @router.get("")
 def listar(inicio: date | None = None, fim: date | None = None, status: str | None = None,
            ctx: Contexto = Depends(_ver)) -> dict:
-    """O plano do período. Sem datas, mostra de ontem em diante.
+    """O plano do período — o que ainda está POR FAZER.
+
+    Sem datas, a lista traz só o que está planejado, de ontem em diante: a
+    agenda é uma lista de tarefas, e tarefa cumprida sai dela. O que já foi
+    produzido aparece em "Produções recentes", que é o registro do que
+    aconteceu — misturar os dois faria a agenda crescer para sempre e esconder
+    o que falta fazer no meio do que já foi feito.
 
     De ONTEM, não de hoje: a linha planejada que ninguém cumpriu é a que mais
     importa ver, e ela está no passado.
+
+    `status=PRODUZIDA` (ou um período explícito) traz o histórico, para quem
+    quiser conferir o que foi planejado contra o que saiu.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         linhas = motor.listar(cur, id_unidade, inicio, fim, status)
-        if inicio is None and fim is None:
+        if inicio is None and fim is None and status is None:
             linhas = [l for l in linhas
-                      if l["status"] != "CANCELADA"
+                      if l["status"] == "PLANEJADA"
                       and (l["data_prevista"] >= date.today() or l["atrasada"])]
         return {
             "linhas": linhas,

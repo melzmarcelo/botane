@@ -223,6 +223,10 @@ para arquivo nenhum — gravar direto aqui.
   tela inteira é a conferência (itens, custos e destinos à vista) e um diálogo no caminho
   comum treina a clicar sem ler. Cancelar linha da agenda também não: é plano, não é razão.
   Cada diálogo diz **o que a ação faz**, não só "tem certeza".
+- ⚠️ **A agenda é lista de TAREFA, não histórico**: linha produzida some dela. O que já foi
+  feito aparece em "Produções recentes" — misturar faria a agenda crescer para sempre e
+  esconder o que falta no meio do que já foi. `?status=PRODUZIDA` traz o histórico, para
+  conferir plano contra realizado.
 - **Agenda de produção** (`producao_agenda` + `services/producao_agenda.py`): o PLANO, que
   não mexe no estoque — quem mexe é a produção, quando a linha é cumprida. ⚠️ A quantidade
   produzida pode sair diferente da planejada (a cozinha rendeu outra coisa) e as duas ficam

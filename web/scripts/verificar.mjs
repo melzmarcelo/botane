@@ -580,6 +580,19 @@ try {
     (invDepois.itens ?? []).some((i) => Number(i.qtd_contada) === 7), invDepois.contados);
 
   // A agenda de produção: planejar e registrar são momentos diferentes.
+  // ⚠️ A suíte GARANTE uma linha planejada. Sem isso o bloco da confirmação
+  // ficava sem botão em que clicar e passava em silêncio — e checagem que não
+  // roda é pior que checagem que falha. (Linha produzida sai da agenda: é uma
+  // lista de tarefa, não um histórico.)
+  const { dados: fichasProd } = await api("GET", "/fichas", null, token);
+  const homologada = (fichasProd ?? []).find((f) => f.status === "HOMOLOGADA");
+  if (homologada) {
+    const amanhaISO = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    await api("POST", "/producao-agenda",
+      { id_produto: homologada.id_produto, data_prevista: amanhaISO, quantidade: 3 }, token);
+  }
+  checar("há ficha homologada para a agenda usar", !!homologada, fichasProd?.length);
+
   await irPara(p, `${WEB}/producao`);
   await new Promise((r) => setTimeout(r, 1400));
   const agenda = await p.evaluate(() => {
@@ -601,7 +614,7 @@ try {
   // real, é fonte de sistema com botão em inglês.
   const semPrompt = await p.evaluate(() => {
     const campos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
-    return { temCampoSai: campos.includes("sai"), usaPrompt: false };
+    return { temCampoQtd: campos.includes("produz"), usaPrompt: false };
   });
   const linhaAgendada = await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Produzir");
@@ -621,7 +634,7 @@ try {
       /baixa os ingredientes/i.test(dialogo?.texto ?? "")
         && /estorno/i.test(dialogo?.texto ?? ""), dialogo?.texto?.slice(0, 140));
     checar("e a quantidade fica no campo da linha, não no diálogo",
-      semPrompt.temCampoSai, semPrompt);
+      semPrompt.temCampoQtd, semPrompt);
     await foto(p, "19c-confirmar-producao");
     await p.evaluate(() => {
       const d = document.querySelector('[role="dialog"]');

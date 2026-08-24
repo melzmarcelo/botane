@@ -148,6 +148,18 @@ checar("a 1,00 cada", perto(saldos[0]["custo_medio"], 1.00), saldos)
 st, r = chamar("POST", f"/producao-agenda/{id_linha}/produzir", {}, token=token)
 checar("não produz a mesma linha duas vezes", st == 400, (st, r))
 
+# Agenda é lista de TAREFA: cumprida, sai dela. O que já foi produzido tem
+# lugar próprio ("Produções recentes"); misturar faria a agenda crescer para
+# sempre e esconder o que falta fazer no meio do que já foi feito.
+st, agenda = chamar("GET", "/producao-agenda", token=token)
+checar("a linha produzida sai da agenda",
+       not any(l["id"] == id_linha for l in agenda["linhas"]),
+       [(l["id"], l["status"]) for l in agenda["linhas"]])
+st, historico = chamar("GET", "/producao-agenda?status=PRODUZIDA", token=token)
+checar("mas continua no histórico, para conferir plano contra realizado",
+       any(l["id"] == id_linha for l in historico["linhas"]),
+       [(l["id"], l["status"]) for l in historico["linhas"]])
+
 print("\n4. o café passado: a venda produz e baixa")
 st, antes = chamar("GET", f"/estoque/saldos?id_produto={po}", token=token)
 po_antes = float(antes[0]["quantidade"])

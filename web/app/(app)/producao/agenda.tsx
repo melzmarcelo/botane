@@ -340,7 +340,9 @@ export default function AgendaProducao({
                                 rende diferente do plano, e descobrir isso
                                 dentro de um popup é tarde demais. */}
                             <label className="flex items-center gap-2">
-                              <span className="rotulo">sai</span>
+                              {/* "sai" lia como saída de ESTOQUE, que é o
+                                  contrário: produzir faz o pronto ENTRAR. */}
+                              <span className="rotulo">produz</span>
                               <input
                                 className="campo mono w-[92px] py-1.5 text-right"
                                 inputMode="decimal"
