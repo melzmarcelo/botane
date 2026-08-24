@@ -227,7 +227,12 @@ def lancar(
         medio_novo = medio_atual if saldo_novo > 0 else (medio_atual or unitario)
         sinal = -qtd
 
-    custo_total = (qtd * unitario).quantize(Decimal("0.01"))
+    # O razão guarda dinheiro em centavos — é o que se soma numa nota. Mas quem
+    # ENCADEIA custo (a produção soma consumos para achar o custo do prato)
+    # precisa do valor sem arredondar: meio centavo por movimento vira erro de
+    # verdade quando multiplicado por mil pratos.
+    custo_exato = qtd * unitario
+    custo_total = custo_exato.quantize(Decimal("0.01"))
 
     cur.execute(
         """INSERT INTO estoque_movimentos
@@ -272,6 +277,7 @@ def lancar(
         "quantidade": sinal,
         "custo_unitario": unitario,
         "custo_total": custo_total,
+        "custo_exato": custo_exato,
         "saldo_apos": saldo_novo,
         "custo_medio_apos": medio_novo,
         "custo_provisorio": provisorio,
@@ -488,7 +494,8 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         ums[r["sigla"]] = dict(r)
 
     cur.execute(
-        """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, p.um_estoque, p.nome
+        """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, p.um_estoque, p.nome,
+                  p.id_local_padrao
              FROM ficha_itens fi
              LEFT JOIN produtos p ON p.id = fi.id_insumo
             WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
@@ -520,13 +527,15 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             if not alvo:
                 continue
             id_alvo, um_origem, um_destino = alvo["id_produto"], item["um"], None
-            cur.execute("SELECT um_estoque, nome FROM produtos WHERE id = %s", (id_alvo,))
+            cur.execute("SELECT um_estoque, nome, id_local_padrao FROM produtos WHERE id = %s",
+                        (id_alvo,))
             p = cur.fetchone()
-            um_destino, nome = p["um_estoque"], p["nome"]
+            um_destino, nome, local_do_item = p["um_estoque"], p["nome"], p["id_local_padrao"]
         else:
             id_alvo, um_origem, um_destino, nome = (
                 item["id_insumo"], item["um"], item["um_estoque"], item["nome"]
             )
+            local_do_item = item.get("id_local_padrao")
 
         bruta = dec(item["qtd_bruta"]) * lotes
         # A MESMA regra da ficha e da nota de entrada: embalagem do produto
@@ -540,19 +549,30 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
                 detail=(f"{nome}: {um_origem or '?'} não converte para "
                         f"{um_destino or '?'}. Cadastre esta unidade de compra no produto."),
             )
+        # Cada insumo sai de ONDE ELE MORA. Uma receita usa leite da câmara e
+        # café do estoque seco ao mesmo tempo: um local só para a produção
+        # inteira faria a saída bater num local sem saldo — o razão registrava
+        # a baixa num lugar por onde o insumo nunca passou, e o saldo do lugar
+        # certo continuava cheio. É a mesma regra da nota de entrada.
         r = lancar(
-            cur, id_unidade=id_unidade, id_local=id_local, id_produto=id_alvo,
+            cur, id_unidade=id_unidade, id_local=local_do_item or id_local,
+            id_produto=id_alvo,
             tipo="SAIDA_PRODUCAO", quantidade=convertida, origem_tipo="PRODUCAO",
             origem_id=id_producao, id_usuario=id_usuario,
             observacao=f"Produção #{id_producao}",
         )
-        custo_consumido += dec(r["custo_total"])
+        custo_consumido += dec(r["custo_exato"])
         consumos.append({"id_produto": id_alvo, "nome": nome,
                          "quantidade": float(convertida), "custo": float(r["custo_total"])})
 
     unitario = (custo_consumido / qtd).quantize(CASAS_CUSTO) if qtd else Decimal(0)
+    # O produzido também entra no local dele: o molho vai para a câmara, não
+    # para onde por acaso se lançou a produção.
+    cur.execute("SELECT id_local_padrao FROM produtos WHERE id = %s", (id_produto,))
+    local_produzido = (cur.fetchone() or {}).get("id_local_padrao")
     entrada = lancar(
-        cur, id_unidade=id_unidade, id_local=id_local, id_produto=id_produto,
+        cur, id_unidade=id_unidade, id_local=local_produzido or id_local,
+        id_produto=id_produto,
         tipo="ENTRADA_PRODUCAO", quantidade=qtd, custo_unitario=unitario,
         origem_tipo="PRODUCAO", origem_id=id_producao, id_usuario=id_usuario,
         observacao=observacao,

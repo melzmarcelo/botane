@@ -209,6 +209,21 @@ para arquivo nenhum — gravar direto aqui.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
+- ⚠️ **A produção baixa cada insumo do local DELE** (`id_local_padrao`), não do local
+  informado no lançamento — uma receita usa leite da câmara e café do seco ao mesmo tempo.
+  Achado pelo `cenario_cafeteria.py` em 24/08/2026: a saída batia num local sem saldo, o razão
+  registrava a baixa por onde o insumo nunca passou (com **custo provisório**) e o saldo do
+  lugar certo continuava cheio. O produzido também entra no local dele.
+- ⚠️ **`lancar()` devolve `custo_exato` além de `custo_total`.** O razão guarda dinheiro em
+  centavos, mas quem ENCADEIA custo (a produção soma consumos para achar o custo do prato)
+  precisa do valor sem arredondar: a produção somava 4,48 + 4,98 = 9,46 onde a conta era
+  9,455, e o prato nascia a 0,946 em vez de 0,9455 — meio centavo por unidade que reaparece
+  multiplicado no CMV teórico.
+- **`tests/cenario_cafeteria.py`**: a casa inteira funcionando uma vez, com números conferidos
+  no papel (frete rateado, embalagem convertida, médio ponderado, ficha, sub-ficha, produção,
+  perda, transferência, inventário, venda e o fechamento das identidades). 57 checagens.
+  ⚠️ Mede **delta** da apuração e soma só os produtos do próprio cenário — a base pode ter
+  outra coisa.
 - **O custo da ficha é congelado no item de venda** (`venda_itens.custo_ficha_unitario`):
   corrigir receita hoje não reescreve o CMV teórico do mês passado.
 - Compras contam só `ENTRADA_NF` e `ENTRADA_MANUAL`; produção e transferência são
