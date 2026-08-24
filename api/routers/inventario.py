@@ -12,6 +12,7 @@ from database import get_cursor
 from models.estoque import ContagemRequest, InventarioCreate, InventarioResponse
 from seguranca import Contexto, requer_permissao
 from services import estoque as motor
+from services import custos
 from services.custos import dec
 
 router = APIRouter(prefix="/inventarios", tags=["inventário"])
@@ -34,9 +35,19 @@ def _montar(cur, id_inventario: int) -> dict:
     cur.execute(
         """SELECT ii.id, ii.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
                   ii.qtd_sistema, ii.qtd_contada, ii.custo_medio, ii.observacao,
-                  (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca
+                  ii.qtd_informada, ii.um_informada, ii.contado_em, u.nome AS contado_por,
+                  c.nome AS categoria,
+                  (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca,
+                  -- Em que unidades este produto pode ser contado. Vai junto
+                  -- para o celular não precisar de uma chamada por produto.
+                  coalesce((SELECT json_agg(json_build_object('um', pu.um, 'fator', pu.fator)
+                                              ORDER BY pu.fator)
+                              FROM produto_unidades pu
+                             WHERE pu.id_produto = p.id), '[]'::json) AS unidades
              FROM inventario_itens ii
              JOIN produtos p ON p.id = ii.id_produto
+             LEFT JOIN usuarios u ON u.id = ii.contado_por
+             LEFT JOIN categorias c ON c.id = p.id_categoria
             WHERE ii.id_inventario = %s
             ORDER BY lower(p.nome)""",
         (id_inventario,),
@@ -138,19 +149,48 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
         if inv["status"] != "ABERTO":
             raise HTTPException(status_code=400, detail="Inventário já fechado.")
 
+        ums = custos._carregar_ums(cur)
         for item in body.itens:
+            # A pessoa conta na embalagem que está na mão; o sistema guarda na
+            # unidade de estoque. A conversão é a MESMA da ficha e da nota.
+            convertida, informada, um_informada = item.qtd_contada, None, None
+            if item.qtd_contada is not None and item.um:
+                cur.execute("SELECT um_estoque, nome FROM produtos WHERE id = %s",
+                            (item.id_produto,))
+                p = cur.fetchone()
+                if not p:
+                    raise HTTPException(status_code=404,
+                                        detail=f"Produto {item.id_produto} não encontrado")
+                convertida, _como = custos.converter_para_estoque(
+                    cur, dec(item.qtd_contada), item.id_produto, item.um, p["um_estoque"], ums)
+                if convertida is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(f"{p['nome']}: {item.um} não converte para "
+                                f"{p['um_estoque'] or '?'}. Cadastre esta unidade de compra "
+                                f"no produto."),
+                    )
+                informada, um_informada = item.qtd_contada, item.um.upper()
+
             cur.execute(
                 """INSERT INTO inventario_itens (id_inventario, id_produto, qtd_sistema,
-                                                 custo_medio, qtd_contada, observacao)
-                   SELECT %s, %s, coalesce(s.quantidade, 0), coalesce(s.custo_medio, 0), %s, %s
+                                                 custo_medio, qtd_contada, qtd_informada,
+                                                 um_informada, observacao, contado_em,
+                                                 contado_por)
+                   SELECT %s, %s, coalesce(s.quantidade, 0), coalesce(s.custo_medio, 0),
+                          %s, %s, %s, %s, now(), %s
                      FROM (SELECT 1) x
                      LEFT JOIN estoque_saldos s
                             ON s.id_produto = %s AND s.id_local = %s
                    ON CONFLICT (id_inventario, id_produto) DO UPDATE
                        SET qtd_contada = EXCLUDED.qtd_contada,
-                           observacao = EXCLUDED.observacao""",
-                (id_inventario, item.id_produto, item.qtd_contada, item.observacao,
-                 item.id_produto, inv["id_local"]),
+                           qtd_informada = EXCLUDED.qtd_informada,
+                           um_informada = EXCLUDED.um_informada,
+                           observacao = EXCLUDED.observacao,
+                           contado_em = now(),
+                           contado_por = EXCLUDED.contado_por""",
+                (id_inventario, item.id_produto, convertida, informada, um_informada,
+                 item.observacao, ctx.id_usuario, item.id_produto, inv["id_local"]),
             )
         return _montar(cur, id_inventario)
 

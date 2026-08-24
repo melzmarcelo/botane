@@ -103,6 +103,17 @@ para arquivo nenhum — gravar direto aqui.
   ⚠️ O impacto previsto soma **todos** os itens, nunca os filtrados.
 - **`fonteDaLista()`** serve a janela a partir de uma lista já carregada (as receitas da
   produção). Mesma janela, outra origem.
+- **A contagem tem tela própria, feita para o celular** (`/inventario/[id]`, 21/08/2026):
+  quem conta anda pela despensa com o telefone, e uma tabela de dez colunas não serve na mão.
+  Cada produto é um cartão; o progresso fica grudado no topo; há filtro "só o que falta".
+  ⚠️ **Grava item a item, no blur** — contagem que só existe na tela até um "salvar tudo" no
+  fim é contagem que se perde. ⚠️ A **unidade é escolhível** (migração 019), com a de estoque
+  por padrão: quem conta conta caixa, e converter de cabeça é onde o erro entra. `qtd_contada`
+  segue na unidade de ESTOQUE (é ela que o fechamento compara); `qtd_informada`/`um_informada`
+  guardam o que foi digitado, senão ninguém sabe depois que 36 eram 3 caixas de 12.
+- ⚠️ **`.campo` tem `font-size: 15px` e vence a utilitária** — abaixo de 16px o Safari do
+  iPhone dá **zoom ao focar** e a tela salta a cada campo. Use `.campo-toque` (16px + alvo
+  maior) em tela de uso no aparelho. `scripts/celular.mjs` fotografa e checa corte lateral.
 - ⚠️ **"Tabelas de apoio" não era o nome de nada que se procura** (21/08/2026): quem precisava
   cadastrar o local de estoque procurava "local de estoque" no menu e não achava — as quatro
   tabelas estavam atrás de um rótulo genérico. Agora cada uma tem entrada própria apontando

@@ -82,6 +82,15 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   color: var(--color-tinta);
   font-family: var(--font-display);
 }
+/* Campo para o DEDO, não para o mouse: a contagem de estoque acontece com o
+   celular na mão, andando pela despensa.
+   ⚠️ 16px não é estética: abaixo disso o Safari do iPhone dá zoom ao focar, e a
+   tela salta a cada produto contado. E a regra tem de morar aqui, junto de
+   `.campo` — a utilitária do Tailwind perde para ela. */
+.campo-toque {
+  font-size: 16px;
+  padding: 10px 12px;
+}
 .campo:focus {
   outline: 2px solid var(--color-erva);
   outline-offset: 1px;

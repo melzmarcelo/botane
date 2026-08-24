@@ -520,18 +520,54 @@ try {
   });
   await new Promise((r) => setTimeout(r, 1600));
   const textoInv = await p.evaluate(() => document.body.innerText);
-  // Achar o produto na contagem: com centenas de linhas, rolar não é opção.
-  const filtroContagem = await p.evaluate(() => {
+  // Contar tem tela própria: quem conta anda pela despensa com o celular, e
+  // uma tabela de dez colunas não serve na mão.
+  checar("abrir a contagem leva para a tela dela", /\/inventario\/\d+/.test(p.url()), p.url());
+  const telaContagem = await p.evaluate(() => {
     const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
-    return rotulos.includes("Achar na contagem");
+    const campo = document.querySelector('input[inputmode="decimal"]');
+    return {
+      achar: rotulos.includes("Achar produto"),
+      contei: rotulos.includes("Contei"),
+      unidade: rotulos.includes("Unidade"),
+      progresso: /contado\(s\)/.test(document.body.innerText),
+      // Abaixo de 16px o iPhone dá zoom no foco e a tela salta a cada campo.
+      tamanhoFonte: campo ? parseFloat(getComputedStyle(campo).fontSize) : 0,
+    };
   });
-  checar("a contagem tem como achar o produto", filtroContagem, filtroContagem);
+  checar("a contagem tem campo por produto, com unidade",
+    telaContagem.contei && telaContagem.unidade, telaContagem);
+  checar("com o progresso à vista e busca", telaContagem.progresso && telaContagem.achar,
+    telaContagem);
+  checar("e campo grande o bastante para o celular não dar zoom",
+    telaContagem.tamanhoFonte >= 16, telaContagem.tamanhoFonte);
+  await foto(p, "20c-contagem");
+
+  // Digitar grava sozinho: contagem que só existe na tela até um "salvar tudo"
+  // no fim é contagem que se perde.
+  await p.evaluate(() => {
+    const c = document.querySelector('input[inputmode="decimal"]');
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    // ⚠️ Sem FOCAR antes, `blur()` não dispara nada — e é o blur que grava.
+    c.focus();
+    set.call(c, "7");
+    c.dispatchEvent(new Event("input", { bubbles: true }));
+    c.blur();
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  const { dados: invDepois } = await api("GET", `/inventarios/${p.url().match(/\d+$/)[0]}`,
+    null, token);
+  checar("o que se digita grava sozinho, sem botão de salvar",
+    (invDepois.itens ?? []).some((i) => Number(i.qtd_contada) === 7), invDepois.contados);
+
   await api("DELETE", `/produtos/${insumoInv.id}`, null, token);
 
+  // O sintoma que originou tudo isto: o seletor mostrava o local e o pedido
+  // saía sem ele. Agora a contagem abre — e o título traz o nome do local.
   checar("a contagem abre sem dizer que o local não existe",
-    !/Local não encontrado/i.test(textoInv) && /Inventário #/.test(textoInv),
+    !/Local não encontrado/i.test(textoInv) && /Contagem ·/.test(textoInv),
     textoInv.slice(0, 140));
-  await foto(p, "20b-inventario-aberto");
 
   // Filtrar o razão. O razão cresce todo dia; sem filtro, achar um movimento
   // vira rolagem — e a planilha tem de sair com o MESMO recorte da tela.

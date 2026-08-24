@@ -97,6 +97,10 @@ class InventarioCreate(BaseModel):
 class ContagemItem(BaseModel):
     id_produto: int
     qtd_contada: float | None = Field(default=None, ge=0)
+    # A unidade em que a pessoa CONTOU. Vazio = a de estoque, que é o padrão da
+    # tela. Contar em caixa e deixar a conversão para a cabeça de quem conta é
+    # onde o erro do inventário entra.
+    um: str | None = Field(default=None, max_length=6)
     observacao: str | None = None
 
 

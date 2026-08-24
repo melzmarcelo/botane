@@ -1,24 +1,14 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { Local, reais } from "@/lib/cadastros";
+import { Local } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
-type Item = {
-  id: number;
-  id_produto: number;
-  codigo: string;
-  produto: string;
-  um_estoque: string | null;
-  qtd_sistema: number;
-  qtd_contada: number | null;
-  custo_medio: number;
-  diferenca: number;
-  observacao: string | null;
-};
 
 type Inventario = {
   id: number;
@@ -27,26 +17,19 @@ type Inventario = {
   data: string;
   status: string;
   observacao: string | null;
-  itens?: Item[];
   contados: number;
   total_itens: number;
   diferenca_valor?: number | null;
 };
 
-const qtd = (n: number | string | null) =>
-  n === null ? "" : Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-
 export default function PaginaInventario() {
   const aviso = useAviso();
+  const router = useRouter();
   const { pode } = useSessao();
-  const podeFechar = pode("estoque.ajuste");
 
   const [lista, setLista] = useState<Inventario[] | null>(null);
-  const [aberto, setAberto] = useState<Inventario | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
   const [idLocal, setIdLocal] = useState("");
-  const [contagem, setContagem] = useState<Record<number, string>>({});
-  const [filtroItem, setFiltroItem] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -77,9 +60,9 @@ export default function PaginaInventario() {
     setErro("");
     try {
       const inv = await api.post<Inventario>("/inventarios", { id_local: Number(idLocal) });
-      setAberto(inv);
-      setContagem({});
-      await carregar();
+      // Abrir uma contagem é o começo de CONTAR: leva direto para a tela de
+      // contagem, em vez de devolver a pessoa à lista para clicar de novo.
+      router.push(`/inventario/${inv.id}`);
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível abrir");
     } finally {
@@ -87,86 +70,8 @@ export default function PaginaInventario() {
     }
   }
 
-  async function ver(id: number) {
-    setErro("");
-    try {
-      const inv = await api.get<Inventario>(`/inventarios/${id}`);
-      setAberto(inv);
-      setContagem(
-        Object.fromEntries(
-          (inv.itens ?? [])
-            .filter((i) => i.qtd_contada !== null)
-            .map((i) => [i.id_produto, String(i.qtd_contada)]),
-        ),
-      );
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Falha ao abrir");
-    }
-  }
 
-  async function salvarContagem() {
-    if (!aberto) return;
-    setOcupado(true);
-    setErro("");
-    try {
-      const itens = Object.entries(contagem)
-        .filter(([, v]) => v.trim() !== "")
-        .map(([id, v]) => ({
-          id_produto: Number(id),
-          qtd_contada: Number(v.replace(",", ".")),
-        }));
-      const inv = await api.put<Inventario>(`/inventarios/${aberto.id}/contagem`, { itens });
-      setAberto(inv);
-      aviso.sucesso("Contagem salva. Nada foi lançado no razão ainda.");
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar");
-    } finally {
-      setOcupado(false);
-    }
-  }
 
-  async function fechar() {
-    if (!aberto) return;
-    setOcupado(true);
-    setErro("");
-    try {
-      const r = await api.post<{ ajustes: number; diferenca_valor: number }>(
-        `/inventarios/${aberto.id}/fechar`,
-      );
-      aviso.sucesso(
-        `Inventário fechado: ${r.ajustes} ajuste(s), diferença de ${reais(
-          Number(r.diferenca_valor),
-        )}.`,
-      );
-      await ver(aberto.id);
-      await carregar();
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível fechar");
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  const todosItens = aberto?.itens ?? [];
-  // Achar o produto que está na mão, numa contagem de centenas de linhas. Aqui
-  // o filtro é de TEXTO e local: a lista inteira já está na tela e é ela que se
-  // percorre — abrir uma janela para escolher UM item seria perder a contagem
-  // de vista, que é o oposto do que quem conta precisa.
-  const alvoFiltro = filtroItem.trim().toLowerCase();
-  const itens = alvoFiltro
-    ? todosItens.filter(
-        (i) =>
-          i.produto.toLowerCase().includes(alvoFiltro) ||
-          (i.codigo ?? "").toLowerCase().includes(alvoFiltro),
-      )
-    : todosItens;
-  // Sobre TODOS os itens, nunca sobre os filtrados: o impacto é o da contagem
-  // inteira, e filtrar a vista não pode mudar o número que se leva ao dono.
-  const diferencaPrevista = todosItens.reduce((soma, i) => {
-    const contado = contagem[i.id_produto];
-    if (contado === undefined || contado === "") return soma;
-    return soma + (Number(contado.replace(",", ".")) - Number(i.qtd_sistema)) * Number(i.custo_medio);
-  }, 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -209,143 +114,6 @@ export default function PaginaInventario() {
         </Cartao>
       )}
 
-      {aberto && (
-        <Cartao
-          titulo={`Inventário #${aberto.id} · ${aberto.local}`}
-          descricao={`${aberto.contados} de ${aberto.total_itens} item(ns) contado(s)`}
-          acao={
-            aberto.status === "ABERTO" ? (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="btn btn-secundario"
-                  onClick={() => void api.baixar(`/exportar/inventario/${aberto.id}.csv`)}
-                >
-                  Folha de contagem
-                </button>
-                <button
-                  className="btn btn-secundario"
-                  onClick={salvarContagem}
-                  disabled={ocupado}
-                >
-                  Salvar contagem
-                </button>
-                {podeFechar && (
-                  <button className="btn btn-primario" onClick={fechar} disabled={ocupado}>
-                    Fechar e ajustar
-                  </button>
-                )}
-              </div>
-            ) : (
-              <Etiqueta cor="erva">{aberto.status.toLowerCase()}</Etiqueta>
-            )
-          }
-        >
-          {!todosItens.length ? (
-            <Vazio>Nenhum item neste local ainda.</Vazio>
-          ) : (
-            <>
-              <div className="mb-4 flex flex-wrap items-end gap-3">
-                <label className="min-w-0 flex-1 sm:max-w-[320px]">
-                  <span className="rotulo">Achar na contagem</span>
-                  <input
-                    className="campo mt-1.5"
-                    placeholder="produto ou código"
-                    value={filtroItem}
-                    onChange={(e) => setFiltroItem(e.target.value)}
-                  />
-                </label>
-                <span className="pb-2 text-[13px] text-suave">
-                  {alvoFiltro
-                    ? `${itens.length} de ${todosItens.length} item(ns)`
-                    : `${todosItens.length} item(ns)`}
-                </span>
-              </div>
-              {!itens.length ? (
-                <Vazio>Nenhum item com “{filtroItem}”.</Vazio>
-              ) : (
-              <div className="overflow-x-auto">
-                <table className="tabela">
-                  <thead>
-                    <tr>
-                      <th>Produto</th>
-                      <th className="num">Sistema</th>
-                      <th className="num">Contado</th>
-                      <th className="num">Diferença</th>
-                      <th className="num">Impacto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itens.map((i) => {
-                      const valor = contagem[i.id_produto] ?? "";
-                      const dif =
-                        valor === ""
-                          ? null
-                          : Number(valor.replace(",", ".")) - Number(i.qtd_sistema);
-                      return (
-                        <tr key={i.id_produto}>
-                          <td>
-                            <span className="font-semibold">{i.produto}</span>
-                            <span className="mono ml-2 text-[12px] text-suave">{i.codigo}</span>
-                          </td>
-                          <td className="num text-suave">
-                            {qtd(i.qtd_sistema)} {i.um_estoque ?? ""}
-                          </td>
-                          <td className="num">
-                            {aberto.status === "ABERTO" ? (
-                              <input
-                                className="campo mono w-[110px] py-1 text-right"
-                                type="number"
-                                step="0.001"
-                                min="0"
-                                value={valor}
-                                onChange={(e) =>
-                                  setContagem({ ...contagem, [i.id_produto]: e.target.value })
-                                }
-                              />
-                            ) : (
-                              qtd(i.qtd_contada)
-                            )}
-                          </td>
-                          <td
-                            className={`num ${
-                              dif === null || dif === 0
-                                ? "text-suave"
-                                : dif > 0
-                                  ? "text-erva"
-                                  : "text-erro"
-                            }`}
-                          >
-                            {dif === null ? "—" : `${dif > 0 ? "+" : ""}${qtd(dif)}`}
-                          </td>
-                          <td className="num text-suave">
-                            {dif === null || dif === 0
-                              ? "—"
-                              : reais(dif * Number(i.custo_medio))}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              )}
-              {aberto.status === "ABERTO" && (
-                <p className="mt-3 text-[14px]">
-                  Impacto previsto no estoque:{" "}
-                  <b className={`mono ${diferencaPrevista < 0 ? "text-erro" : "text-erva"}`}>
-                    {reais(diferencaPrevista)}
-                  </b>
-                  <span className="text-suave">
-                    {" "}
-                    — vira ajuste no razão quando você fechar.
-                  </span>
-                </p>
-              )}
-            </>
-          )}
-        </Cartao>
-      )}
-
       <Cartao titulo="Contagens">
         {!lista ? (
           <Carregando />
@@ -358,7 +126,7 @@ export default function PaginaInventario() {
                 key={i.id}
                 className="flex flex-wrap items-center justify-between gap-3 bg-superficie py-3"
               >
-                <button className="text-left" onClick={() => void ver(i.id)}>
+                <Link href={`/inventario/${i.id}`} className="text-left">
                   <span className="font-semibold hover:text-erva">
                     #{i.id} · {i.local}
                   </span>
@@ -366,7 +134,7 @@ export default function PaginaInventario() {
                     {new Date(i.data).toLocaleDateString("pt-BR")} · {i.contados} de{" "}
                     {i.total_itens} contado(s)
                   </span>
-                </button>
+                </Link>
                 <Etiqueta cor={i.status === "ABERTO" ? "alerta" : "erva"}>
                   {i.status.toLowerCase()}
                 </Etiqueta>

@@ -300,6 +300,33 @@ st, mov_antes = chamar("GET", f"/estoque/movimentos?id_produto={cafe}", token=to
 checar("contagem ainda não mexeu no razão",
        not any(m["tipo"].startswith("AJUSTE") for m in mov_antes))
 
+# Quem conta conta na embalagem que está na mão: "duas caixas", não "vinte e
+# quatro unidades". Converter de cabeça é onde o erro do inventário entra.
+chamar("PUT", f"/produtos/{cafe}/unidades",
+       {"itens": [{"um": "KG", "fator": 1, "padrao": False},
+                  {"um": "CX", "fator": 12, "padrao": True}]}, token=token)
+st, r = chamar("PUT", f"/inventarios/{id_inv}/contagem", {
+    "itens": [{"id_produto": cafe, "qtd_contada": 2, "um": "CX"}],
+}, token=token)
+checar("conta na unidade que está na mão", st == 200, r)
+item_cx = r["itens"][0]
+checar("e o sistema guarda convertido: 2 CX = 24 KG",
+       perto(item_cx["qtd_contada"], 24), item_cx["qtd_contada"])
+checar("guardando também o que foi digitado",
+       perto(item_cx["qtd_informada"], 2) and item_cx["um_informada"] == "CX", item_cx)
+checar("e as unidades possíveis viajam junto, para o celular não pedir de novo",
+       any(u["um"] == "CX" for u in (item_cx.get("unidades") or [])), item_cx.get("unidades"))
+st, r = chamar("PUT", f"/inventarios/{id_inv}/contagem", {
+    "itens": [{"id_produto": cafe, "qtd_contada": 1, "um": "FD"}],
+}, token=token)
+checar("embalagem que ninguém cadastrou é recusada, não convertida a 1:1",
+       st == 400 and "não converte" in str(r.get("detail", "")), (st, r))
+
+# volta para o valor do cenário, que o fechamento confere adiante
+chamar("PUT", f"/inventarios/{id_inv}/contagem", {
+    "itens": [{"id_produto": cafe, "qtd_contada": sistema - 2, "observacao": "faltaram 2"}],
+}, token=token)
+
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=token)
 checar("fecha o inventário", st == 200, r)
 checar("gerou 1 ajuste", r.get("ajustes") == 1, r)
