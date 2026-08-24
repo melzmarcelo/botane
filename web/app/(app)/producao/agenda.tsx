@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local } from "@/lib/cadastros";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 
@@ -93,6 +93,10 @@ export default function AgendaProducao({
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [f, setF] = useState({ id_produto: "", quantidade: "", data: amanha(), rotulo: "" });
+  // Quanto vai sair de fato de cada linha. Começa no planejado — o caso comum
+  // é produzir o que se planejou, e quem digitar por cima está corrigindo.
+  const [saida, setSaida] = useState<Record<number, string>>({});
+  const [confirmando, setConfirmando] = useState<Linha | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -143,15 +147,13 @@ export default function AgendaProducao({
     }
   }
 
+  const quantoSai = (l: Linha) => saida[l.id] ?? String(Number(l.quantidade));
+
   async function produzirLinha(l: Linha) {
-    const texto = window.prompt(
-      `Quanto saiu de fato de ${l.produto}?\n(planejado: ${qtd(l.quantidade)} ${l.um_estoque ?? ""})`,
-      String(Number(l.quantidade)),
-    );
-    if (texto === null) return;
-    const valor = Number(texto.replace(",", "."));
+    const valor = Number(quantoSai(l).replace(",", "."));
     if (!valor || valor <= 0) {
       aviso.erro("Quantidade tem de ser maior que zero.");
+      setConfirmando(null);
       return;
     }
     setOcupado(true);
@@ -160,6 +162,11 @@ export default function AgendaProducao({
         quantidade: valor,
       });
       aviso.sucesso(r.message);
+      setConfirmando(null);
+      setSaida((a) => {
+        const { [l.id]: _fora, ...resto } = a;
+        return resto;
+      });
       await carregar();
       aoProduzir();
     } catch (e) {
@@ -328,13 +335,30 @@ export default function AgendaProducao({
                       <span className="flex flex-wrap items-center gap-3">
                         {l.atrasada && <Etiqueta cor="alerta">atrasada</Etiqueta>}
                         {podeProduzir && (
-                          <button
-                            className="btn btn-secundario"
-                            onClick={() => void produzirLinha(l)}
-                            disabled={ocupado}
-                          >
-                            Produzir
-                          </button>
+                          <>
+                            {/* A quantidade fica À VISTA e editável: a cozinha
+                                rende diferente do plano, e descobrir isso
+                                dentro de um popup é tarde demais. */}
+                            <label className="flex items-center gap-2">
+                              <span className="rotulo">sai</span>
+                              <input
+                                className="campo mono w-[92px] py-1.5 text-right"
+                                inputMode="decimal"
+                                value={quantoSai(l)}
+                                onChange={(e) =>
+                                  setSaida({ ...saida, [l.id]: e.target.value })
+                                }
+                              />
+                              <span className="text-[13px] text-suave">{l.um_estoque}</span>
+                            </label>
+                            <button
+                              className="btn btn-secundario"
+                              onClick={() => setConfirmando(l)}
+                              disabled={ocupado}
+                            >
+                              Produzir
+                            </button>
+                          </>
                         )}
                         <button
                           className="rotulo hover:text-erro"
@@ -352,6 +376,35 @@ export default function AgendaProducao({
           </div>
         )}
       </Cartao>
+
+      {confirmando && (
+        <Confirmacao
+          titulo="Confirmar a produção"
+          rotuloConfirmar="Produzir"
+          ocupado={ocupado}
+          aoCancelar={() => setConfirmando(null)}
+          aoConfirmar={() => void produzirLinha(confirmando)}
+        >
+          <p>
+            Produzir{" "}
+            <b className="mono">
+              {quantoSai(confirmando)} {confirmando.um_estoque}
+            </b>{" "}
+            de <b>{confirmando.produto}</b>?
+          </p>
+          {Number(quantoSai(confirmando).replace(",", ".")) !==
+            Number(confirmando.quantidade) && (
+            <p className="mt-2 text-[13.5px] text-alerta">
+              O plano era {qtd(confirmando.quantidade)} {confirmando.um_estoque} — a agenda
+              guarda os dois números.
+            </p>
+          )}
+          <p className="mt-3 text-[13.5px] text-suave">
+            Isto baixa os ingredientes da ficha e devolve o pronto ao estoque. Nada aqui se
+            apaga: correção é estorno.
+          </p>
+        </Confirmacao>
+      )}
     </div>
   );
 }

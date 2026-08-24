@@ -155,3 +155,50 @@ export function Modal({
     </div>
   );
 }
+
+/**
+ * A pergunta antes do que não se desfaz.
+ *
+ * `window.confirm` e `window.prompt` funcionam, mas são a caixa do NAVEGADOR:
+ * fonte de sistema, botão em inglês, e nenhuma chance de explicar o que a ação
+ * faz. Numa tela que existe para dar confiança sobre estoque e dinheiro, a
+ * confirmação é parte do produto.
+ */
+export function Confirmacao({
+  titulo,
+  children,
+  rotuloConfirmar = "Confirmar",
+  perigo = false,
+  ocupado = false,
+  aoConfirmar,
+  aoCancelar,
+}: {
+  titulo: string;
+  children: ReactNode;
+  rotuloConfirmar?: string;
+  perigo?: boolean;
+  ocupado?: boolean;
+  aoConfirmar: () => void;
+  aoCancelar: () => void;
+}) {
+  return (
+    <Modal titulo={titulo} aoFechar={aoCancelar} largura="480px">
+      <div className="text-[15px] leading-snug">{children}</div>
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button type="button" className="btn btn-secundario" onClick={aoCancelar}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn btn-primario"
+          style={perigo ? { background: "var(--color-erro)" } : undefined}
+          onClick={aoConfirmar}
+          disabled={ocupado}
+          autoFocus
+        >
+          {ocupado ? "…" : rotuloConfirmar}
+        </button>
+      </div>
+    </Modal>
+  );
+}

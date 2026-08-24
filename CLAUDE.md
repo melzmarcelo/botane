@@ -214,6 +214,10 @@ para arquivo nenhum — gravar direto aqui.
   a venda produz e baixa no mesmo lançamento, e o saldo volta a zero). ⚠️ Sem o `NA_HORA` a
   casa venderia mil cafés e o pó continuaria inteiro no razão — ninguém registra produção de
   café a café. O par entrada/saída fica visível no razão de propósito.
+- ⚠️ **Nada de `window.prompt`/`confirm`**: é a caixa do NAVEGADOR — fonte de sistema, botão
+  em inglês, sem espaço para explicar o que a ação faz. O que não se desfaz pergunta pelo
+  `Confirmacao` de `components/ui.tsx`, e o número que a ação usa fica num campo **na linha**,
+  à vista antes do clique.
 - **Agenda de produção** (`producao_agenda` + `services/producao_agenda.py`): o PLANO, que
   não mexe no estoque — quem mexe é a produção, quando a linha é cumprida. ⚠️ A quantidade
   produzida pode sair diferente da planejada (a cozinha rendeu outra coisa) e as duas ficam

@@ -596,6 +596,41 @@ try {
     agenda.agendaPrimeiro && agenda.naoMexe, agenda);
   await foto(p, "19b-agenda-producao");
 
+  // Produzir uma linha da agenda: quantidade à vista e confirmação do sistema,
+  // não a caixa do navegador. `window.prompt` trava o Chrome do teste e, no uso
+  // real, é fonte de sistema com botão em inglês.
+  const semPrompt = await p.evaluate(() => {
+    const campos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    return { temCampoSai: campos.includes("sai"), usaPrompt: false };
+  });
+  const linhaAgendada = await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Produzir");
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  if (linhaAgendada) {
+    await new Promise((r) => setTimeout(r, 800));
+    const dialogo = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      return d ? { titulo: d.getAttribute("aria-label"), texto: d.innerText } : null;
+    });
+    checar("produzir pergunta antes, no padrão do sistema",
+      dialogo?.titulo === "Confirmar a produção", dialogo);
+    checar("dizendo o que a ação faz e que não se desfaz",
+      /baixa os ingredientes/i.test(dialogo?.texto ?? "")
+        && /estorno/i.test(dialogo?.texto ?? ""), dialogo?.texto?.slice(0, 140));
+    checar("e a quantidade fica no campo da linha, não no diálogo",
+      semPrompt.temCampoSai, semPrompt);
+    await foto(p, "19c-confirmar-producao");
+    await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      [...(d?.querySelectorAll("button") ?? [])].find(
+        (b) => b.textContent === "Cancelar")?.click();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
   // Contagem CEGA: o esperado não aparece na tela nem sai do servidor.
   // ⚠️ Só há uma contagem aberta por local: sem fechar a de cima, o POST volta
   // 409 e o bloco inteiro passaria em silêncio — checagem que não roda é pior
