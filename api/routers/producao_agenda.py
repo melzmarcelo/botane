@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 import auditoria
 from database import get_cursor
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import estoque
 from services import producao_agenda as motor
 
 router = APIRouter(prefix="/producao-agenda", tags=["produção"])
@@ -68,6 +69,48 @@ def listar(inicio: date | None = None, fim: date | None = None, status: str | No
             "resumo": motor.resumo(cur, id_unidade),
             "sugestoes": motor.sugestoes(cur, id_unidade),
         }
+
+
+@router.get("/necessario")
+def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
+               ctx: Contexto = Depends(_ver)) -> dict:
+    """O que vai ser preciso para produzir tanto — sem produzir nada.
+
+    A folha que se leva para a bancada: quanto de cada insumo, quanto disso
+    existe no local de onde vai sair, e o que falta. Roda a MESMA conta da
+    produção — prever com outra regra seria prever outra coisa.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        return estoque.previsao_producao(cur, id_unidade, id_produto, quantidade, id_local)
+
+
+@router.get("/{id_agenda}")
+def obter(id_agenda: int, ctx: Contexto = Depends(_ver)) -> dict:
+    """Uma linha da agenda com tudo o que ela vai consumir."""
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT a.*, p.nome AS produto, p.codigo, p.um_estoque, l.nome AS local,
+                      u.nome AS criado_por_nome, pu.nome AS produzido_por_nome
+                 FROM producao_agenda a
+                 JOIN produtos p ON p.id = a.id_produto
+                 LEFT JOIN locais_estoque l ON l.id = a.id_local
+                 LEFT JOIN usuarios u ON u.id = a.criado_por
+                 LEFT JOIN usuarios pu ON pu.id = a.produzido_por
+                WHERE a.id = %s""",
+            (id_agenda,),
+        )
+        linha = cur.fetchone()
+        if not linha:
+            raise HTTPException(status_code=404, detail="Linha da agenda não encontrada")
+        linha = dict(linha)
+        # A previsão é sempre de AGORA: o estoque mudou desde que se agendou, e
+        # é o de agora que diz se dá para produzir.
+        linha["previsao"] = estoque.previsao_producao(
+            cur, linha["id_unidade"], linha["id_produto"], linha["quantidade"],
+            linha["id_local"],
+        )
+        return linha
 
 
 @router.post("", status_code=201)

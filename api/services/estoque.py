@@ -460,6 +460,125 @@ def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_or
     return {"saida": saida, "entrada": entrada}
 
 
+def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
+                      id_local: int | None = None) -> dict:
+    """O que uma produção VAI precisar, sem produzir nada.
+
+    É a folha que a cozinha leva para a bancada: para 22 massas, 4,4 KG de
+    farinha — e se tem 4,4 KG. Roda a MESMA conta da produção (rendimento,
+    conversão de embalagem, local de cada insumo) porque prever com outra regra
+    seria prever outra coisa.
+
+    ⚠️ Sub-ficha aparece como o PRODUTO dela, não explodida em ingredientes: é
+    isso que a produção consome de fato. Explodir aqui mostraria uma lista que
+    o razão nunca vai registrar.
+    """
+    from services import custos
+
+    cur.execute(
+        """SELECT f.id, f.versao, f.rendimento_qtd, f.rendimento_um, p.nome AS produto,
+                  p.codigo, p.um_estoque, p.id_local_padrao
+             FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
+            WHERE f.id_produto = %s AND f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL""",
+        (id_produto,),
+    )
+    ficha = cur.fetchone()
+    if not ficha:
+        raise HTTPException(status_code=400, detail="Este produto não tem ficha homologada.")
+
+    qtd = dec(quantidade)
+    rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
+    lotes = qtd / rendimento
+    ums = custos._carregar_ums(cur)
+    # O local de reserva se resolve como na PRODUÇÃO. Sem isto, o saldo era
+    # procurado num local nulo, nada casava e a folha dizia que faltava tudo.
+    if id_local is None:
+        id_local = local_padrao(cur, id_unidade)
+
+    cur.execute(
+        """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, fi.observacao,
+                  p.um_estoque, p.nome, p.codigo, p.id_local_padrao
+             FROM ficha_itens fi
+             LEFT JOIN produtos p ON p.id = fi.id_insumo
+            WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
+        (ficha["id"],),
+    )
+    itens = [dict(r) for r in cur.fetchall()]
+
+    linhas, custo_total, faltam = [], Decimal(0), 0
+    for item in itens:
+        if item["id_subficha"]:
+            cur.execute(
+                """SELECT p.id, p.nome, p.codigo, p.um_estoque, p.id_local_padrao
+                     FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
+                    WHERE f.id = %s""",
+                (item["id_subficha"],),
+            )
+            alvo = cur.fetchone()
+            if not alvo:
+                continue
+            id_alvo, nome, codigo = alvo["id"], alvo["nome"], alvo["codigo"]
+            um_destino, local_item = alvo["um_estoque"], alvo["id_local_padrao"]
+            eh_preparo = True
+        else:
+            id_alvo, nome, codigo = item["id_insumo"], item["nome"], item["codigo"]
+            um_destino, local_item = item["um_estoque"], item["id_local_padrao"]
+            eh_preparo = False
+
+        por_lote = dec(item["qtd_bruta"])
+        bruta = por_lote * lotes
+        convertida, como = custos.converter_para_estoque(
+            cur, bruta, id_alvo, item["um"], um_destino, ums)
+
+        onde = local_item or id_local
+        cur.execute(
+            """SELECT coalesce(sum(quantidade), 0) AS aqui,
+                      coalesce(sum(quantidade) FILTER (WHERE id_local = %s), 0) AS no_local,
+                      max(custo_medio) FILTER (WHERE quantidade > 0) AS custo
+                 FROM estoque_saldos
+                WHERE id_produto = %s AND id_unidade = %s""",
+            (onde, id_alvo, id_unidade),
+        )
+        saldo = cur.fetchone()
+        unitario, _origem = custos.custo_do_insumo(cur, id_alvo)
+        necessario = convertida if convertida is not None else None
+        custo_linha = (necessario * unitario) if (necessario and unitario) else None
+        if custo_linha:
+            custo_total += custo_linha
+        # Falta é sobre o LOCAL de onde a produção vai tirar — ter no depósito
+        # não ajuda quem está na bancada da cozinha.
+        falta = (necessario - dec(saldo["no_local"])) if necessario is not None else None
+        if falta is not None and falta > 0:
+            faltam += 1
+
+        linhas.append({
+            "id_produto": id_alvo, "produto": nome, "codigo": codigo,
+            "preparo": eh_preparo,
+            "um_ficha": item["um"], "um_estoque": um_destino,
+            "por_unidade": float(por_lote / rendimento),
+            "na_ficha": float(bruta),
+            "necessario": float(necessario) if necessario is not None else None,
+            "conversao": como,
+            "saldo_no_local": float(saldo["no_local"]),
+            "saldo_total": float(saldo["aqui"]),
+            "falta": float(falta) if falta is not None and falta > 0 else 0.0,
+            "custo_unitario": float(unitario) if unitario is not None else None,
+            "custo": float(custo_linha) if custo_linha is not None else None,
+            "observacao": item["observacao"],
+        })
+
+    return {
+        "id_ficha": ficha["id"], "versao": ficha["versao"], "id_produto": id_produto,
+        "produto": ficha["produto"], "codigo": ficha["codigo"],
+        "um_estoque": ficha["um_estoque"],
+        "quantidade": float(qtd), "rendimento_qtd": float(rendimento),
+        "rendimento_um": ficha["rendimento_um"], "lotes": float(lotes),
+        "itens": linhas, "itens_faltando": faltam,
+        "custo_total": float(custo_total),
+        "custo_unitario": float(custo_total / qtd) if qtd else 0.0,
+    }
+
+
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
              id_usuario: int, observacao: str | None = None) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque.

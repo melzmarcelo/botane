@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -322,7 +323,15 @@ export default function AgendaProducao({
                       className="flex flex-wrap items-center justify-between gap-3 bg-superficie py-3"
                     >
                       <span className="min-w-0">
-                        <span className="font-medium">{l.produto}</span>
+                        {/* O nome abre a folha da produção: quanto de cada
+                            insumo, quanto existe e o que falta. Quem vai para a
+                            bancada precisa disso antes de ligar o forno. */}
+                        <Link
+                          href={`/producao/${l.id}`}
+                          className="font-medium hover:text-erva hover:underline"
+                        >
+                          {l.produto}
+                        </Link>
                         <span className="mono ml-2 text-[13px] text-erva">
                           {qtd(l.quantidade)} {l.um_estoque}
                         </span>

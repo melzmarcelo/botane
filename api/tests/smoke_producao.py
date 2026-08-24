@@ -160,6 +160,37 @@ checar("mas continua no histórico, para conferir plano contra realizado",
        any(l["id"] == id_linha for l in historico["linhas"]),
        [(l["id"], l["status"]) for l in historico["linhas"]])
 
+print("\n3b. a folha da produção: o que vai ser preciso")
+st, r = chamar("POST", "/producao-agenda",
+               {"id_produto": massa, "data_prevista": str(amanha), "quantidade": 10},
+               token=token)
+linha_folha = r.get("id")
+st, det = chamar("GET", f"/producao-agenda/{linha_folha}", token=token)
+checar("a linha traz a previsão junto", st == 200 and "previsao" in det, st)
+prev = det.get("previsao") or {}
+item = (prev.get("itens") or [{}])[0]
+checar("com o insumo da ficha", item.get("id_produto") == farinha, item)
+checar("por unidade: 0,2 KG", perto(item.get("por_unidade"), 0.2), item.get("por_unidade"))
+checar("no total: 2 KG para 10 massas", perto(item.get("necessario"), 2),
+       item.get("necessario"))
+checar("dizendo quanto existe no local", item.get("saldo_no_local") is not None, item)
+checar("e que não falta nada", prev.get("itens_faltando") == 0, prev.get("itens_faltando"))
+checar("com o custo da produção (2 × 5,00)", perto(prev.get("custo_total"), 10.00, 0.01),
+       prev.get("custo_total"))
+
+# A previsão avulsa é a mesma conta, para simular outra quantidade.
+st, prev2 = chamar("GET", f"/producao-agenda/necessario?id_produto={massa}&quantidade=20",
+                   token=token)
+checar("dobrar a quantidade dobra o necessário",
+       perto((prev2.get("itens") or [{}])[0].get("necessario"), 4),
+       (prev2.get("itens") or [{}])[0].get("necessario"))
+st, prev3 = chamar("GET", f"/producao-agenda/necessario?id_produto={massa}&quantidade=10000",
+                   token=token)
+checar("pedir mais do que existe acusa a falta", prev3.get("itens_faltando") == 1, prev3)
+checar("dizendo QUANTO falta", (prev3.get("itens") or [{}])[0].get("falta", 0) > 0,
+       (prev3.get("itens") or [{}])[0].get("falta"))
+chamar("DELETE", f"/producao-agenda/{linha_folha}", token=token)
+
 print("\n4. o café passado: a venda produz e baixa")
 st, antes = chamar("GET", f"/estoque/saldos?id_produto={po}", token=token)
 po_antes = float(antes[0]["quantidade"])

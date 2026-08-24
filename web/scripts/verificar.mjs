@@ -609,6 +609,39 @@ try {
     agenda.agendaPrimeiro && agenda.naoMexe, agenda);
   await foto(p, "19b-agenda-producao");
 
+  // O nome da linha abre a FOLHA da produção: quanto de cada insumo, quanto
+  // existe no local e o que falta — antes de ligar o forno.
+  const alvoFolha = await p.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((x) =>
+      /\/producao\/\d+$/.test(x.getAttribute("href") ?? ""));
+    return a ? a.getAttribute("href") : null;
+  });
+  // ⚠️ Navegar de verdade, não `a.click()` de dentro da página: o clique
+  // sintético saía sem a navegação do Next e a checagem media a tela errada.
+  if (alvoFolha) await irPara(p, `${WEB}${alvoFolha}`);
+  const abriuFolha = alvoFolha && /\/producao\/\d+$/.test(p.url());
+  checar("a linha da agenda abre a folha da produção", !!abriuFolha, [alvoFolha, p.url()]);
+  if (abriuFolha) {
+    await new Promise((r) => setTimeout(r, 1600));
+    const folha = await p.evaluate(() => {
+      const cab = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
+      return {
+        colunas: ["Insumo", "Por unidade", "Total", "Tem no local"].every((c) =>
+          cab.includes(c)),
+        rende: /A receita rende/i.test(document.body.innerText),
+        falta: /tem tudo|item\(ns\) faltando/i.test(document.body.innerText),
+      };
+    });
+    checar("com quantidade por unidade e total", folha.colunas, folha);
+    checar("dizendo quantas vezes a receita é feita", folha.rende, folha);
+    checar("e se tem tudo ou o que falta", folha.falta, folha);
+    await foto(p, "19d-folha-producao");
+    // Volta para a agenda: as checagens seguintes são de lá, e ficar na folha
+    // faria a próxima medir o campo errado (aqui o rótulo é "Quantidade").
+    await irPara(p, `${WEB}/producao`);
+    await new Promise((r) => setTimeout(r, 1300));
+  }
+
   // Produzir uma linha da agenda: quantidade à vista e confirmação do sistema,
   // não a caixa do navegador. `window.prompt` trava o Chrome do teste e, no uso
   // real, é fonte de sistema com botão em inglês.

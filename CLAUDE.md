@@ -223,6 +223,14 @@ para arquivo nenhum — gravar direto aqui.
   tela inteira é a conferência (itens, custos e destinos à vista) e um diálogo no caminho
   comum treina a clicar sem ler. Cancelar linha da agenda também não: é plano, não é razão.
   Cada diálogo diz **o que a ação faz**, não só "tem certeza".
+- **A folha da produção** (`/producao/[id]`, `estoque.previsao_producao`): clicar no nome da
+  linha abre o que a produção VAI precisar — por unidade, no total, o que existe no local de
+  onde vai sair e o que falta. Roda a MESMA conta da produção (rendimento, conversão de
+  embalagem, local de cada insumo); prever com outra regra seria prever outra coisa.
+  ⚠️ A previsão é sempre de AGORA, nunca a de quando se agendou. ⚠️ Sub-ficha aparece como o
+  PRODUTO dela, não explodida — é isso que a produção consome de fato.
+  ⚠️ Resolver `id_local` como a produção resolve (cai no principal): sem isso o saldo era
+  procurado num local nulo e a folha dizia que faltava tudo.
 - ⚠️ **A agenda é lista de TAREFA, não histórico**: linha produzida some dela. O que já foi
   feito aparece em "Produções recentes" — misturar faria a agenda crescer para sempre e
   esconder o que falta no meio do que já foi. `?status=PRODUZIDA` traz o histórico, para
