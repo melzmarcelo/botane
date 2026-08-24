@@ -55,7 +55,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         raise HTTPException(status_code=400, detail="Nenhuma venda na importação.")
 
     importadas, repetidas, itens_total, sem_vinculo, sem_custo = 0, 0, 0, 0, 0
-    produzidos_na_hora = 0
+    produzidos_na_hora, baixados = 0, 0
     custos_cache: dict[int, tuple] = {}
 
     with get_cursor() as cur:
@@ -120,29 +120,46 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 )
                 itens_total += 1
 
-                # O que é feito NA HORA nasce e morre na venda: sem isto, a
-                # casa venderia mil cafés e o pó continuaria inteiro no razão.
-                # Produz e baixa no mesmo lançamento — o saldo volta a zero,
-                # que é a verdade: o produto não fica parado em lugar nenhum.
+                # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
+                # continuava na prateleira do sistema: o CMV real ficava
+                # subestimado e a primeira contagem cobria o buraco inteiro
+                # como "ajuste de inventário", que é onde a diferença some.
+                #
+                # O que é feito NA HORA nasce e morre aqui: produz e baixa no
+                # mesmo lançamento, e o saldo volta a zero. O que é PARA
+                # ESTOQUE só baixa — foi produzido antes.
                 if id_produto:
-                    feito = agenda.producao_da_venda(
-                        cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
-                        documento=venda.documento)
-                    if feito:
+                    cur.execute(
+                        """SELECT controla_estoque, id_local_padrao FROM produtos
+                            WHERE id = %s""",
+                        (id_produto,),
+                    )
+                    p_venda = cur.fetchone() or {}
+                    if p_venda.get("controla_estoque"):
+                        feito = agenda.producao_da_venda(
+                            cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
+                            documento=venda.documento)
+                        if feito:
+                            produzidos_na_hora += 1
                         motor_estoque.lancar(
                             cur, id_unidade=id_unidade,
-                            id_local=feito["id_local"], id_produto=id_produto,
+                            id_local=(feito or {}).get("id_local")
+                                     or p_venda.get("id_local_padrao"),
+                            id_produto=id_produto,
                             tipo="SAIDA_VENDA", quantidade=item.quantidade,
+                            data_movimento=venda.data,
                             origem_tipo="VENDA", origem_id=id_venda,
                             documento=venda.documento, id_usuario=ctx.id_usuario,
-                            observacao="Produzido e vendido na hora",
+                            observacao=("Produzido e vendido na hora" if feito
+                                        else "Baixa da venda"),
                         )
-                        produzidos_na_hora += 1
+                        baixados += 1
 
         auditoria.registrar(cur, ctx.id_usuario, "vendas", None, "importar",
                             depois={"vendas": importadas, "itens": itens_total,
                                     "repetidas": repetidas, "sem_vinculo": sem_vinculo,
-                                    "produzidos_na_hora": produzidos_na_hora},
+                                    "produzidos_na_hora": produzidos_na_hora,
+                                    "baixados": baixados},
                             id_unidade=id_unidade)
 
     return {
@@ -152,19 +169,50 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         "itens_sem_vinculo": sem_vinculo,
         "itens_sem_custo": sem_custo,
         "produzidos_na_hora": produzidos_na_hora,
+        "itens_baixados": baixados,
         "message": f"{importadas} venda(s) importada(s)"
         + (f", {repetidas} já existiam" if repetidas else "")
-        + (f", {produzidos_na_hora} produzido(s) na hora" if produzidos_na_hora else ""),
+        + (f", {baixados} item(ns) baixado(s) do estoque" if baixados else "")
+        + (f" ({produzidos_na_hora} produzido[s] na hora)" if produzidos_na_hora else ""),
     }
 
 
 @router.delete("/{id_venda}")
 def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
-    """Cancela a venda para o CMV — não apaga, para o histórico continuar fiel."""
+    """Cancela a venda para o CMV — não apaga, para o histórico continuar fiel.
+
+    A baixa de estoque que a venda causou volta como ESTORNO. Cancelar sem
+    devolver deixaria o produto vendido fora da prateleira e fora do caixa ao
+    mesmo tempo — a diferença apareceria na contagem, sem nome.
+    """
     with get_cursor() as cur:
+        cur.execute("SELECT cancelada FROM vendas WHERE id = %s", (id_venda,))
+        venda = cur.fetchone()
+        if not venda:
+            raise HTTPException(status_code=404, detail="Venda não encontrada")
+        if venda["cancelada"]:
+            raise HTTPException(status_code=400, detail="Esta venda já está cancelada.")
+
+        cur.execute(
+            """SELECT m.id FROM estoque_movimentos m
+                WHERE m.origem_tipo = 'VENDA' AND m.origem_id = %s
+                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                   WHERE e.id_estorno_de = m.id)
+                ORDER BY m.id DESC""",
+            (id_venda,),
+        )
+        movimentos = [r["id"] for r in cur.fetchall()]
+        for id_movimento in movimentos:
+            motor_estoque.estornar(cur, id_movimento, ctx.id_usuario,
+                                   f"Cancelamento da venda #{id_venda}")
+
         cur.execute("UPDATE vendas SET cancelada = true WHERE id = %s", (id_venda,))
-        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "cancelar")
-    return {"message": "Venda cancelada"}
+        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "cancelar",
+                            depois={"movimentos_estornados": len(movimentos)})
+    return {"estornados": len(movimentos),
+            "message": "Venda cancelada"
+                       + (f" — {len(movimentos)} movimento(s) devolvido(s) ao estoque"
+                          if movimentos else "")}
 
 
 @router.get("/sem-vinculo")

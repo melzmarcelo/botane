@@ -37,7 +37,7 @@ from database import get_cursor, init_pool  # noqa: E402
 OPERACAO = [
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",
-    "inventario_itens", "inventarios", "producoes",
+    "inventario_itens", "inventarios", "producao_agenda", "producoes",
     # compras
     "nota_itens", "notas_entrada", "codigos_externos", "sync_log",
     # vendas e apuração

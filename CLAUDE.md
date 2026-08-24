@@ -260,6 +260,17 @@ para arquivo nenhum — gravar direto aqui.
   perda, transferência, inventário, venda e o fechamento das identidades). 57 checagens.
   ⚠️ Mede **delta** da apuração e soma só os produtos do próprio cenário — a base pode ter
   outra coisa.
+- ⚠️ **VENDER É SAIR DO ESTOQUE** (24/08/2026): a importação de venda lança `SAIDA_VENDA`
+  para todo produto que `controla_estoque` — não só para o `NA_HORA`. Antes, o que era
+  PARA_ESTOQUE (ou revenda) continuava na prateleira do sistema depois de vendido: o **CMV
+  real saía subestimado** e a primeira contagem cobria o buraco inteiro como "ajuste de
+  inventário", que é onde a diferença some sem nome. Cancelar a venda **estorna** os
+  movimentos — cancelar sem devolver deixaria o produto fora da prateleira e fora do caixa.
+- **`tests/cenario_semana.py`**: a operação de uma semana com um usuário por papel (gerente,
+  conferente, cozinha, salão, contador) — quem pode o quê, e a conta fechando no fim. Com a
+  baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
+  30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
+  produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
 - **O custo da ficha é congelado no item de venda** (`venda_itens.custo_ficha_unitario`):
   corrigir receita hoje não reescreve o CMV teórico do mês passado.
 - Compras contam só `ENTRADA_NF` e `ENTRADA_MANUAL`; produção e transferência são

@@ -220,8 +220,14 @@ chamar("POST", "/vendas/importar", {"vendas": [{
     "itens": [{"id_produto": massa, "quantidade": 2, "valor_unitario": 12.00}]}]},
     token=token)
 st, depois = chamar("GET", f"/estoque/saldos?id_produto={massa}", token=token)
-checar("vender massa NÃO dispara produção (ela sai do que já existe)",
-       perto(depois[0]["quantidade"], antes[0]["quantidade"]), (antes, depois))
+# Vender massa BAIXA o estoque (ela existe na prateleira), mas NÃO produz nada:
+# é o contrário do café, que nasce na venda. As duas metades importam.
+checar("vender massa baixa o estoque, sem produzir",
+       perto(depois[0]["quantidade"], float(antes[0]["quantidade"]) - 2),
+       (antes[0]["quantidade"], depois[0]["quantidade"]))
+st, mov_massa = chamar("GET", f"/estoque/movimentos?id_produto={massa}&tipo=ENTRADA_PRODUCAO",
+                       token=token)
+checar("e a venda não gerou produção nenhuma", len(mov_massa) == 1, len(mov_massa))
 
 print("\n5. o mínimo vira agenda")
 st, r = chamar("POST", "/estoque/saidas",
@@ -233,7 +239,8 @@ sugerida = next((s for s in agenda["sugestoes"] if s["id_produto"] == massa), No
 checar("a massa aparece como sugestão", sugerida is not None,
        [s["produto"] for s in agenda["sugestoes"]])
 if sugerida:
-    checar("sugerindo repor até o MÁXIMO (30 − 7 = 23)", perto(sugerida["sugerido"], 23),
+    # 22 produzidas − 2 vendidas − 15 consumidas = 5; o máximo é 30.
+    checar("sugerindo repor até o MÁXIMO (30 − 5 = 25)", perto(sugerida["sugerido"], 25),
            sugerida)
 
 st, alertas = chamar("GET", "/alertas", token=token)

@@ -149,13 +149,16 @@ checar("apuração responde", st == 200, a)
 compras = float(a["compras"]) - float(base["compras"])
 checar("compras do período subiram 300,00", perto(compras, 300), compras)
 
-# Estoque: 30 kg comprados − 12 kg de produção − 6 kg de perda = 12 kg (120,00)
-# + 20 pratos a 6,00 (120,00) − 0 vendidos do estoque = o produzido continua lá.
+# Estoque: 30 kg comprados − 12 kg de produção − 6 kg de perda = 12 kg (120,00).
+# Os 20 pratos produzidos (120,00) foram TODOS vendidos, e VENDER É SAIR DO
+# ESTOQUE: sobra só o insumo. Antes desta regra o prato vendido continuava na
+# prateleira do sistema e o CMV real saía subestimado.
 delta_final = float(a["estoque_final"]) - float(base["estoque_final"])
-checar("estoque final subiu 240,00 (12 kg + 20 pratos)", perto(delta_final, 240), delta_final)
+checar("estoque final subiu 120,00 (só o insumo; os pratos foram vendidos)",
+       perto(delta_final, 120), delta_final)
 
 delta_real = float(a["cmv_real"]) - float(base["cmv_real"])
-checar("CMV real do cenário = 60,00 (300 − 240)", perto(delta_real, 60), delta_real)
+checar("CMV real do cenário = 180,00 (300 − 120)", perto(delta_real, 180), delta_real)
 
 delta_teorico = float(a["cmv_teorico"]) - float(base["cmv_teorico"])
 checar("CMV teórico = 120,00 (20 × 6,00 congelado)", perto(delta_teorico, 120), delta_teorico)
