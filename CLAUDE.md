@@ -125,15 +125,11 @@ para arquivo nenhum — gravar direto aqui.
 - ⚠️ **`.campo` tem `font-size: 15px` e vence a utilitária** — abaixo de 16px o Safari do
   iPhone dá **zoom ao focar** e a tela salta a cada campo. Use `.campo-toque` (16px + alvo
   maior) em tela de uso no aparelho. `scripts/celular.mjs` fotografa e checa corte lateral.
-- ⚠️ **"Tabelas de apoio" não era o nome de nada que se procura** (21/08/2026): quem precisava
-  cadastrar o local de estoque procurava "local de estoque" no menu e não achava — as quatro
-  tabelas estavam atrás de um rótulo genérico. Agora cada uma tem entrada própria apontando
-  para `/cadastros?aba=…`, e a tela abre na aba pedida. ⚠️ O item de menu ativo compara
-  **caminho + query**, e `useSearchParams` obriga uma fronteira de **Suspense**: ela envolve só
-  o `MenuLateral`. Envolvendo a casca inteira, toda tela ficava em branco até o roteador
-  resolver a query — e o `next build` recusa a pré-renderização sem a fronteira.
-  ⚠️ A gaveta do celular fecha por mudança de CAMINHO; como as quatro abas compartilham o
-  mesmo, os links do menu também chamam `aoNavegar`.
+- **As quatro tabelas de apoio ficam num item de menu só** — decisão do dono, 24/08/2026,
+  depois de experimentar as quatro separadas. ⚠️ Como "Tabelas de apoio" não é o nome de nada
+  que alguém procura, **a tela diz o que tem dentro** logo abaixo do título, e cada aba tem
+  endereço próprio (`/cadastros?aba=locais`) para guardar e voltar direto.
+  ⚠️ O item de menu aceita **lista** de chaves — Tabelas de apoio serve a quatro permissões.
 - ⚠️ **`innerText` não enxerga valor de campo.** Depois que a escolha virou input, "o nome
   aparece na tela" ficou falso no teste e verdadeiro no monitor — `verificar.mjs` tem
   `textoVisivel()`, que junta `innerText` com o valor dos inputs.

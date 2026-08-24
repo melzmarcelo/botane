@@ -111,11 +111,17 @@ export default function PaginaCadastros() {
       <header>
         <p className="rotulo">Cadastros</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
-          {atual.nome}
+          Tabelas de apoio
         </h1>
-        <p className="mt-1 max-w-[64ch] text-suave">
-          Uma das quatro listas que o cadastro de produto usa. Mexer aqui muda como o estoque e
-          o CMV vão se organizar depois — vale acertar antes de cadastrar o primeiro insumo.
+        {/* O título não diz o que tem dentro, e "tabelas de apoio" não é o nome
+            de nada que alguém procura: quem precisa do local de estoque procura
+            "local de estoque". Por isso a lista vem escrita aqui. */}
+        <p className="mt-1 max-w-[68ch] text-suave">
+          <b className="font-semibold text-tinta">
+            Setores, locais de estoque, categorias e unidades de medida
+          </b>{" "}
+          — as quatro listas que o cadastro de produto usa. Mexer aqui muda como o estoque e o
+          CMV vão se organizar depois: vale acertar antes de cadastrar o primeiro insumo.
         </p>
       </header>
 

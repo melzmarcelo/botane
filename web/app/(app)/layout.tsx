@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
@@ -29,20 +29,14 @@ const MENU: {
       { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
       { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
       { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
-      // "Tabelas de apoio" não é o nome de nada que se procura. Quem precisa
-      // cadastrar o local de estoque procura "local de estoque" — e não achava,
-      // porque as quatro tabelas estavam atrás de um rótulo genérico.
-      { href: "/cadastros?aba=locais", nome: "Locais de estoque", chave: "cadastros.locais" },
-      { href: "/cadastros?aba=setores", nome: "Setores", chave: "cadastros.setores" },
+      // As quatro num item só. Quem procura "local de estoque" no menu não o
+      // encontra pelo nome — por isso a tela DIZ o que tem dentro, logo abaixo
+      // do título, e cada aba tem endereço próprio (`?aba=locais`).
       {
-        href: "/cadastros?aba=categorias",
-        nome: "Categorias",
-        chave: "cadastros.categorias",
-      },
-      {
-        href: "/cadastros?aba=unidades",
-        nome: "Unidades de medida",
-        chave: "cadastros.unidades_medida",
+        href: "/cadastros",
+        nome: "Tabelas de apoio",
+        chave: ["cadastros.setores", "cadastros.locais", "cadastros.categorias",
+                "cadastros.unidades_medida"],
       },
     ],
   },
@@ -177,18 +171,13 @@ function Casca({ children }: { children: React.ReactNode }) {
   const loja = eu.unidades[0];
 
   const navegacao = (
-    // `useSearchParams` obriga uma fronteira de Suspense. Ela envolve SÓ o
-    // menu: envolvendo a casca inteira, toda tela ficava em branco até o
-    // roteador resolver a query — meio segundo de nada em cada navegação.
-    <Suspense fallback={<nav className="px-3 pb-5" />}>
-      <MenuLateral
-        caminho={caminho}
-        pode={pode}
-        abertos={abertos}
-        alternarGrupo={alternarGrupo}
-        aoNavegar={() => setAberto(false)}
-      />
-    </Suspense>
+    <MenuLateral
+      caminho={caminho}
+      pode={pode}
+      abertos={abertos}
+      alternarGrupo={alternarGrupo}
+      aoNavegar={() => setAberto(false)}
+    />
   );
 
   // Trocar senha e sair são AÇÕES: em maiúsculas miúdas pareciam legenda, e
@@ -314,14 +303,7 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * O menu, num componente à parte porque ele lê a QUERY.
- *
- * As quatro tabelas de apoio moram na mesma tela e se distinguem por `?aba=`;
- * sem olhar a query o "você está aqui" apontaria as quatro ao mesmo tempo.
- * `useSearchParams` obriga uma fronteira de Suspense — daí o componente: assim
- * ela envolve só o menu, e não a tela inteira.
- */
+/** O menu, num componente à parte — a casca já é grande o bastante. */
 function MenuLateral({
   caminho,
   pode,
@@ -335,9 +317,6 @@ function MenuLateral({
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
 }) {
-  const busca = useSearchParams();
-  const enderecoAtual = busca?.toString() ? `${caminho}?${busca}` : caminho;
-
   return (
     <nav className="px-3 pb-5">
       {MENU.map((g) => {
@@ -345,7 +324,7 @@ function MenuLateral({
           (i) => !i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave)),
         );
         if (!itens.length) return null;
-        const temAtivo = itens.some((i) => i.href === enderecoAtual);
+        const temAtivo = itens.some((i) => i.href === caminho);
         // O grupo da tela aberta começa expandido — mas é só o padrão: se a
         // pessoa o recolher, ele fica recolhido, inclusive nela. Quem quer o
         // menu enxuto não deve ser obrigado a manter um grupo aberto. A pista
@@ -375,7 +354,7 @@ function MenuLateral({
             </button>
             <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
               {itens.map((i) => {
-                const ativo = enderecoAtual === i.href;
+                const ativo = caminho === i.href;
                 return (
                   <li key={i.href}>
                     <Link

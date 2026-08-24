@@ -347,26 +347,25 @@ try {
     await api("DELETE", `/produtos/${idProduto}`, null, token);
   }
 
-  // "Tabelas de apoio" não é o nome de nada que se procura: quem precisa do
-  // local de estoque procura "local de estoque" no menu.
+  // As quatro tabelas num item só. "Tabelas de apoio" não é o nome de nada que
+  // se procura, então a TELA diz o que tem dentro.
   const menuCadastros = await p.evaluate(() =>
     [...document.querySelectorAll("nav a")].map((a) => a.textContent?.trim()));
-  checar("o menu nomeia cada tabela de apoio",
-    ["Locais de estoque", "Setores", "Categorias", "Unidades de medida"].every((n) =>
-      menuCadastros.includes(n)), menuCadastros);
-  const semRotuloVago = !menuCadastros.includes("Tabelas de apoio");
-  checar("e não esconde nada atrás de um rótulo vago", semRotuloVago, menuCadastros);
+  checar("as tabelas de apoio ficam num item só", menuCadastros.includes("Tabelas de apoio"),
+    menuCadastros);
 
-  // Cada uma abre direto na sua aba, e o endereço vale por si.
+  // O endereço de cada aba vale por si — dá para guardar e voltar direto.
   await irPara(p, `${WEB}/cadastros?aba=locais`);
   await new Promise((r) => setTimeout(r, 1200));
   const abaLocais = await p.evaluate(() => ({
     titulo: document.querySelector("h1")?.textContent?.trim(),
+    diz: /locais de estoque/i.test(document.body.innerText),
     cartao: [...document.querySelectorAll("h2")].map((h) => h.textContent?.trim()),
   }));
   checar("o endereço abre direto na aba pedida",
-    abaLocais.titulo === "Locais de estoque"
-      && abaLocais.cartao.includes("Locais de estoque"), abaLocais);
+    abaLocais.cartao.includes("Locais de estoque"), abaLocais);
+  checar("e a tela nomeia o que tem dentro",
+    abaLocais.titulo === "Tabelas de apoio" && abaLocais.diz, abaLocais);
 
   // Nas tabelas de apoio o formulário fica ACIMA da lista: cadastrar é o que se
   // vai fazer ali, e rolar a lista inteira para achar o campo é atrito bobo.
