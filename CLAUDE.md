@@ -111,6 +111,12 @@ para arquivo nenhum — gravar direto aqui.
   por padrão: quem conta conta caixa, e converter de cabeça é onde o erro entra. `qtd_contada`
   segue na unidade de ESTOQUE (é ela que o fechamento compara); `qtd_informada`/`um_informada`
   guardam o que foi digitado, senão ninguém sabe depois que 36 eram 3 caixas de 12.
+- ⚠️ **Seletor com uma opção só, desabilitado, lê como travado.** O de unidade da contagem
+  ficava assim para produto sem embalagem cadastrada. Agora ele oferece as três origens que
+  convertem de verdade — unidade de estoque, embalagens do produto e unidades da **mesma
+  grandeza** (KG↔G sem cadastro nenhum) — e, ao lado, o caminho "contar em outra embalagem?"
+  para o cadastro do produto. ⚠️ Dentro de UNIDADE, siglas com o mesmo fator base ficam de
+  fora: CX e PCT não se convertem entre si (é a mesma regra de `custos.converter`).
 - ⚠️ **`.campo` tem `font-size: 15px` e vence a utilitária** — abaixo de 16px o Safari do
   iPhone dá **zoom ao focar** e a tela salta a cada campo. Use `.campo-toque` (16px + alvo
   maior) em tela de uso no aparelho. `scripts/celular.mjs` fotografa e checa corte lateral.

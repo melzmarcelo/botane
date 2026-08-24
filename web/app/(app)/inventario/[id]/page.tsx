@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { reais } from "@/lib/cadastros";
+import { reais, UnidadeMedida } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
@@ -76,6 +76,7 @@ export default function PaginaContagem() {
   const [rascunho, setRascunho] = useState<Record<number, { qtd: string; um: string }>>({});
   const [gravando, setGravando] = useState<number | null>(null);
   const [fechando, setFechando] = useState(false);
+  const [ums, setUms] = useState<UnidadeMedida[]>([]);
 
   const carregar = useCallback(async () => {
     try {
@@ -87,6 +88,7 @@ export default function PaginaContagem() {
 
   useEffect(() => {
     void carregar();
+    api.get<UnidadeMedida[]>("/unidades-medida").then(setUms).catch(() => {});
   }, [carregar]);
 
   const aberto = inv?.status === "ABERTO";
@@ -104,15 +106,44 @@ export default function PaginaContagem() {
   const unidadeDe = (i: Item) =>
     rascunho[i.id_produto]?.um ?? i.um_informada ?? i.um_estoque ?? "";
 
-  /** As unidades em que este produto pode ser contado, sem repetir a de estoque. */
+  /**
+   * Em que unidades este produto pode ser contado.
+   *
+   * Três origens, e todas convertem de verdade:
+   *
+   * 1. a unidade de ESTOQUE, que é o padrão;
+   * 2. as embalagens do cadastro do produto (a caixa desta água tem 12);
+   * 3. as unidades da MESMA GRANDEZA — quem estoca em KG pode contar em G, e
+   *    isso não depende de cadastro nenhum.
+   *
+   * O que fica de fora é embalagem que ninguém cadastrou: oferecer CX para um
+   * produto sem caixa definida seria oferecer um erro.
+   */
   const opcoesDe = (i: Item) => {
+    const estoque = (i.um_estoque ?? "").toUpperCase();
+    const grandeza = ums.find((u) => u.sigla === estoque)?.grandeza;
+    const base = ums.find((u) => u.sigla === estoque)?.fator_base;
+
     const vistas = new Set<string>();
     const lista: Unidade[] = [];
-    for (const u of [{ um: i.um_estoque ?? "", fator: 1 }, ...(i.unidades ?? [])]) {
-      const sigla = (u.um ?? "").toUpperCase();
-      if (!sigla || vistas.has(sigla)) continue;
-      vistas.add(sigla);
-      lista.push({ um: sigla, fator: Number(u.fator) });
+    const juntar = (sigla: string, fator: number) => {
+      const s = (sigla ?? "").toUpperCase();
+      if (!s || vistas.has(s) || !Number.isFinite(fator) || fator <= 0) return;
+      vistas.add(s);
+      lista.push({ um: s, fator });
+    };
+
+    juntar(estoque, 1);
+    for (const u of i.unidades ?? []) juntar(u.um, Number(u.fator));
+    if (grandeza && base) {
+      for (const u of ums) {
+        if (u.grandeza !== grandeza) continue;
+        // Dentro de UNIDADE, caixa/fardo/pacote têm o mesmo fator base e NÃO
+        // se convertem entre si: quantas cabem depende do produto. Dúzia entra
+        // porque doze é doze em qualquer um.
+        if (grandeza === "UNIDADE" && Number(u.fator_base) === Number(base)) continue;
+        juntar(u.sigla, Number(u.fator_base) / Number(base));
+      }
     }
     return lista;
   };
@@ -271,6 +302,7 @@ export default function PaginaContagem() {
               key={i.id_produto}
               item={i}
               aberto={!!aberto}
+              podeCadastrar={pode("cadastros.produtos")}
               gravando={gravando === i.id_produto}
               valor={valorDe(i)}
               unidade={unidadeDe(i)}
@@ -312,6 +344,7 @@ export default function PaginaContagem() {
 function LinhaContagem({
   item,
   aberto,
+  podeCadastrar,
   gravando,
   valor,
   unidade,
@@ -321,6 +354,7 @@ function LinhaContagem({
 }: {
   item: Item;
   aberto: boolean;
+  podeCadastrar: boolean;
   gravando: boolean;
   valor: string;
   unidade: string;
@@ -386,7 +420,7 @@ function LinhaContagem({
           <span className="rotulo">Unidade</span>
           <select
             className="campo campo-toque mt-1.5"
-            disabled={!aberto || opcoes.length < 2}
+            disabled={!aberto}
             value={unidade}
             onChange={(e) => {
               aoDigitar(valor, e.target.value);
@@ -400,15 +434,28 @@ function LinhaContagem({
             ))}
           </select>
         </label>
-        <p className="min-w-0 flex-1 pb-2.5 text-[13px] text-suave">
-          {gravando
-            ? "gravando…"
-            : emEstoque
-              ? `= ${qtd(emEstoque)} ${item.um_estoque ?? ""}`
-              : item.contado_por
-                ? `contado por ${item.contado_por}`
-                : ""}
-        </p>
+        <div className="min-w-0 flex-1 pb-2.5 text-[13px] text-suave">
+          <p>
+            {gravando
+              ? "gravando…"
+              : emEstoque
+                ? `= ${qtd(emEstoque)} ${item.um_estoque ?? ""}`
+                : item.contado_por
+                  ? `contado por ${item.contado_por}`
+                  : ""}
+          </p>
+          {/* A lista só traz o que converte de verdade. Quando a embalagem da
+              mão não está lá, o caminho é o cadastro do produto — dizer isso
+              aqui evita a pessoa achar que o seletor está travado. */}
+          {aberto && podeCadastrar && (
+            <Link
+              href={`/produtos/${item.id_produto}`}
+              className="underline underline-offset-2 hover:text-erva"
+            >
+              contar em outra embalagem?
+            </Link>
+          )}
+        </div>
       </div>
     </li>
   );

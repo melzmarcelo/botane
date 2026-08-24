@@ -541,6 +541,25 @@ try {
     telaContagem);
   checar("e campo grande o bastante para o celular não dar zoom",
     telaContagem.tamanhoFonte >= 16, telaContagem.tamanhoFonte);
+  // O seletor de unidade não pode parecer travado: quem estoca em KG conta em
+  // G sem cadastrar nada, e quem precisa de caixa tem de achar o caminho.
+  const seletorUnidade = await p.evaluate(() => {
+    const s = [...document.querySelectorAll("select")].find(
+      (x) => x.closest("label")?.textContent?.includes("Unidade"));
+    return s
+      ? {
+          desabilitado: s.disabled,
+          opcoes: [...s.options].map((o) => o.value),
+          caminho: !!document.body.innerText.match(/contar em outra embalagem/i),
+        }
+      : null;
+  });
+  checar("o seletor de unidade não fica travado",
+    seletorUnidade && seletorUnidade.desabilitado === false, seletorUnidade);
+  checar("e traz as unidades da mesma grandeza, sem cadastro nenhum",
+    (seletorUnidade?.opcoes?.length ?? 0) > 1, seletorUnidade?.opcoes);
+  checar("com o caminho para cadastrar outra embalagem", seletorUnidade?.caminho === true,
+    seletorUnidade);
   await foto(p, "20c-contagem");
 
   // Digitar grava sozinho: contagem que só existe na tela até um "salvar tudo"
