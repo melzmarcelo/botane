@@ -52,6 +52,14 @@ def chamar(metodo, caminho, corpo=None, token=None):
             return e.code, {"detail": bruto.decode(errors="replace")}
 
 
+def baixar_texto(caminho, token):
+    """Baixa um CSV como texto — o `chamar` daqui só entende JSON."""
+    req = urllib.request.Request(BASE + caminho)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return r.read().decode("utf-8", errors="replace")
+
+
 def checar(nome, condicao, extra=""):
     global ok
     if condicao:
@@ -339,6 +347,37 @@ checar("o ajuste está no razão, com nome",
        any(m["tipo"] == "AJUSTE_INVENTARIO_SAIDA" for m in mov))
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=token)
 checar("não fecha duas vezes", st == 400, st)
+
+print("8b. contagem cega")
+# Ver o saldo esperado transforma a contagem em conferência: a pessoa lê 12,
+# olha a prateleira e escreve 12. Na cega o esperado não SAI DO SERVIDOR —
+# esconder só na tela deixaria o número no JSON e na folha impressa.
+st, cega = chamar("POST", "/inventarios",
+                  {"id_local": principal["id"], "produtos": [cafe], "cega": True}, token=token)
+checar("abre contagem cega", st == 201 and cega.get("cega") is True, cega.get("cega"))
+id_cega = cega.get("id")
+criados["inventarios"].append(id_cega)
+item_cego = cega["itens"][0]
+checar("o saldo do sistema NÃO vem na resposta", item_cego["qtd_sistema"] is None, item_cego)
+checar("nem a diferença, nem o custo médio",
+       item_cego["diferenca"] is None and item_cego["custo_medio"] is None, item_cego)
+checar("nem o impacto total", cega.get("diferenca_valor") is None, cega.get("diferenca_valor"))
+
+st, r = chamar("PUT", f"/inventarios/{id_cega}/contagem",
+               {"itens": [{"id_produto": cafe, "qtd_contada": 5}]}, token=token)
+checar("dá para contar mesmo sem ver o esperado", st == 200, st)
+checar("e o esperado continua escondido", r["itens"][0]["qtd_sistema"] is None, r["itens"][0])
+
+folha = baixar_texto(f"/exportar/inventario/{id_cega}.csv", token)
+checar("a folha impressa também não traz o saldo",
+       "Saldo no sistema" not in folha and "cega" in folha, folha[:200])
+
+st, r = chamar("POST", f"/inventarios/{id_cega}/fechar", token=token)
+checar("fecha a contagem cega", st == 200, r)
+st, depois = chamar("GET", f"/inventarios/{id_cega}", token=token)
+checar("fechada, a diferença aparece",
+       depois["itens"][0]["qtd_sistema"] is not None
+       and depois["diferenca_valor"] is not None, depois["itens"][0])
 
 print("9. permissão")
 st, papeis = chamar("GET", "/papeis", token=token)

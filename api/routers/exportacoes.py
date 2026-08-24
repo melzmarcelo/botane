@@ -338,7 +338,7 @@ def inventario(id_inventario: int, ctx: Contexto = Depends(contexto_atual)) -> R
     _exige(ctx, "estoque.inventario")
     with get_cursor() as cur:
         cur.execute(
-            """SELECT i.data, i.status, l.nome AS local FROM inventarios i
+            """SELECT i.data, i.status, i.cega, l.nome AS local FROM inventarios i
                  JOIN locais_estoque l ON l.id = i.id_local WHERE i.id = %s""",
             (id_inventario,),
         )
@@ -358,14 +358,24 @@ def inventario(id_inventario: int, ctx: Contexto = Depends(contexto_atual)) -> R
         )
         linhas = [dict(r) for r in cur.fetchall()]
 
+    # Contagem CEGA aberta: a folha impressa é o caminho mais fácil de furar o
+    # sigilo — quem conta leria o esperado no papel. As colunas do sistema saem.
+    cega_aberta = inv["cega"] and inv["status"] == "ABERTO"
+    colunas = [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Unidade")]
+    if not cega_aberta:
+        colunas.append(("qtd_sistema", "Saldo no sistema"))
+    colunas.append(("qtd_contada", "Contado"))
+    if not cega_aberta:
+        colunas += [("diferenca", "Diferença"), ("custo_medio", "Custo médio"),
+                    ("impacto", "Impacto (R$)")]
+
     conteudo = exportacao.csv_de(
         linhas,
-        [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Unidade"),
-         ("qtd_sistema", "Saldo no sistema"), ("qtd_contada", "Contado"),
-         ("diferenca", "Diferença"), ("custo_medio", "Custo médio"),
-         ("impacto", "Impacto (R$)")],
+        colunas,
         titulo=f"Inventário #{id_inventario} — {inv['local']}",
         resumo=[("Data", inv["data"]), ("Situação", inv["status"]),
+                ("Contagem", "cega — o saldo do sistema não sai daqui"
+                             if cega_aberta else "aberta"),
                 ("Itens", len(linhas))],
     )
     return _resposta(conteudo, exportacao.nome_arquivo(f"inventario-{id_inventario}"))

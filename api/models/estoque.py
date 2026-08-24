@@ -90,6 +90,10 @@ class InventarioCreate(BaseModel):
     id_local: int
     data: date | None = None
     observacao: str | None = None
+    # Contagem cega: quem conta não vê o saldo esperado. Ver o esperado
+    # transforma a contagem em conferência — a pessoa lê 12, olha a prateleira
+    # e escreve 12.
+    cega: bool = False
     # Vazio = puxa tudo o que tem saldo ou movimento no local.
     produtos: list[int] = []
 
@@ -114,6 +118,7 @@ class InventarioResponse(BaseModel):
     local: str
     data: date
     status: str
+    cega: bool = False
     observacao: str | None = None
     criado_em: datetime | None = None
     fechado_em: datetime | None = None

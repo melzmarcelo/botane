@@ -17,6 +17,7 @@ type Inventario = {
   data: string;
   status: string;
   observacao: string | null;
+  cega?: boolean;
   contados: number;
   total_itens: number;
   diferenca_valor?: number | null;
@@ -32,6 +33,7 @@ export default function PaginaInventario() {
   const [idLocal, setIdLocal] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [cega, setCega] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -59,7 +61,10 @@ export default function PaginaInventario() {
     setOcupado(true);
     setErro("");
     try {
-      const inv = await api.post<Inventario>("/inventarios", { id_local: Number(idLocal) });
+      const inv = await api.post<Inventario>("/inventarios", {
+        id_local: Number(idLocal),
+        cega,
+      });
       // Abrir uma contagem é o começo de CONTAR: leva direto para a tela de
       // contagem, em vez de devolver a pessoa à lista para clicar de novo.
       router.push(`/inventario/${inv.id}`);
@@ -103,6 +108,23 @@ export default function PaginaInventario() {
                 ))}
               </select>
             </Campo>
+            {/* Contagem cega: quem conta não vê o esperado. Ver o número
+                transforma a contagem em conferência — a pessoa lê 12, olha a
+                prateleira e escreve 12. */}
+            <label className="flex items-start gap-2 pb-1 sm:max-w-[320px]">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-erva"
+                checked={cega}
+                onChange={(e) => setCega(e.target.checked)}
+              />
+              <span className="text-[14px] leading-snug">
+                contagem cega
+                <span className="block text-[12.5px] text-suave">
+                  esconde o saldo do sistema até a contagem fechar
+                </span>
+              </span>
+            </label>
             <button
               className="btn btn-primario"
               onClick={abrirInventario}
@@ -135,9 +157,12 @@ export default function PaginaInventario() {
                     {i.total_itens} contado(s)
                   </span>
                 </Link>
-                <Etiqueta cor={i.status === "ABERTO" ? "alerta" : "erva"}>
-                  {i.status.toLowerCase()}
-                </Etiqueta>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {i.cega && <Etiqueta>cega</Etiqueta>}
+                  <Etiqueta cor={i.status === "ABERTO" ? "alerta" : "erva"}>
+                    {i.status.toLowerCase()}
+                  </Etiqueta>
+                </span>
               </li>
             ))}
           </ul>

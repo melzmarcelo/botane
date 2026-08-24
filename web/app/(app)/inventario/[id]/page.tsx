@@ -37,12 +37,13 @@ type Item = {
   produto: string;
   um_estoque: string | null;
   categoria: string | null;
-  qtd_sistema: number;
+  /** Vem `null` na contagem cega enquanto ela está aberta. */
+  qtd_sistema: number | null;
   qtd_contada: number | null;
   qtd_informada: number | null;
   um_informada: string | null;
   custo_medio: number;
-  diferenca: number;
+  diferenca: number | null;
   contado_por: string | null;
   observacao: string | null;
   unidades: Unidade[];
@@ -54,6 +55,7 @@ type Inventario = {
   local: string;
   data: string;
   status: string;
+  cega: boolean;
   itens: Item[];
   contados: number;
   total_itens: number;
@@ -229,6 +231,7 @@ export default function PaginaContagem() {
           ) : (
             <Etiqueta cor="erva">fechado</Etiqueta>
           )}
+          {inv.cega && <Etiqueta>contagem cega</Etiqueta>}
         </div>
       </header>
 
@@ -243,7 +246,7 @@ export default function PaginaContagem() {
               <span className="text-suave"> · faltam {faltam}</span>
             )}
           </p>
-          {inv.diferenca_valor !== null && (
+          {inv.diferenca_valor !== null && inv.diferenca_valor !== undefined && (
             <p className="text-[13.5px] text-suave">
               diferença até agora{" "}
               <b
@@ -265,6 +268,13 @@ export default function PaginaContagem() {
           />
         </div>
       </div>
+
+      {inv.cega && aberto && (
+        <Aviso tipo="info">
+          Contagem cega: o saldo do sistema não aparece — nem aqui, nem na folha impressa. Conte
+          o que está na prateleira; a diferença surge quando a contagem fechar.
+        </Aviso>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="min-w-0 flex-1">
@@ -364,7 +374,10 @@ function LinhaContagem({
 }) {
   const campo = useRef<HTMLInputElement>(null);
   const contado = item.qtd_contada !== null && item.qtd_contada !== undefined;
-  const dif = contado ? Number(item.qtd_contada) - Number(item.qtd_sistema) : null;
+  const dif =
+    contado && item.qtd_sistema !== null && item.qtd_sistema !== undefined
+      ? Number(item.qtd_contada) - Number(item.qtd_sistema)
+      : null;
   const fator = opcoes.find((o) => o.um === unidade)?.fator ?? 1;
   const digitado = Number((valor || "0").replace(",", "."));
   // Quanto isso vira no estoque. Só aparece quando a unidade contada não é a de
@@ -381,20 +394,25 @@ function LinhaContagem({
             {item.categoria ? ` · ${item.categoria}` : ""}
           </p>
         </div>
-        {contado && (
+        {contado && dif !== null && (
           <Etiqueta cor={dif === 0 ? "erva" : "alerta"}>
-            {dif === 0 ? "confere" : `${dif! > 0 ? "+" : ""}${qtd(dif!)}`}
+            {dif === 0 ? "confere" : `${dif > 0 ? "+" : ""}${qtd(dif)}`}
           </Etiqueta>
         )}
+        {contado && dif === null && <Etiqueta cor="erva">contado</Etiqueta>}
       </div>
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <div className="w-[104px] shrink-0">
-          <span className="rotulo">Sistema</span>
-          <p className="mono mt-1.5 py-2 text-[15px] text-suave">
-            {qtd(item.qtd_sistema)} {item.um_estoque ?? ""}
-          </p>
-        </div>
+        {/* Na contagem cega o servidor NÃO manda o esperado — não é a tela que
+            esconde. Sem a coluna, quem conta olha a prateleira e não o número. */}
+        {item.qtd_sistema !== null && item.qtd_sistema !== undefined && (
+          <div className="w-[104px] shrink-0">
+            <span className="rotulo">Sistema</span>
+            <p className="mono mt-1.5 py-2 text-[15px] text-suave">
+              {qtd(item.qtd_sistema)} {item.um_estoque ?? ""}
+            </p>
+          </div>
+        )}
         <label className="w-[118px] shrink-0">
           <span className="rotulo">Contei</span>
           <input

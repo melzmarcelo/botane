@@ -111,6 +111,11 @@ para arquivo nenhum — gravar direto aqui.
   por padrão: quem conta conta caixa, e converter de cabeça é onde o erro entra. `qtd_contada`
   segue na unidade de ESTOQUE (é ela que o fechamento compara); `qtd_informada`/`um_informada`
   guardam o que foi digitado, senão ninguém sabe depois que 36 eram 3 caixas de 12.
+- **Contagem cega** (`inventarios.cega`, migração 020): opção ao abrir o inventário. Ver o
+  saldo esperado transforma a contagem em conferência — a pessoa lê 12, olha a prateleira e
+  escreve 12. ⚠️ O esconderijo é no **servidor**: enquanto ABERTO, `qtd_sistema`, `diferenca`,
+  `custo_medio` e `diferenca_valor` saem `null` para todos, e a folha CSV perde as colunas.
+  Esconder só na tela deixaria o número no JSON e no papel impresso. Ao fechar, tudo aparece.
 - ⚠️ **Seletor com uma opção só, desabilitado, lê como travado.** O de unidade da contagem
   ficava assim para produto sem embalagem cadastrada. Agora ele oferece as três origens que
   convertem de verdade — unidade de estoque, embalagens do produto e unidades da **mesma

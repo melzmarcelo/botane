@@ -60,6 +60,17 @@ def _montar(cur, id_inventario: int) -> dict:
     inv["diferenca_valor"] = float(
         sum(dec(i["diferenca"]) * dec(i["custo_medio"]) for i in itens)
     )
+
+    # Contagem CEGA: enquanto está aberta, o esperado não sai do servidor.
+    # Esconder só na tela não é esconder — o número estaria no JSON, na aba de
+    # rede do navegador e na folha impressa. E o objetivo é justamente que quem
+    # conta não saiba o que "deveria" dar.
+    if inv.get("cega") and inv["status"] == "ABERTO":
+        for i in itens:
+            i["qtd_sistema"] = None
+            i["diferenca"] = None
+            i["custo_medio"] = None
+        inv["diferenca_valor"] = None
     return inv
 
 
@@ -68,7 +79,7 @@ def listar(ctx: Contexto = Depends(_perm)) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
             """SELECT i.id, i.id_local, l.nome AS local, i.data, i.status, i.observacao,
-                      i.criado_em, i.fechado_em,
+                      i.criado_em, i.fechado_em, i.cega,
                       (SELECT count(*) FROM inventario_itens ii WHERE ii.id_inventario = i.id) AS total_itens,
                       (SELECT count(*) FROM inventario_itens ii
                         WHERE ii.id_inventario = i.id AND ii.qtd_contada IS NOT NULL) AS contados
@@ -106,9 +117,11 @@ def abrir(body: InventarioCreate, ctx: Contexto = Depends(_perm)) -> dict:
             )
 
         cur.execute(
-            """INSERT INTO inventarios (id_unidade, id_local, data, observacao, id_usuario)
-               VALUES (%s, %s, coalesce(%s, current_date), %s, %s) RETURNING id""",
-            (local["id_unidade"], body.id_local, body.data, body.observacao, ctx.id_usuario),
+            """INSERT INTO inventarios (id_unidade, id_local, data, observacao, id_usuario,
+                                        cega)
+               VALUES (%s, %s, coalesce(%s, current_date), %s, %s, %s) RETURNING id""",
+            (local["id_unidade"], body.id_local, body.data, body.observacao, ctx.id_usuario,
+             body.cega),
         )
         novo = cur.fetchone()["id"]
 

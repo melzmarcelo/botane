@@ -580,6 +580,33 @@ try {
   checar("o que se digita grava sozinho, sem botão de salvar",
     (invDepois.itens ?? []).some((i) => Number(i.qtd_contada) === 7), invDepois.contados);
 
+  // Contagem CEGA: o esperado não aparece na tela nem sai do servidor.
+  // ⚠️ Só há uma contagem aberta por local: sem fechar a de cima, o POST volta
+  // 409 e o bloco inteiro passaria em silêncio — checagem que não roda é pior
+  // que checagem que falha.
+  for (const inv of (await api("GET", "/inventarios", null, token)).dados ?? []) {
+    if (inv.status === "ABERTO") await api("DELETE", `/inventarios/${inv.id}`, null, token);
+  }
+  const { dados: invCega } = await api("POST", "/inventarios",
+    { id_local: localInv?.id, cega: true }, token);
+  checar("abre a contagem cega", !!invCega?.id, invCega);
+  if (invCega?.id) {
+    await irPara(p, `${WEB}/inventario/${invCega.id}`);
+    await new Promise((r) => setTimeout(r, 1500));
+    const cega = await p.evaluate(() => {
+      const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+      return {
+        avisa: /Contagem cega/i.test(document.body.innerText),
+        temSistema: rotulos.includes("Sistema"),
+        temContei: rotulos.includes("Contei"),
+      };
+    });
+    checar("a contagem cega avisa que é cega", cega.avisa, cega);
+    checar("e não mostra o saldo do sistema", cega.temSistema === false && cega.temContei, cega);
+    await foto(p, "20d-contagem-cega");
+    await api("DELETE", `/inventarios/${invCega.id}`, null, token);
+  }
+
   await api("DELETE", `/produtos/${insumoInv.id}`, null, token);
 
   // O sintoma que originou tudo isto: o seletor mostrava o local e o pedido
