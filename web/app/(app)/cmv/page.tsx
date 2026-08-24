@@ -8,6 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import RelatoriosDono from "./relatorios-dono";
+import Movimentacao from "./movimentacao";
 
 type Apuracao = {
   inicio: string;
@@ -82,7 +83,7 @@ export default function PaginaCmv() {
   const [abc, setAbc] = useState<LinhaAbc[] | null>(null);
   const [margem, setMargem] = useState<LinhaMargem[] | null>(null);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
-  const [aba, setAba] = useState<"abc" | "margem" | "dono">("abc");
+  const [aba, setAba] = useState<"abc" | "margem" | "movimentacao" | "dono">("abc");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -297,7 +298,7 @@ export default function PaginaCmv() {
           </Cartao>
 
           <nav className="flex gap-1 border-b border-linha">
-            {(["abc", "margem", "dono"] as const).map((x) => (
+            {(["abc", "margem", "movimentacao", "dono"] as const).map((x) => (
               <button
                 key={x}
                 onClick={() => setAba(x)}
@@ -311,7 +312,9 @@ export default function PaginaCmv() {
                   ? "Curva ABC de insumos"
                   : x === "margem"
                     ? "Margem por prato"
-                    : "Onde pesa e o que subiu"}
+                    : x === "movimentacao"
+                      ? "Movimentação do estoque"
+                      : "Onde pesa e o que subiu"}
               </button>
             ))}
             <button
@@ -320,15 +323,19 @@ export default function PaginaCmv() {
                 void baixar(
                   aba === "abc"
                     ? `/exportar/abc.csv?inicio=${inicio}&fim=${fim}`
-                    : aba === "dono"
-                      ? `/exportar/precos.csv?inicio=${inicio}&fim=${fim}`
-                      : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
+                    : aba === "movimentacao"
+                      ? `/exportar/movimentacao.csv?inicio=${inicio}&fim=${fim}`
+                      : aba === "dono"
+                        ? `/exportar/precos.csv?inicio=${inicio}&fim=${fim}`
+                        : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
                 )
               }
             >
               baixar esta tabela
             </button>
           </nav>
+
+          {aba === "movimentacao" && <Movimentacao inicio={inicio} fim={fim} />}
 
           {aba === "dono" && <RelatoriosDono inicio={inicio} fim={fim} />}
 

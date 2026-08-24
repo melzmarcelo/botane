@@ -50,6 +50,137 @@ def valor_do_estoque(cur, id_unidade: int, ate: date | None = None) -> Decimal:
     return dec(cur.fetchone()["valor"])
 
 
+def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> list[dict]:
+    """O que cada produto tinha, o que entrou, o que saiu e o que sobrou.
+
+    O CMV do mês é uma linha só e diz o RESULTADO; esta é a conta por produto,
+    que é o que se confere e o que se manda ao contador.
+
+    Três decisões que mudam o número:
+
+    * **O saldo inicial e o final saem da fotografia do razão** (`saldo_apos` e
+      `custo_medio_apos` do último movimento antes do corte), não de uma soma
+      de quantidades. Somar entradas menos saídas daria a mesma quantidade e
+      **outro valor**, porque o custo médio muda a cada entrada.
+    * **Entradas e saídas são TODAS**, não só compras e vendas: produção,
+      transferência e ajuste também movem o estoque, e quem confere a contagem
+      precisa ver por onde a diferença passou. (A soma que vira CMV continua
+      sendo só a de compras — são perguntas diferentes.)
+    * Produto que **não se mexeu no mês mas tem saldo** entra na lista: sumir
+      dele faria o total da coluna não fechar com o estoque.
+    """
+    limite = fim + timedelta(days=1)
+    cur.execute(
+        """
+        WITH inicial AS (
+            SELECT DISTINCT ON (id_produto, id_local)
+                   id_produto, id_local, saldo_apos, custo_medio_apos
+              FROM estoque_movimentos
+             WHERE id_unidade = %(u)s AND data_movimento < %(inicio)s
+             ORDER BY id_produto, id_local, id DESC
+        ),
+        final AS (
+            SELECT DISTINCT ON (id_produto, id_local)
+                   id_produto, id_local, saldo_apos, custo_medio_apos
+              FROM estoque_movimentos
+             WHERE id_unidade = %(u)s AND data_movimento < %(limite)s
+             ORDER BY id_produto, id_local, id DESC
+        ),
+        no_periodo AS (
+            SELECT id_produto,
+                   sum(CASE WHEN quantidade > 0 THEN quantidade ELSE 0 END) AS qtd_entradas,
+                   sum(CASE WHEN quantidade > 0 THEN abs(custo_total) ELSE 0 END)
+                       AS valor_entradas,
+                   sum(CASE WHEN quantidade < 0 THEN -quantidade ELSE 0 END) AS qtd_saidas,
+                   sum(CASE WHEN quantidade < 0 THEN abs(custo_total) ELSE 0 END)
+                       AS valor_saidas
+              FROM estoque_movimentos
+             WHERE id_unidade = %(u)s
+               AND data_movimento >= %(inicio)s AND data_movimento < %(limite)s
+             GROUP BY id_produto
+        ),
+        ini AS (
+            SELECT id_produto, sum(saldo_apos) AS qtd,
+                   sum(saldo_apos * custo_medio_apos) AS valor
+              FROM inicial GROUP BY id_produto
+        ),
+        fim AS (
+            SELECT id_produto, sum(saldo_apos) AS qtd,
+                   sum(saldo_apos * custo_medio_apos) AS valor
+              FROM final GROUP BY id_produto
+        ),
+        envolvidos AS (
+            SELECT id_produto FROM ini
+            UNION SELECT id_produto FROM fim
+            UNION SELECT id_produto FROM no_periodo
+        )
+        SELECT e.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+               c.nome AS categoria, s.nome AS setor,
+               coalesce(ini.qtd, 0) AS qtd_inicial,
+               round(coalesce(ini.valor, 0), 2) AS valor_inicial,
+               coalesce(np.qtd_entradas, 0) AS qtd_entradas,
+               round(coalesce(np.valor_entradas, 0), 2) AS valor_entradas,
+               coalesce(np.qtd_saidas, 0) AS qtd_saidas,
+               round(coalesce(np.valor_saidas, 0), 2) AS valor_saidas,
+               coalesce(fim.qtd, 0) AS qtd_final,
+               round(coalesce(fim.valor, 0), 2) AS valor_final,
+               CASE WHEN coalesce(fim.qtd, 0) <> 0
+                    THEN round(coalesce(fim.valor, 0) / fim.qtd, 6) ELSE 0 END
+                   AS custo_medio_final
+          FROM envolvidos e
+          JOIN produtos p ON p.id = e.id_produto
+          LEFT JOIN categorias c ON c.id = p.id_categoria
+          LEFT JOIN setores s ON s.id = p.id_setor
+          LEFT JOIN ini ON ini.id_produto = e.id_produto
+          LEFT JOIN fim ON fim.id_produto = e.id_produto
+          LEFT JOIN no_periodo np ON np.id_produto = e.id_produto
+         WHERE coalesce(ini.qtd, 0) <> 0 OR coalesce(fim.qtd, 0) <> 0
+               OR np.id_produto IS NOT NULL
+         ORDER BY lower(p.nome)
+        """,
+        {"u": id_unidade, "inicio": inicio, "limite": limite},
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def congelar_movimentacao(cur, id_fechamento: int, id_unidade: int,
+                          inicio: date, fim: date) -> int:
+    """Grava a movimentação do mês no fechamento. Devolve quantas linhas.
+
+    Nome, código, categoria e setor vão GRAVADOS junto: renomear o produto ou
+    trocá-lo de categoria depois não pode reescrever o relatório de um mês que
+    já foi fechado.
+    """
+    cur.execute("DELETE FROM cmv_movimentacao WHERE id_fechamento = %s", (id_fechamento,))
+    linhas = movimentacao_por_produto(cur, id_unidade, inicio, fim)
+    for l in linhas:
+        cur.execute(
+            """INSERT INTO cmv_movimentacao
+                   (id_fechamento, id_produto, codigo, produto, um_estoque, categoria, setor,
+                    qtd_inicial, valor_inicial, qtd_entradas, valor_entradas,
+                    qtd_saidas, valor_saidas, qtd_final, valor_final, custo_medio_final)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (id_fechamento, l["id_produto"], l["codigo"], l["produto"], l["um_estoque"],
+             l["categoria"], l["setor"], l["qtd_inicial"], l["valor_inicial"],
+             l["qtd_entradas"], l["valor_entradas"], l["qtd_saidas"], l["valor_saidas"],
+             l["qtd_final"], l["valor_final"], l["custo_medio_final"]),
+        )
+    return len(linhas)
+
+
+def movimentacao_congelada(cur, id_fechamento: int) -> list[dict]:
+    """A movimentação como ficou no fechamento — não se recalcula."""
+    cur.execute(
+        """SELECT id_produto, codigo, produto, um_estoque, categoria, setor,
+                  qtd_inicial, valor_inicial, qtd_entradas, valor_entradas,
+                  qtd_saidas, valor_saidas, qtd_final, valor_final, custo_medio_final
+             FROM cmv_movimentacao WHERE id_fechamento = %s
+            ORDER BY lower(produto)""",
+        (id_fechamento,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
 def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos) -> Decimal:
     cur.execute(
         """SELECT coalesce(sum(abs(custo_total)), 0) AS valor

@@ -164,6 +164,19 @@ para arquivo nenhum — gravar direto aqui.
   o custo pela regra dele. Componente sem custo **não zera** o combo — o que se sabe entra e a
   origem vira `kit_parcial`, para o buraco aparecer em vez de sumir. Ciclo recusado na
   gravação, com trava de profundidade por segurança (igual às fichas).
+- **Movimentação do estoque por produto** (`cmv.movimentacao_por_produto`, migração 018,
+  21/08/2026): estoque inicial, entradas, saídas e estoque final de cada produto — a conta que
+  EXPLICA o CMV, que é uma linha só. Aba em `/cmv` e planilha em `/exportar/movimentacao.csv`.
+  ⚠️ O saldo inicial e o final saem da **fotografia do razão** (`saldo_apos` ×
+  `custo_medio_apos`), não de somar entradas menos saídas: a quantidade daria igual e o
+  **valor** não, porque o médio muda a cada entrada. ⚠️ Entradas e saídas aqui são **todas**
+  (produção, transferência e ajuste inclusive) — a soma que vira CMV continua sendo só a de
+  compras; são perguntas diferentes.
+- **O fechamento congela a movimentação junto** (`cmv_movimentacao`): fechar o mês trava o
+  relatório que explica o número, não só o número. Nome, código, categoria e setor vão
+  **gravados** — renomear o produto depois não reescreve mês fechado. ⚠️ O congelado é do MÊS
+  INTEIRO: um recorte dentro dele não vem congelado, e a resposta traz `mes_fechado` para a
+  tela oferecer o mês completo em vez de deixar mandarem o parcial ao contador.
 - **`services/relatorios.py`** (19/08/2026): os dois relatórios do dono. `cmv_por_grupo`
   quebra a MESMA conta do CMV por setor ou categoria — **não é rateio**, e a soma dos grupos
   fecha com o CMV do período (o teste confere isso). Produto sem grupo aparece como "Sem

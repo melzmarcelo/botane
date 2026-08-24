@@ -170,6 +170,58 @@ def cmv(inicio: date | None = None, fim: date | None = None,
     return _resposta(primeira + "\r\n" + segunda, exportacao.nome_arquivo("cmv", inicio, fim))
 
 
+@router.get("/movimentacao.csv")
+def movimentacao(inicio: date | None = None, fim: date | None = None,
+                 ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """A movimentação do mês, produto a produto — a planilha que se confere.
+
+    Mês fechado sai do que foi CONGELADO no fechamento; mês aberto sai do razão
+    na hora. O cabeçalho diz qual dos dois, porque mandar ao contador um número
+    que ainda pode mudar é o erro que este relatório existe para evitar.
+    """
+    _exige(ctx, "cmv.relatorios")
+    inicio, fim = _periodo(inicio, fim)
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT id, competencia FROM cmv_fechamentos
+                WHERE id_unidade = %s AND inicio = %s AND fim = %s AND status = 'FECHADO'""",
+            (id_unidade, inicio, fim),
+        )
+        fechamento = cur.fetchone()
+        if fechamento:
+            linhas = cmv_motor.movimentacao_congelada(cur, fechamento["id"])
+        else:
+            linhas = cmv_motor.movimentacao_por_produto(cur, id_unidade, inicio, fim)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao", "movimentacao", "exportar",
+                            depois={"inicio": str(inicio), "fim": str(fim),
+                                    "congelado": bool(fechamento)},
+                            id_unidade=id_unidade)
+
+    soma = lambda campo: sum(float(l[campo] or 0) for l in linhas)  # noqa: E731
+    conteudo = exportacao.csv_de(
+        linhas,
+        [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Un."),
+         ("categoria", "Categoria"), ("setor", "Setor"),
+         ("qtd_inicial", "Estoque inicial (qtd)"), ("valor_inicial", "Estoque inicial (R$)"),
+         ("qtd_entradas", "Entradas (qtd)"), ("valor_entradas", "Entradas (R$)"),
+         ("qtd_saidas", "Saídas (qtd)"), ("valor_saidas", "Saídas (R$)"),
+         ("qtd_final", "Estoque final (qtd)"), ("valor_final", "Estoque final (R$)"),
+         ("custo_medio_final", "Custo médio final")],
+        titulo=(f"Movimentação de estoque — {inicio.strftime('%d/%m/%Y')} a "
+                f"{fim.strftime('%d/%m/%Y')}"),
+        resumo=[
+            ("Situação", "mês fechado (congelado)" if fechamento else "mês aberto (parcial)"),
+            ("Produtos", len(linhas)),
+            ("Estoque inicial (R$)", round(soma("valor_inicial"), 2)),
+            ("Entradas (R$)", round(soma("valor_entradas"), 2)),
+            ("Saídas (R$)", round(soma("valor_saidas"), 2)),
+            ("Estoque final (R$)", round(soma("valor_final"), 2)),
+        ],
+    )
+    return _resposta(conteudo, exportacao.nome_arquivo("movimentacao", inicio, fim))
+
+
 @router.get("/abc.csv")
 def abc(inicio: date | None = None, fim: date | None = None,
         ctx: Contexto = Depends(contexto_atual)) -> Response:

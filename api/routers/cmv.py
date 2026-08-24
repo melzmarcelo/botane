@@ -115,6 +115,69 @@ def preco_do_produto(
         return relatorios.historico_de_preco(cur, unidade_atual(cur, ctx), id_produto)
 
 
+@router.get("/movimentacao")
+def movimentacao(inicio: date | None = None, fim: date | None = None,
+                 ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
+    """O que cada produto tinha, o que entrou, o que saiu e o que sobrou.
+
+    Mês FECHADO devolve o que foi congelado no fechamento; mês aberto calcula
+    do razão na hora. A resposta diz qual dos dois é (`congelado`), porque a
+    diferença importa: um número que ainda pode mudar não se manda ao contador.
+    """
+    hoje = date.today()
+    inicio = inicio or hoje.replace(day=1)
+    fim = fim or hoje
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        # Só vale o fechamento que cobre EXATAMENTE o período pedido: um recorte
+        # de dez dias dentro de um mês fechado não é o mês fechado.
+        cur.execute(
+            """SELECT id, competencia, status FROM cmv_fechamentos
+                WHERE id_unidade = %s AND inicio = %s AND fim = %s AND status = 'FECHADO'""",
+            (id_unidade, inicio, fim),
+        )
+        fechamento = cur.fetchone()
+        if fechamento:
+            linhas = motor.movimentacao_congelada(cur, fechamento["id"])
+            congelado = True
+        else:
+            linhas = motor.movimentacao_por_produto(cur, id_unidade, inicio, fim)
+            congelado = False
+
+        # Um recorte DENTRO de um mês fechado não é o mês fechado — mas quem
+        # pediu precisa saber que existe uma versão definitiva do mês inteiro,
+        # senão manda adiante o recorte achando que é ela.
+        cur.execute(
+            """SELECT competencia, inicio, fim FROM cmv_fechamentos
+                WHERE id_unidade = %s AND status = 'FECHADO'
+                  AND %s BETWEEN inicio AND fim
+                ORDER BY competencia DESC LIMIT 1""",
+            (id_unidade, inicio),
+        )
+        mes = cur.fetchone()
+        mes_fechado = (
+            {"competencia": str(mes["competencia"]), "inicio": str(mes["inicio"]),
+             "fim": str(mes["fim"])}
+            if mes and not congelado
+            else None
+        )
+
+    total = {
+        "valor_inicial": sum(float(l["valor_inicial"]) for l in linhas),
+        "valor_entradas": sum(float(l["valor_entradas"]) for l in linhas),
+        "valor_saidas": sum(float(l["valor_saidas"]) for l in linhas),
+        "valor_final": sum(float(l["valor_final"]) for l in linhas),
+    }
+    return {
+        "inicio": str(inicio), "fim": str(fim), "congelado": congelado,
+        # Preenchido só quando o recorte cai dentro de um mês fechado sem ser
+        # ele: a tela oferece o mês inteiro, que é o número definitivo.
+        "mes_fechado": mes_fechado,
+        "competencia": str(fechamento["competencia"]) if fechamento else None,
+        "produtos": len(linhas), "total": total, "linhas": linhas,
+    }
+
+
 @router.get("/fechamentos", response_model=list[FechamentoResponse])
 def listar_fechamentos(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> list[dict]:
     with get_cursor() as cur:
@@ -177,13 +240,18 @@ def fechar(body: FechamentoRequest,
              ctx.id_usuario),
         )
         novo = cur.fetchone()["id"]
+        # A movimentação por produto é congelada junto: fechar o mês tem de
+        # travar também o relatório que EXPLICA o número, não só o número.
+        produtos_congelados = motor.congelar_movimentacao(cur, novo, id_unidade,
+                                                          competencia, fim)
         auditoria.registrar(cur, ctx.id_usuario, "cmv", novo, "fechar",
                             depois={"competencia": str(competencia),
                                     "cmv_real": float(r["cmv_real"]),
                                     "variancia": float(r["variancia"])},
                             id_unidade=id_unidade)
     return {"id": novo, "competencia": str(competencia), "cmv_real": float(r["cmv_real"]),
-            "variancia": float(r["variancia"]), "message": "Período fechado"}
+            "variancia": float(r["variancia"]), "produtos": produtos_congelados,
+            "message": f"Período fechado — {produtos_congelados} produto(s) na movimentação"}
 
 
 @router.post("/fechamentos/{id_fechamento}/reabrir")

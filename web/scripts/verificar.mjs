@@ -1068,6 +1068,30 @@ try {
 
   for (const id of [comboTela.id, bebida.id]) await api("DELETE", `/produtos/${id}`, null, token);
 
+  // A movimentação por produto: a conta que EXPLICA o CMV, e que fecha o mês
+  // junto com ele.
+  await irPara(p, `${WEB}/cmv`);
+  await new Promise((r) => setTimeout(r, 1500));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => x.textContent === "Movimentação do estoque")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  const mov = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const cabecalhos = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
+    return {
+      colunas: ["Inicial", "Entradas", "Saídas", "Final"].every((c) => cabecalhos.includes(c)),
+      situacao: /mês (aberto|fechado)/i.test(texto),
+      fecha: /a conta fecha/i.test(texto),
+      naoFecha: /A conta não fecha/i.test(texto),
+    };
+  });
+  checar("a movimentação mostra inicial, entradas, saídas e final", mov.colunas, mov);
+  checar("e diz se o mês está aberto ou congelado", mov.situacao, mov);
+  checar("com a identidade conferida na própria tela", mov.fecha && !mov.naoFecha, mov);
+  await foto(p, "24b-movimentacao");
+
   console.log("7b. relatórios do dono: onde pesa e o que subiu");
   await irPara(p, `${WEB}/cmv`);
   await new Promise((r) => setTimeout(r, 1500));

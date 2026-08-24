@@ -21,7 +21,7 @@ import urllib.request
 
 sys.path.insert(0, "tests")
 from comum import garantir_local  # noqa: E402
-from datetime import date
+from datetime import date, timedelta
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -201,6 +201,28 @@ checar("cobertura de ficha cai quando há prato sem custo",
        float(a2["cobertura_ficha_pct"]) < float(a["cobertura_ficha_pct"]),
        (a["cobertura_ficha_pct"], a2["cobertura_ficha_pct"]))
 
+print("4b. movimentação de estoque, produto a produto")
+st, mov = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
+checar("a movimentação responde", st == 200 and "linhas" in mov, st)
+checar("e diz que o mês ainda está aberto", mov.get("congelado") is False, mov.get("congelado"))
+linha_insumo = next((l for l in mov["linhas"] if l["id_produto"] == insumo), None)
+checar("o insumo do cenário aparece", linha_insumo is not None,
+       [l["produto"] for l in mov["linhas"]][:5])
+if linha_insumo:
+    # A identidade que o relatório existe para sustentar.
+    conta = (float(linha_insumo["valor_inicial"]) + float(linha_insumo["valor_entradas"])
+             - float(linha_insumo["valor_saidas"]))
+    checar("inicial + entradas − saídas = final, no produto",
+           perto(conta, float(linha_insumo["valor_final"]), 0.05), linha_insumo)
+    checar("e a quantidade fecha do mesmo jeito",
+           perto(float(linha_insumo["qtd_inicial"]) + float(linha_insumo["qtd_entradas"])
+                 - float(linha_insumo["qtd_saidas"]), float(linha_insumo["qtd_final"]), 0.001),
+           linha_insumo)
+t = mov["total"]
+checar("e fecha no total também",
+       perto(t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], 0.05),
+       t)
+
 print("5. fechamento congela o período")
 st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=token)
 checar("fecha o mês", st == 201, r)
@@ -246,6 +268,32 @@ checar("quem tem estoque.retroativo passa mesmo fechado", st == 201, (st, r))
 
 st, fechamentos = chamar("GET", "/cmv/fechamentos", token=token)
 checar("o fechamento aparece na lista", any(f["id"] == id_fech for f in fechamentos))
+
+# O fechamento congela também o relatório que EXPLICA o número, não só o número.
+# ⚠️ O congelado é do MÊS INTEIRO: pedir "dia 1 até hoje" é outro recorte, e a
+# resposta avisa que existe um mês fechado por trás dele.
+st, parcial = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
+checar("recorte dentro do mês fechado não vem congelado",
+       parcial.get("congelado") is False, parcial.get("congelado"))
+checar("mas avisa que o mês está fechado",
+       (parcial.get("mes_fechado") or {}).get("competencia") == str(inicio_mes),
+       parcial.get("mes_fechado"))
+
+fim_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+st, mov_f = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={fim_mes}", token=token)
+checar("depois de fechado, a movimentação vem congelada",
+       mov_f.get("congelado") is True, mov_f.get("congelado"))
+congelada = next((l for l in mov_f["linhas"] if l["id_produto"] == insumo), None)
+checar("com o insumo dentro", congelada is not None, mov_f.get("produtos"))
+# Renomear o produto não pode reescrever o mês fechado: o nome foi GRAVADO.
+if congelada:
+    chamar("PUT", f"/produtos/{insumo}", {"nome": f"Renomeado {marca}"}, token=token)
+    st, mov_f2 = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={fim_mes}",
+                        token=token)
+    ainda = next((l for l in mov_f2["linhas"] if l["id_produto"] == insumo), None)
+    checar("renomear o produto NÃO reescreve o mês fechado",
+           ainda and ainda["produto"] == congelada["produto"],
+           (congelada["produto"], ainda["produto"] if ainda else None))
 st, a3 = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 checar("a apuração marca o período como fechado", a3.get("fechado") is True, a3.get("fechado"))
 
