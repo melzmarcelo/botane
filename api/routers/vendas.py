@@ -15,6 +15,8 @@ from database import get_cursor
 from models.cmv import ImportarVendasRequest, VendaResponse
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
+from services import estoque as motor_estoque
+from services import producao_agenda as agenda
 
 router = APIRouter(prefix="/vendas", tags=["vendas"])
 
@@ -53,6 +55,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         raise HTTPException(status_code=400, detail="Nenhuma venda na importação.")
 
     importadas, repetidas, itens_total, sem_vinculo, sem_custo = 0, 0, 0, 0, 0
+    produzidos_na_hora = 0
     custos_cache: dict[int, tuple] = {}
 
     with get_cursor() as cur:
@@ -117,9 +120,29 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 )
                 itens_total += 1
 
+                # O que é feito NA HORA nasce e morre na venda: sem isto, a
+                # casa venderia mil cafés e o pó continuaria inteiro no razão.
+                # Produz e baixa no mesmo lançamento — o saldo volta a zero,
+                # que é a verdade: o produto não fica parado em lugar nenhum.
+                if id_produto:
+                    feito = agenda.producao_da_venda(
+                        cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
+                        documento=venda.documento)
+                    if feito:
+                        motor_estoque.lancar(
+                            cur, id_unidade=id_unidade,
+                            id_local=feito["id_local"], id_produto=id_produto,
+                            tipo="SAIDA_VENDA", quantidade=item.quantidade,
+                            origem_tipo="VENDA", origem_id=id_venda,
+                            documento=venda.documento, id_usuario=ctx.id_usuario,
+                            observacao="Produzido e vendido na hora",
+                        )
+                        produzidos_na_hora += 1
+
         auditoria.registrar(cur, ctx.id_usuario, "vendas", None, "importar",
                             depois={"vendas": importadas, "itens": itens_total,
-                                    "repetidas": repetidas, "sem_vinculo": sem_vinculo},
+                                    "repetidas": repetidas, "sem_vinculo": sem_vinculo,
+                                    "produzidos_na_hora": produzidos_na_hora},
                             id_unidade=id_unidade)
 
     return {
@@ -128,8 +151,10 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         "itens": itens_total,
         "itens_sem_vinculo": sem_vinculo,
         "itens_sem_custo": sem_custo,
+        "produzidos_na_hora": produzidos_na_hora,
         "message": f"{importadas} venda(s) importada(s)"
-        + (f", {repetidas} já existiam" if repetidas else ""),
+        + (f", {repetidas} já existiam" if repetidas else "")
+        + (f", {produzidos_na_hora} produzido(s) na hora" if produzidos_na_hora else ""),
     }
 
 

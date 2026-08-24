@@ -123,7 +123,15 @@ checar("cozinha NÃO vê auditoria (403)", st == 403, st)
 st, r = chamar("GET", "/empresa", token=token_cozinha)
 checar("cozinha LÊ a empresa (leitura é livre)", st == 200, st)
 st, me_coz = chamar("GET", "/auth/me", token=token_cozinha)
-checar("cozinha tem 5 permissões", len(me_coz.get("permissoes", [])) == 5, me_coz.get("permissoes"))
+# Contar permissões fazia esta checagem quebrar a cada chave nova — ruído que
+# ensina a ignorar o vermelho. O que importa é o RECORTE: a cozinha tem o que é
+# da cozinha e não tem o que é da administração.
+perms_coz = set(me_coz.get("permissoes", []))
+checar("cozinha tem as chaves da cozinha",
+       {"fichas.visualizar", "estoque.saidas"} <= perms_coz, sorted(perms_coz))
+checar("e nenhuma de administração",
+       not any(p.startswith(("admin.", "usuarios.", "papeis.")) for p in perms_coz),
+       sorted(perms_coz))
 
 print("6. refresh rotaciona")
 st, r2 = chamar("POST", "/auth/refresh", {"refresh_token": refresh})

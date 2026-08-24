@@ -579,6 +579,23 @@ try {
   checar("o que se digita grava sozinho, sem botão de salvar",
     (invDepois.itens ?? []).some((i) => Number(i.qtd_contada) === 7), invDepois.contados);
 
+  // A agenda de produção: planejar e registrar são momentos diferentes.
+  await irPara(p, `${WEB}/producao`);
+  await new Promise((r) => setTimeout(r, 1400));
+  const agenda = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const abas = [...document.querySelectorAll("nav button")].map((b) => b.textContent?.trim());
+    return {
+      temAbas: abas.includes("Agenda") && abas.includes("Registrar o que foi feito"),
+      agendaPrimeiro: /Agendar produção/i.test(texto),
+      naoMexe: /não mexe no estoque/i.test(texto),
+    };
+  });
+  checar("produção separa agenda de registro", agenda.temAbas, agenda);
+  checar("e a agenda abre primeiro, com o plano à vista",
+    agenda.agendaPrimeiro && agenda.naoMexe, agenda);
+  await foto(p, "19b-agenda-producao");
+
   // Contagem CEGA: o esperado não aparece na tela nem sai do servidor.
   // ⚠️ Só há uma contagem aberta por local: sem fechar a de cima, o POST volta
   // 409 e o bloco inteiro passaria em silêncio — checagem que não roda é pior

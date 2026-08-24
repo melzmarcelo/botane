@@ -38,6 +38,7 @@ type Form = {
   id_categoria: string;
   id_setor: string;
   producao_propria: boolean;
+  modo_producao: string;
   controla_estoque: boolean;
   um_estoque: string;
   um_compra: string;
@@ -59,7 +60,7 @@ type Form = {
 
 const VAZIO: Form = {
   codigo: "", nome: "", nome_curto: "", tipo: "INSUMO", id_categoria: "", id_setor: "",
-  producao_propria: false, controla_estoque: true, um_estoque: "", um_compra: "",
+  producao_propria: false, modo_producao: "PARA_ESTOQUE", controla_estoque: true, um_estoque: "", um_compra: "",
   fator_compra: "1", id_local_padrao: "", perecivel: false, validade_dias: "", controla_lote: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   codigo_barras: "", observacao: "", preco_venda: "", status: "ATIVO", ativo: true,
@@ -154,6 +155,7 @@ export default function FormularioProduto() {
       id_categoria: num(f.id_categoria),
       id_setor: num(f.id_setor),
       producao_propria: f.producao_propria,
+      modo_producao: f.modo_producao,
       controla_estoque: f.controla_estoque,
       um_estoque: texto(f.um_estoque),
       um_compra: texto(f.um_compra),
@@ -505,6 +507,62 @@ export default function FormularioProduto() {
             </li>
           ))}
         </ul>
+
+        {/* Duas naturezas que o sistema tratava igual e não são: a massa de
+            pizza fica pronta esperando; o café passado não existe parado. */}
+        {f.producao_propria && (
+          <div className="mt-4 border-t border-linha pt-4">
+            <span className="rotulo">Como este produto é produzido</span>
+            <ul className="mt-2 grid gap-3 sm:grid-cols-2">
+              {[
+                {
+                  valor: "PARA_ESTOQUE",
+                  nome: "Para estoque",
+                  explica:
+                    "Produz, guarda e sai depois — para venda ou para outra receita. Tem saldo, tem mínimo e entra na agenda de produção. É a massa de pizza.",
+                },
+                {
+                  valor: "NA_HORA",
+                  nome: "Na hora da venda",
+                  explica:
+                    "Não fica em estoque: a venda produz e baixa no mesmo instante, consumindo os insumos da ficha. É o café passado.",
+                },
+              ].map((m) => {
+                const escolhido = f.modo_producao === m.valor;
+                return (
+                  <li key={m.valor}>
+                    <label
+                      className={`flex h-full cursor-pointer items-start gap-3 rounded border p-3.5 ${
+                        escolhido ? "border-erva bg-erva-claro" : "border-linha2 bg-superficie"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="modo_producao"
+                        className="mt-1 h-4 w-4 accent-erva"
+                        disabled={!podeEditar}
+                        checked={escolhido}
+                        onChange={() => set("modo_producao", m.valor)}
+                      />
+                      <span>
+                        <span
+                          className={`block text-[14.5px] font-semibold ${
+                            escolhido ? "text-erva" : ""
+                          }`}
+                        >
+                          {m.nome}
+                        </span>
+                        <span className="mt-0.5 block text-[13px] leading-snug text-suave">
+                          {m.explica}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </Cartao>
 
       <Cartao

@@ -209,6 +209,21 @@ para arquivo nenhum — gravar direto aqui.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
+- **Duas naturezas de produzido** (`produtos.modo_producao`, migração 021, 24/08/2026):
+  `PARA_ESTOQUE` (a massa de pizza: produz, guarda, sai depois) e `NA_HORA` (o café passado:
+  a venda produz e baixa no mesmo lançamento, e o saldo volta a zero). ⚠️ Sem o `NA_HORA` a
+  casa venderia mil cafés e o pó continuaria inteiro no razão — ninguém registra produção de
+  café a café. O par entrada/saída fica visível no razão de propósito.
+- **Agenda de produção** (`producao_agenda` + `services/producao_agenda.py`): o PLANO, que
+  não mexe no estoque — quem mexe é a produção, quando a linha é cumprida. ⚠️ A quantidade
+  produzida pode sair diferente da planejada (a cozinha rendeu outra coisa) e as duas ficam
+  registradas. Agendar o mesmo produto no mesmo dia **soma** em vez de duplicar: quem agenda
+  de novo aumenta o lote, não abre outra ida ao fogão. Produto `NA_HORA` não se agenda.
+  ⚠️ A sugestão repõe até o **máximo**, não até o mínimo — produzir só até o mínimo deixa a
+  casa raspando o limite no dia seguinte.
+- ⚠️ **O alerta de mínimo se divide em dois**: `estoque.minimo` (compra-se) e
+  `producao.agendar` (a casa produz — aponta para a agenda, não para o estoque). Alerta que
+  aponta para o lugar errado é alerta que ninguém segue. Há também `producao.atrasada`.
 - ⚠️ **A produção baixa cada insumo do local DELE** (`id_local_padrao`), não do local
   informado no lançamento — uma receita usa leite da câmara e café do seco ao mesmo tempo.
   Achado pelo `cenario_cafeteria.py` em 24/08/2026: a saída batia num local sem saldo, o razão
@@ -263,7 +278,7 @@ para arquivo nenhum — gravar direto aqui.
 - Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
   `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (70), `smoke_notas.py` (47),
   `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
-  `smoke_kits.py` (29), `smoke_conversao.py` (23) e
+  `smoke_kits.py` (29), `smoke_conversao.py` (29), `smoke_producao.py` (33) e
   `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
   com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
   apuração anterior, porque o banco local já tem dado de outras rodadas.

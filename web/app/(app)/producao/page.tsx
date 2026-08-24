@@ -9,6 +9,7 @@ import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
+import AgendaProducao from "./agenda";
 
 type Ficha = {
   id: number;
@@ -48,6 +49,7 @@ export default function PaginaProducao() {
   const podeProduzir = pode("estoque.saidas");
   const veCusto = pode("fichas.custos");
 
+  const [aba, setAba] = useState<"agenda" | "registrar">("agenda");
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [historico, setHistorico] = useState<Producao[] | null>(null);
@@ -133,7 +135,29 @@ export default function PaginaProducao() {
         </p>
       </header>
 
+      {/* Planejar e registrar são momentos diferentes: um é a véspera, o outro
+          é depois do fogão. A aba separa os dois sem virar duas telas. */}
+      <nav className="flex gap-1 border-b border-linha">
+        {(["agenda", "registrar"] as const).map((a) => (
+          <button
+            key={a}
+            onClick={() => setAba(a)}
+            className={`-mb-px border-b-2 px-3 py-2 text-[14.5px] ${
+              aba === a
+                ? "border-erva font-semibold text-erva"
+                : "border-transparent text-suave hover:text-tinta"
+            }`}
+          >
+            {a === "agenda" ? "Agenda" : "Registrar o que foi feito"}
+          </button>
+        ))}
+      </nav>
+
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {aba === "agenda" && (
+        <AgendaProducao fichas={fichas} locais={locais} aoProduzir={() => void carregar()} />
+      )}
 
       {resultado && (
         <Cartao
@@ -175,7 +199,7 @@ export default function PaginaProducao() {
         </Cartao>
       )}
 
-      {podeProduzir && (
+      {podeProduzir && aba === "registrar" && (
         <Cartao titulo="Registrar produção">
           {!fichas.length ? (
             <p className="text-[14.5px] text-suave">
@@ -248,7 +272,7 @@ export default function PaginaProducao() {
         </Cartao>
       )}
 
-      <Cartao titulo="Produções recentes">
+      {aba === "registrar" && <Cartao titulo="Produções recentes">
         {!historico ? (
           <Carregando />
         ) : !historico.length ? (
@@ -298,7 +322,7 @@ export default function PaginaProducao() {
             </table>
           </div>
         )}
-      </Cartao>
+      </Cartao>}
     </div>
   );
 }

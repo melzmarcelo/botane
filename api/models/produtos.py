@@ -31,6 +31,9 @@ class ProdutoBase(BaseModel):
     # Onde este produto entra quando chega numa nota. O congelado e o seco vêm
     # na mesma folha: um local por NOTA obrigaria a lançar duas vezes.
     id_local_padrao: int | None = None
+    # PARA_ESTOQUE: produz, guarda, sai depois (a massa de pizza).
+    # NA_HORA: a venda produz e baixa junto (o café passado).
+    modo_producao: str = "PARA_ESTOQUE"
     perecivel: bool = False
     validade_dias: int | None = Field(default=None, ge=0, le=3650)
     controla_lote: bool = False
@@ -79,6 +82,7 @@ class ProdutoUpdate(ProdutoBase):
     tipo: str | None = None
     fator_compra: float | None = Field(default=None, gt=0)
     id_local_padrao: int | None = None
+    modo_producao: str | None = None
     producao_propria: bool | None = None
     controla_estoque: bool | None = None
     perecivel: bool | None = None
@@ -107,6 +111,7 @@ class ProdutoResponse(BaseModel):
     fator_compra: float
     id_local_padrao: int | None = None
     local_padrao: str | None = None
+    modo_producao: str = "PARA_ESTOQUE"
     perecivel: bool
     validade_dias: int | None = None
     controla_lote: bool

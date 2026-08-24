@@ -590,4 +590,7 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         "custo_unitario": float(unitario),
         "consumos": consumos,
         "movimento_entrada": entrada["id"],
+        # Onde o produzido entrou — quem produz por causa de uma venda precisa
+        # dar a baixa no MESMO local, senão o saldo fica preso lá.
+        "id_local": local_produzido or id_local,
     }

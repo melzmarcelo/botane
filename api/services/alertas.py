@@ -53,6 +53,33 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Vai faltar antes da próxima entrega se ninguém comprar.",
            "ver quais", "/estoque")
 
+    # O que falta e a casa PRODUZ não se resolve comprando: entra na agenda.
+    # Separado do alerta acima de propósito — a ação é outra, e um alerta que
+    # aponta para o lugar errado é um alerta que ninguém segue.
+    r = _um(cur, """
+        SELECT count(*) AS n FROM produtos p
+         WHERE p.ativo AND p.producao_propria AND p.modo_producao = 'PARA_ESTOQUE'
+           AND p.estoque_minimo IS NOT NULL
+           AND EXISTS (SELECT 1 FROM fichas_tecnicas f
+                        WHERE f.id_produto = p.id AND f.status = 'HOMOLOGADA')
+           AND NOT EXISTS (SELECT 1 FROM producao_agenda a
+                            WHERE a.id_produto = p.id AND a.status = 'PLANEJADA'
+                              AND a.data_prevista >= current_date)
+           AND coalesce((SELECT sum(s.quantidade) FROM estoque_saldos s
+                          WHERE s.id_produto = p.id AND s.id_unidade = %s), 0)
+               < p.estoque_minimo""", (id_unidade,))
+    juntar("producao.agendar", ATENCAO, "Produzido abaixo do mínimo, sem agenda", r.get("n"),
+           "A cozinha faz isto — mas ninguém marcou quando. Vai faltar no meio do serviço.",
+           "pôr na agenda", "/producao")
+
+    r = _um(cur, """
+        SELECT count(*) AS n FROM producao_agenda
+         WHERE id_unidade = %s AND status = 'PLANEJADA' AND data_prevista < current_date""",
+            (id_unidade,))
+    juntar("producao.atrasada", ATENCAO, "Produção planejada e não feita", r.get("n"),
+           "O dia passou e a linha continua na agenda — ou se produz, ou se cancela.",
+           "ver a agenda", "/producao")
+
     r = _um(cur, """
         SELECT count(*) AS n, coalesce(sum(el.quantidade * s.custo_medio), 0) AS valor
           FROM estoque_lotes el

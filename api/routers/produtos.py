@@ -42,7 +42,7 @@ router = APIRouter(prefix="/produtos", tags=["produtos"])
 _EDITAVEIS = (
     "codigo", "nome", "nome_curto", "tipo", "id_categoria", "id_setor",
     "producao_propria", "controla_estoque", "um_estoque", "um_compra", "fator_compra",
-    "id_local_padrao",
+    "id_local_padrao", "modo_producao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
     "observacao", "status", "ativo",
@@ -54,11 +54,24 @@ def _proximo_codigo(cur) -> str:
     return f"P{cur.fetchone()['n']:04d}"
 
 
+MODOS_PRODUCAO = ("PARA_ESTOQUE", "NA_HORA")
+
+
 def _valida_basico(dados: dict) -> None:
     if dados.get("tipo") and dados["tipo"] not in TIPOS:
         raise HTTPException(status_code=400, detail=f"Tipo inválido. Use: {', '.join(TIPOS)}")
     if dados.get("status") and dados["status"] not in STATUS:
         raise HTTPException(status_code=400, detail=f"Status inválido. Use: {', '.join(STATUS)}")
+    if dados.get("modo_producao") and dados["modo_producao"] not in MODOS_PRODUCAO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Modo de produção inválido. Use: {', '.join(MODOS_PRODUCAO)}",
+        )
+    if dados.get("modo_producao") == "NA_HORA" and dados.get("producao_propria") is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Produzido na hora precisa ser de produção própria — é a ficha que baixa.",
+        )
     if dados.get("producao_propria") and dados.get("tipo") not in (None, "PRODUZIDO", "KIT"):
         raise HTTPException(
             status_code=400,
