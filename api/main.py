@@ -11,7 +11,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import arquivos
-from config import ADMIN_EMAIL, ADMIN_NOME, ADMIN_SENHA, CORS_ORIGINS, DEBUG, PORT
+from config import (
+    ADMIN_EMAIL,
+    ADMIN_EMAIL_PADRAO,
+    ADMIN_NOME,
+    ADMIN_SENHA,
+    ADMIN_SENHA_PADRAO,
+    CORS_ORIGINS,
+    DEBUG,
+    PORT,
+)
 from database import close_pool, get_cursor, init_pool
 from db_updater import run_migrations
 from routers import (
@@ -42,11 +51,38 @@ VERSAO = "0.1.0"
 
 
 def garantir_admin() -> None:
-    """Primeiro acesso: sem nenhum usuário, cria o administrador do .env."""
+    """Primeiro acesso: sem nenhum usuário, cria o administrador do .env.
+
+    ⚠️ **Fora de desenvolvimento, recusa subir com a senha padrão.** Ela está
+    escrita no README, que é público — e o primeiro deploy real subiu com ela
+    porque as variáveis não tinham sido definidas no painel. O sistema ficou na
+    internet com senha de administrador conhecida, e nada avisou: a linha
+    "administrador criado" saiu igual à de sempre.
+
+    Parar o start é o único aviso que ninguém deixa passar. E vale só na
+    criação: sistema que já tem gente dentro não é afetado.
+    """
     with get_cursor() as cur:
         cur.execute("SELECT count(*) AS n FROM usuarios")
         if cur.fetchone()["n"]:
             return
+
+        if not DEBUG:
+            faltando = []
+            if ADMIN_SENHA == ADMIN_SENHA_PADRAO:
+                faltando.append("ADMIN_SENHA")
+            if ADMIN_EMAIL == ADMIN_EMAIL_PADRAO:
+                faltando.append("ADMIN_EMAIL")
+            if len(ADMIN_SENHA) < 12:
+                faltando.append("ADMIN_SENHA (curta demais: mínimo 12 caracteres)")
+            if faltando:
+                raise RuntimeError(
+                    "Recusando criar o administrador com valor de desenvolvimento: "
+                    + ", ".join(faltando)
+                    + ". Defina essas variáveis no ambiente e suba de novo — a senha padrão "
+                    "está escrita no README, que é público."
+                )
+
         cur.execute(
             """INSERT INTO usuarios (nome, email, senha_hash, ativo, trocar_senha)
                VALUES (%s, %s, %s, true, true) RETURNING id""",

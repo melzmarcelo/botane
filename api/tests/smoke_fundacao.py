@@ -164,6 +164,44 @@ tudo = json.dumps(log, ensure_ascii=False)
 checar("e nenhuma senha usada neste teste aparece como valor",
        ADMIN[1] not in tudo and TESTE_SENHA not in tudo)
 
+print("0b. a senha de desenvolvimento não sobe para produção")
+# ⚠️ O primeiro deploy real subiu com `admin@botane.com.br` / `botane123` porque
+# as variáveis não foram definidas no painel — e a senha está escrita no README,
+# que é público. Nada avisou: a linha "administrador criado" saiu igual à de
+# sempre. Agora, com DEBUG desligado, o start PARA. Parar é o único aviso que
+# ninguém deixa passar.
+import subprocess  # noqa: E402
+
+_prova = subprocess.run(
+    [sys.executable, "-c", """
+import sys
+sys.path.insert(0, ".")
+import main, config
+
+class Cur:
+    def execute(self, sql, *a, **k): pass
+    def fetchone(self): return {"n": 0, "id": 1}
+class Ctx:
+    def __enter__(self): return Cur()
+    def __exit__(self, *a): return False
+
+main.get_cursor = lambda: Ctx()
+main.DEBUG = False
+main.ADMIN_SENHA = config.ADMIN_SENHA_PADRAO
+main.ADMIN_EMAIL = "dono@casa.com.br"
+try:
+    main.garantir_admin()
+    print("CRIOU")
+except RuntimeError as e:
+    print("RECUSOU", "README" in str(e))
+"""],
+    capture_output=True, text=True, cwd=".",
+)
+checar("com DEBUG desligado, o start recusa a senha padrão",
+       "RECUSOU" in _prova.stdout, (_prova.stdout[:120], _prova.stderr[:120]))
+checar("e a recusa diz onde a senha está publicada",
+       "True" in _prova.stdout, _prova.stdout[:120])
+
 print("8. limpeza")
 if id_teste:
     st, r = chamar("DELETE", f"/usuarios/{id_teste}", token=token)

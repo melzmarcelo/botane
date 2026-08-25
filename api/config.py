@@ -43,6 +43,10 @@ SENHA_PEDIDOS_HORA = int(os.getenv("SENHA_PEDIDOS_HORA", "3"))
 
 # --- primeiro acesso ---
 # Só é usado quando a tabela de usuários está vazia.
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@botane.com.br")
-ADMIN_SENHA = os.getenv("ADMIN_SENHA", "botane123")
+# ⚠️ São os valores de DESENVOLVIMENTO, e estão escritos no README — que é
+# público. `garantir_admin` recusa subir com eles quando `DEBUG` está desligado.
+ADMIN_EMAIL_PADRAO = "admin@botane.com.br"
+ADMIN_SENHA_PADRAO = "botane123"
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", ADMIN_EMAIL_PADRAO)
+ADMIN_SENHA = os.getenv("ADMIN_SENHA", ADMIN_SENHA_PADRAO)
 ADMIN_NOME = os.getenv("ADMIN_NOME", "Administrador")

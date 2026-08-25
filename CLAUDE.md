@@ -73,7 +73,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 
 - Mapeamento e **etapas 1 a 6 — a primeira parte inteira** (fundação, cadastros, fichas,
   estoque, Omie e CMV) concluídas em 18 e 19/08/2026.
-- Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
+- Roda local: `.\iniciar_local.ps1`. As credenciais do admin inicial estão em
+  `api/.env.example` — e só valem em desenvolvimento.
+- ⚠️ **Com `DEBUG=false`, a API RECUSA SUBIR se `ADMIN_EMAIL`/`ADMIN_SENHA` forem as de
+  desenvolvimento** (ou a senha tiver menos de 12 caracteres). O primeiro deploy real
+  subiu com `admin@botane.com.br` e a senha padrão, porque as variáveis não tinham sido
+  definidas no painel — e nada avisou: a linha "administrador criado" saiu igual à de
+  sempre. Parar o start é o único aviso que ninguém deixa passar. A trava vale só na
+  CRIAÇÃO: sistema que já tem gente dentro não é afetado.
 - **O Omie já foi exercitado contra a conta REAL do cliente** (24/08/2026): 37 notas do
   período, 2.183 produtos e 793 fornecedores importados de verdade. Sem credencial, o
   importador cai no **modo simulado** sobre fixtures, e as duas rotas passam pelo mesmo código.
@@ -496,7 +503,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (811 verificações de API): `smoke_fundacao.py` (38), `smoke_cadastros.py` (47),
+- Testes (813 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (58), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
