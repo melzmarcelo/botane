@@ -124,6 +124,38 @@ def item_da_nota(bruto: dict, seq: int) -> dict:
     }
 
 
+def _acessorias_do_emitente(itens: list[dict], frete_nota, outros_nota) -> None:
+    """Reconhece o rateio que o emitente JÁ fez, item a item.
+
+    ⚠️ **O `vTotalItem` do Omie vem com o frete e o IPI/ST embutidos.** Numa
+    nota real: `vTotalProdutos` 256,00 + `vFrete` 40,00 = `vTotalNFe` 296,00 —
+    e o item, de 2 × 128,00, aparecia com `vTotalItem` **296,00**. Tratando
+    isso como mercadoria e rateando o frete de novo por cima, o queijo entrava
+    no estoque a 336,00: **13,5% acima da nota**, contaminando custo médio,
+    ficha e CMV. Foram R$ 74,44 a mais em 30 notas.
+
+    A regra é a mesma que o XML da NF-e já seguia: **quando o emitente rateou,
+    o rateio é dele**. A sobra de cada item (`vTotalItem` menos a mercadoria
+    líquida) vira acessória informada, e quem não tem sobra recebe ZERO — senão
+    o rateio por valor entraria em cima do que já veio distribuído.
+
+    A sobra mistura frete com IPI/ST; a divisão entre os dois acompanha a
+    proporção da NOTA, para as colunas da tela continuarem dizendo a verdade.
+    O que importa para o custo é a soma, e ela é exata.
+    """
+    if not any(dec(i.get("_sobra") or 0) > 0 for i in itens):
+        for item in itens:
+            item.pop("_sobra", None)
+        return
+    peso_frete = (frete_nota / (frete_nota + outros_nota)
+                  if (frete_nota + outros_nota) > 0 else Decimal(1))
+    for item in itens:
+        sobra = dec(item.pop("_sobra", 0) or 0)
+        frete = (sobra * peso_frete).quantize(Decimal("0.01"))
+        item["frete_informado"] = frete
+        item["outros_informado"] = sobra - frete
+
+
 def recebimento_de_nfe(bruto: dict) -> dict:
     """Uma nota do `ListarRecebimentos` / `ConsultarRecebimento`.
 
@@ -145,6 +177,14 @@ def recebimento_de_nfe(bruto: dict) -> dict:
     # O Omie manda o número zerado à esquerda ("000034194"), como no DANFE.
     numero = str(_pega(cab, "cNumeroNFe", "cNumero", padrao="") or "").strip()
 
+    frete_nota = _numero(_pega(total, "vFrete", "vTotalFrete", "nValFrete"))
+    outros_nota = (_numero(_pega(total, "vTotalIPI", "vIPI"))
+                   + _numero(_pega(total, "vTotalICMSST", "vICMSST"))
+                   + _numero(_pega(total, "vOutrasDespesas", "vOutro")))
+    itens = [item_do_recebimento(i, seq) for seq, i in
+             enumerate(_pega(bruto, "itensRecebimento", "itens", padrao=[]) or [], start=1)]
+    _acessorias_do_emitente(itens, frete_nota, outros_nota)
+
     return {
         "id_omie": str(_pega(cab, "nIdReceb", "nCodRecebimento", padrao="") or "") or None,
         "chave_nfe": _so_digitos(_pega(cab, "cChaveNFe", "chave_nfe")),
@@ -159,7 +199,15 @@ def recebimento_de_nfe(bruto: dict) -> dict:
                               or _pega(cab, "dEmissaoNFe")),
         "valor_produtos": _numero(_pega(total, "vTotalProdutos", "vProdutos")),
         "valor_frete": _numero(_pega(total, "vFrete", "vTotalFrete", "nValFrete")),
-        "valor_desconto": _numero(_pega(total, "vTotalDescontos", "vDescontos", "vDesconto")),
+        # ⚠️ Só o desconto que NÃO está nos itens. O `vTotalDescontos` da nota é
+        # a SOMA dos `vDesconto` de cada item — descontar os dois tira o mesmo
+        # dinheiro duas vezes. Numa nota real, dois cafés de 27,55 com 1,36 de
+        # desconto cada entravam a 23,47 em vez de 26,19: 10% a menos.
+        "valor_desconto": max(
+            _numero(_pega(total, "vTotalDescontos", "vDescontos", "vDesconto"))
+            - sum((dec(i["valor_desconto"]) for i in itens), Decimal(0)),
+            Decimal(0),
+        ),
         "valor_outros": (_numero(_pega(total, "vTotalIPI", "vIPI"))
                          + _numero(_pega(total, "vTotalICMSST", "vICMSST"))
                          + _numero(_pega(total, "vOutrasDespesas", "vOutro"))),
@@ -168,14 +216,17 @@ def recebimento_de_nfe(bruto: dict) -> dict:
         # 80 convivendo). Não filtra nada aqui — a nota entra como IMPORTADA e
         # só vira estoque quando alguém lança —, mas fica à vista no bruto.
         "etapa_omie": str(_pega(cab, "cEtapa", padrao="") or "") or None,
-        "itens": [item_do_recebimento(i, seq) for seq, i in
-                  enumerate(_pega(bruto, "itensRecebimento", "itens", padrao=[]) or [], start=1)],
+        "itens": itens,
     }
 
 
 def item_do_recebimento(bruto: dict, seq: int) -> dict:
     """Um item de `itensRecebimento` — os dados úteis moram em `itensCabec`."""
     cab = _pega(bruto, "itensCabec", padrao={}) or bruto
+    quantidade = _numero(_pega(cab, "nQtdeNFe", "nQuantidade"))
+    preco = _numero(_pega(cab, "nPrecoUnit", "nValorUnitario"))
+    desconto = _numero(_pega(cab, "vDesconto", "nValorDesconto"))
+    total_item = _numero(_pega(cab, "vTotalItem", "nValorTotal"))
     return {
         "seq": int(_pega(cab, "nSequencia", padrao=seq) or seq),
         "descricao_fornecedor": _nome_limpo(
@@ -187,16 +238,21 @@ def item_do_recebimento(bruto: dict, seq: int) -> dict:
         "codigo_omie": str(_pega(cab, "nIdProduto", padrao="") or "") or None,
         "codigo_barras": (_so_digitos(_pega(cab, "cEAN", "cCodigoBarras")) or "")[:20] or None,
         "ncm": (_so_digitos(_pega(cab, "cNCM", "ncm")) or "")[:10] or None,
-        "quantidade": _numero(_pega(cab, "nQtdeNFe", "nQuantidade")),
+        "quantidade": quantidade,
         # ⚠️ A unidade da nota vem com pontuação de DANFE ("BB.", "CX."). Sem
         # limpar, nenhuma comparação com a unidade do cadastro casaria.
         "um_nota": "".join(
             c for c in str(_pega(cab, "cUnidadeNfe", "cUnidade", padrao="") or "").upper()
             if c.isalnum()
         )[:6] or None,
-        "valor_unitario": _numero(_pega(cab, "nPrecoUnit", "nValorUnitario")),
-        "valor_total": _numero(_pega(cab, "vTotalItem", "nValorTotal")),
-        "valor_desconto": _numero(_pega(cab, "vDesconto", "nValorDesconto")),
+        "valor_unitario": preco,
+        # ⚠️ Mercadoria = quantidade × preço, NÃO o `vTotalItem`: aquele já traz
+        # as acessórias que o emitente rateou (ver `_acessorias_do_emitente`).
+        "valor_total": quantidade * preco,
+        "valor_desconto": desconto,
+        # O que sobra entre o total do item e a mercadoria líquida: é o rateio
+        # do emitente. Some do dicionário assim que for distribuído.
+        "_sobra": max(total_item - (quantidade * preco - desconto), Decimal(0)),
         # Item que alguém já marcou para ignorar no Omie entra ignorado aqui:
         # obrigar a repetir a decisão nas duas telas é como não ter integração.
         "ignorado": str(_pega(cab, "cIgnorarItem", padrao="N")).upper() == "S",

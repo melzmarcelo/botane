@@ -1,7 +1,7 @@
 {
   "pagina": 1,
   "total_de_paginas": 1,
-  "total_de_registros": 4,
+  "total_de_registros": 6,
   "produto_servico_cadastro": [
     {
       "codigo_produto": 700001,
@@ -39,6 +39,24 @@
       "unidade": "BJ",
       "ncm": "2003.10.00",
       "valor_unitario": 16.0,
+      "inativo": "N"
+    },
+    {
+      "codigo_produto": 700005,
+      "codigo": "FRETE-EMB",
+      "descricao": "INSUMO COM FRETE EMBUTIDO",
+      "unidade": "UN",
+      "ncm": "0901.11.10",
+      "valor_unitario": 12.0,
+      "inativo": "N"
+    },
+    {
+      "codigo_produto": 700006,
+      "codigo": "DESCONTO-EMB",
+      "descricao": "INSUMO COM DESCONTO EMBUTIDO",
+      "unidade": "UN",
+      "ncm": "0901.11.10",
+      "valor_unitario": 12.0,
       "inativo": "N"
     }
   ]

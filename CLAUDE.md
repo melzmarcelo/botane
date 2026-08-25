@@ -248,6 +248,25 @@ para arquivo nenhum — gravar direto aqui.
 - ⚠️ **O rodapé de tributos do DANFE vem grudado na descrição** e ia para o nome do produto:
   59 cadastros se chamavam "MAMÃO FORMOSA Trib. Aprox. (Fed: R$ 3,63…) Fonte: IBPT/…".
   `mapeadores._nome_limpo` corta na entrada; a migração 023 limpa o que já entrou.
+- 🔑 **O `vTotalItem` do Omie JÁ TRAZ frete, IPI/ST e desconto rateados pelo emitente**
+  (25/08/2026). Tratar isso como mercadoria e ratear as acessórias da nota por cima cobrava
+  tudo DUAS vezes: numa conta real, R$ 74,44 a mais no razão e um queijo entrando 13,5% acima
+  da nota. `mapeadores._acessorias_do_emitente` reconhece a sobra (`vTotalItem` − mercadoria
+  líquida) e a transforma em acessória INFORMADA — a mesma regra que o XML já seguia: quando o
+  emitente rateou, o rateio é dele e ninguém soma nada por cima. A mercadoria passou a ser
+  **quantidade × preço**, nunca `vTotalItem`, e o desconto da NOTA guarda só o que não está
+  nos itens (`vTotalDescontos` é a soma dos `vDesconto`). Migrações 024 e 025 consertam o que
+  entrou antes; nota já lançada precisa de estorno + novo lançamento.
+- ⚠️ **Fator 1 num vínculo não é resposta, é a falta dela.** `codigos_externos.fator` e
+  `produto_fornecedor.fator` nascem 1 por padrão — e **o lançamento da nota CRIA a linha de
+  `produto_fornecedor`** só para guardar o último preço. A cascata de `_fator_do_item` aceitava
+  esse 1 como informação, e o vínculo recém-criado passava na frente do `fator_compra` do
+  produto: o galão de azeite de 5 L entrou certo na primeira nota e virou 1 L na segunda, sem
+  ninguém mexer no cadastro. Agora só fator **diferente de 1** conta como resposta.
+- ⚠️ **Cópia congelada acompanha a largura da ORIGEM.** `cmv_movimentacao.codigo` era
+  `varchar(20)` contra `produtos.codigo varchar(40)`: **fechar o mês estourava com 500** assim
+  que a base tinha um código real de 40 caracteres. Migração 026. É a terceira vez que largura
+  de coluna quebra com dado de verdade (catálogo do Omie e NCM foram as outras).
 - ⚠️ **A unidade da nota ia CRUA para `produtos.um_compra`, que é chave estrangeira.** Uma
   conta real trouxe "UND", "BJ", "GA", "GF", "1UNID" — e criar produto a partir do item da nota
   devolvia 500 sem dizer por quê. Sigla desconhecida vira nulo.
@@ -394,9 +413,9 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (782 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (85),
-  `smoke_notas.py` (66), `smoke_senha.py` (40), `smoke_lotes.py` (28),
+- Testes (807 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (92),
+  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (24),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais

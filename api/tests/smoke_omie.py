@@ -76,7 +76,7 @@ print("0. limpa o cenário da rodada anterior")
 # base que já recebeu notas de uma conta real as da fixture ficam fora dela — a
 # limpeza não achava nada, a rodada seguinte encontrava tudo já conciliado e as
 # fases que precisam de pendência não exercitavam trava nenhuma.
-for numero in ("4812", "4913", "5014"):
+for numero in ("4812", "4913", "5014", "5115"):
     st, notas_antigas = chamar("GET", f"/notas?busca={numero}", token=token)
     for n in notas_antigas or []:
         if n.get("numero") != numero:
@@ -410,6 +410,43 @@ st, r = chamar("POST", f"/notas/{nota_champ['id']}/lancar", {}, token=token)
 checar("com unidade definida, a nota entra", st == 200 and r.get("itens_lancados") == 1, r)
 st, r = chamar("POST", f"/notas/{nota_champ['id']}/estornar", {}, token=token)
 checar("e o estorno desfaz", st == 200, r)
+
+print("6c. o rateio que o EMITENTE já fez não se soma de novo")
+# ⚠️ O `vTotalItem` do Omie vem com frete e desconto embutidos. Tratar isso como
+# mercadoria e ratear as acessórias da nota por cima cobrava o frete duas vezes
+# e o desconto duas vezes — numa conta real, R$ 74,44 a mais no razão e um
+# produto entrando 13,5% acima da nota.
+st, notas = chamar("GET", "/notas?busca=5115", token=token)
+nota_rateio = next((n for n in notas or [] if n["numero"] == "5115"), None)
+checar("a nota com rateio do emitente foi importada", nota_rateio is not None, notas)
+st, detalhe = chamar("GET", f"/notas/{nota_rateio['id']}", token=token)
+itens_rateio = {i["codigo_fornecedor"]: i for i in detalhe.get("itens", [])}
+
+com_frete = itens_rateio.get("FRETE-EMB")
+# 10 × 12,00 = 120,00 de mercadoria + 10,00 de frete que o emitente já rateou.
+checar("a mercadoria é quantidade × preço, não o total do item",
+       com_frete and perto(float(com_frete["valor_total"]), 120.00, 0.01),
+       com_frete and com_frete["valor_total"])
+checar("o frete do emitente entra UMA vez",
+       com_frete and perto(float(com_frete["valor_frete_rateado"] or 0), 10.00, 0.01),
+       com_frete and com_frete["valor_frete_rateado"])
+checar("e o custo bate com a nota: (120 + 10) ÷ 10 = 13,00",
+       com_frete and perto(float(com_frete["custo_aquisicao_unitario"]), 13.00, 0.001),
+       com_frete and com_frete["custo_aquisicao_unitario"])
+
+com_desconto = itens_rateio.get("DESC-EMB")
+# 120,00 − 23,81 de desconto + 10,00 de frete = 106,19 ÷ 10 = 10,619
+checar("o desconto do emitente entra UMA vez",
+       com_desconto and perto(float(com_desconto["valor_desconto"]), 23.81, 0.01),
+       com_desconto and com_desconto["valor_desconto"])
+checar("e o custo com desconto bate: (120 − 23,81 + 10) ÷ 10 = 10,619",
+       com_desconto and perto(float(com_desconto["custo_aquisicao_unitario"]), 10.619, 0.001),
+       com_desconto and com_desconto["custo_aquisicao_unitario"])
+
+# A soma dos custos de aquisição tem de dar o total da NOTA, nem mais nem menos.
+soma = sum(float(i["custo_aquisicao_unitario"]) * float(i["quantidade_convertida"])
+           for i in detalhe["itens"] if i["custo_aquisicao_unitario"])
+checar("a nota inteira fecha com ela mesma (236,19)", perto(soma, 236.19, 0.02), soma)
 
 print("7. permissão")
 tk = garantir_cozinha(chamar, token)

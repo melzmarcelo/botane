@@ -328,6 +328,45 @@ checar("e o desconto do item continua abatendo",
 chamar("DELETE", f"/notas/{n['id']}", token=token)
 chamar("DELETE", f"/produtos/{agua['id']}", token=token)
 
+print("6a4. o vínculo com o fornecedor não encobre o fator do produto")
+# ⚠️ Lançar uma nota CRIA a linha de `produto_fornecedor` só para guardar o
+# último preço — e ela nasce com `fator` 1, o padrão da coluna. Aceitar esse 1
+# como informação fazia o vínculo recém-criado passar na frente do
+# `fator_compra` do produto: o galão de azeite de 5 L entrou certo na primeira
+# nota e virou 1 L na segunda, sem ninguém mexer no cadastro. Fator 1 não é
+# resposta, é a falta dela.
+st, galao = chamar("POST", "/produtos", {
+    "nome": f"Nota galao {marca}", "tipo": "INSUMO", "um_estoque": "L",
+    "fator_compra": 5,
+}, token=token)
+st, forn = chamar("GET", "/fornecedores?limite=1", token=token)
+id_forn = forn[0]["id"] if forn else None
+
+def custo_do_galao(sufixo):
+    st, n = chamar("POST", "/notas", {
+        "numero": f"GL{sufixo}{marca}", "id_local": local["id"], "id_fornecedor": id_forn,
+        "itens": [{"id_produto": galao["id"], "quantidade": 1, "um": "GL",
+                   "valor_unitario": 200}],
+    }, token=token)
+    st, nota = chamar("GET", f"/notas/{n['id']}", token=token)
+    return n["id"], nota["itens"][0]
+
+id_n1, item1 = custo_do_galao("A")
+checar("1 galão vira 5 L pelo fator do produto",
+       perto(item1["quantidade_convertida"], 5, 0.001), item1)
+st, r = chamar("POST", f"/notas/{id_n1}/lancar", {}, token=token)
+checar("a nota lança (e cria o vínculo com o fornecedor)", st == 200, r)
+
+id_n2, item2 = custo_do_galao("B")
+checar("a SEGUNDA nota continua virando 5 L",
+       perto(item2["quantidade_convertida"], 5, 0.001), item2)
+checar("e o custo continua sendo 200 ÷ 5 = 40,00",
+       perto(item2["custo_aquisicao_unitario"], 40, 0.001), item2)
+chamar("DELETE", f"/notas/{id_n2}", token=token)
+chamar("POST", f"/notas/{id_n1}/estornar", {}, token=token)
+chamar("DELETE", f"/notas/{id_n1}", token=token)
+chamar("DELETE", f"/produtos/{galao['id']}", token=token)
+
 print("6b. a nota digitada se corrige enquanto não virou estoque")
 st, r = chamar("PUT", f"/notas/{id_manual}", {
     "id_fornecedor": fornecedor["id"], "numero": f"M{marca}", "serie": "1",

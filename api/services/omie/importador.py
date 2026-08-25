@@ -149,13 +149,20 @@ def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str 
        mandar, sem dizer em que unidade.
     4. **fator de compra do produto** — o padrão antigo, de quando havia um só.
     """
+    # ⚠️ **Fator 1 não é resposta, é a falta dela.** Tanto `codigos_externos`
+    # quanto `produto_fornecedor` nascem com fator 1 por padrão — e o
+    # lançamento da nota CRIA a linha de `produto_fornecedor` só para guardar o
+    # último preço. Aceitar esse 1 como informação faz o vínculo recém-criado
+    # encobrir o `fator_compra` do produto: o azeite de 5 L entrou certo na
+    # primeira nota e virou 1 L na segunda, sem nada mudar no cadastro.
+    # Quem quer dizer "um por um" não precisa dizer nada: 1 já é o resultado.
     if codigo:
         cur.execute(
             "SELECT fator FROM codigos_externos WHERE sistema = %s AND codigo = %s",
             (SISTEMA, codigo),
         )
         linha = cur.fetchone()
-        if linha and dec(linha["fator"]) > 0:
+        if linha and dec(linha["fator"]) > 0 and dec(linha["fator"]) != 1:
             return dec(linha["fator"])
     da_embalagem = custos.fator_de_embalagem(cur, id_produto, um_nota)
     if da_embalagem:
@@ -167,7 +174,7 @@ def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str 
             (id_produto, id_fornecedor),
         )
         linha = cur.fetchone()
-        if linha and dec(linha["fator"]) > 0:
+        if linha and dec(linha["fator"]) > 0 and dec(linha["fator"]) != 1:
             return dec(linha["fator"])
     cur.execute("SELECT fator_compra FROM produtos WHERE id = %s", (id_produto,))
     linha = cur.fetchone()
@@ -357,11 +364,25 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
         sugeridos += 1 if (sugestao and not achado) else 0
         notas_mexidas.add(item["id_nota"])
 
-    for nota in notas_mexidas:
+    # ⚠️ Recalcula TODAS as notas ainda não lançadas, não só as que ganharam
+    # vínculo agora. O custo de aquisição e a quantidade convertida ficam
+    # gravados no item desde a importação — e o que muda entre uma coisa e
+    # outra costuma ser o CADASTRO: alguém definiu a unidade de estoque que
+    # faltava, ou o fator da embalagem. Sem passar tudo a limpo, a tela
+    # continuaria mostrando o número velho até o lançamento, que recalcula.
+    # A conta é barata e o conjunto é pequeno: nota lançada não entra.
+    cur.execute(
+        """SELECT id FROM notas_entrada
+            WHERE id_unidade = %s AND status <> 'LANCADA'"""
+        + (" AND id = %s" if id_nota else ""),
+        parametros,
+    )
+    recalculadas = [r["id"] for r in cur.fetchall()]
+    for nota in recalculadas:
         calcular_nota(cur, nota)
 
     return {"pendentes": len(pendentes), "vinculados": vinculados, "sugeridos": sugeridos,
-            "notas": len(notas_mexidas)}
+            "notas": len(notas_mexidas), "recalculadas": len(recalculadas)}
 
 
 def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,

@@ -150,5 +150,63 @@
         }
       }
     ]
+  },
+  "90004": {
+    "cabec": {
+      "nIdReceb": 90004,
+      "cChaveNFe": "35260812345678000195550010000005111000005115",
+      "cNumeroNFe": "000005115",
+      "cSerieNFe": "1",
+      "cModeloNFe": "55",
+      "cEtapa": "80",
+      "dEmissaoNFe": "20/08/2026",
+      "cCNPJ_CPF": "12.345.678/0001-95",
+      "cRazaoSocial": "Distribuidora Simulada LTDA",
+      "cNome": "Distribuidora Simulada LTDA",
+      "nIdFornecedor": 70001,
+      "nValorNFe": 236.19
+    },
+    "totais": {
+      "vTotalProdutos": 240.0,
+      "vFrete": 20.0,
+      "vTotalDescontos": 23.81,
+      "vTotalNFe": 236.19
+    },
+    "transporte": {
+      "cTipoFrete": "0"
+    },
+    "infoAdicionais": {
+      "dRegistro": "20/08/2026"
+    },
+    "itensRecebimento": [
+      {
+        "itensCabec": {
+          "nSequencia": 1,
+          "cCodigoProduto": "FRETE-EMB",
+          "cDescricaoProduto": "INSUMO COM FRETE EMBUTIDO",
+          "cUnidadeNfe": "UN",
+          "nQtdeNFe": 10,
+          "nPrecoUnit": 12.0,
+          "vTotalItem": 130.0,
+          "vDesconto": 0,
+          "cIgnorarItem": "N",
+          "nIdProduto": 700005
+        }
+      },
+      {
+        "itensCabec": {
+          "nSequencia": 2,
+          "cCodigoProduto": "DESC-EMB",
+          "cDescricaoProduto": "INSUMO COM DESCONTO EMBUTIDO",
+          "cUnidadeNfe": "UN",
+          "nQtdeNFe": 10,
+          "nPrecoUnit": 12.0,
+          "vTotalItem": 106.19,
+          "vDesconto": 23.81,
+          "cIgnorarItem": "N",
+          "nIdProduto": 700006
+        }
+      }
+    ]
   }
 }
