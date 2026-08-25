@@ -21,6 +21,9 @@ const MENU: {
     itens: [
       { href: "/", nome: "Início" },
       { href: "/alertas", nome: "Alertas" },
+      // Sem chave: o manual explica o sistema a quem usa o sistema, e quem tem
+      // menos permissão é justamente quem mais precisa dele.
+      { href: "/ajuda", nome: "Ajuda" },
     ],
   },
   {

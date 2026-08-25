@@ -88,7 +88,17 @@ para arquivo nenhum — gravar direto aqui.
   regra de bolso: mensagem com "Falha ao carregar" fica; o resto flutua.
 - ⚠️ **Voltar tem de parecer um controle**: era `class="rotulo"` (10,5px, maiúsculas, cinza) e
   lia como legenda. Virou `.link-voltar`, pílula com borda e seta.
-- Manual da equipe: `docs/manual-da-equipe.md`.
+- Manuais: `docs/manual-da-equipe.md` (o que cada função faz no dia a dia) e
+  **`web/public/ajuda.html`** — o manual de referência: os onze processos e o caminho do dado,
+  de onde entra até virar número. ⚠️ **Fonte única**: a tela `/ajuda` o exibe num quadro que
+  cresce até a altura do conteúdo, e o mesmo arquivo é o que se publica como artifact
+  (republicar sempre com a mesma URL). Reescrevê-lo em JSX criaria duas versões que divergem
+  no primeiro parágrafo novo — e aí o sistema explicaria duas coisas diferentes sobre si.
+- **O que falta na primeira parte está em [`docs/o-que-falta.md`](docs/o-que-falta.md)** —
+  levantado em 25/08/2026 comparando o MAPEAMENTO item a item com o que existe. O maior item
+  é a **carga inicial das fichas**: com zero fichas não há CMV teórico, nem variância, nem
+  food cost. O documento também registra as três decisões em que a construção divergiu do
+  mapeamento e por quê (a venda passou a baixar estoque, `modo_producao`, `KIT`).
 - ⚠️ **`.campo` é `width:100%` e vence a utilitária de largura do Tailwind.** `w-[110px]` num
   input com `campo` não faz nada — a largura tem de ir na COLUNA (`<th>`), e com `min-w` além
   do `w`: em `table-layout: auto` o navegador ignora a largura sugerida quando falta espaço.
@@ -431,14 +441,14 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (810 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+- Testes (811 verificações de API): `smoke_fundacao.py` (38), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (58), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (223, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (227, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

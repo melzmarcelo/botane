@@ -58,7 +58,14 @@ async function api(metodo, caminho, corpo, token) {
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
   const texto = await r.text();
-  return { status: r.status, dados: texto ? JSON.parse(texto) : null };
+  // `total` vem do X-Total quando a lista é paginada; nulo quando o servidor
+  // não o manda (é o que ele faz ao virar a página, para não recontar).
+  const cabecalho = r.headers.get("X-Total");
+  return {
+    status: r.status,
+    dados: texto ? JSON.parse(texto) : null,
+    total: cabecalho === null ? null : Number(cabecalho),
+  };
 }
 
 async function entrar(pagina, quem) {
@@ -1827,6 +1834,20 @@ try {
   console.log("10b. paginação: o padrão das listas");
   // O rodapé de página é o mesmo em todo grid. Aqui se prova o CONTRATO dele:
   // diz quantos existem, anda, deixa escolher o tamanho e lembra a escolha.
+  // ⚠️ GARANTE o que precisa: numa base recém-instalada não há 20 produtos, e o
+  // rodapé se esconde de propósito quando não há o que paginar. Sem isto o
+  // bloco inteiro morria num seletor que não existe — e a culpa parecia ser da
+  // paginação, não da base vazia.
+  const marcaPag = String(Date.now()).slice(-5);
+  const criadosPag = [];
+  const { total: quantosProdutos } = await api("GET", "/produtos?limite=1", null, token);
+  for (let i = quantosProdutos ?? 0; i < 25; i++) {
+    const { dados } = await api("POST", "/produtos",
+      { nome: `Pag tela ${marcaPag}-${String(i).padStart(2, "0")}`, tipo: "INSUMO",
+        um_estoque: "UN" }, token);
+    if (dados?.id) criadosPag.push(dados.id);
+  }
+
   await irPara(p, `${WEB}/produtos`);
   await new Promise((r) => setTimeout(r, 1600));
 
@@ -1886,7 +1907,11 @@ try {
   await new Promise((r) => setTimeout(r, 1400));
   const campoBuscaPag =
     (await p.$$('input[placeholder="nome, código ou código de barras"]'))[0];
-  await campoBuscaPag.type("cafe");
+  // ⚠️ Um termo que EXISTE nesta base. "cafe" era chute: numa base recém-limpa
+  // não acha nada, a lista fica vazia, o rodapé some — e a checagem acusava a
+  // paginação por um problema que era do dado. Os produtos desta fase têm
+  // marca própria, e o `-0` pega uma parte deles, não todos.
+  await campoBuscaPag.type(`${marcaPag}-0`);
   await new Promise((r) => setTimeout(r, 1800));
   const filtrado = await lerPaginacao();
   checar("filtrar volta para a primeira página",
@@ -1894,6 +1919,38 @@ try {
   checar("e o total passa a ser o do filtro", filtrado.total < antes.total || !filtrado.tem,
     [antes.total, filtrado.total]);
   await foto(p, "32-paginacao");
+  for (const id of criadosPag) await api("DELETE", `/produtos/${id}`, null, token);
+
+  console.log("10c. a ajuda dentro do sistema");
+  // ⚠️ O manual é UM arquivo (`public/ajuda.html`), exibido pela tela e
+  // publicado como documento. Duas cópias do mesmo texto divergem no primeiro
+  // parágrafo novo — e aí o sistema explica duas coisas diferentes sobre si.
+  await irPara(p, `${WEB}/ajuda`);
+  await new Promise((r) => setTimeout(r, 3000));
+  const ajuda = await p.evaluate(() => {
+    const q = document.querySelector("iframe");
+    const doc = q?.contentDocument;
+    return {
+      temQuadro: !!q,
+      titulo: doc?.title ?? null,
+      secoes: doc ? doc.querySelectorAll("section").length : 0,
+      diagramas: doc ? doc.querySelectorAll("svg").length : 0,
+      alturaQuadro: q ? Math.round(q.getBoundingClientRect().height) : 0,
+      alturaConteudo: doc ? doc.documentElement.scrollHeight : 0,
+      noMenu: [...document.querySelectorAll("aside a")]
+        .some((a) => a.textContent.trim() === "Ajuda"),
+    };
+  });
+  checar("a Ajuda está no menu", ajuda.noMenu, ajuda);
+  checar("o manual carrega dentro da tela", ajuda.titulo === "Botané por dentro", ajuda);
+  checar("com todos os processos e os dois diagramas",
+    ajuda.secoes >= 15 && ajuda.diagramas === 2, ajuda);
+  // Documento com rolagem própria dentro de página que já rola é briga de
+  // rolagem: a roda do mouse para no meio e ninguém sabe qual das duas move.
+  checar("o quadro cresce até a altura do conteúdo",
+    ajuda.alturaConteudo > 2000 && Math.abs(ajuda.alturaQuadro - ajuda.alturaConteudo) < 60,
+    ajuda);
+  await foto(p, "33-ajuda");
 
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
