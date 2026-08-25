@@ -31,7 +31,7 @@ services:
   - name: api
     source_dir: /api
     github:
-      repo: SEU-USUARIO/botane
+      repo: melzmarcelo/botane
       branch: producao
       # ⚠️ Falso de propósito na primeira subida: deploy automático a cada push
       # é bom quando existe rotina de verificação. Enquanto não existe, cada
@@ -111,7 +111,7 @@ services:
   - name: web
     source_dir: /web
     github:
-      repo: SEU-USUARIO/botane
+      repo: melzmarcelo/botane
       branch: producao
       deploy_on_push: false
     environment_slug: node-js

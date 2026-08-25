@@ -50,7 +50,7 @@ service worker já previa isto: ele ignora `/api` explicitamente.
 
 ### Antes de rodar o `doctl`
 
-1. **Criar o repositório no GitHub** e apontar `github.repo` no `app.yaml` para ele.
+1. **Criar o repositório no GitHub** — `melzmarcelo/botane`, já apontado no `app.yaml`.
    ⚠️ **Privado.** O repositório não tem segredo (o `.env` está fora), mas tem o modelo de
    dados e a lógica de custo da casa.
 2. **Autorizar o App Platform** a ler o repositório (uma vez, pelo painel da DO).
