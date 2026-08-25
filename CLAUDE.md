@@ -14,6 +14,33 @@ mesma URL para não criar link novo.
 ⚠️ **Tudo deste projeto mora no D:.** Não usar o scratchpad da sessão (`%TEMP%`, que fica no C:)
 para arquivo nenhum — gravar direto aqui.
 
+## Branches — `main` é local, `producao` é o que vai ao ar
+
+```
+desenvolvimento  →  main       roda local (Postgres + FastAPI 9200 + Next 3100)
+                       ↓  merge quando validado
+                    producao   o que fica online
+```
+
+⚠️ **Ao contrário dos outros projetos da casa, `main` NÃO é produção.** Aqui ela é a base de
+trabalho local: é onde se experimenta, se limpa a base, se roda a bateria inteira e se quebra
+coisa à vontade. Só o que passou por isso é promovido.
+
+### Regras
+- Todo desenvolvimento vai para `main` primeiro — nunca commit direto em `producao`
+- `producao` recebe **merge de `main`**, nunca commits próprios: `git checkout producao &&
+  git merge main`
+- Promover só depois de a bateria passar inteira (API + navegador) na base local
+- ⚠️ **Migração nova é o ponto de não retorno.** Ela roda no start da API e reescreve dado;
+  antes de promover, conferir que é idempotente e que já rodou aqui sobre base COM dado, não
+  só sobre base vazia
+- ⚠️ **Configuração não se promove por merge.** `api/.env` está fora do versionamento de
+  propósito: `DEBUG`, `CORS_ORIGINS`, `WEB_URL`, `DB_*` e a senha do admin são de cada
+  ambiente. O que estiver online tem o `.env` dele
+
+Ainda **não há remoto nem servidor**: os dois branches são locais. Quando houver, `producao`
+é quem aponta para lá.
+
 ## Estado
 
 - Mapeamento e **etapas 1 a 6 — a primeira parte inteira** (fundação, cadastros, fichas,
