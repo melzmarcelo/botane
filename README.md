@@ -15,12 +15,44 @@ Sistema sob encomenda, construído **por partes**. A primeira parte é o **CMV**
 
 | Camada | Escolha | Pasta |
 |---|---|---|
-| Banco | PostgreSQL local | `db/` (migrações em `api/migrations/`) |
+| Banco | PostgreSQL | migrações em `api/db_scripts/`, aplicadas no start da API |
 | API | FastAPI + psycopg | `api/` |
 | Web | Next.js (App Router) + Tailwind, PWA instalável | `web/` |
 | App de loja | Capacitor embrulhando o mesmo web (fase 7) | `app/` |
 
 Custeio do estoque: **custo médio ponderado móvel**.
+
+## Branches
+
+```
+main       →  a base de TRABALHO local. Aqui se limpa a base, se roda a bateria
+              inteira e se quebra coisa à vontade
+producao   →  o que vai ao ar. Recebe merge de main, nunca commit direto
+```
+
+⚠️ **Ao contrário dos outros projetos da casa, `main` não é produção.** Só é promovido o
+que passou pela bateria completa. As regras estão em [`CLAUDE.md`](CLAUDE.md).
+
+## Colocar no ar
+
+- **Roteiro:** [`docs/deploy.md`](docs/deploy.md)
+- **DigitalOcean App Platform:** [`.do/app.yaml`](.do/app.yaml) — web em `/`, API em `/api`
+  e Postgres gerenciado, num domínio só (é o que faz o CORS deixar de existir)
+- **Depois de subir:** `python api/verificar_deploy.py https://<endereço>` — doze checagens
+  **só de leitura**. ⚠️ A suíte de fumaça não serve para produção: ela cria produto, lança
+  nota e grava credencial de teste na mesma linha da real
+- **Variáveis:** `api/.env.producao.exemplo` e `web/.env.producao.exemplo`. O `.env` nunca
+  entra no repositório — configuração é de cada ambiente, e por isso não se promove por merge
+
+## Documentação
+
+| Onde | O quê |
+|---|---|
+| [`MAPEAMENTO.md`](MAPEAMENTO.md) | Escopo, modelo de dados e regras de negócio |
+| [`CLAUDE.md`](CLAUDE.md) | As decisões e as armadilhas já pagas — leia antes de mexer |
+| [`docs/o-que-falta.md`](docs/o-que-falta.md) | O que falta na primeira parte |
+| [`web/public/ajuda.html`](web/public/ajuda.html) | Manual de referência: os processos e o caminho do dado (também na tela **Ajuda**) |
+| [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md) | O passo a passo por função |
 
 ## Como subir (local)
 
