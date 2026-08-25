@@ -1,9 +1,10 @@
 """Fornecedores. Leitura livre a autenticados; escrita com `cadastros.fornecedores`."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from models.cadastros import FornecedorCreate, FornecedorResponse, FornecedorUpdate
 from seguranca import Contexto, contexto_atual, requer_permissao
 
@@ -23,6 +24,9 @@ def _so_digitos(cnpj: str | None) -> str | None:
 def listar(
     busca: str | None = Query(default=None, max_length=80),
     incluir_inativos: bool = False,
+    limite: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(contexto_atual),
 ) -> list[dict]:
     with get_cursor() as cur:
@@ -31,17 +35,20 @@ def listar(
                        (SELECT count(*) FROM produto_fornecedor pf
                          WHERE pf.id_fornecedor = f.id) AS produtos,
                        (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
-                         WHERE pf.id_fornecedor = f.id) AS ultima_compra
+                         WHERE pf.id_fornecedor = f.id) AS ultima_compra,
+                       count(*) OVER () AS _total
                   FROM fornecedores f
                  WHERE (%s OR f.ativo)
                    AND (%s::varchar IS NULL
                         OR lower(f.nome) LIKE lower('%%' || %s || '%%')
                         OR lower(coalesce(f.nome_fantasia, '')) LIKE lower('%%' || %s || '%%')
                         OR coalesce(f.cnpj, '') LIKE '%%' || %s || '%%')
-                 ORDER BY f.ativo DESC, lower(f.nome)""",
-            (incluir_inativos, busca, busca, busca, busca),
+                 ORDER BY f.ativo DESC, lower(f.nome)
+                 LIMIT %s OFFSET %s""",
+            (incluir_inativos, busca, busca, busca, busca, limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)
 
 
 @router.get("/{id_fornecedor}", response_model=FornecedorResponse)

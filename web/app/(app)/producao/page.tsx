@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
@@ -57,17 +58,20 @@ export default function PaginaProducao() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const pag = usePaginacao("producoes");
 
   const carregar = useCallback(async () => {
     try {
       const [fs, ls, h] = await Promise.all([
-        api.get<Ficha[]>("/fichas?status=HOMOLOGADA"),
+        // A ficha alimenta a janela de busca, não um grid: vem inteira.
+        api.get<Ficha[]>("/fichas?status=HOMOLOGADA&limite=500"),
         api.get<Local[]>("/locais"),
-        api.get<Producao[]>("/estoque/producoes"),
+        api.listar<Producao>(`/estoque/producoes?${new URLSearchParams(pag.parametros)}`),
       ]);
       setFichas(fs);
       setLocais(ls);
-      setHistorico(h);
+      setHistorico(h.itens);
+      pag.setTotal(h.total);
       setF((atual) => ({
         ...atual,
         id_local: atual.id_local || String(ls.find((l) => l.principal)?.id ?? ls[0]?.id ?? ""),
@@ -75,7 +79,8 @@ export default function PaginaProducao() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pag.offset, pag.porPagina]);
 
   useEffect(() => {
     void carregar();
@@ -322,6 +327,7 @@ export default function PaginaProducao() {
             </table>
           </div>
         )}
+        <Paginacao p={pag} rotulo="produção(ões)" />
       </Cartao>}
     </div>
   );

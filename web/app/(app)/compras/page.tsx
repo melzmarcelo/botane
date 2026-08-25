@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
@@ -34,8 +35,6 @@ type ResultadoXml = {
   valor_total?: number;
 };
 
-const PAGINA = 50;
-
 export default function PaginaCompras() {
   const router = useRouter();
   const aviso = useAviso();
@@ -44,8 +43,8 @@ export default function PaginaCompras() {
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [busca, setBusca] = useState("");
-  const [total, setTotal] = useState(0);
   const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
+  const pag = usePaginacao("notas", { padrao: 50, filtros: [busca] });
   const entradaXml = useRef<HTMLInputElement>(null);
 
   /**
@@ -56,34 +55,18 @@ export default function PaginaCompras() {
    * avisava: lista cheia e lista cortada são iguais na tela. Por isso o total
    * vem no `X-Total`, a busca vai ao servidor e há como pedir mais.
    */
-  const buscarPagina = useCallback(
-    async (inicio: number) => {
-      const q = new URLSearchParams({ limite: String(PAGINA), offset: String(inicio) });
-      if (busca.trim()) q.set("busca", busca.trim());
-      return api.listar<Nota>(`/notas?${q}`);
-    },
-    [busca],
-  );
-
   const carregar = useCallback(async () => {
     try {
-      const n = await buscarPagina(0);
+      const q = new URLSearchParams(pag.parametros);
+      if (busca.trim()) q.set("busca", busca.trim());
+      const n = await api.listar<Nota>(`/notas?${q}`);
       setNotas(n.itens);
-      setTotal(n.total);
+      pag.setTotal(n.total);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [buscarPagina]);
-
-  async function verMais() {
-    try {
-      const r = await buscarPagina((notas ?? []).length);
-      setNotas([...(notas ?? []), ...r.itens]);
-      setTotal(r.total);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível trazer mais notas");
-    }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     // Digitar dispara busca no servidor: um respiro evita uma consulta por tecla.
@@ -278,13 +261,7 @@ export default function PaginaCompras() {
       )}
 
       <Cartao
-        titulo={
-          notas
-            ? total > notas.length
-              ? `${notas.length} de ${total} nota(s)`
-              : `${notas.length} nota(s)`
-            : "Notas"
-        }
+        titulo={notas ? `${pag.total} nota(s)` : "Notas"}
         acao={
           <input
             className="campo w-[240px]"
@@ -327,16 +304,7 @@ export default function PaginaCompras() {
             ))}
           </ul>
         )}
-        {!!notas && total > notas.length && (
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <span className="text-[13px] text-suave">
-              mostrando as {notas.length} mais recentes de {total}
-            </span>
-            <button className="btn btn-secundario" onClick={verMais}>
-              Ver mais
-            </button>
-          </div>
-        )}
+        <Paginacao p={pag} rotulo="nota(s)" />
       </Cartao>
     </div>
   );

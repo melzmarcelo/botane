@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { fatiar, Paginacao, usePaginacao } from "@/components/paginacao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
@@ -60,6 +61,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
+  const pag = usePaginacao("movimentacao", { padrao: 50, filtros: [busca, inicio, fim] });
 
   const carregar = useCallback(async () => {
     setDados(null);
@@ -76,17 +78,33 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
     void carregar();
   }, [carregar]);
 
+  // ⚠️ Calculado ANTES das saídas antecipadas: o efeito que segue é um hook, e
+  // hook depois de um `return` condicional muda de ordem entre renders.
+  const alvo = busca.trim().toLowerCase();
+  const filtradas = !dados
+    ? []
+    : alvo
+      ? dados.linhas.filter(
+          (l) =>
+            l.produto.toLowerCase().includes(alvo) ||
+            (l.codigo ?? "").toLowerCase().includes(alvo),
+        )
+      : dados.linhas;
+
+  const quantas = filtradas.length;
+  useEffect(() => {
+    pag.setTotal(quantas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quantas]);
+
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!dados) return <Carregando />;
 
-  const alvo = busca.trim().toLowerCase();
-  const linhas = alvo
-    ? dados.linhas.filter(
-        (l) =>
-          l.produto.toLowerCase().includes(alvo) ||
-          (l.codigo ?? "").toLowerCase().includes(alvo),
-      )
-    : dados.linhas;
+  // ⚠️ Aqui a paginação é do NAVEGADOR, e é a exceção que confirma a regra: o
+  // rodapé precisa somar TODAS as linhas para a identidade fechar, então o
+  // relatório vem inteiro do servidor de propósito. Fatiar o que já está na
+  // mão não esconde nada — o total continua sendo o de tudo, e o rodapé diz.
+  const linhas = fatiar(filtradas, pag);
 
   // A conta que a tabela inteira tem de fechar. Se não fechar, o problema é do
   // razão e não do relatório — e é melhor ver isso aqui do que no inventário.
@@ -218,6 +236,8 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
           </table>
         </div>
       )}
+
+      <Paginacao p={pag} rotulo="produto(s)" />
 
       <p className="mt-4 text-[13.5px] leading-snug text-suave">
         {confere ? (

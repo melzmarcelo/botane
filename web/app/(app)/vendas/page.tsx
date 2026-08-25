@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
@@ -84,18 +85,22 @@ export default function PaginaVendas() {
   const [texto, setTexto] = useState("");
   const [manual, setManual] = useState({ id_produto: "", quantidade: "", valor_unitario: "", rotulo: "" });
 
+  const pag = usePaginacao("vendas");
+
   const carregar = useCallback(async () => {
     try {
       const [v, p] = await Promise.all([
-        api.get<Venda[]>("/vendas?limite=100"),
+        api.listar<Venda>(`/vendas?${new URLSearchParams(pag.parametros)}`),
         api.get<Pendencia[]>("/vendas/sem-vinculo"),
       ]);
-      setLista(v);
+      setLista(v.itens);
+      pag.setTotal(v.total);
       setPendencias(p);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pag.offset, pag.porPagina]);
 
   useEffect(() => {
     void carregar();
@@ -350,7 +355,7 @@ export default function PaginaVendas() {
         </div>
       )}
 
-      <Cartao titulo="Vendas recentes">
+      <Cartao titulo={lista ? `${pag.total} venda(s)` : "Vendas recentes"}>
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
@@ -405,6 +410,7 @@ export default function PaginaVendas() {
             </table>
           </div>
         )}
+        <Paginacao p={pag} rotulo="venda(s)" />
       </Cartao>
 
       {confirmando && (

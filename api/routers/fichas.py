@@ -8,10 +8,11 @@ Duas regras de acesso que valem a pena ler antes de mexer:
    histórico. Quem quer mudar cria uma nova versão.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from models.fichas import FichaCreate, FichaResponse, FichaResumo, FichaUpdate, ItemFicha
 from seguranca import Contexto, requer_permissao
 from services import custos
@@ -73,6 +74,9 @@ def listar(
     id_produto: int | None = None,
     status: str | None = None,
     busca: str | None = Query(default=None, max_length=80),
+    limite: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(_ver),
 ) -> list[dict]:
     ve_custo = ctx.pode("fichas.custos")
@@ -81,17 +85,20 @@ def listar(
             """
             SELECT f.id, f.id_produto, p.nome AS produto, p.codigo, f.versao, f.status,
                    f.rendimento_qtd, f.rendimento_um, f.porcoes, f.criado_em AS atualizada_em,
-                   (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens
+                   (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
+                   count(*) OVER () AS _total
               FROM fichas_tecnicas f
               JOIN produtos p ON p.id = f.id_produto
              WHERE (%s::int IS NULL OR f.id_produto = %s)
                AND (%s::varchar IS NULL OR f.status = %s)
                AND (%s::varchar IS NULL OR lower(p.nome) LIKE lower('%%' || %s || '%%'))
              ORDER BY lower(p.nome), f.versao DESC
+             LIMIT %s OFFSET %s
             """,
-            (id_produto, id_produto, status, status, busca, busca),
+            (id_produto, id_produto, status, status, busca, busca, limite, offset),
         )
         fichas = [dict(r) for r in cur.fetchall()]
+        com_total(fichas, resposta, offset)
 
         for f in fichas:
             f["rendimento_qtd"] = _num(f["rendimento_qtd"])

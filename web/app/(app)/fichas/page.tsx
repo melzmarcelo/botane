@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -39,22 +40,27 @@ export default function PaginaFichas() {
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
   const [erro, setErro] = useState("");
+  const pag = usePaginacao("fichas", { filtros: [busca, status] });
 
   const carregar = useCallback(async () => {
-    const q = new URLSearchParams();
+    const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (status) q.set("status", status);
     try {
-      const fichas = await api.get<Ficha[]>(`/fichas?${q}`);
-      setLista(fichas);
-      // Produzido sem ficha nenhuma: é a fila de trabalho da cozinha.
-      const produzidos = await api.get<ProdutoResumo[]>("/produtos?tipo=PRODUZIDO");
-      const comFicha = new Set(fichas.map((f) => f.id_produto));
-      setSemFicha(produzidos.filter((p) => !comFicha.has(p.id)));
+      const fichas = await api.listar<Ficha>(`/fichas?${q}`);
+      setLista(fichas.itens);
+      pag.setTotal(fichas.total);
+      // Produzido sem ficha nenhuma: é a fila de trabalho da cozinha. ⚠️ Quem
+      // responde é o SERVIDOR (`sem_ficha=true`): comparar com as fichas desta
+      // PÁGINA acusaria como sem ficha todo produto cuja ficha está na próxima.
+      setSemFicha(
+        await api.get<ProdutoResumo[]>("/produtos?tipo=PRODUZIDO&sem_ficha=true&limite=100"),
+      );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [busca, status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, status, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);
@@ -119,7 +125,7 @@ export default function PaginaFichas() {
         </div>
       </Cartao>
 
-      <Cartao titulo={lista ? `${lista.length} ficha(s)` : "Fichas"}>
+      <Cartao titulo={lista ? `${pag.total} ficha(s)` : "Fichas"}>
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
@@ -218,6 +224,7 @@ export default function PaginaFichas() {
             )}
           </>
         )}
+        <Paginacao p={pag} rotulo="ficha(s)" />
       </Cartao>
     </div>
   );

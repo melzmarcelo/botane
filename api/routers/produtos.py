@@ -129,6 +129,10 @@ def listar(
     id_categoria: int | None = None,
     id_setor: int | None = None,
     status: str | None = None,
+    # ⚠️ Filtro do SERVIDOR porque a lista de fichas é paginada: comparar os
+    # produzidos com "as fichas que vieram nesta página" apontaria como sem
+    # ficha todo produto cuja ficha ficou na página seguinte.
+    sem_ficha: bool = False,
     incluir_inativos: bool = False,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -156,6 +160,8 @@ def listar(
                AND (%s::int IS NULL OR p.id_categoria = %s)
                AND (%s::int IS NULL OR p.id_setor = %s)
                AND (%s::varchar IS NULL OR p.status = %s)
+               AND (NOT %s OR NOT EXISTS
+                    (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id))
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%')
@@ -164,7 +170,7 @@ def listar(
              LIMIT %s OFFSET %s
             """,
             (incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
-             status, status, busca, busca, busca, busca, limite, offset),
+             status, status, sem_ficha, busca, busca, busca, busca, limite, offset),
         )
         linhas = [dict(r) for r in cur.fetchall()]
     return _com_total(linhas, resposta, offset)

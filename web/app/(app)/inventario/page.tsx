@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local } from "@/lib/cadastros";
@@ -34,14 +35,16 @@ export default function PaginaInventario() {
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [cega, setCega] = useState(false);
+  const pag = usePaginacao("inventarios");
 
   const carregar = useCallback(async () => {
     try {
       const [l, ls] = await Promise.all([
-        api.get<Inventario[]>("/inventarios"),
+        api.listar<Inventario>(`/inventarios?${new URLSearchParams(pag.parametros)}`),
         api.get<Local[]>("/locais"),
       ]);
-      setLista(l);
+      setLista(l.itens);
+      pag.setTotal(l.total);
       setLocais(ls);
       // Sem principal, vale o primeiro: uma casa com um local só não tem por
       // que marcar caixinha nenhuma, e o padrão vazio virava "Local não
@@ -51,7 +54,8 @@ export default function PaginaInventario() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pag.offset, pag.porPagina]);
 
   useEffect(() => {
     void carregar();
@@ -167,6 +171,7 @@ export default function PaginaInventario() {
             ))}
           </ul>
         )}
+        <Paginacao p={pag} rotulo="inventário(s)" />
       </Cartao>
     </div>
   );

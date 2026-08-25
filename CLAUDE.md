@@ -44,6 +44,21 @@ para arquivo nenhum — gravar direto aqui.
   routers, e a cópia ficou para trás quando o seletor passou a existir. A escolha vem do
   cabeçalho **`X-Unidade`** (não do corpo: vale para GET e nenhuma tela precisa repassá-la),
   validada com `ctx.ve_unidade` — mandar o cabeçalho não dá acesso a loja nenhuma.
+- **Paginação é o PADRÃO de todo grid** (25/08/2026): `components/paginacao.tsx` —
+  `usePaginacao(nome, { padrao, filtros })` + `<Paginacao p={pag} rotulo="…" />`. O rodapé diz
+  "1–20 de 2.183", deixa escolher **20, 50 ou 100** e **lembra a escolha** (localStorage, por
+  lista: conferir estoque numa tela grande pede 100, o celular pede 20).
+  ⚠️ **O corte é do SERVIDOR** — trazer tudo e fatiar no navegador só troca a mentira de lugar.
+  ⚠️ **Trocar o filtro volta para a primeira página** (é o que `filtros:` faz): quem está na
+  página 7 e digita uma busca cairia numa tela vazia sem nada explicando.
+  ⚠️ A preferência é lida num **efeito**, não no estado inicial: o servidor renderiza a tela
+  antes de existir `localStorage`, e valores diferentes dos dois lados quebram a hidratação.
+  Aplicado em produtos, fornecedores, notas, saldos, razão, fichas, vendas, inventários,
+  produções, auditoria, usuários e movimentação do CMV. **Fora, de propósito**: tabelas de
+  apoio, lojas, papéis e tudo que é detalhe de UM registro (itens da nota, insumos da ficha) —
+  são poucos por natureza, e rodapé de página em lista de três linhas é ruído.
+  ⚠️ **A movimentação do CMV é a única que fatia no navegador**, porque o rodapé precisa somar
+  TODAS as linhas para a identidade fechar — o relatório vem inteiro de propósito.
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
@@ -379,13 +394,14 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (755 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+- Testes (782 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (85),
   `smoke_notas.py` (66), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `cenario_cafeteria.py` (57) e
-  `cenario_semana.py` (54); mais `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (205, no Chrome, com fotos em `web/scripts/_fotos`).
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (24),
+  `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
+  `web/scripts/testar-sw.mjs` (17, sem navegador) e
+  `web/scripts/verificar.mjs` (223, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

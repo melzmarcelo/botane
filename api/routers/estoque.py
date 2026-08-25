@@ -39,6 +39,9 @@ def saldos(
     # Produto desativado com saldo continua existindo — mas só aparece quando
     # pedido, senão o inventário do dia a dia fica cheio de coisa fora de linha.
     incluir_inativos: bool = False,
+    limite: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
 ) -> list[dict]:
     with get_cursor() as cur:
@@ -48,7 +51,9 @@ def saldos(
             SELECT s.id_produto, p.codigo, p.nome AS produto, p.um_estoque, p.estoque_minimo,
                    s.id_local, l.nome AS local, s.quantidade, s.custo_medio,
                    round(s.quantidade * s.custo_medio, 2) AS valor, s.atualizado_em,
-                   (p.estoque_minimo IS NOT NULL AND s.quantidade < p.estoque_minimo) AS abaixo_do_minimo
+                   (p.estoque_minimo IS NOT NULL AND s.quantidade < p.estoque_minimo)
+                       AS abaixo_do_minimo,
+                   count(*) OVER () AS _total
               FROM estoque_saldos s
               JOIN produtos p ON p.id = s.id_produto
               JOIN locais_estoque l ON l.id = s.id_local
@@ -62,11 +67,13 @@ def saldos(
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY lower(p.nome), l.nome
+             LIMIT %s OFFSET %s
             """,
             (id_unidade, incluir_inativos, id_produto, id_produto, id_local, id_local,
-             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca),
+             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca, limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)
 
 
 @router.get("/movimentos", response_model=list[MovimentoResponse])
@@ -322,17 +329,21 @@ def produzir(body: ProducaoRequest,
 
 @router.get("/producoes")
 def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
+                     offset: int = Query(default=0, ge=0),
+                     resposta: Response = None,
                      ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
             """SELECT pr.id, pr.data, pr.quantidade, pr.custo_total, pr.custo_unitario,
                       pr.versao_ficha, p.nome AS produto, p.codigo, l.nome AS local,
-                      u.nome AS usuario
+                      u.nome AS usuario,
+                      count(*) OVER () AS _total
                  FROM producoes pr
                  JOIN produtos p ON p.id = pr.id_produto
                  JOIN locais_estoque l ON l.id = pr.id_local
                  LEFT JOIN usuarios u ON u.id = pr.id_usuario
-                ORDER BY pr.data DESC LIMIT %s""",
-            (limite,),
+                ORDER BY pr.data DESC LIMIT %s OFFSET %s""",
+            (limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)

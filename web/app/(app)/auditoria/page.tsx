@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 type Linha = {
@@ -28,13 +29,18 @@ export default function PaginaAuditoria() {
   const [linhas, setLinhas] = useState<Linha[] | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
   const [erro, setErro] = useState("");
+  const pag = usePaginacao("auditoria", { padrao: 50 });
 
   useEffect(() => {
     api
-      .get<Linha[]>("/auditoria?limite=200")
-      .then(setLinhas)
+      .listar<Linha>(`/auditoria?${new URLSearchParams(pag.parametros)}`)
+      .then((r) => {
+        setLinhas(r.itens);
+        pag.setTotal(r.total);
+      })
       .catch((e) => setErro(e.message));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pag.offset, pag.porPagina]);
 
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!linhas) return <Carregando />;
@@ -133,6 +139,7 @@ export default function PaginaAuditoria() {
           </div>
           </>
         )}
+        <Paginacao p={pag} rotulo="evento(s)" />
       </Cartao>
     </div>
   );

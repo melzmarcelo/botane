@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
@@ -82,9 +83,14 @@ export default function PaginaEstoque() {
   const [movLocal, setMovLocal] = useState("");
   const [movInicio, setMovInicio] = useState("");
   const [movFim, setMovFim] = useState("");
-  const [movTotal, setMovTotal] = useState(0);
-  const [movPagina, setMovPagina] = useState(1);
   const [tipos, setTipos] = useState<TipoMovimento[]>([]);
+  const pagSaldos = usePaginacao("saldos", {
+    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo],
+  });
+  const pagMov = usePaginacao("razao", {
+    padrao: 100,
+    filtros: [movBusca, produtoMov?.id, movTipo, movLocal, movInicio, movFim],
+  });
 
   const [baixando, setBaixando] = useState(false);
 
@@ -102,23 +108,25 @@ export default function PaginaEstoque() {
 
   const carregar = useCallback(async () => {
     try {
-      const q = new URLSearchParams();
+      const q = new URLSearchParams(pagSaldos.parametros);
       if (produtoSaldo) q.set("id_produto", String(produtoSaldo.id));
       else if (busca.trim()) q.set("busca", busca.trim());
       if (idLocal) q.set("id_local", idLocal);
       if (comSaldo) q.set("apenas_com_saldo", "true");
-      setSaldos(await api.get<Saldo[]>(`/estoque/saldos?${q}`));
+      const r = await api.listar<Saldo>(`/estoque/saldos?${q}`);
+      setSaldos(r.itens);
+      pagSaldos.setTotal(r.total);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [busca, produtoSaldo, idLocal, comSaldo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, produtoSaldo, idLocal, comSaldo, pagSaldos.offset, pagSaldos.porPagina]);
 
-  const POR_PAGINA = 100;
   const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio || movFim);
 
   const carregarMovimentos = useCallback(async () => {
     try {
-      const q = new URLSearchParams({ limite: String(POR_PAGINA * movPagina) });
+      const q = new URLSearchParams(pagMov.parametros);
       if (produtoMov) q.set("id_produto", String(produtoMov.id));
       else if (movBusca.trim()) q.set("busca", movBusca.trim());
       if (movTipo) q.set("tipo", movTipo);
@@ -127,17 +135,13 @@ export default function PaginaEstoque() {
       if (movFim) q.set("fim", movFim);
       const { itens, total } = await api.listar<Movimento>(`/estoque/movimentos?${q}`);
       setMovimentos(itens);
-      setMovTotal(total);
+      pagMov.setTotal(total);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim, movPagina]);
-
-  // Trocar o filtro volta para a primeira página: manter a 3ª página de um
-  // filtro no outro mostraria uma lista vazia sem explicação.
-  useEffect(() => {
-    setMovPagina(1);
-  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim,
+      pagMov.offset, pagMov.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregarMovimentos(), movBusca ? 300 : 0);
@@ -275,7 +279,7 @@ export default function PaginaEstoque() {
           </Cartao>
 
           <Cartao
-            titulo={saldos ? `${saldos.length} linha(s)` : "Saldos"}
+            titulo={saldos ? `${pagSaldos.total} linha(s)` : "Saldos"}
             descricao={`Valor em estoque: ${reais(valorTotal)}`}
           >
             {!saldos ? (
@@ -318,6 +322,7 @@ export default function PaginaEstoque() {
                 </table>
               </div>
             )}
+            <Paginacao p={pagSaldos} rotulo="linha(s)" />
           </Cartao>
         </>
       )}
@@ -412,9 +417,7 @@ export default function PaginaEstoque() {
           titulo="Razão de estoque"
           descricao={
             movimentos
-              ? `${movimentos.length} de ${movTotal} lançamento(s)${
-                  temFiltroMov ? " no filtro" : ""
-                }.`
+              ? `${pagMov.total} lançamento(s)${temFiltroMov ? " no filtro" : ""}.`
               : undefined
           }
         >
@@ -498,22 +501,9 @@ export default function PaginaEstoque() {
             </div>
           )}
 
-          {/* Página de 100. O razão cresce todo dia e trazer tudo de uma vez
-              trava a tela justamente na casa que mais movimenta. */}
-          {!!movimentos && movimentos.length < movTotal && (
-            <div className="mt-4 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                className="btn btn-secundario"
-                onClick={() => setMovPagina((n) => n + 1)}
-              >
-                Mostrar mais 100
-              </button>
-              <span className="text-[13px] text-suave">
-                faltam {movTotal - movimentos.length}
-              </span>
-            </div>
-          )}
+          {/* O razão cresce todo dia: trazer tudo de uma vez trava a tela
+              justamente na casa que mais movimenta. */}
+          <Paginacao p={pagMov} rotulo="lançamento(s)" />
         </Cartao>
         </>
       )}

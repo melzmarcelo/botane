@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -31,23 +32,28 @@ export default function PaginaUsuarios() {
   const [erro, setErro] = useState("");
   const [link, setLink] = useState<{ nome: string; url: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const pag = usePaginacao("usuarios");
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     try {
+      const q = new URLSearchParams(pag.parametros);
+      q.set("incluir_inativos", "true");
       const [u, p] = await Promise.all([
-        api.get<Usuario[]>("/usuarios?incluir_inativos=true"),
+        api.listar<Usuario>(`/usuarios?${q}`),
         api.get<Papel[]>("/papeis"),
       ]);
-      setUsuarios(u);
+      setUsuarios(u.itens);
+      pag.setTotal(u.total);
       setPapeis(p);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pag.offset, pag.porPagina]);
 
   useEffect(() => {
     void carregar();
-  }, []);
+  }, [carregar]);
 
   function novo() {
     setEditando(null);
@@ -258,7 +264,8 @@ export default function PaginaUsuarios() {
               </table>
             </div>
           )}
-        </Cartao>
+          <Paginacao p={pag} rotulo="usuário(s)" />
+      </Cartao>
 
         <Cartao titulo={editando ? "Editar usuário" : "Novo usuário"}>
           <form onSubmit={salvar} className="flex flex-col gap-4">

@@ -1824,6 +1824,77 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
+  console.log("10b. paginação: o padrão das listas");
+  // O rodapé de página é o mesmo em todo grid. Aqui se prova o CONTRATO dele:
+  // diz quantos existem, anda, deixa escolher o tamanho e lembra a escolha.
+  await irPara(p, `${WEB}/produtos`);
+  await new Promise((r) => setTimeout(r, 1600));
+
+  const lerPaginacao = () =>
+    p.evaluate(() => {
+      const sel = document.querySelector('select[aria-label="Registros por página"]');
+      const t = document.body.innerText;
+      return {
+        tem: !!sel,
+        porPagina: sel ? Number(sel.value) : null,
+        rodape: t.match(/(\d+)–(\d+) de ([\d.]+)/)?.[0] ?? null,
+        total: Number((t.match(/\d+–\d+ de ([\d.]+)/)?.[1] ?? "0").replace(/\./g, "")),
+        linhas: document.querySelectorAll("tbody tr").length,
+        primeiro: document.querySelector("tbody tr td")?.textContent?.trim() ?? null,
+        proximaLigada: !document.querySelector('button[aria-label="Próxima página"]')?.disabled,
+        anteriorDesligada: !!document.querySelector('button[aria-label="Página anterior"]')
+          ?.disabled,
+      };
+    });
+
+  const antes = await lerPaginacao();
+  checar("a lista tem o rodapé de página", antes.tem, antes);
+  checar("que diz quantos existem, não só quantos vieram",
+    antes.total > antes.linhas, antes);
+  checar("na primeira página o 'anterior' fica desligado", antes.anteriorDesligada, antes);
+
+  await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
+  await new Promise((r) => setTimeout(r, 1400));
+  const segunda = await lerPaginacao();
+  checar("a próxima página traz outros registros",
+    segunda.primeiro !== antes.primeiro && segunda.primeiro !== null, [antes.primeiro, segunda.primeiro]);
+  checar("e o rodapé acompanha", segunda.rodape !== antes.rodape, [antes.rodape, segunda.rodape]);
+  checar("o total não muda ao virar a página", segunda.total === antes.total,
+    [antes.total, segunda.total]);
+
+  // 20, 50 ou 100 — escolha de quem olha.
+  await p.select('select[aria-label="Registros por página"]', "50");
+  await new Promise((r) => setTimeout(r, 1600));
+  const maior = await lerPaginacao();
+  checar("trocar o tamanho traz mais linhas", maior.linhas > antes.linhas,
+    [antes.linhas, maior.linhas]);
+  checar("e volta para a primeira página", /^1–/.test(maior.rodape ?? ""), maior.rodape);
+
+  // ⚠️ A preferência é lembrada: quem escolheu 50 não quer reescolher a cada
+  // visita. Sai da tela e volta.
+  await irPara(p, `${WEB}/fornecedores`);
+  await new Promise((r) => setTimeout(r, 1200));
+  await irPara(p, `${WEB}/produtos`);
+  await new Promise((r) => setTimeout(r, 1800));
+  const lembrado = await lerPaginacao();
+  checar("a escolha de quantos por página é lembrada", lembrado.porPagina === 50,
+    lembrado.porPagina);
+
+  // Filtrar volta ao começo: quem está na página 3 e digita uma busca não pode
+  // cair numa tela vazia porque o resultado tem uma página só.
+  await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
+  await new Promise((r) => setTimeout(r, 1400));
+  const campoBuscaPag =
+    (await p.$$('input[placeholder="nome, código ou código de barras"]'))[0];
+  await campoBuscaPag.type("cafe");
+  await new Promise((r) => setTimeout(r, 1800));
+  const filtrado = await lerPaginacao();
+  checar("filtrar volta para a primeira página",
+    filtrado.linhas > 0 && (filtrado.rodape === null || /^1–/.test(filtrado.rodape)), filtrado);
+  checar("e o total passa a ser o do filtro", filtrado.total < antes.total || !filtrado.tem,
+    [antes.total, filtrado.total]);
+  await foto(p, "32-paginacao");
+
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(

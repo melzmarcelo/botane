@@ -8,10 +8,11 @@ uma receita em abril.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from models.cmv import ImportarVendasRequest, VendaResponse
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
@@ -29,23 +30,27 @@ def listar(
     inicio: date | None = None,
     fim: date | None = None,
     limite: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
     ctx: Contexto = Depends(_ver),
 ) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
             """SELECT v.id, v.data, v.origem, v.canal, v.documento, v.valor_total, v.cancelada,
                       count(vi.id) AS itens,
-                      count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo
+                      count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo,
+                      count(*) OVER () AS _total
                  FROM vendas v
                  LEFT JOIN venda_itens vi ON vi.id_venda = v.id
                 WHERE (%s::date IS NULL OR v.data >= %s)
                   AND (%s::date IS NULL OR v.data <= %s)
                 GROUP BY v.id
                 ORDER BY v.data DESC, v.id DESC
-                LIMIT %s""",
-            (inicio, inicio, fim, fim, limite),
+                LIMIT %s OFFSET %s""",
+            (inicio, inicio, fim, fim, limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)
 
 
 @router.post("/importar", status_code=201)

@@ -5,10 +5,11 @@ movimento de ajuste, com o custo médio do momento: some estoque sem virar
 perda anônima, mas com nome e rastro.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from models.estoque import ContagemRequest, InventarioCreate, InventarioResponse
 from seguranca import Contexto, requer_permissao
 from services import estoque as motor
@@ -75,19 +76,26 @@ def _montar(cur, id_inventario: int) -> dict:
 
 
 @router.get("", response_model=list[InventarioResponse])
-def listar(ctx: Contexto = Depends(_perm)) -> list[dict]:
+def listar(limite: int = Query(default=100, ge=1, le=500),
+           offset: int = Query(default=0, ge=0),
+           resposta: Response = None,
+           ctx: Contexto = Depends(_perm)) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
             """SELECT i.id, i.id_local, l.nome AS local, i.data, i.status, i.observacao,
                       i.criado_em, i.fechado_em, i.cega,
                       (SELECT count(*) FROM inventario_itens ii WHERE ii.id_inventario = i.id) AS total_itens,
                       (SELECT count(*) FROM inventario_itens ii
-                        WHERE ii.id_inventario = i.id AND ii.qtd_contada IS NOT NULL) AS contados
+                        WHERE ii.id_inventario = i.id AND ii.qtd_contada IS NOT NULL) AS contados,
+                      count(*) OVER () AS _total
                  FROM inventarios i
                  JOIN locais_estoque l ON l.id = i.id_local
-                ORDER BY i.data DESC, i.id DESC LIMIT 100"""
+                ORDER BY i.data DESC, i.id DESC
+                LIMIT %s OFFSET %s""",
+            (limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)
 
 
 @router.get("/{id_inventario}", response_model=InventarioResponse)

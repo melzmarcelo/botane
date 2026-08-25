@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
@@ -44,17 +45,21 @@ export default function PaginaFornecedores() {
   const [editando, setEditando] = useState<number | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const pag = usePaginacao("fornecedores", { filtros: [busca, inativos] });
 
   const carregar = useCallback(async () => {
-    const q = new URLSearchParams();
+    const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (inativos) q.set("incluir_inativos", "true");
     try {
-      setLista(await api.get<Fornecedor[]>(`/fornecedores?${q}`));
+      const r = await api.listar<Fornecedor>(`/fornecedores?${q}`);
+      setLista(r.itens);
+      pag.setTotal(r.total);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [busca, inativos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, inativos, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);
@@ -179,7 +184,7 @@ export default function PaginaFornecedores() {
             </div>
           </Cartao>
 
-          <Cartao titulo={lista ? `${lista.length} fornecedor(es)` : "Fornecedores"}>
+          <Cartao titulo={lista ? `${pag.total} fornecedor(es)` : "Fornecedores"}>
             {!lista ? (
               <Carregando />
             ) : !lista.length ? (
@@ -219,6 +224,7 @@ export default function PaginaFornecedores() {
                 ))}
               </ul>
             )}
+            <Paginacao p={pag} rotulo="fornecedor(es)" />
           </Cartao>
         </div>
 

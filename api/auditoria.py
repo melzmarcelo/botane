@@ -48,11 +48,13 @@ def registrar(
 
 
 def listar(limite: int = 100, offset: int = 0, entidade: str | None = None) -> list[dict]:
+    """Os eventos, do mais recente para o mais antigo — com o total na varredura."""
     with get_cursor() as cur:
         cur.execute(
             """
             SELECT a.id, a.entidade, a.id_entidade, a.acao, a.antes, a.depois,
-                   a.em, a.ip, u.nome AS usuario, u.email
+                   a.em, a.ip, u.nome AS usuario, u.email,
+                   count(*) OVER () AS _total
               FROM auditoria a
               LEFT JOIN usuarios u ON u.id = a.id_usuario
              WHERE (%s::varchar IS NULL OR a.entidade = %s)

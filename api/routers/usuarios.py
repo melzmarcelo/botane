@@ -1,9 +1,10 @@
 """Usuários e o vínculo deles com papéis (por loja)."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from models.acesso import UsuarioCreate, UsuarioResponse, UsuarioUpdate
 from seguranca import Contexto, hash_senha, requer_permissao
 from services import email as correio
@@ -40,17 +41,23 @@ def _gravar_papeis(cur, id_usuario: int, papeis) -> None:
 
 
 @router.get("", response_model=list[UsuarioResponse])
-def listar(incluir_inativos: bool = False) -> list[dict]:
+def listar(incluir_inativos: bool = False,
+           limite: int = Query(default=100, ge=1, le=500),
+           offset: int = Query(default=0, ge=0),
+           resposta: Response = None) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
             """SELECT id, nome, email, telefone, ativo, ultimo_acesso,
-                      (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado
+                      (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado,
+                      count(*) OVER () AS _total
                  FROM usuarios
                 WHERE (%s OR ativo)
-                ORDER BY ativo DESC, nome""",
-            (incluir_inativos,),
+                ORDER BY ativo DESC, nome
+                LIMIT %s OFFSET %s""",
+            (incluir_inativos, limite, offset),
         )
         usuarios = [dict(r) for r in cur.fetchall()]
+        com_total(usuarios, resposta, offset)
         for u in usuarios:
             u["papeis"] = _papeis_do_usuario(cur, u["id"])
     return usuarios
@@ -61,7 +68,8 @@ def obter(id_usuario: int) -> dict:
     with get_cursor() as cur:
         cur.execute(
             """SELECT id, nome, email, telefone, ativo, ultimo_acesso,
-                      (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado
+                      (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado,
+                      count(*) OVER () AS _total
                  FROM usuarios WHERE id = %s""",
             (id_usuario,),
         )
