@@ -215,16 +215,22 @@ print("4c. movimento no futuro não existe")
 # ninguém. Uma venda datada com o dia de UTC — às 22h de Brasília, já é o dia
 # seguinte — caía FORA do mês e o relatório de movimentação deixava de fechar
 # com o saldo. Data errada no razão não se conserta: só se estorna.
+# ⚠️ Produto PRÓPRIO, não o do teste anterior. Aquele está com saldo negativo,
+# e uma entrada sobre saldo negativo revaloriza o que já saiu pelo custo novo —
+# comportamento correto do médio provisório, mas que deixa a identidade
+# "inicial + entradas − saídas = final" aberta no relatório de movimentação, e
+# os cenários que medem a casa inteira passavam a acusar isso.
+futuro_prod = novo_produto(f"Est data futura {marca}")
 futuro = (date.today() + timedelta(days=1)).isoformat()
 st, r = chamar("POST", "/estoque/entradas", {
-    "id_produto": novo, "quantidade": 1, "custo_unitario": 10,
+    "id_produto": futuro_prod, "quantidade": 1, "custo_unitario": 10,
     "id_local": principal["id"], "data_movimento": f"{futuro}T09:00:00",
 }, token=token)
 checar("entrada datada amanhã é recusada", st == 400, (st, r))
 checar("e a recusa explica o que é uma data no futuro",
        "futuro" in str(r.get("detail", "")).lower(), r)
 st, r = chamar("POST", "/estoque/entradas", {
-    "id_produto": novo, "quantidade": 1, "custo_unitario": 10,
+    "id_produto": futuro_prod, "quantidade": 1, "custo_unitario": 10,
     "id_local": principal["id"], "data_movimento": f"{date.today().isoformat()}T09:00:00",
 }, token=token)
 checar("hoje continua valendo, do primeiro ao último minuto", st == 201, (st, r))

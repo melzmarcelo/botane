@@ -229,8 +229,10 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
         ) : (
           <span className="text-erro">
             A conta não fecha por {reais(Math.abs(diferenca))} (inicial + entradas − saídas ≠
-            final). Isso é do razão, não deste relatório — vale conferir os movimentos do período
-            antes de fechar o mês.
+            final). Isso é do razão, não deste relatório. A causa quase sempre é a mesma: saída
+            lançada com <b>saldo negativo</b> — ela sai por um custo provisório, e a entrada que
+            chega depois revaloriza o que já tinha saído. Procure os produtos com saldo abaixo de
+            zero no período e lance a entrada que faltava.
           </span>
         )}
       </p>

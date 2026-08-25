@@ -17,6 +17,7 @@ real**. Por isso a tradução vive em `mapeadores.py`, e não aqui.
 import json
 import re
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,65 @@ DIALETO_HUNGARO = {
     "total_paginas": "nTotalPaginas",
     "total": "nTotalRegistros",
 }
+
+
+_DATA_BR = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
+
+
+def _aproximar_datas(dados: Any) -> Any:
+    """Traz as datas da fixture para a semana de HOJE, mantendo o intervalo entre elas.
+
+    ⚠️ Fixture com data fixa envelhece. As notas simuladas nasceram em 16 e
+    20/08/2026; uma semana depois a busca — que por padrão vai desde a última
+    sincronização com folga — já não as alcançava, e o teste dizia que a
+    importação tinha parado de funcionar. O mesmo valeria para a demonstração
+    ao cliente: um sistema que só mostra nota do mês passado parece parado.
+
+    O deslocamento é o mesmo para todas: a nota mais recente vira a de hoje e as
+    outras guardam a distância que tinham. A chave da NF-e não muda, então
+    reimportar continua não duplicando — e a nota que já entrou mantém a data
+    com que entrou.
+    """
+    achadas: list[date] = []
+
+    def varrer(no):
+        if isinstance(no, dict):
+            for v in no.values():
+                varrer(v)
+        elif isinstance(no, list):
+            for v in no:
+                varrer(v)
+        elif isinstance(no, str):
+            m = _DATA_BR.match(no)
+            if m:
+                try:
+                    achadas.append(date(int(m.group(3)), int(m.group(2)), int(m.group(1))))
+                except ValueError:
+                    pass
+
+    varrer(dados)
+    if not achadas:
+        return dados
+    deslocamento = (date.today() - max(achadas)).days
+    if deslocamento == 0:
+        return dados
+
+    def mover(no):
+        if isinstance(no, dict):
+            return {k: mover(v) for k, v in no.items()}
+        if isinstance(no, list):
+            return [mover(v) for v in no]
+        if isinstance(no, str):
+            m = _DATA_BR.match(no)
+            if m:
+                try:
+                    d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError:
+                    return no
+                return (d + timedelta(days=deslocamento)).strftime("%d/%m/%Y")
+        return no
+
+    return mover(dados)
 
 
 class ErroOmie(Exception):
@@ -136,7 +196,7 @@ class ClienteOmie:
         caminho = FIXTURES / nome
         if not caminho.exists():
             raise ErroOmie(f"modo simulado sem fixture para {call} (esperado: {nome})")
-        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        dados = _aproximar_datas(json.loads(caminho.read_text(encoding="utf-8")))
         # Consulta por id: a fixture é um dicionário de respostas, e a chamada
         # devolve a de um registro só (é assim que o `ConsultarRecebimento` fala).
         if "nIdReceb" in param:

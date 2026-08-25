@@ -57,7 +57,8 @@ type Compra = {
   variacao_pct: number | null;
 };
 
-const pct = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
+const pct = (n: number) =>
+  `${n > 0 ? "+" : ""}${n.toFixed(1).replace(".", ",")}%`;
 const dataBr = (d: string) => new Date(d + "T00:00").toLocaleDateString("pt-BR");
 
 export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: string }) {
@@ -165,7 +166,7 @@ export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: s
                           />
                         </span>
                         <span className="mono text-[13px] text-suave">
-                          {Number(g.participacao_pct).toFixed(1)}%
+                          {Number(g.participacao_pct).toFixed(1).replace(".", ",")}%
                         </span>
                       </span>
                     </td>

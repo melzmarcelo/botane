@@ -147,6 +147,13 @@ para arquivo nenhum — gravar direto aqui.
   Depois de lançar o formulário **fica aberto e limpo** — quem ajusta um item ajusta o
   próximo. ⚠️ O item de menu aceita **lista** de chaves (`chave: string | string[]`): Ajustes
   serve a quatro permissões e quem só tem a de perda também precisa chegar nele.
+- **Cada nota tem endereço** (25/08/2026): `/compras` é só a LISTA, `/compras/nova` digita e
+  `/compras/[id]` mostra — com **cabeçalho, itens e total**, no mesmo modelo do formulário de
+  digitação. Antes as três coisas dividiam a mesma tela: o formulário empurrava as notas para
+  fora do campo de visão, e a conferência mostrava os itens espremidos e **nunca somava o
+  total** — quem conferia via as linhas e não via o número que se bate contra o papel do
+  fornecedor. `/compras/[id]/editar` corrige a digitada (a correção também é longa demais para
+  caber num cartão).
 - **`services/nfe_xml.py`** + `routers/notas.py`: a casa opera **sem integração nenhuma**. A
   nota entra por três portas — XML da NF-e, digitação e Omie — e da gravação em diante o
   caminho é um só (conciliação → conversão → rateio → razão). Por isso o ciclo da nota
@@ -383,6 +390,14 @@ para arquivo nenhum — gravar direto aqui.
   numa LISTA paginada onde a da fixture não estava mais, ou afirmavam sobre as primeiras linhas
   de um CSV. Regra: **cada suíte procura os registros DELA**, pelo código ou pelo número que
   ela mesma criou, e garante a precondição em vez de supô-la.
+- ⚠️ **Fixture com data fixa envelhece.** As notas simuladas nasceram em 16–20/08/2026 e uma
+  semana depois já caíam fora da janela automática da busca — o teste dizia que a importação
+  tinha parado. `cliente._aproximar_datas` traz as datas da fixture para a semana de hoje
+  mantendo o intervalo entre elas. Vale também para a demonstração: sistema que só mostra nota
+  do mês passado parece parado.
+- ⚠️ **O teste de navegador põe a integração em `simulado` e devolve o modo no fim.** Depois de
+  o dono configurar a conta real, "Buscar no Omie" na suíte sincronizaria 3.670 notas de
+  verdade — e a conta bloqueia quem consome demais. Trocar só o MODO não toca na credencial.
 - ⚠️ **`preservar_credenciais()` em `tests/comum.py`, registrado no `atexit`.** A suíte do Omie
   grava uma credencial de mentira na MESMA linha onde mora a real, e a API não devolve a chave
   em claro (é a regra que protege o segredo) — então perder a credencial do cliente é
@@ -402,6 +417,13 @@ para arquivo nenhum — gravar direto aqui.
   calada — o movimento caía fora do mês e o relatório de movimentação deixava de fechar com o
   saldo. Foi um dia de caça a um erro de cálculo que não existia. O razão é append-only: data
   errada ali não se conserta, só se estorna.
+- ⚠️ **Saída com saldo negativo deixa a identidade da movimentação aberta**, e não é erro. A
+  saída sai por custo PROVISÓRIO (o último conhecido, ou zero); quando a entrada chega, o médio
+  passa a valer para o saldo negativo inteiro e revaloriza o que já tinha saído — uma correção
+  legítima que movimento nenhum carrega. Foi por isso que uma entrada de R$ 10 sobre saldo −3
+  abriu 30 reais no relatório. A tela nomeia essa causa; a saída é lançar a entrada que faltava.
+  ⚠️ Suíte que cria saldo negativo **não pode** lançar entrada nele depois: a base é
+  compartilhada, e os cenários que medem a casa inteira acusam a diferença.
 - ⚠️ **O rodapé do relatório soma as linhas ARREDONDADAS**, de propósito — o total tem de
   fechar com a coluna que a pessoa confere a mão. Em centenas de produtos isso dá centavos de
   diferença na identidade "inicial + entradas − saídas = final", que **não são erro de razão**.

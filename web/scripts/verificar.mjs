@@ -603,14 +603,29 @@ try {
   // ficava sem botão em que clicar e passava em silêncio — e checagem que não
   // roda é pior que checagem que falha. (Linha produzida sai da agenda: é uma
   // lista de tarefa, não um histórico.)
+  // ⚠️ **Garante a ficha em vez de supô-la.** Numa base recém-limpa não há ficha
+  // homologada nenhuma neste ponto do roteiro — a que a fase do CMV homologa só
+  // aparece muito depois. O bloco todo passava a depender do resíduo da rodada
+  // anterior, que é justamente o que uma suíte não pode fazer.
   const { dados: fichasProd } = await api("GET", "/fichas", null, token);
-  const homologada = (fichasProd ?? []).find((f) => f.status === "HOMOLOGADA");
-  if (homologada) {
-    const amanhaISO = diaLocal(1);
-    await api("POST", "/producao-agenda",
-      { id_produto: homologada.id_produto, data_prevista: amanhaISO, quantidade: 3 }, token);
+  let homologada = (fichasProd ?? []).find((f) => f.status === "HOMOLOGADA");
+  if (!homologada) {
+    const marcaFicha = String(Date.now()).slice(-5);
+    const { dados: insFicha } = await api("POST", "/produtos",
+      { nome: `Agenda insumo ${marcaFicha}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+    const { dados: prodFicha } = await api("POST", "/produtos",
+      { nome: `Agenda preparo ${marcaFicha}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
+    const { dados: novaFicha } = await api("POST", "/fichas", {
+      id_produto: prodFicha.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+      itens: [{ id_insumo: insFicha.id, qtd_bruta: 0.2, um: "KG" }],
+    }, token);
+    await api("POST", `/fichas/${novaFicha.id}/homologar`, null, token);
+    homologada = { id: novaFicha.id, id_produto: prodFicha.id, status: "HOMOLOGADA" };
   }
   checar("há ficha homologada para a agenda usar", !!homologada, fichasProd?.length);
+  const amanhaISO = diaLocal(1);
+  await api("POST", "/producao-agenda",
+    { id_produto: homologada.id_produto, data_prevista: amanhaISO, quantidade: 3 }, token);
 
   await irPara(p, `${WEB}/producao`);
   await new Promise((r) => setTimeout(r, 1400));
@@ -988,6 +1003,17 @@ try {
   await api("DELETE", `/produtos/${prod6.id}`, null, token);
 
   console.log("8. Omie (etapa 5)");
+  // ⚠️ **O modo volta ao que era no fim.** Esta fase exercita a importação
+  // sobre as FIXTURES, e para isso a integração tem de estar em `simulado`.
+  // Numa base onde o dono já configurou a conta de verdade, deixar como estava
+  // faria o teste sincronizar 3.670 notas reais — e a conta do Omie bloqueia
+  // quem consome demais. Trocar só o MODO não toca na credencial: a chave
+  // guardada continua lá (é o que o `PUT /omie/config` sem `app_key` faz).
+  const { dados: omieAntes } = await api("GET", "/omie/config", null, token);
+  const modoOriginal = omieAntes?.modo ?? "simulado";
+  if (modoOriginal !== "simulado") {
+    await api("PUT", "/omie/config", { modo: "simulado", ativa: true }, token);
+  }
   // Limpa o que rodadas anteriores importaram das fixtures.
   const { dados: notasAntigas } = await api("GET", "/notas", null, token);
   for (const n of notasAntigas ?? []) {
@@ -1053,14 +1079,30 @@ try {
   checar("a lista de notas tem busca", !!campoBuscaNota);
   await campoBuscaNota.type("4812");
   await new Promise((r) => setTimeout(r, 1400));
-  await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) =>
+  // A nota agora abre em PÁGINA PRÓPRIA: o item da lista é um link.
+  const linkNota = await p.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((x) =>
       x.textContent.includes("NF 4812"));
-    b?.click();
+    return a ? a.getAttribute("href") : null;
   });
+  checar("a nota da lista leva para a página dela", !!linkNota, linkNota);
+  await irPara(p, WEB + linkNota);
   await new Promise((r) => setTimeout(r, 1200));
   const textoNota = await p.evaluate(() => document.body.innerText);
   checar("a nota abre com os itens", /CAFE EM GRAO/i.test(textoNota), textoNota.slice(0, 100));
+  // O que o dono pediu: as três áreas, no mesmo modelo da digitação.
+  const areasNota = await p.evaluate(() => {
+    const titulos = [...document.querySelectorAll("h2, h3")].map((h) => h.textContent?.trim());
+    return {
+      cabecalho: titulos.includes("Cabeçalho"),
+      itens: titulos.includes("Itens"),
+      total: titulos.includes("Total"),
+      somaVisivel: /Total da nota/i.test(document.body.innerText),
+    };
+  });
+  checar("a página tem cabeçalho, itens e total", areasNota.cabecalho && areasNota.itens
+    && areasNota.total, areasNota);
+  checar("e o total da nota aparece somado", areasNota.somaVisivel, areasNota);
   await foto(p, "29-conciliacao");
 
   await api("DELETE", "/notas/vinculos/CAF-500", null, token);
@@ -1093,12 +1135,19 @@ try {
   const entradaXmlTela = await p.$('input[type="file"]');
   checar("a tela de compras tem a porta do XML", !!entradaXmlTela);
   await entradaXmlTela.uploadFile(caminhoXml);
-  await new Promise((r) => setTimeout(r, 2500));
+  // Um arquivo só: a tela navega para a nota, que é o próximo passo de quem
+  // importou. Esperar o ENDEREÇO mudar é mais confiável que esperar um tempo.
+  for (const ate = Date.now() + 9000; Date.now() < ate; ) {
+    if (/\/compras\/\d+$/.test(p.url())) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  checar("o XML importa pela tela e abre a nota",
+    /\/compras\/\d+$/.test(p.url()), p.url());
+  // A navegação termina antes de a nota carregar: esperar o ITEM aparecer, não
+  // um tempo fixo, senão o teste lê a tela ainda vazia e culpa o sistema.
+  await esperarTexto(p, "AZEITE EXTRA VIRGEM", 9000);
   const textoXml = await p.evaluate(() => document.body.innerText);
-  checar("o XML importa pela tela", /1 nota\(s\) importada\(s\)/i.test(textoXml),
-    textoXml.slice(0, 160));
-  checar("o arquivo aparece com o resultado", /Arquivos lidos/i.test(textoXml));
-  checar("a nota abre sozinha com o item do XML",
+  checar("a nota abre com o item do XML",
     /AZEITE EXTRA VIRGEM/i.test(textoXml), textoXml.slice(0, 200));
 
   // A trava da conciliação se prova AQUI, e não na nota do Omie: o código do
@@ -1116,12 +1165,16 @@ try {
   checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
   await foto(p, "29b-xml-importado");
 
-  // O mesmo arquivo de novo: a chaveNota da NF-e é que impede a duplicação.
+  // O mesmo arquivo de novo: a chave da NF-e é que impede a duplicação. Volta
+  // para a lista, que é onde mora a porta do XML.
+  await irPara(p, `${WEB}/compras`);
+  await new Promise((r) => setTimeout(r, 1100));
   await (await p.$('input[type="file"]')).uploadFile(caminhoXml);
-  await new Promise((r) => setTimeout(r, 2200));
+  await new Promise((r) => setTimeout(r, 2500));
   const textoRepetido = await p.evaluate(() => document.body.innerText);
   checar("o mesmo XML não entra duas vezes",
-    /repetida|já tinha sido importada/i.test(textoRepetido), textoRepetido.slice(0, 160));
+    /repetida|já tinha sido importada/i.test(textoRepetido), textoRepetido.slice(0, 200));
+  checar("o arquivo aparece com o resultado", /Arquivos lidos/i.test(textoRepetido));
 
   // Arquivo que não é nota: a recusa tem de explicar o que houve.
   writeFileSync(`${FOTOS}/_nao-e-nota.xml`, "<retEnviNFe><nRec>1</nRec></retEnviNFe>");
@@ -1138,12 +1191,18 @@ try {
   // unidade de propósito, e pegar "o primeiro que controla estoque" caía num
   // deles — o teste falhava dizendo do produto o que era verdade do rascunho.
   const insumoNota = produtosNota.find((x) => x.controla_estoque && x.um_estoque);
-  await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
+  // A digitação tem PÁGINA PRÓPRIA: o formulário é longo, e aberto dentro da
+  // lista empurrava as notas para fora da tela.
+  await irPara(p, `${WEB}/compras`);
   await new Promise((r) => setTimeout(r, 1100));
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")].find((x) => x.textContent === "Digitar nota")?.click();
+  const linkDigitar = await p.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((x) =>
+      x.textContent?.trim() === "Digitar nota");
+    return a ? a.getAttribute("href") : null;
   });
-  await new Promise((r) => setTimeout(r, 900));
+  checar("digitar nota leva para a página dela", linkDigitar === "/compras/nova", linkDigitar);
+  await irPara(p, `${WEB}/compras/nova`);
+  await new Promise((r) => setTimeout(r, 1200));
   const seletoresNota = await p.$$("select");
   checar("o formulário de digitação abre", seletoresNota.length >= 3, seletoresNota.length);
 
@@ -1205,11 +1264,16 @@ try {
   checar("e já nasce pronta para lançar (sem pendência)",
     !/sem produto vinculado/i.test(textoGravadaNota), textoGravadaNota.slice(0, 200));
 
-  // Corrigir a nota digitada, pela tela, antes de ela virar estoque.
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")].find((x) => x.textContent === "Corrigir")?.click();
+  // Corrigir a nota digitada, pela tela, antes de ela virar estoque. O botão
+  // virou LINK para a página de correção — a nota inteira já tem endereço.
+  const linkCorrigir = await p.evaluate(() => {
+    const a = [...document.querySelectorAll("a")].find((x) => x.textContent?.trim() === "Corrigir");
+    return a ? a.getAttribute("href") : null;
   });
-  await new Promise((r) => setTimeout(r, 1200));
+  checar("a nota digitada oferece o caminho da correção",
+    /\/compras\/\d+\/editar$/.test(linkCorrigir ?? ""), linkCorrigir);
+  await irPara(p, WEB + linkCorrigir);
+  await new Promise((r) => setTimeout(r, 1400));
   const textoCorrigir = await p.evaluate(() => document.body.innerText);
   checar("a nota digitada oferece correção", /Corrigir a nota/i.test(textoCorrigir),
     textoCorrigir.slice(0, 160));
@@ -1228,11 +1292,20 @@ try {
   await new Promise((r) => setTimeout(r, 500));
 
   // Limpeza: as duas notas do teste saem, para a próxima rodada começar limpa.
-  const { dados: notasDoTesteXml } = await api("GET", "/notas?limite=30", null, token);
+  const { dados: notasDoTesteXml } = await api("GET", "/notas?limite=60", null, token);
   for (const n of notasDoTesteXml ?? []) {
     if (n.chave_nfe === chaveNota || (n.origem === "MANUAL" && !n.numero)) {
       await api("DELETE", `/notas/${n.id}`, null, token);
     }
+  }
+
+  // Devolve a integração ao modo em que o dono a deixou.
+  if (modoOriginal !== "simulado") {
+    await api("PUT", "/omie/config", { modo: modoOriginal, ativa: true }, token);
+    const { dados: omieDepois } = await api("GET", "/omie/config", null, token);
+    checar("o modo da integração volta como estava", omieDepois?.modo === modoOriginal,
+      omieDepois?.modo);
+    checar("e a credencial continua configurada", omieDepois?.configurada === true, omieDepois);
   }
 
   console.log("7a. combo: uma linha do PDV que vale por dois produtos");
