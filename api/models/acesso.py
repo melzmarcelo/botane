@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+from config import SENHA_MINIMA
+
 
 # ---------------------------------------------------------------- login
 
@@ -46,7 +48,7 @@ class MeResponse(BaseModel):
 
 class TrocarSenhaRequest(BaseModel):
     senha_atual: str
-    senha_nova: str = Field(min_length=8)
+    senha_nova: str = Field(min_length=SENHA_MINIMA)
 
 
 class EsqueciSenhaRequest(BaseModel):
@@ -55,7 +57,7 @@ class EsqueciSenhaRequest(BaseModel):
 
 class RedefinirSenhaRequest(BaseModel):
     token: str = Field(min_length=10, max_length=200)
-    senha: str = Field(min_length=8)
+    senha: str = Field(min_length=SENHA_MINIMA)
 
 
 # ---------------------------------------------------------------- usuários
@@ -69,7 +71,7 @@ class PapelVinculo(BaseModel):
 class UsuarioCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
     email: EmailStr
-    senha: str = Field(min_length=8)
+    senha: str = Field(min_length=SENHA_MINIMA)
     telefone: str | None = None
     ativo: bool = True
     papeis: list[PapelVinculo] = []
@@ -80,7 +82,7 @@ class UsuarioUpdate(BaseModel):
     email: EmailStr | None = None
     telefone: str | None = None
     ativo: bool | None = None
-    senha: str | None = Field(default=None, min_length=8)
+    senha: str | None = Field(default=None, min_length=SENHA_MINIMA)
     papeis: list[PapelVinculo] | None = None
 
 

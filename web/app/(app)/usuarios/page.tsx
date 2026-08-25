@@ -6,6 +6,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
 
 type Papel = { id: number; nome: string; descricao: string | null; sistema: boolean };
 type Vinculo = { id_papel: number; papel: string; id_unidade: number | null; unidade: string | null };
@@ -298,13 +299,13 @@ export default function PaginaUsuarios() {
               dica={
                 editando
                   ? "Deixe em branco para manter. Trocar aqui obriga nova senha no próximo acesso."
-                  : "Mínimo de 8 caracteres. A pessoa troca no primeiro acesso."
+                  : `${dicaSenha} A pessoa troca no primeiro acesso.`
               }
             >
               <input
                 className="campo"
                 type="password"
-                minLength={8}
+                minLength={SENHA_MINIMA}
                 required={!editando}
                 value={form.senha}
                 onChange={(e) => setForm({ ...form, senha: e.target.value })}

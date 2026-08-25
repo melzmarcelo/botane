@@ -22,6 +22,7 @@ from config import (
     CORS_ORIGINS,
     DEBUG,
     PORT,
+    SENHA_MINIMA,
 )
 from database import close_pool, get_cursor, init_pool
 from db_updater import run_migrations
@@ -84,8 +85,9 @@ def garantir_admin() -> None:
                 faltando.append("ADMIN_SENHA")
             if ADMIN_EMAIL == ADMIN_EMAIL_PADRAO:
                 faltando.append("ADMIN_EMAIL")
-            if len(ADMIN_SENHA) < 12:
-                faltando.append("ADMIN_SENHA (curta demais: mínimo 12 caracteres)")
+            if len(ADMIN_SENHA) < SENHA_MINIMA:
+                faltando.append(
+                    f"ADMIN_SENHA (curta demais: mínimo {SENHA_MINIMA} caracteres)")
             # O marcador do `app.yaml` está no repositório: é senha publicada,
             # igual à do README, e o tamanho dele engana a conferência acima.
             if ADMIN_SENHA.strip().upper() == "DEFINA_NO_PAINEL":

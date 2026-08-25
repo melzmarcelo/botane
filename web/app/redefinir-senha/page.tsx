@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Aviso } from "@/components/ui";
+import { SENHA_MINIMA } from "@/lib/senha";
 
 /**
  * A tela que o link do e-mail abre.
@@ -82,7 +83,7 @@ function Formulario() {
         ) : (
           <>
             <p className="mt-2 text-[14.5px] leading-relaxed text-suave">
-              Olá, {nome}. Escolha uma senha de pelo menos 8 caracteres.
+              Olá, {nome}. Escolha uma senha de pelo menos {SENHA_MINIMA} caracteres.
             </p>
             {erro && (
               <div className="mt-4">
@@ -96,7 +97,7 @@ function Formulario() {
                   className="campo"
                   type="password"
                   required
-                  minLength={8}
+                  minLength={SENHA_MINIMA}
                   autoFocus
                   autoComplete="new-password"
                   value={senha}
@@ -109,7 +110,7 @@ function Formulario() {
                   className="campo"
                   type="password"
                   required
-                  minLength={8}
+                  minLength={SENHA_MINIMA}
                   autoComplete="new-password"
                   value={repetida}
                   onChange={(e) => setRepetida(e.target.value)}

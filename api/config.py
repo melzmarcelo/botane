@@ -41,6 +41,19 @@ WEB_URL = os.getenv("WEB_URL", (CORS_ORIGINS[0] if CORS_ORIGINS else "http://loc
 SENHA_TOKEN_MINUTOS = int(os.getenv("SENHA_TOKEN_MINUTOS", "30"))
 SENHA_PEDIDOS_HORA = int(os.getenv("SENHA_PEDIDOS_HORA", "3"))
 
+# Tamanho mínimo de senha, em UM lugar só.
+#
+# Vale para o administrador que nasce no primeiro start, para a troca de senha,
+# para a redefinição por e-mail e para a senha que o admin define ao cadastrar
+# alguém. Antes o número estava escrito quatro vezes no Python e mais quatro no
+# front — e o do start era 12 enquanto o dos formulários era 8, então uma senha
+# aceita na criação era recusada na primeira troca obrigatória.
+#
+# ⚠️ Curto o bastante para caber na cabeça é curto o bastante para ser
+# adivinhado: seis caracteres são poucos milhões de combinações, e o sistema
+# está na internet. Quem subir esse número aqui sobe em todo lugar.
+SENHA_MINIMA = 6
+
 # --- primeiro acesso ---
 # Só é usado quando a tabela de usuários está vazia.
 # ⚠️ São os valores de DESENVOLVIMENTO, e estão escritos no README — que é

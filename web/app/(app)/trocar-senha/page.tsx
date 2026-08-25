@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Cartao } from "@/components/ui";
+import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
 
 export default function TrocarSenha() {
   const aviso = useAviso();
@@ -61,12 +62,12 @@ export default function TrocarSenha() {
               onChange={(e) => setAtual(e.target.value)}
             />
           </Campo>
-          <Campo rotulo="Nova senha" dica="Mínimo de 8 caracteres.">
+          <Campo rotulo="Nova senha" dica={dicaSenha}>
             <input
               className="campo"
               type="password"
               required
-              minLength={8}
+              minLength={SENHA_MINIMA}
               autoComplete="new-password"
               value={nova}
               onChange={(e) => setNova(e.target.value)}
@@ -77,7 +78,7 @@ export default function TrocarSenha() {
               className="campo"
               type="password"
               required
-              minLength={8}
+              minLength={SENHA_MINIMA}
               autoComplete="new-password"
               value={repetida}
               onChange={(e) => setRepetida(e.target.value)}

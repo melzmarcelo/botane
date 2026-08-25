@@ -65,7 +65,8 @@ Primeiro acesso **local**: o administrador nasce de `ADMIN_EMAIL`/`ADMIN_SENHA` 
 `api/.env`, ou do padrão de desenvolvimento em `api/config.py`. O sistema obriga a troca.
 
 ⚠️ Esse padrão vale **só** em desenvolvimento: com `DEBUG=false` a API **recusa subir** se as
-duas não forem definidas no ambiente, ou se a senha tiver menos de 12 caracteres.
+duas não forem definidas no ambiente, ou se a senha tiver menos de `SENHA_MINIMA`
+caracteres (`api/config.py`) — o mesmo tamanho que os formulários de senha cobram.
 Banco `botane_db` no Postgres local; as migrações rodam sozinhas no start da API.
 
 - API e documentação: <http://localhost:9200/docs>

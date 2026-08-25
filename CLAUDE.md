@@ -76,7 +76,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - Roda local: `.\iniciar_local.ps1`. As credenciais do admin inicial estão em
   `api/.env.example` — e só valem em desenvolvimento.
 - ⚠️ **Com `DEBUG=false`, a API RECUSA SUBIR se `ADMIN_EMAIL`/`ADMIN_SENHA` forem as de
-  desenvolvimento** (ou a senha tiver menos de 12 caracteres). O primeiro deploy real
+  desenvolvimento** (ou a senha for menor que `SENHA_MINIMA`). O primeiro deploy real
   subiu com `admin@botane.com.br` e a senha padrão, porque as variáveis não tinham sido
   definidas no painel — e nada avisou: a linha "administrador criado" saiu igual à de
   sempre. Parar o start é o único aviso que ninguém deixa passar. A trava vale só na
@@ -539,6 +539,11 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **O tamanho mínimo de senha mora em UM lugar**: `SENHA_MINIMA`, em `api/config.py` (hoje
+  **6**), espelhado em `web/lib/senha.ts` para o `minLength` do input e a frase da dica. Estava
+  escrito oito vezes, e com dois valores: 12 no start e 8 nos formulários — senha aceita na
+  criação do administrador era recusada na troca obrigatória do primeiro acesso. A regra de
+  verdade é a do servidor; o `minLength` só evita a viagem.
 - ⚠️ **Marcador de configuração vira dado, e dado ruim não avisa.** O `ADMIN_EMAIL` do
   primeiro deploy subiu com o `DEFINA_NO_PAINEL` do `app.yaml` copiado tal e qual: passou pela
   guarda (não era o valor padrão, e a senha tinha 16 caracteres) e criou um administrador
