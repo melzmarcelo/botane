@@ -18,26 +18,29 @@ name: botane
 region: nyc
 
 databases:
+  # O cluster gerenciado que já existe — anexado, não criado aqui.
+  #
+  # ⚠️ **Anexar é o que evita credencial em arquivo.** A DO injeta host, porta,
+  # usuário e senha nas variáveis `${db.*}` do serviço: nada de senha no
+  # repositório, no spec ou no painel. Trocar a senha do banco depois não exige
+  # mexer em lugar nenhum.
+  #
+  # ⚠️ O cluster precisa estar na MESMA REGIÃO do app (`region:` acima). Se não
+  # estiver, a anexação é recusada — e a mensagem fala de recurso não
+  # encontrado, não de região.
+  #
+  # ⚠️ `defaultdb` e `doadmin` são o database e o superusuário que a DO cria
+  # sozinha. Servem porque o cluster é dedicado ao Botané (o nome dele diz
+  # isso). Se um dia outro sistema for morar aqui, crie database e usuário
+  # próprios ANTES: Botané e Gestor Civil têm tabelas com o mesmo nome
+  # (`usuarios`, `empresa`, `auditoria`), e as migrações rodam em qualquer
+  # banco para onde apontarem.
   - name: db
     engine: PG
-    version: "16"
-    # 🔴 **Banco de DESENVOLVIMENTO — não tem backup.** É o que sobe junto com o
-    # app, de graça, e serve para a primeira subida e para conferir que tudo
-    # funciona. NÃO serve para o dado do cliente: o razão é append-only, o que o
-    # torna auditável e não o torna recuperável.
-    #
-    # Antes de qualquer nota real entrar, crie um cluster gerenciado (que tem
-    # backup e restauração por ponto no tempo) e troque este bloco por:
-    #
-    #     - name: db
-    #       engine: PG
-    #       version: "16"
-    #       production: true
-    #       cluster_name: botane-db
-    #
-    # `db-s-dev-database` NÃO é um tamanho válido aqui: o banco de
-    # desenvolvimento se declara por `production: false`, sem tamanho nenhum.
-    production: false
+    production: true
+    cluster_name: botane-db
+    db_name: defaultdb
+    db_user: doadmin
 
 services:
   # --------------------------------------------------------------------- API

@@ -66,14 +66,25 @@ python api/verificar_deploy.py https://<o-endereço-que-a-DO-deu>
 São doze checagens **só de leitura** — a suíte de fumaça NÃO serve aqui: ela cria produto,
 lança nota e chega a gravar credencial de teste na mesma linha da real.
 
-### 🔴 O banco que sobe com o app não tem backup
+### O banco é um cluster gerenciado, anexado
 
-O `app.yaml` declara `production: false` — o banco de **desenvolvimento**, que vem junto e
-serve para a primeira subida e para conferir que tudo funciona. **Ele não tem backup.**
+O `app.yaml` **anexa** o cluster `botane-db` (`production: true` + `cluster_name`) em vez de
+criar o banco de desenvolvimento que vem junto com o app — aquele não tem backup, e o razão é
+append-only: isso o torna auditável e não o torna recuperável.
 
-Antes de a primeira nota real entrar, crie um cluster gerenciado e troque o bloco por
-`production: true` + `cluster_name`. O razão é append-only: isso o torna auditável e **não**
-o torna recuperável.
+⚠️ **Anexar é o que evita credencial em arquivo.** A DO injeta host, porta, usuário e senha
+nas variáveis `${db.*}`. Nada de senha no repositório, no spec ou no painel — e trocar a senha
+do banco depois não exige mexer em lugar nenhum.
+
+⚠️ **App e cluster na mesma região.** Se não estiverem, a anexação é recusada com mensagem de
+recurso não encontrado, que não fala em região.
+
+⚠️ **Um database por sistema.** As migrações rodam em qualquer banco para onde apontarem, e
+Botané e Gestor Civil têm tabelas com o mesmo nome (`usuarios`, `empresa`, `auditoria`).
+Cluster compartilhado exige database e usuário próprios.
+
+E confira, no painel do cluster, o que o Postgres gerenciado dá de graça e o que não dá:
+**retenção do backup** e **como se restaura**. Backup que nunca foi restaurado é hipótese.
 
 ### Três coisas que o App Platform impõe
 
