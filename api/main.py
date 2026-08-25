@@ -9,6 +9,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import validate_email
+from pydantic_core import PydanticCustomError
 
 import arquivos
 from config import (
@@ -59,6 +61,15 @@ def garantir_admin() -> None:
     internet com senha de administrador conhecida, e nada avisou: a linha
     "administrador criado" saiu igual à de sempre.
 
+    ⚠️ **E recusa e-mail que não seja e-mail.** O segundo deploy subiu com o
+    marcador `DEFINA_NO_PAINEL` copiado do `app.yaml` para as duas variáveis:
+    passou nas conferências acima (não é o valor padrão, e tem 16 caracteres) e
+    criou um administrador com login `defina_no_painel`. A conta nasceu MORTA —
+    `LoginRequest.email` é `EmailStr`, então o pedido morre na validação, com
+    422, antes de chegar ao banco. Ninguém nunca ia entrar, e a única saída era
+    apagar a linha direto no Postgres. Por isso a conferência usa a MESMA regra
+    do login: se não passar aqui, não passaria lá.
+
     Parar o start é o único aviso que ninguém deixa passar. E vale só na
     criação: sistema que já tem gente dentro não é afetado.
     """
@@ -75,6 +86,15 @@ def garantir_admin() -> None:
                 faltando.append("ADMIN_EMAIL")
             if len(ADMIN_SENHA) < 12:
                 faltando.append("ADMIN_SENHA (curta demais: mínimo 12 caracteres)")
+            # O marcador do `app.yaml` está no repositório: é senha publicada,
+            # igual à do README, e o tamanho dele engana a conferência acima.
+            if ADMIN_SENHA.strip().upper() == "DEFINA_NO_PAINEL":
+                faltando.append("ADMIN_SENHA (é o marcador do app.yaml, que está no repositório)")
+            try:
+                validate_email(ADMIN_EMAIL)
+            except (PydanticCustomError, ValueError):
+                faltando.append(f"ADMIN_EMAIL ({ADMIN_EMAIL!r} não é um endereço de e-mail — "
+                                "seria uma conta impossível de usar: o login recusa na validação)")
             if faltando:
                 raise RuntimeError(
                     "Recusando criar o administrador com valor de desenvolvimento: "

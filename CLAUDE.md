@@ -539,6 +539,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **Marcador de configuração vira dado, e dado ruim não avisa.** O `ADMIN_EMAIL` do
+  primeiro deploy subiu com o `DEFINA_NO_PAINEL` do `app.yaml` copiado tal e qual: passou pela
+  guarda (não era o valor padrão, e a senha tinha 16 caracteres) e criou um administrador
+  chamado `defina_no_painel`. A conta nasceu **morta** — `LoginRequest.email` é `EmailStr`, e o
+  pedido morre com 422 antes de tocar o banco —, mas o log dizia "administrador criado" como em
+  qualquer subida boa, e a única saída foi apagar a linha direto no Postgres. `garantir_admin`
+  agora confere o e-mail com a **mesma regra do login** (`pydantic.validate_email`) e recusa o
+  marcador como senha. Regra de bolso: **valor de configuração que vira registro no banco
+  precisa passar pela validação de quem vai LER esse registro.**
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de
   Vendas propunha a data de amanhã para a importação do dia: um restaurante que fecha às 23h
   lançaria a venda inteira no dia seguinte, o CMV do mês fecharia errado e nada na tela

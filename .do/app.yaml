@@ -114,7 +114,15 @@ services:
         value: ${APP_URL}
 
       # Só valem na PRIMEIRA subida, com a tabela de usuários vazia. Depois
-      # disso mudar aqui não muda o usuário que já existe.
+      # disso mudar aqui não muda o usuário que já existe — para trocar é
+      # preciso apagar a linha no banco e reiniciar o componente.
+      #
+      # ⚠️ **Deixar o marcador abaixo como está DERRUBA o start**, de propósito.
+      # Subiu uma vez com ele copiado tal e qual, e nasceu um administrador
+      # `defina_no_painel`: conta MORTA, porque o login valida o campo como
+      # e-mail e recusa com 422 antes de olhar o banco. Ninguém entrava, e o log
+      # dizia "administrador criado" como em qualquer subida boa. Agora o start
+      # para e diz o nome da variável.
       - key: ADMIN_EMAIL
         scope: RUN_TIME
         value: DEFINA_NO_PAINEL
