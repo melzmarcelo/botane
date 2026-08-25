@@ -325,6 +325,14 @@ para arquivo nenhum — gravar direto aqui.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
+  ⚠️ **Data de HOJE responde pelo `estoque_saldos`, não pelo razão.** Os dois dão o mesmo
+  número (o saldo é a fotografia corrente, e o razão não aceita movimento no futuro), mas o
+  caminho é outro: uma linha por produto e local contra um `DISTINCT ON` sobre tudo o que já
+  aconteceu. Com 400.000 movimentos, **837 ms viraram zero** — e é o caso mais comum, porque
+  todo mês aberto termina hoje. O atalho está em DOIS lugares (`valor_do_estoque` e a CTE
+  `final` de `movimentacao_por_produto`) e `smoke_cmv` cobra que continuem concordando.
+  Para data passada vale o índice `ix_mov_fotografia` (migração 027): apuração do mês de
+  ~1.700 ms para **625 ms**, movimentação do mês aberto de 1.262 ms para **642 ms**.
 - **Duas naturezas de produzido** (`produtos.modo_producao`, migração 021, 24/08/2026):
   `PARA_ESTOQUE` (a massa de pizza: produz, guarda, sai depois) e `NA_HORA` (o café passado:
   a venda produz e baixa no mesmo lançamento, e o saldo volta a zero). ⚠️ Sem o `NA_HORA` a
@@ -423,8 +431,8 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (808 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (92),
+- Testes (810 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (58), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25),

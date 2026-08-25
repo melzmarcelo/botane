@@ -25,8 +25,17 @@ TIPOS_COMPRA = ("ENTRADA_NF", "ENTRADA_MANUAL")
 
 
 def valor_do_estoque(cur, id_unidade: int, ate: date | None = None) -> Decimal:
-    """Valor do estoque no fim do dia `ate` (ou agora, se None)."""
-    if ate is None:
+    """Valor do estoque no fim do dia `ate` (ou agora, se None).
+
+    ⚠️ **Data de hoje (ou adiante) responde pelo SALDO, não pelo razão.** Os dois
+    dão o mesmo número — `estoque_saldos` é a fotografia corrente, e o razão não
+    aceita movimento no futuro —, mas o caminho é outro: o saldo é uma linha por
+    produto e local, o razão é um `DISTINCT ON` sobre tudo o que já aconteceu.
+    Com 400.000 movimentos, 837 ms contra alguns milissegundos. E é o caso mais
+    comum: o mês corrente termina hoje, então toda apuração de mês aberto passa
+    por aqui.
+    """
+    if ate is None or ate >= date.today():
         cur.execute(
             """SELECT coalesce(sum(quantidade * custo_medio), 0) AS valor
                  FROM estoque_saldos WHERE id_unidade = %s""",
@@ -80,11 +89,27 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
              ORDER BY id_produto, id_local, id DESC
         ),
         final AS (
-            SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, id_local, saldo_apos, custo_medio_apos
-              FROM estoque_movimentos
-             WHERE id_unidade = %(u)s AND data_movimento < %(limite)s
-             ORDER BY id_produto, id_local, id DESC
+            -- ⚠️ Quando o período termina HOJE — o caso do mês aberto, que é o
+            -- que se olha todo dia — a fotografia final é o próprio saldo:
+            -- `estoque_saldos` é uma linha por produto e local, contra um
+            -- `DISTINCT ON` sobre o razão inteiro. A resposta é a mesma; o
+            -- caminho, não. Data passada continua pelo razão, que é o único
+            -- que sabe como as coisas estavam antes.
+            SELECT id_produto, id_local, quantidade AS saldo_apos,
+                   custo_medio AS custo_medio_apos
+              FROM estoque_saldos
+             WHERE id_unidade = %(u)s AND %(fim_e_hoje)s
+            UNION ALL
+            -- O `DISTINCT ON` mora numa subconsulta: o `ORDER BY` de um lado da
+            -- união seria lido como ordenação do resultado inteiro.
+            SELECT id_produto, id_local, saldo_apos, custo_medio_apos FROM (
+                SELECT DISTINCT ON (id_produto, id_local)
+                       id_produto, id_local, saldo_apos, custo_medio_apos
+                  FROM estoque_movimentos
+                 WHERE id_unidade = %(u)s AND NOT %(fim_e_hoje)s
+                   AND data_movimento < %(limite)s
+                 ORDER BY id_produto, id_local, id DESC
+            ) AS _pelo_razao
         ),
         no_periodo AS (
             SELECT id_produto,
@@ -138,7 +163,8 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
                OR np.id_produto IS NOT NULL
          ORDER BY lower(p.nome)
         """,
-        {"u": id_unidade, "inicio": inicio, "limite": limite},
+        {"u": id_unidade, "inicio": inicio, "limite": limite,
+         "fim_e_hoje": fim >= date.today()},
     )
     return [dict(r) for r in cur.fetchall()]
 

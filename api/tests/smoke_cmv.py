@@ -232,6 +232,30 @@ checar("e fecha no total também",
              t["valor_final"], folga),
        t)
 
+print("4c. o atalho de HOJE responde a mesma coisa que o razão")
+# ⚠️ Período que termina hoje responde pelo `estoque_saldos`, não pelo
+# `DISTINCT ON` sobre o razão inteiro — com 400.000 movimentos, 837 ms viraram
+# zero. São DOIS lugares com esse atalho (a apuração e o relatório de
+# movimentação), e eles têm de continuar dizendo o mesmo número. Atalho que
+# responde outra coisa não é atalho, é erro.
+st, ap_hoje = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+st, mov_hoje = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
+folga_hoje = max(0.05, 0.005 * mov_hoje["produtos"])
+checar("apuração e movimentação fecham no mesmo estoque final",
+       perto(float(ap_hoje["estoque_final"]), float(mov_hoje["total"]["valor_final"]),
+             folga_hoje),
+       (ap_hoje["estoque_final"], mov_hoje["total"]["valor_final"]))
+
+# E o de ONTEM continua indo ao razão: a diferença entre os dois é o que se
+# movimentou hoje, nem mais nem menos.
+ontem = (hoje - timedelta(days=1)).isoformat()
+st, ap_ontem = chamar("GET", f"/cmv/apuracao?inicio={inicio_mes}&fim={ontem}", token=token)
+st, mov_ontem = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={ontem}", token=token)
+checar("o período que termina ONTEM também fecha entre as duas telas",
+       perto(float(ap_ontem["estoque_final"]), float(mov_ontem["total"]["valor_final"]),
+             max(0.05, 0.005 * mov_ontem["produtos"])),
+       (ap_ontem["estoque_final"], mov_ontem["total"]["valor_final"]))
+
 print("5. fechamento congela o período")
 st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=token)
 checar("fecha o mês", st == 201, r)
