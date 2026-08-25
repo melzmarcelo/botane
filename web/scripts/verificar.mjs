@@ -175,6 +175,9 @@ const navegador = await puppeteer.launch({
   defaultViewport: { width: 1440, height: 1000 },
 });
 
+/** Desfazer registrado no caminho: roda no `finally`, dê certo ou não. */
+const aoTerminar = [];
+
 try {
   const p = await navegador.newPage();
   // O 403 da fase 3 é o comportamento esperado (servidor barrando a Cozinha);
@@ -1013,6 +1016,13 @@ try {
   const modoOriginal = omieAntes?.modo ?? "simulado";
   if (modoOriginal !== "simulado") {
     await api("PUT", "/omie/config", { modo: "simulado", ativa: true }, token);
+    // ⚠️ O restauro fica registrado ANTES de qualquer checagem, e roda no
+    // `finally` do roteiro. Repor só no fim do bloco não bastou: uma quebra no
+    // meio da fase deixou a integração em `simulado`, e a busca do dono passou
+    // a não trazer nota nenhuma sem que nada explicasse por quê. É a mesma
+    // lição do `preservar_credenciais` no lado da API.
+    aoTerminar.push(() => api("PUT", "/omie/config",
+      { modo: modoOriginal, ativa: true }, token));
   }
   // Limpa o que rodadas anteriores importaram das fixtures.
   const { dados: notasAntigas } = await api("GET", "/notas", null, token);
@@ -1299,7 +1309,8 @@ try {
     }
   }
 
-  // Devolve a integração ao modo em que o dono a deixou.
+  // Devolve a integração ao modo em que o dono a deixou. O `finally` faria
+  // isso de qualquer jeito; aqui é para poder AFIRMAR que voltou.
   if (modoOriginal !== "simulado") {
     await api("PUT", "/omie/config", { modo: modoOriginal, ativa: true }, token);
     const { dados: omieDepois } = await api("GET", "/omie/config", null, token);
@@ -1847,6 +1858,14 @@ try {
   // Tira a logo de teste: a real é a que o cliente subir.
   await api("DELETE", "/empresa/logo", null, token);
 } finally {
+  // O que precisa voltar ao lugar mesmo se o roteiro estourar no meio.
+  for (const desfazer of aoTerminar) {
+    try {
+      await desfazer();
+    } catch (e) {
+      console.log(`  ! não deu para desfazer: ${e}`);
+    }
+  }
   await navegador.close();
 }
 

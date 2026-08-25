@@ -81,6 +81,11 @@ para arquivo nenhum — gravar direto aqui.
   `produto_unidades` e com `cmv_movimentacao`: a limpeza estourava no meio e quem rodou achava
   que tinha limpado. O script agora **confere antes** (`referenciam()`) e recusa nomeando o que
   falta na lista.
+- ⚠️ **A limpeza NÃO toca nas tabelas de apoio** (locais, setores, categorias): elas são
+  cadastro base e ficam. Mas as suítes criam locais e setores com marcador a cada rodada, e a
+  lista incha — vale tirar o que não é da semente de fábrica depois de uma bateria. A flag
+  `--tabelas-de-apoio` esvazia mesmo, e aí a base fica MAIS vazia que uma instalação nova (a
+  semente do script 005 não volta: o `db_updater` não reexecuta migração já aplicada).
 - `api/limpar_dados.py` zera a operação e deixa a base como instalação nova (`--simular`
   mostra sem apagar). Produtos e fornecedores saem inteiros de propósito: o seed não cria
   nenhum. **Recusa banco que não seja local.**
@@ -398,6 +403,10 @@ para arquivo nenhum — gravar direto aqui.
 - ⚠️ **O teste de navegador põe a integração em `simulado` e devolve o modo no fim.** Depois de
   o dono configurar a conta real, "Buscar no Omie" na suíte sincronizaria 3.670 notas de
   verdade — e a conta bloqueia quem consome demais. Trocar só o MODO não toca na credencial.
+  O restauro é registrado em `aoTerminar` e roda no `finally` do roteiro: repor no fim do bloco
+  não bastou, porque a suíte estourou no meio uma vez e deixou a integração em `simulado` — a
+  busca do dono parou de trazer nota e nada explicava por quê. Mesma lição do
+  `preservar_credenciais`.
 - ⚠️ **`preservar_credenciais()` em `tests/comum.py`, registrado no `atexit`.** A suíte do Omie
   grava uma credencial de mentira na MESMA linha onde mora a real, e a API não devolve a chave
   em claro (é a regra que protege o segredo) — então perder a credencial do cliente é
