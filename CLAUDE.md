@@ -59,6 +59,16 @@ para arquivo nenhum — gravar direto aqui.
   são poucos por natureza, e rodapé de página em lista de três linhas é ruído.
   ⚠️ **A movimentação do CMV é a única que fatia no navegador**, porque o rodapé precisa somar
   TODAS as linhas para a identidade fechar — o relatório vem inteiro de propósito.
+- ⚠️ **O total sai em consulta SEPARADA e só na primeira página** (`paginacao.pagina`). Medido
+  com 400.000 movimentos no razão: página de 100 sem total **4 ms**, com `count(*) OVER ()`
+  **388 ms** — a janela obriga o banco a materializar todas as linhas do filtro para depois
+  cortar em 100. Virar a página não muda o total, então a conta roda no `offset = 0` e mais
+  nada: 148 ms na primeira, **2 ms** nas seguintes. Quando o cabeçalho não vem, `api.listar`
+  devolve `total: null` e `usePaginacao.setTotal` **guarda o que já tinha** — tratar nulo como
+  zero apagaria o rodapé na página 2. Quem monta a consulta passa o SQL **sem LIMIT**: o total
+  usa o mesmo texto e os mesmos parâmetros, e uma cópia do filtro escrita à mão divergiria no
+  primeiro `WHERE` novo. As listas limitadas por natureza (fichas, inventários, usuários)
+  continuam com `com_total` e `count(*) OVER ()`.
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
@@ -413,11 +423,11 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (807 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+- Testes (808 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (24),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (223, no Chrome, com fotos em `web/scripts/_fotos`).

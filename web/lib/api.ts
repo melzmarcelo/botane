@@ -139,8 +139,15 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
 export const api = {
   get: <T,>(caminho: string) => pedir<T>("GET", caminho),
 
-  /** Como `get`, mas devolve também quantos existem no total (cabeçalho X-Total). */
-  async listar<T>(caminho: string): Promise<{ itens: T[]; total: number }> {
+  /**
+   * Como `get`, mas devolve também quantos existem no total (cabeçalho X-Total).
+   *
+   * ⚠️ `total` vem **nulo** quando o servidor não mandou o cabeçalho — o que
+   * acontece de propósito ao virar a página: o total não muda dentro do mesmo
+   * filtro, e contar de novo custaria a tabela inteira. Quem chama guarda o
+   * total que já tinha (é o que `usePaginacao.setTotal` faz).
+   */
+  async listar<T>(caminho: string): Promise<{ itens: T[]; total: number | null }> {
     let token = localStorage.getItem(CHAVE_ACCESS);
     let r = await bruto("GET", caminho, undefined, token);
     if (r.status === 401 && (await renovar())) {
@@ -150,8 +157,8 @@ export const api = {
     const texto = await r.text();
     const dados = texto ? JSON.parse(texto) : [];
     if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
-    const total = Number(r.headers.get("X-Total") ?? (dados as T[]).length);
-    return { itens: dados as T[], total };
+    const cabecalho = r.headers.get("X-Total");
+    return { itens: dados as T[], total: cabecalho === null ? null : Number(cabecalho) };
   },
   post: <T,>(caminho: string, corpo?: unknown) => pedir<T>("POST", caminho, corpo ?? {}),
   put: <T,>(caminho: string, corpo?: unknown) => pedir<T>("PUT", caminho, corpo ?? {}),

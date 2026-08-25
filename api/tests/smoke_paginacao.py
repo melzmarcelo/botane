@@ -107,12 +107,20 @@ st, segunda, cab2 = chamar("GET", "/produtos?limite=2&offset=2", token=token)
 ids_um = {p["id"] for p in pagina}
 ids_dois = {p["id"] for p in segunda}
 checar("a segunda página traz outros registros", not (ids_um & ids_dois), (ids_um, ids_dois))
-checar("e o total não muda entre páginas", total_de(cab2) == total, (total_de(cab2), total))
+# ⚠️ E o total NÃO vem de novo, de propósito. Ele não muda dentro do mesmo
+# filtro, e recontar a cada virada de página custaria a tabela inteira: com
+# 400.000 movimentos no razão, a página com `count(*) OVER ()` levava 388 ms
+# contra 4 ms sem ele. A tela guarda o total que recebeu na primeira página.
+checar("virar a página não recalcula o total", total_de(cab2) is None, total_de(cab2))
+st, terceira, cab3 = chamar("GET", "/produtos?limite=2&offset=0", token=token)
+checar("e voltar à primeira página traz o total de novo",
+       total_de(cab3) == total, (total_de(cab3), total))
 
 
 print("3. o filtro entra na conta, não só na página")
-st, achados, cab3 = chamar("GET", f"/produtos?busca=Pag teste {marca}&limite=100", token=token)
-total_filtrado = total_de(cab3)
+st, achados, cab_filtro = chamar("GET", f"/produtos?busca=Pag teste {marca}&limite=100",
+                                token=token)
+total_filtrado = total_de(cab_filtro)
 checar("buscar reduz o TOTAL, não só o que veio",
        total_filtrado is not None and total_filtrado <= (total or 0),
        (total_filtrado, total))

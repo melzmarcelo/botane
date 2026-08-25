@@ -46,7 +46,14 @@ export function usePaginacao(
   const padrao = opcoes.padrao ?? POR_PAGINA_PADRAO;
   const [porPagina, guardarPorPagina] = useState(padrao);
   const [pagina, setPagina] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [total, guardarTotal] = useState(0);
+
+  // ⚠️ Nulo quer dizer "o servidor não disse", não "zero". Ele não diz ao virar
+  // a página, porque o total do mesmo filtro não mudou — e recontar custaria a
+  // tabela inteira. Aceitar o nulo como zero apagaria o rodapé na página 2.
+  const setTotal = useCallback((n: number | null) => {
+    if (n !== null && n !== undefined) guardarTotal(n);
+  }, []);
 
   // ⚠️ A preferência é lida num efeito, não no estado inicial: o servidor
   // renderiza esta tela antes de existir `localStorage`, e devolver valores

@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from database import get_cursor
+from paginacao import pagina
 
 
 def _limpar(d: dict[str, Any] | None) -> str | None:
@@ -47,20 +48,26 @@ def registrar(
     )
 
 
-def listar(limite: int = 100, offset: int = 0, entidade: str | None = None) -> list[dict]:
-    """Os eventos, do mais recente para o mais antigo — com o total na varredura."""
+def listar(limite: int = 100, offset: int = 0, entidade: str | None = None,
+           resposta=None) -> list[dict]:
+    """Os eventos, do mais recente para o mais antigo.
+
+    A auditoria é a tabela que mais cresce da casa — uma linha por ação de
+    qualquer pessoa. Por isso o total sai em consulta separada e só na primeira
+    página: contar tudo a cada virada de página seria pagar a tabela inteira
+    para mostrar cinquenta linhas.
+    """
     with get_cursor() as cur:
-        cur.execute(
+        return pagina(
+            cur,
             """
             SELECT a.id, a.entidade, a.id_entidade, a.acao, a.antes, a.depois,
-                   a.em, a.ip, u.nome AS usuario, u.email,
-                   count(*) OVER () AS _total
+                   a.em, a.ip, u.nome AS usuario, u.email
               FROM auditoria a
               LEFT JOIN usuarios u ON u.id = a.id_usuario
              WHERE (%s::varchar IS NULL OR a.entidade = %s)
              ORDER BY a.em DESC
-             LIMIT %s OFFSET %s
             """,
-            (entidade, entidade, limite, offset),
+            (entidade, entidade),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        return [dict(r) for r in cur.fetchall()]

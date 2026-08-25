@@ -20,7 +20,7 @@ from models.estoque import (
     SaldoResponse,
     TransferenciaRequest,
 )
-from paginacao import com_total
+from paginacao import com_total, pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import estoque as motor
 
@@ -46,14 +46,14 @@ def saldos(
 ) -> list[dict]:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        cur.execute(
+        linhas = pagina(
+            cur,
             """
             SELECT s.id_produto, p.codigo, p.nome AS produto, p.um_estoque, p.estoque_minimo,
                    s.id_local, l.nome AS local, s.quantidade, s.custo_medio,
                    round(s.quantidade * s.custo_medio, 2) AS valor, s.atualizado_em,
                    (p.estoque_minimo IS NOT NULL AND s.quantidade < p.estoque_minimo)
-                       AS abaixo_do_minimo,
-                   count(*) OVER () AS _total
+                       AS abaixo_do_minimo
               FROM estoque_saldos s
               JOIN produtos p ON p.id = s.id_produto
               JOIN locais_estoque l ON l.id = s.id_local
@@ -67,13 +67,12 @@ def saldos(
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY lower(p.nome), l.nome
-             LIMIT %s OFFSET %s
             """,
             (id_unidade, incluir_inativos, id_produto, id_produto, id_local, id_local,
-             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca, limite, offset),
+             apenas_com_saldo, abaixo_do_minimo, busca, busca, busca),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return com_total(linhas, resposta, offset)
+    return linhas
 
 
 @router.get("/movimentos", response_model=list[MovimentoResponse])
@@ -93,14 +92,15 @@ def movimentos(
     ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
 ) -> list[dict]:
     with get_cursor() as cur:
-        cur.execute(
+        linhas = pagina(
+            cur,
             """
             SELECT m.id, m.data_movimento, m.tipo, m.id_produto, p.nome AS produto, p.codigo,
                    l.nome AS local, m.quantidade, m.custo_unitario, m.custo_total,
                    m.saldo_apos, m.custo_medio_apos, m.custo_provisorio, m.documento,
                    pm.nome AS motivo, m.observacao, u.nome AS usuario, m.id_estorno_de,
-                   EXISTS (SELECT 1 FROM estoque_movimentos e WHERE e.id_estorno_de = m.id) AS estornado,
-                   count(*) OVER () AS _total
+                   EXISTS (SELECT 1 FROM estoque_movimentos e
+                            WHERE e.id_estorno_de = m.id) AS estornado
               FROM estoque_movimentos m
               JOIN produtos p ON p.id = m.id_produto
               JOIN locais_estoque l ON l.id = m.id_local
@@ -117,13 +117,11 @@ def movimentos(
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
              ORDER BY m.id DESC
-             LIMIT %s OFFSET %s
             """,
             (id_produto, id_produto, id_local, id_local, tipo, tipo,
-             inicio, inicio, fim, fim, busca, busca, busca, limite, offset),
+             inicio, inicio, fim, fim, busca, busca, busca),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    com_total(linhas, resposta, offset)
     for l in linhas:
         l["rotulo"] = motor.ROTULOS.get(l["tipo"], l["tipo"])
     return linhas
@@ -333,17 +331,16 @@ def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
                      resposta: Response = None,
                      ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
     with get_cursor() as cur:
-        cur.execute(
+        return pagina(
+            cur,
             """SELECT pr.id, pr.data, pr.quantidade, pr.custo_total, pr.custo_unitario,
                       pr.versao_ficha, p.nome AS produto, p.codigo, l.nome AS local,
-                      u.nome AS usuario,
-                      count(*) OVER () AS _total
+                      u.nome AS usuario
                  FROM producoes pr
                  JOIN produtos p ON p.id = pr.id_produto
                  JOIN locais_estoque l ON l.id = pr.id_local
                  LEFT JOIN usuarios u ON u.id = pr.id_usuario
-                ORDER BY pr.data DESC LIMIT %s OFFSET %s""",
-            (limite, offset),
+                ORDER BY pr.data DESC""",
+            (),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return com_total(linhas, resposta, offset)

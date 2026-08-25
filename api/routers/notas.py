@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 import auditoria
 from database import get_cursor
-from paginacao import com_total
+from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import nfe_xml
 from services.omie import importador
@@ -363,15 +363,15 @@ def listar(status: str | None = None,
     """
     like = f"%{busca.strip()}%" if busca and busca.strip() else None
     with get_cursor() as cur:
-        cur.execute(
+        linhas = pagina(
+            cur,
             """SELECT n.id, n.chave_nfe, n.numero, n.serie, n.nome_emitente, n.cnpj_emitente,
                       n.data_emissao, n.data_entrada, n.valor_total, n.status, n.origem,
                       f.nome AS fornecedor,
                       (SELECT count(*) FROM nota_itens i WHERE i.id_nota = n.id) AS itens,
                       (SELECT count(*) FROM nota_itens i
                         WHERE i.id_nota = n.id AND i.id_produto IS NULL AND NOT i.ignorado)
-                          AS pendentes,
-                      count(*) OVER () AS _total
+                          AS pendentes
                  FROM notas_entrada n
                  LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
                 WHERE (%s::varchar IS NULL OR n.status = %s)
@@ -383,13 +383,12 @@ def listar(status: str | None = None,
                   AND (%s::varchar IS NULL
                        OR n.numero ILIKE %s OR n.nome_emitente ILIKE %s
                        OR f.nome ILIKE %s OR n.chave_nfe ILIKE %s)
-                ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC
-                LIMIT %s OFFSET %s""",
+                ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC""",
             (status, status, origem, origem, inicio, inicio, fim, fim,
-             like, like, like, like, like, limite, offset),
+             like, like, like, like, like),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return com_total(linhas, resposta, offset)
+    return linhas
 
 
 @router.get("/pendencias")

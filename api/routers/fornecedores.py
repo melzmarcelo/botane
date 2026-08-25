@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
-from paginacao import com_total
+from paginacao import pagina
 from models.cadastros import FornecedorCreate, FornecedorResponse, FornecedorUpdate
 from seguranca import Contexto, contexto_atual, requer_permissao
 
@@ -30,25 +30,24 @@ def listar(
     ctx: Contexto = Depends(contexto_atual),
 ) -> list[dict]:
     with get_cursor() as cur:
-        cur.execute(
+        linhas = pagina(
+            cur,
             f"""SELECT f.id, {', '.join('f.' + c for c in _CAMPOS)},
                        (SELECT count(*) FROM produto_fornecedor pf
                          WHERE pf.id_fornecedor = f.id) AS produtos,
                        (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
-                         WHERE pf.id_fornecedor = f.id) AS ultima_compra,
-                       count(*) OVER () AS _total
+                         WHERE pf.id_fornecedor = f.id) AS ultima_compra
                   FROM fornecedores f
                  WHERE (%s OR f.ativo)
                    AND (%s::varchar IS NULL
                         OR lower(f.nome) LIKE lower('%%' || %s || '%%')
                         OR lower(coalesce(f.nome_fantasia, '')) LIKE lower('%%' || %s || '%%')
                         OR coalesce(f.cnpj, '') LIKE '%%' || %s || '%%')
-                 ORDER BY f.ativo DESC, lower(f.nome)
-                 LIMIT %s OFFSET %s""",
-            (incluir_inativos, busca, busca, busca, busca, limite, offset),
+                 ORDER BY f.ativo DESC, lower(f.nome)""",
+            (incluir_inativos, busca, busca, busca, busca),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return com_total(linhas, resposta, offset)
+    return linhas
 
 
 @router.get("/{id_fornecedor}", response_model=FornecedorResponse)

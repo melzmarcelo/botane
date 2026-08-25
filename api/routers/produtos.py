@@ -19,7 +19,7 @@ from models.produtos import (
     STATUS,
     TIPOS,
 )
-from paginacao import com_total as _com_total
+from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao
 from services import kits
 
@@ -140,18 +140,15 @@ def listar(
     ctx: Contexto = Depends(contexto_atual),
 ) -> list[dict]:
     with get_cursor() as cur:
-        cur.execute(
+        linhas = pagina(
+            cur,
             """
             SELECT p.id, p.codigo, p.nome, p.tipo, c.nome AS categoria, s.nome AS setor,
                    p.um_estoque, p.producao_propria, p.controla_estoque, p.controla_lote,
                    p.status, p.ativo,
                    (SELECT pp.preco_venda FROM produto_precos pp
                      WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda,
-                   -- Quantos existiriam sem o LIMIT. Sai na mesma varredura: uma
-                   -- segunda consulta de count repetiria o filtro inteiro e
-                   -- poderia até discordar desta, se algo mudasse no meio.
-                   count(*) OVER () AS _total
+                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
               FROM produtos p
               LEFT JOIN categorias c ON c.id = p.id_categoria
               LEFT JOIN setores s ON s.id = p.id_setor
@@ -167,13 +164,12 @@ def listar(
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%')
                     OR coalesce(p.codigo_barras, '') LIKE '%%' || %s || '%%')
              ORDER BY p.ativo DESC, lower(p.nome)
-             LIMIT %s OFFSET %s
             """,
             (incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
-             status, status, sem_ficha, busca, busca, busca, busca, limite, offset),
+             status, status, sem_ficha, busca, busca, busca, busca),
+            limite=limite, offset=offset, resposta=resposta,
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return _com_total(linhas, resposta, offset)
+    return linhas
 
 
 @router.get("/contagem", response_model=ContagemProdutos)

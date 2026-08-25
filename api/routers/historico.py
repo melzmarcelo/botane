@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, Query, Response
 
 import auditoria
-from paginacao import com_total
 from seguranca import requer_permissao
 
 router = APIRouter(
@@ -20,5 +19,5 @@ def listar(
     entidade: str | None = None,
     resposta: Response = None,
 ) -> list[dict]:
-    linhas = auditoria.listar(limite=limite, offset=offset, entidade=entidade)
-    return com_total(linhas, resposta, offset)
+    return auditoria.listar(limite=limite, offset=offset, entidade=entidade,
+                            resposta=resposta)

@@ -58,6 +58,8 @@ export function fonteProdutos(
       const { itens, total } = await api.listar<ProdutoBruto>(
         `/produtos?${q}${extra ? `&${extra}` : ""}`,
       );
+      // A janela pede sempre a primeira página, então o total vem. O `??` é a
+      // rede: sem cabeçalho, o que se sabe é o tamanho do que veio.
       const filtrados = filtro ? itens.filter(filtro) : itens;
       return {
         itens: filtrados.map((p) => ({
@@ -69,7 +71,7 @@ export function fonteProdutos(
         })),
         // O total é o do servidor; filtrar no cliente só pode diminuir, e
         // mostrar "12 de 300" quando 288 foram descartados aqui mentiria.
-        total: filtro ? filtrados.length : total,
+        total: filtro ? filtrados.length : (total ?? itens.length),
       };
     },
   };
@@ -100,7 +102,7 @@ export function fonteFornecedores(): FonteBusca {
           detalhe: [f.nome_fantasia ? f.nome : null, f.cidade].filter(Boolean).join(" · ") || null,
           bruto: f as unknown as Record<string, unknown>,
         })),
-        total,
+        total: total ?? itens.length,
       };
     },
   };
