@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { hoje, primeiroDiaDoMes } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
@@ -69,16 +70,11 @@ type Fechamento = {
 const pct = (v: number | null | undefined, casas = 1) =>
   v === null || v === undefined ? "—" : `${Number(v).toFixed(casas).replace(".", ",")}%`;
 
-const primeiroDiaDoMes = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-};
-
 export default function PaginaCmv() {
   const aviso = useAviso();
   const { pode } = useSessao();
   const [inicio, setInicio] = useState(primeiroDiaDoMes());
-  const [fim, setFim] = useState(new Date().toISOString().slice(0, 10));
+  const [fim, setFim] = useState(hoje());
   const [a, setA] = useState<Apuracao | null>(null);
   const [abc, setAbc] = useState<LinhaAbc[] | null>(null);
   const [margem, setMargem] = useState<LinhaMargem[] | null>(null);

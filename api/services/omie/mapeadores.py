@@ -10,6 +10,7 @@ Por isso cada leitura passa por `_pega`, que aceita uma lista de nomes possívei
 quando o campo vier com outro nome, é uma linha de mudança, não um refactor.
 """
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -46,6 +47,22 @@ def _numero(valor) -> Decimal:
         # "1.234,56" (pt-BR) e "1234.56" convivem nas respostas.
         valor = valor.replace(".", "").replace(",", ".") if "," in valor else valor
     return dec(valor)
+
+
+# O rodapé de tributos aproximados que a Lei 12.741 manda imprimir no DANFE.
+# ⚠️ Ele vem GRUDADO na descrição do produto, e daí para o cadastro: numa conta
+# real, 59 produtos se chamavam "MAMÃO FORMOSA Trib. Aprox. (Fed: R$ 3,63. Est:
+# R$ 3,24. ). Fonte: IBPT/empresometro.com.br/25.2.E." — nome que não cabe em
+# tela nenhuma e que nenhuma busca por "mamão formosa" encontraria inteiro.
+# Não é parte do nome de nada: é texto fiscal, e o corte é seguro.
+_RODAPE_FISCAL = re.compile(
+    r"\s*(trib(\.|\s)*aprox|val(or)?\s*aprox|fonte:\s*ibpt)\b.*$", re.IGNORECASE | re.DOTALL
+)
+
+
+def _nome_limpo(valor, padrao: str) -> str:
+    texto = str(valor if valor not in (None, "") else padrao)
+    return _RODAPE_FISCAL.sub("", texto).strip() or padrao
 
 
 def _so_digitos(valor) -> str | None:
@@ -87,9 +104,8 @@ def item_da_nota(bruto: dict, seq: int) -> dict:
     prod = _pega(bruto, "produto", "prod", padrao={}) or bruto
     return {
         "seq": int(_pega(bruto, "nSeqItem", "seq", padrao=seq) or seq),
-        "descricao_fornecedor": str(
-            _pega(prod, "cDescricao", "descricao", "descr", padrao="(sem descrição)")
-        )[:200],
+        "descricao_fornecedor": _nome_limpo(
+            _pega(prod, "cDescricao", "descricao", "descr"), "(sem descrição)")[:200],
         "codigo_fornecedor": str(_pega(prod, "cCodigo", "codigo", "cCodProd", padrao="") or "")[:60]
         or None,
         "codigo_barras": (_so_digitos(_pega(prod, "cEAN", "codigo_barras", "cCodigoBarras"))
@@ -108,6 +124,87 @@ def item_da_nota(bruto: dict, seq: int) -> dict:
     }
 
 
+def recebimento_de_nfe(bruto: dict) -> dict:
+    """Uma nota do `ListarRecebimentos` / `ConsultarRecebimento`.
+
+    ⚠️ **É este o módulo onde moram as notas de compra de verdade.** O
+    `produtos/notaentrada` (mapeado acima) é o lançamento manual de nota do
+    Omie: na conta do cliente ele tinha UMA nota, de 2024, enquanto o
+    recebimento de NF-e tinha 3.670. Quem só olhasse o primeiro concluiria que
+    a casa não compra nada.
+
+    A resposta da LISTA e a do DETALHE têm o mesmo cabeçalho; só o detalhe traz
+    `itensRecebimento`. Por isso o mesmo mapeador serve aos dois — a lista vira
+    uma nota sem itens, que é exatamente o que se precisa para decidir se vale
+    a chamada cara do detalhe.
+    """
+    cab = _pega(bruto, "cabec", "cabecalho", padrao={}) or {}
+    total = _pega(bruto, "totais", padrao={}) or {}
+    info = _pega(bruto, "infoAdicionais", "infoCadastro", padrao={}) or {}
+
+    # O Omie manda o número zerado à esquerda ("000034194"), como no DANFE.
+    numero = str(_pega(cab, "cNumeroNFe", "cNumero", padrao="") or "").strip()
+
+    return {
+        "id_omie": str(_pega(cab, "nIdReceb", "nCodRecebimento", padrao="") or "") or None,
+        "chave_nfe": _so_digitos(_pega(cab, "cChaveNFe", "chave_nfe")),
+        "numero": (numero.lstrip("0") or numero) or None,
+        "serie": str(_pega(cab, "cSerieNFe", "cSerie", padrao="") or "") or None,
+        "cnpj_emitente": _so_digitos(_pega(cab, "cCNPJ_CPF", "cCNPJCPF", "cnpj_cpf")),
+        "nome_emitente": _pega(cab, "cRazaoSocial", "cNome"),
+        "data_emissao": _data(_pega(cab, "dEmissaoNFe", "dDtEmissao")),
+        # Entrada é a data em que a nota foi REGISTRADA — a emissão pode ser de
+        # dias antes, e é a chegada que move o estoque.
+        "data_entrada": _data(_pega(info, "dRegistro", "dDtRegistro")
+                              or _pega(cab, "dEmissaoNFe")),
+        "valor_produtos": _numero(_pega(total, "vTotalProdutos", "vProdutos")),
+        "valor_frete": _numero(_pega(total, "vFrete", "vTotalFrete", "nValFrete")),
+        "valor_desconto": _numero(_pega(total, "vTotalDescontos", "vDescontos", "vDesconto")),
+        "valor_outros": (_numero(_pega(total, "vTotalIPI", "vIPI"))
+                         + _numero(_pega(total, "vTotalICMSST", "vICMSST"))
+                         + _numero(_pega(total, "vOutrasDespesas", "vOutro"))),
+        "valor_total": _numero(_pega(total, "vTotalNFe") or _pega(cab, "nValorNFe")),
+        # `cEtapa` é o estágio do recebimento no Omie (a conta real tinha 40 e
+        # 80 convivendo). Não filtra nada aqui — a nota entra como IMPORTADA e
+        # só vira estoque quando alguém lança —, mas fica à vista no bruto.
+        "etapa_omie": str(_pega(cab, "cEtapa", padrao="") or "") or None,
+        "itens": [item_do_recebimento(i, seq) for seq, i in
+                  enumerate(_pega(bruto, "itensRecebimento", "itens", padrao=[]) or [], start=1)],
+    }
+
+
+def item_do_recebimento(bruto: dict, seq: int) -> dict:
+    """Um item de `itensRecebimento` — os dados úteis moram em `itensCabec`."""
+    cab = _pega(bruto, "itensCabec", padrao={}) or bruto
+    return {
+        "seq": int(_pega(cab, "nSequencia", padrao=seq) or seq),
+        "descricao_fornecedor": _nome_limpo(
+            _pega(cab, "cDescricaoProduto", "cDescricao"), "(sem descrição)")[:200],
+        "codigo_fornecedor": str(_pega(cab, "cCodigoProduto", "cCodigo", padrao="") or "")[:60]
+        or None,
+        # O id interno do produto no Omie. É por ele que o item reconhece o
+        # produto que veio do catálogo — identidade do sistema, não texto.
+        "codigo_omie": str(_pega(cab, "nIdProduto", padrao="") or "") or None,
+        "codigo_barras": (_so_digitos(_pega(cab, "cEAN", "cCodigoBarras")) or "")[:20] or None,
+        "ncm": (_so_digitos(_pega(cab, "cNCM", "ncm")) or "")[:10] or None,
+        "quantidade": _numero(_pega(cab, "nQtdeNFe", "nQuantidade")),
+        # ⚠️ A unidade da nota vem com pontuação de DANFE ("BB.", "CX."). Sem
+        # limpar, nenhuma comparação com a unidade do cadastro casaria.
+        "um_nota": "".join(
+            c for c in str(_pega(cab, "cUnidadeNfe", "cUnidade", padrao="") or "").upper()
+            if c.isalnum()
+        )[:6] or None,
+        "valor_unitario": _numero(_pega(cab, "nPrecoUnit", "nValorUnitario")),
+        "valor_total": _numero(_pega(cab, "vTotalItem", "nValorTotal")),
+        "valor_desconto": _numero(_pega(cab, "vDesconto", "nValorDesconto")),
+        # Item que alguém já marcou para ignorar no Omie entra ignorado aqui:
+        # obrigar a repetir a decisão nas duas telas é como não ter integração.
+        "ignorado": str(_pega(cab, "cIgnorarItem", padrao="N")).upper() == "S",
+        "lote_nf": None,
+        "validade_nf": None,
+    }
+
+
 def produto_do_catalogo(bruto: dict) -> dict:
     """Um produto do `ListarProdutos`, para a carga inicial do cadastro.
 
@@ -122,7 +219,7 @@ def produto_do_catalogo(bruto: dict) -> dict:
         "codigo_omie": str(_pega(bruto, "codigo_produto", "nCodProd", padrao="") or "")[:40]
         or None,
         "codigo": str(_pega(bruto, "codigo", "cCodigo", padrao="") or "")[:40] or None,
-        "nome": str(_pega(bruto, "descricao", "cDescricao", padrao="(sem nome)"))[:160],
+        "nome": _nome_limpo(_pega(bruto, "descricao", "cDescricao"), "(sem nome)")[:160],
         "um": str(_pega(bruto, "unidade", "cUnidade", padrao="") or "").upper()[:6] or None,
         # ⚠️ NCM só em DÍGITOS. O Omie devolve pontuado ("0405.10.00") e às
         # vezes com sufixo ("2202.99.00.05", 13 caracteres) — um só desses

@@ -1,0 +1,92 @@
+{
+  "nPagina": 1,
+  "nTotalPaginas": 1,
+  "nRegistros": 3,
+  "nTotalRegistros": 3,
+  "recebimentos": [
+    {
+      "cabec": {
+        "nIdReceb": 90001,
+        "cChaveNFe": "35260812345678000195550010000004811000004812",
+        "cNumeroNFe": "000004812",
+        "cSerieNFe": "1",
+        "cModeloNFe": "55",
+        "cEtapa": "80",
+        "dEmissaoNFe": "16/08/2026",
+        "cCNPJ_CPF": "12.345.678/0001-95",
+        "cRazaoSocial": "Distribuidora Simulada LTDA",
+        "cNome": "Distribuidora Simulada LTDA",
+        "nIdFornecedor": 70001,
+        "nValorNFe": 700.0
+      },
+      "totais": {
+        "vTotalProdutos": 640.0,
+        "vFrete": 60.0,
+        "vTotalDescontos": 0.0,
+        "vTotalNFe": 700.0
+      },
+      "transporte": {
+        "cTipoFrete": "0"
+      },
+      "infoAdicionais": {
+        "dRegistro": "17/08/2026"
+      }
+    },
+    {
+      "cabec": {
+        "nIdReceb": 90002,
+        "cChaveNFe": "35260812345678000195550010000004911000004913",
+        "cNumeroNFe": "000004913",
+        "cSerieNFe": "1",
+        "cModeloNFe": "55",
+        "cEtapa": "40",
+        "dEmissaoNFe": "18/08/2026",
+        "cCNPJ_CPF": "98.765.432/0001-10",
+        "cRazaoSocial": "Hortifruti Simulado ME",
+        "cNome": "Hortifruti Simulado ME",
+        "nIdFornecedor": 70002,
+        "nValorNFe": 270.0
+      },
+      "totais": {
+        "vTotalProdutos": 300.0,
+        "vFrete": 0.0,
+        "vTotalDescontos": 30.0,
+        "vTotalNFe": 270.0
+      },
+      "transporte": {
+        "cTipoFrete": "9"
+      },
+      "infoAdicionais": {
+        "dRegistro": "19/08/2026"
+      }
+    },
+    {
+      "cabec": {
+        "nIdReceb": 90003,
+        "cChaveNFe": "35260812345678000195550010000005011000005014",
+        "cNumeroNFe": "000005014",
+        "cSerieNFe": "1",
+        "cModeloNFe": "55",
+        "cEtapa": "80",
+        "dEmissaoNFe": "20/08/2026",
+        "cCNPJ_CPF": "12.345.678/0001-95",
+        "cRazaoSocial": "Distribuidora Simulada LTDA",
+        "cNome": "Distribuidora Simulada LTDA",
+        "nIdFornecedor": 70001,
+        "nValorNFe": 48.0
+      },
+      "totais": {
+        "vTotalProdutos": 48.0,
+        "vFrete": 0.0,
+        "vTotalDescontos": 0.0,
+        "vTotalNFe": 48.0
+      },
+      "transporte": {
+        "cTipoFrete": "9"
+      },
+      "infoAdicionais": {
+        "dRegistro": "20/08/2026"
+      }
+    }
+  ]
+}

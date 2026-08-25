@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
@@ -78,7 +79,7 @@ export default function PaginaVendas() {
   const [confirmando, setConfirmando] = useState<Venda | null>(null);
   const [ocupado, setOcupado] = useState(false);
 
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(hoje());
   const [documento, setDocumento] = useState("");
   const [texto, setTexto] = useState("");
   const [manual, setManual] = useState({ id_produto: "", quantidade: "", valor_unitario: "", rotulo: "" });

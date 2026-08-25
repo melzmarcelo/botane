@@ -90,9 +90,17 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
 
   // A conta que a tabela inteira tem de fechar. Se não fechar, o problema é do
   // razão e não do relatório — e é melhor ver isso aqui do que no inventário.
+  //
+  // ⚠️ A folga acompanha o TAMANHO do relatório. Cada linha sai arredondada em
+  // centavos e o rodapé soma as linhas arredondadas — de propósito, para o
+  // rodapé fechar com a coluna que a pessoa confere a mão. Num relatório de
+  // centenas de produtos isso dá alguns centavos de diferença, que não são erro
+  // de razão nenhum: com a folga fixa de cinco centavos, uma base real acusava
+  // "a conta não fecha" toda vez, e um alarme que sempre toca ninguém escuta.
   const t = dados.total;
-  const confere =
-    Math.abs(t.valor_inicial + t.valor_entradas - t.valor_saidas - t.valor_final) < 0.05;
+  const diferenca = t.valor_inicial + t.valor_entradas - t.valor_saidas - t.valor_final;
+  const folga = Math.max(0.05, 0.005 * dados.produtos);
+  const confere = Math.abs(diferenca) < folga;
 
   return (
     <Cartao
@@ -220,8 +228,9 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
           </>
         ) : (
           <span className="text-erro">
-            A conta não fecha (inicial + entradas − saídas ≠ final). Isso é do razão, não deste
-            relatório — vale conferir os movimentos do período antes de fechar o mês.
+            A conta não fecha por {reais(Math.abs(diferenca))} (inicial + entradas − saídas ≠
+            final). Isso é do razão, não deste relatório — vale conferir os movimentos do período
+            antes de fechar o mês.
           </span>
         )}
       </p>

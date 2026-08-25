@@ -19,23 +19,9 @@ from models.produtos import (
     STATUS,
     TIPOS,
 )
+from paginacao import com_total as _com_total
 from seguranca import Contexto, contexto_atual, requer_permissao
 from services import kits
-
-def _com_total(linhas: list[dict], resposta, offset: int) -> list[dict]:
-    """Tira o `_total` das linhas e o devolve no cabeçalho `X-Total`.
-
-    A tela precisa saber que existe mais coisa além da página — sem isso, uma
-    lista cheia e uma lista cortada são indistinguíveis, e o usuário conclui que
-    o produto não existe quando ele está na página seguinte.
-    """
-    total = linhas[0].pop("_total", len(linhas)) if linhas else offset
-    for l in linhas[1:]:
-        l.pop("_total", None)
-    if resposta is not None:
-        resposta.headers["X-Total"] = str(total)
-    return linhas
-
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 

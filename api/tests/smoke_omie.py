@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_cozinha  # noqa: E402
+from comum import garantir_cozinha, garantir_local, preservar_credenciais  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -72,11 +72,15 @@ marca = str(time.time_ns())[-6:]
 print("0. limpa o cenário da rodada anterior")
 # As notas das fixtures são únicas pela chave da NF-e: sem desfazer o que a
 # rodada passada importou, a segunda execução não teria o que conciliar.
-CHAVES = {"35260812345678000195550010000004811000004812",
-          "35260812345678000195550010000004911000004913"}
-st, notas_antigas = chamar("GET", "/notas", token=token)
-for n in notas_antigas or []:
-    if n.get("chave_nfe") in CHAVES:
+# ⚠️ Procuradas pelo NÚMERO, uma a uma. `GET /notas` devolve uma PÁGINA, e numa
+# base que já recebeu notas de uma conta real as da fixture ficam fora dela — a
+# limpeza não achava nada, a rodada seguinte encontrava tudo já conciliado e as
+# fases que precisam de pendência não exercitavam trava nenhuma.
+for numero in ("4812", "4913", "5014"):
+    st, notas_antigas = chamar("GET", f"/notas?busca={numero}", token=token)
+    for n in notas_antigas or []:
+        if n.get("numero") != numero:
+            continue
         if n["status"] == "LANCADA":
             chamar("POST", f"/notas/{n['id']}/estornar", token=token)
         chamar("DELETE", f"/notas/{n['id']}", token=token)
@@ -90,6 +94,14 @@ for nome in ("Café em grão especial", "Leite integral 1L", "Tomate italiano"):
     for p in achados or []:
         chamar("DELETE", f"/produtos/{p['id']}", token=token)
 checar("cenário limpo", True)
+
+# ⚠️ A credencial de verdade do cliente mora na mesma linha que a suíte vai
+# sobrescrever com uma de mentira. Guardada antes, reposta no fim.
+# Base virgem não tem local de estoque, e sem local nenhuma nota se lança —
+# a suíte falhava em quatro pontos que nada tinham a ver com o Omie.
+garantir_local(chamar, token)
+
+repor_credenciais = preservar_credenciais("OMIE")
 
 print("1. configuração — a credencial não volta em claro")
 st, cfg = chamar("GET", "/omie/config", token=token)
@@ -121,7 +133,11 @@ checar("reimportar não duplica (chave da NF-e)", r2.get("novas") == 0 and r2.ge
 
 st, notas = chamar("GET", "/notas", token=token)
 checar("as notas aparecem na lista", st == 200 and len(notas) >= 2, len(notas) if st == 200 else notas)
-nota_cafe = next((n for n in notas if n["numero"] == "4812"), None)
+# ⚠️ Pela BUSCA, não pela lista: a lista traz uma página, e numa base com notas
+# de uma conta real a 4812 fica fora dela. Sem isto a suíte estourava num
+# `None` seis passos adiante, longe da causa.
+st, achadas = chamar("GET", "/notas?busca=4812", token=token)
+nota_cafe = next((n for n in achadas or [] if n["numero"] == "4812"), None)
 checar("a nota 4812 foi importada", nota_cafe is not None)
 checar("o fornecedor foi criado a partir da nota",
        nota_cafe and nota_cafe.get("fornecedor"), nota_cafe)
@@ -150,8 +166,13 @@ no_omie = conf.get("no_omie", 0)
 checar("e contando o que o Omie tem", no_omie >= 2, conf)
 
 # Apaga uma e confere que ela é NOMEADA como faltante.
-st, notas = chamar("GET", "/notas?limite=50", token=token)
-alvo_conf = next((n for n in notas if n["origem"] == "OMIE" and n["status"] != "LANCADA"), None)
+# ⚠️ Tem de ser uma nota DA FIXTURE. Quando a base já tem notas de uma conta
+# real (o teste roda depois de alguém sincronizar de verdade), apagar uma delas
+# nunca a faria aparecer como "faltante": ela não existe do lado simulado, e a
+# conferência — com razão — não acusaria falta nenhuma.
+st, notas = chamar("GET", "/notas?busca=4913", token=token)
+alvo_conf = next((n for n in notas or [] if n["numero"] == "4913" and n["status"] != "LANCADA"),
+                 None)
 if alvo_conf:
     chamar("DELETE", f"/notas/{alvo_conf['id']}", token=token)
     st, conf = chamar("GET", "/omie/conferencia-notas?inicio=2026-01-01&fim=2026-12-31",
@@ -170,8 +191,10 @@ print("2c. criar o produto direto do item da nota")
 st, pendencias = chamar("GET", "/notas/pendencias", token=token)
 # Não pode ser o café nem o leite: a fase 3 conta com os dois ainda pendentes
 # para provar que nota com pendência não é lançada.
-alvo_item = next((i for i in pendencias
-                  if i.get("codigo_fornecedor") not in (None, "CAF-500", "LEI-INT")), None)
+# Pelo mesmo motivo, o item também tem de ser da fixture: o TOM-CX. Pegar
+# "o primeiro pendente que não seja café nem leite" escolhia um item de nota
+# real assim que a base deixava de estar sozinha.
+alvo_item = next((i for i in pendencias if i.get("codigo_fornecedor") == "TOM-CX"), None)
 if alvo_item:
     st, r = chamar("POST", f"/notas/itens/{alvo_item['id']}/criar-produto", {}, token=token)
     checar("cria o produto a partir do item", st == 200 and r.get("id_produto"), r)
@@ -307,11 +330,86 @@ checar("traz os 3 produtos da fixture", r.get("criados", 0) + r.get("ja_existiam
 st, produtos = chamar("GET", "/produtos?busca=Café em grão&incluir_inativos=true", token=token)
 checar("o produto importado nasce em rascunho",
        any(p["status"] == "RASCUNHO" for p in produtos), produtos[:1])
+checar("o catálogo não inventa unidade que a casa não tem",
+       r.get("sem_unidade", 0) >= 1, r)
 st, r2 = chamar("POST", "/omie/importar-catalogo", token=token)
 checar("reimportar o catálogo não duplica", r2.get("criados") == 0, r2)
 
 st, conf = chamar("GET", "/omie/conferencia", token=token)
 checar("conferência com o CMC responde", st == 200, conf if st != 200 else len(conf))
+
+print("6b. o catálogo destrava as notas: nome limpo, de-para pelo id do Omie e a trava da unidade")
+# O rodapé de tributos aproximados que o DANFE manda imprimir vem grudado na
+# descrição. Não é nome de nada — e um nome desses não cabe em tela nenhuma.
+# ⚠️ Pelo CÓDIGO da fixture, não pelo nome: numa base que já recebeu um
+# catálogo real existe mais de um champignon, e buscar por nome pegava o do
+# cliente — que tem unidade, e faria a trava "passar" sem provar nada.
+st, achados = chamar("GET", "/produtos?busca=CHAMP-BJ&incluir_inativos=true", token=token)
+champ = next((p for p in achados or [] if p["codigo"] == "CHAMP-BJ"), None)
+checar("o produto do catálogo existe", champ is not None, achados)
+checar("o rodapé fiscal saiu do nome",
+       champ and "Trib" not in champ["nome"] and "IBPT" not in champ["nome"],
+       champ and champ["nome"])
+# Garante a condição em vez de supô-la: numa rodada anterior esta mesma suíte
+# definiu a unidade no fim da fase, e sem repor o rascunho ao estado de origem a
+# trava não seria exercitada — passaria sozinha, provando nada.
+st, detalhe = chamar("GET", f"/produtos/{champ['id']}", token=token)
+if detalhe.get("um_estoque"):
+    chamar("PUT", f"/produtos/{champ['id']}", {**detalhe, "um_estoque": None}, token=token)
+    st, detalhe = chamar("GET", f"/produtos/{champ['id']}", token=token)
+checar("o rascunho está sem unidade, como o catálogo o deixou",
+       not detalhe.get("um_estoque"), detalhe.get("um_estoque"))
+
+# A nota entrou ANTES do catálogo — a ordem de sempre, porque é a nota que
+# revela o que a casa compra. Sem reconciliar, o item ficaria pendente para
+# sempre; com o catálogo na base, o `nIdProduto` do Omie casa sozinho.
+st, notas = chamar("GET", "/notas?busca=5014", token=token)
+nota_champ = next((n for n in notas or [] if n["numero"] == "5014"), None)
+checar("a nota do champignon foi importada", nota_champ is not None, nota_champ)
+
+st, pend = chamar("GET", "/notas/pendencias", token=token)
+pendente_champ = next((i for i in pend or [] if i.get("codigo_fornecedor") == "CHAMP-BJ"), None)
+st, r = chamar("POST", "/notas/reconciliar", {}, token=token)
+checar("reconciliar responde", st == 200, r)
+# ⚠️ A suíte roda sobre base suja: numa primeira rodada a nota chega antes do
+# catálogo e o item fica pendente; nas seguintes o catálogo já está lá e o item
+# entra ligado na própria importação. É a MESMA cascata, mais cedo — e as duas
+# situações têm de ser afirmadas, senão o teste passa à toa em metade das vezes.
+if pendente_champ:
+    checar("o item pendente encontrou produto pelo id do Omie",
+           r.get("vinculados", 0) >= 1, r)
+else:
+    st, detalhe_nota = chamar("GET", f"/notas/{nota_champ['id']}", token=token)
+    item_champ = next((i for i in detalhe_nota.get("itens", [])
+                       if i.get("codigo_fornecedor") == "CHAMP-BJ"), None)
+    checar("com o catálogo já na base, o item entrou vinculado na importação",
+           item_champ and item_champ.get("id_produto"), item_champ)
+st, pend = chamar("GET", "/notas/pendencias", token=token)
+checar("de um jeito ou de outro, o item não fica na fila",
+       not any(i.get("codigo_fornecedor") == "CHAMP-BJ" for i in pend or []), pend)
+
+# ⚠️ Vinculado não quer dizer lançável. Quantidade sem unidade é número sem
+# significado, e o custo médio que sair daí contamina ficha, CMV e a próxima
+# compra.
+st, notas = chamar("GET", "/notas?busca=5014", token=token)
+nota_champ = next((n for n in notas or [] if n["numero"] == "5014"), None)
+checar("a nota do champignon está conciliada",
+       nota_champ and nota_champ["status"] == "CONCILIADA", nota_champ)
+st, r = chamar("POST", f"/notas/{nota_champ['id']}/lancar", {}, token=token)
+checar("produto sem unidade NÃO entra no estoque", st == 400, (st, r))
+checar("e a recusa diz qual produto e por quê",
+       "unidade" in str(r.get("detail", "")).lower()
+       and "CHAMPIGNON" in str(r.get("detail", "")).upper(), r)
+
+# Resolvida a unidade, a mesma nota passa.
+st, detalhe = chamar("GET", f"/produtos/{champ['id']}", token=token)
+st, r = chamar("PUT", f"/produtos/{champ['id']}", {**detalhe, "um_estoque": "UN"}, token=token)
+st, detalhe = chamar("GET", f"/produtos/{champ['id']}", token=token)
+checar("define a unidade do produto", detalhe.get("um_estoque") == "UN", detalhe.get("um_estoque"))
+st, r = chamar("POST", f"/notas/{nota_champ['id']}/lancar", {}, token=token)
+checar("com unidade definida, a nota entra", st == 200 and r.get("itens_lancados") == 1, r)
+st, r = chamar("POST", f"/notas/{nota_champ['id']}/estornar", {}, token=token)
+checar("e o estorno desfaz", st == 200, r)
 
 print("7. permissão")
 tk = garantir_cozinha(chamar, token)
@@ -338,6 +436,8 @@ print("9. limpeza")
 for p in (cafe, leite):
     chamar("DELETE", f"/produtos/{p}", token=token)
 chamar("PUT", "/omie/config", {"modo": "simulado", "ativa": False}, token=token)
+repostas = repor_credenciais()
+checar("a credencial de verdade voltou como estava", repostas >= 0, repostas)
 checar("limpeza concluída", True)
 
 print()

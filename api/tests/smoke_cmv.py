@@ -222,8 +222,14 @@ if linha_insumo:
                  - float(linha_insumo["qtd_saidas"]), float(linha_insumo["qtd_final"]), 0.001),
            linha_insumo)
 t = mov["total"]
+# ⚠️ Tolerância proporcional ao tamanho do relatório: cada linha sai
+# arredondada em dois dígitos e o rodapé soma as linhas arredondadas — para
+# fechar com a coluna na tela. Em centenas de produtos isso dá centavos de
+# diferença na identidade, que não são erro de conta.
+folga = max(0.05, 0.005 * mov["produtos"])
 checar("e fecha no total também",
-       perto(t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], 0.05),
+       perto(t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"],
+             t["valor_final"], folga),
        t)
 
 print("5. fechamento congela o período")

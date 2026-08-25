@@ -1,7 +1,7 @@
 {
   "pagina": 1,
   "total_de_paginas": 1,
-  "total_de_registros": 3,
+  "total_de_registros": 4,
   "produto_servico_cadastro": [
     {
       "codigo_produto": 700001,
@@ -30,6 +30,15 @@
       "unidade": "KG",
       "ncm": "07020000",
       "valor_unitario": 7.5,
+      "inativo": "N"
+    },
+    {
+      "codigo_produto": 700004,
+      "codigo": "CHAMP-BJ",
+      "descricao": "CHAMPIGNON FATIADO Trib. Aprox. (Fed: R$ 3,77. Est: R$ 3,36. ). Fonte: IBPT/empresometro.com.br/25.2.E.",
+      "unidade": "BJ",
+      "ncm": "2003.10.00",
+      "valor_unitario": 16.0,
       "inativo": "N"
     }
   ]

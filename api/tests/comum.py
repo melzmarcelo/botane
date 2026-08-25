@@ -140,3 +140,60 @@ def garantir_cozinha(chamar, token, email: str = "smoke.cozinha@botane.com.br",
 
     st, r = chamar("POST", "/auth/login", {"email": email, "senha": senha})
     return r.get("access_token")
+
+
+def preservar_credenciais(servico: str = "OMIE"):
+    """Guarda a linha de integração e devolve a função que a repõe.
+
+    ⚠️ **A suíte grava uma credencial de mentira na MESMA linha onde mora a de
+    verdade.** Testar o mascaramento exige salvar uma chave conhecida, e a
+    tabela `integracoes` tem uma linha por serviço e loja — então rodar o teste
+    apagava a credencial real do cliente. Pior: a API **não devolve** a chave em
+    claro (é a regra que protege o segredo), logo não havia como reconfigurar
+    sem pedir tudo de novo ao dono da conta.
+
+    A cópia é feita direto no banco pelo mesmo motivo: por fora não passa.
+
+    ⚠️ **A reposição é registrada no `atexit`, não só no fim do roteiro.** Numa
+    primeira versão ela era a penúltima linha da suíte — e bastou a suíte
+    ESTOURAR no meio (um `KeyError` numa asserção) para a credencial de verdade
+    ficar substituída pela de mentira, sem aviso. Guardar e não repor é pior que
+    não guardar: dá a sensação de estar protegido. Repor duas vezes não faz mal
+    nenhum (é o mesmo valor), então o caminho normal continua chamando também.
+    """
+    import atexit
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
+
+    def conectar():
+        return psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER,
+                                password=DB_PASSWORD, dbname=DB_NAME, sslmode=DB_SSLMODE)
+
+    with conectar() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            "SELECT id, credenciais, modo, ativa FROM integracoes WHERE servico = %s",
+            (servico,),
+        )
+        antes = [dict(r) for r in cur.fetchall()]
+
+    def repor() -> int:
+        if not antes:
+            return 0
+        with conectar() as conn, conn.cursor() as cur:
+            for linha in antes:
+                cur.execute(
+                    """UPDATE integracoes SET credenciais = %s, modo = %s, ativa = %s
+                        WHERE id = %s""",
+                    (linha["credenciais"], linha["modo"], linha["ativa"], linha["id"]),
+                )
+            conn.commit()
+        return len(antes)
+
+    atexit.register(repor)
+    return repor

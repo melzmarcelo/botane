@@ -146,8 +146,13 @@ st, csv, cabecalhos = chamar("GET", "/exportar/saldos.csv", token=token, bruto=T
 checar("exporta os saldos", st == 200, st)
 checar("vem com BOM (o Excel lê o acento certo)", csv.startswith("﻿"), repr(csv[:6]))
 checar("usa ponto e vírgula", ";" in csv.splitlines()[3], csv.splitlines()[3][:60])
+# ⚠️ Na LINHA DO PRODUTO DESTA RODADA, não nas primeiras da planilha. A última
+# coluna é o estoque mínimo, que num catálogo real vem vazio para quase todo
+# rascunho — a checagem olhava as cinco primeiras linhas e caía justamente
+# nelas. O produto da suíte tem saldo e custo conhecidos: é dele que se cobra.
+linha_do_teste = next((l for l in csv.splitlines() if f"Alerta insumo {marca}" in l), "")
 checar("número sai com vírgula decimal",
-       any("," in l.split(";")[-1] for l in csv.splitlines()[5:10]), csv.splitlines()[5:7])
+       any("," in campo for campo in linha_do_teste.split(";")[5:8]), linha_do_teste)
 disposicao = next((v for k, v in cabecalhos.items() if k.lower() == "content-disposition"), "")
 checar("o nome do arquivo vem no cabeçalho", "botane-estoque" in disposicao, disposicao)
 checar("e o cabeçalho é exposto ao navegador (CORS)",

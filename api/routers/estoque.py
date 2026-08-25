@@ -20,6 +20,7 @@ from models.estoque import (
     SaldoResponse,
     TransferenciaRequest,
 )
+from paginacao import com_total
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import estoque as motor
 
@@ -115,12 +116,9 @@ def movimentos(
              inicio, inicio, fim, fim, busca, busca, busca, limite, offset),
         )
         linhas = [dict(r) for r in cur.fetchall()]
-    total = linhas[0].pop("_total", len(linhas)) if linhas else offset
+    com_total(linhas, resposta, offset)
     for l in linhas:
-        l.pop("_total", None)
         l["rotulo"] = motor.ROTULOS.get(l["tipo"], l["tipo"])
-    if resposta is not None:
-        resposta.headers["X-Total"] = str(total)
     return linhas
 
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Fornecedor, Local, ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
@@ -104,7 +105,7 @@ export default function NotaManual({
   const [numeroNota, setNumeroNota] = useState(editando?.numero ?? "");
   const [serie, setSerie] = useState(editando?.serie ?? "");
   const [dataEmissao, setDataEmissao] = useState(
-    () => editando?.data_emissao?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    () => editando?.data_emissao?.slice(0, 10) ?? hoje(),
   );
   const [frete, setFrete] = useState(texto(editando?.valor_frete));
   const [desconto, setDesconto] = useState(texto(editando?.valor_desconto));

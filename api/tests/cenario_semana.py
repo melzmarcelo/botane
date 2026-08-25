@@ -332,8 +332,14 @@ if linha_farinha:
     conferir("valendo 300,00 (40 × 7,50)", linha_farinha["valor_final"], 300.00, 0.01)
 
 t = mov["total"]
+# ⚠️ Tolerância proporcional ao tamanho do relatório: cada linha sai
+# arredondada em dois dígitos e o rodapé soma as linhas arredondadas — para
+# fechar com a coluna na tela. Em centenas de produtos isso dá centavos de
+# diferença na identidade, que não são erro de conta.
+folga = max(0.05, 0.005 * mov["produtos"])
 conferir("a movimentação fecha",
-         t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], 0.05)
+         t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"],
+         t["valor_final"], folga)
 
 # A conta do dono, e a prova de que ela fecha: numa semana em que tudo o que
 # saiu foi receita, perda ou diferença de contagem, a VARIÂNCIA tem de ser

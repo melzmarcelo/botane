@@ -15,6 +15,18 @@ const CHROME =
   process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const WEB = "http://127.0.0.1:3100";
 const API = "http://127.0.0.1:9200";
+/**
+ * O dia de HOJE aqui, não em Londres.
+ *
+ * ⚠️ `toISOString()` devolve UTC: rodando às 22h35 de Brasília ele já diz o dia
+ * seguinte. Uma venda datada assim cai fora do mês corrente, e o relatório de
+ * movimentação — que soma o período — deixava de fechar com o saldo final. O
+ * teste acusava o sistema de um erro que era dele. É a mesma armadilha que o
+ * banco resolve com a sessão em America/Sao_Paulo.
+ */
+const diaLocal = (somaDias = 0) =>
+  new Date(Date.now() + somaDias * 86400000).toLocaleDateString("sv-SE");
+
 const FOTOS = "scripts/_fotos";
 
 const ADMIN = { email: "admin@botane.com.br", senha: "botane123" };
@@ -337,9 +349,16 @@ try {
     voltar?.tag === "A" && parseFloat(voltar?.borda ?? "0") > 0
       && parseFloat(voltar?.tamanho ?? "0") >= 13, voltar);
 
-  await p.goto(`${WEB}/produtos?busca=Teste tela`, { waitUntil: "networkidle2" });
+  // ⚠️ `?busca=` na URL não filtra nada: a busca é estado da tela. Com 2.000
+  // produtos na base — uma conta real —, abrir a lista e esperar ver o que
+  // acabou de ser criado é esperar a sorte. Procura-se como se procura.
+  await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 600));
+  const campoBuscaProduto = (await p.$$('input[placeholder="nome, código ou código de barras"]'))[0];
+  await campoBuscaProduto.type(nomeProduto);
+  await new Promise((r) => setTimeout(r, 1200));
   const naLista = await esperarTexto(p, nomeProduto);
-  checar("produto aparece na lista", naLista, nomeProduto);
+  checar("produto aparece na lista quando procurado pelo nome", naLista, nomeProduto);
 
   // Limpa: desativa o produto criado pelo teste.
   if (criou) {
@@ -587,7 +606,7 @@ try {
   const { dados: fichasProd } = await api("GET", "/fichas", null, token);
   const homologada = (fichasProd ?? []).find((f) => f.status === "HOMOLOGADA");
   if (homologada) {
-    const amanhaISO = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const amanhaISO = diaLocal(1);
     await api("POST", "/producao-agenda",
       { id_produto: homologada.id_produto, data_prevista: amanhaISO, quantidade: 3 }, token);
   }
@@ -889,7 +908,7 @@ try {
 
   console.log("7. CMV (etapa 6)");
   const m6 = Date.now().toString().slice(-5);
-  const hoje6 = new Date().toISOString().slice(0, 10);
+  const hoje6 = diaLocal();
   // Cenário: insumo comprado, ficha homologada, produção e venda pela planilha.
   const { dados: ins6 } = await api("POST", "/produtos",
     { nome: `Cmv tela insumo ${m6}`, tipo: "INSUMO", um_estoque: "KG" }, token);
@@ -1026,7 +1045,14 @@ try {
   checar("a nota chega com pendência de de-para", /pendente/i.test(textoCompras));
   await foto(p, "28-compras-sincronizado");
 
-  // Abre a primeira nota e confere que o lançamento está barrado.
+  // Abre a nota da fixture e confere que o lançamento está barrado. ⚠️ Procura
+  // pelo número: numa base com notas de uma conta real, a 4812 fica fora da
+  // primeira página e o clique não achava botão nenhum — o teste então lia o
+  // cabeçalho da casa e falhava sem dizer por quê.
+  const campoBuscaNota = (await p.$$('input[aria-label="Buscar nota"]'))[0];
+  checar("a lista de notas tem busca", !!campoBuscaNota);
+  await campoBuscaNota.type("4812");
+  await new Promise((r) => setTimeout(r, 1400));
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((x) =>
       x.textContent.includes("NF 4812"));
@@ -1035,14 +1061,6 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
   const textoNota = await p.evaluate(() => document.body.innerText);
   checar("a nota abre com os itens", /CAFE EM GRAO/i.test(textoNota), textoNota.slice(0, 100));
-  checar("a tela explica por que não dá para lançar",
-    /sem produto vinculado/i.test(textoNota), textoNota.slice(0, 150));
-  const lancarDesabilitado = await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) =>
-      x.textContent === "Lançar no estoque");
-    return b ? b.disabled : null;
-  });
-  checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
   await foto(p, "29-conciliacao");
 
   await api("DELETE", "/notas/vinculos/CAF-500", null, token);
@@ -1082,6 +1100,20 @@ try {
   checar("o arquivo aparece com o resultado", /Arquivos lidos/i.test(textoXml));
   checar("a nota abre sozinha com o item do XML",
     /AZEITE EXTRA VIRGEM/i.test(textoXml), textoXml.slice(0, 200));
+
+  // A trava da conciliação se prova AQUI, e não na nota do Omie: o código do
+  // azeite é novo a cada rodada, então o item não tem produto nenhum de quem
+  // ser. Na nota do Omie a prova evaporava assim que o catálogo entrava na
+  // base e os itens passavam a se vincular sozinhos — o teste continuava
+  // "passando" sem exercitar trava alguma.
+  checar("a tela explica por que não dá para lançar",
+    /sem produto vinculado/i.test(textoXml), textoXml.slice(0, 200));
+  const lancarDesabilitado = await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      x.textContent === "Lançar no estoque");
+    return b ? b.disabled : null;
+  });
+  checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
   await foto(p, "29b-xml-importado");
 
   // O mesmo arquivo de novo: a chaveNota da NF-e é que impede a duplicação.
@@ -1101,7 +1133,11 @@ try {
 
   // Agora a digitação: a compra do mercado, que não tem XML nenhum.
   const { dados: produtosNota } = await api("GET", "/produtos", null, token);
-  const insumoNota = produtosNota.find((x) => x.controla_estoque);
+  // ⚠️ Precisa ter unidade: a checagem logo abaixo afirma que a linha vem
+  // preenchida com a unidade do estoque. O catálogo do Omie cria rascunhos SEM
+  // unidade de propósito, e pegar "o primeiro que controla estoque" caía num
+  // deles — o teste falhava dizendo do produto o que era verdade do rascunho.
+  const insumoNota = produtosNota.find((x) => x.controla_estoque && x.um_estoque);
   await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
   await p.evaluate(() => {
@@ -1324,7 +1360,7 @@ try {
     /O que subiu de preço/i.test(textoDono));
 
   // O número que a tela mostra tem de ser o mesmo que a API devolve.
-  const hojeIso = new Date().toISOString().slice(0, 10);
+  const hojeIso = diaLocal();
   const { dados: gruposApi } = await api(
     "GET", `/cmv/por-grupo?inicio=${hojeIso}&fim=${hojeIso}&agrupar=setor`, null, token);
   // Só faz sentido somar 100% quando há CMV no período: numa base recém-limpa,

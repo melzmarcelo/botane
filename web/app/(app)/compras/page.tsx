@@ -103,27 +103,61 @@ export default function PaginaCompras() {
   const [ocupado, setOcupado] = useState(false);
   const [digitando, setDigitando] = useState(false);
   const [corrigindo, setCorrigindo] = useState<NotaParaEditar | null>(null);
+  const [busca, setBusca] = useState("");
+  const [total, setTotal] = useState(0);
   const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
   const entradaXml = useRef<HTMLInputElement>(null);
+
+  const PAGINA = 50;
+
+  /**
+   * Uma página de notas, da mais recente para a mais antiga.
+   *
+   * ⚠️ A tela mostrava as 50 mais recentes e mais nada. Numa conta com 3.670
+   * notas isso quer dizer que a compra do mês passado não existe — e nada
+   * avisava: lista cheia e lista cortada são iguais na tela. Por isso o total
+   * vem no `X-Total`, a busca vai ao servidor e há como pedir mais.
+   */
+  const buscarPagina = useCallback(
+    async (inicio: number) => {
+      const q = new URLSearchParams({ limite: String(PAGINA), offset: String(inicio) });
+      if (busca.trim()) q.set("busca", busca.trim());
+      return api.listar<Nota>(`/notas?${q}`);
+    },
+    [busca],
+  );
 
   const carregar = useCallback(async () => {
     try {
       const [n, p, l] = await Promise.all([
-        api.get<Nota[]>("/notas?limite=50"),
+        buscarPagina(0),
         api.get<ProdutoResumo[]>("/produtos"),
         api.get<Local[]>("/locais"),
       ]);
-      setNotas(n);
+      setNotas(n.itens);
+      setTotal(n.total);
       setProdutos(p.filter((x) => x.controla_estoque));
       setLocais(l);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+  }, [buscarPagina]);
+
+  async function verMais() {
+    try {
+      const r = await buscarPagina((notas ?? []).length);
+      setNotas([...(notas ?? []), ...r.itens]);
+      setTotal(r.total);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível trazer mais notas");
+    }
+  }
 
   useEffect(() => {
-    void carregar();
-  }, [carregar]);
+    // Digitar dispara busca no servidor: um respiro evita uma consulta por tecla.
+    const t = setTimeout(() => void carregar(), busca ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [carregar, busca]);
 
   /**
    * Abre a nota para conferência.
@@ -195,6 +229,32 @@ export default function PaginaCompras() {
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível sincronizar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Tenta de novo achar o produto dos itens que ficaram pendentes.
+   *
+   * A ordem real das coisas é esta: chegam as notas, e só depois o cadastro
+   * fica pronto (ou se importa o catálogo do Omie). Sem este botão, cada item
+   * que não encontrou dono no dia da importação só sairia da fila na mão — numa
+   * conta de verdade, 109 de 114 itens passaram a ter produto assim que o
+   * catálogo chegou.
+   */
+  async function reconciliar() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ vinculados: number; pendentes: number; message: string }>(
+        "/notas/reconciliar",
+      );
+      if (r.vinculados) aviso.sucesso(r.message);
+      else aviso.erro(r.message + " — cadastre os produtos ou importe o catálogo do Omie.");
+      await carregar();
+      if (aberta) await abrir(aberta.id, false);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível reconciliar");
     } finally {
       setOcupado(false);
     }
@@ -293,6 +353,9 @@ export default function PaginaCompras() {
   }
 
   const pendentes = aberta?.itens.filter((i) => !i.id_produto && !i.ignorado) ?? [];
+  // A fila da casa inteira, não só a da nota aberta: é ela que diz se vale
+  // oferecer o "reconciliar" no alto da tela.
+  const aPendentes = (notas ?? []).reduce((soma, n) => soma + (n.pendentes ?? 0), 0);
   // O local da nota é a reserva de quem não tem local no cadastro do produto.
   const localDaNota = locais.find((l) => l.id === aberta?.id_local)?.nome ?? "";
 
@@ -341,6 +404,16 @@ export default function PaginaCompras() {
             {pode("integracao.omie") && (
               <button className="btn btn-secundario" onClick={sincronizar} disabled={ocupado}>
                 Buscar no Omie
+              </button>
+            )}
+            {aPendentes > 0 && (
+              <button
+                className="btn btn-secundario"
+                onClick={reconciliar}
+                disabled={ocupado}
+                title="Procura de novo o produto dos itens pendentes"
+              >
+                Reconciliar {aPendentes} pendente(s)
               </button>
             )}
           </div>
@@ -503,7 +576,12 @@ export default function PaginaCompras() {
             <div className="mb-4">
               <Aviso tipo="info">
                 {pendentes.length} item(ns) sem produto vinculado. A nota não entra no estoque
-                enquanto isso — importar errado é pior que não importar.
+                enquanto isso — importar errado é pior que não importar. Se os produtos já foram
+                cadastrados depois desta nota,{" "}
+                <button className="underline hover:text-erva" onClick={reconciliar}>
+                  procure de novo
+                </button>
+                .
               </Aviso>
             </div>
           )}
@@ -647,7 +725,24 @@ export default function PaginaCompras() {
         </Cartao>
       )}
 
-      <Cartao titulo={notas ? `${notas.length} nota(s)` : "Notas"}>
+      <Cartao
+        titulo={
+          notas
+            ? total > notas.length
+              ? `${notas.length} de ${total} nota(s)`
+              : `${notas.length} nota(s)`
+            : "Notas"
+        }
+        acao={
+          <input
+            className="campo w-[240px]"
+            placeholder="Número da NF, fornecedor ou chave"
+            aria-label="Buscar nota"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        }
+      >
         {!notas ? (
           <Carregando />
         ) : !notas.length ? (
@@ -680,6 +775,16 @@ export default function PaginaCompras() {
               </li>
             ))}
           </ul>
+        )}
+        {!!notas && total > notas.length && (
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <span className="text-[13px] text-suave">
+              mostrando as {notas.length} mais recentes de {total}
+            </span>
+            <button className="btn btn-secundario" onClick={verMais}>
+              Ver mais
+            </button>
+          </div>
         )}
       </Cartao>
 

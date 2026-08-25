@@ -43,6 +43,27 @@ _ultima_chamada = 0.0
 _SEGUNDOS_PEDIDOS = re.compile(r"[Aa]guarde\s+(\d+)\s*segundo")
 
 
+# ⚠️ **O Omie tem DOIS dialetos de paginação**, e o mesmo importador fala os
+# dois. Os módulos antigos usam nomes em português (`pagina`,
+# `registros_por_pagina`); `produtos/recebimentonfe` — o que traz as notas de
+# verdade — usa notação húngara (`nPagina`, `nRegistrosPorPagina`) e RECUSA a
+# outra forma com "Tag [PAGINA] não faz parte da estrutura". Cada chamada
+# recusada gasta cota, e cota gasta é o que bloqueia a conta: por isso o dialeto
+# é declarado, não tentado.
+DIALETO_PADRAO = {
+    "pagina": "pagina",
+    "por_pagina": "registros_por_pagina",
+    "total_paginas": "total_de_paginas",
+    "total": "total_de_registros",
+}
+DIALETO_HUNGARO = {
+    "pagina": "nPagina",
+    "por_pagina": "nRegistrosPorPagina",
+    "total_paginas": "nTotalPaginas",
+    "total": "nTotalRegistros",
+}
+
+
 class ErroOmie(Exception):
     def __init__(self, mensagem: str, status: int | None = None):
         super().__init__(mensagem)
@@ -116,12 +137,20 @@ class ClienteOmie:
         if not caminho.exists():
             raise ErroOmie(f"modo simulado sem fixture para {call} (esperado: {nome})")
         dados = json.loads(caminho.read_text(encoding="utf-8"))
+        # Consulta por id: a fixture é um dicionário de respostas, e a chamada
+        # devolve a de um registro só (é assim que o `ConsultarRecebimento` fala).
+        if "nIdReceb" in param:
+            achado = dados.get(str(param["nIdReceb"]))
+            if achado is None:
+                raise ErroOmie(f"modo simulado: recebimento {param['nIdReceb']} não está na fixture")
+            return achado
         # Simula a paginação: a fixture traz tudo, a chamada devolve a página.
-        pagina = int(param.get("pagina", 1))
+        pagina = int(param.get("pagina") or param.get("nPagina") or 1)
         if pagina > 1:
-            for chave in ("nfe_encontradas", "produto_servico_cadastro", "clientes_cadastro"):
+            for chave in ("nfe_encontradas", "produto_servico_cadastro", "clientes_cadastro",
+                          "recebimentos"):
                 if chave in dados:
-                    dados = {**dados, chave: [], "pagina": pagina}
+                    dados = {**dados, chave: [], "pagina": pagina, "nPagina": pagina}
         return dados
 
     def _respirar(self) -> None:
@@ -139,7 +168,7 @@ class ClienteOmie:
 
     def paginar(self, servico: str, call: str, chave_lista: str,
                 param: dict | None = None, por_pagina: int = 50, maximo: int = 60,
-                ao_truncar=None):
+                ao_truncar=None, dialeto: dict | None = None, do_fim: bool = False):
         """Percorre as páginas. Nunca puxa tudo de uma vez — o Omie não gosta.
 
         ⚠️ O teto existe para não varrer uma conta inteira sem querer, mas ele
@@ -147,18 +176,48 @@ class ClienteOmie:
         páginas trouxe 992 e a mensagem foi "992 criado(s)" — indistinguível de
         "o catálogo tem 992". `ao_truncar` recebe (trazidos, total_no_omie)
         quando a varredura para pelo teto, para quem chamou poder contar.
+
+        `do_fim=True` percorre **da última página para a primeira**. Existe
+        porque `ListarRecebimentos` não aceita filtro de data e devolve da nota
+        mais VELHA para a mais nova: numa conta com 3.670 notas de três anos, a
+        página 1 é de 2023 e as de hoje estão na 74. Varrendo de trás, quem só
+        quer as novas para na primeira página que já for velha demais — em vez
+        de atravessar o histórico inteiro toda madrugada.
         """
+        d = dialeto or DIALETO_PADRAO
         pagina, trazidos, total = 1, 0, 0
+
+        def buscar(n: int) -> dict:
+            return self.chamar(servico, call,
+                               {**(param or {}), d["pagina"]: n, d["por_pagina"]: por_pagina})
+
+        if do_fim:
+            # A primeira página é a sonda: diz quantas existem. Se a varredura
+            # chegar até ela, o resultado é reaproveitado — nada se pede duas vezes.
+            primeira = buscar(1)
+            ultima = int(primeira.get(d["total_paginas"]) or 1)
+            for n in range(ultima, 0, -1):
+                if trazidos and ultima - n + 1 > maximo:
+                    if ao_truncar:
+                        ao_truncar(trazidos, int(primeira.get(d["total"]) or 0))
+                    return
+                dados = primeira if n == 1 else buscar(n)
+                registros = dados.get(chave_lista) or []
+                if not registros:
+                    return
+                trazidos += len(registros)
+                yield dados, registros
+            return
+
         while pagina <= maximo:
-            corpo = {**(param or {}), "pagina": pagina, "registros_por_pagina": por_pagina}
-            dados = self.chamar(servico, call, corpo)
+            dados = buscar(pagina)
             registros = dados.get(chave_lista) or []
-            total = int(dados.get("total_de_registros") or 0)
+            total = int(dados.get(d["total"]) or 0)
             if not registros:
                 return
             trazidos += len(registros)
             yield dados, registros
-            total_paginas = int(dados.get("total_de_paginas") or 1)
+            total_paginas = int(dados.get(d["total_paginas"]) or 1)
             if pagina >= total_paginas:
                 return
             pagina += 1

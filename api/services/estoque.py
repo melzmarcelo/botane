@@ -188,8 +188,22 @@ def lancar(
     par = _parametros(cur, id_unidade)
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
-    if data_movimento is not None and par.get("bloquear_retroativo", True):
-        _travar_periodo_fechado(cur, id_unidade, data_movimento, pode_retroativo)
+    if data_movimento is not None:
+        # ⚠️ **Movimento no futuro não aconteceu.** A trava do período fechado
+        # olha para trás; para a frente não olhava ninguém, e uma data errada
+        # entrava calada. Aconteceu de verdade: uma venda datada com o dia de
+        # UTC (às 22h35 de Brasília, já é o dia seguinte) caiu fora do mês, e o
+        # relatório de movimentação deixou de fechar com o saldo — a busca foi
+        # atrás de um erro de cálculo que não existia. O razão é append-only:
+        # data errada aqui não se conserta, só se estorna.
+        cur.execute("SELECT (%s::timestamptz)::date > current_date AS futuro", (data_movimento,))
+        if cur.fetchone()["futuro"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Data no futuro: um movimento de estoque só existe depois de acontecer.",
+            )
+        if par.get("bloquear_retroativo", True):
+            _travar_periodo_fechado(cur, id_unidade, data_movimento, pode_retroativo)
     if tipo == "SAIDA_PERDA" and par["exigir_motivo_perda"] and not id_motivo_perda:
         raise HTTPException(status_code=400, detail="Informe o motivo da perda.")
 

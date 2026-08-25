@@ -16,11 +16,12 @@ fornecedor e a nota do açougue da esquina se digita em um minuto.
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 
 import auditoria
 from database import get_cursor
+from paginacao import com_total
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import nfe_xml
 from services.omie import importador
@@ -345,8 +346,22 @@ def editar_manual(id_nota: int, body: NotaManual,
 @router.get("")
 def listar(status: str | None = None,
            origem: str | None = None,
+           busca: str | None = Query(default=None, max_length=80),
+           inicio: date | None = None,
+           fim: date | None = None,
            limite: int = Query(default=50, ge=1, le=200),
+           offset: int = Query(default=0, ge=0),
+           resposta: Response = None,
            ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> list[dict]:
+    """As notas, da mais recente para a mais antiga.
+
+    ⚠️ **Com busca e paginação porque a conta real tem 3.670 notas.** A tela
+    mostrava as 50 mais recentes e mais nada: a nota do mês passado sumia, e
+    nada na tela dizia que havia mais. Procurar pelo número da NF, pelo nome do
+    fornecedor ou por período é o jeito como alguém procura uma nota de verdade
+    — ninguém rola uma lista de milhares.
+    """
+    like = f"%{busca.strip()}%" if busca and busca.strip() else None
     with get_cursor() as cur:
         cur.execute(
             """SELECT n.id, n.chave_nfe, n.numero, n.serie, n.nome_emitente, n.cnpj_emitente,
@@ -355,16 +370,26 @@ def listar(status: str | None = None,
                       (SELECT count(*) FROM nota_itens i WHERE i.id_nota = n.id) AS itens,
                       (SELECT count(*) FROM nota_itens i
                         WHERE i.id_nota = n.id AND i.id_produto IS NULL AND NOT i.ignorado)
-                          AS pendentes
+                          AS pendentes,
+                      count(*) OVER () AS _total
                  FROM notas_entrada n
                  LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
                 WHERE (%s::varchar IS NULL OR n.status = %s)
                   AND (%s::varchar IS NULL OR n.origem = %s)
+                  AND (%s::date IS NULL
+                       OR coalesce(n.data_entrada, n.data_emissao) >= %s)
+                  AND (%s::date IS NULL
+                       OR coalesce(n.data_entrada, n.data_emissao) <= %s)
+                  AND (%s::varchar IS NULL
+                       OR n.numero ILIKE %s OR n.nome_emitente ILIKE %s
+                       OR f.nome ILIKE %s OR n.chave_nfe ILIKE %s)
                 ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC
-                LIMIT %s""",
-            (status, status, origem, origem, limite),
+                LIMIT %s OFFSET %s""",
+            (status, status, origem, origem, inicio, inicio, fim, fim,
+             like, like, like, like, like, limite, offset),
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    return com_total(linhas, resposta, offset)
 
 
 @router.get("/pendencias")
@@ -384,6 +409,30 @@ def pendencias(ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> li
                 LIMIT 200"""
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+@router.post("/reconciliar")
+def reconciliar(id_nota: int | None = None,
+                ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Tenta de novo achar o produto dos itens pendentes.
+
+    Serve ao dia seguinte ao cadastro: chegaram as notas, depois se cadastraram
+    os produtos (ou se importou o catálogo do Omie) — e aí os itens que estavam
+    pendentes passam a ter dono. Sem isto, a fila de conciliação só diminui na
+    mão, item por item.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = importador.reconciliar(cur, id_unidade, id_nota)
+        auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota or 0, "reconciliar",
+                            depois=r, id_unidade=id_unidade)
+    achados = r["vinculados"]
+    r["message"] = (
+        f"{achados} item(ns) encontraram produto de {r['pendentes']} pendente(s)"
+        if achados else
+        f"nenhum dos {r['pendentes']} item(ns) pendentes encontrou produto"
+    )
+    return r
 
 
 @router.get("/vinculos")
@@ -513,11 +562,22 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
 
         # A unidade da nota serve de ponto de partida, mas só se for uma sigla
         # que existe: nota traz "CX", "FD", e às vezes coisa que não é unidade.
-        um = (body.um_estoque or item["um_nota"] or "").strip().upper() or None
-        if um:
-            cur.execute("SELECT sigla FROM unidades_medida WHERE upper(sigla) = %s", (um,))
-            if not cur.fetchone():
-                um = None
+        def sigla_conhecida(valor: str | None) -> str | None:
+            valor = (valor or "").strip().upper() or None
+            if not valor:
+                return None
+            cur.execute("SELECT sigla FROM unidades_medida WHERE upper(sigla) = %s", (valor,))
+            achada = cur.fetchone()
+            return achada["sigla"] if achada else None
+
+        um = sigla_conhecida(body.um_estoque or item["um_nota"])
+        # ⚠️ `um_compra` também é chave estrangeira. A unidade da nota ia CRUA
+        # para lá, e uma conta real trouxe "UND", "BJ", "GA", "GF", "1UNID" —
+        # siglas de fornecedor que não existem no cadastro. O resultado era
+        # "Internal Server Error" ao criar o produto do item, sem dizer por quê.
+        # Sigla desconhecida vira nulo: o campo é reserva, não vale derrubar
+        # a criação por causa dele.
+        um_compra = sigla_conhecida(item["um_nota"])
 
         nome = (body.nome or item["descricao_fornecedor"] or "").strip()[:160]
         if not nome:
@@ -553,7 +613,7 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
                                      criado_por)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'RASCUNHO', 'NOTA', true, %s)
                RETURNING id""",
-            (codigo, nome, body.tipo, um, item["um_nota"], body.fator or 1,
+            (codigo, nome, body.tipo, um, um_compra, body.fator or 1,
              item["codigo_barras"], item["ncm"], ctx.id_usuario),
         )
         id_produto = cur.fetchone()["id"]

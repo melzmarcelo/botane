@@ -15,7 +15,7 @@ produção consome a ficha e o custo do insumo passa a vir do estoque.
 
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 import time
 import urllib.error
 import urllib.parse
@@ -209,6 +209,25 @@ st, r = chamar("POST", "/estoque/saidas", {
 checar("deixa lançar saída sem saldo", st == 201, r)
 checar("mas marca como custo provisório", r.get("custo_provisorio") is True, r)
 checar("saldo fica negativo (-3)", perto(r.get("saldo"), -3), r.get("saldo"))
+
+print("4c. movimento no futuro não existe")
+# ⚠️ A trava do período fechado olha para trás; para a frente não olhava
+# ninguém. Uma venda datada com o dia de UTC — às 22h de Brasília, já é o dia
+# seguinte — caía FORA do mês e o relatório de movimentação deixava de fechar
+# com o saldo. Data errada no razão não se conserta: só se estorna.
+futuro = (date.today() + timedelta(days=1)).isoformat()
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": novo, "quantidade": 1, "custo_unitario": 10,
+    "id_local": principal["id"], "data_movimento": f"{futuro}T09:00:00",
+}, token=token)
+checar("entrada datada amanhã é recusada", st == 400, (st, r))
+checar("e a recusa explica o que é uma data no futuro",
+       "futuro" in str(r.get("detail", "")).lower(), r)
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": novo, "quantidade": 1, "custo_unitario": 10,
+    "id_local": principal["id"], "data_movimento": f"{date.today().isoformat()}T09:00:00",
+}, token=token)
+checar("hoje continua valendo, do primeiro ao último minuto", st == 201, (st, r))
 
 print("5. perda exige motivo")
 st, motivos = chamar("GET", "/estoque/motivos-perda", token=token)

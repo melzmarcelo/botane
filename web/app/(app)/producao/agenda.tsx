@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { diaLocal, somarDias } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local } from "@/lib/cadastros";
@@ -71,11 +72,7 @@ const qtd = (n: number | string) =>
 
 const dia = (d: string) => new Date(d + "T12:00").toLocaleDateString("pt-BR");
 
-function amanha() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
+const amanha = () => somarDias(1);
 
 export default function AgendaProducao({
   fichas,
@@ -210,7 +207,7 @@ export default function AgendaProducao({
     (mapa[l.data_prevista] ??= []).push(l);
     return mapa;
   }, {});
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = diaLocal();
 
   return (
     <div className="flex flex-col gap-6">

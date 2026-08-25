@@ -19,10 +19,13 @@ para arquivo nenhum — gravar direto aqui.
 - Mapeamento e **etapas 1 a 6 — a primeira parte inteira** (fundação, cadastros, fichas,
   estoque, Omie e CMV) concluídas em 18 e 19/08/2026.
 - Roda local: `.\iniciar_local.ps1`. Admin inicial `admin@botane.com.br` / `botane123`.
-- **Falta só a credencial do Omie**: o importador roda em **modo simulado** sobre fixtures.
-  Ao configurar `app_key`/`app_secret` em Integrações e mudar o modo para `real`, o mesmo
-  código passa a falar com a conta do cliente — o que pode precisar de ajuste é só
-  `services/omie/mapeadores.py`.
+- **O Omie já foi exercitado contra a conta REAL do cliente** (24/08/2026): 37 notas do
+  período, 2.183 produtos e 793 fornecedores importados de verdade. Sem credencial, o
+  importador cai no **modo simulado** sobre fixtures, e as duas rotas passam pelo mesmo código.
+  ⚠️ **A credencial que estava configurada se perdeu** quando a suíte `smoke_omie` estourou no
+  meio, depois de gravar a chave de teste na mesma linha (ver `preservar_credenciais`, já
+  corrigido) — para voltar ao modo real é preciso redigitar `app_key`/`app_secret` em
+  Integrações.
 
 ### O que já existe
 - `api/` FastAPI: `database.py` (pool, sessão em America/Sao_Paulo), `db_updater.py`
@@ -187,6 +190,40 @@ para arquivo nenhum — gravar direto aqui.
      parâmetro errado continua errado na quarta tentativa e só gasta a cota.
   7. ⚠️ **`ListarNotaEnt` não aceita `apenas_importado`** — foi esse parâmetro inválido que
      consumiu cota até o bloqueio.
+- 🔑 **As notas de compra estão em `produtos/recebimentonfe`, NÃO em `produtos/notaentrada`**
+  (24/08/2026). O segundo é o lançamento manual de nota do Omie: na conta do cliente tinha
+  **uma** nota, de 2024, enquanto o recebimento de NF-e tinha **3.670**. Quem olhasse só o
+  primeiro concluiria que a casa não compra nada. A varredura usa `ListarRecebimentos` para os
+  cabeçalhos e `ConsultarRecebimento` (por `nIdReceb`) para os itens — a lista **não traz item
+  nenhum**, e o detalhe só é pedido para nota que ainda não existe aqui: pedir o de todas
+  custaria meia hora e a conta bloqueada. Mapeador: `recebimento_de_nfe` / `item_do_recebimento`.
+- ⚠️ **O Omie tem DOIS dialetos de paginação** (`cliente.DIALETO_PADRAO` e `DIALETO_HUNGARO`).
+  Os módulos antigos falam `pagina`/`registros_por_pagina`; o recebimento exige
+  `nPagina`/`nRegistrosPorPagina` e recusa o outro com "Tag [PAGINA] não faz parte da
+  estrutura". Cada chamada recusada gasta cota — e cota gasta bloqueia a conta.
+- ⚠️ **`ListarRecebimentos` não aceita filtro de data nenhum.** Testados e recusados:
+  `dDtInicial`, `dDataInicial`, `dEmissaoDe`, `dDtEmissaoDe`, `dRegistroInicial`. Aceita só
+  `cEtapa` e `nIdFornecedor`. Como a lista vem da nota mais VELHA para a mais nova, a varredura
+  vai **da última página para a primeira** (`paginar(do_fim=True)`) e para na primeira página
+  inteira fora da janela — senão a sincronização diária atravessaria três anos de histórico.
+- **`nIdProduto` do item é o `codigo_omie` do produto** — nível 2 da cascata de conciliação,
+  antes do EAN. É o de-para que o Omie já fez. Numa conta real, **109 de 114 itens** acharam
+  produto por aí assim que o catálogo entrou.
+- **`POST /notas/reconciliar`** passa a cascata de novo nos itens pendentes. Existe porque a
+  ordem real é: chegam as notas, e só depois o cadastro fica pronto. Sem isso, item que não
+  achou dono no dia da importação só sairia da fila na mão. Nota **lançada** não se mexe (os
+  movimentos já estão no razão) e item ignorado fica ignorado.
+- ⚠️ **Produto sem `um_estoque` NÃO entra no razão** (`lancar_nota`). Quantidade sem unidade é
+  número sem significado — "3" de champignon não diz se são três bandejas ou três quilos —, e o
+  custo médio que sair daí contamina ficha, CMV e a próxima compra. O catálogo do Omie cria
+  rascunho sem unidade de propósito (a sigla do fornecedor pode não existir na casa); é no
+  lançamento que a dívida é cobrada, e a recusa **nomeia todos** os produtos de uma vez.
+- ⚠️ **O rodapé de tributos do DANFE vem grudado na descrição** e ia para o nome do produto:
+  59 cadastros se chamavam "MAMÃO FORMOSA Trib. Aprox. (Fed: R$ 3,63…) Fonte: IBPT/…".
+  `mapeadores._nome_limpo` corta na entrada; a migração 023 limpa o que já entrou.
+- ⚠️ **A unidade da nota ia CRUA para `produtos.um_compra`, que é chave estrangeira.** Uma
+  conta real trouxe "UND", "BJ", "GA", "GF", "1UNID" — e criar produto a partir do item da nota
+  devolvia 500 sem dizer por quê. Sigla desconhecida vira nulo.
 - ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
   **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
   antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e
@@ -330,15 +367,51 @@ para arquivo nenhum — gravar direto aqui.
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes: `smoke_fundacao.py` (36), `smoke_cadastros.py` (46), `smoke_fichas.py` (37),
-  `smoke_estoque.py` (57), `smoke_cmv.py` (45), `smoke_omie.py` (70), `smoke_notas.py` (47),
-  `smoke_senha.py` (40), `smoke_lotes.py` (28), `smoke_relatorios.py` (37),
-  `smoke_kits.py` (29), `smoke_conversao.py` (29), `smoke_producao.py` (33) e
-  `web/scripts/testar-sw.mjs` (17, sem navegador) e `web/scripts/verificar.mjs` (no Chrome,
-  com fotos em `web/scripts/_fotos`). Todos idempotentes; os de CMV medem **delta** sobre a
-  apuração anterior, porque o banco local já tem dado de outras rodadas.
+- Testes (755 verificações de API): `smoke_fundacao.py` (37), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (56), `smoke_omie.py` (85),
+  `smoke_notas.py` (66), `smoke_senha.py` (40), `smoke_lotes.py` (28),
+  `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `cenario_cafeteria.py` (57) e
+  `cenario_semana.py` (54); mais `web/scripts/testar-sw.mjs` (17, sem navegador) e
+  `web/scripts/verificar.mjs` (205, no Chrome, com fotos em `web/scripts/_fotos`).
+  Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
+  local já tem dado de outras rodadas.
+- ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
+  de importar 37 notas e 2.183 produtos de uma conta de verdade, SEIS checagens quebraram — e
+  nenhuma por bug do sistema: pegavam "o primeiro produto que controla estoque" (caiu num
+  rascunho sem unidade), "o primeiro item pendente" (caiu numa nota do cliente), buscavam nota
+  numa LISTA paginada onde a da fixture não estava mais, ou afirmavam sobre as primeiras linhas
+  de um CSV. Regra: **cada suíte procura os registros DELA**, pelo código ou pelo número que
+  ela mesma criou, e garante a precondição em vez de supô-la.
+- ⚠️ **`preservar_credenciais()` em `tests/comum.py`, registrado no `atexit`.** A suíte do Omie
+  grava uma credencial de mentira na MESMA linha onde mora a real, e a API não devolve a chave
+  em claro (é a regra que protege o segredo) — então perder a credencial do cliente é
+  definitivo. Repor no fim do roteiro não bastava: a suíte estourou no meio uma vez, e foi
+  assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de
+  Vendas propunha a data de amanhã para a importação do dia: um restaurante que fecha às 23h
+  lançaria a venda inteira no dia seguinte, o CMV do mês fecharia errado e nada na tela
+  denunciaria. Toda data que vira texto `aaaa-mm-dd` no front passa por **`lib/datas.ts`**
+  (`hoje`, `diaLocal`, `somarDias`, `somarMeses`, `primeiroDiaDoMes`) — `sv-SE` é o formato
+  ISO no fuso de quem está olhando. É a mesma armadilha que o banco resolve com a sessão em
+  `America/Sao_Paulo`.
+- ⚠️ **Movimento de estoque no FUTURO não existe** (`estoque.lancar`). A trava do período
+  fechado olha para trás; para a frente não olhava ninguém, e a data errada acima entrava
+  calada — o movimento caía fora do mês e o relatório de movimentação deixava de fechar com o
+  saldo. Foi um dia de caça a um erro de cálculo que não existia. O razão é append-only: data
+  errada ali não se conserta, só se estorna.
+- ⚠️ **O rodapé do relatório soma as linhas ARREDONDADAS**, de propósito — o total tem de
+  fechar com a coluna que a pessoa confere a mão. Em centenas de produtos isso dá centavos de
+  diferença na identidade "inicial + entradas − saídas = final", que **não são erro de razão**.
+  A folga acompanha o tamanho do relatório (meio centavo por linha), na tela e nos testes: com
+  folga fixa, uma base real acusava "a conta não fecha" toda vez, e alarme que sempre toca
+  ninguém escuta.
+- ⚠️ **Lista sem total é lista mentirosa.** A tela de compras mostrava as 50 notas mais
+  recentes de 3.670 e nada dizia que havia mais — a nota do mês passado simplesmente não
+  existia. Toda listagem que pode crescer devolve o total em `X-Total` (helper único em
+  `api/paginacao.py`) e ganha busca no SERVIDOR.
 - ⚠️ **`ON CONFLICT (id_unidade, servico)` não pega linha com `id_unidade` NULL**: no Postgres
   nulos são distintos, então o UPSERT nunca conflita e cada gravação cria outra linha (o SMTP,
   que é da casa toda, sofreu disso). Quem garante a unicidade dessas linhas é o índice parcial

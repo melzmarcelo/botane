@@ -368,10 +368,16 @@ conferir("CMV real = inicial + compras − final", a.get("cmv_real"), cmv_real, 
 
 st, mov = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
 t = mov["total"]
+# ⚠️ A tolerância acompanha o TAMANHO do relatório. Cada linha sai arredondada
+# em dois dígitos e o rodapé soma as linhas arredondadas — de propósito, para o
+# rodapé fechar com a coluna na tela. Num relatório de uma conta real, com
+# centenas de produtos, isso dá alguns centavos de diferença na identidade. Meio
+# centavo por linha é folga suficiente e continua acusando erro de verdade.
+folga = max(0.05, 0.005 * mov["produtos"])
 conferir("movimentação: inicial + entradas − saídas = final",
-         t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], 0.05)
+         t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], folga)
 conferir("e as compras da movimentação batem com o estoque de agora",
-         t["valor_final"], float(a["estoque_final"]), 0.05)
+         t["valor_final"], float(a["estoque_final"]), folga)
 
 linha_cafe = next((l for l in mov["linhas"] if l["id_produto"] == cafe), None)
 checar("o café aparece na movimentação", linha_cafe is not None,

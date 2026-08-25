@@ -162,11 +162,15 @@ def movimentacao(inicio: date | None = None, fim: date | None = None,
             else None
         )
 
+    # A soma das linhas COMO ELAS APARECEM: o rodapé tem de fechar com a coluna
+    # que a pessoa consegue conferir a mão. Isso quer dizer que a identidade
+    # "inicial + entradas − saídas = final" pode diferir por centavos num
+    # relatório de centenas de produtos — é o arredondamento de cada linha, não
+    # erro de conta. Arredondar o rodapé também evita o 26865.370000000003 que
+    # a soma de floats devolve.
     total = {
-        "valor_inicial": sum(float(l["valor_inicial"]) for l in linhas),
-        "valor_entradas": sum(float(l["valor_entradas"]) for l in linhas),
-        "valor_saidas": sum(float(l["valor_saidas"]) for l in linhas),
-        "valor_final": sum(float(l["valor_final"]) for l in linhas),
+        campo: round(sum(float(l[campo]) for l in linhas), 2)
+        for campo in ("valor_inicial", "valor_entradas", "valor_saidas", "valor_final")
     }
     return {
         "inicio": str(inicio), "fim": str(fim), "congelado": congelado,

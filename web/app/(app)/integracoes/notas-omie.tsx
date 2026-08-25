@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { hoje, somarMeses } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -38,12 +39,7 @@ type Conferencia = {
   so_aqui: { numero: string | null; emitente: string | null; status: string }[];
 };
 
-const hoje = () => new Date().toISOString().slice(0, 10);
-const mesPassado = () => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 10);
-};
+const mesPassado = () => somarMeses(-1);
 const dataBr = (d: string | null) =>
   d ? new Date(d.slice(0, 10) + "T00:00").toLocaleDateString("pt-BR") : "—";
 

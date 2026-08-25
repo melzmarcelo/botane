@@ -2,7 +2,7 @@
 
 O caminho, e o que cada passo garante:
 
-    ListarNotaEnt ─▶ notas_entrada        chave da NF-e única: reimportar não duplica
+    ListarRecebimentos ─▶ notas_entrada   chave da NF-e única: reimportar não duplica
                   ─▶ CONCILIAÇÃO          item da nota encontra (ou não) o produto daqui
                   ─▶ CONVERSÃO            unidade da nota (CX) → unidade de estoque (KG)
                   ─▶ RATEIO               frete, desconto e IPI/ST diluídos por valor
@@ -23,7 +23,7 @@ from services import estoque as motor
 from services import custos
 from services.custos import CASAS_CUSTO, dec
 from services.omie import mapeadores
-from services.omie.cliente import ClienteOmie, ErroOmie
+from services.omie.cliente import DIALETO_HUNGARO, ClienteOmie, ErroOmie
 
 SISTEMA = "OMIE"
 
@@ -81,7 +81,19 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
         if achado:
             return achado["id_produto"], None, 100.0, "vinculo"
 
-    # 2. EAN — chave natural, não depende de quem digitou
+    # 2. identidade do produto no próprio Omie. O item do recebimento traz o
+    # `nIdProduto`, e o catálogo importado guardou esse mesmo número em
+    # `codigo_omie`: é o de-para que o Omie já fez, e não depende de EAN nem de
+    # texto. Quem importou o catálogo antes das notas encontra tudo por aqui.
+    if item.get("codigo_omie"):
+        cur.execute(
+            "SELECT id FROM produtos WHERE codigo_omie = %s AND ativo", (item["codigo_omie"],)
+        )
+        achado = cur.fetchone()
+        if achado:
+            return achado["id"], None, 100.0, "codigo_omie"
+
+    # 3. EAN — chave natural, não depende de quem digitou
     if ean:
         cur.execute(
             "SELECT id FROM produtos WHERE codigo_barras = %s AND ativo", (ean,)
@@ -90,7 +102,7 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
         if achado:
             return achado["id"], None, 100.0, "ean"
 
-    # 3. código no fornecedor — resolve hortifrúti e distribuidor sem EAN.
+    # 4. código no fornecedor — resolve hortifrúti e distribuidor sem EAN.
     # Só produto ativo, como no EAN: produto desativado guarda saldo e razão, mas
     # amarrar nota nova nele o ressuscitaria na compra sem ninguém ter decidido.
     if codigo and id_fornecedor:
@@ -104,7 +116,7 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
         if achado:
             return achado["id_produto"], None, 100.0, "fornecedor"
 
-    # 4. semelhança de descrição (+ NCM igual) → só sugestão
+    # 5. semelhança de descrição (+ NCM igual) → só sugestão
     descricao = item.get("descricao_fornecedor") or ""
     cur.execute(
         "SELECT id, nome, ncm FROM produtos WHERE ativo AND controla_estoque LIMIT 2000"
@@ -302,6 +314,56 @@ def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None
     return calcular_nota(cur, item["id_nota"])
 
 
+def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
+    """Passa a cascata de novo nos itens que ficaram sem produto.
+
+    Existe por causa da ordem em que as coisas acontecem de verdade: é a NOTA
+    que revela quais insumos a casa compra, então quase sempre as notas entram
+    antes de o cadastro estar pronto. Sem isto, cada item que não encontrou
+    produto no dia da importação ficaria pendente para sempre — numa conta real,
+    109 de 114 itens passaram a encontrar produto assim que o catálogo do Omie
+    chegou, e vinculá-los na mão seria trabalho de um dia inteiro.
+
+    ⚠️ **Nota já lançada não se mexe**: os movimentos dela estão no razão, e
+    trocar o produto do item faria a tela contar uma história diferente do que
+    o estoque registrou. Item que alguém marcou como ignorado também fica —
+    é decisão tomada, não pendência.
+    """
+    onde = "AND i.id_nota = %s" if id_nota else ""
+    parametros = [id_unidade] + ([id_nota] if id_nota else [])
+    cur.execute(
+        f"""SELECT i.id, i.id_nota, i.codigo_fornecedor, i.codigo_omie, i.codigo_barras,
+                   i.ncm, i.descricao_fornecedor, n.id_fornecedor
+              FROM nota_itens i
+              JOIN notas_entrada n ON n.id = i.id_nota
+             WHERE n.id_unidade = %s AND n.status <> 'LANCADA'
+               AND i.id_produto IS NULL AND NOT i.ignorado {onde}
+             ORDER BY i.id_nota, i.seq""",
+        parametros,
+    )
+    pendentes = [dict(r) for r in cur.fetchall()]
+
+    vinculados, sugeridos, notas_mexidas = 0, 0, set()
+    for item in pendentes:
+        achado, sugestao, score, _como = conciliar_item(cur, item, item["id_fornecedor"])
+        if not achado and not sugestao:
+            continue
+        cur.execute(
+            "UPDATE nota_itens SET id_produto = %s, sugestao_produto = %s, sugestao_score = %s"
+            " WHERE id = %s",
+            (achado, sugestao, score, item["id"]),
+        )
+        vinculados += 1 if achado else 0
+        sugeridos += 1 if (sugestao and not achado) else 0
+        notas_mexidas.add(item["id_nota"])
+
+    for nota in notas_mexidas:
+        calcular_nota(cur, nota)
+
+    return {"pendentes": len(pendentes), "vinculados": vinculados, "sugeridos": sugeridos,
+            "notas": len(notas_mexidas)}
+
+
 def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                 pode_retroativo: bool = False) -> dict:
     """Transforma a nota em movimento de estoque. Só com tudo conciliado."""
@@ -327,6 +389,31 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                 f"{pendentes} item(ns) ainda sem produto vinculado. "
                 "Vincule ou marque como 'não controla estoque' antes de lançar."
             ),
+        )
+
+    # ⚠️ **Produto sem unidade de estoque não entra no razão.** Quantidade sem
+    # unidade é número sem significado: "3" de champignon não diz se são três
+    # bandejas ou três quilos, e o custo médio que sair daí contamina a ficha, o
+    # CMV e a próxima compra. O catálogo do Omie cria rascunho sem unidade de
+    # propósito (a sigla do fornecedor pode não existir na casa) — é aqui que a
+    # dívida é cobrada. Todos de uma vez: quem for corrigir corrige a nota
+    # inteira numa ida, não descobre um por lançamento recusado.
+    cur.execute(
+        """SELECT p.nome FROM nota_itens i
+             JOIN produtos p ON p.id = i.id_produto
+            WHERE i.id_nota = %s AND NOT i.ignorado AND p.um_estoque IS NULL
+            ORDER BY i.seq""",
+        (id_nota,),
+    )
+    sem_unidade = [r["nome"] for r in cur.fetchall()]
+    if sem_unidade:
+        mostra = ", ".join(sem_unidade[:3])
+        resto = f" e mais {len(sem_unidade) - 3}" if len(sem_unidade) > 3 else ""
+        raise HTTPException(
+            status_code=400,
+            detail=(f"{len(sem_unidade)} produto(s) ainda sem unidade de estoque: {mostra}{resto}. "
+                    "Defina a unidade no cadastro antes de lançar — sem ela a quantidade "
+                    "não significa nada."),
         )
 
     # `id_local_padrao` vem junto: o local é do PRODUTO. Uma nota traz congelado
@@ -477,14 +564,17 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
                    (id_nota, seq, descricao_fornecedor, codigo_fornecedor, codigo_barras, ncm,
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
                     valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
-                    sugestao_score, frete_informado, outros_informado)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    sugestao_score, frete_informado, outros_informado, ignorado,
+                    codigo_omie)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
              item.get("valor_acrescimo") or 0,
              item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
-             item.get("frete_informado"), item.get("outros_informado")),
+             item.get("frete_informado"), item.get("outros_informado"),
+             bool(item.get("ignorado")), item.get("codigo_omie")),
         )
 
     calcular_nota(cur, id_nota)
@@ -532,35 +622,106 @@ def janela(cur, id_unidade: int, desde: date | None = None,
                     f"com {FOLGA_DIAS} dias de folga")
 
 
+# O módulo das notas de compra. Não é `produtos/notaentrada` — ver o mapeador
+# `recebimento_de_nfe`: aquele é o lançamento manual do Omie, este é o que
+# recebe as NF-e dos fornecedores.
+MODULO_NOTAS = "produtos/recebimentonfe"
+LISTA_NOTAS = "ListarRecebimentos"
+ITENS_DA_NOTA = "ConsultarRecebimento"
+
+# Falhas seguidas no detalhe param a varredura. Uma nota problemática é uma
+# nota; cinco em sequência é a conta recusando — e insistir é o que faz o Omie
+# bloquear a integração inteira.
+FALHAS_SEGUIDAS = 5
+
+
+def _ja_temos(cur, id_unidade: int, nota: dict) -> bool:
+    """A nota já está aqui? É o que evita a chamada cara do detalhe."""
+    if nota.get("chave_nfe"):
+        cur.execute("SELECT 1 FROM notas_entrada WHERE chave_nfe = %s", (nota["chave_nfe"],))
+    elif nota.get("id_omie"):
+        cur.execute("SELECT 1 FROM notas_entrada WHERE id_omie = %s", (nota["id_omie"],))
+    else:
+        return False
+    return cur.fetchone() is not None
+
+
 def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = None,
-                desde: date | None = None) -> dict:
-    """Puxa as notas de entrada da janela e grava o que ainda não existe aqui."""
+                desde: date | None = None, teto_paginas: int = 40) -> dict:
+    """Puxa as notas de entrada da janela e grava o que ainda não existe aqui.
+
+    ⚠️ **`ListarRecebimentos` não aceita filtro de data.** Foram testados
+    `dDtInicial`, `dDataInicial`, `dEmissaoDe`, `dDtEmissaoDe` e
+    `dRegistroInicial` — todos "não faz parte da estrutura". O que ele aceita é
+    `cEtapa` e `nIdFornecedor`, que não servem para janela. Então o recorte de
+    período é FEITO AQUI, varrendo **da última página para a primeira**: a lista
+    vem da nota mais velha para a mais nova, e parar na primeira página inteira
+    fora da janela é o que impede uma sincronização diária de atravessar três
+    anos de histórico.
+
+    ⚠️ **O detalhe só é pedido para nota que ainda não existe aqui.** A lista
+    não traz itens, e cada `ConsultarRecebimento` é uma chamada: numa conta de
+    3.670 notas, pedir o detalhe de todas custaria mais de meia hora e a conta
+    bloqueada no meio. Como a dedução é pela chave da NF-e, a segunda
+    sincronização do dia faz zero chamada de detalhe.
+    """
     inicio, motivo = janela(cur, id_unidade, desde, dias)
-    desde = inicio.strftime("%d/%m/%Y")
-    novas, repetidas, paginas = 0, 0, 0
+    novas, repetidas, paginas, antigas, falhas = 0, 0, 0, 0, 0
+    seguidas, truncou = 0, {}
+
+    def parou_no_teto(trazidos, total):
+        truncou.update({"trazidos": trazidos, "total_no_omie": total})
+
     try:
-        for dados, registros in cliente.paginar(
-            # ⚠️ `ListarNotaEnt` NÃO aceita `apenas_importado`: a conta real
-            # devolveu "Tag [APENAS_IMPORTADO] não faz parte da estrutura".
-            # Cada chamada com parâmetro inválido gasta cota — e cota gasta é o
-            # que faz o Omie bloquear a conta inteira.
-            "produtos/notaentrada", "ListarNotaEnt", "nfe_encontradas",
-            {"dDtInicial": desde},
+        for _dados, registros in cliente.paginar(
+            MODULO_NOTAS, LISTA_NOTAS, "recebimentos",
+            por_pagina=50, maximo=teto_paginas, ao_truncar=parou_no_teto,
+            dialeto=DIALETO_HUNGARO, do_fim=True,
         ):
             paginas += 1
-            for bruto in registros:
-                nota = mapeadores.nota_de_entrada(bruto)
-                _id, nova = gravar_nota(cur, id_unidade, nota, bruto)
+            fora = 0
+            # Dentro da página, da mais nova para a mais velha — assim o corte
+            # da janela acontece o quanto antes.
+            for bruto in reversed(registros):
+                cabecalho = mapeadores.recebimento_de_nfe(bruto)
+                data = cabecalho.get("data_entrada") or cabecalho.get("data_emissao")
+                if data and data < inicio:
+                    fora += 1
+                    continue
+                if _ja_temos(cur, id_unidade, cabecalho):
+                    repetidas += 1
+                    continue
+                try:
+                    detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
+                                             {"nIdReceb": int(cabecalho["id_omie"])})
+                    seguidas = 0
+                except (ErroOmie, TypeError, ValueError):
+                    # Uma nota que não abre não pode levar junto as que já
+                    # entraram: conta, segue, e o log diz quantas ficaram.
+                    falhas += 1
+                    seguidas += 1
+                    if seguidas >= FALHAS_SEGUIDAS:
+                        raise
+                    continue
+                nota = mapeadores.recebimento_de_nfe(detalhe)
+                _id, nova = gravar_nota(cur, id_unidade, nota, detalhe)
                 novas += 1 if nova else 0
                 repetidas += 0 if nova else 1
+            antigas += fora
+            # Página inteira fora da janela: daqui para trás só fica mais velho.
+            if fora == len(registros):
+                break
     except ErroOmie as e:
-        _registrar(cur, "produtos/notaentrada", "ListarNotaEnt", "ERRO", novas, e.mensagem,
+        _registrar(cur, MODULO_NOTAS, LISTA_NOTAS, "ERRO", novas, e.mensagem,
                    cliente.modo, paginas)
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
-    _registrar(cur, "produtos/notaentrada", "ListarNotaEnt",
+    recado = f"{novas} nova(s), {repetidas} já existiam — {motivo}"
+    if falhas:
+        recado += f"; {falhas} nota(s) sem detalhe"
+    _registrar(cur, MODULO_NOTAS, LISTA_NOTAS,
                "OK" if novas or repetidas else "VAZIO", novas + repetidas,
-               f"{novas} nova(s), {repetidas} já existiam — {motivo}", cliente.modo, paginas)
+               recado, cliente.modo, paginas)
 
     # Fornecedor que nasce da nota entra com nome e CNPJ e mais nada. Completar
     # agora custa uma chamada e evita a lista de fornecedores pela metade.
@@ -578,7 +739,11 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                        "não deu para completar os fornecedores desta leva", cliente.modo)
 
     return {"novas": novas, "repetidas": repetidas, "paginas": paginas, "modo": cliente.modo,
-            "desde": inicio, "janela": motivo, "fornecedores_completados": completados}
+            "desde": inicio, "janela": motivo, "fornecedores_completados": completados,
+            "fora_da_janela": antigas, "sem_detalhe": falhas,
+            # Só preenchido quando a varredura parou no teto de páginas: sem
+            # isso, "0 nova(s)" não se distingue de "não deu tempo de chegar lá".
+            "faltou_varrer": truncou or None}
 
 
 def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,
@@ -593,16 +758,21 @@ def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,
     do_omie: dict[str, dict] = {}
     try:
         for _dados, registros in cliente.paginar(
-            "produtos/notaentrada", "ListarNotaEnt", "nfe_encontradas",
-            {"dDtInicial": inicio.strftime("%d/%m/%Y"),
-             "dDtFinal": fim.strftime("%d/%m/%Y"), "apenas_importado": "N"},
+            MODULO_NOTAS, LISTA_NOTAS, "recebimentos", por_pagina=50,
+            dialeto=DIALETO_HUNGARO, do_fim=True,
         ):
-            for bruto in registros:
-                n = mapeadores.nota_de_entrada(bruto)
+            # A lista vem da mais velha para a mais nova e não aceita filtro de
+            # data: varre-se de trás e para-se quando a página inteira já é
+            # anterior ao período. O corte é nosso — sem ele a conferência
+            # atravessaria o histórico inteiro para comparar uma semana.
+            antes_do_periodo = 0
+            for bruto in reversed(registros):
+                n = mapeadores.recebimento_de_nfe(bruto)
                 data = n.get("data_entrada") or n.get("data_emissao")
-                # A janela do Omie pode vir mais larga que a pedida; o corte
-                # final é nosso, senão a conta compara períodos diferentes.
-                if data and not (inicio <= _como_data(data) <= fim):
+                if data and _como_data(data) < inicio:
+                    antes_do_periodo += 1
+                    continue
+                if data and _como_data(data) > fim:
                     continue
                 chave = n.get("chave_nfe") or f"omie:{n.get('id_omie')}"
                 do_omie[chave] = {
@@ -612,6 +782,8 @@ def conferir_notas(cur, id_unidade: int, cliente: ClienteOmie,
                     "data": data,
                     "valor_total": float(dec(n.get("valor_total"))),
                 }
+            if antes_do_periodo == len(registros):
+                break
     except ErroOmie as e:
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
