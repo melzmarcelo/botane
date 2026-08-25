@@ -1,11 +1,20 @@
+# Versões PRESAS no que foi testado.
+#
+# ⚠️ Sem `==`, o servidor instala o que estiver mais novo no dia do deploy — que
+# não é o que passou nas 811 verificações aqui. Uma quebra assim aparece no
+# start, em produção, e o log fala de uma biblioteca que ninguém tocou.
+#
+# Para subir uma versão: mude aqui, rode a bateria inteira na base local, e só
+# então promova para `producao`.
+
 fastapi==0.115.0
-uvicorn[standard]
-psycopg2-binary
-pydantic[email]
-python-dotenv
-PyJWT
-bcrypt
-python-multipart
-Pillow
-httpx
-cryptography
+uvicorn[standard]==0.30.6
+psycopg2-binary==2.9.10
+pydantic[email]==2.11.7
+python-dotenv==1.0.1
+PyJWT==2.8.0
+bcrypt==4.0.1
+python-multipart==0.0.9
+Pillow==12.2.0
+httpx==0.28.1
+cryptography==45.0.7

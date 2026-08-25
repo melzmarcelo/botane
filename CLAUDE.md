@@ -41,6 +41,19 @@ coisa à vontade. Só o que passou por isso é promovido.
 Ainda **não há remoto nem servidor**: os dois branches são locais. Quando houver, `producao`
 é quem aponta para lá.
 
+### Preparado para o dia do deploy
+- **[`docs/deploy.md`](docs/deploy.md)** — o roteiro: o que decidir, banco, API, web,
+  verificação em oito passos, backup e como promover uma versão
+- **`api/.env.producao.exemplo`** e **`web/.env.producao.exemplo`** — as variáveis, com o
+  porquê de cada uma. `api/.env` continua fora do versionamento
+- ⚠️ **`requirements.txt` tem as versões PRESAS** no que passou nos testes. Estava com 10 de
+  11 sem `==`: o servidor instalaria o que estivesse mais novo no dia, e a quebra apareceria
+  no start, em produção, falando de uma biblioteca que ninguém tocou
+- ⚠️ Os três erros que o roteiro antecipa, porque são os que sempre acontecem: **CORS** sem o
+  domínio exato (o navegador barra o login e a tela fica muda), **`NEXT_PUBLIC_API` lido na
+  compilação** (mudar depois do build não muda nada) e **`WEB_URL` apontando para localhost**
+  (o link do e-mail de recuperação chega e não abre)
+
 ## Estado
 
 - Mapeamento e **etapas 1 a 6 — a primeira parte inteira** (fundação, cadastros, fichas,
