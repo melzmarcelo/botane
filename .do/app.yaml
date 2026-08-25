@@ -21,10 +21,23 @@ databases:
   - name: db
     engine: PG
     version: "16"
-    # Menor tamanho para começar. O razão é append-only e só cresce: acompanhar
-    # o uso é parte do trabalho, não um detalhe.
-    size: db-s-dev-database
-    num_nodes: 1
+    # 🔴 **Banco de DESENVOLVIMENTO — não tem backup.** É o que sobe junto com o
+    # app, de graça, e serve para a primeira subida e para conferir que tudo
+    # funciona. NÃO serve para o dado do cliente: o razão é append-only, o que o
+    # torna auditável e não o torna recuperável.
+    #
+    # Antes de qualquer nota real entrar, crie um cluster gerenciado (que tem
+    # backup e restauração por ponto no tempo) e troque este bloco por:
+    #
+    #     - name: db
+    #       engine: PG
+    #       version: "16"
+    #       production: true
+    #       cluster_name: botane-db
+    #
+    # `db-s-dev-database` NÃO é um tamanho válido aqui: o banco de
+    # desenvolvimento se declara por `production: false`, sem tamanho nenhum.
+    production: false
 
 services:
   # --------------------------------------------------------------------- API

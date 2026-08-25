@@ -66,6 +66,15 @@ python api/verificar_deploy.py https://<o-endereço-que-a-DO-deu>
 São doze checagens **só de leitura** — a suíte de fumaça NÃO serve aqui: ela cria produto,
 lança nota e chega a gravar credencial de teste na mesma linha da real.
 
+### 🔴 O banco que sobe com o app não tem backup
+
+O `app.yaml` declara `production: false` — o banco de **desenvolvimento**, que vem junto e
+serve para a primeira subida e para conferir que tudo funciona. **Ele não tem backup.**
+
+Antes de a primeira nota real entrar, crie um cluster gerenciado e troque o bloco por
+`production: true` + `cluster_name`. O razão é append-only: isso o torna auditável e **não**
+o torna recuperável.
+
 ### Três coisas que o App Platform impõe
 
 **O filesystem é efêmero.** `api/uploads/` (a logo da empresa) e `api/arquivos/emails/` (os
