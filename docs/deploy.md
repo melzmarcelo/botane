@@ -86,10 +86,15 @@ este módulo muda").
 **Um worker no começo.** As migrações rodam no start de **cada** worker. São idempotentes e o
 `schema_migrations` segura a repetição, mas com um só dá para ler o log e entender.
 
-**A versão do runtime não é a de casa.** Local roda Python 3.13 e Node 24; o `runtime.txt` e o
-`.nvmrc` declaram **3.12** e **22**, que é o que os buildpacks suportam com segurança. É uma
-divergência conhecida entre o que foi testado e o que vai rodar — e é por isso que o
-`verificar_deploy.py` existe. Se a DO já suportar as versões de casa, prefira-as.
+**A versão do Python é declarada em `.python-version`, não em `runtime.txt`.** O buildpack
+recusa o `runtime.txt` — ele foi descontinuado, e a mensagem de erro é clara sobre isso. O
+arquivo leva só o número maior (`3.13`), sem `python-` na frente e sem a versão de correção:
+prender a correção impede o app de receber atualização de segurança a cada build.
+
+O Python online é **o mesmo de casa** (3.13). O Node não: local é 24, e o `.nvmrc` declara
+**22**, que é LTS e é o que o `engines` do `package.json` já pedia. Para uma build de Next a
+diferença é baixa, mas é divergência — e é uma das coisas que o `verificar_deploy.py`
+existe para pegar.
 
 ---
 

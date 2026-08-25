@@ -49,9 +49,11 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - **`api/verificar_deploy.py`** — doze checagens **só de leitura** contra o que está no ar.
   ⚠️ A suíte de fumaça NÃO serve para produção: ela cria produto, lança nota e grava
   credencial de teste na mesma linha da real.
-- ⚠️ **O runtime online não é o de casa**: local é Python 3.13 e Node 24; `runtime.txt` e
-  `.nvmrc` declaram 3.12 e 22, que os buildpacks da DO suportam. Divergência conhecida — é
-  para isso que o verificador existe.
+- ⚠️ **A versão do Python vai em `api/.python-version`, NUNCA em `runtime.txt`** — o buildpack
+  da DO recusa o segundo, que foi descontinuado, e o primeiro deploy morre no build. Só o
+  número maior (`3.13`), sem prefixo e sem a versão de correção: prender a correção impede o
+  app de receber atualização de segurança. O Python online é o mesmo de casa; o Node não
+  (local 24, `.nvmrc` 22, que é LTS e o que o `engines` já pedia).
 - ⚠️ **Filesystem efêmero no App Platform**: `api/uploads/` (logo) e `api/arquivos/emails/`
   somem a cada deploy. Nada insubstituível, mas a saída definitiva é o Spaces —
   `api/arquivos.py` já foi escrito para essa troca.
