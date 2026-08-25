@@ -24,6 +24,7 @@ O que ela cobra é o que quebra num primeiro deploy, na ordem em que quebra:
 """
 
 import json
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -69,6 +70,24 @@ def pedir(url, metodo="GET", corpo=None, token=None, timeout=30):
         return 0, str(e)[:200], {}
 
 
+def enderecos_da_api(base):
+    """Os endereços de API que ficaram gravados no JavaScript da tela de login.
+
+    ⚠️ Não dá para perguntar isso ao servidor: `NEXT_PUBLIC_API` não existe em
+    tempo de execução, ela foi substituída por texto no `build`. O único lugar
+    onde a resposta está é dentro dos pacotes que o navegador baixa.
+    """
+    st, html, _ = pedir(f"{base}/login")
+    if st != 200 or not isinstance(html, str):
+        return set()
+    achados = set()
+    for src in re.findall(r'src="(/_next/static/[^"]+\.js)"', html):
+        st, txt, _ = pedir(f"{base}{src}")
+        if st == 200 and isinstance(txt, str):
+            achados |= set(re.findall(r"https?://[a-zA-Z0-9.\-]+(?::\d+)?/api", txt))
+    return achados
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__)
@@ -97,6 +116,18 @@ def main() -> int:
            st == 200 and "Botané por dentro" in str(corpo), st)
     st, _, _ = pedir(f"{base}/manifest.webmanifest")
     checar("o manifest do PWA é servido", st == 200, st)
+
+    # ⚠️ A checagem que teria poupado uma tarde. `NEXT_PUBLIC_API` entra no
+    # JavaScript na COMPILAÇÃO: mudá-la no painel sem recompilar não muda nada,
+    # e o sintoma na tela é só "Failed to fetch" — sem dizer que endereço tentou.
+    # Aqui o endereço é lido de dentro do pacote compilado e comparado com o
+    # host que está sendo conferido.
+    embutidos = enderecos_da_api(base)
+    esperado = urllib.parse.urlparse(api).netloc
+    checar(f"o front foi compilado apontando para {esperado}",
+           any(urllib.parse.urlparse(e).netloc == esperado for e in embutidos)
+           if embutidos else False,
+           embutidos or "(nenhum endereço encontrado nos pacotes)")
 
     print("\n4. dá para entrar")
     email = input("  e-mail do administrador: ").strip()

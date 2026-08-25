@@ -17,6 +17,27 @@
 name: botane
 region: nyc
 
+# O endereço próprio do sistema.
+#
+# ⚠️ **Sem este bloco, aplicar o spec DESLIGA o domínio.** O certificado
+# continua lá (a DO guarda o registro e renova), então o navegador abre sem
+# aviso de segurança — e leva 404 em tudo, porque a borda não sabe mais para
+# qual app mandar. O sintoma é traiçoeiro: cadeado verde, página que não existe.
+# Dá para ver pela resposta: o domínio ligado devolve `x-do-app-origin`, o
+# desligado não devolve.
+#
+# ⚠️ `PRIMARY` muda o `${APP_URL}` que aparece nas variáveis abaixo. Como
+# `NEXT_PUBLIC_API` é BUILD_TIME, trocar o primário **exige recompilar o `web`**
+# no mesmo deploy — senão o front continua chamando o endereço antigo, e aí
+# passa a ser uma requisição entre origens, que o CORS barra.
+#
+# ⚠️ Nada de `zone:` aqui. O DNS é do HostGator: o `zone` diz à DO que ela
+# manda na zona, e ela não manda. O que existe lá é um CNAME
+# `sistema` → `botane-app-zqokg.ondigitalocean.app`.
+domains:
+  - domain: sistema.botanedeliecafe.com.br
+    type: PRIMARY
+
 databases:
   # O cluster gerenciado que já existe — anexado, não criado aqui.
   #
@@ -103,10 +124,15 @@ services:
         scope: RUN_TIME
         value: "false"
       # Mesma origem: a lista existe por cinto e suspensório, não por
-      # necessidade. `${APP_URL}` é o domínio que o App Platform atribui.
+      # necessidade. `${APP_URL}` é o domínio PRIMÁRIO do app.
+      #
+      # ⚠️ O endereço `.ondigitalocean.app` fica na lista de propósito: ele
+      # nunca deixa de funcionar, e é por onde se entra quando o domínio
+      # próprio quebra (DNS vencido, CNAME apagado). Sem ele aqui, o dia do
+      # problema no DNS seria também o dia sem acesso ao sistema.
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: ${APP_URL}
+        value: ${APP_URL},https://botane-app-zqokg.ondigitalocean.app
       # Entra no LINK do e-mail de recuperação de senha. Apontando para o lugar
       # errado, o link chega e não abre.
       - key: WEB_URL

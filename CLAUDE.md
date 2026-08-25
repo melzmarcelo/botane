@@ -544,6 +544,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   escrito oito vezes, e com dois valores: 12 no start e 8 nos formulários — senha aceita na
   criação do administrador era recusada na troca obrigatória do primeiro acesso. A regra de
   verdade é a do servidor; o `minLength` só evita a viagem.
+- ⚠️ **Domínio próprio: o certificado sobrevive ao desligamento, o roteamento não.** O sistema
+  atende em `sistema.botanedeliecafe.com.br` (CNAME no HostGator → `botane-app-zqokg.
+  ondigitalocean.app`; roteamento e certificado na DO). Aplicar um spec **sem o bloco
+  `domains:`** desliga o domínio, e o sintoma engana: cadeado verde e **404 em tudo**. Quem
+  responde a pergunta é o cabeçalho — `x-do-app-origin` presente quer dizer ligado, ausente
+  quer dizer que a borda não sabe para qual app mandar. Por isso o bloco está no
+  `.do/app.yaml`. ⚠️ Trocar o **primário** muda o `${APP_URL}` e obriga a **recompilar o
+  `web`** no mesmo deploy (`NEXT_PUBLIC_API` é BUILD_TIME). O `.ondigitalocean.app` fica no
+  `CORS_ORIGINS` de propósito: é a porta dos fundos no dia em que o DNS quebrar.
+  `verificar_deploy.py` agora lê o endereço de dentro do JavaScript compilado e o compara com
+  o host conferido — é a única forma de ver essa variável depois do build.
 - ⚠️ **Marcador de configuração vira dado, e dado ruim não avisa.** O `ADMIN_EMAIL` do
   primeiro deploy subiu com o `DEFINA_NO_PAINEL` do `app.yaml` copiado tal e qual: passou pela
   guarda (não era o valor padrão, e a senha tinha 16 caracteres) e criou um administrador

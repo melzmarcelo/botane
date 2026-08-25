@@ -182,6 +182,48 @@ compilar de novo. É o segundo erro mais comum de deploy, atrás do CORS.
 
 ---
 
+## 3b. O domínio próprio
+
+O sistema mora em `sistema.botanedeliecafe.com.br`. O DNS é do **HostGator**; o roteamento e o
+certificado são da **DigitalOcean**. São dois lados, e cada um falha em silêncio de um jeito.
+
+**No HostGator** (cPanel ▸ Zone Editor), um registro só:
+
+| Tipo | Nome | Aponta para |
+|---|---|---|
+| CNAME | `sistema` | `botane-app-zqokg.ondigitalocean.app` |
+
+Nada de A: o endereço da borda da DO muda sem aviso, e IP fixo no DNS é uma quebra marcada
+para um dia qualquer.
+
+**Na DigitalOcean** (App ▸ Settings ▸ Domains ▸ Add Domain), o mesmo nome, com a opção **"You
+manage your domain"** — o DNS é do HostGator, e deixar a DO achar que manda na zona faz ela
+esperar por registros que ninguém vai criar. Marcar como **PRIMARY**. O certificado sai sozinho
+(Let's Encrypt) em poucos minutos depois que o CNAME resolve.
+
+⚠️ **O bloco `domains:` do `.do/app.yaml` tem de existir.** Aplicar um spec sem ele DESLIGA o
+domínio — e o sintoma engana: o certificado continua válido (a DO guarda o registro), então o
+navegador abre com cadeado verde e leva **404 em tudo**. Foi o que aconteceu em 25/08/2026.
+
+Como saber, sem adivinhar, se o domínio está ligado ao app:
+
+```
+curl -sI https://sistema.botanedeliecafe.com.br/login | grep -i x-do-app-origin
+```
+
+Ligado devolve `x-do-app-origin: <id do app>`. Desligado não devolve cabeçalho nenhum — a
+borda recebeu o pedido e não soube para onde mandar.
+
+⚠️ **Trocar o domínio primário obriga a RECOMPILAR o `web`.** `${APP_URL}` passa a ser o
+domínio novo, e `NEXT_PUBLIC_API` é `BUILD_TIME`: sem recompilar, o front continua chamando o
+endereço antigo — que passa a ser *outra origem*, e aí o CORS entra na história por uma porta
+que o desenho de um domínio só existia justamente para fechar.
+
+⚠️ O `.ondigitalocean.app` continua valendo, e está no `CORS_ORIGINS` de propósito: é por onde
+se entra no dia em que o DNS do domínio próprio quebrar.
+
+---
+
 ## 4. Verificar, na ordem
 
 Cada item falha de um jeito diferente. Vale rodar todos, e nesta ordem:
