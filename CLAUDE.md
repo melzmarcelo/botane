@@ -42,6 +42,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 é quem aponta para lá.
 
 ### Preparado para o dia do deploy
+- **`.do/app.yaml`** — o app inteiro no DigitalOcean App Platform: web em `/`, API em `/api` e
+  Postgres gerenciado. ⚠️ **Mesmo domínio de propósito**: com isso o navegador nunca faz
+  requisição entre origens e o CORS deixa de existir como problema. O App Platform remove o
+  prefixo antes de repassar, então nada muda no FastAPI — e o service worker já previa isso.
+- **`api/verificar_deploy.py`** — doze checagens **só de leitura** contra o que está no ar.
+  ⚠️ A suíte de fumaça NÃO serve para produção: ela cria produto, lança nota e grava
+  credencial de teste na mesma linha da real.
+- ⚠️ **O runtime online não é o de casa**: local é Python 3.13 e Node 24; `runtime.txt` e
+  `.nvmrc` declaram 3.12 e 22, que os buildpacks da DO suportam. Divergência conhecida — é
+  para isso que o verificador existe.
+- ⚠️ **Filesystem efêmero no App Platform**: `api/uploads/` (logo) e `api/arquivos/emails/`
+  somem a cada deploy. Nada insubstituível, mas a saída definitiva é o Spaces —
+  `api/arquivos.py` já foi escrito para essa troca.
 - **[`docs/deploy.md`](docs/deploy.md)** — o roteiro: o que decidir, banco, API, web,
   verificação em oito passos, backup e como promover uma versão
 - **`api/.env.producao.exemplo`** e **`web/.env.producao.exemplo`** — as variáveis, com o

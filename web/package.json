@@ -22,5 +22,8 @@
     "puppeteer-core": "^25.8.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20 <23"
   }
 }

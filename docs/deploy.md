@@ -28,6 +28,62 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 ---
 
+## 0b. Escolhido: DigitalOcean App Platform + GitHub
+
+**`.do/app.yaml`** descreve o app inteiro: web, API e Postgres gerenciado. As seções 1 a 3
+abaixo descrevem o que ele faz — leia-as para entender, execute o `app.yaml`.
+
+```bash
+doctl apps create --spec .do/app.yaml        # primeira vez
+doctl apps update <id> --spec .do/app.yaml   # depois
+```
+
+### A decisão que simplifica tudo: um domínio só
+
+Os dois componentes vivem no **mesmo endereço** — a web em `/`, a API em `/api`. Com isso o
+navegador nunca faz requisição entre origens, e **o CORS deixa de existir como problema**. Era
+o erro nº 1 do primeiro deploy, e some por construção.
+
+O App Platform **remove o prefixo** antes de repassar: o navegador chama `/api/notas` e o
+FastAPI recebe `/notas`. Nada muda no código — nem `root_path`, nem prefixo de router. O
+service worker já previa isto: ele ignora `/api` explicitamente.
+
+### Antes de rodar o `doctl`
+
+1. **Criar o repositório no GitHub** e apontar `github.repo` no `app.yaml` para ele.
+   ⚠️ **Privado.** O repositório não tem segredo (o `.env` está fora), mas tem o modelo de
+   dados e a lógica de custo da casa.
+2. **Autorizar o App Platform** a ler o repositório (uma vez, pelo painel da DO).
+3. **Pôr os três segredos pelo painel**, nunca no arquivo: `JWT_SECRET`, `ADMIN_EMAIL` e
+   `ADMIN_SENHA`.
+
+### Depois que subir
+
+```bash
+python api/verificar_deploy.py https://<o-endereço-que-a-DO-deu>
+```
+
+São doze checagens **só de leitura** — a suíte de fumaça NÃO serve aqui: ela cria produto,
+lança nota e chega a gravar credencial de teste na mesma linha da real.
+
+### Três coisas que o App Platform impõe
+
+**O filesystem é efêmero.** `api/uploads/` (a logo da empresa) e `api/arquivos/emails/` (os
+`.eml` de quando não há SMTP) **somem a cada deploy**. Nada insubstituível se perde — a logo se
+reenvia em dez segundos e o `.eml` é consumido na hora —, mas é preciso saber. A saída
+definitiva é o Spaces: `api/arquivos.py` já foi escrito para isso ("quando houver nuvem, só
+este módulo muda").
+
+**Um worker no começo.** As migrações rodam no start de **cada** worker. São idempotentes e o
+`schema_migrations` segura a repetição, mas com um só dá para ler o log e entender.
+
+**A versão do runtime não é a de casa.** Local roda Python 3.13 e Node 24; o `runtime.txt` e o
+`.nvmrc` declaram **3.12** e **22**, que é o que os buildpacks suportam com segurança. É uma
+divergência conhecida entre o que foi testado e o que vai rodar — e é por isso que o
+`verificar_deploy.py` existe. Se a DO já suportar as versões de casa, prefira-as.
+
+---
+
 ## 1. Banco
 
 ```sql

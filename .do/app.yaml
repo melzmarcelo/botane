@@ -1,0 +1,131 @@
+# Botané no DigitalOcean App Platform.
+#
+# Um app, três peças: a web em `/`, a API em `/api` e o Postgres gerenciado.
+#
+# ⚠️ **Os dois componentes no MESMO domínio, de propósito.** Assim o navegador
+# nunca faz requisição entre origens — e o CORS, que é o erro nº 1 de todo
+# primeiro deploy, deixa de existir. O service worker já previa isto: ele ignora
+# `/api` explicitamente ("se um dia a API passar a morar na mesma origem").
+#
+# ⚠️ O App Platform **remove o prefixo** antes de repassar (`preserve_path_prefix`
+# fica falso): o navegador chama `/api/notas` e a API recebe `/notas`. Por isso
+# nada muda no FastAPI — nem `root_path`, nem prefixo de router.
+#
+# Para subir:  doctl apps create --spec .do/app.yaml
+# Para atualizar:  doctl apps update <id> --spec .do/app.yaml
+
+name: botane
+region: nyc
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    # Menor tamanho para começar. O razão é append-only e só cresce: acompanhar
+    # o uso é parte do trabalho, não um detalhe.
+    size: db-s-dev-database
+    num_nodes: 1
+
+services:
+  # --------------------------------------------------------------------- API
+  - name: api
+    source_dir: /api
+    github:
+      repo: SEU-USUARIO/botane
+      branch: producao
+      # ⚠️ Falso de propósito na primeira subida: deploy automático a cada push
+      # é bom quando existe rotina de verificação. Enquanto não existe, cada
+      # promoção é um ato consciente.
+      deploy_on_push: false
+    environment_slug: python
+    # ⚠️ Um worker no começo. As migrações rodam no START de cada worker — são
+    # idempotentes e o `schema_migrations` segura a repetição, mas com um só é
+    # possível ler o log e entender o que aconteceu.
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    run_command: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    http_port: 8080
+    routes:
+      - path: /api
+    health_check:
+      http_path: /saude
+      initial_delay_seconds: 30
+      period_seconds: 20
+    envs:
+      # O banco preenche sozinho — nada de senha escrita neste arquivo.
+      - key: DB_HOST
+        scope: RUN_TIME
+        value: ${db.HOSTNAME}
+      - key: DB_PORT
+        scope: RUN_TIME
+        value: ${db.PORT}
+      - key: DB_USER
+        scope: RUN_TIME
+        value: ${db.USERNAME}
+      - key: DB_PASSWORD
+        scope: RUN_TIME
+        value: ${db.PASSWORD}
+      - key: DB_DATABASE
+        scope: RUN_TIME
+        value: ${db.DATABASE}
+      # O Postgres gerenciado da DO exige TLS.
+      - key: DB_SSLMODE
+        scope: RUN_TIME
+        value: require
+
+      # ⚠️ NÃO escreva o valor aqui. Ponha pelo painel, marcado como SECRET, e
+      # guarde uma cópia junto com as senhas: dele sai a chave que cifra as
+      # credenciais do Omie e do SMTP no banco. Trocar depois invalida as duas,
+      # e elas não voltam em claro nem para o administrador.
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: DEFINA_NO_PAINEL
+
+      - key: DEBUG
+        scope: RUN_TIME
+        value: "false"
+      # Mesma origem: a lista existe por cinto e suspensório, não por
+      # necessidade. `${APP_URL}` é o domínio que o App Platform atribui.
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: ${APP_URL}
+      # Entra no LINK do e-mail de recuperação de senha. Apontando para o lugar
+      # errado, o link chega e não abre.
+      - key: WEB_URL
+        scope: RUN_TIME
+        value: ${APP_URL}
+
+      # Só valem na PRIMEIRA subida, com a tabela de usuários vazia. Depois
+      # disso mudar aqui não muda o usuário que já existe.
+      - key: ADMIN_EMAIL
+        scope: RUN_TIME
+        value: DEFINA_NO_PAINEL
+      - key: ADMIN_SENHA
+        scope: RUN_TIME
+        type: SECRET
+        value: DEFINA_NO_PAINEL
+
+  # --------------------------------------------------------------------- web
+  - name: web
+    source_dir: /web
+    github:
+      repo: SEU-USUARIO/botane
+      branch: producao
+      deploy_on_push: false
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    build_command: npm ci && npm run build
+    run_command: npm start -- -p $PORT
+    http_port: 8080
+    routes:
+      - path: /
+    envs:
+      # ⚠️ `BUILD_TIME`: esta variável entra no JavaScript na COMPILAÇÃO. Mudá-la
+      # sem recompilar não muda nada — é o erro nº 2 de todo primeiro deploy.
+      # `/api` é o caminho do outro componente no mesmo domínio.
+      - key: NEXT_PUBLIC_API
+        scope: BUILD_TIME
+        value: ${APP_URL}/api
