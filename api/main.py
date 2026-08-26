@@ -3,6 +3,7 @@
 Sobe o pool, roda as migrações e garante que exista um administrador.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -13,6 +14,7 @@ from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
 import arquivos
+from services.omie import agenda as agenda_omie
 from config import (
     ADMIN_EMAIL,
     ADMIN_EMAIL_PADRAO,
@@ -128,8 +130,27 @@ async def lifespan(app: FastAPI):
     arquivos.garantir_pasta()
     run_migrations()
     garantir_admin()
+
+    # ⚠️ **O agendador do Omie sobe SEMPRE; quem decide é a configuração.** O
+    # padrão de `agenda_frequencia` é MANUAL, então numa casa que não ligou nada
+    # este laço acorda de minuto em minuto, faz uma consulta com índice e volta
+    # a dormir. Ligar ou desligar não exige reiniciar a API — se o laço só
+    # subisse quando houvesse agenda, mudar a configuração pediria um restart, e
+    # ninguém lembraria disso.
+    parar = asyncio.Event()
+    tarefa = asyncio.create_task(agenda_omie.laco(parar))
+
     print(f"[botane] API {VERSAO} pronta em http://localhost:{PORT}")
     yield
+
+    # ⚠️ Avisa e ESPERA. Sem o `await`, o processo morre no meio de uma busca e
+    # a transação fica para o Postgres desfazer — com o advisory lock preso até
+    # a conexão cair, o que atrasa a próxima instância.
+    parar.set()
+    try:
+        await asyncio.wait_for(tarefa, timeout=10)
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        tarefa.cancel()
     close_pool()
 
 

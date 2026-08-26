@@ -629,6 +629,33 @@
         ou do Omie é o documento do fornecedor; mudar valor ali faria o sistema divergir da
         nota fiscal sem deixar rastro.
       </p>
+
+      <h3>Buscar no Omie sozinho</h3>
+      <p>
+        Em <strong>Integrações</strong> dá para escolher se o sistema procura as notas por
+        conta própria: <strong>manual</strong> (só quando alguém clica),
+        <strong>a cada hora</strong> ou <strong>uma vez por dia</strong>, na hora que a casa
+        escolher. Nota que chega na sexta e ninguém busca até segunda é nota que não entrou no
+        estoque — e o CMV do fim de semana sai com compra a menos.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Buscar custa cota</p>
+        <p>
+          O Omie limita o uso e <strong>bloqueia a integração inteira</strong> de quem passa do
+          ponto. Por isso a busca automática nasce desligada, e “a cada hora” são 24 buscas por
+          dia: se a casa não recebe nota de hora em hora, uma vez por dia entrega o mesmo
+          resultado por uma fração da cota. Pela mesma razão, o agendador <strong>não
+          insiste</strong> quando falha — registra o erro e tenta no horário seguinte.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Duas datas diferentes</p>
+        <p>
+          A tela mostra <em>quando o agendador rodou</em> e <em>quando alguma nota nova
+          chegou</em>. Sem as duas, “não está rodando” e “roda e não acha nada” ficam
+          indistinguíveis — e a segunda é o normal na maior parte dos dias.
+        </p>
+      </div>
     </section>
 
     <!-- ================================================================ ficha -->

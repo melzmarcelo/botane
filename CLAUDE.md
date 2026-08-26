@@ -146,6 +146,11 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   o botão de salvar está no fim de um formulário longo, então quem clicava não via confirmação
   nenhuma e clicava de novo. Sucesso some em 6 s; **erro fica até fecharem**. O aviso pode levar
   UMA ação ("cadastrar outro"), que é a resposta ao "cadastrei, e agora?".
+  ⚠️ **Os dois somem sozinhos** (26/08/2026): sucesso em 6 s, erro em 14 — a frase do erro é
+  mais longa. Antes o erro ficava até alguém fechar, e uma pilha que não se limpa acaba tapando
+  a tela em uso. O que torna isso seguro é o aviso **parar de contar enquanto o ponteiro está
+  em cima** (ou o foco dentro): o medo real era a mensagem sumir no meio da leitura. A barrinha
+  embaixo mostra quanto falta — sem ela, o aviso sumindo parece a tela piscando.
   ⚠️ Erro de **carregamento** continua inline no cartão (é ele que explica a tela vazia) — a
   regra de bolso: mensagem com "Falha ao carregar" fica; o resto flutua.
 - ⚠️ **Voltar tem de parecer um controle**: era `class="rotulo"` (10,5px, maiúsculas, cinza) e
@@ -420,6 +425,28 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - ⚠️ **A unidade da nota ia CRUA para `produtos.um_compra`, que é chave estrangeira.** Uma
   conta real trouxe "UND", "BJ", "GA", "GF", "1UNID" — e criar produto a partir do item da nota
   devolvia 500 sem dizer por quê. Sigla desconhecida vira nulo.
+- **A busca das notas pode rodar sozinha** (`services/omie/agenda.py`, migração 033,
+  26/08/2026): `MANUAL` (o padrão), `HORARIA` ou `DIARIA` numa hora escolhida, por loja, mais
+  uma janela em dias opcional (nulo = a janela adaptativa de sempre). Nota que chega na sexta e
+  ninguém busca até segunda é nota que não entrou no estoque — e o CMV do fim de semana sai com
+  compra a menos.
+  ⚠️ **O padrão é MANUAL e tem de continuar sendo.** Cada busca consome cota, e o Omie
+  **bloqueia a integração inteira** de quem consome demais: ligar é decisão de quem paga a
+  conta, não algo que uma migração liga sozinha. A tela avisa que "a cada hora" são 24 buscas
+  por dia.
+  ⚠️ **O relógio é `agenda_rodou_em`, não `ultima_sincronizacao`** — a segunda só avança quando
+  alguma nota chega, e usá-la como relógio faria o agendador tentar de novo a cada minuto numa
+  casa sem nota nova, que é a casa normal de domingo. Por isso ele avança **mesmo com erro**: o
+  erro fica em `agenda_ultimo_erro`, à vista na tela, e a próxima tentativa é no horário
+  seguinte. Repetir em cima de um bloqueio do Omie só o prolonga.
+  ⚠️ A DIÁRIA dispara na hora escolhida **e só uma vez no dia**: sem a segunda condição ela
+  rodaria a cada minuto durante os sessenta minutos daquela hora.
+  ⚠️ **`pg_try_advisory_xact_lock` antes de olhar o relógio**: duas instâncias da API (ou o
+  worker do `--reload` com um órfão) leriam a mesma linha vencida e gastariam cota em dobro.
+  ⚠️ O laço vive no `lifespan` e sobe SEMPRE — quem decide é a configuração. Se ele só subisse
+  havendo agenda, ligar exigiria reiniciar a API, e ninguém lembraria disso. A busca roda em
+  `asyncio.to_thread`: o importador é síncrono e leva dezenas de segundos; no laço de eventos
+  travaria a API inteira enquanto isso.
 - ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
   **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
   antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e
@@ -640,16 +667,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (965 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (992 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (258, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (266, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

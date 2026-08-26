@@ -16,6 +16,12 @@ type Config = {
   app_key: string | null;
   app_secret: string | null;
   tag_fornecedor: string | null;
+  agenda_frequencia: string;
+  agenda_hora: number;
+  agenda_janela_dias: number | null;
+  /** Quando o agendador RODOU — não é o mesmo que ter trazido nota. */
+  agenda_rodou_em: string | null;
+  agenda_ultimo_erro: string | null;
   ultima_sincronizacao: string | null;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
@@ -58,6 +64,7 @@ export default function PaginaIntegracoes() {
   const [form, setForm] = useState({
     app_key: "", app_secret: "", modo: "simulado", ativa: false,
     tag_fornecedor: "Fornecedor",
+    agenda_frequencia: "MANUAL", agenda_hora: "3", agenda_janela_dias: "",
   });
   const [conferencia, setConferencia] = useState<Conferencia[] | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
@@ -69,7 +76,10 @@ export default function PaginaIntegracoes() {
       const c = await api.get<Config>("/omie/config");
       setCfg(c);
       setForm({ app_key: "", app_secret: "", modo: c.modo, ativa: c.ativa,
-                tag_fornecedor: c.tag_fornecedor ?? "" });
+                tag_fornecedor: c.tag_fornecedor ?? "",
+                agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
+                agenda_hora: String(c.agenda_hora ?? 3),
+                agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "" });
       setVinculos(await api.get<Vinculo[]>("/notas/vinculos"));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
@@ -91,6 +101,14 @@ export default function PaginaIntegracoes() {
         tag_fornecedor: form.tag_fornecedor || null,
         modo: form.modo,
         ativa: form.ativa,
+        agenda_frequencia: form.agenda_frequencia,
+        agenda_hora: Number(form.agenda_hora || 3),
+        // Vazio = janela automática. `Number("")` é 0, que o servidor recusa —
+        // e a recusa falaria de um campo que a pessoa deixou em branco de
+        // propósito.
+        agenda_janela_dias: form.agenda_janela_dias
+          ? Number(form.agenda_janela_dias)
+          : null,
       });
       aviso.sucesso("Integração salva. A chave fica cifrada e não volta pela tela.");
       await carregar();
@@ -243,6 +261,100 @@ export default function PaginaIntegracoes() {
             A chave é guardada cifrada e nunca volta pela API — a tela mostra só os últimos
             dígitos. Na fase 1 o Botané <b>só lê</b> do Omie: nada é escrito lá.
           </p>
+
+          {/* ⚠️ **A busca automática nasce desligada.** Cada busca consome cota
+              da conta, e o Omie bloqueia quem consome demais — o bloqueio pega a
+              integração inteira. Ligar é decisão de quem paga a conta. */}
+          <section className="rounded border border-linha bg-fundo p-4">
+            <p className="rotulo">Buscar notas sozinho</p>
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+              Nota que chega na sexta e ninguém busca até segunda é nota que não entrou no
+              estoque — e o CMV do fim de semana sai com compra a menos. Com o agendamento, o
+              sistema procura sozinho.
+            </p>
+
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Campo rotulo="Com que frequência">
+                <select
+                  className="campo"
+                  disabled={!podeConfigurar}
+                  value={form.agenda_frequencia}
+                  onChange={(e) => setForm({ ...form, agenda_frequencia: e.target.value })}
+                >
+                  <option value="MANUAL">manual — só quando eu clicar</option>
+                  <option value="HORARIA">a cada hora</option>
+                  <option value="DIARIA">uma vez por dia</option>
+                </select>
+              </Campo>
+
+              {/* Cada frequência pede uma pergunta diferente, e só uma. */}
+              {form.agenda_frequencia === "DIARIA" && (
+                <Campo rotulo="A que hora" dica="0 a 23 — de madrugada o Omie está vazio">
+                  <input
+                    className="campo mono"
+                    type="number"
+                    min={0}
+                    max={23}
+                    disabled={!podeConfigurar}
+                    value={form.agenda_hora}
+                    onChange={(e) => setForm({ ...form, agenda_hora: e.target.value })}
+                  />
+                </Campo>
+              )}
+
+              {form.agenda_frequencia !== "MANUAL" && (
+                <Campo
+                  rotulo="Varrer quantos dias para trás"
+                  dica="em branco = desde a última busca"
+                >
+                  <input
+                    className="campo mono"
+                    type="number"
+                    min={1}
+                    max={365}
+                    placeholder="automático"
+                    disabled={!podeConfigurar}
+                    value={form.agenda_janela_dias}
+                    onChange={(e) => setForm({ ...form, agenda_janela_dias: e.target.value })}
+                  />
+                </Campo>
+              )}
+            </div>
+
+            {form.agenda_frequencia === "HORARIA" && (
+              <p className="mt-3 text-[13px] leading-snug text-alerta">
+                A cada hora são 24 buscas por dia. O Omie limita o uso e{" "}
+                <b>bloqueia a integração inteira</b> quando alguém passa do ponto — se a casa
+                não recebe nota de hora em hora, uma vez por dia entrega o mesmo resultado por
+                um vinte e quatro avos da cota.
+              </p>
+            )}
+
+            {/* ⚠️ Duas datas diferentes: quando o agendador RODOU e quando
+                alguma nota chegou. Sem as duas, "não roda" e "roda e não acha
+                nada" ficam indistinguíveis — e a segunda é o normal. */}
+            {cfg?.agenda_rodou_em && (
+              <p className="mt-3 text-[13px] text-suave">
+                Última tentativa automática em{" "}
+                {new Date(cfg.agenda_rodou_em).toLocaleString("pt-BR")}
+                {cfg.ultima_sincronizacao && (
+                  <>
+                    {" · "}última nota nova em{" "}
+                    {new Date(cfg.ultima_sincronizacao).toLocaleString("pt-BR")}
+                  </>
+                )}
+              </p>
+            )}
+            {cfg?.agenda_ultimo_erro && (
+              <div className="mt-3">
+                <Aviso tipo="erro">
+                  A última busca automática falhou: {cfg.agenda_ultimo_erro}. O agendador{" "}
+                  <b>não insiste</b> — a próxima tentativa é no horário seguinte, porque repetir
+                  em cima de um bloqueio do Omie só o prolonga.
+                </Aviso>
+              </div>
+            )}
+          </section>
 
           <div className="flex flex-wrap gap-2">
             {podeConfigurar && (

@@ -11,6 +11,8 @@ inteiro. Ao configurar a chave, o mesmo código passa a falar com a conta real.
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 import auditoria
@@ -36,6 +38,17 @@ class ConfigOmie(BaseModel):
     # Vazio = traz todo mundo (para conta que não usa etiqueta).
     tag_fornecedor: str | None = Field(default="Fornecedor", max_length=60)
 
+    # ⚠️ **A busca automática nasce DESLIGADA e assim continua até alguém
+    # ligar.** Cada busca consome cota da conta do cliente, e o Omie bloqueia
+    # quem consome demais — o bloqueio pega a integração inteira. Ligar é
+    # decisão de quem paga a conta, não padrão que aparece sozinho.
+    agenda_frequencia: Literal["MANUAL", "HORARIA", "DIARIA"] = "MANUAL"
+    agenda_hora: int = Field(default=3, ge=0, le=23)
+    # Nulo = janela automática (desde a última sincronização, com 7 dias de
+    # folga). Preencher só faz sentido para quem quer varrer um mês a cada
+    # rodada — e aí custa mais cota.
+    agenda_janela_dias: int | None = Field(default=None, ge=1, le=365)
+
 
 def _cliente(cur, id_unidade: int) -> ClienteOmie:
     cur.execute(
@@ -58,7 +71,8 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT modo, ativa, credenciais, ultima_sincronizacao, ultimo_status,
-                      ultima_mensagem
+                      ultima_mensagem, agenda_frequencia, agenda_hora,
+                      agenda_janela_dias, agenda_rodou_em, agenda_ultimo_erro
                  FROM integracoes WHERE id_unidade = %s AND servico = %s""",
             (id_unidade, SERVICO),
         )
@@ -84,6 +98,15 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.omie", "admin.in
         "ultima_sincronizacao": linha["ultima_sincronizacao"] if linha else None,
         "ultimo_status": linha["ultimo_status"] if linha else None,
         "ultima_mensagem": linha["ultima_mensagem"] if linha else None,
+        # A agenda: o que está configurado e o que aconteceu na última rodada.
+        # ⚠️ `agenda_rodou_em` é quando o agendador RODOU, não quando trouxe
+        # nota — a tela precisa dos dois para distinguir "não roda" de "roda e
+        # não acha nada".
+        "agenda_frequencia": linha["agenda_frequencia"] if linha else "MANUAL",
+        "agenda_hora": linha["agenda_hora"] if linha else 3,
+        "agenda_janela_dias": linha["agenda_janela_dias"] if linha else None,
+        "agenda_rodou_em": linha["agenda_rodou_em"] if linha else None,
+        "agenda_ultimo_erro": linha["agenda_ultimo_erro"] if linha else None,
         "historico": historico,
     }
 
@@ -116,16 +139,31 @@ def salvar_config(body: ConfigOmie,
             )
 
         cur.execute(
-            """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais)
-               VALUES (%s, %s, %s, %s, %s)
+            """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais,
+                                        agenda_frequencia, agenda_hora, agenda_janela_dias)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (id_unidade, servico) DO UPDATE
                    SET ativa = EXCLUDED.ativa, modo = EXCLUDED.modo,
-                       credenciais = EXCLUDED.credenciais, atualizado_em = now()""",
-            (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred)),
+                       credenciais = EXCLUDED.credenciais,
+                       agenda_frequencia = EXCLUDED.agenda_frequencia,
+                       agenda_hora = EXCLUDED.agenda_hora,
+                       agenda_janela_dias = EXCLUDED.agenda_janela_dias,
+                       atualizado_em = now()""",
+            (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred),
+             body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias),
+        )
+        # ⚠️ Ligar o agendamento limpa o erro anterior: manter a mensagem velha
+        # faria a tela acusar uma falha que já foi tratada — e quem acabou de
+        # arrumar a credencial veria o mesmo aviso de antes.
+        cur.execute(
+            "UPDATE integracoes SET agenda_ultimo_erro = NULL "
+            " WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO),
         )
         # A auditoria registra a mudança sem registrar o segredo.
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "configurar",
                             depois={"modo": body.modo, "ativa": body.ativa,
+                                    "agenda": body.agenda_frequencia,
                                     "app_key": segredos.mascarar(cred.get("app_key"))},
                             id_unidade=id_unidade)
     return {"message": "Integração salva"}

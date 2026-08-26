@@ -380,6 +380,30 @@ try {
     /cadastrar outro/i.test(avisoCriou?.texto ?? ""), avisoCriou?.texto);
   await foto(p, "15-produto");
 
+  // ⚠️ **Os dois tipos de aviso somem sozinhos** — antes o erro ficava até
+  // alguém fechar, e uma pilha que não se limpa acaba tapando a tela em uso. O
+  // sucesso sai em 6 s; o erro, em 14 (frase mais longa). A barrinha embaixo
+  // anuncia isso: sem ela, o aviso sumindo parece a tela piscando.
+  const barra = await p.evaluate(() => {
+    const el = document.querySelector("[data-aviso]");
+    const b = el?.querySelector("span[aria-hidden]:not([class*='font-display'])");
+    return { tem: !!b, transform: b ? getComputedStyle(b).transform : null };
+  });
+  checar("o aviso mostra quanto falta para sumir", barra.tem, barra);
+
+  // ⚠️ Com o ponteiro em cima, o relógio PARA: era o medo real de fechar
+  // sozinho — a mensagem sumir no meio da leitura.
+  await p.hover("[data-aviso]");
+  await new Promise((r) => setTimeout(r, 2500));
+  const pausado = await p.evaluate(() => !!document.querySelector("[data-aviso]"));
+  checar("e não some enquanto o ponteiro está em cima", pausado);
+
+  // Tirado o ponteiro, o tempo volta a correr e ele sai sozinho.
+  await p.mouse.move(5, 5);
+  await new Promise((r) => setTimeout(r, 7000));
+  const sumiu = await p.evaluate(() => !document.querySelector("[data-aviso='ok']"));
+  checar("tirando o ponteiro, o aviso de sucesso some sozinho", sumiu);
+
   // Voltar tem de parecer um controle, não legenda da tela.
   const voltar = await p.evaluate(() => {
     const el = document.querySelector(".link-voltar");
@@ -2044,6 +2068,75 @@ try {
   });
   checar("a conta do CMV continua mostrando Perdas", noPainel.temPerdas, noPainel);
   checar("e ganhou a linha do grupo por tipo de produto", noPainel.temGrupo, noPainel);
+
+  console.log("10y. buscar notas do Omie sozinho");
+  // ⚠️ A agenda nasce MANUAL e este bloco a devolve assim — a conta configurada
+  // aqui pode ser a REAL, e deixar HORARIA ligada faria a máquina buscar notas
+  // do cliente de hora em hora, para sempre.
+  const { dados: cfgAntes } = await api("GET", "/omie/config", null, token);
+  aoTerminar.push(() => api("PUT", "/omie/config", {
+    modo: cfgAntes?.modo ?? "simulado",
+    ativa: cfgAntes?.ativa ?? false,
+    agenda_frequencia: cfgAntes?.agenda_frequencia ?? "MANUAL",
+    agenda_hora: cfgAntes?.agenda_hora ?? 3,
+    agenda_janela_dias: cfgAntes?.agenda_janela_dias ?? null,
+  }, token));
+
+  await irPara(p, `${WEB}/integracoes`);
+  await new Promise((r) => setTimeout(r, 2000));
+  const blocoAgenda = await p.evaluate(() => {
+    const sel = [...document.querySelectorAll("select")]
+      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    return {
+      // ⚠️ Pelo texto da página, não por `span.rotulo`: o título do bloco é um
+      // `<p class="rotulo">`, e a classe é a mesma dos rótulos de campo.
+      temBloco: /buscar notas sozinho/i.test(document.body.innerText),
+      valor: sel?.value ?? null,
+      opcoes: sel ? [...sel.options].map((o) => o.value) : [],
+    };
+  });
+  checar("a tela oferece a busca automática", blocoAgenda.temBloco, blocoAgenda);
+  checar("com as três frequências",
+    ["MANUAL", "HORARIA", "DIARIA"].every((f) => blocoAgenda.opcoes.includes(f)),
+    blocoAgenda);
+  // ⚠️ **Nasce MANUAL.** Cada busca consome cota, e o Omie bloqueia a
+  // integração inteira de quem passa do ponto: ligar é decisão de quem paga.
+  checar("e começa em manual", blocoAgenda.valor === "MANUAL", blocoAgenda);
+
+  // Escolher "a cada hora" tem de avisar do custo — 24 buscas por dia.
+  await p.evaluate(() => {
+    const sel = [...document.querySelectorAll("select")]
+      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    if (!sel) return;
+    sel.value = "HORARIA";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  checar("a cada hora avisa que consome cota",
+    await p.evaluate(() => /bloqueia a integração inteira/i.test(document.body.innerText)));
+
+  // "Uma vez por dia" troca a pergunta: aparece a hora.
+  await p.evaluate(() => {
+    const sel = [...document.querySelectorAll("select")]
+      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    if (!sel) return;
+    sel.value = "DIARIA";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  checar("uma vez por dia pergunta a hora",
+    await p.evaluate(() =>
+      [...document.querySelectorAll("span.rotulo")].some((r) =>
+        /A que hora/i.test(r.textContent ?? ""))));
+  await foto(p, "29-agenda-omie");
+
+  await api("PUT", "/omie/config", {
+    modo: cfgAntes?.modo ?? "simulado",
+    ativa: cfgAntes?.ativa ?? false,
+    agenda_frequencia: cfgAntes?.agenda_frequencia ?? "MANUAL",
+    agenda_hora: cfgAntes?.agenda_hora ?? 3,
+    agenda_janela_dias: cfgAntes?.agenda_janela_dias ?? null,
+  }, token);
 
   console.log("10a. ritmo do fechamento: dia, semana ou mês");
   // ⚠️ **A loja volta a MENSAL no fim deste bloco.** O ritmo muda o período em
