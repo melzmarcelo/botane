@@ -93,31 +93,25 @@ Campo fiscal previsto no mapeamento (4.3) e ausente na tabela.
 
 ## ⚪ Bloqueado por terceiro — não é dívida nossa
 
-### PDV Legal — as vendas entram; falta o de-para do cardápio
-**Resolvido em 26/08/2026.** As credenciais chegaram e o catálogo de endpoints apareceu em
-`GET /help` — a página de ajuda do ASP.NET, que só responde com o Bearer token. O que se sabe
-está em [`pdv-legal-api.md`](pdv-legal-api.md).
+### PDV Legal — falta a ficha técnica dos pratos
+**As vendas e o de-para estão prontos** (26/08/2026). Na conta real: 46 vendas importadas, o
+cardápio de **164 itens** trazido, e **102 itens de venda vinculados** ao prato correspondente.
 
-Funcionando contra a conta real: **46 vendas, 100 itens, R$ 601,70** numa importação de um dia.
-A busca é dia a dia (o `cupom/get` corta em 100 registros fora disso), cupom e item cancelados
-ficam de fora, e reimportar não duplica.
+**O que falta agora é a ficha técnica.** Os 164 pratos nasceram como **rascunho** com
+`producao_propria` marcada — estão na fila de "produzido sem ficha", em Produtos. Enquanto
+nenhum tiver ficha, `com_custo` é zero: a venda entra, a receita aparece, e o **CMV teórico
+continua zero**. É a mesma pendência que já era o maior item desta lista, agora com a lista
+pronta e nomeada em vez de em branco.
 
-**O que falta agora é o de-para do cardápio.** Os 100 itens entraram **sem vínculo**: são 57
-produtos distintos do PDV que ninguém ligou ainda a um produto com ficha técnica. Enquanto isso
-não for feito, **o CMV teórico é zero** — a venda entra, a receita aparece, e a comparação com
-o CMV real não tem com o que comparar.
+Ordem que rende mais: fazer a ficha dos pratos **mais vendidos** primeiro. A tela de Vendas
+ordena por receita, e `cmv.margem_por_prato` mostra o que cada um faturou.
 
-Dois caminhos, e eles se somam:
+⚠️ **Não case código de cardápio com código de produto.** A primeira versão da cascata fazia
+isso e criou 78 vínculos errados (REDBULL → LIMÃO TAITY). Os dois números são espaços de nome
+diferentes. Vinculam o de-para e o nome idêntico; semelhança vira dica no rascunho.
 
-1. **A fila que já existe** — `GET /vendas/sem-vinculo`, mostrada na tela de Vendas, lista os
-   itens por receita. Ligar os 20 primeiros já cobre a maior parte do faturamento.
-2. **Importar o cardápio** — `GET produtos/get` traz o cadastro do PDV com `codproduto`, que é
-   a chave do de-para (`codigos_externos` com `sistema = 'PDV_LEGAL'`). A rota está documentada
-   e **a resposta real ainda não foi lida**.
-
-Também não verificado: a paginação do `cupom/get` (a importação dia a dia não tem teto, então
-ela não é necessária) e os valores de `tipovenda` além do `"B"`, que foi o único que apareceu
-no dia lido.
+Também não verificado: a paginação do `cupom/get` (a importação dia a dia não tem teto) e os
+valores de `tipovenda` além do `"B"`.
 
 ---
 

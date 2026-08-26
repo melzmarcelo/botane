@@ -75,7 +75,21 @@ def buscar(cliente: ClientePdv, filiais: str, inicio: date, fim: date) -> list[d
     return cupons
 
 
-def preparar(cupons: list[dict]) -> tuple[list[dict], dict]:
+def _de_para(cur) -> dict[str, int]:
+    """O código do PDV → o produto daqui, de uma vez só.
+
+    ⚠️ Uma consulta, não uma por item. Um dia de 48 cupons tem ~100 linhas, e o
+    de-para inteiro de um cardápio cabe folgado na memória.
+    """
+    cur.execute(
+        "SELECT codigo, id_produto FROM codigos_externos WHERE sistema = %s",
+        ("PDV_LEGAL",),
+    )
+    return {r["codigo"]: r["id_produto"] for r in cur.fetchall()}
+
+
+def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
+             ) -> tuple[list[dict], dict]:
     """Separa o que vira venda do que não vira, e conta os dois.
 
     ⚠️ **Cupom cancelado não entra**, e **item cancelado dentro de cupom válido
@@ -100,7 +114,12 @@ def preparar(cupons: list[dict]) -> tuple[list[dict], dict]:
                 continue
             if i["quantidade"] <= 0:
                 continue
+            # ⚠️ O vínculo vai RESOLVIDO daqui. O importador de vendas procura
+            # produto pelo código DA CASA e pelo nome; o código do PDV é outra
+            # coisa, e sem esta linha toda venda entraria sem vínculo mesmo com
+            # o de-para montado.
             itens.append({
+                "id_produto": (vinculos or {}).get(i["codigo"] or ""),
                 "codigo": i["codigo"],
                 "descricao": i["descricao"],
                 "quantidade": float(i["quantidade"]),
@@ -134,7 +153,7 @@ def sincronizar(cur, cliente: ClientePdv, id_unidade: int, filiais: str,
         cupons = buscar(cliente, filiais, inicio, fim)
     except ErroPdv:
         raise
-    vendas, resumo = preparar(cupons)
+    vendas, resumo = preparar(cupons, _de_para(cur))
     return {
         "inicio": inicio,
         "fim": fim,

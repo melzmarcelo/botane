@@ -115,6 +115,38 @@ export default function PdvLegal() {
     }
   }
 
+  /**
+   * Traz o cardápio e monta o de-para.
+   *
+   * ⚠️ O que a cascata **não** faz é casar código com código: o número do
+   * cardápio e o código da casa são espaços de nome diferentes, e casá-los
+   * ligou REDBULL a LIMÃO TAITY numa base real. Vinculam o de-para que já
+   * existe e o nome idêntico; semelhança vira dica no rascunho, e só.
+   */
+  async function importarCardapio() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{
+        message: string;
+        criados: number;
+        sem_custo: number;
+      }>("/pdv/cardapio");
+      aviso.sucesso(
+        r.sem_custo > 0
+          ? `${r.message}. ${r.sem_custo} item(ns) ainda sem custo — falta a ficha técnica.`
+          : r.message,
+        r.criados > 0
+          ? { texto: "ver os rascunhos criados", ao: () => router.push("/produtos") }
+          : undefined,
+      );
+      await carregar();
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível importar o cardápio");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function testar() {
     setOcupado(true);
     try {
@@ -245,15 +277,30 @@ export default function PdvLegal() {
               Testar conexão
             </button>
             {cfg.configurada && (
-              <button
-                className="btn btn-secundario"
-                type="button"
-                onClick={sincronizar}
-                disabled={ocupado}
-                title="Traz os cupons do PDV e grava como venda"
-              >
-                Buscar vendas
-              </button>
+              <>
+                <button
+                  className="btn btn-secundario"
+                  type="button"
+                  onClick={sincronizar}
+                  disabled={ocupado}
+                  title="Traz os cupons do PDV e grava como venda"
+                >
+                  Buscar vendas
+                </button>
+                {/* ⚠️ Sem o cardápio, a venda entra e o CMV teórico é ZERO: a
+                    receita aparece, o CMV real aparece, e a variância não tem
+                    com o que comparar. O botão fica ao lado do de buscar
+                    porque é a outra metade do mesmo trabalho. */}
+                <button
+                  className="btn btn-secundario"
+                  type="button"
+                  onClick={importarCardapio}
+                  disabled={ocupado}
+                  title="Traz os itens do cardápio e liga aos pratos daqui"
+                >
+                  Importar cardápio
+                </button>
+              </>
             )}
           </div>
         </form>

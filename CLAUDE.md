@@ -173,6 +173,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - ⚠️ **`.campo` é `width:100%` e vence a utilitária de largura do Tailwind.** `w-[110px]` num
   input com `campo` não faz nada — a largura tem de ir na COLUNA (`<th>`), e com `min-w` além
   do `w`: em `table-layout: auto` o navegador ignora a largura sugerida quando falta espaço.
+- ⚠️ **Produto ATIVO sem unidade de estoque também devolvia 500.** A trava é do banco
+  (`ck_produto_rascunho`) e é a certa — quantidade sem unidade não decide custo nenhum —, mas
+  vazava como "Internal Server Error" para quem cadastrava um prato sem escolher unidade.
+  Virou 400 com frase, e a saída ("salve como rascunho") vai junto. ⚠️ Ao adicionar validação
+  que consulta uma coluna, **o `SELECT` do "antes" no PUT precisa trazê-la**: sem `um_estoque`
+  ali, um PUT que só mudava o preço levava 400 sem ter tocado no assunto.
 - ⚠️ **Nome repetido em tabela de apoio devolvia 500.** A unicidade é do banco (é o certo),
   mas deixar a constraint estourar dava "Internal Server Error" para quem só digitou duas
   vezes o mesmo nome — no primeiro dia, cadastrando setores e locais. `_recusar_repetido()`
@@ -492,6 +498,24 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `venda_id` que eu tinha lido: a venda de demonstração entrou primeiro e a real foi descartada
   como "repetida" — sem nada denunciando, porque repetida é o caso normal. Número de
   demonstração tem de ser **impossível de existir** na conta.
+  🔑 **O cardápio e o de-para** (`services/pdv/cardapio.py`): `produtos/getlistaresumida`
+  devolve um **ENVELOPE** `{total_count, total, pagina, data}`, não uma lista — tratá-lo como
+  lista daria "4 itens" para as quatro CHAVES. O vínculo mora em `codigos_externos` com
+  `sistema = 'PDV_LEGAL'`, e a chave é o `codigo` do PDV, que chega no item da venda como
+  `codproduto`.
+  ⚠️ **NUNCA case código de cardápio com código da casa — são espaços de nome diferentes.** A
+  primeira versão fazia isso e, numa base com 2.189 insumos do Omie, **os 78 vínculos criados
+  assim estavam TODOS errados**: REDBULL virou LIMÃO TAITY, PÃO COM MANTEIGA virou MANJERICÃO,
+  BOLO virou ADESIVO VINIL PRETO. Nenhum daria erro em lugar nenhum — só o CMV teórico sairia
+  com o custo do insumo errado, para sempre. Vinculam o de-para que já existe e o **nome
+  idêntico** (normalizado); semelhança vira **dica na observação** do rascunho e não amarra
+  nada. A suíte trava isso com um produto isca de código "72".
+  ⚠️ **O item do cardápio que não existe aqui nasce PRODUZIDO/RASCUNHO com `producao_propria`**,
+  código `PDV-<codigo>`: é isso que o põe na fila de "produzido sem ficha", que é a lista que
+  alguém precisa percorrer. Na conta real foram **164 pratos**.
+  ⚠️ `cardapio.reconciliar` passa o de-para nos itens de venda pendentes e **recalcula o custo
+  AGORA** — item que entrou sem produto entrou sem custo, e ao ganhar produto precisa do custo
+  de hoje. Existe separado porque o de-para também se arruma à mão na tela de Vendas.
   ⚠️ Os itens sem de-para caem na fila que já existia (`GET /vendas/sem-vinculo`), mostrada na
   tela de Vendas. **Enquanto ela não for resolvida, o CMV teórico é zero**: 100 itens de 57
   produtos distintos entraram sem vínculo na primeira importação real.
@@ -715,16 +739,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.043 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.059 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (51),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (67),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (272, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (273, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

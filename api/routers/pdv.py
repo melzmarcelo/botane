@@ -23,7 +23,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from models.cmv import ImportarVendasRequest, VendaImportar
 from routers import vendas as rota_vendas
 from services import segredos
-from services.pdv import importador
+from services.pdv import cardapio, importador
 from services.pdv.cliente import ClientePdv, ErroPdv
 
 router = APIRouter(prefix="/pdv", tags=["PDV Legal"])
@@ -264,3 +264,51 @@ def sincronizar(
         "message": (f"{gravado.get('importadas', 0)} venda(s) nova(s) de {r['cupons']} "
                     f"cupom(ns) — {r['janela']}"),
     }
+
+
+@router.post("/cardapio")
+def importar_cardapio(
+    criar_ausentes: bool = True,
+    ctx: Contexto = Depends(requer_permissao("integracao.pdv")),
+) -> dict:
+    """Traz o cardápio do PDV e monta o de-para.
+
+    ⚠️ **Sem isto o CMV teórico é zero.** A venda entra, a receita aparece, e a
+    variância — que é o número que interessa — não tem com o que comparar.
+
+    ⚠️ **Reconcilia as vendas que já entraram** logo em seguida: a ordem real é
+    a venda chegar antes de o cardápio estar ligado, e sem isso os itens que
+    entraram sem produto ficariam pendentes para sempre.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cliente = _cliente(cur, id_unidade)
+        try:
+            r = cardapio.importar(cur, cliente, ctx.id_usuario, criar_ausentes)
+        except ErroPdv as e:
+            raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+        depois = cardapio.reconciliar(cur, id_unidade)
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "cardapio",
+                            depois={**r, **depois}, id_unidade=id_unidade)
+
+    return {**r, "reconciliados": depois["vinculados"],
+            "com_custo": depois["com_custo"], "sem_custo": depois["sem_custo"],
+            "message": (f"{r['itens']} item(ns) do cardápio — {r['vinculados']} vinculado(s), "
+                        f"{r['criados']} criado(s) em rascunho, "
+                        f"{depois['vinculados']} venda(s) reconciliada(s)")}
+
+
+@router.post("/reconciliar")
+def reconciliar(ctx: Contexto = Depends(requer_permissao("integracao.pdv"))) -> dict:
+    """Passa o de-para de novo nos itens de venda sem produto.
+
+    Existe separado do cardápio porque o de-para também se arruma **à mão**, na
+    tela de Vendas: depois de ligar meia dúzia de itens ali, é isto que faz o
+    CMV teórico do mês passado enxergar o conserto.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = cardapio.reconciliar(cur, id_unidade)
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "reconciliar",
+                            depois=r, id_unidade=id_unidade)
+    return {**r, "message": f"{r['vinculados']} item(ns) de venda vinculado(s)"}

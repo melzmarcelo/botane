@@ -332,6 +332,151 @@ checar("objeto solto e tratado como lista de um",
 checar("e lista vazia nao estoura", mp.lista_de_cupons(None) == [])
 
 
+print("\n8e. o cardapio e o de-para")
+chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True}, token=token)
+
+# ⚠️ **O produto isca do bug real.** O `codReferencia` do REDBULL na fixture e
+# "72". Se a cascata casasse codigo de cardapio com codigo da casa, este insumo
+# seria o "produto" do REDBULL — e foi EXATAMENTE isso que aconteceu na conta do
+# cliente: 78 vinculos, todos errados, e nenhum daria erro em lugar nenhum.
+# O `codReferencia` do REDBULL na fixture e "72". Garante que existe um produto
+# com esse codigo — criando, ou reaproveitando o que a base ja tiver.
+st, r = chamar("POST", "/produtos", {
+    "codigo": "72", "nome": f"Isca de codigo {marca}", "tipo": "INSUMO", "um_estoque": "KG",
+}, token=token)
+if st == 201:
+    isca = r.get("id")
+else:
+    # ⚠️ Pelo BANCO, nao pela busca da lista: `busca=72` casa com qualquer nome
+    # que tenha "72" dentro, e o que se quer aqui e o codigo EXATO. Numa base com
+    # 2.200 produtos, procurar pelo texto devolve o produto errado ou nenhum.
+    import psycopg2 as _pg
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    from config import (DB_HOST as _H, DB_NAME as _N, DB_PASSWORD as _P,
+                        DB_PORT as _O, DB_SSLMODE as _S, DB_USER as _U)
+
+    with _pg.connect(host=_H, port=_O, user=_U, password=_P, dbname=_N,
+                     sslmode=_S) as _c, _c.cursor() as _cur:
+        _cur.execute("SELECT id FROM produtos WHERE codigo = %s", ("72",))
+        achado = _cur.fetchone()
+    isca = achado[0] if achado else None
+checar("ha um produto cujo codigo colide com o do cardapio", isca is not None, (st, r))
+
+# ⚠️ Nome IDENTICO ao do cardapio: este pode e deve vincular. E precisa de
+# unidade — produto ATIVO sem unidade de estoque e recusado, porque quantidade
+# sem unidade nao decide custo nenhum.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"EXPR{marca}", "nome": "CAFE EXPRESSO", "tipo": "PRODUZIDO",
+    "um_estoque": "UN",
+}, token=token)
+expresso = r.get("id")
+checar("cria um prato com o nome exato do cardapio", st == 201, (st, r))
+
+st, r = chamar("POST", "/pdv/cardapio", token=token)
+checar("a importacao do cardapio responde", st == 200, (st, r))
+# ⚠️ A resposta e um ENVELOPE `{total_count, total, pagina, data}`. Tratada como
+# lista, ela daria "4 itens" para as quatro CHAVES.
+checar("le os quatro itens do envelope, nao as chaves dele",
+       r.get("itens") == 4, r.get("itens"))
+# ⚠️ Numa base ja importada o item cai em `ja_vinculados`, nao em `vinculados`:
+# o que se afirma e que ele ACHOU dono, por um dos dois caminhos certos.
+checar("e o de nome identico acha dono",
+       (r.get("vinculados") or 0) + (r.get("ja_vinculados") or 0) >= 1, r)
+
+st, ce = chamar("GET", f"/produtos/{expresso}", token=token)
+checar("o prato de nome identico existe", st == 200, st)
+
+st, isca_depois = chamar("GET", f"/produtos/{isca}", token=token)
+checar("o produto isca nao foi tocado", isca_depois.get("id") == isca, isca_depois.get("id"))
+
+
+print("\n8f. codigo de cardapio NAO casa com codigo da casa")
+# O teste que trava o bug: depois de importar, o REDBULL nao pode ter virado o
+# insumo de codigo "72".
+from services.pdv import cardapio as card  # noqa: E402
+
+import psycopg2  # noqa: E402
+from psycopg2.extras import RealDictCursor  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER  # noqa: E402
+
+conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                        dbname=DB_NAME, sslmode=DB_SSLMODE)
+with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
+    c.execute("""SELECT ce.id_produto, p.nome, p.tipo FROM codigos_externos ce
+                   JOIN produtos p ON p.id = ce.id_produto
+                  WHERE ce.sistema = 'PDV_LEGAL' AND ce.codigo = '10689996'""")
+    vinculo = c.fetchone()
+conn.close()
+
+checar("o REDBULL do cardapio tem vinculo", vinculo is not None, vinculo)
+if vinculo:
+    # ⚠️ A afirmacao central deste arquivo. Se ela cair, o CMV teorico passa a
+    # contar o custo de um insumo qualquer para um refrigerante — sem erro
+    # nenhum, para sempre, e ninguem vai procurar ali.
+    checar("e NAO e o insumo de codigo 72",
+           vinculo["id_produto"] != isca, (vinculo["id_produto"], isca))
+    checar("virou um prato proprio, em rascunho",
+           vinculo["tipo"] == "PRODUZIDO", vinculo)
+
+
+print("\n8g. semelhanca sugere, nao vincula")
+# ⚠️ "PAO DE QUEIJO ESPECIAL" e parecido com "PAO DE QUEIJO" do cardapio, mas
+# nao e a mesma coisa. Palpite que vincula sozinho contamina o CMV teorico de
+# todo mes em que o prato foi vendido.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"PQE{marca}", "nome": "PAO DE QUEIJO ESPECIAL DA CASA",
+    "tipo": "PRODUZIDO", "um_estoque": "UN",
+}, token=token)
+parecido = r.get("id")
+
+conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                        dbname=DB_NAME, sslmode=DB_SSLMODE)
+with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
+    # Solta o de-para do PAO DE QUEIJO para a cascata rodar de novo nele.
+    c.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo='10689994'")
+conn.close()
+
+st, r = chamar("POST", "/pdv/cardapio", token=token)
+conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                        dbname=DB_NAME, sslmode=DB_SSLMODE)
+with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
+    c.execute("""SELECT ce.id_produto, p.nome, p.observacao FROM codigos_externos ce
+                   JOIN produtos p ON p.id = ce.id_produto
+                  WHERE ce.sistema = 'PDV_LEGAL' AND ce.codigo = '10689994'""")
+    pq = c.fetchone()
+conn.close()
+
+checar("o PAO DE QUEIJO voltou a ter vinculo", pq is not None, pq)
+if pq:
+    checar("e NAO foi amarrado no parecido",
+           pq["id_produto"] != parecido, (pq["id_produto"], parecido))
+    # A dica viaja com o rascunho: quem for fazer a ficha ve o palpite sem que
+    # ele tenha decidido nada.
+    checar("mas a semelhanca virou dica na observacao",
+           pq["observacao"] and "arece com" in pq["observacao"], pq.get("observacao"))
+
+
+print("\n8h. reconciliar liga as vendas que estavam pendentes")
+st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+st, r = chamar("POST", "/pdv/reconciliar", token=token)
+checar("a reconciliacao responde", st == 200, (st, r))
+checar("e conta quantos ligou", "vinculados" in (r or {}), r)
+# ⚠️ Sem ficha nao ha custo, e isso NAO e erro: e o proximo passo humano. O
+# numero sai separado justamente para a tela poder dizer "ligou, mas falta a
+# ficha" em vez de dizer so "ligou".
+checar("distinguindo o que ficou sem custo",
+       "sem_custo" in (r or {}), r)
+
+for id_produto in (isca, expresso, parecido):
+    if id_produto:
+        chamar("DELETE", f"/produtos/{id_produto}", token=token)
+
+
 print("\n9. limpeza")
 devolver_simulado()
 st, c = chamar("GET", "/pdv/config", token=token)

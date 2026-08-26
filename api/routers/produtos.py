@@ -67,6 +67,18 @@ def _valida_basico(dados: dict) -> None:
             status_code=400,
             detail="Produção própria só vale para produto produzido ou kit.",
         )
+    # ⚠️ **A trava do banco (`ck_produto_rascunho`) vazava como 500.** Produto
+    # ATIVO precisa de unidade de estoque — é ela que decide o custo por
+    # unidade, e sem ela ficha, CMV e compra herdam um número sem significado.
+    # A regra é certa; o que estava errado era a mensagem: quem cadastrava um
+    # prato sem escolher unidade recebia "Internal Server Error" e não tinha
+    # como adivinhar. Mesma família do nome repetido em tabela de apoio.
+    if (dados.get("status") or "ATIVO") == "ATIVO" and not dados.get("um_estoque"):
+        raise HTTPException(
+            status_code=400,
+            detail=("Produto ativo precisa de unidade de estoque — é ela que dá sentido à "
+                    "quantidade. Escolha uma, ou salve como rascunho para conferir depois."),
+        )
 
 
 def _gravar_preco(cur, id_produto: int, preco: float | None, id_usuario: int) -> None:
@@ -277,7 +289,11 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
 
     with get_cursor() as cur:
         cur.execute(
-            "SELECT codigo, nome, tipo, status, producao_propria FROM produtos WHERE id = %s",
+            # ⚠️ `um_estoque` entra aqui porque a validação o consulta: sem ele
+            # no "antes", um PUT que só muda o preço pareceria estar deixando o
+            # produto ativo sem unidade — e levava 400 sem ter mexido nisso.
+            "SELECT codigo, nome, tipo, status, producao_propria, um_estoque "
+            "  FROM produtos WHERE id = %s",
             (id_produto,),
         )
         antes = cur.fetchone()

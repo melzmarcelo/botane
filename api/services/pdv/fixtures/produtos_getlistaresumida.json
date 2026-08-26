@@ -1,0 +1,31 @@
+{
+  "total_count": "4",
+  "total": "4",
+  "pagina": "1",
+  "data": [
+    {
+      "codReferencia": "195",
+      "codigo": 10689993,
+      "descricao": "CAFE EXPRESSO",
+      "listaUnidadeCompra": []
+    },
+    {
+      "codReferencia": "212",
+      "codigo": 10689994,
+      "descricao": "PAO DE QUEIJO",
+      "listaUnidadeCompra": []
+    },
+    {
+      "codReferencia": "300",
+      "codigo": 10689995,
+      "descricao": "AGUA COM GAS",
+      "listaUnidadeCompra": []
+    },
+    {
+      "codReferencia": "72",
+      "codigo": 10689996,
+      "descricao": "REDBULL S/ ACUCAR GERAL",
+      "listaUnidadeCompra": []
+    }
+  ]
+}

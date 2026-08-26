@@ -2103,6 +2103,8 @@ try {
       temFiliais: rotulos.includes("Filiais"),
       temBuscar: [...document.querySelectorAll("button")].some(
         (b) => b.textContent?.trim() === "Buscar vendas"),
+      temCardapio: [...document.querySelectorAll("button")].some(
+        (b) => b.textContent?.trim() === "Importar cardápio"),
       configurada: /guardado:/.test(texto),
     };
   });
@@ -2116,6 +2118,10 @@ try {
   // ganhou o botão de buscar. O aviso de "só guarda credencial" saiu junto.
   checar("e o botão de buscar vendas quando há credencial",
     pdv.temBuscar || !pdv.configurada, pdv);
+  // ⚠️ Sem o cardápio a venda entra e o CMV teórico é ZERO — os dois botões são
+  // as duas metades do mesmo trabalho, e um sem o outro entrega meia resposta.
+  checar("e o de importar o cardápio, que é o que dá custo à venda",
+    pdv.temCardapio || !pdv.configurada, pdv);
   await foto(p, "30-pdv-legal");
 
   console.log("10y. buscar notas do Omie sozinho");
