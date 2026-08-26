@@ -14,7 +14,9 @@ O que este arquivo cobra:
 5. comprar material de limpeza move o grupo, e só ele
 6. grupo configurado aparece no painel mesmo valendo zero
 7. apagar o grupo devolve os tipos e não perde histórico
-8. quem só vê o painel não reconfigura a apuração da casa
+8. **grupo FORA do CMV real tira o custo dele da conta** — e o CMV cai
+   exatamente o que o grupo valia
+9. quem só vê o painel não reconfigura a apuração da casa
 
     python tests/smoke_grupos_cmv.py            (API de pé na 9200)
 
@@ -293,6 +295,51 @@ checar("e cada um ficou com o tipo certo",
        and so_embalagem and so_embalagem["tipos"] == ["EMBALAGEM"],
        (so_limpeza and so_limpeza["tipos"], so_embalagem and so_embalagem["tipos"]))
 
+
+print("\n7b. grupo FORA do CMV real tira o custo da conta")
+# ⚠️ **A propriedade que prova a exclusão**: o CMV real tem de cair EXATAMENTE o
+# que o grupo vale. Cair menos quer dizer que só as compras saíram e o estoque
+# do grupo ficou; cair mais quer dizer que levou junto o que não era dele.
+st, com_grupo = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+g_dentro = next((x for x in com_grupo.get("grupos", [])
+                 if x["nome"] == f"Não comida {marca}"), None)
+checar("o grupo começa DENTRO do CMV",
+       g_dentro and g_dentro.get("considerar_no_cmv") is True, g_dentro)
+valor_do_grupo = float(g_dentro["cmv"]) if g_dentro else 0.0
+
+st, r = chamar("PUT", f"/cmv/grupos/{id_grupo}",
+               {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA"],
+                "ordem": 90, "ativo": True, "considerar_no_cmv": False}, token=token)
+checar("dá para tirar o grupo do CMV real", st == 200, (st, r))
+
+st, sem_grupo = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+caiu = float(com_grupo["cmv_real"]) - float(sem_grupo["cmv_real"])
+checar("o CMV real cai exatamente o que o grupo valia",
+       perto(caiu, valor_do_grupo, 0.02), (caiu, valor_do_grupo))
+checar("e a apuração diz quais tipos ficaram de fora",
+       "MATERIAL_LIMPEZA" in (sem_grupo.get("tipos_fora_do_cmv") or []),
+       sem_grupo.get("tipos_fora_do_cmv"))
+
+# ⚠️ **O dinheiro NÃO some da tela.** Gastar com limpeza é gastar; um número que
+# desaparece é um número que ninguém controla. A linha fica, dizendo que está
+# fora.
+g_fora = next((x for x in sem_grupo.get("grupos", [])
+               if x["nome"] == f"Não comida {marca}"), None)
+checar("o grupo continua aparecendo no painel", g_fora is not None,
+       [x["nome"] for x in sem_grupo.get("grupos", [])])
+checar("com o mesmo valor de antes", g_fora and perto(float(g_fora["cmv"]), valor_do_grupo),
+       (g_fora and g_fora["cmv"], valor_do_grupo))
+checar("e marcado como fora do CMV",
+       g_fora and g_fora.get("considerar_no_cmv") is False, g_fora)
+
+# Voltar a considerar devolve o CMV ao que era: a régua é reversível.
+chamar("PUT", f"/cmv/grupos/{id_grupo}",
+       {"nome": f"Não comida {marca}", "tipos": ["MATERIAL_LIMPEZA"], "ordem": 90,
+        "ativo": True, "considerar_no_cmv": True}, token=token)
+st, de_volta = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+checar("e marcar de novo devolve o CMV ao que era",
+       perto(float(de_volta["cmv_real"]), float(com_grupo["cmv_real"]), 0.02),
+       (de_volta["cmv_real"], com_grupo["cmv_real"]))
 
 print("\n8. quem só vê o painel não reconfigura a apuração")
 tk_cozinha = garantir_cozinha(chamar, token)

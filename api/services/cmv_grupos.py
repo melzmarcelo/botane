@@ -33,7 +33,7 @@ from services import relatorios
 def listar(cur) -> list[dict]:
     """Os grupos e os tipos de cada um, na ordem em que aparecem no CMV."""
     cur.execute(
-        """SELECT g.id, g.nome, g.ordem, g.ativo,
+        """SELECT g.id, g.nome, g.ordem, g.ativo, g.considerar_no_cmv,
                   coalesce(array_agg(t.tipo ORDER BY t.tipo)
                            FILTER (WHERE t.tipo IS NOT NULL), '{}') AS tipos
              FROM cmv_grupos g
@@ -105,11 +105,13 @@ def _gravar_tipos(cur, id_grupo: int, tipos: list[str]) -> None:
         )
 
 
-def criar(cur, nome: str, tipos: list[str], ordem: int = 0) -> int:
+def criar(cur, nome: str, tipos: list[str], ordem: int = 0,
+          considerar_no_cmv: bool = True) -> int:
     _validar(cur, nome, tipos, None)
     cur.execute(
-        "INSERT INTO cmv_grupos (nome, ordem) VALUES (%s, %s) RETURNING id",
-        (nome.strip(), ordem),
+        "INSERT INTO cmv_grupos (nome, ordem, considerar_no_cmv) VALUES (%s, %s, %s) "
+        "RETURNING id",
+        (nome.strip(), ordem, considerar_no_cmv),
     )
     novo = cur.fetchone()["id"]
     _gravar_tipos(cur, novo, tipos)
@@ -117,14 +119,16 @@ def criar(cur, nome: str, tipos: list[str], ordem: int = 0) -> int:
 
 
 def atualizar(cur, id_grupo: int, nome: str, tipos: list[str],
-              ordem: int = 0, ativo: bool = True) -> None:
+              ordem: int = 0, ativo: bool = True,
+              considerar_no_cmv: bool = True) -> None:
     cur.execute("SELECT id FROM cmv_grupos WHERE id = %s", (id_grupo,))
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Grupo não encontrado")
     _validar(cur, nome, tipos, id_grupo)
     cur.execute(
-        "UPDATE cmv_grupos SET nome = %s, ordem = %s, ativo = %s WHERE id = %s",
-        (nome.strip(), ordem, ativo, id_grupo),
+        "UPDATE cmv_grupos SET nome = %s, ordem = %s, ativo = %s, considerar_no_cmv = %s "
+        "WHERE id = %s",
+        (nome.strip(), ordem, ativo, considerar_no_cmv, id_grupo),
     )
     _gravar_tipos(cur, id_grupo, tipos)
 
@@ -175,6 +179,10 @@ def valores(cur, id_unidade: int, inicio: date, fim: date) -> list[dict]:
             "compras": float(medido[g["nome"]]["compras"]) if g["nome"] in medido else 0.0,
             "produtos": medido[g["nome"]]["produtos"] if g["nome"] in medido else 0,
             "tipos": list(g["tipos"]),
+            # ⚠️ A tela precisa dizer isso ao lado do número: um grupo fora do
+            # CMV mostra um valor que NÃO está no total acima, e sem o aviso
+            # parece que a conta não fecha.
+            "considerar_no_cmv": g["considerar_no_cmv"],
         }
         for g in grupos
     ]

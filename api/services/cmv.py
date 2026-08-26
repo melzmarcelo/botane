@@ -24,8 +24,34 @@ from services.custos import dec
 TIPOS_COMPRA = ("ENTRADA_NF", "ENTRADA_MANUAL")
 
 
-def valor_do_estoque(cur, id_unidade: int, ate: date | None = None) -> Decimal:
+def tipos_fora_do_cmv(cur) -> list[str]:
+    """Os tipos de produto que a casa tirou do CMV real.
+
+    ⚠️ **Sair é sair da conta INTEIRA.** O CMV real é
+    `inicial + compras − final`; tirar só as compras deixaria o estoque de
+    detergente do começo e do fim dentro da conta, e a diferença entre os dois
+    viraria custo de comida do mesmo jeito — com sinal imprevisível. Quem sai,
+    sai das três pontas, e aí a contribuição do grupo se anula por completo.
+
+    ⚠️ Devolve `[]` quando não há nenhum, e quem chama trata isso como "não
+    filtra nada". Um `NOT IN ()` vazio no Postgres é erro de sintaxe, e um
+    `<> ALL('{}')` é verdadeiro para todos — dependia de qual se escrevesse
+    primeiro. Aqui a resposta é uma só.
+    """
+    cur.execute(
+        """SELECT t.tipo FROM cmv_grupo_tipos t
+             JOIN cmv_grupos g ON g.id = t.id_grupo
+            WHERE g.ativo AND NOT g.considerar_no_cmv"""
+    )
+    return [r["tipo"] for r in cur.fetchall()]
+
+
+def valor_do_estoque(cur, id_unidade: int, ate: date | None = None,
+                     fora: list[str] | None = None) -> Decimal:
     """Valor do estoque no fim do dia `ate` (ou agora, se None).
+
+    `fora` são os tipos de produto que a casa tirou do CMV real. Quando vem, o
+    valor sai **sem eles** — é o mesmo filtro nas três pontas da conta.
 
     ⚠️ **Data de hoje (ou adiante) responde pelo SALDO, não pelo razão.** Os dois
     dão o mesmo número — `estoque_saldos` é a fotografia corrente, e o razão não
@@ -35,26 +61,36 @@ def valor_do_estoque(cur, id_unidade: int, ate: date | None = None) -> Decimal:
     comum: o mês corrente termina hoje, então toda apuração de mês aberto passa
     por aqui.
     """
+    # ⚠️ O filtro entra como `(%(fora)s IS NULL OR ...)` em vez de o SQL mudar
+    # de forma conforme haja ou não tipos de fora: duas consultas para a mesma
+    # pergunta divergem no primeiro ajuste que alguém faz só numa delas.
+    p = {"u": id_unidade, "fora": fora or None}
+
     if ate is None or ate >= date.today():
         cur.execute(
-            """SELECT coalesce(sum(quantidade * custo_medio), 0) AS valor
-                 FROM estoque_saldos WHERE id_unidade = %s""",
-            (id_unidade,),
+            """SELECT coalesce(sum(s.quantidade * s.custo_medio), 0) AS valor
+                 FROM estoque_saldos s
+                 JOIN produtos pr ON pr.id = s.id_produto
+                WHERE s.id_unidade = %(u)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+            p,
         )
         return dec(cur.fetchone()["valor"])
 
     cur.execute(
         """
         WITH ultimo AS (
-            SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, id_local, saldo_apos, custo_medio_apos
-              FROM estoque_movimentos
-             WHERE id_unidade = %s AND data_movimento < %s
-             ORDER BY id_produto, id_local, id DESC
+            SELECT DISTINCT ON (m.id_produto, m.id_local)
+                   m.id_produto, m.id_local, m.saldo_apos, m.custo_medio_apos
+              FROM estoque_movimentos m
+              JOIN produtos pr ON pr.id = m.id_produto
+             WHERE m.id_unidade = %(u)s AND m.data_movimento < %(ate)s
+               AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+             ORDER BY m.id_produto, m.id_local, m.id DESC
         )
         SELECT coalesce(sum(saldo_apos * custo_medio_apos), 0) AS valor FROM ultimo
         """,
-        (id_unidade, ate + timedelta(days=1)),
+        {**p, "ate": ate + timedelta(days=1)},
     )
     return dec(cur.fetchone()["valor"])
 
@@ -207,33 +243,49 @@ def movimentacao_congelada(cur, id_fechamento: int) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
-def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos) -> Decimal:
+def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos,
+                    fora: list[str] | None = None) -> Decimal:
     cur.execute(
-        """SELECT coalesce(sum(abs(custo_total)), 0) AS valor
-             FROM estoque_movimentos
-            WHERE id_unidade = %s AND tipo = ANY(%s)
-              AND data_movimento >= %s AND data_movimento < %s""",
-        (id_unidade, list(tipos), inicio, fim + timedelta(days=1)),
+        """SELECT coalesce(sum(abs(m.custo_total)), 0) AS valor
+             FROM estoque_movimentos m
+             JOIN produtos pr ON pr.id = m.id_produto
+            WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
+              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+        {"u": id_unidade, "tipos": list(tipos), "inicio": inicio,
+         "limite": fim + timedelta(days=1), "fora": fora or None},
     )
     return dec(cur.fetchone()["valor"])
 
 
 def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     """A conta do período inteiro, com os pedaços que explicam a variância."""
-    estoque_inicial = valor_do_estoque(cur, id_unidade, inicio - timedelta(days=1))
-    estoque_final = valor_do_estoque(cur, id_unidade, fim)
-    compras = _soma_movimentos(cur, id_unidade, inicio, fim, TIPOS_COMPRA)
+    # ⚠️ **Os tipos que a casa tirou do CMV saem das TRÊS pontas.** Detergente e
+    # marmita não são comida, e o food cost é o número que vira decisão de
+    # cardápio. Tirar só as compras deixaria o estoque de limpeza do começo e do
+    # fim na conta, e a diferença entre os dois viraria custo de comida do mesmo
+    # jeito — com sinal imprevisível. Saindo das três, a contribuição do grupo
+    # se anula por completo.
+    fora = tipos_fora_do_cmv(cur)
+
+    estoque_inicial = valor_do_estoque(cur, id_unidade, inicio - timedelta(days=1), fora)
+    estoque_final = valor_do_estoque(cur, id_unidade, fim, fora)
+    compras = _soma_movimentos(cur, id_unidade, inicio, fim, TIPOS_COMPRA, fora)
 
     cmv_real = estoque_inicial + compras - estoque_final
 
-    perdas = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_PERDA",))
-    consumo = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_CONSUMO_INTERNO",))
+    perdas = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_PERDA",), fora)
+    consumo = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_CONSUMO_INTERNO",), fora)
     cur.execute(
-        """SELECT coalesce(sum(custo_total * CASE WHEN quantidade > 0 THEN 1 ELSE -1 END), 0) AS valor
-             FROM estoque_movimentos
-            WHERE id_unidade = %s AND tipo LIKE 'AJUSTE_INVENTARIO%%'
-              AND data_movimento >= %s AND data_movimento < %s""",
-        (id_unidade, inicio, fim + timedelta(days=1)),
+        """SELECT coalesce(sum(m.custo_total
+                               * CASE WHEN m.quantidade > 0 THEN 1 ELSE -1 END), 0) AS valor
+             FROM estoque_movimentos m
+             JOIN produtos pr ON pr.id = m.id_produto
+            WHERE m.id_unidade = %(u)s AND m.tipo LIKE 'AJUSTE_INVENTARIO%%'
+              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+        {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+         "fora": fora or None},
     )
     ajustes = dec(cur.fetchone()["valor"])
 
@@ -277,6 +329,9 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
         # Sem isto o CMV teórico mente por omissão: metade dos pratos sem ficha
         # dá um teórico pela metade e uma variância enorme que não existe.
         "cobertura_ficha_pct": cobertura,
+        # Os tipos que ficaram de fora — a tela precisa dizer isso ao lado do
+        # número, senão o CMV parece menor sem explicação.
+        "tipos_fora_do_cmv": fora,
         "food_cost_pct": (cmv_real / receita * 100) if receita else None,
     }
 

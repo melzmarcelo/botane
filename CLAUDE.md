@@ -161,6 +161,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   é a **carga inicial das fichas**: com zero fichas não há CMV teórico, nem variância, nem
   food cost. O documento também registra as três decisões em que a construção divergiu do
   mapeamento e por quê (a venda passou a baixar estoque, `modo_producao`, `KIT`).
+- ⚠️ **Aba padrão escrita à mão abre na aba errada.** Tabelas de apoio abria em `"locais"`, que
+  é a SEGUNDA da lista: entrar pelo menu caía nela com a primeira ali do lado, marcada como não
+  escolhida. Agora o padrão é `ABAS.find(pode(chave))` — a primeira que a pessoa **pode ver**,
+  que também resolve quem não tem permissão na primeira e caía numa aba vazia.
 - ⚠️ **`.campo` é `width:100%` e vence a utilitária de largura do Tailwind.** `w-[110px]` num
   input com `campo` não faz nada — a largura tem de ir na COLUNA (`<th>`), e com `min-w` além
   do `w`: em `table-layout: auto` o navegador ignora a largura sugerida quando falta espaço.
@@ -504,8 +508,21 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   passado inteiro sem tocar em cadastro nenhum; gravar o grupo no produto exigiria varrer o
   cadastro a cada mudança e deixaria para trás justamente os produtos antigos, que são os que
   têm histórico.
-  ⚠️ **As linhas EXPLICAM o CMV, não se somam a ele** — como Perdas: o material de limpeza já
-  está dentro do CMV real, e a linha diz quanto do total é isso.
+  ⚠️ **O grupo escolhe se entra no CMV real** (`considerar_no_cmv`, migração 032). Marcado, a
+  linha EXPLICA o CMV — como Perdas: o custo já está no total e a linha diz quanto do total é
+  aquilo. Desmarcado, o custo **sai da conta**, e é isso que separa comida de detergente no food
+  cost, que é o percentual que vira decisão de cardápio.
+  ⚠️ **Sair é sair das TRÊS pontas** — estoque inicial, compras e estoque final. Tirar só as
+  compras deixaria o estoque de limpeza do começo e do fim na conta, e a diferença entre os dois
+  viraria custo de comida do mesmo jeito, com sinal imprevisível. Saindo das três, a
+  contribuição do grupo se anula por completo: a suíte cobra que o CMV caia **exatamente** o que
+  o grupo valia, e que remarcar devolva o número.
+  ⚠️ **O dinheiro NÃO some da tela**: o grupo continua no painel, dito "FORA do CMV real", e um
+  aviso acima da conta nomeia o que ficou de fora. Gasto que desaparece da vista é gasto que
+  ninguém controla — e quem compara com o mês passado precisa saber que a régua mudou.
+  ⚠️ `tipos_fora_do_cmv` viaja na apuração e é uma **lista**: o router converte os valores para
+  `float`, e `float(list)` derrubava a apuração inteira com 500. Campo novo que não seja número
+  precisa entrar na exceção de `_float`.
   ⚠️ **Grupo configurado aparece no painel mesmo valendo zero**, ao contrário do relatório por
   grupo (que lista o que pesou): ali "não apareceu" é indistinguível de "não salvou". E na ordem
   que a casa definiu, não na do valor — linha que troca de lugar entre um período e outro é
@@ -623,16 +640,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (957 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (965 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
-  `smoke_grupos_cmv.py` (37), `smoke_inventario_filtros.py` (39),
+  `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (254, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (258, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

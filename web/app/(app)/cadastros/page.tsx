@@ -65,7 +65,12 @@ export default function PaginaCadastros() {
   const busca = useSearchParams();
   const router = useRouter();
   const pedida = busca.get("aba") as Aba | null;
-  const aba: Aba = ABAS.some((a) => a.id === pedida) ? (pedida as Aba) : "locais";
+  // ⚠️ **Sem `?aba=`, abre a PRIMEIRA aba — e a primeira que a pessoa pode
+  // ver.** O padrão era `"locais"`, escrito à mão: entrar pelo menu caía na
+  // segunda aba, com a primeira ali do lado, marcada como não escolhida. E
+  // quem não tivesse permissão de locais caía numa aba vazia sem entender.
+  const primeira = (ABAS.find((a) => pode(a.chave)) ?? ABAS[0]).id;
+  const aba: Aba = ABAS.some((a) => a.id === pedida) ? (pedida as Aba) : primeira;
   const setAba = (nova: Aba) => router.replace(`/cadastros?aba=${nova}`);
   const [setores, setSetores] = useState<Setor[] | null>(null);
   const [locais, setLocais] = useState<Local[] | null>(null);

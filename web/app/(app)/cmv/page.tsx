@@ -32,7 +32,15 @@ type Apuracao = {
   fechado: boolean;
   ciclo: string;
   rotulo: string | null;
-  grupos?: { nome: string; cmv: number; compras: number; produtos: number; tipos: string[] }[];
+  grupos?: {
+    nome: string;
+    cmv: number;
+    compras: number;
+    produtos: number;
+    tipos: string[];
+    considerar_no_cmv: boolean;
+  }[];
+  tipos_fora_do_cmv?: string[];
 };
 
 type LinhaAbc = {
@@ -327,6 +335,24 @@ export default function PaginaCmv() {
             </Aviso>
           )}
 
+          {/* ⚠️ O aviso vem ANTES da conta, não depois: quem compara o CMV
+              deste mês com o do mês passado precisa saber que a régua mudou. */}
+          {(a.tipos_fora_do_cmv?.length ?? 0) > 0 && (
+            <Aviso tipo="info">
+              {(a.grupos ?? [])
+                .filter((g) => !g.considerar_no_cmv)
+                .map((g) => g.nome)
+                .join(", ") || "Um grupo"}{" "}
+              está <b>fora do CMV real</b>: o custo de{" "}
+              {(a.tipos_fora_do_cmv ?? []).map(nomeTipo).join(", ").toLowerCase()} não entra na
+              conta abaixo nem no food cost. Ele continua à vista, em linha própria — quem
+              quiser somá-lo, soma.{" "}
+              <Link href="/cadastros?aba=grupos-cmv" className="underline">
+                mudar isso
+              </Link>
+            </Aviso>
+          )}
+
           <Cartao
             titulo="Como o CMV se formou"
             descricao="A conta aberta, para conferir de onde cada real veio."
@@ -355,14 +381,18 @@ export default function PaginaCmv() {
                     ["Perdas", a.perdas, "quebra, validade, cortesia — dentro do CMV real"],
                     ["Consumo interno", a.consumo_interno, "equipe e degustação"],
                     ["Ajustes de inventário", a.ajustes, "diferença apurada na contagem"],
-                    // ⚠️ Os grupos que a casa montou por tipo de produto entram
-                    // como as linhas acima: explicam o CMV real, não se somam a
-                    // ele. Detergente e marmita já estão dentro do total — o que
-                    // a linha faz é dizer quanto do total é isso.
+                    // ⚠️ **Duas naturezas de linha de grupo.** A que está
+                    // DENTRO explica o CMV real, como Perdas: o custo já está
+                    // no total, e a linha diz quanto do total é aquilo. A que
+                    // está FORA mostra um valor que NÃO está no total — foi
+                    // tirado do estoque inicial, das compras e do final. Sem a
+                    // frase dizendo qual é qual, a conta parece não fechar.
                     ...(a.grupos ?? []).map((g) => [
                       g.nome,
                       g.cmv,
-                      `${g.tipos.map(nomeTipo).join(" e ")} — dentro do CMV real`,
+                      `${g.tipos.map(nomeTipo).join(" e ")} — ${
+                        g.considerar_no_cmv ? "dentro do CMV real" : "FORA do CMV real"
+                      }`,
                     ] as [string, number, string]),
                   ].map(([rotulo, valor, ajuda, forte]) => (
                     <tr key={String(rotulo)}>

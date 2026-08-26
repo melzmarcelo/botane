@@ -71,7 +71,14 @@ def apuracao(
         )
         fechado = cur.fetchone() is not None
 
-    resposta = {k: (_float(v) if not isinstance(v, (date, int)) else v) for k, v in r.items()}
+    # ⚠️ A conversão para `float` vale para dinheiro. `tipos_fora_do_cmv` é uma
+    # LISTA de siglas e passou por aqui como qualquer outro valor —
+    # `float(list)` derruba a apuração inteira com 500. Campo novo na apuração
+    # que não seja número precisa entrar nesta exceção.
+    resposta = {
+        k: (v if isinstance(v, (date, int, list)) else _float(v))
+        for k, v in r.items()
+    }
     resposta["variancia_pct"] = (
         float(r["variancia"] / r["cmv_teorico"] * 100) if r["cmv_teorico"] else None
     )
@@ -79,6 +86,7 @@ def apuracao(
     resposta["ciclo"] = c["ciclo"]
     resposta["rotulo"] = periodos.rotulo(inicio, fim, c["ciclo"])
     resposta["grupos"] = grupos
+    resposta["tipos_fora_do_cmv"] = list(r.get("tipos_fora_do_cmv") or [])
     return resposta
 
 
@@ -260,7 +268,8 @@ def tipos_livres(
 def criar_grupo(body: GrupoCmvRequest,
                 ctx: Contexto = Depends(requer_permissao("cmv.grupos"))) -> dict:
     with get_cursor() as cur:
-        novo = cmv_grupos.criar(cur, body.nome, body.tipos, body.ordem)
+        novo = cmv_grupos.criar(cur, body.nome, body.tipos, body.ordem,
+                                body.considerar_no_cmv)
         auditoria.registrar(cur, ctx.id_usuario, "cmv_grupo", novo, "criar",
                             depois={"nome": body.nome, "tipos": body.tipos})
     return {"id": novo, "message": f"Grupo {body.nome} criado"}
@@ -271,7 +280,8 @@ def atualizar_grupo(id_grupo: int, body: GrupoCmvRequest,
                     ctx: Contexto = Depends(requer_permissao("cmv.grupos"))) -> dict:
     with get_cursor() as cur:
         antes = next((g for g in cmv_grupos.listar(cur) if g["id"] == id_grupo), None)
-        cmv_grupos.atualizar(cur, id_grupo, body.nome, body.tipos, body.ordem, body.ativo)
+        cmv_grupos.atualizar(cur, id_grupo, body.nome, body.tipos, body.ordem,
+                             body.ativo, body.considerar_no_cmv)
         auditoria.registrar(cur, ctx.id_usuario, "cmv_grupo", id_grupo, "atualizar",
                             antes=antes and {"nome": antes["nome"],
                                              "tipos": list(antes["tipos"])},

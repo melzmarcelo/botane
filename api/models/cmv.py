@@ -62,8 +62,11 @@ class ApuracaoResponse(BaseModel):
     ciclo: str = "MENSAL"
     rotulo: str | None = None
     # Os grupos que a casa montou por tipo de produto — quanto do CMV é
-    # material de limpeza, embalagem, o que ela tiver separado.
+    # material de limpeza, embalagem, o que ela tiver separado. Grupo marcado
+    # como fora do CMV traz `considerar_no_cmv: false` e o valor dele NÃO está
+    # no `cmv_real`.
     grupos: list[dict] = Field(default_factory=list)
+    tipos_fora_do_cmv: list[str] = Field(default_factory=list)
 
 
 class GrupoCmvRequest(BaseModel):
@@ -73,6 +76,10 @@ class GrupoCmvRequest(BaseModel):
     tipos: list[str] = Field(default_factory=list)
     ordem: int = Field(default=0, ge=0, le=999)
     ativo: bool = True
+    # ⚠️ Falso tira os produtos destes tipos do CMV real — do estoque inicial,
+    # das compras e do estoque final. É o que separa comida de detergente no
+    # food cost. O grupo continua aparecendo no painel, à parte.
+    considerar_no_cmv: bool = True
 
 
 class GrupoCmvResponse(BaseModel):
@@ -81,6 +88,7 @@ class GrupoCmvResponse(BaseModel):
     tipos: list[str]
     ordem: int
     ativo: bool
+    considerar_no_cmv: bool = True
 
 
 class FechamentoRequest(BaseModel):

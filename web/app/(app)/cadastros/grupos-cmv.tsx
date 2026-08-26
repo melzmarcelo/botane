@@ -19,7 +19,14 @@ import { Aviso, Campo, Carregando, Confirmacao, Etiqueta, Vazio } from "@/compon
  * descobrir a regra errando.
  */
 
-type Grupo = { id: number; nome: string; tipos: string[]; ordem: number; ativo: boolean };
+type Grupo = {
+  id: number;
+  nome: string;
+  tipos: string[];
+  ordem: number;
+  ativo: boolean;
+  considerar_no_cmv: boolean;
+};
 
 export default function GruposCmv() {
   const aviso = useAviso();
@@ -30,6 +37,7 @@ export default function GruposCmv() {
   const [erro, setErro] = useState("");
   const [novoNome, setNovoNome] = useState("");
   const [novosTipos, setNovosTipos] = useState<string[]>([]);
+  const [novoNoCmv, setNovoNoCmv] = useState(true);
   const [editando, setEditando] = useState<Grupo | null>(null);
   const [excluindo, setExcluindo] = useState<Grupo | null>(null);
 
@@ -61,6 +69,44 @@ export default function GruposCmv() {
 
   const alternar = (lista: string[], tipo: string) =>
     lista.includes(tipo) ? lista.filter((t) => t !== tipo) : [...lista, tipo];
+
+  /**
+   * A escolha que muda o NÚMERO, não só a apresentação.
+   *
+   * ⚠️ Desmarcado, os produtos destes tipos saem do CMV real — do estoque
+   * inicial, das compras e do estoque final. É o que separa comida de
+   * detergente no food cost, que é o percentual que vira decisão de cardápio.
+   * O dinheiro continua aparecendo no painel, à parte: gasto que some da vista
+   * é gasto que ninguém controla.
+   */
+  const NoCmv = ({
+    marcado,
+    aoTrocar,
+    id,
+  }: {
+    marcado: boolean;
+    aoTrocar: (v: boolean) => void;
+    id: string;
+  }) => (
+    <label className="flex items-start gap-2.5" htmlFor={`cmv-${id}`}>
+      <input
+        id={`cmv-${id}`}
+        type="checkbox"
+        className="mt-0.5 h-4 w-4 accent-erva"
+        disabled={!podeEditar}
+        checked={marcado}
+        onChange={(e) => aoTrocar(e.target.checked)}
+      />
+      <span className="text-[14px] leading-snug">
+        considerar no CMV real
+        <span className="block text-[12.5px] text-suave">
+          {marcado
+            ? "o custo destes tipos entra na conta do CMV, como qualquer insumo."
+            : "o custo destes tipos FICA DE FORA do CMV e do food cost — continua aparecendo no painel, em linha própria."}
+        </span>
+      </span>
+    </label>
+  );
 
   /** As caixas de tipo, com o já usado travado e explicado. */
   const Tipos = ({
@@ -115,9 +161,11 @@ export default function GruposCmv() {
                 nome: novoNome,
                 tipos: novosTipos,
                 ordem: (grupos.at(-1)?.ordem ?? 0) + 10,
+                considerar_no_cmv: novoNoCmv,
               });
               setNovoNome("");
               setNovosTipos([]);
+              setNovoNoCmv(true);
             }, "Grupo criado.");
           }}
         >
@@ -136,6 +184,7 @@ export default function GruposCmv() {
           <Campo rotulo="Tipos de produto que entram">
             <Tipos escolhidos={novosTipos} aoTrocar={setNovosTipos} />
           </Campo>
+          <NoCmv marcado={novoNoCmv} aoTrocar={setNovoNoCmv} id="novo" />
           <div>
             <button className="btn btn-secundario" type="submit">
               Criar grupo
@@ -164,6 +213,7 @@ export default function GruposCmv() {
                       tipos: alvo.tipos,
                       ordem: alvo.ordem,
                       ativo: alvo.ativo,
+                      considerar_no_cmv: alvo.considerar_no_cmv,
                     });
                     setEditando(null);
                   }, "Grupo atualizado.");
@@ -186,6 +236,11 @@ export default function GruposCmv() {
                     aoTrocar={(tipos) => setEditando({ ...editando, tipos })}
                   />
                 </Campo>
+                <NoCmv
+                  marcado={editando.considerar_no_cmv}
+                  aoTrocar={(v) => setEditando({ ...editando, considerar_no_cmv: v })}
+                  id={String(editando.id)}
+                />
                 <div className="flex gap-2">
                   <button className="btn btn-primario" type="submit">
                     Salvar
@@ -202,7 +257,10 @@ export default function GruposCmv() {
             ) : (
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[15px] font-semibold">{g.nome}</p>
+                  <p className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
+                    {g.nome}
+                    {!g.considerar_no_cmv && <Etiqueta cor="alerta">fora do CMV real</Etiqueta>}
+                  </p>
                   <ul className="mt-1.5 flex flex-wrap gap-1.5">
                     {/* Grupo sem tipo não aparece no CMV — dizer isso aqui evita
                         que alguém procure a linha que não existe. */}

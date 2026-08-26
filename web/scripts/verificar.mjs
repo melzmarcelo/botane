@@ -1941,10 +1941,45 @@ try {
     for (const id of gruposCriados) await api("DELETE", `/cmv/grupos/${id}`, null, token);
   });
 
+  // ⚠️ **Sem `?aba=`, abre a PRIMEIRA aba.** O padrão estava escrito à mão como
+  // "locais" e entrar pelo menu caía na SEGUNDA, com a primeira ali do lado
+  // marcada como não escolhida.
+  await irPara(p, `${WEB}/cadastros`);
+  await new Promise((r) => setTimeout(r, 1600));
+  // ⚠️ Quem responde "que aba está aberta" é a FRASE que a tela mostra abaixo do
+  // título — cada aba tem a sua. Procurar o botão marcado esbarra no menu
+  // lateral, que também é feito de botões.
+  const abaInicial = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    return {
+      setores: /Organização do trabalho/i.test(texto),
+      locais: /Onde a coisa fica fisicamente/i.test(texto),
+      url: location.search,
+    };
+  });
+  checar("entrar em Tabelas de apoio abre a PRIMEIRA aba (Setores)",
+    abaInicial.setores && !abaInicial.locais, abaInicial);
+
   await irPara(p, `${WEB}/cadastros?aba=grupos-cmv`);
   await new Promise((r) => setTimeout(r, 1800));
   checar("a aba Grupos do CMV existe em Tabelas de apoio",
     await p.evaluate(() => /grupos do cmv/i.test(document.body.innerText)));
+
+  // ⚠️ A escolha que muda o NÚMERO: desmarcada, os tipos do grupo saem do CMV
+  // real. Precisa estar à vista de quem monta o grupo, não escondida.
+  const caixaCmv = await p.evaluate(() => {
+    const rotulo = [...document.querySelectorAll("label")]
+      .find((l) => /considerar no CMV real/i.test(l.textContent ?? ""));
+    return {
+      existe: !!rotulo,
+      marcada: rotulo?.querySelector("input")?.checked ?? null,
+      explica: /FICA DE FORA do CMV/i.test(document.body.innerText)
+        || /entra na conta do CMV/i.test(document.body.innerText),
+    };
+  });
+  checar("o grupo escolhe se entra no CMV real", caixaCmv.existe, caixaCmv);
+  checar("marcada por padrão no grupo novo", caixaCmv.marcada === true, caixaCmv);
+  checar("e a tela explica o que cada estado faz", caixaCmv.explica, caixaCmv);
 
   // Cria um grupo pela TELA, com um tipo livre.
   const { dados: livresAntes } = await api("GET", "/cmv/grupos/tipos-livres", null, token);
