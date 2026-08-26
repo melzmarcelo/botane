@@ -15,8 +15,9 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import GruposCmv from "./grupos-cmv";
 
-type Aba = "setores" | "locais" | "categorias" | "unidades";
+type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
 
 const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
   {
@@ -46,6 +47,13 @@ const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
     chave: "cadastros.unidades_medida",
     explica:
       "Quilo, litro, unidade. O fator converte para a base da grandeza (g, ml, un). Quantas unidades vêm na caixa é do produto, não daqui.",
+  },
+  {
+    id: "grupos-cmv",
+    nome: "Grupos do CMV",
+    chave: "cmv.grupos",
+    explica:
+      "Separa no painel de CMV o que não é comida. Cada grupo junta um ou mais tipos de produto — e um tipo só pode estar num grupo.",
   },
 ];
 
@@ -419,6 +427,14 @@ export default function PaginaCadastros() {
       )}
 
       {/* ---------------------------------------------------------- unidades */}
+      {/* ⚠️ Em componente próprio: esta tela já é longa, e o editor de grupos
+          tem estado seu (o formulário de edição abre em linha). */}
+      {aba === "grupos-cmv" && (
+        <Cartao titulo="Grupos do CMV">
+          <GruposCmv />
+        </Cartao>
+      )}
+
       {aba === "unidades" && (
         <Cartao titulo="Unidades de medida">
           {!ums ? (

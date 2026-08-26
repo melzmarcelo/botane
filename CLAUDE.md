@@ -424,6 +424,32 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   salvar: semana que fecha na quarta, mês que começa no 26 e dia corrido são três aritméticas,
   e uma segunda implementação em TypeScript divergiria no primeiro caso de borda — aparecendo
   como fechamento no período errado, que só se desfaz reabrindo.
+- **A casa monta os próprios grupos do CMV, por TIPO de produto**
+  (`services/cmv_grupos.py`, migração 029, 26/08/2026). O painel já mostrava Perdas, Consumo
+  interno e Ajustes de inventário como linhas que EXPLICAM o número; faltava a pergunta que o
+  dono faz olhando a nota do mês: **quanto disto não é comida?** Detergente, sacola e marmita
+  entram no custo pela mesma porta dos insumos e somem no total. Tipo novo:
+  **`MATERIAL_LIMPEZA`**. O grupo de exemplo ("Material de limpeza e embalagem" = EMBALAGEM +
+  MATERIAL_LIMPEZA) nasce na migração — funcionalidade que não aparece é funcionalidade que
+  ninguém procura —, e é editável e apagável como qualquer outro.
+  ⚠️ **Um tipo só entra em UM grupo, e quem garante é o BANCO**: `tipo` é a chave primária de
+  `cmv_grupo_tipos`. Conferir só na aplicação deixaria duas telas gravarem ao mesmo tempo — e o
+  mesmo custo apareceria em dois grupos, com a soma dos grupos deixando de fechar com o CMV, que
+  é justamente a propriedade que dá sentido ao corte (a suíte cobra a identidade).
+  ⚠️ **O vínculo é com o TIPO, nunca com o produto.** Mudar a configuração reclassifica o
+  passado inteiro sem tocar em cadastro nenhum; gravar o grupo no produto exigiria varrer o
+  cadastro a cada mudança e deixaria para trás justamente os produtos antigos, que são os que
+  têm histórico.
+  ⚠️ **As linhas EXPLICAM o CMV, não se somam a ele** — como Perdas: o material de limpeza já
+  está dentro do CMV real, e a linha diz quanto do total é isso.
+  ⚠️ **Grupo configurado aparece no painel mesmo valendo zero**, ao contrário do relatório por
+  grupo (que lista o que pesou): ali "não apareceu" é indistinguível de "não salvou". E na ordem
+  que a casa definiu, não na do valor — linha que troca de lugar entre um período e outro é
+  linha que ninguém acha.
+  ⚠️ A conta é a MESMA de `relatorios.cmv_por_grupo` (`agrupar="grupo"`), não uma soma escrita à
+  parte: painel e relatório mostram o número lado a lado. Configura-se em **Tabelas de apoio ▸
+  Grupos do CMV**, sob a chave `cmv.grupos` — ver o painel e remontar a apuração da casa são
+  coisas diferentes, e o Contador tem a primeira.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
@@ -533,14 +559,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (849 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (886 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
+  `smoke_grupos_cmv.py` (37),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (238, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (246, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
@@ -585,6 +612,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `CORS_ORIGINS` de propósito: é a porta dos fundos no dia em que o DNS quebrar.
   `verificar_deploy.py` agora lê o endereço de dentro do JavaScript compilado e o compara com
   o host conferido — é a única forma de ver essa variável depois do build.
+- ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**
+  Produto com movimento não é apagado, vira INATIVO — então a base acumula um por rodada. O
+  `verificar.mjs` clicava no primeiro item cujo nome continha `"Est tela"`, sem o marcador: a
+  partir da segunda rodada a entrada de 10 kg ia para o produto de OUTRO teste, o desta ficava
+  com saldo zero, e a checagem acusava a tela de não gravar. Duas checagens falhavam de forma
+  intermitente e pareciam instabilidade do navegador. Vale a mesma regra das suítes de API:
+  **cada teste procura o registro DELE**, pelo nome completo com marca de tempo.
+  ⚠️ E `foto(fullPage)` no painel de CMV estoura o tempo do protocolo do Chrome — a página tem
+  composição, ABC e margem, todas longas. Fotografar a tela do assunto, não a maior.
 - ⚠️ **A fotografia do razão não sobrevive a lançamento retroativo — e não é dos ciclos.**
   `saldo_apos` é calculado na ordem de LANÇAMENTO (decisão certa: por data, o CMV de ontem
   mudaria sozinho). Como o saldo de uma data passada é lido do último movimento antes dela, um

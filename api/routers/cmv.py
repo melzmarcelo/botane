@@ -6,10 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auditoria
 from database import get_cursor
-from models.cmv import ApuracaoResponse, FechamentoRequest, FechamentoResponse
+from models.cmv import (
+    ApuracaoResponse,
+    FechamentoRequest,
+    FechamentoResponse,
+    GrupoCmvRequest,
+    GrupoCmvResponse,
+)
+from models.produtos import TIPOS as TIPOS_PRODUTO
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
-from services import periodos, relatorios
+from services import cmv_grupos, periodos, relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
 
@@ -53,6 +60,10 @@ def apuracao(
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
         c = periodos.config(cur, id_unidade)
         r = motor.apurar(cur, id_unidade, inicio, fim)
+        # ⚠️ Vem junto da apuração, não numa segunda chamada: o painel do dono
+        # que faz duas requisições pisca duas vezes, e a linha do grupo aparece
+        # depois do total — dando a impressão de que foi somada por fora.
+        grupos = cmv_grupos.valores(cur, id_unidade, inicio, fim)
         cur.execute(
             """SELECT 1 FROM cmv_fechamentos
                 WHERE id_unidade = %s AND status = 'FECHADO' AND fim >= %s AND inicio <= %s""",
@@ -67,6 +78,7 @@ def apuracao(
     resposta["fechado"] = fechado
     resposta["ciclo"] = c["ciclo"]
     resposta["rotulo"] = periodos.rotulo(inicio, fim, c["ciclo"])
+    resposta["grupos"] = grupos
     return resposta
 
 
@@ -98,12 +110,12 @@ def margem(
 
 @router.get("/por-grupo")
 def por_grupo(
-    agrupar: str = Query(default="setor", pattern="^(setor|categoria)$"),
+    agrupar: str = Query(default="setor", pattern="^(setor|categoria|grupo)$"),
     inicio: date | None = None,
     fim: date | None = None,
     ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
 ) -> list[dict]:
-    """O CMV do período quebrado por setor ou por categoria."""
+    """O CMV do período quebrado por setor, categoria ou grupo da casa."""
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
@@ -215,6 +227,68 @@ def movimentacao(inicio: date | None = None, fim: date | None = None,
         "competencia": str(fechamento["competencia"]) if fechamento else None,
         "produtos": len(linhas), "total": total, "linhas": linhas,
     }
+
+
+# --------------------------------------------------------- grupos do CMV
+
+
+@router.get("/grupos", response_model=list[GrupoCmvResponse])
+def listar_grupos(ctx: Contexto = Depends(requer_permissao("cmv.grupos", "cmv.painel"))
+                  ) -> list[dict]:
+    """Os grupos configurados. Quem vê o painel também lê — a tela os nomeia."""
+    with get_cursor() as cur:
+        return cmv_grupos.listar(cur)
+
+
+@router.get("/grupos/tipos-livres")
+def tipos_livres(
+    id_grupo: int | None = None,
+    ctx: Contexto = Depends(requer_permissao("cmv.grupos")),
+) -> dict:
+    """Os tipos de produto que ainda não pertencem a grupo nenhum.
+
+    ⚠️ Ao editar, os tipos do próprio grupo contam como livres: sem isso a tela
+    abriria sem as escolhas dele, e quem entrasse só para renomear sairia tendo
+    esvaziado o grupo sem perceber.
+    """
+    with get_cursor() as cur:
+        return {"tipos": cmv_grupos.tipos_livres(cur, id_grupo),
+                "todos": list(TIPOS_PRODUTO)}
+
+
+@router.post("/grupos", status_code=201)
+def criar_grupo(body: GrupoCmvRequest,
+                ctx: Contexto = Depends(requer_permissao("cmv.grupos"))) -> dict:
+    with get_cursor() as cur:
+        novo = cmv_grupos.criar(cur, body.nome, body.tipos, body.ordem)
+        auditoria.registrar(cur, ctx.id_usuario, "cmv_grupo", novo, "criar",
+                            depois={"nome": body.nome, "tipos": body.tipos})
+    return {"id": novo, "message": f"Grupo {body.nome} criado"}
+
+
+@router.put("/grupos/{id_grupo}")
+def atualizar_grupo(id_grupo: int, body: GrupoCmvRequest,
+                    ctx: Contexto = Depends(requer_permissao("cmv.grupos"))) -> dict:
+    with get_cursor() as cur:
+        antes = next((g for g in cmv_grupos.listar(cur) if g["id"] == id_grupo), None)
+        cmv_grupos.atualizar(cur, id_grupo, body.nome, body.tipos, body.ordem, body.ativo)
+        auditoria.registrar(cur, ctx.id_usuario, "cmv_grupo", id_grupo, "atualizar",
+                            antes=antes and {"nome": antes["nome"],
+                                             "tipos": list(antes["tipos"])},
+                            depois={"nome": body.nome, "tipos": body.tipos})
+    return {"message": "Grupo atualizado"}
+
+
+@router.delete("/grupos/{id_grupo}")
+def excluir_grupo(id_grupo: int,
+                  ctx: Contexto = Depends(requer_permissao("cmv.grupos"))) -> dict:
+    with get_cursor() as cur:
+        antes = next((g for g in cmv_grupos.listar(cur) if g["id"] == id_grupo), None)
+        cmv_grupos.excluir(cur, id_grupo)
+        auditoria.registrar(cur, ctx.id_usuario, "cmv_grupo", id_grupo, "excluir",
+                            antes=antes and {"nome": antes["nome"],
+                                             "tipos": list(antes["tipos"])})
+    return {"message": "Grupo excluído — os tipos dele voltaram a ficar livres"}
 
 
 @router.get("/periodos")

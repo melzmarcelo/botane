@@ -895,11 +895,17 @@ try {
   checar("e a janela já vem com o filtro digitado", (janela?.linhas ?? 0) > 1, janela);
   await foto(p, "18d-busca-cadastro");
   // Escolher na janela devolve o foco ao campo, para seguir no teclado.
-  await p.evaluate(() => {
+  // ⚠️ Escolhe pelo nome COMPLETO, com o marcador desta rodada. Antes procurava
+  // só por "Est tela" — e produto com movimento não é apagado, vira inativo, de
+  // modo que a base acumula um por rodada. A partir da segunda, o clique caía
+  // no produto de OUTRO teste: a entrada de 10 kg ia para ele, o produto desta
+  // rodada ficava com saldo zero e a checagem acusava a tela de não gravar.
+  // Mesma regra das suítes de API: cada teste procura o registro DELE.
+  await p.evaluate((alvo) => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return;
-    [...d.querySelectorAll("li button")].find((b) => b.textContent.includes("Est tela"))?.click();
-  });
+    [...d.querySelectorAll("li button")].find((b) => b.textContent.includes(alvo))?.click();
+  }, `Est tela ${m4}`);
   await new Promise((r) => setTimeout(r, 700));
   const depoisDaJanela = await p.evaluate(() => ({
     fechou: !document.querySelector('[role="dialog"]'),
@@ -1840,6 +1846,86 @@ try {
     () => document.documentElement.scrollWidth <= window.innerWidth + 1,
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
+
+  console.log("10z. grupos do CMV: separar o que não é comida");
+  // A casa monta os próprios grupos por tipo de produto. O que se prova aqui é
+  // o que a tela promete: o tipo já usado aparece TRAVADO, dizendo onde está —
+  // deixar escolher para depois levar 409 é fazer a pessoa descobrir a regra
+  // errando.
+  const marcaG = String(Date.now()).slice(-5);
+  const gruposCriados = [];
+  aoTerminar.push(async () => {
+    for (const id of gruposCriados) await api("DELETE", `/cmv/grupos/${id}`, null, token);
+  });
+
+  await irPara(p, `${WEB}/cadastros?aba=grupos-cmv`);
+  await new Promise((r) => setTimeout(r, 1800));
+  checar("a aba Grupos do CMV existe em Tabelas de apoio",
+    await p.evaluate(() => /grupos do cmv/i.test(document.body.innerText)));
+
+  // Cria um grupo pela TELA, com um tipo livre.
+  const { dados: livresAntes } = await api("GET", "/cmv/grupos/tipos-livres", null, token);
+  const tipoLivre = (livresAntes?.tipos ?? [])[0];
+  checar("há tipo de produto livre para o teste usar", !!tipoLivre, livresAntes);
+  if (tipoLivre) {
+    await p.evaluate((nome) => {
+      const campo = [...document.querySelectorAll("input")]
+        .find((i) => i.placeholder?.includes("Material de limpeza"));
+      if (!campo) return;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, "value").set;
+      setter.call(campo, nome);
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    }, `Teste tela ${marcaG}`);
+    await p.evaluate((tipo) => {
+      document.querySelector(`#tipo-novo-${tipo}`)?.click();
+    }, tipoLivre);
+    await new Promise((r) => setTimeout(r, 400));
+    await p.evaluate(() => {
+      [...document.querySelectorAll("button")]
+        .find((b) => b.textContent === "Criar grupo")?.click();
+    });
+    await new Promise((r) => setTimeout(r, 1800));
+
+    const { dados: depoisCriar } = await api("GET", "/cmv/grupos", null, token);
+    const meu = (depoisCriar ?? []).find((g) => g.nome === `Teste tela ${marcaG}`);
+    checar("o grupo criado pela tela chega ao servidor", !!meu, depoisCriar?.length);
+    if (meu) {
+      gruposCriados.push(meu.id);
+      checar("com o tipo que foi marcado", meu.tipos.includes(tipoLivre), meu.tipos);
+    }
+
+    // ⚠️ O tipo agora está tomado: a caixa dele tem de aparecer DESABILITADA e
+    // dizendo em que grupo está.
+    await new Promise((r) => setTimeout(r, 600));
+    const travado = await p.evaluate((tipo) => {
+      const caixa = document.querySelector(`#tipo-novo-${tipo}`);
+      const rotulo = document.querySelector(`label[for="tipo-novo-${tipo}"]`);
+      return { existe: !!caixa, travada: caixa?.disabled ?? null,
+               texto: rotulo?.textContent ?? "" };
+    }, tipoLivre);
+    checar("o tipo já usado fica travado na tela", travado.travada === true, travado);
+    checar("e a tela diz em qual grupo ele está",
+      /já está em/.test(travado.texto), travado.texto);
+    // ⚠️ A foto é DESTA tela, não do painel de CMV: `fullPage` no painel — que
+    // tem a composição, a ABC e a margem, todas longas — estourava o tempo do
+    // protocolo do Chrome. E é aqui que a configuração se vê.
+    await foto(p, "27-grupos-cmv");
+  }
+
+  // A linha do grupo aparece na conta do CMV, junto de Perdas e Ajustes.
+  await irPara(p, `${WEB}/cmv`);
+  await new Promise((r) => setTimeout(r, 2200));
+  const noPainel = await p.evaluate(() => {
+    const linhas = [...document.querySelectorAll("table tr")]
+      .map((l) => l.textContent?.trim() ?? "");
+    return {
+      temPerdas: linhas.some((l) => l.startsWith("Perdas")),
+      temGrupo: linhas.some((l) => /Material de limpeza|Teste tela/i.test(l)),
+    };
+  });
+  checar("a conta do CMV continua mostrando Perdas", noPainel.temPerdas, noPainel);
+  checar("e ganhou a linha do grupo por tipo de produto", noPainel.temGrupo, noPainel);
 
   console.log("10a. ritmo do fechamento: dia, semana ou mês");
   // ⚠️ **A loja volta a MENSAL no fim deste bloco.** O ritmo muda o período em

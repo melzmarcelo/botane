@@ -39,7 +39,7 @@ const MENU: {
         href: "/cadastros",
         nome: "Tabelas de apoio",
         chave: ["cadastros.setores", "cadastros.locais", "cadastros.categorias",
-                "cadastros.unidades_medida"],
+                "cadastros.unidades_medida", "cmv.grupos"],
       },
     ],
   },

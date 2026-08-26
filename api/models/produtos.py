@@ -4,7 +4,10 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-TIPOS = ("INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM")
+# ⚠️ A ordem é a que aparece nas telas, e `MATERIAL_LIMPEZA` fica ao lado de
+# `EMBALAGEM` de propósito: são os dois tipos que entram no custo pela porta dos
+# insumos sem serem comida. É o que os grupos do CMV separam.
+TIPOS = ("INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM", "MATERIAL_LIMPEZA")
 STATUS = ("RASCUNHO", "ATIVO", "ARQUIVADO")
 
 

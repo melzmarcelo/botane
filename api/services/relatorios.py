@@ -21,20 +21,37 @@ from services.custos import dec
 
 def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
                   agrupar: str = "setor") -> list[dict]:
-    """A conta do CMV quebrada por setor ou por categoria.
+    """A conta do CMV quebrada por setor, por categoria ou pelos grupos da casa.
+
+    Não é rateio: é a mesma conta (`inicial + compras − final`) restrita a cada
+    grupo, e a soma dos grupos fecha com o CMV do período — o teste cobra isso.
 
     O que não tem grupo aparece como "Sem setor" em vez de sumir — produto sem
     classificação é justamente o que ninguém olha, e some da conta se a junção
     for interna.
+
+    ⚠️ `agrupar="grupo"` usa os **grupos do CMV** que a casa montou por tipo de
+    produto (`cmv_grupos` + `cmv_grupo_tipos`), que é como o dono separa o que
+    não é comida — detergente e marmita entram no custo pela mesma porta dos
+    insumos e somem no total.
     """
-    if agrupar not in ("setor", "categoria"):
-        raise ValueError("agrupar deve ser 'setor' ou 'categoria'")
+    if agrupar not in ("setor", "categoria", "grupo"):
+        raise ValueError("agrupar deve ser 'setor', 'categoria' ou 'grupo'")
 
     junta = {
         "setor": "LEFT JOIN setores g ON g.id = p.id_setor",
         "categoria": "LEFT JOIN categorias g ON g.id = p.id_categoria",
+        # ⚠️ O grupo do CMV é por TIPO de produto, não por uma coluna do
+        # produto: quem diz que EMBALAGEM e MATERIAL_LIMPEZA andam juntos é a
+        # casa, em `cmv_grupo_tipos`. A junção passa pelo tipo justamente para
+        # que mudar a configuração reclassifique o passado inteiro sem tocar em
+        # produto nenhum — o contrário (gravar o grupo no produto) exigiria
+        # varrer o cadastro a cada mudança e deixaria os antigos para trás.
+        "grupo": """LEFT JOIN cmv_grupo_tipos gt ON gt.tipo = p.tipo
+                    LEFT JOIN cmv_grupos g ON g.id = gt.id_grupo AND g.ativo""",
     }[agrupar]
-    rotulo = "Sem setor" if agrupar == "setor" else "Sem categoria"
+    rotulo = {"setor": "Sem setor", "categoria": "Sem categoria",
+              "grupo": "Sem grupo"}[agrupar]
 
     cur.execute(
         f"""

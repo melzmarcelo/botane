@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS categorias (
     id        serial PRIMARY KEY,
     id_pai    integer REFERENCES categorias(id) ON DELETE RESTRICT,
     nome      varchar(80) NOT NULL,
-    tipo      varchar(20) NOT NULL DEFAULT 'INSUMO',  -- INSUMO|REVENDA|PRODUZIDO|EMBALAGEM
+    tipo      varchar(20) NOT NULL DEFAULT 'INSUMO',  -- INSUMO|REVENDA|PRODUZIDO|EMBALAGEM|MATERIAL_LIMPEZA (029)
     ordem     smallint NOT NULL DEFAULT 0,
     ativo     boolean NOT NULL DEFAULT true,
     criado_em timestamptz NOT NULL DEFAULT now(),
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS produtos (
     codigo            varchar(40) NOT NULL,
     nome              varchar(160) NOT NULL,
     nome_curto        varchar(60),
-    tipo              varchar(20) NOT NULL,   -- INSUMO|REVENDA|PRODUZIDO|KIT|EMBALAGEM
+    tipo              varchar(20) NOT NULL,   -- INSUMO|REVENDA|PRODUZIDO|KIT|EMBALAGEM|MATERIAL_LIMPEZA (029)
     id_categoria      integer REFERENCES categorias(id) ON DELETE SET NULL,
     id_setor          integer REFERENCES setores(id) ON DELETE SET NULL,
     producao_propria  boolean NOT NULL DEFAULT false,

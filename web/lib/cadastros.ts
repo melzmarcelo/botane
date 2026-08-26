@@ -70,10 +70,21 @@ export const TIPOS_PRODUTO = [
   { valor: "REVENDA", nome: "Revenda", ajuda: "Compra e vende inteiro, sem receita" },
   { valor: "KIT", nome: "Kit", ajuda: "Conjunto de outros produtos" },
   { valor: "EMBALAGEM", nome: "Embalagem", ajuda: "Copo, sacola, marmita" },
+  {
+    valor: "MATERIAL_LIMPEZA",
+    nome: "Material de limpeza",
+    ajuda: "Detergente, desinfetante, pano — custo que não é comida",
+  },
 ];
 
 export const TIPOS_LOCAL = ["SECO", "RESFRIADO", "CONGELADO", "BAR"];
-export const TIPOS_CATEGORIA = ["INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM"];
+export const TIPOS_CATEGORIA = [
+  "INSUMO",
+  "REVENDA",
+  "PRODUZIDO",
+  "EMBALAGEM",
+  "MATERIAL_LIMPEZA",
+];
 export const GRANDEZAS = ["MASSA", "VOLUME", "UNIDADE"];
 
 export const nomeTipo = (t: string) =>

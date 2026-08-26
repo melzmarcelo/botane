@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { reais } from "@/lib/cadastros";
+import { nomeTipo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
@@ -32,6 +32,7 @@ type Apuracao = {
   fechado: boolean;
   ciclo: string;
   rotulo: string | null;
+  grupos?: { nome: string; cmv: number; compras: number; produtos: number; tipos: string[] }[];
 };
 
 type LinhaAbc = {
@@ -354,6 +355,15 @@ export default function PaginaCmv() {
                     ["Perdas", a.perdas, "quebra, validade, cortesia — dentro do CMV real"],
                     ["Consumo interno", a.consumo_interno, "equipe e degustação"],
                     ["Ajustes de inventário", a.ajustes, "diferença apurada na contagem"],
+                    // ⚠️ Os grupos que a casa montou por tipo de produto entram
+                    // como as linhas acima: explicam o CMV real, não se somam a
+                    // ele. Detergente e marmita já estão dentro do total — o que
+                    // a linha faz é dizer quanto do total é isso.
+                    ...(a.grupos ?? []).map((g) => [
+                      g.nome,
+                      g.cmv,
+                      `${g.tipos.map(nomeTipo).join(" e ")} — dentro do CMV real`,
+                    ] as [string, number, string]),
                   ].map(([rotulo, valor, ajuda, forte]) => (
                     <tr key={String(rotulo)}>
                       <td className={forte ? "font-bold" : ""}>{rotulo}</td>

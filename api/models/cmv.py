@@ -61,6 +61,26 @@ class ApuracaoResponse(BaseModel):
     # diz "agosto" enquanto o fechamento congela a semana mente sobre si mesma.
     ciclo: str = "MENSAL"
     rotulo: str | None = None
+    # Os grupos que a casa montou por tipo de produto — quanto do CMV é
+    # material de limpeza, embalagem, o que ela tiver separado.
+    grupos: list[dict] = Field(default_factory=list)
+
+
+class GrupoCmvRequest(BaseModel):
+    nome: str = Field(min_length=2, max_length=60)
+    # ⚠️ Lista de TIPOS de produto, não de produtos. Vazia é legítima: o grupo
+    # existe e ainda não recebeu tipo nenhum — some do painel até receber.
+    tipos: list[str] = Field(default_factory=list)
+    ordem: int = Field(default=0, ge=0, le=999)
+    ativo: bool = True
+
+
+class GrupoCmvResponse(BaseModel):
+    id: int
+    nome: str
+    tipos: list[str]
+    ordem: int
+    ativo: bool
 
 
 class FechamentoRequest(BaseModel):
