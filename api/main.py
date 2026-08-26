@@ -15,6 +15,7 @@ from pydantic_core import PydanticCustomError
 
 import arquivos
 from services.omie import agenda as agenda_omie
+from services.pdv import agenda as agenda_pdv
 from config import (
     ADMIN_EMAIL,
     ADMIN_EMAIL_PADRAO,
@@ -132,14 +133,19 @@ async def lifespan(app: FastAPI):
     run_migrations()
     garantir_admin()
 
-    # ⚠️ **O agendador do Omie sobe SEMPRE; quem decide é a configuração.** O
-    # padrão de `agenda_frequencia` é MANUAL, então numa casa que não ligou nada
-    # este laço acorda de minuto em minuto, faz uma consulta com índice e volta
+    # ⚠️ **Os agendadores sobem SEMPRE; quem decide é a configuração.** O padrão
+    # de `agenda_frequencia` é MANUAL, então numa casa que não ligou nada estes
+    # laços acordam de minuto em minuto, fazem uma consulta com índice e voltam
     # a dormir. Ligar ou desligar não exige reiniciar a API — se o laço só
     # subisse quando houvesse agenda, mudar a configuração pediria um restart, e
     # ninguém lembraria disso.
+    #
+    # ⚠️ **Dois laços separados, não um.** As integrações falham por motivos
+    # diferentes e em momentos diferentes; um laço só faria a busca de notas
+    # esperar a de vendas terminar — e um erro no meio derrubaria as duas.
     parar = asyncio.Event()
-    tarefa = asyncio.create_task(agenda_omie.laco(parar))
+    tarefas = [asyncio.create_task(agenda_omie.laco(parar)),
+               asyncio.create_task(agenda_pdv.laco(parar))]
 
     print(f"[botane] API {VERSAO} pronta em http://localhost:{PORT}")
     yield
@@ -148,10 +154,11 @@ async def lifespan(app: FastAPI):
     # a transação fica para o Postgres desfazer — com o advisory lock preso até
     # a conexão cair, o que atrasa a próxima instância.
     parar.set()
-    try:
-        await asyncio.wait_for(tarefa, timeout=10)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
-        tarefa.cancel()
+    for tarefa in tarefas:
+        try:
+            await asyncio.wait_for(tarefa, timeout=10)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            tarefa.cancel()
     close_pool()
 
 

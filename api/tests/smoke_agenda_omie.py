@@ -16,7 +16,10 @@ O que este arquivo cobra:
 ⚠️ **A lógica do relógio é testada como função pura.** Testá-la pela API exigiria
 esperar uma hora passar, ou mexer no relógio da máquina; e disparar o agendador
 de verdade contra a conta real do cliente consome cota, que é justamente o que o
-Omie bloqueia. `_deve_rodar` recebe o "agora" como argumento por causa disto.
+Omie bloqueia. `deve_rodar` recebe o "agora" como argumento por causa disto.
+
+⚠️ A regra mora em `services/agenda_integracao.py`, compartilhada com o PDV
+Legal: uma segunda cópia divergiria na primeira correção.
 
 ⚠️ **Devolve a agenda para MANUAL no fim, pelo `atexit`.** A conta configurada
 aqui é a REAL: deixar HORARIA ligada faria a máquina de desenvolvimento buscar
@@ -36,6 +39,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
 from comum import preservar_credenciais  # noqa: E402
+from services import agenda_integracao as regra  # noqa: E402
 from services.omie import agenda  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
@@ -120,29 +124,29 @@ def linha(freq, rodou=None, hora=3, ativa=True):
             "ativa": ativa}
 
 
-checar("MANUAL nunca roda", not agenda._deve_rodar(linha("MANUAL"), agora))
+checar("MANUAL nunca roda", not regra.deve_rodar(linha("MANUAL"), agora))
 # ⚠️ Integração desligada não roda, mesmo com agenda: desligar é desligar, e
 # uma agenda que sobrevive ao desligamento é uma surpresa cara.
 checar("integração inativa não roda, mesmo agendada",
-       not agenda._deve_rodar(linha("HORARIA", ativa=False), agora))
-checar("HORARIA roda quando nunca rodou", agenda._deve_rodar(linha("HORARIA"), agora))
+       not regra.deve_rodar(linha("HORARIA", ativa=False), agora))
+checar("HORARIA roda quando nunca rodou", regra.deve_rodar(linha("HORARIA"), agora))
 checar("HORARIA NÃO roda meia hora depois da última",
-       not agenda._deve_rodar(linha("HORARIA", agora - timedelta(minutes=30)), agora))
+       not regra.deve_rodar(linha("HORARIA", agora - timedelta(minutes=30)), agora))
 checar("HORARIA roda uma hora depois",
-       agenda._deve_rodar(linha("HORARIA", agora - timedelta(hours=1, minutes=1)), agora))
+       regra.deve_rodar(linha("HORARIA", agora - timedelta(hours=1, minutes=1)), agora))
 
 
 print("\n3. a diária dispara uma vez no dia, não a cada minuto")
-checar("DIARIA roda na hora escolhida", agenda._deve_rodar(linha("DIARIA", hora=3), agora))
+checar("DIARIA roda na hora escolhida", regra.deve_rodar(linha("DIARIA", hora=3), agora))
 checar("e NÃO roda numa hora que não é a dela",
-       not agenda._deve_rodar(linha("DIARIA", hora=5), agora))
+       not regra.deve_rodar(linha("DIARIA", hora=5), agora))
 # ⚠️ Sem esta regra ela rodaria a cada minuto durante os sessenta minutos da
 # hora escolhida: sessenta buscas onde se pediu uma.
 checar("e NÃO repete depois de já ter rodado hoje",
-       not agenda._deve_rodar(
+       not regra.deve_rodar(
            linha("DIARIA", agora.replace(hour=3, minute=1), hora=3), agora))
 checar("mas roda de novo no dia seguinte",
-       agenda._deve_rodar(
+       regra.deve_rodar(
            linha("DIARIA", agora - timedelta(days=1), hora=3), agora))
 
 

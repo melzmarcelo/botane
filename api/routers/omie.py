@@ -140,17 +140,20 @@ def salvar_config(body: ConfigOmie,
 
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais,
-                                        agenda_frequencia, agenda_hora, agenda_janela_dias)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        agenda_frequencia, agenda_hora, agenda_janela_dias,
+                                        agenda_id_usuario)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (id_unidade, servico) DO UPDATE
                    SET ativa = EXCLUDED.ativa, modo = EXCLUDED.modo,
                        credenciais = EXCLUDED.credenciais,
                        agenda_frequencia = EXCLUDED.agenda_frequencia,
                        agenda_hora = EXCLUDED.agenda_hora,
                        agenda_janela_dias = EXCLUDED.agenda_janela_dias,
+                       agenda_id_usuario = EXCLUDED.agenda_id_usuario,
                        atualizado_em = now()""",
             (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred),
-             body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias),
+             body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias,
+             ctx.id_usuario),
         )
         # ⚠️ Ligar o agendamento limpa o erro anterior: manter a mensagem velha
         # faria a tela acusar uma falha que já foi tratada — e quem acabou de

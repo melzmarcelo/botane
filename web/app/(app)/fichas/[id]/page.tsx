@@ -8,7 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
-import BuscaCadastro from "@/components/busca-cadastro";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 
 type Item = {
@@ -74,12 +74,12 @@ export default function EditorFicha() {
 
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [idProduto, setIdProduto] = useState("");
+  const [rotuloProduto, setRotuloProduto] = useState("");
   const [cabecalho, setCabecalho] = useState({
     rendimento_qtd: "1", rendimento_um: "", porcoes: "1", tempo_preparo_min: "",
     modo_preparo: "", alergenos: "", observacao: "",
   });
   const [itens, setItens] = useState<Item[]>([{ ...ITEM_VAZIO }]);
-  const [produzidos, setProduzidos] = useState<ProdutoResumo[]>([]);
   const [fichas, setFichas] = useState<FichaListada[]>([]);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [carregando, setCarregando] = useState(!nova);
@@ -88,12 +88,10 @@ export default function EditorFicha() {
 
   useEffect(() => {
     Promise.all([
-      api.get<ProdutoResumo[]>("/produtos?tipo=PRODUZIDO"),
       api.get<UnidadeMedida[]>("/unidades-medida"),
       api.get<FichaListada[]>("/fichas"),
     ])
-      .then(([prod, u, fs]) => {
-        setProduzidos(prod);
+      .then(([u, fs]) => {
         setUms(u);
         setFichas(fs);
       })
@@ -226,6 +224,22 @@ export default function EditorFicha() {
    * conviverem na mesma lista sem se confundirem, e decodificar é só olhar o
    * sinal.
    */
+  /**
+   * O que esta ficha PRODUZ — só produto produzido, buscado no servidor.
+   *
+   * ⚠️ O filtro do tipo vai como parâmetro da consulta (`extra`), não como
+   * peneira no navegador: filtrar depois cortaria a página trazida e a busca
+   * diria "nenhum resultado" para um prato que existe na página seguinte.
+   */
+  const fonteProduzidos = useMemo<FonteBusca>(
+    () => ({
+      ...fonteProdutos(undefined, "tipo=PRODUZIDO"),
+      titulo: "Buscar produto produzido",
+      singular: "produto",
+    }),
+    [],
+  );
+
   const fonteInsumoOuPreparo = useMemo<FonteBusca>(() => {
     const produtos = fonteProdutos((p) => p.controla_estoque);
     return {
@@ -311,31 +325,30 @@ export default function EditorFicha() {
 
       <Cartao titulo="O que esta ficha produz">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* ⚠️ **BUSCA, não `<select>`.** A lista vinha de
+              `/produtos?tipo=PRODUZIDO` e o endpoint pagina: eram os 200
+              primeiros em ordem alfabética. Enquanto a casa tinha dezenas de
+              pratos ninguém notou; ao importar o cardápio do PDV (627 itens), o
+              prato que se queria virou invisível — e o pior é que o `<select>`
+              não tem como dizer isso. A tela ficava certa, o produto simplesmente
+              não estava lá, e o formulário recusava salvar sem explicar.
+              Produto NÃO é "poucos por natureza": é exatamente o caso para que
+              `BuscaCadastro` existe. */}
           <Campo rotulo="Produto" className="lg:col-span-2">
             {nova ? (
-              <select
-                className="campo"
+              <BuscaCadastro
+                fonte={fonteProduzidos}
                 required
-                value={idProduto}
-                onChange={(e) => setIdProduto(e.target.value)}
-              >
-                <option value="">— escolha —</option>
-                {produzidos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
-                ))}
-              </select>
+                selecionado={
+                  idProduto ? { id: Number(idProduto), rotulo: rotuloProduto } : null
+                }
+                aoEscolher={(item: ItemBusca | null) => {
+                  setIdProduto(item ? String(item.id) : "");
+                  setRotuloProduto(item ? rotuloDe(item) : "");
+                }}
+              />
             ) : (
               <input className="campo" value={ficha?.produto ?? ""} disabled />
-            )}
-            {nova && !produzidos.length && (
-              <span className="mt-1 block text-[12.5px] text-alerta">
-                Nenhum produto do tipo &quot;produzido&quot;.{" "}
-                <Link href="/produtos/novo" className="underline">
-                  cadastrar
-                </Link>
-              </span>
             )}
           </Campo>
           <Campo rotulo="Rendimento" dica="quanto sai da receita inteira">

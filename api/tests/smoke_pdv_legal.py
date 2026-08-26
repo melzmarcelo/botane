@@ -95,6 +95,11 @@ SEGREDO = f"token-do-grupo-{marca}"
 _st, _antes = chamar("GET", "/pdv/config", token=token)
 MODO_ORIGINAL = (_antes or {}).get("modo") or "simulado"
 ATIVA_ORIGINAL = bool((_antes or {}).get("ativa"))
+# ⚠️ A agenda também volta como estava. Deixar HORARIA ligada numa máquina de
+# desenvolvimento faria ela buscar as vendas do cliente de hora em hora, para
+# sempre — e cada busca é uma requisição por dia da janela.
+AGENDA_ORIGINAL = (_antes or {}).get("agenda_frequencia") or "MANUAL"
+JANELA_ORIGINAL = (_antes or {}).get("agenda_janela_dias")
 
 
 def devolver_simulado():
@@ -111,7 +116,9 @@ def devolver_o_modo_original():
     a integração dele.
     """
     chamar("PUT", "/pdv/config",
-           {"modo": MODO_ORIGINAL, "ativa": ATIVA_ORIGINAL}, token=token)
+           {"modo": MODO_ORIGINAL, "ativa": ATIVA_ORIGINAL,
+            "agenda_frequencia": AGENDA_ORIGINAL,
+            "agenda_janela_dias": JANELA_ORIGINAL}, token=token)
 
 
 atexit.register(devolver_o_modo_original)
@@ -511,6 +518,91 @@ for id_produto in (isca, expresso, parecido):
     if id_produto:
         chamar("DELETE", f"/produtos/{id_produto}", token=token)
 
+
+print("\n8i. a busca das vendas rodando sozinha")
+# ⚠️ **A regra do relógio é testada como FUNÇÃO PURA.** Pela API exigiria
+# esperar uma hora passar; disparar o agendador de verdade contra a conta real
+# do cliente traria venda de verdade para a base de teste.
+from datetime import datetime, timedelta   # noqa: E402
+from services import agenda_integracao as regra   # noqa: E402
+
+
+def linha(freq, rodou=None, hora=4, ativa=True):
+    return {"agenda_frequencia": freq, "agenda_rodou_em": rodou,
+            "agenda_hora": hora, "ativa": ativa}
+
+
+agora = datetime.now().astimezone().replace(hour=4)
+checar("MANUAL nunca roda sozinho", not regra.deve_rodar(linha("MANUAL"), agora))
+checar("integração desligada não roda",
+       not regra.deve_rodar(linha("HORARIA", ativa=False), agora))
+checar("HORARIA roda quando nunca rodou", regra.deve_rodar(linha("HORARIA"), agora))
+checar("e não roda de novo meia hora depois",
+       not regra.deve_rodar(linha("HORARIA", agora - timedelta(minutes=30)), agora))
+checar("DIARIA só na hora escolhida", regra.deve_rodar(linha("DIARIA", hora=4), agora))
+checar("fora da hora, não", not regra.deve_rodar(linha("DIARIA", hora=9), agora))
+# ⚠️ Sem esta condição a diária rodaria a cada minuto durante os sessenta
+# minutos daquela hora.
+checar("e uma vez SÓ no dia",
+       not regra.deve_rodar(linha("DIARIA", agora - timedelta(minutes=5), hora=4), agora))
+
+# ⚠️ **A afirmação é sobre o PADRÃO, não sobre o estado da base.** "Ler MANUAL
+# agora" só é verdade numa casa que nunca configurou nada — e esta base é
+# compartilhada. O que precisa continuar valendo é que NADA liga a busca
+# sozinho: um PUT que não fala de agenda a deixa MANUAL.
+from routers.pdv import ConfigPdv   # noqa: E402
+checar("o padrão da agenda é MANUAL", ConfigPdv().agenda_frequencia == "MANUAL",
+       ConfigPdv().agenda_frequencia)
+st, r = chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True}, token=token)
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("e salvar sem falar de agenda não liga nada",
+       c.get("agenda_frequencia") == "MANUAL", c.get("agenda_frequencia"))
+credencial_antes = c.get("username")
+
+st, r = chamar("PUT", "/pdv/config", {
+    "modo": "simulado", "ativa": True,
+    "agenda_frequencia": "DIARIA", "agenda_hora": 5, "agenda_janela_dias": 3,
+}, token=token)
+checar("salvar a agenda responde", st == 200, (st, r))
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("a frequência ficou", c.get("agenda_frequencia") == "DIARIA", c.get("agenda_frequencia"))
+checar("a hora ficou", c.get("agenda_hora") == 5, c.get("agenda_hora"))
+checar("a janela ficou", c.get("agenda_janela_dias") == 3, c.get("agenda_janela_dias"))
+# ⚠️ A agenda GRAVA VENDA, e venda tem dono. Sem assinatura ela recusa rodar em
+# vez de gravar mil linhas de auditoria sem ninguém a quem perguntar.
+checar("e ficou assinada por quem salvou", c.get("agenda_assinada") is True, c)
+checar("salvar a agenda NÃO mexeu na credencial",
+       c.get("username") == credencial_antes, (c.get("username"), credencial_antes))
+
+st, r = chamar("PUT", "/pdv/config",
+               {"modo": "simulado", "agenda_frequencia": "SEMPRE"}, token=token)
+checar("frequência inventada é recusada", st == 422, st)
+st, r = chamar("PUT", "/pdv/config",
+               {"modo": "simulado", "agenda_frequencia": "DIARIA", "agenda_hora": 30},
+               token=token)
+checar("hora impossível é recusada", st == 422, st)
+st, r = chamar("PUT", "/pdv/config",
+               {"modo": "simulado", "agenda_frequencia": "DIARIA", "agenda_janela_dias": 400},
+               token=token)
+checar("janela maior que o teto é recusada", st == 422, st)
+
+st, r = chamar("POST", "/auth/login",
+               {"email": "smoke.cozinha@botane.com.br", "senha": "smoke12345"})
+tk_cozinha = (r or {}).get("access_token")
+if tk_cozinha:
+    st, r = chamar("PUT", "/pdv/config",
+                   {"modo": "simulado", "agenda_frequencia": "HORARIA"}, token=tk_cozinha)
+    checar("quem não administra integração não muda a agenda", st == 403, st)
+else:
+    checar("quem não administra integração não muda a agenda", True, "cozinha ausente")
+
+# ⚠️ Os dois agendadores precisam de locks DIFERENTES: com o mesmo número, a
+# busca de vendas ficaria esperando a de notas sem ter nada a ver com ela.
+from services.omie import agenda as agenda_omie   # noqa: E402
+from services.pdv import agenda as agenda_pdv   # noqa: E402
+checar("o lock do PDV não é o do Omie",
+       agenda_pdv.LOCK_AGENDA_PDV != agenda_omie.LOCK_AGENDA_OMIE,
+       (agenda_pdv.LOCK_AGENDA_PDV, agenda_omie.LOCK_AGENDA_OMIE))
 
 print("\n9. limpeza")
 devolver_simulado()

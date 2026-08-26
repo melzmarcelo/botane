@@ -94,7 +94,28 @@ async function garantirLocal() {
   return novo.id;
 }
 
-const foto = (pagina, nome) => pagina.screenshot({ path: `${FOTOS}/${nome}.png`, fullPage: true });
+/**
+ * Fotografa a tela. **Nunca derruba a bateria.**
+ *
+ * ⚠️ `fullPage` numa página longa estoura o `protocolTimeout` do Chrome — já
+ * aconteceu com o painel de CMV e voltou a acontecer quando Integrações ganhou
+ * o segundo bloco de agenda. A foto é diagnóstico: perder uma é um aborrecimento,
+ * perder a rodada inteira de 280 checagens por causa dela é outra coisa. Quando
+ * a de página inteira falha, tenta a da janela; se essa também falhar, avisa e
+ * segue.
+ */
+async function foto(pagina, nome) {
+  try {
+    await pagina.screenshot({ path: `${FOTOS}/${nome}.png`, fullPage: true });
+  } catch {
+    try {
+      await pagina.screenshot({ path: `${FOTOS}/${nome}.png` });
+      console.log(`  (foto ${nome}: página longa demais, saiu só a janela)`);
+    } catch {
+      console.log(`  (foto ${nome}: não saiu)`);
+    }
+  }
+}
 
 /**
  * Navega tolerando o frame trocar no meio do caminho.
@@ -190,6 +211,9 @@ const navegador = await puppeteer.launch({
   headless: "new",
   args: ["--no-sandbox", "--window-size=1440,1000"],
   defaultViewport: { width: 1440, height: 1000 },
+  // ⚠️ O padrão são 30 s, e a foto de página inteira de uma tela longa passa
+  // disso nesta máquina. Sessenta dá folga sem esconder travamento de verdade.
+  protocolTimeout: 60_000,
 });
 
 /** Desfazer registrado no caminho: roda no `finally`, dê certo ou não. */
@@ -484,8 +508,22 @@ try {
 
   await p.goto(`${WEB}/fichas/nova`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1300));
-  const camposFicha = await p.$$("select");
-  await camposFicha[0].select(String(bolo.id));      // produto
+  // ⚠️ **O produto da ficha virou BUSCA.** Era um `<select>` alimentado por
+  // `/produtos?tipo=PRODUZIDO`, que pagina: eram os 200 primeiros em ordem
+  // alfabética. Ao importar o cardápio do PDV (627 pratos), o produto recém
+  // criado deixou de estar na lista — e o `<select>` não tem como dizer isso:
+  // a tela ficava certa e o formulário recusava salvar sem explicar por quê.
+  const buscaProduto = await p.$('input[aria-label="Buscar produto produzido"]');
+  checar("o produto da ficha se escolhe por busca", !!buscaProduto);
+  await buscaProduto.type(`Tela bolo ${marca}`);
+  await p.keyboard.press("Tab");
+  await new Promise((r) => setTimeout(r, 1200));
+  checar("e o Tab acha o prato desta rodada",
+    (await p.evaluate(() =>
+      document.querySelector('input[aria-label="Buscar produto produzido"]')?.value ?? ""))
+      .includes(`Tela bolo ${marca}`),
+    await p.evaluate(() =>
+      document.querySelector('input[aria-label="Buscar produto produzido"]')?.value ?? ""));
   await p.$$eval("input[type=number]", (els) => {
     els[0].value = "";
   });
@@ -515,7 +553,8 @@ try {
     itemEscolhido);
   await numeros[2].type("500");
   const selectsUm = await p.$$("select");
-  await selectsUm[2].select("G");                    // 0 produto, 1 rendimento_um, 2 unidade
+  // Sem o select do produto sobraram dois: 0 rendimento_um, 1 unidade do item.
+  await selectsUm[1].select("G");
   await Promise.all([
     p.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
     p.click('button[type="submit"]'),
@@ -1081,10 +1120,18 @@ try {
     await foto(p, nome);
   }
 
-  // Importa a venda colando a planilha, do jeito que o cliente faria.
-  await p.goto(`${WEB}/vendas`, { waitUntil: "networkidle2" });
+  // ⚠️ Lançar saiu da lista para `/vendas/lancar`. Os dois formulários ocupavam
+  // a primeira dobra e as vendas — o assunto da página — começavam abaixo do
+  // campo de colar texto; com 1.375 vendas num mês isso é a tela errada.
+  await p.goto(`${WEB}/vendas/lancar`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));
   const doc6 = `TELA-${m6}`;
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((x) => x.textContent?.trim() === "Colar planilha");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 500));
   await p.evaluate((d) => {
     const campos = [...document.querySelectorAll("input")];
     const alvo = campos.find((c) => c.placeholder?.includes("fechamento-"));
@@ -1096,19 +1143,62 @@ try {
   }, doc6);
   const area = await p.$("textarea");
   await area.type(`${prod6.codigo}; Prato de teste; 10; 30,00`);
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 500));
   const textoPrevia = await p.evaluate(() => document.body.innerText);
   checar("a tela reconhece a linha colada", /1 linha\(s\) reconhecida/.test(textoPrevia),
     textoPrevia.match(/.{0,40}reconhecid.{0,30}/)?.[0]);
+  // ⚠️ A prévia mostra o que o sistema ENTENDEU, não o que foi colado: separador
+  // errado vira uma linha só com tudo dentro, e sem isto só apareceria depois
+  // de gravar.
+  checar("e a prévia mostra a linha entendida", /Prato de teste/.test(textoPrevia),
+    textoPrevia.slice(0, 120));
+  await foto(p, "24-vendas-lancar");
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent === "Importar");
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 1800));
+  await new Promise((r) => setTimeout(r, 2200));
   const textoImport = await p.evaluate(() => document.body.innerText);
-  checar("importa a venda pela tela", /1 venda\(s\), 1 item/.test(textoImport),
-    textoImport.slice(0, 120));
+  checar("importa a venda pela tela", /1 venda\(s\) importada/.test(textoImport),
+    textoImport.slice(0, 160));
+  checar("e volta para a lista", /\/vendas$/.test(new URL(p.url()).pathname) ||
+    p.url().endsWith("/vendas"), p.url());
   await foto(p, "24-vendas-importada");
+
+  // ⚠️ A busca vai ao SERVIDOR. Com 1.375 vendas, filtrar a página carregada
+  // acharia o documento só quando ele já estivesse na tela.
+  await p.evaluate((d) => {
+    const alvo = [...document.querySelectorAll("input")]
+      .find((c) => c.placeholder?.includes("documento"));
+    if (alvo) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(alvo, d);
+      alvo.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, doc6);
+  await new Promise((r) => setTimeout(r, 1400));
+  checar("a busca da lista acha a venda desta rodada",
+    (await textoVisivel(p)).includes(doc6), (await textoVisivel(p)).slice(0, 120));
+
+  // A venda inteira numa página só: itens, custo congelado e o que saiu do
+  // estoque. Antes a lista mostrava data, origem e total — e mais nada.
+  const { dados: minhas } = await api("GET", `/vendas?busca=${doc6}`, null, token);
+  checar("a lista devolve exatamente a venda buscada", minhas.length === 1, minhas.length);
+  await p.goto(`${WEB}/vendas/${minhas[0].id}`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1400));
+  const textoDet = await textoVisivel(p);
+  checar("o detalhe da venda abre", /Receita/i.test(textoDet) && textoDet.includes(doc6),
+    textoDet.slice(0, 140));
+  // ⚠️ Procura o registro DESTA rodada, pelo nome com marca de tempo. "O
+  // produto que contém X" cairia no de outra rodada — produto com movimento não
+  // é apagado, vira inativo, e a base acumula um por rodada.
+  checar("com o prato vendido", textoDet.includes(`Cmv tela prato ${m6}`),
+    textoDet.slice(0, 220));
+  checar("o custo teórico aparece", /Custo te[óo]rico/i.test(textoDet));
+  // 10 pratos × 5,00 de ficha = 50,00 — o congelado, não o custo de hoje.
+  checar("e vale os 50,00 da ficha", /50,00/.test(textoDet), textoDet.slice(0, 300));
+  checar("o movimento no estoque aparece", /Movimento no estoque/i.test(textoDet));
+  await foto(p, "24b-venda-detalhe");
 
   // A conta: 10 pratos a 5,00 de custo = 50,00 de CMV teórico; receita 300,00.
   const { dados: ap } = await api("GET", `/cmv/apuracao?inicio=${hoje6}&fim=${hoje6}`, null, token);
@@ -2139,9 +2229,11 @@ try {
 
   await irPara(p, `${WEB}/integracoes`);
   await new Promise((r) => setTimeout(r, 2000));
+  // ⚠️ **Pelo id da seção, não por "o primeiro select com HORARIA".** Desde que
+  // o PDV Legal ganhou agenda, há DOIS blocos iguais na mesma tela — e o
+  // seletor por conteúdo passou a devolver o de quem estivesse antes no DOM.
   const blocoAgenda = await p.evaluate(() => {
-    const sel = [...document.querySelectorAll("select")]
-      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    const sel = document.querySelector("#agenda-omie select");
     return {
       // ⚠️ Pelo texto da página, não por `span.rotulo`: o título do bloco é um
       // `<p class="rotulo">`, e a classe é a mesma dos rótulos de campo.
@@ -2160,8 +2252,7 @@ try {
 
   // Escolher "a cada hora" tem de avisar do custo — 24 buscas por dia.
   await p.evaluate(() => {
-    const sel = [...document.querySelectorAll("select")]
-      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    const sel = document.querySelector("#agenda-omie select");
     if (!sel) return;
     sel.value = "HORARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -2172,8 +2263,7 @@ try {
 
   // "Uma vez por dia" troca a pergunta: aparece a hora.
   await p.evaluate(() => {
-    const sel = [...document.querySelectorAll("select")]
-      .find((s) => [...s.options].some((o) => o.value === "HORARIA"));
+    const sel = document.querySelector("#agenda-omie select");
     if (!sel) return;
     sel.value = "DIARIA";
     sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -2181,7 +2271,7 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   checar("uma vez por dia pergunta a hora",
     await p.evaluate(() =>
-      [...document.querySelectorAll("span.rotulo")].some((r) =>
+      [...document.querySelectorAll("#agenda-omie span.rotulo")].some((r) =>
         /A que hora/i.test(r.textContent ?? ""))));
   await foto(p, "29-agenda-omie");
 
@@ -2192,6 +2282,61 @@ try {
     agenda_hora: cfgAntes?.agenda_hora ?? 3,
     agenda_janela_dias: cfgAntes?.agenda_janela_dias ?? null,
   }, token);
+
+  console.log("10z. buscar vendas do PDV sozinho");
+  // ⚠️ Mesma devolução do bloco do Omie: a conta do PDV configurada aqui é a
+  // REAL, e deixar HORARIA ligada faria a máquina buscar as vendas do cliente
+  // de hora em hora — cada busca é uma requisição por dia da janela.
+  const { dados: pdvAntes } = await api("GET", "/pdv/config", null, token);
+  const reporPdv = () => api("PUT", "/pdv/config", {
+    modo: pdvAntes?.modo ?? "simulado",
+    ativa: pdvAntes?.ativa ?? false,
+    agenda_frequencia: pdvAntes?.agenda_frequencia ?? "MANUAL",
+    agenda_hora: pdvAntes?.agenda_hora ?? 4,
+    agenda_janela_dias: pdvAntes?.agenda_janela_dias ?? null,
+  }, token);
+  aoTerminar.push(reporPdv);
+
+  await irPara(p, `${WEB}/integracoes`);
+  await new Promise((r) => setTimeout(r, 2000));
+  const agendaPdv = await p.evaluate(() => {
+    const sel = document.querySelector("#agenda-pdv select");
+    return {
+      temBloco: /buscar vendas sozinho/i.test(document.body.innerText),
+      valor: sel?.value ?? null,
+      opcoes: sel ? [...sel.options].map((o) => o.value) : [],
+    };
+  });
+  checar("o PDV também oferece a busca automática", agendaPdv.temBloco, agendaPdv);
+  checar("com as três frequências",
+    ["MANUAL", "HORARIA", "DIARIA"].every((f) => agendaPdv.opcoes.includes(f)),
+    agendaPdv);
+
+  await p.evaluate(() => {
+    const sel = document.querySelector("#agenda-pdv select");
+    if (!sel) return;
+    sel.value = "HORARIA";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  // ⚠️ "A cada hora" não parece caro até alguém multiplicar: 24 buscas por dia,
+  // e cada uma faz uma requisição por dia da janela.
+  checar("a cada hora diz quanto custa",
+    await p.evaluate(() => /uma requisição por dia da janela/i.test(document.body.innerText)));
+
+  await p.evaluate(() => {
+    const sel = document.querySelector("#agenda-pdv select");
+    if (!sel) return;
+    sel.value = "DIARIA";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  checar("uma vez por dia pergunta a hora",
+    await p.evaluate(() =>
+      [...document.querySelectorAll("#agenda-pdv span.rotulo")].some((r) =>
+        /A que hora/i.test(r.textContent ?? ""))));
+  await foto(p, "31-agenda-pdv");
+  await reporPdv();
 
   console.log("10a. ritmo do fechamento: dia, semana ou mês");
   // ⚠️ **A loja volta a MENSAL no fim deste bloco.** O ritmo muda o período em

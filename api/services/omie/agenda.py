@@ -25,57 +25,25 @@ de novo a cada minuto numa casa sem nota nova — que é a casa normal de doming
 
 import asyncio
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from database import get_cursor
+from services import agenda_integracao as regra
 from services import segredos
 from services.omie import importador
 from services.omie.cliente import ClienteOmie, ErroOmie
 
 SERVICO = "OMIE"
 
-# De quanto em quanto tempo o agendador acorda e olha o relógio. Um minuto é
-# fino o bastante para a hora escolhida ser respeitada e grosso o bastante para
-# a consulta (uma, com índice) não pesar.
-INTERVALO_DE_CHECAGEM = 60
+# ⚠️ **A regra "chegou a hora?" mora em `agenda_integracao`**, junto com a do
+# PDV Legal. Ela estava escrita aqui dentro; copiá-la para o segundo agendador
+# faria os dois divergirem na primeira correção — e o sintoma seria uma
+# integração buscando na hora certa e a outra não, sem nada explicando.
+INTERVALO_DE_CHECAGEM = regra.INTERVALO_DE_CHECAGEM
 
 # ⚠️ Chave do advisory lock. Número fixo e único no sistema: dois locks com o
 # mesmo número se bloqueariam sem ter nada a ver um com o outro.
 LOCK_AGENDA_OMIE = 8_120_331
-
-
-def _deve_rodar(linha: dict, agora: datetime) -> bool:
-    """Chegou a hora desta integração?
-
-    ⚠️ A DIÁRIA dispara na hora escolhida **e só uma vez no dia**: sem a segunda
-    condição, ela rodaria a cada minuto durante os sessenta minutos daquela hora.
-    """
-    freq = linha["agenda_frequencia"]
-    if freq == "MANUAL" or not linha["ativa"]:
-        return False
-
-    ultima = linha["agenda_rodou_em"]
-    if freq == "HORARIA":
-        return ultima is None or (agora - ultima) >= timedelta(hours=1)
-
-    if freq == "DIARIA":
-        if agora.hour != linha["agenda_hora"]:
-            return False
-        return ultima is None or ultima.date() < agora.date()
-
-    return False
-
-
-def pendentes(cur, agora: datetime) -> list[dict]:
-    """As integrações que estão devendo uma busca."""
-    cur.execute(
-        """SELECT id, id_unidade, modo, ativa, credenciais, agenda_frequencia,
-                  agenda_hora, agenda_janela_dias, agenda_rodou_em
-             FROM integracoes
-            WHERE servico = %s AND agenda_frequencia <> 'MANUAL'""",
-        (SERVICO,),
-    )
-    return [dict(r) for r in cur.fetchall() if _deve_rodar(dict(r), agora)]
 
 
 def rodar_uma(cur, linha: dict) -> dict:
@@ -100,12 +68,7 @@ def rodar_uma(cur, linha: dict) -> dict:
     except Exception as e:  # noqa: BLE001 — o agendador não pode morrer por uma loja
         erro = f"{type(e).__name__}: {e}"
 
-    cur.execute(
-        """UPDATE integracoes
-              SET agenda_rodou_em = now(), agenda_ultimo_erro = %s
-            WHERE id = %s""",
-        (erro, linha["id"]),
-    )
+    regra.marcar(cur, linha["id"], erro)
     return {"id_unidade": linha["id_unidade"], "erro": erro, **resultado}
 
 
@@ -113,17 +76,11 @@ def rodar_pendentes() -> list[dict]:
     """Uma passada do agendador. Devolve o que rodou — vazio é o caso comum."""
     feitos: list[dict] = []
     with get_cursor() as cur:
-        # ⚠️ **Advisory lock antes de olhar o relógio.** Duas instâncias da API
-        # (ou o worker do `--reload` junto com um sobrevivente órfão) leriam a
-        # mesma linha "vencida" e disparariam duas buscas — cota gasta em dobro
-        # por nada. `pg_try_advisory_xact_lock` não espera: quem não pega vai
-        # embora e tenta no minuto seguinte.
-        cur.execute("SELECT pg_try_advisory_xact_lock(%s) AS peguei", (LOCK_AGENDA_OMIE,))
-        if not cur.fetchone()["peguei"]:
+        if not regra.peguei_o_lock(cur, LOCK_AGENDA_OMIE):
             return feitos
 
         agora = datetime.now().astimezone()
-        for linha in pendentes(cur, agora):
+        for linha in regra.pendentes(cur, SERVICO, agora):
             feitos.append(rodar_uma(cur, linha))
     return feitos
 

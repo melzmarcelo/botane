@@ -24,10 +24,19 @@ type Config = {
   password: string | null;
   client_id: string | null;
   client_secret: string | null;
+  ultima_sincronizacao: string | null;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
   importador_disponivel: boolean;
   filiais: string | null;
+  agenda_frequencia: string;
+  agenda_hora: number;
+  agenda_janela_dias: number | null;
+  /** Quando o agendador RODOU — não é o mesmo que ter trazido venda. */
+  agenda_rodou_em: string | null;
+  agenda_ultimo_erro: string | null;
+  /** A agenda grava venda, e venda tem dono. Sem assinatura ela recusa rodar. */
+  agenda_assinada: boolean;
 };
 
 const VAZIO = {
@@ -38,6 +47,9 @@ const VAZIO = {
   modo: "simulado",
   ativa: false,
   filiais: "",
+  agenda_frequencia: "MANUAL",
+  agenda_hora: "4",
+  agenda_janela_dias: "",
 };
 
 export default function PdvLegal() {
@@ -58,7 +70,15 @@ export default function PdvLegal() {
       // ⚠️ Os campos voltam VAZIOS, não mascarados: um campo com bolinhas
       // dentro seria enviado de volta como bolinhas no primeiro salvar. O que
       // já está guardado aparece na etiqueta ao lado, não no input.
-      setForm({ ...VAZIO, modo: c.modo, ativa: c.ativa, filiais: c.filiais ?? "" });
+      setForm({
+        ...VAZIO,
+        modo: c.modo,
+        ativa: c.ativa,
+        filiais: c.filiais ?? "",
+        agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
+        agenda_hora: String(c.agenda_hora ?? 4),
+        agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "",
+      });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -80,6 +100,11 @@ export default function PdvLegal() {
         modo: form.modo,
         ativa: form.ativa,
         filiais: form.filiais,
+        agenda_frequencia: form.agenda_frequencia,
+        agenda_hora: Number(form.agenda_hora || 4),
+        // Vazio = janela automática. `Number("")` é 0, que o servidor recusa —
+        // e a recusa falaria de um campo deixado em branco de propósito.
+        agenda_janela_dias: form.agenda_janela_dias ? Number(form.agenda_janela_dias) : null,
       });
       aviso.sucesso("Credencial do PDV Legal salva, cifrada. Ela não volta pela tela.");
       await carregar();
@@ -255,6 +280,113 @@ export default function PdvLegal() {
               <span className="pb-1.5 text-[14px]">integração ativa</span>
             </label>
           </div>
+
+          {/* ⚠️ A busca automática existe pela mesma razão que a do Omie: venda
+              de sábado que ninguém importa é receita que falta no CMV do fim de
+              semana — e a variância sai boa demais, porque o teórico não conta
+              o que foi vendido. */}
+          <section id="agenda-pdv" className="rounded border border-linha bg-fundo p-4">
+            <p className="rotulo">Buscar vendas sozinho</p>
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+              Sem agendamento, alguém precisa abrir esta tela e clicar em Buscar vendas todo
+              dia. O que não for buscado não entra no CMV daquele período.
+            </p>
+
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Campo rotulo="Com que frequência">
+                <select
+                  className="campo"
+                  disabled={!podeConfigurar}
+                  value={form.agenda_frequencia}
+                  onChange={(e) => setForm({ ...form, agenda_frequencia: e.target.value })}
+                >
+                  <option value="MANUAL">manual — só quando eu clicar</option>
+                  <option value="HORARIA">a cada hora</option>
+                  <option value="DIARIA">uma vez por dia</option>
+                </select>
+              </Campo>
+
+              {/* Cada frequência pede uma pergunta diferente, e só uma. */}
+              {form.agenda_frequencia === "DIARIA" && (
+                <Campo
+                  rotulo="A que hora"
+                  dica="0 a 23 — depois do fechamento do caixa"
+                >
+                  <input
+                    className="campo mono"
+                    type="number"
+                    min={0}
+                    max={23}
+                    disabled={!podeConfigurar}
+                    value={form.agenda_hora}
+                    onChange={(e) => setForm({ ...form, agenda_hora: e.target.value })}
+                  />
+                </Campo>
+              )}
+
+              {form.agenda_frequencia !== "MANUAL" && (
+                <Campo
+                  rotulo="Varrer quantos dias para trás"
+                  dica="em branco = desde a última venda importada"
+                >
+                  <input
+                    className="campo mono"
+                    type="number"
+                    min={1}
+                    max={60}
+                    placeholder="automático"
+                    disabled={!podeConfigurar}
+                    value={form.agenda_janela_dias}
+                    onChange={(e) => setForm({ ...form, agenda_janela_dias: e.target.value })}
+                  />
+                </Campo>
+              )}
+            </div>
+
+            {/* ⚠️ Cada DIA da janela é uma requisição ao PDV — é o único jeito
+                sem teto de 100 cupons. O aviso diz a conta, porque "a cada hora"
+                não parece caro até alguém multiplicar. */}
+            {form.agenda_frequencia === "HORARIA" && (
+              <p className="mt-3 text-[13px] leading-snug text-alerta">
+                A cada hora são 24 buscas por dia, e cada busca faz{" "}
+                <b>uma requisição por dia da janela</b>. Se a casa fecha o caixa uma vez, uma
+                vez por dia traz exatamente o mesmo resultado.
+              </p>
+            )}
+
+            {/* ⚠️ Duas datas diferentes: quando o agendador RODOU e quando
+                alguma venda chegou. Sem as duas, "não roda" e "roda e não acha
+                nada" ficam indistinguíveis — e a segunda é o normal de domingo. */}
+            {cfg.agenda_rodou_em && (
+              <p className="mt-3 text-[13px] text-suave">
+                Última tentativa automática em{" "}
+                {new Date(cfg.agenda_rodou_em).toLocaleString("pt-BR")}
+                {cfg.ultima_sincronizacao && (
+                  <>
+                    {" · "}última venda nova em{" "}
+                    {new Date(cfg.ultima_sincronizacao).toLocaleString("pt-BR")}
+                  </>
+                )}
+              </p>
+            )}
+            {cfg.agenda_frequencia !== "MANUAL" && !cfg.agenda_assinada && (
+              <div className="mt-3">
+                <Aviso tipo="info">
+                  A agenda não sabe quem a ligou, e venda tem dono — ela vai recusar rodar.
+                  Salve o agendamento de novo para assiná-lo.
+                </Aviso>
+              </div>
+            )}
+            {cfg.agenda_ultimo_erro && (
+              <div className="mt-3">
+                <Aviso tipo="erro">
+                  A última busca automática falhou: {cfg.agenda_ultimo_erro}. O agendador{" "}
+                  <b>não insiste</b> — a próxima tentativa é no horário seguinte, porque
+                  repetir uma credencial recusada só queima tentativa de login.
+                </Aviso>
+              </div>
+            )}
+          </section>
 
           <p className="text-[13px] leading-snug text-suave">
             A senha e o token do grupo são guardados <b>cifrados</b> e nunca voltam pela API —

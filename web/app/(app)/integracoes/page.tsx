@@ -266,7 +266,10 @@ export default function PaginaIntegracoes() {
           {/* ⚠️ **A busca automática nasce desligada.** Cada busca consome cota
               da conta, e o Omie bloqueia quem consome demais — o bloqueio pega a
               integração inteira. Ligar é decisão de quem paga a conta. */}
-          <section className="rounded border border-linha bg-fundo p-4">
+          {/* ⚠️ O id existe para o teste de tela: a página tem DOIS blocos de
+              agenda (este e o do PDV), e "o primeiro select com HORARIA"
+              deixaria de identificar qual é qual no dia em que a ordem mudasse. */}
+          <section id="agenda-omie" className="rounded border border-linha bg-fundo p-4">
             <p className="rotulo">Buscar notas sozinho</p>
             <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
               Nota que chega na sexta e ninguém busca até segunda é nota que não entrou no

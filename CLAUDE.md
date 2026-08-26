@@ -208,7 +208,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   com `cmv.painel` — quem não tem recebe `dinheiro: null`, não um valor zerado. A cobertura
   de ficha viaja junto porque é ela que diz o quanto dá para confiar na variância.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/ajustes`,
-  `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`.
+  `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`. As que têm
+  detalhe e formulário em página própria: `/compras/[id]`, `/compras/nova`,
+  `/inventario/[id]`, `/inventario/novo`, `/producao/[id]`, `/produtos/[id]`, `/fichas/[id]`,
+  `/vendas/[id]`, `/vendas/lancar` e `/vendas/sem-vinculo`.
 - **Busca de cadastro é o padrão onde havia combobox** (21/08/2026):
   `components/busca-cadastro.tsx` + `lib/busca-cadastro.ts`. Digita-se código ou nome e dá
   **Tab**: um resultado preenche e segue; mais de um (ou nenhum) abre a janela de pesquisa já
@@ -574,6 +577,50 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   inativos), e **1.375 vendas de 1.451 cupons** em 30 dias (28/07 a 26/08), 6.356 itens,
   R$ 187.348,50 de receita, **zero item sem vínculo**. Todos os 6.356 sem custo — porque não há
   ficha técnica nenhuma ainda, que é o item que falta para a variância existir.
+- **Cada venda tem endereço** (27/08/2026): `/vendas` é só a LISTA, `/vendas/lancar` lança
+  (à mão ou colando a planilha, em abas) e `/vendas/[id]` mostra — cabeçalho, itens com o custo
+  congelado de cada um, e os movimentos que a venda causou no estoque. Mesmo corte de Compras, e
+  pela mesma razão: os dois formulários ocupavam a primeira dobra e as vendas — o assunto da
+  página — começavam abaixo do campo de colar texto. Com 1.375 vendas num mês isso é a tela
+  errada. A fila de de-para virou `/vendas/sem-vinculo`, que é uma **fila de trabalho** e não um
+  aviso: alguém percorre, cadastra ou vincula, e volta.
+  ⚠️ **O detalhe mostra o custo CONGELADO, não o de hoje.** Recalcular na hora de mostrar faria a
+  tela discordar do relatório, e a diferença apareceria como variância sem causa.
+  ⚠️ **Item sem ficha é CONTADO, e o aviso vem ANTES dos números.** Com um item sem custo a
+  margem sai alta demais; quem lê o número primeiro já formou a impressão errada. Os cartões
+  dizem "(parcial)" e o aviso nomeia quantos itens estão sem ficha.
+  ⚠️ **O estorno NÃO se acha pela origem da venda.** Ele nasce com `origem_tipo = 'ESTORNO'` e
+  `origem_id` apontando para o movimento que desfaz, não para a venda — procurar só por
+  `origem_tipo = 'VENDA'` mostrava a saída e escondia a devolução, e a tela de uma venda
+  cancelada dizia que o produto saiu e nunca voltou.
+  ⚠️ **`GET /vendas/{id}` é declarado DEPOIS de `/vendas/sem-vinculo`.** O FastAPI casa rotas na
+  ordem de declaração: com o parâmetro na frente, "sem-vinculo" viraria um id e o pedido morreria
+  em 422 antes de chegar à fila.
+  ⚠️ **A listagem não filtrava por `id_unidade`** — somava as vendas de todas as lojas. Idem
+  `/vendas/sem-vinculo` e o cancelamento. Corrigido; a busca por documento vai ao servidor.
+- **A busca das vendas no PDV pode rodar sozinha** (`services/pdv/agenda.py`, 27/08/2026):
+  `MANUAL` (o padrão), `HORARIA` ou `DIARIA` numa hora escolhida, com janela opcional em dias.
+  Venda de sábado que ninguém importa é receita que falta no CMV do fim de semana — e a variância
+  sai boa demais, porque o teórico não conta o que foi vendido.
+  ⚠️ **Não precisou de migração**: as colunas `agenda_*` de `integracoes` nunca tiveram nada de
+  específico do Omie, e a linha do PDV mora na mesma tabela.
+  ⚠️ **A regra "chegou a hora?" mora em `services/agenda_integracao.py`**, um lugar só. Ela
+  estava dentro do agendador do Omie; copiá-la faria os dois divergirem na primeira correção, e o
+  sintoma seria uma integração buscando na hora certa e a outra não, sem nada explicando.
+  ⚠️ **Locks DIFERENTES** (`8_120_331` no Omie, `8_120_332` no PDV): com o mesmo número, a busca
+  de vendas ficaria esperando a de notas sem ter nada a ver com ela. A suíte cobra isso.
+  ⚠️ **Dois laços no `lifespan`, não um.** As integrações falham por motivos diferentes; um laço
+  só faria a busca de notas esperar a de vendas, e um erro no meio derrubaria as duas.
+  🔑 **A agenda do PDV GRAVA VENDA — e venda tem dono.** Ao contrário da do Omie, que só puxa
+  para uma tabela de integração, esta baixa estoque, entra no razão e vai para a auditoria; toda
+  escrita dessas carrega `id_usuario`, e o agendador não tem sessão. Quem SALVA a agenda passa a
+  assiná-la (`integracoes.agenda_id_usuario`, migração 034); sem assinatura o agendador **recusa
+  rodar e diz por quê**, em vez de gravar venda sem dono. Inventar um "usuário do sistema" seria
+  pior: uma conta real, com senha e permissões, que ninguém vigia e que aparece como autor de mil
+  vendas.
+  ⚠️ **Cada DIA da janela é uma requisição** (é o único jeito sem teto de 100 cupons): a horária
+  com janela de 30 dias são 720 chamadas por dia para reler o mesmo mês. A tela diz a conta,
+  porque "a cada hora" não parece caro até alguém multiplicar.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -780,18 +827,34 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.046 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.104 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (69),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (89), `smoke_vendas.py` (38),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (273, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (288, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
+- ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
+  da ficha vinha de `/produtos?tipo=PRODUZIDO`: eram os 200 primeiros em ordem alfabética.
+  Enquanto a casa tinha dezenas de pratos, ninguém notou; ao importar o cardápio do PDV (627
+  itens), o prato recém-criado deixou de estar na lista — e o `<select>` não tem como dizer isso.
+  A tela ficava certa, o produto simplesmente não estava lá, e o formulário recusava salvar sem
+  explicar. Virou `BuscaCadastro`, que é o padrão da casa exatamente para isto. A regra de bolso
+  do `<select>` continua valendo — **poucos por natureza** (categoria, setor, local, unidade) —,
+  e produto nunca foi disso.
+- ⚠️ **Foto de página inteira não pode derrubar a bateria.** `fullPage` estoura o
+  `protocolTimeout` do Chrome numa tela longa; aconteceu com o painel de CMV e voltou a acontecer
+  quando Integrações ganhou o segundo bloco de agenda — e levou junto as 280 checagens da rodada.
+  `foto()` agora cai para a foto da JANELA e avisa; o `protocolTimeout` subiu para 60 s.
+- ⚠️ **"O primeiro elemento que casa" deixa de identificar quando surge o segundo.** O teste da
+  agenda do Omie pegava "o primeiro `select` que tem HORARIA"; assim que o PDV ganhou o mesmo
+  bloco, passou a depender da ordem do DOM. Cada seção tem `id` (`#agenda-omie`, `#agenda-pdv`) e
+  o teste aponta para o dela.
 - ⚠️ **Relatório cortado no topo esconde o registro que se procura.** `/cmv/margem` sai ordenado
   por receita e cortado no `limite` (50). Assim que a base ganhou 464 pratos e R$ 187 mil de
   venda real, o prato de R$ 500 de uma suíte saiu do topo — e "não está na lista" leu como

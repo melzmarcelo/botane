@@ -29,12 +29,25 @@ _editar = requer_permissao("cmv.fechamento", "cmv.painel")
 def listar(
     inicio: date | None = None,
     fim: date | None = None,
+    # A busca vai ao SERVIDOR: com 1.375 vendas num mês, filtrar a página
+    # carregada acharia o documento só quando ele já estivesse na tela.
+    busca: str | None = None,
+    origem: str | None = None,
     limite: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
     ctx: Contexto = Depends(_ver),
 ) -> list[dict]:
+    """As vendas da loja atual, da mais recente para a mais antiga.
+
+    ⚠️ **Filtra por `id_unidade`, e isso não estava aqui.** Toda tabela de
+    movimento carrega a loja desde o começo, mas a listagem somava as de todas —
+    numa casa com duas lojas, a tela de uma mostraria as vendas da outra e o
+    total não bateria com o CMV daquela loja.
+    """
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        alvo = f"%{busca.strip()}%" if busca and busca.strip() else None
         return pagina(
             cur,
             """SELECT v.id, v.data, v.origem, v.canal, v.documento, v.valor_total, v.cancelada,
@@ -42,11 +55,14 @@ def listar(
                       count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo
                  FROM vendas v
                  LEFT JOIN venda_itens vi ON vi.id_venda = v.id
-                WHERE (%s::date IS NULL OR v.data >= %s)
+                WHERE v.id_unidade = %s
+                  AND (%s::date IS NULL OR v.data >= %s)
                   AND (%s::date IS NULL OR v.data <= %s)
+                  AND (%s::text IS NULL OR v.origem = %s)
+                  AND (%s::text IS NULL OR v.documento ILIKE %s)
                 GROUP BY v.id
                 ORDER BY v.data DESC, v.id DESC""",
-            (inicio, inicio, fim, fim),
+            (id_unidade, inicio, inicio, fim, fim, origem, origem, alvo, alvo),
             limite=limite, offset=offset, resposta=resposta,
         )
 
@@ -189,7 +205,11 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
     mesmo tempo — a diferença apareceria na contagem, sem nome.
     """
     with get_cursor() as cur:
-        cur.execute("SELECT cancelada FROM vendas WHERE id = %s", (id_venda,))
+        # ⚠️ A loja entra na busca: sem ela, um id de outra loja seria cancelado
+        # por quem nem enxerga aquela venda na tela.
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute("SELECT cancelada FROM vendas WHERE id = %s AND id_unidade = %s",
+                    (id_venda, id_unidade))
         venda = cur.fetchone()
         if not venda:
             raise HTTPException(status_code=404, detail="Venda não encontrada")
@@ -222,13 +242,102 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
 def sem_vinculo(ctx: Contexto = Depends(_ver)) -> list[dict]:
     """Itens vendidos que não achamos no cadastro — a fila de de-para do PDV."""
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT vi.codigo_pdv, vi.descricao_pdv, count(*) AS ocorrencias,
                       sum(vi.quantidade) AS quantidade, sum(vi.valor_total) AS receita
                  FROM venda_itens vi
                  JOIN vendas v ON v.id = vi.id_venda
-                WHERE vi.id_produto IS NULL AND NOT v.cancelada
+                WHERE vi.id_produto IS NULL AND NOT v.cancelada AND v.id_unidade = %s
                 GROUP BY vi.codigo_pdv, vi.descricao_pdv
-                ORDER BY receita DESC LIMIT 100"""
+                ORDER BY receita DESC LIMIT 100""",
+            (id_unidade,),
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+# ⚠️ **`/{id_venda}` vem DEPOIS de `/sem-vinculo`, e a ordem é o que faz as duas
+# funcionarem.** O FastAPI casa as rotas na ordem em que foram declaradas: com o
+# parâmetro na frente, "sem-vinculo" viraria um id e o pedido morreria em 422
+# antes de chegar à fila de de-para.
+@router.get("/{id_venda}")
+def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
+    """Uma venda inteira: cabeçalho, itens e o que cada item deixou.
+
+    ⚠️ **O custo aqui é o CONGELADO no item**, não o custo de hoje. É ele que
+    entrou no CMV teórico daquele dia, e recalcular na hora de mostrar faria a
+    tela discordar do relatório — a diferença apareceria como variância sem
+    causa. Item sem custo é item cujo prato não tem ficha; ele aparece dito
+    assim, porque é o que explica um CMV teórico menor que o real.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.id_externo,
+                      v.mesa, v.valor_total, v.desconto, v.cancelada, v.importada_em,
+                      u.nome AS usuario
+                 FROM vendas v
+                 LEFT JOIN usuarios u ON u.id = v.id_usuario
+                WHERE v.id = %s AND v.id_unidade = %s""",
+            (id_venda, id_unidade),
+        )
+        venda = cur.fetchone()
+        if not venda:
+            raise HTTPException(status_code=404, detail="Venda não encontrada")
+
+        cur.execute(
+            """SELECT vi.id, vi.codigo_pdv, vi.descricao_pdv, vi.id_produto,
+                      vi.quantidade, vi.valor_unitario, vi.valor_total,
+                      vi.custo_ficha_unitario, vi.origem_custo,
+                      p.nome AS produto, p.codigo AS produto_codigo, p.tipo,
+                      c.nome AS categoria, s.nome AS setor
+                 FROM venda_itens vi
+                 LEFT JOIN produtos p ON p.id = vi.id_produto
+                 LEFT JOIN categorias c ON c.id = p.id_categoria
+                 LEFT JOIN setores s ON s.id = p.id_setor
+                WHERE vi.id_venda = %s
+                ORDER BY vi.id""",
+            (id_venda,),
+        )
+        itens = [dict(r) for r in cur.fetchall()]
+
+        # Os movimentos de estoque que esta venda causou — a prova de que ela
+        # saiu da prateleira, e o que o estorno devolveu quando foi cancelada.
+        #
+        # ⚠️ **O estorno NÃO se acha pela origem da venda.** Ele nasce com
+        # `origem_tipo = 'ESTORNO'` e `origem_id` apontando para o movimento que
+        # desfaz, não para a venda — procurar só por `origem_tipo = 'VENDA'`
+        # mostrava a saída e escondia a devolução, e a tela de uma venda
+        # cancelada dizia que o produto tinha saído e nunca voltado. A segunda
+        # perna do OR é o que fecha o par.
+        cur.execute(
+            """WITH da_venda AS (
+                   SELECT id FROM estoque_movimentos
+                    WHERE origem_tipo = 'VENDA' AND origem_id = %s
+               )
+               SELECT m.id, m.tipo, m.quantidade, m.custo_total, m.data_movimento,
+                      m.id_estorno_de, p.nome AS produto, l.nome AS local
+                 FROM estoque_movimentos m
+                 JOIN produtos p ON p.id = m.id_produto
+                 LEFT JOIN locais_estoque l ON l.id = m.id_local
+                WHERE m.id IN (SELECT id FROM da_venda)
+                   OR m.id_estorno_de IN (SELECT id FROM da_venda)
+                ORDER BY m.id""",
+            (id_venda,),
+        )
+        movimentos = [dict(r) for r in cur.fetchall()]
+
+    custo = sum(float(i["quantidade"]) * float(i["custo_ficha_unitario"] or 0) for i in itens)
+    receita = sum(float(i["valor_total"] or 0) for i in itens)
+    return {
+        **dict(venda),
+        "itens": itens,
+        "movimentos": movimentos,
+        "receita": receita,
+        # ⚠️ O custo teórico só vale a soma quando TODO item tem ficha. Com um
+        # item sem custo, a margem sairia alta demais e pareceria um resultado
+        # excelente — por isso a tela recebe a contagem e diz "parcial".
+        "custo_teorico": custo,
+        "itens_sem_custo": sum(1 for i in itens if i["custo_ficha_unitario"] is None),
+        "itens_sem_vinculo": sum(1 for i in itens if i["id_produto"] is None),
+    }
