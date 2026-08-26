@@ -335,6 +335,28 @@ try {
   const criou = /\/produtos\/\d+/.test(p.url());
   checar("cadastra produto pela tela", criou, p.url());
 
+  // ⚠️ **O EAN existia no formulário e não tinha campo na tela.** Era enviado ao
+  // salvar e lido pela conciliação da nota, mas ninguém conseguia ver nem
+  // digitar: o dado só entrava pela importação do Omie. Campo que o servidor
+  // aceita e a tela não oferece é campo morto — e some sem ninguém notar.
+  const fiscais = await p.evaluate(() => {
+    const rotulos = [...document.querySelectorAll("span.rotulo")].map((r) =>
+      r.textContent?.trim() ?? "");
+    return {
+      ean: rotulos.some((r) => /EAN\/GTIN/i.test(r)),
+      ncm: rotulos.includes("NCM"),
+      cest: rotulos.includes("CEST"),
+      marca: rotulos.includes("Marca"),
+      peso: rotulos.some((r) => /^Peso l/i.test(r)),
+      // O vínculo com o Omie é interno: não se mostra a quem cadastra.
+      omie: /Vínculo com o Omie|Código interno/i.test(document.body.innerText),
+    };
+  });
+  checar("o formulário do produto tem o código de barras (EAN/GTIN)", fiscais.ean, fiscais);
+  checar("e os campos que vêm do cadastro do Omie",
+    fiscais.ncm && fiscais.cest && fiscais.marca && fiscais.peso, fiscais);
+  checar("sem expor o vínculo interno com o Omie", !fiscais.omie, fiscais);
+
   // O aviso de "criado" ficava no TOPO, e o botão de salvar está no fim de um
   // formulário longo: quem clicava não via confirmação nenhuma. Agora ele
   // flutua preso ao rodapé — e leva junto o caminho para cadastrar o próximo.

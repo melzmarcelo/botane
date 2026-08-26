@@ -85,13 +85,6 @@ export default function FormularioProduto() {
   const podeEditar = pode("cadastros.produtos");
 
   const [f, setF] = useState<Form>(VAZIO);
-  // ⚠️ Fora do formulário de propósito: são de LEITURA. O código interno é o
-  // que segura o vínculo com o Omie, e um campo editável ao lado dos outros
-  // convidaria a mexer nele — que é desamarrar o produto do cadastro de origem.
-  const [vinculo, setVinculo] = useState<{
-    codigo_omie: string | null;
-    sincronizado_em: string | null;
-  }>({ codigo_omie: null, sincronizado_em: null });
   const [vinculos, setVinculos] = useState<VinculoFornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -125,10 +118,6 @@ export default function FormularioProduto() {
     api
       .get<Record<string, unknown>>(`/produtos/${id}`)
       .then((p) => {
-        setVinculo({
-          codigo_omie: (p.codigo_omie as string) ?? null,
-          sincronizado_em: (p.sincronizado_em as string) ?? null,
-        });
         setF({
           ...VAZIO,
           ...Object.fromEntries(
@@ -468,6 +457,21 @@ export default function FormularioProduto() {
               onChange={(e) => set("validade_dias", e.target.value)}
             />
           </Campo>
+          {/* ⚠️ **O EAN existia no formulário e não tinha campo na tela.** Era
+              enviado ao salvar e lido pela conciliação da nota — nível 3 da
+              cascata, o que casa o item do fornecedor com o produto certo —,
+              mas ninguém conseguia ver nem digitar. Campo morto na direção
+              inversa: o dado entrava só pela importação do Omie. */}
+          <Campo rotulo="Código de barras (EAN/GTIN)" dica="casa o item da nota com este produto">
+            <input
+              className="campo mono"
+              maxLength={20}
+              inputMode="numeric"
+              disabled={!podeEditar}
+              value={f.codigo_barras}
+              onChange={(e) => set("codigo_barras", e.target.value)}
+            />
+          </Campo>
           <Campo rotulo="NCM">
             <input
               className="campo mono"
@@ -518,34 +522,6 @@ export default function FormularioProduto() {
           </Campo>
         </div>
 
-        {/* ⚠️ **O código interno é o que segura o vínculo com o Omie.** Ele
-            guarda o id do produto de LÁ, que a casa não escolhe; `código` é o
-            da casa e pode ser trocado à vontade sem quebrar nada. É por isso
-            que a conciliação da nota procura por ele antes do EAN. Só leitura:
-            editá-lo é desamarrar o produto do cadastro de origem. */}
-        {(vinculo.codigo_omie || vinculo.sincronizado_em) && (
-          <div className="mt-5 rounded border border-linha bg-fundo p-4">
-            <p className="rotulo">Vínculo com o Omie</p>
-            <div className="mt-2 flex flex-wrap items-baseline gap-x-8 gap-y-2">
-              <p className="text-[14px]">
-                Código interno{" "}
-                <span className="mono ml-1 font-semibold">{vinculo.codigo_omie ?? "—"}</span>
-              </p>
-              {vinculo.sincronizado_em && (
-                <p className="text-[13px] text-suave">
-                  completado pela sincronização em{" "}
-                  {new Date(vinculo.sincronizado_em).toLocaleDateString("pt-BR")}
-                </p>
-              )}
-            </div>
-            <p className="mt-2 max-w-[70ch] text-[13px] leading-snug text-suave">
-              É o código do produto no Omie. O <b>código</b> acima é o da casa e pode ser
-              trocado quando quiser: o vínculo se mantém por este, não por aquele. A
-              sincronização preenche o que estiver em branco e nunca sobrescreve o que você
-              corrigir aqui.
-            </p>
-          </div>
-        )}
 
         <ul className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2">
           {[

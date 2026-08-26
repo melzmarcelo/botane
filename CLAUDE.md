@@ -346,8 +346,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   havia campo a criar. Ele guarda o `codigo_produto` do Omie (o id de lá, que a casa não
   escolhe), tem índice único e é o nível 2 da cascata de conciliação. `produtos.codigo` é o da
   casa e pode ser renomeado à vontade; a suíte cobra que renomear NÃO faça a importação criar um
-  duplicado. A tela mostra o código interno em bloco de **só leitura**: editá-lo é desamarrar o
-  produto do cadastro de origem.
+  duplicado. ⚠️ **O vínculo com o Omie NÃO aparece na tela do produto** — é interno, e quem
+  cadastra não tem o que fazer com ele.
+  ⚠️ **O EAN estava no formulário e não tinha campo na tela.** Era enviado ao salvar e lido pela
+  conciliação da nota, mas ninguém conseguia ver nem digitar: o dado só entrava pela importação
+  do Omie. Campo que o servidor aceita e a tela não oferece é campo morto na direção inversa — e
+  esse some sem ninguém notar, porque nada quebra. O `verificar.mjs` passou a cobrar os cinco
+  campos fiscais do formulário.
   ⚠️ **O `ListarProdutos` do Omie NÃO diz quem fornece o quê** — conferido campo a campo contra
   a conta real. Quem sabe isso é a NOTA, e até aqui o vínculo só nascia no LANÇAMENTO: numa base
   real, 227 produtos já tinham aparecido em nota com fornecedor e só 107 tinham vínculo. O resto
@@ -627,7 +632,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_produto_do_omie.py` (31),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (251, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (254, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
