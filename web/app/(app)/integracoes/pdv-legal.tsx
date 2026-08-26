@@ -3,19 +3,17 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
+import { useRouter } from "next/navigation";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 
 /**
- * PDV Legal — a credencial e o teste de conexão.
+ * PDV Legal — a credencial, o teste de conexão e a busca das vendas.
  *
- * ⚠️ **Só isto, e a tela diz por quê.** O `POST /token` da Tablet Cloud é a
- * única parte da API documentada publicamente; o catálogo de endpoints — vendas
- * do dia, itens, cancelamentos, cardápio — fica no portal de parceiros, fechado.
- * Sem ele, importador é endereço adivinhado.
- *
- * Uma tela com um botão de testar e nada mais parece incompleta; **dizer o que
- * falta e por quê** é a diferença entre "pela metade" e "até aqui dá".
+ * ⚠️ **A senha e o token do grupo nunca voltam do servidor**, nem para
+ * preencher o campo: os inputs abrem VAZIOS e o que está guardado aparece na
+ * dica, mascarado. Um campo preenchido com bolinhas seria enviado de volta como
+ * bolinhas no primeiro salvar — e a credencial de verdade se perderia.
  */
 
 type Config = {
@@ -29,7 +27,7 @@ type Config = {
   ultimo_status: string | null;
   ultima_mensagem: string | null;
   importador_disponivel: boolean;
-  pendencia: string;
+  filiais: string | null;
 };
 
 const VAZIO = {
@@ -39,10 +37,12 @@ const VAZIO = {
   client_secret: "",
   modo: "simulado",
   ativa: false,
+  filiais: "",
 };
 
 export default function PdvLegal() {
   const aviso = useAviso();
+  const router = useRouter();
   const { pode } = useSessao();
   const podeConfigurar = pode("admin.integracoes");
 
@@ -58,7 +58,7 @@ export default function PdvLegal() {
       // ⚠️ Os campos voltam VAZIOS, não mascarados: um campo com bolinhas
       // dentro seria enviado de volta como bolinhas no primeiro salvar. O que
       // já está guardado aparece na etiqueta ao lado, não no input.
-      setForm({ ...VAZIO, modo: c.modo, ativa: c.ativa });
+      setForm({ ...VAZIO, modo: c.modo, ativa: c.ativa, filiais: c.filiais ?? "" });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -79,11 +79,37 @@ export default function PdvLegal() {
         client_secret: form.client_secret || null,
         modo: form.modo,
         ativa: form.ativa,
+        filiais: form.filiais,
       });
       aviso.sucesso("Credencial do PDV Legal salva, cifrada. Ela não volta pela tela.");
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Traz os cupons e os grava como venda.
+   *
+   * ⚠️ A busca é **dia a dia** no servidor: o `cupom/get` do PDV devolve no
+   * máximo 100 registros num intervalo de até 10 dias, exceto quando a data
+   * inicial é igual à final. Uma casa com 48 cupons por dia estoura os 100 em
+   * três dias — e o corte seria mudo.
+   */
+  async function sincronizar() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ message: string; sem_vinculo?: number }>(
+        "/pdv/sincronizar",
+      );
+      aviso.sucesso(r.message, (r.sem_vinculo ?? 0) > 0
+        ? { texto: "ver itens sem vínculo", ao: () => router.push("/vendas") }
+        : undefined);
+      await carregar();
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível buscar as vendas");
     } finally {
       setOcupado(false);
     }
@@ -137,17 +163,6 @@ export default function PdvLegal() {
       }
     >
       <div className="flex flex-col gap-5">
-        {/* ⚠️ O aviso vem PRIMEIRO. Uma tela com um botão de testar e mais nada
-            parece um pedaço faltando; dizer o que falta, por quê e o que roda
-            no lugar é a diferença entre "incompleto" e "até aqui dá". */}
-        {!cfg.importador_disponivel && (
-          <Aviso tipo="info">
-            Por enquanto esta tela só <b>guarda a credencial e testa a conexão</b>. {cfg.pendencia}{" "}
-            A autenticação é a única parte da API que a Tablet Cloud publica; escrever o
-            importador sem o catálogo seria adivinhar endereço.
-          </Aviso>
-        )}
-
         <form className="flex flex-col gap-4" onSubmit={salvar}>
           <div className="grid gap-4 sm:grid-cols-2">
             {campos.map((c) => (
@@ -174,6 +189,18 @@ export default function PdvLegal() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* ⚠️ Em branco o servidor descobre sozinho — uma casa com uma
+                filial só não deveria digitar o código dela. Só é obrigatório
+                quando há mais de uma: aí somar todas mudaria o CMV de cada. */}
+            <Campo rotulo="Filiais" dica="em branco = descobre sozinho">
+              <input
+                className="campo mono"
+                disabled={!podeConfigurar}
+                placeholder="37622 ou 10,20,30"
+                value={form.filiais}
+                onChange={(e) => setForm({ ...form, filiais: e.target.value })}
+              />
+            </Campo>
             <Campo rotulo="Modo" dica="real exige os quatro campos preenchidos">
               <select
                 className="campo"
@@ -217,6 +244,17 @@ export default function PdvLegal() {
             >
               Testar conexão
             </button>
+            {cfg.configurada && (
+              <button
+                className="btn btn-secundario"
+                type="button"
+                onClick={sincronizar}
+                disabled={ocupado}
+                title="Traz os cupons do PDV e grava como venda"
+              >
+                Buscar vendas
+              </button>
+            )}
           </div>
         </form>
 

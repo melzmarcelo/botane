@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>API TABLET CLOUD</title>
+    <link href="/Content/css?v=YDEpRS58WQTQdbwzzeliQZZahXjH4kO5htWbfWS_ie01" rel="stylesheet"/>
+
+    <script src="/bundles/modernizr?v=w9fZKPSiHtN4N4FRqV7jn-3kGoQY5hHpkwFv5TfMrus1"></script>
+
+</head>
+<body>
+    <div class="navbar navbar-inverse navbar-fixed-top">
+        <div class="container">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="/">Home</a>
+            </div>
+            <div class="navbar-collapse collapse">
+                <ul class="nav navbar-nav">
+                    <li><a href="/Help">API</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="container body-content">
+        
+
+<link type="text/css" href="/Areas/HelpPage/HelpPage.css" rel="stylesheet" />
+<header class="help-page">
+    <div class="content-wrapper">
+        <div class="float-left">
+            <h1>API TABLET CLOUD</h1>
+        </div>
+    </div>
+</header>
+<div id="body" class="help-page">
+    <section class="featured">
+        <div class="content-wrapper">
+            <h2>Introdução</h2>
+            <p>
+                Todas as informações e métodos disponiveis estão descritos aqui.
+            </p>
+        </div>
+    </section>
+    <section class="content-wrapper main-content clear-fix">
+
+
+<h2 id="ClassesProdutos">ClassesProdutos</h2>
+    <p>Todas as informacoes a respeito das classes de produtos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-classes-get">GET classes/get</a></td>
+            <td class="api-documentation">
+                <p>Todos as classes da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-classes-get-MaxRegistros-Pagina">GET classes/get/{MaxRegistros}/{Pagina}</a></td>
+            <td class="api-documentation">
+                <p>Todos as classes da empresa logada de forma paginada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-classes-get-dataHora">GET classes/get/{dataHora}</a></td>
+            <td class="api-documentation">
+                <p>Todos as classes alteradas depois da data e hora passada como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Cliente">Cliente</h2>
+    <p>Todas as informacoes a respeito dos clientes</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-get">GET cliente/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os dados dos clientes da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-get-vendas-Id">GET cliente/get/vendas/{Id}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista dos &#250;ltimos 10 cupons do cliente passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-buscarapida-busca">GET cliente/buscarapida/{busca}</a></td>
+            <td class="api-documentation">
+                <p>Faz uma busca r&#225;pida dos clientes baseada no parametro de busca.(a busca come&#231;a a partir do terceiro caracter)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-buscarapida-busca-codusuariopdv-codfilial">GET cliente/buscarapida/{busca}/{codusuariopdv}/{codfilial}</a></td>
+            <td class="api-documentation">
+                <p>Faz uma busca r&#225;pida dos clientes baseada no parametro de busca para clientes vinculados ao usuario PDV passado como parametro.(a busca come&#231;a a partir do terceiro caracter)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-contaassinada-codcliente-dataInicial-datafinal">GET cliente/contaassinada/{codcliente}/{dataInicial}/{datafinal}</a></td>
+            <td class="api-documentation">
+                <p>Devolve o extrato da conta assinada do cliente passado como parametro
+            Se o intervalo entre a data inicial e a data final for maior que 100 dias o sistema ir&#225; rejeitar a busca</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cliente-get-id">GET cliente/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Cliente Especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-cliente-save">POST cliente/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo Cliente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-cliente-saveContaAssinada">POST cliente/saveContaAssinada</a></td>
+            <td class="api-documentation">
+                <p>Grava o cr&#233;dito de uma conta assinada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-cliente-update">PUT cliente/update</a></td>
+            <td class="api-documentation">
+                <p>Altera os dados de um cliente existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-cliente-delete-id">DELETE cliente/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Desativa o cliente passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="ConferenciaCaixa">ConferenciaCaixa</h2>
+    <p>Todas as informacoes sobre a confer&#234;ncia de caixa pdv</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-conferenciacaixa-getByCodigo-codigo">GET conferenciacaixa/getByCodigo/{codigo}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de sangrias</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-conferenciacaixa-save">POST conferenciacaixa/save</a></td>
+            <td class="api-documentation">
+                <p>Salva uma confer&#234;ncia as cegas PDV</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Cupom">Cupom</h2>
+    <p>Todas as informacoes dos cupons de venda</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-get-dataInicial-datafinal-filiais">GET cupom/get/{dataInicial}/{datafinal}/{filiais}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de cupons com intervalo m&#225;ximo de 10 dias e no m&#225;ximo 100 registros - obs(se a data inicial e final forem iguais n&#227;o existe limita&#231;&#227;o)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-get-offset-dataInicial-datafinal-filiais">GET cupom/get/{offset}/{dataInicial}/{datafinal}/{filiais}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de cupons com intervalo m&#225;ximo de 10 dias com no m&#225;ximo 100 registros por p&#225;gina</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-gettotalfilial-dataInicial-datafinal-filiais">GET cupom/gettotalfilial/{dataInicial}/{datafinal}/{filiais}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista com o valor total dos cupons com intervalo m&#225;ximo de 10 dias</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-get-VendaId-CodFilial">GET cupom/get/{VendaId}/{CodFilial}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um cupom de venda especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-getByMac-VendaId-CodFilial-MacTerminal">GET cupom/getByMac/{VendaId}/{CodFilial}/{MacTerminal}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um cupom de venda especifico de um determinado terminal</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-cupom-getDadosFiscais-VendaId-CodFilial-MacTerminal">GET cupom/getDadosFiscais/{VendaId}/{CodFilial}/{MacTerminal}</a></td>
+            <td class="api-documentation">
+                <p>Dados fiscais a respeito de um cupom de venda</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-cupom-save">POST cupom/save</a></td>
+            <td class="api-documentation">
+                <p>Grava ou atualiza um cupom de venda</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-cupom-estornar-VendaId-CodFilial-MacTerminal">PUT cupom/estornar/{VendaId}/{CodFilial}/{MacTerminal}</a></td>
+            <td class="api-documentation">
+                <p>Estorna um cupom de venda e todos os itens que estiverem cadastrados nele</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="DataAccess">DataAccess</h2>
+    <p>Informa&#231;&#245;es dos dados de acesso do token</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-dataaccess">GET dataaccess</a></td>
+            <td class="api-documentation">
+                <p>Devolve os dados de acesso do token passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Delivery">Delivery</h2>
+    <p>Informa&#231;&#245;es a respeito da taxa de entrega do delivery</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-delivery-get-codFilial">GET delivery/get/{codFilial}</a></td>
+            <td class="api-documentation">
+                <p>Todas as taxas da filial passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-delivery-save">POST delivery/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra uma nova taxa de entrega</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-delivery-update">PUT delivery/update</a></td>
+            <td class="api-documentation">
+                <p>Altera uma taxa existente</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Diagnostico">Diagnostico</h2>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-diagnostico-claims">GET diagnostico/claims</a></td>
+            <td class="api-documentation">
+                <p>No documentation available.</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Dispositivo">Dispositivo</h2>
+    <p>Todas as informa&#231;&#245;es a respeito dos Dispositivos - Mac</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-dispositivo-get">GET dispositivo/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os dispositivos da empresa logada no sistema</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-dispositivo-get-mac">GET dispositivo/get/{mac}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Mac Especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-dispositivo-save">POST dispositivo/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo Mac</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-dispositivo-update">PUT dispositivo/update</a></td>
+            <td class="api-documentation">
+                <p>Altera um Mac existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-dispositivo-delete-mac">DELETE dispositivo/delete/{mac}</a></td>
+            <td class="api-documentation">
+                <p>Esse m&#233;todo &#233; obsoleto, por favor utilizar o m&#233;todo removerlicenca</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-dispositivo-validatoken-mac-token">GET dispositivo/validatoken/{mac}/{token}</a></td>
+            <td class="api-documentation">
+                <p>Consulta um mac e um token para a&#231;&#245;es no pdv</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-dispositivo-removerlicenca-mac-token">DELETE dispositivo/removerlicenca/{mac}/{token}</a></td>
+            <td class="api-documentation">
+                <p>Exclui o Mac passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-dispositivo-getFiliais-cpf_cnpj">GET dispositivo/getFiliais/{cpf_cnpj}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de filiais baseado no cnpj passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-dispositivo-saveRegistro">POST dispositivo/saveRegistro</a></td>
+            <td class="api-documentation">
+                <p>Registra um dispositivo</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Email">Email</h2>
+    <p>Todas as informacoes a respeito das Impressoras</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-email-send_emailTo_assunto_conteudo">POST email/send?emailTo={emailTo}&amp;assunto={assunto}&amp;conteudo={conteudo}</a></td>
+            <td class="api-documentation">
+                <p>Envia um e-mail com o remetente noreply@tabletcloud.com.br</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Erros">Erros</h2>
+    <p>Todas as informa&#231;&#245;es de erros no Tablet PDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-erro-get">GET erro/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os erros cadastrados na base de dados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-erro-getliberados">GET erro/getliberados</a></td>
+            <td class="api-documentation">
+                <p>Todos os erros liberados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-erro-getnaoliberados">GET erro/getnaoliberados</a></td>
+            <td class="api-documentation">
+                <p>Todos os erros n&#227;o liberados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-erro-get-id">GET erro/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um erro especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-erro-save">POST erro/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo erro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-erro-update">PUT erro/update</a></td>
+            <td class="api-documentation">
+                <p>Altera os dados de um erro existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-erro-delete-id">DELETE erro/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Desativa o erro passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Estoque">Estoque</h2>
+    <p>Consulta os dados de estoque dos produtos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-estoque-getmovimentacao_offset_dataInicial_datafinal_filiais">GET estoque/getmovimentacao?offset={offset}&amp;dataInicial={dataInicial}&amp;datafinal={datafinal}&amp;filiais={filiais}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista com as movimenta&#231;&#245;es de estoque da empresa - M&#225;ximo de 100 registros por p&#225;gina</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-estoque-getsaida-offset-dataInicial-datafinal-filiais">GET estoque/getsaida/{offset}/{dataInicial}/{datafinal}/{filiais}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista com as movimenta&#231;&#245;es de saida do estoque - M&#225;ximo de 100 registros por p&#225;gina</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-estoque-get-CodFilial-CodVenda">GET estoque/get/{CodFilial}/{CodVenda}</a></td>
+            <td class="api-documentation">
+                <p>Devolve a quantidade em estoque de um produto para uma determinada filial baseado no c&#243;digo de venda</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-estoque-get-CodFilial">GET estoque/get/{CodFilial}</a></td>
+            <td class="api-documentation">
+                <p>Devolve a quantidade em estoque de todos os produtos para uma determinada filial</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-estoque-savedevolucao">POST estoque/savedevolucao</a></td>
+            <td class="api-documentation">
+                <p>Grava a devolu&#231;&#227;o de um produto</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-estoque-saveentrada">POST estoque/saveentrada</a></td>
+            <td class="api-documentation">
+                <p>Grava uma entrada no estoque</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-estoque-savesaida">POST estoque/savesaida</a></td>
+            <td class="api-documentation">
+                <p>Grava uma saida no estoque</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Filial">Filial</h2>
+    <p>Consulta dos dados das filiais da empresa logada</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-filial-get">GET filial/get</a></td>
+            <td class="api-documentation">
+                <p>Todas as filiais da empresa logada</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="FormaPagamentoPDV">FormaPagamentoPDV</h2>
+    <p>Todas as informa&#231;&#245;es a respeito de: FormaPagamentoPDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-formapagamentopdv-get">GET formapagamentopdv/get</a></td>
+            <td class="api-documentation">
+                <p>Todos as Formas de Pagamento da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-formapagamentopdv-get-id">GET formapagamentopdv/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito da FormaPagamentoPDV Especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-formapagamentopdv-save">POST formapagamentopdv/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra uma nova FormaPagamentoPDV</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-formapagamentopdv-update">PUT formapagamentopdv/update</a></td>
+            <td class="api-documentation">
+                <p>Altera uma FormaPagamentoPDV existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-formapagamentopdv-delete-id">DELETE formapagamentopdv/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Exclui uma FormaPagamentoPDV passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Fornecedor">Fornecedor</h2>
+    <p>Todas as informacoes a respeito dos fornecedores</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-fornecedor-get">GET fornecedor/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os dados dos fornecedores da empresa logada</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="GrupoProdutos">GrupoProdutos</h2>
+    <p>Todas as informa&#231;&#245;es a respeito dos Grupos de Produtos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-grupoprodutos-get">GET grupoprodutos/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os Grupos de Produtos da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-grupoprodutos-get-id">GET grupoprodutos/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Grupo de Produto especifico (O campo ID pode ser o c&#243;digo interno ou externo)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-grupoprodutos-save">POST grupoprodutos/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo Grupo de produto</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-grupoprodutos-update">PUT grupoprodutos/update</a></td>
+            <td class="api-documentation">
+                <p>Altera um Grupo de Produto existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-grupoprodutos-delete-id">DELETE grupoprodutos/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Exclui o Grupo de produto passado como parametro (O campo ID pode ser o c&#243;digo interno ou externo)</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Impostos">Impostos</h2>
+    <p>Lista de todos os impostos necess&#225;rios para integra&#231;&#227;o com o sistema</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-cfop">GET impostos/cfop</a></td>
+            <td class="api-documentation">
+                <p>Lista do CFOP</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-csosn">GET impostos/csosn</a></td>
+            <td class="api-documentation">
+                <p>Lista do CSOSN</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-codpiscofins">GET impostos/codpiscofins</a></td>
+            <td class="api-documentation">
+                <p>Lista do C&#243;digo de PIS/COFINS</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-icms-IsServico">GET impostos/icms/{IsServico}</a></td>
+            <td class="api-documentation">
+                <p>Lista do ICMS</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-cst">GET impostos/cst</a></td>
+            <td class="api-documentation">
+                <p>Lista do CST</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-codservico">GET impostos/codservico</a></td>
+            <td class="api-documentation">
+                <p>Lista dos c&#243;digo de servi&#231;o</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-unidademedida">GET impostos/unidademedida</a></td>
+            <td class="api-documentation">
+                <p>Lista das unidades de medidas v&#225;lidas para o sistema</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-cest-codCest">GET impostos/cest/{codCest}</a></td>
+            <td class="api-documentation">
+                <p>Recebe o c&#243;digo Cest e devolve a descri&#231;&#227;o</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impostos-ncm-codNCM">GET impostos/ncm/{codNCM}</a></td>
+            <td class="api-documentation">
+                <p>Recebe o c&#243;digo NCM e devolve a descri&#231;&#227;o</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Impressoras">Impressoras</h2>
+    <p>Todas as informacoes a respeito das Impressoras</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impressoras-get">GET impressoras/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os Impressoras da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-impressoras-get-id">GET impressoras/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Impressoras especifica</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-impressoras-save">POST impressoras/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra uma nova Impressora</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-impressoras-update">PUT impressoras/update</a></td>
+            <td class="api-documentation">
+                <p>Altera uma Impressora existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-impressoras-delete-id">DELETE impressoras/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Exclui a impressora passada como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Integrador">Integrador</h2>
+    <p>Integra&#231;&#227;o com Tablet PDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-integrador-savePedido">POST integrador/savePedido</a></td>
+            <td class="api-documentation">
+                <p>Salva um pedido</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-integrador-get-Identificador">GET integrador/get/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Recupera informa&#231;&#245;es de um pedido baseado no c&#243;digo</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-integrador-getstatus-Identificador">GET integrador/getstatus/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Recupera o status de um pedido baseado no c&#243;digo</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-integrador-check">GET integrador/check</a></td>
+            <td class="api-documentation">
+                <p>Utlizado pelo PDV para verificar se existe algum pedido</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-integrador-get">GET integrador/get</a></td>
+            <td class="api-documentation">
+                <p>Utilizado pelo PDV para listar os pedidos pendentes</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Licenciamento">Licenciamento</h2>
+    <p>Gerenciar licenciamentos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-relatorioMensal-mesCompetencia-anoCompetencia-comDetalhesDeCadaFilial">GET licenciamento/relatorioMensal/{mesCompetencia}/{anoCompetencia}/{comDetalhesDeCadaFilial}</a></td>
+            <td class="api-documentation">
+                <p>Devolve o relat&#243;rio de faturamento do m&#234;s e ano passados como par&#226;metro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-offset-filtro">GET licenciamento/minhaslicencas/{offset}/{filtro}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os licenciamentos do OEM logado</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-produtos">GET licenciamento/minhaslicencas/produtos</a></td>
+            <td class="api-documentation">
+                <p>Devolve os produtos licenciados para o OEM logado</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-tipodenegocio">GET licenciamento/minhaslicencas/tipodenegocio</a></td>
+            <td class="api-documentation">
+                <p>Devolve os tipos de neg&#243;cio</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-detalhestipodenegocio-codtipo">GET licenciamento/minhaslicencas/detalhestipodenegocio/{codtipo}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os detalhes do tipo de neg&#243;cio passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-origemdavenda">GET licenciamento/minhaslicencas/origemdavenda</a></td>
+            <td class="api-documentation">
+                <p>Devolve a lista com as origens das vendas</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-licenciamento-minhaslicencas-modulos-codproduto-codgrupoeconomico-codloja">GET licenciamento/minhaslicencas/modulos/{codproduto}/{codgrupoeconomico}/{codloja}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os m&#243;dulos licenciados para o OEM logado</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-licenciamento-minhaslicencas-saveGrupoEconomico">POST licenciamento/minhaslicencas/saveGrupoEconomico</a></td>
+            <td class="api-documentation">
+                <p>Salva o grupo economico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-licenciamento-minhaslicencas-saveFilial">POST licenciamento/minhaslicencas/saveFilial</a></td>
+            <td class="api-documentation">
+                <p>Salva ou atualiza os dados de uma filial</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Localidade">Localidade</h2>
+    <p>V&#225;rias funcionalidades para recuperar informa&#231;&#245;es de localidade</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-localidade-endereco-cep">GET localidade/endereco/{cep}</a></td>
+            <td class="api-documentation">
+                <p>Busca o endere&#231;o completo baseado no cep passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-localidade-endereco-cep-codfilial">GET localidade/endereco/{cep}/{codfilial}</a></td>
+            <td class="api-documentation">
+                <p>Busca o endere&#231;o completo incluindo a distancia do cep para a filial passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-localidade-cidades-uf">GET localidade/cidades/{uf}</a></td>
+            <td class="api-documentation">
+                <p>Busca o nome e c&#243;digo do IBGE de todas as cidades do estado passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-localidade-estados">GET localidade/estados</a></td>
+            <td class="api-documentation">
+                <p>Devolve todos os estados com as Unidades Federativas(UF)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-localidade-codibge-uf-cidade">GET localidade/codibge/{uf}/{cidade}</a></td>
+            <td class="api-documentation">
+                <p>Recebe a unidade federativa (UF) e o nome da cidade e devolve o c&#243;digo do IBGE (Se n&#227;o localizar devolve zero(0))</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Modificador">Modificador</h2>
+    <p>Todas as informacoes a respeito dos modificadores de produtos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-modificador-get-codFilial-data">GET modificador/get/{codFilial}/{data}</a></td>
+            <td class="api-documentation">
+                <p>Todos os modificadores da empresa</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-modificador-get-codFilial-data-MaxRegistros-Pagina">GET modificador/get/{codFilial}/{data}/{MaxRegistros}/{Pagina}</a></td>
+            <td class="api-documentation">
+                <p>Todos os modificadores retornando de forma paginada</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="OEM">OEM</h2>
+    <p>Consulta dos dados do Parceiro OEM</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-oem-configuracoes">GET oem/configuracoes</a></td>
+            <td class="api-documentation">
+                <p>Busca as configura&#231;&#245;es do parceiro OEM da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-oem-configuracoes-codfilial">GET oem/configuracoes/{codfilial}</a></td>
+            <td class="api-documentation">
+                <p>Busca as configura&#231;&#245;es do parceiro OEM da empresa logada e o logotipo da filial passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-oem-indicamais">GET oem/indicamais</a></td>
+            <td class="api-documentation">
+                <p>Busca a lista de OEM habilitados para o IndicaMais</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-oem-usuariosBeepay">GET oem/usuariosBeepay</a></td>
+            <td class="api-documentation">
+                <p>Busca todos os usu&#225;rios Beepay ativos</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="partner">partner</h2>
+    <p>Consulta os dados de parceiros integrados</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-Partner-getroomlisthits">GET Partner/getroomlisthits</a></td>
+            <td class="api-documentation">
+                <p>Devolve a lista de hospedes se a loja estiver com os dados corretamente configurados no app hits</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-Partner-getroomlisthits">POST Partner/getroomlisthits</a></td>
+            <td class="api-documentation">
+                <p>Devolve a lista de hospedes se a loja estiver com os dados corretamente configurados no app hits</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-Partner-getclientefixe-codfilial-cpfCliente">GET Partner/getclientefixe/{codfilial}/{cpfCliente}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os dados do cliente Fixe da filial passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-Partner-getclientefixeV2-codfilial-cpfCliente">GET Partner/getclientefixeV2/{codfilial}/{cpfCliente}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os dados do cliente Fixe da filial passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-Partner-addPointsfixe-codCupom">POST Partner/addPointsfixe/{codCupom}</a></td>
+            <td class="api-documentation">
+                <p>Grava os pontos no Fixe de uma venda realizada no cloud</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-Partner-RemovePointsfixe-codCupom">POST Partner/RemovePointsfixe/{codCupom}</a></td>
+            <td class="api-documentation">
+                <p>Resgata os cr&#233;ditos de fidelidade baseado numa venda realizada no PDV</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="PerfilUsuarioPDV">PerfilUsuarioPDV</h2>
+    <p>Todas as informacoes dos perfis de usu&#225;rios PDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-usuariopdv-perfil-get">GET usuariopdv/perfil/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os perfis cadastrados para a empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-usuariopdv-perfil-getmodulos">GET usuariopdv/perfil/getmodulos</a></td>
+            <td class="api-documentation">
+                <p>Mostra todos os m&#243;dulos disponiveis, esse m&#233;todo ser&#225; necess&#225;rio para cadastrar um novo perfil</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-usuariopdv-perfil-get-id">GET usuariopdv/perfil/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Perfil especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-usuariopdv-perfil-save">POST usuariopdv/perfil/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo Perfil</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-usuariopdv-perfil-update">PUT usuariopdv/perfil/update</a></td>
+            <td class="api-documentation">
+                <p>Altera os dados de um perfil existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-usuariopdv-perfil-delete-id">DELETE usuariopdv/perfil/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Deleta o perfil passado como parametro se n&#227;o houver nenhum usu&#225;rio vinculado</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="PontoVenda">PontoVenda</h2>
+    <p>Todas as informa&#231;&#245;es a respeito de: FormaPagamentoPDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-pontovenda-get">GET pontovenda/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os pontos de venda cadastrados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-pontovenda-get-id">GET pontovenda/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um ponto de venda especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-pontovenda-save">POST pontovenda/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo ponto de venda</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-pontovenda-update">PUT pontovenda/update</a></td>
+            <td class="api-documentation">
+                <p>Altera um ponto de venda existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-pontovenda-delete-id">DELETE pontovenda/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Exclui o ponto de venda passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Produtos">Produtos</h2>
+    <p>Todas as informa&#231;&#245;es a respeito dos produtos</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-produtos-get">GET produtos/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os produtos da empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-produtos-getbydata-dataUltimomodificacao">GET produtos/getbydata/{dataUltimomodificacao}</a></td>
+            <td class="api-documentation">
+                <p>Todos os produtos da empresa logada baseado na data da &#250;ltima modifica&#231;&#227;o passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-produtos-get-id">GET produtos/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um produto especifico (O campo ID pode ser o c&#243;digo interno ou externo)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-produtos-getlistaresumida-pagina">GET produtos/getlistaresumida/{pagina}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista resumida com a lista dos produtos ativos - M&#225;ximo de 100 registros por p&#225;gina</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-produtos-saveunidades">POST produtos/saveunidades</a></td>
+            <td class="api-documentation">
+                <p>Cadastra ou atualiza unidades de compra de uma lista de produtos</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-produtos-save">POST produtos/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo produto</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-produtos-saveImage">POST produtos/saveImage</a></td>
+            <td class="api-documentation">
+                <p>Salva a imagem de um produto</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-produtos-update">PUT produtos/update</a></td>
+            <td class="api-documentation">
+                <p>Altera um produto existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-produtos-delete-id">DELETE produtos/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Exclui o produto passado como parametro (O campo ID pode ser o c&#243;digo interno ou externo)</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Promocoes">Promocoes</h2>
+    <p>Todas as informacoes a respeito de promo&#231;&#245;es</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-promocoes-get-codFilial">GET promocoes/get/{codFilial}</a></td>
+            <td class="api-documentation">
+                <p>Todas as promo&#231;&#245;es da filial passada como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="SangriaSuprimento">SangriaSuprimento</h2>
+    <p>Todas as informacoes sobre sangria e suprimento</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-sangriasuprimento-getSangria-dataApartirDe">GET sangriasuprimento/getSangria/{dataApartirDe}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de sangrias</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-sangriasuprimento-getSuprimento-dataApartirDe">GET sangriasuprimento/getSuprimento/{dataApartirDe}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma lista de suprimentos</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-sangriasuprimento-getByCodigo-Codigo">GET sangriasuprimento/getByCodigo/{Codigo}</a></td>
+            <td class="api-documentation">
+                <p>Devolve uma sangria ou suprimento especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-sangriasuprimento-cancelar-Codigo-CodUsuario-dtCancelamento">DELETE sangriasuprimento/cancelar/{Codigo}/{CodUsuario}/{dtCancelamento}</a></td>
+            <td class="api-documentation">
+                <p>Cancela uma sangria ou um suprimento</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-sangriasuprimento-save">POST sangriasuprimento/save</a></td>
+            <td class="api-documentation">
+                <p>Salva uma sangria ou um suprimento</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Stone">Stone</h2>
+    <p>Integra&#231;&#227;o com a maquina Mamba Stone</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stone-saveMesaStoneCode-CodPDV-Identificador">POST stone/saveMesa{StoneCode}/{CodPDV}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Envia solicita&#231;&#227;o de dados para uma mesa espeficica</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-stone-getCheckPedido-StoneCode-Identificador">GET stone/getCheckPedido/{StoneCode}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Verifica se o pedido enviado foi atendido</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-stone-getPedido-StoneCode-Identificador">GET stone/getPedido/{StoneCode}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Recupera informa&#231;&#245;es de um pedido para exibir no Mamba</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stone-liberaMesa-StoneCode-Identificador">POST stone/liberaMesa/{StoneCode}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Avisa ao PDV que uma mesa deve ser liberada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stone-saveConta">POST stone/saveConta</a></td>
+            <td class="api-documentation">
+                <p>Salva dados de uma conta fechada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-stone-getImagemCupom-StoneCode-CodPedido">GET stone/getImagemCupom/{StoneCode}/{CodPedido}</a></td>
+            <td class="api-documentation">
+                <p>Recupera a imagem do cupom fiscal para impress&#227;o</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="StonePDV">StonePDV</h2>
+    <p>Integra&#231;&#227;o Tablet PDV com m&#225;quina Stone Mamba</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-stonepdv-getCheck-StoneCode">GET stonepdv/getCheck/{StoneCode}</a></td>
+            <td class="api-documentation">
+                <p>Verifica se existe algum pedido que precisa da intera&#231;&#227;o do tablet pdv</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-stonepdv-getContaFechada-StoneCode-Identificador">GET stonepdv/getContaFechada/{StoneCode}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Recupera informa&#231;&#245;es de um pedido fechado</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stonepdv-savePedido">POST stonepdv/savePedido</a></td>
+            <td class="api-documentation">
+                <p>Salva um pedido solicitado pela Mamba</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stonepdv-saveNoData-StoneCode-Identificador">POST stonepdv/saveNoData/{StoneCode}/{Identificador}</a></td>
+            <td class="api-documentation">
+                <p>Salva as informa&#231;&#245;es de dados n&#227;o localizados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-stonepdv-saveImageCupom-StoneCode-CodPedido-imgBase64">POST stonepdv/saveImageCupom/{StoneCode}/{CodPedido}/{imgBase64}</a></td>
+            <td class="api-documentation">
+                <p>Salva a imagem do cupom para um determinado pedido</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="TabelaPreco">TabelaPreco</h2>
+    <p>Todas as informa&#231;&#245;es a respeito da tabela de pre&#231;os</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tabelapreco-getbydata-filial_id-Data">GET tabelapreco/getbydata/{filial_id}/{Data}</a></td>
+            <td class="api-documentation">
+                <p>Devolve a tabela de pre&#231;os dos produtos alterados ap&#243;s a data passada como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tabelapreco-get-filial_id">GET tabelapreco/get/{filial_id}</a></td>
+            <td class="api-documentation">
+                <p>Tabela de pre&#231;os e impostos da empresa e filial passadas como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tabelapreco-get-filial_id-id">GET tabelapreco/get/{filial_id}/{id}</a></td>
+            <td class="api-documentation">
+                <p>Tabela de pre&#231;os e impostos de um produto especifico (O campo ID pode ser o c&#243;digo interno ou externo)</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-tabelapreco-save">POST tabelapreco/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra uma tabela de pre&#231;os e impostos para um produto e filial</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-tabelapreco-update">PUT tabelapreco/update</a></td>
+            <td class="api-documentation">
+                <p>Altera os valores e impostos para um produto que j&#225; tenha tabela de pre&#231;os cadastrada</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Tickets">Tickets</h2>
+    <p>M&#233;todo para manipula&#231;&#227;o de dados dos Tickets (WATO)</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tickets-get">GET tickets/get</a></td>
+            <td class="api-documentation">
+                <p>Os 1000 &#250;ltimos tickets de acordo com o filtro passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tickets-getdocs-codTicket">GET tickets/getdocs/{codTicket}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os documentos relacionados com um ticket</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-tickets-save">POST tickets/save</a></td>
+            <td class="api-documentation">
+                <p>Salva o documento em um ticket baseado nos dados passados como parametro(O arquivo deve ser enviado na tag Base64)</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Tools">Tools</h2>
+    <p>Ferramentas necess&#225;rias para v&#225;rias funcionalidades do sistema</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-diastroca">GET tools/diastroca</a></td>
+            <td class="api-documentation">
+                <p>Devolve o n&#250;mero de dias que o cupom de troca tem validade a partir da data da compra</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-celulaconsumo">GET tools/celulaconsumo</a></td>
+            <td class="api-documentation">
+                <p>Devolve o nome da c&#233;lula de consumo de uma determinada empresa</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-controledownload-codloja-mac-modulo">GET tools/controledownload/{codloja}/{mac}/{modulo}</a></td>
+            <td class="api-documentation">
+                <p>Devolve o status do mac e m&#243;dulo passado como parametro para download dos dados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-tools-savecontroledownload-codloja-mac-modulo">POST tools/savecontroledownload/{codloja}/{mac}/{modulo}</a></td>
+            <td class="api-documentation">
+                <p>Grava na tabela de controle quando o PDV realiza a sincroniza&#231;&#227;o dos dados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-mensagemtroca">GET tools/mensagemtroca</a></td>
+            <td class="api-documentation">
+                <p>Devolve a mensagem de troca</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-fechamentooperador">GET tools/fechamentooperador</a></td>
+            <td class="api-documentation">
+                <p>Devolve o tipo de impress&#227;o no fechamento do operador</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-changes-CodFilial-Data">GET tools/changes/{CodFilial}/{Data}</a></td>
+            <td class="api-documentation">
+                <p>Devolve as altera&#231;&#245;es realizadas no sistema</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-mensagemlicenciamento-CodFilial">GET tools/mensagemlicenciamento/{CodFilial}</a></td>
+            <td class="api-documentation">
+                <p>Consulta status da empresa</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-motivocancelamento-CodFilial">GET tools/motivocancelamento/{CodFilial}</a></td>
+            <td class="api-documentation">
+                <p>Consulta os motivos de cancelamento de vendas cadastrados</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-tools-tipodesconto-CodFilial">GET tools/tipodesconto/{CodFilial}</a></td>
+            <td class="api-documentation">
+                <p>Consulta os tipos de descontos da filial passada como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="UsuarioPDV">UsuarioPDV</h2>
+    <p>Todas as informacoes dos usu&#225;rios PDV</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-usuariopdv-get">GET usuariopdv/get</a></td>
+            <td class="api-documentation">
+                <p>Todos os usu&#225;rios PDV cadastrados para a empresa logada</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-usuariopdv-get-id">GET usuariopdv/get/{id}</a></td>
+            <td class="api-documentation">
+                <p>Dados a respeito de um Usu&#225;rio especifico</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-usuariopdv-save">POST usuariopdv/save</a></td>
+            <td class="api-documentation">
+                <p>Cadastra um novo Usu&#225;rio PDV</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/PUT-usuariopdv-update">PUT usuariopdv/update</a></td>
+            <td class="api-documentation">
+                <p>Altera os dados de um usu&#225;rio PDV existente</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/DELETE-usuariopdv-delete-id">DELETE usuariopdv/delete/{id}</a></td>
+            <td class="api-documentation">
+                <p>Deleta o usu&#225;rio PDV passado como parametro</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="Validador">Validador</h2>
+    <p>Validador de tickets</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-validador-status-token-codFilial">GET validador/status/{token}/{codFilial}</a></td>
+            <td class="api-documentation">
+                <p>Devolve o status do token passado como parametro</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/GET-validador-get-Token">GET validador/get/{Token}</a></td>
+            <td class="api-documentation">
+                <p>Devolve os dados do validador de uma loja</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-validador-save">POST validador/save</a></td>
+            <td class="api-documentation">
+                <p>Salva um ticket no servidor</p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h2 id="XMLNota">XMLNota</h2>
+    <p>Salva um arquivo XML no servidor TabletCloud</p>
+<table class="help-page-table">
+    <thead>
+        <tr><th>API</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td class="api-name"><a href="/Help/Api/POST-xml-save">POST xml/save</a></td>
+            <td class="api-documentation">
+                <p>Salva um documento XML especifico para a loja logada</p>
+            </td>
+        </tr>
+    </tbody>
+</table>    </section>
+</div>
+
+        <hr />
+        <footer>
+            <p>&copy; 2026 - WebServices Tablet Cloud</p>
+        </footer>
+    </div>
+
+    <script src="/bundles/jquery?v=M552tGwpbxyE0RkheBDCh-odjZ90lxzXTh-V82YYM2Y1"></script>
+
+    <script src="/bundles/bootstrap?v=iTdcQLdhilorfQsoxwYdUx39Ev8f-pgcBu51zsXdT2o1"></script>
+
+    
+</body>
+</html>

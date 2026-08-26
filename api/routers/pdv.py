@@ -1,18 +1,18 @@
-"""PDV Legal — credencial, autenticação e teste de conexão.
+"""PDV Legal — credencial, autenticação e a busca das vendas.
 
-⚠️ **Só isto, e é de propósito.** O `POST /token` da Tablet Cloud é a única
-parte da API documentada publicamente; o catálogo de endpoints — vendas do dia,
-itens, cancelamentos, cardápio — fica no portal de parceiros, fechado. Sem ele,
-escrever importador é adivinhar endereço: exatamente o que, na integração com o
-Omie, custou uma conta bloqueada por parâmetro inventado.
+O catálogo de endpoints da Tablet Cloud não é público, mas apareceu em
+`GET /help` — a página de ajuda do ASP.NET, que só responde com o Bearer token.
+O que se sabe dele está em `docs/pdv-legal-api.md`, conferido contra a conta
+real do cliente.
 
-O que existe aqui destrava o resto: com a credencial guardada e o token
-funcionando, o importador que vier depois só precisa saber **quais** endereços
-chamar.
-
-Enquanto isso, a venda continua entrando por planilha — o plano B previsto no
-mapeamento, que funciona e alimenta o mesmo `vendas`/`venda_itens`.
+⚠️ **A gravação da venda NÃO acontece aqui.** A sincronização busca, traduz e
+entrega ao mesmo `/vendas/importar` que a planilha usa — com o mesmo de-para, o
+mesmo congelamento do custo da ficha e a mesma baixa de estoque. Era o que o
+mapeamento previa: *"quando a API abrir, muda a fonte e não o resto"*. Duas
+gravações de venda seriam duas contas de CMV conforme a origem.
 """
+
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -20,8 +20,11 @@ from pydantic import BaseModel, Field
 import auditoria
 from database import get_cursor
 from seguranca import Contexto, requer_permissao, unidade_atual
+from models.cmv import ImportarVendasRequest, VendaImportar
+from routers import vendas as rota_vendas
 from services import segredos
-from services.pdv.cliente import ClientePdv
+from services.pdv import importador
+from services.pdv.cliente import ClientePdv, ErroPdv
 
 router = APIRouter(prefix="/pdv", tags=["PDV Legal"])
 
@@ -32,6 +35,11 @@ class ConfigPdv(BaseModel):
     # ⚠️ Os quatro em branco mantêm o que já estava: a tela mostra mascarado, e
     # exigir redigitar a senha para mudar o modo é o caminho mais curto para
     # alguém guardar a credencial num bloco de notas.
+    # ⚠️ As filiais que a busca cobre — uma lista separada por vírgula, como a
+    # API pede ("37622" ou "10,20,30"). Em branco, a sincronização descobre
+    # sozinha em `filial/get`: uma casa com uma filial só não deveria precisar
+    # digitar o código dela em lugar nenhum.
+    filiais: str | None = Field(default=None, max_length=200)
     username: str | None = Field(default=None, max_length=120)
     password: str | None = Field(default=None, max_length=200)
     # O `client_id` é o código do grupo econômico; o `client_secret`, o token do
@@ -80,14 +88,13 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
         "password": segredos.mascarar(cred.get("password")),
         "client_id": segredos.mascarar(cred.get("client_id")),
         "client_secret": segredos.mascarar(cred.get("client_secret")),
+        "filiais": cred.get("filiais"),
         "ultima_sincronizacao": linha["ultima_sincronizacao"] if linha else None,
         "ultimo_status": linha["ultimo_status"] if linha else None,
         "ultima_mensagem": linha["ultima_mensagem"] if linha else None,
-        # O que ainda falta para a venda entrar sozinha. Vai no JSON porque é a
-        # tela que precisa explicar por que só há um botão de testar aqui.
-        "importador_disponivel": False,
-        "pendencia": ("O catálogo de endpoints do PDV Legal não é público. Com ele, "
-                      "a venda passa a entrar sozinha; até lá, ela entra por planilha."),
+        # O catálogo chegou em 26/08/2026 (ver `docs/pdv-legal-api.md`), então a
+        # venda entra sozinha. O campo fica porque a TELA muda de cara com ele.
+        "importador_disponivel": True,
     }
 
 
@@ -109,6 +116,9 @@ def salvar_config(body: ConfigPdv,
             valor = getattr(body, campo)
             if valor:
                 cred[campo] = valor.strip()
+        # Não é segredo: é o recorte da busca, e quem configura precisa vê-lo.
+        if body.filiais is not None:
+            cred["filiais"] = body.filiais.strip() or None
 
         # ⚠️ Modo real sem os quatro é promessa que a primeira chamada quebra —
         # e o erro apareceria como "não autorizado", que manda quem configurou
@@ -161,3 +171,96 @@ def testar(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
             (id_unidade, SERVICO, r["modo"], "OK" if r["ok"] else "ERRO", r["detalhe"]),
         )
     return r
+
+
+@router.post("/sincronizar")
+def sincronizar(
+    dias: int | None = None,
+    desde: date | None = None,
+    ctx: Contexto = Depends(requer_permissao("integracao.pdv")),
+) -> dict:
+    """Busca as vendas do PDV Legal e as grava pelo caminho de sempre.
+
+    ⚠️ **Dia a dia.** O `cupom/get` devolve no máximo 100 registros num intervalo
+    de até 10 dias — *exceto* quando a data inicial é igual à final, e aí não há
+    teto. Uma casa com 48 cupons por dia estoura os 100 em três dias de janela, e
+    o corte seria silencioso: 100 é um número plausível, ninguém veria falta, e o
+    CMV do período sairia com receita a menos.
+
+    ⚠️ **A gravação é do importador de vendas**, não daqui: o mesmo de-para, o
+    mesmo custo congelado da ficha e a mesma baixa de estoque da planilha.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            "SELECT credenciais, modo FROM integracoes WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO),
+        )
+        linha = cur.fetchone()
+        cred = segredos.decifrar(linha["credenciais"]) if linha else {}
+        cliente = _cliente(cur, id_unidade)
+
+        # ⚠️ Sem filial configurada, descobre sozinho — uma casa com uma filial
+        # só não deveria precisar digitar o código dela em lugar nenhum. Só
+        # pergunta quando há mais de uma: aí a escolha é de quem configura, e
+        # somar todas mudaria o CMV de cada loja.
+        filiais = (cred.get("filiais") or "").strip()
+        if not filiais:
+            try:
+                lista = cliente.get("/filial/get") or []
+            except ErroPdv as e:
+                raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+            codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
+            if len(codigos) != 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"A conta tem {len(codigos)} filial(is). Diga quais entram na "
+                            "busca no campo Filiais da configuração, separadas por vírgula."),
+                )
+            filiais = codigos[0]
+
+        try:
+            r = importador.sincronizar(cur, cliente, id_unidade, filiais, dias, desde)
+        except ErroPdv as e:
+            cur.execute(
+                """INSERT INTO integracoes (id_unidade, servico, modo, ultimo_status,
+                                            ultima_mensagem)
+                   VALUES (%s, %s, %s, 'ERRO', %s)
+                   ON CONFLICT (id_unidade, servico) DO UPDATE
+                       SET ultimo_status = 'ERRO', ultima_mensagem = EXCLUDED.ultima_mensagem""",
+                (id_unidade, SERVICO, cliente.modo, e.mensagem),
+            )
+            raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
+
+    vendas = r.pop("vendas")
+    gravado: dict = {"importadas": 0, "repetidas": 0}
+    if vendas:
+        # ⚠️ Chamada direta à função da rota de vendas, com o MESMO contexto:
+        # `Depends` só vale quando o FastAPI a roteia. É o que garante um
+        # caminho de gravação só — o de-para, o custo da ficha e a baixa de
+        # estoque moram lá, e uma segunda cópia divergiria na primeira mudança.
+        gravado = rota_vendas.importar(
+            ImportarVendasRequest(vendas=[VendaImportar(**v) for v in vendas]), ctx
+        )
+
+    with get_cursor() as cur:
+        cur.execute(
+            """INSERT INTO integracoes (id_unidade, servico, modo, ultima_sincronizacao,
+                                        ultimo_status, ultima_mensagem)
+               VALUES (%s, %s, %s, now(), 'OK', %s)
+               ON CONFLICT (id_unidade, servico) DO UPDATE
+                   SET ultima_sincronizacao = now(), ultimo_status = 'OK',
+                       ultima_mensagem = EXCLUDED.ultima_mensagem""",
+            (id_unidade, SERVICO, cliente.modo,
+             f"{gravado.get('importadas', 0)} venda(s) nova(s) ({r['janela']})"),
+        )
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "sincronizar",
+                            depois={**r, **{k: gravado.get(k) for k in
+                                            ("importadas", "repetidas", "sem_vinculo")}},
+                            id_unidade=id_unidade)
+
+    return {
+        **r, **gravado,
+        "message": (f"{gravado.get('importadas', 0)} venda(s) nova(s) de {r['cupons']} "
+                    f"cupom(ns) — {r['janela']}"),
+    }

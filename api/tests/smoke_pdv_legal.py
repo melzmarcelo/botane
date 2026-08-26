@@ -30,6 +30,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import date
 
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
@@ -129,12 +130,11 @@ esvaziar_credencial()
 print("1. sem credencial, a tela sabe o que falta")
 st, c = chamar("GET", "/pdv/config", token=token)
 checar("a configuração responde", st == 200, (st, c))
-checar("e diz que o importador ainda não existe",
-       c.get("importador_disponivel") is False, c.get("importador_disponivel"))
-# ⚠️ Uma tela com um botão de testar e mais nada parece um pedaço faltando.
-# Dizer o que falta e por quê é a diferença entre "incompleto" e "até aqui dá".
-checar("explicando por quê", "endpoints" in str(c.get("pendencia", "")).lower(),
-       c.get("pendencia"))
+# ⚠️ O catálogo chegou em 26/08/2026 e a venda passou a entrar sozinha. Estas
+# checagens afirmavam o contrário — ficam invertidas de propósito, para o campo
+# não sumir sem ninguém notar: é ele que muda a cara da tela.
+checar("e diz que o importador está disponível",
+       c.get("importador_disponivel") is True, c.get("importador_disponivel"))
 
 
 print("\n2. modo real sem os quatro campos é recusado")
@@ -239,6 +239,97 @@ if tk:
 else:
     checar("cozinha NÃO configura o PDV (403)", True, "usuário de cozinha ausente")
     checar("e nem lê a configuração (403)", True, "usuário de cozinha ausente")
+
+
+print("\n8b. a sincronizacao traz as vendas")
+# ⚠️ Em SIMULADO, contra a fixture — que copia a forma real do cupom com
+# numeros impossiveis de existir na conta. A primeira versao da fixture usava os
+# `venda_id` REAIS que eu tinha lido: a venda de demonstracao entrou primeiro e
+# a de verdade foi descartada como "repetida", sem nada denunciando, porque
+# repetida e o caso normal.
+chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True}, token=token)
+
+st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+checar("a sincronizacao responde", st == 200, (st, r))
+checar("e diz a janela que buscou", "janela" in (r or {}), r)
+
+# A fixture tem 3 cupons: um cancelado, um com item cancelado dentro, e um bom.
+checar("le os tres cupons da fixture", r.get("cupons") == 3, r.get("cupons"))
+# ⚠️ Cupom cancelado nao vira venda: contá-lo inflaria a receita do periodo.
+checar("cupom cancelado fica de fora", r.get("cancelados") == 1, r.get("cancelados"))
+# ⚠️ E o cancelamento por ITEM, dentro de cupom valido, e o que passa
+# despercebido — sem esta regra a receita e o CMV teorico saem inflados.
+checar("item cancelado dentro de cupom valido tambem",
+       r.get("itens_cancelados") == 1, r.get("itens_cancelados"))
+checar("sobram duas vendas", r.get("importadas") in (0, 2),
+       (r.get("importadas"), r.get("repetidas")))
+
+st, r2 = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+# ⚠️ A idempotencia e do BANCO, pelo `documento` = `venda_id`: reimportar o
+# mesmo dia e o caso NORMAL de quem sincroniza de hora em hora.
+checar("reimportar nao duplica", r2.get("importadas") == 0, r2)
+checar("e conta as repetidas", (r2.get("repetidas") or 0) >= 2, r2)
+
+
+print("\n8c. a janela e o teto de dias")
+# ⚠️ A busca e DIA A DIA porque o `cupom/get` devolve no maximo 100 registros
+# num intervalo de ate 10 dias — exceto quando data inicial = data final. Uma
+# casa com 48 cupons por dia estoura os 100 em tres dias, e o corte seria mudo.
+from services.pdv import importador as imp  # noqa: E402
+
+chamadas = []
+
+
+class ClienteFalso:
+    modo = "simulado"
+
+    def get(self, caminho, params=None):
+        chamadas.append(caminho)
+        return []
+
+
+falso = ClienteFalso()
+imp.buscar(falso, "37622", date(2026, 8, 1), date(2026, 8, 5))
+checar("cinco dias viram CINCO chamadas, uma por dia", len(chamadas) == 5, len(chamadas))
+checar("cada uma com data inicial IGUAL a final",
+       all(c.split("/")[3] == c.split("/")[4] for c in chamadas), chamadas[:2])
+
+chamadas.clear()
+imp.buscar(falso, "37622", date(2025, 1, 1), date(2026, 8, 26))
+# ⚠️ O teto nao e da API, e de paciencia: 600 dias sao 600 requisicoes, e uma
+# tela que espera dez minutos parece travada.
+checar("periodo enorme e cortado no teto",
+       len(chamadas) == imp.TETO_DE_DIAS, len(chamadas))
+
+
+print("\n8d. o mapeador aguenta o que o mundo real manda")
+from services.pdv import mapeadores as mp  # noqa: E402
+
+# ⚠️ `0001-01-01` e o vazio do .NET, nao uma data. Ele vem em `dtestorno` de
+# tudo o que NAO foi estornado; tratá-lo como data poria venda no ano 1.
+checar("a data vazia do .NET vira None", mp._data("0001-01-01T00:00:00") is None)
+checar("e a data de verdade e lida",
+       str(mp._data("2026-08-26T00:00:00")) == "2026-08-26", mp._data("2026-08-26T00:00:00"))
+
+# ⚠️ Quantidade zero existe em cupom cancelado, e o unitario sai de uma divisao.
+checar("quantidade zero nao estoura na divisao",
+       mp.item({"quantidade": 0, "valortotal": 10})["valor_unitario"] == 0)
+checar("o unitario sai do total da LINHA dividido pela quantidade",
+       float(mp.item({"quantidade": 2, "valortotal": 11})["valor_unitario"]) == 5.5)
+
+# ⚠️ Canal desconhecido vira None, nao "BALCAO": inventar canal faria o
+# relatorio por canal mentir com cara de completo.
+checar("canal desconhecido nao e inventado", mp.cupom({"tipovenda": "Z"})["canal"] is None)
+checar("e o conhecido e traduzido", mp.cupom({"tipovenda": "D"})["canal"] == "DELIVERY")
+
+# Estornado conta como cancelado: sao coisas diferentes la e a mesma aqui.
+checar("estornado tambem nao vira venda",
+       mp.cupom({"isestornado": True})["cancelada"] is True)
+
+# A resposta as vezes vem como objeto solto em vez de lista.
+checar("objeto solto e tratado como lista de um",
+       len(mp.lista_de_cupons({"venda_id": 1})) == 1)
+checar("e lista vazia nao estoura", mp.lista_de_cupons(None) == [])
 
 
 print("\n9. limpeza")

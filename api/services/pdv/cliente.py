@@ -1,24 +1,16 @@
 """Conversa com o PDV Legal (plataforma Tablet Cloud).
 
-⚠️ **Só a autenticação está implementada, e é de propósito.** O `POST /token`
-é a única parte da API que a Tablet Cloud documenta publicamente; o catálogo de
-endpoints — vendas do dia, itens, cancelamentos, cardápio — fica no portal de
-parceiros, fechado. Escrever importador contra endereço adivinhado é o oposto
-do que a integração com o Omie ensinou: lá, quatro campos que a documentação
-previa vinham **vazios** na conta real, e um parâmetro inventado consumiu cota
-até a conta ser bloqueada.
+Este arquivo é só o transporte: credencial, token e um `get()` genérico. Quem
+sabe **quais** endereços chamar é o importador; quem sabe traduzir o que volta é
+o mapeador. O catálogo está em `docs/pdv-legal-api.md`.
 
-Então este arquivo faz o que dá para fazer com certeza:
+⚠️ **O token fica só na MEMÓRIA.** Guardá-lo no banco seria guardar uma
+credencial de acesso a mais, com prazo, para economizar uma chamada a cada doze
+horas — troca ruim. Reiniciar a API pede um token novo, e isso é barato.
 
-* guarda e usa a credencial (cifrada em `integracoes`, como a do Omie);
-* pega o Bearer token e **o reaproveita** até perto de expirar;
-* oferece um `get()` genérico, que é onde os endpoints entram quando o catálogo
-  chegar — sem que nada acima precise mudar.
-
-⚠️ **O token vale ~6 horas (21.599 s) e fica só na MEMÓRIA.** Guardá-lo no banco
-seria guardar uma credencial de acesso a mais, com prazo, para economizar uma
-chamada a cada seis horas — troca ruim. Reiniciar a API pede um token novo, e
-isso é barato.
+⚠️ **`expires_in` veio 43.199 s (12 h)** da conta real, contra as ~6 h que a
+documentação pública sugeria. O código não depende disso: usa o que o servidor
+manda, com folga.
 """
 
 import json
@@ -135,12 +127,11 @@ class ClientePdv:
     def get(self, caminho: str, params: dict | None = None) -> Any:
         """Uma leitura autenticada. É por aqui que os endpoints entram.
 
-        ⚠️ **Existe vazio de propósito**: o catálogo de endereços do PDV Legal
-        não é público, e nenhum caminho está escrito no código porque nenhum foi
-        verificado. Quando a documentação chegar, o importador chama este método
-        e nada abaixo dele muda.
+        ⚠️ **Nenhum caminho está escrito aqui**, de propósito: quem sabe quais
+        rotas existem é o importador, e este arquivo é transporte. Rota nova não
+        pede mudança nenhuma neste método.
 
-        ⚠️ **Um 401 tenta UMA vez com token novo.** Token de seis horas vence no
+        ⚠️ **Um 401 tenta UMA vez com token novo.** Token de doze horas vence no
         meio de uma importação longa, e o 401 dali é vencimento, não credencial
         errada. Repetir mais de uma vez, não: aí o 401 é o que ele diz ser, e
         insistir só queima tentativa de login.
@@ -168,15 +159,22 @@ class ClientePdv:
     def _fixture(self, caminho: str) -> Any:
         """Resposta gravada, para o modo simulado.
 
+        ⚠️ **O nome do arquivo ignora os parâmetros do caminho.** As rotas da
+        Tablet Cloud levam tudo na URL — `/cupom/get/2026-08-26/2026-08-26/37622`
+        —, e um arquivo por combinação de data e filial seria um arquivo por dia,
+        para sempre. A busca vai encurtando o caminho até achar: aquela rota cai
+        em `cupom_get.json`.
+
         Sem arquivo, devolve lista vazia em vez de estourar: o modo simulado
-        existe para a tela funcionar sem credencial, e um endpoint que ainda não
-        tem fixture é o caso normal enquanto o catálogo não chega.
+        existe para a tela funcionar sem credencial.
         """
-        nome = caminho.strip("/").replace("/", "_") or "raiz"
-        arquivo = FIXTURES / f"{nome}.json"
-        if not arquivo.exists():
-            return []
-        return json.loads(arquivo.read_text(encoding="utf-8"))
+        partes = [p for p in caminho.strip("/").split("/") if p]
+        while partes:
+            arquivo = FIXTURES / ("_".join(partes) + ".json")
+            if arquivo.exists():
+                return json.loads(arquivo.read_text(encoding="utf-8"))
+            partes.pop()
+        return []
 
     # ----------------------------------------------------------------- teste
 

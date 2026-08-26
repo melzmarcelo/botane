@@ -461,14 +461,40 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - Credenciais ficam cifradas (`services/segredos.py`, Fernet com chave derivada do
   `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
   as credenciais guardadas.
-- **PDV Legal: a credencial e a autenticação existem; o importador NÃO** (`services/pdv/`,
-  `routers/pdv.py`, 26/08/2026). O `POST https://api.tabletcloud.com.br/token` é a **única
-  parte da API que a Tablet Cloud documenta publicamente**; o catálogo de endpoints — vendas do
-  dia, itens, cancelamentos, cardápio — fica no portal de parceiros, fechado. Escrever
-  importador sem ele é adivinhar endereço, que é o que custou uma conta bloqueada no Omie.
-  ⚠️ Então a tela **diz o que falta e o que roda no lugar** (planilha): cartão com botão de
-  testar e mais nada parece pedaço faltando, e alguém abre chamado por isso. `pendencia` e
-  `importador_disponivel` viajam no JSON justamente para a tela poder explicar.
+- **PDV Legal: as vendas entram sozinhas** (`services/pdv/`, `routers/pdv.py`, 26/08/2026).
+  🔑 **O catálogo de endpoints não é público, mas apareceu em `GET /help`** — a página de ajuda
+  do ASP.NET Web API, que **só responde com o Bearer token** (sem token dá 500). São 173 rotas
+  com parâmetros e tipos. O que interessa está em **`docs/pdv-legal-api.md`**, e o HTML cru em
+  `docs/pdv-legal-help.html`. Antes de pedir documentação a suporte de API fechada, vale tentar
+  `/help`, `/swagger*`, `/openapi.json` — **com o token**.
+  ⚠️ **A busca é DIA A DIA, e isso decide se o número está certo.** O `cupom/get` devolve no
+  máximo 100 registros num intervalo de até 10 dias — *exceto quando data inicial = data final,
+  que não tem teto*. A conta do cliente faz **48 cupons num dia comum**: pedir "os últimos 10
+  dias" traria 100 e calaria o resto, e ninguém veria falta nenhuma porque 100 é um número
+  plausível. O CMV do período sairia com receita a menos.
+  ⚠️ **A gravação NÃO acontece no router do PDV.** Ele busca, traduz e chama o mesmo
+  `/vendas/importar` da planilha — mesmo de-para, mesmo custo congelado da ficha, mesma baixa de
+  estoque. Era o que o mapeamento previa: *"muda a fonte e não o resto"*. Duas gravações seriam
+  duas contas de CMV conforme a origem.
+  ⚠️ **Cancelamento em DOIS níveis**: `iscancelado`/`isestornado` no cupom e `iscancelado` no
+  item. O segundo é o que passa despercebido — um cupom válido com uma linha cancelada dentro
+  infla receita e CMV teórico. Cupom que fica sem item nenhum some.
+  ⚠️ **`valortotal` do item é o total da LINHA**, não o unitário — e quantidade zero existe em
+  cupom cancelado, então a divisão precisa de guarda.
+  ⚠️ **`valorcusto` é o custo que o PDV acha, e NÃO vira o nosso.** O CMV teórico é
+  `quantidade × custo da ficha daqui`; trocar um pelo outro seria conferir a casa contra o
+  cadastro do PDV.
+  ⚠️ **`0001-01-01` é o vazio do .NET**, não uma data: vem em `dtestorno` de tudo o que não foi
+  estornado, e tratá-lo como data poria venda no ano 1.
+  ⚠️ **`expires_in` veio 43.199 s (12 h)**, não as ~6 h da documentação pública. O código usa o
+  que o servidor manda, com 5 min de folga.
+  ⚠️ **Fixture com id REAL bloqueia a venda de verdade.** A primeira versão da fixture copiou os
+  `venda_id` que eu tinha lido: a venda de demonstração entrou primeiro e a real foi descartada
+  como "repetida" — sem nada denunciando, porque repetida é o caso normal. Número de
+  demonstração tem de ser **impossível de existir** na conta.
+  ⚠️ Os itens sem de-para caem na fila que já existia (`GET /vendas/sem-vinculo`), mostrada na
+  tela de Vendas. **Enquanto ela não for resolvida, o CMV teórico é zero**: 100 itens de 57
+  produtos distintos entraram sem vínculo na primeira importação real.
   ⚠️ **Nada volta em claro — nem o usuário.** Os quatro campos saem mascarados; campo em branco
   MANTÉM o guardado, e exigir redigitar a senha para mudar o modo é o caminho mais curto para
   alguém anotar a credencial num bloco de notas.
@@ -689,13 +715,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.024 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.043 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (32),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (51),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (272, no Chrome, com fotos em `web/scripts/_fotos`).

@@ -93,27 +93,31 @@ Campo fiscal previsto no mapeamento (4.3) e ausente na tabela.
 
 ## ⚪ Bloqueado por terceiro — não é dívida nossa
 
-### PDV Legal — falta só o catálogo de endpoints
-**As credenciais chegaram** (26/08/2026), e com elas foi construído o que é possível construir
-com certeza: a credencial guardada cifrada, o `POST /token` com renovação, o teste de conexão e
-a tela em Integrações. `services/pdv/cliente.py` tem um `get()` genérico — é por ele que os
-endpoints entram, sem que nada acima precise mudar.
+### PDV Legal — as vendas entram; falta o de-para do cardápio
+**Resolvido em 26/08/2026.** As credenciais chegaram e o catálogo de endpoints apareceu em
+`GET /help` — a página de ajuda do ASP.NET, que só responde com o Bearer token. O que se sabe
+está em [`pdv-legal-api.md`](pdv-legal-api.md).
 
-**O que ainda falta é a documentação dos endpoints**, que não é pública: fica no portal de
-parceiros (`oem.tabletcloud.com.br`) ou por `development@tabletcloud.com.br`. O cliente pede,
-como titular da conta — ver [`integracoes-o-que-pedir.md`](integracoes-o-que-pedir.md).
+Funcionando contra a conta real: **46 vendas, 100 itens, R$ 601,70** numa importação de um dia.
+A busca é dia a dia (o `cupom/get` corta em 100 registros fora disso), cupom e item cancelados
+ficam de fora, e reimportar não duplica.
 
-⚠️ **Não vale sondar a API atrás dos endereços.** É o oposto do que a integração com o Omie
-ensinou: lá, um parâmetro inventado consumiu cota até a conta ser bloqueada, e quatro campos
-que a documentação previa vinham vazios na conta real. O que se precisa saber de lá:
+**O que falta agora é o de-para do cardápio.** Os 100 itens entraram **sem vínculo**: são 57
+produtos distintos do PDV que ninguém ligou ainda a um produto com ficha técnica. Enquanto isso
+não for feito, **o CMV teórico é zero** — a venda entra, a receita aparece, e a comparação com
+o CMV real não tem com o que comparar.
 
-1. quais endpoints de **vendas** existem (vendas do dia, itens, cancelamentos);
-2. se dá para puxar o **cadastro de itens do cardápio** — é o que liga cada item vendido ao
-   prato com ficha técnica;
-3. um **exemplo de resposta real**, que vale mais que a documentação.
+Dois caminhos, e eles se somam:
 
-Enquanto não vem, a venda entra por **planilha ou digitação**, que é o plano B previsto e
-funciona. Quando a API abrir, muda a fonte e não o resto.
+1. **A fila que já existe** — `GET /vendas/sem-vinculo`, mostrada na tela de Vendas, lista os
+   itens por receita. Ligar os 20 primeiros já cobre a maior parte do faturamento.
+2. **Importar o cardápio** — `GET produtos/get` traz o cadastro do PDV com `codproduto`, que é
+   a chave do de-para (`codigos_externos` com `sistema = 'PDV_LEGAL'`). A rota está documentada
+   e **a resposta real ainda não foi lida**.
+
+Também não verificado: a paginação do `cupom/get` (a importação dia a dia não tem teto, então
+ela não é necessária) e os valores de `tipovenda` além do `"B"`, que foi o único que apareceu
+no dia lido.
 
 ---
 

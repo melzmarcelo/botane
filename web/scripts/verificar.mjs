@@ -2100,15 +2100,22 @@ try {
       campos: ["Usuário de integração", "client_id", "client_secret"].filter((c) =>
         rotulos.some((r) => r.startsWith(c))),
       senhasEscondidas: senhas,
+      temFiliais: rotulos.includes("Filiais"),
+      temBuscar: [...document.querySelectorAll("button")].some(
+        (b) => b.textContent?.trim() === "Buscar vendas"),
+      configurada: /guardado:/.test(texto),
     };
   });
   checar("a tela tem o cartão do PDV Legal", pdv.temCartao, pdv);
   checar("com os campos da credencial", pdv.campos.length === 3, pdv);
+  checar("e o campo das filiais", pdv.temFiliais, pdv);
   // ⚠️ Senha e token do grupo em `type=password`: a tela de integrações fica
   // aberta na sala, e credencial à vista é credencial anotada.
   checar("senha e token do grupo escondidos", pdv.senhasEscondidas >= 2, pdv);
-  checar("e a tela explica o que ainda falta", pdv.explica, pdv);
-  checar("dizendo o que roda no lugar", pdv.dizPlanilha, pdv);
+  // ⚠️ Com o catálogo em mãos (26/08/2026), a venda entra sozinha: o cartão
+  // ganhou o botão de buscar. O aviso de "só guarda credencial" saiu junto.
+  checar("e o botão de buscar vendas quando há credencial",
+    pdv.temBuscar || !pdv.configurada, pdv);
   await foto(p, "30-pdv-legal");
 
   console.log("10y. buscar notas do Omie sozinho");
