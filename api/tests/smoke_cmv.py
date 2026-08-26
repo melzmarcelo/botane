@@ -181,7 +181,11 @@ checar("ABC traz classe e acumulado", linha and linha["classe"] in ("A", "B", "C
 checar("valor consumido do insumo = 180,00 (120 produção + 60 perda)",
        linha and perto(linha["valor"], 180), linha)
 
-st, margem = chamar("GET", f"/cmv/margem?{periodo}", token=token)
+# ⚠️ **Pelo id, não caçando na lista.** O relatório sai ordenado por receita e
+# cortado no limite; assim que a base ganhou vendas reais, o prato de R$ 500
+# deste cenário saiu do topo e a checagem acusou margem zero num prato que tinha
+# vendido — a suíte afirmando sobre o registro de outra pessoa.
+st, margem = chamar("GET", f"/cmv/margem?{periodo}&id_produto={prato}", token=token)
 mp = next((x for x in margem if x["id_produto"] == prato), None)
 checar("margem por prato responde", st == 200 and mp is not None, st)
 checar("receita do prato = 500,00", mp and perto(mp["receita"], 500), mp)

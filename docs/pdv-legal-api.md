@@ -119,11 +119,56 @@ que dia a venda conta.
 
 ---
 
+## O cardápio — `produtos/get` (lido na conta real em 26/08/2026)
+
+Devolve uma **lista** (não um envelope) com **630 itens** na conta do cliente, e
+cada item traz muito mais do que a lista resumida:
+
+```
+codigo             int    7029540         ← o de-para: é o `codproduto` do item da venda
+codigoVenda        int    187             ← o número digitado no PDV, não é chave
+codReferencia      str    "533"           ← ⚠️ NÃO casa com `produtos.codigo` daqui
+descricaoCupom     str    "ACONCHEGO FRIO"
+descricaoDetalhada str    "ACONCHEGO FRIO"
+status             bool   true            ← false = fora do cardápio (166 dos 630)
+nomeGrupo          str    "CHA"           ← vira CATEGORIA
+nomeImpressora     str    "BAR"           ← vira SETOR (VITRINE/BAR/COZINHA/Nenhum)
+unidade            str    "UN"            ← "GR" aqui é "G"
+codigoNCM          str    "21011200"      ← 463 dos 464 ativos vêm preenchidos
+codigoEAN          str    ""              ← ⚠️ vazio em 100% da conta real
+localEstoque       str    "Botane"
+baixaEstoque       bool   true            ← true em 100% — não separa nada
+```
+
+⚠️ **`getlistaresumida` traz MENOS itens, e não avisa.** Na mesma conta ela
+devolveu 570 dos 630 — sessenta pratos a menos, calada. Ela também só tem quatro
+campos (`codigo`, `codReferencia`, `descricao`), então o rascunho nasceria sem
+categoria, sem setor, sem NCM e sem unidade. Ficou como reserva.
+
+⚠️ **A impressora é o dado mais útil que ninguém esperaria.** VITRINE (183),
+BAR (132), COZINHA (66) e "Nenhum" (83) descrevem onde o item é preparado — que
+é exatamente o que "setor" significa aqui. Sai de graça um CMV por setor que de
+outro jeito alguém teria de digitar 630 vezes. **"Nenhum" não é setor**: é o
+texto do PDV para "não imprime em estação nenhuma".
+
+⚠️ **O grupo NÃO diz se o item é revenda ou produção própria.** "PRODUTOS
+MERCEARIA" e "CATERING" caem os dois em "Nenhum", e um é comprado pronto e o
+outro é feito na casa. O tipo continua sendo decisão de quem confere o rascunho;
+chutar poria o prato na fila errada — a de "falta ficha" em vez da de "falta
+compra".
+
+### `grupoprodutos/get`
+
+30 grupos, com `codigo`, `nome`, `corIcone` e `ativo`. Os nomes são os que viram
+categoria: ALMOCO, CAFETERIA, SANDUICHES, VITRINE SECA DOCE, GELADEIRA…
+
+---
+
 ## O que ainda não foi verificado
 
-- **O cardápio** (`produtos/get`): a rota existe e está documentada, mas a
-  resposta real não foi lida. É o que liga `codproduto` ao prato com ficha.
 - **Paginação** (`cupom/get/{offset}/…`): não foi exercitada, porque a
   importação dia a dia não tem teto.
-- **`tipovenda`**: só o valor `"B"` apareceu no dia lido. Os outros (delivery,
-  mesa) precisam de um dia com movimento diferente para serem confirmados.
+- **`produtos/getbydata/{data}`**: seria o caminho para atualizar só o que mudou
+  no cardápio, em vez de reler os 630. Não foi chamada.
+- **`tipovenda`**: na janela de 30 dias da conta real apareceram os valores já
+  mapeados; nenhum desconhecido chegou a virar `null`.

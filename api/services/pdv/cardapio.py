@@ -18,13 +18,20 @@ vai procurar ali.
 
 ⚠️ **E não se casa código com código.** O `codReferencia` do cardápio e o
 `produtos.codigo` daqui são espaços de nome diferentes; ver `_candidato`.
+
+⚠️ **A fonte é `produtos/get`, não `produtos/getlistaresumida`.** A resumida traz
+quatro campos (código, referência, descrição) e, na conta real do cliente, 570 de
+630 itens — sessenta pratos a menos, sem dizer que faltavam. A completa traz o
+grupo do cardápio, a impressora, o NCM e a unidade, que é o que transforma 464
+rascunhos vazios em 464 rascunhos já classificados. A resumida ficou como
+reserva, para o caso de a rota completa não estar liberada numa conta.
 """
 
 import re
 import unicodedata
 from difflib import SequenceMatcher
 
-from services.pdv.cliente import ClientePdv
+from services.pdv.cliente import ClientePdv, ErroPdv
 
 SISTEMA = "PDV_LEGAL"
 
@@ -36,6 +43,15 @@ TETO_DE_PAGINAS = 40
 # Abaixo disto nem sugere. Um palpite fraco na tela é pior que nenhum: ele
 # convida ao clique, e quem clica não confere.
 SCORE_MINIMO = 55.0
+
+# ⚠️ "Nenhum" é o texto que o PDV usa para "não imprime em estação nenhuma" —
+# não é o nome de um setor. Criar um setor chamado "Nenhum" poria 83 itens de
+# mercearia e catering debaixo de um rótulo que não quer dizer nada.
+SEM_IMPRESSORA = {"", "nenhum", "nenhuma", "0", "none"}
+
+# O PDV escreve a grama como "GR"; aqui a sigla é "G". As demais coincidem, e o
+# que não coincidir fica sem unidade — que é o estado honesto de um rascunho.
+SIGLAS = {"GR": "G", "UND": "UN", "UNID": "UN"}
 
 
 def _normalizar(texto: str | None) -> str:
@@ -52,13 +68,63 @@ def _normalizar(texto: str | None) -> str:
     return re.sub(r"[^a-z0-9 ]", " ", re.sub(r"\s+", " ", sem_acento.lower())).strip()
 
 
-def baixar(cliente: ClientePdv) -> list[dict]:
-    """Todo o cardápio, página a página.
+def _primeiro(bruto: dict, *nomes: str) -> str:
+    """O primeiro campo preenchido, na ordem dada.
 
-    ⚠️ **A resposta é um ENVELOPE, não uma lista**: `{total_count, total,
-    pagina, data}`. Tratá-la como lista devolveria as quatro chaves como se
-    fossem quatro produtos — e o importador diria "4 itens" numa conta com 164.
+    Mesma ideia do mapeador do Omie: a mesma informação tem nome diferente em
+    cada rota da mesma API, e ler por lista de nomes possíveis é o que impede um
+    campo renomeado de virar um cadastro em branco que ninguém percebe.
     """
+    for nome in nomes:
+        valor = bruto.get(nome)
+        if valor not in (None, "", 0):
+            return str(valor).strip()
+    return ""
+
+
+def _item(bruto: dict) -> dict:
+    """Um item do cardápio, com os nomes daqui.
+
+    Serve as duas rotas: a completa (`descricaoCupom`, `status`, `nomeGrupo`…) e
+    a resumida (`descricao` e mais nada). O que a resumida não tem vira vazio, e
+    `ativo` vira True — uma rota que não fala de status não está dizendo que o
+    item está fora do cardápio.
+    """
+    impressora = _primeiro(bruto, "nomeImpressora")
+    sigla = _primeiro(bruto, "unidade").upper()
+    return {
+        "codigo": _primeiro(bruto, "codigo"),
+        "descricao": _primeiro(
+            bruto, "descricaoCupom", "descricao", "descricaoDetalhada", "descrTabletQrCodeMesa"
+        )[:200],
+        "ativo": bool(bruto.get("status", True)),
+        "grupo": _primeiro(bruto, "nomeGrupo")[:80],
+        "setor": "" if impressora.lower() in SEM_IMPRESSORA else impressora[:80],
+        "ncm": re.sub(r"\D", "", _primeiro(bruto, "codigoNCM"))[:8],
+        "ean": re.sub(r"\D", "", _primeiro(bruto, "codigoEAN"))[:14],
+        "unidade": SIGLAS.get(sigla, sigla)[:10],
+    }
+
+
+def baixar(cliente: ClientePdv) -> list[dict]:
+    """Todo o cardápio, já com os nomes daqui.
+
+    Tenta a rota completa primeiro. Só cai na resumida quando a completa não
+    responde — e aí a paginação e o envelope voltam a importar.
+
+    ⚠️ **A resposta da resumida é um ENVELOPE, não uma lista**: `{total_count,
+    total, pagina, data}`. Tratá-la como lista devolveria as quatro chaves como
+    se fossem quatro produtos — e o importador diria "4 itens" numa conta com 630.
+    """
+    try:
+        completa = cliente.get("/produtos/get")
+    except ErroPdv:
+        completa = None
+    if isinstance(completa, dict):
+        completa = completa.get("data")
+    if completa:
+        return [_item(b) for b in completa]
+
     itens: list[dict] = []
     pagina = 1
     while pagina <= TETO_DE_PAGINAS:
@@ -74,10 +140,97 @@ def baixar(cliente: ClientePdv) -> list[dict]:
         if len(itens) >= total:
             break
         pagina += 1
-    return itens
+    return [_item(b) for b in itens]
 
 
-def _candidato(cur, item: dict, por_nome: dict[str, int]) -> tuple[int | None, str, float]:
+# ------------------------------------------------------- classificação de apoio
+
+
+class _Apoio:
+    """Categoria, setor e unidade — achados ou criados, uma vez cada.
+
+    ⚠️ **Existe para não fazer 630 SELECTs iguais.** Um cardápio de 630 itens tem
+    30 grupos e 4 impressoras; sem o cache, cada item repetiria a mesma busca.
+    """
+
+    def __init__(self, cur):
+        self.cur = cur
+        self._categorias: dict[str, int | None] = {}
+        self._setores: dict[str, int | None] = {}
+        self._unidades: set[str] | None = None
+
+    def categoria(self, nome: str) -> int | None:
+        """O grupo do cardápio vira categoria de produto.
+
+        ⚠️ Nasce com `tipo = 'PRODUZIDO'`, não `'INSUMO'`: são categorias de
+        coisa que se VENDE (CAFETERIA, SANDUICHES, ALMOCO), e misturá-las com as
+        de insumo faria a tela de cadastro oferecer "Sanduíches" para classificar
+        um quilo de farinha.
+        """
+        if not nome:
+            return None
+        chave = nome.strip().lower()
+        if chave in self._categorias:
+            return self._categorias[chave]
+        self.cur.execute(
+            "SELECT id FROM categorias WHERE lower(nome) = %s LIMIT 1", (chave,)
+        )
+        achada = self.cur.fetchone()
+        if achada:
+            self._categorias[chave] = achada["id"]
+        else:
+            self.cur.execute(
+                "INSERT INTO categorias (nome, tipo, ativo) VALUES (%s, 'PRODUZIDO', true) "
+                "RETURNING id",
+                (nome,),
+            )
+            self._categorias[chave] = self.cur.fetchone()["id"]
+        return self._categorias[chave]
+
+    def setor(self, nome: str) -> int | None:
+        """A impressora do PDV vira setor.
+
+        VITRINE, BAR, COZINHA — é onde o item é preparado, que é exatamente o que
+        o setor significa aqui. Sai de graça um CMV por setor que faria sentido
+        para quem toca a casa, e que de outro jeito alguém teria de digitar 630
+        vezes.
+        """
+        if not nome:
+            return None
+        chave = nome.strip().lower()
+        if chave in self._setores:
+            return self._setores[chave]
+        self.cur.execute(
+            "SELECT id FROM setores WHERE lower(nome) = %s LIMIT 1", (chave,)
+        )
+        achado = self.cur.fetchone()
+        if achado:
+            self._setores[chave] = achado["id"]
+        else:
+            self.cur.execute(
+                "INSERT INTO setores (nome, ativo) VALUES (%s, true) RETURNING id", (nome,)
+            )
+            self._setores[chave] = self.cur.fetchone()["id"]
+        return self._setores[chave]
+
+    def unidade(self, sigla: str) -> str | None:
+        """A sigla, só se ela existir aqui.
+
+        ⚠️ **Sigla desconhecida vira nulo, nunca uma unidade nova.** É a mesma
+        regra do item da nota: `um_estoque` é chave estrangeira, e criar "M" de
+        metro porque o cardápio mandou é criar um problema no lugar de recusar um
+        dado.
+        """
+        if not sigla:
+            return None
+        if self._unidades is None:
+            self.cur.execute("SELECT sigla FROM unidades_medida WHERE ativo")
+            self._unidades = {r["sigla"] for r in self.cur.fetchall()}
+        return sigla if sigla in self._unidades else None
+
+
+def _candidato(cur, codigo: str, descricao: str,
+               por_nome: dict[str, int]) -> tuple[int | None, str, float]:
     """A cascata: onde este item do cardápio encontra um produto daqui.
 
     A ordem é da certeza para o palpite, e o palpite não vincula:
@@ -95,10 +248,6 @@ def _candidato(cur, item: dict, por_nome: dict[str, int]) -> tuple[int | None, s
     nenhum — apenas o CMV teórico de todo mês sairia com o custo do insumo
     errado, para sempre, e ninguém iria procurar ali.
     """
-    codigo = str(item.get("codigo") or "")
-    referencia = str(item.get("codReferencia") or "")
-    descricao = item.get("descricao") or ""
-
     if codigo:
         cur.execute(
             "SELECT id_produto FROM codigos_externos WHERE sistema = %s AND codigo = %s",
@@ -122,6 +271,38 @@ def _candidato(cur, item: dict, por_nome: dict[str, int]) -> tuple[int | None, s
     return None, "sem_candidato", 0.0
 
 
+# ⚠️ Só campo que o cardápio ENSINA. `tipo`, `modo_producao` e `id_local_padrao`
+# ficam de fora de propósito: o PDV não sabe se um item de mercearia é revenda ou
+# produção própria, e chutar poria o prato na fila errada — a de "falta ficha"
+# em vez da de "falta compra", ou o contrário.
+_DO_CARDAPIO = ("id_categoria", "id_setor", "ncm", "codigo_barras", "um_estoque")
+
+
+def _completar(cur, id_produto: int, campos: dict) -> bool:
+    """Preenche só o que está EM BRANCO no produto.
+
+    ⚠️ **Nunca sobrescreve.** Reimportar o cardápio depois de alguém corrigir a
+    categoria de um prato não pode desfazer a correção — é a mesma lição do
+    importador de fornecedores do Omie. Sem isto, a reimportação também não
+    faria nada (`continue` no item já vinculado), e os rascunhos criados por uma
+    versão anterior ficariam vazios para sempre.
+    """
+    cur.execute(
+        f"SELECT {', '.join(_DO_CARDAPIO)} FROM produtos WHERE id = %s", (id_produto,)
+    )
+    antes = cur.fetchone()
+    if not antes:
+        return False
+    faltando = {c: v for c, v in campos.items() if v is not None and not antes[c]}
+    if not faltando:
+        return False
+    sets = ", ".join(f"{c} = %s" for c in faltando)
+    cur.execute(
+        f"UPDATE produtos SET {sets} WHERE id = %s", [*faltando.values(), id_produto]
+    )
+    return True
+
+
 def importar(cur, cliente: ClientePdv, id_usuario: int,
              criar_ausentes: bool = True) -> dict:
     """Traz o cardápio e liga o que dá para ligar.
@@ -134,26 +315,44 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
     ⚠️ **`criar_ausentes` faz o prato nascer RASCUNHO.** O item do cardápio é um
     PRATO — ele precisa de ficha para virar custo. Criá-lo como rascunho com
     `producao_propria` marcada o põe na fila de "produzido sem ficha", que é
-    exatamente a lista que alguém precisa percorrer. Não criar deixaria 164
-    itens vendidos sem nada do outro lado.
+    exatamente a lista que alguém precisa percorrer.
+
+    ⚠️ **Item fora do cardápio nasce INATIVO, não deixa de nascer.** Na conta
+    real, 166 dos 630 estão desligados no PDV — mas venda antiga aponta para
+    eles, e um item sem cadastro é uma venda sem vínculo que ninguém consegue
+    resolver depois. Inativo resolve os dois lados: o de-para existe, o histórico
+    fecha, e a fila de "falta ficha" continua mostrando só os 464 que ainda se
+    vendem.
     """
     itens = baixar(cliente)
+    apoio = _Apoio(cur)
 
     cur.execute("SELECT id, nome FROM produtos WHERE ativo")
     por_nome = {_normalizar(r["nome"]): r["id"] for r in cur.fetchall()}
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
-              "criados": 0, "sugestoes": 0, "sem_vinculo": 0}
+              "criados": 0, "inativos": 0, "completados": 0,
+              "sugestoes": 0, "sem_vinculo": 0}
 
     for item in itens:
-        codigo = str(item.get("codigo") or "")
+        codigo, descricao = item["codigo"], item["descricao"]
         if not codigo:
             continue
-        descricao = (item.get("descricao") or "")[:200]
-        id_produto, origem, score = _candidato(cur, item, por_nome)
+
+        campos = {
+            "id_categoria": apoio.categoria(item["grupo"]),
+            "id_setor": apoio.setor(item["setor"]),
+            "ncm": item["ncm"] or None,
+            "codigo_barras": item["ean"] or None,
+            "um_estoque": apoio.unidade(item["unidade"]),
+        }
+
+        id_produto, origem, score = _candidato(cur, codigo, descricao, por_nome)
 
         if origem == "ja_vinculado":
             resumo["ja_vinculados"] += 1
+            if _completar(cur, id_produto, campos):
+                resumo["completados"] += 1
             continue
 
         dica = None
@@ -172,20 +371,30 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
             cur.execute(
                 """INSERT INTO produtos (codigo, nome, tipo, status, origem,
                                          producao_propria, controla_estoque, observacao,
-                                         criado_por)
-                   VALUES (%s, %s, 'PRODUZIDO', 'RASCUNHO', 'PDV', true, false, %s, %s)
+                                         ativo, id_categoria, id_setor, ncm,
+                                         codigo_barras, um_estoque, criado_por)
+                   VALUES (%s, %s, 'PRODUZIDO', 'RASCUNHO', 'PDV', true, false, %s,
+                           %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT DO NOTHING RETURNING id""",
-                (f"PDV-{codigo}"[:40], descricao or f"Item {codigo}", dica, id_usuario),
+                (f"PDV-{codigo}"[:40], descricao or f"Item {codigo}", dica, item["ativo"],
+                 campos["id_categoria"], campos["id_setor"], campos["ncm"],
+                 campos["codigo_barras"], campos["um_estoque"], id_usuario),
             )
             criado = cur.fetchone()
             if criado:
                 id_produto = criado["id"]
                 origem = "criado"
                 resumo["criados"] += 1
+                if not item["ativo"]:
+                    resumo["inativos"] += 1
 
         if not id_produto:
             resumo["sem_vinculo"] += 1
             continue
+
+        if origem != "criado":
+            if _completar(cur, id_produto, campos):
+                resumo["completados"] += 1
 
         cur.execute(
             """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,

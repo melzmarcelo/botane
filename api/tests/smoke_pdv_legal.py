@@ -25,6 +25,7 @@ usuário que não existe — e serviço de autenticação conta tentativa falha.
 
 import atexit
 import json
+from pathlib import Path
 import sys
 import time
 import urllib.error
@@ -78,10 +79,6 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-# ⚠️ A linha do PDV mora na MESMA tabela da do Omie. Este arquivo grava uma
-# credencial de mentira ali: sem preservar, a real do cliente iria junto.
-preservar_credenciais("PDV_LEGAL")
-
 marca = str(time.time_ns())[-6:]
 USUARIO = f"integracao{marca}@botane"
 SENHA = f"senha-de-mentira-{marca}"
@@ -89,12 +86,43 @@ GRUPO = f"GRUPO-{marca}"
 SEGREDO = f"token-do-grupo-{marca}"
 
 
+# ⚠️ **Como a integração estava ANTES desta rodada.** A suíte precisa do modo
+# simulado no meio (credencial de mentira em modo real bateria na Tablet Cloud
+# de verdade), mas deixá-la simulada no fim desliga a integração do cliente sem
+# dizer nada: a busca de vendas para de trazer cupom e nada explica por quê. É a
+# mesma lição que o Omie já cobrou — trocar o MODO não toca na credencial, e por
+# isso o modo tem de ser devolvido separado dela.
+_st, _antes = chamar("GET", "/pdv/config", token=token)
+MODO_ORIGINAL = (_antes or {}).get("modo") or "simulado"
+ATIVA_ORIGINAL = bool((_antes or {}).get("ativa"))
+
+
 def devolver_simulado():
     """Modo real com credencial de mentira bateria na Tablet Cloud de verdade."""
     chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": False}, token=token)
 
 
-atexit.register(devolver_simulado)
+def devolver_o_modo_original():
+    """Repõe o modo que a casa tinha, com ou sem traceback no caminho.
+
+    ⚠️ Roda no `atexit` pela mesma razão que `preservar_credenciais`: repor no
+    fim do roteiro não basta, porque a suíte já estourou no meio uma vez — e
+    quem for usar o sistema depois não tem como adivinhar que um teste desligou
+    a integração dele.
+    """
+    chamar("PUT", "/pdv/config",
+           {"modo": MODO_ORIGINAL, "ativa": ATIVA_ORIGINAL}, token=token)
+
+
+atexit.register(devolver_o_modo_original)
+
+# ⚠️ A linha do PDV mora na MESMA tabela da do Omie. Este arquivo grava uma
+# credencial de mentira ali: sem preservar, a real do cliente iria junto.
+# ⚠️ **Registrado DEPOIS do modo, de propósito**: o `atexit` roda na ordem
+# inversa, então a credencial verdadeira volta primeiro e o modo real só depois.
+# Ao contrário, a integração ficaria "real" apontando por um instante para a
+# credencial de mentira.
+preservar_credenciais("PDV_LEGAL")
 
 
 def esvaziar_credencial():
@@ -376,10 +404,18 @@ checar("cria um prato com o nome exato do cardapio", st == 201, (st, r))
 
 st, r = chamar("POST", "/pdv/cardapio", token=token)
 checar("a importacao do cardapio responde", st == 200, (st, r))
-# ⚠️ A resposta e um ENVELOPE `{total_count, total, pagina, data}`. Tratada como
-# lista, ela daria "4 itens" para as quatro CHAVES.
-checar("le os quatro itens do envelope, nao as chaves dele",
-       r.get("itens") == 4, r.get("itens"))
+# ⚠️ O numero sai da fixture, nao de uma constante: a rota completa devolve uma
+# LISTA e a resumida um ENVELOPE `{total_count, total, pagina, data}` — tratado
+# como lista, o envelope daria "4 itens" para as quatro CHAVES dele. Contar o
+# arquivo faz a checagem continuar valendo quando alguem acrescentar uma linha.
+_fix = json.loads((Path(__file__).resolve().parents[1] / "services" / "pdv" /
+                   "fixtures" / "produtos_get.json").read_text(encoding="utf-8"))
+checar("le os itens do cardapio, nao as chaves de um envelope",
+       r.get("itens") == len(_fix), (r.get("itens"), len(_fix)))
+# ⚠️ Item fora do cardapio nasce INATIVO em vez de nao nascer: venda antiga
+# aponta para ele, e sem cadastro a venda ficaria sem vinculo para sempre.
+checar("item desligado no PDV entra, mas inativo",
+       (r.get("criados") or 0) == 0 or (r.get("inativos") or 0) >= 1, r)
 # ⚠️ Numa base ja importada o item cai em `ja_vinculados`, nao em `vinculados`:
 # o que se afirma e que ele ACHOU dono, por um dos dois caminhos certos.
 checar("e o de nome identico acha dono",
@@ -399,7 +435,6 @@ from services.pdv import cardapio as card  # noqa: E402
 
 import psycopg2  # noqa: E402
 from psycopg2.extras import RealDictCursor  # noqa: E402
-from pathlib import Path  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER  # noqa: E402
@@ -481,6 +516,10 @@ print("\n9. limpeza")
 devolver_simulado()
 st, c = chamar("GET", "/pdv/config", token=token)
 checar("a integração volta para simulado", c.get("modo") == "simulado", c.get("modo"))
+devolver_o_modo_original()
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("e depois para o modo que a casa tinha",
+       c.get("modo") == MODO_ORIGINAL, (c.get("modo"), MODO_ORIGINAL))
 
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")

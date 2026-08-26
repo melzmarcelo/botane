@@ -369,10 +369,23 @@ def curva_abc(cur, id_unidade: int, inicio: date, fim: date, limite: int = 50) -
     return linhas
 
 
-def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int = 50) -> list[dict]:
-    """O que cada prato vendeu, custou e deixou — a base da engenharia de cardápio."""
+def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int = 50,
+                     id_produto: int | None = None) -> list[dict]:
+    """O que cada prato vendeu, custou e deixou — a base da engenharia de cardápio.
+
+    ⚠️ **`id_produto` responde por UM prato, sem depender do corte.** A lista sai
+    ordenada por receita e cortada no `limite`; num cardápio de 464 itens, o
+    prato que se quer olhar pode estar na posição 300 — e procurá-lo numa lista
+    de 50 devolve "não vendeu nada", que é falso. Foi assim que uma suíte passou
+    a acusar margem zero num prato que tinha vendido R$ 500: a base ganhou vendas
+    reais e o registro dela saiu do topo.
+    """
+    filtro, parametros = "", [id_unidade, inicio, fim]
+    if id_produto is not None:
+        filtro = "AND vi.id_produto = %s"
+        parametros.append(id_produto)
     cur.execute(
-        """SELECT vi.id_produto, coalesce(p.nome, vi.descricao_pdv, 'Sem vínculo') AS produto,
+        f"""SELECT vi.id_produto, coalesce(p.nome, vi.descricao_pdv, 'Sem vínculo') AS produto,
                   p.codigo,
                   sum(vi.quantidade) AS quantidade,
                   sum(vi.valor_total) AS receita,
@@ -382,10 +395,11 @@ def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int 
              JOIN vendas v ON v.id = vi.id_venda
              LEFT JOIN produtos p ON p.id = vi.id_produto
             WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data BETWEEN %s AND %s
+              {filtro}
             GROUP BY vi.id_produto, coalesce(p.nome, vi.descricao_pdv, 'Sem vínculo'), p.codigo
             ORDER BY receita DESC
             LIMIT %s""",
-        (id_unidade, inicio, fim, limite),
+        [*parametros, limite],
     )
     linhas = []
     for r in cur.fetchall():

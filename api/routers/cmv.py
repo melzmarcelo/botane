@@ -108,12 +108,16 @@ def margem(
     inicio: date | None = None,
     fim: date | None = None,
     limite: int = Query(default=50, ge=5, le=200),
+    # ⚠️ Com um prato escolhido, o corte por receita deixa de mandar: num
+    # cardápio de centenas de itens o que se quer olhar raramente está no topo,
+    # e não achá-lo na lista lê como "não vendeu", que é outra coisa.
+    id_produto: int | None = None,
     ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
 ) -> list[dict]:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
-        return motor.margem_por_prato(cur, id_unidade, inicio, fim, limite)
+        return motor.margem_por_prato(cur, id_unidade, inicio, fim, limite, id_produto)
 
 
 @router.get("/por-grupo")

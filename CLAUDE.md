@@ -468,6 +468,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
   as credenciais guardadas.
 - **PDV Legal: as vendas entram sozinhas** (`services/pdv/`, `routers/pdv.py`, 26/08/2026).
+  🔑 **CREDENCIAL DE INTEGRAÇÃO NÃO DIZ DE QUEM ELA É — conferir o CNPJ ANTES de importar.**
+  O primeiro par de chaves (`client_id: 31121`) autenticava, respondia tudo e apontava para
+  **outra empresa**: `CAFE DA CLINICA LTDA`, CNPJ 59.938.158/0001-50. Nada na resposta gritava —
+  `/pdv/testar` dizia "autenticou", o cardápio veio, as vendas vieram. Foram 46 vendas e 165
+  pratos de terceiro dentro da base antes de alguém reparar no nome. O par certo é
+  `client_id: 25527`, filial **30638**, `BOTANE DELI E CAFE LTDA`, CNPJ 45.304.800/0001-34,
+  Blumenau/SC. Primeira chamada de conta nova é sempre `GET /filial/get`, e o que ela devolver
+  se compara com o CNPJ que o cliente informou. ⚠️ O CNPJ vem **sem pontuação** nesta conta e
+  **com** pontuação na outra — comparar só os dígitos.
   🔑 **O catálogo de endpoints não é público, mas apareceu em `GET /help`** — a página de ajuda
   do ASP.NET Web API, que **só responde com o Bearer token** (sem token dá 500). São 173 rotas
   com parâmetros e tipos. O que interessa está em **`docs/pdv-legal-api.md`**, e o HTML cru em
@@ -498,11 +507,32 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `venda_id` que eu tinha lido: a venda de demonstração entrou primeiro e a real foi descartada
   como "repetida" — sem nada denunciando, porque repetida é o caso normal. Número de
   demonstração tem de ser **impossível de existir** na conta.
-  🔑 **O cardápio e o de-para** (`services/pdv/cardapio.py`): `produtos/getlistaresumida`
-  devolve um **ENVELOPE** `{total_count, total, pagina, data}`, não uma lista — tratá-lo como
-  lista daria "4 itens" para as quatro CHAVES. O vínculo mora em `codigos_externos` com
-  `sistema = 'PDV_LEGAL'`, e a chave é o `codigo` do PDV, que chega no item da venda como
-  `codproduto`.
+  🔑 **O cardápio e o de-para** (`services/pdv/cardapio.py`): a fonte é **`produtos/get`**,
+  que devolve uma LISTA. O vínculo mora em `codigos_externos` com `sistema = 'PDV_LEGAL'`, e a
+  chave é o `codigo` do PDV, que chega no item da venda como `codproduto`.
+  ⚠️ **`getlistaresumida` traz MENOS itens e não avisa** — 570 de 630 na conta real, sessenta
+  pratos a menos, calada. E só tem quatro campos, então o rascunho nasceria vazio. Ficou como
+  reserva; quando ela é usada, lembrar que a resposta é um **ENVELOPE** `{total_count, total,
+  pagina, data}` e não uma lista — tratá-lo como lista daria "4 itens" para as quatro CHAVES.
+  🔑 **A impressora do PDV vira SETOR e o grupo vira CATEGORIA** (26/08/2026). `nomeImpressora`
+  (VITRINE 183, BAR 132, COZINHA 66) diz onde o item é preparado, que é o que setor significa
+  aqui; `nomeGrupo` dá as 30 categorias do cardápio. Vêm junto `codigoNCM` (463 de 464) e
+  `unidade`. É o que transforma 464 rascunhos vazios em 464 já classificados — de outro jeito
+  alguém digitaria isso 630 vezes. ⚠️ **"Nenhum" não é setor**: é o texto do PDV para "não
+  imprime em estação nenhuma". ⚠️ A categoria nasce com `tipo = 'PRODUZIDO'`, não `INSUMO` —
+  senão a tela ofereceria "Sanduíches" para classificar um quilo de farinha.
+  ⚠️ **O grupo NÃO diz se o item é revenda ou produção própria**: "PRODUTOS MERCEARIA" e
+  "CATERING" caem os dois em "Nenhum", e um é comprado pronto e o outro é feito na casa. `tipo`,
+  `modo_producao` e `id_local_padrao` ficam de fora do que o cardápio ensina — chutar poria o
+  prato na fila errada, a de "falta ficha" em vez da de "falta compra".
+  ⚠️ **Reimportar o cardápio COMPLETA o que está em branco, nunca sobrescreve** (`_completar`).
+  Sem isso a reimportação não fazia nada (o item já vinculado caía num `continue`) e os
+  rascunhos de uma versão anterior ficariam vazios para sempre; sobrescrevendo, ela desfaria a
+  correção de quem arrumou a categoria à mão. Mesma regra do importador de fornecedores do Omie.
+  ⚠️ **Item fora do cardápio nasce INATIVO, não deixa de nascer.** São 166 dos 630 na conta
+  real. Venda antiga aponta para eles: sem cadastro, seria uma venda sem vínculo que ninguém
+  consegue resolver depois. Inativo fecha os dois lados — o de-para existe, o histórico fecha, e
+  a fila de "falta ficha" continua mostrando só os 464 que ainda se vendem.
   ⚠️ **NUNCA case código de cardápio com código da casa — são espaços de nome diferentes.** A
   primeira versão fazia isso e, numa base com 2.189 insumos do Omie, **os 78 vínculos criados
   assim estavam TODOS errados**: REDBULL virou LIMÃO TAITY, PÃO COM MANTEIGA virou MANJERICÃO,
@@ -512,7 +542,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   nada. A suíte trava isso com um produto isca de código "72".
   ⚠️ **O item do cardápio que não existe aqui nasce PRODUZIDO/RASCUNHO com `producao_propria`**,
   código `PDV-<codigo>`: é isso que o põe na fila de "produzido sem ficha", que é a lista que
-  alguém precisa percorrer. Na conta real foram **164 pratos**.
+  alguém precisa percorrer. Na conta real foram **627 pratos**, 463 deles ativos.
   ⚠️ `cardapio.reconciliar` passa o de-para nos itens de venda pendentes e **recalcula o custo
   AGORA** — item que entrou sem produto entrou sem custo, e ao ganhar produto precisa do custo
   de hoje. Existe separado porque o de-para também se arruma à mão na tela de Vendas.
@@ -533,6 +563,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   mensagem do servidor, **nunca o que foi enviado**: o corpo tem a senha, e exceção vira log.
   ⚠️ A suíte **nunca põe em modo real**: a credencial de teste é de mentira, e serviço de
   autenticação conta tentativa falha.
+  ⚠️ **Mas ela DEVOLVE o modo que encontrou** (`devolver_o_modo_original`, no `atexit`). Antes
+  ela terminava sempre em `simulado` — e, agora que a casa tem credencial de verdade, rodar a
+  bateria desligaria a integração do cliente sem dizer nada: a busca de vendas pararia de trazer
+  cupom e nada explicaria por quê. Mesma lição do Omie. ⚠️ O registro vem **antes** do
+  `preservar_credenciais`, porque o `atexit` roda na ordem inversa: a credencial verdadeira volta
+  primeiro e o modo real só depois — ao contrário, a integração ficaria "real" apontando por um
+  instante para a credencial de mentira.
+  ✅ **Exercitado contra a conta REAL em 26/08/2026**: 630 itens de cardápio (627 criados, 164
+  inativos), e **1.375 vendas de 1.451 cupons** em 30 dias (28/07 a 26/08), 6.356 itens,
+  R$ 187.348,50 de receita, **zero item sem vínculo**. Todos os 6.356 sem custo — porque não há
+  ficha técnica nenhuma ainda, que é o item que falta para a variância existir.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -739,18 +780,24 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.059 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.046 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (67),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (69),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (273, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
+- ⚠️ **Relatório cortado no topo esconde o registro que se procura.** `/cmv/margem` sai ordenado
+  por receita e cortado no `limite` (50). Assim que a base ganhou 464 pratos e R$ 187 mil de
+  venda real, o prato de R$ 500 de uma suíte saiu do topo — e "não está na lista" leu como
+  "margem zero", um bug que não existia. O endpoint ganhou `id_produto`, que responde por UM
+  prato sem depender do corte; a suíte pergunta pelo id dela. Vale para todo relatório com
+  `LIMIT`: quem quer olhar um item específico precisa de um caminho que não passe pelo ranking.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
   de importar 37 notas e 2.183 produtos de uma conta de verdade, SEIS checagens quebraram — e
   nenhuma por bug do sistema: pegavam "o primeiro produto que controla estoque" (caiu num
