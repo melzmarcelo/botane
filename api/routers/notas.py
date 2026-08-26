@@ -410,6 +410,28 @@ def pendencias(ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> li
         return [dict(r) for r in cur.fetchall()]
 
 
+@router.post("/vincular-fornecedores")
+def vincular_fornecedores(ctx: Contexto = Depends(requer_permissao("compras.conciliar"))
+                          ) -> dict:
+    """Cria o vínculo produto × fornecedor a partir das notas que já entraram.
+
+    ⚠️ **O catálogo do Omie não diz quem fornece o quê** — quem sabe isso é a
+    nota. Até aqui o vínculo só nascia no LANÇAMENTO, para guardar o último
+    preço, e nota importada e ainda não lançada — o estado normal de quem acabou
+    de sincronizar — ficava de fora.
+
+    O preço não vem daqui: `custo_aquisicao_unitario` só existe depois do
+    lançamento. O que se cria é o vínculo e o código do produto no fornecedor,
+    que é o nível 3 da cascata de conciliação da PRÓXIMA nota.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = importador.vincular_fornecedores(cur, id_unidade)
+        auditoria.registrar(cur, ctx.id_usuario, "produto", 0, "vincular_fornecedores",
+                            depois=r, id_unidade=id_unidade)
+    return {**r, "message": f"{r['vinculos_criados']} vínculo(s) criado(s) a partir das notas"}
+
+
 @router.post("/reconciliar")
 def reconciliar(id_nota: int | None = None,
                 ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:

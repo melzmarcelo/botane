@@ -51,6 +51,10 @@ type Form = {
   estoque_minimo: string;
   estoque_maximo: string;
   ncm: string;
+  cest: string;
+  marca: string;
+  peso_liquido: string;
+  peso_bruto: string;
   codigo_barras: string;
   observacao: string;
   preco_venda: string;
@@ -63,6 +67,7 @@ const VAZIO: Form = {
   producao_propria: false, modo_producao: "PARA_ESTOQUE", controla_estoque: true, um_estoque: "", um_compra: "",
   fator_compra: "1", id_local_padrao: "", perecivel: false, validade_dias: "", controla_lote: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
+  cest: "", marca: "", peso_liquido: "", peso_bruto: "",
   codigo_barras: "", observacao: "", preco_venda: "", status: "ATIVO", ativo: true,
 };
 
@@ -80,6 +85,13 @@ export default function FormularioProduto() {
   const podeEditar = pode("cadastros.produtos");
 
   const [f, setF] = useState<Form>(VAZIO);
+  // ⚠️ Fora do formulário de propósito: são de LEITURA. O código interno é o
+  // que segura o vínculo com o Omie, e um campo editável ao lado dos outros
+  // convidaria a mexer nele — que é desamarrar o produto do cadastro de origem.
+  const [vinculo, setVinculo] = useState<{
+    codigo_omie: string | null;
+    sincronizado_em: string | null;
+  }>({ codigo_omie: null, sincronizado_em: null });
   const [vinculos, setVinculos] = useState<VinculoFornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -113,6 +125,10 @@ export default function FormularioProduto() {
     api
       .get<Record<string, unknown>>(`/produtos/${id}`)
       .then((p) => {
+        setVinculo({
+          codigo_omie: (p.codigo_omie as string) ?? null,
+          sincronizado_em: (p.sincronizado_em as string) ?? null,
+        });
         setF({
           ...VAZIO,
           ...Object.fromEntries(
@@ -168,6 +184,10 @@ export default function FormularioProduto() {
       estoque_minimo: num(f.estoque_minimo),
       estoque_maximo: num(f.estoque_maximo),
       ncm: texto(f.ncm),
+      cest: texto(f.cest),
+      marca: texto(f.marca),
+      peso_liquido: num(f.peso_liquido),
+      peso_bruto: num(f.peso_bruto),
       codigo_barras: texto(f.codigo_barras),
       observacao: texto(f.observacao),
       preco_venda: num(f.preco_venda),
@@ -456,7 +476,76 @@ export default function FormularioProduto() {
               onChange={(e) => set("ncm", e.target.value)}
             />
           </Campo>
+          <Campo rotulo="CEST" dica="acompanha o NCM">
+            <input
+              className="campo mono"
+              disabled={!podeEditar}
+              value={f.cest}
+              onChange={(e) => set("cest", e.target.value)}
+            />
+          </Campo>
+          <Campo rotulo="Marca" dica="separa dois “café 500g”">
+            <input
+              className="campo"
+              maxLength={60}
+              disabled={!podeEditar}
+              value={f.marca}
+              onChange={(e) => set("marca", e.target.value)}
+            />
+          </Campo>
+          {/* ⚠️ Peso é conversão, não enfeite: o pacote entra por UN e a ficha
+              consome em KG. O LÍQUIDO é o que interessa — o bruto inclui a
+              embalagem, e ninguém cozinha o papelão. */}
+          <Campo rotulo="Peso líquido" dica="o que dá para usar">
+            <input
+              className="campo mono"
+              type="number"
+              step="0.001"
+              disabled={!podeEditar}
+              value={f.peso_liquido}
+              onChange={(e) => set("peso_liquido", e.target.value)}
+            />
+          </Campo>
+          <Campo rotulo="Peso bruto" dica="com a embalagem">
+            <input
+              className="campo mono"
+              type="number"
+              step="0.001"
+              disabled={!podeEditar}
+              value={f.peso_bruto}
+              onChange={(e) => set("peso_bruto", e.target.value)}
+            />
+          </Campo>
         </div>
+
+        {/* ⚠️ **O código interno é o que segura o vínculo com o Omie.** Ele
+            guarda o id do produto de LÁ, que a casa não escolhe; `código` é o
+            da casa e pode ser trocado à vontade sem quebrar nada. É por isso
+            que a conciliação da nota procura por ele antes do EAN. Só leitura:
+            editá-lo é desamarrar o produto do cadastro de origem. */}
+        {(vinculo.codigo_omie || vinculo.sincronizado_em) && (
+          <div className="mt-5 rounded border border-linha bg-fundo p-4">
+            <p className="rotulo">Vínculo com o Omie</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-8 gap-y-2">
+              <p className="text-[14px]">
+                Código interno{" "}
+                <span className="mono ml-1 font-semibold">{vinculo.codigo_omie ?? "—"}</span>
+              </p>
+              {vinculo.sincronizado_em && (
+                <p className="text-[13px] text-suave">
+                  completado pela sincronização em{" "}
+                  {new Date(vinculo.sincronizado_em).toLocaleDateString("pt-BR")}
+                </p>
+              )}
+            </div>
+            <p className="mt-2 max-w-[70ch] text-[13px] leading-snug text-suave">
+              É o código do produto no Omie. O <b>código</b> acima é o da casa e pode ser
+              trocado quando quiser: o vínculo se mantém por este, não por aquele. A
+              sincronização preenche o que estiver em branco e nunca sobrescreve o que você
+              corrigir aqui.
+            </p>
+          </div>
+        )}
 
         <ul className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2">
           {[

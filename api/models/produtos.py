@@ -44,6 +44,15 @@ class ProdutoBase(BaseModel):
     estoque_minimo: float | None = Field(default=None, ge=0)
     estoque_maximo: float | None = Field(default=None, ge=0)
     ncm: str | None = Field(default=None, max_length=10)
+    # ⚠️ Vêm do cadastro do Omie e são COMPLETADOS na sincronização — nunca
+    # sobrescritos. Quem corrigiu à mão corrigiu porque o dado de lá estava
+    # errado; reimportar não pode desfazer conserto.
+    cest: str | None = Field(default=None, max_length=10)
+    marca: str | None = Field(default=None, max_length=60)
+    # O líquido é o que interessa: o bruto inclui a embalagem, e ninguém cozinha
+    # o papelão. É ele que resolve "o pacote entra por UN e a ficha pede KG".
+    peso_liquido: float | None = Field(default=None, ge=0)
+    peso_bruto: float | None = Field(default=None, ge=0)
     codigo_barras: str | None = Field(default=None, max_length=20)
     codigo_omie: str | None = Field(default=None, max_length=40)
     observacao: str | None = None
@@ -122,8 +131,18 @@ class ProdutoResponse(BaseModel):
     estoque_minimo: float | None = None
     estoque_maximo: float | None = None
     ncm: str | None = None
+    cest: str | None = None
+    marca: str | None = None
+    peso_liquido: float | None = None
+    peso_bruto: float | None = None
     codigo_barras: str | None = None
+    # ⚠️ **O código interno do Omie** — o id de lá, que a casa não escolhe. É
+    # por ele que o vínculo sobrevive quando alguém troca o `codigo` da casa, e
+    # é o nível 2 da cascata de conciliação, antes do EAN. A tela mostra sem
+    # deixar editar; a API aceita alteração porque consertar um de-para errado é
+    # trabalho de quem administra.
     codigo_omie: str | None = None
+    sincronizado_em: datetime | None = None
     origem: str
     status: str
     observacao: str | None = None

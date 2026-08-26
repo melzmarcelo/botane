@@ -327,6 +327,37 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
      parâmetro errado continua errado na quarta tentativa e só gasta a cota.
   7. ⚠️ **`ListarNotaEnt` não aceita `apenas_importado`** — foi esse parâmetro inválido que
      consumiu cota até o bloqueio.
+- **O cadastro do produto aproveita mais do que o Omie já tem** (migração 031, 26/08/2026).
+  Medido na conta real: 2.189 produtos importados, **todos** com NCM, **1.149 com EAN** e
+  **zero com categoria** — e sem categoria o CMV por grupo e a curva ABC não separam nada.
+  ⚠️ **O buraco não era o campo, era a reimportação: produto que já existia não recebia NADA.**
+  A importação contava "atualizado" e seguia com um `continue`, então quem foi criado antes de
+  um campo ser mapeado — ou criado a partir do item da nota — nunca mais era completado. Agora
+  `_completar_produto` preenche **só o que está em branco** (`coalesce(coluna, %s)`), pela mesma
+  regra do importador de fornecedores: reimportar não pode desfazer correção. Quem corrigiu
+  corrigiu porque o dado de lá estava errado.
+  ⚠️ Campos novos: `marca`, `cest`, `peso_liquido`, `peso_bruto`, `sincronizado_em`. **Peso é
+  conversão, não enfeite** — o pacote entra por UN e a ficha consome em KG; o LÍQUIDO é o que
+  interessa, porque o bruto inclui a embalagem.
+  ⚠️ **A família do Omie vira categoria**, criada na primeira vez que aparece: é a classificação
+  que a casa já fez do outro lado, e deixá-la para trás obrigava a classificar dois mil itens
+  à mão.
+  ⚠️ **`produtos.codigo_omie` já era o "código interno" que sobrevive à troca do código** — não
+  havia campo a criar. Ele guarda o `codigo_produto` do Omie (o id de lá, que a casa não
+  escolhe), tem índice único e é o nível 2 da cascata de conciliação. `produtos.codigo` é o da
+  casa e pode ser renomeado à vontade; a suíte cobra que renomear NÃO faça a importação criar um
+  duplicado. A tela mostra o código interno em bloco de **só leitura**: editá-lo é desamarrar o
+  produto do cadastro de origem.
+  ⚠️ **O `ListarProdutos` do Omie NÃO diz quem fornece o quê** — conferido campo a campo contra
+  a conta real. Quem sabe isso é a NOTA, e até aqui o vínculo só nascia no LANÇAMENTO: numa base
+  real, 227 produtos já tinham aparecido em nota com fornecedor e só 107 tinham vínculo. O resto
+  eram notas importadas e não lançadas, que é o estado normal de quem acabou de sincronizar.
+  `POST /notas/vincular-fornecedores` fecha essa lacuna (185 vínculos na primeira execução).
+  ⚠️ **Preço só de nota LANÇADA**: `custo_aquisicao_unitario` é calculado no lançamento, e o
+  valor bruto da linha não é custo.
+  ⚠️ **A conta real deixa `marca`, `cest`, `peso` e `descricao_familia` VAZIOS.** O mapeador lê
+  os nomes certos (conferidos num registro só, em 26/08/2026); é o cadastro do cliente que não
+  os preenche. O que ele preenche é descrição, código, EAN, NCM, unidade e valor.
 - 🔑 **As notas de compra estão em `produtos/recebimentonfe`, NÃO em `produtos/notaentrada`**
   (24/08/2026). O segundo é o lançamento manual de nota do Omie: na conta do cliente tinha
   **uma** nota, de 2024, enquanto o recebimento de NF-e tinha **3.670**. Quem olhasse só o
@@ -587,12 +618,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (926 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (957 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (37), `smoke_inventario_filtros.py` (39),
+  `smoke_produto_do_omie.py` (31),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (251, no Chrome, com fotos em `web/scripts/_fotos`).
@@ -617,6 +649,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   não bastou, porque a suíte estourou no meio uma vez e deixou a integração em `simulado` — a
   busca do dono parou de trazer nota e nada explicava por quê. Mesma lição do
   `preservar_credenciais`.
+- ⚠️ **Trabalhar na integração com a conta REAL configurada custa cota.** `POST
+  /omie/importar-catalogo` varre os 2.189 produtos do cliente a cada chamada, e o Omie bloqueia
+  quem consome demais. Antes de exercitar qualquer coisa do Omie: **conferir o modo** e pôr em
+  `simulado` (só o MODO — a credencial fica onde está). Para descobrir que campos uma conta
+  devolve de verdade, **uma** chamada com `registros_por_pagina: 1` responde tudo e não custa
+  quase nada; adivinhar nome de campo e varrer o catálogo para conferir é o caminho caro.
+  `preservar_credenciais()` repõe a linha inteira — credencial, modo e `ativa` —, então suíte
+  que o chama devolve o modo sozinha.
 - ⚠️ **`preservar_credenciais()` em `tests/comum.py`, registrado no `atexit`.** A suíte do Omie
   grava uma credencial de mentira na MESMA linha onde mora a real, e a API não devolve a chave
   em claro (é a regra que protege o segredo) — então perder a credencial do cliente é

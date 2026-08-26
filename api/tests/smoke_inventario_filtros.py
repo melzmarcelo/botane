@@ -126,11 +126,16 @@ print("\n1. a prévia responde antes de abrir")
 st, p = chamar("GET", f"/inventarios/previa?locais={l1['id']}&locais={l2['id']}"
                       f"&setores={s1['id']}", token=token)
 checar("a prévia responde", st == 200, st)
+# ⚠️ **Afirma sobre o PRÓPRIO produto, não sobre o total.** As rodadas
+# anteriores deixam "Caixa dupla NNNNNN" na base — produto com movimento não é
+# apagado —, e um total esperado erraria a partir da segunda vez. O que importa
+# é que o produto DESTE teste apareça uma vez por prateleira.
+meus = [a for a in p.get("amostra", []) if a["produto"] == f"Caixa dupla {marca}"]
 checar("o produto em dois locais dá DUAS linhas para um produto só",
-       p.get("total") == 2 and p.get("produtos") == 1, p)
-checar("e ela diz de quais locais", len(p.get("locais", [])) == 2, p.get("locais"))
-checar("com uma amostra do que vem", any(f"Caixa dupla {marca}" == a["produto"]
-                                         for a in p.get("amostra", [])), p.get("amostra"))
+       len(meus) == 2, meus or p.get("amostra"))
+checar("e cada uma num local diferente", len({a["local"] for a in meus}) == 2, meus)
+checar("com a prévia dizendo de quais locais", len(p.get("locais", [])) >= 2,
+       p.get("locais"))
 
 
 print("\n2. os filtros combinam com E, não com OU")
@@ -157,11 +162,11 @@ if id_inv:
     abertas.append(id_inv)
 checar("o cabeçalho NÃO tem local único", inv.get("id_local") is None, inv.get("id_local"))
 checar("e o nome é o que foi dado", inv.get("nome") == f"Recorte {marca}", inv.get("nome"))
-checar("com duas linhas, uma por prateleira", inv.get("total_itens") == 2,
-       inv.get("total_itens"))
+minhas = [i for i in inv.get("itens", []) if i["produto"] == f"Caixa dupla {marca}"]
+checar("com duas linhas para o produto deste teste, uma por prateleira",
+       len(minhas) == 2, [i["produto"] for i in inv.get("itens", [])])
 checar("e cada linha diz o local dela",
-       len({i.get("local") for i in inv.get("itens", [])}) == 2,
-       [i.get("local") for i in inv.get("itens", [])])
+       len({i.get("local") for i in minhas}) == 2, [i.get("local") for i in minhas])
 checar("o filtro fica gravado, para explicar a lista depois",
        (inv.get("filtros") or {}).get("setores") == [s1["nome"]], inv.get("filtros"))
 
@@ -262,6 +267,13 @@ checar("e a recusa explica que só entra o que tem saldo",
 
 
 print("\n10. limpeza")
+# ⚠️ Os produtos saem no fim. Com movimento eles viram INATIVOS em vez de serem
+# apagados — e é isso que os tira do recorte da próxima rodada: sem esta linha,
+# cada execução deixava mais uma "Caixa dupla" com saldo para a seguinte contar.
+for id_produto in (duplo, outro):
+    if id_produto:
+        chamar("DELETE", f"/produtos/{id_produto}", token=token)
+
 for id_inv in list(abertas):
     st, r = chamar("DELETE", f"/inventarios/{id_inv}", token=token)
     checar(f"cancela a contagem {id_inv}", st == 200, (st, r))

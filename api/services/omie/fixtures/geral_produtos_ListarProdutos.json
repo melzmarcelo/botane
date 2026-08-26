@@ -11,7 +11,13 @@
       "ncm": "09011110",
       "ean": "7891234500017",
       "valor_unitario": 30.0,
-      "inativo": "N"
+      "inativo": "N",
+      "marca": "Melitta",
+      "descricao_familia": "Mercearia",
+      "peso_liq": "0.5",
+      "peso_bruto": "0.55",
+      "cest": "17.004.00",
+      "estoque_minimo": "10"
     },
     {
       "codigo_produto": 700002,
@@ -21,7 +27,12 @@
       "ncm": "04012010",
       "ean": "7891234500024",
       "valor_unitario": 4.5,
-      "inativo": "N"
+      "inativo": "N",
+      "marca": "Italac",
+      "descricao_familia": "Laticínios",
+      "peso_liq": "1.0",
+      "peso_bruto": "1.03",
+      "estoque_minimo": "20"
     },
     {
       "codigo_produto": 700003,
@@ -30,7 +41,10 @@
       "unidade": "KG",
       "ncm": "07020000",
       "valor_unitario": 7.5,
-      "inativo": "N"
+      "inativo": "N",
+      "marca": "União",
+      "descricao_familia": "Mercearia",
+      "peso_liq": "5.0"
     },
     {
       "codigo_produto": 700004,
@@ -39,7 +53,8 @@
       "unidade": "BJ",
       "ncm": "2003.10.00",
       "valor_unitario": 16.0,
-      "inativo": "N"
+      "inativo": "N",
+      "descricao_familia": "Hortifrúti"
     },
     {
       "codigo_produto": 700005,
@@ -48,7 +63,10 @@
       "unidade": "UN",
       "ncm": "0901.11.10",
       "valor_unitario": 12.0,
-      "inativo": "N"
+      "inativo": "N",
+      "marca": "Sadia",
+      "descricao_familia": "Congelados",
+      "peso_liq": "2.5"
     },
     {
       "codigo_produto": 700006,
@@ -57,7 +75,9 @@
       "unidade": "UN",
       "ncm": "0901.11.10",
       "valor_unitario": 12.0,
-      "inativo": "N"
+      "inativo": "N",
+      "descricao_familia": "Descartáveis",
+      "cest": "28.064.00"
     }
   ]
 }

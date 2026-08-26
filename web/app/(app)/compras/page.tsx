@@ -150,6 +150,30 @@ export default function PaginaCompras() {
     }
   }
 
+  /**
+   * Cria o vínculo produto × fornecedor a partir das notas que já entraram.
+   *
+   * ⚠️ **O catálogo do Omie não diz quem fornece o quê** — quem sabe isso é a
+   * nota. Até aqui o vínculo só nascia no LANÇAMENTO, para guardar o último
+   * preço, e nota importada e ainda não lançada — o estado normal de quem
+   * acabou de sincronizar — ficava de fora.
+   */
+  async function vincularFornecedores() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ vinculos_criados: number; message: string }>(
+        "/notas/vincular-fornecedores",
+      );
+      if (r.vinculos_criados) aviso.sucesso(r.message);
+      else aviso.sucesso("Nenhum vínculo novo — as notas já estavam todas amarradas.");
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível vincular");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   // A fila da casa inteira: é ela que diz se vale oferecer o "reconciliar".
   const aPendentes = (notas ?? []).reduce((soma, n) => soma + (n.pendentes ?? 0), 0);
 
@@ -201,6 +225,16 @@ export default function PaginaCompras() {
                 title="Procura de novo o produto dos itens pendentes"
               >
                 Reconciliar {aPendentes} pendente(s)
+              </button>
+            )}
+            {pode("compras.conciliar") && (
+              <button
+                className="btn btn-secundario"
+                onClick={vincularFornecedores}
+                disabled={ocupado}
+                title="Amarra produto e fornecedor pelo que as notas já mostraram"
+              >
+                Vincular fornecedores
               </button>
             )}
           </div>

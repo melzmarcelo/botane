@@ -287,6 +287,35 @@ def produto_do_catalogo(bruto: dict) -> dict:
         or None,
         "valor_unitario": _numero(_pega(bruto, "valor_unitario", "nValorUnitario")),
         "inativo": str(_pega(bruto, "inativo", padrao="N")).upper() == "S",
+
+        # ------------------------------------------------- o que passou a vir
+        # ⚠️ Cada campo por uma LISTA de nomes possíveis, como todo o resto
+        # deste arquivo: o Omie mistura dialetos (`descricao` e `cDescricao`) e
+        # o que chega depende do módulo que respondeu.
+        "marca": (_pega(bruto, "marca", "cMarca") or "")[:60] or None,
+        "cest": (_so_digitos(_pega(bruto, "cest", "cCest", "codigo_cest")) or "")[:10] or None,
+        # ⚠️ **O líquido é o que interessa** — o bruto inclui a embalagem, e
+        # ninguém cozinha o papelão. Os dois vêm porque o cadastro do Omie às
+        # vezes só tem um deles preenchido.
+        "peso_liquido": _numero(_pega(bruto, "peso_liq", "peso_liquido", "nPesoLiq")) or None,
+        "peso_bruto": _numero(_pega(bruto, "peso_bruto", "nPesoBruto")) or None,
+        # A FAMÍLIA do Omie é a classificação que a casa já fez lá. Vira
+        # categoria aqui — e é ela que faltava nos 2.189 produtos importados,
+        # sem a qual o CMV por grupo e a curva ABC não separam nada.
+        "familia": (_pega(bruto, "descricao_familia", "cDescrFamilia", "familia") or "")[:80]
+        or None,
+        "descricao_detalhada": (_pega(bruto, "descr_detalhada", "cDescrDetalhada") or "")[:2000]
+        or None,
+        "estoque_minimo": _numero(_pega(bruto, "estoque_minimo", "nEstoqueMinimo")) or None,
+        # ⚠️ **O fornecedor do produto é opcional e pode não vir.** O
+        # `ListarProdutos` do Omie não promete esse campo, e nas contas em que
+        # ele não existe isto simplesmente fica nulo — o vínculo então vem das
+        # NOTAS, que é onde ele existe de verdade. Ler aqui não custa nada e
+        # aproveita a conta que o tiver preenchido.
+        "codigo_fornecedor_omie": str(
+            _pega(bruto, "codigo_fornecedor", "nCodFornecedor", "cCodFornecedor", padrao="")
+            or ""
+        )[:40] or None,
     }
 
 

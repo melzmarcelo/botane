@@ -321,6 +321,69 @@ def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None
     return calcular_nota(cur, item["id_nota"])
 
 
+def vincular_fornecedores(cur, id_unidade: int) -> dict:
+    """Cria o vínculo produto × fornecedor a partir das notas que já entraram.
+
+    ⚠️ **O catálogo do Omie não diz quem fornece o quê** — o `ListarProdutos`
+    devolve o produto, não a origem dele. Quem sabe isso é a NOTA: se o item do
+    açúcar veio numa nota da distribuidora, a distribuidora fornece açúcar. É a
+    mesma informação, vinda de onde ela de fato existe.
+
+    Até aqui o vínculo só nascia no **lançamento** da nota, para guardar o
+    último preço. Numa base real isso deixou 120 pares de fora: 227 produtos já
+    tinham aparecido em nota com fornecedor e só 107 tinham vínculo — o resto
+    eram notas importadas e ainda não lançadas, que é o estado normal de quem
+    acabou de sincronizar.
+
+    ⚠️ **Preço só de nota LANÇADA.** `custo_aquisicao_unitario` é calculado no
+    lançamento (frete rateado, desconto abatido, convertido para a unidade de
+    estoque); numa nota pendente ele ainda não existe. Gravar o valor bruto da
+    linha ali poria na reserva de custo um número que não é custo — e a ficha
+    de um insumo sem saldo passaria a mentir.
+
+    ⚠️ **Não sobrescreve.** Vínculo que já existe fica como está: o preço dele
+    veio de um lançamento de verdade, e o código no fornecedor pode ter sido
+    corrigido à mão.
+    """
+    cur.execute(
+        """
+        WITH pares AS (
+            SELECT ni.id_produto, n.id_fornecedor,
+                   -- O código do produto NO fornecedor: é o nível 3 da cascata
+                   -- de conciliação, o que resolve hortifrúti e distribuidor
+                   -- sem EAN na próxima nota que chegar.
+                   (array_agg(ni.codigo_fornecedor ORDER BY n.id DESC)
+                        FILTER (WHERE ni.codigo_fornecedor IS NOT NULL))[1] AS codigo,
+                   max(coalesce(n.data_entrada, n.data_emissao))
+                       FILTER (WHERE n.status = 'LANCADA') AS ultima_compra
+              FROM nota_itens ni
+              JOIN notas_entrada n ON n.id = ni.id_nota
+             WHERE n.id_unidade = %s
+               AND ni.id_produto IS NOT NULL AND n.id_fornecedor IS NOT NULL
+               AND n.status <> 'CANCELADA'
+             GROUP BY ni.id_produto, n.id_fornecedor
+        )
+        INSERT INTO produto_fornecedor (id_produto, id_fornecedor, codigo_no_fornecedor,
+                                        ultima_compra)
+        SELECT id_produto, id_fornecedor, codigo, ultima_compra FROM pares
+        ON CONFLICT (id_produto, id_fornecedor) DO NOTHING
+        """,
+        (id_unidade,),
+    )
+    criados = cur.rowcount
+
+    # Quantos produtos passaram a ter ao menos um fornecedor conhecido — é o
+    # número que interessa a quem vai cotar, não a contagem de linhas.
+    cur.execute(
+        """SELECT count(DISTINCT pf.id_produto) AS produtos,
+                  count(DISTINCT pf.id_fornecedor) AS fornecedores
+             FROM produto_fornecedor pf"""
+    )
+    r = cur.fetchone()
+    return {"vinculos_criados": criados, "produtos_com_fornecedor": r["produtos"],
+            "fornecedores": r["fornecedores"]}
+
+
 def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
     """Passa a cascata de novo nos itens que ficaram sem produto.
 
@@ -842,6 +905,73 @@ def _como_data(valor):
     return date.fromisoformat(str(valor)[:10])
 
 
+# Os campos que a sincronização COMPLETA — nunca sobrescreve.
+#
+# ⚠️ **Só o que está em branco.** É a mesma regra do importador de fornecedores,
+# e pela mesma razão: reimportar não pode desfazer correção. Se alguém arrumou
+# o nome, corrigiu o peso ou escolheu outra categoria aqui, foi porque o dado
+# de lá estava errado — e a próxima sincronização apagaria o conserto.
+#
+# `nome` fica FORA de propósito: ele é o que mais se corrige à mão (o rodapé de
+# tributos do DANFE já entrou em 59 cadastros), e completá-lo não faz sentido
+# porque ele nunca está vazio.
+_COMPLETAVEIS = ("codigo_barras", "ncm", "marca", "cest", "peso_liquido", "peso_bruto",
+                 "estoque_minimo")
+
+
+def _categoria_da_familia(cur, familia: str | None, cache: dict[str, int]) -> int | None:
+    """A família do Omie vira categoria aqui, criada na primeira vez que aparece.
+
+    ⚠️ **É a classificação que a casa já fez do outro lado.** Numa conta real,
+    2.189 produtos vieram com NCM e NENHUM com categoria — e sem categoria o CMV
+    por grupo e a curva ABC não separam nada. A família é a resposta que já
+    existia; deixá-la para trás obrigava a classificar dois mil itens à mão.
+    """
+    if not familia:
+        return None
+    chave = familia.strip().lower()
+    if not chave:
+        return None
+    if chave in cache:
+        return cache[chave]
+
+    cur.execute("SELECT id FROM categorias WHERE lower(nome) = %s", (chave,))
+    linha = cur.fetchone()
+    if not linha:
+        cur.execute(
+            "INSERT INTO categorias (nome, tipo) VALUES (%s, 'INSUMO') RETURNING id",
+            (familia.strip()[:80],),
+        )
+        linha = cur.fetchone()
+    cache[chave] = linha["id"]
+    return cache[chave]
+
+
+def _completar_produto(cur, id_produto: int, p: dict, id_categoria: int | None) -> bool:
+    """Preenche no produto o que está em branco. Devolve se mexeu em algo.
+
+    O `coalesce(coluna, %s)` faz a regra no próprio UPDATE: coluna preenchida
+    fica como está, coluna nula recebe o valor de fora. Conferir antes em
+    Python custaria um SELECT por produto — são milhares.
+    """
+    campos = {c: p.get(c) for c in _COMPLETAVEIS if p.get(c) is not None}
+    if id_categoria:
+        campos["id_categoria"] = id_categoria
+    if p.get("descricao_detalhada"):
+        campos["observacao"] = p["descricao_detalhada"]
+    if not campos:
+        return False
+
+    sets = ", ".join(f"{c} = coalesce({c}, %s)" for c in campos)
+    condicoes = " OR ".join(f"{c} IS NULL" for c in campos)
+    cur.execute(
+        f"UPDATE produtos SET {sets}, sincronizado_em = now() "
+        f"WHERE id = %s AND ({condicoes})",
+        [*campos.values(), id_produto],
+    )
+    return cur.rowcount > 0
+
+
 def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
     """Traz o catálogo do Omie como **rascunho**.
 
@@ -855,6 +985,10 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
     O padrão do Omie devolve só o que veio do PDV dele.
     """
     criados, atualizados, paginas, sem_unidade = 0, 0, 0, 0
+    completados = 0
+    # Cache de família → categoria: uma conta real tem dezenas de famílias e
+    # milhares de produtos, e uma consulta por produto seria uma por linha.
+    categorias: dict[str, int] = {}
     truncou: dict = {}
 
     def parou_no_teto(trazidos, total):
@@ -883,19 +1017,34 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                     if not cur.fetchone():
                         sem_unidade += 1
                         p["um"] = None
+                id_categoria = _categoria_da_familia(cur, p["familia"], categorias)
+
                 cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (p["codigo_omie"],))
                 existente = cur.fetchone()
                 if existente:
+                    # ⚠️ **Produto que já existe passou a RECEBER o que falta.**
+                    # Antes esta linha só contava "atualizado" e seguia sem
+                    # escrever nada — e era por isso que o EAN, o NCM e a marca
+                    # ficavam vazios aqui enquanto estavam preenchidos lá:
+                    # quem foi criado antes de o campo ser mapeado, ou criado a
+                    # partir do item da nota, nunca mais era completado.
+                    if _completar_produto(cur, existente["id"], p, id_categoria):
+                        completados += 1
                     atualizados += 1
                     continue
                 cur.execute(
                     """INSERT INTO produtos (codigo, nome, tipo, um_estoque, ncm, codigo_barras,
-                                             codigo_omie, origem, status, controla_estoque,
+                                             codigo_omie, marca, cest, peso_liquido, peso_bruto,
+                                             estoque_minimo, id_categoria, observacao,
+                                             sincronizado_em, origem, status, controla_estoque,
                                              criado_por)
-                       VALUES (%s, %s, 'INSUMO', %s, %s, %s, %s, 'OMIE', 'RASCUNHO', true, %s)
+                       VALUES (%s, %s, 'INSUMO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                               now(), 'OMIE', 'RASCUNHO', true, %s)
                        ON CONFLICT DO NOTHING RETURNING id""",
                     (p["codigo"] or f"OMIE-{p['codigo_omie']}", p["nome"], p["um"], p["ncm"],
-                     p["codigo_barras"], p["codigo_omie"], id_usuario),
+                     p["codigo_barras"], p["codigo_omie"], p["marca"], p["cest"],
+                     p["peso_liquido"], p["peso_bruto"], p["estoque_minimo"], id_categoria,
+                     p["descricao_detalhada"], id_usuario),
                 )
                 if cur.fetchone():
                     criados += 1
@@ -905,8 +1054,14 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
     _registrar(cur, "geral/produtos", "ListarProdutos", "OK", criados + atualizados,
-               f"{criados} criado(s) em rascunho", cliente.modo, paginas)
+               f"{criados} criado(s) em rascunho, {completados} completado(s)",
+               cliente.modo, paginas)
     return {"criados": criados, "ja_existiam": atualizados,
+            # Quantos JÁ EXISTIAM e ganharam campo que estava vazio — EAN,
+            # marca, peso, categoria. É o número que explica por que reimportar
+            # deixou de ser inútil.
+            "completados": completados,
+            "categorias_usadas": len(categorias),
             "sem_unidade": sem_unidade, "modo": cliente.modo,
             # Preenchido só quando a varredura parou no teto: sem isso, "992
             # criado(s)" não se distingue de "o catálogo tem 992".

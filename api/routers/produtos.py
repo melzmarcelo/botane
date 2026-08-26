@@ -31,6 +31,10 @@ _EDITAVEIS = (
     "id_local_padrao", "modo_producao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
+    # Vêm do cadastro do Omie e são COMPLETADOS na sincronização — mas
+    # continuam editáveis: quem corrige aqui é porque o dado de lá está errado,
+    # e a completagem só preenche o que está em branco.
+    "cest", "marca", "peso_liquido", "peso_bruto",
     "observacao", "status", "ativo",
 )
 
