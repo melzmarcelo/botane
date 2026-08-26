@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { hoje, primeiroDiaDoMes } from "@/lib/datas";
+import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
@@ -30,6 +30,8 @@ type Apuracao = {
   cobertura_ficha_pct: number;
   food_cost_pct: number | null;
   fechado: boolean;
+  ciclo: string;
+  rotulo: string | null;
 };
 
 type LinhaAbc = {
@@ -55,9 +57,24 @@ type LinhaMargem = {
   sem_custo: boolean;
 };
 
+type Periodo = {
+  inicio: string;
+  fim: string;
+  rotulo: string;
+  corrente: boolean;
+  status: string | null;
+  fechavel: boolean;
+};
+
+type Ciclo = { ciclo: string; descricao: string; periodos: Periodo[] };
+
 type Fechamento = {
   id: number;
   competencia: string;
+  inicio: string;
+  fim: string;
+  rotulo: string | null;
+  ciclo: string;
   cmv_real: number;
   cmv_teorico: number;
   variancia: number;
@@ -73,8 +90,14 @@ const pct = (v: number | null | undefined, casas = 1) =>
 export default function PaginaCmv() {
   const aviso = useAviso();
   const { pode } = useSessao();
-  const [inicio, setInicio] = useState(primeiroDiaDoMes());
-  const [fim, setFim] = useState(hoje());
+  // ⚠️ **Quem diz qual é o período é o servidor.** A casa pode fechar por dia,
+  // por semana ou por mês, e a semana que fecha na quarta não se calcula com
+  // `primeiroDiaDoMes()`. Enquanto o ciclo não chega, as datas ficam vazias e a
+  // apuração não é pedida — um flash com o mês do calendário numa casa que
+  // fecha por semana já seria um número errado na tela.
+  const [inicio, setInicio] = useState("");
+  const [fim, setFim] = useState("");
+  const [ciclo, setCiclo] = useState<Ciclo | null>(null);
   const [a, setA] = useState<Apuracao | null>(null);
   const [abc, setAbc] = useState<LinhaAbc[] | null>(null);
   const [margem, setMargem] = useState<LinhaMargem[] | null>(null);
@@ -88,7 +111,25 @@ export default function PaginaCmv() {
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
+  // O ciclo é pedido uma vez: ele muda na tela de Lojas, não aqui.
+  useEffect(() => {
+    api
+      .get<Ciclo>("/cmv/periodos?quantos=12")
+      .then((c) => {
+        setCiclo(c);
+        const atual = c.periodos.find((p) => p.corrente) ?? c.periodos[0];
+        if (atual) {
+          setInicio(atual.inicio);
+          // O período corrente ainda não acabou: mostrar até hoje, não até o
+          // fim que ainda vai acontecer.
+          setFim(atual.fim > hoje() ? hoje() : atual.fim);
+        }
+      })
+      .catch((e) => setErro(e instanceof Error ? e.message : "Falha ao carregar"));
+  }, []);
+
   const carregar = useCallback(async () => {
+    if (!inicio || !fim) return;
     const q = `inicio=${inicio}&fim=${fim}`;
     try {
       const [ap, cur, mar, fec] = await Promise.all([
@@ -126,11 +167,11 @@ export default function PaginaCmv() {
     setOcupado(true);
     setErro("");
     try {
-      const r = await api.post<{ competencia: string; variancia: number }>("/cmv/fechamentos", {
+      const r = await api.post<{ rotulo: string; variancia: number }>("/cmv/fechamentos", {
         competencia: inicio,
       });
       aviso.sucesso(
-        `Período de ${r.competencia} fechado. A partir de agora, lançamento com data dentro dele exige permissão de retroativo.`,
+        `Período de ${r.rotulo} fechado. A partir de agora, lançamento com data dentro dele exige permissão de retroativo.`,
       );
       await carregar();
     } catch (e) {
@@ -177,6 +218,35 @@ export default function PaginaCmv() {
           <button className="btn btn-secundario" onClick={() => window.print()}>
             Imprimir / PDF
           </button>
+          {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
+              que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
+              engano entra — um dia a mais e a apuração deixa de bater com o
+              fechamento. As datas continuam ali para o recorte fora do ritmo. */}
+          {ciclo && ciclo.periodos.length > 0 && (
+            <label>
+              <span className="rotulo">Período</span>
+              <select
+                className="campo mt-1.5"
+                value={
+                  ciclo.periodos.find((p) => p.inicio === inicio && p.fim === fim)?.inicio ?? ""
+                }
+                onChange={(e) => {
+                  const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
+                  if (!p) return;
+                  setInicio(p.inicio);
+                  setFim(p.fim > hoje() ? hoje() : p.fim);
+                }}
+              >
+                <option value="">outro recorte</option>
+                {ciclo.periodos.map((p) => (
+                  <option key={p.inicio} value={p.inicio}>
+                    {p.rotulo}
+                    {p.corrente ? " (em curso)" : p.status === "FECHADO" ? " · fechado" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             <span className="rotulo">De</span>
             <input
@@ -268,7 +338,7 @@ export default function PaginaCmv() {
                   onClick={() => setConfirmando({ tipo: "fechar" })}
                   disabled={ocupado}
                 >
-                  Fechar o mês
+                  Fechar {a.rotulo ? `— ${a.rotulo}` : "o período"}
                 </button>
               ) : undefined
             }
@@ -453,17 +523,17 @@ export default function PaginaCmv() {
           )}
 
           <Cartao
-            titulo="Meses fechados"
+            titulo="Períodos fechados"
             descricao="Fechar congela o período: depois disso, lançar com data de trás exige permissão."
           >
             {!fechamentos.length ? (
-              <Vazio>Nenhum mês fechado ainda.</Vazio>
+              <Vazio>Nenhum período fechado ainda.</Vazio>
             ) : (
               <div className="overflow-x-auto">
                 <table className="tabela">
                   <thead>
                     <tr>
-                      <th>Competência</th>
+                      <th>Período</th>
                       <th className="num">CMV real</th>
                       <th className="num">Teórico</th>
                       <th className="num">Variância</th>
@@ -475,12 +545,12 @@ export default function PaginaCmv() {
                   <tbody>
                     {fechamentos.map((f) => (
                       <tr key={f.id}>
-                        <td className="mono">
-                          {new Date(f.competencia + "T12:00:00").toLocaleDateString("pt-BR", {
-                            month: "2-digit",
-                            year: "numeric",
-                          })}
-                        </td>
+                        {/* ⚠️ O nome do período vem do servidor. Ele é o único
+                            que sabe se "01/08" é o mês de agosto ou a semana que
+                            começou nele — a coluna `ciclo` é quem responde, e
+                            remontar a frase aqui daria duas versões da mesma
+                            verdade. */}
+                        <td>{f.rotulo ?? `${f.inicio} a ${f.fim}`}</td>
                         <td className="num">{reais(f.cmv_real)}</td>
                         <td className="num">{reais(f.cmv_teorico)}</td>
                         <td className={`num ${f.variancia > 0 ? "text-erro" : "text-erva"}`}>
@@ -498,7 +568,7 @@ export default function PaginaCmv() {
                               className="rotulo hover:text-erro"
                               onClick={() =>
                                 setConfirmando({ tipo: "reabrir", id: f.id,
-                                                 competencia: f.competencia })
+                                                 competencia: f.rotulo ?? f.competencia })
                               }
                             >
                               reabrir
@@ -517,7 +587,7 @@ export default function PaginaCmv() {
 
       {confirmando?.tipo === "fechar" && (
         <Confirmacao
-          titulo="Fechar o mês"
+          titulo="Fechar o período"
           rotuloConfirmar="Fechar"
           ocupado={ocupado}
           aoCancelar={() => setConfirmando(null)}
@@ -526,17 +596,21 @@ export default function PaginaCmv() {
             void fechar();
           }}
         >
-          <p>Fechar a apuração do período e congelar os números?</p>
+          <p>
+            Fechar a apuração de <b>{a?.rotulo ?? `${inicio} a ${fim}`}</b> e congelar os
+            números?
+          </p>
           <p className="mt-3 text-[13.5px] text-suave">
-            A movimentação por produto é congelada junto, e movimento com data dentro do mês
-            passa a ser recusado — só quem tem a permissão de lançamento retroativo passa.
+            A movimentação por produto é congelada junto, e movimento com data dentro do
+            período passa a ser recusado — só quem tem a permissão de lançamento retroativo
+            passa.
           </p>
         </Confirmacao>
       )}
 
       {confirmando?.tipo === "reabrir" && (
         <Confirmacao
-          titulo="Reabrir o mês"
+          titulo="Reabrir o período"
           rotuloConfirmar="Reabrir"
           perigo
           ocupado={ocupado}
@@ -548,11 +622,11 @@ export default function PaginaCmv() {
           }}
         >
           <p>
-            Reabrir a competência <b>{confirmando.competencia}</b>?
+            Reabrir o período de <b>{confirmando.competencia}</b>?
           </p>
           <p className="mt-3 text-[13.5px] text-suave">
-            O mês volta a aceitar lançamento retroativo — e o número que já foi levado ao dono
-            pode mudar. Fechar de novo recalcula tudo.
+            O período volta a aceitar lançamento retroativo — e o número que já foi levado ao
+            dono pode mudar. Fechar de novo recalcula tudo.
           </p>
         </Confirmacao>
       )}

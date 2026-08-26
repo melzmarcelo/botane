@@ -45,6 +45,31 @@ minutos numa chamada só. O `pg_trgm` está disponível no servidor e **não ins
 
 ## 🟡 Falta, e dói quando a base cresce
 
+### A fotografia do razão não sobrevive a lançamento retroativo
+`saldo_apos`/`custo_medio_apos` são calculados na **ordem de lançamento** — decisão de projeto,
+e a certa: recalcular por data faria o CMV de ontem mudar sozinho. A consequência, que só agora
+ficou visível, é que **um movimento gravado hoje com data de trás carrega a fotografia do
+momento em que foi gravado**. Como `valor_do_estoque` e `movimentacao_por_produto` leem o saldo
+de uma data passada pegando o último movimento antes dela, esse retroativo entra como "o
+último" e devolve um saldo que já inclui o que veio antes dele na fila de gravação.
+
+Efeito prático: a identidade `inicial + entradas − saídas = final` abre num recorte que
+**termina antes de hoje**, se houve retroativo depois. Medido na base local: três produtos do
+`smoke_cmv` (que lança retroativo de propósito) abriam R$ 130,00 cada num recorte de um dia. No
+recorte do mês inteiro a conta fecha, porque o retroativo e os movimentos que ele contamina
+caem os dois dentro da janela — foi por isso que passou despercebido enquanto o único período
+possível era o mês.
+
+⚠️ **Não é regressão dos ciclos de fechamento** — é anterior a eles, e sempre esteve ao alcance
+de quem escolhesse datas na mão. Os ciclos só tornaram a janela curta o padrão. A tela nomeia
+essa causa junto com a do saldo negativo.
+
+Consertar de verdade quer dizer parar de usar a fotografia para data passada e reconstruir o
+saldo somando o razão **na ordem de data** — o que é caro (é justamente o que a fotografia
+existe para evitar) e muda o número histórico. A alternativa barata é **impedir retroativo
+fora de período fechado** — hoje só o fechamento trava, e período aberto aceita qualquer data
+de trás. Decidir antes de a casa começar a usar retroativo com frequência.
+
 ### Engenharia de cardápio
 `cmv.margem_por_prato` já entrega o que cada prato vendeu, custou e deixou. Falta a matriz que
 cruza **popularidade × margem** e classifica em estrela, cavalo de batalha, quebra-cabeça e

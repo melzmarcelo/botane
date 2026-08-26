@@ -56,10 +56,18 @@ class ApuracaoResponse(BaseModel):
     cobertura_ficha_pct: float
     food_cost_pct: float | None = None
     fechado: bool = False
+    # O ritmo em que esta loja fecha, e como o período se chama. Vão na
+    # apuração porque é a tela que mostra os dois lado a lado — e uma tela que
+    # diz "agosto" enquanto o fechamento congela a semana mente sobre si mesma.
+    ciclo: str = "MENSAL"
+    rotulo: str | None = None
 
 
 class FechamentoRequest(BaseModel):
-    competencia: date            # qualquer dia do mês a fechar
+    # ⚠️ Qualquer dia DENTRO do período a fechar. O tamanho do período vem da
+    # configuração da loja (`parametros.ciclo_fechamento`), não daqui: mandar o
+    # ciclo no pedido deixaria a tela fechar num ritmo e o razão travar noutro.
+    competencia: date
 
 
 class FechamentoResponse(BaseModel):
@@ -79,5 +87,7 @@ class FechamentoResponse(BaseModel):
     receita: float
     food_cost_pct: float | None = None
     status: str
+    ciclo: str = "MENSAL"
+    rotulo: str | None = None
     fechado_por: str | None = None
     fechado_em: str | None = None

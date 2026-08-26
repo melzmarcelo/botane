@@ -257,11 +257,29 @@ checar("o período que termina ONTEM também fecha entre as duas telas",
        (ap_ontem["estoque_final"], mov_ontem["total"]["valor_final"]))
 
 print("5. fechamento congela o período")
-st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=token)
-checar("fecha o mês", st == 201, r)
+# ⚠️ **O cenário fecha o DIA, não o mês.** Fechar o mês corrente é recusado
+# desde que os ciclos existem: no dia 25, congelar agosto travaria os seis dias
+# que ainda vão acontecer. O dia de hoje já terminou o bastante para ser
+# fechado (o corte é `fim > hoje`, não `>=`) e contém todo o cenário acima, que
+# é lançado sem data — ou seja, hoje.
+st, r = chamar("PUT", "/unidades/1/parametros", {"ciclo_fechamento": "DIARIO"}, token=token)
+checar("a loja passa a fechar por dia", st == 200, r)
+st, r = chamar("GET", "/cmv/periodos?quantos=1", token=token)
+checar("e o ciclo volta na consulta", r.get("ciclo") == "DIARIO", r.get("ciclo"))
+
+st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(hoje)}, token=token)
+checar("fecha o dia", st == 201, r)
+checar("e o nome do período é a data", r.get("rotulo") == hoje.strftime("%d/%m/%Y"),
+       r.get("rotulo"))
 id_fech = r.get("id")
-st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=token)
+st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(hoje)}, token=token)
 checar("não fecha duas vezes", st == 409, st)
+
+# ⚠️ Período que ainda não acabou não fecha — é a guarda que impede congelar
+# dias que nem aconteceram. Com ciclo diário o amanhã serve de prova.
+st, r = chamar("POST", "/cmv/fechamentos",
+               {"competencia": str(hoje + timedelta(days=1))}, token=token)
+checar("período que ainda não terminou é recusado", st == 400, (st, r))
 
 # O admin TEM `estoque.retroativo` — a trava é para quem não tem. Quem testa
 # isso é o conferente, que lança entrada mas não pode mexer em mês fechado.
@@ -283,9 +301,9 @@ tk_conf = r.get("access_token")
 
 st, r = chamar("POST", "/estoque/entradas", {
     "id_produto": insumo, "quantidade": 1, "custo_unitario": 10, "id_local": local["id"],
-    "data_movimento": f"{inicio_mes}T10:00:00",
+    "data_movimento": f"{hoje}T10:00:00",
 }, token=tk_conf)
-checar("conferente NÃO lança com data dentro do mês fechado", st == 400, (st, r))
+checar("conferente NÃO lança com data dentro do período fechado", st == 400, (st, r))
 checar("a recusa diz qual período está fechado", "fechado" in str(r.get("detail", "")).lower(), r)
 
 st, r = chamar("POST", "/estoque/entradas", {
@@ -295,7 +313,7 @@ checar("lançamento sem data (hoje) continua passando", st == 201, r)
 
 st, r = chamar("POST", "/estoque/entradas", {
     "id_produto": insumo, "quantidade": 1, "custo_unitario": 10, "id_local": local["id"],
-    "data_movimento": f"{inicio_mes}T10:00:00",
+    "data_movimento": f"{hoje}T10:00:00",
 }, token=token)
 checar("quem tem estoque.retroativo passa mesmo fechado", st == 201, (st, r))
 
@@ -306,14 +324,16 @@ checar("o fechamento aparece na lista", any(f["id"] == id_fech for f in fechamen
 # ⚠️ O congelado é do MÊS INTEIRO: pedir "dia 1 até hoje" é outro recorte, e a
 # resposta avisa que existe um mês fechado por trás dele.
 st, parcial = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
-checar("recorte dentro do mês fechado não vem congelado",
+checar("recorte dentro do período fechado não vem congelado",
        parcial.get("congelado") is False, parcial.get("congelado"))
-checar("mas avisa que o mês está fechado",
-       (parcial.get("mes_fechado") or {}).get("competencia") == str(inicio_mes),
-       parcial.get("mes_fechado"))
+# ⚠️ Com ciclo diário a relação é a inversa: o recorte do mês não cai DENTRO do
+# dia fechado — ele o engloba. É o outro aviso que tem de disparar, senão a
+# tela mostra um número que mistura congelado com o que ainda muda.
+checar("e avisa que o recorte atravessa período já fechado",
+       parcial.get("periodos_fechados_dentro", 0) >= 1,
+       parcial.get("periodos_fechados_dentro"))
 
-fim_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-st, mov_f = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={fim_mes}", token=token)
+st, mov_f = chamar("GET", f"/cmv/movimentacao?inicio={hoje}&fim={hoje}", token=token)
 checar("depois de fechado, a movimentação vem congelada",
        mov_f.get("congelado") is True, mov_f.get("congelado"))
 congelada = next((l for l in mov_f["linhas"] if l["id_produto"] == insumo), None)
@@ -321,10 +341,10 @@ checar("com o insumo dentro", congelada is not None, mov_f.get("produtos"))
 # Renomear o produto não pode reescrever o mês fechado: o nome foi GRAVADO.
 if congelada:
     chamar("PUT", f"/produtos/{insumo}", {"nome": f"Renomeado {marca}"}, token=token)
-    st, mov_f2 = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={fim_mes}",
+    st, mov_f2 = chamar("GET", f"/cmv/movimentacao?inicio={hoje}&fim={hoje}",
                         token=token)
     ainda = next((l for l in mov_f2["linhas"] if l["id_produto"] == insumo), None)
-    checar("renomear o produto NÃO reescreve o mês fechado",
+    checar("renomear o produto NÃO reescreve o período fechado",
            ainda and ainda["produto"] == congelada["produto"],
            (congelada["produto"], ainda["produto"] if ainda else None))
 st, a3 = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
@@ -334,7 +354,7 @@ st, r = chamar("POST", f"/cmv/fechamentos/{id_fech}/reabrir", token=token)
 checar("reabre o período", st == 200, r)
 st, r = chamar("POST", "/estoque/entradas", {
     "id_produto": insumo, "quantidade": 1, "custo_unitario": 10, "id_local": local["id"],
-    "data_movimento": f"{inicio_mes}T10:00:00",
+    "data_movimento": f"{hoje}T10:00:00",
 }, token=tk_conf)
 checar("depois de reaberto, o conferente volta a lançar retroativo", st == 201, (st, r))
 
@@ -354,6 +374,14 @@ st, r = chamar("GET", "/cmv/apuracao", token=tk)
 checar("cozinha NÃO vê o painel de CMV (403)", st == 403, st)
 st, r = chamar("POST", "/cmv/fechamentos", {"competencia": str(inicio_mes)}, token=tk)
 checar("cozinha NÃO fecha período (403)", st == 403, st)
+
+# ⚠️ A loja volta ao ritmo MENSAL. A base é compartilhada com as outras suítes,
+# e uma delas apurando "o dia" onde esperava "o mês" acusaria diferença sem que
+# nada tivesse quebrado. Mesma lição do modo `simulado` do Omie.
+st, r = chamar("PUT", "/unidades/1/parametros",
+               {"ciclo_fechamento": "MENSAL", "dia_fechamento_cmv": 1,
+                "fechamento_dia_semana": 7}, token=token)
+checar("a loja volta a fechar por mês", st == 200, r)
 
 print("7. limpeza")
 chamar("DELETE", f"/vendas/{0}", token=token)  # inofensivo: id inexistente

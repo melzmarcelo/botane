@@ -22,12 +22,9 @@ from database import get_cursor
 from seguranca import Contexto, contexto_atual, unidade_atual
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
-from services import relatorios
+from services import periodos, relatorios
 
 router = APIRouter(prefix="/inicio", tags=["Início"])
-
-MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
-         "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
 
 def _float(v):
@@ -37,10 +34,17 @@ def _float(v):
 @router.get("")
 def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
     hoje = date.today()
-    inicio = hoje.replace(day=1)
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # ⚠️ O painel do dono abre no PERÍODO DA CASA, não no mês. Numa casa que
+        # fecha toda semana, um food cost "de agosto" na tela inicial é um
+        # número que ela nunca usou para decidir nada — e que não bate com o
+        # fechamento que ela assinou no domingo.
+        ciclo = periodos.config(cur, id_unidade)
+        inicio, fim_do_ciclo = periodos.periodo_do_dia(
+            hoje, ciclo["ciclo"], dia_semana=ciclo["dia_semana"], dia_mes=ciclo["dia_mes"])
+        fim = min(fim_do_ciclo, hoje)
 
         # ---- operação: contagem, não dinheiro. Vale para qualquer pessoa. ----
         cur.execute(
@@ -71,8 +75,9 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
         resposta = {
             "periodo": {
                 "inicio": inicio,
-                "fim": hoje,
-                "rotulo": f"{MESES[hoje.month - 1]} de {hoje.year}",
+                "fim": fim,
+                "rotulo": periodos.rotulo(inicio, fim_do_ciclo, ciclo["ciclo"]),
+                "ciclo": ciclo["ciclo"],
             },
             "operacao": operacao,
             "alertas": alertas_motor.levantar(cur, id_unidade),
@@ -83,7 +88,7 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
         if not ctx.pode("cmv.painel"):
             return resposta
 
-        a = cmv_motor.apurar(cur, id_unidade, inicio, hoje)
+        a = cmv_motor.apurar(cur, id_unidade, inicio, fim)
         estoque_agora = cmv_motor.valor_do_estoque(cur, id_unidade)
         receita = float(a["receita"])
 
@@ -103,7 +108,7 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
         }
 
         if ctx.pode("cmv.relatorios") or ctx.pode("cmv.painel"):
-            grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, hoje, "setor")
+            grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, "setor")
             resposta["pesos"] = [
                 {"grupo": g["grupo"], "cmv": float(g["cmv"]),
                  "participacao_pct": g["participacao_pct"]}

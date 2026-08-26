@@ -14,7 +14,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
  * tinha, o que entrou, o que saiu, o que sobrou —, que é o que se confere
  * contra a prateleira e o que vai para o contador.
  *
- * Mês FECHADO vem congelado do fechamento; mês aberto é calculado na hora. A
+ * Período FECHADO vem congelado do fechamento; aberto é calculado na hora. A
  * tela diz qual dos dois, porque mandar adiante um número que ainda pode mudar
  * é exatamente o que este relatório existe para evitar.
  */
@@ -42,8 +42,15 @@ type Resposta = {
   fim: string;
   congelado: boolean;
   competencia: string | null;
-  /** Preenchido quando o recorte cai DENTRO de um mês fechado sem ser ele. */
-  mes_fechado: { competencia: string; inicio: string; fim: string } | null;
+  /** Quantos períodos já fechados este recorte ENGLOBA (a relação inversa). */
+  periodos_fechados_dentro?: number;
+  /** Preenchido quando o recorte cai DENTRO de um período fechado sem ser ele. */
+  mes_fechado: {
+    competencia: string;
+    inicio: string;
+    fim: string;
+    rotulo?: string;
+  } | null;
   produtos: number;
   total: {
     valor_inicial: number;
@@ -126,19 +133,34 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
       descricao="O que cada produto tinha, o que entrou, o que saiu e o que sobrou."
       acao={
         dados.congelado ? (
-          <Etiqueta cor="erva">mês fechado · congelado</Etiqueta>
+          <Etiqueta cor="erva">período fechado · congelado</Etiqueta>
         ) : (
-          <Etiqueta cor="alerta">mês aberto · ainda muda</Etiqueta>
+          <Etiqueta cor="alerta">período aberto · ainda muda</Etiqueta>
         )
       }
     >
+      {/* ⚠️ Dois avisos, duas relações diferentes. O de baixo é o recorte que cai
+          DENTRO de um fechamento; este é o recorte que ENGLOBA fechamentos —
+          o caso que só existe desde que a casa pode fechar por semana ou por
+          dia, e em que o número na tela mistura congelado com o que ainda muda. */}
+      {!dados.mes_fechado && (dados.periodos_fechados_dentro ?? 0) > 0 && (
+        <div className="mb-4">
+          <Aviso tipo="info">
+            Este recorte atravessa {dados.periodos_fechados_dentro} período
+            {(dados.periodos_fechados_dentro ?? 0) > 1 ? "s" : ""} já fechado
+            {(dados.periodos_fechados_dentro ?? 0) > 1 ? "s" : ""} — o número abaixo soma o que
+            já está congelado com o que ainda pode mudar. Para o contador, mande cada período
+            fechado separado.
+          </Aviso>
+        </div>
+      )}
+
       {dados.mes_fechado && (
         <div className="mb-4">
           <Aviso tipo="info">
-            Este recorte cai dentro de um mês já fechado. O número definitivo é o do mês
-            inteiro ({new Date(dados.mes_fechado.inicio + "T12:00").toLocaleDateString("pt-BR")}{" "}
-            a {new Date(dados.mes_fechado.fim + "T12:00").toLocaleDateString("pt-BR")}) — é ele
-            que fica congelado e é ele que vai para o contador.
+            Este recorte cai dentro de um período já fechado. O número definitivo é o do
+            período inteiro ({dados.mes_fechado.rotulo ?? `${dados.mes_fechado.inicio} a ${dados.mes_fechado.fim}`})
+            — é ele que fica congelado e é ele que vai para o contador.
           </Aviso>
         </div>
       )}
@@ -188,7 +210,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
                     </span>
                   </td>
                   {/* Quantidade em cima, dinheiro embaixo: quem confere a
-                      prateleira olha a quantidade; quem fecha o mês, o valor. */}
+                      prateleira olha a quantidade; quem fecha o período, o valor. */}
                   <td className="num whitespace-nowrap">
                     {qtd(l.qtd_inicial)} {l.um_estoque ?? ""}
                     <span className="block text-[12.5px] text-suave">
@@ -224,7 +246,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
             <tfoot>
               <tr className="border-t-2 border-linha2 font-semibold">
                 {/* O total é sempre de TUDO: filtrar a vista não pode mudar o
-                    número que fecha o mês. */}
+                    número que fecha o período. */}
                 <td>Total {alvo ? "— de todos, não do filtro" : ""}</td>
                 <td className="num">{reais(t.valor_inicial)}</td>
                 <td className="num text-erva">{reais(t.valor_entradas)}</td>
@@ -249,10 +271,19 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
         ) : (
           <span className="text-erro">
             A conta não fecha por {reais(Math.abs(diferenca))} (inicial + entradas − saídas ≠
-            final). Isso é do razão, não deste relatório. A causa quase sempre é a mesma: saída
-            lançada com <b>saldo negativo</b> — ela sai por um custo provisório, e a entrada que
-            chega depois revaloriza o que já tinha saído. Procure os produtos com saldo abaixo de
-            zero no período e lance a entrada que faltava.
+            final). Isso é do razão, não deste relatório, e são duas as causas conhecidas.{" "}
+            <b>Saída com saldo negativo</b>: ela sai por um custo provisório, e a entrada que
+            chega depois revaloriza o que já tinha saído — procure os produtos com saldo abaixo
+            de zero no período e lance a entrada que faltava.{" "}
+            {/* ⚠️ A segunda causa só aparece em recorte que termina antes de hoje, e ficou
+                visível quando a casa passou a fechar por semana e por dia: o saldo de uma data
+                passada é lido da fotografia do último movimento antes dela, e essa fotografia
+                foi calculada na ordem de LANÇAMENTO. Um movimento retroativo entra depois de
+                tudo e carrega uma fotografia que já inclui o que veio antes dele na fila. */}
+            <b>Lançamento retroativo</b>: movimento gravado hoje com data de trás carrega a
+            fotografia de saldo do momento em que foi gravado, não da data que tem — então o
+            começo do período sai contaminado. Feche os períodos em dia: fechado, o retroativo
+            só passa com permissão.
           </span>
         )}
       </p>

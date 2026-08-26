@@ -174,6 +174,16 @@ if (jaExiste) {
 // começo, vale para todas — inclusive numa instalação virgem.
 await garantirLocal();
 
+// ⚠️ **E precisa do ritmo MENSAL, garantido — não suposto.** Quase tudo daqui
+// para baixo lê o período CORRENTE da loja: o painel de CMV, a tela inicial e a
+// movimentação por produto. Com a loja em SEMANAL ou DIARIO, esses recortes
+// ficam de poucos dias, e a identidade "inicial + entradas − saídas = final"
+// abre por causa dos lançamentos retroativos que as outras suítes deixam na
+// base (ver `docs/o-que-falta.md`). A fase 10a troca o ritmo de propósito e o
+// devolve; aqui é a precondição de todo o resto.
+await api("PUT", "/unidades/1/parametros",
+  { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+
 mkdirSync(FOTOS, { recursive: true });
 const navegador = await puppeteer.launch({
   executablePath: CHROME,
@@ -1424,13 +1434,13 @@ try {
     const cabecalhos = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
     return {
       colunas: ["Inicial", "Entradas", "Saídas", "Final"].every((c) => cabecalhos.includes(c)),
-      situacao: /mês (aberto|fechado)/i.test(texto),
+      situacao: /período (aberto|fechado)/i.test(texto),
       fecha: /a conta fecha/i.test(texto),
       naoFecha: /A conta não fecha/i.test(texto),
     };
   });
   checar("a movimentação mostra inicial, entradas, saídas e final", mov.colunas, mov);
-  checar("e diz se o mês está aberto ou congelado", mov.situacao, mov);
+  checar("e diz se o período está aberto ou congelado", mov.situacao, mov);
   checar("com a identidade conferida na própria tela", mov.fecha && !mov.naoFecha, mov);
   await foto(p, "24b-movimentacao");
 
@@ -1831,6 +1841,98 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
+  console.log("10a. ritmo do fechamento: dia, semana ou mês");
+  // ⚠️ **A loja volta a MENSAL no fim deste bloco.** O ritmo muda o período em
+  // que o painel de CMV e a tela inicial abrem; deixá-lo em SEMANAL faria as
+  // suítes de API seguintes apurarem outro recorte e acusarem diferença sem
+  // que nada tivesse quebrado. Mesma lição do modo `simulado` do Omie.
+  aoTerminar.push(async () => {
+    await api("PUT", "/unidades/1/parametros",
+      { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+  });
+
+  // ⚠️ Parte de MENSAL em vez de supor: a base é compartilhada, e uma suíte
+  // anterior que estourou no meio pode ter deixado a loja noutro ritmo.
+  await api("PUT", "/unidades/1/parametros",
+    { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+
+  await irPara(p, `${WEB}/lojas`);
+  await new Promise((r) => setTimeout(r, 1600));
+  // ⚠️ O título está num `.rotulo`, que o CSS põe em maiúsculas — e `innerText`
+  // devolve o texto RENDERIZADO, não o que está no JSX. Procurar pela frase
+  // como ela foi escrita não acha nada.
+  const temRitmo = await p.evaluate(() =>
+    /ritmo do fechamento do cmv/i.test(document.body.innerText));
+  checar("a tela de Lojas oferece o ritmo do fechamento", temRitmo);
+
+  // No mensal só existe a pergunta do mês: oferecer também o dia da semana
+  // seria pedir uma resposta que não muda nada.
+  const seletores = () =>
+    p.evaluate(() => {
+      const rotulos = [...document.querySelectorAll("label")].map((l) =>
+        l.textContent?.trim() ?? "");
+      return {
+        temSemana: rotulos.some((r) => r.startsWith("Dia em que a semana fecha")),
+        temMes: rotulos.some((r) => r.startsWith("Dia em que o mês começa")),
+        frase: document.body.innerText.match(/Fecha .+/)?.[0] ?? "",
+        etiquetas: [...document.querySelectorAll("section .etiqueta, section span")]
+          .map((e) => e.textContent?.trim()).filter((t) => /\d{2}\/\d{2}\/\d{4}/.test(t ?? "")),
+      };
+    });
+  const mensal = await seletores();
+  checar("no mensal, pergunta o dia de início do mês", mensal.temMes, mensal);
+  checar("e NÃO pergunta o dia da semana", !mensal.temSemana, mensal);
+  checar("a frase confirma o que foi escolhido",
+    /Fecha no fim do mês/.test(mensal.frase), mensal.frase);
+
+  // Trocar para semanal muda a pergunta e a prévia — que vem do servidor, do
+  // mesmo código que vai fechar o período de verdade.
+  await p.evaluate(() => {
+    const sel = [...document.querySelectorAll("select")]
+      .find((s) => [...s.options].some((o) => o.value === "SEMANAL"));
+    if (!sel) return;
+    sel.value = "SEMANAL";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  const semanal = await seletores();
+  checar("no semanal, pergunta o dia em que a semana fecha", semanal.temSemana, semanal);
+  checar("e some a pergunta do mês", !semanal.temMes, semanal);
+  checar("a prévia diz em que dia fecha",
+    /Fecha todo domingo/.test(semanal.frase), semanal.frase);
+  checar("e mostra os próximos períodos", semanal.etiquetas.length >= 3, semanal.etiquetas);
+  await foto(p, "26-ritmo-semanal");
+
+  // Salvar e conferir que o painel de CMV passou a abrir na SEMANA.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")].find((b) => b.textContent === "Salvar")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1500));
+  await irPara(p, `${WEB}/cmv`);
+  await new Promise((r) => setTimeout(r, 2200));
+  const noCmv = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const opcoes = [...document.querySelectorAll("select")]
+      .flatMap((s) => [...s.options].map((o) => o.textContent?.trim() ?? ""));
+    return {
+      temSeletor: opcoes.some((o) => /^semana de /.test(o)),
+      emCurso: opcoes.some((o) => /em curso/.test(o)),
+      botao: [...document.querySelectorAll("button")]
+        .map((b) => b.textContent?.trim() ?? "").find((t) => t.startsWith("Fechar")) ?? "",
+      texto,
+    };
+  });
+  checar("o painel de CMV oferece as semanas para escolher", noCmv.temSeletor, noCmv.botao);
+  checar("e marca qual está em curso", noCmv.emCurso, noCmv.botao);
+  // ⚠️ O botão nomeia o período: "Fechar o mês" numa casa que fecha por semana
+  // é a tela discordando do que o servidor vai fazer.
+  checar("o botão de fechar nomeia o período, não o mês",
+    !/mês/.test(noCmv.botao), noCmv.botao);
+  await foto(p, "26b-cmv-semanal");
+
+  await api("PUT", "/unidades/1/parametros",
+    { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+
   console.log("10b. paginação: o padrão das listas");
   // O rodapé de página é o mesmo em todo grid. Aqui se prova o CONTRATO dele:
   // diz quantos existem, anda, deixa escolher o tamanho e lembra a escolha.
@@ -1839,9 +1941,15 @@ try {
   // bloco inteiro morria num seletor que não existe — e a culpa parecia ser da
   // paginação, não da base vazia.
   const marcaPag = String(Date.now()).slice(-5);
+  // ⚠️ **Os 25 são SEMPRE deste teste, não "até chegar a 25 na base".** A conta
+  // antiga partia do total existente: com a base já passando de 25 produtos —
+  // que é o normal depois de qualquer bateria, e o certo depois de uma
+  // importação real — o laço não criava nada, e a busca por `${marcaPag}-0`
+  // logo abaixo não achava nenhum. O rodapé sumia com a lista vazia e a
+  // checagem acusava a paginação por um problema que era do dado. É a mesma
+  // lição das suítes de API: cada teste procura os registros DELE.
   const criadosPag = [];
-  const { total: quantosProdutos } = await api("GET", "/produtos?limite=1", null, token);
-  for (let i = quantosProdutos ?? 0; i < 25; i++) {
+  for (let i = 0; i < 25; i++) {
     const { dados } = await api("POST", "/produtos",
       { nome: `Pag tela ${marcaPag}-${String(i).padStart(2, "0")}`, tipo: "INSUMO",
         um_estoque: "UN" }, token);

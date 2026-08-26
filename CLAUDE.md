@@ -394,6 +394,36 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   setor" em vez de sumir na junção. `evolucao_de_preco` ordena pelo **impacto em reais**, não
   pelo percentual: 8% num item semanal dói mais que 60% num trimestral. Base é o **custo de
   aquisição** (frete dentro), não o valor de tabela.
+- **O fechamento tem três ritmos** (`services/periodos.py`, migração 028, 25/08/2026):
+  `MENSAL` (o padrão e o de sempre), `SEMANAL` (escolhendo o dia em que a semana fecha) e
+  `DIARIO`. A casa que viu a apresentação fecha o CMV toda **semana** — mês é o ritmo do
+  contador, e uma variância que só aparece no dia 30 chega tarde para virar decisão. Escolhe-se
+  em `parametros.ciclo_fechamento` + `fechamento_dia_semana` (ISO: 1 = segunda, 7 = domingo).
+  ⚠️ **A pergunta "que período é este dia?" é feita num lugar só.** O mês estava escrito por
+  dentro de quatro: o fechamento, o painel de CMV, a tela inicial e a frase com que o razão
+  recusa lançamento. Trocar o ritmo em um deles faria o sistema discordar de si mesmo.
+  ⚠️ **`dia_fechamento_cmv` era campo MORTO** — estava na tela de Lojas e ninguém lia. Virou o
+  dia em que o mês do CMV COMEÇA: 1 dá o mês do calendário (idêntico ao de antes), 26 dá o
+  ciclo 26/07–25/08 de quem fecha junto com o fornecedor. Limitado a 28: dia 30 não existe em
+  fevereiro, e período de tamanho variável não compara com o anterior.
+  ⚠️ **Período que ainda não terminou não fecha.** A conferência antiga (`competencia > mês
+  corrente`) deixava fechar o mês CORRENTE: no dia 25, congelar agosto travava os seis dias que
+  ainda iam acontecer. O corte é `fim > hoje`, e não `>=`, porque o dia do fechamento pertence
+  ao período que ele encerra — recusar o último dia deixaria a casa sempre um período atrasada.
+  ⚠️ **Períodos fechados não se sobrepõem** (409 nomeando o outro): quem fechava por mês e passa
+  a fechar por semana teria dois congelados dizendo coisas diferentes sobre os mesmos dias.
+  ⚠️ `cmv_fechamentos.ciclo` entra na unicidade (`ux_fechamento_ciclo`) — sem ele a semana que
+  começa no dia 1 colidiria com o mês que começa no dia 1, e o `ON CONFLICT` sobrescreveria um
+  com o outro em silêncio.
+  ⚠️ **O nome do período vem do SERVIDOR** (`periodos.rotulo`), nunca remontado no front: só a
+  coluna `ciclo` sabe se "01/08" é o mês de agosto ou a semana que começou nele. E o nome curto
+  ("agosto de 2026") só vale para o período INTEIRO — um recorte que para no dia 25 mostra as
+  duas pontas, senão manda-se ao contador um pedaço achando que é o mês.
+  ⚠️ A tela de Lojas mostra a prévia do calendário **pedindo ao servidor**
+  (`GET /unidades/{id}/parametros/previa-fechamento`), com os valores do formulário e sem
+  salvar: semana que fecha na quarta, mês que começa no 26 e dia corrido são três aritméticas,
+  e uma segunda implementação em TypeScript divergiria no primeiro caso de borda — aparecendo
+  como fechamento no período errado, que só se desfaz reabrindo.
 - **`services/cmv.py`**: `CMV real = estoque inicial + compras − estoque final`. O valor do
   estoque numa data sai do próprio razão (último movimento antes do corte já traz
   `saldo_apos` × `custo_medio_apos`) — não se recalcula série nenhuma.
@@ -503,14 +533,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (813 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (58), `smoke_omie.py` (92),
+- Testes (849 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (227, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (238, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
@@ -555,6 +585,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `CORS_ORIGINS` de propósito: é a porta dos fundos no dia em que o DNS quebrar.
   `verificar_deploy.py` agora lê o endereço de dentro do JavaScript compilado e o compara com
   o host conferido — é a única forma de ver essa variável depois do build.
+- ⚠️ **A fotografia do razão não sobrevive a lançamento retroativo — e não é dos ciclos.**
+  `saldo_apos` é calculado na ordem de LANÇAMENTO (decisão certa: por data, o CMV de ontem
+  mudaria sozinho). Como o saldo de uma data passada é lido do último movimento antes dela, um
+  retroativo gravado hoje entra como "o último" e devolve um saldo que já inclui o que veio
+  antes dele na fila. Resultado: `inicial + entradas − saídas = final` abre em recorte que
+  termina antes de hoje. No mês inteiro fecha, porque o retroativo e o que ele contamina caem os
+  dois dentro da janela — foi por isso que passou anos despercebido, com o mês sendo o único
+  período possível. A tela nomeia a causa; o conserto está em `docs/o-que-falta.md`.
+  ⚠️ Toda suíte que confere essa identidade tem de **garantir o ritmo MENSAL** antes, não supô-lo.
 - ⚠️ **Marcador de configuração vira dado, e dado ruim não avisa.** O `ADMIN_EMAIL` do
   primeiro deploy subiu com o `DEFINA_NO_PAINEL` do `app.yaml` copiado tal e qual: passou pela
   guarda (não era o valor padrão, e a senha tinha 16 caracteres) e criou um administrador

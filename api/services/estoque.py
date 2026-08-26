@@ -86,16 +86,23 @@ def _travar_periodo_fechado(cur, id_unidade: int, quando, pode_retroativo: bool)
         return
     data = quando.date() if hasattr(quando, "date") else quando
     cur.execute(
-        """SELECT competencia FROM cmv_fechamentos
+        """SELECT inicio, fim, ciclo FROM cmv_fechamentos
             WHERE id_unidade = %s AND status = 'FECHADO' AND %s BETWEEN inicio AND fim""",
         (id_unidade, data),
     )
     fechado = cur.fetchone()
     if fechado:
+        # ⚠️ A frase nomeia o PERÍODO, não o mês. Com fechamento semanal, dizer
+        # "o período de 08/2026 está fechado" mandaria quem lança procurar um
+        # mês inteiro na lista — e a semana que está travando o lançamento é uma
+        # linha de sete dias que ele não encontraria.
+        from services import periodos
+
+        nome = periodos.rotulo(fechado["inicio"], fechado["fim"], fechado["ciclo"] or "MENSAL")
         raise HTTPException(
             status_code=400,
             detail=(
-                f"O período de {fechado['competencia'].strftime('%m/%Y')} está fechado. "
+                f"O período de {nome} está fechado. "
                 "Reabra o período ou lance na data de hoje."
             ),
         )

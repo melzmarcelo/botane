@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -73,6 +75,16 @@ class UnidadeResponse(UnidadeCreate):
 
 
 class ParametrosUpdate(BaseModel):
+    # ⚠️ O ritmo do fechamento do CMV. Mensal é o padrão e o de sempre; a casa
+    # que conta a despensa toda semana fecha em SEMANAL, e quem confere o caixa
+    # toda noite, em DIARIO. Quem interpreta os três é `services/periodos.py`.
+    ciclo_fechamento: Literal["DIARIO", "SEMANAL", "MENSAL"] | None = None
+    # Dia em que a semana FECHA, no padrão ISO: 1 = segunda … 7 = domingo.
+    fechamento_dia_semana: int | None = Field(default=None, ge=1, le=7)
+    # ⚠️ Era campo MORTO — estava na tela de Lojas e ninguém lia. Agora é o dia
+    # em que o mês do CMV COMEÇA: 1 dá o mês do calendário (o padrão, e o
+    # comportamento de antes), 26 dá o ciclo 26/07–25/08. Limitado a 28 porque
+    # dia 30 não existe em fevereiro.
     dia_fechamento_cmv: int | None = Field(default=None, ge=1, le=28)
     bloquear_retroativo: bool | None = None
     permitir_saldo_negativo: bool | None = None

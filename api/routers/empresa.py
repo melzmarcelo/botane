@@ -4,7 +4,7 @@ Leitura é liberada a qualquer autenticado (o cabeçalho do app mostra o nome e 
 logo). Escrita exige a chave do módulo — o padrão de leitura x mutação da casa.
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
 import arquivos
 import auditoria
@@ -19,6 +19,7 @@ from models.empresa import (
     UnidadeUpdate,
 )
 from seguranca import Contexto, contexto_atual, requer_permissao
+from services import periodos
 
 router = APIRouter(tags=["empresa"])
 
@@ -187,6 +188,39 @@ def obter_parametros(id_unidade: int, ctx: Contexto = Depends(contexto_atual)) -
             )
             p = cur.fetchone()
     return dict(p)
+
+
+@router.get("/unidades/{id_unidade}/parametros/previa-fechamento")
+def previa_do_fechamento(
+    id_unidade: int,
+    ciclo: str = Query(default="MENSAL", pattern="^(DIARIO|SEMANAL|MENSAL)$"),
+    dia_semana: int = Query(default=7, ge=1, le=7),
+    dia_mes: int = Query(default=1, ge=1, le=28),
+    ctx: Contexto = Depends(contexto_atual),
+) -> dict:
+    """Como ficaria o calendário do CMV com esta escolha — antes de salvar.
+
+    ⚠️ Existe para NÃO haver uma segunda aritmética de período em TypeScript. A
+    semana que fecha na quarta, o mês que começa no dia 26 e o dia corrido são
+    três contas diferentes; escrevê-las de novo no front daria duas versões que
+    concordam hoje e divergem no primeiro caso de borda — com o detalhe de que
+    a divergência apareceria como um fechamento no período errado, que só se
+    desfaz reabrindo.
+
+    Os parâmetros vêm do formulário, não do banco: é uma prévia do que ainda
+    não foi salvo.
+    """
+    if not ctx.ve_unidade(id_unidade):
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
+    lista = periodos.periodos_ate_hoje(ciclo, 3, dia_semana=dia_semana, dia_mes=dia_mes)
+    return {
+        "descricao": periodos.descricao_do_ciclo(ciclo, dia_semana=dia_semana,
+                                                 dia_mes=dia_mes),
+        "periodos": [
+            {"inicio": str(i), "fim": str(f), "rotulo": periodos.rotulo(i, f, ciclo)}
+            for i, f in lista
+        ],
+    }
 
 
 @router.put("/unidades/{id_unidade}/parametros")

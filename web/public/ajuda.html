@@ -846,17 +846,63 @@
         </p>
       </div>
 
-      <h3>Fechar o mês</h3>
+      <h3>Fechar o período</h3>
       <p>
         O fechamento congela os números <em>e o relatório que os explica</em>: nome, código,
-        categoria e setor vão gravados, então renomear um produto depois não reescreve um mês
-        fechado. A partir do fechamento, movimento com data anterior é recusado — salvo para
-        quem tem a permissão de lançamento retroativo.
+        categoria e setor vão gravados, então renomear um produto depois não reescreve um
+        período fechado. A partir do fechamento, movimento com data dentro dele é recusado —
+        salvo para quem tem a permissão de lançamento retroativo.
       </p>
       <p>
         Reabrir é possível e fica registrado. O que não se faz é mexer no passado sem que nada
         acuse.
       </p>
+
+      <h3>De quanto em quanto tempo se fecha</h3>
+      <p>
+        Nem toda casa apura no fim do mês. Mês é o ritmo do contador; quem conta a despensa
+        costuma querer saber antes — uma variância que só aparece no dia 30 chega tarde para
+        virar decisão. O ritmo se escolhe em <strong>Lojas ▸ Parâmetros de operação</strong>, e
+        vale para o painel de CMV, a tela inicial e o que o estoque aceita lançar.
+      </p>
+      <table>
+        <thead><tr><th>Ritmo</th><th>O período é</th><th>Serve para</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Diariamente</strong></td>
+            <td>O dia</td>
+            <td>Quem confere o caixa e o estoque toda noite</td>
+          </tr>
+          <tr>
+            <td><strong>Semanalmente</strong></td>
+            <td>A semana que termina no dia escolhido</td>
+            <td>A casa que conta a despensa toda semana — escolhe-se o dia do fechamento</td>
+          </tr>
+          <tr>
+            <td><strong>Mensalmente</strong></td>
+            <td>O mês. Começando no dia 1, é o mês do calendário</td>
+            <td>O padrão. O dia de início pode mudar, para acompanhar o ciclo do fornecedor</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="regra">
+        <p class="rotulo">Período em curso não fecha</p>
+        <p>
+          Só se fecha depois do último dia do período — no próprio dia dele, se quiser. Fechar
+          antes congelaria dias que ainda não aconteceram, e a casa passaria a levar recusa ao
+          lançar o que faltava. Pela mesma razão, dois períodos fechados <strong>não podem se
+          sobrepor</strong>: se agosto já está fechado, uma semana dentro dele só fecha depois
+          de agosto ser reaberto.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Trocar o ritmo não reescreve o passado</p>
+        <p>
+          Cada fechamento guarda o ritmo com que foi feito, e continua aparecendo com o nome
+          dele — “agosto de 2026” não vira “semana de 01 a 07” porque a casa mudou de ideia
+          depois. Os períodos novos passam a seguir o ritmo novo, dali para a frente.
+        </p>
+      </div>
     </section>
 
     <!-- ============================================================== alertas -->
@@ -926,7 +972,7 @@
           <li><strong>Dinheiro e quantidade nunca em ponto flutuante.</strong> Custo unitário com seis casas.</li>
           <li><strong>Uma única regra de conversão.</strong> Ficha, produção e nota convertem pelo mesmo caminho — senão a mesma caixa vale 12 na entrada e 1 na receita.</li>
           <li><strong>O custo médio segue a ordem de lançamento</strong>, não a data do movimento. Recalcular por data faria o CMV de ontem mudar sozinho.</li>
-          <li><strong>Movimento no futuro não existe.</strong> Nem retroativo em mês fechado, sem permissão.</li>
+          <li><strong>Movimento no futuro não existe.</strong> Nem retroativo em período fechado, sem permissão.</li>
           <li><strong>Ficha é versionada</strong>, e o custo é congelado no momento do uso.</li>
           <li><strong>Importar duas vezes não duplica.</strong> Quem garante é o banco, por chave única — nunca o gatilho que disparou.</li>
           <li><strong>Nada de silent fail.</strong> Toda ação diz o que deu certo ou o que impediu.</li>
@@ -1012,7 +1058,7 @@
               <td>Estoque ▸ Inventário</td>
             </tr>
             <tr>
-              <td>Fechamento do mês</td>
+              <td>Fechamento do período</td>
               <td>Ação do gerente</td>
               <td><code>cmv_fechamentos</code>, <code>cmv_movimentacao</code></td>
               <td>CMV ▸ Painel</td>
