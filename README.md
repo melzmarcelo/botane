@@ -106,6 +106,7 @@ inteiro. O script **se recusa a rodar** se o banco não for local.
 | API — CMV (apuração, ABC, margem, fechamento) | `cd api && python tests/smoke_cmv.py` |
 | API — ciclos de fechamento (diário, semanal, mensal) | `cd api && python tests/smoke_ciclos.py` |
 | API — grupos do CMV por tipo de produto | `cd api && python tests/smoke_grupos_cmv.py` |
+| API — inventário por recorte (local, setor, categoria, tipo) | `cd api && python tests/smoke_inventario_filtros.py` |
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |

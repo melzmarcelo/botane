@@ -213,6 +213,34 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ O impacto previsto soma **todos** os itens, nunca os filtrados.
 - **`fonteDaLista()`** serve a janela a partir de uma lista já carregada (as receitas da
   produção). Mesma janela, outra origem.
+- **A contagem se monta por RECORTE** (`services/inventario_selecao.py`, migração 030,
+  26/08/2026): **local, setor, categoria e tipo de produto**, cada um opcional, combinando com
+  E, e vazio querendo dizer "todos". Contar a despensa inteira é raro — o que a casa faz é
+  contar a câmara fria, ou só as bebidas, ou só o hortifrúti antes da feira; antes disso a
+  única pergunta era o LOCAL, e quem quisesse um pedaço escolhia produto por produto.
+  ⚠️ **A linha da contagem virou o par produto × LOCAL** (`inventario_itens.id_local`, unicidade
+  `(inventário, produto, local)`). Sem local escolhido, o mesmo café pode ter saldo na câmara e
+  no seco: são duas prateleiras, duas contagens e dois ajustes. Sem isso o fechamento lançaria
+  os dois no mesmo lugar e sumiria com o estoque de um deles.
+  ⚠️ **`inventarios.id_local` virou NULO quando a contagem cobre vários.** Não é redundância: é
+  o atalho de que todo o resto depende, e continua sendo a resposta certa no caso comum.
+  ⚠️ **Contar sem dizer o local, com o produto em dois, é RECUSADO — não adivinhado.** O erro
+  só apareceria no fechamento, como falta num lugar e sobra no outro, e nada na tela denunciaria.
+  ⚠️ **A guarda deixou de ser "um inventário aberto por local"** e passou a ser o par
+  produto × local: contar as bebidas e o hortifrúti do mesmo local ao mesmo tempo é legítimo.
+  ⚠️ **Cega por padrão** (`InventarioCreate.cega = True`): a opção certa não pode depender de
+  alguém lembrar de marcá-la. Suíte que confere saldo congelado ou diferença passa `cega: False`
+  de propósito.
+  ⚠️ O vínculo é com o **tipo/setor/categoria do produto**, e o que gerou a lista fica gravado
+  (`filtro_*`): quem abre uma contagem de três meses atrás vê 40 produtos e precisa saber por
+  que aqueles 40.
+  ⚠️ **`/inventario` é só a LISTA; `/inventario/novo` monta.** O formulário morava no topo da
+  lista e empurrava as contagens para fora do campo de visão — com quatro filtros e a prévia não
+  caberia. Mesma separação de Compras. A prévia (`GET /inventarios/previa`) diz **quantas linhas
+  viriam, de quais locais**, antes do botão: numa base real o filtro em branco traz o cadastro
+  inteiro, e descobrir isso depois custa cancelar e recomeçar.
+  ⚠️ O **nome** é editável depois, inclusive com a contagem fechada — é rótulo, não mexe em item
+  nem em razão.
 - **A contagem tem tela própria, feita para o celular** (`/inventario/[id]`, 21/08/2026):
   quem conta anda pela despensa com o telefone, e uma tabela de dez colunas não serve na mão.
   Cada produto é um cartão; o progresso fica grudado no topo; há filtro "só o que falta".
@@ -559,15 +587,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (886 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (82), `smoke_cmv.py` (63), `smoke_omie.py` (92),
+- Testes (926 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
-  `smoke_grupos_cmv.py` (37),
+  `smoke_grupos_cmv.py` (37), `smoke_inventario_filtros.py` (39),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (246, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (251, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois

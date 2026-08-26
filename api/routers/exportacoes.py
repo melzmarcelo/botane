@@ -338,22 +338,28 @@ def inventario(id_inventario: int, ctx: Contexto = Depends(contexto_atual)) -> R
     _exige(ctx, "estoque.inventario")
     with get_cursor() as cur:
         cur.execute(
-            """SELECT i.data, i.status, i.cega, l.nome AS local FROM inventarios i
-                 JOIN locais_estoque l ON l.id = i.id_local WHERE i.id = %s""",
+            # ⚠️ `LEFT JOIN`: a contagem de vários locais não tem local único, e
+            # o `JOIN` a fazia sumir — a folha respondia 404 sem explicar nada.
+            """SELECT i.data, i.status, i.cega, i.nome,
+                      coalesce(l.nome, i.nome, 'vários locais') AS local
+                 FROM inventarios i
+                 LEFT JOIN locais_estoque l ON l.id = i.id_local WHERE i.id = %s""",
             (id_inventario,),
         )
         inv = cur.fetchone()
         if not inv:
             raise HTTPException(status_code=404, detail="Inventário não encontrado")
         cur.execute(
-            """SELECT p.codigo, p.nome AS produto, p.um_estoque, ii.qtd_sistema,
+            """SELECT p.codigo, p.nome AS produto, p.um_estoque,
+                      l.nome AS local, ii.qtd_sistema,
                       ii.qtd_contada, ii.custo_medio,
                       (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca,
                       round((coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema)
                             * ii.custo_medio, 2) AS impacto
                  FROM inventario_itens ii
                  JOIN produtos p ON p.id = ii.id_produto
-                WHERE ii.id_inventario = %s ORDER BY lower(p.nome)""",
+                 LEFT JOIN locais_estoque l ON l.id = ii.id_local
+                WHERE ii.id_inventario = %s ORDER BY lower(l.nome), lower(p.nome)""",
             (id_inventario,),
         )
         linhas = [dict(r) for r in cur.fetchall()]
@@ -361,7 +367,12 @@ def inventario(id_inventario: int, ctx: Contexto = Depends(contexto_atual)) -> R
     # Contagem CEGA aberta: a folha impressa é o caminho mais fácil de furar o
     # sigilo — quem conta leria o esperado no papel. As colunas do sistema saem.
     cega_aberta = inv["cega"] and inv["status"] == "ABERTO"
+    # ⚠️ A coluna do local só aparece quando a contagem cobre mais de um: numa
+    # folha de um local só ela seria a mesma palavra repetida em cada linha.
+    varios_locais = len({l["local"] for l in linhas}) > 1
     colunas = [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Unidade")]
+    if varios_locais:
+        colunas.append(("local", "Local"))
     if not cega_aberta:
         colunas.append(("qtd_sistema", "Saldo no sistema"))
     colunas.append(("qtd_contada", "Contado"))

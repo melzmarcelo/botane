@@ -311,10 +311,16 @@ for i in abertos or []:
     if i["status"] == "ABERTO" and i["id_local"] == principal["id"]:
         chamar("DELETE", f"/inventarios/{i['id']}", token=token)
 
+# ⚠️ **`cega: False` explícito.** A contagem passou a nascer CEGA por padrão —
+# ver o saldo esperado transforma a contagem em conferência. Esta fase confere
+# justamente o saldo congelado e a diferença, então ela pede o contrário de
+# propósito; sem isso, `qtd_sistema` vem nulo e o teste morre num `float(None)`.
 st, inv = chamar("POST", "/inventarios", {
     "id_local": principal["id"], "produtos": [cafe], "observacao": f"smoke {marca}",
+    "cega": False,
 }, token=token)
 checar("abre inventário", st == 201, inv)
+checar("e o nome nasce vazio quando ninguém dá um", inv.get("nome") is None, inv.get("nome"))
 id_inv = inv.get("id")
 criados["inventarios"].append(id_inv)
 sistema = float(inv["itens"][0]["qtd_sistema"])

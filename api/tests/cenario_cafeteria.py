@@ -330,8 +330,12 @@ conferir("e o seco recebe 5 L pelo mesmo médio",
 # ------------------------------------------------------------- 8. inventário
 print("\n8. inventário: a contagem acerta o razão")
 
+# ⚠️ `cega: False` de propósito: a contagem passou a nascer CEGA, e o cenário
+# confere o saldo congelado e a diferença número a número. Contagem cega
+# esconde os dois até fechar — o que é o certo para quem conta, e inútil para
+# quem está provando a conta.
 st, inv = chamar("POST", "/inventarios",
-                 {"id_local": seco["id"], "produtos": [cafe]}, token=token)
+                 {"id_local": seco["id"], "produtos": [cafe], "cega": False}, token=token)
 id_inv = precisa(inv.get("id"), f"não abriu o inventário: {inv}")
 conferir("o sistema acha 19,84 KG de café", inv["itens"][0]["qtd_sistema"], 19.84)
 st, r = chamar("PUT", f"/inventarios/{id_inv}/contagem",

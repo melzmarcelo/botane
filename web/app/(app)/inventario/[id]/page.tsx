@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { reais, UnidadeMedida } from "@/lib/cadastros";
+import { nomeTipo, reais, UnidadeMedida } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
@@ -33,6 +33,9 @@ type Unidade = { um: string; fator: number };
 
 type Item = {
   id_produto: number;
+  /** ⚠️ A linha é o par produto × local: o mesmo café pode estar em dois. */
+  id_local: number | null;
+  local: string | null;
   codigo: string;
   produto: string;
   um_estoque: string | null;
@@ -46,12 +49,16 @@ type Item = {
   diferenca: number | null;
   contado_por: string | null;
   observacao: string | null;
+  setor: string | null;
+  tipo: string | null;
   unidades: Unidade[];
 };
 
 type Inventario = {
   id: number;
-  id_local: number;
+  nome: string | null;
+  /** Nulo quando a contagem cobre mais de um local. */
+  id_local: number | null;
   local: string;
   data: string;
   status: string;
@@ -60,7 +67,24 @@ type Inventario = {
   contados: number;
   total_itens: number;
   diferenca_valor: number | null;
+  filtros?: {
+    locais: string[];
+    setores: string[];
+    categorias: string[];
+    tipos: string[];
+  } | null;
 };
+
+/**
+ * A identidade de uma linha da contagem.
+ *
+ * ⚠️ **Não é o produto.** Desde que a contagem virou um recorte, o mesmo café
+ * pode aparecer na câmara e no estoque seco — duas linhas, duas quantidades,
+ * dois ajustes. Com a chave sendo só `id_produto`, o rascunho de uma
+ * sobrescreveria o da outra e o React reclamaria de chave repetida.
+ */
+const chaveDe = (i: { id_produto: number; id_local: number | null }) =>
+  `${i.id_produto}:${i.id_local ?? 0}`;
 
 const qtd = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
@@ -75,8 +99,11 @@ export default function PaginaContagem() {
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [soPendentes, setSoPendentes] = useState(false);
-  const [rascunho, setRascunho] = useState<Record<number, { qtd: string; um: string }>>({});
-  const [gravando, setGravando] = useState<number | null>(null);
+  // ⚠️ A chave é `produto:local`, não o id do produto — ver `chaveDe`.
+  const [rascunho, setRascunho] = useState<Record<string, { qtd: string; um: string }>>({});
+  const [gravando, setGravando] = useState<string | null>(null);
+  const [renomeando, setRenomeando] = useState(false);
+  const [nomeNovo, setNomeNovo] = useState("");
   const [fechando, setFechando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
@@ -99,7 +126,7 @@ export default function PaginaContagem() {
   // O que a pessoa digitou, item a item — o servidor devolve o convertido, e
   // sobrescrever o campo enquanto ela digita seria arrancar o texto da mão.
   const valorDe = (i: Item) =>
-    rascunho[i.id_produto]?.qtd ??
+    rascunho[chaveDe(i)]?.qtd ??
     (i.qtd_informada !== null && i.qtd_informada !== undefined
       ? String(Number(i.qtd_informada))
       : i.qtd_contada !== null
@@ -107,7 +134,7 @@ export default function PaginaContagem() {
         : "");
 
   const unidadeDe = (i: Item) =>
-    rascunho[i.id_produto]?.um ?? i.um_informada ?? i.um_estoque ?? "";
+    rascunho[chaveDe(i)]?.um ?? i.um_informada ?? i.um_estoque ?? "";
 
   /**
    * Em que unidades este produto pode ser contado.
@@ -151,14 +178,28 @@ export default function PaginaContagem() {
     return lista;
   };
 
+  async function salvarNome() {
+    try {
+      await api.put(`/inventarios/${id}/nome`, { nome: nomeNovo.trim() });
+      setRenomeando(false);
+      await carregar();
+      aviso.sucesso("Nome atualizado.");
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível renomear");
+    }
+  }
+
   async function gravarItem(item: Item, texto: string, um: string) {
     const limpo = texto.trim().replace(",", ".");
-    setGravando(item.id_produto);
+    setGravando(chaveDe(item));
     try {
       const r = await api.put<Inventario>(`/inventarios/${id}/contagem`, {
         itens: [
           {
             id_produto: item.id_produto,
+            // ⚠️ Vai sempre, mesmo na contagem de um local só: sem ele o
+            // servidor recusa quando o produto está em duas prateleiras.
+            id_local: item.id_local,
             qtd_contada: limpo === "" ? null : Number(limpo),
             um: um || null,
             observacao: item.observacao,
@@ -168,7 +209,7 @@ export default function PaginaContagem() {
       setInv(r);
       // O rascunho sai do caminho: daqui em diante vale o que o servidor diz.
       setRascunho((a) => {
-        const { [item.id_produto]: _fora, ...resto } = a;
+        const { [chaveDe(item)]: _fora, ...resto } = a;
         return resto;
       });
     } catch (e) {
@@ -220,19 +261,84 @@ export default function PaginaContagem() {
         <Link href="/inventario" className="link-voltar">
           inventários
         </Link>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
-          Contagem · {inv.local}
-        </h1>
+        {/* ⚠️ "Contagem" saiu do <h1> e virou o rótulo acima dele. O título
+            agora é o NOME que a pessoa deu — e "Contagem · Contagem do Natal"
+            seria a palavra duas vezes. Sem o rótulo, uma contagem chamada
+            "Estoque seco" pareceria a tela do local. */}
+        <p className="rotulo mt-3">Contagem</p>
+        {/* ⚠️ O nome é editável DEPOIS de aberta, e também depois de fechada.
+            Quem procura "a contagem do Natal" seis meses depois não deveria
+            depender de ter acertado o nome na abertura — é rótulo, não mexe em
+            item nem em razão. */}
+        {renomeando ? (
+          <form
+            className="mt-1 flex flex-wrap items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void salvarNome();
+            }}
+          >
+            <label className="min-w-0 flex-1">
+              <span className="rotulo">Nome da contagem</span>
+              <input
+                className="campo mt-1.5"
+                autoFocus
+                required
+                minLength={2}
+                maxLength={80}
+                value={nomeNovo}
+                onChange={(e) => setNomeNovo(e.target.value)}
+              />
+            </label>
+            <button className="btn btn-primario" type="submit">
+              Salvar
+            </button>
+            <button
+              className="btn btn-secundario"
+              type="button"
+              onClick={() => setRenomeando(false)}
+            >
+              Cancelar
+            </button>
+          </form>
+        ) : (
+          <h1 className="mt-1 flex flex-wrap items-baseline gap-x-3 text-[24px] font-bold tracking-tight sm:text-[30px]">
+            {inv.nome || inv.local}
+            {pode("estoque.inventario") && (
+              <button
+                className="rotulo hover:text-erva"
+                onClick={() => {
+                  setNomeNovo(inv.nome || inv.local);
+                  setRenomeando(true);
+                }}
+              >
+                renomear
+              </button>
+            )}
+          </h1>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Etiqueta>
             {new Date(inv.data + "T12:00").toLocaleDateString("pt-BR")}
           </Etiqueta>
+          {/* Quando a contagem cobre mais de um local, o cabeçalho diz de onde
+              ela é — a lista de itens sozinha não responde isso de relance. */}
+          {inv.id_local === null && <Etiqueta>vários locais</Etiqueta>}
           {aberto ? (
             <Etiqueta cor="alerta">aberto</Etiqueta>
           ) : (
             <Etiqueta cor="erva">fechado</Etiqueta>
           )}
           {inv.cega && <Etiqueta>contagem cega</Etiqueta>}
+          {(inv.filtros?.setores ?? []).map((x) => (
+            <Etiqueta key={`s-${x}`}>setor {x}</Etiqueta>
+          ))}
+          {(inv.filtros?.categorias ?? []).map((x) => (
+            <Etiqueta key={`c-${x}`}>{x}</Etiqueta>
+          ))}
+          {(inv.filtros?.tipos ?? []).map((x) => (
+            <Etiqueta key={`t-${x}`}>{nomeTipo(x)}</Etiqueta>
+          ))}
         </div>
       </header>
 
@@ -310,16 +416,19 @@ export default function PaginaContagem() {
         <ul className="flex flex-col gap-2.5">
           {itens.map((i) => (
             <LinhaContagem
-              key={i.id_produto}
+              key={chaveDe(i)}
               item={i}
               aberto={!!aberto}
+              // O local aparece na linha só quando a contagem tem mais de um:
+              // repetir a mesma palavra em todas seria ruído.
+              mostrarLocal={inv.id_local === null}
               podeCadastrar={pode("cadastros.produtos")}
-              gravando={gravando === i.id_produto}
+              gravando={gravando === chaveDe(i)}
               valor={valorDe(i)}
               unidade={unidadeDe(i)}
               opcoes={opcoesDe(i)}
               aoDigitar={(qtdTexto, um) =>
-                setRascunho((a) => ({ ...a, [i.id_produto]: { qtd: qtdTexto, um } }))
+                setRascunho((a) => ({ ...a, [chaveDe(i)]: { qtd: qtdTexto, um } }))
               }
               aoGravar={(qtdTexto, um) => void gravarItem(i, qtdTexto, um)}
             />
@@ -383,6 +492,7 @@ export default function PaginaContagem() {
 function LinhaContagem({
   item,
   aberto,
+  mostrarLocal,
   podeCadastrar,
   gravando,
   valor,
@@ -393,6 +503,7 @@ function LinhaContagem({
 }: {
   item: Item;
   aberto: boolean;
+  mostrarLocal: boolean;
   podeCadastrar: boolean;
   gravando: boolean;
   valor: string;
@@ -422,6 +533,12 @@ function LinhaContagem({
             <span className="mono">{item.codigo}</span>
             {item.categoria ? ` · ${item.categoria}` : ""}
           </p>
+          {/* ⚠️ O local vira o destaque da linha quando a contagem cobre mais
+              de um: sem ele, duas linhas do mesmo produto ficam idênticas na
+              tela, e quem conta não sabe qual prateleira está na frente. */}
+          {mostrarLocal && item.local && (
+            <p className="mt-1 text-[13px] font-semibold text-erva">{item.local}</p>
+          )}
         </div>
         {contado && dif !== null && (
           <Etiqueta cor={dif === 0 ? "erva" : "alerta"}>

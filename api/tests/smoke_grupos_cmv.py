@@ -203,7 +203,11 @@ checar("o grupo aparece no painel", grupo_antes is not None,
        [g["nome"] for g in antes.get("grupos", [])])
 base_grupo = float(grupo_antes["cmv"]) if grupo_antes else 0.0
 base_cmv = float(antes["cmv_real"])
-checar("e começa em zero, porque nada foi comprado ainda", perto(base_grupo, 0), base_grupo)
+# ⚠️ **Não afirmar "começa em zero".** A base é compartilhada e produto com
+# movimento vira INATIVO em vez de sumir: qualquer suíte que compre uma
+# embalagem deixa valor neste grupo para sempre. O que se afirma daqui para
+# baixo é o DELTA — a linha de base é só o ponto de partida.
+checar("e traz um número, não nulo", isinstance(base_grupo, float), base_grupo)
 
 for id_produto, quanto in ((id_limpeza, 40.0), (id_embalagem, 60.0), (id_insumo, 100.0)):
     st, r = chamar("POST", "/estoque/entradas", {

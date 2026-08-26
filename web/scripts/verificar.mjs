@@ -544,19 +544,64 @@ try {
   await api("POST", "/estoque/entradas",
     { id_produto: insumoInv.id, quantidade: 3, custo_unitario: 5, id_local: localInv?.id },
     token);
+  // ⚠️ Montar a contagem virou tela própria (`/inventario/novo`): com quatro
+  // filtros e a prévia, o formulário não cabia mais no topo da lista. Aqui se
+  // consulta; lá se monta.
   await p.goto(`${WEB}/inventario`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
-  const localEscolhido = await p.evaluate(() => {
-    const s = document.querySelector("select");
-    return s ? { valor: s.value, texto: s.options[s.selectedIndex]?.text } : null;
+  const listaInv = await p.evaluate(() => ({
+    temBotao: [...document.querySelectorAll("a")].some(
+      (a) => a.textContent?.trim() === "Nova contagem"),
+    // ⚠️ O rodapé de paginação TAMBÉM tem um select ("Registros por página"):
+    // procurar "algum select" acusaria o formulário que já não existe.
+    semFormulario: ![...document.querySelectorAll("span.rotulo")]
+      .some((r) => r.textContent?.trim() === "Local"),
+  }));
+  checar("a lista tem o botão de nova contagem", listaInv.temBotao, listaInv);
+  checar("e não carrega mais o formulário de abertura", listaInv.semFormulario, listaInv);
+
+  await irPara(p, `${WEB}/inventario/novo`);
+  await new Promise((r) => setTimeout(r, 1800));
+  const noNovo = await p.evaluate(() => {
+    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) =>
+      x.textContent?.trim());
+    const cega = [...document.querySelectorAll('input[type="checkbox"]')].pop();
+    return {
+      filtros: ["Locais", "Setores", "Categorias", "Tipos de produto"].filter((f) =>
+        rotulos.includes(f)),
+      cegaMarcada: cega?.checked ?? null,
+      previa: /linha\(s\) para contar/.test(document.body.innerText),
+    };
   });
-  checar("o seletor de local vem preenchido", !!localEscolhido?.valor, localEscolhido);
+  checar("a tela nova oferece os quatro filtros", noNovo.filtros.length === 4, noNovo.filtros);
+  // ⚠️ Cega MARCADA por padrão: ver o esperado transforma a contagem em
+  // conferência, e a opção certa não pode depender de alguém lembrar.
+  checar("com a contagem cega já marcada", noNovo.cegaMarcada === true, noNovo);
+  checar("e a prévia diz quantas linhas viriam", noNovo.previa, noNovo);
+  await foto(p, "28-inventario-novo");
+
+  // Estreitar por LOCAL tem de mudar o número da prévia — é o que prova que o
+  // filtro chega ao servidor, e não só ao estado da tela.
+  const totalDaPrevia = () =>
+    p.evaluate(() =>
+      Number(document.body.innerText.match(/(\d+)\s*linha\(s\) para contar/)?.[1] ?? -1));
+  const semFiltro = await totalDaPrevia();
+  await p.evaluate((nome) => {
+    const alvo = [...document.querySelectorAll("label")].find((l) =>
+      l.textContent?.trim() === nome);
+    alvo?.querySelector("input")?.click();
+  }, localInv?.nome);
+  await new Promise((r) => setTimeout(r, 1600));
+  const comLocal = await totalDaPrevia();
+  checar("escolher um local estreita a prévia", comLocal > 0 && comLocal <= semFiltro,
+    [semFiltro, comLocal]);
+
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find(
-      (x) => x.textContent === "Abrir inventário");
+      (x) => x.textContent?.startsWith("Abrir contagem"));
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 1600));
+  await new Promise((r) => setTimeout(r, 2200));
   const textoInv = await p.evaluate(() => document.body.innerText);
   // Contar tem tela própria: quem conta anda pela despensa com o celular, e
   // uma tabela de dez colunas não serve na mão.
@@ -763,7 +808,7 @@ try {
   // O sintoma que originou tudo isto: o seletor mostrava o local e o pedido
   // saía sem ele. Agora a contagem abre — e o título traz o nome do local.
   checar("a contagem abre sem dizer que o local não existe",
-    !/Local não encontrado/i.test(textoInv) && /Contagem ·/.test(textoInv),
+    !/Local não encontrado/i.test(textoInv) && /CONTAGEM/i.test(textoInv),
     textoInv.slice(0, 140));
 
   // Filtrar o razão. O razão cresce todo dia; sem filtro, achar um movimento
@@ -901,6 +946,22 @@ try {
   // no produto de OUTRO teste: a entrada de 10 kg ia para ele, o produto desta
   // rodada ficava com saldo zero e a checagem acusava a tela de não gravar.
   // Mesma regra das suítes de API: cada teste procura o registro DELE.
+  // ⚠️ **Refina DENTRO da janela antes de clicar.** A janela abriu com "Est",
+  // que numa base com várias rodadas traz dezenas de "Est tela NNNNN" — e o
+  // produto desta rodada pode nem estar na página exibida. Digitar o marcador
+  // no campo da própria janela é o que quem usa faria, e é o que garante que o
+  // clique cai no registro DESTE teste. (Clicar no primeiro da lista mandaria a
+  // entrada de 10 kg para o produto de outro teste — foi esse o bug.)
+  await p.evaluate((alvo) => {
+    const d = document.querySelector('[role="dialog"]');
+    const campo = d?.querySelector("input");
+    if (!campo) return;
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    set.call(campo, alvo);
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  }, `Est tela ${m4}`);
+  await new Promise((r) => setTimeout(r, 1400));
   await p.evaluate((alvo) => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return;

@@ -766,19 +766,55 @@
       </div>
 
       <p>
-        Abre-se um inventário para um local, conta-se produto a produto, e ao fechar o sistema
-        lança a diferença como ajuste. A tela de contagem é feita para o celular: quem conta
-        anda pela despensa com o telefone na mão, e cada produto é um cartão, não uma linha de
-        tabela de dez colunas.
+        Monta-se a contagem, conta-se produto a produto, e ao fechar o sistema lança a diferença
+        como ajuste. A tela de contagem é feita para o celular: quem conta anda pela despensa
+        com o telefone na mão, e cada produto é um cartão, não uma linha de tabela de dez
+        colunas.
       </p>
 
+      <h3>Montar a contagem</h3>
+      <p>
+        Contar a despensa inteira é raro. O que a casa faz é contar a câmara fria, ou só as
+        bebidas, ou só o hortifrúti antes da feira. Em <strong>Inventário ▸ Nova contagem</strong>
+        são quatro filtros — <strong>local, setor, categoria e tipo de produto</strong> —, cada
+        um opcional. Deixar em branco quer dizer <em>todos</em>, e eles se somam: setor
+        <em>cozinha</em> com tipo <em>insumo</em> traz os insumos da cozinha, não a soma dos
+        dois. A contagem também recebe um nome, que pode ser trocado depois — inclusive com ela
+        já fechada.
+      </p>
       <div class="regra">
-        <p class="rotulo">Contagem cega</p>
+        <p class="rotulo">A prévia antes do botão</p>
         <p>
-          Opção ao abrir. Ver o saldo esperado transforma a contagem em conferência — a pessoa
-          lê 12, olha a prateleira e escreve 12. Com a contagem cega, o saldo, a diferença e o
-          valor <strong>não saem do servidor</strong> enquanto o inventário está aberto:
-          esconder só na tela deixaria o número no papel impresso.
+          A tela mostra <strong>quantas linhas viriam e de quais locais</strong> antes de abrir.
+          Numa base grande, filtro em branco traz o cadastro inteiro — e descobrir isso depois
+          custa cancelar e recomeçar.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Cada prateleira é uma linha</p>
+        <p>
+          O mesmo café com saldo na câmara e no estoque seco vira <strong>duas linhas</strong>,
+          contadas separadamente — são duas prateleiras, e o ajuste de cada uma vai para o local
+          dela. Só entra o que tem saldo ou já se moveu nos locais escolhidos: produto que nunca
+          passou por ali não vira linha para alguém escrever zero.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Duas contagens não disputam a mesma prateleira</p>
+        <p>
+          Contar as bebidas e o hortifrúti do mesmo local ao mesmo tempo é legítimo. O que o
+          sistema recusa é o <em>mesmo produto no mesmo local</em> em duas contagens abertas: as
+          duas congelaram o saldo, as duas lançariam ajuste, e a segunda desfaria a primeira.
+        </p>
+      </div>
+
+      <div class="regra">
+        <p class="rotulo">Contagem cega — o padrão</p>
+        <p>
+          Vem marcada ao abrir, e dá para desmarcar. Ver o saldo esperado transforma a contagem
+          em conferência — a pessoa lê 12, olha a prateleira e escreve 12. Com a contagem cega, o
+          saldo, a diferença e o valor <strong>não saem do servidor</strong> enquanto o
+          inventário está aberto: esconder só na tela deixaria o número no papel impresso.
         </p>
       </div>
 

@@ -87,19 +87,38 @@ class ProducaoRequest(BaseModel):
 
 
 class InventarioCreate(BaseModel):
-    id_local: int
+    """Os quatro filtros combinam com E, e vazio quer dizer "todos"."""
+
+    nome: str | None = Field(default=None, max_length=80)
     data: date | None = None
     observacao: str | None = None
-    # Contagem cega: quem conta não vê o saldo esperado. Ver o esperado
-    # transforma a contagem em conferência — a pessoa lê 12, olha a prateleira
-    # e escreve 12.
-    cega: bool = False
-    # Vazio = puxa tudo o que tem saldo ou movimento no local.
-    produtos: list[int] = []
+    # ⚠️ **Cega por padrão.** Ver o saldo esperado transforma a contagem em
+    # conferência: a pessoa lê 12, olha a prateleira e escreve 12. O padrão
+    # antigo era o contrário, e a opção certa ficava dependendo de alguém
+    # lembrar de marcá-la.
+    cega: bool = True
+
+    # ⚠️ `id_local` continua aceito e é o caminho de sempre: um local só. Quando
+    # vem, vale como `locais = [ele]` — nada do que já chamava esta API mudou.
+    id_local: int | None = None
+    locais: list[int] = Field(default_factory=list)
+    setores: list[int] = Field(default_factory=list)
+    categorias: list[int] = Field(default_factory=list)
+    tipos: list[str] = Field(default_factory=list)
+    # Lista explícita: entra mesmo sem saldo, porque quem nomeou sabe o que quer.
+    produtos: list[int] = Field(default_factory=list)
+
+
+class InventarioRenomear(BaseModel):
+    nome: str = Field(min_length=2, max_length=80)
 
 
 class ContagemItem(BaseModel):
     id_produto: int
+    # ⚠️ O local da linha. Só é obrigatório quando a contagem cobre mais de um
+    # local E o produto aparece em dois — aí "o item do café" é ambíguo. Nas
+    # contagens de um local só, continua desnecessário.
+    id_local: int | None = None
     qtd_contada: float | None = Field(default=None, ge=0)
     # A unidade em que a pessoa CONTOU. Vazio = a de estoque, que é o padrão da
     # tela. Contar em caixa e deixar a conversão para a cabeça de quem conta é
@@ -114,7 +133,10 @@ class ContagemRequest(BaseModel):
 
 class InventarioResponse(BaseModel):
     id: int
-    id_local: int
+    nome: str | None = None
+    # ⚠️ Nulo quando a contagem cobre mais de um local — e aí `local` traz a
+    # frase que descreve o recorte, não um nome de prateleira.
+    id_local: int | None = None
     local: str
     data: date
     status: str
@@ -126,3 +148,6 @@ class InventarioResponse(BaseModel):
     contados: int = 0
     total_itens: int = 0
     diferenca_valor: float | None = None
+    # O que gerou a lista, para quem abrir a contagem meses depois entender por
+    # que são aqueles produtos e não outros.
+    filtros: dict | None = None
