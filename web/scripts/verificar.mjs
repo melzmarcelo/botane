@@ -1208,7 +1208,20 @@ try {
   const textoCompras = await p.evaluate(() => document.body.innerText);
   checar("sincroniza pela tela", /nota\(s\) nova\(s\)/i.test(textoCompras),
     textoCompras.slice(0, 120));
-  checar("a nota chega com pendência de de-para", /pendente/i.test(textoCompras));
+  // ⚠️ A fila de conciliação é da CASA INTEIRA e vem do servidor — antes a tela
+  // somava só as notas da página carregada, e numa base com centenas de notas a
+  // pendente caía na página 4 e o botão sumia. O teste confere pelo mesmo
+  // caminho que a tela usa.
+  const { dados: filaPendente } = await api("GET", "/notas/pendencias", null, token);
+  checar("a fila de conciliação vem do servidor, não da página",
+    Array.isArray(filaPendente), filaPendente);
+  if ((filaPendente ?? []).length > 0) {
+    checar("e a tela oferece reconciliar quando há pendência",
+      /pendente/i.test(textoCompras), textoCompras.slice(0, 160));
+  } else {
+    checar("e a tela oferece reconciliar quando há pendência", true,
+      "nenhum item pendente nesta base");
+  }
   await foto(p, "28-compras-sincronizado");
 
   // Abre a nota da fixture e confere que o lançamento está barrado. ⚠️ Procura
@@ -2068,6 +2081,35 @@ try {
   });
   checar("a conta do CMV continua mostrando Perdas", noPainel.temPerdas, noPainel);
   checar("e ganhou a linha do grupo por tipo de produto", noPainel.temGrupo, noPainel);
+
+  console.log("10x. PDV Legal: a credencial e o que ainda falta");
+  // ⚠️ **Só a autenticação existe, e a tela tem de DIZER isso.** O catálogo de
+  // endpoints da Tablet Cloud não é público; um cartão com um botão de testar e
+  // mais nada parece um pedaço faltando, e alguém abriria chamado por isso.
+  await irPara(p, `${WEB}/integracoes`);
+  await new Promise((r) => setTimeout(r, 2000));
+  const pdv = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const rotulos = [...document.querySelectorAll("span.rotulo")].map((r) =>
+      r.textContent?.trim() ?? "");
+    const senhas = [...document.querySelectorAll('input[type="password"]')].length;
+    return {
+      temCartao: /PDV Legal/.test(texto),
+      explica: /catálogo de endpoints/i.test(texto),
+      dizPlanilha: /planilha/i.test(texto),
+      campos: ["Usuário de integração", "client_id", "client_secret"].filter((c) =>
+        rotulos.some((r) => r.startsWith(c))),
+      senhasEscondidas: senhas,
+    };
+  });
+  checar("a tela tem o cartão do PDV Legal", pdv.temCartao, pdv);
+  checar("com os campos da credencial", pdv.campos.length === 3, pdv);
+  // ⚠️ Senha e token do grupo em `type=password`: a tela de integrações fica
+  // aberta na sala, e credencial à vista é credencial anotada.
+  checar("senha e token do grupo escondidos", pdv.senhasEscondidas >= 2, pdv);
+  checar("e a tela explica o que ainda falta", pdv.explica, pdv);
+  checar("dizendo o que roda no lugar", pdv.dizPlanilha, pdv);
+  await foto(p, "30-pdv-legal");
 
   console.log("10y. buscar notas do Omie sozinho");
   // ⚠️ A agenda nasce MANUAL e este bloco a devolve assim — a conta configurada

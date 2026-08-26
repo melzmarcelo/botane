@@ -461,6 +461,28 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - Credenciais ficam cifradas (`services/segredos.py`, Fernet com chave derivada do
   `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
   as credenciais guardadas.
+- **PDV Legal: a credencial e a autenticação existem; o importador NÃO** (`services/pdv/`,
+  `routers/pdv.py`, 26/08/2026). O `POST https://api.tabletcloud.com.br/token` é a **única
+  parte da API que a Tablet Cloud documenta publicamente**; o catálogo de endpoints — vendas do
+  dia, itens, cancelamentos, cardápio — fica no portal de parceiros, fechado. Escrever
+  importador sem ele é adivinhar endereço, que é o que custou uma conta bloqueada no Omie.
+  ⚠️ Então a tela **diz o que falta e o que roda no lugar** (planilha): cartão com botão de
+  testar e mais nada parece pedaço faltando, e alguém abre chamado por isso. `pendencia` e
+  `importador_disponivel` viajam no JSON justamente para a tela poder explicar.
+  ⚠️ **Nada volta em claro — nem o usuário.** Os quatro campos saem mascarados; campo em branco
+  MANTÉM o guardado, e exigir redigitar a senha para mudar o modo é o caminho mais curto para
+  alguém anotar a credencial num bloco de notas.
+  ⚠️ **Modo real exige os quatro.** Sem isso a primeira chamada devolve "não autorizado", e quem
+  configurou vai procurar a credencial errada.
+  ⚠️ O Bearer token vale ~6 h e fica **só na memória**, num cache de CLASSE protegido por lock:
+  cada requisição HTTP monta um cliente novo, e sem o cache duas telas abertas pediriam dois
+  tokens. Renova com 5 min de folga — usar até o último segundo faz a requisição da virada
+  falhar com 401, que parece credencial errada. Um 401 tenta UMA vez com token novo; mais que
+  isso é queimar tentativa de login.
+  ⚠️ `POST /token` é **formulário**, não JSON — é o `password grant` do OAuth 2. A exceção leva a
+  mensagem do servidor, **nunca o que foi enviado**: o corpo tem a senha, e exceção vira log.
+  ⚠️ A suíte **nunca põe em modo real**: a credencial de teste é de mentira, e serviço de
+  autenticação conta tentativa falha.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -667,16 +689,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (992 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.024 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (32),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (266, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (272, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
@@ -781,6 +803,11 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   A folga acompanha o tamanho do relatório (meio centavo por linha), na tela e nos testes: com
   folga fixa, uma base real acusava "a conta não fecha" toda vez, e alarme que sempre toca
   ninguém escuta.
+- ⚠️ **E contagem somada da PÁGINA é a mesma mentira.** A tela de Compras somava `pendentes`
+  das notas que tinham vindo na página carregada e chamava aquilo de "a fila da casa inteira" —
+  verdade com 37 notas, mentira com 3.670: a pendente cai na página 4 e o botão "Reconciliar"
+  simplesmente some, com a pendência continuando lá. A fila vem de `GET /notas/pendencias`, que
+  é da casa inteira. Vale para todo número que resume uma lista paginada.
 - ⚠️ **Lista sem total é lista mentirosa.** A tela de compras mostrava as 50 notas mais
   recentes de 3.670 e nada dizia que havia mais — a nota do mês passado simplesmente não
   existia. Toda listagem que pode crescer devolve o total em `X-Total` (helper único em

@@ -45,6 +45,7 @@ from routers import (
     notas,
     omie,
     papeis,
+    pdv,
     producao_agenda,
     produtos,
     usuarios,
@@ -194,6 +195,7 @@ app.include_router(vendas.router)
 app.include_router(cmv.router)
 app.include_router(notas.router)
 app.include_router(omie.router)
+app.include_router(pdv.router)
 app.include_router(producao_agenda.router)
 app.include_router(inicio.router)
 app.include_router(alertas.router)

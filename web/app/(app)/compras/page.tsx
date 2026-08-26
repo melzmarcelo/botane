@@ -59,9 +59,15 @@ export default function PaginaCompras() {
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
-      const n = await api.listar<Nota>(`/notas?${q}`);
+      // A lista e a FILA vêm juntas: a fila é da casa inteira e não depende de
+      // qual página está aberta.
+      const [n, pendentes] = await Promise.all([
+        api.listar<Nota>(`/notas?${q}`),
+        api.get<{ id: number }[]>("/notas/pendencias"),
+      ]);
       setNotas(n.itens);
       pag.setTotal(n.total);
+      setAPendentes(pendentes.length);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -174,8 +180,13 @@ export default function PaginaCompras() {
     }
   }
 
-  // A fila da casa inteira: é ela que diz se vale oferecer o "reconciliar".
-  const aPendentes = (notas ?? []).reduce((soma, n) => soma + (n.pendentes ?? 0), 0);
+  // ⚠️ **A fila vem do SERVIDOR, não da página.** Esta conta somava `pendentes`
+  // das notas que tinham vindo na página carregada e se chamava "a fila da casa
+  // inteira" — verdade com 37 notas, mentira com 3.670: a nota pendente cai na
+  // página 4 e o botão "Reconciliar" simplesmente some, com a pendência
+  // continuando lá. É a mesma lição do `X-Total`: lista sem total é lista
+  // mentirosa.
+  const [aPendentes, setAPendentes] = useState(0);
 
   return (
     <div className="flex flex-col gap-6">

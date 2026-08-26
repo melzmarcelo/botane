@@ -109,6 +109,7 @@ inteiro. O script **se recusa a rodar** se o banco não for local.
 | API — inventário por recorte (local, setor, categoria, tipo) | `cd api && python tests/smoke_inventario_filtros.py` |
 | API — o que o produto aproveita do Omie (EAN, marca, peso, família) | `cd api && python tests/smoke_produto_do_omie.py` |
 | API — agendamento da busca de notas no Omie | `cd api && python tests/smoke_agenda_omie.py` |
+| API — credencial e autenticação do PDV Legal | `cd api && python tests/smoke_pdv_legal.py` |
 | API — Omie (importação, de-para, rateio, estorno) | `cd api && python tests/smoke_omie.py` |
 | API — notas sem integração (XML da NF-e e digitação) | `cd api && python tests/smoke_notas.py` |
 | API — alertas e exportação em CSV | `cd api && python tests/smoke_alertas.py` |

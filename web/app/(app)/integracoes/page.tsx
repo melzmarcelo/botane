@@ -8,6 +8,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import EmailSmtp from "./email-smtp";
 import NotasOmie from "./notas-omie";
+import PdvLegal from "./pdv-legal";
 
 type Config = {
   configurada: boolean;
@@ -370,6 +371,10 @@ export default function PaginaIntegracoes() {
       </Cartao>
 
       {pode("integracao.omie") && <NotasOmie />}
+
+      {/* O PDV Legal fica ao lado do Omie porque é a outra ponta da mesma
+          conta: um traz o que entrou (nota), o outro o que saiu (venda). */}
+      {(pode("integracao.pdv") || pode("admin.integracoes")) && <PdvLegal />}
 
       {pode("integracao.omie") && (
         <Cartao
