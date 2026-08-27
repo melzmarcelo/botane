@@ -173,7 +173,11 @@ checar("food cost sai calculado", a.get("food_cost_pct") is not None)
 checar("cobertura de ficha vem no painel", a.get("cobertura_ficha_pct") is not None)
 
 print("3. curva ABC e margem por prato")
-st, abc = chamar("GET", f"/cmv/abc?{periodo}", token=token)
+# ⚠️ **Pelo id, não caçando na lista.** O ABC sai ordenado por valor e cortado
+# no limite; assim que a base ganhou consumo real, o insumo deste cenário saiu
+# do topo e a checagem acusou "não foi consumido" num insumo que foi. A classe
+# continua sendo a do período inteiro — ela é calculada antes do corte.
+st, abc = chamar("GET", f"/cmv/abc?{periodo}&id_produto={insumo}", token=token)
 checar("ABC responde", st == 200 and len(abc) > 0, st)
 linha = next((x for x in abc if x["id_produto"] == insumo), None)
 checar("o insumo do cenário aparece no ABC", linha is not None)

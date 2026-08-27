@@ -95,12 +95,15 @@ def abc(
     inicio: date | None = None,
     fim: date | None = None,
     limite: int = Query(default=50, ge=5, le=200),
+    # ⚠️ Com um produto escolhido, o corte por valor deixa de mandar. A classe
+    # continua sendo a do período inteiro — é calculada antes do corte.
+    id_produto: int | None = None,
     ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
 ) -> list[dict]:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
-        return motor.curva_abc(cur, id_unidade, inicio, fim, limite)
+        return motor.curva_abc(cur, id_unidade, inicio, fim, limite, id_produto)
 
 
 @router.get("/margem")

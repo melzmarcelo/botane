@@ -132,6 +132,25 @@ atexit.register(devolver_o_modo_original)
 preservar_credenciais("PDV_LEGAL")
 
 
+def _conexao_do_banco():
+    """Uma conexão direta ao banco, com dicionário por linha.
+
+    Existe porque o de-para e o `codigo_omie` não têm rota de escrita — são
+    internos de propósito. Repetir os seis parâmetros de conexão em cada fase é
+    o caminho mais curto para uma delas ficar para trás.
+    """
+    from pathlib import Path
+
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
+
+    return psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                            dbname=DB_NAME, sslmode=DB_SSLMODE, cursor_factory=RealDictCursor)
+
+
 def esvaziar_credencial():
     """Zera a credencial do PDV direto no banco — a API não tem como.
 
@@ -421,8 +440,19 @@ checar("le os itens do cardapio, nao as chaves de um envelope",
        r.get("itens") == len(_fix), (r.get("itens"), len(_fix)))
 # ⚠️ Item fora do cardapio nasce INATIVO em vez de nao nascer: venda antiga
 # aponta para ele, e sem cadastro a venda ficaria sem vinculo para sempre.
+# ⚠️ **Afirma sobre o ITEM da fixture, nao sobre o que esta rodada criou.**
+# Contar `criados` so vale na primeira rodada de uma base virgem — na segunda o
+# item ja existe, `criados` volta zero e a checagem acusava um bug que nao ha.
+_desligado = next((x for x in _fix if x.get("status") is False), None)
+# ⚠️ Sem `quote` aqui: `chamar` já escapa o caminho, e escapar duas vezes faz o
+# espaço virar %2520 — a busca não acha nada e o teste acusa um bug que não há.
+st_i, prod_i = chamar(
+    "GET", f"/produtos?busca={_desligado['descricaoCupom']}&incluir_inativos=true",
+    token=token) if _desligado else (0, [])
+_achado = next((x for x in (prod_i or [])
+                if x.get("codigo") == f"PDV-{_desligado['codigo']}"), None) if _desligado else None
 checar("item desligado no PDV entra, mas inativo",
-       (r.get("criados") or 0) == 0 or (r.get("inativos") or 0) >= 1, r)
+       _achado is not None and _achado.get("ativo") is False, (_achado, st_i))
 # ⚠️ Numa base ja importada o item cai em `ja_vinculados`, nao em `vinculados`:
 # o que se afirma e que ele ACHOU dono, por um dos dois caminhos certos.
 checar("e o de nome identico acha dono",
@@ -433,6 +463,70 @@ checar("o prato de nome identico existe", st == 200, st)
 
 st, isca_depois = chamar("GET", f"/produtos/{isca}", token=token)
 checar("o produto isca nao foi tocado", isca_depois.get("id") == isca, isca_depois.get("id"))
+
+
+print("\n8e2. o EAN vincula sem depender do nome")
+# ⚠️ **O EAN identifica o mesmo objeto FISICO no mundo todo** — e e ele que
+# impede o mesmo pacote de cafe de virar dois cadastros: um vindo do catalogo do
+# Omie (onde e comprado) e outro do cardapio (onde e vendido). Esse duplicado
+# ninguem enxerga: a compra entra no estoque por um cadastro, a venda nao sai por
+# nenhum, e a sobra aparece na contagem como "ajuste de inventario".
+#
+# ⚠️ O item da fixture tem nome DELIBERADAMENTE diferente do produto que carrega
+# o EAN: se os nomes coincidissem, o passo do nome vincularia e o teste passaria
+# sem exercitar nada.
+EAN_FIXTURE = "7899999000019"
+CODIGO_FIXTURE = "10689998"
+
+def _sem_rastro_do_ean():
+    """Devolve a base ao estado de antes — a suite tem de ser idempotente.
+
+    Tira o de-para e o rascunho que uma rodada anterior possa ter criado; sem
+    isso o passo 1 da cascata (de-para ja existe) responderia primeiro e o do
+    EAN nunca seria exercitado.
+    """
+    conexao = _conexao_do_banco()
+    with conexao, conexao.cursor() as cur:
+        cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
+                    (CODIGO_FIXTURE,))
+        cur.execute("DELETE FROM produtos WHERE codigo = %s", (f"PDV-{CODIGO_FIXTURE}",))
+        cur.execute("SELECT id, nome FROM produtos WHERE codigo_barras = %s", (EAN_FIXTURE,))
+        dono = cur.fetchone()
+        if not dono:
+            cur.execute(
+                """INSERT INTO produtos (codigo, nome, tipo, status, um_estoque,
+                                         controla_estoque, codigo_barras, ativo)
+                   VALUES ('SMOKE-EAN-TONICA', 'Tonica de conferencia do EAN', 'REVENDA',
+                           'ATIVO', 'UN', true, %s, true)
+                   RETURNING id, nome""",
+                (EAN_FIXTURE,),
+            )
+            dono = cur.fetchone()
+        conexao.commit()
+    return dict(dono)
+
+dono_do_ean = _sem_rastro_do_ean()
+checar("ha um produto carregando o EAN da fixture", bool(dono_do_ean.get("id")), dono_do_ean)
+checar("com nome diferente do item do cardapio",
+       "tonica impossivel" not in (dono_do_ean.get("nome") or "").lower(), dono_do_ean)
+
+st, r = chamar("POST", "/pdv/cardapio", token=token)
+checar("a importacao responde", st == 200, (st, r))
+checar("e conta o vinculo por EAN", (r.get("por_ean") or 0) >= 1, r)
+
+conexao = _conexao_do_banco()
+with conexao, conexao.cursor() as cur:
+    cur.execute("""SELECT id_produto, origem_vinculo FROM codigos_externos
+                    WHERE sistema='PDV_LEGAL' AND codigo=%s""", (CODIGO_FIXTURE,))
+    vinculo = dict(cur.fetchone() or {})
+    cur.execute("SELECT 1 FROM produtos WHERE codigo = %s", (f"PDV-{CODIGO_FIXTURE}",))
+    virou_rascunho = bool(cur.fetchone())
+checar("o item do cardapio achou o produto pelo EAN",
+       vinculo.get("id_produto") == dono_do_ean["id"], (vinculo, dono_do_ean["id"]))
+checar("e o vinculo diz que foi o EAN", vinculo.get("origem_vinculo") == "EAN", vinculo)
+# ⚠️ O ponto todo: sem o passo do EAN ele viraria um rascunho novo, e o mesmo
+# produto ficaria com dois cadastros.
+checar("e NAO criou um rascunho duplicado", not virou_rascunho, virou_rascunho)
 
 
 print("\n8f. codigo de cardapio NAO casa com codigo da casa")

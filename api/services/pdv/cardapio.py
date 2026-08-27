@@ -10,9 +10,9 @@ que já servia ao Omie e aos códigos de fornecedor. A chave é o `codigo` do PD
 (que chega no item da venda como `codproduto`), e não a descrição: nome de prato
 muda de cardápio para cardápio e o número não.
 
-⚠️ **A cascata só vincula o que é certo**: o de-para que já existe e o nome
-IDÊNTICO. Semelhança sugere e para por aí. É a mesma regra da conciliação de
-nota, e pela mesma razão: um vínculo errado não fica errado sozinho — ele
+⚠️ **A cascata só vincula o que é certo**: o de-para que já existe, o **EAN** e o
+nome IDÊNTICO. Semelhança sugere e para por aí. É a mesma regra da conciliação
+de nota, e pela mesma razão: um vínculo errado não fica errado sozinho — ele
 contamina o CMV teórico de todo mês em que aquele prato foi vendido, e ninguém
 vai procurar ali.
 
@@ -229,15 +229,16 @@ class _Apoio:
         return sigla if sigla in self._unidades else None
 
 
-def _candidato(cur, codigo: str, descricao: str,
+def _candidato(cur, codigo: str, descricao: str, ean: str,
                por_nome: dict[str, int]) -> tuple[int | None, str, float]:
     """A cascata: onde este item do cardápio encontra um produto daqui.
 
     A ordem é da certeza para o palpite, e o palpite não vincula:
 
     1. **código do PDV** já registrado em `codigos_externos` — o de-para de antes
-    2. **nome idêntico**, normalizado
-    3. **semelhança** — só sugestão, nunca vínculo
+    2. **EAN/GTIN** — identificador global, e único no cadastro
+    3. **nome idêntico**, normalizado
+    4. **semelhança** — só sugestão, nunca vínculo
 
     ⚠️ **NÃO existe passo por código da casa, e isso custou caro para descobrir.**
     A primeira versão casava o `codReferencia` do cardápio ("72", "75", "141")
@@ -247,6 +248,16 @@ def _candidato(cur, codigo: str, descricao: str,
     MANJERICÃO, BOLO virou ADESIVO VINIL PRETO. Nenhum deles daria erro em lugar
     nenhum — apenas o CMV teórico de todo mês sairia com o custo do insumo
     errado, para sempre, e ninguém iria procurar ali.
+
+    ⚠️ **O EAN é o oposto disso: ele identifica o mesmo objeto físico no mundo
+    todo.** É o que impede o mesmo pacote de café de virar dois cadastros — um
+    vindo do catálogo do Omie (onde ele é comprado) e outro do cardápio (onde é
+    vendido) —, que é o duplicado que ninguém enxerga: a compra entra no estoque
+    por um cadastro, a venda não sai por nenhum, e a sobra aparece na contagem
+    como "ajuste de inventário", que é onde a diferença some sem nome.
+    ⚠️ Sem ambiguidade por construção: `ux_produto_barras` é único. **A conta
+    real do cliente devolve EAN vazio em 100% do cardápio** — este passo dorme
+    hoje e passa a valer no dia em que alguém preencher, do lado de lá ou daqui.
     """
     if codigo:
         cur.execute(
@@ -256,6 +267,12 @@ def _candidato(cur, codigo: str, descricao: str,
         achado = cur.fetchone()
         if achado:
             return achado["id_produto"], "ja_vinculado", 100.0
+
+    if ean:
+        cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s", (ean,))
+        achado = cur.fetchone()
+        if achado:
+            return achado["id"], "ean", 100.0
 
     chave = _normalizar(descricao)
     if chave and chave in por_nome:
@@ -332,7 +349,10 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
-              "sugestoes": 0, "sem_vinculo": 0}
+              # ⚠️ Contado à parte porque é o vínculo mais forte que existe, e
+              # porque hoje ele vale ZERO nesta conta: ver o número em 0 é o que
+              # diz que o cardápio do cliente não tem EAN preenchido.
+              "por_ean": 0, "sugestoes": 0, "sem_vinculo": 0}
 
     for item in itens:
         codigo, descricao = item["codigo"], item["descricao"]
@@ -347,7 +367,7 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
             "um_estoque": apoio.unidade(item["unidade"]),
         }
 
-        id_produto, origem, score = _candidato(cur, codigo, descricao, por_nome)
+        id_produto, origem, score = _candidato(cur, codigo, descricao, item["ean"], por_nome)
 
         if origem == "ja_vinculado":
             resumo["ja_vinculados"] += 1
@@ -406,6 +426,8 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
         )
         if origem != "criado":
             resumo["vinculados"] += 1
+            if origem == "ean":
+                resumo["por_ean"] += 1
 
     return resumo
 

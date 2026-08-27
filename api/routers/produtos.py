@@ -18,10 +18,11 @@ from models.produtos import (
     ProdutoUpdate,
     STATUS,
     TIPOS,
+    UnificarRequest,
 )
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao
-from services import kits
+from services import duplicados, kits
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -204,6 +205,58 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
         "rascunhos": sum(l["rascunhos"] for l in linhas),
         "inativos": sum(l["inativos"] for l in linhas),
     }
+
+
+# ⚠️ **Antes de `/{id_produto}`.** O FastAPI casa rotas na ordem de declaração:
+# com o parâmetro na frente, "duplicados" viraria um id e o pedido morreria em
+# 422 antes de chegar aqui.
+@router.get("/duplicados")
+def duplicados_suspeitos(
+    minimo: float = Query(default=80.0, ge=50, le=100),
+    limite: int = Query(default=200, ge=1, le=500),
+    # ⚠️ Reduz ao que só a integração cria: o mesmo produto entrando pelo Omie e
+    # pelo cardápio. É o pior dos dois casos — dentro de uma porta os cadastros
+    # ao menos se comportam igual; entre portas, um controla estoque e o outro
+    # não, e é aí que a venda deixa de sair da prateleira.
+    so_entre_portas: bool = False,
+    ctx: Contexto = Depends(requer_permissao("cadastros.produtos")),
+) -> dict:
+    """Cadastros parecidos que vieram de portas de entrada DIFERENTES.
+
+    Dentro da mesma porta a chave única já impede a repetição — `codigo_omie`
+    no catálogo do Omie, `(sistema, codigo)` no cardápio do PDV. Entre portas
+    não existe chave nenhuma, e é aí que o mesmo pacote de café vira dois
+    cadastros: a compra entra por um, a venda não sai por nenhum, e a sobra
+    aparece na contagem como "ajuste de inventário".
+
+    ⚠️ **Isto SUGERE, não decide.** Unir dois produtos que são diferentes de
+    verdade não tem desfazer.
+    """
+    with get_cursor() as cur:
+        return duplicados.suspeitos(cur, minimo, limite, so_entre_portas)
+
+
+@router.post("/{id_produto}/unificar")
+def unificar(id_produto: int, body: UnificarRequest,
+             ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Diz que dois cadastros são o mesmo produto. `id_produto` é o que FICA.
+
+    ⚠️ O absorvido tem de ser um cadastro **sem história**: movimento no razão,
+    mês fechado, contagem de inventário, ficha e nota de entrada não mudam de
+    dono. A recusa nomeia o que trava e manda fazer ao contrário.
+    """
+    with get_cursor() as cur:
+        try:
+            r = duplicados.unificar(cur, id_produto, body.id_absorver, ctx.id_usuario)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "unificar",
+                            depois={k: v for k, v in r.items() if k != "message"})
+    return r
 
 
 @router.get("/{id_produto}", response_model=ProdutoResponse)

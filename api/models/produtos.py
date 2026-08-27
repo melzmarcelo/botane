@@ -70,6 +70,18 @@ class UnidadesCompraRequest(BaseModel):
     itens: list[UnidadeCompra] = Field(default_factory=list)
 
 
+class UnificarRequest(BaseModel):
+    """Qual dos dois cadastros SAI. O que fica vai no caminho da rota.
+
+    ⚠️ O que sai é o que não tem história — movimento, ficha, nota, contagem. O
+    servidor confere e recusa nomeando o que trava, porque escolher errado a
+    direção é o engano natural: quem olha a lista vê dois nomes parecidos e não
+    tem como saber qual dos dois carrega o passado.
+    """
+
+    id_absorver: int
+
+
 class KitItem(BaseModel):
     id_componente: int
     quantidade: float = Field(default=1, gt=0)

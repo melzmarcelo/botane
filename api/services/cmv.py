@@ -336,36 +336,64 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     }
 
 
-def curva_abc(cur, id_unidade: int, inicio: date, fim: date, limite: int = 50) -> list[dict]:
-    """Onde o dinheiro do estoque foi parar no período — 80/95/100."""
+def curva_abc(cur, id_unidade: int, inicio: date, fim: date, limite: int = 50,
+              id_produto: int | None = None) -> list[dict]:
+    """Onde o dinheiro do estoque foi parar no período — 80/95/100.
+
+    ⚠️ **A classe é calculada sobre o consumo INTEIRO, e o corte vem depois.**
+    Antes a soma e o acumulado saíam das linhas trazidas: com `limite = 50` numa
+    casa que consome 500 produtos, "classe A" queria dizer "80% do que aparece
+    nesta tela", não 80% do dinheiro — e a curva ABC existe justamente para
+    dizer a segunda coisa. As janelas rodam sobre o resultado JÁ AGRUPADO (uma
+    linha por produto), então custam pouco; a armadilha do `count(*) OVER ()` é
+    outra, e é sobre janela em cima do razão cru.
+
+    ⚠️ **`id_produto` responde por UM produto sem depender do corte** — e agora
+    isso tem sentido, porque a participação e o acumulado dele continuam sendo
+    os do período todo. Era o que faltava: o insumo procurado saía do topo assim
+    que a base ganhava consumo de verdade, e "não está na lista" lia como "não
+    foi consumido".
+    """
+    filtro, parametros = "", [id_unidade, inicio, fim + timedelta(days=1)]
+    if id_produto is not None:
+        filtro = "WHERE id_produto = %s"
+        parametros.append(id_produto)
     cur.execute(
-        """SELECT m.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
-                  sum(abs(m.quantidade)) AS quantidade,
-                  sum(abs(m.custo_total)) AS valor
-             FROM estoque_movimentos m
-             JOIN produtos p ON p.id = m.id_produto
-            WHERE m.id_unidade = %s AND m.quantidade < 0
-              AND m.tipo NOT IN ('TRANSFERENCIA_SAIDA', 'ESTORNO_SAIDA')
-              AND m.data_movimento >= %s AND m.data_movimento < %s
-            GROUP BY m.id_produto, p.codigo, p.nome, p.um_estoque
-            ORDER BY valor DESC
-            LIMIT %s""",
-        (id_unidade, inicio, fim + timedelta(days=1), limite),
+        f"""WITH consumo AS (
+                   SELECT m.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+                          sum(abs(m.quantidade)) AS quantidade,
+                          sum(abs(m.custo_total)) AS valor
+                     FROM estoque_movimentos m
+                     JOIN produtos p ON p.id = m.id_produto
+                    WHERE m.id_unidade = %s AND m.quantidade < 0
+                      AND m.tipo NOT IN ('TRANSFERENCIA_SAIDA', 'ESTORNO_SAIDA')
+                      AND m.data_movimento >= %s AND m.data_movimento < %s
+                    GROUP BY m.id_produto, p.codigo, p.nome, p.um_estoque
+               ), curva AS (
+                   SELECT *,
+                          sum(valor) OVER () AS total_geral,
+                          sum(valor) OVER (ORDER BY valor DESC, id_produto
+                                           ROWS UNBOUNDED PRECEDING) AS acumulado
+                     FROM consumo
+               )
+               SELECT * FROM curva
+               {filtro}
+               ORDER BY valor DESC
+               LIMIT %s""",
+        [*parametros, limite],
     )
     linhas = [dict(r) for r in cur.fetchall()]
-    total = sum(dec(l["valor"]) for l in linhas) or Decimal(1)
 
-    acumulado = Decimal(0)
     for l in linhas:
-        valor = dec(l["valor"])
-        acumulado += valor
-        participacao = valor / total * 100
-        acumulada = acumulado / total * 100
+        valor, total = dec(l["valor"]), dec(l["total_geral"]) or Decimal(1)
+        acumulada = dec(l["acumulado"]) / total * 100
         l["valor"] = float(valor)
         l["quantidade"] = float(dec(l["quantidade"]))
-        l["participacao_pct"] = float(participacao)
+        l["participacao_pct"] = float(valor / total * 100)
         l["acumulada_pct"] = float(acumulada)
         l["classe"] = "A" if acumulada <= 80 else ("B" if acumulada <= 95 else "C")
+        l.pop("total_geral", None)
+        l.pop("acumulado", None)
     return linhas
 
 

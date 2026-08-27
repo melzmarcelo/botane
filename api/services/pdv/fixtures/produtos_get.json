@@ -78,5 +78,21 @@
     "codigoEAN": "",
     "baixaEstoque": true,
     "localEstoque": "Botane"
+  },
+  {
+    "codigo": 10689998,
+    "codReferencia": "441",
+    "codigoVenda": 441,
+    "descricaoCupom": "AGUA TONICA IMPOSSIVEL",
+    "descricaoDetalhada": "AGUA TONICA IMPOSSIVEL 269ML",
+    "codGrupo": 328957,
+    "nomeGrupo": "GELADEIRA",
+    "nomeImpressora": "Nenhum",
+    "status": true,
+    "unidade": "UN",
+    "codigoNCM": "22011000",
+    "codigoEAN": "7899999000019",
+    "baixaEstoque": true,
+    "localEstoque": "Botane"
   }
 ]

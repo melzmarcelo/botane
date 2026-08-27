@@ -2172,6 +2172,50 @@ try {
   checar("a conta do CMV continua mostrando Perdas", noPainel.temPerdas, noPainel);
   checar("e ganhou a linha do grupo por tipo de produto", noPainel.temGrupo, noPainel);
 
+  console.log("10w. possiveis duplicados entre portas de entrada");
+  // ⚠️ O mesmo produto pode entrar duas vezes por portas diferentes — catalogo
+  // do Omie (o que se compra) e cardapio do PDV (o que se vende). Dentro de cada
+  // porta a chave unica impede; entre portas nao ha chave nenhuma. E o estrago
+  // nao e um cadastro feio: e estoque fantasma, que reaparece na contagem como
+  // "ajuste de inventario", que e onde a diferenca some sem nome.
+  const mDup = Date.now().toString().slice(-5);
+  const { dados: dupA } = await api("POST", "/produtos", {
+    codigo: `TDUP-A-${mDup}`, nome: `Chá tela duplicado ${mDup} lata 200g`,
+    tipo: "INSUMO", um_estoque: "KG", controla_estoque: true, status: "ATIVO",
+  }, token);
+  const { dados: dupB } = await api("POST", "/produtos", {
+    codigo: `PDV-TDUP-${mDup}`, nome: `Chá tela duplicado ${mDup} lata 200 g`,
+    tipo: "PRODUZIDO", producao_propria: true, controla_estoque: false, status: "RASCUNHO",
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${dupA.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${dupB.id}`, null, token));
+  // Sem o vinculo do PDV os dois seriam da mesma porta ("casa") e o par nao
+  // apareceria — que e justamente a regra que o relatorio segue.
+  await api("POST", "/vendas/importar", { vendas: [{
+    data: diaLocal(), documento: `TDUP-${mDup}`, origem: "PDV_LEGAL",
+    itens: [{ id_produto: dupB.id, quantidade: 1, valor_unitario: 10 }],
+  }] }, token);
+
+  await irPara(p, `${WEB}/produtos`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const temAtalho = await p.evaluate(() =>
+    [...document.querySelectorAll("a")].some((a) => /Poss[íi]veis duplicados/i.test(a.textContent ?? "")));
+  // ⚠️ Sem caminho a partir de Produtos, a conferencia e uma tela que ninguem acha.
+  checar("Produtos leva aos possíveis duplicados", temAtalho);
+
+  await irPara(p, `${WEB}/produtos/duplicados`);
+  await new Promise((r) => setTimeout(r, 2000));
+  const dup = await textoVisivel(p);
+  checar("a tela de duplicados abre", /Poss[íi]veis duplicados/i.test(dup), dup.slice(0, 120));
+  // ⚠️ O aviso e a razao de a tela existir: sem ele, "dois cadastros parecidos"
+  // parece questao de arrumacao.
+  checar("e explica por que duplicado importa",
+    /ajuste de invent[áa]rio/i.test(dup), dup.slice(0, 300));
+  checar("com o seletor de quanto parecido", await p.evaluate(() =>
+    [...document.querySelectorAll("select")].some((s) =>
+      [...s.options].some((o) => /a partir de 80/.test(o.textContent ?? "")))));
+  await foto(p, "32-duplicados");
+
   console.log("10x. PDV Legal: a credencial e o que ainda falta");
   // ⚠️ **Só a autenticação existe, e a tela tem de DIZER isso.** O catálogo de
   // endpoints da Tablet Cloud não é público; um cartão com um botão de testar e

@@ -80,11 +80,25 @@ O catálogo do Omie trouxe **2.183 produtos sem categoria e sem setor**. Enquant
 assim, o relatório de CMV por grupo devolve tudo em "Sem setor" e não serve para nada. Falta
 uma tela de classificação em lote (selecionar N produtos, aplicar categoria e setor).
 
-### Unificar cadastros duplicados
-A conta real trouxe **12 hortifrútis com cadastro repetido** (`laranja pera` tem 5, `mirtilo`
-tem 3). Hoje só há desativar um a um. Quando a próxima compra vier pelo código do gêmeo, o
-custo médio da laranja passa a existir em dois lugares. Falta uma ação de **unificar**: mover
-saldo, movimentos e vínculos de um produto para outro.
+### ~~Unificar cadastros duplicados~~ — FEITO (27/08/2026)
+`/produtos/duplicados` cruza os cadastros e mostra **grupos**, não pares: a conta real tem
+**sete** "LARANJA PERA", que dariam 21 linhas para conferir a mesma laranja. Cruza também entre
+portas de entrada (Omie × cardápio do PDV), que é o caso pior — ali um cadastro controla estoque
+e o outro não, e a venda deixa de sair da prateleira.
+
+`POST /produtos/{id}/unificar` move o de-para do PDV, o `codigo_omie`, o EAN e os itens de venda,
+e desativa o absorvido. **Só absorve cadastro sem história**: movimento no razão, mês fechado,
+contagem, produção, nota, ficha e vínculo de fornecedor travam, e a recusa nomeia o que trava.
+
+⚠️ **O que NÃO foi feito, de propósito: mover saldo e movimentos.** O razão é append-only. Um
+cadastro com movimento fica; é o outro que é absorvido. Onde os DOIS têm movimento, a unificação
+é recusada — juntar duas histórias de estoque exigiria reescrever o razão, e o custo médio
+resultante seria uma invenção.
+
+⚠️ **A regra que separa duplicado de variação é `mesmo_produto`, e ela é o item difícil.** Nomes
+de catálogo são quase todos embalagem: "FRUTA MORANGO CG PCT1KG CX6KG" e "FRUTA AMORA CG PCT1KG
+CX6KG" batem 95%. Sem a regra, 1.507 pares ilegíveis; com ela, 103 grupos com os verdadeiros no
+topo. Se aparecer falso positivo, é ali que se mexe — nunca no placar.
 
 ### `cest` no produto
 Campo fiscal previsto no mapeamento (4.3) e ausente na tabela.
