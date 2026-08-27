@@ -310,6 +310,10 @@ def sincronizar(
 
     return {
         **r, **gravado,
+        # ⚠️ O MODO viaja na resposta, como na busca do Omie. Sem ele, quem está
+        # em simulado importa vendas de demonstração e não tem como saber — os
+        # números aparecem no CMV como se fossem da casa.
+        "modo": cliente.modo,
         "message": (f"{gravado.get('importadas', 0)} venda(s) nova(s) de {r['cupons']} "
                     f"cupom(ns) — {r['janela']}"),
     }

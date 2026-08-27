@@ -343,6 +343,12 @@ chamar("PUT", "/pdv/config", {"modo": "simulado", "ativa": True}, token=token)
 st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
 checar("a sincronizacao responde", st == 200, (st, r))
 checar("e diz a janela que buscou", "janela" in (r or {}), r)
+# ⚠️ **O MODO viaja na resposta**, como na busca do Omie. Sem ele, quem esta em
+# simulado importa venda de demonstracao e nao tem como saber -- os numeros
+# aparecem no CMV como se fossem da casa. E a tela de Vendas usa este campo para
+# dizer "(modo simulado -- dados de demonstracao)" no aviso.
+checar("e o MODO, para a tela poder avisar que e demonstracao",
+       r.get("modo") == "simulado", r.get("modo"))
 
 # A fixture tem 3 cupons: um cancelado, um com item cancelado dentro, e um bom.
 checar("le os tres cupons da fixture", r.get("cupons") == 3, r.get("cupons"))

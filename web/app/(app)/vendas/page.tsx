@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -25,6 +26,7 @@ import { CANAIS, dataBr, ORIGENS, Venda } from "./tipos";
  */
 export default function PaginaVendas() {
   const aviso = useAviso();
+  const router = useRouter();
   const { pode } = useSessao();
   const podeLancar = pode("cmv.painel") || pode("cmv.fechamento");
 
@@ -33,6 +35,7 @@ export default function PaginaVendas() {
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [origem, setOrigem] = useState("");
+  const [ocupado, setOcupado] = useState(false);
 
   // ⚠️ `filtros:` faz a busca voltar para a primeira página. Sem isso, quem
   // está na página 7 e digita um documento cai numa tela vazia sem explicação.
@@ -61,6 +64,61 @@ export default function PaginaVendas() {
     return () => clearTimeout(t);
   }, [carregar, busca]);
 
+  /**
+   * Traz os cupons do PDV — o mesmo lugar onde Compras busca no Omie.
+   *
+   * ⚠️ **A busca vive na tela do ASSUNTO, não só em Integrações.** Quem opera
+   * abre Vendas para ver as vendas; ter de lembrar que a busca mora noutra tela
+   * é o tipo de passo que ninguém dá — e venda que não é buscada é receita que
+   * falta no CMV do período, sem nada denunciando.
+   *
+   * ⚠️ Sem período: a janela vai desde a última venda importada, com folga. A
+   * resposta diz qual janela foi usada.
+   */
+  async function buscarNoPdv() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{
+        importadas: number;
+        itens_sem_vinculo: number;
+        modo: string;
+        message: string;
+      }>("/pdv/sincronizar");
+      aviso.sucesso(
+        r.message +
+          (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
+        (r.itens_sem_vinculo ?? 0) > 0
+          ? { texto: "ver itens sem vínculo", ao: () => router.push("/vendas/sem-vinculo") }
+          : undefined,
+      );
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível buscar as vendas");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Passa o de-para de novo nos itens que ficaram sem produto.
+   *
+   * ⚠️ Existe pela mesma razão do botão gêmeo em Compras: a ordem real é a venda
+   * chegar ANTES de o cardápio estar ligado. Sem ele, item que não achou produto
+   * no dia da importação só sairia da fila na mão.
+   */
+  async function reconciliar() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ message: string }>("/pdv/reconciliar");
+      aviso.sucesso(r.message);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível reconciliar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -73,11 +131,32 @@ export default function PaginaVendas() {
             mês passado.
           </p>
         </div>
-        {podeLancar && (
-          <Link href="/vendas/lancar" className="btn btn-primario">
-            Lançar
-          </Link>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {podeLancar && (
+            <Link href="/vendas/lancar" className="btn btn-primario">
+              Lançar
+            </Link>
+          )}
+          {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
+              tela do assunto: quem abre Vendas para ver as vendas não vai
+              lembrar que ela mora em Integrações — e venda não buscada é receita
+              faltando no CMV, sem nada denunciando. */}
+          {pode("integracao.pdv") && (
+            <button className="btn btn-secundario" onClick={buscarNoPdv} disabled={ocupado}>
+              {ocupado ? "Buscando…" : "Buscar no PDV"}
+            </button>
+          )}
+          {pendencias > 0 && pode("integracao.pdv") && (
+            <button
+              className="btn btn-secundario"
+              onClick={reconciliar}
+              disabled={ocupado}
+              title="Procura de novo o produto dos itens pendentes"
+            >
+              Reconciliar {pendencias} pendente(s)
+            </button>
+          )}
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

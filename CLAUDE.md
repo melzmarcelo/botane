@@ -299,6 +299,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   Depois de lançar o formulário **fica aberto e limpo** — quem ajusta um item ajusta o
   próximo. ⚠️ O item de menu aceita **lista** de chaves (`chave: string | string[]`): Ajustes
   serve a quatro permissões e quem só tem a de perda também precisa chegar nele.
+- ⚠️ **A busca da integração vive na tela do ASSUNTO, não só em Integrações.** `/vendas` ganhou
+  **Buscar no PDV** (27/08/2026), gêmeo do "Buscar no Omie" de `/compras`, mais o
+  **Reconciliar N pendente(s)** quando há item de venda sem produto. Quem abre Vendas para ver as
+  vendas não vai lembrar que a busca mora noutra tela — e venda não buscada é receita faltando no
+  CMV do período, sem nada denunciando.
+  ⚠️ **O `modo` viaja na resposta de `/pdv/sincronizar`**, como já viajava na do Omie: sem ele,
+  quem está em simulado importa venda de demonstração e não tem como saber — os números aparecem
+  no CMV como se fossem da casa. A tela escreve "(modo simulado — dados de demonstração)".
 - **Cada nota tem endereço** (25/08/2026): `/compras` é só a LISTA, `/compras/nova` digita e
   `/compras/[id]` mostra — com **cabeçalho, itens e total**, no mesmo modelo do formulário de
   digitação. Antes as três coisas dividiam a mesma tela: o formulário empurrava as notas para
@@ -936,16 +944,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.174 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.175 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (106), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (299, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (300, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

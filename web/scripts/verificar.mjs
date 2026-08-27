@@ -1165,6 +1165,14 @@ try {
     p.url().endsWith("/vendas"), p.url());
   await foto(p, "24-vendas-importada");
 
+  // ⚠️ **A busca do PDV vive na tela do ASSUNTO**, como o "Buscar no Omie" de
+  // Compras. Quem abre Vendas para ver as vendas nao vai lembrar que a busca
+  // mora em Integracoes -- e venda nao buscada e receita faltando no CMV.
+  const botoesVendas = await p.evaluate(() =>
+    [...document.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? ""));
+  checar("Vendas tem o botao Buscar no PDV",
+    botoesVendas.some((x) => /Buscar no PDV/i.test(x)), botoesVendas.slice(0, 8));
+
   // ⚠️ A busca vai ao SERVIDOR. Com 1.375 vendas, filtrar a página carregada
   // acharia o documento só quando ele já estivesse na tela.
   await p.evaluate((d) => {
