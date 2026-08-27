@@ -63,6 +63,21 @@ DIALETO_HUNGARO = {
     "total_paginas": "nTotalPaginas",
     "total": "nTotalRegistros",
 }
+# ⚠️ **E existe um TERCEIRO.** A posição de estoque (`ListarPosEstoque`) aceita
+# `nPagina` mas recusa `nRegistrosPorPagina` — quer `nRegPorPagina`, e responde
+# `nTotPaginas`/`nTotRegistros`. Descoberto em 27/08/2026, com a conferência de
+# estoque quebrada desde sempre: **toda** chamada dela voltava
+# "Tag [PAGINA] não faz parte da estrutura", e cada recusa gasta cota.
+#
+# A lição não é "existem três": é que **o dialeto é por CHAMADA, não por módulo**.
+# Ao escrever a próxima, uma chamada com um registro só diz qual é — e custa
+# quase nada, enquanto adivinhar custa cota e cota gasta bloqueia a conta.
+DIALETO_POSICAO = {
+    "pagina": "nPagina",
+    "por_pagina": "nRegPorPagina",
+    "total_paginas": "nTotPaginas",
+    "total": "nTotRegistros",
+}
 
 
 _DATA_BR = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")

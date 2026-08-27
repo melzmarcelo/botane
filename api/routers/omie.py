@@ -284,8 +284,19 @@ def conferencia_notas(
 
 
 @router.get("/conferencia")
-def conferencia(ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> list[dict]:
-    """Custo médio daqui × CMC do Omie. Divergência = entrada não conciliada."""
+def conferencia(so_divergentes: bool = True,
+                ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
+    """Saldo e custo médio daqui × posição de estoque do Omie.
+
+    Divergência quer dizer que alguma entrada não foi conciliada de um dos lados
+    — a conferência cruzada mais barata que existe, porque o Omie já mantém o
+    número por outros motivos.
+
+    ⚠️ **A resposta virou objeto, não lista.** Lista sozinha não conseguia dizer
+    quantos foram conferidos, quantos não têm cadastro aqui, nem que a varredura
+    parou no teto de páginas — e "lista vazia" se lê como "está tudo certo"
+    quando pode ser "não achei nenhum produto".
+    """
     with get_cursor() as cur:
         cliente = _cliente(cur, unidade_atual(cur, ctx))
-        return importador.conferir_estoque(cur, cliente)
+        return importador.conferir_estoque(cur, cliente, so_divergentes)

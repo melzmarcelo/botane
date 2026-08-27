@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -36,15 +37,37 @@ type Config = {
   }[];
 };
 
-type Conferencia = {
+type LinhaConferencia = {
+  id_produto: number;
+  codigo: string;
   produto: string;
+  um_estoque: string | null;
   codigo_omie: string;
   saldo_botane: number;
   saldo_omie: number;
+  diferenca_saldo: number;
   custo_medio_botane: number;
   cmc_omie: number;
-  diferenca: number;
+  diferenca_custo: number;
   divergente: boolean;
+};
+
+/**
+ * ⚠️ A resposta é um OBJETO, não uma lista.
+ *
+ * Lista sozinha não conseguia dizer quantos foram conferidos, quantos produtos
+ * do Omie não têm cadastro aqui, nem que a varredura parou no teto de páginas —
+ * e "lista vazia" se lê como "está tudo certo" quando pode ser "não achei
+ * nenhum produto". Foi exatamente o que aconteceu: a chamada estava quebrada
+ * desde sempre e o sintoma teria sido uma tabela vazia.
+ */
+type Conferencia = {
+  linhas: LinhaConferencia[];
+  conferidos: number;
+  sem_cadastro_aqui: number;
+  divergentes: number;
+  truncado: boolean;
+  message: string;
 };
 
 type Vinculo = {
@@ -67,7 +90,7 @@ export default function PaginaIntegracoes() {
     tag_fornecedor: "Fornecedor",
     agenda_frequencia: "MANUAL", agenda_hora: "3", agenda_janela_dias: "",
   });
-  const [conferencia, setConferencia] = useState<Conferencia[] | null>(null);
+  const [conferencia, setConferencia] = useState<Conferencia | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -152,7 +175,7 @@ export default function PaginaIntegracoes() {
     setOcupado(true);
     setErro("");
     try {
-      setConferencia(await api.get<Conferencia[]>("/omie/conferencia"));
+      setConferencia(await api.get<Conferencia>("/omie/conferencia"));
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Falha na conferência");
     } finally {
@@ -440,11 +463,28 @@ export default function PaginaIntegracoes() {
 
       {conferencia && (
         <Cartao
-          titulo="Custo médio daqui × CMC do Omie"
+          titulo="Estoque daqui × posição no Omie"
           descricao="Divergência quer dizer que alguma entrada não foi conciliada de um dos lados."
         >
-          {!conferencia.length ? (
-            <Vazio>Nenhum produto com código do Omie para comparar.</Vazio>
+          {/* ⚠️ O resumo vem ANTES da tabela, e diz o que a tabela não diz:
+              quantos foram conferidos e quantos produtos do Omie não têm
+              cadastro aqui. Sem ele, uma lista curta se lê como "quase tudo
+              certo" quando pode ser "quase nada foi comparado". */}
+          <p className="mb-3 text-[13.5px]">{conferencia.message}</p>
+          {conferencia.truncado && (
+            <div className="mb-3">
+              <Aviso tipo="erro">
+                A varredura parou no teto de páginas — <b>há mais produtos no Omie</b> que não
+                entraram nesta comparação.
+              </Aviso>
+            </div>
+          )}
+          {!conferencia.linhas.length ? (
+            <Vazio>
+              {conferencia.conferidos
+                ? "Nenhuma divergência: saldo e custo médio batem com o Omie."
+                : "Nenhum produto com código do Omie para comparar."}
+            </Vazio>
           ) : (
             <div className="overflow-x-auto">
               <table className="tabela">
@@ -453,26 +493,55 @@ export default function PaginaIntegracoes() {
                     <th>Produto</th>
                     <th className="num">Saldo aqui</th>
                     <th className="num">Saldo Omie</th>
+                    <th className="num">Dif. saldo</th>
                     <th className="num">Custo médio</th>
                     <th className="num">CMC Omie</th>
-                    <th className="num">Diferença</th>
+                    <th className="num">Dif. custo</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {conferencia.map((c) => (
-                    <tr key={c.codigo_omie} className={c.divergente ? "" : "opacity-70"}>
-                      <td className="font-semibold">{c.produto}</td>
-                      <td className="num">{Number(c.saldo_botane)}</td>
-                      <td className="num text-suave">{Number(c.saldo_omie)}</td>
-                      <td className="num">{reais(Number(c.custo_medio_botane))}</td>
-                      <td className="num text-suave">{reais(Number(c.cmc_omie))}</td>
-                      <td className={`num ${c.divergente ? "font-semibold text-erro" : ""}`}>
-                        {reais(Number(c.diferenca))}
+                  {conferencia.linhas.slice(0, 200).map((c) => (
+                    <tr key={c.codigo_omie}>
+                      <td>
+                        <Link href={`/produtos/${c.id_produto}`} className="hover:text-erva">
+                          {c.produto}
+                        </Link>
+                        <span className="block text-[12px] text-suave">
+                          <span className="mono">{c.codigo}</span>
+                          {c.um_estoque ? ` · ${c.um_estoque}` : ""}
+                        </span>
+                      </td>
+                      <td className="num tabular-nums">{Number(c.saldo_botane)}</td>
+                      <td className="num tabular-nums text-suave">{Number(c.saldo_omie)}</td>
+                      <td
+                        className={`num tabular-nums ${
+                          Math.abs(Number(c.diferenca_saldo)) > 0.001
+                            ? "font-semibold text-erro"
+                            : ""
+                        }`}
+                      >
+                        {Number(c.diferenca_saldo)}
+                      </td>
+                      <td className="num tabular-nums">{reais(Number(c.custo_medio_botane))}</td>
+                      <td className="num tabular-nums text-suave">{reais(Number(c.cmc_omie))}</td>
+                      <td
+                        className={`num tabular-nums ${
+                          Math.abs(Number(c.diferenca_custo)) > 0.01
+                            ? "font-semibold text-erro"
+                            : ""
+                        }`}
+                      >
+                        {reais(Number(c.diferenca_custo))}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {conferencia.linhas.length > 200 && (
+                <p className="mt-2 text-[13px] text-suave">
+                  Mostrando as 200 maiores diferenças de {conferencia.linhas.length}.
+                </p>
+              )}
             </div>
           )}
         </Cartao>

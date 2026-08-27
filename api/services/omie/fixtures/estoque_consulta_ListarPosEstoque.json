@@ -1,18 +1,37 @@
 {
-  "pagina": 1,
-  "total_de_paginas": 1,
+  "nPagina": 1,
+  "nTotPaginas": 1,
+  "nRegistros": 2,
+  "nTotRegistros": 2,
+  "dDataPosicao": "27/08/2026",
   "produtos": [
     {
+      "cCodInt": "",
       "cCodigo": "CAF-500",
       "cDescricao": "Café em grão especial 500g",
+      "codigo_local_estoque": 7298774029,
+      "estoque_minimo": 0,
+      "fisico": 12,
+      "nCMC": 30.5,
+      "nCodProd": 9100000001,
+      "nPendente": 0,
+      "nPrecoUnitario": 42.0,
       "nSaldo": 12,
-      "nCMC": 30.5
+      "reservado": 0
     },
     {
+      "cCodInt": "",
       "cCodigo": "LEI-INT",
       "cDescricao": "Leite integral 1L",
+      "codigo_local_estoque": 7298774029,
+      "estoque_minimo": 0,
+      "fisico": 40,
+      "nCMC": 4.1,
+      "nCodProd": 9100000002,
+      "nPendente": 0,
+      "nPrecoUnitario": 6.5,
       "nSaldo": 40,
-      "nCMC": 4.1
+      "reservado": 0
     }
   ]
 }

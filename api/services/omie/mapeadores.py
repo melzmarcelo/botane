@@ -335,12 +335,26 @@ def fornecedor_do_cadastro(bruto: dict) -> dict:
 
 
 def posicao_de_estoque(bruto: dict) -> dict:
-    """Uma linha do `ListarPosEstoque` — traz o CMC, o custo médio do Omie."""
+    """Uma linha do `ListarPosEstoque` — traz o CMC, o custo médio do Omie.
+
+    ⚠️ **`nCodProd` é o `codigo_omie`; `cCodigo` NÃO é.** A primeira versão lia
+    `cCodigo`, que é o código da CASA registrado no Omie ("104304"), e comparava
+    com `produtos.codigo_omie`, que guarda o id de lá ("7302593753"). Nunca
+    casava — a conferência voltaria **vazia** mesmo com a chamada funcionando, e
+    "nenhuma divergência" é indistinguível de "nenhum produto encontrado".
+    Mesma família do erro que ligou REDBULL a LIMÃO TAITY: ler o identificador
+    errado não dá erro em lugar nenhum.
+
+    `codigo_da_casa` viaja junto porque é o que se mostra na tela — ninguém
+    reconhece um produto por "7302593753".
+    """
     return {
-        "codigo_omie": str(_pega(bruto, "cCodigo", "codigo_produto", padrao="") or "") or None,
+        "codigo_omie": str(_pega(bruto, "nCodProd", "codigo_produto", padrao="") or "") or None,
+        "codigo_da_casa": str(_pega(bruto, "cCodigo", padrao="") or "") or None,
         "descricao": _pega(bruto, "cDescricao", "descricao"),
         "saldo": _numero(_pega(bruto, "nSaldo", "saldo")),
         "cmc": _numero(_pega(bruto, "nCMC", "cmc", "custo_medio")),
+        "preco_unitario": _numero(_pega(bruto, "nPrecoUnitario", padrao=0)),
     }
 
 

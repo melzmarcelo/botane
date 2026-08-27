@@ -41,6 +41,42 @@ _EDITAVEIS = (
 )
 
 
+# ⚠️ As três colunas com índice único além do `codigo`. Deixar a constraint
+# estourar devolve "Internal Server Error" para quem só digitou um código que já
+# é de outro produto — mesma família do nome repetido em tabela de apoio, que já
+# custou um chamado. Ver `_recusar_codigo_de_outro`.
+_UNICOS = (
+    ("codigo_omie", "o código do Omie"),
+    ("codigo_pdv", "o código do PDV"),
+    ("codigo_barras", "o código de barras"),
+)
+
+
+def _recusar_codigo_de_outro(cur, dados: dict, id_produto: int | None = None) -> None:
+    """Código único que já é de outro cadastro vira 409 com frase, não 500.
+
+    ⚠️ E a frase **nomeia o dono** — porque a ação seguinte quase sempre é abrir
+    aquele produto e usar o botão Vincular: dois cadastros disputando o mesmo
+    identificador externo costumam ser o mesmo produto.
+    """
+    for coluna, rotulo in _UNICOS:
+        valor = (dados.get(coluna) or "").strip() if isinstance(dados.get(coluna), str) \
+            else dados.get(coluna)
+        if not valor:
+            continue
+        cur.execute(
+            f"SELECT id, codigo, nome FROM produtos WHERE {coluna} = %s AND id <> %s",
+            (str(valor), id_produto or 0),
+        )
+        dono = cur.fetchone()
+        if dono:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"{rotulo} {valor} já é de “{dono['nome']}” ({dono['codigo']}). "
+                        "Se for o mesmo produto, abra aquele cadastro e use Vincular."),
+            )
+
+
 def _proximo_codigo(cur) -> str:
     cur.execute("SELECT nextval('seq_codigo_produto') AS n")
     return f"P{cur.fetchone()['n']:04d}"
@@ -317,6 +353,7 @@ def criar(body: ProdutoCreate,
             raise HTTPException(
                 status_code=409, detail=f"O código {codigo} já é de {existente['nome']}"
             )
+        _recusar_codigo_de_outro(cur, dados)
         dados["codigo"] = codigo
         dados["criado_por"] = ctx.id_usuario
         dados["nome"] = dados["nome"].strip()
@@ -357,6 +394,7 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
 
         # O tipo que vale na validação é o novo, se veio; senão o que já estava.
         _valida_basico({**dict(antes), **dados})
+        _recusar_codigo_de_outro(cur, dados, id_produto)
 
         if "codigo" in dados and dados["codigo"]:
             cur.execute(

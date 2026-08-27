@@ -2281,6 +2281,39 @@ try {
     pdv.temCardapio || !pdv.configurada, pdv);
   await foto(p, "30-pdv-legal");
 
+  console.log("10x2. conferencia de estoque com o Omie");
+  // ⚠️ **Esta conferencia NUNCA funcionou ate 27/08/2026 e o simulado dizia que
+  // sim.** `ListarPosEstoque` tem um dialeto de paginacao so dele, e o mapeador
+  // lia `cCodigo` (o codigo da CASA no Omie) como `codigo_omie` (o id de la) --
+  // nunca casava. O sintoma seria uma tabela VAZIA, que se le como "esta tudo
+  // certo". Por isso a tela mostra o RESUMO antes da tabela.
+  await irPara(p, `${WEB}/integracoes`);
+  await new Promise((r) => setTimeout(r, 2000));
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => /Conferir estoque|Confer[êe]ncia/i.test(x.textContent ?? ""));
+    b?.click();
+  });
+  // ⚠️ **Espera pela RESPOSTA, não por um tempo fixo.** Contra a conta real a
+  // varredura leva ~17 s (1.987 produtos em 10 páginas); um `setTimeout` de três
+  // segundos reprovava a checagem por impaciência, não por defeito.
+  let conf = "";
+  for (let tentativa = 0; tentativa < 30; tentativa++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    conf = await textoVisivel(p);
+    if (/produto\(s\) conferido|Nenhum produto com c[óo]digo do Omie|Falha na confer/i.test(conf)) {
+      break;
+    }
+  }
+  checar("a conferencia de estoque responde",
+    /produto\(s\) conferido|Nenhum produto com c[óo]digo do Omie/i.test(conf),
+    conf.slice(0, 200));
+  // ⚠️ O resumo diz o que a tabela nao diz: quantos foram conferidos e quantos
+  // do Omie nao tem cadastro aqui. Lista curta sem ele le como "quase tudo bem".
+  checar("e mostra o resumo antes da tabela",
+    /conferido\(s\)/i.test(conf) || /Nenhum produto/i.test(conf), conf.slice(0, 200));
+  await foto(p, "33-conferencia-estoque");
+
   console.log("10y. buscar notas do Omie sozinho");
   // ⚠️ A agenda nasce MANUAL e este bloco a devolve assim — a conta configurada
   // aqui pode ser a REAL, e deixar HORARIA ligada faria a máquina buscar notas

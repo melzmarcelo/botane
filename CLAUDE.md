@@ -392,6 +392,31 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   cabeçalhos e `ConsultarRecebimento` (por `nIdReceb`) para os itens — a lista **não traz item
   nenhum**, e o detalhe só é pedido para nota que ainda não existe aqui: pedir o de todas
   custaria meia hora e a conta bloqueada. Mapeador: `recebimento_de_nfe` / `item_do_recebimento`.
+- 🔑 **A conferência de estoque com o Omie NUNCA funcionou até 27/08/2026 — e o modo simulado
+  dizia que sim.** `GET /omie/conferencia` sempre voltou "Tag [PAGINA] não faz parte da
+  estrutura"; cada recusa gastava cota. Três erros empilhados, e o segundo é o pior:
+  1. **`ListarPosEstoque` tem um dialeto SÓ DELE** (`DIALETO_POSICAO`): aceita `nPagina`,
+     **recusa** `nRegistrosPorPagina` e quer `nRegPorPagina`; responde `nTotPaginas`/
+     `nTotRegistros`. São **três** dialetos, não dois — e a lição não é o número: é que **o
+     dialeto é por CHAMADA, não por módulo**. Uma chamada com um registro só diz qual é.
+  2. **O mapeador lia `cCodigo` como `codigo_omie`.** `cCodigo` é o código da CASA registrado no
+     Omie ("104304"); `codigo_omie` guarda o id de lá (`nCodProd`, "7302593753"). Nunca casava —
+     e o sintoma seria uma **lista vazia**, que se lê como "está tudo certo". Mesma família do
+     erro que ligou REDBULL a LIMÃO TAITY: ler o identificador errado não dá erro em lugar nenhum.
+  3. **A comparação olhava só o custo médio.** Saldo diferente com custo igual é o caso mais
+     comum de todos — a entrada lançada de um lado só.
+  ⚠️ **E a fixture tinha sido escrita a partir da suposição errada** (`pagina`, `cCodigo`), então
+  o simulado confirmava a suposição de quem a escreveu. **Fixture que copia o que se imagina não
+  testa nada.** Agora ela copia a forma real, lida da conta do cliente.
+  ⚠️ A resposta virou **objeto**, não lista: `conferidos`, `sem_cadastro_aqui`, `divergentes` e
+  `truncado`. Lista sozinha não distingue "nenhuma divergência" de "nenhum produto comparado", e
+  a tela mostra o resumo ANTES da tabela por isso. Medido na conta real: **1.987 produtos em
+  ~17 s** (10 páginas de 200).
+- ⚠️ **Código único repetido virava 500.** `codigo_omie`, `codigo_pdv` e `codigo_barras` têm
+  índice único, e a violação vazava como "Internal Server Error" para quem só digitou um código
+  que já é de outro produto. Virou 409 com frase que **nomeia o dono** — porque a ação seguinte
+  quase sempre é abrir aquele cadastro e usar **Vincular**. Mesma família do nome repetido em
+  tabela de apoio.
 - ⚠️ **O Omie tem DOIS dialetos de paginação** (`cliente.DIALETO_PADRAO` e `DIALETO_HUNGARO`).
   Os módulos antigos falam `pagina`/`registros_por_pagina`; o recebimento exige
   `nPagina`/`nRegistrosPorPagina` e recusa o outro com "Tag [PAGINA] não faz parte da
@@ -911,8 +936,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.160 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
+- Testes (1.174 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
@@ -920,7 +945,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (106), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (297, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (299, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

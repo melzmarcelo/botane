@@ -23,7 +23,7 @@ from services import estoque as motor
 from services import custos
 from services.custos import CASAS_CUSTO, dec
 from services.omie import mapeadores
-from services.omie.cliente import DIALETO_HUNGARO, ClienteOmie, ErroOmie
+from services.omie.cliente import DIALETO_HUNGARO, DIALETO_POSICAO, ClienteOmie, ErroOmie
 
 SISTEMA = "OMIE"
 
@@ -1166,22 +1166,50 @@ def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
             "tag": tag, "modo": cliente.modo}
 
 
-def conferir_estoque(cur, cliente: ClienteOmie) -> list[dict]:
-    """Compara o custo médio daqui com o CMC do Omie — conferência cruzada de graça.
+def conferir_estoque(cur, cliente: ClienteOmie, so_divergentes: bool = True) -> dict:
+    """Saldo e custo médio daqui × posição de estoque do Omie.
 
-    Divergência quer dizer que alguma entrada não foi conciliada de um dos lados.
+    Divergência quer dizer que alguma entrada não foi conciliada de um dos lados
+    — e é a conferência cruzada mais barata que existe, porque o Omie já mantém
+    o número por outros motivos.
+
+    ⚠️ **`ListarPosEstoque` tem um dialeto de paginação SÓ DELE**
+    (`DIALETO_POSICAO`): aceita `nPagina`, recusa `nRegistrosPorPagina` e quer
+    `nRegPorPagina`. Com o dialeto errado, **toda** chamada voltava "Tag [PAGINA]
+    não faz parte da estrutura" — a conferência nunca funcionou, e cada recusa
+    gastava cota.
+
+    ⚠️ **O de-para é `nCodProd` → `produtos.codigo_omie`**, nunca `cCodigo`: esse
+    é o código da CASA registrado no Omie, e comparar com `codigo_omie` não casa
+    nunca. O sintoma seria pior que o erro — lista vazia, que se lê como "está
+    tudo certo".
+
+    ⚠️ **Só compara produto que existe DOS DOIS LADOS.** Produto do Omie que não
+    tem cadastro aqui não é divergência: é catálogo que ninguém importou, e
+    contá-lo encheria a lista de linhas sem ação possível. O resumo diz quantos
+    foram por esse caminho, para o número não sumir.
     """
-    linhas = []
+    linhas: list[dict] = []
+    vistos = 0
+    sem_cadastro = 0
+    truncou = {"foi": False}
+
+    def marcar(trazidos, total):
+        truncou["foi"] = True
+        truncou["trazidos"], truncou["total"] = trazidos, total
+
     try:
         for _dados, registros in cliente.paginar(
-            "estoque/consulta", "ListarPosEstoque", "produtos", {"dDataPosicao": ""},
+            "estoque/consulta", "ListarPosEstoque", "produtos",
+            dialeto=DIALETO_POSICAO, por_pagina=200, maximo=30, ao_truncar=marcar,
         ):
             for bruto in registros:
                 pos = mapeadores.posicao_de_estoque(bruto)
                 if not pos["codigo_omie"]:
                     continue
+                vistos += 1
                 cur.execute(
-                    """SELECT p.id, p.nome,
+                    """SELECT p.id, p.codigo, p.nome, p.um_estoque,
                               coalesce(sum(s.quantidade), 0) AS saldo,
                               CASE WHEN coalesce(sum(s.quantidade), 0) > 0
                                    THEN sum(s.quantidade * s.custo_medio) / sum(s.quantidade)
@@ -1189,23 +1217,54 @@ def conferir_estoque(cur, cliente: ClienteOmie) -> list[dict]:
                          FROM produtos p
                          LEFT JOIN estoque_saldos s ON s.id_produto = p.id
                         WHERE p.codigo_omie = %s
-                        GROUP BY p.id, p.nome""",
+                        GROUP BY p.id, p.codigo, p.nome, p.um_estoque""",
                     (pos["codigo_omie"],),
                 )
                 nosso = cur.fetchone()
                 if not nosso:
+                    sem_cadastro += 1
                     continue
-                diferenca = dec(nosso["custo_medio"]) - pos["cmc"]
+
+                dif_saldo = dec(nosso["saldo"]) - dec(pos["saldo"])
+                dif_custo = dec(nosso["custo_medio"]) - pos["cmc"]
+                # ⚠️ Duas divergências, não uma. A versão anterior olhava só o
+                # custo — e saldo diferente com custo igual é o caso mais comum
+                # de todos: a entrada foi lançada de um lado só.
+                divergente = abs(dif_saldo) > Decimal("0.001") or abs(dif_custo) > Decimal("0.01")
+                if so_divergentes and not divergente:
+                    continue
                 linhas.append({
+                    "id_produto": nosso["id"],
+                    "codigo": nosso["codigo"],
                     "produto": nosso["nome"],
+                    "um_estoque": nosso["um_estoque"],
                     "codigo_omie": pos["codigo_omie"],
                     "saldo_botane": float(dec(nosso["saldo"])),
                     "saldo_omie": float(pos["saldo"]),
+                    "diferenca_saldo": float(dif_saldo),
                     "custo_medio_botane": float(dec(nosso["custo_medio"])),
                     "cmc_omie": float(pos["cmc"]),
-                    "diferenca": float(diferenca),
-                    "divergente": abs(diferenca) > Decimal("0.01"),
+                    "diferenca_custo": float(dif_custo),
+                    "divergente": divergente,
                 })
     except ErroOmie as e:
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
-    return linhas
+
+    linhas.sort(key=lambda x: -abs(x["diferenca_saldo"]))
+    return {
+        "linhas": linhas,
+        "conferidos": vistos,
+        "sem_cadastro_aqui": sem_cadastro,
+        "divergentes": sum(1 for x in linhas if x["divergente"]),
+        # ⚠️ Truncar calado foi o erro que custou "992 criado(s)" no catálogo:
+        # indistinguível de "o catálogo tem 992". Aqui o mesmo teto existe, e
+        # quando bate, a tela precisa dizer.
+        "truncado": truncou["foi"],
+        "message": (
+            f"{vistos} produto(s) conferido(s)"
+            + (f", {sem_cadastro} sem cadastro aqui" if sem_cadastro else "")
+            + f" — {sum(1 for x in linhas if x['divergente'])} divergente(s)"
+            + (". A varredura parou no teto de páginas — há mais no Omie."
+               if truncou["foi"] else "")
+        ),
+    }

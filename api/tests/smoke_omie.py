@@ -14,6 +14,7 @@ lançamento, vincular ensina o de-para, e a credencial nunca sai da API.
 """
 
 import json
+from pathlib import Path
 import sys
 import time
 import urllib.error
@@ -335,8 +336,109 @@ checar("o catálogo não inventa unidade que a casa não tem",
 st, r2 = chamar("POST", "/omie/importar-catalogo", token=token)
 checar("reimportar o catálogo não duplica", r2.get("criados") == 0, r2)
 
+print("6a2. conferência de estoque: saldo e custo daqui × posição no Omie")
+# ⚠️ **Esta conferência NUNCA funcionou até 27/08/2026, e o modo simulado dizia
+# que sim.** Dois erros, e o segundo é o que assusta:
+#
+#   1. `ListarPosEstoque` tem um dialeto de paginação SÓ DELE — aceita `nPagina`,
+#      recusa `nRegistrosPorPagina`, quer `nRegPorPagina`. Toda chamada real
+#      voltava "Tag [PAGINA] não faz parte da estrutura", e cada recusa gasta
+#      cota da conta do cliente.
+#   2. o mapeador lia `cCodigo` como `codigo_omie`. `cCodigo` é o código da CASA
+#      registrado no Omie ("104304"); `codigo_omie` guarda o id de lá
+#      ("7302593753"). **Nunca casava** — e o sintoma seria uma lista VAZIA, que
+#      se lê como "está tudo certo".
+#
+# ⚠️ E a fixture tinha sido escrita a partir da suposição errada, com `pagina` e
+# `cCodigo`. Fixture que confirma a suposição de quem a escreveu não testa nada:
+# o simulado passou por meses enquanto o real nunca respondeu. Agora ela copia a
+# forma REAL, lida da conta do cliente.
+FIXTURE_POS = json.loads(
+    (Path(__file__).resolve().parents[1] / "services" / "omie" / "fixtures"
+     / "estoque_consulta_ListarPosEstoque.json").read_text(encoding="utf-8")
+)
+_alvo = FIXTURE_POS["produtos"][0]
+
+# ⚠️ **Precondição garantida, não suposta.** `codigo_omie` é único e produto com
+# movimento vira INATIVO em vez de sumir — criar um por rodada estourava a
+# unicidade na segunda, acusando um bug que não existe. O jeito honesto é
+# procurar quem já tem aquele código e reaproveitar; só a API não sabe buscar
+# por `codigo_omie`, então esta é a exceção que justifica ir ao banco.
+def _produto_do_codigo_omie(codigo_omie: str) -> int | None:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
+
+    conexao = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
+                               dbname=DB_NAME, sslmode=DB_SSLMODE,
+                               cursor_factory=RealDictCursor)
+    with conexao, conexao.cursor() as cur:
+        cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (str(codigo_omie),))
+        achado = cur.fetchone()
+    conexao.close()
+    return achado["id"] if achado else None
+
+
+produto_conf = _produto_do_codigo_omie(_alvo["nCodProd"])
+if produto_conf:
+    st, r = chamar("PUT", f"/produtos/{produto_conf}", {
+        "nome": "Cafe da conferencia", "tipo": "INSUMO", "um_estoque": "KG",
+        "controla_estoque": True, "status": "ATIVO", "ativo": True,
+    }, token=token)
+    checar("um produto com o codigo_omie da fixture", st == 200, (st, r))
+else:
+    st, r = chamar("POST", "/produtos", {
+        "codigo": f"CONF-{marca}", "nome": "Cafe da conferencia", "tipo": "INSUMO",
+        "um_estoque": "KG", "controla_estoque": True, "status": "ATIVO",
+        "codigo_omie": str(_alvo["nCodProd"]),
+    }, token=token)
+    produto_conf = r.get("id")
+    checar("um produto com o codigo_omie da fixture", st == 201, (st, r))
+
+# ⚠️ E o codigo unico repetido tem de virar 409 COM FRASE, nunca 500: e a mesma
+# familia do nome repetido em tabela de apoio, e a frase nomeia o dono porque a
+# acao seguinte e abrir aquele cadastro e usar Vincular.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"CONF-DUP-{marca}", "nome": "Colidente", "tipo": "INSUMO",
+    "um_estoque": "KG", "status": "ATIVO", "codigo_omie": str(_alvo["nCodProd"]),
+}, token=token)
+checar("codigo do Omie repetido e 409, nao 500", st == 409, (st, r))
+checar("e a frase nomeia o dono e manda Vincular",
+       "Vincular" in str(r.get("detail", "")), r)
+
 st, conf = chamar("GET", "/omie/conferencia", token=token)
-checar("conferência com o CMC responde", st == 200, conf if st != 200 else len(conf))
+checar("a conferência responde", st == 200, conf)
+# ⚠️ Objeto, não lista: lista sozinha não conseguia dizer quantos foram
+# conferidos nem que a varredura truncou — e vazia se lê como "tudo certo".
+checar("e devolve o resumo, não só as linhas",
+       isinstance(conf, dict) and "conferidos" in conf, type(conf).__name__)
+checar("conferiu os dois itens da fixture", conf.get("conferidos") == 2, conf.get("conferidos"))
+# O segundo item da fixture não tem cadastro aqui — e isso é contado, não somem.
+checar("e conta o que não tem cadastro aqui",
+       conf.get("sem_cadastro_aqui") == 1, conf.get("sem_cadastro_aqui"))
+
+minha = next((x for x in (conf.get("linhas") or []) if x["id_produto"] == produto_conf), None)
+checar("o produto desta rodada aparece na conferência", minha is not None,
+       [x["codigo"] for x in (conf.get("linhas") or [])][:5])
+if minha:
+    # ⚠️ O de-para é por `nCodProd`. Se voltasse a ler `cCodigo`, esta linha
+    # simplesmente não existiria — e a lista vazia pareceria "sem divergência".
+    checar("pelo nCodProd, não pelo código da casa",
+           minha["codigo_omie"] == str(_alvo["nCodProd"]), minha["codigo_omie"])
+    checar("com o saldo do Omie", minha["saldo_omie"] == _alvo["nSaldo"], minha)
+    checar("e o saldo daqui, que é zero", minha["saldo_botane"] == 0, minha)
+    # ⚠️ Duas divergências, não uma: a versão anterior olhava só o custo, e
+    # saldo diferente com custo igual é o caso mais comum de todos.
+    checar("a diferença de SALDO é apontada",
+           abs(minha["diferenca_saldo"] + _alvo["nSaldo"]) < 0.001, minha["diferenca_saldo"])
+    checar("e a de custo também", minha["cmc_omie"] == _alvo["nCMC"], minha)
+
+st, todos = chamar("GET", "/omie/conferencia?so_divergentes=false", token=token)
+checar("sem o filtro, traz também o que bate",
+       len(todos.get("linhas") or []) >= len(conf.get("linhas") or []),
+       (len(todos.get("linhas") or []), len(conf.get("linhas") or [])))
+
 
 print("6b. o catálogo destrava as notas: nome limpo, de-para pelo id do Omie e a trava da unidade")
 # O rodapé de tributos aproximados que o DANFE manda imprimir vem grudado na
