@@ -538,9 +538,25 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   a fila de "falta ficha" continua mostrando só os 464 que ainda se vendem.
   ⚠️ **O EAN é passo EXATO da cascata**, antes do nome (`ux_produto_barras` é único, então não
   há ambiguidade). É ele que impede o mesmo pacote de virar dois cadastros — um pelo Omie, outro
-  pelo cardápio. ⚠️ **A conta real devolve EAN vazio em 100% do cardápio**: o passo dorme hoje e
-  passa a valer no dia em que alguém preencher, de um lado ou do outro. `por_ean` viaja no resumo
-  justamente para o zero ser visível.
+  pelo cardápio.
+  🔑 **Mas o PDV desta conta NÃO tem código de barras em lugar nenhum — conferido nos três
+  lugares possíveis (27/08/2026), para ninguém repetir a investigação:**
+  1. `produtos/get` → `codigoEAN`: existe no modelo, **vazio em 630 de 630**
+  2. `produtos/getlistaresumida` → `listaUnidadeCompra[].codEAN` (com `unidade` e
+     `fatorconversao` junto — é o único lugar da API com fator de embalagem): a **lista inteira
+     vem vazia em 570 de 570**
+  3. item do cupom: **não existe** campo de código de barras no modelo
+  ⚠️ **O contraste explica o porquê**: NCM está preenchido em 463 de 464, EAN em zero. O NCM é
+  obrigatório para emitir o cupom fiscal; o EAN é opcional, e num café ninguém bipa nada — o
+  operador toca um botão numa tela agrupada por VITRINE/BAR/COZINHA. O campo nunca teve a quem
+  servir.
+  ⚠️ **Consequência prática: nesta conta o passo do EAN NÃO dispara**, por mais cheio que esteja
+  o nosso lado (1.150 dos 2.190 produtos do Omie têm EAN, e o XML da NF-e traz `cEAN` por item).
+  Quem defende contra duplicado aqui é `/produtos/duplicados`, não o EAN. `por_ean` viaja no
+  resumo justamente para esse zero ficar visível em vez de parecer uma trava funcionando.
+  ⚠️ Existe saída, e ela é um **write no PDV do cliente** (`produtos/update`/`produtos/save`,
+  ainda não usados — até aqui só lemos de lá): mandar o EAN daqui para os itens de mercearia,
+  que são os que têm código impresso na embalagem. Decisão de quem opera, não efeito colateral.
   ⚠️ **NUNCA case código de cardápio com código da casa — são espaços de nome diferentes.** A
   primeira versão fazia isso e, numa base com 2.189 insumos do Omie, **os 78 vínculos criados
   assim estavam TODOS errados**: REDBULL virou LIMÃO TAITY, PÃO COM MANTEIGA virou MANJERICÃO,

@@ -157,6 +157,29 @@ outro é feito na casa. O tipo continua sendo decisão de quem confere o rascunh
 chutar poria o prato na fila errada — a de "falta ficha" em vez da de "falta
 compra".
 
+### Código de barras: não existe nesta conta
+
+Conferido nos três lugares possíveis em 27/08/2026 — vale registrar para não se
+repetir a busca:
+
+| Onde | Campo | Resultado |
+|---|---|---|
+| `produtos/get` | `codigoEAN` | existe no modelo, **vazio em 630 de 630** |
+| `produtos/getlistaresumida` | `listaUnidadeCompra[].codEAN` | a lista vem **vazia em 570 de 570** |
+| item do cupom | — | **não existe** campo de código de barras |
+
+⚠️ **`listaUnidadeCompra` é o único lugar da API com fator de embalagem**
+(`{unidade, fatorconversao, codEAN}`), e só aparece na rota resumida. Se um dia
+o cliente preencher, é dali que sai o `produto_unidades`.
+
+⚠️ **O contraste explica**: NCM preenchido em 463 de 464, EAN em zero. O NCM é
+obrigatório para emitir o cupom fiscal; o EAN é opcional — e num café ninguém
+bipa nada, o operador toca um botão. O campo nunca teve a quem servir.
+
+⚠️ A página de ajuda de cada rota (`/Help/Api/GET-produtos-get`) traz o **modelo
+de campos**; o índice de `/help` traz só a lista de rotas. As duas respondem
+apenas com o Bearer token.
+
 ### `grupoprodutos/get`
 
 30 grupos, com `codigo`, `nome`, `corIcone` e `ativo`. Os nomes são os que viram
