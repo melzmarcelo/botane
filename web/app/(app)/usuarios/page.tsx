@@ -1,15 +1,24 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
-import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
+import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Vinculo } from "./formulario";
 
-type Papel = { id: number; nome: string; descricao: string | null; sistema: boolean };
-type Vinculo = { id_papel: number; papel: string; id_unidade: number | null; unidade: string | null };
+/**
+ * A lista de quem tem acesso — só a lista.
+ *
+ * ⚠️ **O cadastro saiu da coluna da direita.** A lista de papéis cresce com o
+ * sistema e cada um tem descrição de duas linhas; espremida em 380 px, ela
+ * empurrava o botão de salvar para fora da tela, e quem cadastrava marcava as
+ * caixinhas sem ver o que marcava. Mesmo corte de Compras, Vendas e
+ * Fornecedores.
+ */
+
 type Usuario = {
   id: number;
   nome: string;
@@ -21,31 +30,21 @@ type Usuario = {
   papeis: Vinculo[];
 };
 
-const vazio = { nome: "", email: "", telefone: "", senha: "", papeis: [] as number[] };
-
 export default function PaginaUsuarios() {
   const aviso = useAviso();
   const { eu } = useSessao();
   const [usuarios, setUsuarios] = useState<Usuario[] | null>(null);
-  const [papeis, setPapeis] = useState<Papel[]>([]);
-  const [form, setForm] = useState({ ...vazio });
-  const [editando, setEditando] = useState<number | null>(null);
   const [erro, setErro] = useState("");
   const [link, setLink] = useState<{ nome: string; url: string } | null>(null);
-  const [salvando, setSalvando] = useState(false);
   const pag = usePaginacao("usuarios");
 
   const carregar = useCallback(async () => {
     try {
       const q = new URLSearchParams(pag.parametros);
       q.set("incluir_inativos", "true");
-      const [u, p] = await Promise.all([
-        api.listar<Usuario>(`/usuarios?${q}`),
-        api.get<Papel[]>("/papeis"),
-      ]);
+      const u = await api.listar<Usuario>(`/usuarios?${q}`);
       setUsuarios(u.itens);
       pag.setTotal(u.total);
-      setPapeis(p);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -55,60 +54,6 @@ export default function PaginaUsuarios() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
-
-  function novo() {
-    setEditando(null);
-    setForm({ ...vazio });
-    setErro("");
-  }
-
-  function editar(u: Usuario) {
-    setEditando(u.id);
-    setForm({
-      nome: u.nome,
-      email: u.email,
-      telefone: u.telefone ?? "",
-      senha: "",
-      papeis: u.papeis.map((v) => v.id_papel),
-    });
-    setErro("");
-  }
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault();
-    setSalvando(true);
-    setErro("");
-    // id_unidade nulo = vale em todas as lojas; com uma loja só é o que faz sentido
-    const vinculos = form.papeis.map((id) => ({ id_papel: id, id_unidade: null }));
-    try {
-      if (editando) {
-        const corpo: Record<string, unknown> = {
-          nome: form.nome,
-          email: form.email,
-          telefone: form.telefone || null,
-          papeis: vinculos,
-        };
-        if (form.senha) corpo.senha = form.senha;
-        await api.put(`/usuarios/${editando}`, corpo);
-        aviso.sucesso("Usuário atualizado.");
-      } else {
-        await api.post("/usuarios", {
-          nome: form.nome,
-          email: form.email,
-          telefone: form.telefone || null,
-          senha: form.senha,
-          papeis: vinculos,
-        });
-        aviso.sucesso("Usuário criado. A senha precisa ser trocada no primeiro acesso.");
-      }
-      novo();
-      await carregar();
-    } catch (err) {
-      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
-    } finally {
-      setSalvando(false);
-    }
-  }
 
   async function alternarAtivo(u: Usuario) {
     setErro("");
@@ -162,9 +107,9 @@ export default function PaginaUsuarios() {
             o servidor, não a tela.
           </p>
         </div>
-        <button className="btn btn-secundario" onClick={novo}>
+        <Link href="/usuarios/novo" className="btn btn-primario">
           Novo usuário
-        </button>
+        </Link>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -191,172 +136,81 @@ export default function PaginaUsuarios() {
         </Cartao>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <Cartao titulo="Quem tem acesso">
-          {!usuarios.length ? (
-            <Vazio>Nenhum usuário ainda.</Vazio>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Pessoa</th>
-                    <th>Papéis</th>
-                    <th>Último acesso</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usuarios.map((u) => (
-                    <tr key={u.id} className={u.ativo ? "" : "opacity-55"}>
-                      <td>
-                        <button className="text-left" onClick={() => editar(u)}>
-                          <span className="font-semibold hover:text-erva">{u.nome}</span>
-                          <span className="block text-[13px] text-suave">{u.email}</span>
+      <Cartao titulo="Quem tem acesso">
+        {!usuarios.length ? (
+          <Vazio>Nenhum usuário ainda.</Vazio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Pessoa</th>
+                  <th>Papéis</th>
+                  <th>Último acesso</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {usuarios.map((u) => (
+                  <tr key={u.id} className={u.ativo ? "" : "opacity-55"}>
+                    <td>
+                      <Link href={`/usuarios/${u.id}`} className="text-left">
+                        <span className="font-semibold hover:text-erva">{u.nome}</span>
+                        <span className="block text-[13px] text-suave">{u.email}</span>
+                      </Link>
+                      {u.bloqueado && (
+                        <button
+                          className="rotulo mt-1 block text-erro hover:underline"
+                          onClick={() => void desbloquear(u)}
+                        >
+                          bloqueado · desbloquear
                         </button>
-                        {u.bloqueado && (
-                          <button
-                            className="rotulo mt-1 block text-erro hover:underline"
-                            onClick={() => void desbloquear(u)}
-                          >
-                            bloqueado · desbloquear
-                          </button>
-                        )}
-                        {u.ativo && (
-                          <button
-                            className="rotulo mt-1 block hover:text-erva"
-                            onClick={() => void linkDeSenha(u)}
-                          >
-                            esqueceu a senha?
-                          </button>
-                        )}
-                      </td>
-                      <td>
-                        <div className="flex flex-wrap gap-1">
-                          {u.papeis.length ? (
-                            u.papeis.map((v) => (
-                              <Etiqueta key={v.id_papel} cor="erva">
-                                {v.papel}
-                              </Etiqueta>
-                            ))
-                          ) : (
-                            <Etiqueta cor="alerta">sem papel</Etiqueta>
-                          )}
-                        </div>
-                      </td>
-                      <td className="mono text-[13px] text-suave">
-                        {u.ultimo_acesso
-                          ? new Date(u.ultimo_acesso).toLocaleString("pt-BR")
-                          : "nunca"}
-                      </td>
-                      <td className="text-right">
-                        {u.id !== eu?.id && (
-                          <button
-                            className="rotulo hover:text-erva"
-                            onClick={() => void alternarAtivo(u)}
-                          >
-                            {u.ativo ? "desativar" : "reativar"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <Paginacao p={pag} rotulo="usuário(s)" />
-      </Cartao>
-
-        <Cartao titulo={editando ? "Editar usuário" : "Novo usuário"}>
-          <form onSubmit={salvar} className="flex flex-col gap-4">
-            <Campo rotulo="Nome">
-              <input
-                className="campo"
-                required
-                value={form.nome}
-                onChange={(e) => setForm({ ...form, nome: e.target.value })}
-              />
-            </Campo>
-            <Campo rotulo="E-mail">
-              <input
-                className="campo"
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </Campo>
-            <Campo rotulo="Telefone">
-              <input
-                className="campo"
-                value={form.telefone}
-                onChange={(e) => setForm({ ...form, telefone: e.target.value })}
-              />
-            </Campo>
-            <Campo
-              rotulo={editando ? "Nova senha" : "Senha"}
-              dica={
-                editando
-                  ? "Deixe em branco para manter. Trocar aqui obriga nova senha no próximo acesso."
-                  : `${dicaSenha} A pessoa troca no primeiro acesso.`
-              }
-            >
-              <input
-                className="campo"
-                type="password"
-                minLength={SENHA_MINIMA}
-                required={!editando}
-                value={form.senha}
-                onChange={(e) => setForm({ ...form, senha: e.target.value })}
-              />
-            </Campo>
-
-            <div>
-              <span className="rotulo">Papéis</span>
-              <ul className="mt-1.5 flex flex-col gap-1.5">
-                {papeis.map((p) => (
-                  <li key={p.id} className="flex items-start gap-2">
-                    <input
-                      id={`papel-${p.id}`}
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 accent-erva"
-                      checked={form.papeis.includes(p.id)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          papeis: e.target.checked
-                            ? [...form.papeis, p.id]
-                            : form.papeis.filter((x) => x !== p.id),
-                        })
-                      }
-                    />
-                    <label htmlFor={`papel-${p.id}`} className="cursor-pointer">
-                      <span className="text-[14.5px] font-semibold">{p.nome}</span>
-                      {p.descricao && (
-                        <span className="block text-[12.5px] leading-snug text-suave">
-                          {p.descricao}
-                        </span>
                       )}
-                    </label>
-                  </li>
+                      {u.ativo && (
+                        <button
+                          className="rotulo mt-1 block hover:text-erva"
+                          onClick={() => void linkDeSenha(u)}
+                        >
+                          esqueceu a senha?
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {u.papeis.length ? (
+                          u.papeis.map((v) => (
+                            <Etiqueta key={v.id_papel} cor="erva">
+                              {v.papel}
+                            </Etiqueta>
+                          ))
+                        ) : (
+                          <Etiqueta cor="alerta">sem papel</Etiqueta>
+                        )}
+                      </div>
+                    </td>
+                    <td className="mono text-[13px] text-suave">
+                      {u.ultimo_acesso
+                        ? new Date(u.ultimo_acesso).toLocaleString("pt-BR")
+                        : "nunca"}
+                    </td>
+                    <td className="text-right">
+                      {u.id !== eu?.id && (
+                        <button
+                          className="rotulo hover:text-erva"
+                          onClick={() => void alternarAtivo(u)}
+                        >
+                          {u.ativo ? "desativar" : "reativar"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </div>
-
-            <div className="flex gap-2">
-              <button className="btn btn-primario" type="submit" disabled={salvando}>
-                {salvando ? "Salvando…" : editando ? "Salvar" : "Criar"}
-              </button>
-              {editando && (
-                <button className="btn btn-secundario" type="button" onClick={novo}>
-                  Cancelar
-                </button>
-              )}
-            </div>
-          </form>
-        </Cartao>
-      </div>
+              </tbody>
+            </table>
+          </div>
+        )}
+        <Paginacao p={pag} rotulo="usuário(s)" />
+      </Cartao>
     </div>
   );
 }

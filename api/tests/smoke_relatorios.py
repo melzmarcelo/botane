@@ -214,7 +214,9 @@ req.add_header("Authorization", f"Bearer {token}")
 with _u.urlopen(req, timeout=60) as resp:
     csv = resp.read().decode("utf-8")
 checar("o CSV sai", "Evolução de preço" in csv, csv[:80])
-checar("com o insumo do teste", f"Rel azeite {marca}" in csv)
+# ⚠️ `.upper()`: o nome do produto é normalizado pelo banco (migração
+# 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
+checar("com o insumo do teste", f"Rel azeite {marca}".upper() in csv)
 checar("e traz o quadro por setor no mesmo arquivo", "Onde o custo pesa" in csv)
 checar("com o impacto somado no resumo", "Impacto somado" in csv)
 

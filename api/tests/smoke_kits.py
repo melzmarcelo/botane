@@ -130,11 +130,13 @@ checar("e a origem diz que está completo", r.get("origem") == "kit", r)
 st, k = chamar("GET", f"/produtos/{combo['id']}/kit", token=token)
 detalhe = {d["componente"]: d for d in k["detalhe"]}
 checar("o detalhe mostra de onde veio cada real", len(detalhe) == 2, k["detalhe"])
+# ⚠️ `.upper()`: o nome do produto é normalizado pelo banco (migração
+# 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
 checar("o prato custa pela ficha",
-       detalhe.get(f"Kit prato {marca}", {}).get("origem") == "ficha", detalhe)
+       detalhe.get(f"Kit prato {marca}".upper(), {}).get("origem") == "ficha", detalhe)
 checar("o refrigerante custa pelo médio do estoque",
-       detalhe.get(f"Kit refri {marca}", {}).get("origem") in ("estoque", "medio", "custo_medio"),
-       detalhe)
+       detalhe.get(f"Kit refri {marca}".upper(), {}).get("origem")
+       in ("estoque", "medio", "custo_medio"), detalhe)
 
 print("3. o kit segue a ficha VIGENTE do prato")
 # Receita nova: dobra o arroz. O combo tem de acompanhar na hora.

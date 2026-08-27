@@ -150,7 +150,10 @@ checar("usa ponto e vírgula", ";" in csv.splitlines()[3], csv.splitlines()[3][:
 # coluna é o estoque mínimo, que num catálogo real vem vazio para quase todo
 # rascunho — a checagem olhava as cinco primeiras linhas e caía justamente
 # nelas. O produto da suíte tem saldo e custo conhecidos: é dele que se cobra.
-linha_do_teste = next((l for l in csv.splitlines() if f"Alerta insumo {marca}" in l), "")
+# ⚠️ `.upper()`: o nome do produto é normalizado pelo banco (migração
+# 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
+linha_do_teste = next(
+    (l for l in csv.splitlines() if f"Alerta insumo {marca}".upper() in l), "")
 checar("número sai com vírgula decimal",
        any("," in campo for campo in linha_do_teste.split(";")[5:8]), linha_do_teste)
 disposicao = next((v for k, v in cabecalhos.items() if k.lower() == "content-disposition"), "")
@@ -159,7 +162,7 @@ checar("e o cabeçalho é exposto ao navegador (CORS)",
        any(k.lower() == "access-control-expose-headers" for k in cabecalhos)
        or True, list(cabecalhos)[:4])
 checar("tem o título e a data de geração", "Posição de estoque" in csv and "gerado em" in csv)
-checar("o produto do teste está na planilha", f"Alerta insumo {marca}" in csv)
+checar("o produto do teste está na planilha", f"Alerta insumo {marca}".upper() in csv)
 
 st, csv, _ = chamar("GET", "/exportar/cmv.csv", token=token, bruto=True)
 checar("exporta o CMV", st == 200 and "Composição do CMV" in csv, csv[:80])

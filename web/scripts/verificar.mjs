@@ -518,10 +518,12 @@ try {
   await buscaProduto.type(`Tela bolo ${marca}`);
   await p.keyboard.press("Tab");
   await new Promise((r) => setTimeout(r, 1200));
+  // ⚠️ `.toUpperCase()`: o nome do produto e normalizado pelo BANCO (migracao
+  // 036, gatilho), entao o que a tela mostra nunca e o que a suite digitou.
   checar("e o Tab acha o prato desta rodada",
     (await p.evaluate(() =>
       document.querySelector('input[aria-label="Buscar produto produzido"]')?.value ?? ""))
-      .includes(`Tela bolo ${marca}`),
+      .includes(`Tela bolo ${marca}`.toUpperCase()),
     await p.evaluate(() =>
       document.querySelector('input[aria-label="Buscar produto produzido"]')?.value ?? ""));
   await p.$$eval("input[type=number]", (els) => {
@@ -549,7 +551,8 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
   const itemEscolhido = await p.evaluate(
     () => document.querySelector('input[aria-label="Buscar insumo ou preparo"]')?.value ?? "");
-  checar("e o Tab preenche a linha", itemEscolhido.includes(`Tela farinha ${marca}`),
+  checar("e o Tab preenche a linha",
+       itemEscolhido.includes(`Tela farinha ${marca}`.toUpperCase()),
     itemEscolhido);
   await numeros[2].type("500");
   const selectsUm = await p.$$("select");
@@ -582,7 +585,8 @@ try {
     await p.goto(`${WEB}/fichas/${idFicha}`, { waitUntil: "networkidle2" });
     await new Promise((r) => setTimeout(r, 1300));
     const textoCozinha = await textoVisivel(p);
-    checar("cozinha vê a receita", /Tela farinha/.test(textoCozinha), textoCozinha.slice(0, 80));
+    checar("cozinha vê a receita", /TELA FARINHA/i.test(textoCozinha),
+    textoCozinha.slice(0, 80));
     checar("cozinha NÃO vê custo na tela", !/R\$/.test(textoCozinha),
       textoCozinha.match(/.{0,30}R\$.{0,20}/)?.[0]);
     await foto(p, "17-ficha-cozinha");
@@ -1000,7 +1004,7 @@ try {
   const preencheu = await p.evaluate(
     () => document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "");
   checar("um resultado só: o Tab preenche e segue",
-    preencheu.includes(`Est tela ${m4}`), preencheu);
+    preencheu.includes(`Est tela ${m4}`.toUpperCase()), preencheu);
 
   // Mais de um resultado tem de abrir a janela de pesquisa, já filtrada.
   await p.evaluate(() => {
@@ -1045,13 +1049,13 @@ try {
       window.HTMLInputElement.prototype, "value").set;
     set.call(campo, alvo);
     campo.dispatchEvent(new Event("input", { bubbles: true }));
-  }, `Est tela ${m4}`);
+  }, `Est tela ${m4}`.toUpperCase());
   await new Promise((r) => setTimeout(r, 1400));
   await p.evaluate((alvo) => {
     const d = document.querySelector('[role="dialog"]');
     if (!d) return;
     [...d.querySelectorAll("li button")].find((b) => b.textContent.includes(alvo))?.click();
-  }, `Est tela ${m4}`);
+  }, `Est tela ${m4}`.toUpperCase());
   await new Promise((r) => setTimeout(r, 700));
   const depoisDaJanela = await p.evaluate(() => ({
     fechou: !document.querySelector('[role="dialog"]'),
@@ -1200,7 +1204,7 @@ try {
   // ⚠️ Procura o registro DESTA rodada, pelo nome com marca de tempo. "O
   // produto que contém X" cairia no de outra rodada — produto com movimento não
   // é apagado, vira inativo, e a base acumula um por rodada.
-  checar("com o prato vendido", textoDet.includes(`Cmv tela prato ${m6}`),
+  checar("com o prato vendido", textoDet.includes(`Cmv tela prato ${m6}`.toUpperCase()),
     textoDet.slice(0, 220));
   checar("o custo teórico aparece", /Custo te[óo]rico/i.test(textoDet));
   // 10 pratos × 5,00 de ficha = 50,00 — o congelado, não o custo de hoje.
@@ -2633,6 +2637,81 @@ try {
     [antes.total, filtrado.total]);
   await foto(p, "32-paginacao");
   for (const id of criadosPag) await api("DELETE", `/produtos/${id}`, null, token);
+
+  console.log("10b2. cadastrar em pagina propria: fornecedor e usuario");
+  // ⚠️ **Os dois formularios viviam na coluna da direita da lista.** O de
+  // fornecedor tinha treze campos espremidos em 360 px; o de usuario, uma lista
+  // de papeis que cresce com o sistema, cada um com descricao de duas linhas --
+  // e o botao de salvar caia fora da tela. Quem cadastrava marcava caixinha sem
+  // ver o que marcava. Mesmo corte de Compras e de Vendas.
+  const mCad = Date.now().toString().slice(-5);
+
+  await irPara(p, `${WEB}/fornecedores`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const listaForn = await textoVisivel(p);
+  // ⚠️ A lista nao pode mais ter o formulario dentro: se "Razao social" aparecer
+  // aqui, o cartao voltou para a direita.
+  checar("a lista de fornecedores nao tem mais o formulario",
+    !/Raz[ãa]o social/i.test(listaForn), listaForn.slice(0, 160));
+  checar("e o botao leva para a pagina nova", await p.evaluate(() =>
+    [...document.querySelectorAll("a")].some(
+      (a) => /Novo fornecedor/i.test(a.textContent ?? "") && a.getAttribute("href") === "/fornecedores/novo")));
+
+  await irPara(p, `${WEB}/fornecedores/novo`);
+  await new Promise((r) => setTimeout(r, 1400));
+  const formForn = await textoVisivel(p);
+  checar("a pagina de novo fornecedor abre", /Novo fornecedor/i.test(formForn), formForn.slice(0, 140));
+  checar("com os campos separados por assunto",
+    /Identifica[çc][ãa]o/i.test(formForn) && /Contato/i.test(formForn) && /Entrega/i.test(formForn),
+    formForn.slice(0, 260));
+  // ⚠️ O CNPJ e o que liga a nota do Omie ao fornecedor certo -- a tela diz isso.
+  checar("e a tela diz para que serve o CNPJ", /casa a nota do Omie/i.test(formForn),
+    formForn.slice(0, 300));
+
+  await p.evaluate((nome) => {
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    const campos = [...document.querySelectorAll("input")];
+    if (campos[0]) { set.call(campos[0], nome); campos[0].dispatchEvent(new Event("input", { bubbles: true })); }
+  }, `Fornecedor tela ${mCad}`);
+  await new Promise((r) => setTimeout(r, 400));
+  // ⚠️ Clique por `evaluate`, nao por `p.click` com `waitForNavigation`: a volta
+  // para a lista e do CLIENTE (`router.push`), entao a espera por navegacao nunca
+  // resolve e trava o protocolo do Chrome -- derrubando a rodada inteira.
+  await p.evaluate(() => {
+    document.querySelector('button[type="submit"]')?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+  const { dados: fornCriados } = await api(
+    "GET", `/fornecedores?busca=Fornecedor tela ${mCad}`, null, token);
+  const meuForn = (fornCriados ?? []).find((f) => f.nome === `Fornecedor tela ${mCad}`);
+  checar("cadastrar pela pagina grava o fornecedor", !!meuForn, (fornCriados ?? []).length);
+  if (meuForn) {
+    aoTerminar.push(() => api("DELETE", `/fornecedores/${meuForn.id}`, null, token));
+    // ⚠️ A edicao e a MESMA forma da criacao, para o olho reconhecer.
+    await irPara(p, `${WEB}/fornecedores/${meuForn.id}`);
+    await new Promise((r) => setTimeout(r, 1600));
+    const edicao = await textoVisivel(p);
+    checar("e a edicao abre com o nome no titulo",
+      edicao.includes(`Fornecedor tela ${mCad}`), edicao.slice(0, 160));
+  }
+
+  await irPara(p, `${WEB}/usuarios`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const listaUsu = await textoVisivel(p);
+  checar("a lista de usuarios nao tem mais o formulario",
+    !/Nova senha|Pap[ée]is<\/span>/i.test(listaUsu) && !/Criar usu[áa]rio/i.test(listaUsu),
+    listaUsu.slice(0, 160));
+
+  await irPara(p, `${WEB}/usuarios/novo`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const formUsu = await textoVisivel(p);
+  checar("a pagina de novo usuario abre", /Novo usu[áa]rio/i.test(formUsu), formUsu.slice(0, 140));
+  // ⚠️ Os papeis agora cabem lado a lado, com a descricao inteira a vista.
+  checar("com os papeis e suas descricoes a vista",
+    /Pap[ée]is/i.test(formUsu) && /Administrador/i.test(formUsu), formUsu.slice(0, 300));
+  checar("e dizendo que a senha e provisoria",
+    /troca no primeiro acesso/i.test(formUsu), formUsu.slice(0, 300));
+  await foto(p, "34-cadastro-em-pagina");
 
   console.log("10c. a ajuda dentro do sistema");
   // ⚠️ O manual é UM arquivo (`public/ajuda.html`), exibido pela tela e

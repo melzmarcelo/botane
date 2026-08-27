@@ -130,7 +130,10 @@ checar("a prévia responde", st == 200, st)
 # anteriores deixam "Caixa dupla NNNNNN" na base — produto com movimento não é
 # apagado —, e um total esperado erraria a partir da segunda vez. O que importa
 # é que o produto DESTE teste apareça uma vez por prateleira.
-meus = [a for a in p.get("amostra", []) if a["produto"] == f"Caixa dupla {marca}"]
+# ⚠️ `.upper()`: o nome do produto é normalizado pelo banco (migração
+# 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
+meus = [a for a in p.get("amostra", [])
+        if a["produto"] == f"Caixa dupla {marca}".upper()]
 checar("o produto em dois locais dá DUAS linhas para um produto só",
        len(meus) == 2, meus or p.get("amostra"))
 checar("e cada uma num local diferente", len({a["local"] for a in meus}) == 2, meus)
@@ -147,7 +150,8 @@ checar("setor 1 + tipo insumo não traz nenhum dos dois", not achou_meus, achou_
 
 st, p = chamar("GET", f"/inventarios/previa?setores={s2['id']}&tipos=INSUMO", token=token)
 checar("setor 2 + tipo insumo traz o insumo do setor 2",
-       any(f"Insumo do setor 2 {marca}" == a["produto"] for a in p.get("amostra", [])),
+       any(f"Insumo do setor 2 {marca}".upper() == a["produto"]
+           for a in p.get("amostra", [])),
        p.get("amostra"))
 
 
@@ -162,7 +166,8 @@ if id_inv:
     abertas.append(id_inv)
 checar("o cabeçalho NÃO tem local único", inv.get("id_local") is None, inv.get("id_local"))
 checar("e o nome é o que foi dado", inv.get("nome") == f"Recorte {marca}", inv.get("nome"))
-minhas = [i for i in inv.get("itens", []) if i["produto"] == f"Caixa dupla {marca}"]
+minhas = [i for i in inv.get("itens", [])
+          if i["produto"] == f"Caixa dupla {marca}".upper()]
 checar("com duas linhas para o produto deste teste, uma por prateleira",
        len(minhas) == 2, [i["produto"] for i in inv.get("itens", [])])
 checar("e cada linha diz o local dela",

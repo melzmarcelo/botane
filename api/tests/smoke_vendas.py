@@ -175,8 +175,10 @@ checar("o canal veio junto", d.get("canal") == "BALCAO", d.get("canal"))
 checar("os dois itens", len(d.get("itens") or []) == 2, len(d.get("itens") or []))
 
 item = next((i for i in d["itens"] if i["id_produto"] == prato), None)
+# ⚠️ `.upper()`: o nome do produto é normalizado pelo banco (migração
+# 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
 checar("o item vinculado traz o nome do produto",
-       item and item["produto"] == f"Prato venda {marca}", item)
+       item and item["produto"] == f"Prato venda {marca}".upper(), item)
 # 0,5 kg × 20/kg = 10,00 por unidade — o custo CONGELADO, não o de hoje.
 checar("e o custo congelado da ficha (10,00)",
        item and abs(float(item["custo_ficha_unitario"]) - 10) < 0.01, item)

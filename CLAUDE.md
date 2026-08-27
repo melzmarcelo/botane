@@ -166,6 +166,31 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   é a **carga inicial das fichas**: com zero fichas não há CMV teórico, nem variância, nem
   food cost. O documento também registra as três decisões em que a construção divergiu do
   mapeamento e por quê (a venda passou a baixar estoque, `modo_producao`, `KIT`).
+- 🔑 **A descrição do produto é MAIÚSCULA, e quem garante é um GATILHO** (migração 036,
+  27/08/2026 — o primeiro do projeto). A base tinha 752 de 3.226 em caixa mista: "Matcha
+  Culinario 500g" ao lado de "CAFE EXPRESSO". Não é feiura — é lista que não se lê: numa
+  conferência de compra o olho percorre a coluna, e caixa alternada quebra a varredura.
+  ⚠️ **Gatilho e não helper porque o nome é escrito em CINCO lugares**: o formulário, o catálogo
+  do Omie, o cardápio do PDV, a criação a partir do item da nota e a fusão de cadastros. Um
+  helper teria de ser chamado nos cinco, e o sexto — que vai existir — nasceria sem ele. "Por
+  padrão" é regra de DADO; quem garante regra de dado sem depender de memória é o banco.
+  ⚠️ Só `nome` e `nome_curto`. **`observacao` fica fora**: é texto que alguém escreveu para ser
+  lido, e em maiúsculas vira grito. `codigo` também, porque mexer nele mudaria o de-para.
+  ⚠️ O `upper()` do Postgres foi conferido contra o do Python acento a acento.
+  ⚠️ **A tela mostra `uppercase` por CSS** — só dica visual, para quem digita ver o que vai ser
+  gravado em vez de descobrir depois. O valor real é normalizado no banco.
+  ⚠️ **Toda suíte que compara nome de produto precisa de `.upper()`** — onze checagens de API e
+  seis de tela caíram de uma vez quando o gatilho entrou, e nenhuma por bug: elas afirmavam sobre
+  o que mandaram, não sobre o que foi gravado.
+  ⚠️ Nome de **fornecedor** NÃO segue a regra: é razão social, vem de um lugar só, e "Cia.
+  Brasileira de Distribuição" em caixa alta perde a leitura sem ganhar nada.
+- ⚠️ **Cadastro em coluna lateral não cabe no cadastro.** Fornecedor (13 campos em 360 px) e
+  usuário (uma lista de papéis que cresce, cada um com descrição de duas linhas, em 380 px) eram
+  formulários na direita da lista: quem cadastrava rolava a tela para achar o botão, e no de
+  usuário ele caía fora — marcava-se caixinha sem ver o que se marcava. Viraram
+  `/fornecedores/novo` + `/fornecedores/[id]` e `/usuarios/novo` + `/usuarios/[id]`, com o
+  formulário num componente só (criar e corrigir têm a mesma forma, para o olho reconhecer).
+  Mesmo corte de Compras, Vendas e Inventário — **consultar e cadastrar são telas diferentes**.
 - ⚠️ **Aba padrão escrita à mão abre na aba errada.** Tabelas de apoio abria em `"locais"`, que
   é a SEGUNDA da lista: entrar pelo menu caía nela com a primeira ali do lado, marcada como não
   escolhida. Agora o padrão é `ABAS.find(pode(chave))` — a primeira que a pessoa **pode ver**,
@@ -215,7 +240,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`. As que têm
   detalhe e formulário em página própria: `/compras/[id]`, `/compras/nova`,
   `/inventario/[id]`, `/inventario/novo`, `/producao/[id]`, `/produtos/[id]`, `/fichas/[id]`,
-  `/vendas/[id]`, `/vendas/lancar` e `/vendas/sem-vinculo`.
+  `/vendas/[id]`, `/vendas/lancar`, `/vendas/sem-vinculo`, `/fornecedores/novo`,
+  `/fornecedores/[id]`, `/usuarios/novo` e `/usuarios/[id]`.
 - **Busca de cadastro é o padrão onde havia combobox** (21/08/2026):
   `components/busca-cadastro.tsx` + `lib/busca-cadastro.ts`. Digita-se código ou nome e dá
   **Tab**: um resultado preenche e segue; mais de um (ou nenhum) abre a janela de pesquisa já
@@ -953,7 +979,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (300, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (309, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

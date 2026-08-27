@@ -295,9 +295,14 @@ export default function FormularioProduto() {
 
       <Cartao titulo="Identificação">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Campo rotulo="Nome" className="sm:col-span-2">
+          {/* ⚠️ `uppercase` é só CSS, e é de propósito: o valor gravado é
+              normalizado pelo BANCO (migração 036, gatilho), porque o nome do
+              produto é escrito por cinco caminhos diferentes. A classe existe
+              para quem digita ver, na hora, o que vai ficar salvo — em vez de
+              descobrir depois que "Café latte" virou outra coisa. */}
+          <Campo rotulo="Nome" className="sm:col-span-2" dica="fica em MAIÚSCULAS">
             <input
-              className="campo"
+              className="campo uppercase"
               required
               minLength={2}
               disabled={!podeEditar}
@@ -313,9 +318,9 @@ export default function FormularioProduto() {
               onChange={(e) => set("codigo", e.target.value)}
             />
           </Campo>
-          <Campo rotulo="Nome curto" dica="para o cardápio e o PDV">
+          <Campo rotulo="Nome curto" dica="para o cardápio e o PDV · MAIÚSCULAS">
             <input
-              className="campo"
+              className="campo uppercase"
               disabled={!podeEditar}
               value={f.nome_curto}
               onChange={(e) => set("nome_curto", e.target.value)}
