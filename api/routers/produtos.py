@@ -275,7 +275,8 @@ def vincular(id_produto: int, body: VincularRequest,
     """
     with get_cursor() as cur:
         try:
-            r = produtos_vinculo.fundir(cur, id_produto, body.id_sai, ctx.id_usuario)
+            r = produtos_vinculo.fundir(cur, id_produto, body.id_sai, ctx.id_usuario,
+                                        body.baixar_vendas)
         except LookupError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:

@@ -192,6 +192,110 @@ checar("e a observação diz para onde ele foi",
 checar("e ele perdeu o código do PDV, que agora é do outro",
        saiu.get("codigo_pdv") is None, saiu.get("codigo_pdv"))
 
+print("\n5b. o que foi vendido e nunca saiu do estoque BAIXA na fusão")
+# ⚠️ **O cenário que o dono descreveu, e é a razão de a fusão existir:**
+#
+#     PRODUTO PDV    estoque  0   vendas 10
+#     PRODUTO OMIE   estoque 15   vendas  0
+#     ao vincular →  estoque  5   vendas 10
+#
+# O item do cardápio vendia sem baixar estoque (nasce sem controlar). Sem esta
+# saída, o resultado seria "comprou 15, vendeu 10, saldo 15" — e as 10 faltando
+# apareceriam na primeira contagem como AJUSTE DE INVENTÁRIO, que é exatamente
+# onde a diferença some sem nome.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"BX-OMIE-{marca}", "nome": f"Baixa omie {marca}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": True, "status": "ATIVO",
+    "codigo_omie": f"55{marca}",
+}, token=token)
+bx_omie = r.get("id")
+checar("o lado das compras", st == 201, (st, r))
+
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": bx_omie, "quantidade": 15, "custo_unitario": 8,
+    "id_local": principal["id"], "documento": f"BX-{marca}",
+}, token=token)
+checar("entra 15 no estoque", st == 201, (st, r))
+
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"BX-PDV-{marca}", "nome": f"Baixa pdv {marca}", "tipo": "PRODUZIDO",
+    "producao_propria": True, "controla_estoque": False, "status": "RASCUNHO",
+    "codigo_pdv": f"66{marca}",
+}, token=token)
+bx_pdv = r.get("id")
+checar("o lado das vendas, sem controlar estoque", st == 201, (st, r))
+
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": hoje, "documento": f"BXV-{marca}", "origem": "PDV_LEGAL",
+    "itens": [{"id_produto": bx_pdv, "quantidade": 10, "valor_unitario": 20}],
+}]}, token=token)
+checar("vende 10 pelo cadastro do cardápio", st == 201, (st, r))
+# ⚠️ A venda NÃO baixou nada: é assim que o buraco nasce.
+checar("e nada baixou do estoque", (r.get("itens_baixados") or 0) == 0, r)
+
+
+def _saldo(id_produto):
+    st, s = chamar("GET", f"/estoque/saldos?id_produto={id_produto}", token=token)
+    return sum(float(x["quantidade"]) for x in (s or []))
+
+
+checar("antes: o lado das compras tem 15", _saldo(bx_omie) == 15, _saldo(bx_omie))
+
+st, prev = chamar("GET", f"/produtos/{bx_omie}/vincular/previa?id_sai={bx_pdv}", token=token)
+baixa = prev.get("baixa") or {}
+# ⚠️ O número aparece ANTES do botão: é movimento de estoque, não pode ser
+# surpresa. E o saldo resultante vem junto, porque é o que a pessoa confere.
+checar("a prévia diz quanto vai baixar", baixa.get("quantidade") == 10, baixa)
+checar("e qual saldo vai sobrar", baixa.get("saldo_depois") == 5, baixa)
+checar("dizendo que não fica negativo", baixa.get("fica_negativo") is False, baixa)
+checar("e de qual prateleira sai", baixa.get("local") is not None, baixa)
+
+st, r = chamar("POST", f"/produtos/{bx_omie}/vincular", {"id_sai": bx_pdv}, token=token)
+checar("a fusão responde", st == 200, (st, r))
+checar("e conta a baixa", r.get("baixa_de_estoque") == 10, r)
+# 15 comprados − 10 vendidos = 5. É a conta que o dono descreveu.
+checar("DEPOIS: estoque 5, que é 15 menos os 10 vendidos", _saldo(bx_omie) == 5, _saldo(bx_omie))
+
+st, mg = chamar("GET", f"/cmv/margem?id_produto={bx_omie}", token=token)
+checar("e as 10 vendas passaram para o cadastro que ficou",
+       sum(float(x["quantidade"]) for x in (mg or [])) == 10, mg)
+
+# ⚠️ O tipo é SAIDA_VENDA, não ajuste: aquelas unidades foram vendidas mesmo.
+# Como ajuste, engordariam a linha do CMV que quer dizer "não sabemos o que houve".
+st, movs = chamar("GET", f"/estoque/movimentos?id_produto={bx_omie}", token=token)
+a_baixa = next((x for x in (movs or []) if (x.get("documento") or "").startswith("vinculo-")), None)
+checar("o movimento existe e é do tipo SAIDA_VENDA",
+       a_baixa and a_baixa["tipo"] == "SAIDA_VENDA", a_baixa)
+checar("com a observação dizendo de onde veio",
+       a_baixa and "nunca baixaram estoque" in (a_baixa.get("observacao") or ""), a_baixa)
+
+print("\n5c. e dá para NÃO baixar, sabendo do que se abre mão")
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"BX2-OMIE-{marca}", "nome": f"Sem baixa omie {marca}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": True, "status": "ATIVO",
+}, token=token)
+sb_omie = r.get("id")
+chamar("POST", "/estoque/entradas", {
+    "id_produto": sb_omie, "quantidade": 8, "custo_unitario": 4,
+    "id_local": principal["id"], "documento": f"BX2-{marca}",
+}, token=token)
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"BX2-PDV-{marca}", "nome": f"Sem baixa pdv {marca}", "tipo": "PRODUZIDO",
+    "producao_propria": True, "controla_estoque": False, "status": "RASCUNHO",
+}, token=token)
+sb_pdv = r.get("id")
+chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": hoje, "documento": f"BX2V-{marca}", "origem": "MANUAL",
+    "itens": [{"id_produto": sb_pdv, "quantidade": 3, "valor_unitario": 9}],
+}]}, token=token)
+
+st, r = chamar("POST", f"/produtos/{sb_omie}/vincular",
+               {"id_sai": sb_pdv, "baixar_vendas": False}, token=token)
+checar("com `baixar_vendas: false` a fusão acontece", st == 200, (st, r))
+checar("e NÃO baixa nada", r.get("baixa_de_estoque") is None, r)
+checar("o saldo fica como estava", _saldo(sb_omie) == 8, _saldo(sb_omie))
+
+
 print("\n6. dois códigos do PDV: principal e apelido")
 # ⚠️ **O caso é REAL**: "ENTREGA" tem QUATRO códigos de cardápio distintos na
 # conta do cliente. Uma coluna sozinha guardaria um, e os outros voltariam a

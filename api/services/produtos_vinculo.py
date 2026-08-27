@@ -107,9 +107,82 @@ def previa(cur, id_fica: int, id_sai: int) -> dict:
             "codigo_barras": fica["codigo_barras"] or sai["codigo_barras"],
         },
         "itens_de_venda": itens_venda,
+        "baixa": _baixa_pendente(cur, fica, sai),
         "completa": [c for c in _COMPLETAVEIS
                      if not fica.get(c) and sai.get(c)],
     }
+
+
+def _baixa_pendente(cur, fica: dict, sai: dict) -> dict | None:
+    """Quanto foi VENDIDO pelo cadastro absorvido e nunca saiu do estoque.
+
+    ⚠️ **É o buraco que a fusão precisa fechar.** O item do cardápio nasce sem
+    controlar estoque, então as vendas dele nunca tocaram o razão. Fundido no
+    cadastro que compra, o resultado seria: comprou 15, vendeu 10, e o saldo
+    dizendo 15. Na primeira contagem faltariam 10 unidades, aparecendo como
+    "ajuste de inventário" — que é exatamente onde a diferença some sem nome, e é
+    o problema que a fusão existe para resolver.
+
+    ⚠️ **A conta é simples porque a trava garante**: só se absorve cadastro SEM
+    movimento no razão, então NENHUMA venda dele baixou estoque. Não há o que
+    separar entre "já baixou" e "não baixou".
+
+    ⚠️ Só faz sentido quando o cadastro que FICA controla estoque. Se ele também
+    não controla, não há prateleira de onde tirar — e a resposta honesta é nada.
+
+    ⚠️ **O saldo pode ficar NEGATIVO**, e a prévia diz isso antes. Não é erro: o
+    razão aceita, a saída sai por custo provisório e a próxima entrada revaloriza.
+    Mas quem confirma precisa ver.
+    """
+    if not fica.get("controla_estoque"):
+        return None
+
+    cur.execute(
+        """SELECT coalesce(sum(vi.quantidade), 0) AS qtd
+             FROM venda_itens vi
+             JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+            WHERE vi.id_produto = %s""",
+        (sai["id"],),
+    )
+    quantidade = float(cur.fetchone()["qtd"] or 0)
+    if quantidade <= 0:
+        return None
+
+    id_local = _local_da_baixa(cur, fica)
+    cur.execute(
+        """SELECT coalesce(sum(quantidade), 0) AS saldo FROM estoque_saldos
+            WHERE id_produto = %s""",
+        (fica["id"],),
+    )
+    saldo = float(cur.fetchone()["saldo"] or 0)
+
+    cur.execute("SELECT nome FROM locais_estoque WHERE id = %s", (id_local,))
+    local = (cur.fetchone() or {}).get("nome")
+
+    return {
+        "quantidade": quantidade,
+        "um": fica.get("um_estoque"),
+        "saldo_atual": saldo,
+        "saldo_depois": saldo - quantidade,
+        "fica_negativo": saldo - quantidade < 0,
+        "id_local": id_local,
+        "local": local,
+    }
+
+
+def _local_da_baixa(cur, fica: dict) -> int | None:
+    """De qual prateleira a saída sai: a do produto, senão a principal da loja.
+
+    Mesma ordem que a produção e a venda usam. Local errado registra a baixa por
+    onde a mercadoria nunca passou, e o saldo do lugar certo continua cheio.
+    """
+    if fica.get("id_local_padrao"):
+        return fica["id_local_padrao"]
+    cur.execute(
+        "SELECT id FROM locais_estoque WHERE ativo ORDER BY principal DESC, id LIMIT 1"
+    )
+    linha = cur.fetchone()
+    return linha["id"] if linha else None
 
 
 def _nomes(fica: dict, sai: dict) -> tuple[str, str | None, dict]:
@@ -140,13 +213,30 @@ def _nomes(fica: dict, sai: dict) -> tuple[str, str | None, dict]:
     }
 
 
-def fundir(cur, id_fica: int, id_sai: int, id_usuario: int) -> dict:
+def fundir(cur, id_fica: int, id_sai: int, id_usuario: int,
+           baixar_vendas: bool = True) -> dict:
     """Funde os dois: um fica, o outro é inativado.
 
-    ⚠️ **Não fabrica movimento de estoque.** As vendas que passaram pelo cadastro
-    do cardápio não baixaram estoque (ele não controlava) e continuam sem baixar
-    — o razão é append-only e inventar lançamento retroativo seria pior que a
-    falta dele. O que a fusão conserta é daqui para a frente.
+    ⚠️ **`baixar_vendas` fecha o buraco do estoque, e é o motivo de a fusão
+    existir.** O item do cardápio vendia sem baixar (não controlava estoque);
+    fundido no cadastro que compra, o resultado seria "comprou 15, vendeu 10,
+    saldo 15" — e as 10 faltando apareceriam na primeira contagem como ajuste de
+    inventário, que é onde a diferença some sem nome.
+
+    ⚠️ **Não é lançamento retroativo, e é por isso que pode.** O razão é
+    append-only: a saída entra com a data de HOJE, num movimento só, dizendo de
+    onde veio. Datá-la no passado cairia dentro de mês possivelmente já fechado e
+    reescreveria número que já foi ao contador.
+
+    ⚠️ O tipo é **`SAIDA_VENDA`, não ajuste**: aquelas unidades foram vendidas
+    mesmo. Como ajuste, elas engordariam a linha de "ajuste de inventário" do
+    CMV — justamente a linha que quer dizer "não sabemos o que houve".
+
+    ⚠️ Um movimento SÓ, com `origem_tipo = 'VINCULO'`. Cancelar depois uma
+    daquelas vendas antigas não devolve a unidade ao estoque (o estorno procura
+    por `origem_tipo = 'VENDA'`), e isso é aceito: a alternativa seria um
+    movimento por venda antiga, todos com a data de hoje, enchendo o razão de
+    linhas que não correspondem a nada que aconteceu naquele dia.
 
     ⚠️ **O custo dos itens de venda SEM custo é recalculado agora.** O item
     entrou contando zero no CMV teórico; ao ganhar um produto com ficha, passa a
@@ -233,6 +323,26 @@ def fundir(cur, id_fica: int, id_sai: int, id_usuario: int) -> dict:
                 "UPDATE venda_itens SET id_produto = %s WHERE id = %s", (id_fica, item["id"])
             )
 
+    # ---------------------------------- a baixa do que foi vendido e não saiu
+    baixa = conferido.get("baixa")
+    if baixar_vendas and baixa and baixa["quantidade"] > 0:
+        from services import estoque as motor_estoque
+
+        cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (baixa["id_local"],))
+        id_unidade = (cur.fetchone() or {}).get("id_unidade")
+        cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
+        id_unidade = id_unidade or (cur.fetchone() or {}).get("id")
+        motor_estoque.lancar(
+            cur, id_unidade=id_unidade, id_local=baixa["id_local"], id_produto=id_fica,
+            tipo="SAIDA_VENDA", quantidade=baixa["quantidade"],
+            origem_tipo="VINCULO", origem_id=id_sai,
+            documento=f"vinculo-{id_sai}", id_usuario=id_usuario,
+            observacao=(f"Vendas de “{sai['nome']}” que nunca baixaram estoque — "
+                        f"{baixa['quantidade']:g} {fica.get('um_estoque') or ''}".strip()),
+        )
+        movidos["baixa_de_estoque"] = baixa["quantidade"]
+        movidos["saldo_depois"] = baixa["saldo_depois"]
+
     nota = (f"Fundido em {fica['codigo']} — {nome}. "
             "Era o mesmo produto com outro cadastro.")
     cur.execute(
@@ -254,5 +364,8 @@ def fundir(cur, id_fica: int, id_sai: int, id_usuario: int) -> dict:
         "message": (f"“{sai['nome']}” foi fundido em “{nome}”"
                     + (f" — {len(itens)} item(ns) de venda mudaram de dono"
                        if itens else "")
-                    + (f", {recalculados} ganharam custo" if recalculados else "")),
+                    + (f", {recalculados} ganharam custo" if recalculados else "")
+                    + (f". {movidos['baixa_de_estoque']:g} unidade(s) vendida(s) baixaram do "
+                       f"estoque agora — saldo {movidos['saldo_depois']:g}"
+                       if movidos.get("baixa_de_estoque") else "")),
     }

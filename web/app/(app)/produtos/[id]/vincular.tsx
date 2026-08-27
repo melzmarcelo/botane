@@ -54,6 +54,15 @@ type Previa = {
     codigo_barras: string | null;
   };
   itens_de_venda: number;
+  /** O que foi vendido pelo absorvido e nunca saiu do estoque. */
+  baixa: {
+    quantidade: number;
+    um: string | null;
+    saldo_atual: number;
+    saldo_depois: number;
+    fica_negativo: boolean;
+    local: string | null;
+  } | null;
   completa: string[];
 };
 
@@ -85,6 +94,10 @@ export default function Vincular({
 }) {
   const aviso = useAviso();
   const [escolhido, setEscolhido] = useState<{ id: number; rotulo: string } | null>(null);
+  // ⚠️ LIGADO por padrão: sem a baixa, o resultado seria "comprou 15, vendeu 10,
+  // saldo 15", e as 10 faltando apareceriam na primeira contagem como ajuste de
+  // inventário — onde a diferença some sem nome.
+  const [baixar, setBaixar] = useState(true);
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -116,6 +129,7 @@ export default function Vincular({
     try {
       const r = await api.post<{ message: string }>(`/produtos/${idProduto}/vincular`, {
         id_sai: escolhido.id,
+        baixar_vendas: baixar,
       });
       aviso.sucesso(r.message);
       aoFundir();
@@ -236,13 +250,52 @@ export default function Vincular({
                   </div>
                 )}
               </dl>
-              {/* ⚠️ Dito antes de confirmar, porque é a única parte que a fusão
-                  NÃO conserta: o razão é append-only e inventar lançamento no
-                  passado seria pior que a falta dele. */}
-              <p className="mt-3 text-[12.5px] leading-snug text-suave">
-                As vendas que já passaram <b>não</b> baixam estoque retroativamente. O que isto
-                conserta é daqui para a frente.
-              </p>
+              {/* ⚠️ **A baixa do que foi vendido e nunca saiu.** É o que fecha a
+                  conta: o item do cardápio vendia sem baixar estoque, e sem esta
+                  saída o saldo continuaria dizendo que a mercadoria está na
+                  prateleira. O número aparece ANTES do botão, com o saldo que
+                  vai sobrar — é movimento de estoque, não pode ser surpresa. */}
+              {previa.baixa ? (
+                <label className="mt-3 flex items-start gap-2 rounded border border-linha bg-superficie p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-erva"
+                    checked={baixar}
+                    onChange={(e) => setBaixar(e.target.checked)}
+                  />
+                  <span className="text-[13px] leading-snug">
+                    Baixar do estoque as{" "}
+                    <b>
+                      {previa.baixa.quantidade}
+                      {previa.baixa.um ? ` ${previa.baixa.um}` : ""}
+                    </b>{" "}
+                    que <b>{previa.sai.nome}</b> vendeu e nunca saíram da prateleira.
+                    <span className="mt-1 block text-suave">
+                      Saldo {previa.baixa.saldo_atual} → <b>{previa.baixa.saldo_depois}</b>
+                      {previa.baixa.local ? ` em ${previa.baixa.local}` : ""} · a saída entra
+                      com a data de <b>hoje</b>, não no passado.
+                    </span>
+                    {previa.baixa.fica_negativo && (
+                      <span className="mt-1 block text-alerta">
+                        ⚠️ O saldo fica <b>negativo</b>. O razão aceita — a saída sai por custo
+                        provisório e a próxima entrada revaloriza —, mas vale conferir se a
+                        compra correspondente já foi lançada.
+                      </span>
+                    )}
+                    {!baixar && (
+                      <span className="mt-1 block text-suave">
+                        Sem a baixa, essas unidades vão aparecer como <b>ajuste de inventário</b>{" "}
+                        na primeira contagem.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ) : (
+                <p className="mt-3 text-[12.5px] leading-snug text-suave">
+                  Nada a baixar do estoque: o cadastro que sai não tem venda, ou o que fica não
+                  controla estoque.
+                </p>
+              )}
             </div>
           </div>
         )}

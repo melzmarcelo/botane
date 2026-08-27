@@ -2231,6 +2231,10 @@ try {
     checar("e a curta do lado do PDV",
       previa.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`), previa.slice(0, 260));
     checar("dizendo que o outro vira inativo", /vira inativo/i.test(previa));
+    // ⚠️ Nada a baixar aqui (o lado do PDV nao vendeu), e a tela DIZ isso em vez
+    // de calar: caixinha ausente sem explicacao lê como funcionalidade faltando.
+    checar("e explica que nao ha o que baixar do estoque",
+      /Nada a baixar do estoque/i.test(previa), previa.slice(0, 400));
     await foto(p, "32-vincular");
 
     await p.evaluate(() => {

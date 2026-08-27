@@ -83,6 +83,12 @@ class VincularRequest(BaseModel):
     """
 
     id_sai: int
+    # ⚠️ **Fecha o buraco do estoque, e por isso vem LIGADO.** O item do cardápio
+    # vendia sem baixar; sem esta saída o resultado seria "comprou 15, vendeu 10,
+    # saldo 15", e as 10 faltando apareceriam na primeira contagem como ajuste de
+    # inventário — onde a diferença some sem nome. Desligar é para quem prefere
+    # deixar a contagem resolver, sabendo disso.
+    baixar_vendas: bool = True
 
 
 class KitItem(BaseModel):

@@ -759,9 +759,32 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   fornecedores. `_carregar` faz `SELECT p.*` de propósito: enumerar as colunas ali faria a lista
   de campos completáveis viver em dois lugares, e um campo novo entraria na lista e não no
   SELECT. Foi o que aconteceu com `marca` na primeira versão.
-  ⚠️ **Não fabrica movimento de estoque.** As vendas que passaram pelo cadastro do cardápio não
-  baixaram estoque e continuam sem baixar; o que a fusão conserta é daqui para a frente. O item
-  de venda **sem** custo ganha o custo de hoje; o que já tinha congelado não é tocado.
+  🔑 **A fusão BAIXA do estoque o que foi vendido e nunca saiu** (`baixar_vendas`, ligado por
+  padrão). É o motivo de ela existir, e o caso é este:
+
+      PRODUTO PDV    estoque  0   vendas 10
+      PRODUTO OMIE   estoque 15   vendas  0
+      ao vincular →  estoque  5   vendas 10
+
+  O item do cardápio nasce sem controlar estoque, então as vendas dele nunca tocaram o razão.
+  Sem a baixa, o resultado seria "comprou 15, vendeu 10, saldo 15" — e as 10 faltando
+  apareceriam na primeira contagem como **ajuste de inventário**, que é justamente onde a
+  diferença some sem nome.
+  ⚠️ **Não é lançamento retroativo, e é por isso que pode.** A saída entra com a data de HOJE,
+  num movimento só, dizendo de onde veio. Datá-la no passado cairia dentro de mês possivelmente
+  já fechado.
+  ⚠️ O tipo é **`SAIDA_VENDA`, não ajuste**: aquelas unidades foram vendidas mesmo. Como ajuste,
+  engordariam a linha do CMV que quer dizer "não sabemos o que houve".
+  ⚠️ **A conta é simples porque a trava garante**: só se absorve cadastro SEM movimento no
+  razão, então nenhuma venda dele baixou — não há o que separar entre "já baixou" e "não baixou".
+  ⚠️ A prévia mostra a quantidade, a prateleira e o **saldo que vai sobrar**, e avisa quando ele
+  fica NEGATIVO (o razão aceita, com custo provisório, mas quem confirma tem de ver). Desligar é
+  possível e a tela diz o que se perde.
+  ⚠️ **Um movimento SÓ, com `origem_tipo = 'VINCULO'`.** Cancelar depois uma daquelas vendas
+  antigas não devolve a unidade (o estorno procura `origem_tipo = 'VENDA'`) — aceito de propósito:
+  a alternativa seria um movimento por venda antiga, todos com a data de hoje, enchendo o razão de
+  linhas que não correspondem a nada que aconteceu naquele dia.
+  ⚠️ O item de venda **sem** custo ganha o custo de hoje; o que já tinha congelado não é tocado.
   ⚠️ O absorvido vira **inativo e ARQUIVADO**, com a observação dizendo para onde foi — nunca
   apagado, porque auditoria e histórico continuam apontando para ele.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
@@ -970,16 +993,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.175 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.194 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (59),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (309, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (310, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
