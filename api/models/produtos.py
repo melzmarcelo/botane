@@ -55,6 +55,9 @@ class ProdutoBase(BaseModel):
     peso_bruto: float | None = Field(default=None, ge=0)
     codigo_barras: str | None = Field(default=None, max_length=20)
     codigo_omie: str | None = Field(default=None, max_length=40)
+    # ⚠️ Espelho do `codigo_omie` para o PDV Legal. Com os DOIS preenchidos, o
+    # cadastro é o mesmo produto nas duas integrações — e isso se lê na tela.
+    codigo_pdv: str | None = Field(default=None, max_length=40)
     observacao: str | None = None
 
 
@@ -70,16 +73,16 @@ class UnidadesCompraRequest(BaseModel):
     itens: list[UnidadeCompra] = Field(default_factory=list)
 
 
-class UnificarRequest(BaseModel):
-    """Qual dos dois cadastros SAI. O que fica vai no caminho da rota.
+class VincularRequest(BaseModel):
+    """Qual cadastro SAI. O que fica é o da tela, no caminho da rota.
 
     ⚠️ O que sai é o que não tem história — movimento, ficha, nota, contagem. O
     servidor confere e recusa nomeando o que trava, porque escolher errado a
-    direção é o engano natural: quem olha a lista vê dois nomes parecidos e não
-    tem como saber qual dos dois carrega o passado.
+    direção é o engano natural: quem olha dois nomes parecidos não tem como
+    saber qual dos dois carrega o passado.
     """
 
-    id_absorver: int
+    id_sai: int
 
 
 class KitItem(BaseModel):
@@ -154,6 +157,10 @@ class ProdutoResponse(BaseModel):
     # deixar editar; a API aceita alteração porque consertar um de-para errado é
     # trabalho de quem administra.
     codigo_omie: str | None = None
+    codigo_pdv: str | None = None
+    # Os códigos EXTRAS do cardápio que apontam para este produto: "ENTREGA" tem
+    # quatro na conta real, e um campo só perderia três.
+    apelidos_pdv: list[str] = []
     sincronizado_em: datetime | None = None
     origem: str
     status: str

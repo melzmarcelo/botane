@@ -539,8 +539,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   de verdade, com o EAN; depois alguém preenche o EAN no PDV. Na reimportação **o item já está
   vinculado — o primeiro passo da cascata responde antes do EAN** —, e a colisão acontece.
   ⚠️ **O conflito é INFORMAÇÃO, não erro**: dois cadastros disputando o mesmo EAN são o mesmo
-  produto. Ele vira `ean_de_outro` no resumo e uma frase que aponta para `/produtos/duplicados` —
-  que sabe mover o de-para, os itens de venda e o custo junto. **Repontar o vínculo ali seria
+  produto. Ele vira `ean_de_outro` no resumo e uma frase que manda abrir o produto e usar
+  **Vincular** — que sabe mover os códigos, os itens de venda e o custo junto. **Repontar o vínculo ali seria
   errado**: as vendas passadas ficariam presas no rascunho.
   ⚠️ **Corolário que vale para toda a cascata: o passo do EAN só decide na PRIMEIRA vez que o
   item aparece.** Depois de vinculado, o vínculo manda — inclusive quando o EAN chega depois.
@@ -568,7 +568,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   servir.
   ⚠️ **Consequência prática: nesta conta o passo do EAN NÃO dispara**, por mais cheio que esteja
   o nosso lado (1.150 dos 2.190 produtos do Omie têm EAN, e o XML da NF-e traz `cEAN` por item).
-  Quem defende contra duplicado aqui é `/produtos/duplicados`, não o EAN. `por_ean` viaja no
+  Quem defende contra duplicado aqui é o botão **Vincular**, não o EAN. `por_ean` viaja no
   resumo justamente para esse zero ficar visível em vez de parecer uma trava funcionando.
   ⚠️ Existe saída, e ela é um **write no PDV do cliente** (`produtos/update`/`produtos/save`,
   ainda não usados — até aqui só lemos de lá): mandar o EAN daqui para os itens de mercearia,
@@ -577,9 +577,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   primeira versão fazia isso e, numa base com 2.189 insumos do Omie, **os 78 vínculos criados
   assim estavam TODOS errados**: REDBULL virou LIMÃO TAITY, PÃO COM MANTEIGA virou MANJERICÃO,
   BOLO virou ADESIVO VINIL PRETO. Nenhum daria erro em lugar nenhum — só o CMV teórico sairia
-  com o custo do insumo errado, para sempre. Vinculam o de-para que já existe e o **nome
-  idêntico** (normalizado); semelhança vira **dica na observação** do rascunho e não amarra
-  nada. A suíte trava isso com um produto isca de código "72".
+  com o custo do insumo errado, para sempre.
+  🔑 **A cascata por NOME também saiu** (27/08/2026): nem semelhança, nem nome idêntico. Restam
+  duas portas, e nenhuma é palpite — o **código do PDV** e o **EAN**, que é identificador global.
+  Não achou? Nasce rascunho, e quem reconhece o produto usa o botão Vincular na tela dele.
+  🔑 **O PREÇO DE VENDA vem junto, e de OUTRA rota**: `tabelapreco/get/{filial}`, não o cadastro
+  do produto. `valor` preenchido em **629 de 630** na conta real. Durante toda a primeira versão
+  os 630 pratos nasceram sem preço nenhum, com o número a uma chamada de distância. Grava em
+  `produto_precos` e **só quando muda** — uma linha por importação transformaria "quando o preço
+  subiu" em ruído, que é a pergunta que a tabela existe para responder.
+  ⚠️ Preço é **por filial**: sem filial, nenhum preço. Melhor prato sem preço do que prato com o
+  preço de outra loja.
   ⚠️ **O item do cardápio que não existe aqui nasce PRODUZIDO/RASCUNHO com `producao_propria`**,
   código `PDV-<codigo>`: é isso que o põe na fila de "produzido sem ficha", que é a lista que
   alguém precisa percorrer. Na conta real foram **627 pratos**, 463 deles ativos.
@@ -658,43 +666,45 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **Cada DIA da janela é uma requisição** (é o único jeito sem teto de 100 cupons): a horária
   com janela de 30 dias são 720 chamadas por dia para reler o mesmo mês. A tela diz a conta,
   porque "a cada hora" não parece caro até alguém multiplicar.
-- **O mesmo produto com dois cadastros** (`services/duplicados.py`, `/produtos/duplicados`,
-  27/08/2026). O sistema recebe produto por três portas — catálogo do Omie (o que se compra),
-  cardápio do PDV (o que se vende) e a mão de quem cadastra — e **nenhuma chave impede o mesmo
-  produto de existir duas vezes**. Entre portas não há chave nenhuma; dentro de uma, a chave
-  garante que o *identificador* não repita, não que o *produto* não repita: a conta real tem
-  **sete cadastros de "LARANJA PERA"**, cada um com o seu `codigo_omie`.
-  ⚠️ **O estrago tem duas formas.** Entre portas é **estoque fantasma**: a compra entra por um
-  cadastro, a venda não sai por nenhum (o item do cardápio nasce com `controla_estoque = false`),
-  o saldo do primeiro nunca desce, e a sobra aparece na contagem como "ajuste de inventário" —
-  onde a diferença some sem nome. Dentro de uma é **custo partido**: a próxima compra vai para o
-  gêmeo e o custo médio passa a existir em vários lugares, com cada ficha puxando o de um deles.
-  🔑 **A regra que torna a lista utilizável é `mesmo_produto`, não o placar.** "FRUTA MORANGO CG
-  PCT1KG CX6KG" e "FRUTA AMORA CG PCT1KG CX6KG" batem **95%** de semelhança — o nome é quase todo
-  embalagem e a palavra que muda tudo pesa pouco no texto. Sem a regra são 1.507 pares a 80%,
-  ilegíveis; com ela, 103 grupos com os verdadeiros no topo. Ela diz: **número dos DOIS lados
-  quer dizer produtos diferentes** (N19 × N21, 300ML × 250ML, 1UNID × 10UNID), número de um lado
-  só é ruído ("BURRATA ATACADO 2"), e palavra sem par do outro lado reprova — a menos que seja
-  variação de grafia ("panettone" × "panetone").
-  ⚠️ **`_normalizar` separa número de letra** (`500g` → `500 g`). Sem isso, "500g" e "500 g" são
-  a mesma coisa escrita por duas pessoas e viravam tokens diferentes — e a regra acima reprovaria
-  um par idêntico. De quebra, "pct1kg" vira "pct 1 kg" e o índice enxerga as palavras.
-  ⚠️ **GRUPO, não par.** Sete cadastros da mesma laranja dariam 21 pares — 21 linhas para
-  conferir a mesma laranja. União por vizinhança (union-find), e **os pares são guardados antes
-  de virar grupo**: a raiz muda a cada união, e anotar o placar "na raiz de agora" o perde.
-  ⚠️ **A transitividade é desejada**: se dois cadastros do Omie parecem com o mesmo do cardápio,
-  os três são um grupo — inclusive no recorte `so_entre_portas`, onde a ponte é o item do PDV.
-  ⚠️ **Semelhança SUGERE, nunca funde.** `POST /produtos/{id}/unificar` só absorve cadastro **sem
-  história**: movimento no razão (append-only), mês fechado, contagem de inventário, produção,
-  nota de entrada, ficha, combo e vínculo de fornecedor travam, e a recusa **nomeia o que trava**
-  e manda fazer ao contrário. Dois `codigo_omie` também travam — códigos diferentes são produtos
-  diferentes lá, e uni-los esconderia o problema em vez de resolvê-lo na origem.
-  ⚠️ **A unificação NÃO fabrica movimento de estoque.** As vendas que passaram pelo cadastro do
-  cardápio não baixaram estoque e continuam sem baixar; o que ela conserta é daqui para a frente.
-  O que muda de dono: de-para do PDV, `codigo_omie`, EAN e itens de venda — e o item que estava
-  **sem custo ganha o custo de hoje** (mesma regra de `cardapio.reconciliar`); o que já tinha
-  custo congelado não é tocado. O absorvido vira **inativo**, com a observação dizendo para onde
-  foi — nunca apagado.
+- **O vínculo entre cadastros é DECLARADO, não detectado** (`services/produtos_vinculo.py`,
+  botão **Vincular** na tela do produto, 27/08/2026). O sistema recebe produto por três portas —
+  catálogo do Omie (o que se compra), cardápio do PDV (o que se vende) e a mão de quem cadastra —
+  e nenhuma chave impede o mesmo produto de existir duas vezes.
+  🔑 **Existiu um detector por semelhança de nome, e ele foi REMOVIDO porque errava nos dois
+  sentidos.** Não achava `BEB CERV HEINEKEN 350ML` contra `CERVEJA HEINEKEN PILSEN` — o mesmo
+  produto, **63,8%** de semelhança — e juntava `CAKE BOARD N19` com `CAKE BOARD N21`, que são
+  tamanhos diferentes. **Nenhum piso separa os dois casos, porque a diferença não está no
+  texto**: um é a descrição abreviada do fornecedor com o volume, o outro é o nome comercial com
+  o estilo. Palpite que vincula sozinho contamina o CMV teórico de todo mês em que o prato foi
+  vendido, e ninguém vai procurar ali.
+  ⚠️ **`produtos.codigo_pdv`** (migração 035) é o espelho do `codigo_omie`: único, visível e
+  editável. **Com os dois preenchidos, o cadastro é o mesmo produto nas duas integrações** — e
+  isso se lê na tela, sem abrir o banco.
+  ⚠️ **O vínculo do PDV tem DOIS níveis** (`services/pdv/vinculo.py`): a coluna é o código
+  PRINCIPAL e `codigos_externos` guarda os **apelidos**. Não é sobra de projeto antigo — na conta
+  real, `ENTREGA` tem **quatro** códigos de cardápio apontando para a mesma coisa. Uma coluna
+  sozinha guardaria um, e os outros três voltariam a virar rascunho na importação seguinte: o
+  duplicado renascendo sozinho, sem ninguém ter feito nada. A resolução é coluna → apelidos, e a
+  regra mora num arquivo só.
+  ⚠️ **A descrição fica com o nome do lado do OMIE e a curta com o do PDV**, e não é preferência
+  estética: são nomes com funções diferentes. O do Omie é o fiscal, o que aparece na nota do
+  fornecedor e o que se procura ao conferir uma compra; o do PDV é o que sai no cupom e o que a
+  equipe fala. Guardar os dois é o que faz o mesmo cadastro ser reconhecível nas duas pontas.
+  ⚠️ **A prévia vem antes do botão** (`GET /produtos/{id}/vincular/previa`): fusão não tem
+  desfazer, e quem confirma precisa ver com que nome o produto vai ficar, que campos serão
+  completados, quantos itens de venda mudam de dono e — quando não dá — o que exatamente trava.
+  ⚠️ **Só absorve cadastro SEM história**: movimento no razão (append-only), mês fechado,
+  contagem de inventário, produção, nota, ficha, combo e vínculo de fornecedor travam, e a recusa
+  **nomeia o que trava** e manda fazer ao contrário.
+  ⚠️ **Completa o que está em branco, nunca sobrescreve** — mesma regra do importador de
+  fornecedores. `_carregar` faz `SELECT p.*` de propósito: enumerar as colunas ali faria a lista
+  de campos completáveis viver em dois lugares, e um campo novo entraria na lista e não no
+  SELECT. Foi o que aconteceu com `marca` na primeira versão.
+  ⚠️ **Não fabrica movimento de estoque.** As vendas que passaram pelo cadastro do cardápio não
+  baixaram estoque e continuam sem baixar; o que a fusão conserta é daqui para a frente. O item
+  de venda **sem** custo ganha o custo de hoje; o que já tinha congelado não é tocado.
+  ⚠️ O absorvido vira **inativo e ARQUIVADO**, com a observação dizendo para onde foi — nunca
+  apagado, porque auditoria e histórico continuam apontando para ele.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -901,16 +911,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.157 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.160 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (101), `smoke_vendas.py` (38), `smoke_duplicados.py` (41),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (106), `smoke_vendas.py` (38), `smoke_vinculo.py` (40),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (292, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (297, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

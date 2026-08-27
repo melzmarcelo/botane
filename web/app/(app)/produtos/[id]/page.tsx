@@ -19,6 +19,7 @@ import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import ComposicaoKit from "./kit";
 import UnidadesDeCompra from "./unidades";
+import Vincular from "./vincular";
 
 type VinculoFornecedor = {
   id_fornecedor: number;
@@ -77,6 +78,7 @@ const texto = (v: string) => (v.trim() === "" ? null : v.trim());
 const FORNECEDORES = fonteFornecedores();
 
 export default function FormularioProduto() {
+  const [vinculando, setVinculando] = useState(false);
   const aviso = useAviso();
   const { id } = useParams<{ id: string }>();
   const novo = id === "novo";
@@ -248,6 +250,21 @@ export default function FormularioProduto() {
         </div>
         {podeEditar && (
           <div className="flex gap-2">
+            {/* ⚠️ **O caminho para dizer que dois cadastros são o mesmo.** Não
+                existe detector: "BEB CERV HEINEKEN 350ML" e "CERVEJA HEINEKEN
+                PILSEN" são o mesmo produto e batem 63,8% de semelhança, e
+                nenhum piso honesto os junta. Quem reconhece está aqui, olhando
+                o produto. */}
+            {!novo && (
+              <button
+                type="button"
+                className="btn btn-secundario"
+                onClick={() => setVinculando(true)}
+                title="Dizer que outro cadastro é este mesmo produto"
+              >
+                Vincular
+              </button>
+            )}
             {!novo && f.status === "RASCUNHO" && (
               <button type="button" className="btn btn-secundario" onClick={revisar}>
                 Revisar e ativar
@@ -259,6 +276,19 @@ export default function FormularioProduto() {
           </div>
         )}
       </header>
+
+      {vinculando && (
+        <Vincular
+          idProduto={Number(id)}
+          aoFechar={() => setVinculando(false)}
+          aoFundir={() => {
+            setVinculando(false);
+            // Recarrega: o nome, a descrição curta e os códigos mudaram.
+            router.refresh();
+            window.location.reload();
+          }}
+        />
+      )}
 
       {!podeEditar && <Aviso tipo="info">Você tem acesso de leitura a esta tela.</Aviso>}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

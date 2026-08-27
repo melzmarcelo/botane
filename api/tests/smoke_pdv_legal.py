@@ -132,6 +132,43 @@ atexit.register(devolver_o_modo_original)
 preservar_credenciais("PDV_LEGAL")
 
 
+def _dono_do_codigo(codigo):
+    """Que produto responde por este código do PDV — e por onde.
+
+    ⚠️ **Dois níveis desde que o código virou campo do produto**: o principal em
+    `produtos.codigo_pdv` e os apelidos em `codigos_externos`. Olhar só a tabela
+    (como esta suíte fazia) deixa de fora justamente o vínculo que a tela mostra.
+    """
+    conexao = _conexao_do_banco()
+    with conexao, conexao.cursor() as cur:
+        cur.execute(
+            "SELECT id, nome, tipo, observacao FROM produtos WHERE codigo_pdv = %s",
+            (str(codigo),),
+        )
+        achado = cur.fetchone()
+        if achado:
+            return {**dict(achado), "id_produto": achado["id"], "onde": "principal"}
+        cur.execute(
+            """SELECT p.id, p.nome, p.tipo, p.observacao, ce.id_produto, ce.origem_vinculo
+                 FROM codigos_externos ce JOIN produtos p ON p.id = ce.id_produto
+                WHERE ce.sistema = 'PDV_LEGAL' AND ce.codigo = %s""",
+            (str(codigo),),
+        )
+        achado = cur.fetchone()
+        return {**dict(achado), "onde": "apelido"} if achado else None
+
+
+def _soltar_codigo(codigo):
+    """Tira este código dos DOIS lugares, para a cascata rodar de novo nele."""
+    conexao = _conexao_do_banco()
+    with conexao, conexao.cursor() as cur:
+        cur.execute("UPDATE produtos SET codigo_pdv = NULL WHERE codigo_pdv = %s", (str(codigo),))
+        cur.execute(
+            "DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s", (str(codigo),)
+        )
+        conexao.commit()
+
+
 def _conexao_do_banco():
     """Uma conexão direta ao banco, com dicionário por linha.
 
@@ -455,6 +492,16 @@ checar("item desligado no PDV entra, mas inativo",
        _achado is not None and _achado.get("ativo") is False, (_achado, st_i))
 # ⚠️ Numa base ja importada o item cai em `ja_vinculados`, nao em `vinculados`:
 # o que se afirma e que ele ACHOU dono, por um dos dois caminhos certos.
+# ⚠️ **O preco vem de OUTRA rota** (`tabelapreco/get/{filial}`), nao do cadastro
+# do produto -- foi por isso que os pratos nasceram sem preco nenhum durante toda
+# a primeira versao: o numero estava a uma chamada de distancia. Na conta real,
+# `valor` vem preenchido em 629 dos 630.
+st_p, prods_p = chamar("GET", "/produtos?busca=CAFE EXPRESSO&incluir_inativos=true", token=token)
+_expresso = next((x for x in (prods_p or []) if x.get("codigo") == "PDV-10689993"), None)
+checar("o cardapio traz o preco de venda junto",
+       _expresso is None or float(_expresso.get("preco_venda") or 0) == 5.5,
+       (_expresso or {}).get("preco_venda"))
+
 checar("e o de nome identico acha dono",
        (r.get("vinculados") or 0) + (r.get("ja_vinculados") or 0) >= 1, r)
 
@@ -485,10 +532,9 @@ def _sem_rastro_do_ean():
     isso o passo 1 da cascata (de-para ja existe) responderia primeiro e o do
     EAN nunca seria exercitado.
     """
+    _soltar_codigo(CODIGO_FIXTURE)
     conexao = _conexao_do_banco()
     with conexao, conexao.cursor() as cur:
-        cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
-                    (CODIGO_FIXTURE,))
         cur.execute("DELETE FROM produtos WHERE codigo = %s", (f"PDV-{CODIGO_FIXTURE}",))
         cur.execute("SELECT id, nome FROM produtos WHERE codigo_barras = %s", (EAN_FIXTURE,))
         dono = cur.fetchone()
@@ -514,16 +560,17 @@ st, r = chamar("POST", "/pdv/cardapio", token=token)
 checar("a importacao responde", st == 200, (st, r))
 checar("e conta o vinculo por EAN", (r.get("por_ean") or 0) >= 1, r)
 
+vinculo = _dono_do_codigo(CODIGO_FIXTURE) or {}
 conexao = _conexao_do_banco()
 with conexao, conexao.cursor() as cur:
-    cur.execute("""SELECT id_produto, origem_vinculo FROM codigos_externos
-                    WHERE sistema='PDV_LEGAL' AND codigo=%s""", (CODIGO_FIXTURE,))
-    vinculo = dict(cur.fetchone() or {})
     cur.execute("SELECT 1 FROM produtos WHERE codigo = %s", (f"PDV-{CODIGO_FIXTURE}",))
     virou_rascunho = bool(cur.fetchone())
 checar("o item do cardapio achou o produto pelo EAN",
        vinculo.get("id_produto") == dono_do_ean["id"], (vinculo, dono_do_ean["id"]))
-checar("e o vinculo diz que foi o EAN", vinculo.get("origem_vinculo") == "EAN", vinculo)
+# ⚠️ O codigo passa a ser o PRINCIPAL do produto -- o campo que a tela mostra --,
+# e nao mais uma linha de de-para com rotulo de origem.
+checar("e ele virou o codigo principal do produto",
+       vinculo.get("onde") == "principal", vinculo)
 # ⚠️ O ponto todo: sem o passo do EAN ele viraria um rascunho novo, e o mesmo
 # produto ficaria com dois cadastros.
 checar("e NAO criou um rascunho duplicado", not virou_rascunho, virou_rascunho)
@@ -538,23 +585,18 @@ print("\n8e3. EAN que ja e de OUTRO produto nao derruba a importacao")
 # antes do EAN -- e a gravacao batia no indice unico `ux_produto_barras`. Nao era
 # um item que falhava: era a importacao INTEIRA que morria, porque a transacao e
 # uma so, e nada entrava.
+_soltar_codigo(CODIGO_FIXTURE)
 conexao = _conexao_do_banco()
 with conexao, conexao.cursor() as cur:
-    cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
-                (CODIGO_FIXTURE,))
     cur.execute("DELETE FROM produtos WHERE codigo = 'SMOKE-EAN-RASCUNHO'")
-    # O rascunho SEM ean, no lugar do dono legitimo do EAN.
+    # O rascunho SEM ean, segurando o codigo do PDV no lugar do dono do EAN.
     cur.execute(
         """INSERT INTO produtos (codigo, nome, tipo, status, origem, producao_propria,
-                                 controla_estoque, ativo)
+                                 controla_estoque, ativo, codigo_pdv)
            VALUES ('SMOKE-EAN-RASCUNHO', 'Rascunho que disputa o EAN', 'PRODUZIDO',
-                   'RASCUNHO', 'PDV', true, false, true) RETURNING id""")
+                   'RASCUNHO', 'PDV', true, false, true, %s) RETURNING id""",
+        (CODIGO_FIXTURE,))
     rascunho = cur.fetchone()["id"]
-    cur.execute(
-        """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
-                                         origem_vinculo)
-           VALUES ('PDV_LEGAL', %s, %s, 'AGUA TONICA IMPOSSIVEL', 'CRIADO')""",
-        (CODIGO_FIXTURE, rascunho))
     conexao.commit()
 
 st, r = chamar("POST", "/pdv/cardapio", token=token)
@@ -564,8 +606,8 @@ checar("a importacao NAO estoura com o EAN disputado", st == 200, (st, r))
 # os itens de venda e o custo junto -- repontar o vinculo aqui deixaria as vendas
 # passadas presas no rascunho.
 checar("e conta o EAN que e de outro cadastro", (r.get("ean_de_outro") or 0) >= 1, r)
-checar("a mensagem aponta para os duplicados",
-       "duplicados" in (r.get("message") or "").lower(), r.get("message"))
+checar("a mensagem manda usar o Vincular",
+       "vincular" in (r.get("message") or "").lower(), r.get("message"))
 
 conexao = _conexao_do_banco()
 with conexao, conexao.cursor() as cur:
@@ -577,10 +619,9 @@ checar("o rascunho NAO ficou com o EAN", ainda is None, ainda)
 checar("e o EAN continua com o dono de antes", dono == dono_do_ean["id"], (dono, dono_do_ean["id"]))
 
 # Devolve o de-para ao dono certo, para a suite ser idempotente.
+_soltar_codigo(CODIGO_FIXTURE)
 conexao = _conexao_do_banco()
 with conexao, conexao.cursor() as cur:
-    cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
-                (CODIGO_FIXTURE,))
     cur.execute("DELETE FROM produtos WHERE codigo = 'SMOKE-EAN-RASCUNHO'")
     conexao.commit()
 
@@ -596,14 +637,7 @@ from psycopg2.extras import RealDictCursor  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER  # noqa: E402
 
-conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
-                        dbname=DB_NAME, sslmode=DB_SSLMODE)
-with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
-    c.execute("""SELECT ce.id_produto, p.nome, p.tipo FROM codigos_externos ce
-                   JOIN produtos p ON p.id = ce.id_produto
-                  WHERE ce.sistema = 'PDV_LEGAL' AND ce.codigo = '10689996'""")
-    vinculo = c.fetchone()
-conn.close()
+vinculo = _dono_do_codigo("10689996")
 
 checar("o REDBULL do cardapio tem vinculo", vinculo is not None, vinculo)
 if vinculo:
@@ -616,28 +650,34 @@ if vinculo:
            vinculo["tipo"] == "PRODUZIDO", vinculo)
 
 
-print("\n8g. semelhanca sugere, nao vincula")
-# ⚠️ "PAO DE QUEIJO ESPECIAL" e parecido com "PAO DE QUEIJO" do cardapio, mas
-# nao e a mesma coisa. Palpite que vincula sozinho contamina o CMV teorico de
-# todo mes em que o prato foi vendido.
+print("\n8g. NOME parecido nao vincula, e nome IGUAL tambem nao")
+# ⚠️ **A cascata por nome saiu inteira, e este bloco guarda o porque.** Ela
+# errava nos DOIS sentidos: nao achava "BEB CERV HEINEKEN 350ML" contra "CERVEJA
+# HEINEKEN PILSEN" -- o mesmo produto, 63,8% de semelhanca -- e juntava "CAKE
+# BOARD N19" com "CAKE BOARD N21", que sao tamanhos diferentes. Nenhum piso
+# separa os dois casos, porque a diferenca nao esta no texto.
+#
+# ⚠️ E o nome IDENTICO tambem nao vincula: "PAO DE QUEIJO" da casa pode ser outra
+# receita que o "PAO DE QUEIJO" do cardapio. Quem reconhece produto e gente, e o
+# caminho e o botao Vincular na tela do produto.
 st, r = chamar("POST", "/produtos", {
     "codigo": f"PQE{marca}", "nome": "PAO DE QUEIJO ESPECIAL DA CASA",
     "tipo": "PRODUZIDO", "um_estoque": "UN",
 }, token=token)
 parecido = r.get("id")
 
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"PQI{marca}", "nome": "PAO DE QUEIJO", "tipo": "PRODUZIDO",
+    "um_estoque": "UN",
+}, token=token)
+identico = r.get("id")
+
+_soltar_codigo("10689994")
 conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
                         dbname=DB_NAME, sslmode=DB_SSLMODE)
 with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
-    # Solta o de-para do PAO DE QUEIJO para a cascata rodar de novo nele.
-    c.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo='10689994'")
-    # ⚠️ **E TIRA DA FRENTE O RASCUNHO DE NOME IDENTICO.** Sem isto a cascata
-    # para no passo do NOME e nunca chega na semelhanca -- o rascunho criado na
-    # fase 8e se chama exatamente "PAO DE QUEIJO", que e a descricao do item.
-    # A checagem da dica so passava por sobra de rodada anterior: numa base
-    # zerada ela caia, acusando um comportamento que existe. Renomear e
-    # desativar e o suficiente (`por_nome` so olha produto ativo) e nao esbarra
-    # nos itens de venda que ja apontam para ele.
+    # Tira da frente o rascunho de rodadas anteriores, para o item ter de nascer
+    # de novo -- e ai se ve a quem ele se liga.
     c.execute(
         """UPDATE produtos SET codigo = %s, nome = %s, ativo = false
             WHERE codigo = 'PDV-10689994'""",
@@ -646,23 +686,28 @@ with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
 conn.close()
 
 st, r = chamar("POST", "/pdv/cardapio", token=token)
-conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD,
-                        dbname=DB_NAME, sslmode=DB_SSLMODE)
-with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
-    c.execute("""SELECT ce.id_produto, p.nome, p.observacao FROM codigos_externos ce
-                   JOIN produtos p ON p.id = ce.id_produto
-                  WHERE ce.sistema = 'PDV_LEGAL' AND ce.codigo = '10689994'""")
-    pq = c.fetchone()
-conn.close()
+pq = _dono_do_codigo("10689994")
 
-checar("o PAO DE QUEIJO voltou a ter vinculo", pq is not None, pq)
+checar("o PAO DE QUEIJO do cardapio tem vinculo", pq is not None, pq)
 if pq:
     checar("e NAO foi amarrado no parecido",
            pq["id_produto"] != parecido, (pq["id_produto"], parecido))
-    # A dica viaja com o rascunho: quem for fazer a ficha ve o palpite sem que
-    # ele tenha decidido nada.
-    checar("mas a semelhanca virou dica na observacao",
-           pq["observacao"] and "arece com" in pq["observacao"], pq.get("observacao"))
+    # ⚠️ A afirmacao que a versao anterior nao fazia: nem o nome IGUAL vincula.
+    checar("nem no de nome IGUAL",
+           pq["id_produto"] != identico, (pq["id_produto"], identico))
+    checar("virou um rascunho proprio", pq["tipo"] == "PRODUZIDO", pq)
+    # ⚠️ E sem palpite escrito em lugar nenhum: sugestao que ninguem pediu vira
+    # ruido na observacao e convida ao clique.
+    checar("e sem dica de palpite na observacao",
+           not (pq.get("observacao") or "").lower().count("parece com"), pq.get("observacao"))
+
+# ⚠️ O caminho de verdade: quem reconhece liga a mao, e o codigo do PDV migra.
+st, r = chamar("POST", f"/produtos/{identico}/vincular", {"id_sai": pq["id_produto"]},
+               token=token)
+checar("e o botao Vincular liga os dois", st == 200, (st, r))
+depois = _dono_do_codigo("10689994")
+checar("o codigo do PDV passou para o cadastro da casa",
+       depois and depois["id_produto"] == identico, depois)
 
 
 print("\n8h. reconciliar liga as vendas que estavam pendentes")

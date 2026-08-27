@@ -2172,49 +2172,72 @@ try {
   checar("a conta do CMV continua mostrando Perdas", noPainel.temPerdas, noPainel);
   checar("e ganhou a linha do grupo por tipo de produto", noPainel.temGrupo, noPainel);
 
-  console.log("10w. possiveis duplicados entre portas de entrada");
-  // ⚠️ O mesmo produto pode entrar duas vezes por portas diferentes — catalogo
-  // do Omie (o que se compra) e cardapio do PDV (o que se vende). Dentro de cada
-  // porta a chave unica impede; entre portas nao ha chave nenhuma. E o estrago
-  // nao e um cadastro feio: e estoque fantasma, que reaparece na contagem como
-  // "ajuste de inventario", que e onde a diferenca some sem nome.
-  const mDup = Date.now().toString().slice(-5);
-  const { dados: dupA } = await api("POST", "/produtos", {
-    codigo: `TDUP-A-${mDup}`, nome: `Chá tela duplicado ${mDup} lata 200g`,
-    tipo: "INSUMO", um_estoque: "KG", controla_estoque: true, status: "ATIVO",
+  console.log("10w. vincular dois cadastros do mesmo produto");
+  // ⚠️ **Nao existe detector, e este bloco guarda o porque.** Um cruzamento por
+  // semelhanca errava nos dois sentidos: nao achava "BEB CERV HEINEKEN 350ML"
+  // contra "CERVEJA HEINEKEN PILSEN" -- o mesmo produto, 63,8% -- e juntava
+  // "CAKE BOARD N19" com "CAKE BOARD N21", que sao tamanhos diferentes. Quem
+  // reconhece produto e quem esta olhando a tela.
+  const mVinc = Date.now().toString().slice(-5);
+  const { dados: vincA } = await api("POST", "/produtos", {
+    codigo: `TVINC-A-${mVinc}`, nome: `BEB CERV HEINEKEN 350ML ${mVinc}`,
+    tipo: "REVENDA", um_estoque: "UN", controla_estoque: true, status: "ATIVO",
+    codigo_omie: `771${mVinc}`,
   }, token);
-  const { dados: dupB } = await api("POST", "/produtos", {
-    codigo: `PDV-TDUP-${mDup}`, nome: `Chá tela duplicado ${mDup} lata 200 g`,
-    tipo: "PRODUZIDO", producao_propria: true, controla_estoque: false, status: "RASCUNHO",
+  const { dados: vincB } = await api("POST", "/produtos", {
+    codigo: `TVINC-B-${mVinc}`, nome: `CERVEJA HEINEKEN PILSEN ${mVinc}`,
+    tipo: "PRODUZIDO", producao_propria: true, controla_estoque: false,
+    status: "RASCUNHO", codigo_pdv: `991${mVinc}`, marca: "Heineken",
   }, token);
-  aoTerminar.push(() => api("DELETE", `/produtos/${dupA.id}`, null, token));
-  aoTerminar.push(() => api("DELETE", `/produtos/${dupB.id}`, null, token));
-  // Sem o vinculo do PDV os dois seriam da mesma porta ("casa") e o par nao
-  // apareceria — que e justamente a regra que o relatorio segue.
-  await api("POST", "/vendas/importar", { vendas: [{
-    data: diaLocal(), documento: `TDUP-${mDup}`, origem: "PDV_LEGAL",
-    itens: [{ id_produto: dupB.id, quantidade: 1, valor_unitario: 10 }],
-  }] }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${vincA.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${vincB.id}`, null, token));
 
-  await irPara(p, `${WEB}/produtos`);
-  await new Promise((r) => setTimeout(r, 1600));
-  const temAtalho = await p.evaluate(() =>
-    [...document.querySelectorAll("a")].some((a) => /Poss[íi]veis duplicados/i.test(a.textContent ?? "")));
-  // ⚠️ Sem caminho a partir de Produtos, a conferencia e uma tela que ninguem acha.
-  checar("Produtos leva aos possíveis duplicados", temAtalho);
+  await irPara(p, `${WEB}/produtos/${vincA.id}`);
+  await new Promise((r) => setTimeout(r, 1800));
+  const temBotao = await p.evaluate(() =>
+    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Vincular"));
+  checar("a tela do produto tem o botao Vincular", temBotao);
 
-  await irPara(p, `${WEB}/produtos/duplicados`);
-  await new Promise((r) => setTimeout(r, 2000));
-  const dup = await textoVisivel(p);
-  checar("a tela de duplicados abre", /Poss[íi]veis duplicados/i.test(dup), dup.slice(0, 120));
-  // ⚠️ O aviso e a razao de a tela existir: sem ele, "dois cadastros parecidos"
-  // parece questao de arrumacao.
-  checar("e explica por que duplicado importa",
-    /ajuste de invent[áa]rio/i.test(dup), dup.slice(0, 300));
-  checar("com o seletor de quanto parecido", await p.evaluate(() =>
-    [...document.querySelectorAll("select")].some((s) =>
-      [...s.options].some((o) => /a partir de 80/.test(o.textContent ?? "")))));
-  await foto(p, "32-duplicados");
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => x.textContent?.trim() === "Vincular");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const busca = await p.$('input[aria-label="Buscar produto"]');
+  checar("e abre a busca do outro cadastro", !!busca);
+  if (busca) {
+    await busca.type(`CERVEJA HEINEKEN PILSEN ${mVinc}`);
+    await p.keyboard.press("Tab");
+    await new Promise((r) => setTimeout(r, 1800));
+    const previa = await textoVisivel(p);
+    // ⚠️ A previa vem ANTES do botao porque fusao nao tem desfazer: quem
+    // confirma precisa ver com que nome o produto vai ficar.
+    checar("a previa mostra como fica", /Como fica/i.test(previa), previa.slice(0, 160));
+    checar("a descricao vem do lado do Omie",
+      previa.includes(`BEB CERV HEINEKEN 350ML ${mVinc}`), previa.slice(0, 260));
+    checar("e a curta do lado do PDV",
+      previa.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`), previa.slice(0, 260));
+    checar("dizendo que o outro vira inativo", /vira inativo/i.test(previa));
+    await foto(p, "32-vincular");
+
+    await p.evaluate(() => {
+      const b = [...document.querySelectorAll("button")].find(
+        (x) => x.textContent?.trim() === "Vincular e fundir");
+      b?.click();
+    });
+    await new Promise((r) => setTimeout(r, 2600));
+    const { dados: depois } = await api("GET", `/produtos/${vincA.id}`, null, token);
+    checar("a fusao pela tela junta os dois nomes",
+      depois.nome === `BEB CERV HEINEKEN 350ML ${mVinc}`
+      && depois.nome_curto === `CERVEJA HEINEKEN PILSEN ${mVinc}`,
+      [depois.nome, depois.nome_curto]);
+    checar("e os codigos das duas integracoes",
+      depois.codigo_omie === `771${mVinc}` && depois.codigo_pdv === `991${mVinc}`,
+      [depois.codigo_omie, depois.codigo_pdv]);
+    const { dados: saiu } = await api("GET", `/produtos/${vincB.id}`, null, token);
+    checar("e o outro ficou inativo, nao apagado", saiu.ativo === false, saiu.ativo);
+  }
 
   console.log("10x. PDV Legal: a credencial e o que ainda falta");
   // ⚠️ **Só a autenticação existe, e a tela tem de DIZER isso.** O catálogo de

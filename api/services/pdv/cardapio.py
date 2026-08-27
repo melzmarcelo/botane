@@ -1,36 +1,33 @@
-"""O cardápio do PDV Legal, e o de-para que liga item vendido a prato daqui.
+"""O cardápio do PDV Legal — e o preço de venda que vem junto.
 
-Sem isto a venda entra e o **CMV teórico é zero**: a receita aparece, o CMV real
-aparece, e a variância — que é o número que interessa — não tem com o que
-comparar. Numa primeira importação real, 100 itens de 57 produtos distintos
-entraram sem vínculo nenhum.
+Sem o cardápio a venda entra e o **CMV teórico é zero**: a receita aparece, o CMV
+real aparece, e a variância — que é o número que interessa — não tem com o que
+comparar.
 
-O vínculo mora em `codigos_externos` com `sistema = 'PDV_LEGAL'`, a mesma tabela
-que já servia ao Omie e aos códigos de fornecedor. A chave é o `codigo` do PDV
-(que chega no item da venda como `codproduto`), e não a descrição: nome de prato
-muda de cardápio para cardápio e o número não.
+⚠️ **NADA aqui adivinha.** O item é reconhecido pelo **código do PDV**
+(`services/pdv/vinculo.py`) ou pelo **EAN**, que é identificador global e não
+palpite. Não achou? Nasce rascunho, e quem reconhece o produto liga com o botão
+Vincular na tela dele.
 
-⚠️ **A cascata só vincula o que é certo**: o de-para que já existe, o **EAN** e o
-nome IDÊNTICO. Semelhança sugere e para por aí. É a mesma regra da conciliação
-de nota, e pela mesma razão: um vínculo errado não fica errado sozinho — ele
+A versão anterior casava por nome idêntico e sugeria por semelhança, e errava
+nos dois sentidos: não achava "BEB CERV HEINEKEN 350ML" contra "CERVEJA HEINEKEN
+PILSEN" (63,8% — o mesmo produto), e juntava "CAKE BOARD N19" com "CAKE BOARD
+N21", que são tamanhos diferentes. Um palpite errado não fica errado sozinho:
 contamina o CMV teórico de todo mês em que aquele prato foi vendido, e ninguém
 vai procurar ali.
 
-⚠️ **E não se casa código com código.** O `codReferencia` do cardápio e o
-`produtos.codigo` daqui são espaços de nome diferentes; ver `_candidato`.
+⚠️ **A fonte do cadastro é `produtos/get`, não `produtos/getlistaresumida`.** A
+resumida traz quatro campos e, na conta real, 570 de 630 itens — sessenta pratos
+a menos, sem dizer que faltavam.
 
-⚠️ **A fonte é `produtos/get`, não `produtos/getlistaresumida`.** A resumida traz
-quatro campos (código, referência, descrição) e, na conta real do cliente, 570 de
-630 itens — sessenta pratos a menos, sem dizer que faltavam. A completa traz o
-grupo do cardápio, a impressora, o NCM e a unidade, que é o que transforma 464
-rascunhos vazios em 464 rascunhos já classificados. A resumida ficou como
-reserva, para o caso de a rota completa não estar liberada numa conta.
+⚠️ **O preço vem de OUTRA rota** (`tabelapreco/get/{filial}`), não do cadastro
+do produto: `valor`, preenchido em 629 dos 630 na conta real. Sem ela os pratos
+nasciam sem preço nenhum, com o número a uma chamada de distância.
 """
 
 import re
-import unicodedata
-from difflib import SequenceMatcher
 
+from services.pdv import vinculo
 from services.pdv.cliente import ClientePdv, ErroPdv
 
 SISTEMA = "PDV_LEGAL"
@@ -40,10 +37,6 @@ SISTEMA = "PDV_LEGAL"
 # um jeito de descobrir o limite deles do pior jeito.
 TETO_DE_PAGINAS = 40
 
-# Abaixo disto nem sugere. Um palpite fraco na tela é pior que nenhum: ele
-# convida ao clique, e quem clica não confere.
-SCORE_MINIMO = 55.0
-
 # ⚠️ "Nenhum" é o texto que o PDV usa para "não imprime em estação nenhuma" —
 # não é o nome de um setor. Criar um setor chamado "Nenhum" poria 83 itens de
 # mercearia e catering debaixo de um rótulo que não quer dizer nada.
@@ -52,20 +45,6 @@ SEM_IMPRESSORA = {"", "nenhum", "nenhuma", "0", "none"}
 # O PDV escreve a grama como "GR"; aqui a sigla é "G". As demais coincidem, e o
 # que não coincidir fica sem unidade — que é o estado honesto de um rascunho.
 SIGLAS = {"GR": "G", "UND": "UN", "UNID": "UN"}
-
-
-def _normalizar(texto: str | None) -> str:
-    """Sem acento, sem pontuação, espaços colapsados, minúsculo.
-
-    "PÃO DE QUEIJO C/ REQ." e "pao de queijo c req" viram a mesma coisa — que é
-    o que permite o nome idêntico valer como vínculo em vez de só sugestão.
-    """
-    if not texto:
-        return ""
-    sem_acento = "".join(
-        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
-    )
-    return re.sub(r"[^a-z0-9 ]", " ", re.sub(r"\s+", " ", sem_acento.lower())).strip()
 
 
 def _primeiro(bruto: dict, *nomes: str) -> str:
@@ -229,65 +208,6 @@ class _Apoio:
         return sigla if sigla in self._unidades else None
 
 
-def _candidato(cur, codigo: str, descricao: str, ean: str,
-               por_nome: dict[str, int]) -> tuple[int | None, str, float]:
-    """A cascata: onde este item do cardápio encontra um produto daqui.
-
-    A ordem é da certeza para o palpite, e o palpite não vincula:
-
-    1. **código do PDV** já registrado em `codigos_externos` — o de-para de antes
-    2. **EAN/GTIN** — identificador global, e único no cadastro
-    3. **nome idêntico**, normalizado
-    4. **semelhança** — só sugestão, nunca vínculo
-
-    ⚠️ **NÃO existe passo por código da casa, e isso custou caro para descobrir.**
-    A primeira versão casava o `codReferencia` do cardápio ("72", "75", "141")
-    com `produtos.codigo` — e os dois são espaços de nome diferentes. Numa base
-    com 2.189 insumos importados do Omie, **os 78 vínculos criados assim estavam
-    todos errados**: REDBULL virou LIMÃO TAITY, PÃO COM MANTEIGA virou
-    MANJERICÃO, BOLO virou ADESIVO VINIL PRETO. Nenhum deles daria erro em lugar
-    nenhum — apenas o CMV teórico de todo mês sairia com o custo do insumo
-    errado, para sempre, e ninguém iria procurar ali.
-
-    ⚠️ **O EAN é o oposto disso: ele identifica o mesmo objeto físico no mundo
-    todo.** É o que impede o mesmo pacote de café de virar dois cadastros — um
-    vindo do catálogo do Omie (onde ele é comprado) e outro do cardápio (onde é
-    vendido) —, que é o duplicado que ninguém enxerga: a compra entra no estoque
-    por um cadastro, a venda não sai por nenhum, e a sobra aparece na contagem
-    como "ajuste de inventário", que é onde a diferença some sem nome.
-    ⚠️ Sem ambiguidade por construção: `ux_produto_barras` é único. **A conta
-    real do cliente devolve EAN vazio em 100% do cardápio** — este passo dorme
-    hoje e passa a valer no dia em que alguém preencher, do lado de lá ou daqui.
-    """
-    if codigo:
-        cur.execute(
-            "SELECT id_produto FROM codigos_externos WHERE sistema = %s AND codigo = %s",
-            (SISTEMA, codigo),
-        )
-        achado = cur.fetchone()
-        if achado:
-            return achado["id_produto"], "ja_vinculado", 100.0
-
-    if ean:
-        cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s", (ean,))
-        achado = cur.fetchone()
-        if achado:
-            return achado["id"], "ean", 100.0
-
-    chave = _normalizar(descricao)
-    if chave and chave in por_nome:
-        return por_nome[chave], "nome", 100.0
-
-    melhor, melhor_score = None, 0.0
-    for nome, id_produto in por_nome.items():
-        score = SequenceMatcher(None, chave, nome).ratio() * 100
-        if score > melhor_score:
-            melhor, melhor_score = id_produto, score
-    if melhor and melhor_score >= SCORE_MINIMO:
-        return melhor, "semelhanca", round(melhor_score, 2)
-    return None, "sem_candidato", 0.0
-
-
 # ⚠️ Só campo que o cardápio ENSINA. `tipo`, `modo_producao` e `id_local_padrao`
 # ficam de fora de propósito: o PDV não sabe se um item de mercearia é revenda ou
 # produção própria, e chutar poria o prato na fila errada — a de "falta ficha"
@@ -353,14 +273,69 @@ def _completar(cur, id_produto: int, campos: dict) -> tuple[bool, int]:
     return True, conflitos
 
 
-def importar(cur, cliente: ClientePdv, id_usuario: int,
-             criar_ausentes: bool = True) -> dict:
-    """Traz o cardápio e liga o que dá para ligar.
+def precos(cliente: ClientePdv, filial: str) -> dict[str, float]:
+    """O preço de venda de cada item, por código do PDV.
 
-    ⚠️ **Semelhança NÃO vincula** — vira uma linha na observação do rascunho
-    criado ("parece com X"), para quem for fazer a ficha conferir. Vínculo
-    errado não fica errado sozinho: contamina o CMV teórico de todo mês em que
-    aquele prato foi vendido, e ninguém vai procurar ali.
+    ⚠️ **Vem de OUTRA rota** (`tabelapreco/get/{filial}`), não do cadastro do
+    produto — foi por isso que os pratos nasciam sem preço nenhum durante toda a
+    primeira versão: o número estava a uma chamada de distância. Na conta real,
+    `valor` vem preenchido em 629 dos 630.
+
+    ⚠️ **O preço é POR FILIAL.** Sem filial não há preço, e devolver vazio é a
+    resposta honesta: melhor prato sem preço do que prato com o preço de outra
+    loja.
+    """
+    if not filial:
+        return {}
+    try:
+        bruto = cliente.get(f"/tabelapreco/get/{filial}")
+    except ErroPdv:
+        return {}
+    if isinstance(bruto, dict):
+        bruto = bruto.get("data") or []
+    tabela = {}
+    for linha in bruto or []:
+        codigo = _primeiro(linha, "codProduto", "codigo")
+        valor = linha.get("valor")
+        if codigo and valor:
+            tabela[codigo] = float(valor)
+    return tabela
+
+
+def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int) -> bool:
+    """Abre o preço de venda vigente, se ele mudou.
+
+    ⚠️ **Só grava quando MUDA.** `produto_precos` é histórico: uma linha nova a
+    cada importação transformaria "quando o preço subiu" em ruído, e é essa
+    pergunta que a tabela existe para responder.
+    """
+    cur.execute(
+        """SELECT id, preco_venda FROM produto_precos
+            WHERE id_produto = %s AND id_unidade IS NULL AND vigente_ate IS NULL""",
+        (id_produto,),
+    )
+    atual = cur.fetchone()
+    if atual and float(atual["preco_venda"]) == float(preco):
+        return False
+    if atual:
+        cur.execute(
+            "UPDATE produto_precos SET vigente_ate = current_date WHERE id = %s", (atual["id"],)
+        )
+    cur.execute(
+        "INSERT INTO produto_precos (id_produto, preco_venda, criado_por) VALUES (%s, %s, %s)",
+        (id_produto, preco, id_usuario),
+    )
+    return True
+
+
+def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
+             criar_ausentes: bool = True) -> dict:
+    """Traz o cardápio e liga o que o CÓDIGO manda ligar.
+
+    ⚠️ **Duas portas, e nenhuma delas é palpite**: o código do PDV
+    (`vinculo.por_codigo`, que olha o campo do produto e os apelidos) e o **EAN**,
+    que é identificador global. Não achou nenhuma? Nasce rascunho — e quem
+    reconhece o produto liga com o botão Vincular na tela dele.
 
     ⚠️ **`criar_ausentes` faz o prato nascer RASCUNHO.** O item do cardápio é um
     PRATO — ele precisa de ficha para virar custo. Criá-lo como rascunho com
@@ -370,25 +345,22 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
     ⚠️ **Item fora do cardápio nasce INATIVO, não deixa de nascer.** Na conta
     real, 166 dos 630 estão desligados no PDV — mas venda antiga aponta para
     eles, e um item sem cadastro é uma venda sem vínculo que ninguém consegue
-    resolver depois. Inativo resolve os dois lados: o de-para existe, o histórico
-    fecha, e a fila de "falta ficha" continua mostrando só os 464 que ainda se
-    vendem.
+    resolver depois. Inativo fecha os dois lados: o vínculo existe, o histórico
+    fecha, e a fila de "falta ficha" mostra só os que ainda se vendem.
     """
     itens = baixar(cliente)
     apoio = _Apoio(cur)
-
-    cur.execute("SELECT id, nome FROM produtos WHERE ativo")
-    por_nome = {_normalizar(r["nome"]): r["id"] for r in cur.fetchall()}
+    tabela = precos(cliente, filial)
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
               # ⚠️ Contado à parte porque é o vínculo mais forte que existe, e
               # porque hoje ele vale ZERO nesta conta: ver o número em 0 é o que
               # diz que o cardápio do cliente não tem EAN preenchido.
-              "por_ean": 0, "sugestoes": 0, "sem_vinculo": 0,
+              "por_ean": 0, "apelidos": 0, "sem_vinculo": 0,
               # ⚠️ EAN que já é de outro cadastro: os dois são o mesmo produto.
-              # Não é erro — é o caminho para `/produtos/duplicados`.
-              "ean_de_outro": 0}
+              # Não é erro — é o caminho para o botão Vincular.
+              "ean_de_outro": 0, "precos": 0}
 
     for item in itens:
         codigo, descricao = item["codigo"], item["descricao"]
@@ -403,39 +375,31 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
             "um_estoque": apoio.unidade(item["unidade"]),
         }
 
-        id_produto, origem, score = _candidato(cur, codigo, descricao, item["ean"], por_nome)
+        # ---- porta 1: o código do PDV, principal ou apelido
+        id_produto = vinculo.por_codigo(cur, codigo)
+        origem = "ja_vinculado" if id_produto else None
 
-        if origem == "ja_vinculado":
-            resumo["ja_vinculados"] += 1
-            mudou, conflitos = _completar(cur, id_produto, campos)
-            resumo["completados"] += 1 if mudou else 0
-            resumo["ean_de_outro"] += conflitos
-            continue
-
-        dica = None
-        if origem == "semelhanca":
-            # Sugestão só: a dica viaja com o rascunho, mas não amarra nada.
-            resumo["sugestoes"] += 1
-            cur.execute("SELECT nome FROM produtos WHERE id = %s", (id_produto,))
-            parecido = (cur.fetchone() or {}).get("nome")
-            dica = (f"Parece com “{parecido}” ({score:.0f}%). Confira antes de "
-                    "fazer a ficha — o palpite não vinculou nada.")
-            id_produto = None
+        # ---- porta 2: o EAN, que é identificador global e não palpite
+        if not id_produto and item["ean"]:
+            cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s", (item["ean"],))
+            achado = cur.fetchone()
+            if achado:
+                id_produto, origem = achado["id"], "ean"
 
         if not id_produto and criar_ausentes:
             # ⚠️ O código da casa nasce com prefixo: `codigo` é único, e o número
             # do PDV pode colidir com um código que alguém já usou aqui.
             cur.execute(
-                """INSERT INTO produtos (codigo, nome, tipo, status, origem,
-                                         producao_propria, controla_estoque, observacao,
+                """INSERT INTO produtos (codigo, nome, nome_curto, tipo, status, origem,
+                                         producao_propria, controla_estoque,
                                          ativo, id_categoria, id_setor, ncm,
-                                         codigo_barras, um_estoque, criado_por)
-                   VALUES (%s, %s, 'PRODUZIDO', 'RASCUNHO', 'PDV', true, false, %s,
-                           %s, %s, %s, %s, %s, %s, %s)
+                                         codigo_barras, um_estoque, codigo_pdv, criado_por)
+                   VALUES (%s, %s, %s, 'PRODUZIDO', 'RASCUNHO', 'PDV', true, false,
+                           %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT DO NOTHING RETURNING id""",
-                (f"PDV-{codigo}"[:40], descricao or f"Item {codigo}", dica, item["ativo"],
-                 campos["id_categoria"], campos["id_setor"], campos["ncm"],
-                 campos["codigo_barras"], campos["um_estoque"], id_usuario),
+                (f"PDV-{codigo}"[:40], descricao or f"Item {codigo}", (descricao or "")[:60],
+                 item["ativo"], campos["id_categoria"], campos["id_setor"], campos["ncm"],
+                 campos["codigo_barras"], campos["um_estoque"], str(codigo), id_usuario),
             )
             criado = cur.fetchone()
             if criado:
@@ -453,19 +417,14 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
             mudou, conflitos = _completar(cur, id_produto, campos)
             resumo["completados"] += 1 if mudou else 0
             resumo["ean_de_outro"] += conflitos
-
-        cur.execute(
-            """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
-                                             origem_vinculo, confirmado_por)
-               VALUES (%s, %s, %s, %s, %s, %s)
-               ON CONFLICT (sistema, codigo) DO UPDATE
-                   SET descricao_externa = EXCLUDED.descricao_externa""",
-            (SISTEMA, codigo, id_produto, descricao, origem.upper()[:20], id_usuario),
-        )
-        if origem != "criado":
+            onde = vinculo.gravar(cur, id_produto, codigo, descricao, id_usuario)
+            resumo["apelidos"] += 1 if onde == "apelido" else 0
             resumo["vinculados"] += 1
-            if origem == "ean":
-                resumo["por_ean"] += 1
+            resumo["por_ean"] += 1 if origem == "ean" else 0
+
+        preco = tabela.get(str(codigo))
+        if preco and _gravar_preco(cur, id_produto, preco, id_usuario):
+            resumo["precos"] += 1
 
     return resumo
 
@@ -486,15 +445,22 @@ def reconciliar(cur, id_unidade: int) -> dict:
     """
     from services import cmv as motor
 
+    # ⚠️ **Os dois níveis do vínculo**, não só os apelidos: desde que o código do
+    # PDV virou campo do produto, procurar apenas em `codigos_externos` deixava
+    # de fora justamente o vínculo principal — o que a tela mostra.
+    mapa = vinculo.de_para(cur)
     cur.execute(
-        """SELECT vi.id, vi.codigo_pdv, ce.id_produto
+        """SELECT vi.id, vi.codigo_pdv
              FROM venda_itens vi
              JOIN vendas v ON v.id = vi.id_venda
-             JOIN codigos_externos ce ON ce.sistema = %s AND ce.codigo = vi.codigo_pdv
             WHERE v.id_unidade = %s AND vi.id_produto IS NULL AND NOT v.cancelada""",
-        (SISTEMA, id_unidade),
+        (id_unidade,),
     )
-    pendentes = [dict(r) for r in cur.fetchall()]
+    pendentes = [
+        {**dict(r), "id_produto": mapa[str(r["codigo_pdv"])]}
+        for r in cur.fetchall()
+        if str(r["codigo_pdv"]) in mapa
+    ]
 
     custos: dict[int, tuple] = {}
     vinculados, com_custo = 0, 0

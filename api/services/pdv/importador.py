@@ -16,7 +16,7 @@ CMV do período sairia com receita a menos.
 
 from datetime import date, timedelta
 
-from services.pdv import mapeadores
+from services.pdv import mapeadores, vinculo
 from services.pdv.cliente import ClientePdv, ErroPdv
 
 ORIGEM = "PDV_LEGAL"
@@ -73,19 +73,6 @@ def buscar(cliente: ClientePdv, filiais: str, inicio: date, fim: date) -> list[d
         cupons.extend(mapeadores.lista_de_cupons(bruto))
         d += timedelta(days=1)
     return cupons
-
-
-def _de_para(cur) -> dict[str, int]:
-    """O código do PDV → o produto daqui, de uma vez só.
-
-    ⚠️ Uma consulta, não uma por item. Um dia de 48 cupons tem ~100 linhas, e o
-    de-para inteiro de um cardápio cabe folgado na memória.
-    """
-    cur.execute(
-        "SELECT codigo, id_produto FROM codigos_externos WHERE sistema = %s",
-        ("PDV_LEGAL",),
-    )
-    return {r["codigo"]: r["id_produto"] for r in cur.fetchall()}
 
 
 def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
@@ -153,7 +140,7 @@ def sincronizar(cur, cliente: ClientePdv, id_unidade: int, filiais: str,
         cupons = buscar(cliente, filiais, inicio, fim)
     except ErroPdv:
         raise
-    vendas, resumo = preparar(cupons, _de_para(cur))
+    vendas, resumo = preparar(cupons, vinculo.de_para(cur))
     return {
         "inicio": inicio,
         "fim": fim,

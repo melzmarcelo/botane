@@ -85,14 +85,6 @@ export default function PaginaProdutos() {
           >
             Baixar planilha
           </button>
-          {/* ⚠️ Sem um caminho daqui, a conferência de duplicados é uma tela
-              que ninguém acha — e duplicado não avisa: ele vira estoque
-              fantasma e reaparece como "ajuste de inventário" na contagem. */}
-          {podeEditar && (
-            <Link href="/produtos/duplicados" className="btn btn-secundario">
-              Possíveis duplicados
-            </Link>
-          )}
           {podeEditar && (
             <Link href="/produtos/novo" className="btn btn-primario">
               Novo produto

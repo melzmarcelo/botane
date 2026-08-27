@@ -1,0 +1,38 @@
+[
+  {
+    "codFilial": 37622,
+    "codProduto": 10689993,
+    "valor": 5.5,
+    "valorCusto": 0.0,
+    "codCFOP": "5102",
+    "codCSOSN": "102",
+    "pausado": false
+  },
+  {
+    "codFilial": 37622,
+    "codProduto": 10689994,
+    "valor": 6.5,
+    "valorCusto": 0.0,
+    "codCFOP": "5102",
+    "codCSOSN": "102",
+    "pausado": false
+  },
+  {
+    "codFilial": 37622,
+    "codProduto": 10689995,
+    "valor": 5.0,
+    "valorCusto": 0.0,
+    "codCFOP": "5102",
+    "codCSOSN": "102",
+    "pausado": false
+  },
+  {
+    "codFilial": 37622,
+    "codProduto": 10689996,
+    "valor": 12.0,
+    "valorCusto": 0.0,
+    "codCFOP": "5102",
+    "codCSOSN": "102",
+    "pausado": false
+  }
+]

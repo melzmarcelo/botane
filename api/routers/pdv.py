@@ -328,12 +328,32 @@ def importar_cardapio(
     ⚠️ **Reconcilia as vendas que já entraram** logo em seguida: a ordem real é
     a venda chegar antes de o cardápio estar ligado, e sem isso os itens que
     entraram sem produto ficariam pendentes para sempre.
+
+    ⚠️ **A filial é o que traz o PREÇO** (`tabelapreco/get/{filial}`), que mora
+    em outra rota e não no cadastro do produto. Sem ela o cardápio entra sem
+    preço nenhum — foi assim durante toda a primeira versão, com o número a uma
+    chamada de distância. Preço é POR FILIAL: na dúvida, nenhum é melhor que o
+    de outra loja.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cliente = _cliente(cur, id_unidade)
+        cur.execute(
+            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO),
+        )
+        linha = cur.fetchone()
+        cred = segredos.decifrar(linha["credenciais"]) if linha else {}
+        filial = (cred.get("filiais") or "").split(",")[0].strip()
+        if not filial:
+            try:
+                lista = cliente.get("/filial/get") or []
+            except ErroPdv:
+                lista = []
+            codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
+            filial = codigos[0] if len(codigos) == 1 else ""
         try:
-            r = cardapio.importar(cur, cliente, ctx.id_usuario, criar_ausentes)
+            r = cardapio.importar(cur, cliente, ctx.id_usuario, filial, criar_ausentes)
         except ErroPdv as e:
             raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
         depois = cardapio.reconciliar(cur, id_unidade)
@@ -349,8 +369,9 @@ def importar_cardapio(
             "message": (f"{r['itens']} item(ns) do cardápio — {r['vinculados']} vinculado(s), "
                         f"{r['criados']} criado(s) em rascunho, "
                         f"{depois['vinculados']} venda(s) reconciliada(s)"
+                        + (f", {r['precos']} preço(s) de venda" if r.get("precos") else "")
                         + (f". {r['ean_de_outro']} item(ns) trazem EAN que já é de outro "
-                           "cadastro — veja Possíveis duplicados"
+                           "cadastro — abra o produto e use Vincular"
                            if r.get("ean_de_outro") else ""))}
 
 

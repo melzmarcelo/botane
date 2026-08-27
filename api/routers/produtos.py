@@ -18,11 +18,11 @@ from models.produtos import (
     ProdutoUpdate,
     STATUS,
     TIPOS,
-    UnificarRequest,
+    VincularRequest,
 )
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao
-from services import duplicados, kits
+from services import kits, produtos_vinculo
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -32,6 +32,7 @@ _EDITAVEIS = (
     "id_local_padrao", "modo_producao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
+    "codigo_pdv",
     # Vêm do cadastro do Omie e são COMPLETADOS na sincronização — mas
     # continuam editáveis: quem corrige aqui é porque o dado de lá está errado,
     # e a completagem só preenche o que está em branco.
@@ -207,54 +208,45 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
     }
 
 
-# ⚠️ **Antes de `/{id_produto}`.** O FastAPI casa rotas na ordem de declaração:
-# com o parâmetro na frente, "duplicados" viraria um id e o pedido morreria em
-# 422 antes de chegar aqui.
-@router.get("/duplicados")
-def duplicados_suspeitos(
-    minimo: float = Query(default=80.0, ge=50, le=100),
-    limite: int = Query(default=200, ge=1, le=500),
-    # ⚠️ Reduz ao que só a integração cria: o mesmo produto entrando pelo Omie e
-    # pelo cardápio. É o pior dos dois casos — dentro de uma porta os cadastros
-    # ao menos se comportam igual; entre portas, um controla estoque e o outro
-    # não, e é aí que a venda deixa de sair da prateleira.
-    so_entre_portas: bool = False,
-    ctx: Contexto = Depends(requer_permissao("cadastros.produtos")),
-) -> dict:
-    """Cadastros parecidos que vieram de portas de entrada DIFERENTES.
+@router.get("/{id_produto}/vincular/previa")
+def previa_do_vinculo(id_produto: int, id_sai: int,
+                      ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O que a fusão faria — antes de mandar fazer.
 
-    Dentro da mesma porta a chave única já impede a repetição — `codigo_omie`
-    no catálogo do Omie, `(sistema, codigo)` no cardápio do PDV. Entre portas
-    não existe chave nenhuma, e é aí que o mesmo pacote de café vira dois
-    cadastros: a compra entra por um, a venda não sai por nenhum, e a sobra
-    aparece na contagem como "ajuste de inventário".
-
-    ⚠️ **Isto SUGERE, não decide.** Unir dois produtos que são diferentes de
-    verdade não tem desfazer.
-    """
-    with get_cursor() as cur:
-        return duplicados.suspeitos(cur, minimo, limite, so_entre_portas)
-
-
-@router.post("/{id_produto}/unificar")
-def unificar(id_produto: int, body: UnificarRequest,
-             ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
-    """Diz que dois cadastros são o mesmo produto. `id_produto` é o que FICA.
-
-    ⚠️ O absorvido tem de ser um cadastro **sem história**: movimento no razão,
-    mês fechado, contagem de inventário, ficha e nota de entrada não mudam de
-    dono. A recusa nomeia o que trava e manda fazer ao contrário.
+    ⚠️ Existe porque fusão não tem desfazer. Quem confirma precisa ver com que
+    nome o produto vai ficar, quais campos serão completados, quantos itens de
+    venda mudam de dono, e — quando não dá — o que exatamente trava.
     """
     with get_cursor() as cur:
         try:
-            r = duplicados.unificar(cur, id_produto, body.id_absorver, ctx.id_usuario)
+            return produtos_vinculo.previa(cur, id_produto, id_sai)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{id_produto}/vincular")
+def vincular(id_produto: int, body: VincularRequest,
+             ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Diz que dois cadastros são o mesmo produto. `id_produto` é o que FICA.
+
+    ⚠️ **Nada aqui adivinha.** Quem reconhece o produto é quem está olhando a
+    tela; o sistema guarda o que ela disse. A descrição longa fica com o nome do
+    lado do Omie e a curta com o do PDV, os códigos das duas integrações migram
+    para o mesmo cadastro, e o que sai é **inativado** — nunca apagado, porque a
+    auditoria e o histórico continuam apontando para ele.
+    """
+    with get_cursor() as cur:
+        try:
+            r = produtos_vinculo.fundir(cur, id_produto, body.id_sai, ctx.id_usuario)
         except LookupError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except PermissionError as e:
             raise HTTPException(status_code=409, detail=str(e))
-        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "unificar",
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "vincular",
                             depois={k: v for k, v in r.items() if k != "message"})
     return r
 
@@ -285,6 +277,16 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         preco = cur.fetchone()
         produto["preco_venda"] = preco["preco_venda"] if preco else None
         produto["preco_desde"] = preco["vigente_de"] if preco else None
+
+        # ⚠️ Os códigos EXTRAS do cardápio. "ENTREGA" tem quatro na conta real;
+        # o campo `codigo_pdv` guarda o principal e estes são os apelidos — sem
+        # eles, a tela diria que o produto tem um vínculo quando tem quatro.
+        cur.execute(
+            """SELECT codigo FROM codigos_externos
+                WHERE sistema = 'PDV_LEGAL' AND id_produto = %s ORDER BY codigo""",
+            (id_produto,),
+        )
+        produto["apelidos_pdv"] = [r["codigo"] for r in cur.fetchall()]
 
         cur.execute(
             """SELECT pf.id_fornecedor, f.nome AS fornecedor, pf.codigo_no_fornecedor,
