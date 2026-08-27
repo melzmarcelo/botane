@@ -198,6 +198,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   lista incha — vale tirar o que não é da semente de fábrica depois de uma bateria. A flag
   `--tabelas-de-apoio` esvazia mesmo, e aí a base fica MAIS vazia que uma instalação nova (a
   semente do script 005 não volta: o `db_updater` não reexecuta migração já aplicada).
+- **`web/scripts/base-vazia.mjs`** passa por todas as 26 telas com a base ZERADA e diz qual
+  quebra. ⚠️ Tela com zero registro é o estado que ninguém testa e que o cliente vê no primeiro
+  dia: divisão por zero, `lista[0]` e `.toFixed()` em nulo só aparecem ali — e aparecem na frente
+  de quem está conhecendo o sistema. Não cria nada; roda depois de `limpar_dados.py`.
 - `api/limpar_dados.py` zera a operação e deixa a base como instalação nova (`--simular`
   mostra sem apagar). Produtos e fornecedores saem inteiros de propósito: o seed não cria
   nenhum. **Recusa banco que não seja local.**
