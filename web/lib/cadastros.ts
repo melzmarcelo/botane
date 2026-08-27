@@ -75,15 +75,26 @@ export const TIPOS_PRODUTO = [
     nome: "Material de limpeza",
     ajuda: "Detergente, desinfetante, pano — custo que não é comida",
   },
+  {
+    valor: "UTENSILIO",
+    nome: "Utensílios",
+    ajuda:
+      "Prato, talher, taça, panela, avental — não é consumido pela receita: " +
+      "quebra, some e é reposto. Fica fora do CMV real",
+  },
 ];
 
 export const TIPOS_LOCAL = ["SECO", "RESFRIADO", "CONGELADO", "BAR"];
+// ⚠️ Espelha TIPOS_CATEGORIA de api/models/cadastros.py — sem KIT, que não se
+// classifica em categoria de compra. Os dois lados têm de andar juntos: o front
+// oferecia MATERIAL_LIMPEZA e o servidor recusava com 422.
 export const TIPOS_CATEGORIA = [
   "INSUMO",
   "REVENDA",
   "PRODUZIDO",
   "EMBALAGEM",
   "MATERIAL_LIMPEZA",
+  "UTENSILIO",
 ];
 export const GRANDEZAS = ["MASSA", "VOLUME", "UNIDADE"];
 

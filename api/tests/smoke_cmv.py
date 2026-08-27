@@ -249,20 +249,51 @@ print("4c. o atalho de HOJE responde a mesma coisa que o razão")
 st, ap_hoje = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 st, mov_hoje = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
 folga_hoje = max(0.05, 0.005 * mov_hoje["produtos"])
+
+
+# ⚠️ **As duas telas respondem perguntas diferentes, e só coincidem enquanto a
+# casa não tira nenhum tipo do CMV.** A apuração desconta do estoque final os
+# tipos que estão em grupo com `considerar_no_cmv = false` (migração 032) — sair
+# é sair das três pontas. A movimentação é relatório de ESTOQUE e mostra tudo:
+# taça guardada é estoque, mesmo não sendo custo de comida.
+#
+# Comparar os dois crus passou a acusar diferença assim que a base ganhou um
+# grupo fora do CMV (utensílios, migração 037), e a diferença era exatamente o
+# valor das taças. Não era erro de conta: era a checagem somando peras com maçãs.
+#
+# ⚠️ O `ontem` abaixo passava por sorte — o estoque de ontem ainda não tinha
+# utensílio. Um dia depois, quebraria sozinho.
+#
+# O que se quer provar aqui continua sendo **o atalho de HOJE contra o razão**,
+# então a parcela fora do CMV sai dos dois lados.
+def _fora_do_cmv(mov, tipos):
+    if not tipos:
+        return 0.0
+    ids = set()
+    for t in tipos:
+        _, lista = chamar("GET", f"/produtos?tipo={t}&por_pagina=500", token=token)
+        ids |= {p["id"] for p in (lista or [])}
+    return sum(float(l["valor_final"]) for l in mov["linhas"] if l["id_produto"] in ids)
+
+
+fora_hoje = _fora_do_cmv(mov_hoje, ap_hoje.get("tipos_fora_do_cmv") or [])
 checar("apuração e movimentação fecham no mesmo estoque final",
-       perto(float(ap_hoje["estoque_final"]), float(mov_hoje["total"]["valor_final"]),
+       perto(float(ap_hoje["estoque_final"]),
+             float(mov_hoje["total"]["valor_final"]) - fora_hoje,
              folga_hoje),
-       (ap_hoje["estoque_final"], mov_hoje["total"]["valor_final"]))
+       (ap_hoje["estoque_final"], mov_hoje["total"]["valor_final"], fora_hoje))
 
 # E o de ONTEM continua indo ao razão: a diferença entre os dois é o que se
 # movimentou hoje, nem mais nem menos.
 ontem = (hoje - timedelta(days=1)).isoformat()
 st, ap_ontem = chamar("GET", f"/cmv/apuracao?inicio={inicio_mes}&fim={ontem}", token=token)
 st, mov_ontem = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={ontem}", token=token)
+fora_ontem = _fora_do_cmv(mov_ontem, ap_ontem.get("tipos_fora_do_cmv") or [])
 checar("o período que termina ONTEM também fecha entre as duas telas",
-       perto(float(ap_ontem["estoque_final"]), float(mov_ontem["total"]["valor_final"]),
+       perto(float(ap_ontem["estoque_final"]),
+             float(mov_ontem["total"]["valor_final"]) - fora_ontem,
              max(0.05, 0.005 * mov_ontem["produtos"])),
-       (ap_ontem["estoque_final"], mov_ontem["total"]["valor_final"]))
+       (ap_ontem["estoque_final"], mov_ontem["total"]["valor_final"], fora_ontem))
 
 print("5. fechamento congela o período")
 # ⚠️ **O cenário fecha o DIA, não o mês.** Fechar o mês corrente é recusado

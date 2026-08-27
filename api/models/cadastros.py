@@ -5,7 +5,18 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 TIPOS_LOCAL = ("SECO", "RESFRIADO", "CONGELADO", "BAR")
-TIPOS_CATEGORIA = ("INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM")
+# ⚠️ Espelha `TIPOS` de models/produtos.py, menos `KIT` (combo não se classifica
+# em categoria de compra). `MATERIAL_LIMPEZA` faltava aqui desde a migração 029:
+# a tela oferecia o tipo e o servidor recusava com 422, e ninguém tinha tentado
+# criar a categoria ainda. Tipo novo entra nos DOIS lugares.
+TIPOS_CATEGORIA = (
+    "INSUMO",
+    "REVENDA",
+    "PRODUZIDO",
+    "EMBALAGEM",
+    "MATERIAL_LIMPEZA",
+    "UTENSILIO",
+)
 GRANDEZAS = ("MASSA", "VOLUME", "UNIDADE")
 
 

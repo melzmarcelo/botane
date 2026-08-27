@@ -868,6 +868,31 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   salvar: semana que fecha na quarta, mês que começa no 26 e dia corrido são três aritméticas,
   e uma segunda implementação em TypeScript divergiria no primeiro caso de borda — aparecendo
   como fechamento no período errado, que só se desfaz reabrindo.
+- **`UTENSILIO` — "Utensílios"** (migração 037, 27/08/2026), pedido da cliente.
+  Prato, talher, taça, panela e avental entravam como INSUMO ou REVENDA e sumiam dentro do
+  custo da comida.
+  🔑 **O que o separa de EMBALAGEM e MATERIAL_LIMPEZA não é ser "não comida" — os três são. É
+  que utensílio NÃO É CONSUMIDO**: marmita sai com o pedido, detergente acaba; uma taça vive
+  meses e some num sábado. Ele quebra, some e é REPOSTO. Por isso ganhou grupo próprio no CMV
+  em vez de virar apêndice do de limpeza: "quanto se quebrou e se repôs no mês?" não é a mesma
+  pergunta que "quanto disto não é comida?".
+  ⚠️ **Nasce FORA do CMV real** (`considerar_no_cmv = false`), pelo mesmo motivo do grupo de
+  limpeza: taça quebrada não é custo do prato, e o food cost é o percentual que vira decisão de
+  cardápio. Como nenhum produto tinha o tipo ainda, **nada no passado muda** — todo mês já
+  fechado continua idêntico, e a suíte cobra que comprar utensílio não mova o CMV real.
+  ⚠️ **A lista viva é `TIPOS`, em `api/models/produtos.py`** — `cmv_grupos`,
+  `inventario_selecao` e o router do CMV a importam, então o tipo se propaga sozinho para
+  grupos, filtro de inventário e painel. **Não há CHECK no banco de propósito**: tipo novo é
+  migração de dado, não alteração de tabela. Mas são DUAS listas, e a outra é
+  `TIPOS_PRODUTO` em `web/lib/cadastros.ts` — mexer só numa faz o servidor aceitar um tipo que
+  ninguém consegue escolher (a lição do EAN, na direção inversa: essa não quebra nada, só
+  nunca aparece). O `verificar.mjs` passou a contar os tipos do `<select>`.
+  ⚠️ **`TIPOS_CATEGORIA` é uma TERCEIRA lista** (`api/models/cadastros.py`), e estava sem
+  `MATERIAL_LIMPEZA` desde a 029: a tela oferecia o tipo e o servidor recusava com 422 —
+  ninguém tinha tentado criar a categoria ainda. Corrigido junto. Ela espelha `TIPOS` menos
+  `KIT`, que não se classifica em categoria de compra.
+  ⚠️ Tipo inválido devolve **400 com a lista inteira na frase**, não 422 — "UTENSILIOS" no
+  plural é o erro provável, e a resposta mostra a grafia certa.
 - **A casa monta os próprios grupos do CMV, por TIPO de produto**
   (`services/cmv_grupos.py`, migração 029, 26/08/2026). O painel já mostrava Perdas, Consumo
   interno e Ajustes de inventário como linhas que EXPLICAM o número; faltava a pergunta que o
@@ -1016,16 +1041,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.203 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.226 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
-  `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
+  `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (310, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (313, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1091,6 +1116,21 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **Apuração e movimentação NÃO respondem a mesma pergunta, e a diferença dormiu até o
+  primeiro grupo fora do CMV existir na base.** `cmv.apuracao` desconta do estoque final os
+  tipos com `considerar_no_cmv = false`; `cmv.movimentacao_por_produto` **não recebe esse
+  filtro** — é relatório de ESTOQUE e mostra tudo, porque taça guardada é estoque mesmo não
+  sendo custo de comida. A checagem do `smoke_cmv` comparava os dois crus e passou anos verde:
+  a base local não tinha nenhum grupo fora do CMV (a semente da 029 sumiu numa limpeza com
+  `--tabelas-de-apoio`, e migração não reexecuta). Assim que a 037 semeou o de utensílios, a
+  identidade abriu **exatamente o valor das taças** — e parecia erro de razão.
+  ⚠️ **A segunda checagem, a de ONTEM, passava por sorte**: o estoque do dia anterior ainda não
+  tinha utensílio. Quebraria sozinha no dia seguinte, longe de qualquer commit — que é o pior
+  tipo de teste frágil. As duas agora tiram a parcela fora do CMV dos dois lados.
+  ⚠️ **A movimentação não devolve `tipo`** (só `categoria` e `setor`), então o teste casa por
+  `id_produto` contra `/produtos?tipo=`. Pôr `tipo` no relatório seria melhor, mas a cópia
+  congelada (`cmv_movimentacao`, migração 018) também não tem a coluna: mês fechado ficaria
+  sem ela. É migração própria, não efeito colateral de outra coisa.
 - ⚠️ **O tamanho mínimo de senha mora em UM lugar**: `SENHA_MINIMA`, em `api/config.py` (hoje
   **6**), espelhado em `web/lib/senha.ts` para o `minLength` do input e a frase da dica. Estava
   escrito oito vezes, e com dois valores: 12 no start e 8 nos formulários — senha aceita na

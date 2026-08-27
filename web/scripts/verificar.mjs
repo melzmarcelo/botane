@@ -347,6 +347,25 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
   const nomeProduto = `Teste tela ${Date.now().toString().slice(-5)}`;
   await p.type('input[required]', nomeProduto);
+
+  // ⚠️ Tipo novo tem de CHEGAR à tela. `TIPOS` (api/models/produtos.py) e
+  // `TIPOS_PRODUTO` (web/lib/cadastros.ts) são listas separadas: mexer só numa
+  // faz o servidor aceitar um tipo que ninguém consegue escolher. É a lição do
+  // EAN na direção inversa — e essa não quebra nada, só nunca aparece.
+  const tiposNaTela = await p.evaluate(() =>
+    [...(document.querySelector("select")?.options ?? [])].map((o) => o.value));
+  checar("a tela oferece os sete tipos de produto", tiposNaTela.length === 7, tiposNaTela);
+  checar("inclusive utensílios e enxoval", tiposNaTela.includes("UTENSILIO"), tiposNaTela);
+
+  // A ajuda do tipo é o que explica a escolha a quem cadastra; sem ela
+  // "Utensílios" fica indistinguível de "Material de limpeza".
+  await p.select("select", "UTENSILIO");
+  await new Promise((r) => setTimeout(r, 300));
+  const ajudaUtensilio = await textoVisivel(p);
+  checar("e explica que utensílio não é consumido pela receita",
+    /quebra, some e é reposto/i.test(ajudaUtensilio),
+    ajudaUtensilio.slice(0, 200));
+
   await p.select("select", "INSUMO");
   const selects = await p.$$("select");
   // ordem dos selects: tipo, categoria, setor, um_estoque, um_compra

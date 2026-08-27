@@ -4,10 +4,26 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-# ⚠️ A ordem é a que aparece nas telas, e `MATERIAL_LIMPEZA` fica ao lado de
-# `EMBALAGEM` de propósito: são os dois tipos que entram no custo pela porta dos
-# insumos sem serem comida. É o que os grupos do CMV separam.
-TIPOS = ("INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM", "MATERIAL_LIMPEZA")
+# ⚠️ A ordem é a que aparece nas telas, e os três últimos ficam juntos de
+# propósito: são os tipos que entram no custo pela porta dos insumos sem serem
+# comida. É o que os grupos do CMV separam.
+#
+# ⚠️ `UTENSILIO` não é só mais um "não comida": é o único que não é CONSUMIDO.
+# Marmita sai com o pedido, detergente acaba — uma taça vive meses e some num
+# sábado. Por isso tem grupo próprio no CMV (migração 037) e não entra no de
+# limpeza.
+#
+# ⚠️ Esta tupla é a fonte única: `cmv_grupos`, `inventario_selecao` e o router do
+# CMV a importam. Não há CHECK no banco — tipo novo se adiciona aqui.
+TIPOS = (
+    "INSUMO",
+    "REVENDA",
+    "PRODUZIDO",
+    "KIT",
+    "EMBALAGEM",
+    "MATERIAL_LIMPEZA",
+    "UTENSILIO",
+)
 STATUS = ("RASCUNHO", "ATIVO", "ARQUIVADO")
 
 

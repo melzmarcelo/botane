@@ -380,8 +380,19 @@ t = mov["total"]
 folga = max(0.05, 0.005 * mov["produtos"])
 conferir("movimentação: inicial + entradas − saídas = final",
          t["valor_inicial"] + t["valor_entradas"] - t["valor_saidas"], t["valor_final"], folga)
+# ⚠️ A movimentação mostra TODO o estoque; a apuração desconta os tipos que a
+# casa pôs fora do CMV (`considerar_no_cmv = false`). Enquanto não havia nenhum
+# grupo assim na base, os dois números coincidiam e a checagem parecia uma
+# identidade — não é. Ver a armadilha no CLAUDE.md.
+_fora = a.get("tipos_fora_do_cmv") or []
+_ids_fora: set[int] = set()
+for _t in _fora:
+    _, _lista = chamar("GET", f"/produtos?tipo={_t}&por_pagina=500", token=token)
+    _ids_fora |= {p["id"] for p in (_lista or [])}
+_valor_fora = sum(float(l["valor_final"]) for l in mov["linhas"]
+                  if l["id_produto"] in _ids_fora)
 conferir("e as compras da movimentação batem com o estoque de agora",
-         t["valor_final"], float(a["estoque_final"]), folga)
+         t["valor_final"] - _valor_fora, float(a["estoque_final"]), folga)
 
 linha_cafe = next((l for l in mov["linhas"] if l["id_produto"] == cafe), None)
 checar("o café aparece na movimentação", linha_cafe is not None,
