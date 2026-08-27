@@ -295,29 +295,62 @@ def _candidato(cur, codigo: str, descricao: str, ean: str,
 _DO_CARDAPIO = ("id_categoria", "id_setor", "ncm", "codigo_barras", "um_estoque")
 
 
-def _completar(cur, id_produto: int, campos: dict) -> bool:
-    """Preenche só o que está EM BRANCO no produto.
+# ⚠️ Colunas com índice ÚNICO. Escrever nelas um valor que já é de outro produto
+# não derruba só aquele item — derruba a importação inteira, porque a transação é
+# uma só. Ver `_completar`.
+_UNICOS = ("codigo_barras",)
+
+
+def _completar(cur, id_produto: int, campos: dict) -> tuple[bool, int]:
+    """Preenche só o que está EM BRANCO no produto. Devolve (mudou, conflitos).
 
     ⚠️ **Nunca sobrescreve.** Reimportar o cardápio depois de alguém corrigir a
     categoria de um prato não pode desfazer a correção — é a mesma lição do
     importador de fornecedores do Omie. Sem isto, a reimportação também não
     faria nada (`continue` no item já vinculado), e os rascunhos criados por uma
     versão anterior ficariam vazios para sempre.
+
+    ⚠️ **EAN que já pertence a OUTRO produto é PULADO, não gravado.** O cenário
+    acontece em três tempos: o item entra sem EAN e vira rascunho; depois o
+    catálogo do Omie traz o produto de verdade, com o EAN; depois alguém
+    preenche o EAN no PDV. Na reimportação o item já está vinculado — o primeiro
+    passo da cascata responde antes do EAN —, e a gravação batia no
+    `ux_produto_barras`. Não é um item que falha: é a importação inteira que
+    morre, e nada entra.
+
+    ⚠️ **E o conflito é INFORMAÇÃO, não erro**: dois cadastros disputando o mesmo
+    EAN são o mesmo produto. Quem resolve isso é `/produtos/duplicados`, que sabe
+    mover o de-para, os itens de venda e o custo junto — repontar o vínculo aqui
+    deixaria as vendas passadas presas no rascunho.
     """
     cur.execute(
         f"SELECT {', '.join(_DO_CARDAPIO)} FROM produtos WHERE id = %s", (id_produto,)
     )
     antes = cur.fetchone()
     if not antes:
-        return False
+        return False, 0
     faltando = {c: v for c, v in campos.items() if v is not None and not antes[c]}
+
+    conflitos = 0
+    for coluna in _UNICOS:
+        valor = faltando.get(coluna)
+        if valor is None:
+            continue
+        cur.execute(
+            f"SELECT 1 FROM produtos WHERE {coluna} = %s AND id <> %s LIMIT 1",
+            (valor, id_produto),
+        )
+        if cur.fetchone():
+            faltando.pop(coluna)
+            conflitos += 1
+
     if not faltando:
-        return False
+        return False, conflitos
     sets = ", ".join(f"{c} = %s" for c in faltando)
     cur.execute(
         f"UPDATE produtos SET {sets} WHERE id = %s", [*faltando.values(), id_produto]
     )
-    return True
+    return True, conflitos
 
 
 def importar(cur, cliente: ClientePdv, id_usuario: int,
@@ -352,7 +385,10 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
               # ⚠️ Contado à parte porque é o vínculo mais forte que existe, e
               # porque hoje ele vale ZERO nesta conta: ver o número em 0 é o que
               # diz que o cardápio do cliente não tem EAN preenchido.
-              "por_ean": 0, "sugestoes": 0, "sem_vinculo": 0}
+              "por_ean": 0, "sugestoes": 0, "sem_vinculo": 0,
+              # ⚠️ EAN que já é de outro cadastro: os dois são o mesmo produto.
+              # Não é erro — é o caminho para `/produtos/duplicados`.
+              "ean_de_outro": 0}
 
     for item in itens:
         codigo, descricao = item["codigo"], item["descricao"]
@@ -371,8 +407,9 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
 
         if origem == "ja_vinculado":
             resumo["ja_vinculados"] += 1
-            if _completar(cur, id_produto, campos):
-                resumo["completados"] += 1
+            mudou, conflitos = _completar(cur, id_produto, campos)
+            resumo["completados"] += 1 if mudou else 0
+            resumo["ean_de_outro"] += conflitos
             continue
 
         dica = None
@@ -413,8 +450,9 @@ def importar(cur, cliente: ClientePdv, id_usuario: int,
             continue
 
         if origem != "criado":
-            if _completar(cur, id_produto, campos):
-                resumo["completados"] += 1
+            mudou, conflitos = _completar(cur, id_produto, campos)
+            resumo["completados"] += 1 if mudou else 0
+            resumo["ean_de_outro"] += conflitos
 
         cur.execute(
             """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,

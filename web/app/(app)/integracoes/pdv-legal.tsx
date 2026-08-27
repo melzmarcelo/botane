@@ -155,14 +155,19 @@ export default function PdvLegal() {
         message: string;
         criados: number;
         sem_custo: number;
+        // ⚠️ Dois cadastros disputando o mesmo EAN são o mesmo produto — o
+        // achado leva à tela que sabe unificá-los.
+        ean_de_outro?: number;
       }>("/pdv/cardapio");
       aviso.sucesso(
         r.sem_custo > 0
           ? `${r.message}. ${r.sem_custo} item(ns) ainda sem custo — falta a ficha técnica.`
           : r.message,
-        r.criados > 0
-          ? { texto: "ver os rascunhos criados", ao: () => router.push("/produtos") }
-          : undefined,
+        (r.ean_de_outro ?? 0) > 0
+          ? { texto: "ver possíveis duplicados", ao: () => router.push("/produtos/duplicados") }
+          : r.criados > 0
+            ? { texto: "ver os rascunhos criados", ao: () => router.push("/produtos") }
+            : undefined,
       );
       await carregar();
     } catch (err) {

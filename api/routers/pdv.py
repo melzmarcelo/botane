@@ -342,9 +342,16 @@ def importar_cardapio(
 
     return {**r, "reconciliados": depois["vinculados"],
             "com_custo": depois["com_custo"], "sem_custo": depois["sem_custo"],
+            # ⚠️ `ean_de_outro` sai na frase porque é um achado, não um detalhe:
+            # dois cadastros disputando o mesmo EAN são o mesmo produto, e quem
+            # resolve isso é a tela de duplicados — que sabe mover o de-para, os
+            # itens de venda e o custo junto.
             "message": (f"{r['itens']} item(ns) do cardápio — {r['vinculados']} vinculado(s), "
                         f"{r['criados']} criado(s) em rascunho, "
-                        f"{depois['vinculados']} venda(s) reconciliada(s)")}
+                        f"{depois['vinculados']} venda(s) reconciliada(s)"
+                        + (f". {r['ean_de_outro']} item(ns) trazem EAN que já é de outro "
+                           "cadastro — veja Possíveis duplicados"
+                           if r.get("ean_de_outro") else ""))}
 
 
 @router.post("/reconciliar")

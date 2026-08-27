@@ -529,6 +529,62 @@ checar("e o vinculo diz que foi o EAN", vinculo.get("origem_vinculo") == "EAN", 
 checar("e NAO criou um rascunho duplicado", not virou_rascunho, virou_rascunho)
 
 
+print("\n8e3. EAN que ja e de OUTRO produto nao derruba a importacao")
+# ⚠️ **O cenario acontece em tres tempos, e nenhum deles e estranho:**
+#   1. o item do cardapio entra SEM ean e vira rascunho
+#   2. depois o catalogo do Omie traz o produto de verdade, com o EAN
+#   3. depois alguem preenche o EAN no PDV, e o cardapio e reimportado
+# No passo 3 o item JA esta vinculado -- o primeiro passo da cascata responde
+# antes do EAN -- e a gravacao batia no indice unico `ux_produto_barras`. Nao era
+# um item que falhava: era a importacao INTEIRA que morria, porque a transacao e
+# uma so, e nada entrava.
+conexao = _conexao_do_banco()
+with conexao, conexao.cursor() as cur:
+    cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
+                (CODIGO_FIXTURE,))
+    cur.execute("DELETE FROM produtos WHERE codigo = 'SMOKE-EAN-RASCUNHO'")
+    # O rascunho SEM ean, no lugar do dono legitimo do EAN.
+    cur.execute(
+        """INSERT INTO produtos (codigo, nome, tipo, status, origem, producao_propria,
+                                 controla_estoque, ativo)
+           VALUES ('SMOKE-EAN-RASCUNHO', 'Rascunho que disputa o EAN', 'PRODUZIDO',
+                   'RASCUNHO', 'PDV', true, false, true) RETURNING id""")
+    rascunho = cur.fetchone()["id"]
+    cur.execute(
+        """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
+                                         origem_vinculo)
+           VALUES ('PDV_LEGAL', %s, %s, 'AGUA TONICA IMPOSSIVEL', 'CRIADO')""",
+        (CODIGO_FIXTURE, rascunho))
+    conexao.commit()
+
+st, r = chamar("POST", "/pdv/cardapio", token=token)
+checar("a importacao NAO estoura com o EAN disputado", st == 200, (st, r))
+# ⚠️ O conflito e INFORMACAO, nao erro: dois cadastros disputando o mesmo EAN sao
+# o mesmo produto. Quem resolve e /produtos/duplicados, que sabe mover o de-para,
+# os itens de venda e o custo junto -- repontar o vinculo aqui deixaria as vendas
+# passadas presas no rascunho.
+checar("e conta o EAN que e de outro cadastro", (r.get("ean_de_outro") or 0) >= 1, r)
+checar("a mensagem aponta para os duplicados",
+       "duplicados" in (r.get("message") or "").lower(), r.get("message"))
+
+conexao = _conexao_do_banco()
+with conexao, conexao.cursor() as cur:
+    cur.execute("SELECT codigo_barras FROM produtos WHERE id = %s", (rascunho,))
+    ainda = (cur.fetchone() or {}).get("codigo_barras")
+    cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s", (EAN_FIXTURE,))
+    dono = (cur.fetchone() or {}).get("id")
+checar("o rascunho NAO ficou com o EAN", ainda is None, ainda)
+checar("e o EAN continua com o dono de antes", dono == dono_do_ean["id"], (dono, dono_do_ean["id"]))
+
+# Devolve o de-para ao dono certo, para a suite ser idempotente.
+conexao = _conexao_do_banco()
+with conexao, conexao.cursor() as cur:
+    cur.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s",
+                (CODIGO_FIXTURE,))
+    cur.execute("DELETE FROM produtos WHERE codigo = 'SMOKE-EAN-RASCUNHO'")
+    conexao.commit()
+
+
 print("\n8f. codigo de cardapio NAO casa com codigo da casa")
 # O teste que trava o bug: depois de importar, o REDBULL nao pode ter virado o
 # insumo de codigo "72".
@@ -575,6 +631,18 @@ conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PA
 with conn, conn.cursor(cursor_factory=RealDictCursor) as c:
     # Solta o de-para do PAO DE QUEIJO para a cascata rodar de novo nele.
     c.execute("DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo='10689994'")
+    # ⚠️ **E TIRA DA FRENTE O RASCUNHO DE NOME IDENTICO.** Sem isto a cascata
+    # para no passo do NOME e nunca chega na semelhanca -- o rascunho criado na
+    # fase 8e se chama exatamente "PAO DE QUEIJO", que e a descricao do item.
+    # A checagem da dica so passava por sobra de rodada anterior: numa base
+    # zerada ela caia, acusando um comportamento que existe. Renomear e
+    # desativar e o suficiente (`por_nome` so olha produto ativo) e nao esbarra
+    # nos itens de venda que ja apontam para ele.
+    c.execute(
+        """UPDATE produtos SET codigo = %s, nome = %s, ativo = false
+            WHERE codigo = 'PDV-10689994'""",
+        (f"PDV-10689994-{marca}", f"Rascunho antigo do pao de queijo {marca}"),
+    )
 conn.close()
 
 st, r = chamar("POST", "/pdv/cardapio", token=token)

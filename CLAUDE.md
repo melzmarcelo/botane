@@ -532,6 +532,18 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   "CATERING" caem os dois em "Nenhum", e um é comprado pronto e o outro é feito na casa. `tipo`,
   `modo_producao` e `id_local_padrao` ficam de fora do que o cardápio ensina — chutar poria o
   prato na fila errada, a de "falta ficha" em vez da de "falta compra".
+  ⚠️ **EAN que já pertence a OUTRO produto é PULADO, não gravado.** `codigo_barras` tem índice
+  único (`ux_produto_barras`), e a gravação batia nele — **derrubando a importação INTEIRA**, não
+  só aquele item, porque a transação é uma só e nada entrava. O cenário tem três tempos, e nenhum
+  deles é estranho: o item entra sem EAN e vira rascunho; depois o catálogo do Omie traz o produto
+  de verdade, com o EAN; depois alguém preenche o EAN no PDV. Na reimportação **o item já está
+  vinculado — o primeiro passo da cascata responde antes do EAN** —, e a colisão acontece.
+  ⚠️ **O conflito é INFORMAÇÃO, não erro**: dois cadastros disputando o mesmo EAN são o mesmo
+  produto. Ele vira `ean_de_outro` no resumo e uma frase que aponta para `/produtos/duplicados` —
+  que sabe mover o de-para, os itens de venda e o custo junto. **Repontar o vínculo ali seria
+  errado**: as vendas passadas ficariam presas no rascunho.
+  ⚠️ **Corolário que vale para toda a cascata: o passo do EAN só decide na PRIMEIRA vez que o
+  item aparece.** Depois de vinculado, o vínculo manda — inclusive quando o EAN chega depois.
   ⚠️ **Reimportar o cardápio COMPLETA o que está em branco, nunca sobrescreve** (`_completar`).
   Sem isso a reimportação não fazia nada (o item já vinculado caía num `continue`) e os
   rascunhos de uma versão anterior ficariam vazios para sempre; sobrescrevendo, ela desfaria a
@@ -889,13 +901,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.152 verificações de API): `smoke_fundacao.py` (39), `smoke_cadastros.py` (47),
+- Testes (1.157 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (92),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (96), `smoke_vendas.py` (38), `smoke_duplicados.py` (41),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (101), `smoke_vendas.py` (38), `smoke_duplicados.py` (41),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (292, no Chrome, com fotos em `web/scripts/_fotos`).
@@ -923,6 +935,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   "margem zero", um bug que não existia. O endpoint ganhou `id_produto`, que responde por UM
   prato sem depender do corte; a suíte pergunta pelo id dela. Vale para todo relatório com
   `LIMIT`: quem quer olhar um item específico precisa de um caminho que não passe pelo ranking.
+- ⚠️ **E o contrário também: base ZERADA descobre suíte que vivia de sobra.** Depois de
+  `limpar_dados.py`, a fase 8g de `smoke_pdv_legal` caiu — ela conferia que a semelhança vira
+  dica na observação do rascunho, mas o rascunho de nome IDÊNTICO criado numa fase anterior fazia
+  a cascata parar no passo do nome e nunca chegar na semelhança. Só passava porque uma rodada
+  antiga havia deixado a observação lá. Precondição garantida (o rascunho é renomeado e
+  desativado antes) em vez de suposta. ⚠️ `web/scripts/base-vazia.mjs` passa pelas 26 telas com a
+  base zerada — é o estado que ninguém testa e que o cliente vê no primeiro dia.
 - ⚠️ **As suítes têm de sobreviver a uma base com dado REAL, não só a uma base virgem.** Depois
   de importar 37 notas e 2.183 produtos de uma conta de verdade, SEIS checagens quebraram — e
   nenhuma por bug do sistema: pegavam "o primeiro produto que controla estoque" (caiu num
