@@ -158,10 +158,61 @@ st, r = chamar("POST", "/estoque/entradas", {
 }, token=token)
 checar("o lado do Omie ganha movimento no razão", st == 201, (st, r))
 
-st, r = chamar("POST", f"/produtos/{do_pdv}/vincular", {"id_sai": do_omie}, token=token)
-checar("absorver quem tem movimento é recusado", st == 409, (st, r))
-checar("e a recusa NOMEIA o que trava", "append-only" in str(r.get("detail", "")), r)
-checar("mandando fazer ao contrário", "ao contrário" in str(r.get("detail", "")), r)
+# ⚠️ **A direção é resolvida pelos FATOS, não pela tela.** Antes isto era uma
+# recusa: "não pode ser absorvido… faça a fusão a partir dele" — uma resposta que
+# já sabia o certo e ainda exigia refazer o caminho noutra tela. Se só um lado tem
+# história, não há escolha a fazer: o sistema inverte e DIZ por quê.
+st, prev = chamar("GET", f"/produtos/{do_pdv}/vincular/previa?id_sai={do_omie}", token=token)
+checar("da tela do que NÃO tem história, a direção inverte",
+       prev.get("invertido") is True, prev.get("invertido"))
+checar("e o que tem movimento é que fica",
+       prev["fica"]["id"] == do_omie, (prev["fica"]["id"], do_omie))
+checar("com o motivo dito", "história" in (prev.get("motivo_da_direcao") or ""),
+       prev.get("motivo_da_direcao"))
+checar("e sem impedimento, porque agora dá", prev.get("pode") is True, prev.get("impedimentos"))
+
+print("\n4b. sem história dos dois lados, quem CONTROLA ESTOQUE fica")
+# ⚠️ **O caso real que motivou isto.** "AGUA MINERAL C/GAS 600ML PLATINA" (Omie)
+# tinha nota de entrada e fornecedor, mas ZERO movimento no razão — nada que o
+# impedisse de ser absorvido. Sem este critério, fundir da tela do cardápio
+# deixaria vivo o rascunho do PDV, que nasce SEM controlar estoque: a compra
+# deixaria de entrar no razão, calada, e o saldo pararia de existir para o item.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"CE-OMIE-{marca}", "nome": f"Agua omie {marca}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": True, "status": "ATIVO",
+}, token=token)
+ce_omie = r.get("id")
+checar("um cadastro que controla estoque, sem movimento", st == 201, (st, r))
+
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"CE-PDV-{marca}", "nome": f"Agua pdv {marca}", "tipo": "PRODUZIDO",
+    "producao_propria": True, "controla_estoque": False, "status": "RASCUNHO",
+}, token=token)
+ce_pdv = r.get("id")
+checar("e o rascunho do cardápio, que não controla", st == 201, (st, r))
+
+st, prev = chamar("GET", f"/produtos/{ce_pdv}/vincular/previa?id_sai={ce_omie}", token=token)
+checar("nenhum dos dois tem impedimento", prev.get("pode") is True, prev.get("impedimentos"))
+checar("mas a direção inverte mesmo assim", prev.get("invertido") is True, prev)
+checar("e quem fica é o que controla estoque",
+       prev["fica"]["id"] == ce_omie and prev["fica"]["controla_estoque"] is True, prev["fica"])
+checar("com o motivo dito", "controla estoque" in (prev.get("motivo_da_direcao") or ""),
+       prev.get("motivo_da_direcao"))
+
+print("\n4c. nota de entrada e fornecedor NÃO travam — são ponteiros")
+# ⚠️ A primeira versão barrava os dois, e estava errado: um item de nota diz
+# "esta linha é deste produto"; se os dois cadastros são o mesmo produto, a linha
+# muda de dono. O caso real foi recusado por uma nota NÃO lançada.
+st, forn = chamar("GET", "/fornecedores?limite=1", token=token)
+if forn:
+    st, r = chamar("PUT", f"/produtos/{ce_omie}", {
+        "nome": f"Agua omie {marca}", "tipo": "REVENDA", "um_estoque": "UN",
+        "controla_estoque": True, "status": "ATIVO",
+        "fornecedores": [{"id_fornecedor": forn[0]["id"], "fator": 1, "preferencial": True}],
+    }, token=token)
+    checar("o cadastro ganha um fornecedor vinculado", st == 200, (st, r))
+    st, prev = chamar("GET", f"/produtos/{ce_pdv}/vincular/previa?id_sai={ce_omie}", token=token)
+    checar("e continua podendo ser fundido", prev.get("pode") is True, prev.get("impedimentos"))
 
 print("\n5. a fusão, na direção certa")
 st, r = chamar("POST", f"/produtos/{do_omie}/vincular", {"id_sai": do_pdv}, token=token)

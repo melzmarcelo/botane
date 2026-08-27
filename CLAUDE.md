@@ -752,9 +752,32 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **A prévia vem antes do botão** (`GET /produtos/{id}/vincular/previa`): fusão não tem
   desfazer, e quem confirma precisa ver com que nome o produto vai ficar, que campos serão
   completados, quantos itens de venda mudam de dono e — quando não dá — o que exatamente trava.
-  ⚠️ **Só absorve cadastro SEM história**: movimento no razão (append-only), mês fechado,
-  contagem de inventário, produção, nota, ficha, combo e vínculo de fornecedor travam, e a recusa
-  **nomeia o que trava** e manda fazer ao contrário.
+  🔑 **A direção é decidida pelos FATOS, não pela tela** (`direcao`, 27/08/2026). Antes, abrir o
+  cadastro do cardápio e escolher o do Omie levava *"não pode ser absorvido… faça a fusão a partir
+  dele"* — uma recusa que já sabia a resposta e ainda exigia refazer o caminho noutra tela. Três
+  critérios, nesta ordem:
+  1. **história** — só um lado pode ser absorvido, então não há escolha;
+  2. **controlar estoque** — o cadastro que controla é o operacional; o do cardápio nasce sem.
+     ⚠️ Sem este critério, fundir o do Omie no rascunho do PDV produzia um produto com os dois
+     códigos e **sem controlar estoque**: a compra deixaria de entrar no razão, calada, e o saldo
+     pararia de existir para aquele item;
+  3. **a tela** — empatados os dois acima, manda o contexto de quem está olhando.
+  ⚠️ **Inverter calado seria pior que não inverter**: a resposta traz `invertido` e
+  `motivo_da_direcao`, e a tela avisa — senão a pessoa confirma achando que o cadastro que abriu
+  é o que fica.
+  ⚠️ **Só absorve cadastro SEM história, e a lista de travas já foi MAIOR.** Ela barrava nota de
+  entrada e vínculo de fornecedor, e isso estava errado: são PONTEIROS, não história — um item de
+  nota diz "esta linha é deste produto", e se os dois cadastros são o mesmo produto, a linha muda
+  de dono. O sintoma foi um caso real: `AGUA MINERAL C/GAS 600ML PLATINA`, com **zero** movimento
+  no razão, recusado por causa de uma nota **não lançada**. Sobraram as travas do que de fato não
+  se move: razão, lote, mês fechado, contagem de inventário, produção e ficha própria. Nota
+  LANÇADA não escapa — ela gerou movimento, e o razão barra.
+  ⚠️ Mudam de dono (`_REAPONTAVEIS`): item de nota, sugestão de produto na nota, fornecedor,
+  embalagem, agenda de produção, linha de ficha e componente de combo. **Quatro têm unicidade
+  composta com o produto**, e mudar o dono às cegas estouraria o índice — derrubando a fusão
+  inteira, não só a linha: quando a gêmea já existe do lado que fica, a do absorvido é descartada.
+  ⚠️ Com os DOIS carregando história, a recusa continua — e agora diz isso, em vez de mandar
+  fazer ao contrário, que não resolveria nada.
   ⚠️ **Completa o que está em branco, nunca sobrescreve** — mesma regra do importador de
   fornecedores. `_carregar` faz `SELECT p.*` de propósito: enumerar as colunas ali faria a lista
   de campos completáveis viver em dois lugares, e um campo novo entraria na lista e não no
@@ -993,13 +1016,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.194 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.203 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (59),
+  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (310, no Chrome, com fotos em `web/scripts/_fotos`).

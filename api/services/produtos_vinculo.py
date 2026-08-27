@@ -20,22 +20,49 @@ inventário" — onde a diferença some sem nome. Dentro de uma porta, é o cust
 médio existindo em dois lugares, com cada ficha puxando o de um deles.
 """
 
-# ⚠️ Tudo que o absorvido NÃO pode ter. Cada linha destas é história que não se
-# move de cadastro: o razão é append-only, o mês fechado é congelado, e a
-# contagem de um inventário registra o que foi contado naquele dia.
+# ⚠️ **O que o absorvido NÃO pode ter — e a lista já foi maior.** A primeira
+# versão barrava nota de entrada e vínculo de fornecedor, e isso estava errado:
+# são PONTEIROS, não história. Um item de nota diz "esta linha é deste produto";
+# se os dois cadastros são o mesmo produto, a linha muda de dono e pronto. O
+# sintoma foi um caso real — "AGUA MINERAL C/GAS 600ML PLATINA", com ZERO
+# movimento no razão, recusado por ter uma nota não lançada.
+#
+# O que sobrou aqui é o que de fato não se move:
+#
+# * o razão é **append-only** — saldo e custo médio são construídos dele;
+# * o mês fechado é **congelado**, e já foi ao contador;
+# * a contagem registra **o que foi contado naquele dia**;
+# * uma produção **aconteceu**;
+# * duas fichas próprias não cabem num cadastro só (uma vigente por produto).
+#
+# ⚠️ Nota LANÇADA não escapa: ela gerou movimento, e `estoque_movimentos` barra.
 _IMPEDIMENTOS = (
     ("estoque_movimentos", "id_produto", "tem movimento no razão, que é append-only"),
     ("estoque_lotes", "id_produto", "tem lote em estoque"),
     ("cmv_movimentacao", "id_produto", "aparece num mês já fechado, que é congelado"),
     ("inventario_itens", "id_produto", "foi contado num inventário"),
     ("producoes", "id_produto", "tem produção registrada"),
-    ("producao_agenda", "id_produto", "está na agenda de produção"),
-    ("nota_itens", "id_produto", "aparece em nota de entrada"),
     ("fichas_tecnicas", "id_produto", "tem ficha técnica própria"),
-    ("ficha_itens", "id_insumo", "é insumo na ficha de outro produto"),
-    ("kit_itens", "id_componente", "é componente de um combo"),
-    ("kit_itens", "id_kit", "é um combo com composição"),
-    ("produto_fornecedor", "id_produto", "tem fornecedor vinculado, com histórico de preço"),
+)
+
+# ⚠️ O que MUDA DE DONO na fusão: ponteiros, não fatos. Cada linha é "esta
+# entrada é deste produto", e se os dois cadastros são o mesmo produto, ela passa
+# para o que fica.
+#
+# ⚠️ **Quatro destas têm unicidade COMPOSTA com o produto**, e mudar o dono às
+# cegas estouraria o índice — derrubando a fusão inteira, não só aquela linha. O
+# terceiro campo é a expressão que identifica a linha GÊMEA do lado que fica
+# (`{a}` vira o apelido da tabela); existindo a gêmea, a do absorvido é
+# descartada, porque a que fica já diz a mesma coisa.
+_REAPONTAVEIS = (
+    ("nota_itens", "id_produto", None),
+    ("nota_itens", "sugestao_produto", None),
+    ("produto_fornecedor", "id_produto", "{a}.id_fornecedor"),
+    ("produto_unidades", "id_produto", "upper({a}.um)"),
+    ("producao_agenda", "id_produto", "{a}.data_prevista"),
+    ("ficha_itens", "id_insumo", None),
+    ("kit_itens", "id_componente", "{a}.id_kit"),
+    ("kit_itens", "id_kit", "{a}.id_componente"),
 )
 
 # ⚠️ Os campos que se completam quando estão em branco no que fica. `nome` e
@@ -78,17 +105,68 @@ def _carregar(cur, id_produto: int) -> dict | None:
     return dict(linha) if linha else None
 
 
-def previa(cur, id_fica: int, id_sai: int) -> dict:
+def direcao(cur, id_tela: int, id_escolhido: int) -> tuple[int, int, bool]:
+    """Quem fica e quem sai — decidido pelos FATOS, não pela tela em que se está.
+
+    ⚠️ **Existe porque a versão anterior mandava a pessoa trocar de tela.** Quem
+    abria o cadastro do cardápio e escolhia o do Omie levava "não pode ser
+    absorvido… faça a fusão a partir dele" — uma recusa que já sabia a resposta e
+    ainda assim exigia refazer o caminho. Se um lado tem história e o outro não,
+    a direção não é escolha: é o único jeito que funciona.
+
+    ⚠️ **Com os dois sem história, manda a TELA.** É o contexto de quem está
+    olhando, e não há motivo para contrariá-lo.
+
+    ⚠️ Com os DOIS carregando história, ninguém fica: a recusa é legítima e o
+    chamador a levanta. Juntar duas histórias de estoque exigiria reescrever o
+    razão, e o custo médio resultante seria invenção.
+
+    A ordem dos critérios:
+
+    1. **história** — só um lado pode ser absorvido, então não há escolha;
+    2. **controlar estoque** — o cadastro que controla é o operacional; o do
+       cardápio é um lugar-guardado que nasce sem controlar. Sem este critério,
+       fundir o do Omie no rascunho do PDV produzia um produto com os dois
+       códigos e **sem controlar estoque**: a compra deixaria de entrar no razão,
+       calada, e o saldo pararia de existir para aquele item;
+    3. **a tela** — sendo os dois iguais nos critérios acima, manda o contexto de
+       quem está olhando.
+    """
+    if impedimentos(cur, id_escolhido) and not impedimentos(cur, id_tela):
+        return id_escolhido, id_tela, True
+
+    tela, escolhido = _carregar(cur, id_tela), _carregar(cur, id_escolhido)
+    if (escolhido or {}).get("controla_estoque") and not (tela or {}).get("controla_estoque"):
+        return id_escolhido, id_tela, True
+
+    return id_tela, id_escolhido, False
+
+
+def previa(cur, id_tela: int, id_escolhido: int) -> dict:
     """O que a fusão faria — para ver ANTES de mandar.
 
     ⚠️ Existe porque fusão não tem desfazer. Quem confirma precisa ver com que
     nome o produto vai ficar, o que muda de dono e o que impede.
+
+    ⚠️ **A direção é resolvida aqui** (`direcao`), e a resposta diz quando ela foi
+    invertida — a tela mostra "Fica / Sai" pelo resultado, não pelo cadastro em
+    que a pessoa estava.
     """
-    fica, sai = _carregar(cur, id_fica), _carregar(cur, id_sai)
-    if not fica or not sai:
-        raise LookupError("Produto não encontrado.")
-    if id_fica == id_sai:
+    if id_tela == id_escolhido:
         raise ValueError("Escolha dois cadastros diferentes.")
+    if not _carregar(cur, id_tela) or not _carregar(cur, id_escolhido):
+        raise LookupError("Produto não encontrado.")
+
+    id_fica, id_sai, invertido = direcao(cur, id_tela, id_escolhido)
+    fica, sai = _carregar(cur, id_fica), _carregar(cur, id_sai)
+
+    # ⚠️ Trocar a direção sem dizer por quê é pior que não trocar: a pessoa
+    # confirma achando que o cadastro que abriu é o que fica.
+    motivo = None
+    if invertido:
+        motivo = ("tem história que não muda de cadastro"
+                  if impedimentos(cur, id_sai) or fica["movimentos"]
+                  else "é o cadastro que controla estoque")
 
     travas = impedimentos(cur, id_sai)
     nome, nome_curto, de_onde = _nomes(fica, sai)
@@ -107,6 +185,12 @@ def previa(cur, id_fica: int, id_sai: int) -> dict:
             "codigo_barras": fica["codigo_barras"] or sai["codigo_barras"],
         },
         "itens_de_venda": itens_venda,
+        # ⚠️ A tela precisa saber que a direção foi trocada — senão a pessoa
+        # confirma achando que o cadastro que ela abriu é o que fica.
+        "invertido": invertido,
+        "motivo_da_direcao": motivo,
+        "id_fica": id_fica,
+        "id_sai": id_sai,
         "baixa": _baixa_pendente(cur, fica, sai),
         "completa": [c for c in _COMPLETAVEIS
                      if not fica.get(c) and sai.get(c)],
@@ -213,7 +297,7 @@ def _nomes(fica: dict, sai: dict) -> tuple[str, str | None, dict]:
     }
 
 
-def fundir(cur, id_fica: int, id_sai: int, id_usuario: int,
+def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
            baixar_vendas: bool = True) -> dict:
     """Funde os dois: um fica, o outro é inativado.
 
@@ -246,12 +330,18 @@ def fundir(cur, id_fica: int, id_sai: int, id_usuario: int,
     from services import cmv as motor
     from services.pdv import vinculo
 
-    conferido = previa(cur, id_fica, id_sai)
+    conferido = previa(cur, id_tela, id_escolhido)
+    # ⚠️ A MESMA resolução da prévia: o que a pessoa confirmou é o que acontece.
+    id_fica, id_sai = conferido["id_fica"], conferido["id_sai"]
     if conferido["impedimentos"]:
+        # ⚠️ Chegar aqui quer dizer que os DOIS têm história — a `direcao` já
+        # teria invertido se só um tivesse. A frase diz isso, em vez de mandar
+        # "fazer ao contrário", que não resolveria nada.
         raise PermissionError(
-            f"“{conferido['sai']['nome']}” não pode ser absorvido: "
-            + "; ".join(conferido["impedimentos"])
-            + ". Se ele é o cadastro certo, faça a fusão ao contrário."
+            f"Os dois cadastros têm história e nenhum pode ser absorvido. "
+            f"“{conferido['sai']['nome']}” " + "; ".join(conferido["impedimentos"])
+            + ". Juntar duas histórias de estoque exigiria reescrever o razão, que é "
+            "append-only — desative um deles à mão e siga com o outro."
         )
     fica, sai = conferido["fica"], conferido["sai"]
 
@@ -302,6 +392,35 @@ def fundir(cur, id_fica: int, id_sai: int, id_usuario: int,
         (id_fica, id_sai),
     )
     movidos["apelidos"] = cur.rowcount
+
+    # ⚠️ Os PONTEIROS mudam de dono: item de nota, vínculo de fornecedor,
+    # embalagem, agenda de produção, linha de ficha, componente de combo. Nenhum
+    # deles é história — são "esta linha é deste produto", e se os dois cadastros
+    # são o mesmo produto, a linha passa para o que fica.
+    reapontados: dict[str, int] = {}
+    descartados: dict[str, int] = {}
+    for tabela, coluna, chave in _REAPONTAVEIS:
+        if chave:
+            cur.execute(
+                f"""DELETE FROM {tabela} sai
+                     WHERE sai.{coluna} = %s
+                       AND EXISTS (SELECT 1 FROM {tabela} fica
+                                    WHERE fica.{coluna} = %s
+                                      AND {chave.format(a='fica')} = {chave.format(a='sai')})""",
+                (id_sai, id_fica),
+            )
+            if cur.rowcount:
+                descartados[tabela] = descartados.get(tabela, 0) + cur.rowcount
+        cur.execute(
+            f"UPDATE {tabela} SET {coluna} = %s WHERE {coluna} = %s",
+            (id_fica, id_sai),
+        )
+        if cur.rowcount:
+            reapontados[tabela] = reapontados.get(tabela, 0) + cur.rowcount
+    if reapontados:
+        movidos["reapontados"] = reapontados
+    if descartados:
+        movidos["descartados_por_ja_existirem"] = descartados
 
     cur.execute(
         "SELECT id, custo_ficha_unitario FROM venda_itens WHERE id_produto = %s", (id_sai,)
@@ -354,6 +473,7 @@ def fundir(cur, id_fica: int, id_sai: int, id_usuario: int,
     )
 
     return {
+        "invertido": conferido["invertido"],
         "fica": {"id": id_fica, "codigo": fica["codigo"], "nome": nome,
                  "nome_curto": nome_curto},
         "saiu": {"id": id_sai, "codigo": sai["codigo"], "nome": sai["nome"]},

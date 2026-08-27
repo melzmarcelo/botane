@@ -45,6 +45,9 @@ type Previa = {
   sai: Lado;
   impedimentos: string[];
   pode: boolean;
+  /** A direção foi resolvida pelos FATOS, e pode não ser a da tela. */
+  invertido: boolean;
+  motivo_da_direcao: string | null;
   resultado: {
     nome: string;
     nome_curto: string | null;
@@ -178,8 +181,23 @@ export default function Vincular({
                 resultado que não vai valer. */}
             {!previa.pode && (
               <Aviso tipo="erro">
-                <b>{previa.sai.nome}</b> não pode ser absorvido: {previa.impedimentos.join("; ")}.
-                Se ele é o cadastro certo, faça a fusão a partir dele.
+                Os dois cadastros têm história e nenhum pode ser absorvido —{" "}
+                <b>{previa.sai.nome}</b> {previa.impedimentos.join("; ")}. Juntar duas histórias
+                de estoque exigiria reescrever o razão, que é append-only. Desative um deles à
+                mão e siga com o outro.
+              </Aviso>
+            )}
+
+            {/* ⚠️ **A direção é dos FATOS, não da tela.** Antes, escolher um
+                cadastro com história levava "não pode ser absorvido… faça a
+                fusão a partir dele" — uma recusa que já sabia a resposta e ainda
+                exigia refazer o caminho. Agora o sistema resolve e DIZ por quê:
+                trocar a direção calado seria pior, porque a pessoa confirmaria
+                achando que o cadastro que abriu é o que fica. */}
+            {previa.invertido && (
+              <Aviso tipo="info">
+                A direção foi invertida: <b>{previa.fica.nome}</b> é que fica, porque{" "}
+                {previa.motivo_da_direcao}. O cadastro que você abriu é o que sai.
               </Aviso>
             )}
 
