@@ -1054,9 +1054,10 @@ try {
     const texto = document.body.innerText;
     const escolhido = document.querySelector('[aria-pressed="true"]');
     return {
-      tipos: ["Entrada", "Saída", "Perda", "Transferência", "Ajuste de custo"].filter(
-        (t) => texto.includes(t),
-      ),
+      tipos: [
+        "Entrada", "Saída", "Perda", "Transferência",
+        "Ajuste de estoque", "Ajuste de custo",
+      ].filter((t) => texto.includes(t)),
       escolhido: escolhido?.textContent?.trim().slice(0, 8) ?? null,
       temCusto: /custo unit[áa]rio/i.test(texto),
     };
@@ -1064,10 +1065,25 @@ try {
   // 🔑 **CINCO tipos, não quatro.** O ajuste de custo é mais um item da mesma
   // tela — mesma forma dos outros, um produto por vez. Contar aqui é o que
   // pega o tipo que some da lista por um erro de permissão ou de rótulo.
-  checar("a tela de ajustes oferece os cinco tipos", telaAjustes.tipos.length === 5,
+  checar("a tela de ajustes oferece os seis tipos", telaAjustes.tipos.length === 6,
     telaAjustes.tipos);
-  checar("inclusive o ajuste de custo", telaAjustes.tipos.some((t) => /custo/i.test(t)),
+  checar("inclusive os dois que declaram a verdade em vez do movimento",
+    telaAjustes.tipos.some((t) => /ajuste de custo/i.test(t))
+      && telaAjustes.tipos.some((t) => /ajuste de estoque/i.test(t)),
     telaAjustes.tipos);
+
+  // O ajuste de ESTOQUE pede a quantidade que a prateleira TEM — não o quanto
+  // se moveu. É o que o separa de Entrada e Saída.
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      /ajuste de estoque/i.test(x.textContent ?? ""));
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const formSaldo = await p.evaluate(() =>
+    [...document.querySelectorAll(".rotulo")].map((r) => r.textContent?.trim() ?? ""));
+  checar("no ajuste de estoque pede a quantidade que REALMENTE tem",
+    formSaldo.some((r) => /realmente tem/i.test(r)), formSaldo);
 
   // O formulário se molda ao tipo. No custo isso quer dizer: SEM quantidade
   // (nada se move) e COM o custo certo.

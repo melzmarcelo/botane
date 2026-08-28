@@ -23,6 +23,18 @@ import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
  */
 
 type Motivo = { id: number; nome: string };
+type PreviaSaldo = {
+  produto: string;
+  um: string | null;
+  saldo_atual: number;
+  saldo_novo: number;
+  diferenca: number;
+  movimento: string;
+  custo_medio: number;
+  valor: number;
+  efeito_no_cmv: number;
+};
+
 type PreviaCusto = {
   produto: string;
   saldo: number;
@@ -35,7 +47,7 @@ type PreviaCusto = {
   efeito_no_cmv: number;
 };
 
-type Tipo = "entrada" | "saida" | "perda" | "transferencia" | "custo";
+type Tipo = "entrada" | "saida" | "perda" | "transferencia" | "saldo" | "custo";
 
 type Movimento = {
   id: number;
@@ -87,6 +99,15 @@ const TIPOS: {
       "Mudar de local sem mudar de dono. Não cria nem destrói valor: sai de um lado pelo médio e entra do outro pelo mesmo.",
   },
   {
+    id: "saldo",
+    nome: "Ajuste de estoque",
+    // 🔑 A permissão existia desde o começo — "ajustar saldo fora do
+    // inventário" — sem nenhuma funcionalidade atrás dela. É esta.
+    chave: "estoque.ajuste",
+    descricao:
+      "A prateleira tem 12 e o sistema diz 15. Aqui se informa quanto REALMENTE tem, e o sistema lança a sobra ou a falta — que aparece no CMV como ajuste de inventário.",
+  },
+  {
     id: "custo",
     nome: "Ajuste de custo",
     // ⚠️ Chave PRÓPRIA: mexer na quantidade é dizer que a prateleira tem outra
@@ -113,6 +134,7 @@ const VAZIO = {
   // O custo CERTO, não a diferença: pedir a diferença obrigaria a fazer a
   // conta de cabeça, que é onde o erro entra.
   custo_novo: "",
+  quantidade_certa: "",
   id_local: "",
   id_local_destino: "",
   id_motivo_perda: "",
@@ -140,6 +162,7 @@ export default function PaginaAjustes() {
   const [confirmando, setConfirmando] = useState<Movimento | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [previaCusto, setPreviaCusto] = useState<PreviaCusto | null>(null);
+  const [previaSaldo, setPreviaSaldo] = useState<PreviaSaldo | null>(null);
 
   const carregarRecentes = useCallback(async () => {
     try {
@@ -198,6 +221,7 @@ export default function PaginaAjustes() {
   const conferirCusto = useCallback(async () => {
     if (!f.id_produto || !f.custo_novo.trim()) {
       setPreviaCusto(null);
+      setPreviaSaldo(null);
       return;
     }
     try {
@@ -215,8 +239,28 @@ export default function PaginaAjustes() {
       // Prévia é conforto, não trava: se ela falhar, o lançamento ainda
       // responde com a mensagem certa do servidor.
       setPreviaCusto(null);
+      setPreviaSaldo(null);
     }
   }, [f.id_produto, f.custo_novo, f.id_local]);
+
+  /** O que o acerto de saldo faria, perguntado ao SERVIDOR. */
+  const conferirSaldo = useCallback(async () => {
+    if (!f.id_produto || !f.quantidade_certa.trim()) {
+      setPreviaSaldo(null);
+      return;
+    }
+    try {
+      setPreviaSaldo(
+        await api.post<PreviaSaldo>("/ajustes/estoque/previa", {
+          id_produto: Number(f.id_produto),
+          quantidade_certa: Number(f.quantidade_certa.replace(",", ".")),
+          id_local: f.id_local ? Number(f.id_local) : null,
+        }),
+      );
+    } catch {
+      setPreviaSaldo(null);
+    }
+  }, [f.id_produto, f.quantidade_certa, f.id_local]);
 
   async function lancar(e: FormEvent) {
     e.preventDefault();
@@ -228,7 +272,23 @@ export default function PaginaAjustes() {
       observacao: f.observacao || null,
     };
     try {
-      if (tipo === "custo") {
+      if (tipo === "saldo") {
+        const r = await api.post<{
+          saldo_anterior: number;
+          saldo_novo: number;
+          movimento: string;
+          valor: number;
+        }>("/ajustes/estoque", {
+          id_produto: base.id_produto,
+          quantidade_certa: Number(f.quantidade_certa.replace(",", ".")),
+          id_local: base.id_local,
+          observacao: base.observacao,
+        });
+        aviso.sucesso(
+          `Saldo acertado de ${qtd(r.saldo_anterior)} para ${qtd(r.saldo_novo)} — ` +
+            `${r.movimento} de ${reais(Math.abs(r.valor))}.`,
+        );
+      } else if (tipo === "custo") {
         const r = await api.post<{
           lancados: number;
           diferenca_total: number;
@@ -288,6 +348,7 @@ export default function PaginaAjustes() {
       setF((a) => ({ ...VAZIO, id_local: a.id_local }));
       setProduto(null);
       setPreviaCusto(null);
+      setPreviaSaldo(null);
       await carregarRecentes();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
@@ -379,13 +440,15 @@ export default function PaginaAjustes() {
                   // Trocar o produto invalida a prévia: sem isso ela
                   // mostraria o número de outro item.
                   setPreviaCusto(null);
+                  setPreviaSaldo(null);
+      setPreviaSaldo(null);
                 }}
               />
             </Campo>
             {/* ⚠️ O ajuste de custo NÃO tem quantidade: é o que o separa dos
                 outros quatro. Mostrar o campo desabilitado sugeriria que
                 alguma quantidade se move. */}
-            {tipo !== "custo" && (
+            {tipo !== "custo" && tipo !== "saldo" && (
               <Campo rotulo="Quantidade">
                 <input
                   className="campo mono"
@@ -395,6 +458,22 @@ export default function PaginaAjustes() {
                   required
                   value={f.quantidade}
                   onChange={(e) => setF({ ...f, quantidade: e.target.value })}
+                />
+              </Campo>
+            )}
+            {tipo === "saldo" && (
+              <Campo rotulo="Quantidade que REALMENTE tem">
+                <input
+                  className="campo mono"
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  required
+                  value={f.quantidade_certa}
+                  onChange={(e) => setF({ ...f, quantidade_certa: e.target.value })}
+                  // A prévia é do SERVIDOR, no blur — a mesma regra do ajuste
+                  // de custo, e pelo mesmo motivo.
+                  onBlur={() => void conferirSaldo()}
                 />
               </Campo>
             )}
@@ -525,6 +604,28 @@ export default function PaginaAjustes() {
             estoque final, e o CMV é `inicial + compras − final`, então o CMV
             CAI. Sem essa frase escrita, o número muda e ninguém sabe por quê.
           */}
+          {tipo === "saldo" && previaSaldo && (
+            <div className="mt-4">
+              <Aviso tipo="info">
+                <b>{previaSaldo.produto}</b>: o sistema tem{" "}
+                {qtd(previaSaldo.saldo_atual)} {previaSaldo.um} e passa a ter{" "}
+                {qtd(previaSaldo.saldo_novo)} — <b>{previaSaldo.movimento}</b> de{" "}
+                {qtd(Math.abs(previaSaldo.diferenca))} {previaSaldo.um}, que valem{" "}
+                <b>{reais(Math.abs(previaSaldo.valor))}</b> pelo custo médio de{" "}
+                {reais(previaSaldo.custo_medio)}.{" "}
+                {/* ⚠️ Aqui o sinal NÃO se inverte, ao contrário do ajuste de
+                    custo: falta baixa o estoque final, e o CMV é
+                    `inicial + compras − final` — menos estoque, CMV maior. */}
+                {previaSaldo.efeito_no_cmv !== 0 && (
+                  <>
+                    Isto {previaSaldo.efeito_no_cmv > 0 ? "AUMENTA" : "REDUZ"} o CMV do
+                    período em <b>{reais(Math.abs(previaSaldo.efeito_no_cmv))}</b>.
+                  </>
+                )}
+              </Aviso>
+            </div>
+          )}
+
           {tipo === "custo" && previaCusto && (
             <div className="mt-4">
               <Aviso tipo="info">

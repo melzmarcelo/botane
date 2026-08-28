@@ -101,27 +101,77 @@ for pid, quantia, custo in ((a, 12, 5.00), (b, 17, 3.00), (c, 35, 2.50)):
     checar(f"entrada de {quantia} lançada", st == 201, (st, r))
 
 
-print("\n2. a prévia do custo mostra a diferença antes")
-# O produto A tem 12 unidades a 5,00 = 60,00. A 6,00 passa a valer 72,00.
+print("\n2. ajuste de SALDO: a prateleira tem outra coisa")
+# O produto A tem 12. A conferência achou 9 — faltam 3.
+st, r = chamar("POST", "/ajustes/estoque/previa", {
+    "id_produto": a, "quantidade_certa": 9, "id_local": local["id"]}, token=token)
+checar("a prévia responde", st == 200, (st, r))
+checar("com o saldo de agora e o novo",
+       perto(r.get("saldo_atual"), 12) and perto(r.get("saldo_novo"), 9), r)
+checar("e diz que é FALTA de 3", r.get("movimento") == "falta"
+       and perto(r.get("diferenca"), -3), r)
+# 3 × 5,00 = 15,00
+checar("valendo 15,00 pelo custo médio", perto(r.get("valor"), -15.00), r)
+# 🔑 **O sinal aqui NÃO se inverte, ao contrário do ajuste de custo.** Falta
+# baixa o estoque final, e o CMV é `inicial + compras − final`: menos estoque,
+# CMV MAIOR. Falta encarece o mês; sobra barateia. Trocar os dois sinais é o
+# erro mais fácil de cometer nesta tela.
+checar("e que isso AUMENTA o CMV em 15,00", perto(r.get("efeito_no_cmv"), 15.00), r)
+
+st, ap_antes = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+cmv_antes = float(ap_antes["cmv_real"])
+ajustes_antes = float(ap_antes.get("ajustes") or 0)
+
+st, r = chamar("POST", "/ajustes/estoque", {
+    "id_produto": a, "quantidade_certa": 9, "id_local": local["id"],
+    "observacao": f"conferência {marca}"}, token=token)
+checar("o acerto é lançado", st == 201, (st, r))
+checar("como falta", r.get("movimento") == "falta", r)
+
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)
+checar("o saldo passou a 9", perto(saldos[0]["quantidade"], 9), saldos)
+# ⚠️ Sobra entra pelo MÉDIO que já existe, e falta sai por ele: o acerto de
+# QUANTIDADE não pode mexer no custo médio — quem faz isso é o outro tipo.
+checar("e o custo médio NÃO mudou", perto(saldos[0]["custo_medio"], 5.00), saldos)
+
+st, ap_depois = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
+checar("o CMV subiu 15,00 (menos estoque, CMV maior)",
+       perto(float(ap_depois["cmv_real"]) - cmv_antes, 15.00),
+       (cmv_antes, ap_depois["cmv_real"]))
+# Cai na linha que já existe, não numa nova: é a mesma natureza de correção.
+checar("e caiu na linha de ajustes de inventário do painel",
+       perto(float(ap_depois.get("ajustes") or 0) - ajustes_antes, -15.00),
+       (ajustes_antes, ap_depois.get("ajustes")))
+
+st, r = chamar("POST", "/ajustes/estoque", {
+    "id_produto": a, "quantidade_certa": 9, "id_local": local["id"]}, token=token)
+checar("repetir a mesma quantidade é recusado", st == 400, (st, r))
+checar("com a frase dizendo que já está assim",
+       "já está" in str(r.get("detail", "")).lower(), r.get("detail"))
+
+
+print("\n3. a prévia do custo mostra a diferença antes")
+# O produto A tem 9 unidades a 5,00 = 45,00 (perdeu 3 no acerto de saldo
+# acima). A 6,00 passa a valer 54,00.
 st, r = chamar("POST", "/ajustes/custo/previa", {
     "linhas": [{"id_produto": a, "custo_novo": 6.00, "id_local": local["id"]}],
 }, token=token)
 checar("a prévia responde", st == 200, (st, r))
 linha = (r.get("linhas") or [{}])[0]
 checar("com o saldo e o custo de agora",
-       perto(linha.get("saldo"), 12) and perto(linha.get("custo_atual"), 5.00), linha)
-checar("o valor de antes e o de depois", perto(linha.get("valor_atual"), 60.00)
-       and perto(linha.get("valor_novo"), 72.00), linha)
-checar("e a diferença em reais (12,00)", perto(linha.get("diferenca"), 12.00), linha)
+       perto(linha.get("saldo"), 9) and perto(linha.get("custo_atual"), 5.00), linha)
+checar("o valor de antes e o de depois", perto(linha.get("valor_atual"), 45.00)
+       and perto(linha.get("valor_novo"), 54.00), linha)
+checar("e a diferença em reais (9,00)", perto(linha.get("diferenca"), 9.00), linha)
 # 🔑 O sinal invertido é o ponto que confunde: estoque mais caro, CMV MENOR.
-checar("o efeito no CMV vem com o sinal invertido (−12,00)",
-       perto(linha.get("efeito_no_cmv"), -12.00), linha)
+checar("o efeito no CMV vem com o sinal invertido (−9,00)",
+       perto(linha.get("efeito_no_cmv"), -9.00), linha)
 checar("a prévia NÃO lançou nada",
        (chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)[1][0]["custo_medio"]) == 5.0,
        "custo mudou sem lançar")
 
 
-print("\n3. o ajuste de custo muda o valor, não a quantidade")
+print("\n4. o ajuste de custo muda o valor, não a quantidade")
 st, ap_antes = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 cmv_antes = float(ap_antes["cmv_real"])
 custo_antes = float(ap_antes.get("ajuste_custo") or 0)
@@ -134,31 +184,31 @@ st, r = chamar("POST", "/ajustes/custo", {
     ],
 }, token=token)
 checar("dois custos corrigidos num lote", st == 201 and r.get("lancados") == 2, (st, r))
-# A: 12 × (6,00 − 5,00) = +12,00 | B: 17 × (4,00 − 3,00) = +17,00 → 29,00
-checar("a diferença total é 29,00", perto(r.get("diferenca_total"), 29.00), r)
+# A: 9 × (6,00 − 5,00) = +9,00 | B: 17 × (4,00 − 3,00) = +17,00 → 26,00
+checar("a diferença total é 26,00", perto(r.get("diferenca_total"), 26.00), r)
 
 st, saldos = chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)
 checar("o custo médio passou a 6,00", perto(saldos[0]["custo_medio"], 6.00), saldos)
-checar("e a QUANTIDADE não mudou", perto(saldos[0]["quantidade"], 12), saldos)
+checar("e a QUANTIDADE não mudou", perto(saldos[0]["quantidade"], 9), saldos)
 
 st, movs = chamar("GET", f"/estoque/movimentos?id_produto={a}", token=token)
 mov = next((m for m in (movs or []) if m.get("tipo") == "AJUSTE_CUSTO"), None)
 checar("o razão registra o movimento de valor", mov is not None,
        [m.get("tipo") for m in (movs or [])][:5])
-checar("com quantidade zero e valor 12,00",
-       mov and perto(mov.get("quantidade"), 0) and perto(mov.get("custo_total"), 12.00), mov)
+checar("com quantidade zero e valor 9,00",
+       mov and perto(mov.get("quantidade"), 0) and perto(mov.get("custo_total"), 9.00), mov)
 
 
-print("\n4. e o CMV anda exatamente o que o ajuste valeu")
+print("\n5. e o CMV anda exatamente o que o ajuste valeu")
 st, ap_depois = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 # 🔑 A afirmação central. Estoque reavaliado +29,00 → estoque final maior →
 # CMV menor em 29,00. Se um dia isso deixar de valer, a identidade do CMV
 # quebrou e o número na tela do dono está errado.
-checar("o CMV real caiu 29,00 (estoque mais caro, CMV menor)",
-       perto(float(ap_depois["cmv_real"]) - cmv_antes, -29.00),
+checar("o CMV real caiu 26,00 (estoque mais caro, CMV menor)",
+       perto(float(ap_depois["cmv_real"]) - cmv_antes, -26.00),
        (cmv_antes, ap_depois["cmv_real"]))
-checar("e a linha do painel nomeia o efeito (−29,00)",
-       perto(float(ap_depois.get("ajuste_custo") or 0) - custo_antes, -29.00),
+checar("e a linha do painel nomeia o efeito (−26,00)",
+       perto(float(ap_depois.get("ajuste_custo") or 0) - custo_antes, -26.00),
        (custo_antes, ap_depois.get("ajuste_custo")))
 
 
@@ -181,11 +231,11 @@ linha_a = next((x for x in mov["linhas"] if x["id_produto"] == a), None)
 # então o valor das entradas passa a mercadoria em exatamente 12,00.
 checar("a linha do produto soma valor sem somar quantidade",
        linha_a and perto(linha_a["qtd_entradas"], 12)
-       and perto(float(linha_a["valor_entradas"]) - 60.00, 12.00),
+       and perto(float(linha_a["valor_entradas"]) - 60.00, 9.00),
        linha_a)
 
 
-print("\n5. o que é recusado, e com frase")
+print("\n6. o que é recusado, e com frase")
 zerado = criar("Z", "UN")
 st, r = chamar("POST", "/ajustes/custo", {
     "linhas": [{"id_produto": zerado, "custo_novo": 9.00, "id_local": local["id"]}],
@@ -205,7 +255,7 @@ st, r = chamar("POST", "/ajustes/custo", {
 checar("custo negativo é recusado", st == 422, st)
 
 
-print("\n6. ajuste de custo tem permissão própria")
+print("\n7. ajuste de custo tem permissão própria")
 # ⚠️ O Conferente ajusta estoque e NÃO ajusta custo: contar prateleira e
 # decidir valor são poderes diferentes. Se um dia a chave for para o papel
 # errado, esta checagem cai.
@@ -226,7 +276,7 @@ if conferente:
            "estoque.custo" not in chaves, sorted(chaves))
 
 
-print("\n7. tudo na auditoria")
+print("\n8. tudo na auditoria")
 st, aud = chamar("GET", "/auditoria?entidade=ajuste_lote&limite=20", token=token)
 eventos = [e for e in (aud or []) if e.get("acao") in ("ajuste_estoque", "ajuste_custo")]
 checar("o ajuste está registrado", len(eventos) >= 1,

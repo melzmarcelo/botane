@@ -1,4 +1,8 @@
-"""Ajuste de CUSTO — corrigir o custo médio sem mexer na quantidade.
+"""Ajustes que declaram a VERDADE, e o sistema calcula a diferença.
+
+Dois: o saldo (a prateleira tem 12, o sistema diz 15) e o custo médio.
+Entrada, saída e transferência dizem o que se MOVEU e têm porta própria
+e mais antiga em `/estoque/*`.
 
 É a única porta que grava movimento de valor. Quantidade tem porta própria e
 mais antiga: `/estoque/entradas`, `/estoque/saidas`, `/estoque/transferencias`.
@@ -12,11 +16,62 @@ from fastapi import APIRouter, Depends, Query
 
 import auditoria
 from database import get_cursor
-from models.ajustes import AjusteCustoRequest, PreviaCustoRequest
+from models.ajustes import (
+    AjusteCustoRequest,
+    AjusteSaldoRequest,
+    PreviaCustoRequest,
+)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import ajustes as servico
 
 router = APIRouter(prefix="/ajustes", tags=["ajustes"])
+
+
+@router.post("/estoque/previa")
+def previa_de_saldo(
+    body: AjusteSaldoRequest,
+    ctx: Contexto = Depends(requer_permissao("estoque.ajuste")),
+) -> dict:
+    """O que o acerto de saldo faria, sem fazer."""
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        return servico.previa_saldo(cur, id_unidade, body.id_produto, body.id_local,
+                                    body.quantidade_certa)
+
+
+@router.post("/estoque", status_code=201)
+def acertar_saldo(
+    body: AjusteSaldoRequest,
+    ctx: Contexto = Depends(requer_permissao("estoque.ajuste")),
+) -> dict:
+    """Leva o saldo à quantidade que a prateleira tem.
+
+    ⚠️ `estoque.ajuste` é "ajustar saldo fora do inventário" — a permissão
+    existia desde o começo sem funcionalidade atrás dela. Quem lança entrada ou
+    saída diz o que se MOVEU; aqui alguém afirma quanto TEM, que é mais forte.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = servico.ajustar_saldo(
+            cur,
+            id_unidade=id_unidade,
+            id_produto=body.id_produto,
+            id_local=body.id_local,
+            quantidade_certa=body.quantidade_certa,
+            observacao=body.observacao,
+            documento=body.documento,
+            id_usuario=ctx.id_usuario,
+            pode_retroativo=ctx.pode("estoque.retroativo"),
+        )
+        # O saldo de ANTES e o de DEPOIS na auditoria: sem os dois, o registro
+        # diz que houve um acerto e não de quanto para quanto.
+        auditoria.registrar(
+            cur, ctx.id_usuario, "ajuste_lote", r["id_lote"], "ajuste_saldo",
+            antes={r["produto"]: r["saldo_anterior"]},
+            depois={r["produto"]: r["saldo_novo"]},
+            id_unidade=id_unidade,
+        )
+    return {**r, "message": f"Saldo de {r['produto']} acertado para {r['saldo_novo']}"}
 
 
 @router.post("/custo/previa")

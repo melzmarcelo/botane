@@ -37,6 +37,130 @@ def _lote(cur, *, id_unidade: int, natureza: str, observacao: str | None,
     return cur.fetchone()["id"]
 
 
+# ----------------------------------------------------------------- saldo
+#
+# 🔑 **"A prateleira tem 12, o sistema diz 15."** Entrada e Saída dizem o que se
+# MOVEU; este diz quanto realmente TEM. É o mesmo gesto do ajuste de custo —
+# declara-se a verdade e o sistema calcula a diferença —, e é para ele que a
+# permissão `estoque.ajuste` ("Ajustar saldo fora do inventário") existe desde o
+# começo, sem funcionalidade atrás dela.
+#
+# ⚠️ **Reusa os tipos do inventário** (`AJUSTE_INVENTARIO_ENTRADA/SAIDA`) de
+# propósito: é a mesma natureza de correção, e assim o valor cai na linha
+# "Ajustes de inventário" que o painel de CMV já mostra. Um tipo novo criaria
+# uma segunda linha para a mesma coisa, e a soma das explicações deixaria de
+# bater com o que a pessoa entende por "ajuste".
+
+
+def _saldo_de(cur, id_unidade: int, id_produto: int, local: int, travar: bool):
+    cur.execute(
+        f"""SELECT s.quantidade, s.custo_medio, p.nome, p.codigo, p.um_estoque
+              FROM estoque_saldos s JOIN produtos p ON p.id = s.id_produto
+             WHERE s.id_unidade = %s AND s.id_local = %s AND s.id_produto = %s
+             {"FOR UPDATE OF s" if travar else ""}""",
+        (id_unidade, local, id_produto),
+    )
+    linha = cur.fetchone()
+    if not linha:
+        raise HTTPException(status_code=404,
+                            detail="Este produto não tem saldo neste local.")
+    return linha
+
+
+def previa_saldo(cur, id_unidade: int, id_produto: int, id_local: int | None,
+                 quantidade_certa) -> dict:
+    """O que o acerto faria, sem fazer.
+
+    Mostra a diferença em QUANTIDADE e em REAIS: quem confere conta unidades,
+    mas quem lê o CMV depois vê dinheiro — e é o dinheiro que entra na linha
+    de ajustes do painel.
+    """
+    local = id_local or estoque.local_padrao(cur, id_unidade)
+    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=False)
+
+    atual = dec(linha["quantidade"])
+    certa = dec(quantidade_certa)
+    if certa < 0:
+        raise HTTPException(status_code=400, detail="Quantidade não pode ser negativa.")
+    medio = dec(linha["custo_medio"])
+    diferenca = certa - atual
+
+    return {
+        "id_produto": id_produto,
+        "produto": linha["nome"],
+        "codigo": linha["codigo"],
+        "um": linha["um_estoque"],
+        "id_local": local,
+        "saldo_atual": float(atual),
+        "saldo_novo": float(certa),
+        "diferenca": float(diferenca),
+        # Sobra entra, falta sai — e o rótulo diz qual, porque o sinal sozinho
+        # não conta a história para quem está conferindo.
+        "movimento": "sobra" if diferenca > 0 else "falta" if diferenca < 0 else "nenhum",
+        "custo_medio": float(medio),
+        "valor": float((diferenca * medio).quantize(Decimal("0.01"))),
+        # ⚠️ Ao contrário do ajuste de custo, aqui o sinal NÃO se inverte: falta
+        # no estoque baixa o estoque final, e o CMV é `inicial + compras −
+        # final` — menos estoque, CMV maior. Falta encarece o mês.
+        "efeito_no_cmv": float((-diferenca * medio).quantize(Decimal("0.01"))),
+        "sem_efeito": diferenca == 0,
+    }
+
+
+def ajustar_saldo(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
+                  quantidade_certa, observacao: str | None = None,
+                  documento: str | None = None, id_usuario: int | None = None,
+                  pode_retroativo: bool = False) -> dict:
+    """Leva o saldo do sistema à quantidade que a prateleira tem."""
+    local = id_local or estoque.local_padrao(cur, id_unidade)
+    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=True)
+
+    atual = dec(linha["quantidade"])
+    certa = dec(quantidade_certa)
+    if certa < 0:
+        raise HTTPException(status_code=400, detail="Quantidade não pode ser negativa.")
+    diferenca = certa - atual
+    if diferenca == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{linha['nome']} já está com {atual} neste local.",
+        )
+
+    id_lote = _lote(cur, id_unidade=id_unidade, natureza="ESTOQUE",
+                    observacao=observacao, documento=documento, id_usuario=id_usuario)
+
+    sobra = diferenca > 0
+    m = estoque.lancar(
+        cur,
+        id_unidade=id_unidade,
+        id_produto=id_produto,
+        tipo="AJUSTE_INVENTARIO_ENTRADA" if sobra else "AJUSTE_INVENTARIO_SAIDA",
+        quantidade=abs(diferenca),
+        id_local=local,
+        # ⚠️ Sem custo informado: a sobra entra pelo MÉDIO que já existe. Item
+        # encontrado vale o que os outros valem, e assim o acerto de quantidade
+        # não mexe no custo médio — que é o que o outro tipo faz.
+        custo_unitario=None,
+        origem_tipo="AJUSTE_LOTE",
+        origem_id=id_lote,
+        documento=documento,
+        observacao=observacao,
+        id_usuario=id_usuario,
+        pode_retroativo=pode_retroativo,
+    )
+
+    return {
+        "id_lote": id_lote,
+        "id_movimento": m["id"],
+        "produto": linha["nome"],
+        "saldo_anterior": float(atual),
+        "saldo_novo": float(certa),
+        "diferenca": float(diferenca),
+        "movimento": "sobra" if sobra else "falta",
+        "valor": float(m["custo_total"]) * (1 if sobra else -1),
+    }
+
+
 # ------------------------------------------------------------------ custo
 
 

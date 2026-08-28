@@ -5,6 +5,17 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 
+class AjusteSaldoRequest(BaseModel):
+    id_produto: int
+    # ⚠️ A quantidade CERTA — a que a prateleira tem —, não a diferença. Pedir
+    # a diferença obrigaria a fazer a subtração de cabeça, que é onde o erro
+    # entra: quem conta lê "12" na etiqueta, não "menos 3".
+    quantidade_certa: float = Field(ge=0)
+    id_local: int | None = None
+    observacao: str | None = None
+    documento: str | None = Field(default=None, max_length=60)
+
+
 class LinhaAjusteCusto(BaseModel):
     id_produto: int
     # ⚠️ O custo CERTO, não a diferença. Quem confere olha a etiqueta e digita o
