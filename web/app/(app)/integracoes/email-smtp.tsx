@@ -26,6 +26,7 @@ type Config = {
   senha: string | null;
   ultimo_status: string | null;
   ultima_mensagem: string | null;
+  credencial_ilegivel: boolean;
   pasta_simulado: string;
 };
 
@@ -119,6 +120,18 @@ export default function EmailSmtp() {
       {erro && (
         <div className="mb-4">
           <Aviso tipo="erro">{erro}</Aviso>
+        </div>
+      )}
+
+      {cfg.credencial_ilegivel && (
+        <div className="mb-4">
+          <Aviso tipo="erro">
+            <b>A senha guardada não pode ser lida.</b> Ela foi cifrada com uma chave
+            (<span className="mono text-[13px]">JWT_SECRET</span>) diferente da que este
+            ambiente usa hoje — o que acontece ao trocar a chave, ou ao subir a mesma base
+            noutro lugar. Enquanto isso, o envio sai sem senha e o servidor recusa dizendo
+            que a autenticação falhou. <b>Redigite a senha abaixo e salve.</b>
+          </Aviso>
         </div>
       )}
 

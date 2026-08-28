@@ -119,6 +119,32 @@ checar("com a recusa nomeada na mensagem",
        erro2)
 
 
+print("\n4. credencial que não abre é diferente de credencial ausente")
+# 🔑 O `JWT_SECRET` deriva a chave do Fernet. Trocá-lo — ou subir a mesma base
+# noutro ambiente — fazia `decifrar` devolver {} em silêncio: o envio saía com
+# senha VAZIA e o servidor respondia "authentication failed". Quem lia isso
+# redigitava a senha achando que tinha errado a digitação, quando o que mudou
+# foi a chave do ambiente. Dois problemas diferentes, uma frase só.
+from services import segredos  # noqa: E402
+
+guardado = segredos.cifrar({"senha": "abc123"})
+checar("o que foi cifrado com a chave de agora abre",
+       segredos.decifrar(guardado).get("senha") == "abc123", segredos.decifrar(guardado))
+checar("e não é acusado de ilegível", segredos.ilegivel(guardado) is False)
+
+checar("credencial AUSENTE não é ilegível (não configurar é normal)",
+       segredos.ilegivel(None) is False and segredos.ilegivel(b"") is False)
+
+# Cifrado com outra chave: é o que sobra no banco depois que o JWT_SECRET muda.
+outra = segredos.Fernet(
+    segredos.base64.urlsafe_b64encode(
+        segredos.hashlib.sha256(b"outro-segredo-qualquer").digest())
+).encrypt(b'{"senha": "abc123"}')
+checar("credencial de OUTRA chave é acusada de ilegível",
+       segredos.ilegivel(outra) is True)
+checar("e o decifrar continua devolvendo vazio, sem derrubar a tela",
+       segredos.decifrar(outra) == {}, segredos.decifrar(outra))
+
 print(f"\n{ok} ok, {len(falhas)} falha(s)")
 for f in falhas:
     print("  -", f)

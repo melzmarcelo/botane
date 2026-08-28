@@ -61,6 +61,9 @@ def obter(ctx: Contexto = Depends(requer_permissao("admin.integracoes"))) -> dic
         "remetente_nome": cfg.get("remetente_nome"),
         "remetente_email": cfg.get("remetente_email"),
         "senha": segredos.mascarar(cred.get("senha")),
+        # ⚠️ A tela precisa distinguir "nunca configurei" de "está lá e não
+        # abre": nos dois a senha vem vazia, e só o segundo é um problema.
+        "credencial_ilegivel": segredos.ilegivel(linha["credenciais"]) if linha else False,
         "ultimo_status": linha["ultimo_status"] if linha else None,
         "ultima_mensagem": linha["ultima_mensagem"] if linha else None,
         "pasta_simulado": correio.PASTA,

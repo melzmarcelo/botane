@@ -33,7 +33,34 @@ def decifrar(bruto: bytes | memoryview | None) -> dict:
     except (InvalidToken, ValueError):
         # Segredo trocado ou dado corrompido: melhor tratar como "sem credencial"
         # do que derrubar a tela inteira.
+        #
+        # ⚠️ Mas "sem credencial" e "credencial que não abre" NÃO são a mesma
+        # coisa para quem está tentando entender por que não funciona — use
+        # `ilegivel()` antes de concluir que ninguém configurou nada.
         return {}
+
+
+def ilegivel(bruto: bytes | memoryview | None) -> bool:
+    """Há credencial guardada, mas a chave atual não a abre.
+
+    🔑 Existe porque o silêncio aqui manda procurar no lugar errado. O
+    `JWT_SECRET` deriva a chave do Fernet: trocá-lo — ou subir a mesma base
+    noutro ambiente — faz `decifrar` devolver `{}`, o envio sai com **senha
+    vazia**, e o servidor responde *authentication failed*. Quem lê isso
+    redigita a senha achando que errou a digitação, quando o que houve foi a
+    chave do ambiente mudar. São dois problemas diferentes e o sistema dizia a
+    mesma frase para os dois.
+
+    ⚠️ Falso para credencial **ausente**: não configurar nada é um estado
+    normal, e avisar sobre ele seria alarme onde não há problema.
+    """
+    if not bruto:
+        return False
+    try:
+        Fernet(_chave()).decrypt(bytes(bruto))
+        return False
+    except (InvalidToken, ValueError):
+        return True
 
 
 def mascarar(valor: str | None) -> str | None:

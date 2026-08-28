@@ -1041,9 +1041,9 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.243 verificações de API): `smoke_fundacao.py` (46, 47 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.248 verificações de API): `smoke_fundacao.py` (46, 47 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
-  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (10), `smoke_lotes.py` (28),
+  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
@@ -1116,6 +1116,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **Credencial ILEGÍVEL e credencial AUSENTE davam a mesma resposta — e a diferença é tudo.**
+  `JWT_SECRET` deriva a chave do Fernet; trocá-lo (ou subir a mesma base noutro ambiente) faz
+  `segredos.decifrar` devolver `{}` em silêncio. O envio de e-mail saía com **senha vazia** e o
+  servidor respondia *authentication failed* — que manda redigitar a senha, quando o que mudou
+  foi a chave do ambiente. Aconteceu na produção em 28/08/2026, com `smtp.titan.email:465`.
+  Agora existe `segredos.ilegivel(bruto)`: verdadeiro só quando **há** credencial guardada e a
+  chave atual não a abre. `email.enviar` **para antes de conectar** (senão gasta uma tentativa
+  de login num serviço que conta tentativa falha) e a tela de Integrações mostra o aviso sem
+  precisar tentar enviar. ⚠️ Falso para credencial ausente: não configurar nada é estado normal,
+  e avisar sobre ele seria alarme onde não há problema.
+  ⚠️ **Vale para Omie e PDV também** — os três usam o mesmo `segredos`. Só o e-mail foi ligado.
 - 🔑 **Não dava para saber QUAL commit estava no ar, e isso custou uma ida e volta.** `VERSAO` é
   texto fixo, a lista de rotas só muda quando alguém cria endpoint, e correção de comportamento
   (um prazo de socket) não deixa rastro de fora — era impossível separar *"a correção não

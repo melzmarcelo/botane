@@ -71,6 +71,8 @@ def configuracao(cur) -> dict:
     # Sem servidor não há como enviar, por mais que alguém marque "real".
     cfg["modo"] = linha["modo"] if (linha["modo"] == "real" and cfg.get("servidor")) else "simulado"
     cfg["senha"] = segredos.decifrar(linha["credenciais"]).get("senha")
+    # ⚠️ Guardada mas ilegível não é o mesmo que ausente — ver segredos.ilegivel.
+    cfg["credencial_ilegivel"] = segredos.ilegivel(linha["credenciais"])
     return cfg
 
 
@@ -115,6 +117,15 @@ def enviar(cur, para: str, assunto: str, texto: str, html: str | None = None) ->
 
     if cfg["modo"] != "real":
         return {"modo": "simulado", "arquivo": _gravar(msg, para)}
+
+    # ⚠️ Parar ANTES de conectar. Sem isso o envio sai com senha vazia e o
+    # servidor responde "authentication failed" — que manda redigitar a senha,
+    # quando o que mudou foi a chave do ambiente. Além de errado, gasta uma
+    # tentativa de login num serviço que conta tentativa falha.
+    if cfg.get("credencial_ilegivel"):
+        raise ErroEmail(
+            "A senha guardada não pôde ser lida: o JWT_SECRET deste ambiente mudou "
+            "desde que ela foi salva. Redigite a senha do SMTP em Integrações.")
 
     entregar(cfg, msg)
     return {"modo": "real", "servidor": cfg["servidor"]}
