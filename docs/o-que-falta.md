@@ -148,3 +148,20 @@ Coisas que mudaram com bom motivo e que o `MAPEAMENTO.md` ainda não registra:
 2. **`modo_producao`** (`PARA_ESTOQUE` / `NA_HORA`) não existia no mapeamento. Sem ele, a casa
    venderia mil cafés e o pó continuaria inteiro no razão.
 3. **`KIT`** era um tipo previsto e não implementado; hoje é `services/kits.py`.
+
+## O envio de e-mail segura a transação do banco (28/08/2026)
+
+`email.enviar(cur, ...)` recebe o cursor e faz a conversa SMTP **dentro** da
+transação. São três chamadores — o botão de teste, a criação de usuário e a
+recuperação de senha — e o último é **rota pública**: cada pedido prende uma
+conexão do pool por até `ORCAMENTO_ENVIO` (20 s) enquanto fala com um servidor
+externo. Numa casa com o SMTP mal configurado, alguns pedidos seguidos esgotam
+o pool e derrubam o sistema inteiro, não só o e-mail.
+
+O caminho já está aberto: `email.entregar(cfg, msg)` não toca no banco. Falta
+reordenar os chamadores para **ler a configuração, fechar a transação, enviar e
+só então gravar o status**.
+
+⚠️ Na recuperação de senha a ordem importa: o token tem de ser gravado **mesmo
+que o envio falhe** — senão o admin não consegue entregar o link pela tela de
+Usuários, que é a saída prevista para quem não tem SMTP.

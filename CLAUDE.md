@@ -1041,9 +1041,9 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.226 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.236 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
-  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_lotes.py` (28),
+  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (10), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
@@ -1116,6 +1116,33 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **`timeout=` do smtplib é POR OPERAÇÃO, e são quatro — o pior caso era 80 s.** Conectar,
+  STARTTLS, autenticar e enviar, 20 s cada. O roteamento do App Platform desiste em ~60 s e
+  devolve **504 com página HTML**, então o que chegava na tela não era o erro do SMTP: era o do
+  gateway, dizendo nada sobre a causa. Agora `email.entregar` tem **orçamento do envio inteiro**
+  (`ORCAMENTO_ENVIO`, 20 s), reposto a cada passo com `s.sock.settimeout(_resta(ate))`.
+  ⚠️ **O STARTTLS TROCA o socket** por um embrulhado em TLS — o prazo do anterior não acompanha,
+  e sem repor depois dele os passos seguintes voltam a ficar sem prazo nenhum.
+  ⚠️ **`settimeout(0)` não é "sem espera", é NÃO BLOQUEANTE** — a operação falha na hora com um
+  erro que não parece tempo esgotado. Por isso `_resta` tem piso de 1 s.
+  ⚠️ **A frase do erro leva o texto do socket de propósito**, porque é ele que separa as causas:
+  *timed out* é pacote descartado (porta bloqueada na saída — o caso comum em nuvem),
+  *Connection refused* é servidor ou porta errados, *Name or service not known* é o endereço.
+  Sem isso os três viram "não foi possível enviar" e mandam procurar no lugar errado.
+  ⚠️ `entregar` foi separado de `enviar` para **não tocar no banco**: dá para exercitar o prazo
+  contra um endereço morto sem pôr o SMTP da casa em modo real — rastro que já custou uma
+  credencial neste projeto. `smoke_email_prazo.py` usa 192.0.2.1 (TEST-NET-1, RFC 5737), que
+  não é roteável: ninguém responde e ninguém recusa, que é exatamente o que a porta bloqueada faz.
+  ⚠️ **Ainda pendente**: `enviar(cur, ...)` segura a transação do banco durante toda a conversa
+  SMTP, nos três chamadores — inclusive na recuperação de senha, que é **rota pública**. Cada
+  pedido prende uma conexão do pool por até 20 s. Ver `docs/o-que-falta.md`.
+- 🔑 **`JSON.parse` antes de olhar `r.ok` transforma todo 5xx em erro de sintaxe.** Quem responde
+  ao navegador não é só o FastAPI: o roteamento do App Platform responde HTML quando o app está
+  reiniciando ou o tempo esgotou, e a tela dizia
+  `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` — engolindo o status real. Agora
+  `corpoDaResposta` (em `web/lib/api.ts`) lê o corpo sem estourar e devolve frase útil. O
+  `baixar()` já fazia certo; `pedir` e `login` não. ⚠️ No `login` era pior: HTML ali lê como
+  **senha errada**.
 - 🔑 **Apuração e movimentação NÃO respondem a mesma pergunta, e a diferença dormiu até o
   primeiro grupo fora do CMV existir na base.** `cmv.apuracao` desconta do estoque final os
   tipos com `considerar_no_cmv = false`; `cmv.movimentacao_por_produto` **não recebe esse

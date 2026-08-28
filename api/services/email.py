@@ -16,6 +16,7 @@ import os
 import re
 import smtplib
 import ssl
+import time
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
@@ -25,6 +26,28 @@ from services import segredos
 
 SERVICO = "SMTP"
 PASTA = os.path.join(BASE_DIR, "arquivos", "emails")
+
+# ⚠️ **O orçamento é do envio INTEIRO, não de cada passo.** O `timeout=` do
+# smtplib vale para CADA operação de socket, e são quatro em sequência:
+# conectar, STARTTLS, autenticar e enviar. Com 20 s em cada, o pior caso era
+# 80 s — e o roteamento do App Platform desiste em ~60, devolvendo **504 com
+# uma página HTML**. Ou seja: o erro que a pessoa via não era o do SMTP, era o
+# do gateway, e não dizia nada sobre a causa.
+#
+# 20 s no total é folgado para distinguir "servidor respondeu e recusou" de
+# "os pacotes estão sendo descartados", que é a pergunta que este botão existe
+# para responder. E sobra muito para o gateway responder antes de desistir.
+ORCAMENTO_ENVIO = 20
+
+
+def _resta(ate: float) -> float:
+    """Quanto do orçamento sobrou. Nunca zero: 0 em socket é NÃO BLOQUEANTE.
+
+    ⚠️ `settimeout(0)` põe o socket em modo não bloqueante e faz a operação
+    falhar na hora com um erro que não parece tempo esgotado. O piso de 1 s
+    garante que o último passo ainda tenha chance de dizer o que houve.
+    """
+    return max(1.0, ate - time.monotonic())
 
 
 class ErroEmail(Exception):
@@ -93,25 +116,53 @@ def enviar(cur, para: str, assunto: str, texto: str, html: str | None = None) ->
     if cfg["modo"] != "real":
         return {"modo": "simulado", "arquivo": _gravar(msg, para)}
 
+    entregar(cfg, msg)
+    return {"modo": "real", "servidor": cfg["servidor"]}
+
+
+def entregar(cfg: dict, msg: EmailMessage) -> None:
+    """A conversa com o servidor SMTP, e só ela.
+
+    Separada de `enviar` por dois motivos, e o segundo é o que importa:
+
+    * **não toca no banco** — dá para exercitar o prazo contra um endereço que
+      não responde sem pôr a configuração da casa em modo real, que é o rastro
+      perigoso (o projeto já perdeu uma credencial assim);
+    * é aqui que vive o ORÇAMENTO, num lugar só.
+    """
     porta = int(cfg.get("porta") or 587)
     seguranca = (cfg.get("seguranca") or "starttls").lower()
     contexto = ssl.create_default_context()
+    ate = time.monotonic() + ORCAMENTO_ENVIO
     try:
         if seguranca == "ssl":
-            with smtplib.SMTP_SSL(cfg["servidor"], porta, context=contexto, timeout=20) as s:
+            with smtplib.SMTP_SSL(cfg["servidor"], porta, context=contexto,
+                                  timeout=_resta(ate)) as s:
                 if cfg.get("usuario"):
+                    s.sock.settimeout(_resta(ate))
                     s.login(cfg["usuario"], cfg.get("senha") or "")
+                s.sock.settimeout(_resta(ate))
                 s.send_message(msg)
         else:
-            with smtplib.SMTP(cfg["servidor"], porta, timeout=20) as s:
+            with smtplib.SMTP(cfg["servidor"], porta, timeout=_resta(ate)) as s:
                 if seguranca == "starttls":
+                    s.sock.settimeout(_resta(ate))
                     s.starttls(context=contexto)
+                    # ⚠️ O STARTTLS TROCA o socket por um embrulhado em TLS —
+                    # o timeout do anterior não acompanha, e sem repor aqui os
+                    # passos seguintes voltariam a ficar sem prazo nenhum.
                 if cfg.get("usuario"):
+                    s.sock.settimeout(_resta(ate))
                     s.login(cfg["usuario"], cfg.get("senha") or "")
+                s.sock.settimeout(_resta(ate))
                 s.send_message(msg)
     except (smtplib.SMTPException, OSError) as e:
+        # ⚠️ A frase leva o erro do socket porque é ELE que separa as causas:
+        # "timed out" é pacote descartado (porta bloqueada na saída, o caso
+        # comum em nuvem); "Connection refused" é servidor errado ou porta
+        # fechada; "Name or service not known" é o endereço. Sem isso, os três
+        # viram "não foi possível enviar" e mandam procurar no lugar errado.
         raise ErroEmail(f"Não foi possível enviar o e-mail: {e}") from e
-    return {"modo": "real", "servidor": cfg["servidor"]}
 
 
 def testar(cur, para: str) -> dict:
