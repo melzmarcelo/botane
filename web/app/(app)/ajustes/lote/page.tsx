@@ -14,17 +14,28 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
-import { Aviso, Campo, Cartao } from "@/components/ui";
+import { Aviso, Campo, Cartao, Vazio } from "@/components/ui";
 import { api, ErroApi } from "@/lib/api";
 import { fonteProdutos } from "@/lib/busca-cadastro";
-import { Local } from "@/lib/cadastros";
+import { Local, reais } from "@/lib/cadastros";
 import { useSessao } from "@/lib/sessao";
 
 type Motivo = { id: number; nome: string };
+
+type Lote = {
+  id: number;
+  natureza: string;
+  observacao: string | null;
+  criado_em: string;
+  usuario: string | null;
+  linhas: number;
+  valor: number;
+};
+
 
 const TIPOS = [
   { id: "ENTRADA_MANUAL", nome: "Entrada", chave: "estoque.entradas" },
@@ -65,6 +76,14 @@ export default function PaginaAjusteLote() {
   const [observacao, setObservacao] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [lotes, setLotes] = useState<Lote[] | null>(null);
+
+  const carregarLotes = useCallback(() => {
+    api
+      .get<Lote[]>("/ajustes/lotes?natureza=ESTOQUE&limite=10")
+      .then(setLotes)
+      .catch(() => setLotes([]));
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -79,6 +98,8 @@ export default function PaginaAjusteLote() {
       })
       .catch(() => setErro("Falha ao carregar os locais de estoque."));
   }, []);
+
+  useEffect(carregarLotes, [carregarLotes]);
 
   const trocar = (i: number, campo: keyof Linha, valor: unknown) =>
     setLinhas((ls) => ls.map((x, j) => (j === i ? { ...x, [campo]: valor } : x)));
@@ -110,6 +131,7 @@ export default function PaginaAjusteLote() {
       // Fica aberto e limpo: quem confere uma prateleira confere a próxima.
       setLinhas([nova(padrao)]);
       setObservacao("");
+      carregarLotes();
     } catch (e) {
       // ⚠️ Erro de AÇÃO vai para o aviso flutuante — o botão está no fim de um
       // formulário longo, e mensagem no topo não é vista por quem clicou.
@@ -128,21 +150,22 @@ export default function PaginaAjusteLote() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
+    <div className="flex flex-col gap-6">
+      <header>
         <Link href="/ajustes" className="link-voltar">
           ← Ajustes
         </Link>
-        <h1 className="titulo mt-2">Ajuste em lote</h1>
-        <p className="text-neutro-500 text-[14px] mt-1 max-w-[70ch]">
+        <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Ajuste em lote</h1>
+        <p className="mt-1 max-w-[68ch] text-suave">
           Vários produtos num lançamento só, com uma observação que explica o conjunto. As
           linhas podem misturar entrada, consumo e perda. <b>Ou tudo entra, ou nada entra.</b>
         </p>
-      </div>
+      </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <Cartao>
+      <Cartao titulo="As linhas do lote"
+              descricao="Podem misturar entrada, consumo e perda.">
         <div className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
           <Campo rotulo="Local de estoque">
             <select
@@ -272,6 +295,51 @@ export default function PaginaAjusteLote() {
             {ocupado ? "Lançando…" : `Lançar ${preenchidas.length || ""} ajuste(s)`}
           </button>
         </div>
+      </Cartao>
+    
+      {/*
+        ⚠️ O que já foi lançado. Toda tela de lançamento da casa mostra isto —
+        sem ele, a pergunta "eu já lancei essa conferência?" só se responde no
+        razão, produto por produto.
+      */}
+      <Cartao titulo="Lotes recentes">
+        {lotes === null ? (
+          <p className="text-suave text-[14px]">Carregando…</p>
+        ) : lotes.length === 0 ? (
+          <Vazio>Nenhum lote lançado ainda.</Vazio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead>
+                <tr>
+                  <th className="rotulo pb-2 text-left">Quando</th>
+                  <th className="rotulo pb-2 text-left">Quem</th>
+                  <th className="rotulo pb-2 text-left">Por quê</th>
+                  <th className="rotulo pb-2 text-right">Linhas</th>
+                  <th className="rotulo pb-2 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotes.map((l) => (
+                  <tr key={l.id} className="border-t border-linha">
+                    <td className="py-2 whitespace-nowrap">
+                      {new Date(l.criado_em).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2">{l.usuario ?? "—"}</td>
+                    <td className="py-2 text-suave">{l.observacao || "—"}</td>
+                    <td className="py-2 text-right tabular-nums">{l.linhas}</td>
+                    <td className="py-2 text-right tabular-nums">{reais(l.valor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Cartao>
     </div>
   );

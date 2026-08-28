@@ -13,11 +13,11 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
-import { Aviso, Campo, Cartao, Confirmacao } from "@/components/ui";
+import { Aviso, Campo, Cartao, Confirmacao, Vazio } from "@/components/ui";
 import { api, ErroApi } from "@/lib/api";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { Local, reais } from "@/lib/cadastros";
@@ -45,6 +45,17 @@ type LinhaPrevia = {
 
 type Previa = { linhas: LinhaPrevia[]; diferenca_total: number; efeito_no_cmv: number };
 
+
+type Lote = {
+  id: number;
+  natureza: string;
+  observacao: string | null;
+  criado_em: string;
+  usuario: string | null;
+  linhas: number;
+  valor: number;
+};
+
 let sequencia = 1;
 const nova = (): Linha => ({ chave: sequencia++, produto: null, custo_novo: "" });
 
@@ -58,7 +69,15 @@ export default function PaginaAjusteCusto() {
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [lotes, setLotes] = useState<Lote[] | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+
+  const carregarLotes = useCallback(() => {
+    api
+      .get<Lote[]>("/ajustes/lotes?natureza=CUSTO&limite=10")
+      .then(setLotes)
+      .catch(() => setLotes([]));
+  }, []);
 
   useEffect(() => {
     api
@@ -70,6 +89,8 @@ export default function PaginaAjusteCusto() {
       })
       .catch(() => setErro("Falha ao carregar os locais de estoque."));
   }, []);
+
+  useEffect(carregarLotes, [carregarLotes]);
 
   // ⚠️ Trocar qualquer coisa invalida a prévia. Sem isto, alguém mudaria o
   // custo depois de conferir e confirmaria um número que não é o que viu.
@@ -125,6 +146,7 @@ export default function PaginaAjusteCusto() {
       setLinhas([nova()]);
       setObservacao("");
       setPrevia(null);
+      carregarLotes();
     } catch (e) {
       aviso.erro(e instanceof ErroApi ? e.message : "Não foi possível lançar.");
     } finally {
@@ -144,22 +166,23 @@ export default function PaginaAjusteCusto() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
+    <div className="flex flex-col gap-6">
+      <header>
         <Link href="/ajustes" className="link-voltar">
           ← Ajustes
         </Link>
-        <h1 className="titulo mt-2">Ajuste de custo</h1>
-        <p className="text-neutro-500 text-[14px] mt-1 max-w-[70ch]">
+        <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Ajuste de custo</h1>
+        <p className="mt-1 max-w-[68ch] text-suave">
           Corrige o <b>custo médio</b> de produtos que já estão em estoque. A quantidade não
           muda — só quanto ela vale. Serve para o custo provisório de uma saída sem saldo,
           para o produto que entrou sem custo e para a nota digitada com o valor errado.
         </p>
-      </div>
+      </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-      <Cartao>
+      <Cartao titulo="Os custos a corrigir"
+              descricao="Informe o custo CERTO — o sistema calcula a diferença.">
         <div className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
           <Campo rotulo="Local de estoque">
             <select
@@ -274,8 +297,7 @@ export default function PaginaAjusteCusto() {
       </Cartao>
 
       {previa && (
-        <Cartao>
-          <p className="rotulo">O que vai acontecer</p>
+        <Cartao titulo="O que vai acontecer">
           <div className="overflow-x-auto mt-3">
             <table className="w-full text-[14px]">
               <thead>
@@ -294,7 +316,7 @@ export default function PaginaAjusteCusto() {
                   <tr key={l.id_produto} className="border-t border-linha">
                     <td className="py-2">
                       {l.produto}
-                      <span className="text-neutro-500 text-[12.5px]"> · {l.codigo}</span>
+                      <span className="text-suave text-[12.5px]"> · {l.codigo}</span>
                     </td>
                     <td className="py-2 text-right tabular-nums">
                       {l.saldo} {l.um}
@@ -380,6 +402,51 @@ export default function PaginaAjusteCusto() {
           </p>
         </Confirmacao>
       )}
+    
+      {/*
+        ⚠️ O que já foi lançado. Toda tela de lançamento da casa mostra isto —
+        sem ele, a pergunta "eu já lancei essa conferência?" só se responde no
+        razão, produto por produto.
+      */}
+      <Cartao titulo="Lotes recentes">
+        {lotes === null ? (
+          <p className="text-suave text-[14px]">Carregando…</p>
+        ) : lotes.length === 0 ? (
+          <Vazio>Nenhum lote lançado ainda.</Vazio>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[14px]">
+              <thead>
+                <tr>
+                  <th className="rotulo pb-2 text-left">Quando</th>
+                  <th className="rotulo pb-2 text-left">Quem</th>
+                  <th className="rotulo pb-2 text-left">Por quê</th>
+                  <th className="rotulo pb-2 text-right">Linhas</th>
+                  <th className="rotulo pb-2 text-right">Diferença</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotes.map((l) => (
+                  <tr key={l.id} className="border-t border-linha">
+                    <td className="py-2 whitespace-nowrap">
+                      {new Date(l.criado_em).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="py-2">{l.usuario ?? "—"}</td>
+                    <td className="py-2 text-suave">{l.observacao || "—"}</td>
+                    <td className="py-2 text-right tabular-nums">{l.linhas}</td>
+                    <td className="py-2 text-right tabular-nums">{reais(l.valor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Cartao>
     </div>
   );
 }

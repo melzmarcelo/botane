@@ -1068,7 +1068,10 @@ try {
   const lote = await p.evaluate(() => ({
     titulo: document.querySelector("h1")?.textContent?.trim() ?? "",
     colunas: [...document.querySelectorAll("th")].map((t) => t.textContent.trim()),
-    linhas: document.querySelectorAll("tbody tr").length,
+    // ⚠️ A PRIMEIRA tabela: desde que a tela ganhou "Lotes recentes", contar
+    // `tbody tr` solto soma as linhas do histórico e o número deixa de dizer
+    // o que se queria saber.
+    linhas: document.querySelector("table tbody")?.querySelectorAll("tr").length ?? 0,
   }));
   checar("a tela de ajuste em lote abre", /lote/i.test(lote.titulo), lote);
   checar("com produto, tipo, quantidade, custo e motivo por linha",
@@ -1090,6 +1093,30 @@ try {
     custo.botoes.some((b) => /conferir/i.test(b)), custo.botoes);
   checar("dizendo que a quantidade não muda, só o valor",
     /quantidade n[ãa]o\s+muda/i.test(custo.texto), custo.texto.slice(0, 300));
+
+  // 🔑 **O cabeçalho tem de estar ESTILIZADO.** As duas telas nasceram com
+  // `className="titulo"` — classe que NÃO EXISTE no globals.css. O <h1> saía
+  // sem estilo nenhum e nada quebrava: classe inventada não dá erro em lugar
+  // algum, só fica feia, e ninguém abre o inspetor para conferir. Mesmo caso
+  // do `text-neutro-500`, que também não pintava nada.
+  const cabecalho = await p.evaluate(() => {
+    const h = document.querySelector("h1");
+    const s = h ? getComputedStyle(h) : null;
+    return {
+      tamanho: s ? parseFloat(s.fontSize) : 0,
+      peso: s ? Number(s.fontWeight) : 0,
+      voltar: !!document.querySelector(".link-voltar"),
+    };
+  });
+  checar("o título da tela é grande e em negrito, como nas outras",
+    cabecalho.tamanho >= 24 && cabecalho.peso >= 600, cabecalho);
+  checar("e tem o link de voltar em pílula", cabecalho.voltar, cabecalho);
+
+  // A outra metade do padrão da casa: toda tela de lançamento mostra o que já
+  // foi lançado. Sem isto, "eu já lancei essa conferência?" só se responde no
+  // razão, produto por produto.
+  checar("e mostra os lotes já lançados",
+    await p.evaluate(() => /lotes recentes/i.test(document.body.innerText)));
 
   // ⚠️ **Voltar para /ajustes antes de seguir.** O bloco abaixo continua o
   // lançamento avulso e supõe estar nessa tela — sem isto ele procura os
