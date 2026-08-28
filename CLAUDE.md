@@ -1057,7 +1057,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (324, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (326, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1123,6 +1123,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto
+  costuma estar em UM. Escolher o errado não dava erro na hora: numa saída, o razão registrava
+  a baixa por um local onde o insumo nunca passou, criando saldo **negativo com custo
+  provisório** — o mesmo defeito que a produção já teve. Agora a tela pergunta onde o produto
+  tem saldo e oferece só esses, **com a quantidade no rótulo** ("Câmara fria — 12 KG"), o que
+  faz a escolha ser consciente em vez de um chute entre nomes de prateleira. Um local só:
+  escolhe sozinho.
+  ⚠️ **Na ENTRADA a lista continua inteira**, de propósito: a primeira entrada de um produto
+  novo não tem saldo em lugar nenhum, e restringir ali impediria de cadastrar o estoque inicial.
+  O destino da transferência idem — as duas põem mercadoria onde ela ainda não está.
+  ⚠️ **Tirar o seletor não era opção**: produto PODE ter saldo em mais de um local (há casos na
+  base), e escolher sozinho ajustaria a prateleira errada em silêncio.
+  ⚠️ Sem saldo em lugar nenhum, os tipos que TIRAM do estoque avisam em vez de deixar lançar.
 - 🔑 **A tela de Ajustes tem SEIS tipos, e eles se dividem em dois grupos.** Entrada, Saída,
   Perda e Transferência dizem **o que se MOVEU**. Ajuste de estoque e Ajuste de custo declaram
   **a VERDADE** — quanto realmente tem, quanto realmente custa — e o sistema calcula a

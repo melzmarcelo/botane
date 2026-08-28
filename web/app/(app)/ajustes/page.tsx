@@ -23,6 +23,13 @@ import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
  */
 
 type Motivo = { id: number; nome: string };
+type SaldoDoProduto = {
+  id_local: number;
+  local: string;
+  quantidade: number;
+  um_estoque: string | null;
+};
+
 type PreviaSaldo = {
   produto: string;
   um: string | null;
@@ -163,6 +170,8 @@ export default function PaginaAjustes() {
   const [salvando, setSalvando] = useState(false);
   const [previaCusto, setPreviaCusto] = useState<PreviaCusto | null>(null);
   const [previaSaldo, setPreviaSaldo] = useState<PreviaSaldo | null>(null);
+  // Onde este produto TEM saldo. `null` = ainda não perguntamos.
+  const [ondeTem, setOndeTem] = useState<SaldoDoProduto[] | null>(null);
 
   const carregarRecentes = useCallback(async () => {
     try {
@@ -242,6 +251,60 @@ export default function PaginaAjustes() {
       setPreviaSaldo(null);
     }
   }, [f.id_produto, f.custo_novo, f.id_local]);
+
+  /**
+   * Onde este produto tem saldo.
+   *
+   * 🔑 **A lista de locais tinha TODOS os locais da casa** — 93 numa base real —
+   * enquanto o produto costuma estar em um. Escolher o errado não dava erro na
+   * hora: numa saída, o razão registrava a baixa por um local onde o insumo
+   * nunca passou, criando saldo NEGATIVO com custo provisório. É o mesmo
+   * defeito que a produção já tinha tido.
+   *
+   * ⚠️ Na ENTRADA a lista continua inteira: a primeira entrada de um produto
+   * novo não tem saldo em lugar nenhum, e restringir ali impediria de cadastrar
+   * o estoque inicial.
+   */
+  useEffect(() => {
+    if (!f.id_produto) {
+      setOndeTem(null);
+      return;
+    }
+    let cancelado = false;
+    api
+      .get<SaldoDoProduto[]>(`/estoque/saldos?id_produto=${f.id_produto}`)
+      .then((linhas) => {
+        if (cancelado) return;
+        const comSaldo = linhas.filter((l) => Number(l.quantidade) !== 0);
+        setOndeTem(comSaldo);
+        // Um só: escolhe sozinho. Obrigar a abrir um seletor de uma opção é
+        // atrito puro — e é onde alguém deixa o padrão errado passar.
+        if (comSaldo.length === 1) {
+          setF((a) => ({ ...a, id_local: String(comSaldo[0].id_local) }));
+        }
+      })
+      .catch(() => {
+        // Falhar aqui não pode travar o lançamento: cai para a lista inteira.
+        if (!cancelado) setOndeTem(null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [f.id_produto]);
+
+  /**
+   * Os locais que o seletor oferece.
+   *
+   * ⚠️ Entrada e o DESTINO da transferência aceitam qualquer local — as duas
+   * põem mercadoria onde ela ainda não está.
+   */
+  const locaisDoTipo =
+    tipo === "entrada" || ondeTem === null
+      ? locais
+      : locais.filter((l) => ondeTem.some((o) => o.id_local === l.id));
+
+  const quantoTem = (idLocal: number) =>
+    ondeTem?.find((o) => o.id_local === idLocal);
 
   /** O que o acerto de saldo faria, perguntado ao SERVIDOR. */
   const conferirSaldo = useCallback(async () => {
@@ -507,19 +570,48 @@ export default function PaginaAjustes() {
                 />
               </Campo>
             )}
-            <Campo rotulo={tipo === "transferencia" ? "De qual local" : "Local"}>
+            <Campo
+              rotulo={tipo === "transferencia" ? "De qual local" : "Local"}
+              dica={
+                tipo !== "entrada" && ondeTem && ondeTem.length > 1
+                  ? `Este produto está em ${ondeTem.length} locais.`
+                  : undefined
+              }
+            >
               <select
                 className="campo"
                 value={f.id_local}
-                onChange={(e) => setF({ ...f, id_local: e.target.value })}
+                onChange={(e) => {
+                  setF({ ...f, id_local: e.target.value });
+                  // Trocar de prateleira muda os números da prévia.
+                  setPreviaSaldo(null);
+                  setPreviaCusto(null);
+                }}
               >
-                {locais.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.nome}
-                  </option>
-                ))}
+                {locaisDoTipo.map((l) => {
+                  const tem = quantoTem(l.id);
+                  return (
+                    <option key={l.id} value={l.id}>
+                      {/* A quantidade no rótulo é o que faz a escolha ser
+                          consciente em vez de um chute entre nomes. */}
+                      {l.nome}
+                      {tem ? ` — ${qtd(tem.quantidade)} ${tem.um_estoque ?? ""}` : ""}
+                    </option>
+                  );
+                })}
               </select>
             </Campo>
+            {/* ⚠️ Sem saldo em lugar nenhum, os tipos que TIRAM do estoque não
+                têm o que tirar. Dizer isso aqui evita o 404 ou — pior — a saída
+                que cria saldo negativo num local por onde nada passou. */}
+            {tipo !== "entrada" && f.id_produto && ondeTem?.length === 0 && (
+              <div className="sm:col-span-2">
+                <Aviso tipo="erro">
+                  Este produto não tem saldo em nenhum local. Lance uma{" "}
+                  <b>entrada</b> antes — ou confira se o produto é o certo.
+                </Aviso>
+              </div>
+            )}
             {tipo === "transferencia" && (
               <Campo rotulo="Para qual local">
                 <select

@@ -1085,6 +1085,7 @@ try {
   checar("no ajuste de estoque pede a quantidade que REALMENTE tem",
     formSaldo.some((r) => /realmente tem/i.test(r)), formSaldo);
 
+
   // O formulário se molda ao tipo. No custo isso quer dizer: SEM quantidade
   // (nada se move) e COM o custo certo.
   await p.evaluate(() => {
@@ -1215,6 +1216,45 @@ try {
   const { dados: saldos } = await api("GET", `/estoque/saldos?busca=${m4}`, null, token);
   checar("saldo gravado pela tela", saldos.length === 1 && Number(saldos[0].quantidade) === 10,
     saldos);
+
+  // 🔑 **O seletor de local oferecia TODOS os locais da casa** — 93 numa base
+  // real — enquanto o produto costuma estar em UM. Escolher o errado não dava
+  // erro na hora: numa saída, o razão registrava a baixa por um local onde o
+  // insumo nunca passou, criando saldo NEGATIVO com custo provisório. É o
+  // mesmo defeito que a produção já teve.
+  //
+  // ⚠️ A checagem só vale AQUI, depois da entrada acima: antes de o produto
+  // ter saldo não há o que filtrar. E vale no ajuste de estoque, não na
+  // entrada — nesta a lista continua inteira de propósito, porque a primeira
+  // entrada de um produto novo não tem saldo em lugar nenhum.
+  const totalDeLocais = await p.evaluate(
+    () => document.querySelectorAll("select")[0]?.options.length ?? 0);
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      /ajuste de estoque/i.test(x.textContent ?? ""));
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 600));
+  const campoLocal = await p.$('input[aria-label="Buscar produto"]');
+  if (campoLocal) {
+    await campoLocal.type(`Est tela ${m4}`);
+    await p.keyboard.press("Tab");
+    await new Promise((r) => setTimeout(r, 1600));
+  }
+  const apos = await p.evaluate(() => {
+    const s = document.querySelectorAll("select")[0];
+    return {
+      total: s?.options.length ?? 0,
+      rotulos: [...(s?.options ?? [])].map((o) => o.textContent?.trim() ?? "").slice(0, 3),
+    };
+  });
+  // Não afirmo um número: afirmo que ENCOLHEU, que é o que importa.
+  checar("o local passa a oferecer só onde o produto tem saldo",
+    apos.total > 0 && apos.total < totalDeLocais, { totalDeLocais, ...apos });
+  // A quantidade no rótulo é o que faz a escolha ser consciente em vez de um
+  // chute entre nomes de prateleira.
+  checar("e mostra a quantidade ao lado do nome do local",
+    apos.rotulos.some((r) => /—\s*\d/.test(r)), apos.rotulos);
   checar("valor em estoque = 200,00", saldos[0] && Number(saldos[0].valor) === 200,
     saldos[0]?.valor);
 
