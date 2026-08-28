@@ -157,7 +157,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   lia como legenda. Virou `.link-voltar`, pílula com borda e seta.
 - Manuais: `docs/manual-da-equipe.md` (o que cada função faz no dia a dia) e
   **`web/public/ajuda.html`** — o manual de referência: os onze processos e o caminho do dado,
-  de onde entra até virar número. ⚠️ **Fonte única**: a tela `/ajuda` o exibe num quadro que
+  de onde entra até virar número.
+  🔑 **A seção "De onde vem cada número" é o coração dele** (28/08/2026): segue UM quilo de
+  café da nota até a variância, com a aritmética real em cada passo — custo de aquisição com
+  frete rateado, custo médio ponderado (e por que a média simples erraria R$ 0,92/kg), ficha,
+  custo congelado no item de venda, CMV real pela fotografia do razão, e a variância fechando
+  **exatamente** com a perda apontada. Fecha com a tabela "cada número e sua origem" e com o
+  que ENFRAQUECE cada um (produto sem unidade, prato sem ficha, venda sem vínculo). Quem
+  confere um relatório sem saber a origem do valor acaba aceitando o que está lá. ⚠️ **Fonte única**: a tela `/ajuda` o exibe num quadro que
   cresce até a altura do conteúdo, e o mesmo arquivo é o que se publica como artifact
   (republicar sempre com a mesma URL). Reescrevê-lo em JSX criaria duas versões que divergem
   no primeiro parágrafo novo — e aí o sistema explicaria duas coisas diferentes sobre si.
@@ -1050,7 +1057,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (317, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (319, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

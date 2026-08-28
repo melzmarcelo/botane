@@ -280,6 +280,7 @@
     <ol>
       <li><a href="#proposito">O número que o sistema existe para produzir</a></li>
       <li><a href="#mapa">O mapa do dado</a></li>
+      <li><a href="#trilha">De onde vem cada número</a></li>
       <li class="grupo"><span class="rotulo">Os processos</span></li>
       <li><a href="#cadastro">1 · Cadastro base</a></li>
       <li><a href="#produto">2 · Produto</a></li>
@@ -393,7 +394,7 @@
               <text x="34" y="68">XML · digitação · Omie</text>
               <text x="34" y="150">consome a ficha</text>
               <text x="34" y="232">perda · transferência</text>
-              <text x="34" y="314">planilha do PDV</text>
+              <text x="34" y="314">PDV · planilha · manual</text>
               <text x="624" y="133">inicial + compras − final</text>
               <text x="624" y="263">vendas × ficha</text>
             </g>
@@ -421,6 +422,203 @@
         saldo que ficou e o custo médio que passou a valer. Nenhuma tela escreve nele
         diretamente — todas passam pelo mesmo motor.
       </p>
+    </section>
+
+    <!-- ============================================================== trilha -->
+    <section id="trilha">
+      <h2>De onde vem cada número</h2>
+      <p class="chamada">
+        Um quilo de café, do papel da nota até a variância do mês. Cada conta abaixo é a
+        que o sistema faz de verdade.
+      </p>
+
+      <p>
+        Todo número desta tela nasce de outro. Quem confere um relatório e não sabe a origem
+        do valor acaba aceitando o que está lá — e é exatamente aí que um erro de cadastro
+        vira um food cost errado que ninguém questiona. Esta seção percorre a cadeia inteira
+        com um exemplo só, para que o caminho fique visível.
+      </p>
+
+      <h3>1 · O custo de entrada não é o preço da nota</h3>
+      <p>
+        A nota traz <strong>20 KG de café a R$ 55,00</strong> e <strong>R$ 30,00 de
+        frete</strong>. O que entra no estoque não é 55,00:
+      </p>
+      <table>
+        <thead><tr><th>De onde vem</th><th>Conta</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Mercadoria</td><td>20 × 55,00</td><td>R$ 1.100,00</td></tr>
+          <tr><td>Frete rateado</td><td>por valor, entre os itens da nota</td><td>R$ 30,00</td></tr>
+          <tr><td><strong>Custo de aquisição</strong></td><td>1.130,00 ÷ 20</td>
+              <td><strong>R$ 56,50 / KG</strong></td></tr>
+        </tbody>
+      </table>
+      <div class="regra">
+        <p class="rotulo">Por que isso importa</p>
+        <p>
+          Frete, IPI/ST e desconto entram no custo do produto, não numa conta de despesa à
+          parte. Ignorá-los faz o café parecer 2,7% mais barato do que é — e essa diferença
+          atravessa a ficha, o CMV e a margem de todo prato que leva café.
+          <strong>Quando o próprio fornecedor já rateou</strong> as acessórias nos itens, o
+          sistema reconhece e não cobra duas vezes.
+        </p>
+      </div>
+
+      <h3>2 · O custo médio é ponderado, e muda a cada entrada</h3>
+      <p>
+        Semanas depois chegam <strong>10 KG a R$ 62,00</strong>. O estoque passa a ter dois
+        preços, e o sistema guarda um só:
+      </p>
+      <table>
+        <thead><tr><th>De onde vem</th><th>Quantidade</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Saldo anterior</td><td>20 KG</td><td>R$ 1.130,00</td></tr>
+          <tr><td>Entrada nova</td><td>10 KG</td><td>R$ 620,00</td></tr>
+          <tr><td><strong>Custo médio</strong></td><td><strong>30 KG</strong></td>
+              <td><strong>1.750,00 ÷ 30 = R$ 58,3333</strong></td></tr>
+        </tbody>
+      </table>
+      <div class="regra">
+        <p class="rotulo">Ponderado, não a média dos preços</p>
+        <p>
+          A média simples entre 56,50 e 62,00 daria <strong>59,25</strong> — R$ 0,92 a mais
+          por quilo, porque ignoraria que o lote barato é o dobro do caro. O sistema pondera
+          pela quantidade, e é esse valor que a ficha e a saída usam.
+        </p>
+      </div>
+
+      <h3>3 · A ficha transforma custo de insumo em custo de prato</h3>
+      <p>
+        O espresso leva <strong>16 g de café</strong> e <strong>1 copo</strong>. A ficha não
+        guarda dinheiro: ela guarda quantidades, e o custo é calculado no momento do uso.
+      </p>
+      <table>
+        <thead><tr><th>Insumo</th><th>Conta</th><th>Custo</th></tr></thead>
+        <tbody>
+          <tr><td>Café</td><td>0,016 KG × 58,3333</td><td>R$ 0,9333</td></tr>
+          <tr><td>Copo</td><td>1 UN × 0,12</td><td>R$ 0,1200</td></tr>
+          <tr><td><strong>Custo do espresso</strong></td><td></td>
+              <td><strong>R$ 1,0533</strong></td></tr>
+        </tbody>
+      </table>
+      <p>
+        A conversão de <strong>gramas para quilos</strong> passa pela mesma regra que a nota e
+        a produção usam. É por isso que a receita pode ser escrita na unidade da cozinha sem
+        que ninguém converta de cabeça.
+      </p>
+
+      <h3>4 · A venda usa o custo do dia, e o congela</h3>
+      <p>
+        Vendem-se <strong>100 espressos a R$ 7,00</strong>. Duas coisas acontecem no mesmo
+        lançamento, e cada uma alimenta um lado da comparação:
+      </p>
+      <div class="grade-2">
+        <div class="cartao">
+          <p class="rotulo">Sai do estoque</p>
+          <p style="margin:6px 0 0">
+            100 × 0,016 = <strong>1,6 KG de café</strong><br>
+            <span style="color:var(--suave)">vira linha no razão, alimenta o CMV real</span>
+          </p>
+        </div>
+        <div class="cartao">
+          <p class="rotulo">Vira CMV teórico</p>
+          <p style="margin:6px 0 0">
+            100 × 1,0533 = <strong>R$ 105,33</strong><br>
+            <span style="color:var(--suave)">gravado no item da venda, para sempre</span>
+          </p>
+        </div>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Congelado quer dizer congelado</p>
+        <p>
+          O custo da ficha é gravado <em>no item da venda</em>. Corrigir a receita amanhã não
+          reescreve o CMV do mês passado — senão o número que já foi ao contador mudaria
+          sozinho. É o mesmo motivo pelo qual o fechamento grava nome, código, categoria e
+          setor: renomear um produto não pode reescrever o passado.
+        </p>
+      </div>
+
+      <h3>5 · O CMV real vem do razão, não de uma soma de notas</h3>
+      <p>
+        No fim do período o sistema não soma o que se comprou: ele olha o que a prateleira
+        tinha, o que entrou e o que sobrou. O valor do estoque numa data sai da
+        <strong>fotografia do próprio razão</strong> — cada movimento grava o saldo e o custo
+        médio que ficaram valendo depois dele.
+      </p>
+      <table>
+        <thead><tr><th>De onde vem</th><th>Conta</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Estoque inicial</td><td>o mês começou sem café</td><td>R$ 0,00</td></tr>
+          <tr><td>Compras</td><td>1.130,00 + 620,00</td><td>R$ 1.750,00</td></tr>
+          <tr><td>Estoque final</td><td>27,9 KG × 58,3333</td><td>R$ 1.627,50</td></tr>
+          <tr><td><strong>CMV real do café</strong></td><td>0 + 1.750,00 − 1.627,50</td>
+              <td><strong>R$ 122,50</strong></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Sobraram 27,9 KG porque saíram <strong>1,6 KG nas vendas</strong> e
+        <strong>0,5 KG numa perda</strong> — um saco que caiu no chão e foi apontado em
+        Ajustes.
+      </p>
+
+      <h3>6 · A variância é a diferença, e ela tem nome</h3>
+      <div class="grade-2">
+        <div class="cartao">
+          <p class="rotulo">CMV real do café</p>
+          <p style="margin:6px 0 0"><strong>R$ 122,50</strong><br>
+            <span style="color:var(--suave)">2,1 KG saíram da prateleira</span></p>
+        </div>
+        <div class="cartao">
+          <p class="rotulo">CMV teórico do café</p>
+          <p style="margin:6px 0 0"><strong>R$ 93,33</strong><br>
+            <span style="color:var(--suave)">1,6 KG é o que as receitas pediam</span></p>
+        </div>
+      </div>
+      <div class="regra">
+        <p class="rotulo">A variância fecha com a perda — e é isso que prova a conta</p>
+        <p>
+          <strong>122,50 − 93,33 = R$ 29,17</strong>, que é exatamente
+          <strong>0,5 KG × 58,3333</strong>: a perda apontada. Quando a variância fecha com
+          perdas e ajustes conhecidos, o estoque está sob controle.
+          <strong>Quando sobra diferença sem nome</strong> — e é o caso normal de quem não
+          controla — essa sobra é quebra, porção generosa demais, erro de contagem ou furto.
+          É esse número que o sistema existe para mostrar.
+        </p>
+      </div>
+      <p>
+        O <strong>food cost</strong> fecha a conta do prato: o CMV sobre os R$ 700,00 de
+        receita. É a régua com que se compara mês a mês.
+      </p>
+
+      <h3>Resumo: cada número e sua origem</h3>
+      <table>
+        <thead><tr><th>O número na tela</th><th>Vem de</th></tr></thead>
+        <tbody>
+          <tr><td>Custo de aquisição</td><td>(mercadoria + frete + impostos − desconto) ÷ quantidade, no lançamento da nota</td></tr>
+          <tr><td>Custo médio</td><td>o razão, recalculado a cada entrada, ponderado pela quantidade</td></tr>
+          <tr><td>Custo da ficha</td><td>soma dos insumos × custo médio de cada um, no momento do uso</td></tr>
+          <tr><td>Custo do item vendido</td><td>a ficha, <strong>congelada</strong> no item da venda</td></tr>
+          <tr><td>Valor do estoque numa data</td><td>a fotografia do razão: saldo × custo médio do último movimento antes do corte</td></tr>
+          <tr><td>CMV real</td><td>estoque inicial + compras − estoque final</td></tr>
+          <tr><td>CMV teórico</td><td>soma dos custos congelados dos itens vendidos</td></tr>
+          <tr><td>Variância</td><td>real − teórico</td></tr>
+          <tr><td>Food cost</td><td>CMV real ÷ receita do período</td></tr>
+          <tr><td>Receita</td><td>soma do valor dos itens de venda, sem os cancelados</td></tr>
+          <tr><td>Preço de venda</td><td>a tabela de preços do PDV, na importação do cardápio</td></tr>
+        </tbody>
+      </table>
+
+      <div class="regra">
+        <p class="rotulo">O que enfraquece cada número</p>
+        <p>
+          <strong>Produto sem unidade de estoque</strong> não entra no razão — e o que não
+          entra não aparece em CMV nenhum. <strong>Prato sem ficha</strong> vende com custo
+          zero e derruba o teórico, inflando a variância. <strong>Item de venda sem produto
+          vinculado</strong> não gera baixa nem custo. Por isso o painel mostra a
+          <em>cobertura de fichas</em> ao lado da variância: é ela que diz o quanto dá para
+          confiar no número.
+        </p>
+      </div>
     </section>
 
     <!-- ============================================================= cadastro -->
@@ -489,6 +687,8 @@
           <tr><td><strong>Produzido</strong></td><td>Produção, a partir de uma ficha</td><td>Venda</td></tr>
           <tr><td><strong>Revenda</strong></td><td>Nota de compra</td><td>Venda, sem ficha nenhuma</td></tr>
           <tr><td><strong>Embalagem</strong></td><td>Nota de compra</td><td>Ficha ou consumo interno</td></tr>
+          <tr><td><strong>Material de limpeza</strong></td><td>Nota de compra</td><td>Consumo — não é comida</td></tr>
+          <tr><td><strong>Utensílios</strong></td><td>Nota de compra</td><td>Quebra e reposição — não é consumido</td></tr>
           <tr><td><strong>Kit</strong></td><td>Não entra: é combinação</td><td>Venda — o custo vem dos componentes</td></tr>
         </tbody>
       </table>
@@ -520,6 +720,39 @@
         Produto que nasce sozinho (do catálogo do Omie ou de um item de nota) entra como
         <strong>rascunho</strong>. Rascunho existe para lembrar que falta gente conferir
         unidade e fator.
+      </p>
+
+      <h3>O mesmo produto, vindo de dois lugares</h3>
+      <p>
+        O cadastro recebe produto por três portas: o <strong>catálogo do Omie</strong> (o que
+        se compra), o <strong>cardápio do PDV</strong> (o que se vende) e a mão de quem
+        cadastra. Nada impede que o mesmo produto exista duas vezes — o fornecedor o chama de
+        <span class="mono">BEB CERV HEINEKEN 350ML</span> e o cardápio, de
+        <span class="mono">CERVEJA HEINEKEN PILSEN</span>.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O sistema não adivinha: quem reconhece o produto é gente</p>
+        <p>
+          Houve um detector por semelhança de nome, e ele foi <strong>removido</strong>: não
+          achava a cerveja acima (63,8% de semelhança, o mesmo produto) e juntava
+          <span class="mono">CAKE BOARD N19</span> com <span class="mono">N21</span>, que são
+          tamanhos diferentes. Nenhum limiar separa os dois casos, porque a diferença não está
+          no texto. E um vínculo errado não dá erro em lugar nenhum — só contamina o CMV
+          teórico de todo mês em que aquele prato foi vendido.
+        </p>
+      </div>
+      <p>
+        No lugar dele há o botão <strong>Vincular</strong>, na tela do produto: escolhe-se o
+        outro cadastro, o sistema mostra a <em>prévia</em> — com que nome vai ficar, que campos
+        serão completados, quantos itens de venda mudam de dono — e só então funde. Com o
+        código do Omie e o do PDV preenchidos, o cadastro é o mesmo produto nas duas
+        integrações, e isso se lê na tela.
+      </p>
+      <p>
+        A fusão <strong>baixa do estoque o que foi vendido e nunca saiu</strong>. O item do
+        cardápio nasce sem controlar estoque, então as vendas dele nunca tocaram o razão:
+        sem essa baixa, as unidades faltando apareceriam na primeira contagem como “ajuste de
+        inventário”, que é onde a diferença some sem nome.
       </p>
 
       <h3>Local padrão</h3>
@@ -856,20 +1089,61 @@
     <section id="venda">
       <h2>8 · Venda</h2>
       <p class="chamada">
-        Enquanto a API do PDV não abre, a venda entra por planilha ou na mão.
+        As vendas entram sozinhas do PDV. A planilha e a digitação continuam, para o dia em
+        que a integração estiver fora do ar.
       </p>
 
       <div class="fluxo">
-        <span>Planilha do PDV</span> <em>→</em> <span>de-para do item</span> <em>→</em>
+        <span>PDV</span> <em>→</em> <span>de-para do item</span> <em>→</em>
         <span class="destino">baixa no razão</span> <em>+</em>
         <span class="destino">CMV teórico</span>
       </div>
 
       <p>
-        Cola-se o relatório do PDV — código, descrição, quantidade, valor —, o sistema reconhece
-        as linhas e importa. O de-para do item do PDV para o prato daqui usa a mesma tabela de
-        códigos externos das notas.
+        Em <strong>Vendas ▸ Buscar no PDV</strong> o sistema traz os cupons do período.
+        Também roda sozinho, se a casa quiser: manual, de hora em hora ou uma vez por dia,
+        configurado em Integrações. Venda de sábado que ninguém importa é receita faltando no
+        CMV do fim de semana — e a variância sai boa demais, porque o teórico não conta o que
+        foi vendido.
       </p>
+
+      <div class="regra">
+        <p class="rotulo">A busca é dia a dia, e isso decide se o número está certo</p>
+        <p>
+          O PDV devolve no máximo 100 cupons por consulta, <em>exceto</em> quando se pergunta
+          por um dia só. Uma casa que faz 48 cupons num dia comum, perguntada por dez dias,
+          receberia 100 e o resto sumiria em silêncio — 100 é um número plausível, e ninguém
+          notaria a falta. Por isso a busca pergunta um dia de cada vez.
+        </p>
+      </div>
+
+      <p>
+        <strong>Onde a venda é gravada é o mesmo lugar da planilha.</strong> A integração
+        busca, traduz e entrega para a mesma importação — mesmo de-para, mesmo custo congelado
+        da ficha, mesma baixa de estoque. Duas gravações seriam duas contas de CMV conforme a
+        origem.
+      </p>
+
+      <p>
+        O cancelamento vem em <strong>dois níveis</strong>: o cupom inteiro e a linha dentro
+        dele. O segundo é o que passa despercebido — um cupom válido com um item cancelado
+        dentro infla receita e CMV teórico ao mesmo tempo.
+      </p>
+
+      <h3>O item da venda precisa achar o produto daqui</h3>
+      <p>
+        O vínculo é pelo <strong>código do PDV</strong>, guardado no cadastro do produto. Item
+        que não acha dono cai na fila de <strong>Vendas ▸ Sem vínculo</strong>, que é uma
+        lista de trabalho: alguém percorre, cadastra ou vincula, e volta.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Enquanto a fila não é resolvida, o CMV teórico é zero</p>
+        <p>
+          Item sem produto não tem ficha, e sem ficha não tem custo. A venda entra na receita
+          e não entra no custo — o que faz a margem parecer excelente. O painel avisa quantos
+          itens estão nessa situação, e os cartões dizem “(parcial)”.
+        </p>
+      </div>
 
       <p>
         <strong>Vender é sair do estoque.</strong> Todo produto que controla estoque baixa na
@@ -923,10 +1197,18 @@
 
       <h3>Separar o que não é comida</h3>
       <p>
-        Detergente, sacola e marmita entram no custo pela mesma porta dos insumos — e somem no
-        total. Em <strong>Tabelas de apoio ▸ Grupos do CMV</strong> a casa monta os próprios
-        grupos escolhendo os <em>tipos de produto</em> que entram em cada um. Cada grupo vira
-        uma linha no painel, ao lado de Perdas e Ajustes de inventário.
+        Detergente, sacola, marmita e taça entram no custo pela mesma porta dos insumos — e
+        somem no total. Em <strong>Tabelas de apoio ▸ Grupos do CMV</strong> a casa monta os
+        próprios grupos escolhendo os <em>tipos de produto</em> que entram em cada um. Cada
+        grupo vira uma linha no painel, ao lado de Perdas e Ajustes de inventário.
+      </p>
+      <p>
+        Três tipos existem só para isso, e o que os separa importa:
+        <strong>Embalagem</strong> sai com o pedido e não volta; <strong>Material de
+        limpeza</strong> acaba com o uso; <strong>Utensílios</strong> não são consumidos —
+        uma taça vive meses e some num sábado. Ela quebra, some e é reposta, e a pergunta que
+        ela responde (“quanto se quebrou e se repôs no mês?”) não é a mesma das outras duas.
+        Por isso tem grupo próprio.
       </p>
       <div class="regra">
         <p class="rotulo">Entra ou não entra no CMV real</p>
@@ -1056,6 +1338,32 @@
         Credenciais de integração ficam <strong>cifradas</strong> e nunca voltam pela API —
         só mascaradas. Nem o administrador relê uma chave que já salvou.
       </p>
+
+      <h3>A sessão, e a caixinha do login</h3>
+      <p>
+        Por padrão a sessão <strong>se encerra quando o navegador fecha</strong>. Quem marca
+        <strong>“manter conectado neste aparelho”</strong> troca isso: a sessão sobrevive ao
+        fechamento e vale por semanas. A caixinha nasce desmarcada de propósito — a opção
+        segura tem de ser a que vale para quem não escolheu nada.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O navegador esquecer não é segurança</p>
+        <p>
+          Quem garante a promessa é o <em>servidor</em>: sem “manter conectado”, o acesso vale
+          poucas horas e expira sozinho, mesmo que alguém copie o token para outro
+          computador. A escolha fica gravada na sessão, e renovar não a muda — senão ela
+          duraria até a primeira renovação e sumiria em silêncio.
+        </p>
+      </div>
+      <p>
+        Sair da conta <strong>encerra na hora</strong>, em qualquer um dos dois modos. Trocar
+        a senha derruba todas as sessões abertas daquela pessoa.
+      </p>
+      <p>
+        Uma consequência prática de “fecha com o navegador”: abrir o sistema numa
+        <strong>aba nova</strong> pede login de novo. É o preço de encerrar ao fechar — e é
+        justamente o que a caixinha resolve para quem prefere o contrário.
+      </p>
     </section>
 
     <!-- =============================================================== regras -->
@@ -1093,7 +1401,7 @@
           <tbody>
             <tr>
               <td>Produto</td>
-              <td>Cadastro, catálogo do Omie, item de nota</td>
+              <td>Cadastro, catálogo do Omie, cardápio do PDV, item de nota</td>
               <td><code>produtos</code></td>
               <td>Cadastros ▸ Produtos</td>
             </tr>
@@ -1174,6 +1482,36 @@
               <td>Tela de Integrações</td>
               <td><code>integracoes</code> (cifrado)</td>
               <td>Administração ▸ Integrações</td>
+            </tr>
+            <tr>
+              <td>Venda e seus itens</td>
+              <td>PDV, planilha colada ou digitação</td>
+              <td><code>vendas</code>, <code>venda_itens</code></td>
+              <td>Vendas</td>
+            </tr>
+            <tr>
+              <td>Custo do item vendido</td>
+              <td>A ficha, no momento da importação — <strong>congelado</strong></td>
+              <td><code>venda_itens.custo_ficha_unitario</code></td>
+              <td>Venda ▸ detalhe</td>
+            </tr>
+            <tr>
+              <td>Preço de venda</td>
+              <td>Tabela de preços do PDV, e só quando muda</td>
+              <td><code>produto_precos</code></td>
+              <td>Produto ▸ preço</td>
+            </tr>
+            <tr>
+              <td>Vínculo com o PDV</td>
+              <td>Importação do cardápio ou o botão Vincular</td>
+              <td><code>produtos.codigo_pdv</code>, <code>codigos_externos</code></td>
+              <td>Cadastro do produto</td>
+            </tr>
+            <tr>
+              <td>Sessão de acesso</td>
+              <td>Login — e a escolha de “manter conectado”</td>
+              <td><code>sessoes</code></td>
+              <td>—</td>
             </tr>
           </tbody>
         </table>

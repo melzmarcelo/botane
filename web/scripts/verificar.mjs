@@ -2810,7 +2810,25 @@ try {
   checar("a Ajuda está no menu", ajuda.noMenu, ajuda);
   checar("o manual carrega dentro da tela", ajuda.titulo === "Botané por dentro", ajuda);
   checar("com todos os processos e os dois diagramas",
-    ajuda.secoes >= 15 && ajuda.diagramas === 2, ajuda);
+    ajuda.secoes >= 16 && ajuda.diagramas === 2, ajuda);
+  // ⚠️ A seção que explica DE ONDE VEM cada número é o coração do manual: é ela
+  // que faz alguém conferir um relatório em vez de aceitar o valor que está lá.
+  // Cobrar o texto, e não só a contagem de seções, porque contagem passa mesmo
+  // quando o conteúdo virou outra coisa.
+  const trilha = await p.evaluate(() => {
+    const q = document.querySelector("iframe");
+    const d = q?.contentDocument;
+    const t = d?.getElementById("trilha")?.innerText ?? "";
+    return {
+      existe: t.length > 500,
+      custoMedio: /ponderad/i.test(t),
+      congelado: /congelad/i.test(t),
+      resumo: /CMV real ÷ receita|estoque inicial \+ compras/i.test(t),
+    };
+  });
+  checar("o manual explica de onde vem cada número", trilha.existe, trilha);
+  checar("com o custo médio ponderado, o custo congelado e a fórmula do CMV",
+    trilha.custoMedio && trilha.congelado && trilha.resumo, trilha);
   // Documento com rolagem própria dentro de página que já rola é briga de
   // rolagem: a roda do mouse para no meio e ninguém sabe qual das duas move.
   checar("o quadro cresce até a altura do conteúdo",
