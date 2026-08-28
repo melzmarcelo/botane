@@ -1048,16 +1048,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.266 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.300 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (34), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (319, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (325, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1123,6 +1123,20 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **Movimento de quantidade ZERO some das somas que ramificam por sinal.** O ajuste de custo
+  (migração 039) reavalia o estoque sem mover mercadoria: `quantidade = 0`, `custo_total <> 0`.
+  A CTE da movimentação ramificava só em `quantidade > 0` e `< 0`, então ele caía em nenhum dos
+  dois lados e o valor sumia — enquanto o estoque FINAL, que sai da fotografia do razão, já o
+  incluía. A identidade `inicial + entradas − saídas = final` parou de fechar, e a diferença era
+  exatamente o reavaliado. **Três suítes caíram de uma vez.** Agora o valor entra pelo SINAL do
+  `custo_total` quando a quantidade é zero. ⚠️ A quantidade continua fora (é zero mesmo): a linha
+  mostra valor sem unidade, que é literalmente o que aconteceu.
+  ⚠️ **O sinal do efeito é contraintuitivo e precisa estar escrito na tela**: subir o custo do
+  estoque AUMENTA o estoque final, e o CMV é `inicial + compras − final` — estoque mais caro,
+  CMV **menor**. A prévia diz isso em reais antes do botão.
+  ⚠️ **Teste de tela que desvia tem de VOLTAR.** As checagens novas navegavam para
+  `/ajustes/lote` e `/ajustes/custo` e o bloco seguinte supunha estar em `/ajustes` — a suíte
+  morria procurando campos numa página que não os tem, longe da causa.
 - ⚠️ **`/estoque/saldos` é paginado, e os dois CENÁRIOS montavam dicionário da primeira página.**
   `cenario_semana` estourou com `StopIteration` e `cenario_cafeteria` passava por sorte — o
   KeyError chegaria na rodada seguinte. Os dois agora pedem `?id_produto=` de cada produto

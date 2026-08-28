@@ -53,6 +53,13 @@ const MENU: {
         chave: ["estoque.entradas", "estoque.saidas", "estoque.perdas",
                 "estoque.transferencias"],
       },
+      {
+        href: "/ajustes/custo",
+        nome: "Ajuste de custo",
+        // Item próprio no menu porque é processo próprio — e a chave é só
+        // dele: quem conta prateleira não decide valor.
+        chave: "estoque.custo",
+      },
       { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
       { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },
     ],

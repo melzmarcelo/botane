@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -251,6 +252,32 @@ export default function PaginaAjustes() {
           entra como estorno.
         </p>
       </header>
+
+      {/*
+        Os dois processos em lote. Ficam no topo porque quem confere a despensa
+        chega aqui com VÁRIAS diferenças — o lançamento avulso abaixo é o caso
+        de uma só.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link href="/ajustes/lote" className="cartao block transition hover:border-erva focus-visible:border-erva">
+          <p className="rotulo">Vários produtos</p>
+          <p className="mt-1 font-semibold">Ajuste em lote</p>
+          <p className="mt-1 text-[13.5px] text-suave">
+            Entrada, consumo e perda de vários itens num lançamento só, com uma observação
+            que explica o conjunto.
+          </p>
+        </Link>
+        {pode("estoque.custo") && (
+          <Link href="/ajustes/custo" className="cartao block transition hover:border-erva focus-visible:border-erva">
+            <p className="rotulo">Sem mexer na quantidade</p>
+            <p className="mt-1 font-semibold">Ajuste de custo</p>
+            <p className="mt-1 text-[13.5px] text-suave">
+              Corrige o custo médio de quem já está em estoque — o custo provisório, o produto
+              que entrou sem custo, a nota digitada errada. <b>Muda o CMV do período.</b>
+            </p>
+          </Link>
+        )}
+      </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

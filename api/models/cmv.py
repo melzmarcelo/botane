@@ -50,6 +50,12 @@ class ApuracaoResponse(BaseModel):
     perdas: float
     consumo_interno: float
     ajustes: float
+    # ⚠️ Efeito NO CMV da reavaliação de custo, já com o sinal invertido:
+    # estoque reavaliado para cima deixa o CMV MENOR. Sem esta linha o número
+    # mudaria sem explicação — o produto não se moveu, só passou a valer outra
+    # coisa. Campo novo tem de entrar aqui também, senão sai do serviço e não
+    # chega à tela, calado.
+    ajuste_custo: float = 0
     receita: float
     vendas: int
     itens_sem_custo: int

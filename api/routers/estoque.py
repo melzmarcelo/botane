@@ -99,6 +99,10 @@ def movimentos(
                    l.nome AS local, m.quantidade, m.custo_unitario, m.custo_total,
                    m.saldo_apos, m.custo_medio_apos, m.custo_provisorio, m.documento,
                    pm.nome AS motivo, m.observacao, u.nome AS usuario, m.id_estorno_de,
+                   -- De onde o movimento veio. Sem isto, um ajuste feito em lote é
+                   -- indistinguível de um avulso, e a pergunta "de onde veio?" só
+                   -- se responde no banco.
+                   m.origem_tipo, m.origem_id,
                    EXISTS (SELECT 1 FROM estoque_movimentos e
                             WHERE e.id_estorno_de = m.id) AS estornado
               FROM estoque_movimentos m

@@ -31,6 +31,7 @@ from config import (
 from database import close_pool, get_cursor, init_pool
 from db_updater import run_migrations
 from routers import (
+    ajustes,
     alertas,
     autenticacao,
     cadastros,
@@ -206,6 +207,7 @@ app.include_router(omie.router)
 app.include_router(pdv.router)
 app.include_router(producao_agenda.router)
 app.include_router(inicio.router)
+app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
 

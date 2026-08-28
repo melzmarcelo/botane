@@ -32,6 +32,9 @@ class MovimentoResponse(BaseModel):
     quantidade: float
     custo_unitario: float
     custo_total: float
+    # NOTA, PRODUCAO, VENDA, AJUSTE_LOTE… — o que originou o movimento.
+    origem_tipo: str | None = None
+    origem_id: int | None = None
     saldo_apos: float
     custo_medio_apos: float
     custo_provisorio: bool

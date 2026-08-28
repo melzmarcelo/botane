@@ -29,7 +29,12 @@ SAIDAS = {
     "SAIDA_VENDA", "SAIDA_PRODUCAO", "SAIDA_PERDA", "SAIDA_CONSUMO_INTERNO",
     "TRANSFERENCIA_SAIDA", "AJUSTE_INVENTARIO_SAIDA", "ESTORNO_SAIDA",
 }
-TIPOS = ENTRADAS | SAIDAS
+# 🔑 **`AJUSTE_CUSTO` não é entrada nem saída** — é o único movimento que mexe
+# no VALOR sem mexer na quantidade. Fica fora dos dois conjuntos de propósito:
+# somá-lo às entradas o faria virar "compra" no CMV, e às saídas, "consumo".
+# Ele é a terceira coisa, e o painel o mostra em linha própria.
+AJUSTE_CUSTO = "AJUSTE_CUSTO"
+TIPOS = ENTRADAS | SAIDAS | {AJUSTE_CUSTO}
 
 ROTULOS = {
     "ENTRADA_NF": "Entrada por nota",
@@ -46,6 +51,7 @@ ROTULOS = {
     "TRANSFERENCIA_SAIDA": "Transferência (saída)",
     "AJUSTE_INVENTARIO_SAIDA": "Ajuste de inventário (falta)",
     "ESTORNO_SAIDA": "Estorno (saída)",
+    "AJUSTE_CUSTO": "Ajuste de custo",
 }
 
 
@@ -174,6 +180,14 @@ def lancar(
     """Grava UM movimento e devolve o que ficou. Quantidade sempre positiva."""
     if tipo not in TIPOS:
         raise HTTPException(status_code=400, detail=f"Tipo de movimento inválido: {tipo}")
+    # ⚠️ O ajuste de custo NÃO passa por aqui: ele tem quantidade zero, e todo
+    # este corpo pressupõe mercadoria se movendo (saldo, FEFO, lote, custo
+    # médio ponderado). Quem o lança é `services.ajustes.lancar_custo`.
+    if tipo == AJUSTE_CUSTO:
+        raise HTTPException(
+            status_code=400,
+            detail="Ajuste de custo se lança em Estoque ▸ Ajustes ▸ Custo.",
+        )
 
     qtd = dec(quantidade)
     if qtd <= 0:

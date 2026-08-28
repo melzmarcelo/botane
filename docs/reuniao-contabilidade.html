@@ -1,0 +1,816 @@
+<title>Botané e a contabilidade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<style>
+  /* Mesma identidade do sistema e do manual: quem vê os três reconhece um só
+     produto. O que muda aqui é a estrutura — isto se usa DURANTE a reunião,
+     então tudo precisa ser encontrável de relance. */
+  :root {
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #cfd8c5;
+    --linha2: #bfc8b6;
+    --erva: #2c6a4a;
+    --erva-fundo: #e3efe7;
+    --latao: #9a6e24;
+    --latao-fundo: #f6efe0;
+    --alerta: #a9711a;
+    --alerta-fundo: #faf1e2;
+    --erro: #95332a;
+    --erro-fundo: #fbecea;
+    --sombra: 0 1px 2px rgba(20, 32, 26, .06), 0 8px 24px -16px rgba(20, 32, 26, .3);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papel: #10170f;
+      --superficie: #19211a;
+      --superficie2: #212a21;
+      --tinta: #e6ece1;
+      --suave: #9aa896;
+      --linha: #2d382d;
+      --linha2: #3d493c;
+      --erva: #74b78f;
+      --erva-fundo: #1c2b22;
+      --latao: #cfa45e;
+      --latao-fundo: #2a2418;
+      --alerta: #d09b45;
+      --alerta-fundo: #2b2317;
+      --erro: #d98074;
+      --erro-fundo: #2c1c1a;
+      --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --papel: #10170f;
+    --superficie: #19211a;
+    --superficie2: #212a21;
+    --tinta: #e6ece1;
+    --suave: #9aa896;
+    --linha: #2d382d;
+    --linha2: #3d493c;
+    --erva: #74b78f;
+    --erva-fundo: #1c2b22;
+    --latao: #cfa45e;
+    --latao-fundo: #2a2418;
+    --alerta: #d09b45;
+    --alerta-fundo: #2b2317;
+    --erro: #d98074;
+    --erro-fundo: #2c1c1a;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: Newsreader, Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .rotulo, .selo, th, .fita {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  }
+  code, .mono, .tempo { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+  .folha { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.capa {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 72px 24px 40px;
+  }
+  header.capa h1 {
+    font-size: clamp(34px, 5.5vw, 56px);
+    line-height: 1.04;
+    letter-spacing: -.022em;
+    margin: 18px 0 12px;
+    text-wrap: balance;
+  }
+  header.capa .linha-fina {
+    font-size: clamp(18px, 2.4vw, 22px);
+    color: var(--suave);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .selo {
+    display: inline-flex;
+    gap: 9px;
+    align-items: baseline;
+    border: 1px solid var(--linha2);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--suave);
+    background: var(--superficie);
+  }
+
+  section { margin-top: 56px; scroll-margin-top: 24px; }
+
+  h2 {
+    font-size: clamp(23px, 3vw, 30px);
+    letter-spacing: -.015em;
+    margin: 0 0 6px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--linha2);
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 18.5px;
+    margin: 34px 0 8px;
+    letter-spacing: -.01em;
+  }
+
+  p { margin: 0 0 15px; max-width: 74ch; }
+  .chamada {
+    font-size: 19px;
+    color: var(--suave);
+    font-style: italic;
+    margin: 14px 0 22px;
+    max-width: 68ch;
+  }
+
+  .rotulo {
+    font-size: 10.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--suave);
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+
+  /* ---- pauta: o bloco de tempo é o que se procura de relance ---- */
+  .pauta { border-top: 1px solid var(--linha); margin-top: 22px; }
+  .bloco {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 20px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--linha);
+    align-items: start;
+  }
+  @media (max-width: 640px) {
+    .bloco { grid-template-columns: 1fr; gap: 6px; }
+  }
+  .tempo {
+    font-size: 13px;
+    color: var(--erva);
+    font-weight: 500;
+    padding-top: 3px;
+    white-space: nowrap;
+  }
+  .bloco h3 { margin: 0 0 4px; font-size: 17.5px; }
+  .bloco p { margin: 0 0 8px; font-size: 16px; }
+  .bloco ul { margin: 6px 0 0; padding-left: 20px; font-size: 16px; }
+  .bloco li { margin-bottom: 5px; }
+
+  .cartao {
+    background: var(--superficie);
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: var(--sombra);
+  }
+  .grade-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+  }
+
+  .aviso {
+    border-left: 3px solid var(--alerta);
+    background: var(--alerta-fundo);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    margin: 22px 0;
+  }
+  .aviso p:last-child { margin-bottom: 0; }
+  .aviso .rotulo { color: var(--alerta); }
+
+  .destaque {
+    border-left: 3px solid var(--erva);
+    background: var(--erva-fundo);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    margin: 22px 0;
+  }
+  .destaque p:last-child { margin-bottom: 0; }
+  .destaque .rotulo { color: var(--erva); }
+
+  .rolagem { overflow-x: auto; margin: 20px 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15.5px;
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    min-width: 480px;
+  }
+  th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--suave);
+    border-bottom: 1.5px solid var(--linha2);
+    padding: 0 14px 8px 0;
+    font-weight: 600;
+  }
+  td {
+    border-bottom: 1px solid var(--linha);
+    padding: 11px 14px 11px 0;
+    vertical-align: top;
+  }
+  td:last-child, th:last-child { padding-right: 0; }
+  .num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---- perguntas: cada uma é uma unidade que se lê inteira ---- */
+  .qa { margin-top: 26px; }
+  .pergunta {
+    background: var(--superficie);
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--sombra);
+  }
+  .pergunta > .q {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-weight: 600;
+    font-size: 17px;
+    margin: 0 0 10px;
+    letter-spacing: -.008em;
+    color: var(--erva);
+    max-width: none;
+  }
+  .pergunta p { font-size: 16px; margin-bottom: 10px; }
+  .pergunta p:last-child { margin-bottom: 0; }
+  .curta {
+    display: inline-block;
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    background: var(--superficie2);
+    border-radius: 6px;
+    padding: 2px 9px;
+    margin-right: 7px;
+    color: var(--tinta);
+  }
+
+  .fita {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--latao-fundo);
+    color: var(--latao);
+    margin-bottom: 10px;
+  }
+
+  ul.limpa { list-style: none; padding: 0; margin: 16px 0; }
+  ul.limpa li {
+    padding: 10px 0 10px 26px;
+    border-bottom: 1px solid var(--linha);
+    position: relative;
+    max-width: 74ch;
+  }
+  ul.limpa li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--erva);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  strong { font-weight: 600; }
+  a { color: var(--erva); }
+
+  @media print {
+    body { background: #fff; }
+    .bloco, .pergunta, .cartao { break-inside: avoid; }
+    section { break-before: auto; }
+  }
+</style>
+
+<header class="capa">
+  <span class="selo">Roteiro de reunião · Botané Deli e Café</span>
+  <h1>O Botané e a contabilidade</h1>
+  <p class="linha-fina">
+    O que apresentar, onde os números do sistema encontram os de vocês — e os três
+    pontos em que eles legitimamente divergem.
+  </p>
+</header>
+
+<div class="folha">
+
+  <!-- ====================================================== antes de começar -->
+  <section id="antes">
+    <h2>Antes de começar</h2>
+    <p class="chamada">
+      Uma frase para abrir, e uma para evitar o mal-entendido mais provável.
+    </p>
+
+    <div class="destaque">
+      <p class="rotulo">A abertura, em uma frase</p>
+      <p>
+        “A casa passou a controlar estoque e ficha técnica num sistema próprio. Ele não
+        substitui nada do que vocês fazem — <strong>ele produz o número que hoje só aparece
+        depois que o mês fecha</strong>, e queremos combinar como os dois lados conversam.”
+      </p>
+    </div>
+
+    <div class="aviso">
+      <p class="rotulo">O mal-entendido a matar logo no começo</p>
+      <p>
+        Contador ouve “sistema de CMV” e pensa em <strong>escrituração</strong>. Deixe claro
+        na primeira fala: o Botané é <strong>gerencial</strong>. Ele não emite documento
+        fiscal, não escritura, não gera SPED e não substitui o Omie. Ele lê a nota que já
+        existe e responde a uma pergunta que a apuração fiscal não responde:
+        <em>onde está a diferença entre o que saiu e o que deveria ter saído.</em>
+      </p>
+    </div>
+
+    <h3>Quem está na sala, e o que cada um quer ouvir</h3>
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Quem</th><th>A pergunta na cabeça dele</th><th>O que responde</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Contador responsável</strong></td>
+            <td>“Isso vai bater com o que eu apuro?”</td>
+            <td>O bloco de divergências, item 5 da pauta</td>
+          </tr>
+          <tr>
+            <td><strong>Quem faz a escrita fiscal</strong></td>
+            <td>“Vão me pedir coisa nova todo mês?”</td>
+            <td>Nada muda no fluxo dele; o sistema só <em>lê</em></td>
+          </tr>
+          <tr>
+            <td><strong>Quem monta o balanço</strong></td>
+            <td>“De onde sai o estoque final?”</td>
+            <td>Custo médio ponderado móvel, item 3</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================================================================ pauta -->
+  <section id="pauta">
+    <h2>Roteiro — 45 minutos</h2>
+    <p class="chamada">
+      Os itens 5 e 6 são o motivo da reunião. Se o tempo apertar, corte o 2 e o 7.
+    </p>
+
+    <div class="pauta">
+      <div class="bloco">
+        <div class="tempo">0–3 min</div>
+        <div>
+          <h3>1 · Por que a casa foi buscar isto</h3>
+          <p>
+            O problema em três lugares, que é a linguagem que eles entendem:
+          </p>
+          <ul>
+            <li><strong>Compra</strong> — o insumo subiu e ninguém viu no recebimento.</li>
+            <li><strong>Ficha</strong> — a receita diz 80 g, a cozinha usa 110 g.</li>
+            <li><strong>Perda</strong> — quebra, validade, consumo interno e desvio saem sem nome, e tudo vira “CMV alto”.</li>
+          </ul>
+          <p style="margin-top:8px">
+            Feche o item assim: <em>“a apuração de vocês mostra que o CMV subiu. Ela não
+            mostra em qual dos três.”</em>
+          </p>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">3–8 min</div>
+        <div>
+          <h3>2 · O que o sistema é, e o que não é</h3>
+          <p>
+            Uma tela só — a inicial. Não navegue por tudo: contador não quer conhecer o
+            software, quer saber de onde vem o número.
+          </p>
+          <ul>
+            <li><strong>É:</strong> estoque, ficha técnica, CMV gerencial, variância.</li>
+            <li><strong>Não é:</strong> emissor fiscal, escrituração, SPED, folha, financeiro.</li>
+            <li>A nota entra por <strong>XML da NF-e</strong>, digitação ou pelo <strong>Omie</strong>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">8–18 min</div>
+        <div>
+          <h3>3 · De onde vem cada número</h3>
+          <p>
+            O núcleo técnico. Use o exemplo do quilo de café (item “Os quatro números”,
+            abaixo) e diga as três palavras que eles esperam:
+            <strong>custo médio ponderado móvel</strong>.
+          </p>
+          <ul>
+            <li>Frete e impostos <strong>entram no custo do produto</strong>, rateados por item.</li>
+            <li>O estoque final é <strong>saldo × custo médio</strong>, lido do próprio razão.</li>
+            <li>CMV = <span class="mono">EI + compras − EF</span>. É a fórmula deles.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">18–24 min</div>
+        <div>
+          <h3>4 · Rastreabilidade — o que eles vão querer testar</h3>
+          <p>
+            Este item compra credibilidade. Ofereça que escolham um produto na hora e
+            percorra: nota → razão → saldo → CMV.
+          </p>
+          <ul>
+            <li>O razão <strong>só cresce</strong>: correção é estorno, nunca exclusão.</li>
+            <li>Toda alteração fica na <strong>auditoria</strong>, com valor antes e depois.</li>
+            <li>Mês fechado <strong>congela</strong> o relatório inteiro, não só o total.</li>
+            <li>A mesma nota não entra duas vezes — <strong>a chave da NF-e</strong> é única no banco.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">24–36 min</div>
+        <div>
+          <h3>5 · Onde os dois números divergem <span class="fita">o item que importa</span></h3>
+          <p>
+            <strong>Levante você, antes que eles descubram.</strong> Divergência explicada é
+            metodologia; divergência descoberta é erro. Detalhe no bloco “As três
+            divergências”, abaixo.
+          </p>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">36–42 min</div>
+        <div>
+          <h3>6 · O que combinar</h3>
+          <p>
+            Saia da reunião com estas quatro respostas — estão no bloco “O combinado”.
+          </p>
+        </div>
+      </div>
+
+      <div class="bloco">
+        <div class="tempo">42–45 min</div>
+        <div>
+          <h3>7 · Acesso, se quiserem</h3>
+          <p>
+            Existe um papel <strong>Contador</strong> pronto, <strong>somente leitura</strong>.
+            Ofereça — não imponha. Muitos escritórios preferem receber o arquivo.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================== os quatro números -->
+  <section id="numeros">
+    <h2>Os quatro números, e de onde saem</h2>
+    <p class="chamada">
+      Se você decorar uma coisa desta reunião, decore esta tabela.
+    </p>
+
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Número</th><th>Conta</th><th>Origem do dado</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>CMV real</strong></td>
+            <td class="num">EI + compras − EF</td>
+            <td>O razão de estoque — movimento a movimento</td>
+          </tr>
+          <tr>
+            <td><strong>CMV teórico</strong></td>
+            <td class="num">Σ (vendido × custo da ficha)</td>
+            <td>As vendas do PDV × a ficha técnica, congelada na data</td>
+          </tr>
+          <tr>
+            <td><strong>Variância</strong></td>
+            <td class="num">real − teórico</td>
+            <td>A diferença — é ela que tem nome: perda, ficha errada ou desvio</td>
+          </tr>
+          <tr>
+            <td><strong>Food cost</strong></td>
+            <td class="num">CMV ÷ receita</td>
+            <td>A régua de comparação mês a mês</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>O exemplo de um quilo de café</h3>
+    <p>
+      Guarde este exemplo para o item 3. Ele mostra a cadeia inteira e termina fechando —
+      que é o que convence.
+    </p>
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Passo</th><th>Conta</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr><td>Nota: 20 KG a 55,00 + 30,00 de frete</td><td class="num">1.130,00 ÷ 20</td><td class="num"><strong>56,50 / KG</strong></td></tr>
+          <tr><td>Segunda compra: 10 KG a 62,00</td><td class="num">1.750,00 ÷ 30</td><td class="num"><strong>58,3333</strong></td></tr>
+          <tr><td>Ficha do espresso (16 g + copo)</td><td class="num">0,016 × 58,3333 + 0,12</td><td class="num"><strong>1,0533</strong></td></tr>
+          <tr><td>Venda de 100 espressos</td><td class="num">baixa 1,6 KG · congela 105,33</td><td class="num">os dois lados</td></tr>
+          <tr><td>Perda apontada</td><td class="num">0,5 KG</td><td class="num">29,17</td></tr>
+          <tr><td><strong>CMV real do café</strong></td><td class="num">1.750,00 − 1.627,50</td><td class="num"><strong>122,50</strong></td></tr>
+          <tr><td><strong>Variância</strong></td><td class="num">122,50 − 93,33</td><td class="num"><strong>29,17</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="destaque">
+      <p class="rotulo">A frase que fecha o item</p>
+      <p>
+        “A variância deu <strong>exatamente</strong> a perda que foi apontada. Quando fecha
+        assim, o estoque está sob controle. <strong>Quando sobra diferença sem nome</strong>,
+        é quebra, porção generosa demais, erro de contagem ou desvio — e é esse número que a
+        casa não tinha.”
+      </p>
+    </div>
+  </section>
+
+  <!-- ========================================================= divergências -->
+  <section id="divergencias">
+    <h2>As três divergências</h2>
+    <p class="chamada">
+      Todas são legítimas e todas têm causa nomeável. Leve-as você.
+    </p>
+
+    <div class="aviso">
+      <p class="rotulo">1 · O food cost da casa exclui o que não é comida</p>
+      <p>
+        O sistema permite tirar do CMV os grupos que não são insumo —
+        <strong>material de limpeza, embalagem e utensílios</strong>. É uma decisão
+        gerencial: taça quebrada não é custo do prato, e o food cost é o percentual que vira
+        decisão de cardápio.
+      </p>
+      <p>
+        <strong>O CMV fiscal de vocês inclui tudo isso.</strong> Os dois números vão diferir,
+        e a diferença é exatamente o valor desses grupos — que o painel mostra em linha
+        separada, dita “fora do CMV real”. Combine no item 6 qual dos dois vai ao relatório
+        gerencial e qual vai à apuração.
+      </p>
+    </div>
+
+    <div class="aviso">
+      <p class="rotulo">2 · Nota importada não é nota lançada</p>
+      <p>
+        A nota chega do Omie ou do XML e fica <strong>aguardando conferência</strong>. Ela só
+        entra no estoque quando alguém confere os itens e lança. Uma nota emitida dia 30 e
+        conferida dia 2 entra no estoque em <strong>fevereiro</strong>, enquanto na
+        escrituração de vocês ela é de <strong>janeiro</strong>.
+      </p>
+      <p>
+        Não é erro dos dois lados: é regime de competência do documento contra o momento
+        físico da mercadoria. <strong>Vale combinar um corte</strong> — por exemplo, toda nota
+        do mês conferida até o dia 5.
+      </p>
+    </div>
+
+    <div class="aviso">
+      <p class="rotulo">3 · A receita vem do PDV, não do cupom escriturado</p>
+      <p>
+        O CMV teórico e o food cost usam a venda que o <strong>PDV</strong> registrou. Se
+        houver diferença entre o que o PDV registra e o que é escriturado, os percentuais
+        divergem — e a causa está lá, não aqui.
+      </p>
+      <p>
+        <strong>Pergunta boa para fazer a eles:</strong> “a receita que vocês escrituram bate
+        com o relatório de vendas do PDV?” Se não bater, é um achado que vale a reunião
+        inteira.
+      </p>
+    </div>
+
+    <div class="destaque">
+      <p class="rotulo">Uma divergência que NÃO existe</p>
+      <p>
+        O método de custeio. O sistema usa <strong>custo médio ponderado móvel</strong>, que é
+        o mesmo aceito fiscalmente e o mais usado no varejo alimentar. Se perguntarem, a
+        resposta é curta e tranquiliza.
+      </p>
+    </div>
+  </section>
+
+  <!-- =============================================================== dúvidas -->
+  <section id="duvidas">
+    <h2>Perguntas prováveis, e o que responder</h2>
+    <p class="chamada">
+      Cada resposta começa por uma frase curta. Se a conversa não pedir mais, pare nela.
+    </p>
+
+    <div class="qa">
+      <div class="pergunta">
+        <p class="q">Qual o método de custeio?</p>
+        <p><span class="curta">Custo médio ponderado móvel.</span> Recalculado a cada entrada,
+          ponderado pela quantidade — não é média simples entre preços.</p>
+        <p>Se insistirem: o custo unitário é guardado com <strong>seis casas decimais</strong>,
+          e dinheiro nunca em ponto flutuante. O arredondamento acontece na exibição, não na
+          conta.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">O frete entra no custo do estoque?</p>
+        <p><span class="curta">Entra, rateado por item.</span> Frete, IPI/ST e desconto compõem
+          o custo de aquisição.</p>
+        <p>E quando o próprio emitente já rateou as acessórias nos itens, o sistema reconhece e
+          <strong>não cobra duas vezes</strong> — foi um erro real que já custou 13% a mais num
+          queijo, e está corrigido.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Como vocês valorizam o estoque final?</p>
+        <p><span class="curta">Saldo × custo médio, lido do razão.</span> Cada movimento grava o
+          saldo e o custo médio que ficaram valendo depois dele — é uma fotografia, não um
+          recálculo.</p>
+        <p>Por isso o valor do estoque em qualquer data passada é reproduzível: não depende de
+          refazer a série.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Dá para amarrar com o Livro de Inventário?</p>
+        <p><span class="curta">Sim — o inventário fechado é a contagem física.</span> Ele gera
+          planilha com produto, quantidade contada, custo médio e valor.</p>
+        <p>⚠️ <strong>Seja honesto no alcance:</strong> o sistema entrega a contagem valorizada.
+          A escrituração do Livro (e do Bloco K, se aplicável) continua com vocês — vale
+          perguntar em que formato preferem receber.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Como sei que ninguém apagou um movimento?</p>
+        <p><span class="curta">Porque não é possível apagar.</span> O razão é somente-inclusão:
+          correção é <strong>estorno</strong>, que cria a contrapartida apontando para o
+          movimento original. Os dois ficam à vista.</p>
+        <p>Além disso, toda alteração de cadastro vai para a auditoria com autor, data, valor
+          antes e depois. Mês fechado recusa lançamento retroativo, salvo para quem tem
+          permissão específica — e isso também fica registrado.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">E se a mesma nota for importada duas vezes?</p>
+        <p><span class="curta">O banco recusa.</span> A chave da NF-e tem índice único. Não é o
+          programa que confere — é a estrutura do banco, que não depende de ninguém lembrar.</p>
+        <p>Nota digitada à mão não tem chave: a repetição é reconhecida por fornecedor + número
+          + série.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Vocês emitem nota? Geram SPED?</p>
+        <p><span class="curta">Não, nem um nem outro.</span> O sistema <em>lê</em> a nota que
+          já existe. A emissão e a obrigação acessória continuam onde estão hoje.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Por que o CMV de vocês não bate com o meu?</p>
+        <p><span class="curta">Por três causas conhecidas — e todas nomeáveis.</span> Grupos
+          fora do CMV gerencial, nota conferida em mês diferente do escriturado, e receita do
+          PDV contra receita escriturada.</p>
+        <p>Vá ao bloco “As três divergências” e mostre que você já as tinha mapeado. É o
+          momento em que a reunião vira colaboração.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Posso ter acesso para consultar?</p>
+        <p><span class="curta">Sim, e é somente leitura.</span> Existe um papel
+          <strong>Contador</strong> pronto: painel de CMV, relatórios, notas de entrada,
+          saldos e fichas com custo. <strong>Escrita nenhuma.</strong></p>
+        <p>A permissão é verificada no servidor, não na tela — quem não pode não consegue nem
+          por outro caminho.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Como recebemos os dados?</p>
+        <p><span class="curta">Planilha, do próprio sistema.</span> Saem em CSV: saldos,
+          movimentos do razão, apuração do CMV, movimentação por produto, curva ABC, evolução
+          de preços, produtos, vencimentos e a folha do inventário.</p>
+        <p>Pergunte qual formato preferem — se pedirem algo que não existe, é ajuste pequeno.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Com que frequência o mês fecha?</p>
+        <p><span class="curta">Hoje, mensal — alinhado com vocês.</span> O sistema aceita
+          fechar por semana ou por dia, e a casa pode querer isso para gestão.</p>
+        <p>⚠️ Se ela adotar semanal, <strong>avise-os</strong>: os períodos gerenciais deixam de
+          coincidir com o mês fiscal. Os dois convivem, mas o relatório que vai a vocês
+          continua sendo o do mês.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">O que acontece se lançarmos uma nota atrasada?</p>
+        <p><span class="curta">Entra, e o custo médio recalcula dali para frente.</span> O
+          sistema segue a <strong>ordem de lançamento</strong>, não a data do documento.</p>
+        <p>É deliberado: recalcular por data faria o CMV de um mês já fechado mudar sozinho —
+          e o número que já foi a vocês não pode mudar depois de entregue.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">Quem garante que a ficha técnica está certa?</p>
+        <p><span class="curta">A variância.</span> Se a receita no papel diz 80 g e a cozinha
+          usa 110, o real fica acima do teórico mês após mês — e sempre no mesmo prato.</p>
+        <p>É por isso que a ficha é <strong>versionada</strong>: homologada, ela não se edita.
+          Corrigir gera nova versão, e o custo do que já foi vendido não muda.</p>
+      </div>
+
+      <div class="pergunta">
+        <p class="q">E os dados? Onde ficam, quem garante?</p>
+        <p><span class="curta">Servidor gerenciado, com backup do provedor.</span> Acesso por
+          usuário nomeado, senha própria e sessão que expira.</p>
+        <p>Se perguntarem por LGPD: o sistema guarda dados de <strong>fornecedores e
+          funcionários</strong> — não de clientes finais. Não há cadastro de consumidor.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= combinado -->
+  <section id="combinado">
+    <h2>O combinado — saia da reunião com isto</h2>
+    <p class="chamada">
+      Quatro perguntas. Se as quatro tiverem resposta, a reunião valeu.
+    </p>
+
+    <ul class="limpa">
+      <li>
+        <strong>Qual relatório vocês querem, em que formato e até que dia do mês?</strong>
+        Anote o nome do arquivo e o prazo.
+      </li>
+      <li>
+        <strong>Até quando a casa pode conferir nota do mês anterior?</strong> É o corte que
+        resolve a divergência nº 2. Sugira o dia 5.
+      </li>
+      <li>
+        <strong>O CMV que vai a vocês inclui limpeza, embalagem e utensílios?</strong> Do
+        ponto de vista fiscal, sim. Confirme, e configure o sistema para gerar os dois.
+      </li>
+      <li>
+        <strong>Vocês querem acesso de leitura ou preferem receber o arquivo?</strong> Deixe a
+        escolha com eles.
+      </li>
+    </ul>
+
+    <div class="destaque">
+      <p class="rotulo">A pergunta que vale a reunião inteira</p>
+      <p>
+        “A receita que vocês escrituram bate com o relatório de vendas do PDV?” Se a resposta
+        for hesitante, você encontrou algo que nenhum dos dois lados estava vendo — e a
+        conversa deixa de ser sobre software.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================================================================ evitar -->
+  <section id="evitar">
+    <h2>Três coisas a não fazer</h2>
+
+    <div class="grade-2">
+      <div class="cartao">
+        <p class="rotulo">Não demonstrar o sistema tela a tela</p>
+        <p style="margin:6px 0 0;font-size:16px">
+          Contador não decide por interface. Uma tela — a inicial — e o resto em números.
+        </p>
+      </div>
+      <div class="cartao">
+        <p class="rotulo">Não prometer que os CMV vão bater</p>
+        <p style="margin:6px 0 0;font-size:16px">
+          Eles não vão, e é correto que não batam. Prometa que a diferença é
+          <strong>sempre explicável</strong>.
+        </p>
+      </div>
+      <div class="cartao">
+        <p class="rotulo">Não entrar em detalhe técnico não perguntado</p>
+        <p style="margin:6px 0 0;font-size:16px">
+          Integração, banco, arquitetura — nada disso responde à pergunta deles. Só entre se
+          puxarem.
+        </p>
+      </div>
+    </div>
+
+    <div class="aviso">
+      <p class="rotulo">Se aparecer uma pergunta que você não sabe</p>
+      <p>
+        Diga que não sabe e anote. <strong>Toda pergunta desta reunião tem resposta no
+        sistema</strong> — o custo de responder errado é a confiança, e o de responder depois
+        é um e-mail.
+      </p>
+    </div>
+  </section>
+
+</div>

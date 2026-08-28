@@ -1061,6 +1061,42 @@ try {
   });
   checar("a tela de ajustes oferece os quatro tipos", telaAjustes.tipos.length === 4,
     telaAjustes.tipos);
+
+  // Os dois processos em lote (migração 039). Quem confere a despensa acha
+  // várias diferenças de uma vez; lançar uma a uma perde a relação entre elas.
+  await irPara(p, `${WEB}/ajustes/lote`);
+  const lote = await p.evaluate(() => ({
+    titulo: document.querySelector("h1")?.textContent?.trim() ?? "",
+    colunas: [...document.querySelectorAll("th")].map((t) => t.textContent.trim()),
+    linhas: document.querySelectorAll("tbody tr").length,
+  }));
+  checar("a tela de ajuste em lote abre", /lote/i.test(lote.titulo), lote);
+  checar("com produto, tipo, quantidade, custo e motivo por linha",
+    lote.colunas.length >= 5, lote.colunas);
+  // Uma linha para começar, e o botão que acrescenta as outras.
+  checar("começa com uma linha e dá para somar mais", lote.linhas === 1, lote);
+
+  await irPara(p, `${WEB}/ajustes/custo`);
+  const custo = await p.evaluate(() => ({
+    titulo: document.querySelector("h1")?.textContent?.trim() ?? "",
+    texto: document.body.innerText,
+    botoes: [...document.querySelectorAll("button")].map((b) => b.textContent.trim()),
+  }));
+  checar("a tela de ajuste de custo abre", /custo/i.test(custo.titulo), custo.titulo);
+  // ⚠️ A prévia é o que separa esta tela de um formulário perigoso: o ajuste
+  // entra no razão e só sai por estorno. O botão de conferir vem ANTES do de
+  // lançar, e é isso que se cobra aqui.
+  checar("e pede para CONFERIR antes de lançar",
+    custo.botoes.some((b) => /conferir/i.test(b)), custo.botoes);
+  checar("dizendo que a quantidade não muda, só o valor",
+    /quantidade n[ãa]o\s+muda/i.test(custo.texto), custo.texto.slice(0, 300));
+
+  // ⚠️ **Voltar para /ajustes antes de seguir.** O bloco abaixo continua o
+  // lançamento avulso e supõe estar nessa tela — sem isto ele procura os
+  // campos numa página que não os tem e a suíte MORRE, longe da causa. Mesma
+  // família da lição do localStorage: quem desvia, devolve.
+  await irPara(p, `${WEB}/ajustes`);
+  await new Promise((r) => setTimeout(r, 800));
   checar("com um já escolhido e o formulário montado para ele",
     telaAjustes.escolhido?.startsWith("Entrada") && telaAjustes.temCusto, telaAjustes);
 

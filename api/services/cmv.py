@@ -148,13 +148,27 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
             ) AS _pelo_razao
         ),
         no_periodo AS (
+            -- 🔑 **O movimento de quantidade ZERO tem de entrar pelo VALOR.**
+            -- O ajuste de custo (migração 039) reavalia o estoque sem mover
+            -- mercadoria: `quantidade = 0`, `custo_total <> 0`. Ramificando só
+            -- em `> 0` e `< 0`, ele caía em nenhum dos dois lados e o valor
+            -- sumia da conta — enquanto o estoque FINAL, que sai da fotografia
+            -- do razão, já o incluía. Resultado: a identidade
+            -- `inicial + entradas − saídas = final` parava de fechar, e a
+            -- diferença era exatamente o que fora reavaliado.
+            --
+            -- ⚠️ A quantidade continua fora (é zero mesmo): a linha mostra
+            -- valor entrando sem unidade nenhuma, que é literalmente o que
+            -- aconteceu. O razão do produto explica, com o tipo à vista.
             SELECT id_produto,
                    sum(CASE WHEN quantidade > 0 THEN quantidade ELSE 0 END) AS qtd_entradas,
-                   sum(CASE WHEN quantidade > 0 THEN abs(custo_total) ELSE 0 END)
-                       AS valor_entradas,
+                   sum(CASE WHEN quantidade > 0 THEN abs(custo_total)
+                            WHEN quantidade = 0 AND custo_total > 0 THEN custo_total
+                            ELSE 0 END) AS valor_entradas,
                    sum(CASE WHEN quantidade < 0 THEN -quantidade ELSE 0 END) AS qtd_saidas,
-                   sum(CASE WHEN quantidade < 0 THEN abs(custo_total) ELSE 0 END)
-                       AS valor_saidas
+                   sum(CASE WHEN quantidade < 0 THEN abs(custo_total)
+                            WHEN quantidade = 0 AND custo_total < 0 THEN -custo_total
+                            ELSE 0 END) AS valor_saidas
               FROM estoque_movimentos
              WHERE id_unidade = %(u)s
                AND data_movimento >= %(inicio)s AND data_movimento < %(limite)s
@@ -289,6 +303,27 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     )
     ajustes = dec(cur.fetchone()["valor"])
 
+    # 🔑 **Reavaliação de custo (migração 039).** Quantidade zero, valor
+    # diferente de zero: o produto não se moveu, mas passou a valer outra coisa.
+    # Isso muda o estoque final e portanto o CMV — sem linha própria, o número
+    # mudaria sem explicação nenhuma na tela.
+    #
+    # ⚠️ **O sinal é invertido**, e é o ponto que confunde: `custo_total` guarda
+    # quanto o ESTOQUE ganhou de valor, e o CMV é `inicial + compras − final`.
+    # Estoque mais caro, CMV menor. A linha mostra o efeito NO CMV, que é a
+    # pergunta de quem está lendo o painel.
+    cur.execute(
+        """SELECT coalesce(sum(-m.custo_total), 0) AS valor
+             FROM estoque_movimentos m
+             JOIN produtos pr ON pr.id = m.id_produto
+            WHERE m.id_unidade = %(u)s AND m.tipo = 'AJUSTE_CUSTO'
+              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+        {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+         "fora": fora or None},
+    )
+    ajuste_custo = dec(cur.fetchone()["valor"])
+
     # Receita e CMV teórico saem das vendas do período.
     cur.execute(
         """SELECT coalesce(sum(vi.valor_total), 0) AS receita,
@@ -323,6 +358,8 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
         "perdas": perdas,
         "consumo_interno": consumo,
         "ajustes": ajustes,
+        # Efeito NO CMV: negativo quando o estoque foi reavaliado para cima.
+        "ajuste_custo": ajuste_custo,
         "receita": receita,
         "vendas": v["vendas"],
         "itens_sem_custo": v["itens_sem_custo"],
