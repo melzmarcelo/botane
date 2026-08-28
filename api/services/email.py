@@ -157,7 +157,18 @@ def entregar(cfg: dict, msg: EmailMessage) -> None:
                 s.sock.settimeout(_resta(ate))
                 s.send_message(msg)
     except (smtplib.SMTPException, OSError) as e:
-        # ⚠️ A frase leva o erro do socket porque é ELE que separa as causas:
+        # ⚠️ **O log precisa dizer o motivo, não só o status.** Quem opera abre
+        # o log da nuvem e via `POST /email/testar 502` e mais nada — o porquê
+        # ia só para a tela de quem clicou, que quase nunca é a mesma pessoa.
+        # Aqui, e não no router, porque são três chamadores (o botão de teste,
+        # a criação de usuário e a recuperação de senha) e a recuperação é
+        # rota PÚBLICA: é justamente a que ninguém está olhando quando falha.
+        #
+        # ⚠️ Servidor e porta entram na linha; usuário e senha **nunca** — log
+        # é lido por mais gente do que a tela, e vaza para onde ninguém previu.
+        print(f"[botane] e-mail NAO enviado por {cfg.get('servidor')}:{porta} "
+              f"({seguranca}): {type(e).__name__}: {e}")
+        # A frase leva o erro do socket porque é ELE que separa as causas:
         # "timed out" é pacote descartado (porta bloqueada na saída, o caso
         # comum em nuvem); "Connection refused" é servidor errado ou porta
         # fechada; "Name or service not known" é o endereço. Sem isso, os três

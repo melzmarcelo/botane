@@ -25,20 +25,35 @@ import os
 
 from config import BASE_DIR
 
-# ⚠️ O que NÃO entra na conta: `__pycache__` é gerado e difere por versão de
-# Python; `arquivos` e `uploads` são dados de operação (o .eml, a logo) e mudam
-# sozinhos com o uso — dentro do hash, a impressão mudaria sem ninguém ter
-# publicado nada.
-IGNORAR = {"__pycache__", "arquivos", "uploads", ".venv", "venv", ".git"}
+# 🔑 **Lista BRANCA, não lista negra — e isso não é preferência de estilo.**
+# A primeira versão excluía o que eu sabia nomear (`__pycache__`, `.venv`,
+# `arquivos`, `uploads`) e contou **136 arquivos aqui e 2.014 na produção**: o
+# buildpack instala as dependências dentro da pasta da API, com um nome que eu
+# não tinha previsto. O hash passou a incluir bibliotecas de terceiros — ou
+# seja, a ferramenta feita para comparar O NOSSO código comparava outra coisa,
+# e nunca ia bater com o cálculo local.
+#
+# A lista negra depende de eu adivinhar tudo o que pode aparecer; a branca só
+# depende de eu saber o que é meu. Só a segunda é verdade estável.
+#
+# ⚠️ `arquivos` e `uploads` continuam fora de qualquer jeito: são dados de
+# operação (o .eml, a logo) e mudam sozinhos com o uso — dentro do hash, a
+# impressão mudaria sem ninguém ter publicado nada.
+NOSSAS = ("db_scripts", "models", "routers", "services", "tests")
 
 
 def _arquivos() -> list[str]:
     achados: list[str] = []
-    for raiz, pastas, nomes in os.walk(BASE_DIR):
-        pastas[:] = sorted(p for p in pastas if p not in IGNORAR)
-        for n in sorted(nomes):
-            if n.endswith((".py", ".sql")):
-                achados.append(os.path.join(raiz, n))
+    # Os .py soltos na raiz da API (main, config, seguranca, database…).
+    for n in sorted(os.listdir(BASE_DIR)):
+        if n.endswith(".py") and os.path.isfile(os.path.join(BASE_DIR, n)):
+            achados.append(os.path.join(BASE_DIR, n))
+    for pasta in NOSSAS:
+        for raiz, subpastas, nomes in os.walk(os.path.join(BASE_DIR, pasta)):
+            subpastas[:] = sorted(p for p in subpastas if p != "__pycache__")
+            for n in sorted(nomes):
+                if n.endswith((".py", ".sql")):
+                    achados.append(os.path.join(raiz, n))
     # Caminho relativo e com barra normal: o separador do Windows entraria no
     # hash e daria diferença onde não há.
     return sorted(achados, key=lambda c: os.path.relpath(c, BASE_DIR).replace("\\", "/"))
