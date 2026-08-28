@@ -104,6 +104,37 @@ function mensagemDoErro(dados: unknown, status: number): string {
   return `Erro ${status}`;
 }
 
+/**
+ * Lê o corpo da resposta sem nunca estourar por não ser JSON.
+ *
+ * ⚠️ **Quem responde não é só a API.** Entre o navegador e o FastAPI há o
+ * roteamento do App Platform, e quando ELE responde — app reiniciando, tempo
+ * esgotado, 502 — o corpo é uma página HTML. `JSON.parse` nela levantava
+ * `Unexpected token '<', "<!DOCTYPE "...`, e como isso acontecia **antes** de
+ * olhar `r.ok`, o status real (503, 504) era engolido: a tela dizia um erro de
+ * sintaxe onde a resposta certa era "o servidor não respondeu, tente de novo".
+ *
+ * ⚠️ Corpo vazio com status de erro também é caso real (504 sem corpo), e a
+ * mensagem tem de continuar dizendo o status em vez de "null".
+ */
+async function corpoDaResposta(r: Response): Promise<{ dados: unknown; erro?: string }> {
+  const texto = await r.text();
+  if (!texto) return { dados: null };
+  try {
+    return { dados: JSON.parse(texto) };
+  } catch {
+    // Não é JSON. O texto pode ser uma página inteira — não vai para a tela.
+    const fora = r.status >= 500 || r.status === 0;
+    return {
+      dados: null,
+      erro: fora
+        ? `O servidor não respondeu (erro ${r.status}). Se acabou de ser publicada uma versão, `
+          + "espere alguns segundos e tente de novo."
+        : `Resposta inesperada do servidor (${r.status}).`,
+    };
+  }
+}
+
 async function renovar(): Promise<boolean> {
   const refresh = localStorage.getItem(CHAVE_REFRESH);
   if (!refresh) return false;
@@ -130,8 +161,8 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
     throw new ErroApi(401, "Sessão expirada, entre de novo");
   }
 
-  const texto = await r.text();
-  const dados = texto ? JSON.parse(texto) : null;
+  const { dados, erro } = await corpoDaResposta(r);
+  if (erro) throw new ErroApi(r.status, erro);
   if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
   return dados as T;
 }
@@ -222,10 +253,13 @@ export const api = {
 
   async login(email: string, senha: string): Promise<Sessao> {
     const r = await bruto("POST", "/auth/login", { email, senha });
-    const texto = await r.text();
-    const dados = texto ? JSON.parse(texto) : null;
+    // ⚠️ Mesmo cuidado do `pedir`: o login é a PRIMEIRA tela, e é justamente
+    // durante uma publicação que ele pega o HTML do roteamento. Dizer "erro de
+    // sintaxe" ali faz parecer senha errada.
+    const { dados, erro } = await corpoDaResposta(r);
+    if (erro) throw new ErroApi(r.status, erro);
     if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
-    guardarSessao(dados);
+    guardarSessao(dados as Sessao);
     return dados as Sessao;
   },
 
