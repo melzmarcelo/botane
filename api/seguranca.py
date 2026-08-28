@@ -13,7 +13,12 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request
 
-from config import JWT_EXPIRY_MIN, JWT_SECRET, REFRESH_EXPIRY_DIAS
+from config import (
+    JWT_EXPIRY_MIN,
+    JWT_SECRET,
+    REFRESH_EXPIRY_DIAS,
+    REFRESH_SESSAO_HORAS,
+)
 from database import get_cursor
 
 # ---------------------------------------------------------------- senha
@@ -41,16 +46,23 @@ def criar_access_token(id_usuario: int, email: str) -> tuple[str, int]:
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256"), JWT_EXPIRY_MIN * 60
 
 
-def gerar_refresh() -> tuple[str, str, datetime]:
+def gerar_refresh(persistente: bool = True) -> tuple[str, str, datetime]:
     """Devolve (valor em claro, hash guardado, validade).
 
     O banco guarda só o hash: vazamento da tabela não vira sessão de ninguém.
+
+    ⚠️ `persistente` é a escolha de quem entrou. Sem "manter conectado" a
+    validade é de horas, não de dias: o front guarda o token em sessionStorage
+    e ele morre com o navegador, mas **o servidor não pode confiar nisso** —
+    quem copiou o token não está preso ao navegador de ninguém.
     """
     valor = secrets.token_urlsafe(48)
+    prazo = (timedelta(days=REFRESH_EXPIRY_DIAS) if persistente
+             else timedelta(hours=REFRESH_SESSAO_HORAS))
     return (
         valor,
         hashlib.sha256(valor.encode()).hexdigest(),
-        datetime.now(timezone.utc) + timedelta(days=REFRESH_EXPIRY_DIAS),
+        datetime.now(timezone.utc) + prazo,
     )
 
 

@@ -214,7 +214,7 @@ st, nota = chamar("POST", "/notas", {
 id_nota = precisa(nota.get("id"), f"sem nota: {nota}")
 st, r = chamar("POST", f"/notas/{id_nota}/lancar", {}, token=tokens["conferente"])
 checar("conferente lança a nota", st == 200, r)
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["conferente"])
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={farinha}", token=tokens["conferente"])
 s_farinha = next(s for s in saldos if s["id_produto"] == farinha)
 conferir("farinha a 6,50 (240 + 20 de frete ÷ 40)", s_farinha["custo_medio"], 6.50)
 
@@ -249,7 +249,7 @@ st, r = chamar("POST", "/estoque/saidas", {
 checar("salão aponta a perda (quem vê a perda é quem está no salão)", st == 201, r)
 conferir("a perda vale 6,50 (5 × 1,30)", float(r.get("custo_unitario", 0)) * 5, 6.50, 0.01)
 
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["conferente"])
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={pao}", token=tokens["conferente"])
 s_pao = next(s for s in saldos if s["id_produto"] == pao)
 # 100 produzidos − 60 vendidos − 5 perdidos = 35. VENDER É SAIR DO ESTOQUE:
 # sem essa baixa, o pão vendido continuaria na prateleira do sistema e a
@@ -270,7 +270,7 @@ st, nota2 = chamar("POST", "/notas", {
 }, token=tokens["conferente"])
 id_nota2 = precisa(nota2.get("id"), "sem a segunda nota")
 chamar("POST", f"/notas/{id_nota2}/lancar", {}, token=tokens["conferente"])
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["conferente"])
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={farinha}", token=tokens["conferente"])
 s_farinha = next(s for s in saldos if s["id_produto"] == farinha)
 conferir("médio novo: (130 + 320) ÷ 60 = 7,50", s_farinha["custo_medio"], 7.50)
 
@@ -284,7 +284,7 @@ linha2 = r.get("id")
 st, r = chamar("POST", f"/producao-agenda/{linha2}/produzir", {}, token=tokens["cozinha"])
 conferir("a leva nova custa 150,00", r.get("custo_total"), 150.00, 0.01)
 conferir("a 1,50 cada", r.get("custo_unitario"), 1.50)
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["conferente"])
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={pao}", token=tokens["conferente"])
 s_pao = next(s for s in saldos if s["id_produto"] == pao)
 conferir("135 pães em estoque", s_pao["quantidade"], 135)
 # 35 a 1,30 = 45,50 | 100 a 1,50 = 150,00 | 195,50 ÷ 135 = 1,448148
@@ -309,7 +309,7 @@ st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=tokens["gerente"])
 checar("o gerente fecha", st == 200, r)
 conferir("o ajuste tira 5 pães a 1,448148 = 7,24",
          abs(float(r.get("diferenca_valor", 0))), 7.24, 0.02)
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["gerente"])
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={pao}", token=tokens["gerente"])
 s_pao = next(s for s in saldos if s["id_produto"] == pao)
 conferir("o saldo vira o contado: 130", s_pao["quantidade"], 130)
 conferir("e o médio não muda", s_pao["custo_medio"], 1.448148, 0.000005)
@@ -358,8 +358,13 @@ checar("e o food cost da semana sai num número de gente (30,6%)", 28 < food < 3
 
 # O alerta é da casa INTEIRA: numa base compartilhada ele fala de outro
 # produto. O que este cenário pode afirmar é sobre o que ele mesmo mexeu.
-st, saldos = chamar("GET", "/estoque/saldos", token=tokens["gerente"])
-meus = [s for s in saldos if s["id_produto"] in (farinha, pao)]
+# ⚠️ Um pedido por produto: a lista é paginada, e filtrar a primeira página
+# faria `meus` vir VAZIO numa base grande — a checagem abaixo passaria sem ter
+# olhado nada, que é pior do que falhar.
+meus = []
+for _p in (farinha, pao):
+    st, _s = chamar("GET", f"/estoque/saldos?id_produto={_p}", token=tokens["gerente"])
+    meus += _s or []
 checar("nenhum saldo negativo no que a semana mexeu",
        all(float(s["quantidade"]) >= 0 for s in meus),
        [(s["produto"], s["quantidade"]) for s in meus])

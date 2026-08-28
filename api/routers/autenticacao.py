@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import auditoria
-from config import BLOQUEIO_MINUTOS, MAX_TENTATIVAS_LOGIN
+from config import BLOQUEIO_MINUTOS, MAX_TENTATIVAS_LOGIN, REFRESH_GRACA_SEGUNDOS
 from database import get_cursor
 from models.acesso import (
     EsqueciSenhaRequest,
@@ -78,11 +78,18 @@ def login(body: LoginRequest, request: Request):
             (u["id"],),
         )
 
-        valor, hashed, expira = gerar_refresh()
+        # ⚠️ A escolha de quem entrou vai para o BANCO, não só para o navegador.
+        # O front guarda o token em sessionStorage quando não é persistente, e
+        # ele morre com o navegador — mas o servidor não pode confiar nisso:
+        # quem copiou o token não está preso ao navegador de ninguém. É a
+        # validade curta que garante a promessa.
+        valor, hashed, expira = gerar_refresh(body.manter_conectado)
         cur.execute(
-            """INSERT INTO sessoes (id_usuario, refresh_hash, expira_em, ip, agente)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (u["id"], hashed, expira, _ip(request), request.headers.get("user-agent")),
+            """INSERT INTO sessoes
+                   (id_usuario, refresh_hash, expira_em, ip, agente, persistente)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (u["id"], hashed, expira, _ip(request), request.headers.get("user-agent"),
+             body.manter_conectado),
         )
         auditoria.registrar(cur, u["id"], "sessao", u["id"], "login", ip=_ip(request))
 
@@ -104,25 +111,55 @@ def login(body: LoginRequest, request: Request):
 def refresh(body: RefreshRequest):
     """Rotaciona o refresh: o antigo morre no mesmo instante em que o novo nasce."""
     h = hash_refresh(body.refresh_token)
+    agora = datetime.now(timezone.utc)
     with get_cursor() as cur:
         cur.execute(
-            """SELECT s.id, s.expira_em, s.revogada_em,
+            """SELECT s.id, s.expira_em, s.revogada_em, s.persistente, s.substituida_em,
                       u.id AS id_usuario, u.nome, u.email, u.ativo, u.trocar_senha
                  FROM sessoes s JOIN usuarios u ON u.id = s.id_usuario
                 WHERE s.refresh_hash = %s""",
             (h,),
         )
         s = cur.fetchone()
-        if not s or s["revogada_em"] or s["expira_em"] <= datetime.now(timezone.utc):
+        if not s or s["expira_em"] <= agora:
             raise HTTPException(status_code=401, detail="Sessão expirada, entre de novo")
+        # 🔑 **A GRAÇA existe por causa da rotação.** O token antigo morre no
+        # instante em que o novo nasce; duas abas (ou duas chamadas que escapem
+        # da trava do front) apresentam o MESMO token, a primeira rotaciona e a
+        # segunda chegaria com um token revogado há milissegundos. Sem esta
+        # janela, quem não fez nada errado era jogado para a tela de login no
+        # meio do trabalho — que foi exatamente a queixa que originou isto.
+        #
+        # ⚠️ **A graça vale só para quem foi SUBSTITUÍDO por uma rotação.**
+        # `revogada_em` também é preenchida pelo logout, e perdoar ali seria um
+        # buraco: sair da conta deixaria o refresh valendo mais 30 segundos. A
+        # suíte pegou exatamente isso. Sair vale na hora, sempre — assim como
+        # sessão derrubada pelo admin e troca de senha.
+        if s["revogada_em"]:
+            na_graca = (
+                s["substituida_em"] is not None
+                and s["substituida_em"] >= agora - timedelta(seconds=REFRESH_GRACA_SEGUNDOS)
+            )
+            if not na_graca:
+                raise HTTPException(status_code=401,
+                                    detail="Sessão expirada, entre de novo")
         if not s["ativo"]:
             raise HTTPException(status_code=403, detail="Usuário inativo")
 
-        cur.execute("UPDATE sessoes SET revogada_em = now() WHERE id = %s", (s["id"],))
-        valor, hashed, expira = gerar_refresh()
+        # Marca a substituição junto com a revogação: é o par que abre a graça.
         cur.execute(
-            "INSERT INTO sessoes (id_usuario, refresh_hash, expira_em) VALUES (%s, %s, %s)",
-            (s["id_usuario"], hashed, expira),
+            """UPDATE sessoes SET revogada_em = now(), substituida_em = now()
+                WHERE id = %s AND revogada_em IS NULL""",
+            (s["id"],),
+        )
+        # ⚠️ A rotação PRESERVA o modo. Sem isso, renovar uma sessão de navegador
+        # a promoveria para 30 dias: a escolha da pessoa duraria até a primeira
+        # renovação e depois sumiria, sem nada avisando.
+        valor, hashed, expira = gerar_refresh(s["persistente"])
+        cur.execute(
+            """INSERT INTO sessoes (id_usuario, refresh_hash, expira_em, persistente)
+               VALUES (%s, %s, %s, %s)""",
+            (s["id_usuario"], hashed, expira, s["persistente"]),
         )
 
     token, ttl = criar_access_token(s["id_usuario"], s["email"])

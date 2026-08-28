@@ -165,7 +165,19 @@ print("6. refresh rotaciona")
 st, r2 = chamar("POST", "/auth/refresh", {"refresh_token": refresh})
 checar("refresh devolve novo par", st == 200 and r2.get("refresh_token") != refresh, st)
 st, r3 = chamar("POST", "/auth/refresh", {"refresh_token": refresh})
-checar("refresh antigo não vale mais (401)", st == 401, st)
+# 🔑 **Esta checagem MUDOU de sentido em 28/08/2026, e a troca é deliberada.**
+# Antes ela cobrava 401 no ato: rotacionou, o antigo morreu. Mas as telas
+# disparam várias chamadas juntas, e quando o access vencia todas renovavam com
+# o MESMO refresh — a primeira rotacionava e as outras eram DESLOGADAS no meio
+# do trabalho. Era a queixa "durante o uso fecha".
+#
+# Agora há uma janela curta (`REFRESH_GRACA_SEGUNDOS`) em que o token recém
+# substituído ainda serve. O que se cobra aqui é que a janela exista e seja
+# só isso: quem detalha as duas pontas — dentro e fora da graça, e o logout
+# valendo na hora — é `smoke_sessao.py`.
+checar("dentro da graça, o refresh recém-rotacionado ainda serve", st == 200, st)
+checar("e a resposta traz outro par, sem reaproveitar o antigo",
+       r3.get("refresh_token") not in (None, refresh), r3.get("refresh_token"))
 novo_refresh = r2.get("refresh_token")
 st, r4 = chamar("POST", "/auth/logout", {"refresh_token": novo_refresh}, token=r2["access_token"])
 checar("logout responde", st == 200, r4)

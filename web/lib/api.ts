@@ -58,25 +58,70 @@ export class ErroApi extends Error {
   }
 }
 
-export const guardarSessao = (s: { access_token: string; refresh_token: string }) => {
-  localStorage.setItem(CHAVE_ACCESS, s.access_token);
-  localStorage.setItem(CHAVE_REFRESH, s.refresh_token);
+/**
+ * Onde a sessão mora — e é a escolha de quem entrou que decide.
+ *
+ * `sessionStorage` morre quando o navegador fecha; `localStorage` sobrevive.
+ * Antes era sempre `localStorage`: fechar o navegador não encerrava nada, e
+ * num computador compartilhado a sessão ficava aberta para o próximo.
+ *
+ * ⚠️ **`sessionStorage` é POR ABA.** Abrir o sistema numa aba nova pede login
+ * de novo — é o preço de "fecha quando eu fecho o navegador", e é justamente
+ * o que "manter conectado" resolve para quem prefere o contrário.
+ *
+ * ⚠️ **O front esquecer não é segurança.** Quem garante a promessa é a
+ * validade curta do refresh no servidor (`REFRESH_SESSAO_HORAS`): um token
+ * copiado não está preso ao navegador de ninguém.
+ */
+const guarda = (persistente: boolean) => (persistente ? localStorage : sessionStorage);
+
+/** Lê dos dois: a sessão pode estar em qualquer um, e só um deles a tem. */
+const lerSessao = (chave: string) =>
+  typeof window === "undefined"
+    ? null
+    : sessionStorage.getItem(chave) ?? localStorage.getItem(chave);
+
+export const guardarSessao = (
+  s: { access_token: string; refresh_token: string },
+  persistente?: boolean,
+) => {
+  // Sem dizer o modo (é o caso da RENOVAÇÃO), mantém onde já estava — senão
+  // renovar mudaria a escolha da pessoa pelas costas.
+  // ⚠️ Aqui a pergunta é "está no localStorage?", e não "existe em algum
+  // lugar?" — por isso NÃO passa por `lerSessao`, que olha os dois.
+  const onde =
+    persistente === undefined
+      ? localStorage.getItem(CHAVE_REFRESH) !== null
+        ? localStorage
+        : sessionStorage
+      : guarda(persistente);
+  // Nunca deixar cópia no outro: duas fontes divergentes fariam `lerSessao`
+  // devolver um token velho depois de um logout parcial.
+  [localStorage, sessionStorage].forEach((s2) => {
+    if (s2 !== onde) {
+      s2.removeItem(CHAVE_ACCESS);
+      s2.removeItem(CHAVE_REFRESH);
+    }
+  });
+  onde.setItem(CHAVE_ACCESS, s.access_token);
+  onde.setItem(CHAVE_REFRESH, s.refresh_token);
 };
 
 export const limparSessao = () => {
-  localStorage.removeItem(CHAVE_ACCESS);
-  localStorage.removeItem(CHAVE_REFRESH);
-  // A loja escolhida é da sessão: quem entra depois não herda a escolha de
-  // quem saiu — e pode nem enxergar aquela loja.
-  localStorage.removeItem(CHAVE_UNIDADE);
+  [localStorage, sessionStorage].forEach((s2) => {
+    s2.removeItem(CHAVE_ACCESS);
+    s2.removeItem(CHAVE_REFRESH);
+    // A loja escolhida é da sessão: quem entra depois não herda a escolha de
+    // quem saiu — e pode nem enxergar aquela loja.
+    s2.removeItem(CHAVE_UNIDADE);
+  });
 };
 
 /** Caminho de imagem devolvido pela API (`/arquivos/...`) vira URL completa. */
 export const urlArquivo = (u?: string | null) =>
   !u ? null : u.startsWith("http") ? u : BASE + u;
 
-export const temSessao = () =>
-  typeof window !== "undefined" && !!localStorage.getItem(CHAVE_ACCESS);
+export const temSessao = () => !!lerSessao(CHAVE_ACCESS);
 
 async function bruto(metodo: string, caminho: string, corpo?: unknown, token?: string | null) {
   const r = await fetch(BASE + caminho, {
@@ -135,21 +180,50 @@ async function corpoDaResposta(r: Response): Promise<{ dados: unknown; erro?: st
   }
 }
 
+/**
+ * 🔑 **Uma renovação por vez — e é isto que conserta a queda no meio do uso.**
+ *
+ * O refresh do servidor é ROTATIVO: o token antigo morre no instante em que o
+ * novo nasce. As telas disparam várias chamadas ao mesmo tempo (Integrações
+ * pede quatro), então, quando o access vence, TODAS levam 401 juntas e todas
+ * chamavam `renovar()` com o **mesmo** refresh. A primeira rotacionava e
+ * revogava; as outras chegavam com token morto, recebiam 401 e caíam no
+ * `limparSessao()` — sessão encerrada sem ninguém ter feito nada errado.
+ *
+ * Agora a primeira chamada cria a promessa e as demais **esperam a mesma**:
+ * uma requisição de refresh, um token novo, todo mundo segue com ele.
+ *
+ * ⚠️ A trava é por ABA. Duas abas ainda podem correr entre si — quem cobre
+ * esse caso é a janela de graça do servidor (`REFRESH_GRACA_SEGUNDOS`).
+ */
+let renovacaoEmCurso: Promise<boolean> | null = null;
+
 async function renovar(): Promise<boolean> {
-  const refresh = localStorage.getItem(CHAVE_REFRESH);
-  if (!refresh) return false;
-  const r = await bruto("POST", "/auth/refresh", { refresh_token: refresh });
-  if (!r.ok) return false;
-  guardarSessao(await r.json());
-  return true;
+  if (!renovacaoEmCurso) {
+    renovacaoEmCurso = (async () => {
+      const refresh = lerSessao(CHAVE_REFRESH);
+      if (!refresh) return false;
+      const r = await bruto("POST", "/auth/refresh", { refresh_token: refresh });
+      if (!r.ok) return false;
+      // ⚠️ Sem dizer o modo: a renovação MANTÉM onde a sessão já estava. Dizer
+      // aqui mudaria a escolha da pessoa pelas costas.
+      guardarSessao(await r.json());
+      return true;
+    })().finally(() => {
+      // Liberar só depois de gravar o token novo — soltar antes deixaria a
+      // próxima chamada ler o refresh velho e recomeçar a corrida.
+      renovacaoEmCurso = null;
+    });
+  }
+  return renovacaoEmCurso;
 }
 
 async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
-  let token = localStorage.getItem(CHAVE_ACCESS);
+  let token = lerSessao(CHAVE_ACCESS);
   let r = await bruto(metodo, caminho, corpo, token);
 
   if (r.status === 401 && (await renovar())) {
-    token = localStorage.getItem(CHAVE_ACCESS);
+    token = lerSessao(CHAVE_ACCESS);
     r = await bruto(metodo, caminho, corpo, token);
   }
 
@@ -179,10 +253,10 @@ export const api = {
    * total que já tinha (é o que `usePaginacao.setTotal` faz).
    */
   async listar<T>(caminho: string): Promise<{ itens: T[]; total: number | null }> {
-    let token = localStorage.getItem(CHAVE_ACCESS);
+    let token = lerSessao(CHAVE_ACCESS);
     let r = await bruto("GET", caminho, undefined, token);
     if (r.status === 401 && (await renovar())) {
-      token = localStorage.getItem(CHAVE_ACCESS);
+      token = lerSessao(CHAVE_ACCESS);
       r = await bruto("GET", caminho, undefined, token);
     }
     const texto = await r.text();
@@ -200,7 +274,7 @@ export const api = {
     const enviar = async () =>
       fetch(BASE + caminho, {
         method: "POST",
-        headers: { Authorization: `Bearer ${localStorage.getItem(CHAVE_ACCESS)}` },
+        headers: { Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}` },
         body: corpo,
       });
 
@@ -220,7 +294,7 @@ export const api = {
   async baixar(caminho: string): Promise<void> {
     const pegar = async () =>
       fetch(BASE + caminho, {
-        headers: { Authorization: `Bearer ${localStorage.getItem(CHAVE_ACCESS)}` },
+        headers: { Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}` },
       });
 
     let r = await pegar();
@@ -251,20 +325,29 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   },
 
-  async login(email: string, senha: string): Promise<Sessao> {
-    const r = await bruto("POST", "/auth/login", { email, senha });
+  /**
+   * @param manterConectado guarda a sessão no navegador (localStorage) em vez
+   * de encerrá-la ao fechar. O servidor também precisa saber: é ele que decide
+   * a validade do refresh, e o front esquecer não é segurança nenhuma.
+   */
+  async login(email: string, senha: string, manterConectado = false): Promise<Sessao> {
+    const r = await bruto("POST", "/auth/login", {
+      email,
+      senha,
+      manter_conectado: manterConectado,
+    });
     // ⚠️ Mesmo cuidado do `pedir`: o login é a PRIMEIRA tela, e é justamente
     // durante uma publicação que ele pega o HTML do roteamento. Dizer "erro de
     // sintaxe" ali faz parecer senha errada.
     const { dados, erro } = await corpoDaResposta(r);
     if (erro) throw new ErroApi(r.status, erro);
     if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
-    guardarSessao(dados as Sessao);
+    guardarSessao(dados as Sessao, manterConectado);
     return dados as Sessao;
   },
 
   async logout() {
-    const refresh = localStorage.getItem(CHAVE_REFRESH);
+    const refresh = lerSessao(CHAVE_REFRESH);
     try {
       if (refresh) await pedir("POST", "/auth/logout", { refresh_token: refresh });
     } catch {

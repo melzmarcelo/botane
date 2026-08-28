@@ -22,6 +22,15 @@ JWT_SECRET = os.getenv("JWT_SECRET", "troque-este-valor-no-env")
 # Token curto de propósito: quem some da equipe perde acesso rápido.
 JWT_EXPIRY_MIN = int(os.getenv("JWT_EXPIRY_MIN", "60"))
 REFRESH_EXPIRY_DIAS = int(os.getenv("REFRESH_EXPIRY_DIAS", "30"))
+# Sessão de quem NÃO marcou "manter conectado". O token morre com o navegador
+# (o front guarda em sessionStorage), mas o servidor não pode confiar nisso: a
+# validade curta é o que garante que um refresh copiado não sirva por um mês.
+REFRESH_SESSAO_HORAS = int(os.getenv("REFRESH_SESSAO_HORAS", "12"))
+# ⚠️ Folga para o refresh ROTATIVO. Duas abas (ou duas chamadas que escapem da
+# trava do front) apresentam o mesmo token: a primeira rotaciona e revoga, a
+# segunda chegaria com token morto e derrubaria a sessão de quem não fez nada
+# errado. Dentro desta janela o token recém-revogado ainda é aceito.
+REFRESH_GRACA_SEGUNDOS = int(os.getenv("REFRESH_GRACA_SEGUNDOS", "30"))
 MAX_TENTATIVAS_LOGIN = int(os.getenv("MAX_TENTATIVAS_LOGIN", "5"))
 BLOQUEIO_MINUTOS = int(os.getenv("BLOQUEIO_MINUTOS", "15"))
 

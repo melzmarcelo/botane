@@ -13,6 +13,10 @@ from config import SENHA_MINIMA
 class LoginRequest(BaseModel):
     email: EmailStr
     senha: str = Field(min_length=1)
+    # ⚠️ O padrão é **não** manter conectado: a escolha segura é a que vale para
+    # quem não escolheu nada, e um cliente antigo que não mande o campo recebe
+    # a sessão curta em vez da de 30 dias.
+    manter_conectado: bool = False
 
 
 class RefreshRequest(BaseModel):

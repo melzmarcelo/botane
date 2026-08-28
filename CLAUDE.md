@@ -1041,16 +1041,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.248 verificações de API): `smoke_fundacao.py` (46, 47 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.266 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
-  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_lotes.py` (28),
+  `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (313, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (317, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1116,6 +1116,37 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **`/estoque/saldos` é paginado, e os dois CENÁRIOS montavam dicionário da primeira página.**
+  `cenario_semana` estourou com `StopIteration` e `cenario_cafeteria` passava por sorte — o
+  KeyError chegaria na rodada seguinte. Os dois agora pedem `?id_produto=` de cada produto
+  DELES (`saldos_de()` no cafeteria). ⚠️ Pior que o estouro é o caso mudo: a checagem final do
+  `cenario_semana` filtrava a página e, vindo vazia, passava sem ter olhado nada.
+- 🔑 **A sessão caía no meio do uso, e a causa era o refresh ROTATIVO sem trava no cliente.**
+  O antigo morre no instante em que o novo nasce; as telas disparam várias chamadas juntas
+  (Integrações pede quatro), então, ao vencer o access, TODAS levavam 401 e todas chamavam
+  `renovar()` com o **mesmo** refresh. A primeira rotacionava e revogava, as outras chegavam com
+  token morto e caíam no `limparSessao()` — sessão encerrada sem ninguém ter feito nada errado.
+  Duas defesas, em camadas diferentes: `renovacaoEmCurso` em `web/lib/api.ts` (uma renovação por
+  vez, as demais esperam a MESMA promessa) e `REFRESH_GRACA_SEGUNDOS` no servidor, para o caso
+  de duas ABAS — que a trava do front não cobre.
+  ⚠️ **A graça vale só para token SUBSTITUÍDO por rotação** (`sessoes.substituida_em`), nunca
+  para revogação explícita. A primeira versão olhava só `revogada_em`, que o **logout** também
+  preenche: sair da conta deixava o refresh valendo mais 30 s. A suíte pegou. Sair vale na hora,
+  sempre — assim como sessão derrubada pelo admin.
+- 🔑 **Fechar o navegador não encerrava nada**: o token ia sempre para `localStorage` e o refresh
+  valia 30 dias para todo mundo. Agora quem entra escolhe (`manter_conectado` no login):
+  desmarcado → `sessionStorage` + refresh de `REFRESH_SESSAO_HORAS`; marcado → `localStorage` +
+  os 30 dias de sempre.
+  ⚠️ **O padrão é desmarcado**, e o servidor também trata a ausência do campo como sessão curta:
+  a opção segura tem de ser a que vale para quem não escolheu — inclusive para cliente antigo.
+  ⚠️ **`sessionStorage` é POR ABA**: abrir o sistema numa aba nova pede login de novo. É o preço
+  de "fecha quando eu fechar o navegador", e é o que "manter conectado" resolve para quem
+  prefere o contrário.
+  ⚠️ **A rotação PRESERVA o modo** (`sessoes.persistente`, migração 038). Sem isso, renovar
+  promoveria a sessão curta a 30 dias: a escolha da pessoa duraria até a primeira renovação e
+  depois sumiria, sem nada avisando.
+  ⚠️ **O front esquecer não é segurança.** Quem garante a promessa é a validade curta no
+  servidor — token copiado não está preso ao navegador de ninguém.
 - 🔑 **Credencial ILEGÍVEL e credencial AUSENTE davam a mesma resposta — e a diferença é tudo.**
   `JWT_SECRET` deriva a chave do Fernet; trocá-lo (ou subir a mesma base noutro ambiente) faz
   `segredos.decifrar` devolver `{}` em silêncio. O envio de e-mail saía com **senha vazia** e o

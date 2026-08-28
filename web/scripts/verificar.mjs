@@ -80,6 +80,20 @@ async function entrar(pagina, quem) {
 }
 
 /**
+ * Confere onde a sessão foi parar depois do login.
+ *
+ * ⚠️ É a única forma de provar a promessa "fecha quando eu fechar o navegador":
+ * `sessionStorage` morre com a janela, `localStorage` não. Testar isso pela API
+ * não prova nada — a escolha do armazenamento é do FRONT.
+ */
+async function ondeMoraASessao(pagina) {
+  return pagina.evaluate(() => ({
+    sessao: sessionStorage.getItem("botane.refresh") !== null,
+    local: localStorage.getItem("botane.refresh") !== null,
+  }));
+}
+
+/**
  * O local principal, criando um se a base não tiver nenhum.
  *
  * Base recém-instalada não tem local de estoque, e sem local nenhum movimento
@@ -238,6 +252,43 @@ try {
   const url = p.url();
   // Depende de o admin já ter trocado a senha ou não — o que importa é ter entrado.
   checar("admin entra no app", !url.includes("/login"), url);
+
+  // 🔑 **A promessa "fecha quando eu fechar o navegador" é aqui que se prova.**
+  // Sem marcar "manter conectado", a sessão tem de ficar em `sessionStorage`,
+  // que morre com a janela. Antes ficava sempre em `localStorage`: fechar o
+  // navegador não encerrava nada e, num computador compartilhado, a sessão
+  // ficava aberta para o próximo. A API não tem como testar isto — a escolha
+  // do armazenamento é do front.
+  const semManter = await ondeMoraASessao(p);
+  checar("sem 'manter conectado', a sessão morre com o navegador",
+    semManter.sessao && !semManter.local, semManter);
+
+  // E com a caixinha marcada, o contrário — que é o que a pessoa pediu.
+  const p2 = await navegador.newPage();
+  await p2.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
+  await p2.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+  await p2.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
+  await p2.type('input[type="email"]', ADMIN.email);
+  await p2.type('input[type="password"]', ADMIN.senha);
+  const caixa = await p2.$('input[type="checkbox"]');
+  checar("a tela de login oferece 'manter conectado'", caixa !== null);
+  if (caixa) await caixa.click();
+  await Promise.all([
+    p2.waitForNavigation({ waitUntil: "networkidle2" }).catch(() => {}),
+    p2.click('button[type="submit"]'),
+  ]);
+  await new Promise((r) => setTimeout(r, 1200));
+  const comManter = await ondeMoraASessao(p2);
+  checar("com 'manter conectado', a sessão sobrevive ao fechamento",
+    comManter.local && !comManter.sessao, comManter);
+  // ⚠️ Não deixar cópia nos dois: duas fontes divergentes fariam a leitura
+  // devolver um token velho depois de um logout parcial.
+  checar("e fica num lugar só, nunca nos dois",
+    comManter.local !== comManter.sessao, comManter);
+  await p2.close();
+  // ⚠️ `localStorage` é do domínio: o login em p2 trocou a sessão de TODAS as
+  // abas. Voltar como admin na página principal antes de seguir.
+  await entrar(p, ADMIN);
   await p.goto(`${WEB}/trocar-senha`, { waitUntil: "networkidle2" });
   await foto(p, "02-trocar-senha");
 

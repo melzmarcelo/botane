@@ -229,16 +229,33 @@ conferir("açúcar: custo 6,225/KG", por_produto[acucar]["custo_aquisicao_unitar
 st, r = chamar("POST", f"/notas/{id_nota}/lancar", {}, token=token)
 checar("lança a nota no estoque", st == 200, r)
 
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = {(s["id_produto"], s["id_local"]): s for s in saldos}
+def saldos_de(*produtos):
+    """O saldo por (produto, local) — pedindo o de CADA produto.
+
+    ⚠️ `/estoque/saldos` é PAGINADO. Buscar a lista inteira e montar o
+    dicionário funcionava enquanto a base era pequena; com alguns milhares de
+    produtos, os do cenário caem fora da primeira página e o `saldo[(x, y)]`
+    estoura com KeyError num ponto que não tem nada a ver com o que se testa.
+    Vale a regra da casa: **cada suíte procura os registros DELA**.
+    """
+    linhas = []
+    for p in produtos:
+        _, s = chamar("GET", f"/estoque/saldos?id_produto={p}", token=token)
+        linhas += s or []
+    return {(x["id_produto"], x["id_local"]): x for x in linhas}
+
+
+saldo = saldos_de(cafe, leite, acucar)
 conferir("café: 10 KG no estoque seco", saldo[(cafe, seco["id"])]["quantidade"], 10)
 conferir("leite: 60 L NA CÂMARA (o local é do produto)",
          saldo[(leite, camara["id"])]["quantidade"], 60)
 conferir("açúcar: 10 KG", saldo[(acucar, seco["id"])]["quantidade"], 10)
 # Só os produtos DESTE cenário: a base pode ter outra coisa, e somar tudo
 # transformaria a checagem numa conta sobre o que não é do teste.
-meus = {cafe, leite, acucar, copo}
-valor_estoque = sum(float(s["valor"]) for s in saldos if s["id_produto"] in meus)
+# ⚠️ Pede o saldo de cada um: a lista é paginada, e o `copo` nem estava no
+# dicionário acima. Somar a primeira página daria o valor de outros produtos.
+valor_estoque = sum(float(x["valor"])
+                    for x in saldos_de(cafe, leite, acucar, copo).values())
 conferir("o estoque passa a valer o total da nota", valor_estoque, 830.00, 0.01)
 
 # ---------------------------------------------------------- 4. o custo médio
@@ -251,8 +268,7 @@ st, r = chamar("POST", "/estoque/entradas", {
 checar("entra mais 10 KG de café a 60,00", st == 201, r)
 conferir("médio novo = (518,75 + 600) ÷ 20 = 55,9375", r.get("custo_medio"), 55.9375)
 
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = {(s["id_produto"], s["id_local"]): s for s in saldos}
+saldo = saldos_de(cafe)
 conferir("e o café passa a valer 1.118,75", saldo[(cafe, seco["id"])]["valor"], 1118.75, 0.01)
 
 # ---------------------------------------------------------------- 5. fichas
@@ -299,8 +315,7 @@ conferir("consumindo 9,4550 (4,4750 de espresso + 4,9800 de leite)",
          r.get("custo_total"), 9.455, 0.01)
 conferir("cada um a 0,9455", r.get("custo_unitario"), 0.9455)
 
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = {(s["id_produto"], s["id_local"]): s for s in saldos}
+saldo = saldos_de(espresso, cafe)
 conferir("sobram 10 espressos", saldo[(espresso, seco["id"])]["quantidade"], 10)
 conferir("café baixou para 19,84 KG", saldo[(cafe, seco["id"])]["quantidade"], 19.84)
 
@@ -321,8 +336,7 @@ st, r = chamar("POST", "/estoque/transferencias", {
     "id_local_destino": seco["id"],
 }, token=token)
 checar("transfere 5 L para o seco", st == 201, r)
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = {(s["id_produto"], s["id_local"]): s for s in saldos}
+saldo = saldos_de(leite)
 conferir("câmara fica com 51,8 L", saldo[(leite, camara["id"])]["quantidade"], 51.8)
 conferir("e o seco recebe 5 L pelo mesmo médio",
          saldo[(leite, seco["id"])]["custo_medio"], 4.15)
@@ -344,8 +358,7 @@ st, r = chamar("PUT", f"/inventarios/{id_inv}/contagem",
 conferir("contaram 19,5 — faltam 0,34", r["itens"][0]["diferenca"], -0.34)
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=token)
 checar("fecha o inventário", st == 200, r)
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = {(s["id_produto"], s["id_local"]): s for s in saldos}
+saldo = saldos_de(cafe)
 conferir("o saldo passa a ser o contado", saldo[(cafe, seco["id"])]["quantidade"], 19.5)
 conferir("o médio NÃO muda com o ajuste", saldo[(cafe, seco["id"])]["custo_medio"], 55.9375)
 
