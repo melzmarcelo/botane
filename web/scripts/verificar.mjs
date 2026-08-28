@@ -1054,69 +1054,43 @@ try {
     const texto = document.body.innerText;
     const escolhido = document.querySelector('[aria-pressed="true"]');
     return {
-      tipos: ["Entrada", "Saída", "Perda", "Transferência"].filter((t) => texto.includes(t)),
+      tipos: ["Entrada", "Saída", "Perda", "Transferência", "Ajuste de custo"].filter(
+        (t) => texto.includes(t),
+      ),
       escolhido: escolhido?.textContent?.trim().slice(0, 8) ?? null,
       temCusto: /custo unit[áa]rio/i.test(texto),
     };
   });
-  checar("a tela de ajustes oferece os quatro tipos", telaAjustes.tipos.length === 4,
+  // 🔑 **CINCO tipos, não quatro.** O ajuste de custo é mais um item da mesma
+  // tela — mesma forma dos outros, um produto por vez. Contar aqui é o que
+  // pega o tipo que some da lista por um erro de permissão ou de rótulo.
+  checar("a tela de ajustes oferece os cinco tipos", telaAjustes.tipos.length === 5,
+    telaAjustes.tipos);
+  checar("inclusive o ajuste de custo", telaAjustes.tipos.some((t) => /custo/i.test(t)),
     telaAjustes.tipos);
 
-  // Os dois processos em lote (migração 039). Quem confere a despensa acha
-  // várias diferenças de uma vez; lançar uma a uma perde a relação entre elas.
-  await irPara(p, `${WEB}/ajustes/lote`);
-  const lote = await p.evaluate(() => ({
-    titulo: document.querySelector("h1")?.textContent?.trim() ?? "",
-    colunas: [...document.querySelectorAll("th")].map((t) => t.textContent.trim()),
-    // ⚠️ A PRIMEIRA tabela: desde que a tela ganhou "Lotes recentes", contar
-    // `tbody tr` solto soma as linhas do histórico e o número deixa de dizer
-    // o que se queria saber.
-    linhas: document.querySelector("table tbody")?.querySelectorAll("tr").length ?? 0,
-  }));
-  checar("a tela de ajuste em lote abre", /lote/i.test(lote.titulo), lote);
-  checar("com produto, tipo, quantidade, custo e motivo por linha",
-    lote.colunas.length >= 5, lote.colunas);
-  // Uma linha para começar, e o botão que acrescenta as outras.
-  checar("começa com uma linha e dá para somar mais", lote.linhas === 1, lote);
-
-  await irPara(p, `${WEB}/ajustes/custo`);
-  const custo = await p.evaluate(() => ({
-    titulo: document.querySelector("h1")?.textContent?.trim() ?? "",
-    texto: document.body.innerText,
-    botoes: [...document.querySelectorAll("button")].map((b) => b.textContent.trim()),
-  }));
-  checar("a tela de ajuste de custo abre", /custo/i.test(custo.titulo), custo.titulo);
-  // ⚠️ A prévia é o que separa esta tela de um formulário perigoso: o ajuste
-  // entra no razão e só sai por estorno. O botão de conferir vem ANTES do de
-  // lançar, e é isso que se cobra aqui.
-  checar("e pede para CONFERIR antes de lançar",
-    custo.botoes.some((b) => /conferir/i.test(b)), custo.botoes);
-  checar("dizendo que a quantidade não muda, só o valor",
-    /quantidade n[ãa]o\s+muda/i.test(custo.texto), custo.texto.slice(0, 300));
-
-  // 🔑 **O cabeçalho tem de estar ESTILIZADO.** As duas telas nasceram com
-  // `className="titulo"` — classe que NÃO EXISTE no globals.css. O <h1> saía
-  // sem estilo nenhum e nada quebrava: classe inventada não dá erro em lugar
-  // algum, só fica feia, e ninguém abre o inspetor para conferir. Mesmo caso
-  // do `text-neutro-500`, que também não pintava nada.
-  const cabecalho = await p.evaluate(() => {
-    const h = document.querySelector("h1");
-    const s = h ? getComputedStyle(h) : null;
-    return {
-      tamanho: s ? parseFloat(s.fontSize) : 0,
-      peso: s ? Number(s.fontWeight) : 0,
-      voltar: !!document.querySelector(".link-voltar"),
-    };
+  // O formulário se molda ao tipo. No custo isso quer dizer: SEM quantidade
+  // (nada se move) e COM o custo certo.
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      /ajuste de custo/i.test(x.textContent ?? ""));
+    b?.click();
   });
-  checar("o título da tela é grande e em negrito, como nas outras",
-    cabecalho.tamanho >= 24 && cabecalho.peso >= 600, cabecalho);
-  checar("e tem o link de voltar em pílula", cabecalho.voltar, cabecalho);
-
-  // A outra metade do padrão da casa: toda tela de lançamento mostra o que já
-  // foi lançado. Sem isto, "eu já lancei essa conferência?" só se responde no
-  // razão, produto por produto.
-  checar("e mostra os lotes já lançados",
-    await p.evaluate(() => /lotes recentes/i.test(document.body.innerText)));
+  await new Promise((r) => setTimeout(r, 700));
+  const formCusto = await p.evaluate(() => ({
+    rotulos: [...document.querySelectorAll("span.rotulo, .rotulo")]
+      .map((r) => r.textContent?.trim() ?? ""),
+    texto: document.body.innerText,
+  }));
+  // ⚠️ Quantidade some de propósito: mostrá-la desabilitada sugeriria que
+  // alguma quantidade se move, que é justamente o que NÃO acontece aqui.
+  checar("no ajuste de custo não há campo de quantidade",
+    !formCusto.rotulos.includes("Quantidade"), formCusto.rotulos);
+  checar("e há o campo do custo médio certo",
+    formCusto.rotulos.some((r) => /custo m[ée]dio certo/i.test(r)), formCusto.rotulos);
+  checar("com a tela dizendo que a quantidade não muda",
+    /quantidade n[ãa]o\s+muda/i.test(formCusto.texto),
+    formCusto.texto.slice(0, 400));
 
   // ⚠️ **Voltar para /ajustes antes de seguir.** O bloco abaixo continua o
   // lançamento avulso e supõe estar nessa tela — sem isto ele procura os

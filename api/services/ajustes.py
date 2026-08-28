@@ -37,64 +37,6 @@ def _lote(cur, *, id_unidade: int, natureza: str, observacao: str | None,
     return cur.fetchone()["id"]
 
 
-# --------------------------------------------------------------- estoque
-
-
-def lancar_estoque(cur, *, id_unidade: int, linhas: list[dict], observacao: str | None = None,
-                   documento: str | None = None, id_usuario: int | None = None,
-                   data_movimento: datetime | None = None,
-                   pode_retroativo: bool = False) -> dict:
-    """N ajustes de quantidade, num lote só.
-
-    Cada linha vira um movimento normal do razão — mesma função `lancar`, mesmas
-    travas (saldo negativo, período fechado, produto sem unidade). O lote não
-    afrouxa regra nenhuma: ele só amarra os movimentos a uma origem comum.
-
-    ⚠️ **A linha que falha derruba o lote inteiro**, e a mensagem diz QUAL
-    linha. Gravar as que deram certo e reclamar das outras deixaria a pessoa
-    sem saber o que já entrou — e, num ajuste de estoque, tentar de novo
-    duplicaria o que passou.
-    """
-    if not linhas:
-        raise HTTPException(status_code=400, detail="Nenhuma linha para lançar.")
-
-    id_lote = _lote(cur, id_unidade=id_unidade, natureza="ESTOQUE", observacao=observacao,
-                    documento=documento, id_usuario=id_usuario)
-
-    movimentos = []
-    for i, linha in enumerate(linhas, start=1):
-        try:
-            m = estoque.lancar(
-                cur,
-                id_unidade=id_unidade,
-                id_produto=linha["id_produto"],
-                tipo=linha["tipo"],
-                quantidade=linha["quantidade"],
-                id_local=linha.get("id_local"),
-                custo_unitario=linha.get("custo_unitario"),
-                data_movimento=data_movimento,
-                origem_tipo="AJUSTE_LOTE",
-                origem_id=id_lote,
-                id_motivo_perda=linha.get("id_motivo_perda"),
-                documento=documento,
-                observacao=linha.get("observacao") or observacao,
-                id_usuario=id_usuario,
-                lote=linha.get("lote"),
-                validade=linha.get("validade"),
-                pode_retroativo=pode_retroativo,
-            )
-        except HTTPException as e:
-            # ⚠️ A frase precisa dizer a LINHA. Num lote de vinte, "saldo
-            # insuficiente" sem número manda a pessoa procurar em vinte.
-            raise HTTPException(
-                status_code=e.status_code,
-                detail=f"Linha {i}: {e.detail}",
-            ) from e
-        movimentos.append(m)
-
-    return {"id_lote": id_lote, "lancados": len(movimentos), "movimentos": movimentos}
-
-
 # ------------------------------------------------------------------ custo
 
 

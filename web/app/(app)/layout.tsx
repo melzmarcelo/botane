@@ -50,15 +50,10 @@ const MENU: {
       {
         href: "/ajustes",
         nome: "Ajustes",
+        // ⚠️ Lista de chaves: a tela serve a cinco tipos, e quem tem só a de
+        // custo (ou só a de perda) também precisa chegar nela.
         chave: ["estoque.entradas", "estoque.saidas", "estoque.perdas",
-                "estoque.transferencias"],
-      },
-      {
-        href: "/ajustes/custo",
-        nome: "Ajuste de custo",
-        // Item próprio no menu porque é processo próprio — e a chave é só
-        // dele: quem conta prateleira não decide valor.
-        chave: "estoque.custo",
+                "estoque.transferencias", "estoque.custo"],
       },
       { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
       { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },

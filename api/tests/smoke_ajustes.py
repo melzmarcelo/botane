@@ -1,19 +1,19 @@
-"""Ajustes em lote: de estoque (quantidade) e de custo (valor).
+"""Ajuste de CUSTO: corrigir o custo médio sem mexer na quantidade.
 
-Dois processos separados de propósito. Mexer na quantidade é dizer que a
-prateleira tem outra coisa; mexer no custo é dizer que o dinheiro é outro — e
-o segundo altera o CMV do período **sem que nada tenha entrado ou saído**.
+Mexer na quantidade é dizer que a prateleira tem outra coisa; mexer no custo é
+dizer que o dinheiro é outro — e este altera o CMV do período **sem que nada
+tenha entrado ou saído**. Por isso é tipo próprio no razão, tem permissão
+própria e mora como mais um item na tela de Ajustes, um produto por vez.
 
 O que este arquivo cobra:
 
-1. um lote de estoque lança vários produtos de uma vez, amarrados a uma origem
-2. a linha que falha derruba o lote INTEIRO, e a mensagem diz qual linha
-3. a prévia do custo mostra a diferença em reais antes de qualquer coisa
-4. o ajuste de custo muda o valor sem mexer na quantidade
-5. **e o CMV do período anda exatamente o que ele valeu**, com sinal invertido
-6. saldo zero e custo repetido são recusados, com frase
-7. o ajuste de custo tem permissão PRÓPRIA — quem só ajusta estoque não passa
-8. tudo fica na auditoria, com o custo de antes e o de depois
+1. a prévia mostra a diferença em reais antes de qualquer coisa
+2. o ajuste muda o valor sem mexer na quantidade
+3. **e o CMV do período anda exatamente o que ele valeu**, com sinal invertido
+4. **a movimentação continua fechando** — foi aqui que o desenho falhou
+5. saldo zero e custo repetido são recusados, com frase
+6. permissão PRÓPRIA: quem só ajusta estoque não passa
+7. tudo fica na auditoria, com o custo de antes e o de depois
 
     python tests/smoke_ajustes.py            (API de pé na 9200)
 
@@ -92,71 +92,16 @@ def criar(sufixo, um="KG"):
     return r["id"]
 
 
-print("1. o lote de estoque lança vários de uma vez")
+print("1. preparo: três produtos com saldo e custo conhecidos")
 a, b, c = criar("A"), criar("B"), criar("C")
-# Entradas prévias, para haver saldo e custo médio conhecidos.
-for pid, qtd, custo in ((a, 10, 5.00), (b, 20, 3.00), (c, 40, 2.50)):
+for pid, quantia, custo in ((a, 12, 5.00), (b, 17, 3.00), (c, 35, 2.50)):
     st, r = chamar("POST", "/estoque/entradas", {
-        "id_produto": pid, "quantidade": qtd, "custo_unitario": custo,
+        "id_produto": pid, "quantidade": quantia, "custo_unitario": custo,
         "id_local": local["id"]}, token=token)
-    assert st == 201, (st, r)
-
-st, r = chamar("POST", "/ajustes/estoque", {
-    "observacao": f"Conferência da despensa {marca}",
-    "linhas": [
-        {"id_produto": a, "tipo": "ENTRADA_MANUAL", "quantidade": 2, "custo_unitario": 5.00,
-         "id_local": local["id"]},
-        {"id_produto": b, "tipo": "SAIDA_CONSUMO_INTERNO", "quantidade": 3,
-         "id_local": local["id"]},
-        {"id_produto": c, "tipo": "SAIDA_CONSUMO_INTERNO", "quantidade": 5,
-         "id_local": local["id"]},
-    ],
-}, token=token)
-checar("três linhas num lançamento só", st == 201 and r.get("lancados") == 3, (st, r))
-id_lote = r.get("id_lote")
-
-st, saldos = chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)
-checar("o primeiro produto subiu para 12", saldos and perto(saldos[0]["quantidade"], 12),
-       saldos)
-st, saldos = chamar("GET", f"/estoque/saldos?id_produto={c}", token=token)
-checar("e o terceiro caiu para 35", saldos and perto(saldos[0]["quantidade"], 35), saldos)
-
-st, lotes = chamar("GET", "/ajustes/lotes?natureza=ESTOQUE", token=token)
-meu = next((x for x in lotes if x["id"] == id_lote), None)
-checar("o lote aparece no histórico, com autor e contagem",
-       meu and meu["linhas"] == 3 and meu["usuario"], meu)
-checar("e guarda a observação que explica o conjunto",
-       meu and marca in (meu.get("observacao") or ""), meu)
-
-# ⚠️ É o que amarra os movimentos ao lote: sem isso, três ajustes da mesma
-# conferência ficam indistinguíveis de três avulsos.
-st, movs = chamar("GET", f"/estoque/movimentos?id_produto={a}", token=token)
-checar("o movimento aponta para o lote como origem",
-       any(m.get("origem_tipo") == "AJUSTE_LOTE" for m in (movs or [])),
-       (movs or [{}])[0])
+    checar(f"entrada de {quantia} lançada", st == 201, (st, r))
 
 
-print("\n2. a linha que falha derruba o lote inteiro")
-st, antes = chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)
-qtd_antes = float(antes[0]["quantidade"])
-st, r = chamar("POST", "/ajustes/estoque", {
-    "linhas": [
-        {"id_produto": a, "tipo": "ENTRADA_MANUAL", "quantidade": 1, "custo_unitario": 5.00,
-         "id_local": local["id"]},
-        {"id_produto": 999999999, "tipo": "ENTRADA_MANUAL", "quantidade": 1,
-         "custo_unitario": 1.00, "id_local": local["id"]},
-    ],
-}, token=token)
-checar("o lote com produto inexistente é recusado", st == 404, (st, r))
-# ⚠️ Num lote de vinte, "produto não encontrado" sem número manda procurar em
-# vinte. A frase diz a linha.
-checar("e a mensagem diz QUAL linha", "Linha 2" in str(r.get("detail", "")), r.get("detail"))
-st, depois = chamar("GET", f"/estoque/saldos?id_produto={a}", token=token)
-checar("a linha boa NÃO entrou (tudo ou nada)",
-       perto(depois[0]["quantidade"], qtd_antes), (qtd_antes, depois[0]["quantidade"]))
-
-
-print("\n3. a prévia do custo mostra a diferença antes")
+print("\n2. a prévia do custo mostra a diferença antes")
 # O produto A tem 12 unidades a 5,00 = 60,00. A 6,00 passa a valer 72,00.
 st, r = chamar("POST", "/ajustes/custo/previa", {
     "linhas": [{"id_produto": a, "custo_novo": 6.00, "id_local": local["id"]}],
@@ -176,7 +121,7 @@ checar("a prévia NÃO lançou nada",
        "custo mudou sem lançar")
 
 
-print("\n4. o ajuste de custo muda o valor, não a quantidade")
+print("\n3. o ajuste de custo muda o valor, não a quantidade")
 st, ap_antes = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 cmv_antes = float(ap_antes["cmv_real"])
 custo_antes = float(ap_antes.get("ajuste_custo") or 0)
@@ -204,7 +149,7 @@ checar("com quantidade zero e valor 12,00",
        mov and perto(mov.get("quantidade"), 0) and perto(mov.get("custo_total"), 12.00), mov)
 
 
-print("\n5. e o CMV anda exatamente o que o ajuste valeu")
+print("\n4. e o CMV anda exatamente o que o ajuste valeu")
 st, ap_depois = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 # 🔑 A afirmação central. Estoque reavaliado +29,00 → estoque final maior →
 # CMV menor em 29,00. Se um dia isso deixar de valer, a identidade do CMV
@@ -240,7 +185,7 @@ checar("a linha do produto soma valor sem somar quantidade",
        linha_a)
 
 
-print("\n6. o que é recusado, e com frase")
+print("\n5. o que é recusado, e com frase")
 zerado = criar("Z", "UN")
 st, r = chamar("POST", "/ajustes/custo", {
     "linhas": [{"id_produto": zerado, "custo_novo": 9.00, "id_local": local["id"]}],
@@ -260,7 +205,7 @@ st, r = chamar("POST", "/ajustes/custo", {
 checar("custo negativo é recusado", st == 422, st)
 
 
-print("\n7. ajuste de custo tem permissão própria")
+print("\n6. ajuste de custo tem permissão própria")
 # ⚠️ O Conferente ajusta estoque e NÃO ajusta custo: contar prateleira e
 # decidir valor são poderes diferentes. Se um dia a chave for para o papel
 # errado, esta checagem cai.
@@ -276,15 +221,15 @@ if conferente:
     # perda precisa conseguir lançar a perda dele. Cobrar `estoque.ajuste`
     # nominalmente falhava sem haver problema: essa chave é a do ESTORNO.
     porta = {"estoque.ajuste", "estoque.entradas", "estoque.saidas", "estoque.perdas"}
-    checar("ele passa pela porta do lote de estoque", bool(chaves & porta), sorted(chaves))
+    checar("ele lança ajuste de quantidade", bool(chaves & porta), sorted(chaves))
     checar("e NÃO ajusta custo — contar prateleira não é decidir valor",
            "estoque.custo" not in chaves, sorted(chaves))
 
 
-print("\n8. tudo na auditoria")
+print("\n7. tudo na auditoria")
 st, aud = chamar("GET", "/auditoria?entidade=ajuste_lote&limite=20", token=token)
 eventos = [e for e in (aud or []) if e.get("acao") in ("ajuste_estoque", "ajuste_custo")]
-checar("os dois lotes estão registrados", len(eventos) >= 2,
+checar("o ajuste está registrado", len(eventos) >= 1,
        [e.get("acao") for e in (aud or [])][:6])
 custo_ev = next((e for e in eventos if e["acao"] == "ajuste_custo"), None)
 # ⚠️ É dinheiro mudando sem mercadoria se mover: sem o antes E o depois, o

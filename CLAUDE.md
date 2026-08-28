@@ -1048,16 +1048,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.300 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.265 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (34), `smoke_ciclos.py` (31),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (28), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (328, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (323, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1123,6 +1123,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **O ajuste de custo é MAIS UM TIPO na tela de Ajustes, um produto por vez** — não um
+  processo em lote com tela própria. A primeira versão fez lote (`/ajustes/lote`,
+  `/ajustes/custo`, item no menu) e o dono pediu igual aos outros quatro: mesma tela, mesma
+  forma. O lote saiu; o que ficou do backend é `POST /ajustes/custo` (recebe lista, a tela
+  manda uma) e `POST /ajustes/custo/previa`. `ajuste_lotes` continua no banco e recebe um lote
+  de UM por ajuste — é o que guarda autor e observação e amarra o movimento por
+  `origem_tipo = 'AJUSTE_LOTE'`. **Quantidade tem porta própria e mais antiga**
+  (`/estoque/entradas`, `/saidas`, `/transferencias`); o lote de estoque virou código morto e
+  foi removido.
+  ⚠️ **A prévia é pedida ao SERVIDOR no blur do campo**, não recalculada em TypeScript: seria a
+  segunda versão da mesma regra, e as duas divergiriam no primeiro caso de borda.
+  ⚠️ O campo de quantidade **some** no tipo custo — mostrá-lo desabilitado sugeriria que alguma
+  quantidade se move.
 - 🔑 **Movimento de quantidade ZERO some das somas que ramificam por sinal.** O ajuste de custo
   (migração 039) reavalia o estoque sem mover mercadoria: `quantidade = 0`, `custo_total <> 0`.
   A CTE da movimentação ramificava só em `quantidade > 0` e `< 0`, então ele caía em nenhum dos

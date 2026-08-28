@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -24,7 +23,19 @@ import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
  */
 
 type Motivo = { id: number; nome: string };
-type Tipo = "entrada" | "saida" | "perda" | "transferencia";
+type PreviaCusto = {
+  produto: string;
+  saldo: number;
+  um: string | null;
+  custo_atual: number;
+  custo_novo: number;
+  valor_atual: number;
+  valor_novo: number;
+  diferenca: number;
+  efeito_no_cmv: number;
+};
+
+type Tipo = "entrada" | "saida" | "perda" | "transferencia" | "custo";
 
 type Movimento = {
   id: number;
@@ -75,11 +86,22 @@ const TIPOS: {
     descricao:
       "Mudar de local sem mudar de dono. Não cria nem destrói valor: sai de um lado pelo médio e entra do outro pelo mesmo.",
   },
+  {
+    id: "custo",
+    nome: "Ajuste de custo",
+    // ⚠️ Chave PRÓPRIA: mexer na quantidade é dizer que a prateleira tem outra
+    // coisa; mexer no custo é dizer que o dinheiro é outro. Quem confere a
+    // despensa não precisa desse poder — e por isso o cartão nem aparece para
+    // quem não tem a chave.
+    chave: "estoque.custo",
+    descricao:
+      "Corrige o custo médio de quem já está em estoque. A quantidade não muda — só quanto ela vale. Muda o CMV do período.",
+  },
 ];
 
 // Só os movimentos que nascem AQUI. O razão inteiro tem tela própria.
 const TIPOS_DA_MAO = ["ENTRADA_MANUAL", "SAIDA_CONSUMO_INTERNO", "SAIDA_PERDA",
-                      "TRANSFERENCIA_SAIDA", "TRANSFERENCIA_ENTRADA"];
+                      "TRANSFERENCIA_SAIDA", "TRANSFERENCIA_ENTRADA", "AJUSTE_CUSTO"];
 
 // Ajuste mexe no razão: produto que não controla estoque não tem o que ajustar.
 const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
@@ -88,6 +110,9 @@ const VAZIO = {
   id_produto: "",
   quantidade: "",
   custo_unitario: "",
+  // O custo CERTO, não a diferença: pedir a diferença obrigaria a fazer a
+  // conta de cabeça, que é onde o erro entra.
+  custo_novo: "",
   id_local: "",
   id_local_destino: "",
   id_motivo_perda: "",
@@ -114,6 +139,7 @@ export default function PaginaAjustes() {
   const [erro, setErro] = useState("");
   const [confirmando, setConfirmando] = useState<Movimento | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [previaCusto, setPreviaCusto] = useState<PreviaCusto | null>(null);
 
   const carregarRecentes = useCallback(async () => {
     try {
@@ -161,6 +187,37 @@ export default function PaginaAjustes() {
     );
   }, [locais]);
 
+  /**
+   * O que o ajuste de custo faria, perguntado ao SERVIDOR.
+   *
+   * ⚠️ Ele entra no razão e só sai por estorno — quem confirma precisa ver a
+   * diferença em REAIS, não em custo unitário, que é onde o erro de casa
+   * decimal se esconde. E o efeito no CMV vem com o sinal certo, que é
+   * contraintuitivo: estoque mais caro, CMV MENOR.
+   */
+  const conferirCusto = useCallback(async () => {
+    if (!f.id_produto || !f.custo_novo.trim()) {
+      setPreviaCusto(null);
+      return;
+    }
+    try {
+      const r = await api.post<{ linhas: PreviaCusto[] }>("/ajustes/custo/previa", {
+        linhas: [
+          {
+            id_produto: Number(f.id_produto),
+            custo_novo: Number(f.custo_novo.replace(",", ".")),
+            id_local: f.id_local ? Number(f.id_local) : null,
+          },
+        ],
+      });
+      setPreviaCusto(r.linhas?.[0] ?? null);
+    } catch {
+      // Prévia é conforto, não trava: se ela falhar, o lançamento ainda
+      // responde com a mensagem certa do servidor.
+      setPreviaCusto(null);
+    }
+  }, [f.id_produto, f.custo_novo, f.id_local]);
+
   async function lancar(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
@@ -171,7 +228,27 @@ export default function PaginaAjustes() {
       observacao: f.observacao || null,
     };
     try {
-      if (tipo === "entrada") {
+      if (tipo === "custo") {
+        const r = await api.post<{
+          lancados: number;
+          diferenca_total: number;
+          linhas: { custo_anterior: number; custo_novo: number }[];
+        }>("/ajustes/custo", {
+          observacao: base.observacao,
+          linhas: [
+            {
+              id_produto: base.id_produto,
+              custo_novo: Number(f.custo_novo.replace(",", ".")),
+              id_local: base.id_local,
+            },
+          ],
+        });
+        const l = r.linhas?.[0];
+        aviso.sucesso(
+          `Custo corrigido de ${reais(Number(l?.custo_anterior))} para ` +
+            `${reais(Number(l?.custo_novo))} — ${reais(r.diferenca_total)} de diferença no estoque.`,
+        );
+      } else if (tipo === "entrada") {
         const r = await api.post<{ custo_medio: number }>("/estoque/entradas", {
           ...base,
           custo_unitario: Number(f.custo_unitario.replace(",", ".")),
@@ -210,6 +287,7 @@ export default function PaginaAjustes() {
       // próximo, e fechar obrigaria a escolher o tipo de novo.
       setF((a) => ({ ...VAZIO, id_local: a.id_local }));
       setProduto(null);
+      setPreviaCusto(null);
       await carregarRecentes();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível lançar");
@@ -252,32 +330,6 @@ export default function PaginaAjustes() {
           entra como estorno.
         </p>
       </header>
-
-      {/*
-        Os dois processos em lote. Ficam no topo porque quem confere a despensa
-        chega aqui com VÁRIAS diferenças — o lançamento avulso abaixo é o caso
-        de uma só.
-      */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Link href="/ajustes/lote" className="cartao block transition hover:border-erva focus-visible:border-erva">
-          <p className="rotulo">Vários produtos</p>
-          <p className="mt-1 font-semibold">Ajuste em lote</p>
-          <p className="mt-1 text-[13.5px] text-suave">
-            Entrada, consumo e perda de vários itens num lançamento só, com uma observação
-            que explica o conjunto.
-          </p>
-        </Link>
-        {pode("estoque.custo") && (
-          <Link href="/ajustes/custo" className="cartao block transition hover:border-erva focus-visible:border-erva">
-            <p className="rotulo">Sem mexer na quantidade</p>
-            <p className="mt-1 font-semibold">Ajuste de custo</p>
-            <p className="mt-1 text-[13.5px] text-suave">
-              Corrige o custo médio de quem já está em estoque — o custo provisório, o produto
-              que entrou sem custo, a nota digitada errada. <b>Muda o CMV do período.</b>
-            </p>
-          </Link>
-        )}
-      </div>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
@@ -324,20 +376,45 @@ export default function PaginaAjustes() {
                 aoEscolher={(i: ItemBusca | null) => {
                   setProduto(i ? { id: i.id, rotulo: rotuloDe(i) } : null);
                   setF((a) => ({ ...a, id_produto: i ? String(i.id) : "" }));
+                  // Trocar o produto invalida a prévia: sem isso ela
+                  // mostraria o número de outro item.
+                  setPreviaCusto(null);
                 }}
               />
             </Campo>
-            <Campo rotulo="Quantidade">
-              <input
-                className="campo mono"
-                type="number"
-                step="0.001"
-                min="0.001"
-                required
-                value={f.quantidade}
-                onChange={(e) => setF({ ...f, quantidade: e.target.value })}
-              />
-            </Campo>
+            {/* ⚠️ O ajuste de custo NÃO tem quantidade: é o que o separa dos
+                outros quatro. Mostrar o campo desabilitado sugeriria que
+                alguma quantidade se move. */}
+            {tipo !== "custo" && (
+              <Campo rotulo="Quantidade">
+                <input
+                  className="campo mono"
+                  type="number"
+                  step="0.001"
+                  min="0.001"
+                  required
+                  value={f.quantidade}
+                  onChange={(e) => setF({ ...f, quantidade: e.target.value })}
+                />
+              </Campo>
+            )}
+            {tipo === "custo" && (
+              <Campo rotulo="Custo médio certo (R$)">
+                <input
+                  className="campo mono"
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  required
+                  value={f.custo_novo}
+                  onChange={(e) => setF({ ...f, custo_novo: e.target.value })}
+                  // A prévia é pedida ao SERVIDOR quando o campo perde o foco.
+                  // Refazer a conta aqui criaria a segunda versão da mesma
+                  // regra, e as duas divergiriam no primeiro caso de borda.
+                  onBlur={() => void conferirCusto()}
+                />
+              </Campo>
+            )}
             {tipo === "entrada" && (
               <Campo rotulo="Custo unitário (R$)">
                 <input
@@ -440,6 +517,31 @@ export default function PaginaAjustes() {
               </button>
             </div>
           </form>
+
+          {/*
+            ⚠️ A prévia fica DEPOIS do formulário e antes de qualquer outra
+            coisa: o ajuste de custo entra no razão e só sai por estorno. E o
+            sinal do efeito no CMV é contraintuitivo — subir o custo aumenta o
+            estoque final, e o CMV é `inicial + compras − final`, então o CMV
+            CAI. Sem essa frase escrita, o número muda e ninguém sabe por quê.
+          */}
+          {tipo === "custo" && previaCusto && (
+            <div className="mt-4">
+              <Aviso tipo="info">
+                <b>{previaCusto.produto}</b>: {qtd(previaCusto.saldo)} {previaCusto.um} a{" "}
+                {reais(previaCusto.custo_atual)} valem {reais(previaCusto.valor_atual)}. A{" "}
+                {reais(previaCusto.custo_novo)} passam a valer{" "}
+                {reais(previaCusto.valor_novo)} —{" "}
+                <b>
+                  {previaCusto.diferenca >= 0 ? "+" : ""}
+                  {reais(previaCusto.diferenca)}
+                </b>{" "}
+                no estoque, o que{" "}
+                {previaCusto.efeito_no_cmv < 0 ? "REDUZ" : "AUMENTA"} o CMV do período em{" "}
+                <b>{reais(Math.abs(previaCusto.efeito_no_cmv))}</b>.
+              </Aviso>
+            </div>
+          )}
         </Cartao>
       )}
 

@@ -1,60 +1,22 @@
-"""Ajustes em lote — de estoque e de custo.
+"""Ajuste de CUSTO — corrigir o custo médio sem mexer na quantidade.
 
-Dois processos separados de propósito, com permissões diferentes:
-`estoque.ajuste` mexe na quantidade, `estoque.custo` mexe no valor. O segundo
-altera o CMV do período sem que nada tenha entrado ou saído.
+É a única porta que grava movimento de valor. Quantidade tem porta própria e
+mais antiga: `/estoque/entradas`, `/estoque/saidas`, `/estoque/transferencias`.
+
+⚠️ Permissão à parte (`estoque.custo`): mexer na quantidade é dizer que a
+prateleira tem outra coisa; mexer no custo é dizer que o dinheiro é outro, e
+isso altera o CMV do período sem que nada tenha entrado ou saído.
 """
 
 from fastapi import APIRouter, Depends, Query
 
 import auditoria
 from database import get_cursor
-from models.ajustes import (
-    AjusteCustoRequest,
-    AjusteEstoqueRequest,
-    PreviaCustoRequest,
-)
+from models.ajustes import AjusteCustoRequest, PreviaCustoRequest
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import ajustes as servico
 
 router = APIRouter(prefix="/ajustes", tags=["ajustes"])
-
-
-@router.post("/estoque", status_code=201)
-def lote_de_estoque(
-    body: AjusteEstoqueRequest,
-    ctx: Contexto = Depends(requer_permissao("estoque.ajuste", "estoque.entradas",
-                                            "estoque.saidas", "estoque.perdas")),
-) -> dict:
-    """N ajustes de quantidade, num lançamento só.
-
-    ⚠️ A permissão aceita QUALQUER uma das quatro porque o lote pode misturar
-    entrada, saída e perda — e quem só tem a de perda precisa conseguir lançar
-    a perda dele. Cada linha ainda passa pelas travas do razão.
-    """
-    with get_cursor() as cur:
-        id_unidade = unidade_atual(cur, ctx)
-        r = servico.lancar_estoque(
-            cur,
-            id_unidade=id_unidade,
-            linhas=[l.model_dump() for l in body.linhas],
-            observacao=body.observacao,
-            documento=body.documento,
-            id_usuario=ctx.id_usuario,
-            data_movimento=body.data_movimento,
-            pode_retroativo=ctx.pode("estoque.retroativo"),
-        )
-        # ⚠️ A auditoria guarda o LOTE inteiro, não uma linha por movimento: é o
-        # conjunto que tem sentido ("conferência da câmara fria"), e vinte
-        # registros soltos escondem isso em vez de mostrar.
-        auditoria.registrar(
-            cur, ctx.id_usuario, "ajuste_lote", r["id_lote"], "ajuste_estoque",
-            depois={"linhas": len(body.linhas), "observacao": body.observacao,
-                    "produtos": [l.id_produto for l in body.linhas]},
-            id_unidade=id_unidade,
-        )
-    return {"id_lote": r["id_lote"], "lancados": r["lancados"],
-            "message": f"{r['lancados']} ajuste(s) lançado(s)"}
 
 
 @router.post("/custo/previa")
