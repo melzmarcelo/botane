@@ -1041,7 +1041,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.236 verificações de API): `smoke_fundacao.py` (39, 40 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.242 verificações de API): `smoke_fundacao.py` (45, 46 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (10), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
@@ -1116,6 +1116,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- 🔑 **Não dava para saber QUAL commit estava no ar, e isso custou uma ida e volta.** `VERSAO` é
+  texto fixo, a lista de rotas só muda quando alguém cria endpoint, e correção de comportamento
+  (um prazo de socket) não deixa rastro de fora — era impossível separar *"a correção não
+  funcionou"* de *"a correção não foi publicada"*. `GET /saude` agora devolve **`impressao`**
+  (hash do próprio código-fonte) e a **última migração aplicada**. O mesmo cálculo roda aqui:
+  `cd api && python -c "import impressao; print(impressao.CODIGO)"`.
+  ⚠️ **As pontas de linha são normalizadas antes do hash** (`
+` → `
+`): o repositório é
+  clonado com CRLF no Windows e LF no contêiner, e sem isso o mesmo commit daria impressões
+  diferentes — a ferramenta feita para responder "é o mesmo código?" responderia sempre "não".
+  ⚠️ **`arquivos/` e `uploads/` ficam de fora**: são dados de operação (o `.eml`, a logo) e mudam
+  sozinhos com o uso — dentro do hash, a impressão mudaria sem ninguém ter publicado nada.
 - 🔑 **`timeout=` do smtplib é POR OPERAÇÃO, e são quatro — o pior caso era 80 s.** Conectar,
   STARTTLS, autenticar e enviar, 20 s cada. O roteamento do App Platform desiste em ~60 s e
   devolve **504 com página HTML**, então o que chegava na tela não era o erro do SMTP: era o do

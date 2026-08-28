@@ -47,6 +47,26 @@ def checar(nome: str, condicao: bool, extra=""):
         print(f"  FALHA {nome} {extra}")
 
 
+print("0. saúde: qual código está de pé")
+# ⚠️ Sem isso não dava para separar "a correção não funcionou" de "a correção
+# não foi publicada" — e a diferença entre as duas é um dia de trabalho. A
+# `versao` é um texto fixo e não muda de um deploy para o outro; a `impressao`
+# é do código de verdade, e o mesmo cálculo roda na máquina de quem publica.
+st, r = chamar("GET", "/saude")
+checar("responde sem autenticação (é a checagem de infra)", st == 200, (st, r))
+checar("e diz que o banco respondeu", r.get("status") == "ok", r)
+checar("com a impressão do código que está rodando",
+       isinstance(r.get("impressao"), str) and len(r["impressao"]) == 12, r)
+checar("e quantos arquivos entraram na conta", (r.get("arquivos") or 0) > 50, r)
+# ⚠️ Estável entre chamadas: se mudasse sozinha (por ler dado de operação, ou
+# por pontas de linha), responderia sempre "não é o mesmo código" e viraria um
+# alarme que ninguém escuta.
+st, r2 = chamar("GET", "/saude")
+checar("a impressão não muda entre duas chamadas",
+       r2.get("impressao") == r.get("impressao"), (r.get("impressao"), r2.get("impressao")))
+checar("e a última migração aplicada vai junto",
+       isinstance(r.get("migracao"), str) and r["migracao"].endswith(".sql"), r)
+
 print("1. login")
 st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": "errada"})
 checar("senha errada devolve 401", st == 401, st)

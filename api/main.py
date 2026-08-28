@@ -16,6 +16,7 @@ from pydantic_core import PydanticCustomError
 import arquivos
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
+import impressao
 from config import (
     ADMIN_EMAIL,
     ADMIN_EMAIL_PADRAO,
@@ -211,10 +212,28 @@ app.include_router(exportacoes.router)
 
 @app.get("/saude", tags=["infra"])
 def saude() -> dict:
+    """Diz que está de pé — e QUAL código está de pé.
+
+    ⚠️ A `versao` é fixa no código e não distingue um deploy do outro. Quem
+    responde "o que subiu é o que eu publiquei?" é a `impressao`: o mesmo
+    cálculo roda na máquina de quem publicou (`python -c "import impressao;
+    print(impressao.CODIGO)"`, de dentro de `api/`) e os dois se comparam.
+    Sem isso não dava para separar "a correção não funcionou" de "a correção
+    não foi publicada".
+
+    A última migração aplicada vai junto porque é a outra metade da mesma
+    pergunta: código novo com migração pendente é um estado real, e ele
+    aparece aqui em vez de virar erro estranho numa tela qualquer.
+    """
     with get_cursor() as cur:
         cur.execute("SELECT 1 AS ok")
         cur.fetchone()
-    return {"status": "ok", "versao": VERSAO}
+        cur.execute(
+            "SELECT script_name FROM schema_migrations ORDER BY script_name DESC LIMIT 1")
+        linha = cur.fetchone()
+    return {"status": "ok", "versao": VERSAO,
+            "migracao": (linha or {}).get("script_name"),
+            **impressao.CODIGO}
 
 
 if __name__ == "__main__":
