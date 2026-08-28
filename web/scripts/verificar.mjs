@@ -223,6 +223,13 @@ mkdirSync(FOTOS, { recursive: true });
 const navegador = await puppeteer.launch({
   executablePath: CHROME,
   headless: "new",
+  // ⚠️ **O perfil vai para o D:, não para o TEMP do C:.** Sem isto o Chrome
+  // cria o `user-data-dir` no disco do sistema, que nesta máquina vive no
+  // limite — e o sintoma não é "disco cheio": são erros de PROTOCOLO em pontos
+  // diferentes a cada rodada ("Cannot navigate to invalid URL", "detached
+  // Frame"), que parecem instabilidade do teste. É a mesma regra do resto do
+  // projeto: nada deste repositório escreve volume no C:.
+  userDataDir: "scripts/_chrome-perfil",
   args: ["--no-sandbox", "--window-size=1440,1000"],
   defaultViewport: { width: 1440, height: 1000 },
   // ⚠️ O padrão são 30 s, e a foto de página inteira de uma tela longa passa

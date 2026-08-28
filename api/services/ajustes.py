@@ -52,7 +52,18 @@ def _lote(cur, *, id_unidade: int, natureza: str, observacao: str | None,
 # bater com o que a pessoa entende por "ajuste".
 
 
-def _saldo_de(cur, id_unidade: int, id_produto: int, local: int, travar: bool):
+def _saldo_de(cur, id_unidade: int, id_produto: int, local: int, travar: bool,
+              exigir: bool = True):
+    """O saldo do produto naquele local.
+
+    ⚠️ **Sem linha de saldo NÃO é impedimento** para o acerto de quantidade: é
+    justamente o caso de "a prateleira tem 5 e o sistema não tem nada". Recusar
+    ali obrigaria a lançar uma entrada falsa antes, que é pior — inventa uma
+    compra que não houve. Quando `exigir` é falso, a ausência vira zero.
+
+    Para o ajuste de CUSTO a ausência continua barrando, e não por política:
+    sem quantidade, `(novo − atual) × saldo` é zero. Não há valor a corrigir.
+    """
     cur.execute(
         f"""SELECT s.quantidade, s.custo_medio, p.nome, p.codigo, p.um_estoque
               FROM estoque_saldos s JOIN produtos p ON p.id = s.id_produto
@@ -61,10 +72,20 @@ def _saldo_de(cur, id_unidade: int, id_produto: int, local: int, travar: bool):
         (id_unidade, local, id_produto),
     )
     linha = cur.fetchone()
-    if not linha:
+    if linha:
+        return linha
+    if exigir:
         raise HTTPException(status_code=404,
                             detail="Este produto não tem saldo neste local.")
-    return linha
+
+    # Sem linha ainda: o produto existe, o saldo é zero. O `lancar` cria a
+    # linha quando o movimento entrar.
+    cur.execute("SELECT nome, codigo, um_estoque FROM produtos WHERE id = %s", (id_produto,))
+    p = cur.fetchone()
+    if not p:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    return {"quantidade": 0, "custo_medio": 0, "nome": p["nome"],
+            "codigo": p["codigo"], "um_estoque": p["um_estoque"]}
 
 
 def previa_saldo(cur, id_unidade: int, id_produto: int, id_local: int | None,
@@ -76,7 +97,7 @@ def previa_saldo(cur, id_unidade: int, id_produto: int, id_local: int | None,
     de ajustes do painel.
     """
     local = id_local or estoque.local_padrao(cur, id_unidade)
-    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=False)
+    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=False, exigir=False)
 
     atual = dec(linha["quantidade"])
     certa = dec(quantidade_certa)
@@ -113,7 +134,7 @@ def ajustar_saldo(cur, *, id_unidade: int, id_produto: int, id_local: int | None
                   pode_retroativo: bool = False) -> dict:
     """Leva o saldo do sistema à quantidade que a prateleira tem."""
     local = id_local or estoque.local_padrao(cur, id_unidade)
-    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=True)
+    linha = _saldo_de(cur, id_unidade, id_produto, local, travar=True, exigir=False)
 
     atual = dec(linha["quantidade"])
     certa = dec(quantidade_certa)

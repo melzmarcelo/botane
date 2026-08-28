@@ -295,11 +295,19 @@ export default function PaginaAjustes() {
   /**
    * Os locais que o seletor oferece.
    *
-   * ⚠️ Entrada e o DESTINO da transferência aceitam qualquer local — as duas
-   * põem mercadoria onde ela ainda não está.
+   * Onde o produto TEM saldo, para não escolher a prateleira errada. Mas o
+   * filtro é conforto, não trava:
+   *
+   * ⚠️ **Sem saldo em lugar nenhum, a lista volta INTEIRA.** Lançar perda ou
+   * saída de algo que o sistema acha que é zero é legítimo — o razão aceita e
+   * marca o custo como provisório. Bloquear ali obrigaria a inventar uma
+   * entrada antes, que é pior: cria uma compra que não houve.
+   *
+   * ⚠️ Entrada e o DESTINO da transferência também aceitam qualquer local —
+   * as duas põem mercadoria onde ela ainda não está.
    */
   const locaisDoTipo =
-    tipo === "entrada" || ondeTem === null
+    tipo === "entrada" || ondeTem === null || ondeTem.length === 0
       ? locais
       : locais.filter((l) => ondeTem.some((o) => o.id_local === l.id));
 
@@ -601,17 +609,6 @@ export default function PaginaAjustes() {
                 })}
               </select>
             </Campo>
-            {/* ⚠️ Sem saldo em lugar nenhum, os tipos que TIRAM do estoque não
-                têm o que tirar. Dizer isso aqui evita o 404 ou — pior — a saída
-                que cria saldo negativo num local por onde nada passou. */}
-            {tipo !== "entrada" && f.id_produto && ondeTem?.length === 0 && (
-              <div className="sm:col-span-2">
-                <Aviso tipo="erro">
-                  Este produto não tem saldo em nenhum local. Lance uma{" "}
-                  <b>entrada</b> antes — ou confira se o produto é o certo.
-                </Aviso>
-              </div>
-            )}
             {tipo === "transferencia" && (
               <Campo rotulo="Para qual local">
                 <select

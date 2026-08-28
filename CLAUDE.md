@@ -1048,11 +1048,11 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.278 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.285 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (41), `smoke_ciclos.py` (31),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
   `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
@@ -1123,6 +1123,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
 
 ### Armadilhas já pagas
+- ⚠️ **Apagar pasta de rota do Next deixa o cache de dev desalinhado, e a rota-PAI some.**
+  Removidas `app/(app)/ajustes/{lote,custo}/`, `/ajustes` passou a devolver **404** enquanto as
+  outras telas respondiam 200 — o `.next/dev/server/app/(app)/ajustes/custo/` continuava lá com
+  manifesto próprio. Some as sobras em `.next/dev` e dê um `touch` na `page.tsx` (ou reinicie o
+  `npm run dev`). ⚠️ A suíte de navegador tinha passado VERDE logo depois da remoção: o
+  conflito só apareceu numa recompilação posterior.
+- ⚠️ **Suíte de navegador que quebra no MEIO deixa rastro que derruba a próxima.** A limpeza de
+  notas roda no fim; uma quebra antes dela deixou uma nota manual órfã, e as rodadas seguintes
+  falharam num ponto sem relação nenhuma com a causa. Antes de caçar bug numa suíte que
+  começou a falhar sozinha, **procure a sobra da rodada anterior**.
+  ⚠️ O perfil do Chrome do `verificar.mjs` agora fica em `web/scripts/_chrome-perfil` — no
+  TEMP do C: (que vive no limite nesta máquina) o Chrome falha com erro de PROTOCOLO em pontos
+  diferentes a cada rodada, não com "disco cheio", e isso se lê como teste instável.
 - 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto
   costuma estar em UM. Escolher o errado não dava erro na hora: numa saída, o razão registrava
   a baixa por um local onde o insumo nunca passou, criando saldo **negativo com custo
@@ -1135,7 +1148,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   O destino da transferência idem — as duas põem mercadoria onde ela ainda não está.
   ⚠️ **Tirar o seletor não era opção**: produto PODE ter saldo em mais de um local (há casos na
   base), e escolher sozinho ajustaria a prateleira errada em silêncio.
-  ⚠️ Sem saldo em lugar nenhum, os tipos que TIRAM do estoque avisam em vez de deixar lançar.
+  ⚠️ **Sem saldo em lugar nenhum, a lista volta INTEIRA e o lançamento é PERMITIDO.** Houve
+  uma versão que bloqueava com "este produto não tem saldo em nenhum local" — estava errado:
+  perda e saída de algo que o sistema acha que é zero são legítimas, o razão aceita e marca o
+  custo como provisório. Bloquear obrigaria a inventar uma entrada antes, que é pior: cria uma
+  compra que não houve e o custo dela contamina o médio. O acerto de quantidade idem — "a
+  prateleira tem 5 e o sistema não tem nada" é justamente o caso em que ele serve, e
+  `_saldo_de(exigir=False)` trata a ausência de linha como zero.
+  ⚠️ O ajuste de CUSTO continua recusando saldo zero, e não por política: `(novo − atual) × 0`
+  é zero. Não há valor a corrigir.
 - 🔑 **A tela de Ajustes tem SEIS tipos, e eles se dividem em dois grupos.** Entrada, Saída,
   Perda e Transferência dizem **o que se MOVEU**. Ajuste de estoque e Ajuste de custo declaram
   **a VERDADE** — quanto realmente tem, quanto realmente custa — e o sistema calcula a

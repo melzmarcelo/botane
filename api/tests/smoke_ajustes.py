@@ -81,6 +81,8 @@ marca = str(time.time_ns())[-6:]
 hoje = date.today()
 periodo = f"inicio={hoje.replace(day=1)}&fim={hoje}"
 local = garantir_local(chamar, token)
+_st, _motivos = chamar("GET", "/estoque/motivos-perda", token=token)
+motivo_perda = (_motivos or [{}])[0].get("id")
 
 
 def criar(sufixo, um="KG"):
@@ -255,7 +257,39 @@ st, r = chamar("POST", "/ajustes/custo", {
 checar("custo negativo é recusado", st == 422, st)
 
 
-print("\n7. ajuste de custo tem permissão própria")
+print("\n7. lançar SEM saldo é permitido — só o local é exigido")
+# 🔑 A tela chegou a bloquear isto com "este produto não tem saldo em nenhum
+# local". Estava errado: perda e saída de algo que o sistema acha que é zero
+# são legítimas — o razão aceita e marca o custo como PROVISÓRIO. Bloquear
+# obrigaria a inventar uma entrada antes, que é pior: cria uma compra que não
+# houve, e o custo dela contamina o médio.
+zerado2 = criar("W", "UN")
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": zerado2, "quantidade": 2, "tipo": "SAIDA_PERDA",
+    "id_local": local["id"], "id_motivo_perda": motivo_perda}, token=token)
+checar("perda de produto sem saldo nenhum é aceita", st == 201, (st, r))
+checar("e o custo sai marcado como provisório", r.get("custo_provisorio") is True, r)
+
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={zerado2}", token=token)
+checar("o saldo fica negativo, que é o que de fato aconteceu",
+       saldos and perto(saldos[0]["quantidade"], -2), saldos)
+
+# O acerto de quantidade também: "a prateleira tem 5 e o sistema não tem nada"
+# é exatamente o caso em que ele serve.
+zerado3 = criar("Y", "UN")
+st, r = chamar("POST", "/ajustes/estoque/previa", {
+    "id_produto": zerado3, "quantidade_certa": 5, "id_local": local["id"]}, token=token)
+checar("a prévia do acerto responde mesmo sem linha de saldo", st == 200, (st, r))
+checar("partindo de zero", perto(r.get("saldo_atual"), 0), r)
+
+st, r = chamar("POST", "/ajustes/estoque", {
+    "id_produto": zerado3, "quantidade_certa": 5, "id_local": local["id"]}, token=token)
+checar("e o acerto entra, criando o saldo", st == 201, (st, r))
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={zerado3}", token=token)
+checar("o produto passa a ter 5", saldos and perto(saldos[0]["quantidade"], 5), saldos)
+
+
+print("\n8. ajuste de custo tem permissão própria")
 # ⚠️ O Conferente ajusta estoque e NÃO ajusta custo: contar prateleira e
 # decidir valor são poderes diferentes. Se um dia a chave for para o papel
 # errado, esta checagem cai.
@@ -276,7 +310,7 @@ if conferente:
            "estoque.custo" not in chaves, sorted(chaves))
 
 
-print("\n8. tudo na auditoria")
+print("\n9. tudo na auditoria")
 st, aud = chamar("GET", "/auditoria?entidade=ajuste_lote&limite=20", token=token)
 eventos = [e for e in (aud or []) if e.get("acao") in ("ajuste_estoque", "ajuste_custo")]
 checar("o ajuste está registrado", len(eventos) >= 1,

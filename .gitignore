@@ -26,4 +26,8 @@ api/arquivos/
 
 # saída dos testes de tela
 web/scripts/_fotos/
+# Perfil do Chrome do verificar.mjs — volume, nao codigo. Fica no D: de
+# proposito: no TEMP do C: o Chrome falha com erro de PROTOCOLO, nao com
+# "disco cheio", e parece instabilidade do teste.
+web/scripts/_chrome-perfil/
 web/tsconfig.tsbuildinfo
