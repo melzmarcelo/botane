@@ -74,6 +74,7 @@ class ProdutoBase(BaseModel):
     # ⚠️ Espelho do `codigo_omie` para o PDV Legal. Com os DOIS preenchidos, o
     # cadastro é o mesmo produto nas duas integrações — e isso se lê na tela.
     codigo_pdv: str | None = Field(default=None, max_length=40)
+    integrado_pdv: bool = False
     observacao: str | None = None
 
 
@@ -180,6 +181,7 @@ class ProdutoResponse(BaseModel):
     # trabalho de quem administra.
     codigo_omie: str | None = None
     codigo_pdv: str | None = None
+    integrado_pdv: bool | None = None
     # Os códigos EXTRAS do cardápio que apontam para este produto: "ENTREGA" tem
     # quatro na conta real, e um campo só perderia três.
     apelidos_pdv: list[str] = []

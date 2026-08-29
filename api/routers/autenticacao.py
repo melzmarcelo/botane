@@ -23,6 +23,7 @@ from seguranca import (
     gerar_refresh,
     hash_refresh,
     hash_senha,
+    unidade_atual,
     verificar_senha,
 )
 from services import senhas
@@ -216,6 +217,15 @@ def me(ctx: Contexto = Depends(contexto_atual)):
             )
         unidades = [dict(r) for r in cur.fetchall()]
 
+        # A loja ATUAL decide: o envio ao PDV é configurado por loja, e quem
+        # troca de loja no seletor tem de ver a marca da loja em que está.
+        cur.execute(
+            """SELECT enviar_ao_pdv FROM integracoes
+                WHERE servico = 'PDV_LEGAL' AND id_unidade = %s""",
+            (unidade_atual(cur, ctx),),
+        )
+        linha_pdv = cur.fetchone()
+
     return {
         "id": ctx.id_usuario,
         "nome": u["nome"],
@@ -227,6 +237,7 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         "papeis": papeis,
         "unidades": unidades,
         "todas_unidades": ctx.todas_unidades,
+        "enviar_ao_pdv": bool(linha_pdv["enviar_ao_pdv"]) if linha_pdv else False,
     }
 
 

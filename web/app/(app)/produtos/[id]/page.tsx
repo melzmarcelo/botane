@@ -49,6 +49,7 @@ type Form = {
   perecivel: boolean;
   validade_dias: string;
   controla_lote: boolean;
+  integrado_pdv: boolean;
   controla_validade: boolean;
   estoque_minimo: string;
   estoque_maximo: string;
@@ -68,6 +69,7 @@ const VAZIO: Form = {
   codigo: "", nome: "", nome_curto: "", tipo: "INSUMO", id_categoria: "", id_setor: "",
   producao_propria: false, modo_producao: "PARA_ESTOQUE", controla_estoque: true, um_estoque: "", um_compra: "",
   fator_compra: "1", id_local_padrao: "", perecivel: false, validade_dias: "", controla_lote: false,
+  integrado_pdv: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   cest: "", marca: "", peso_liquido: "", peso_bruto: "",
   codigo_barras: "", observacao: "", preco_venda: "", status: "ATIVO", ativo: true,
@@ -84,7 +86,8 @@ export default function FormularioProduto() {
   const { id } = useParams<{ id: string }>();
   const novo = id === "novo";
   const router = useRouter();
-  const { pode } = useSessao();
+  const { pode, eu } = useSessao();
+  const enviaAoPdv = !!eu?.enviar_ao_pdv;
   const podeEditar = pode("cadastros.produtos");
 
   const [f, setF] = useState<Form>(VAZIO);
@@ -173,6 +176,7 @@ export default function FormularioProduto() {
       validade_dias: num(f.validade_dias),
       controla_lote: f.controla_lote,
       controla_validade: f.controla_validade,
+      integrado_pdv: f.integrado_pdv,
       estoque_minimo: num(f.estoque_minimo),
       estoque_maximo: num(f.estoque_maximo),
       ncm: texto(f.ncm),
@@ -603,10 +607,31 @@ export default function FormularioProduto() {
               nome: "Controla validade",
               explica: "Na saída, o sistema sugere o que vence primeiro.",
             },
-          ].map((i) => (
+            // ⚠️ Marca uma DECISÃO, não um fato derivado: quem já tem código
+            // do PDV nasce marcado (e quem ganha o código depois também — quem
+            // garante é o gatilho da 040). Mas um prato novo pode ser marcado
+            // ANTES de existir lá, e um produto que veio de lá pode ser
+            // desmarcado para o Botané não mexer nele.
+            // ⚠️ Só aparece com o envio LIGADO na integração: controle para um
+            // recurso desligado é ruído. Desligar o envio NÃO desmarca ninguém —
+            // o valor gravado fica, e volta a aparecer quando religarem.
+            ...(enviaAoPdv
+              ? [
+                  {
+                    campo: "integrado_pdv" as const,
+                    nome: "Integrado com PDV",
+                    explica: "Este produto existe (ou deve existir) no cardápio do PDV.",
+                  },
+                ]
+              : []),
+          ].map((i, n, lista) => (
             <li
               key={i.campo}
-              className="flex items-start gap-3 bg-superficie p-4 last:sm:col-span-2"
+              // ⚠️ O último só ocupa a linha inteira quando a lista é ÍMPAR —
+              // senão sobra uma célula vazia ao lado dele.
+              className={`flex items-start gap-3 bg-superficie p-4 ${
+                n === lista.length - 1 && lista.length % 2 ? "sm:col-span-2" : ""
+              }`}
             >
               <input
                 id={i.campo}

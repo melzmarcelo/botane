@@ -29,6 +29,7 @@ type Config = {
   ultima_mensagem: string | null;
   importador_disponivel: boolean;
   filiais: string | null;
+  enviar_ao_pdv: boolean;
   agenda_frequencia: string;
   agenda_hora: number;
   agenda_janela_dias: number | null;
@@ -47,6 +48,7 @@ const VAZIO = {
   modo: "simulado",
   ativa: false,
   filiais: "",
+  enviar_ao_pdv: false,
   agenda_frequencia: "MANUAL",
   agenda_hora: "4",
   agenda_janela_dias: "",
@@ -55,7 +57,7 @@ const VAZIO = {
 export default function PdvLegal() {
   const aviso = useAviso();
   const router = useRouter();
-  const { pode } = useSessao();
+  const { pode, recarregar } = useSessao();
   const podeConfigurar = pode("admin.integracoes");
 
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -75,6 +77,7 @@ export default function PdvLegal() {
         modo: c.modo,
         ativa: c.ativa,
         filiais: c.filiais ?? "",
+        enviar_ao_pdv: !!c.enviar_ao_pdv,
         agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
         agenda_hora: String(c.agenda_hora ?? 4),
         agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "",
@@ -100,6 +103,7 @@ export default function PdvLegal() {
         modo: form.modo,
         ativa: form.ativa,
         filiais: form.filiais,
+        enviar_ao_pdv: form.enviar_ao_pdv,
         agenda_frequencia: form.agenda_frequencia,
         agenda_hora: Number(form.agenda_hora || 4),
         // Vazio = janela automática. `Number("")` é 0, que o servidor recusa —
@@ -108,6 +112,11 @@ export default function PdvLegal() {
       });
       aviso.sucesso("Credencial do PDV Legal salva, cifrada. Ela não volta pela tela.");
       await carregar();
+      // ⚠️ O `/auth/me` carrega UMA vez e leva o `enviar_ao_pdv` que a tela de
+      // produto e a de cadastros usam para mostrar (ou esconder) a marca. Sem
+      // recarregar aqui, quem acabou de ligar o envio não veria a marca em
+      // lugar nenhum até dar F5 — e concluiria que o interruptor não fez nada.
+      await recarregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
     } finally {
@@ -285,6 +294,34 @@ export default function PdvLegal() {
               <span className="pb-1.5 text-[14px]">integração ativa</span>
             </label>
           </div>
+
+          {/* 🔑 **A mão inversa.** Até aqui a integração só LÊ do PDV. Escrever
+              de volta mexe no sistema que a casa usa para vender, no meio do
+              expediente de alguém — por isso é um interruptor separado do
+              "integração ativa", nasce DESLIGADO, e ligar é decisão de quem
+              responde pelo cardápio. */}
+          <section id="envio-pdv" className="rounded border border-linha p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-erva"
+                disabled={!podeConfigurar}
+                checked={form.enviar_ao_pdv}
+                onChange={(e) => setForm({ ...form, enviar_ao_pdv: e.target.checked })}
+              />
+              <span>
+                <span className="block text-[14.5px] font-semibold">
+                  Enviar informações ao PDV
+                </span>
+                <span className="mt-0.5 block max-w-[70ch] text-[13px] leading-snug text-suave">
+                  Libera o envio de cadastros daqui para o cardápio do PDV. Entram só os
+                  produtos marcados como <b>Integrado com PDV</b> — quem já tem código do
+                  PDV nasce marcado. Nada é enviado sozinho: o envio é sempre disparado
+                  por alguém.
+                </span>
+              </span>
+            </label>
+          </section>
 
           {/* ⚠️ A busca automática existe pela mesma razão que a do Omie: venda
               de sábado que ninguém importa é receita que falta no CMV do fim de

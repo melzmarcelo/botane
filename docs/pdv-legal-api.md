@@ -25,8 +25,31 @@ grant_type=password&username=…&password=…&client_id=…&client_secret=…
 
 ## A conta do cliente
 
-Uma filial: **código `37622`**, CAFE DA CLINICA LTDA, CNPJ 59.938.158/0001-50,
-Biguaçu. O `client_id` (31121) aparece nos cupons como `codempresa`.
+🔑 **CORRIGIDO em 29/08/2026 — este arquivo descrevia a conta ERRADA.** Ele
+dizia *"filial 37622, CAFE DA CLINICA LTDA, CNPJ 59.938.158/0001-50, Biguaçu"*,
+que é a empresa de outra pessoa: foi o primeiro par de chaves testado, e ele
+autenticava, respondia tudo e apontava para outro lugar. Foram 46 vendas e 165
+pratos de terceiro dentro da base antes de alguém reparar no nome — e o arquivo
+de referência ficou com o erro por mais três dias.
+
+A conta certa, **conferida contra `GET filial/get` em 29/08/2026**:
+
+| | |
+|---|---|
+| `client_id` (grupo econômico) | **25527** |
+| filial | **30638** |
+| razão social | **BOTANE DELI E CAFE LTDA** |
+| CNPJ | **45.304.800/0001-34** |
+| cidade | Blumenau/SC |
+
+⚠️ **O CNPJ vem SEM pontuação nesta conta** (`45304800000134`) e **com**
+pontuação na outra — comparar só os dígitos, sempre.
+
+⚠️ **Credencial de integração não diz de quem ela é.** A primeira chamada de
+qualquer conta nova é `GET filial/get`, e o que ela devolver se compara com o
+CNPJ que o cliente informou. Lendo, o erro custa dado de terceiro na base;
+**escrevendo, cadastra produto do Botané no PDV de outra empresa** — e lá não
+existe "desfazer importação".
 
 ---
 

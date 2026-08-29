@@ -474,6 +474,7 @@ try {
       (b) => b.textContent?.trim() === "Baixar"));
   checar("a tela do produto oferece baixar os dados dele", baixarProduto);
 
+
   checar("o formulário do produto tem o código de barras (EAN/GTIN)", fiscais.ean, fiscais);
   checar("e os campos que vêm do cadastro do Omie",
     fiscais.ncm && fiscais.cest && fiscais.marca && fiscais.peso, fiscais);
@@ -536,6 +537,110 @@ try {
   checar("o voltar é um controle, não um rótulo",
     voltar?.tag === "A" && parseFloat(voltar?.borda ?? "0") > 0
       && parseFloat(voltar?.tamanho ?? "0") >= 13, voltar);
+
+  // ⚠️ **Este bloco RECARREGA a tela e sai dela** — por isso vem aqui, depois
+  // de tudo o que dependia do estado do cadastro recém-salvo. Posto antes, o
+  // `reload` apagava o aviso flutuante e derrubava cinco checagens que não têm
+  // nada a ver com o PDV. É a regra que já valia: teste que desvia tem de vir
+  // no fim, ou voltar.
+  // ⚠️ **A marca só aparece com o envio LIGADO.** Controle para um recurso
+  // desligado é ruído: quem cadastra um produto hoje não tem o que decidir
+  // sobre um envio que não acontece. Aqui se prova o PORTÃO — com o envio
+  // desligado (o padrão) a caixinha não existe; ligado, ela aparece.
+  const marcaDoPdv = () =>
+    p.evaluate(() => {
+      const c = document.querySelector("#integrado_pdv");
+      return { existe: !!c, marcado: c ? c.checked : null,
+               rotulo: /Integrado com PDV/.test(document.body.innerText) };
+    });
+  // ⚠️ **Não SUPÕE que o envio está desligado — desliga.** A casa pode estar com
+  // ele ligado (foi o que aconteceu na primeira rodada depois de o dono ligá-lo),
+  // e o teste acusava a tela de mostrar uma marca que ela deve mesmo mostrar.
+  // Garante a precondição em vez de supô-la, e devolve o que achou no fim.
+  const { dados: pdvAntesMarca } = await api("GET", "/pdv/config", null, token);
+  const comEnvioAssim = (ligado) => api("PUT", "/pdv/config", {
+    modo: pdvAntesMarca?.modo ?? "simulado", ativa: pdvAntesMarca?.ativa ?? false,
+    enviar_ao_pdv: ligado,
+    agenda_frequencia: pdvAntesMarca?.agenda_frequencia ?? "MANUAL",
+    agenda_hora: pdvAntesMarca?.agenda_hora ?? 4,
+    agenda_janela_dias: pdvAntesMarca?.agenda_janela_dias ?? null,
+  }, token);
+  const reporEnvio = () => comEnvioAssim(!!pdvAntesMarca?.enviar_ao_pdv);
+  // Registrado ANTES de mexer: se o roteiro estourar no meio, a casa não fica
+  // com o envio num estado que ninguém escolheu.
+  aoTerminar.push(reporEnvio);
+
+  await comEnvioAssim(false);
+  await p.reload({ waitUntil: "networkidle2" });
+  await p
+    .waitForFunction(
+      () => [...document.querySelectorAll("span.rotulo")].some(
+        (r) => r.textContent?.trim() === "NCM"),
+      { timeout: 20000 })
+    .catch(() => {});
+  const semEnvio = await marcaDoPdv();
+  checar("com o envio desligado, a marca do PDV nem aparece",
+    !semEnvio.existe && !semEnvio.rotulo, semEnvio);
+  await comEnvioAssim(true);
+  await p.reload({ waitUntil: "networkidle2" });
+  await p
+    .waitForFunction(
+      () => [...document.querySelectorAll("span.rotulo")].some(
+        (r) => r.textContent?.trim() === "NCM"),
+      { timeout: 20000 })
+    .catch(() => {});
+  const comEnvio = await marcaDoPdv();
+  checar("ligado o envio, a marca aparece no cadastro",
+    comEnvio.existe && comEnvio.rotulo, comEnvio);
+  // Produto recém-criado pela tela não tem código do PDV: nasce desmarcado.
+  checar("e um produto novo nasce desmarcado", comEnvio.marcado === false, comEnvio);
+
+  // E nas tabelas de apoio, onde a marca é do SETOR (a impressora do PDV) e da
+  // CATEGORIA (o grupo dele).
+  await irPara(p, `${WEB}/cadastros?aba=setores`);
+  await new Promise((r) => setTimeout(r, 1500));
+  const apoioComEnvio = await p.evaluate(() =>
+    /integrar ao PDV|tirar do PDV/.test(document.body.innerText));
+  checar("e nas tabelas de apoio o setor também", apoioComEnvio);
+
+  // A tela de Exportação: só existe com o envio ligado, e é onde a fila mora.
+  await irPara(p, `${WEB}/exportacao`);
+  await new Promise((r) => setTimeout(r, 2500));
+  const exportacao = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    const abas = [...document.querySelectorAll("nav button")].map((b) => b.textContent ?? "");
+    return {
+      titulo: /Exporta..o para o PDV/.test(texto),
+      // As três abas do ciclo: o que falta, o que foi, e o que deu errado.
+      pendentes: abas.some((a) => /^Pendentes \(/.test(a.trim())),
+      integrados: abas.some((a) => /^Integrados \(/.test(a.trim())),
+      erros: abas.some((a) => /^Erros \(/.test(a.trim())),
+      // ⚠️ Não pode dizer que o envio está desligado com ele LIGADO.
+      recusou: /envio ao PDV est. desligado/i.test(texto),
+    };
+  });
+  checar("a tela de exportação para o PDV existe", exportacao.titulo, exportacao);
+  checar("com as três abas do ciclo",
+    exportacao.pendentes && exportacao.integrados && exportacao.erros, exportacao);
+  checar("e com o envio ligado ela não diz que está desligado",
+    !exportacao.recusou, exportacao);
+  await foto(p, "30c-exportacao-pdv");
+
+  await reporEnvio();
+
+  // ⚠️ Desligado, o item some do menu e a tela explica — porta que abre numa
+  // tela inútil é pior que porta nenhuma.
+  await comEnvioAssim(false);
+  await irPara(p, `${WEB}/exportacao`);
+  await new Promise((r) => setTimeout(r, 1600));
+  const desligada = await p.evaluate(() => ({
+    explica: /envio ao PDV est. desligado/i.test(document.body.innerText),
+    noMenu: [...document.querySelectorAll("aside a")].some(
+      (a) => a.getAttribute("href") === "/exportacao"),
+  }));
+  checar("desligado, a tela explica em vez de listar", desligada.explica, desligada);
+  checar("e o item sai do menu", !desligada.noMenu, desligada);
+  await reporEnvio();
 
   // ⚠️ `?busca=` na URL não filtra nada: a busca é estado da tela. Com 2.000
   // produtos na base — uma conta real —, abrir a lista e esperar ver o que
@@ -2757,6 +2862,24 @@ try {
     };
   });
   checar("o PDV também oferece a busca automática", agendaPdv.temBloco, agendaPdv);
+
+  // 🔑 A mão inversa. Até aqui a integração só LIA do PDV; escrever de volta
+  // mexe no sistema que a casa usa para vender, então é um interruptor
+  // separado do "integração ativa" e nasce DESLIGADO.
+  const envioPdv = await p.evaluate(() => {
+    const bloco = document.querySelector("#envio-pdv");
+    const caixa = bloco?.querySelector('input[type="checkbox"]');
+    return { temBloco: !!bloco, ligado: caixa ? caixa.checked : null,
+             frase: /Enviar informações ao PDV/.test(bloco?.innerText ?? "") };
+  });
+  checar("a tela oferece o envio ao PDV", envioPdv.temBloco && envioPdv.frase, envioPdv);
+  // ⚠️ **Afirma que a caixinha REFLETE o servidor, não que ela está desligada.**
+  // Ela nasce desligada, mas depois de a casa ligar o envio ela fica ligada — e
+  // o teste caía acusando de defeito uma decisão do dono. É a mesma correção da
+  // checagem do setor BAR: descrever a propriedade, nunca o estado do dia.
+  const { dados: cfgEnvio } = await api("GET", "/pdv/config", null, token);
+  checar("e a caixinha mostra o que o servidor diz",
+    envioPdv.ligado === !!cfgEnvio?.enviar_ao_pdv, [envioPdv.ligado, cfgEnvio?.enviar_ao_pdv]);
   checar("com as três frequências",
     ["MANUAL", "HORARIA", "DIARIA"].every((f) => agendaPdv.opcoes.includes(f)),
     agendaPdv);

@@ -208,3 +208,242 @@ Perguntas que elas respondem:
 ⚠️ **Nada disso deve nascer automático.** A busca já é agendada porque errar
 para menos custa uma venda não importada; errar para mais, na escrita, custa o
 cardápio do cliente.
+
+
+---
+
+## 9. O desenho pedido pelo dono (29/08/2026)
+
+> **Passo 1 FEITO** (migração 040): o interruptor `enviar_ao_pdv` na tela de
+> Integrações e a marca `integrado_pdv` no cadastro do produto, com a carga dos
+> 744 que já tinham ligação e o gatilho que marca quem ganhar a ligação depois.
+> **Passo 1b FEITO** (migração 041): a mesma marca em **setor** e
+> **categoria** — 29 categorias e 3 setores (VITRINE, BAR, COZINHA) marcados
+> pela carga. E os três campos só APARECEM com o envio ligado, pela dica que
+> viaja no `/auth/me`.
+> **Passo 2 FEITO** (migrações 042 e 043): a fila, a tela **Cadastros ▸
+> Exportação para o PDV** com as três abas, e a tabela intermediária
+> `pdv_pendencias` alimentada por gatilho. **Exercitado contra a conta real**:
+> 29 categorias e 3 setores adotados, `codRefExterna` gravado lá.
+> Falta o produto — a função do gatilho já o trata e o `CREATE TRIGGER` está
+> escrito e comentado na 043.
+
+> Um parâmetro nas integrações do PDV, "Enviar informações ao PDV". Habilitado,
+> aparece em Cadastros um item novo — como Exportações — listando tudo que está
+> **pendente de envio**, em três abas: **pendente**, **enviado** e **com erro**,
+> para ajustar e ver qual foi o erro. E em produto, ficha e categoria, um campo
+> novo "Integrado com PDV", com um script para marcar os registros atuais.
+
+A forma está certa e resolve o problema central: **de 3.301 produtos, só uns 500
+têm o que fazer no PDV**, e sem uma marcação por registro o envio teria de
+adivinhar quais. Abaixo, o que o desenho implica e o que ele ainda não decide.
+
+### 9.1 A marcação: o que ela quer dizer, exatamente
+
+⚠️ **`integrado_pdv` e `codigo_pdv` são coisas diferentes, e a diferença É a
+fila.**
+
+| `integrado_pdv` | `codigo_pdv` | significa | ação |
+|---|---|---|---|
+| ✔ | vazio | *deve* existir lá e não existe | `produtos/save` |
+| ✔ | preenchido | existe lá | `produtos/update`, **se mudou** |
+| ✘ | preenchido | veio de lá, mas não mandamos nada | nada — **nunca apagar** |
+| ✘ | vazio | insumo de compra; não é assunto do PDV | nada |
+
+**O script de marcação dos registros atuais** sai desses fatos, sem palpite:
+
+- **produtos**: `integrado_pdv = (codigo_pdv IS NOT NULL)` — 534 hoje.
+- **categorias**: verdadeiro para a categoria que **classifica ao menos um
+  produto que já existe no PDV**. É fato, não semelhança de nome.
+- **setores**: idem (ver 9.4).
+
+### 9.2 A fila tem de ser DERIVADA, não mantida
+
+🔑 A tentação é uma coluna `pendente_pdv` marcada quando alguém salva. **É a
+armadilha do nome em maiúsculas, ao contrário.** O nome de um produto é escrito
+em cinco lugares — o formulário, o catálogo do Omie, o cardápio do PDV, a
+criação a partir do item da nota e a fusão de cadastros. Uma fila mantida à mão
+precisaria ser alimentada nos cinco, e **o sexto — que vai existir — nasceria
+sem ela**: o produto mudaria aqui e nunca apareceria como pendente.
+
+A saída é a mesma que o gatilho usou: **não depender de memória**. O envio grava
+a **impressão** (hash) do que mandou; a aba *pendente* é uma consulta —
+
+```
+integrado_pdv = true
+E ( nunca enviado  OU  impressão do que seria enviado agora ≠ a do último envio OK )
+```
+
+Assim a fila está sempre certa, venha a mudança de onde vier — inclusive de uma
+tela que ainda não foi escrita.
+
+### 9.3 As três abas, e o que cada uma é
+
+| aba | o que é | de onde sai |
+|---|---|---|
+| **pendente** | consulta derivada (9.2) | calculada na hora |
+| **enviado** | o histórico do que foi | `pdv_envios` com estado OK |
+| **com erro** | a última tentativa que falhou, com a mensagem e o que foi mandado | `pdv_envios` com estado ERRO |
+
+⚠️ **A aba "com erro" só serve se guardar o CORPO enviado.** "Erro 400" sozinho
+não diz o que ajustar; com o payload ao lado, quem olha vê que faltou o grupo ou
+que o NCM foi recusado.
+
+⚠️ **Enviado é histórico e cresce para sempre** — entra paginada, pelo padrão da
+casa (`usePaginacao` + `X-Total`), com o corte no servidor.
+
+⚠️ **Toda tentativa vai para a auditoria**, com o que foi mandado. É a única
+forma de responder depois "quem mudou o preço deste prato no caixa".
+
+### 9.4 A ordem importa: categoria antes de produto
+
+O produto no PDV tem **grupo** (`nomeGrupo`) e **impressora** (`nomeImpressora`).
+Mandar um produto cuja categoria ainda não existe lá tende a falhar — e a aba
+"com erro" encheria de falhas de dependência que não são erro nenhum, só ordem.
+
+Então a fila é **por tipo, em ordem**: categorias → (setores) → produtos.
+
+⚠️ **E falta o de-para dos dois.** `categorias` e `setores` não têm coluna de
+código do PDV; o vínculo com `grupoprodutos` e `impressoras` **não existe** e
+precisa nascer com este trabalho — senão cada envio recria o grupo lá.
+
+⚠️ **O dono não citou setor.** Mas se o produto vai com impressora, o setor vai
+junto por consequência. Decidir se ele entra agora ou se o produto sai sem
+impressora (e alguém escolhe lá).
+
+### 9.5 A ficha é a peça que não tem encaixe do outro lado
+
+⚠️ **Não existe rota de receita no PDV** — nenhuma das 173. E o modelo de
+`produtos/get` **não tem campo de custo nem de preço**: o preço mora em
+`tabelapreco`, e custo não aparece em lugar nenhum do produto.
+
+Então "ficha integrada com PDV" precisa de significado. As leituras possíveis:
+
+1. **O prato da ficha deve existir no PDV** — mas isso já é o
+   `integrado_pdv` do *produto*; a ficha não acrescenta nada.
+2. **Mandar o custo que a ficha calcula**, para os relatórios do PDV baterem com
+   os daqui. Só caberia dentro de `tabelapreco/save` (*"preços e impostos"*), e
+   **não se sabe se ele tem campo de custo** — é uma das perguntas do item 6.
+3. **Marcar quais fichas estão prontas** para o prato poder ir (ficha homologada
+   como pré-condição do envio). Isso é uma regra da FILA, não um campo na ficha.
+
+**Pergunta para o dono:** qual das três? Hoje a (2) é a única que manda algo novo
+para o PDV, e depende de um campo que talvez não exista.
+
+### 9.6 O parâmetro, e o que ele protege
+
+`integracoes.enviar_ao_pdv` na linha do PDV_LEGAL, **por loja**, **desligado por
+padrão** — como as agendas. Desligado, o item de menu não aparece e nenhuma rota
+de escrita responde.
+
+⚠️ **A guarda do CNPJ (item 1) vale por lote, no servidor**, e não é substituída
+por este parâmetro: um está ligado e o outro está certo são coisas diferentes.
+
+⚠️ **O envio nasce MANUAL.** A busca é agendada porque errar para menos custa uma
+venda não importada; errar para mais, na escrita, custa o cardápio do cliente no
+meio do expediente.
+
+### 9.7 O que este desenho ainda não decide
+
+1. **A ficha** (9.5) — qual dos três significados.
+2. **O preço** entra no envio? Volta a decisão do item 4: quem é o dono do preço
+   de venda. Se entrar, a leitura do preço tem de sair.
+3. **Setor/impressora** entra agora (9.4)?
+4. As cinco perguntas do item 6, que só as páginas de modelo respondem.
+
+
+---
+
+## 10. O produto — o mapa de estados (29/08/2026)
+
+Medido nos modelos reais (`/Help/Api/POST-produtos-save` e `POST-tabelapreco-save`).
+
+### 10.1 O que a API oferece
+
+`produtos` tem **`CodRefExterna`** (o nosso id) e — o que muda o desenho —
+**`CodGrupoExterno`**: o produto aponta para o grupo pelo **nosso** id de
+categoria. Foi para isso que adotar as 29 categorias serviu; sem aquilo, cada
+produto precisaria carregar o código do grupo de lá.
+
+Campos que nos interessam:
+
+| PDV | daqui |
+|---|---|
+| `CodRefExterna` | `produtos.id` |
+| `Codigo` | `produtos.codigo_pdv` (0 quando ainda não existe lá) |
+| `DescricaoCupom` | `nome_curto` — é o que sai no cupom |
+| `DescricaoDetalhada` | `nome` |
+| `CodGrupoExterno` | `id_categoria` |
+| `CodigoImpressora` | `setores.codigo_pdv` do `id_setor` |
+| `Unidade`, `CodigoNCM`, `CodigoCest`, `CodigoEAN` | os campos do cadastro |
+| `Status` (bool) | `ativo` |
+
+**O preço vai por outra rota**, `tabelapreco/save|update`
+(`Fiweb.Models.Produtos.Impostos`):
+
+- **`CodProduto` é o ÚNICO campo obrigatório** — e é o código DELES, por isso
+  `produtos.codigo_pdv` precisa estar gravado antes de qualquer preço sair.
+- `Valor` é o preço de venda; `CodFilial` diz de qual loja.
+- 🔑 **Todos os campos fiscais são opcionais** (CFOP, CSOSN, PIS, Cofins…).
+  Isso responde a pergunta 4 do item 6: **mandar preço não depende de cadastro
+  fiscal nenhum.**
+- 🔑 **Existe `ValorCusto`.** É o encaixe que faltava para a ficha técnica
+  (item 9.5): o custo calculado aqui tem para onde ir, e os relatórios do PDV
+  passariam a bater com os daqui.
+
+### 10.2 O mapa de estados
+
+| # | aqui | no PDV | ação |
+|---|---|---|---|
+| 1 | novo, marcado, ativo | não existe | **CRIAR** |
+| 2 | marcado, ativo | existe, sem dono (`codRefExterna` = 0) | **ADOTAR** |
+| 3 | marcado, ativo | é nosso, e algo que ele enxerga mudou | **ATUALIZAR** |
+| 4 | marcado, ativo | é nosso, mas está **inativo lá** | **REATIVAR** |
+| 5 | **desmarcado** | é nosso e ativo lá | **DESATIVAR** |
+| 6 | **inativado aqui** | é nosso e ativo lá | **DESATIVAR** |
+| 7 | desmarcado | não existe lá | nada |
+| 8 | marcado, mudou só o **preço** | é nosso | **PREÇO** (`tabelapreco`) |
+
+⚠️ **Tudo passa pela fila.** Nenhum desses estados escreve no PDV ao salvar: o
+gatilho registra a pendência e alguém manda pela tela de Exportação.
+
+### 10.3 A assimetria com a categoria, e por que ela é segura
+
+Na categoria, `ativo` **não** se sincroniza — PASCOA e DIA DOS NAMORADOS ficam
+ativas aqui o ano todo e são ligadas e desligadas lá conforme a época, e
+sincronizar reativaria a Páscoa em agosto.
+
+No produto, você pediu o contrário: desativar aqui deve desativar lá. O risco é
+o mesmo — um prato de inverno desligado no cardápio e ainda ativo aqui.
+
+🔑 **O que torna as duas coisas compatíveis é a PENDÊNCIA.** É a mudança feita
+*aqui* que autoriza mexer no `ativo` de *lá*:
+
+- desativei o produto aqui → pendência → o envio desativa lá ✔
+- alguém desativou no PDV e nada mudou aqui → **sem pendência, sem ação** ✔
+
+A diferença de `ativo` **nunca sozinha** gera envio; só a mudança registrada
+gera. Assim o dono do estado continua sendo quem mexeu por último em cada lado,
+e não há ping-pong.
+
+### 10.4 A decisão que ainda é sua: o preço tem dois donos
+
+⚠️ **Hoje o Botané LÊ o preço do PDV.** `services/pdv/cardapio.py` importa
+`tabelapreco/get` e grava em `produto_precos` "só quando muda" — 629 de 630
+preenchidos vieram de lá.
+
+Se o preço passar a ser enviado **sem** a leitura mudar, os dois sistemas
+brigam: um preço alterado no PDV volta por cima do que mandamos, o próximo
+envio o desfaz, e a tabela de preços — que existe para responder *"quando o
+preço subiu?"* — vira ruído.
+
+As saídas, e nenhuma é técnica:
+
+1. **O Botané passa a ser o dono**: envia preço e **para de importar** preço do
+   cardápio. É o que fecha o ciclo do sistema (custo → food cost → decisão de
+   preço → caixa).
+2. **O PDV continua dono**: o preço não entra no envio, e a integração de
+   produto manda só cadastro. O ciclo fica pela metade.
+
+Enquanto isso não for decidido, o envio de produto sai **sem preço** — cadastro
+apenas. É o único caminho que não cria a briga.

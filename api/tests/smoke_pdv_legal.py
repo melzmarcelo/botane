@@ -817,6 +817,230 @@ checar("o lock do PDV não é o do Omie",
        agenda_pdv.LOCK_AGENDA_PDV != agenda_omie.LOCK_AGENDA_OMIE,
        (agenda_pdv.LOCK_AGENDA_PDV, agenda_omie.LOCK_AGENDA_OMIE))
 
+print("\n8j. o interruptor do envio, e a marca de quem participa")
+# A integracao so LIA do PDV. Escrever de volta mexe no sistema que a casa usa
+# para vender, entao o caminho comeca por duas coisas que nao enviam nada: o
+# interruptor e a marcacao de quem participa.
+st, cfg = chamar("GET", "/pdv/config", token=token)
+checar("a configuracao publica o interruptor de envio", "enviar_ao_pdv" in cfg, list(cfg))
+# ⚠️ **"Nasce desligado" é propriedade da linha NOVA, não da que está aí.** A
+# versao anterior afirmava `False` na configuracao atual e caiu no dia em que a
+# casa ligou o envio — acusando de defeito uma decisao do dono. Quem garante o
+# padrao e o `DEFAULT false` da migracao 040 mais o `coalesce(%s, false)` do
+# INSERT; o que se testa aqui e que o campo existe e e booleano.
+checar("e ele e um booleano", isinstance(cfg.get("enviar_ao_pdv"), bool),
+       type(cfg.get("enviar_ao_pdv")).__name__)
+
+# Um produto novo NAO nasce marcado: a marca e uma decisao.
+st, novo_p = chamar("POST", "/produtos", {
+    "codigo": f"PDVI{marca}", "nome": f"Pdv integrado {marca}",
+    "tipo": "PRODUZIDO", "um_estoque": "UN",
+}, token=token)
+id_novo = novo_p.get("id")
+st, p_novo = chamar("GET", f"/produtos/{id_novo}", token=token)
+checar("produto novo nao nasce integrado", p_novo.get("integrado_pdv") is False,
+       p_novo.get("integrado_pdv"))
+
+# Quem GANHA o codigo do PDV e marcado pelo BANCO. O `codigo_pdv` e escrito em
+# quatro lugares (formulario, importacao do cardapio e as duas rotas do
+# Vincular); marcar na aplicacao exigiria lembrar nos quatro, e o quinto
+# nasceria sem a marca — o produto passaria a existir no PDV e nunca apareceria
+# na fila de envio.
+chamar("PUT", f"/produtos/{id_novo}", {**p_novo, "codigo_pdv": f"C{marca}"}, token=token)
+st, p_novo = chamar("GET", f"/produtos/{id_novo}", token=token)
+checar("ganhar o codigo do PDV marca sozinho", p_novo.get("integrado_pdv") is True,
+       (p_novo.get("integrado_pdv"), p_novo.get("codigo_pdv")))
+
+# E o DESMARQUE fica de pe: "existe no PDV e eu nao quero que o Botane mexa
+# nele" e um estado legitimo. Um gatilho que forcasse `true` sempre que houvesse
+# codigo o destruiria no primeiro save.
+chamar("PUT", f"/produtos/{id_novo}", {**p_novo, "integrado_pdv": False}, token=token)
+st, p_novo = chamar("GET", f"/produtos/{id_novo}", token=token)
+checar("o dono pode desmarcar quem veio do PDV",
+       p_novo.get("integrado_pdv") is False, p_novo.get("integrado_pdv"))
+chamar("PUT", f"/produtos/{id_novo}", {**p_novo, "observacao": "salvou de novo"},
+       token=token)
+st, p_novo = chamar("GET", f"/produtos/{id_novo}", token=token)
+checar("e salvar de novo nao remarca", p_novo.get("integrado_pdv") is False,
+       p_novo.get("integrado_pdv"))
+chamar("DELETE", f"/produtos/{id_novo}", token=token)
+
+# O produto no cardapio do PDV carrega GRUPO e IMPRESSORA — a categoria e o
+# setor daqui. Mandar um produto cujo grupo nao existe la tende a falhar, entao
+# os dois tambem se marcam.
+st, s_novo = chamar("POST", "/setores", {"nome": f"Setor pdv {marca}"}, token=token)
+id_setor_pdv = s_novo.get("id")
+st, setores_ = chamar("GET", "/setores?incluir_inativos=true", token=token)
+achado = next((x for x in setores_ if x["id"] == id_setor_pdv), {})
+checar("setor tem a marca de integrado com PDV", "integrado_pdv" in achado, achado)
+checar("e nasce desmarcado", achado.get("integrado_pdv") is False, achado)
+chamar("PUT", f"/setores/{id_setor_pdv}", {"integrado_pdv": True}, token=token)
+st, setores_ = chamar("GET", "/setores?incluir_inativos=true", token=token)
+achado = next((x for x in setores_ if x["id"] == id_setor_pdv), {})
+checar("e a marca do setor grava", achado.get("integrado_pdv") is True, achado)
+chamar("DELETE", f"/setores/{id_setor_pdv}", token=token)
+
+st, c_novo = chamar("POST", "/categorias",
+                    {"nome": f"Cat pdv {marca}", "tipo": "PRODUZIDO"}, token=token)
+id_cat_pdv = c_novo.get("id")
+st, cats = chamar("GET", "/categorias?incluir_inativas=true", token=token)
+achada = next((x for x in cats if x["id"] == id_cat_pdv), {})
+checar("categoria tem a marca de integrado com PDV", "integrado_pdv" in achada, achada)
+chamar("PUT", f"/categorias/{id_cat_pdv}", {"integrado_pdv": True}, token=token)
+st, cats = chamar("GET", "/categorias?incluir_inativas=true", token=token)
+achada = next((x for x in cats if x["id"] == id_cat_pdv), {})
+checar("e a marca da categoria grava", achada.get("integrado_pdv") is True, achada)
+chamar("DELETE", f"/categorias/{id_cat_pdv}", token=token)
+
+# A carga da 041 marcou por FATO: o setor que ja tem produto no PDV. Na conta
+# real sao exatamente as tres impressoras — VITRINE, BAR e COZINHA.
+st, setores_ = chamar("GET", "/setores", token=token)
+marcados = [x["nome"] for x in setores_ if x.get("integrado_pdv")]
+checar("a carga marcou os setores que ja tem produto no PDV", len(marcados) > 0, marcados)
+
+# 🔑 A dica de interface viaja no /auth/me — quem cadastra produto nao tem
+# `integracao.pdv` para perguntar ao /pdv/config.
+st, me = chamar("GET", "/auth/me", token=token)
+checar("o /auth/me diz se o envio esta ligado", "enviar_ao_pdv" in me, list(me))
+
+
+print("\n8k. a fila de envio ao PDV")
+# ⚠️ Em SIMULADO: a fila le o cardapio do outro lado, e uma suite que roda toda
+# hora nao pode ficar batendo na conta do cliente por isso.
+st, cfg_atual = chamar("GET", "/pdv/config", token=token)
+base_cfg = {"modo": cfg_atual["modo"], "ativa": cfg_atual["ativa"],
+            "agenda_frequencia": cfg_atual["agenda_frequencia"],
+            "agenda_hora": cfg_atual["agenda_hora"],
+            "agenda_janela_dias": cfg_atual.get("agenda_janela_dias")}
+chamar("PUT", "/pdv/config", {**base_cfg, "modo": "simulado",
+                              "enviar_ao_pdv": False}, token=token)
+st, r = chamar("GET", "/pdv/envio/fila", token=token)
+checar("com o envio desligado a fila recusa", st == 409, st)
+checar("e a frase diz onde ligar", "Integra" in str(r.get("detail")), r)
+
+chamar("PUT", "/pdv/config", {**base_cfg, "modo": "simulado",
+                              "enviar_ao_pdv": True}, token=token)
+st, fila = chamar("GET", "/pdv/envio/fila", token=token)
+checar("ligado, a fila responde", st == 200 and "pendentes" in fila, st)
+checar("com as tres abas",
+       all(k in fila for k in ("pendentes", "integrados", "erros")), list(fila))
+
+# 🔑 O que mais importa nesta tela: o que JA EXISTE no PDV entra como ADOTAR,
+# nunca como CRIAR. Sem isso o primeiro envio duplicaria o cardapio inteiro do
+# cliente — 30 grupos que existem ha anos e nunca souberam do Botane.
+acoes = {(p["tipo"], p["nome"]): p["acao"] for p in fila["pendentes"]}
+cafeteria = next((a for (t, n), a in acoes.items()
+                  if t == "CATEGORIA" and n == "CAFETERIA"), None)
+checar("categoria que ja existe no PDV entra como ADOTAR", cafeteria == "ADOTAR", cafeteria)
+# ⚠️ **A afirmacao é sobre o INVARIANTE, nao sobre o estado do dia.** A versao
+# anterior exigia BAR pendente como ADOTAR — e BAR passou a INTEGRADO assim que
+# a casa adotou os setores de verdade, derrubando a checagem sem que nada
+# estivesse errado. O que nao pode acontecer nunca e outra coisa: propor CRIAR
+# para um registro que ja existe do outro lado. Foi esse o defeito que quase
+# duplicou o cardapio do cliente.
+nomes_la = {"ALMOCO", "CAFETERIA", "CHA", "BAR", "CAIXA", "COZINHA", "VITRINE"}
+criar_indevido = [p["nome"] for p in fila["pendentes"]
+                  if p["acao"] == "CRIAR" and p["nome"].upper() in nomes_la]
+checar("nunca propoe CRIAR para o que ja existe no PDV", not criar_indevido, criar_indevido)
+conhecidos = {p["nome"] for p in fila["pendentes"] + fila["integrados"]}
+checar("e o setor que ja existe la e reconhecido", "BAR" in conhecidos,
+       sorted(conhecidos)[:8])
+
+# 🔑 **Um PUT que NAO manda o campo mantem o valor.** Este endpoint substitui a
+# linha inteira, e com `False` de padrao qualquer chamada que omitisse o campo
+# DESLIGAVA o envio em silencio — um cliente antigo, uma tela que so salva a
+# agenda, um script de restauro. Aconteceu com o restaurador da agenda na suite
+# de navegador, e o sintoma e o pior possivel: a tela de Exportacao some do menu
+# e nada explica.
+chamar("PUT", "/pdv/config", {**base_cfg, "enviar_ao_pdv": True}, token=token)
+chamar("PUT", "/pdv/config", base_cfg, token=token)   # sem o campo, de proposito
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("um PUT sem o campo MANTEM o envio ligado", c.get("enviar_ao_pdv") is True,
+       c.get("enviar_ao_pdv"))
+chamar("PUT", "/pdv/config", {**base_cfg, "enviar_ao_pdv": False}, token=token)
+st, c = chamar("GET", "/pdv/config", token=token)
+checar("e mandar False desliga de verdade", c.get("enviar_ao_pdv") is False,
+       c.get("enviar_ao_pdv"))
+chamar("PUT", "/pdv/config", {**base_cfg, "enviar_ao_pdv": True}, token=token)
+
+# E o corpo da adocao preserva o que e DELES: adotar e reconhecer, nao impor.
+adocao = next((p for p in fila["pendentes"]
+               if p["tipo"] == "CATEGORIA" and p["nome"] == "CAFETERIA"), None)
+if adocao:
+    checar("a adocao leva o codigo deles", adocao["corpo"].get("codigo") == 328953, adocao)
+    checar("e preserva a cor de la", adocao["corpo"].get("corIcone") == "2980B9", adocao)
+    checar("gravando o NOSSO id no codRefExterna",
+           adocao["corpo"].get("codRefExterna") == adocao["id_registro"], adocao)
+
+# ⚠️ O modo simulado NAO inventa sucesso: enviar ali tem de recusar, senao a aba
+# de integrados encheria de registro que nao existe no PDV.
+st, r = chamar("POST", "/pdv/envio", {}, token=token)
+checar("enviar em simulado nao finge que gravou",
+       st >= 400 or (r or {}).get("falhas", 0) > 0, (st, r))
+
+# ⚠️ DEVOLVE o que a casa tinha, nunca "False" fixo. Esta suite rodou depois de
+# o dono ligar o envio e o deixou DESLIGADO, sem avisar — a tela de Exportacao
+# some do menu e nada explica por que. Mesma licao do `devolver_o_modo_original`
+# e do `preservar_credenciais`: teste que mexe em configuracao devolve o que achou.
+chamar("PUT", "/pdv/config",
+       {**base_cfg, "enviar_ao_pdv": cfg_atual.get("enviar_ao_pdv", False)}, token=token)
+
+
+print("\n8l. a tabela intermediaria de pendencias")
+# 🔑 **Nada vai ao PDV em tempo real.** Alterar um cadastro gera PENDENCIA, que
+# espera alguem conferir e mandar. E quem alimenta a tabela e o GATILHO, nao o
+# codigo: nenhum caminho da aplicacao consegue esquecer, nem o que ainda vai ser
+# escrito. A suite usa um setor DELA, criado e apagado aqui.
+st, s_p = chamar("POST", "/setores", {"nome": f"Pend setor {marca}",
+                                      "integrado_pdv": True}, token=token)
+id_sp = s_p.get("id")
+checar("cria o setor desta rodada, ja marcado", st == 201, (st, s_p))
+
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+nomes_pend = {p["nome"] for p in fila_p["pendentes"]}
+# Ele nao existe no PDV simulado: entra como CRIAR.
+achado = next((p for p in fila_p["pendentes"] if p["nome"] == f"Pend setor {marca}"), None)
+checar("o setor novo entra na fila", achado is not None, sorted(nomes_pend)[:6])
+checar("e como CRIAR, porque nao existe la",
+       (achado or {}).get("acao") == "CRIAR", (achado or {}).get("acao"))
+
+# ⚠️ Salvar sem mudar nada NAO gera pendencia nova: `AFTER UPDATE OF nome`
+# dispara quando a coluna e ESCRITA, mesmo com o mesmo valor, e sem o `WHEN`
+# abrir um cadastro e salvar criava fila do nada.
+chamar("PUT", f"/setores/{id_sp}", {"nome": f"Pend setor {marca}"}, token=token)
+chamar("PUT", f"/setores/{id_sp}", {"ativo": True}, token=token)
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+quantos = sum(1 for p in fila_p["pendentes"] if p["nome"] == f"Pend setor {marca}")
+checar("salvar sem mudar nada nao duplica a fila", quantos == 1, quantos)
+
+# ⚠️ Uma pendencia ABERTA por registro: dez correcoes viram uma linha, nao dez.
+for i in range(3):
+    chamar("PUT", f"/setores/{id_sp}", {"nome": f"Pend setor {marca} v{i}"}, token=token)
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+quantos = sum(1 for p in fila_p["pendentes"] if p["nome"].startswith(f"Pend setor {marca}"))
+checar("tres alteracoes seguidas dao UMA linha", quantos == 1, quantos)
+
+# 🔑 **A guarda de conta recusa o lote INTEIRO em simulado — e esta certo.** A
+# filial da fixture e de DEMONSTRACAO (CNPJ 00.000.000/0001-00), e nao desta
+# casa. Fazer a fixture se passar pela empresa do cliente para "o teste
+# funcionar" seria plantar aqui exatamente a confusao que ja custou 46 vendas
+# de terceiro na base: credencial de integracao nao diz de quem ela e.
+st, r = chamar("POST", "/pdv/envio",
+               {"itens": [{"tipo": "SETOR", "id_registro": id_sp}]}, token=token)
+checar("a guarda de conta recusa o envio em simulado", st == 409, (st, r))
+checar("e a frase diz que a conta e de outra empresa",
+       "outra empresa" in str((r or {}).get("detail", "")), r)
+
+# ⚠️ E o mais importante: recusado o lote, a pendencia continua ABERTA. E isso
+# que faz o registro voltar para Pendentes depois de alguem corrigir, sem ter
+# de mexer no cadastro so para reenfileirar.
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+ainda = any(p["nome"].startswith(f"Pend setor {marca}") for p in fila_p["pendentes"])
+checar("e a pendencia continua ABERTA", ainda, ainda)
+
+chamar("DELETE", f"/setores/{id_sp}", token=token)
+
+
 print("\n9. limpeza")
 devolver_simulado()
 st, c = chamar("GET", "/pdv/config", token=token)

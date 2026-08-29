@@ -48,6 +48,15 @@ export type Eu = {
   papeis: string[];
   unidades: { id: number; nome: string; apelido: string | null; matriz: boolean }[];
   todas_unidades: boolean;
+  /**
+   * O envio ao PDV está ligado NESTA loja.
+   *
+   * ⚠️ É dica de INTERFACE, não permissão: a marca "integrado com PDV" no
+   * cadastro só faz sentido com o envio ligado, e quem cadastra produto não tem
+   * `integracao.pdv` para perguntar ao `/pdv/config`. Vem no `/auth/me` porque
+   * é o que toda tela já carrega uma vez.
+   */
+  enviar_ao_pdv: boolean;
 };
 
 export class ErroApi extends Error {

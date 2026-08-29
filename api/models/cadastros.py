@@ -29,6 +29,8 @@ class SetorCreate(BaseModel):
     ordem: int = 0
     id_unidade: int | None = None
     ativo: bool = True
+    # O setor daqui é a IMPRESSORA do cardápio do PDV (VITRINE, BAR, COZINHA).
+    integrado_pdv: bool = False
 
 
 class SetorUpdate(BaseModel):
@@ -36,6 +38,7 @@ class SetorUpdate(BaseModel):
     cor: str | None = None
     ordem: int | None = None
     ativo: bool | None = None
+    integrado_pdv: bool | None = None
 
 
 class SetorResponse(BaseModel):
@@ -45,6 +48,7 @@ class SetorResponse(BaseModel):
     ordem: int
     id_unidade: int | None = None
     ativo: bool
+    integrado_pdv: bool = False
 
 
 # ---------------------------------------------------------------- locais
@@ -83,6 +87,8 @@ class CategoriaCreate(BaseModel):
     tipo: str = "INSUMO"
     ordem: int = 0
     ativo: bool = True
+    # A categoria daqui é o GRUPO do cardápio do PDV.
+    integrado_pdv: bool = False
 
 
 class CategoriaUpdate(BaseModel):
@@ -91,6 +97,7 @@ class CategoriaUpdate(BaseModel):
     tipo: str | None = None
     ordem: int | None = None
     ativo: bool | None = None
+    integrado_pdv: bool | None = None
 
 
 class CategoriaResponse(BaseModel):
@@ -102,6 +109,7 @@ class CategoriaResponse(BaseModel):
     tipo: str
     ordem: int
     ativo: bool
+    integrado_pdv: bool = False
     produtos: int = 0
 
 

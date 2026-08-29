@@ -1014,6 +1014,151 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ O item de venda **sem** custo ganha o custo de hoje; o que já tinha congelado não é tocado.
   ⚠️ O absorvido vira **inativo e ARQUIVADO**, com a observação dizendo para onde foi — nunca
   apagado, porque auditoria e histórico continuam apontando para ele.
+- 🔑 **Enviar ao PDV — passo 1: o interruptor e a marca** (migração 040, 29/08/2026). A
+  integração com o PDV Legal sempre foi de mão única: lemos cardápio, preços e vendas.
+  Escrever de volta mexe no sistema que a casa usa para VENDER, no meio do expediente de
+  alguém — então o caminho começa por duas coisas que **não enviam nada**.
+  **`integracoes.enviar_ao_pdv`** (por loja, nasce FALSO) e **`produtos.integrado_pdv`**.
+  ⚠️ **`integrado_pdv` NÃO é `codigo_pdv is not null`, e a diferença É a fila**: marcado sem
+  código = deve existir lá e não existe (criar); marcado com código = existe (atualizar se
+  mudou); **desmarcado com código = veio de lá e não queremos que o Botané mexa** — estado
+  legítimo, e é ele que impede o campo de ser derivado.
+  🔑 **Quem ganha o código do PDV é marcado por um GATILHO**, pela mesma razão do 036: o
+  `codigo_pdv` é escrito em QUATRO lugares — o formulário, a importação do cardápio e as duas
+  rotas do Vincular. Marcar na aplicação exigiria lembrar nos quatro, e o quinto nasceria sem
+  a marca: o produto passaria a existir no PDV e **nunca apareceria na fila de envio**.
+  ⚠️ **Só na transição de vazio para preenchido.** Um gatilho que forçasse `true` sempre que
+  houvesse código destruiria o desmarque no primeiro save.
+  ⚠️ A carga marcou **744** produtos (533 ativos) por FATO — código principal ou apelido em
+  `codigos_externos` —, nunca por semelhança de nome. E `AND NOT integrado_pdv` deixa o
+  script barato ao repetir e **não desfaz o desmarque de ninguém** no próximo deploy.
+  ⚠️ **Setor e categoria também têm a marca** (migração 041): o produto no cardápio do PDV
+  carrega grupo (`nomeGrupo`) e impressora (`nomeImpressora`), que são a categoria e o setor
+  daqui — mandar produto cujo grupo não existe lá tende a falhar, então a fila é por tipo e em
+  ordem. A carga marcou **29 categorias** e **3 setores**, e os três são exatamente VITRINE,
+  BAR e COZINHA. ⚠️ Por FATO — "classifica ao menos um produto que já existe no PDV" —, nunca
+  casando o nome com os grupos do cardápio: é o palpite que este projeto já removeu uma vez,
+  quando a semelhança ligou REDBULL a LIMÃO TAITY.
+  ⚠️ **Sem gatilho na 041, e a ausência tem razão**: categoria e setor não têm coluna de código
+  do PDV — o de-para com `grupoprodutos` e `impressoras` ainda não existe. Quando nascer, esta
+  marca vai precisar do mesmo cuidado da 040.
+  ⚠️ **A marca só APARECE com o envio ligado** — controle para recurso desligado é ruído. Mas
+  desligar **não desmarca ninguém**: o valor gravado fica e volta a aparecer quando religarem.
+  🔑 **O portão vem no `/auth/me`, não do `/pdv/config`.** Quem cadastra produto não tem
+  `integracao.pdv` para perguntar à configuração — e `/auth/me` é o que toda tela já carrega
+  uma vez, então a dica não custa uma requisição por tela. É dica de INTERFACE, não permissão:
+  quem barra continua sendo o servidor. ⚠️ Ele resolve a loja ATUAL (`unidade_atual`), porque
+  o envio é configurado por loja. ⚠️ E a tela de Integrações chama `recarregar()` depois de
+  salvar: sem isso, quem acabou de ligar o envio não veria a marca em lugar nenhum até dar F5
+  e concluiria que o interruptor não fez nada.
+  ⚠️ **O `SELECT` do "antes" da auditoria precisou do campo novo** nos dois routers — sem ele,
+  marcar ou desmarcar entraria na auditoria como se nada tivesse mudado. Mesma lição do
+  `um_estoque` que faltava no PUT do produto.
+- 🔑 **A fila de envio ao PDV** (migração 042, `services/pdv/envio.py`, tela
+  **Cadastros ▸ Exportação para o PDV**, 29/08/2026). Três abas: **pendentes** (com o botão
+  de enviar), **integrados** e **erros** — este com a mensagem do PDV **ao lado do corpo
+  mandado**, porque "erro 400" sozinho não diz o que ajustar.
+  🔑 **A pendência mora numa TABELA INTERMEDIÁRIA (`pdv_pendencias`, migração 043), e quem a
+  alimenta é o BANCO.** Alterar um cadastro aqui **não escreve no PDV**: gera pendência, que
+  espera alguém abrir a tela, conferir e mandar. Escrever no cardápio de quem está vendendo não
+  pode ser efeito colateral de salvar um formulário.
+  ⚠️ **Gatilho, não código.** Um `INSERT` de pendência escrito na aplicação teria de existir em
+  todo lugar que salva um cadastro — e o próximo lugar, que vai existir, nasceria sem ele. É a
+  mesma razão da maiúscula (036) e da marca de integrado (040).
+  ⚠️ **Uma pendência ABERTA por registro** (índice único parcial): dez correções seguidas dão
+  uma linha, não dez. E **o motivo mais recente manda** — quem alterou e depois desmarcou quer
+  sair, não atualizar.
+  ⚠️ **São DOIS gatilhos por tabela**, e não um: `AFTER UPDATE OF nome` dispara quando a coluna
+  é ESCRITA, mesmo com o mesmo valor — abrir um cadastro e salvar criava pendência do nada. O
+  `WHEN (OLD.x IS DISTINCT FROM NEW.x)` filtra, e não convive com `INSERT` no mesmo gatilho
+  porque ali não existe `OLD`. (`IS DISTINCT FROM`, não `<>`: com nulo dos dois lados, `<>` é
+  nulo e o gatilho não dispararia nem quando deveria.)
+  ⚠️ **`ativo` NÃO gera pendência** — é a decisão mais importante da 043, e vem do achado de
+  que o campo tem donos diferentes dos dois lados: PASCOA e DIA DOS NAMORADOS entrariam na fila
+  a cada virada de estação, e o envio as reativaria no cardápio.
+  ⚠️ **A pendência só fecha com envio que deu CERTO** — no erro ela fica aberta, e é isso que
+  faz o registro voltar para Pendentes depois de corrigido, sem precisar mexer no cadastro só
+  para reenfileirar.
+  ⚠️ **Pendência sem o que fazer também fecha**, sem `id_envio`: tirar do PDV uma categoria que
+  já está desativada lá pede uma ação que não existe, e a pendência ficaria aberta para sempre.
+  Fila com linha que ninguém resolve é fila que ninguém mais lê.
+  ⚠️ **Produto: a função do gatilho já o trata, o `CREATE TRIGGER` está escrito e comentado.**
+  Ligar hoje faria 533 produtos gerarem pendência que ninguém consegue enviar — não há montador
+  de corpo nem rota. Vira uma linha descomentada quando o envio de produto existir.
+  ⚠️ **A pendência manda, mas a REALIDADE tem voto**: a fila ainda entra em Pendentes quando o
+  que está lá difere do que temos, mesmo sem pendência registrada. É a rede que pega o que
+  mudou por fora (uma carga, um `UPDATE` na mão) e o que o gatilho não viu porque nasceu depois.
+  ⚠️ **A impressão é do CORPO**, não de uma lista de campos: quando o corpo ganhar um campo
+  novo, a fila passa a notar mudanças nele sozinha.
+  🔑 **E a fila PERGUNTA AO PDV o que já existe lá — sem isso ela é perigosa.** `pdv_envios` só
+  sabe o que este sistema mandou, e numa casa que usa o PDV há anos ele nunca mandou nada: a
+  fila concluiria "nunca enviado, logo CRIAR" para os **30 grupos que já estão no cardápio**, e
+  apertar Enviar duplicaria o cardápio do cliente. Foi o primeiro estado da fila, e o teste
+  mostrou. Agora a ação é **ADOTAR** — 29 categorias e 3 setores, nenhum como criar.
+  ⚠️ **Adotar é um update que só toca no de-para**: `{**o_que_esta_lá, codRefExterna: nosso_id}`
+  — medido, o nome, a cor e o `ativo` ficam intactos. Mandar os NOSSOS campos numa adoção
+  reescreveria a cor que alguém escolheu lá. Adotar é reconhecer, não impor.
+  ⚠️ **Falhar a leitura do PDV NÃO vira "então crie tudo"**: sobe 502 e a tela diz que não deu
+  para ler o cardápio. O padrão seguro é não agir.
+  ⚠️ **O casamento por NOME só decide a ADOÇÃO, e uma vez** — dali em diante manda o
+  `codRefExterna` (categoria) ou o `codigo_pdv` guardado (setor). Não é a cascata por
+  semelhança que este projeto removeu: é igualdade exata, e a pessoa confirma na tela.
+  ⚠️ **No modo simulado o envio RECUSA, não finge.** Um "gravado com sucesso" de mentira
+  encheria a aba de integrados com registros que o PDV não tem — e a próxima leitura do
+  cardápio não os acharia, num estado que ninguém explica olhando a tela.
+  ⚠️ **200 com `erro: true` existe** na Tablet Cloud: tratar o status HTTP como resposta faria
+  uma recusa dela virar sucesso. E o `delete` responde uma STRING pura, não um objeto.
+  ⚠️ **A conta é conferida por lote** (`conferir_a_conta`), comparando só os DÍGITOS do CNPJ
+  contra `filial/get`. Sem CNPJ na tela de Empresa, o envio recusa e explica.
+  🔑 **UMA TRANSAÇÃO POR ITEM — o PDV não volta atrás e o banco daqui volta.** O primeiro
+  envio real rodou o laço inteiro dentro de um `with get_cursor()`: um item levantou no fim, a
+  transação foi desfeita, e os **29 registros das categorias já adotadas no PDV sumiram
+  daqui**. Ficou o cardápio alterado do outro lado e nenhum registro deste — o pior dos dois
+  mundos, porque a fila não sabia mais o que tinha mandado. Cada item agora grava a sua linha,
+  comitada, antes do próximo. ⚠️ Sobra uma janela de UM item (processo morto entre a chamada e
+  o commit), e ela é aceitável porque se conserta sozinha — a fila relê o cardápio e vê que
+  aquele registro já está adotado. **Foi o que aconteceu**: as 29 voltaram como "integradas"
+  sem nenhum registro local, e é a prova de que a fila derivada aguenta perder o histórico.
+  🔑 **`ativo` NÃO se sincroniza, e o campo tem DONOS DIFERENTES dos dois lados.** Aqui quer
+  dizer "uso este cadastro"; lá quer dizer "aparece no cardápio para vender AGORA". Quatro
+  categorias estavam ativas aqui e inativas lá — **PASCOA, DIA DOS NAMORADOS**, FOODBY e
+  MERCEARIA PRESENTES: sazonais, ligadas e desligadas lá conforme a época. Mandar o nosso
+  `ativo` **reativaria a Páscoa em agosto** no cardápio de quem está vendendo. Quem existe lá
+  fica com o `ativo` DE LÁ; só o que nasce daqui nasce visível; e `ativo` ficou fora da
+  comparação, senão as quatro apareceriam como pendentes para sempre.
+  🔑 **Adotar um SETOR não escreve no PDV — não há onde.** A impressora não tem campo de
+  código externo, então reconhecê-la é guardar o `codigo_pdv` deste lado e mais nada. A
+  primeira versão mandava um `impressoras/update`: escrita sem propósito no cardápio de quem
+  está vendendo, que ainda por cima falhou e derrubou o lote.
+  🔑 **Um PUT que NÃO manda o campo MANTÉM o valor** (`coalesce`). `PUT /pdv/config`
+  substitui a linha inteira, e com `False` de padrão qualquer chamada que omitisse
+  `enviar_ao_pdv` **desligava o envio em silêncio** — um cliente antigo, uma tela que só salva
+  a agenda, um script de restauro. Foi o que o restaurador da agenda na suíte de navegador
+  fez, e o sintoma é o pior possível: a tela de Exportação some do menu e nada explica.
+  ⚠️ **`EXCLUDED` não serve nesse `coalesce`**: ele carrega a linha já montada para inserir,
+  onde o nulo virou `false`. Quem responde "veio ou não veio?" é o parâmetro CRU, e por isso
+  ele entra duas vezes no comando.
+  ⚠️ **Desmarcado que JÁ SAIU daqui não some da tela**: vai para **Integrados** dizendo o que
+  virou ("desativada" / "fora da integração"). Antes ele desaparecia das três abas no instante
+  do envio — quem tinha acabado de desativar uma categoria não via nem que deu certo, nem que
+  ela continua vinculada lá. No SETOR esse é o estado FINAL: a impressora não tem campo
+  `ativo`, então não há como desativá-la pela API.
+  🔑 **Três checagens caíram por descreverem O ESTADO DO DIA, não uma propriedade** — "BAR está
+  pendente como ADOTAR", "o interruptor está desligado", "ele nasce desligado". Todas passaram
+  a falhar no instante em que a casa usou o sistema de verdade (adotou os setores, ligou o
+  envio), acusando de defeito uma decisão do dono. Viraram afirmações sobre invariantes:
+  *nunca propor CRIAR para o que já existe lá*, *a caixinha reflete o servidor*, *o campo é
+  booleano*. **Teste que descreve o estado do dia envelhece no primeiro uso real.**
+  ⚠️ **A suíte devolve o `enviar_ao_pdv` que ACHOU**, nunca `False` fixo — ela rodou depois de
+  o dono ligar o envio e o deixou desligado, e a tela de Exportação sumiu do menu sem nada
+  explicar. Mesma lição do `devolver_o_modo_original`. O teste de navegador também **desliga
+  para testar o portão** em vez de supor que já estava desligado.
+  ⚠️ **O estudo do envio está em [`docs/pdv-envio.md`](docs/pdv-envio.md)**, com o que ainda
+  não está decidido: o que a ficha envia (não há rota de receita no PDV, nem campo de custo no
+  produto), se o preço entra (e aí quem passa a ser o dono dele), e se setor/impressora vai
+  junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
+  vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
+  empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -1245,16 +1390,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.380 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.414 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (141), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (339, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (349, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

@@ -59,7 +59,9 @@ const ABAS: { id: Aba; nome: string; chave: string; explica: string }[] = [
 
 export default function PaginaCadastros() {
   const aviso = useAviso();
-  const { pode } = useSessao();
+  const { pode, eu } = useSessao();
+  // Dica de interface: com o envio desligado, a marca não tem o que decidir.
+  const enviaAoPdv = !!eu?.enviar_ao_pdv;
   // A aba vem da URL: é o que permite o menu apontar direto para "Locais de
   // estoque" e o endereço continuar valendo quando alguém o guarda.
   const busca = useSearchParams();
@@ -161,6 +163,10 @@ export default function PaginaCadastros() {
       <p className="-mt-3 max-w-[70ch] text-[14px] text-suave">{atual.explica}</p>
 
       {/* ---------------------------------------------------------- setores */}
+      {/* ⚠️ A marca só aparece com o envio LIGADO. Um controle para um recurso
+          desligado é ruído: quem cadastra um setor hoje não tem o que decidir
+          sobre um envio que não acontece. O valor gravado NÃO se perde quando o
+          envio é desligado — desligar não é desmarcar. */}
       {aba === "setores" && (
         <Cartao titulo="Setores">
           {!setores ? (
@@ -204,9 +210,32 @@ export default function PaginaCadastros() {
                       s.ativo ? "" : "opacity-55"
                     }`}
                   >
-                    <span className="font-medium">{s.nome}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="font-medium">{s.nome}</span>
+                      {enviaAoPdv && s.integrado_pdv && (
+                        <Etiqueta cor="erva">PDV</Etiqueta>
+                      )}
+                    </span>
                     {podeAba("setores") && (
                       <span className="flex gap-3">
+                        {enviaAoPdv && (
+                          <button
+                            className="link-acao"
+                            onClick={() =>
+                              acao(
+                                () =>
+                                  api.put(`/setores/${s.id}`, {
+                                    integrado_pdv: !s.integrado_pdv,
+                                  }),
+                                s.integrado_pdv
+                                  ? "Setor fora do envio ao PDV."
+                                  : "Setor entra no envio ao PDV.",
+                              )
+                            }
+                          >
+                            {s.integrado_pdv ? "tirar do PDV" : "integrar ao PDV"}
+                          </button>
+                        )}
                         <button
                           className="link-acao"
                           onClick={() =>
@@ -408,19 +437,40 @@ export default function PaginaCadastros() {
                       <span className="font-medium">{c.nome}</span>
                       <Etiqueta>{c.tipo.toLowerCase()}</Etiqueta>
                       {!!c.produtos && <Etiqueta cor="erva">{c.produtos} produto(s)</Etiqueta>}
+                      {enviaAoPdv && c.integrado_pdv && <Etiqueta cor="erva">PDV</Etiqueta>}
                     </span>
                     {podeAba("categorias") && (
-                      <button
-                        className="link-acao"
-                        onClick={() =>
-                          acao(
-                            () => api.put(`/categorias/${c.id}`, { ativo: !c.ativo }),
-                            c.ativo ? "Categoria desativada." : "Categoria reativada.",
-                          )
-                        }
-                      >
-                        {c.ativo ? "desativar" : "reativar"}
-                      </button>
+                      <span className="flex gap-3">
+                        {enviaAoPdv && (
+                          <button
+                            className="link-acao"
+                            onClick={() =>
+                              acao(
+                                () =>
+                                  api.put(`/categorias/${c.id}`, {
+                                    integrado_pdv: !c.integrado_pdv,
+                                  }),
+                                c.integrado_pdv
+                                  ? "Categoria fora do envio ao PDV."
+                                  : "Categoria entra no envio ao PDV.",
+                              )
+                            }
+                          >
+                            {c.integrado_pdv ? "tirar do PDV" : "integrar ao PDV"}
+                          </button>
+                        )}
+                        <button
+                          className="link-acao"
+                          onClick={() =>
+                            acao(
+                              () => api.put(`/categorias/${c.id}`, { ativo: !c.ativo }),
+                              c.ativo ? "Categoria desativada." : "Categoria reativada.",
+                            )
+                          }
+                        >
+                          {c.ativo ? "desativar" : "reativar"}
+                        </button>
+                      </span>
                     )}
                   </li>
                 ))}

@@ -14,7 +14,13 @@ import { ProvedorAvisos } from "@/components/aviso-flutuante";
     quem tem só a de perda também precisa chegar nela. */
 const MENU: {
   grupo: string;
-  itens: { href: string; nome: string; chave?: string | string[] }[];
+  itens: {
+    href: string;
+    nome: string;
+    chave?: string | string[];
+    /** Só entra no menu com o envio ao PDV ligado — ver `enviar_ao_pdv`. */
+    soComEnvioAoPdv?: boolean;
+  }[];
 }[] = [
   {
     grupo: "Operação",
@@ -40,6 +46,14 @@ const MENU: {
         nome: "Tabelas de apoio",
         chave: ["cadastros.setores", "cadastros.locais", "cadastros.categorias",
                 "cadastros.unidades_medida", "cmv.grupos"],
+      },
+      // ⚠️ Só aparece com o envio ao PDV LIGADO. Item de menu para um recurso
+      // desligado é uma porta que abre numa tela que explica que não faz nada.
+      {
+        href: "/exportacao",
+        nome: "Exportação para o PDV",
+        chave: ["integracao.pdv", "admin.integracoes"],
+        soComEnvioAoPdv: true,
       },
     ],
   },
@@ -177,6 +191,7 @@ function Casca({ children }: { children: React.ReactNode }) {
 
   const navegacao = (
     <MenuLateral
+            enviaAoPdv={!!eu?.enviar_ao_pdv}
       caminho={caminho}
       pode={pode}
       abertos={abertos}
@@ -312,12 +327,15 @@ export default function LayoutApp({ children }: { children: React.ReactNode }) {
 function MenuLateral({
   caminho,
   pode,
+  enviaAoPdv,
   abertos,
   alternarGrupo,
   aoNavegar,
 }: {
   caminho: string;
   pode: (chave: string) => boolean;
+  /** Dica de interface: item de menu para recurso desligado é porta que não leva a nada. */
+  enviaAoPdv: boolean;
   abertos: Record<string, boolean>;
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
@@ -326,7 +344,9 @@ function MenuLateral({
     <nav className="px-3 pb-5">
       {MENU.map((g) => {
         const itens = g.itens.filter(
-          (i) => !i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave)),
+          (i) =>
+            (!i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave))) &&
+            (!i.soComEnvioAoPdv || enviaAoPdv),
         );
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);

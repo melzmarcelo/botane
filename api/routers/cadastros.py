@@ -49,7 +49,7 @@ def _sets(dados: dict) -> tuple[str, list]:
 def listar_setores(incluir_inativos: bool = False, ctx: Contexto = Depends(contexto_atual)):
     with get_cursor() as cur:
         cur.execute(
-            """SELECT id, nome, cor, ordem, id_unidade, ativo FROM setores
+            """SELECT id, nome, cor, ordem, id_unidade, ativo, integrado_pdv FROM setores
                 WHERE (%s OR ativo) ORDER BY ordem, nome""",
             (incluir_inativos,),
         )
@@ -68,9 +68,10 @@ def criar_setor(body: SetorCreate,
             f"Já existe um setor chamado {body.nome.strip()}.",
         )
         cur.execute(
-            """INSERT INTO setores (nome, cor, ordem, id_unidade, ativo)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (body.nome.strip(), body.cor, body.ordem, body.id_unidade, body.ativo),
+            """INSERT INTO setores (nome, cor, ordem, id_unidade, ativo, integrado_pdv)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            (body.nome.strip(), body.cor, body.ordem, body.id_unidade, body.ativo,
+             body.integrado_pdv),
         )
         novo = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "setor", novo, "criar", depois=body.model_dump())
@@ -84,7 +85,11 @@ def atualizar_setor(id_setor: int, body: SetorUpdate,
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
     with get_cursor() as cur:
-        cur.execute("SELECT nome, cor, ordem, ativo FROM setores WHERE id = %s", (id_setor,))
+        # ⚠️ O `SELECT` do "antes" traz o campo novo: sem ele, marcar ou
+        # desmarcar a integração entraria na auditoria como se nada tivesse
+        # mudado. É a mesma lição do `um_estoque` que faltava no PUT do produto.
+        cur.execute("SELECT nome, cor, ordem, ativo, integrado_pdv FROM setores WHERE id = %s",
+                    (id_setor,))
         antes = cur.fetchone()
         if not antes:
             raise HTTPException(status_code=404, detail="Setor não encontrado")
@@ -225,17 +230,18 @@ def listar_categorias(incluir_inativas: bool = False, ctx: Contexto = Depends(co
         cur.execute(
             """
             WITH RECURSIVE arvore AS (
-                SELECT c.id, c.id_pai, c.nome, c.tipo, c.ordem, c.ativo,
+                SELECT c.id, c.id_pai, c.nome, c.tipo, c.ordem, c.ativo, c.integrado_pdv,
                        c.nome::text AS caminho, 0 AS nivel,
                        lpad(c.ordem::text, 5, '0') || c.nome AS chave
                   FROM categorias c WHERE c.id_pai IS NULL
                 UNION ALL
-                SELECT f.id, f.id_pai, f.nome, f.tipo, f.ordem, f.ativo,
+                SELECT f.id, f.id_pai, f.nome, f.tipo, f.ordem, f.ativo, f.integrado_pdv,
                        a.caminho || ' › ' || f.nome, a.nivel + 1,
                        a.chave || '/' || lpad(f.ordem::text, 5, '0') || f.nome
                   FROM categorias f JOIN arvore a ON a.id = f.id_pai
             )
             SELECT a.id, a.id_pai, a.nome, a.caminho, a.nivel, a.tipo, a.ordem, a.ativo,
+                   a.integrado_pdv,
                    (SELECT count(*) FROM produtos p WHERE p.id_categoria = a.id) AS produtos
               FROM arvore a
              WHERE (%s OR a.ativo)
@@ -266,9 +272,10 @@ def criar_categoria(body: CategoriaCreate,
     _valida(body.tipo, TIPOS_CATEGORIA, "tipo")
     with get_cursor() as cur:
         cur.execute(
-            """INSERT INTO categorias (nome, id_pai, tipo, ordem, ativo)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (body.nome.strip(), body.id_pai, body.tipo, body.ordem, body.ativo),
+            """INSERT INTO categorias (nome, id_pai, tipo, ordem, ativo, integrado_pdv)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            (body.nome.strip(), body.id_pai, body.tipo, body.ordem, body.ativo,
+             body.integrado_pdv),
         )
         nova = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "categoria", nova, "criar",
@@ -285,7 +292,10 @@ def atualizar_categoria(id_categoria: int, body: CategoriaUpdate,
         raise HTTPException(status_code=400, detail="Nada para atualizar")
     with get_cursor() as cur:
         cur.execute(
-            "SELECT nome, id_pai, tipo, ordem, ativo FROM categorias WHERE id = %s",
+            # ⚠️ O campo novo entra no "antes": sem ele, marcar ou desmarcar a
+            # integração entraria na auditoria como se nada tivesse mudado.
+            "SELECT nome, id_pai, tipo, ordem, ativo, integrado_pdv "
+            "  FROM categorias WHERE id = %s",
             (id_categoria,),
         )
         antes = cur.fetchone()

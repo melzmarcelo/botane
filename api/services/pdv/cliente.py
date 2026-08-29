@@ -156,6 +156,54 @@ class ClientePdv:
                 raise ErroPdv("O PDV Legal respondeu algo que não é JSON.") from e
         raise ErroPdv("O PDV Legal recusou o token duas vezes.", 401)
 
+    def enviar(self, metodo: str, caminho: str, corpo: dict) -> Any:
+        """Uma ESCRITA autenticada — a mão inversa da integração.
+
+        ⚠️ **No modo simulado ela não inventa sucesso: recusa.** Devolver um
+        "gravado com sucesso" de mentira encheria a aba de integrados com
+        registros que não existem no PDV, e a próxima leitura do cardápio não
+        os acharia — um estado que ninguém consegue explicar olhando a tela. O
+        simulado serve para a tela funcionar sem credencial, não para fingir
+        que escreveu no sistema de vendas de alguém.
+
+        ⚠️ O 401 tenta uma vez com token novo, como no `get`: um token de doze
+        horas vence no meio de um lote, e ali o 401 é vencimento, não
+        credencial errada.
+        """
+        if self.modo == "simulado":
+            raise ErroPdv(
+                "A integração está em modo simulado — nada é enviado ao PDV. "
+                "Troque para o modo real em Integrações antes de enviar.")
+
+        for tentativa in (1, 2):
+            r = httpx.request(
+                metodo.upper(),
+                f"{BASE}{caminho}",
+                json=corpo,
+                headers={"Authorization": f"Bearer {self.token(forcar=tentativa == 2)}",
+                         "Content-Type": "application/json"},
+                timeout=60,
+            )
+            if r.status_code == 401 and tentativa == 1:
+                continue
+            if r.status_code >= 400:
+                raise ErroPdv(_mensagem_de_erro(r), r.status_code)
+            try:
+                resposta = r.json()
+            except ValueError:
+                # ⚠️ O `delete` responde uma STRING pura ("Registry deleted
+                # successfully!"), não um objeto. Texto não é erro aqui.
+                return {"texto": r.text.strip().strip('"')}
+            # ⚠️ **200 com `erro: true` existe.** A Tablet Cloud responde
+            # `{"id":…, "message":…, "erro":false}` no caminho feliz; tratar o
+            # status HTTP como a resposta faria uma recusa dela virar sucesso
+            # na aba de integrados.
+            if isinstance(resposta, dict) and resposta.get("erro"):
+                raise ErroPdv(str(resposta.get("message") or "O PDV recusou o envio."),
+                              r.status_code)
+            return resposta
+        raise ErroPdv("O PDV Legal recusou o token duas vezes.", 401)
+
     def _fixture(self, caminho: str) -> Any:
         """Resposta gravada, para o modo simulado.
 

@@ -48,6 +48,12 @@ class MeResponse(BaseModel):
     papeis: list[str]
     unidades: list[dict]
     todas_unidades: bool
+    # ⚠️ Dica de INTERFACE, não permissão. A marca "integrado com PDV" no
+    # cadastro de produto, setor e categoria só faz sentido com o envio ligado —
+    # e quem cadastra produto não tem `integracao.pdv` para perguntar ao
+    # `/pdv/config`. Vem por aqui porque `/auth/me` é o que toda tela já
+    # carrega uma vez, e assim o campo não custa uma requisição por tela.
+    enviar_ao_pdv: bool = False
 
 
 class TrocarSenhaRequest(BaseModel):

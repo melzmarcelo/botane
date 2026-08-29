@@ -2,7 +2,15 @@
 
 /** Tipos e rótulos compartilhados pelas telas de cadastro. */
 
-export type Setor = { id: number; nome: string; cor: string | null; ordem: number; ativo: boolean };
+export type Setor = {
+  id: number;
+  nome: string;
+  cor: string | null;
+  ordem: number;
+  ativo: boolean;
+  /** O setor daqui é a IMPRESSORA do cardápio do PDV (VITRINE, BAR, COZINHA). */
+  integrado_pdv: boolean;
+};
 export type Local = {
   id: number;
   id_unidade: number;
@@ -20,6 +28,8 @@ export type Categoria = {
   tipo: string;
   ordem: number;
   ativo: boolean;
+  /** A categoria daqui é o GRUPO do cardápio do PDV. */
+  integrado_pdv: boolean;
   produtos: number;
 };
 export type UnidadeMedida = {

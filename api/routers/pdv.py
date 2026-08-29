@@ -19,13 +19,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from psycopg2.extras import Json
+
 import auditoria
 from database import get_cursor
 from seguranca import Contexto, requer_permissao, unidade_atual
 from models.cmv import ImportarVendasRequest, VendaImportar
 from routers import vendas as rota_vendas
 from services import segredos
-from services.pdv import cardapio, importador
+from services.pdv import cardapio, envio, importador
 from services.pdv.cliente import ClientePdv, ErroPdv
 
 router = APIRouter(prefix="/pdv", tags=["PDV Legal"])
@@ -55,6 +57,18 @@ class ConfigPdv(BaseModel):
     # teto de 100 cupons), então uma agenda horária com janela de 30 dias são
     # 720 chamadas por dia para reler o mesmo mês. Ligar é decisão de quem
     # opera, não padrão que aparece sozinho.
+    # ⚠️ Nasce DESLIGADO. Ligar é decisão de quem paga a conta e responde
+    # pelo cardápio: a busca errada custa uma venda não importada, o envio
+    # errado custa o cardápio do cliente no meio do expediente.
+    #
+    # 🔑 **`None` MANTÉM o que está guardado — e isso não é conveniência.**
+    # Este PUT substitui a linha inteira, e com `False` de padrão qualquer
+    # chamada que não mandasse o campo **desligava o envio em silêncio**: um
+    # cliente antigo, uma tela que só salva a agenda, um script de restauro.
+    # Aconteceu com o restaurador da agenda na suíte de navegador, e o sintoma
+    # é o pior possível — a tela de Exportação some do menu e nada explica.
+    # É a mesma regra que a credencial já segue aqui: em branco, mantém.
+    enviar_ao_pdv: bool | None = None
     agenda_frequencia: Literal["MANUAL", "HORARIA", "DIARIA"] = "MANUAL"
     agenda_hora: int = Field(default=4, ge=0, le=23)
     # Nulo = janela automática (desde a última venda importada, com 2 dias de
@@ -83,7 +97,8 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT modo, ativa, credenciais, ultima_sincronizacao, ultimo_status,
-                      ultima_mensagem, agenda_frequencia, agenda_hora, agenda_janela_dias,
+                      ultima_mensagem, enviar_ao_pdv,
+                      agenda_frequencia, agenda_hora, agenda_janela_dias,
                       agenda_rodou_em, agenda_ultimo_erro, agenda_id_usuario
                  FROM integracoes WHERE id_unidade = %s AND servico = %s""",
             (id_unidade, SERVICO),
@@ -110,6 +125,7 @@ def config(ctx: Contexto = Depends(requer_permissao("integracao.pdv", "admin.int
         # ⚠️ `agenda_rodou_em` é quando o agendador RODOU, não quando trouxe
         # venda — uma casa fechada no domingo tem as duas coisas diferentes, e
         # mostrar a segunda faria parecer que a agenda parou.
+        "enviar_ao_pdv": bool(linha["enviar_ao_pdv"]) if linha else False,
         "agenda_frequencia": linha["agenda_frequencia"] if linha else "MANUAL",
         "agenda_hora": linha["agenda_hora"] if linha else 4,
         "agenda_janela_dias": linha["agenda_janela_dias"] if linha else None,
@@ -166,20 +182,33 @@ def salvar_config(body: ConfigPdv,
         # ligou decidiu aquilo, e é quem responde por ela.
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, ativa, modo, credenciais,
+                                        enviar_ao_pdv,
                                         agenda_frequencia, agenda_hora, agenda_janela_dias,
                                         agenda_id_usuario)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+               -- Linha NOVA: nulo vira falso — a integração nasce sem envio,
+               -- e ligar é decisão explícita.
+               VALUES (%s, %s, %s, %s, %s, coalesce(%s::boolean, false),
+                       %s, %s, %s, %s)
                ON CONFLICT (id_unidade, servico) DO UPDATE
                    SET ativa = EXCLUDED.ativa, modo = EXCLUDED.modo,
                        credenciais = EXCLUDED.credenciais,
+                       -- ⚠️ **`EXCLUDED` não serve aqui.** Ele carrega a linha
+                       -- já montada para inserir, onde o nulo virou `false` —
+                       -- e o `coalesce` sobre ele nunca veria o nulo. Quem
+                       -- responde "veio ou não veio?" é o parâmetro CRU, e por
+                       -- isso ele entra duas vezes.
+                       enviar_ao_pdv = coalesce(%s::boolean,
+                                                integracoes.enviar_ao_pdv),
                        agenda_frequencia = EXCLUDED.agenda_frequencia,
                        agenda_hora = EXCLUDED.agenda_hora,
                        agenda_janela_dias = EXCLUDED.agenda_janela_dias,
                        agenda_id_usuario = EXCLUDED.agenda_id_usuario,
                        atualizado_em = now()""",
             (id_unidade, SERVICO, body.ativa, body.modo, segredos.cifrar(cred),
+             body.enviar_ao_pdv,
              body.agenda_frequencia, body.agenda_hora, body.agenda_janela_dias,
-             ctx.id_usuario),
+             ctx.id_usuario,
+             body.enviar_ao_pdv),
         )
         # ⚠️ Salvar limpa o erro anterior: manter a mensagem velha faria a tela
         # acusar uma falha já tratada, e quem acabou de arrumar a credencial
@@ -192,6 +221,7 @@ def salvar_config(body: ConfigPdv,
         # A auditoria registra a mudança sem registrar o segredo.
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "configurar",
                             depois={"modo": body.modo, "ativa": body.ativa,
+                                    "enviar_ao_pdv": body.enviar_ao_pdv,
                                     "agenda": body.agenda_frequencia,
                                     "username": segredos.mascarar(cred.get("username"))},
                             id_unidade=id_unidade)
@@ -393,3 +423,172 @@ def reconciliar(ctx: Contexto = Depends(requer_permissao("integracao.pdv"))) -> 
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "reconciliar",
                             depois=r, id_unidade=id_unidade)
     return {**r, "message": f"{r['vinculados']} item(ns) de venda vinculado(s)"}
+
+
+# ---------------------------------------------------------------------------
+# A mão inversa: enviar cadastros daqui para o cardápio do PDV
+# ---------------------------------------------------------------------------
+
+def _envio_ligado(cur, id_unidade: int) -> None:
+    """O interruptor é a primeira porta; a conta certa é a segunda."""
+    cur.execute(
+        "SELECT enviar_ao_pdv FROM integracoes WHERE id_unidade = %s AND servico = %s",
+        (id_unidade, SERVICO),
+    )
+    linha = cur.fetchone()
+    if not linha or not linha["enviar_ao_pdv"]:
+        raise HTTPException(
+            status_code=409,
+            detail=("O envio ao PDV está desligado. Ligue em Integrações ▸ PDV Legal, "
+                    "em 'Enviar informações ao PDV'."),
+        )
+
+
+@router.get("/envio/fila")
+def envio_fila(ctx: Contexto = Depends(requer_permissao("integracao.pdv",
+                                                        "admin.integracoes"))) -> dict:
+    """As três abas: pendentes, integrados e erros.
+
+    ⚠️ **Pendentes é uma CONSULTA, não uma tabela.** Ver `services/pdv/envio.py`:
+    uma fila mantida à mão precisaria ser alimentada em todo lugar que salva um
+    cadastro, e o próximo lugar — que vai existir — nasceria sem ela.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        _envio_ligado(cur, id_unidade)
+        # ⚠️ O cliente vai junto: a fila PERGUNTA ao PDV o que já existe lá.
+        # Sem isso ela mandaria CRIAR para os grupos que já estão no cardápio.
+        try:
+            return envio.fila(cur, id_unidade, _cliente(cur, id_unidade))
+        except ErroPdv as e:
+            # ⚠️ Falhar a leitura NÃO pode virar "então crie tudo": a tela diz
+            # que não deu para falar com o PDV, e o padrão seguro é não agir.
+            raise HTTPException(
+                status_code=502,
+                detail=(f"Não deu para ler o cardápio do PDV para saber o que já existe "
+                        f"lá: {e}. Sem essa leitura a lista mostraria como 'criar' o que "
+                        f"já está no cardápio."))
+
+
+class EnvioPedido(BaseModel):
+    """O que enviar. Vazio = tudo o que está pendente."""
+
+    itens: list[dict] | None = None
+
+
+@router.post("/envio")
+def envio_disparar(body: EnvioPedido,
+                   ctx: Contexto = Depends(requer_permissao("integracao.pdv",
+                                                            "admin.integracoes"))) -> dict:
+    """Envia os pendentes, um a um, e grava CADA tentativa.
+
+    ⚠️ **Um a um, e o erro de um não derruba o lote.** O que falhou vai para a
+    aba de erros com a mensagem do PDV ao lado do corpo mandado — "erro 400"
+    sozinho não diz o que ajustar; com o payload, quem olha vê que faltou o
+    grupo ou que o nome já existe.
+
+    ⚠️ **Categoria antes de setor.** O produto no cardápio aponta para os dois,
+    e a ordem evita que a aba de erros encha de falha de dependência — que não é
+    erro, é ordem.
+    """
+    # ---- preparo: uma transação curta, que só LÊ ----
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        _envio_ligado(cur, id_unidade)
+        cliente = _cliente(cur, id_unidade)
+
+        cur.execute("SELECT cnpj FROM empresa WHERE id = 1")
+        empresa = cur.fetchone()
+        # 🔑 De quem é a conta — antes de escrever qualquer coisa.
+        envio.conferir_a_conta(cliente, (empresa or {}).get("cnpj"))
+
+        panorama = envio.fila(cur, id_unidade, cliente)
+        pendentes = panorama["pendentes"]
+
+        # 🔑 **Pendência sem o que fazer FECHA aqui.** Tirar do PDV uma
+        # categoria que já está desativada lá pede uma ação que não existe: a
+        # pendência ficaria aberta para sempre, e uma fila com linhas que
+        # ninguém consegue resolver é uma fila que ninguém mais lê. Fecha sem
+        # `id_envio` — o registro diz "resolvida, e nada precisou ser enviado".
+        for i in panorama["integrados"]:
+            cur.execute(
+                """UPDATE pdv_pendencias SET resolvido_em = now()
+                    WHERE tipo = %s AND id_registro = %s AND resolvido_em IS NULL""",
+                (i["tipo"], i["id_registro"]),
+            )
+
+    if body.itens:
+        querem = {(i.get("tipo"), i.get("id_registro")) for i in body.itens}
+        pendentes = [p for p in pendentes if (p["tipo"], p["id_registro"]) in querem]
+
+    # Categoria primeiro: o produto do cardápio aponta para o grupo.
+    ordem = {envio.CATEGORIA: 0, envio.SETOR: 1}
+    pendentes.sort(key=lambda p: (ordem.get(p["tipo"], 9), p["nome"]))
+
+    # ---- o envio: UMA TRANSAÇÃO POR ITEM ----
+    # 🔑 **O PDV não volta atrás, e o banco daqui volta.** Na primeira versão o
+    # laço inteiro rodava dentro de um `with get_cursor()`: o envio de um setor
+    # levantou no fim, a transação foi desfeita, e os 29 registros das
+    # categorias já adotadas no PDV sumiram daqui. Ficamos com o cardápio
+    # alterado do outro lado e nenhum registro deste — o pior dos dois mundos,
+    # porque a fila não sabia mais o que tinha mandado.
+    #
+    # Cada item agora grava a sua própria linha, comitada, antes do próximo.
+    # ⚠️ Sobra uma janela de UM item (se o processo morrer entre a chamada ao
+    # PDV e o commit), e ela é aceitável porque se conserta sozinha: a fila
+    # relê o cardápio e vê que aquele registro já está adotado.
+    enviados, falhas = 0, 0
+    for item in pendentes:
+        try:
+            resposta = envio.enviar_um(cliente, item)
+            codigo = str((resposta or {}).get("id") or item.get("codigo_pdv") or "") or None
+            with get_cursor() as cur:
+                cur.execute(
+                    """INSERT INTO pdv_envios (id_unidade, tipo, id_registro, acao, estado,
+                                               impressao, enviado, resposta, codigo_pdv,
+                                               id_usuario)
+                       VALUES (%s, %s, %s, %s, 'OK', %s, %s, %s, %s, %s)
+                       RETURNING id""",
+                    (id_unidade, item["tipo"], item["id_registro"], item["acao"],
+                     item["impressao"], Json(item["corpo"]), Json(resposta), codigo,
+                     ctx.id_usuario),
+                )
+                id_envio = cur.fetchone()["id"] if cur.description else None
+                # ⚠️ A impressora não tem código externo: sem guardar o código
+                # dela aqui, o próximo envio criaria outra com o mesmo nome.
+                if item["tipo"] == envio.SETOR and codigo:
+                    cur.execute("UPDATE setores SET codigo_pdv = %s WHERE id = %s",
+                                (codigo, item["id_registro"]))
+                # 🔑 **A pendência só fecha com o envio que deu CERTO.** No erro
+                # ela fica aberta de propósito: é o que faz o registro voltar
+                # para Pendentes depois de alguém corrigir o cadastro, sem
+                # precisar mexer no cadastro de novo só para "reenfileirar".
+                cur.execute(
+                    """UPDATE pdv_pendencias
+                          SET resolvido_em = now(), id_envio = %s
+                        WHERE tipo = %s AND id_registro = %s AND resolvido_em IS NULL""",
+                    (id_envio, item["tipo"], item["id_registro"]),
+                )
+            enviados += 1
+        except ErroPdv as e:
+            with get_cursor() as cur:
+                cur.execute(
+                    """INSERT INTO pdv_envios (id_unidade, tipo, id_registro, acao, estado,
+                                               impressao, enviado, erro, id_usuario)
+                       VALUES (%s, %s, %s, %s, 'ERRO', %s, %s, %s, %s)""",
+                    (id_unidade, item["tipo"], item["id_registro"], item["acao"],
+                     item["impressao"], Json(item["corpo"]), str(e), ctx.id_usuario),
+                )
+            falhas += 1
+
+    with get_cursor() as cur:
+        auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "enviar",
+                            depois={"enviados": enviados, "falhas": falhas,
+                                    "pedidos": len(pendentes)},
+                            id_unidade=id_unidade)
+
+    if not pendentes:
+        return {"enviados": 0, "falhas": 0, "message": "Nada pendente para enviar."}
+    return {"enviados": enviados, "falhas": falhas,
+            "message": (f"{enviados} enviado(s)"
+                        + (f", {falhas} com erro" if falhas else ""))}

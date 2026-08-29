@@ -33,6 +33,12 @@ _EDITAVEIS = (
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
     "codigo_pdv",
+    # ⚠️ Quem já tem `codigo_pdv` nasce marcado, e quem GANHA o código depois
+    # também — quem garante isso é o gatilho da 040, não esta lista. Aqui ele é
+    # editável porque a marca é uma DECISÃO: um prato novo pode ser marcado
+    # antes de existir no PDV (é o que o põe na fila de criação), e um produto
+    # que veio de lá pode ser desmarcado para o Botané não mexer nele.
+    "integrado_pdv",
     # Vêm do cadastro do Omie e são COMPLETADOS na sincronização — mas
     # continuam editáveis: quem corrige aqui é porque o dado de lá está errado,
     # e a completagem só preenche o que está em branco.
