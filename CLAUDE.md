@@ -1159,6 +1159,43 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **O PRODUTO no envio, e o Botané virando DONO DO PREÇO** (migração 044, 29/08/2026).
+  O que sai é **valor, nome, setor e categoria** — decisão do dono, nestas palavras.
+  ⚠️ **NENHUM imposto é enviado, e isso é a trava mais importante do arquivo.** Os campos
+  fiscais estão preenchidos em **629 de 630** no PDV (CFOP 5102, CSOSN 102, CST 00, PIS/Cofins
+  e o objeto da reforma tributária) e o Botané **não tem nenhum deles**. Mandá-los zerados —
+  o que um `{**nosso}` faria sozinho — derrubaria a emissão fiscal do cliente. `corpo_do_produto`
+  leva descrição, grupo, impressora, unidade, NCM, CEST, EAN e `status`, e nada mais; a suíte
+  cobra a AUSÊNCIA dos oito campos fiscais.
+  ⚠️ **`produtos/delete` nunca é chamado.** Sair do cardápio é `status: false`.
+  🔑 **O preço mora noutra tabela, e por isso são DOIS gatilhos.** Mudar o preço não toca em
+  `produtos` — sem o gatilho de `produto_precos`, um envio diria "tudo integrado" com o
+  cardápio cobrando o valor velho. Ele é só de **INSERT**: linha nova É a mudança de preço; o
+  `UPDATE` de lá só fecha a vigência da anterior. ⚠️ E `NEW.id` ali é o id da LINHA DE PREÇO —
+  usá-lo criaria pendência para um produto que não existe, e ela nunca sairia da fila.
+  ⚠️ **`enviar_preco` é ler → mudar só `valor` → gravar.** A linha de `tabelapreco` volta como
+  veio; qualquer campo não repetido seria apagado, e são os fiscais que moram ali.
+  🔑 **Ser dono do preço obriga a PARAR de importá-lo.** `cardapio.importar` deixa de ler
+  `tabelapreco` quando `enviar_ao_pdv` está ligado naquela loja — senão os dois sistemas
+  brigam: o preço alterado lá volta por cima na sincronização seguinte, o envio o desfaz, e
+  `produto_precos`, que existe para responder *"quando o preço subiu?"*, vira ruído de ida e
+  volta. ⚠️ Só o PREÇO para de vir: nome, grupo, impressora e NCM continuam sendo importados —
+  dono do preço não é dono de tudo.
+  ⚠️ **`ativo` ENTRA na regra do produto, ao contrário da categoria.** Lá o campo é sazonal e
+  tem donos diferentes; aqui, desativar um produto deve tirá-lo do cardápio. O que impede o
+  ping-pong é a **pendência**: é a mudança feita AQUI que autoriza mexer no `status` de LÁ.
+  Desativaram no PDV e nada mudou aqui? Não há pendência, e nada é reativado.
+  ⚠️ **O casamento é pelo `codigo_pdv`, NUNCA por nome** — é a lição do REDBULL → LIMÃO TAITY,
+  e escrevendo ela criaria produto em cima do cadastro errado.
+  ⚠️ **Produto INATIVO aqui não NASCE no cardápio** (eram 67, resíduo de suíte): povoar o PDV
+  com o que a casa já não vende. E **vínculo perdido não vira cadastro novo** — `codigo_pdv`
+  guardado que sumiu do cardápio (137, com nomes de teste) vira `SEM_PAR`, à VISTA na aba
+  Integrados e sem ação: criar um segundo cadastro deixaria o código velho apontando para o
+  nada e um duplicado no lugar.
+  🔑 **18 "PAO DE QUEIJO" quase foram criados no PDV do cliente**, e a causa era do TESTE:
+  `_soltar_codigo()` limpava o `codigo_pdv` e deixava `integrado_pdv = true`, então o resíduo
+  entrava na fila como CRIAR. Fila derivada tem esta propriedade — lixo de suíte vira proposta
+  de escrita no sistema de quem está vendendo. Conferir a fila ANTES de mandar, sempre.
 - **`services/kits.py`** (19/08/2026): combo/kit — a linha única do PDV que vale por vários
   produtos. `KIT` já era um tipo previsto em `produtos.tipo` e nunca tinha sido implementado:
   o combo não é produzido (sem ficha) nem estocado (sem custo médio), então entrava no CMV
@@ -1390,13 +1427,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.414 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.447 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (141), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (145), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (349, no Chrome, com fotos em `web/scripts/_fotos`).

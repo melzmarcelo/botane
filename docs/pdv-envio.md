@@ -445,5 +445,21 @@ As saídas, e nenhuma é técnica:
 2. **O PDV continua dono**: o preço não entra no envio, e a integração de
    produto manda só cadastro. O ciclo fica pela metade.
 
-Enquanto isso não for decidido, o envio de produto sai **sem preço** — cadastro
-apenas. É o único caminho que não cria a briga.
+**Decidido em 29/08/2026: a saída 1 — o Botané é o dono do preço.**
+
+O que isso mudou, em concreto:
+
+- `enviar_preco()` faz **ler → mudar só `valor` → gravar** em `tabelapreco`. A
+  linha inteira volta como veio; o único campo tocado é o preço.
+- ⚠️ **`cardapio.importar` PARA de importar preço** quando `enviar_ao_pdv` está
+  ligado naquela loja. Sem isso a briga aconteceria mesmo com o envio certo: o
+  preço de lá voltaria por cima na sincronização seguinte. Só o preço para de
+  vir — nome, grupo, impressora e NCM continuam sendo importados.
+- ⚠️ **Nenhum imposto é enviado.** Os campos fiscais estão preenchidos em 629 de
+  630 no PDV (CFOP 5102, CSOSN 102, CST 00, PIS/Cofins e o objeto da reforma
+  tributária) e o Botané **não tem nenhum deles**. Mandá-los zerados derrubaria
+  a emissão fiscal do cliente. O corpo do produto leva descrição, grupo,
+  impressora, unidade, NCM, CEST, EAN e status — e nada mais.
+- ⚠️ `produtos/delete` **nunca** é chamado. Sair do cardápio é `status: false`.
+
+O que o Botané manda, então, é: **valor, nome, setor e categoria.**

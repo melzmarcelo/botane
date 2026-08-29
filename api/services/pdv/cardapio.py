@@ -329,7 +329,7 @@ def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int) -> bool:
 
 
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
-             criar_ausentes: bool = True) -> dict:
+             criar_ausentes: bool = True, id_unidade: int = 1) -> dict:
     """Traz o cardápio e liga o que o CÓDIGO manda ligar.
 
     ⚠️ **Duas portas, e nenhuma delas é palpite**: o código do PDV
@@ -350,7 +350,22 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     """
     itens = baixar(cliente)
     apoio = _Apoio(cur)
-    tabela = precos(cliente, filial)
+
+    # 🔑 **Com o envio ligado, o Botané passa a ser o DONO do preço — e para de
+    # importá-lo.** Manter as duas direções faria os sistemas brigarem: um preço
+    # alterado no PDV voltaria por cima do que mandamos, o envio seguinte o
+    # desfaria, e `produto_precos` — que existe para responder "quando o preço
+    # subiu?" — viraria ruído de ida e volta.
+    # ⚠️ Só o PREÇO para de vir. O resto do cardápio (nome, grupo, impressora,
+    # NCM) continua sendo importado: dono do preço não é dono de tudo.
+    cur.execute(
+        """SELECT enviar_ao_pdv FROM integracoes
+            WHERE servico = 'PDV_LEGAL' AND id_unidade = %s""",
+        (id_unidade,),
+    )
+    linha_cfg = cur.fetchone()
+    somos_donos_do_preco = bool(linha_cfg and linha_cfg["enviar_ao_pdv"])
+    tabela = {} if somos_donos_do_preco else precos(cliente, filial)
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,

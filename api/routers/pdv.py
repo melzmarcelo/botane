@@ -387,7 +387,8 @@ def importar_cardapio(
             codigos = [str(f.get("codigo")) for f in lista if f.get("codigo")]
             filial = codigos[0] if len(codigos) == 1 else ""
         try:
-            r = cardapio.importar(cur, cliente, ctx.id_usuario, filial, criar_ausentes)
+            r = cardapio.importar(cur, cliente, ctx.id_usuario, filial, criar_ausentes,
+                                  id_unidade)
         except ErroPdv as e:
             raise HTTPException(status_code=502, detail=f"PDV Legal: {e.mensagem}")
         depois = cardapio.reconciliar(cur, id_unidade)
@@ -525,6 +526,21 @@ def envio_disparar(body: EnvioPedido,
     ordem = {envio.CATEGORIA: 0, envio.SETOR: 1}
     pendentes.sort(key=lambda p: (ordem.get(p["tipo"], 9), p["nome"]))
 
+    # A filial da tabela de preços: sem ela o preço não sai, e o cadastro sai
+    # igual. ⚠️ Uma só — preço é POR filial, e mandar o daqui para a loja errada
+    # seria pior que não mandar.
+    filial = None
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+            (id_unidade, SERVICO))
+        linha_cred = cur.fetchone()
+        filiais = (segredos.decifrar(linha_cred["credenciais"]) if linha_cred else {}).get(
+            "filiais")
+    if filiais:
+        so = [f.strip() for f in str(filiais).split(",") if f.strip()]
+        filial = int(so[0]) if len(so) == 1 else None
+
     # ---- o envio: UMA TRANSAÇÃO POR ITEM ----
     # 🔑 **O PDV não volta atrás, e o banco daqui volta.** Na primeira versão o
     # laço inteiro rodava dentro de um `with get_cursor()`: o envio de um setor
@@ -540,7 +556,7 @@ def envio_disparar(body: EnvioPedido,
     enviados, falhas = 0, 0
     for item in pendentes:
         try:
-            resposta = envio.enviar_um(cliente, item)
+            resposta = envio.enviar_um(cliente, item, filial)
             codigo = str((resposta or {}).get("id") or item.get("codigo_pdv") or "") or None
             with get_cursor() as cur:
                 cur.execute(

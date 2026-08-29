@@ -159,10 +159,20 @@ def _dono_do_codigo(codigo):
 
 
 def _soltar_codigo(codigo):
-    """Tira este código dos DOIS lugares, para a cascata rodar de novo nele."""
+    """Tira este código dos DOIS lugares, para a cascata rodar de novo nele.
+
+    ⚠️ **Solta a MARCA junto.** O gatilho da 040 marca `integrado_pdv` quando um
+    produto ganha `codigo_pdv`; tirar só o código deixava o produto marcado e
+    sem vínculo — que a fila de envio lê, corretamente, como "deve existir no
+    PDV e não existe: criar". Dezoito rodadas depois, a fila do dono tinha
+    dezoito PAO DE QUEIJO esperando para virar dezoito cadastros no cardápio do
+    cliente. A suíte estava fabricando trabalho para alguém desfazer à mão.
+    """
     conexao = _conexao_do_banco()
     with conexao, conexao.cursor() as cur:
-        cur.execute("UPDATE produtos SET codigo_pdv = NULL WHERE codigo_pdv = %s", (str(codigo),))
+        cur.execute(
+            "UPDATE produtos SET codigo_pdv = NULL, integrado_pdv = false "
+            " WHERE codigo_pdv = %s", (str(codigo),))
         cur.execute(
             "DELETE FROM codigos_externos WHERE sistema='PDV_LEGAL' AND codigo=%s", (str(codigo),)
         )
@@ -1039,6 +1049,46 @@ ainda = any(p["nome"].startswith(f"Pend setor {marca}") for p in fila_p["pendent
 checar("e a pendencia continua ABERTA", ainda, ainda)
 
 chamar("DELETE", f"/setores/{id_sp}", token=token)
+
+
+print("\n8m. o produto na fila de envio")
+# 🔑 **O que ja existe no cardapio entra como ADOTAR, nunca CRIAR.** Sao 630
+# produtos la; propor criar duplicaria o cardapio do cliente. O casamento e pelo
+# `produtos.codigo_pdv` — NUNCA por nome: a cascata por nome foi removida da
+# importacao depois de ligar REDBULL a LIMAO TAITY.
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+prods = [p for p in fila_p["pendentes"] if p["tipo"] == "PRODUTO"]
+criar = [p for p in prods if p["acao"] == "CRIAR"]
+adotar = [p for p in prods if p["acao"] == "ADOTAR"]
+checar("os produtos do cardapio entram na fila", len(prods) > 0, len(prods))
+checar("e como ADOTAR, nao CRIAR", len(adotar) > len(criar), (len(adotar), len(criar)))
+
+# ⚠️ O corpo do produto NAO leva imposto nenhum. Os campos fiscais da linha de
+# preco (CFOP, CSOSN, CST, PIS/Cofins, reforma tributaria) estao preenchidos em
+# 629 dos 630 no PDV e o Botane nao tem nenhum deles: manda-los zerados
+# derrubaria a emissao fiscal do cliente.
+if adotar or [p for p in fila_p["integrados"] if p["tipo"] == "PRODUTO"]:
+    algum = (adotar or [p for p in fila_p["integrados"] if p["tipo"] == "PRODUTO"])[0]
+    proibidos = {"codCFOP", "codCSOSN", "codCST", "codPisCofins", "pis", "cofins",
+                 "reformaTributaria", "codICMS_ISS"}
+    checar("o corpo do produto nao carrega imposto",
+           not (proibidos & set(algum["corpo"])), sorted(set(algum["corpo"]) & proibidos))
+
+# ⚠️ Produto INATIVO aqui e inexistente la nao vira cadastro novo, e produto com
+# `codigo_pdv` que sumiu do cardapio nao vira duplicado: fica a VISTA, sem agir.
+st, p_inativo = chamar("POST", "/produtos", {
+    "codigo": f"INAT{marca}", "nome": f"Inativo pdv {marca}", "tipo": "PRODUZIDO",
+    "um_estoque": "UN", "integrado_pdv": True,
+}, token=token)
+id_inat = p_inativo.get("id")
+# ⚠️ `POST /produtos` nao aceita `ativo` (o modelo de criacao tem `status`);
+# desativar e um segundo passo, que e como acontece na vida real.
+chamar("PUT", f"/produtos/{id_inat}", {"ativo": False}, token=token)
+st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
+checar("produto inativo aqui nao nasce no cardapio",
+       not any(p["id_registro"] == id_inat for p in fila_p["pendentes"]),
+       [p["nome"] for p in fila_p["pendentes"] if p["id_registro"] == id_inat])
+chamar("DELETE", f"/produtos/{id_inat}", token=token)
 
 
 print("\n9. limpeza")

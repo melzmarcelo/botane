@@ -39,8 +39,11 @@ from services.pdv.cliente import ClientePdv, ErroPdv
 
 CATEGORIA = "CATEGORIA"
 SETOR = "SETOR"
+PRODUTO = "PRODUTO"
 
 ADOTAR = "ADOTAR"
+REATIVAR = "REATIVAR"
+SEM_PAR = "SEM_PAR"
 CRIAR = "CRIAR"
 ATUALIZAR = "ATUALIZAR"
 DESATIVAR = "DESATIVAR"
@@ -117,7 +120,48 @@ def corpo_de_saida(linha: dict, remoto: dict | None) -> dict:
             "ativo_no_pdv": (remoto or {}).get("ativo")}
 
 
-MONTADORES = {CATEGORIA: corpo_da_categoria, SETOR: corpo_do_setor}
+def corpo_do_produto(linha: dict, remoto: dict | None = None,
+                    adotar: bool = False) -> dict:
+    """`produtos` → o cadastro do cardápio (`produtos/save|update`).
+
+    ⚠️ **Só o que o cardápio enxerga, e NADA de imposto.** Os campos fiscais da
+    linha de preço (CFOP 5102, CSOSN 102, CST 00, PIS/Cofins, reforma
+    tributária) estão preenchidos em 629 dos 630 no PDV, e o Botané não tem
+    nenhum deles. Mandar `null` ali zeraria a emissão fiscal do cliente — muito
+    pior que um preço errado, e sem botão de desfazer. Preço tem rota própria
+    (`tabelapreco`), e mesmo lá só o `Valor` é nosso.
+
+    ⚠️ **O grupo vai pelo `CodGrupoExterno`** — o id da nossa categoria. É o que
+    a adoção das 29 categorias tornou possível: sem ela, cada produto teria de
+    carregar o código do grupo de lá.
+    ⚠️ A impressora, não: o modelo dela não tem código externo, então vai o
+    `CodigoImpressora` guardado em `setores.codigo_pdv`.
+    ⚠️ **`DescricaoCupom` é o `nome_curto`** — é ele que sai impresso no cupom e
+    aparece no botão do PDV. Sem nome curto, cai no nome completo, porque um
+    botão sem texto é pior que um botão com texto longo.
+    """
+    if adotar and remoto:
+        return {**remoto, "codRefExterna": linha["id"]}
+    corpo = {
+        "codigo": int((remoto or {}).get("codigo") or linha.get("codigo_pdv") or 0),
+        "codRefExterna": linha["id"],
+        "descricaoCupom": (linha.get("nome_curto") or linha["nome"] or "").strip(),
+        "descricaoDetalhada": (linha["nome"] or "").strip(),
+        "status": bool(linha["ativo"]),
+    }
+    if linha.get("id_categoria"):
+        corpo["codGrupoExterno"] = linha["id_categoria"]
+    if linha.get("setor_codigo_pdv"):
+        corpo["codigoImpressora"] = int(linha["setor_codigo_pdv"])
+    for nosso, deles in (("um_estoque", "unidade"), ("ncm", "codigoNCM"),
+                         ("cest", "codigoCest"), ("codigo_barras", "codigoEAN")):
+        if linha.get(nosso):
+            corpo[deles] = str(linha[nosso])
+    return corpo
+
+
+MONTADORES = {CATEGORIA: corpo_da_categoria, SETOR: corpo_do_setor,
+              PRODUTO: corpo_do_produto}
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +216,26 @@ def _registros(cur, id_unidade: int) -> list[dict]:
         (id_unidade,),
     )
     linhas += [{**dict(r), "tipo": SETOR} for r in cur.fetchall()]
+
+    # ⚠️ **Só os que participam.** São 6.945 produtos na base; montar o corpo de
+    # todos a cada abertura da tela seria varrer o cadastro inteiro para achar
+    # 533. O desmarcado entra pela pendência aberta — é ela que carrega o
+    # pedido de saída.
+    cur.execute(
+        """SELECT p.id, p.nome, p.nome_curto, p.ativo, p.integrado_pdv, p.codigo_pdv,
+                  p.id_categoria, p.id_setor, p.um_estoque, p.ncm, p.cest,
+                  p.codigo_barras, s.codigo_pdv AS setor_codigo_pdv,
+                  (SELECT pp.preco_venda FROM produto_precos pp
+                    WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
+                    ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+             FROM produtos p
+             LEFT JOIN setores s ON s.id = p.id_setor
+            WHERE p.integrado_pdv
+               OR EXISTS (SELECT 1 FROM pdv_pendencias q
+                           WHERE q.tipo = 'PRODUTO' AND q.id_registro = p.id
+                             AND q.resolvido_em IS NULL)
+            ORDER BY p.nome""")
+    linhas += [{**dict(r), "tipo": PRODUTO} for r in cur.fetchall()]
     return linhas
 
 
@@ -191,6 +255,7 @@ def _o_que_existe_la(cliente) -> dict[str, dict]:
     """
     grupos = cliente.get("/grupoprodutos/get") or []
     impressoras = cliente.get("/impressoras/get") or []
+    produtos = cliente.get("/produtos/get") or []
     return {
         CATEGORIA: {
             "por_ref": {int(g["codRefExterna"]): g for g in grupos if g.get("codRefExterna")},
@@ -200,6 +265,18 @@ def _o_que_existe_la(cliente) -> dict[str, dict]:
         SETOR: {
             "por_ref": {},   # impressora não tem código externo — é o modelo dela
             "por_nome": {str(i.get("nome", "")).strip().upper(): i for i in impressoras},
+        },
+        PRODUTO: {
+            "por_ref": {int(p["codRefExterna"]): p for p in produtos
+                        if p.get("codRefExterna")},
+            # 🔑 **Produto NÃO casa por nome, e a ausência é deliberada.** A
+            # cascata por nome foi REMOVIDA da importação do cardápio depois de
+            # ligar REDBULL a LIMÃO TAITY e PÃO COM MANTEIGA a MANJERICÃO —
+            # nenhum piso separa o acerto do erro, porque a diferença não está
+            # no texto. Aqui quem reconhece é o `produtos.codigo_pdv`, que já
+            # existe em 744 cadastros e foi posto lá por gente.
+            "por_nome": {},
+            "por_codigo": {str(p.get("codigo")): p for p in produtos},
         },
     }
 
@@ -253,6 +330,13 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
             if tem_pendencia and ja_e_nosso and tipo == CATEGORIA and remoto.get("ativo"):
                 corpo = {**remoto, "ativo": False}
                 pendentes.append(_item(linha, DESATIVAR, corpo, anterior, remoto))
+            elif tem_pendencia and ja_e_nosso and tipo == PRODUTO and remoto.get("status"):
+                # ⚠️ No produto o campo chama `status`, não `ativo` — é o modelo
+                # deles, e trocar um pelo outro mandaria um campo que o PDV
+                # ignora: o produto continuaria no cardápio e a tela diria que
+                # saiu.
+                pendentes.append(_item(linha, DESATIVAR,
+                                       {**remoto, "status": False}, anterior, remoto))
             elif anterior or ja_e_nosso:
                 # ⚠️ **Desmarcado que JÁ SAIU daqui não some da tela.** O ciclo
                 # é: tirar do PDV → pendente como desativar → enviar → e então
@@ -266,6 +350,23 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
                 integrados.append(_item(linha, DESATIVAR, corpo_de_saida(linha, remoto),
                                         anterior, remoto))
             continue
+
+        # ⚠️ **Produto desativado AQUI sai do cardápio — categoria não.** No
+        # produto você mandou que desativar aqui desative lá; na categoria o
+        # `ativo` tem donos diferentes (PASCOA fica ativa aqui o ano todo e é
+        # ligada e desligada lá conforme a época).
+        # 🔑 O que impede o ping-pong é a PENDÊNCIA: é a mudança feita AQUI que
+        # autoriza mexer no `ativo` de LÁ. Alguém desativou no PDV e nada mudou
+        # aqui? Sem pendência, sem ação — e nada é reativado por engano.
+        if tipo == PRODUTO and ja_e_nosso and tem_pendencia:
+            if not linha["ativo"] and remoto.get("status"):
+                pendentes.append(_item(linha, DESATIVAR,
+                                       {**remoto, "status": False}, anterior, remoto))
+                continue
+            if linha["ativo"] and not remoto.get("status"):
+                corpo = MONTADORES[tipo](linha, remoto)
+                pendentes.append(_item(linha, REATIVAR, corpo, anterior, remoto))
+                continue
 
         # 1. Existe lá e já é nosso (o `codRefExterna` aponta para cá).
         if ja_e_nosso:
@@ -291,6 +392,23 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
             continue
 
         # 3. Não existe lá.
+        if tipo == PRODUTO:
+            # ⚠️ **Produto INATIVO aqui não nasce no cardápio.** Criar lá algo
+            # que esta casa já não vende é povoar o PDV com o que ninguém quer
+            # ver — e foram 67 assim, todos resíduo de suíte.
+            if not linha["ativo"]:
+                continue
+            # 🔑 **Vínculo PERDIDO não vira cadastro novo.** Tem `codigo_pdv`
+            # guardado e esse código não está mais no cardápio: o produto foi
+            # removido de lá, ou o código nunca foi de verdade (137 assim, com
+            # nomes de teste). Criar um segundo cadastro deixaria o código
+            # velho apontando para o nada e um duplicado no lugar. Fica à
+            # VISTA, sem agir — quem resolve é gente, tirando a marca ou
+            # limpando o código.
+            if linha.get("codigo_pdv"):
+                integrados.append(_item(linha, SEM_PAR, {"codigo_pdv": linha["codigo_pdv"]},
+                                        anterior, None))
+                continue
         corpo = MONTADORES[tipo](linha)
         pendentes.append(_item(linha, CRIAR, corpo, anterior, None))
 
@@ -320,6 +438,14 @@ def _remoto(la: dict, linha: dict) -> tuple[dict | None, bool]:
         achado = la[tipo]["por_ref"].get(linha["id"])
         if achado:
             return achado, True
+    elif tipo == PRODUTO:
+        achado = la[tipo]["por_ref"].get(linha["id"])
+        if achado:
+            return achado, True
+        # Tem o código de lá guardado mas o `codRefExterna` ainda não aponta
+        # para cá: existe, é o mesmo, e falta só o vínculo — é adoção.
+        cod = str(linha.get("codigo_pdv") or "")
+        return (la[tipo]["por_codigo"].get(cod) if cod else None), False
     else:
         cod = str(linha.get("codigo_pdv") or "")
         if cod:
@@ -340,6 +466,14 @@ def _difere(tipo: str, corpo: dict, remoto: dict) -> bool:
     # ⚠️ `ativo` fica FORA da comparação pelo mesmo motivo: com ele, as quatro
     # categorias sazonais apareceriam como pendentes para sempre, e cada envio
     # as reativaria no cardápio.
+    if tipo == PRODUTO:
+        # ⚠️ Só o que ENVIAMOS. O PDV devolve dezenas de campos que não
+        # controlamos (favorito, destaque, modificadores…); compará-los faria
+        # todo produto parecer eternamente pendente.
+        return any(corpo.get(c) != remoto.get(c)
+                   for c in ("descricaoCupom", "descricaoDetalhada",
+                             "codGrupoExterno", "codigoImpressora")
+                   if c in corpo)
     campos = ("nome",)
     return any(corpo.get(c) != remoto.get(c) for c in campos)
 
@@ -353,6 +487,10 @@ def _item(linha: dict, acao: str, corpo: dict, anterior: dict | None,
         "acao": acao,
         "corpo": corpo,
         "impressao": impressao(corpo),
+        # ⚠️ FORA do corpo: o corpo é o que vai para o cadastro, e o preço tem
+        # rota própria. Misturá-lo ali mandaria um campo que `produtos/update`
+        # ignora — e a tela diria que o preço saiu.
+        "preco": linha.get("preco_venda"),
         "codigo_pdv": (str((remoto or {}).get("codigo") or "")
                        or (anterior or {}).get("codigo_pdv")
                        or linha.get("codigo_pdv")),
@@ -369,7 +507,45 @@ ROTAS = {
     CATEGORIA: {"criar": "/grupoprodutos/save", "atualizar": "/grupoprodutos/update",
                 "desativar": "/grupoprodutos/update"},
     SETOR: {"criar": "/impressoras/save", "atualizar": "/impressoras/update"},
+    PRODUTO: {"criar": "/produtos/save", "atualizar": "/produtos/update",
+              # Desativar e reativar são o MESMO update, com `status` trocado —
+              # não existe rota própria, e `produtos/delete` fica fora de
+              # propósito: quem tira um item do cardápio de vez é gente, lá.
+              "desativar": "/produtos/update", "reativar": "/produtos/update"},
 }
+
+
+PRECO = "PRECO"
+
+
+def enviar_preco(cliente, filial: int, codigo_pdv: str, valor) -> dict:
+    """Muda SÓ o preço na linha da tabela do PDV, preservando o resto.
+
+    🔑 **Os impostos moram no PDV e o Botané não tem nenhum deles.** Medido na
+    conta real: `codCFOP` 5102, `codCSOSN` 102, `codCST` 00 e `codPisCofins`
+    preenchidos em 629 dos 630, além de PIS/Cofins em 44 e do objeto inteiro da
+    `reformaTributaria` em todos. Mandar um `tabelapreco/update` com apenas
+    `CodProduto` e `Valor` — e o PUT substituindo a linha — **zeraria a emissão
+    fiscal do cliente**. Não se desfaz com um botão, e ninguém percebe até o
+    primeiro cupom recusado.
+
+    Então é leitura-alteração-escrita: pega a linha como ela está, troca o
+    `valor`, devolve tudo o mais idêntico. A divisão fica limpa — o Botané
+    decide **quanto custa**, o PDV continua sabendo **como tributar**.
+
+    ⚠️ `CodProduto` é o código DELES e é o único campo obrigatório: preço só sai
+    depois de o cadastro existir lá e o `codigo_pdv` estar guardado aqui.
+    """
+    linhas = cliente.get(f"/tabelapreco/get/{filial}") or []
+    atual = next((l for l in linhas if str(l.get("codProduto")) == str(codigo_pdv)), None)
+    if atual is None:
+        raise ErroPdv(
+            f"O produto {codigo_pdv} não tem linha na tabela de preços da filial {filial}. "
+            "O preço é gravado sobre a linha que já existe — criar uma do zero exigiria "
+            "inventar os impostos, que são do PDV.")
+    if float(atual.get("valor") or 0) == float(valor or 0):
+        return {"sem_mudanca": True, "valor": atual.get("valor")}
+    return cliente.enviar("PUT", "/tabelapreco/update", {**atual, "valor": float(valor)})
 
 
 def conferir_a_conta(cliente: ClientePdv, cnpj_da_casa: str | None) -> None:
@@ -411,8 +587,15 @@ def conferir_a_conta(cliente: ClientePdv, cnpj_da_casa: str | None) -> None:
         )
 
 
-def enviar_um(cliente: ClientePdv, item: dict) -> dict:
-    """Manda UM registro. Devolve o que voltou; levanta `ErroPdv` no que falhar."""
+def enviar_um(cliente: ClientePdv, item: dict, filial: int | None = None) -> dict:
+    """Manda UM registro. Devolve o que voltou; levanta `ErroPdv` no que falhar.
+
+    ⚠️ **O preço vai DEPOIS do cadastro, e só quando o produto já existe lá.**
+    `tabelapreco` exige o `CodProduto` — o código DELES —, então um produto
+    recém-criado só ganha preço no envio seguinte, quando o código já está
+    guardado aqui. Mandar antes daria um erro que fala de um campo obrigatório
+    e não da ordem das coisas.
+    """
     rotas = ROTAS[item["tipo"]]
     acao = item["acao"]
 
@@ -431,4 +614,19 @@ def enviar_um(cliente: ClientePdv, item: dict) -> dict:
     caminho = rotas["criar" if acao == CRIAR else
                     ("desativar" if acao == DESATIVAR else "atualizar")]
     metodo = "POST" if acao == CRIAR else "PUT"
-    return cliente.enviar(metodo, caminho, item["corpo"])
+    resposta = cliente.enviar(metodo, caminho, item["corpo"])
+
+    if (item["tipo"] == PRODUTO and acao != DESATIVAR
+            and item.get("preco") is not None and filial):
+        codigo = str((resposta or {}).get("id") or item.get("codigo_pdv") or "")
+        if codigo:
+            try:
+                resposta = {**(resposta or {}),
+                            "preco": enviar_preco(cliente, filial, codigo, item["preco"])}
+            except ErroPdv as e:
+                # ⚠️ O cadastro FOI. Estourar aqui faria o item inteiro contar
+                # como erro e voltar para a fila, e o próximo envio repetiria um
+                # cadastro que já está certo. O que falhou foi o preço, e é isso
+                # que a resposta diz.
+                resposta = {**(resposta or {}), "preco_falhou": str(e)}
+    return resposta
