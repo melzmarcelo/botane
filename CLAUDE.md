@@ -141,6 +141,128 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   mesmos filtros — filtrar na tela e baixar outra coisa faria quem conferisse achar que um dos
   dois mente. Os rótulos dos tipos saem de `GET /estoque/tipos-movimento`, não de uma lista
   copiada no front.
+- 🔑 **Baixar deixou de ser um clique cego** (`services/exportacao_catalogo.py`,
+  `components/exportar.tsx`, 29/08/2026). O botão de `/produtos` despejava os **3.226** do
+  cadastro, sempre; o de saldos trazia os 99 locais; o razão MANDAVA `id_produto` e o servidor
+  **ignorava** — filtrar um produto na tela e baixar dava a planilha inteira, calada, que é
+  exatamente o defeito que aquele endpoint dizia existir para evitar. Agora o botão abre uma
+  janela: os filtros pertinentes ÀQUELE processo, todos de escolha múltipla, mais a escolha
+  entre **planilha e PDF**.
+  🔑 **O PDF não foi nove trabalhos, foi um** — e a razão é que os relatórios já se declaravam
+  na mesma forma. `exportacao.pdf_de` tem a MESMA assinatura de `csv_de`
+  (`linhas, colunas, titulo, resumo`), então relatório novo nasce com os dois formatos sem que
+  ninguém escreva nada a mais, e é impossível a planilha e o PDF discordarem sobre o conteúdo.
+  ⚠️ **O motor é `reportlab`** (preso em `requirements.txt`), e a escolha é restrição, não
+  gosto: `weasyprint` exige GTK/cairo e **quebraria o build no App Platform**. Gerar no
+  navegador criaria a segunda implementação do mesmo relatório.
+  ⚠️ **A extensão do caminho É o formato, e por isso a URL não mente**: `/exportar/saldos.csv`
+  e `/exportar/saldos.pdf`. Quando o caminho traz extensão é ela que manda — um `?formato=pdf`
+  pendurado num `.csv` faria o arquivo baixado discordar do endereço que o gerou.
+  ⚠️ **O catálogo dos filtros vem do SERVIDOR** (`GET /exportar/catalogo`), com as opções já
+  resolvidas. É a lição das três listas de `TIPOS`: escrita no front, a lista divergiria
+  **calada** — a tela ofereceria um filtro que o servidor ignora e o arquivo sairia com mais
+  linhas do que se pediu. As opções vêm resolvidas para a janela não precisar de quatro
+  requisições a mais (e piscar quatro vezes) antes de deixar escolher.
+  ⚠️ **O vocabulário é o de `inventario_selecao`**: filtro opcional, combinando com E, vazio
+  querendo dizer "todos", e no SQL `(%(x)s IS NULL OR coluna = ANY(%(x)s))`.
+  ⚠️ **Produto NÃO vira lista de caixinhas** — são milhares, e seria a mesma mentira do
+  `<select>` paginado. O catálogo marca o filtro com `tipo: "produtos"` e a tela resolve com a
+  `BuscaCadastro` da casa, guardando o escolhido como etiqueta.
+  ⚠️ **A prévia diz quantas linhas viriam ANTES do botão** (`/exportar/{rel}/previa`), como a
+  do inventário — e conta o ANEXO junto, senão ela diria "10" e o contador abriria 443 linhas.
+  ⚠️ **Dois relatórios são COMPOSTOS de propósito**: o do contador leva a apuração **e** a
+  margem por prato; o da reunião com o fornecedor leva a evolução de preço **e** o peso por
+  setor. `csv_de`/`pdf_de` recebem `anexos=` por causa deles. Partir em dois arquivos faria
+  quem recebe juntar de novo — e duas suítes cobram os dois quadros no mesmo arquivo.
+  ⚠️ O BOM do anexo **sai**: ele só vale no começo do arquivo, e um solto no meio vira
+  caractere invisível numa célula do Excel (o `precos.csv` tinha esse desde sempre).
+  ⚠️ **`MAXIMO_PDF = 5000`**: o razão de uma base real tem centenas de milhares de movimentos,
+  e o PDF disso é um arquivo de milhares de páginas que ninguém abre e que estoura o tempo da
+  requisição. Acima do teto a resposta é uma FRASE mandando usar a planilha, que não tem teto —
+  e a janela desabilita o botão antes do clique, em vez de deixar a surpresa para depois.
+  ⚠️ **`int` é contagem e não leva casa decimal no PDF**: o resumo dizia "Linhas 2,00". O tipo
+  já separa os dois na origem — contagem chega de um `len()`, dinheiro chega como `Decimal`.
+  ⚠️ E o número sai formatado **diferente** do CSV de propósito: a planilha precisa de vírgula
+  decimal SEM separador de milhar (com ponto de milhar o Excel lê como texto e não soma); o PDF
+  é para o olho, e "1.284.532,10" se lê enquanto "1284532,1" não.
+  ⚠️ **A apuração do CMV passou a sair em centavos**, e é arredondamento de APRESENTAÇÃO: ela
+  encadeia custo unitário de 6 casas, e o arquivo do contador dizia "56.138,035", que não é um
+  valor em reais. Quem arredonda é a linha do relatório, nunca o motor.
+  ⚠️ **Nem todo relatório filtra pelo banco**: a movimentação e os vencimentos são motores cuja
+  consulta prova uma identidade (`inicial + entradas − saídas = final`) ou alimenta o alerta da
+  tela inicial. Neles o corte é feito sobre as linhas devolvidas — daí o de-para de id para
+  nome. Remodelar o SQL deles arriscaria a propriedade que o relatório existe para provar.
+  ⚠️ **Toda exportação vai para a auditoria com o FILTRO que a gerou**: sem ele o registro diria
+  "fulano exportou o estoque", e a pergunta que se faz depois é sempre *o quê, exatamente*.
+  ⚠️ **A folha de contagem existia desde a etapa 4 sem botão em tela nenhuma** — só se chegava a
+  ela pela URL, e ela é o caminho previsto para quem conta no papel. Ganhou o botão em
+  `/inventario/[id]`, no modo "avulso" da janela (um registro só: pergunta o formato e mais
+  nada). Em contagem CEGA aberta o servidor continua tirando as colunas do sistema.
+- 🔑 **A ficha técnica se imprime** (`GET /exportar/ficha/{id}.pdf`, botão em `/fichas/[id]`,
+  29/08/2026). A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha — não na
+  frente do monitor. Sem o papel, a receita fica presa numa tela que ninguém leva para perto
+  do fogão.
+  🔑 **Ver a ficha e ver o CUSTO são permissões diferentes, e o PDF não podia ser a porta
+  lateral disso.** Sem `fichas.custos` nenhuma coluna nem linha de dinheiro entra no arquivo —
+  quem esconde é o servidor, como já era no JSON. Um PDF é justamente o que SAI da tela e
+  circula; se o dinheiro vazasse por aqui, a regra do router de fichas viraria enfeite. A
+  suíte cobra isso nos dois formatos.
+  ⚠️ **O modo de preparo não é tabela** — é o texto que se lê enquanto se cozinha. `csv_de` e
+  `pdf_de` ganharam `notas=[(rótulo, texto)]`, que fecham o documento depois dos ingredientes,
+  na ordem em que se usa. No PDF a quebra de linha vira `<br/>`: o `Paragraph` do reportlab
+  ignora a quebra crua e um preparo numerado sairia em bloco corrido.
+  ⚠️ **Coluna sem informação SAI da ficha** — mesma regra da folha de contagem, que só mostra o
+  local quando a contagem cobre mais de um. Numa receita simples "Qtd líquida" e "Observação"
+  vêm vazias em todas as linhas e "Fator correção" é 1,00 repetido: três colunas mortas
+  empurravam o documento para PAISAGEM. Sem elas a ficha cabe em **retrato**, que é o formato
+  de quem vai pendurar o papel. Elas voltam sozinhas na receita que as usa — quem descasca
+  cebola tem fator de correção, e aí a coluna é a informação mais importante da linha.
+  ⚠️ **`exportacao.quantidade_br` existe porque texto MONTADO à mão escapa da formatação**: o
+  resumo dizia `Rendimento;2.0000 UN` — ponto decimal e quatro zeros no meio de um CSV que usa
+  vírgula em todo o resto. O valor virava string antes de passar pelo formatador, e nenhuma das
+  duas formatações o alcançava. Os zeros à direita saem: "1,0000 UN" não informa mais que
+  "1 UN", só sugere uma precisão que não existe ali.
+  ⚠️ **`formatoPadrao` na janela**: o padrão é planilha porque a maioria dos relatórios é para
+  CONFERIR, mas a ficha e a folha de contagem têm o papel como destino — abrir em "planilha"
+  ali faz escolher errado por inércia.
+  ⚠️ **A ficha sai em RETRATO, e por isso `pdf_de` ganhou `orientacao`.** O corte automático é
+  por número de colunas, e está certo para relatório de tabela — lá quem manda é a largura. A
+  ficha é outra coisa: um documento com FORMA por convenção. Assim que a receita usava fator de
+  correção ela caía em paisagem, e cartão de receita em paisagem não é o papel que se prende no
+  armário da cozinha.
+  ⚠️ **A coluna "No estoque" só entra quando houve CONVERSÃO de unidade.** Ela existe para o
+  caso de a receita pedir 1 CX e o razão baixar 12 PCT; sem conversão é a cópia das duas
+  colunas anteriores — e era uma das que empurravam a ficha para paisagem.
+  ⚠️ **O custo da LINHA sai em centavos; o unitário, não.** A coluna vinha com "2,375" e
+  "1,287" no meio de valores de dois dígitos, e é uma coluna que alguém soma com o dedo. O
+  unitário é um PREÇO (R$ por KG) e fica com a precisão que tiver.
+  🔑 **E o total do resumo NÃO virou a soma das linhas arredondadas.** Somar a coluna impressa
+  dá um centavo a mais que "Custo da receita" — é o centavo que toda coluna arredondada carrega.
+  A escolha é deliberada: o resumo mostra o número **autorizado**, o mesmo da tela e do CMV.
+  Um relatório que discorda do sistema sobre o custo da receita é pior que um centavo de
+  diferença numa soma feita à mão. (⚠️ É o oposto da regra do rodapé dos relatórios de tabela,
+  onde o total FECHA com a coluna — lá o total é do próprio relatório; aqui ele é de fora.)
+  ⚠️ `components/filtro-multiplo.tsx` saiu de dentro de `/inventario/novo` quando a exportação
+  passou a precisar do mesmo controle; ganhou **busca dentro da lista** acima de 12 opções
+  (99 locais e 70 categorias numa base real).
+- 🔑 **A janela (`Modal`) era do tamanho do CONTEÚDO, e conteúdo longo saía da tela sem
+  rolagem nenhuma** (29/08/2026). A de exportação, com cinco filtros, passava de mil pixels:
+  num notebook os últimos campos e o botão de baixar ficavam fora, **e não havia barra de
+  rolagem em lugar nenhum** — porque `Modal` trava o `overflow` do corpo da página enquanto
+  está aberta. O defeito era do componente, não daquela tela: valia para toda janela do
+  sistema, e só apareceu quando uma delas cresceu.
+  Agora o cartão é limitado pela altura da JANELA (`max-h-[calc(100dvh-4rem)]`), vira
+  `flex-col`, e só o miolo rola (`min-h-0 flex-1 overflow-y-auto` — sem o `min-h-0` um filho
+  de flex não encolhe abaixo do próprio conteúdo, e o `overflow` não teria o que rolar).
+  ⚠️ **`dvh`, não `vh`**: no celular a barra de endereço entra na conta do `vh`, e o pé do
+  cartão fica atrás dela.
+  ⚠️ **`Modal` ganhou `rodape`**, que fica FORA da rolagem: botão de ação que rolou para fora
+  da vista é botão que não existe, e quem não o acha conclui que a janela não tem saída. A
+  contagem da prévia fica ao lado dele porque é o número que se olha imediatamente antes de
+  clicar.
+  ⚠️ **A bateria rodava a 1440×1000 e não pegaria isso.** A checagem nova MEDE numa tela de
+  notebook de verdade (1440×760) e devolve o tamanho depois — altura generosa demais no teste
+  esconde exatamente a classe de defeito que o teste existe para achar.
 - **Aviso de ação flutua** (`components/aviso-flutuante.tsx`, 20/08/2026): sucesso e erro de
   AÇÃO saem por `useAviso()` e aparecem presos ao canto inferior — a mensagem ficava no topo e
   o botão de salvar está no fim de um formulário longo, então quem clicava não via confirmação
@@ -155,6 +277,27 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   regra de bolso: mensagem com "Falha ao carregar" fica; o resto flutua.
 - ⚠️ **Voltar tem de parecer um controle**: era `class="rotulo"` (10,5px, maiúsculas, cinza) e
   lia como legenda. Virou `.link-voltar`, pílula com borda e seta.
+- 🔑 **E a lição do Voltar nunca tinha sido generalizada — valia para mais trinta lugares**
+  (29/08/2026, pedido do dono: *"há muitos lugares clicáveis que parecem somente palavras"*).
+  Varredura dos 213 elementos clicáveis do front: **82 não tinham forma de controle**. A causa
+  era `.rotulo` usada em AÇÃO — `vincular`, `criar produto`, `desbloquear`, `estornar`,
+  `remover`, `desativar` —, que é a mesma tinta do `<th>` da tabela e da legenda do campo ao
+  lado. Três peças novas em `globals.css`:
+  **`.link-acao`** (pílula com borda: ação em linha, dentro de célula, aviso ou cartão),
+  **`.link-acao-erro`** (a mesma, vermelha no hover — o que estorna, apaga ou remove se anuncia
+  ANTES do clique) e **`.link-registro`** (o NOME que leva ao registro: sublinhado fino
+  permanente, verde no hover).
+  ⚠️ **O `<button>` do Tailwind 4 mostra a SETA, não a mão.** O Preflight não devolve
+  `cursor: pointer` — só `.btn` pedia o dele —, então todo botão sem classe própria tinha
+  literalmente a pista de "isto é texto". A rede de segurança está em `@layer base`.
+  ⚠️ **`.link-registro` existe por causa do CELULAR.** Nos cartões (produtos, fichas, compras,
+  inventário, vendas) o nome era `font-semibold` puro e a única pista aparecia no hover — onde
+  não há ponteiro, não havia pista nenhuma de que o cartão inteiro era clicável.
+  ⚠️ **As três vão em `@layer components`, ao contrário de `.campo` e `.btn`**: elas definem
+  `display`, e CSS sem camada VENCE a utilitária do Tailwind (é a mesma nota do `.campo`). Sem
+  a camada, o `lg:hidden` do "fechar" do menu lateral parava de valer e ele aparecia no desktop.
+  ⚠️ Ficaram de fora, de propósito: abas com sublinhado, cartão selecionável com borda, o × de
+  fechar (é símbolo, não palavra) e link dentro de frase — sublinhado já é a convenção do link.
 - Manuais: `docs/manual-da-equipe.md` (o que cada função faz no dia a dia) e
   **`web/public/ajuda.html`** — o manual de referência: os onze processos e o caminho do dado,
   de onde entra até virar número.
@@ -1048,16 +1191,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.285 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.354 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (69), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (326, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (338, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -1072,6 +1215,20 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `protocolTimeout` do Chrome numa tela longa; aconteceu com o painel de CMV e voltou a acontecer
   quando Integrações ganhou o segundo bloco de agenda — e levou junto as 280 checagens da rodada.
   `foto()` agora cai para a foto da JANELA e avisa; o `protocolTimeout` subiu para 60 s.
+- 🔑 **Dormir um tempo fixo e afirmar é SUPOR a precondição.** Três checagens do navegador
+  quebraram assim em 29/08/2026, e nenhuma por defeito da tela: `pdv-legal.tsx` devolve
+  `<Carregando/>` enquanto `/pdv/config` não responde, então `#agenda-pdv` não existe no DOM —
+  e o teste acusava a tela de não ter a agenda. O bloco do Omie é outro componente e responde
+  antes, o que fazia a falha parecer específica do PDV. A tela do produto tinha a mesma doença.
+  A correção é `waitForSelector`/`waitForFunction` pelo que se vai medir.
+  ⚠️ **Mas esperar pelo seletor ERRADO não espera nada.** `span.rotulo` existe igual no
+  formulário de cadastro, que é a tela de onde se acabou de sair: a espera casava com a página
+  velha e devolvia na hora, e a checagem seguinte media a tela ainda em branco. **Espere por
+  algo que só existe na tela de DESTINO** — ali, o rótulo "NCM".
+- ⚠️ **Rodar a suíte de API junto com a de navegador inventa falha.** As duas disputam a mesma
+  API local; a de navegador espera tempos fixos, e sob a carga da outra a tela não pinta a
+  tempo. Duas checagens do formulário de produto "falharam" assim e passaram sozinhas na
+  rodada seguinte — meia hora atrás de um defeito que não existia.
 - ⚠️ **"O primeiro elemento que casa" deixa de identificar quando surge o segundo.** O teste da
   agenda do Omie pegava "o primeiro `select` que tem HORARIA"; assim que o PDV ganhou o mesmo
   bloco, passou a depender da ordem do DOM. Cada seção tem `id` (`#agenda-omie`, `#agenda-pdv`) e
@@ -1096,6 +1253,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   numa LISTA paginada onde a da fixture não estava mais, ou afirmavam sobre as primeiras linhas
   de um CSV. Regra: **cada suíte procura os registros DELA**, pelo código ou pelo número que
   ela mesma criou, e garante a precondição em vez de supô-la.
+  ⚠️ **Vale igual para o teste de TELA, e lá o disfarce é outro**: "o primeiro `select` da
+  página". A contagem de inventário tem 257 linhas numa base real, e a primeira é a que a
+  ordem alfabética entregar — caiu num rascunho do catálogo do Omie, sem unidade de estoque,
+  cujo seletor legitimamente não tem o que oferecer. A checagem acusava a tela de um defeito
+  que era do dado. Agora ela acha o cartão pelo NOME do produto daquela rodada (em maiúsculas,
+  que é como o gatilho grava) — e o "digitar grava sozinho" escreve nele, em vez de deixar
+  contagem em produto de terceiro.
 - ⚠️ **Fixture com data fixa envelhece.** As notas simuladas nasceram em 16–20/08/2026 e uma
   semana depois já caíam fora da janela automática da busca — o teste dizia que a importação
   tinha parado. `cliente._aproximar_datas` traz as datas da fixture para a semana de hoje
@@ -1204,7 +1368,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - ⚠️ **`/estoque/saldos` é paginado, e os dois CENÁRIOS montavam dicionário da primeira página.**
   `cenario_semana` estourou com `StopIteration` e `cenario_cafeteria` passava por sorte — o
   KeyError chegaria na rodada seguinte. Os dois agora pedem `?id_produto=` de cada produto
-  DELES (`saldos_de()` no cafeteria). ⚠️ Pior que o estouro é o caso mudo: a checagem final do
+  DELES (`saldos_de()` no cafeteria).
+  ⚠️ **`smoke_conversao` tinha a MESMA doença e ficou de fora daquela correção** — quebrou
+  em 29/08/2026, com quatro checagens, na primeira base grande o bastante para empurrar os
+  produtos dele para fora da primeira página. E o sintoma engana: a checagem acusa o razão de
+  não ter gravado o que gravou. Ao corrigir uma armadilha deste tipo, **procurar todos os
+  chamadores**, não só os que estão falhando naquele dia. ⚠️ Pior que o estouro é o caso mudo: a checagem final do
   `cenario_semana` filtrava a página e, vindo vazia, passava sem ter olhado nada.
 - 🔑 **A sessão caía no meio do uso, e a causa era o refresh ROTATIVO sem trava no cliente.**
   O antigo morre no instante em que o novo nasce; as telas disparam várias chamadas juntas

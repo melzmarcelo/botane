@@ -103,7 +103,7 @@ export default function Login() {
         </form>
 
         <p className="mt-6 text-[13.5px]">
-          <a href="/esqueci-senha" className="text-erva underline-offset-2 hover:underline">
+          <a href="/esqueci-senha" className="text-erva underline underline-offset-2">
             Esqueci minha senha
           </a>
         </p>

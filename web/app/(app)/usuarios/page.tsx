@@ -126,7 +126,7 @@ export default function PaginaUsuarios() {
               >
                 Copiar
               </button>
-              <button className="rotulo hover:text-erro" onClick={() => setLink(null)}>
+              <button className="link-acao link-acao-erro" onClick={() => setLink(null)}>
                 fechar
               </button>
             </div>
@@ -155,12 +155,12 @@ export default function PaginaUsuarios() {
                   <tr key={u.id} className={u.ativo ? "" : "opacity-55"}>
                     <td>
                       <Link href={`/usuarios/${u.id}`} className="text-left">
-                        <span className="font-semibold hover:text-erva">{u.nome}</span>
+                        <span className="link-registro">{u.nome}</span>
                         <span className="block text-[13px] text-suave">{u.email}</span>
                       </Link>
                       {u.bloqueado && (
                         <button
-                          className="rotulo mt-1 block text-erro hover:underline"
+                          className="link-acao link-acao-erro mt-1 flex w-fit"
                           onClick={() => void desbloquear(u)}
                         >
                           bloqueado · desbloquear
@@ -168,7 +168,7 @@ export default function PaginaUsuarios() {
                       )}
                       {u.ativo && (
                         <button
-                          className="rotulo mt-1 block hover:text-erva"
+                          className="link-acao mt-1 flex w-fit"
                           onClick={() => void linkDeSenha(u)}
                         >
                           esqueceu a senha?
@@ -196,7 +196,7 @@ export default function PaginaUsuarios() {
                     <td className="text-right">
                       {u.id !== eu?.id && (
                         <button
-                          className="rotulo hover:text-erva"
+                          className="link-acao"
                           onClick={() => void alternarAtivo(u)}
                         >
                           {u.ativo ? "desativar" : "reativar"}

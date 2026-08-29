@@ -273,7 +273,7 @@ export default function PaginaLancarVenda() {
                         {itens.length > 1 && (
                           <button
                             type="button"
-                            className="rotulo hover:text-erro"
+                            className="link-acao link-acao-erro"
                             onClick={() => setItens(itens.filter((_, x) => x !== n))}
                           >
                             tirar

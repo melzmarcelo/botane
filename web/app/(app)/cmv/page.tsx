@@ -7,6 +7,7 @@ import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { nomeTipo, reais } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
@@ -160,18 +161,6 @@ export default function PaginaCmv() {
     void carregar();
   }, [carregar]);
 
-  async function baixar(caminho: string) {
-    setOcupado(true);
-    setErro("");
-    try {
-      await api.baixar(caminho);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
-    } finally {
-      setOcupado(false);
-    }
-  }
-
   async function fechar() {
     setOcupado(true);
     setErro("");
@@ -217,15 +206,12 @@ export default function PaginaCmv() {
           </p>
         </div>
         <div className="nao-imprimir flex flex-wrap items-end gap-2">
-          <button
-            className="btn btn-secundario"
-            onClick={() => void baixar(`/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`)}
-            disabled={ocupado}
-          >
-            Baixar planilha
-          </button>
+          <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
+          {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
+              os cartões e os gráficos. O PDF da janela é a tabela do relatório
+              — são duas coisas, e quem quer uma raramente quer a outra. */}
           <button className="btn btn-secundario" onClick={() => window.print()}>
-            Imprimir / PDF
+            Imprimir a tela
           </button>
           {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
               que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
@@ -432,22 +418,20 @@ export default function PaginaCmv() {
                       : "Onde pesa e o que subiu"}
               </button>
             ))}
-            <button
-              className="rotulo nao-imprimir ml-auto self-center hover:text-erva"
-              onClick={() =>
-                void baixar(
-                  aba === "abc"
-                    ? `/exportar/abc.csv?inicio=${inicio}&fim=${fim}`
-                    : aba === "movimentacao"
-                      ? `/exportar/movimentacao.csv?inicio=${inicio}&fim=${fim}`
-                      : aba === "dono"
-                        ? `/exportar/precos.csv?inicio=${inicio}&fim=${fim}`
-                        : `/exportar/cmv.csv?inicio=${inicio}&fim=${fim}`,
-                )
+            <BotaoExportar
+              className="link-acao nao-imprimir ml-auto self-center"
+              rotulo="baixar esta tabela"
+              relatorio={
+                aba === "abc"
+                  ? "abc"
+                  : aba === "movimentacao"
+                    ? "movimentacao"
+                    : aba === "dono"
+                      ? "precos"
+                      : "cmv"
               }
-            >
-              baixar esta tabela
-            </button>
+              iniciais={{ inicio, fim }}
+            />
           </nav>
 
           {aba === "movimentacao" && <Movimentacao inicio={inicio} fim={fim} />}
@@ -605,7 +589,7 @@ export default function PaginaCmv() {
                         <td className="text-right">
                           {f.status === "FECHADO" && pode("cmv.reabrir") && (
                             <button
-                              className="rotulo hover:text-erro"
+                              className="link-acao link-acao-erro"
                               onClick={() =>
                                 setConfirmando({ tipo: "reabrir", id: f.id,
                                                  competencia: f.rotulo ?? f.competencia })

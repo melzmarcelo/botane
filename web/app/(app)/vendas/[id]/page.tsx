@@ -150,7 +150,7 @@ export default function PaginaVenda() {
                 <tr key={i.id}>
                   <td>
                     {i.id_produto ? (
-                      <Link href={`/produtos/${i.id_produto}`} className="hover:text-erva">
+                      <Link href={`/produtos/${i.id_produto}`} className="link-registro">
                         {i.produto}
                       </Link>
                     ) : (

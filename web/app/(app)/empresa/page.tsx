@@ -275,7 +275,7 @@ export default function PaginaEmpresa() {
                   {enviandoLogo ? "Enviando…" : t("logo_url") ? "Trocar imagem" : "Enviar imagem"}
                 </button>
                 {t("logo_url") && (
-                  <button type="button" className="rotulo hover:text-erro" onClick={removerLogo}>
+                  <button type="button" className="link-acao link-acao-erro" onClick={removerLogo}>
                     remover
                   </button>
                 )}

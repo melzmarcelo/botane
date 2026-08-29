@@ -18,3 +18,4 @@ python-multipart==0.0.9
 Pillow==12.2.0
 httpx==0.28.1
 cryptography==45.0.7
+reportlab==5.0.1

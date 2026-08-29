@@ -247,7 +247,7 @@ function Casca({ children }: { children: React.ReactNode }) {
         <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-4 pt-5">
           <Marca logo={marca.logo} nome={marca.nome} />
           <button
-            className="rotulo lg:hidden"
+            className="link-acao lg:hidden"
             onClick={() => setAberto(false)}
             aria-label="Fechar menu"
           >

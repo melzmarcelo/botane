@@ -91,7 +91,7 @@ export default function PaginaInventario() {
                     distingue nada. Sem nome, `local` já traz o recorte por
                     extenso — quem monta a frase é o servidor. */}
                 <Link href={`/inventario/${i.id}`} className="min-w-0 text-left">
-                  <span className="font-semibold hover:text-erva">
+                  <span className="link-registro">
                     #{i.id} · {i.nome || i.local}
                   </span>
                   <span className="block text-[13px] text-suave">

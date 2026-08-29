@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { nomeTipo, reais, UnidadeMedida } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
@@ -306,7 +307,7 @@ export default function PaginaContagem() {
             {inv.nome || inv.local}
             {pode("estoque.inventario") && (
               <button
-                className="rotulo hover:text-erva"
+                className="link-acao"
                 onClick={() => {
                   setNomeNovo(inv.nome || inv.local);
                   setRenomeando(true);
@@ -339,6 +340,24 @@ export default function PaginaContagem() {
           {(inv.filtros?.tipos ?? []).map((x) => (
             <Etiqueta key={`t-${x}`}>{nomeTipo(x)}</Etiqueta>
           ))}
+          {/* ⚠️ A folha de contagem existe desde a etapa 4 e NENHUMA tela
+              oferecia o botão — só se chegava a ela pela URL. Contar no papel e
+              digitar depois é o caminho previsto para quem não leva o celular
+              à câmara fria, e ele estava fechado. Em contagem CEGA aberta a
+              folha sai sem as colunas do sistema: o papel é o jeito mais fácil
+              de furar o sigilo, e quem esconde é o servidor. */}
+          <BotaoExportar
+            className="link-acao"
+            rotulo="folha de contagem"
+            formatoPadrao="pdf"
+            relatorio={`inventario/${inv.id}`}
+            avulso={{
+              rotulo: "Folha de contagem",
+              descricao: inv.cega && aberto
+                ? "Contagem cega: o saldo do sistema não sai na folha."
+                : "Para imprimir, contar no papel e digitar depois.",
+            }}
+          />
         </div>
       </header>
 

@@ -261,7 +261,7 @@ export default function ComposicaoKit({
           {linhas.length > 1 && (
             <button
               type="button"
-              className="rotulo hover:text-erro"
+              className="link-acao link-acao-erro"
               onClick={() => setLinhas(linhas.slice(0, -1))}
             >
               remover a última

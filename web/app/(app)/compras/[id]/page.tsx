@@ -239,7 +239,7 @@ export default function PaginaNota() {
           {pendentes.length} item(ns) sem produto vinculado. A nota não entra no estoque enquanto
           isso — importar errado é pior que não importar. Se os produtos já foram cadastrados
           depois desta nota,{" "}
-          <button className="underline hover:text-erva" onClick={reconciliar}>
+          <button className="link-acao" onClick={reconciliar}>
             procure de novo
           </button>
           .
@@ -384,7 +384,7 @@ export default function PaginaNota() {
                           )}
                           <span className="flex gap-3">
                             <button
-                              className="rotulo text-erva hover:underline"
+                              className="link-acao"
                               onClick={() => void vincular(i)}
                               disabled={!escolha[i.id]}
                             >
@@ -394,14 +394,14 @@ export default function PaginaNota() {
                                 poupa sair da tela, cadastrar e voltar. */}
                             {pode("cadastros.produtos") && (
                               <button
-                                className="rotulo hover:text-erva"
+                                className="link-acao"
                                 onClick={() => void criarProduto(i)}
                               >
                                 criar produto
                               </button>
                             )}
                             <button
-                              className="rotulo hover:text-erro"
+                              className="link-acao link-acao-erro"
                               onClick={() => void ignorar(i)}
                             >
                               não controla estoque

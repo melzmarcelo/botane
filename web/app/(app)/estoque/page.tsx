@@ -10,6 +10,7 @@ import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { FiltroCadastro } from "@/components/busca-cadastro";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
 
 type Saldo = {
@@ -92,20 +93,6 @@ export default function PaginaEstoque() {
     filtros: [movBusca, produtoMov?.id, movTipo, movLocal, movInicio, movFim],
   });
 
-  const [baixando, setBaixando] = useState(false);
-
-  async function baixar(caminho: string) {
-    setBaixando(true);
-    setErro("");
-    try {
-      await api.baixar(caminho);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
-    } finally {
-      setBaixando(false);
-    }
-  }
-
   const carregar = useCallback(async () => {
     try {
       const q = new URLSearchParams(pagSaldos.parametros);
@@ -171,19 +158,20 @@ export default function PaginaEstoque() {
 
   const valorTotal = saldos?.reduce((s, x) => s + Number(x.valor), 0) ?? 0;
 
-  /** A planilha do razão sai com os MESMOS filtros da tela — filtrar aqui e
-      baixar outra coisa faria quem conferisse achar que um dos dois mente. */
-  function csvDoRazao() {
-    const q = new URLSearchParams();
-    if (produtoMov) q.set("id_produto", String(produtoMov.id));
-    else if (movBusca.trim()) q.set("busca", movBusca.trim());
-    if (movTipo) q.set("tipo", movTipo);
-    if (movLocal) q.set("id_local", movLocal);
-    if (movInicio) q.set("inicio", movInicio);
-    if (movFim) q.set("fim", movFim);
-    const s = q.toString();
-    return `/exportar/movimentos.csv${s ? `?${s}` : ""}`;
-  }
+  /** O que a janela de exportação recebe já preenchido.
+
+      ⚠️ São os MESMOS filtros da tela: filtrar aqui e baixar outra coisa faria
+      quem conferisse os dois achar que um deles mente. O `id_produto` era
+      mandado e o servidor o IGNORAVA — a planilha vinha inteira com um produto
+      fixado na tela, calada. */
+  const semeaduraDoRazao = {
+    inicio: movInicio || undefined,
+    fim: movFim || undefined,
+    tipos_movimento: movTipo ? [movTipo] : [],
+    locais: movLocal ? [Number(movLocal)] : [],
+    produtos: produtoMov ? [{ id: produtoMov.id, rotulo: produtoMov.rotulo }] : [],
+    busca: produtoMov ? "" : movBusca.trim(),
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -206,13 +194,13 @@ export default function PaginaEstoque() {
               Lançar ajuste
             </Link>
           )}
-          <button
-            className="btn btn-secundario"
-            onClick={() => void baixar(aba === "saldos" ? "/exportar/saldos.csv" : csvDoRazao())}
-            disabled={baixando}
-          >
-            {baixando ? "Baixando…" : "Baixar planilha"}
-          </button>
+          {/* Baixar deixou de ser um clique cego: a janela pergunta o recorte
+              e o formato antes de gerar. */}
+          {aba === "saldos" ? (
+            <BotaoExportar relatorio="saldos" />
+          ) : (
+            <BotaoExportar relatorio="movimentos" iniciais={semeaduraDoRazao} />
+          )}
         </div>
       </header>
 
@@ -487,7 +475,7 @@ export default function PaginaEstoque() {
                       <td className="text-right">
                         {pode("estoque.ajuste") && !m.estornado && !m.id_estorno_de && (
                           <button
-                            className="rotulo whitespace-nowrap hover:text-erro"
+                            className="link-acao link-acao-erro"
                             onClick={() => setConfirmando(m)}
                           >
                             estornar

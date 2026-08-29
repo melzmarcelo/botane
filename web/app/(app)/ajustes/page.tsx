@@ -792,7 +792,7 @@ export default function PaginaAjustes() {
                     <td className="num">
                       {!m.estornado && pode("estoque.ajuste") && (
                         <button
-                          className="rotulo hover:text-erro"
+                          className="link-acao link-acao-erro"
                           onClick={() => setConfirmando(m)}
                         >
                           estornar

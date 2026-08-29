@@ -789,7 +789,7 @@ export default function FormularioProduto() {
                   {podeEditar && (
                     <button
                       type="button"
-                      className="rotulo pb-2 hover:text-erro"
+                      className="link-acao link-acao-erro mb-2"
                       onClick={() => setVinculos((l) => l.filter((_, j) => j !== i))}
                     >
                       remover

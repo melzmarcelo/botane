@@ -125,11 +125,11 @@ export default function Inicio() {
       {semMovimento && (
         <Aviso tipo="info">
           A casa ainda não tem movimento. Comece cadastrando os insumos em{" "}
-          <Link href="/produtos" className="text-erva underline-offset-2 hover:underline">
+          <Link href="/produtos" className="text-erva underline underline-offset-2">
             Produtos
           </Link>{" "}
           e dando entrada na primeira nota em{" "}
-          <Link href="/compras" className="text-erva underline-offset-2 hover:underline">
+          <Link href="/compras" className="text-erva underline underline-offset-2">
             Notas de entrada
           </Link>
           .
@@ -191,7 +191,7 @@ export default function Inicio() {
                   >
                     {a.quantidade}
                   </span>
-                  <span className="font-semibold hover:text-erva">{a.titulo}</span>
+                  <span className="link-registro">{a.titulo}</span>
                   <span className="text-[13.5px] text-suave">— {a.acao}</span>
                 </Link>
               </li>
@@ -220,7 +220,7 @@ export default function Inicio() {
               { rotulo: "Abaixo do estoque mínimo", valor: o.abaixo_minimo, href: "/alertas" },
             ].map((l) => (
               <li key={l.rotulo} className="flex items-center justify-between bg-superficie py-2.5">
-                <Link href={l.href} className="no-underline hover:text-erva">
+                <Link href={l.href} className="link-registro font-normal">
                   {l.rotulo}
                 </Link>
                 <span className={`mono font-semibold ${l.valor > 0 ? "" : "text-suave"}`}>

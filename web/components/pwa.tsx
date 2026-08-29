@@ -112,7 +112,7 @@ export function ConviteInstalar() {
             Instalar
           </button>
         )}
-        <button className="rotulo hover:text-erro" onClick={dispensar}>
+        <button className="link-acao link-acao-erro" onClick={dispensar}>
           agora não
         </button>
       </div>

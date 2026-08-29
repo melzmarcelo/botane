@@ -78,7 +78,7 @@ export default function EsqueciSenha() {
               <button className="btn btn-primario" type="submit" disabled={enviando}>
                 {enviando ? "Enviando…" : "Enviar o link"}
               </button>
-              <a className="rotulo text-center hover:text-erva no-underline" href="/login">
+              <a className="link-acao self-center" href="/login">
                 voltar
               </a>
             </form>

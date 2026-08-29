@@ -13,6 +13,7 @@ import {
   nomeTipo,
   reais,
 } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
@@ -73,18 +74,10 @@ export default function PaginaProdutos() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            className="btn btn-secundario"
-            onClick={async () => {
-              try {
-                await api.baixar("/exportar/produtos.csv");
-              } catch (e) {
-                aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
-              }
-            }}
-          >
-            Baixar planilha
-          </button>
+          {/* ⚠️ Este botão despejava os 3.226 produtos, sempre — não havia
+              recorte nenhum. Agora a janela pergunta tipo, categoria, setor e
+              situação antes de gerar. */}
+          <BotaoExportar relatorio="produtos" />
           {podeEditar && (
             <Link href="/produtos/novo" className="btn btn-primario">
               Novo produto
@@ -161,7 +154,7 @@ export default function PaginaProdutos() {
           <Vazio>
             Nenhum produto encontrado.{" "}
             {podeEditar && (
-              <Link href="/produtos/novo" className="text-erva underline">
+              <Link href="/produtos/novo" className="link-acao">
                 cadastrar o primeiro
               </Link>
             )}
@@ -174,7 +167,7 @@ export default function PaginaProdutos() {
                 <li key={p.id} className="bg-superficie py-3">
                   <Link href={`/produtos/${p.id}`} className="block">
                     <div className="flex items-start justify-between gap-3">
-                      <span className="font-semibold">{p.nome}</span>
+                      <span className="link-registro">{p.nome}</span>
                       <span className="mono shrink-0 text-[12px] text-suave">{p.codigo}</span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -209,7 +202,7 @@ export default function PaginaProdutos() {
                     <tr key={p.id} className={p.ativo ? "" : "opacity-55"}>
                       <td className="mono text-[13px]">{p.codigo}</td>
                       <td>
-                        <Link href={`/produtos/${p.id}`} className="font-semibold hover:text-erva">
+                        <Link href={`/produtos/${p.id}`} className="link-registro">
                           {p.nome}
                         </Link>
                         <span className="ml-2 inline-flex gap-1">

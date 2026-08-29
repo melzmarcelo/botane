@@ -503,7 +503,7 @@ export default function PaginaIntegracoes() {
                   {conferencia.linhas.slice(0, 200).map((c) => (
                     <tr key={c.codigo_omie}>
                       <td>
-                        <Link href={`/produtos/${c.id_produto}`} className="hover:text-erva">
+                        <Link href={`/produtos/${c.id_produto}`} className="link-registro">
                           {c.produto}
                         </Link>
                         <span className="block text-[12px] text-suave">

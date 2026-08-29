@@ -435,6 +435,19 @@ try {
   await new Promise((r) => setTimeout(r, 1500));
   const criou = /\/produtos\/\d+/.test(p.url());
   checar("cadastra produto pela tela", criou, p.url());
+  // ⚠️ A tela do produto carrega em várias chamadas; sob carga ela ainda não
+  // pintou depois de 1,5 s, e as checagens dos campos fiscais viravam
+  // "nenhum rótulo existe" — que se lê como campo REMOVIDO.
+  // ⚠️ E esperar por `span.rotulo` não esperava nada: esse seletor existe
+  // igual no formulário de cadastro, a tela de onde se acabou de sair. A
+  // espera casava com a página velha e devolvia na hora. **Espere por algo que
+  // só existe na tela de DESTINO** — aqui, o rótulo "NCM".
+  await p
+    .waitForFunction(
+      () => [...document.querySelectorAll("span.rotulo")].some(
+        (r) => r.textContent?.trim() === "NCM"),
+      { timeout: 20000 })
+    .catch(() => {});
 
   // ⚠️ **O EAN existia no formulário e não tinha campo na tela.** Era enviado ao
   // salvar e lido pela conciliação da nota, mas ninguém conseguia ver nem
@@ -656,6 +669,41 @@ try {
     checar("a tela mostra o custo por porção", /0,50/.test(textoFicha),
       textoFicha.slice(0, 60));
 
+    // A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha —
+    // não na frente do monitor. Sem o papel, a receita fica presa numa tela
+    // que ninguém leva para perto do fogão.
+    await p.evaluate(() => {
+      [...document.querySelectorAll("button")]
+        .find((b) => /Imprimir ficha/i.test(b.textContent ?? ""))
+        ?.click();
+    });
+    await new Promise((r) => setTimeout(r, 2000));
+    const janelaFicha = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      const texto = d?.innerText ?? "";
+      const marcado = [...(d?.querySelectorAll("[aria-pressed]") ?? [])].find(
+        (b) => b.getAttribute("aria-pressed") === "true");
+      return {
+        abriu: !!d,
+        titulo: d?.querySelector("h2")?.textContent ?? "",
+        // ⚠️ O padrão da ficha é PDF: o destino dela é o papel, e abrir em
+        // "planilha" faz escolher errado por inércia.
+        // ⚠️ `textContent` junta os dois <span> do cartão sem separador —
+        // "PDFPara ler, imprimir…". Quem tem a quebra é `innerText`, e aqui o
+        // que se quer é só saber QUAL cartão está marcado.
+        escolhido: (marcado?.textContent ?? "").trim().startsWith("PDF") ? "PDF" : "outro",
+        botao: [...(d?.querySelectorAll("button") ?? [])].some((b) =>
+          /^Baixar PDF/.test(b.textContent?.trim() ?? "")),
+      };
+    });
+    checar("a ficha tem botão de imprimir", janelaFicha.abriu, janelaFicha);
+    checar("e a janela dela já vem em PDF",
+      janelaFicha.escolhido === "PDF" && janelaFicha.botao, janelaFicha);
+    await p.evaluate(() => {
+      document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
+    });
+    await new Promise((r) => setTimeout(r, 500));
+
     // A cozinha vê a receita e não vê dinheiro — na tela, não só na API.
     await p.evaluate(() => localStorage.clear());
     await entrar(p, COZINHA);
@@ -792,17 +840,29 @@ try {
     telaContagem.tamanhoFonte >= 16, telaContagem.tamanhoFonte);
   // O seletor de unidade não pode parecer travado: quem estoca em KG conta em
   // G sem cadastrar nada, e quem precisa de caixa tem de achar o caminho.
-  const seletorUnidade = await p.evaluate(() => {
-    const s = [...document.querySelectorAll("select")].find(
+  // ⚠️ "O primeiro select da tela" deixa de identificar assim que a base tem
+  // dado de VERDADE: numa contagem de 257 linhas a primeira é a que a ordem
+  // alfabética entregar, e caiu num rascunho do catálogo do Omie — produto SEM
+  // unidade de estoque, cujo seletor legitimamente não tem o que oferecer. A
+  // checagem acusava a tela de um defeito que era do dado. Cada suíte pergunta
+  // pelo registro DELA. (E o nome está em MAIÚSCULAS: quem garante é o gatilho.)
+  const seletorUnidade = await p.evaluate((nome) => {
+    const cartao = [...document.querySelectorAll("li")].find(
+      (l) => l.querySelector("p")?.textContent?.trim().toUpperCase() === nome);
+    if (!cartao) return { achouCartao: false };
+    const s = [...cartao.querySelectorAll("select")].find(
       (x) => x.closest("label")?.textContent?.includes("Unidade"));
     return s
       ? {
+          achouCartao: true,
           desabilitado: s.disabled,
           opcoes: [...s.options].map((o) => o.value),
           caminho: !!document.body.innerText.match(/contar em outra embalagem/i),
         }
-      : null;
-  });
+      : { achouCartao: true, semSeletor: true };
+  }, `Inv tela ${m4}`.toUpperCase());
+  checar("a contagem tem o produto desta rodada", seletorUnidade?.achouCartao === true,
+    seletorUnidade);
   checar("o seletor de unidade não fica travado",
     seletorUnidade && seletorUnidade.desabilitado === false, seletorUnidade);
   checar("e traz as unidades da mesma grandeza, sem cadastro nenhum",
@@ -813,8 +873,12 @@ try {
 
   // Digitar grava sozinho: contagem que só existe na tela até um "salvar tudo"
   // no fim é contagem que se perde.
-  await p.evaluate(() => {
-    const c = document.querySelector('input[inputmode="decimal"]');
+  // ⚠️ No cartão DESTA rodada, não no primeiro da lista: escrever 7 no rascunho
+  // que a ordem alfabética entregou deixaria contagem em produto de terceiro.
+  await p.evaluate((nome) => {
+    const cartao = [...document.querySelectorAll("li")].find(
+      (l) => l.querySelector("p")?.textContent?.trim().toUpperCase() === nome);
+    const c = (cartao ?? document).querySelector('input[inputmode="decimal"]');
     const set = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value").set;
     // ⚠️ Sem FOCAR antes, `blur()` não dispara nada — e é o blur que grava.
@@ -822,7 +886,7 @@ try {
     set.call(c, "7");
     c.dispatchEvent(new Event("input", { bubbles: true }));
     c.blur();
-  });
+  }, `Inv tela ${m4}`.toUpperCase());
   await new Promise((r) => setTimeout(r, 1600));
   const { dados: invDepois } = await api("GET", `/inventarios/${p.url().match(/\d+$/)[0]}`,
     null, token);
@@ -1951,6 +2015,85 @@ try {
     /ponto\(s\) de atenção|Nada pendente/i.test(textoAlertas), textoAlertas.slice(0, 140));
   await foto(p, "30-alertas");
 
+  // ---- Baixar deixou de ser um clique cego ----
+  // ⚠️ O botão de /produtos despejava os 3.226 do cadastro, SEMPRE. Agora abre
+  // uma janela com os filtros pertinentes ao processo e a escolha do formato.
+  // Quem diz quais são os filtros é o servidor: uma lista escrita no front
+  // divergiria calada, e o arquivo sairia com mais linhas do que se pediu.
+  const { dados: catalogo } = await api("GET", "/exportar/catalogo", null, token);
+  checar("o servidor publica o catálogo de relatórios",
+    Array.isArray(catalogo) && catalogo.length >= 8, catalogo?.length);
+  const doCadastro = (catalogo ?? []).find((r) => r.chave === "produtos");
+  checar("e cada relatório declara os filtros dele",
+    (doCadastro?.filtros ?? []).map((f) => f.nome).includes("tipos_produto"),
+    doCadastro?.filtros?.map((f) => f.nome));
+
+  await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1800));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => /^Baixar/i.test(x.textContent?.trim() ?? ""))
+      ?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2400));
+  const janelaExp = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    const rotulos = [...(d?.querySelectorAll("span.rotulo") ?? [])].map((x) =>
+      x.textContent?.trim());
+    return {
+      abriu: !!d,
+      titulo: d?.querySelector("h2")?.textContent ?? "",
+      rotulos,
+      // A prévia diz quantas linhas viriam ANTES do botão.
+      previa: /linha\(s\) neste recorte/.test(d?.innerText ?? ""),
+      formatos: /Planilha/.test(d?.innerText ?? "") && /PDF/.test(d?.innerText ?? ""),
+      caixinhas: (d?.querySelectorAll('input[type="checkbox"]') ?? []).length,
+    };
+  });
+  checar("o Baixar abre a janelaExp de exportação", janelaExp.abriu, janelaExp);
+  checar("com os filtros do processo, em escolha múltipla",
+    janelaExp.rotulos.includes("Tipos de produto") && janelaExp.caixinhas > 3, janelaExp);
+  checar("e a escolha entre planilha e PDF", janelaExp.formatos, janelaExp);
+  checar("com a prévia de quantas linhas viriam", janelaExp.previa, janelaExp);
+  await foto(p, "30b-exportar");
+
+  // ⚠️ **A janela tem de CABER na tela.** Ela era do tamanho do conteúdo, e a
+  // de exportação — cinco filtros — passava de mil pixels: num notebook os
+  // últimos campos e o botão de baixar ficavam fora, e não havia barra de
+  // rolagem em lugar nenhum (o corpo da página fica travado com a janela
+  // aberta). A altura de 1000 do resto da bateria escondia isso, então esta
+  // checagem MEDE numa tela de notebook de verdade.
+  await p.setViewport({ width: 1440, height: 760 });
+  await new Promise((r) => setTimeout(r, 700));
+  const coube = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    if (!d) return { achou: false };
+    const corpo = d.children[1];
+    corpo.scrollTop = corpo.scrollHeight;
+    const botao = [...d.querySelectorAll("button")].find((b) =>
+      /^Baixar (planilha|PDF)/.test(b.textContent?.trim() ?? ""));
+    const cartao = d.getBoundingClientRect();
+    const bb = botao?.getBoundingClientRect();
+    return {
+      achou: true,
+      cabe: cartao.bottom <= window.innerHeight + 1 && cartao.top >= -1,
+      rola: corpo.scrollHeight > corpo.clientHeight + 1,
+      botaoAlcancavel: !!bb && bb.bottom <= window.innerHeight + 1 && bb.top >= 0,
+    };
+  });
+  checar("a janela cabe na tela de um notebook", coube.cabe, coube);
+  checar("com o miolo rolando por dentro", coube.rola, coube);
+  // O botão fica FORA da rolagem: rolado até o fim, ele continua onde estava.
+  checar("e o botão de baixar sempre à vista", coube.botaoAlcancavel, coube);
+  await p.setViewport({ width: 1440, height: 1000 });
+  await new Promise((r) => setTimeout(r, 500));
+  // ⚠️ Fechar antes de seguir: janela aberta trava a rolagem do corpo, e o
+  // bloco seguinte mediria uma tela que não rola.
+  await p.evaluate(() => {
+    document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
+  });
+  await new Promise((r) => setTimeout(r, 600));
+
   const { dados: listaAlertas } = await api("GET", "/alertas", null, token);
   checar("a API devolve alerta com ação e link",
     listaAlertas.length === 0 || (listaAlertas[0].acao && listaAlertas[0].href),
@@ -1990,12 +2133,17 @@ try {
   }
 
   // Botão de exportar presente nas telas que o oferecem.
+  // ⚠️ O rótulo encurtou de "Baixar planilha" para "Baixar" quando o botão
+  // deixou de baixar e passou a ABRIR a janela — prometer planilha num botão
+  // que agora também gera PDF seria mentir no próprio rótulo. A checagem
+  // procura o botão, não a frase antiga.
   for (const [rota, nome] of [["/estoque", "estoque"], ["/cmv", "CMV"], ["/produtos", "produtos"]]) {
     await p.goto(WEB + rota, { waitUntil: "networkidle2" });
-    await new Promise((r) => setTimeout(r, 1100));
+    await new Promise((r) => setTimeout(r, 1600));
     const tem = await p.evaluate(() =>
-      [...document.querySelectorAll("button")].some((b) => /Baixar planilha/i.test(b.textContent)));
-    checar(`${nome} oferece baixar planilha`, tem);
+      [...document.querySelectorAll("button")].some((b) =>
+        /^Baixar/i.test(b.textContent?.trim() ?? "")));
+    checar(`${nome} oferece baixar`, tem);
   }
   await foto(p, "31-cmv-exportar");
 
@@ -2584,7 +2732,14 @@ try {
   aoTerminar.push(reporPdv);
 
   await irPara(p, `${WEB}/integracoes`);
-  await new Promise((r) => setTimeout(r, 2000));
+  // ⚠️ **Esperar o BLOCO, não o relógio.** `pdv-legal.tsx` devolve
+  // `<Carregando/>` enquanto `/pdv/config` não responde, então o `#agenda-pdv`
+  // não existe no DOM — e a checagem acusava a tela de não ter a agenda. O
+  // bloco do Omie é outro componente e responde antes, o que fazia a falha
+  // parecer específica do PDV. Dormir um tempo fixo e afirmar é supor a
+  // precondição; esperar por ela é garanti-la.
+  await p.waitForSelector("#agenda-pdv", { timeout: 20000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 400));
   const agendaPdv = await p.evaluate(() => {
     const sel = document.querySelector("#agenda-pdv select");
     return {

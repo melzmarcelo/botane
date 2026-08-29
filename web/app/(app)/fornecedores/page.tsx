@@ -117,7 +117,7 @@ export default function PaginaFornecedores() {
                 }`}
               >
                 <Link href={`/fornecedores/${x.id}`} className="min-w-0 text-left">
-                  <span className="font-semibold hover:text-erva">{x.nome}</span>
+                  <span className="link-registro">{x.nome}</span>
                   <span className="mt-0.5 block text-[13px] text-suave">
                     {x.cnpj ? mascaraCnpj(x.cnpj) : "sem CNPJ"}
                     {x.cidade ? ` · ${x.cidade}${x.uf ? "/" + x.uf : ""}` : ""}
@@ -132,7 +132,7 @@ export default function PaginaFornecedores() {
                   </span>
                 </Link>
                 {podeEditar && (
-                  <button className="rotulo hover:text-erva" onClick={() => void alternar(x)}>
+                  <button className="link-acao" onClick={() => void alternar(x)}>
                     {x.ativo ? "desativar" : "reativar"}
                   </button>
                 )}

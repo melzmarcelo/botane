@@ -96,12 +96,19 @@ export function Modal({
   descricao,
   aoFechar,
   children,
+  rodape,
   largura = "760px",
 }: {
   titulo: string;
   descricao?: string;
   aoFechar: () => void;
   children: ReactNode;
+  /**
+   * O que fica GRUDADO embaixo, fora da rolagem: os botões da ação e o número
+   * que se olha antes de clicar. Dentro do corpo eles rolam para fora da vista
+   * numa janela longa, e quem não vê o botão acha que a janela não tem saída.
+   */
+  rodape?: ReactNode;
   largura?: string;
 }) {
   useEffect(() => {
@@ -129,14 +136,23 @@ export function Modal({
         if (e.target === e.currentTarget) aoFechar();
       }}
     >
+      {/* ⚠️ A janela CABE na tela e rola por dentro.
+          Ela era do tamanho do conteúdo, e a de exportação — com cinco filtros
+          — passava de mil pixels: numa tela de notebook os últimos campos e o
+          botão de baixar ficavam fora, sem barra de rolagem em lugar nenhum
+          (o corpo da página está travado enquanto a janela está aberta). Agora
+          o cartão é limitado pela altura da JANELA, o cabeçalho e o rodapé
+          ficam parados, e só o miolo rola.
+          ⚠️ `dvh`, não `vh`: no celular a barra de endereço entra na conta do
+          `vh`, e o pedaço de baixo do cartão fica atrás dela. */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        className="cartao w-full shadow-[0_16px_48px_rgba(20,32,26,0.28)]"
+        className="cartao flex max-h-[calc(100dvh-2rem)] w-full flex-col shadow-[0_16px_48px_rgba(20,32,26,0.28)] sm:max-h-[calc(100dvh-4rem)]"
         style={{ maxWidth: largura }}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-linha px-5 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-linha px-5 py-4">
           <div>
             <h2 className="text-[17px] font-bold tracking-tight">{titulo}</h2>
             {descricao && <p className="mt-1 text-[13.5px] text-suave">{descricao}</p>}
@@ -150,7 +166,12 @@ export function Modal({
             ×
           </button>
         </header>
-        <div className="p-5">{children}</div>
+        {/* `min-h-0` é o que deixa um filho de flex encolher abaixo do próprio
+            conteúdo — sem ele o `overflow-y-auto` não tem o que rolar. */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        {rodape && (
+          <div className="shrink-0 border-t border-linha px-5 py-4">{rodape}</div>
+        )}
       </div>
     </div>
   );

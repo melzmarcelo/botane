@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 type Alerta = {
@@ -51,7 +52,6 @@ export default function PaginaAlertas() {
   const [vencimentos, setVencimentos] = useState<Vencimento[]>([]);
   const [minimos, setMinimos] = useState<Minimo[]>([]);
   const [erro, setErro] = useState("");
-  const [baixando, setBaixando] = useState("");
 
   const carregar = useCallback(async () => {
     try {
@@ -71,18 +71,6 @@ export default function PaginaAlertas() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
-
-  async function baixar(caminho: string, chave: string) {
-    setBaixando(chave);
-    setErro("");
-    try {
-      await api.baixar(caminho);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
-    } finally {
-      setBaixando("");
-    }
-  }
 
   const criticos = alertas?.filter((a) => a.severidade === "critico").length ?? 0;
 
@@ -145,7 +133,7 @@ export default function PaginaAlertas() {
                   </p>
                   <p className="mt-0.5 text-[13.5px] leading-snug text-suave">{a.detalhe}</p>
                 </div>
-                <Link href={a.href} className="rotulo whitespace-nowrap text-erva hover:underline">
+                <Link href={a.href} className="link-acao">
                   {a.acao} ›
                 </Link>
               </li>
@@ -159,13 +147,7 @@ export default function PaginaAlertas() {
         descricao="Lotes com validade dentro da janela configurada nos parâmetros da loja."
         acao={
           vencimentos.length ? (
-            <button
-              className="btn btn-secundario"
-              onClick={() => baixar("/exportar/vencimentos.csv", "venc")}
-              disabled={baixando === "venc"}
-            >
-              {baixando === "venc" ? "Baixando…" : "Baixar planilha"}
-            </button>
+            <BotaoExportar relatorio="vencimentos" />
           ) : undefined
         }
       >
@@ -220,13 +202,7 @@ export default function PaginaAlertas() {
         descricao="O que vai faltar antes da próxima entrega — a base da lista de compras."
         acao={
           minimos.length ? (
-            <button
-              className="btn btn-secundario"
-              onClick={() => baixar("/exportar/saldos.csv", "saldos")}
-              disabled={baixando === "saldos"}
-            >
-              {baixando === "saldos" ? "Baixando…" : "Baixar estoque"}
-            </button>
+            <BotaoExportar relatorio="saldos" rotulo="Baixar estoque" />
           ) : undefined
         }
       >

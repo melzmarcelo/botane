@@ -56,7 +56,7 @@ function Filtro<T extends { toString(): string }>({
             caixinha "todos" que se desmarca sozinha ao marcar outra é um
             estado a mais para manter em dia, e o primeiro a divergir. */}
         {escolhidos.length > 0 && (
-          <button className="rotulo hover:text-erva" onClick={() => aoTrocar([])}>
+          <button className="link-acao" onClick={() => aoTrocar([])}>
             limpar
           </button>
         )}

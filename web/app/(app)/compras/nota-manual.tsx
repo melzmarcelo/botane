@@ -334,7 +334,7 @@ export default function NotaManual({
           <button className="btn btn-primario" onClick={gravar} disabled={ocupado}>
             {ocupado ? "Gravando…" : editando ? "Gravar correção" : "Gravar nota"}
           </button>
-          <button className="rotulo hover:text-erro" onClick={aoFechar}>
+          <button className="link-acao link-acao-erro" onClick={aoFechar}>
             cancelar
           </button>
         </div>

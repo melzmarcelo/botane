@@ -258,7 +258,7 @@ export default function PaginaCompras() {
         <Cartao
           titulo="Arquivos lidos"
           acao={
-            <button className="rotulo hover:text-erro" onClick={() => setImportados(null)}>
+            <button className="link-acao link-acao-erro" onClick={() => setImportados(null)}>
               fechar
             </button>
           }
@@ -269,7 +269,7 @@ export default function PaginaCompras() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   {r.id ? (
                     <Link href={`/compras/${r.id}`} className="text-left">
-                      <span className="font-semibold hover:text-erva">
+                      <span className="link-registro">
                         {r.numero ? `NF ${r.numero}` : r.arquivo}
                       </span>
                       <span className="block text-[13px] text-suave">
@@ -333,7 +333,7 @@ export default function PaginaCompras() {
                 className="flex flex-wrap items-center justify-between gap-3 bg-superficie py-3"
               >
                 <Link href={`/compras/${n.id}`} className="min-w-0 text-left">
-                  <span className="font-semibold hover:text-erva">
+                  <span className="link-registro">
                     NF {n.numero ?? "—"} · {n.fornecedor ?? n.nome_emitente ?? "sem fornecedor"}
                   </span>
                   <span className="block text-[13px] text-suave">

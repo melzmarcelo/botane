@@ -60,6 +60,21 @@ def checar(nome, condicao, detalhe=""):
         print(f"  FALHA {nome} {detalhe}")
 
 
+def saldo_de(id_produto):
+    """O saldo DESTE produto, perguntado ao servidor.
+
+    ⚠️ **`/estoque/saldos` é PAGINADO.** Montar um dicionário com a primeira
+    página e procurar o próprio produto nele funciona enquanto a base é pequena
+    e passa a mentir quando ela cresce: o produto não está na página, e a
+    checagem acusa o razão de não ter gravado o que gravou. Os dois `cenario_*`
+    já tinham sido corrigidos disso; este arquivo ficou de fora e quebrou na
+    primeira base grande.
+    """
+    _st, dados = chamar("GET", f"/estoque/saldos?id_produto={id_produto}", token=token)
+    itens = dados["itens"] if isinstance(dados, dict) and "itens" in dados else dados
+    return (itens or [None])[0]
+
+
 def perto(a, b, casas=4):
     return abs(float(a or 0) - float(b)) < 10 ** -casas
 
@@ -98,8 +113,7 @@ checar("e o custo sai por unidade de estoque",
        perto(item.get("custo_aquisicao_unitario"), 1), item.get("custo_aquisicao_unitario"))
 st, r = chamar("POST", f"/notas/{nota}/lancar", {"id_local": local["id"]}, token=token)
 checar("lança no estoque", st == 200, r)
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = next((s for s in saldos if s["id_produto"] == prod), None)
+saldo = saldo_de(prod)
 checar("o razão guarda a quantidade JÁ convertida", saldo and perto(saldo["quantidade"], 12),
        saldo)
 checar("e o custo médio é o do pacote, não o da caixa",
@@ -130,8 +144,7 @@ checar("produz pela ficha em caixa", st == 201, r)
 consumo = (r.get("consumos") or [{}])[0]
 checar("consome 12 pacotes", perto(consumo.get("quantidade"), 12), consumo)
 checar("ao custo dos 12 pacotes", perto(consumo.get("custo"), 12), consumo)
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-saldo = next((s for s in saldos if s["id_produto"] == prod), None)
+saldo = saldo_de(prod)
 checar("e o saldo do insumo zera", not saldo or perto(saldo["quantidade"], 0), saldo)
 
 print("5. embalagem que ninguém cadastrou não vira 1:1 calada")
@@ -223,8 +236,7 @@ checar("a tela mostra o destino de cada item antes de lançar",
        destinos.get(congelado) == camara["nome"] and destinos.get(seco) is None, destinos)
 st, r = chamar("POST", f"/notas/{nota2}/lancar", {}, token=token)
 checar("lança a nota inteira de uma vez", st == 200, r)
-st, saldos = chamar("GET", "/estoque/saldos", token=token)
-onde = {s["id_produto"]: s["id_local"] for s in saldos}
+onde = {alvo: (saldo_de(alvo) or {}).get("id_local") for alvo in (congelado, seco)}
 checar("o congelado entra na câmara", onde.get(congelado) == camara["id"], onde)
 checar("e o seco no local da nota", onde.get(seco) == reserva["id"], onde)
 

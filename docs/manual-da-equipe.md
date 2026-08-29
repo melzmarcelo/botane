@@ -81,7 +81,8 @@ Menu **Estoque → Inventário**.
 1. **Abrir inventário** no local que vai contar.
 2. Conte de verdade e vá digitando. **Nada muda no estoque enquanto você digita**
    — dá para parar no meio e voltar depois.
-3. Precisa de papel? **Folha de contagem** baixa a planilha para imprimir.
+3. Precisa de papel? **Folha de contagem** — escolha **PDF**, que é o formato
+   feito para imprimir. (Em contagem cega o papel também sai sem o esperado.)
 4. No fim, **Fechar e ajustar**. Aí sim a diferença vira movimento, com o seu
    nome.
 
@@ -160,6 +161,27 @@ Menu **CMV → Painel de CMV**:
 - **Onde pesa e o que subiu**: o CMV por setor (cozinha x bar) e a lista do que
   subiu de preço, **ordenada pelo impacto em reais**. É a planilha para levar à
   conversa com o fornecedor — o botão "baixar esta tabela" gera o arquivo.
+
+### Baixar: sempre a janela
+
+Todo botão de **Baixar** abre uma janela antes de gerar o arquivo. Nela você
+escolhe **o recorte** — o que faz sentido naquele relatório: locais, setores,
+categorias, tipos de produto, produtos específicos, período — e **o formato**:
+
+- **Planilha** para conferir e somar no Excel.
+- **PDF** para ler, imprimir ou mandar por e-mail.
+
+A **ficha técnica** também se imprime: na tela dela, **Imprimir ficha** — já vem
+em PDF, com os ingredientes, o rendimento e o modo de preparo. É o cartão para
+pendurar na cozinha. Quem não tem permissão de ver custo recebe a receita **sem
+os valores**, igual à tela.
+
+O rodapé da janela diz **quantas linhas vão sair** antes de você clicar. Se o
+número estiver grande demais, estreite o filtro ali mesmo — é mais rápido que
+abrir um arquivo de três mil linhas para descobrir que não era aquilo.
+
+Deixar tudo em branco quer dizer **tudo**: nenhum filtro marcado não é "nada", é
+"sem recorte".
 
 ### Fechar o mês
 

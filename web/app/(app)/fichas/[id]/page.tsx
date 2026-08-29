@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
@@ -287,6 +288,24 @@ export default function EditorFicha() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* ⚠️ A ficha existe para ser SEGUIDA, e quem segue está de pé na
+              cozinha — não na frente do monitor. Sem o papel, a receita fica
+              presa numa tela que ninguém leva para perto do fogão.
+              O custo NÃO sai para quem não tem `fichas.custos`: quem esconde é
+              o servidor, senão o PDF viraria a porta lateral que a regra do
+              router de fichas existe para fechar. */}
+          {!nova && ficha && (
+            <BotaoExportar
+              relatorio={`ficha/${ficha.id}`}
+              rotulo="Imprimir ficha"
+              formatoPadrao="pdf"
+              avulso={{
+                rotulo: `Ficha técnica — ${ficha.produto}`,
+                descricao:
+                  "O cartão da receita, para pendurar na cozinha. Em PDF sai pronto para imprimir.",
+              }}
+            />
+          )}
           {!nova && podeEditar && travada && (
             <button
               type="button"
@@ -521,7 +540,7 @@ export default function EditorFicha() {
                     {editavel && (
                       <button
                         type="button"
-                        className="rotulo pb-2 hover:text-erro"
+                        className="link-acao link-acao-erro mb-2"
                         onClick={() => setItens((l) => l.filter((_, j) => j !== i))}
                       >
                         remover

@@ -132,7 +132,7 @@ export default function PaginaFichas() {
           <Vazio>
             Nenhuma ficha ainda.{" "}
             {podeEditar && (
-              <Link href="/fichas/nova" className="text-erva underline">
+              <Link href="/fichas/nova" className="link-acao">
                 criar a primeira
               </Link>
             )}
@@ -144,7 +144,7 @@ export default function PaginaFichas() {
                 <li key={f.id} className="bg-superficie py-3">
                   <Link href={`/fichas/${f.id}`} className="block">
                     <div className="flex items-start justify-between gap-3">
-                      <span className="font-semibold">{f.produto}</span>
+                      <span className="link-registro">{f.produto}</span>
                       <Etiqueta cor={CORES[f.status]}>{f.status.toLowerCase()}</Etiqueta>
                     </div>
                     <p className="mt-1 text-[13px] text-suave">
@@ -182,7 +182,7 @@ export default function PaginaFichas() {
                   {lista.map((f) => (
                     <tr key={f.id} className={f.status === "ARQUIVADA" ? "opacity-55" : ""}>
                       <td>
-                        <Link href={`/fichas/${f.id}`} className="font-semibold hover:text-erva">
+                        <Link href={`/fichas/${f.id}`} className="link-registro">
                           {f.produto}
                         </Link>
                         <span className="mono ml-2 text-[12px] text-suave">{f.codigo}</span>

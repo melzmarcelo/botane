@@ -279,10 +279,10 @@ export default function GruposCmv() {
                 </div>
                 {podeEditar && (
                   <span className="flex shrink-0 gap-3">
-                    <button className="rotulo hover:text-erva" onClick={() => setEditando(g)}>
+                    <button className="link-acao" onClick={() => setEditando(g)}>
                       editar
                     </button>
-                    <button className="rotulo hover:text-erro" onClick={() => setExcluindo(g)}>
+                    <button className="link-acao link-acao-erro" onClick={() => setExcluindo(g)}>
                       excluir
                     </button>
                   </span>

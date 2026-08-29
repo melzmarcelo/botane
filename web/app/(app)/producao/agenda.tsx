@@ -325,7 +325,7 @@ export default function AgendaProducao({
                             bancada precisa disso antes de ligar o forno. */}
                         <Link
                           href={`/producao/${l.id}`}
-                          className="font-medium hover:text-erva hover:underline"
+                          className="link-registro font-medium"
                         >
                           {l.produto}
                         </Link>
@@ -369,7 +369,7 @@ export default function AgendaProducao({
                           </>
                         )}
                         <button
-                          className="rotulo hover:text-erro"
+                          className="link-acao link-acao-erro"
                           onClick={() => void cancelar(l)}
                           disabled={ocupado}
                         >

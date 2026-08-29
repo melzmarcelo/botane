@@ -214,7 +214,7 @@ export default function PaginaVendas() {
                 }`}
               >
                 <Link href={`/vendas/${v.id}`} className="min-w-0 text-left">
-                  <span className="font-semibold hover:text-erva">
+                  <span className="link-registro">
                     {dataBr(v.data)} · {v.documento ?? `venda #${v.id}`}
                   </span>
                   <span className="block text-[13px] text-suave">

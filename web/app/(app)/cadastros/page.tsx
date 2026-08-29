@@ -208,7 +208,7 @@ export default function PaginaCadastros() {
                     {podeAba("setores") && (
                       <span className="flex gap-3">
                         <button
-                          className="rotulo hover:text-erva"
+                          className="link-acao"
                           onClick={() =>
                             acao(
                               () => api.put(`/setores/${s.id}`, { ativo: !s.ativo }),
@@ -294,7 +294,7 @@ export default function PaginaCadastros() {
                       <span className="flex gap-3">
                         {!l.principal && l.ativo && (
                           <button
-                            className="rotulo hover:text-erva"
+                            className="link-acao"
                             onClick={() =>
                               acao(
                                 () => api.put(`/locais/${l.id}`, { principal: true }),
@@ -306,7 +306,7 @@ export default function PaginaCadastros() {
                           </button>
                         )}
                         <button
-                          className="rotulo hover:text-erva"
+                          className="link-acao"
                           onClick={() =>
                             acao(
                               () => api.put(`/locais/${l.id}`, { ativo: !l.ativo }),
@@ -411,7 +411,7 @@ export default function PaginaCadastros() {
                     </span>
                     {podeAba("categorias") && (
                       <button
-                        className="rotulo hover:text-erva"
+                        className="link-acao"
                         onClick={() =>
                           acao(
                             () => api.put(`/categorias/${c.id}`, { ativo: !c.ativo }),
@@ -527,7 +527,7 @@ export default function PaginaCadastros() {
                         <td className="text-right">
                           {podeAba("unidades") && (
                             <button
-                              className="rotulo hover:text-erva"
+                              className="link-acao"
                               onClick={() =>
                                 acao(
                                   () =>

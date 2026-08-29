@@ -159,7 +159,7 @@ function Balao({ recado, aoFechar }: { recado: Recado; aoFechar: () => void }) {
         {recado.acao && (
           <button
             type="button"
-            className="mt-1.5 font-display text-[13px] font-semibold text-erva underline underline-offset-2 hover:text-tinta"
+            className="link-acao mt-1.5"
             onClick={() => {
               recado.acao?.ao();
               aoFechar();

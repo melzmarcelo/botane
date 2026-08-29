@@ -72,6 +72,79 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   font-size: 15px;
   line-height: 1;
 }
+/* ⚠️ Em CAMADA, ao contrário de `.campo` e `.btn`: estas definem `display`, e
+   `lg:hidden`, `flex` e `font-normal` do Tailwind precisam poder vencer.
+   CSS sem camada ganha da utilitária — foi assim que o "fechar" do menu
+   quase passou a aparecer no desktop. */
+@layer components {
+  /* Ação escrita com `.rotulo` — 10,5px, mono, MAIÚSCULAS, cinza — é a mesma tinta
+     do `<th>` da tabela e da legenda do campo: lia como rótulo, não como controle.
+     É exatamente o defeito que o "Voltar" tinha, repetido em trinta lugares —
+     "vincular", "criar produto", "desbloquear", "estornar", "remover". O que separa
+     um controle de uma palavra é ter BORDA, forma própria e responder ao ponteiro. */
+  .link-acao {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-display);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    padding: 5px 10px;
+    border: 1px solid var(--color-linha2);
+    border-radius: 999px;
+    background: var(--color-superficie);
+    color: var(--color-suave);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+  .link-acao:hover:not(:disabled) {
+    border-color: var(--color-erva);
+    color: var(--color-erva);
+    background: var(--color-erva-claro);
+  }
+  /* O que desfaz, apaga ou estorna se anuncia em vermelho ANTES do clique. */
+  .link-acao-erro:hover:not(:disabled) {
+    border-color: var(--color-erro);
+    color: var(--color-erro);
+    background: #f6e8e6;
+  }
+  .link-acao:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* O nome do registro na lista LEVA para o registro, e nada dizia isso: era texto
+     em negrito, e a única pista aparecia com o ponteiro em cima — no celular, onde
+     ponteiro não existe, pista nenhuma. Sublinhado fino é a convenção do link, e
+     fica calmo o bastante para uma tabela de cem linhas não virar um borrão. */
+  .link-registro {
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--color-linha2);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  }
+  .link-registro:hover {
+    color: var(--color-erva);
+    text-decoration-color: var(--color-erva);
+  }
+}
+
+@layer base {
+  /* O Preflight do Tailwind 4 não devolve o cursor de mão ao <button> (só
+     `.btn` pedia o dele) — então TODO botão sem classe própria mostrava a
+     seta, que é a pista de "isto é texto". Rede de segurança para o que
+     vier depois; na camada base, para qualquer utilitária de cursor vencer. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 .campo {
   width: 100%;
   border: 1px solid var(--color-linha2);

@@ -208,7 +208,7 @@ export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: s
                   <tr key={p.id_produto}>
                     <td>
                       <button className="text-left" onClick={() => void abrir(p.id_produto)}>
-                        <span className="font-semibold hover:text-erva">{p.produto}</span>
+                        <span className="link-registro">{p.produto}</span>
                         <span className="block text-[12.5px] text-suave">
                           {aberto === p.id_produto ? "esconder as compras" : "ver cada compra"}
                         </span>
