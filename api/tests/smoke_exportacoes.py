@@ -18,6 +18,9 @@ O que este arquivo cobra:
 9. formato e relatório que não existem respondem com frase, não com 500
 10. a ficha técnica sai para o papel, com o modo de preparo junto
 11. e o PDF da ficha NÃO é a porta lateral do custo
+12. o nome do arquivo carrega o nome do REGISTRO
+13. a folha de UM produto, com o bloco de estoque sob a permissão dele
+14. todo PDF sai em papel timbrado e diz quem o emitiu
 
     python tests/smoke_exportacoes.py            (API de pé na 9200)
 
@@ -41,6 +44,16 @@ from datetime import date
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
 from comum import garantir_local  # noqa: E402
+
+# ⚠️ Importados no TOPO: alguns blocos afirmam sobre funções puras (o slug do
+# nome de arquivo, o teto do PDF, o papel timbrado) que HTTP não alcança, e
+# importar no meio do arquivo fazia o bloco de cima estourar com NameError
+# quando a ordem dos blocos mudava.
+import arquivos  # noqa: E402
+from database import get_cursor  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
+from services import exportacao as _exp  # noqa: E402
+from services import exportacao_catalogo as _cat  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -80,6 +93,14 @@ def checar(nome, condicao, extra=""):
     else:
         falhas.append(nome)
         print(f"  FALHA {nome} {extra}")
+
+
+def exportado_do_nome(disposicao: str) -> str:
+    """O nome do arquivo dentro do Content-Disposition."""
+    marca_ = 'filename="'
+    if marca_ not in disposicao:
+        return ""
+    return disposicao.split(marca_, 1)[1].split('"', 1)[0]
 
 
 def linhas_do_csv(texto: str) -> int:
@@ -429,13 +450,65 @@ else:
     print("  (sem usuário de cozinha nesta base — bloco pulado)")
 
 
-print("13. o teto do PDF")
+print("13. o nome do arquivo diz o que ele e")
+# ⚠️ `botane-ficha-431.pdf` obriga a ABRIR o arquivo para saber de que prato
+# ele e — e quem baixa cinco fichas seguidas fica com cinco numeros. O nome do
+# registro no nome do arquivo e o que torna a pasta de Downloads legivel.
+checar("o acento vira letra sem acento",
+       _exp.slug("Açúcar Refinado") == "acucar-refinado", _exp.slug("Açúcar Refinado"))
+checar("e o resto vira hifen, sem repetir",
+       _exp.slug("//CACAROLA  REDONDA 3/4") == "cacarola-redonda-3-4",
+       _exp.slug("//CACAROLA  REDONDA 3/4"))
+checar("nome vazio nao vira arquivo sem nome",
+       _exp.slug(None) == "" and _exp.slug("   ") == "")
+checar("e o nome tem teto", len(_exp.slug("a" * 200)) <= 45)
+
+st, _b, cab = chamar(f"GET", f"/exportar/ficha/{id_ficha}.pdf", token=token, bruto=True)
+disp = cab.get("content-disposition", "")
+# ⚠️ A VERSAO entra junto: duas versoes do mesmo prato sao dois documentos.
+checar("o arquivo da ficha leva o nome do prato",
+       exportado_do_nome(disp).startswith(f"botane-ficha-fic-prato-{marca}-v"), disp)
+
+st, _b, cab = chamar(f"GET", f"/exportar/produto/{id_produto}.csv", token=token, bruto=True)
+checar("e o do produto leva o nome do produto",
+       exportado_do_nome(cab.get("content-disposition", "")).startswith(
+           f"botane-produto-exp-insumo-{marca}"), cab.get("content-disposition"))
+
+
+print("14. a folha de UM produto")
+st, folha, _ = chamar(f"GET", f"/exportar/produto/{id_produto}.csv", token=token, bruto=True)
+folha = folha.decode("utf-8")
+checar("a folha do produto sai", st == 200, st)
+checar("com o nome no titulo", f"Exp insumo {marca}".upper() in folha, folha[:80])
+checar("o cadastro no resumo", "Código;" in folha and "Tipo;INSUMO" in folha, folha[:300])
+# Os quatro quadros, na ordem em que se le um produto: onde ele esta, em que
+# embalagem entra, com quem se compra, e o que aconteceu com ele.
+checar("o saldo por local", "Saldo por local" in folha, folha[:600])
+checar("e os ultimos movimentos", "Últimos movimentos" in folha, folha[-500:])
+# ⚠️ O carimbo e do ARQUIVO, nao de cada quadro: os anexos vinham com
+# "Botané Deli e Café — gerado em…" repetido embaixo de cada titulo.
+checar("com o carimbo uma vez so, no topo", folha.count("gerado em") == 1,
+       folha.count("gerado em"))
+st, folha_pdf, _ = chamar(f"GET", f"/exportar/produto/{id_produto}.pdf",
+                          token=token, bruto=True)
+checar("e sai em PDF também", st == 200 and folha_pdf[:4] == b"%PDF", st)
+st, _r, _h = chamar("GET", "/exportar/produto/99999999.pdf", token=token, bruto=True)
+checar("produto que não existe dá 404", st == 404, st)
+
+# 🔑 Saldo, custo médio e razão são dados de ESTOQUE, e não passam a ser de
+# cadastro por estarem no arquivo de um produto.
+st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
+if st == 200:
+    tk_coz = r["access_token"]
+    st, _r, _h = chamar(f"GET", f"/exportar/produto/{id_produto}.csv",
+                        token=tk_coz, bruto=True)
+    checar("a cozinha não baixa a folha do produto (não é do cadastro)", st == 403, st)
+
+
+print("15. o teto do PDF")
 # ⚠️ Testado como FUNÇÃO, não por HTTP: esta base tem 3.940 movimentos no total
 # e o teto é 5.000 — chegar lá por requisição exigiria criar cinco mil linhas a
 # cada rodada, que é caro e não prova nada a mais.
-from fastapi import HTTPException  # noqa: E402
-from services import exportacao as _exp  # noqa: E402
-from services import exportacao_catalogo as _cat  # noqa: E402
 
 checar("no teto, ainda passa", _cat.limite_do_pdf(_exp.MAXIMO_PDF) is None)
 frase = ""
@@ -453,13 +526,11 @@ checar("e o separador de milhar não come a vírgula da frase",
        "5.000, porque" in frase and "planilha, que" in frase, frase)
 
 
-print("14. o papel timbrado e o carimbo de quem emitiu")
+print("16. o papel timbrado e o carimbo de quem emitiu")
 # ⚠️ O PDF SAI da tela e circula — vira anexo de e-mail, papel na mesa do
 # contador, foto no grupo. Sem o timbre não diz de que casa é; sem o rodapé não
 # diz quem emitiu nem quando.
-import arquivos  # noqa: E402
 
-from database import get_cursor  # noqa: E402
 
 with get_cursor() as _cur:
     timbre = _cat.papel_timbrado(_cur)

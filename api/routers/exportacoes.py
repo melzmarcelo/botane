@@ -26,6 +26,7 @@ import auditoria
 from database import get_cursor
 from seguranca import Contexto, contexto_atual, unidade_atual
 from services import custos
+from services import estoque as estoque_motor
 from services import exportacao
 from services import exportacao_catalogo as catalogo_motor
 
@@ -51,6 +52,15 @@ def _centavos(v):
     """Dinheiro de APRESENTAÇÃO. O cálculo continua exato — quem arredonda é a
     linha do relatório."""
     return None if v is None else Decimal(str(v)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+
+
+def _junta_fiscais(prod: dict) -> str | None:
+    """NCM, EAN, CEST e marca numa linha só — cada um aparece se existir."""
+    pedacos = [f"NCM {prod['ncm']}" if prod.get("ncm") else None,
+               f"EAN {prod['codigo_barras']}" if prod.get("codigo_barras") else None,
+               f"CEST {prod['cest']}" if prod.get("cest") else None,
+               prod.get("marca")]
+    return " · ".join(p for p in pedacos if p) or None
 
 
 def _id_do_caminho(bruto: str, oque: str) -> int:
@@ -208,7 +218,188 @@ def inventario(nome: str, formato: str | None = None,
          ("Contagem", "cega — o saldo do sistema não sai daqui" if cega_aberta else "aberta"),
          ("Itens", len(linhas))],
     )
-    return _render(saida, f"inventario-{id_inventario}", ext, timbre, ctx.nome)
+    apelido = exportacao.slug(inv["nome"] or inv["local"]) or str(id_inventario)
+    return _render(saida, f"inventario-{apelido}", ext, timbre, ctx.nome)
+
+
+@router.get("/produto/{nome}")
+def produto(nome: str, formato: str | None = None,
+            ctx: Contexto = Depends(contexto_atual)) -> Response:
+    """Tudo o que a casa sabe de UM produto, num arquivo só.
+
+    A tela do produto junta cadastro, saldo, embalagens, fornecedores e o
+    razão dele em abas e blocos; quem precisa levar isso para fora — para
+    conferir uma compra, para discutir preço com o fornecedor, para responder
+    ao contador — não tinha como.
+
+    ⚠️ **O bloco de ESTOQUE exige `estoque.saldos`.** Saldo, custo médio e
+    razão são dados de estoque, e não passam a ser de cadastro por estarem no
+    arquivo de um produto — é a mesma regra do custo na ficha técnica: o PDF é
+    o que sai da tela e circula, e não pode ser a porta lateral de nada.
+    """
+    _exige(ctx, "cadastros.produtos")
+    bruto, ext = _partir(nome, formato)
+    id_produto = _id_do_caminho(bruto, "Produto")
+    ve_estoque = ctx.pode("estoque.saldos")
+
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao,
+                      (SELECT pp.preco_venda FROM produto_precos pp
+                        WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
+                        ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                 FROM produtos p
+                 LEFT JOIN categorias c ON c.id = p.id_categoria
+                 LEFT JOIN setores s ON s.id = p.id_setor
+                 LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
+                WHERE p.id = %s""",
+            (id_produto,),
+        )
+        prod = cur.fetchone()
+        if not prod:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        prod = dict(prod)
+
+        saldos: list[dict] = []
+        movimentos: list[dict] = []
+        if ve_estoque:
+            cur.execute(
+                """SELECT l.nome AS local, e.quantidade, e.custo_medio,
+                          round(e.quantidade * e.custo_medio, 2) AS valor
+                     FROM estoque_saldos e
+                     JOIN locais_estoque l ON l.id = e.id_local
+                    WHERE e.id_produto = %s AND e.id_unidade = %s AND e.quantidade <> 0
+                    ORDER BY lower(l.nome)""",
+                (id_produto, id_unidade),
+            )
+            saldos = [dict(r) for r in cur.fetchall()]
+            # ⚠️ Os ÚLTIMOS, não todos: o razão de um insumo movimentado pode
+            # ter milhares de linhas, e quem abre a ficha de um produto quer o
+            # que aconteceu com ele agora. O razão inteiro tem relatório próprio.
+            cur.execute(
+                """SELECT m.data_movimento, m.tipo, l.nome AS local, m.quantidade,
+                          m.custo_unitario, m.saldo_apos, m.custo_medio_apos, m.documento
+                     FROM estoque_movimentos m
+                     JOIN locais_estoque l ON l.id = m.id_local
+                    WHERE m.id_produto = %s AND m.id_unidade = %s
+                    ORDER BY m.id DESC LIMIT 50""",
+                (id_produto, id_unidade),
+            )
+            movimentos = [dict(r) for r in cur.fetchall()][::-1]
+            for m in movimentos:
+                m["tipo"] = estoque_motor.ROTULOS.get(m["tipo"], m["tipo"])
+
+        cur.execute(
+            """SELECT um, fator, padrao, observacao FROM produto_unidades
+                WHERE id_produto = %s ORDER BY padrao DESC, fator""",
+            (id_produto,),
+        )
+        embalagens = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            """SELECT f.nome AS fornecedor, pf.codigo_no_fornecedor, pf.embalagem, pf.fator,
+                      pf.ultimo_preco, pf.ultima_compra, pf.preferencial
+                 FROM produto_fornecedor pf
+                 JOIN fornecedores f ON f.id = pf.id_fornecedor
+                WHERE pf.id_produto = %s
+                ORDER BY pf.preferencial DESC, lower(f.nome)""",
+            (id_produto,),
+        )
+        fornecedores = [dict(r) for r in cur.fetchall()]
+
+        timbre = catalogo_motor.papel_timbrado(cur)
+        auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"produto-{id_produto}",
+                            "exportar", depois={"formato": ext, "com_estoque": ve_estoque},
+                            id_unidade=id_unidade)
+
+    resumo: list[tuple[str, object]] = [
+        ("Código", prod["codigo"]),
+        ("Tipo", prod["tipo"]),
+        ("Categoria", prod["categoria"] or "—"),
+        ("Setor", prod["setor"] or "—"),
+        ("Unidade de estoque", prod["um_estoque"] or "—"),
+        ("Situação", f"{prod['status']} · {'ativo' if prod['ativo'] else 'inativo'}"),
+    ]
+    if prod["um_compra"]:
+        resumo.append(("Unidade de compra",
+                       f"{prod['um_compra']} × {exportacao.quantidade_br(prod['fator_compra'])}"))
+    if prod["preco_venda"] is not None:
+        resumo.append(("Preço de venda", _centavos(prod["preco_venda"])))
+    if prod["local_padrao"]:
+        resumo.append(("Local padrão", prod["local_padrao"]))
+    if prod["estoque_minimo"]:
+        resumo.append(("Estoque mínimo",
+                       exportacao.quantidade_br(prod["estoque_minimo"], prod["um_estoque"])))
+    if prod["perecivel"]:
+        resumo.append(("Perecível", f"validade de {prod['validade_dias']} dia(s)"
+                                    if prod["validade_dias"] else "sim"))
+    if prod["controla_lote"]:
+        resumo.append(("Controla lote", True))
+    fiscais = _junta_fiscais(prod)
+    if fiscais:
+        resumo.append(("Fiscal", fiscais))
+    if ve_estoque:
+        resumo.append(("Saldo total",
+                       exportacao.quantidade_br(
+                           sum(s["quantidade"] for s in saldos) if saldos else 0,
+                           prod["um_estoque"])))
+        resumo.append(("Valor em estoque",
+                       _centavos(sum(s["valor"] or 0 for s in saldos)) if saldos else 0))
+
+    # Os quadros do arquivo, na ordem em que se lê um produto: onde ele está,
+    # em que embalagem entra, com quem se compra, e o que aconteceu com ele.
+    # ⚠️ Quadro vazio não entra — um produto recém-cadastrado não tem saldo nem
+    # fornecedor, e três tabelas vazias fazem o arquivo parecer defeituoso.
+    blocos: list[tuple] = []
+    if saldos:
+        blocos.append((saldos,
+                       [("local", "Local"), ("quantidade", "Saldo"),
+                        ("custo_medio", "Custo médio"), ("valor", "Valor")],
+                       "Saldo por local", None))
+    if embalagens:
+        blocos.append((embalagens,
+                       [("um", "Unidade"), ("fator", "Equivale a (un. de estoque)"),
+                        ("padrao", "Padrão"), ("observacao", "Observação")],
+                       "Embalagens de compra", None))
+    if fornecedores:
+        blocos.append((fornecedores,
+                       [("fornecedor", "Fornecedor"),
+                        ("codigo_no_fornecedor", "Código lá"), ("embalagem", "Embalagem"),
+                        ("fator", "Fator"), ("ultimo_preco", "Último preço"),
+                        ("ultima_compra", "Última compra"),
+                        ("preferencial", "Preferencial")],
+                       "Quem fornece", None))
+    if movimentos:
+        blocos.append((movimentos,
+                       [("data_movimento", "Data"), ("tipo", "Movimento"),
+                        ("local", "Local"), ("quantidade", "Quantidade"),
+                        ("custo_unitario", "Custo unitário"), ("saldo_apos", "Saldo depois"),
+                        ("custo_medio_apos", "Custo médio depois"),
+                        ("documento", "Documento")],
+                       "Últimos movimentos", None))
+
+    titulo = f"Produto — {prod['nome']}"
+    apelido = exportacao.slug(prod["nome"]) or str(id_produto)
+    nome_arq = exportacao.nome_arquivo(f"produto-{apelido}", ext=ext)
+    vazio = ("Este produto ainda não tem saldo, embalagem, fornecedor nem movimento — "
+             "só o cadastro acima.")
+
+    # ⚠️ Aqui NÃO há quadro principal: são quatro assuntos do mesmo produto, e
+    # promover um deles a "a tabela" faria os outros três parecerem apêndice.
+    # O bloco principal fica só com o título e o resumo (colunas vazias), e
+    # cada quadro entra como anexo, com o nome dele em cima.
+    notas = [] if blocos else [("", vazio)]
+    if ext == "pdf":
+        catalogo_motor.limite_do_pdf(sum(len(b[0]) for b in blocos))
+        return _entregar(
+            exportacao.pdf_de([], [], titulo, resumo, anexos=blocos, notas=notas,
+                              empresa=timbre, emitido_por=ctx.nome),
+            nome_arq, ext)
+    return _entregar(
+        exportacao.csv_de([], [], titulo, resumo, anexos=blocos,
+                          notas=notas).encode("utf-8"),
+        nome_arq, ext)
 
 
 @router.get("/ficha/{nome}")
@@ -342,7 +533,12 @@ def ficha(nome: str, formato: str | None = None,
         linhas, colunas, f"Ficha técnica — {f['produto']}", resumo,
         anexos=[],
     )
-    nome_arq = exportacao.nome_arquivo(f"ficha-{id_ficha}", ext=ext)
+    # ⚠️ O nome do arquivo é o que a pessoa vê na pasta de Downloads:
+    # `botane-ficha-431.pdf` obriga a abrir para saber de que prato é, e quem
+    # baixa cinco fichas seguidas fica com cinco números. A VERSÃO entra junto
+    # porque duas versões do mesmo prato são dois documentos diferentes.
+    apelido = exportacao.slug(f["produto"]) or str(id_ficha)
+    nome_arq = exportacao.nome_arquivo(f"ficha-{apelido}-v{f['versao']}", ext=ext)
     notas = [("Modo de preparo", f["modo_preparo"] or ""),
              ("Observações", f["observacao"] or "")]
     if ext == "pdf":

@@ -18,6 +18,7 @@ PDF discordarem sobre o que o relatório contém.
 
 import csv
 import io
+import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -65,7 +66,8 @@ def _valor(v) -> str:
 def csv_de(linhas: list[dict], colunas: list[tuple[str, str]],
            titulo: str | None = None, resumo: list[tuple[str, object]] | None = None,
            anexos: list[tuple] | None = None,
-           notas: list[tuple[str, str]] | None = None) -> str:
+           notas: list[tuple[str, str]] | None = None,
+           com_carimbo: bool = True) -> str:
     """`colunas` = [(chave_no_dict, "Cabeçalho na planilha"), ...].
 
     `anexos` = [(linhas, colunas, titulo, resumo), ...] — o segundo quadro do
@@ -81,17 +83,22 @@ def csv_de(linhas: list[dict], colunas: list[tuple[str, str]],
 
     if titulo:
         escritor.writerow([titulo])
-        escritor.writerow([f"Botané Deli e Café — gerado em "
-                           f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"])
+        # ⚠️ O carimbo é do ARQUIVO, não de cada quadro: os anexos vinham com
+        # "Botané Deli e Café — gerado em…" repetido embaixo de cada título, e
+        # a folha de um produto ficava com a mesma linha três vezes.
+        if com_carimbo:
+            escritor.writerow([f"Botané Deli e Café — gerado em "
+                               f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"])
         escritor.writerow([])
     if resumo:
         for rotulo, valor in resumo:
             escritor.writerow([rotulo, _valor(valor)])
         escritor.writerow([])
 
-    escritor.writerow([cab for _chave, cab in colunas])
-    for linha in linhas:
-        escritor.writerow([_valor(linha.get(chave)) for chave, _cab in colunas])
+    if colunas:
+        escritor.writerow([cab for _chave, cab in colunas])
+        for linha in linhas:
+            escritor.writerow([_valor(linha.get(chave)) for chave, _cab in colunas])
 
     # ⚠️ Texto CORRIDO, não tabela: o modo de preparo de uma ficha técnica é
     # um parágrafo, e espremê-lo numa coluna o tornaria ilegível nos dois
@@ -108,8 +115,30 @@ def csv_de(linhas: list[dict], colunas: list[tuple[str, str]],
     for a_linhas, a_colunas, a_titulo, a_resumo in (anexos or []):
         # ⚠️ O BOM do anexo SAI: ele só vale no começo do arquivo, e um BOM
         # solto no meio vira um caractere invisível numa célula do Excel.
-        texto += "\r\n" + csv_de(a_linhas, a_colunas, a_titulo, a_resumo).lstrip(BOM)
+        texto += "\r\n" + csv_de(a_linhas, a_colunas, a_titulo, a_resumo,
+                                  com_carimbo=False).lstrip(BOM)
     return texto
+
+
+def slug(texto: str | None, maximo: int = 45) -> str:
+    """"Bolo de Cenoura 3/4" → "bolo-de-cenoura-3-4".
+
+    ⚠️ **O nome do arquivo é o que a pessoa vê na pasta de Downloads.**
+    `botane-ficha-431-20260829.pdf` obriga a abrir o arquivo para saber de que
+    prato ele é — e quem baixa cinco fichas seguidas fica com cinco números.
+    O nome do registro no nome do arquivo é o que torna a pasta legível.
+
+    ⚠️ Acento vira letra sem acento e o resto vira hífen: nome de arquivo
+    atravessa Windows, e-mail e nuvem, e cada um estraga um caractere diferente.
+    """
+    if not texto:
+        return ""
+    normal = unicodedata.normalize("NFKD", str(texto))
+    limpo = "".join(c for c in normal if not unicodedata.combining(c)).lower()
+    saida = "".join(c if c.isalnum() else "-" for c in limpo)
+    while "--" in saida:
+        saida = saida.replace("--", "-")
+    return saida.strip("-")[:maximo].strip("-")
 
 
 def nome_arquivo(base: str, inicio: date | None = None, fim: date | None = None,
@@ -273,7 +302,8 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
            subtitulo: str | None = None, anexos: list[tuple] | None = None,
            notas: list[tuple[str, str]] | None = None,
            orientacao: str = "auto", empresa: dict | None = None,
-           emitido_por: str | None = None) -> bytes:
+           emitido_por: str | None = None,
+           vazio: str = "Nenhuma linha para o filtro escolhido.") -> bytes:
     """`colunas` = [(chave_no_dict, "Cabeçalho"), ...] — igual ao `csv_de`.
 
     `anexos` = [(linhas, colunas, titulo, resumo), ...], como no `csv_de`.
@@ -396,10 +426,15 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
             historia.append(KeepTogether(caixa))
             historia.append(Spacer(1, 6 * mm))
 
+        # ⚠️ Sem COLUNAS o bloco é só o cabeçalho: é como o relatório de UM
+        # registro monta a folha — o título e o resumo em cima, e cada quadro
+        # (saldo, embalagens, fornecedores) com o nome dele logo abaixo.
+        if not b_colunas:
+            return
         if not b_linhas:
             # ⚠️ Página vazia não explica nada, e quem baixou vai achar que o
             # sistema falhou em vez de que o filtro não achou ninguém.
-            historia.append(Paragraph("Nenhuma linha para o filtro escolhido.", normal))
+            historia.append(Paragraph(_escapar(vazio), normal))
             return
 
         numericas = {chave: _e_numerica(b_linhas, chave) for chave, _ in b_colunas}
@@ -439,9 +474,11 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         if not (corpo or "").strip():
             continue
         historia.append(Spacer(1, 8 * mm))
-        historia.append(Paragraph(_escapar(rotulo), ParagraphStyle(
-            "nota", fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=_TINTA)))
-        historia.append(Spacer(1, 2 * mm))
+        if rotulo:
+            historia.append(Paragraph(_escapar(rotulo), ParagraphStyle(
+                "nota", fontName="Helvetica-Bold", fontSize=11, leading=14,
+                textColor=_TINTA)))
+            historia.append(Spacer(1, 2 * mm))
         quebrado = _escapar(corpo).replace(chr(13) + chr(10), chr(10)).replace(chr(10), "<br/>")
         historia.append(Paragraph(
             quebrado,

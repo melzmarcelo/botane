@@ -466,6 +466,14 @@ try {
       omie: /Vínculo com o Omie|Código interno/i.test(document.body.innerText),
     };
   });
+  // ⚠️ Baixar os dados do produto que se esta olhando fica FORA do bloco de
+  // edicao: levar isso para fora — conferir uma compra, discutir preco com o
+  // fornecedor, responder ao contador — e coisa de quem CONSULTA.
+  const baixarProduto = await p.evaluate(() =>
+    [...document.querySelectorAll("button")].some(
+      (b) => b.textContent?.trim() === "Baixar"));
+  checar("a tela do produto oferece baixar os dados dele", baixarProduto);
+
   checar("o formulário do produto tem o código de barras (EAN/GTIN)", fiscais.ean, fiscais);
   checar("e os campos que vêm do cadastro do Omie",
     fiscais.ncm && fiscais.cest && fiscais.marca && fiscais.peso, fiscais);

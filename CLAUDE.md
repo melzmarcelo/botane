@@ -251,7 +251,34 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   páginas viraria ruído, e quem identifica as outras é o rodapé.
   ⚠️ Com o timbre em cima, o subtítulo padrão saiu — ele repetia o nome da casa e a data, e a
   data agora mora no rodapé. Dado repetido em dois lugares envelhece num deles.
-  ⚠️ O **CSV não mudou**: ele já leva a linha "Botané Deli e Café — gerado em…".
+  ⚠️ O **CSV não mudou** no timbre: ele já leva a linha "Botané Deli e Café — gerado em…".
+  ⚠️ Mas o carimbo é do ARQUIVO, não de cada quadro: os anexos vinham com essa linha repetida
+  embaixo de cada título, e a folha de um produto ficava com ela três vezes (`com_carimbo`).
+- 🔑 **O nome do arquivo carrega o nome do REGISTRO** (`exportacao.slug`, 29/08/2026).
+  `botane-ficha-431.pdf` obriga a ABRIR o arquivo para saber de que prato ele é — e quem baixa
+  cinco fichas seguidas fica com cinco números na pasta de Downloads. Agora sai
+  `botane-ficha-bolo-de-cenoura-v2-20260829.pdf`.
+  ⚠️ **A versão entra junto na ficha**: duas versões do mesmo prato são dois documentos
+  diferentes, e sem ela a segunda sobrescreveria a primeira.
+  ⚠️ Acento vira letra sem acento e o resto vira hífen — nome de arquivo atravessa Windows,
+  e-mail e nuvem, e cada um estraga um caractere diferente. Com teto de 45 caracteres.
+  ⚠️ Vale também para a folha de contagem (`inventario-camara-fria`) e para a folha do produto.
+- 🔑 **A folha de UM produto** (`GET /exportar/produto/{id}`, botão **Baixar** em
+  `/produtos/[id]`): cadastro, saldo por local, embalagens de compra, quem fornece e os
+  **últimos 50** movimentos. A tela junta tudo isso em blocos; quem precisava levar para fora —
+  conferir uma compra, discutir preço com o fornecedor, responder ao contador — não tinha como.
+  ⚠️ **O bloco de estoque exige `estoque.saldos`.** Saldo, custo médio e razão são dados de
+  ESTOQUE e não passam a ser de cadastro por estarem no arquivo de um produto — mesma regra do
+  custo na ficha.
+  ⚠️ **Os ÚLTIMOS movimentos, não todos**: o razão de um insumo movimentado tem milhares de
+  linhas, e quem abre a ficha de um produto quer o que aconteceu com ele agora. O razão inteiro
+  tem relatório próprio.
+  ⚠️ **Não há quadro principal**: são quatro assuntos do mesmo produto, e promover um deles a
+  "a tabela" faria os outros três parecerem apêndice. O bloco principal fica só com título e
+  resumo (`colunas=[]`), e cada quadro entra como anexo com o nome dele em cima.
+  ⚠️ **Quadro vazio não entra** — produto recém-cadastrado não tem saldo nem fornecedor, e três
+  tabelas vazias fazem o arquivo parecer defeituoso. Sem nenhum quadro, uma frase explica.
+  ⚠️ O botão fica **fora do `podeEditar`**: baixar é de quem CONSULTA.
   ⚠️ **A ficha sai em RETRATO, e por isso `pdf_de` ganhou `orientacao`.** O corte automático é
   por número de colunas, e está certo para relatório de tabela — lá quem manda é a largura. A
   ficha é outra coisa: um documento com FORMA por convenção. Assim que a receita usava fator de
@@ -1218,16 +1245,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.366 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.380 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (81), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (338, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (339, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

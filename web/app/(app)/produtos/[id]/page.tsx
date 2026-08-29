@@ -14,6 +14,7 @@ import {
   TIPOS_PRODUTO,
   UnidadeMedida,
 } from "@/lib/cadastros";
+import BotaoExportar from "@/components/exportar";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
@@ -248,8 +249,24 @@ export default function FormularioProduto() {
             {!f.ativo && <Etiqueta cor="alerta">inativo</Etiqueta>}
           </div>
         </div>
-        {podeEditar && (
-          <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* ⚠️ Fora do `podeEditar`: levar os dados do produto para fora — para
+              conferir uma compra, discutir preço com o fornecedor ou responder
+              ao contador — é coisa de quem CONSULTA, não de quem edita. O bloco
+              de estoque dentro do arquivo tem a permissão dele, no servidor. */}
+          {!novo && (
+            <BotaoExportar
+              relatorio={`produto/${id}`}
+              rotulo="Baixar"
+              avulso={{
+                rotulo: `Produto — ${f.nome || "sem nome"}`,
+                descricao:
+                  "Cadastro, saldo por local, embalagens, fornecedores e os últimos movimentos.",
+              }}
+            />
+          )}
+          {podeEditar && (
+            <>
             {/* ⚠️ **O caminho para dizer que dois cadastros são o mesmo.** Não
                 existe detector: "BEB CERV HEINEKEN 350ML" e "CERVEJA HEINEKEN
                 PILSEN" são o mesmo produto e batem 63,8% de semelhança, e
@@ -273,8 +290,9 @@ export default function FormularioProduto() {
             <button className="btn btn-primario" type="submit" disabled={salvando}>
               {salvando ? "Salvando…" : novo ? "Criar produto" : "Salvar"}
             </button>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </header>
 
       {vinculando && (
