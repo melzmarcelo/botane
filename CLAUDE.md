@@ -225,6 +225,33 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **`formatoPadrao` na janela**: o padrão é planilha porque a maioria dos relatórios é para
   CONFERIR, mas a ficha e a folha de contagem têm o papel como destino — abrir em "planilha"
   ali faz escolher errado por inércia.
+- 🔑 **Todo PDF sai em papel TIMBRADO, e com o carimbo de quem o emitiu** (29/08/2026).
+  O PDF sai da tela e circula: vira anexo de e-mail, papel na mesa do contador, foto no grupo.
+  Sem o timbre ele não diz de que casa é; sem o rodapé não diz quem o emitiu nem quando — e um
+  relatório sem essas duas coisas não se confere contra nada.
+  Cabeçalho: logo + nome + CNPJ/IE + endereço + contato (`exportacao_catalogo.papel_timbrado`).
+  Rodapé, em três partes: **título** à esquerda (uma página solta na mesa precisa dizer de que
+  relatório é), **"emitido por Fulano em dd/mm/aaaa hh:mm"** ao centro, **"Página X de Y"** à
+  direita.
+  ⚠️ **Monta com o que EXISTE.** A base tem razão social, nome fantasia e UF, e mais nada. Uma
+  linha reservada e vazia anuncia o que falta em cada página impressa; montar só o que tem sai
+  limpo hoje e completo depois, sem ninguém tocar em nada.
+  ⚠️ **A UF só aparece ATRÁS da cidade** — sozinha, virava uma linha de endereço escrita "SC".
+  Nesse par a informação é o conjunto, não cada metade.
+  ⚠️ **A logo vem do DISCO, por `arquivos.caminho_local`** — o PDF desenha a imagem, não a
+  busca por HTTP. Mora naquele módulo pela mesma razão que `remover`: é o único que sabe onde
+  os arquivos ficam, e é ele que muda no dia do Spaces. Altura fixa e largura pela PROPORÇÃO:
+  logo esticada é pior que logo nenhuma.
+  ⚠️ **Logo ausente ou ilegível NÃO derruba o relatório** — no App Platform `api/uploads/` é
+  efêmera e some a cada deploy, então "sem logo" é estado normal, não erro.
+  ⚠️ **O carimbo é calculado UMA vez, fora do rodapé**: `_CanvasNumerado` redesenha o rodapé de
+  cada página no fim, e chamar `now()` ali daria horários diferentes entre a página 1 e a 40 do
+  mesmo arquivo.
+  ⚠️ **O timbre sai só na PRIMEIRA página** (é um flowable, não um `onPage`): repetido em 16
+  páginas viraria ruído, e quem identifica as outras é o rodapé.
+  ⚠️ Com o timbre em cima, o subtítulo padrão saiu — ele repetia o nome da casa e a data, e a
+  data agora mora no rodapé. Dado repetido em dois lugares envelhece num deles.
+  ⚠️ O **CSV não mudou**: ele já leva a linha "Botané Deli e Café — gerado em…".
   ⚠️ **A ficha sai em RETRATO, e por isso `pdf_de` ganhou `orientacao`.** O corte automático é
   por número de colunas, e está certo para relatório de tabela — lá quem manda é a largura. A
   ficha é outra coisa: um documento com FORMA por convenção. Assim que a receita usava fator de
@@ -1191,13 +1218,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.354 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.366 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (69), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (81), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (107), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (338, no Chrome, com fotos em `web/scripts/_fotos`).

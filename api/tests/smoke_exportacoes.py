@@ -453,6 +453,66 @@ checar("e o separador de milhar não come a vírgula da frase",
        "5.000, porque" in frase and "planilha, que" in frase, frase)
 
 
+print("14. o papel timbrado e o carimbo de quem emitiu")
+# ⚠️ O PDF SAI da tela e circula — vira anexo de e-mail, papel na mesa do
+# contador, foto no grupo. Sem o timbre não diz de que casa é; sem o rodapé não
+# diz quem emitiu nem quando.
+import arquivos  # noqa: E402
+
+from database import get_cursor  # noqa: E402
+
+with get_cursor() as _cur:
+    timbre = _cat.papel_timbrado(_cur)
+st, empresa_api = chamar("GET", "/empresa", token=token)
+checar("o timbre traz o nome da casa",
+       timbre.get("nome") == (empresa_api.get("nome_fantasia")
+                              or empresa_api.get("razao_social")), timbre)
+# ⚠️ Monta com o que EXISTE. Uma linha reservada e vazia anuncia o que falta
+# em cada página impressa; montar só o que tem sai limpo hoje e completo
+# depois, sem ninguém tocar em nada.
+checar("e não inventa linha para campo em branco",
+       all(l and l.strip() for l in timbre.get("linhas", [])), timbre)
+if not empresa_api.get("cidade"):
+    checar("com a base sem endereço, nenhuma linha de endereço sai",
+           not any("/" in l and len(l) < 4 for l in timbre.get("linhas", [])), timbre)
+
+checar("o CNPJ sai formatado para quem lê",
+       _cat._cnpj_formatado("45304800000134") == "45.304.800/0001-34",
+       _cat._cnpj_formatado("45304800000134"))
+# ⚠️ Cadastro pela metade não pode virar número inventado no papel.
+checar("e um cadastro pela metade passa como veio",
+       _cat._cnpj_formatado("123") == "123" and _cat._cnpj_formatado(None) is None)
+
+# ⚠️ A UF só aparece ATRÁS da cidade: sozinha, virava uma linha de endereço
+# escrita "SC" — que é o estado atual da base e não informa nada.
+so_uf = _cat._junta(None, "SC", sep="/")
+checar("_junta não deixa separador solto", so_uf == "SC", so_uf)
+checar("e nada vira None em vez de string vazia", _cat._junta(None, "") is None)
+
+# ⚠️ A pasta de uploads é EFÊMERA no App Platform e some a cada deploy: logo
+# ausente tem de sair sem logo, não derrubar o relatório.
+checar("logo que não existe não vira caminho",
+       arquivos.caminho_local("/arquivos/nao-existe-999.png") is None)
+checar("e URL de fora do prefixo é recusada",
+       arquivos.caminho_local("https://outro.site/logo.png") is None)
+
+carimbo = _exp._junta_rodape("Fulano")
+checar("o rodapé diz quem emitiu e quando",
+       carimbo.startswith("emitido por Fulano em"), carimbo)
+checar("e sem nome ainda diz quando",
+       _exp._junta_rodape(None).startswith("emitido em"), _exp._junta_rodape(None))
+
+# O PDF sai com o timbre montado, inclusive apontando para uma logo que não
+# existe — que é o caso do dia seguinte a um deploy.
+sem_quebrar = _exp.pdf_de(
+    [{"a": "x"}], [("a", "A")], titulo="Timbre",
+    empresa={"nome": "Casa", "linhas": ["CNPJ 00.000.000/0001-00"],
+             "logo": "nao-existe.png"},
+    emitido_por="Fulano")
+checar("e o PDF sai mesmo com a logo faltando",
+       sem_quebrar[:4] == b"%PDF", sem_quebrar[:8])
+
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 if falhas:

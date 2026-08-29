@@ -68,6 +68,26 @@ async def salvar_imagem(arquivo: UploadFile, nome_base: str) -> str:
     return f"{PREFIXO_URL}/{nome}"
 
 
+def caminho_local(url: str | None) -> Path | None:
+    """A URL de volta ao arquivo em disco, para quem precisa do CONTEÚDO.
+
+    O PDF **desenha** a logo, não a busca por HTTP — pedir a si mesmo por rede
+    para carimbar um cabeçalho seria uma requisição a mais por relatório, e
+    falharia justamente onde o PDF é gerado sem navegador nenhum.
+
+    ⚠️ Mora aqui, e não em quem monta o PDF, pela mesma razão que `remover`:
+    este é o único módulo que sabe onde os arquivos ficam. No dia do Spaces é
+    só ele que muda — quem chama continua recebendo bytes.
+    ⚠️ Devolve `None` quando o arquivo não está lá. No App Platform a pasta é
+    EFÊMERA e some a cada deploy: o cabeçalho tem de sair sem a logo em vez de
+    derrubar o relatório.
+    """
+    if not url or not url.startswith(PREFIXO_URL + "/"):
+        return None
+    alvo = PASTA / Path(url).name
+    return alvo if alvo.parent == PASTA and alvo.exists() else None
+
+
 def remover(url: str | None) -> None:
     if not url or not url.startswith(PREFIXO_URL + "/"):
         return

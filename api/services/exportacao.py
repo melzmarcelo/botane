@@ -25,8 +25,10 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
+    Image,
     KeepTogether,
     Paragraph,
     SimpleDocTemplate,
@@ -234,6 +236,12 @@ def _larguras(linhas: list[dict], colunas: list[tuple[str, str]],
     return [disponivel * p / total for p in pesos]
 
 
+def _junta_rodape(emitido_por: str | None) -> str:
+    """"emitido por Fulano em 29/08/2026 11:52" — ou só a data, sem o nome."""
+    quando = datetime.now().strftime("%d/%m/%Y %H:%M")
+    return f"emitido por {emitido_por} em {quando}" if emitido_por else f"emitido em {quando}"
+
+
 class _CanvasNumerado(rl_canvas.Canvas):
     """"Página 3" sozinha não diz se o relatório acabou.
 
@@ -264,10 +272,19 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
            titulo: str | None = None, resumo: list[tuple[str, object]] | None = None,
            subtitulo: str | None = None, anexos: list[tuple] | None = None,
            notas: list[tuple[str, str]] | None = None,
-           orientacao: str = "auto") -> bytes:
+           orientacao: str = "auto", empresa: dict | None = None,
+           emitido_por: str | None = None) -> bytes:
     """`colunas` = [(chave_no_dict, "Cabeçalho"), ...] — igual ao `csv_de`.
 
     `anexos` = [(linhas, colunas, titulo, resumo), ...], como no `csv_de`.
+
+    `empresa` = {"nome", "linhas", "logo"} de `exportacao_catalogo.papel_timbrado`.
+    `emitido_por` = o nome de quem pediu o arquivo.
+
+    ⚠️ **O PDF sai da tela e circula** — vira anexo de e-mail, papel na mesa do
+    contador, foto no grupo. Sem o timbre ele não diz de que casa é; sem o
+    rodapé não diz quem o emitiu nem quando, e um relatório sem essas duas
+    coisas não se confere contra nada.
     """
     # ⚠️ Paisagem por CONTAGEM DE COLUNAS, não por gosto: a movimentação do
     # estoque tem 14 colunas, e em retrato cada uma ficaria com 13 mm.
@@ -299,16 +316,65 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
     largura = pagina[0] - 2 * margem
     historia: list = []
 
+    def timbre() -> None:
+        """Logo à esquerda, dados da casa à direita, e um fio fechando."""
+        if not empresa or not empresa.get("nome"):
+            return
+        texto = [Paragraph(_escapar(empresa["nome"]), ParagraphStyle(
+            "casa", fontName="Helvetica-Bold", fontSize=11, leading=14, textColor=_TINTA))]
+        for l in empresa.get("linhas") or []:
+            texto.append(Paragraph(_escapar(l), ParagraphStyle(
+                "casaLinha", fontName="Helvetica", fontSize=7.5, leading=10,
+                textColor=_SUAVE)))
+
+        celula_logo = ""
+        caminho = empresa.get("logo")
+        if caminho:
+            # ⚠️ Altura fixa e largura pela PROPORÇÃO: logo esticada é pior que
+            # logo nenhuma, e cada casa manda a sua no formato que tiver.
+            try:
+                largura_img, altura_img = ImageReader(str(caminho)).getSize()
+                alta = 14 * mm
+                celula_logo = Image(str(caminho), width=alta * largura_img / altura_img,
+                                    height=alta)
+            except Exception:
+                # ⚠️ Arquivo ilegível não derruba o relatório: o cabeçalho sai
+                # sem a logo. No App Platform a pasta é efêmera e some a cada
+                # deploy — é um estado normal, não um erro.
+                celula_logo = ""
+
+        cabecalho = Table([[celula_logo, texto]],
+                          colWidths=[22 * mm if celula_logo else 0, largura -
+                                     (22 * mm if celula_logo else 0)],
+                          hAlign="LEFT")
+        cabecalho.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0),
+            ("LEFTPADDING", (1, 0), (1, 0), 4 if celula_logo else 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LINEBELOW", (0, 0), (-1, -1), 0.5, _LINHA),
+        ]))
+        historia.append(cabecalho)
+        historia.append(Spacer(1, 5 * mm))
+
     def bloco(b_linhas, b_colunas, b_titulo, b_resumo, principal: bool) -> None:
         if b_titulo:
             historia.append(Paragraph(_escapar(b_titulo), ParagraphStyle(
                 "titulo", fontName="Helvetica-Bold", fontSize=14 if principal else 11,
                 leading=17 if principal else 14, textColor=_TINTA)))
         if principal:
-            historia.append(Paragraph(_escapar(subtitulo or (
+            # ⚠️ Com o timbre em cima, o subtítulo padrão diria de novo o nome
+            # da casa e a data — e a data agora mora no rodapé, ao lado de quem
+            # emitiu. Repetido em dois lugares, o dado envelhece num deles.
+            padrao = None if empresa else (
                 f"Botané Deli e Café — gerado em "
-                f"{datetime.now().strftime('%d/%m/%Y às %H:%M')}")), ParagraphStyle(
-                "sub", fontName="Helvetica", fontSize=8, leading=11, textColor=_SUAVE)))
+                f"{datetime.now().strftime('%d/%m/%Y às %H:%M')}")
+            if subtitulo or padrao:
+                historia.append(Paragraph(_escapar(subtitulo or padrao), ParagraphStyle(
+                    "sub", fontName="Helvetica", fontSize=8, leading=11,
+                    textColor=_SUAVE)))
         historia.append(Spacer(1, 6 * mm))
 
         if b_resumo:
@@ -359,6 +425,7 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         ]))
         historia.append(tabela)
 
+    timbre()
     bloco(linhas, colunas, titulo, resumo, principal=True)
     for a_linhas, a_colunas, a_titulo, a_resumo in (anexos or []):
         historia.append(Spacer(1, 10 * mm))
@@ -381,11 +448,20 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
             ParagraphStyle("notaCorpo", fontName="Helvetica", fontSize=9, leading=13,
                            textColor=_TINTA)))
 
+    # ⚠️ O carimbo é calculado UMA vez, fora do rodapé: `_CanvasNumerado`
+    # redesenha o rodapé de cada página no fim, e chamar `now()` ali daria
+    # horários diferentes entre a página 1 e a 40 do mesmo arquivo.
+    emissao = _junta_rodape(emitido_por)
+
     def rodape(canvas, numero: int, total: int) -> None:
         canvas.saveState()
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(_SUAVE)
+        # À esquerda o título: uma página solta na mesa precisa dizer de que
+        # relatório ela é. Ao centro quem emitiu e quando. À direita, onde está.
         canvas.drawString(margem, 9 * mm, titulo or "Botané Deli e Café")
+        if emissao:
+            canvas.drawCentredString(pagina[0] / 2, 9 * mm, emissao)
         canvas.drawRightString(pagina[0] - margem, 9 * mm, f"Página {numero} de {total}")
         canvas.restoreState()
 

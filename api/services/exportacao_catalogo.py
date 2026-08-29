@@ -32,6 +32,8 @@ from typing import Callable
 
 from fastapi import HTTPException
 
+import arquivos
+
 from models.produtos import TIPOS
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
@@ -132,6 +134,73 @@ def _nomes(opcoes: list[dict], escolhidos: list | None) -> set[str] | None:
     if not escolhidos:
         return None
     return {o["nome"] for o in opcoes if o["valor"] in set(escolhidos)}
+
+
+# ---------------------------------------------------------------------------
+# O papel timbrado: quem emitiu o relatório
+# ---------------------------------------------------------------------------
+
+def _cnpj_formatado(bruto: str | None) -> str | None:
+    """00000000000100 → "00.000.000/0001-00". Fora de 14 dígitos, devolve como veio.
+
+    ⚠️ O cadastro aceita o CNPJ digitado de qualquer jeito, e num documento que
+    vai ao contador ele precisa sair na forma que o contador lê. Quem não tem
+    14 dígitos passa direto: um cadastro pela metade não pode virar um número
+    inventado no papel.
+    """
+    if not bruto:
+        return None
+    d = "".join(c for c in bruto if c.isdigit())
+    if len(d) != 14:
+        return bruto
+    return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+
+
+def _junta(*pedacos, sep=" · ") -> str | None:
+    """Só o que existe, e nada de separador solto quando o resto falta."""
+    vivos = [str(p).strip() for p in pedacos if p and str(p).strip()]
+    return sep.join(vivos) or None
+
+
+def papel_timbrado(cur) -> dict:
+    """O cabeçalho da casa para o PDF: nome, documento, endereço, contato, logo.
+
+    ⚠️ **Monta com o que EXISTE.** Hoje a base tem razão social, nome fantasia
+    e UF, e mais nada — CNPJ, endereço e logo estão em branco, e vão ficar até
+    alguém preencher. Um cabeçalho que reserva a linha do CNPJ e a deixa vazia
+    anuncia o que falta em cada página impressa; um que monta só o que tem sai
+    limpo hoje e completo depois, sem ninguém tocar em nada.
+    """
+    cur.execute("SELECT * FROM empresa WHERE id = 1")
+    e = cur.fetchone()
+    if not e:
+        return {}
+    e = dict(e)
+
+    # ⚠️ A UF só aparece ATRÁS da cidade. Sozinha ela virava uma linha de
+    # endereço escrita "SC" — que é o estado atual da base, e não informa nada
+    # a quem recebe o papel. Aqui o par é a informação, não cada metade.
+    cidade_uf = (_junta(e.get("cidade"), e.get("uf"), sep="/")
+                 if e.get("cidade") else None)
+    endereco = _junta(
+        _junta(e.get("logradouro"), e.get("numero"), e.get("complemento"), sep=", "),
+        e.get("bairro"),
+        cidade_uf,
+        f"CEP {e['cep']}" if e.get("cep") else None,
+    )
+    linhas = [
+        _junta(
+            f"CNPJ {_cnpj_formatado(e.get('cnpj'))}" if e.get("cnpj") else None,
+            f"IE {e['inscricao_estadual']}" if e.get("inscricao_estadual") else None,
+        ),
+        endereco,
+        _junta(e.get("telefone"), e.get("email"), e.get("site")),
+    ]
+    return {
+        "nome": e.get("nome_fantasia") or e.get("razao_social") or "",
+        "linhas": [l for l in linhas if l],
+        "logo": arquivos.caminho_local(e.get("logo_url")),
+    }
 
 
 # ---------------------------------------------------------------------------

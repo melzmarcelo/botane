@@ -81,7 +81,8 @@ def _entregar(conteudo: bytes, nome: str, ext: str) -> Response:
     )
 
 
-def _render(saida: catalogo_motor.Saida, base: str, ext: str) -> Response:
+def _render(saida: catalogo_motor.Saida, base: str, ext: str,
+            timbre: dict | None = None, por: str | None = None) -> Response:
     nome = exportacao.nome_arquivo(base, saida.inicio, saida.fim, ext=ext)
     if ext == "pdf":
         # ⚠️ O teto conta o arquivo INTEIRO, anexo incluído: são as páginas do
@@ -91,7 +92,8 @@ def _render(saida: catalogo_motor.Saida, base: str, ext: str) -> Response:
             len(saida.linhas) + sum(len(a[0]) for a in saida.anexos))
         return _entregar(
             exportacao.pdf_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
-                              anexos=saida.anexos), nome, ext)
+                              anexos=saida.anexos, empresa=timbre, emitido_por=por),
+            nome, ext)
     texto = exportacao.csv_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
                               anexos=saida.anexos)
     return _entregar(texto.encode("utf-8"), nome, ext)
@@ -179,6 +181,7 @@ def inventario(nome: str, formato: str | None = None,
             (id_inventario,),
         )
         linhas = [dict(r) for r in cur.fetchall()]
+        timbre = catalogo_motor.papel_timbrado(cur)
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"inventario-{id_inventario}",
                             "exportar", depois={"formato": ext, "linhas": len(linhas)})
 
@@ -205,7 +208,7 @@ def inventario(nome: str, formato: str | None = None,
          ("Contagem", "cega — o saldo do sistema não sai daqui" if cega_aberta else "aberta"),
          ("Itens", len(linhas))],
     )
-    return _render(saida, f"inventario-{id_inventario}", ext)
+    return _render(saida, f"inventario-{id_inventario}", ext, timbre, ctx.nome)
 
 
 @router.get("/ficha/{nome}")
@@ -240,6 +243,7 @@ def ficha(nome: str, formato: str | None = None,
         if not f:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
         calculo = custos.custo_da_ficha(cur, id_ficha)
+        timbre = catalogo_motor.papel_timbrado(cur)
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"ficha-{id_ficha}",
                             "exportar", depois={"formato": ext, "com_custo": ve_custo})
 
@@ -345,9 +349,11 @@ def ficha(nome: str, formato: str | None = None,
         catalogo_motor.limite_do_pdf(len(linhas))
         return _entregar(
             exportacao.pdf_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
-                              subtitulo=(f"Botané Deli e Café — versão {f['versao']}"
+                              # ⚠️ Sem o nome da casa: ele está no timbre, logo
+                              # acima. Repetido, envelhece num dos dois lugares.
+                              subtitulo=(f"versão {f['versao']}"
                                          f" · {str(f['status']).lower()}"),
-                              notas=notas,
+                              notas=notas, empresa=timbre, emitido_por=ctx.nome,
                               # A ficha é um CARTÃO DE RECEITA: sai em retrato,
                               # que é a forma do papel que se pendura. Só cede à
                               # paisagem quando a receita usa colunas demais.
@@ -401,8 +407,9 @@ def exportar(relatorio: str, formato: str | None = None, filtros: _Filtros = Dep
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         saida = catalogo_motor.montar(cur, chave, id_unidade, filtros.como_dict)
+        timbre = catalogo_motor.papel_timbrado(cur)
         auditoria.registrar(
             cur, ctx.id_usuario, "exportacao", chave, "exportar",
             depois={"formato": ext, "linhas": len(saida.linhas), **filtros.preenchidos()},
             id_unidade=id_unidade)
-    return _render(saida, rel.base, ext)
+    return _render(saida, rel.base, ext, timbre, ctx.nome)
