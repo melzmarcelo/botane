@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Categoria, Local, Setor, TIPOS_PRODUTO } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import FiltroMultiplo from "@/components/filtro-multiplo";
 
 /**
  * Montar uma contagem.
@@ -103,6 +104,13 @@ export default function PaginaNovaContagem() {
   // ⚠️ Cega marcada por padrão: ver o saldo esperado transforma a contagem em
   // conferência — a pessoa lê 12, olha a prateleira e escreve 12.
   const [cega, setCega] = useState(true);
+  // 🔑 **Quem foi escalado para contar ESTA contagem.** Vazio quer dizer
+  // "qualquer um com a permissão de contar" — é o comportamento de sempre, e é
+  // o que faz esta tela não obrigar ninguém a escolher.
+  // ⚠️ Não é permissão, é escala: a permissão diz o que a pessoa sabe fazer,
+  // isto diz quem está no turno de hoje.
+  const [contadores, setContadores] = useState<number[]>([]);
+  const [equipe, setEquipe] = useState<{ id: number; nome: string }[]>([]);
 
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [carregandoPrevia, setCarregandoPrevia] = useState(false);
@@ -114,11 +122,16 @@ export default function PaginaNovaContagem() {
       api.get<Local[]>("/locais"),
       api.get<Setor[]>("/setores"),
       api.get<Categoria[]>("/categorias"),
+      // ⚠️ Falhar aqui não derruba a tela: quem não pode ver a lista de
+      // usuários ainda pode abrir contagem — ela só nasce sem escala, que é o
+      // padrão de qualquer jeito.
+      api.get<{ id: number; nome: string }[]>("/usuarios").catch(() => []),
     ])
-      .then(([l, s, c]) => {
+      .then(([l, s, c, u]) => {
         setLocais(l.filter((x) => x.ativo !== false));
         setSetores(s.filter((x) => x.ativo !== false));
         setCategorias(c.filter((x) => x.ativo !== false));
+        setEquipe(u as { id: number; nome: string }[]);
       })
       .catch((e) => setErro(e instanceof Error ? e.message : "Falha ao carregar"));
   }, []);
@@ -159,6 +172,7 @@ export default function PaginaNovaContagem() {
         setores: escSetores,
         categorias: escCategorias,
         tipos: escTipos,
+        contadores,
       });
       // Abrir uma contagem é o começo de CONTAR: leva direto para a tela de
       // contagem, em vez de devolver a pessoa à lista para clicar de novo.
@@ -255,6 +269,29 @@ export default function PaginaNovaContagem() {
           </label>
         </div>
       </Cartao>
+
+      {/* 🔑 **Quem conta é escala do dia, não papel.** A permissão diz que a
+          pessoa sabe contar; esta lista diz quem foi escalado para ESTA
+          contagem. Sem isso, restringir a contagem de hoje exigiria mexer nos
+          papéis — e desfazer amanhã. */}
+      {equipe.length > 0 && (
+        <Cartao
+          titulo="Quem vai contar"
+          descricao={
+            contadores.length
+              ? `${contadores.length} pessoa(s) escalada(s) — só elas conseguem digitar nesta contagem.`
+              : "Ninguém escolhido: qualquer pessoa com permissão de contar pode preencher."
+          }
+        >
+          <FiltroMultiplo
+            titulo="Pessoas"
+            ajuda="Deixe vazio para liberar a todos que podem contar."
+            opcoes={equipe.map((u) => ({ valor: u.id, nome: u.nome }))}
+            escolhidos={contadores}
+            aoTrocar={setContadores}
+          />
+        </Cartao>
+      )}
 
       <Cartao
         titulo="O que vai entrar"

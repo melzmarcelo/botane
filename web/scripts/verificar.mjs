@@ -973,7 +973,12 @@ try {
   const noNovo = await p.evaluate(() => {
     const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) =>
       x.textContent?.trim());
-    const cega = [...document.querySelectorAll('input[type="checkbox"]')].pop();
+    // ⚠️ **Pelo RÓTULO, nunca pela posição.** Era "a última caixinha da
+    // página" — e o cartão "Quem vai contar" passou a ter caixinhas depois
+    // dela, fazendo a checagem medir a escala de uma pessoa. Mesma armadilha
+    // do "primeiro elemento que casa", pela outra ponta.
+    const cega = [...document.querySelectorAll('input[type="checkbox"]')]
+      .find((c) => /contagem cega/i.test(c.closest("label")?.innerText ?? ""));
     return {
       filtros: ["Locais", "Setores", "Categorias", "Tipos de produto"].filter((f) =>
         rotulos.includes(f)),

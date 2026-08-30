@@ -110,6 +110,13 @@ class InventarioCreate(BaseModel):
     tipos: list[str] = Field(default_factory=list)
     # Lista explícita: entra mesmo sem saldo, porque quem nomeou sabe o que quer.
     produtos: list[int] = Field(default_factory=list)
+    # 🔑 **Quem foi ESCALADO para contar esta contagem.** Vazio quer dizer
+    # "qualquer um que tenha a permissão de contar" — que é o comportamento de
+    # sempre, e o que faz as contagens antigas continuarem valendo.
+    # ⚠️ Não é permissão, é escala: a permissão diz o que a pessoa sabe fazer;
+    # isto diz quem está no turno de hoje. Misturar as duas obrigaria a mexer em
+    # papel toda vez que a equipe mudasse.
+    contadores: list[int] = Field(default_factory=list)
 
 
 class InventarioRenomear(BaseModel):
@@ -154,3 +161,5 @@ class InventarioResponse(BaseModel):
     # O que gerou a lista, para quem abrir a contagem meses depois entender por
     # que são aqueles produtos e não outros.
     filtros: dict | None = None
+    # Quem foi escalado para contar. Vazio = qualquer um com a permissão.
+    contadores: list[dict] = []

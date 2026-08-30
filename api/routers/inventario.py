@@ -24,7 +24,38 @@ from services.custos import dec
 
 router = APIRouter(prefix="/inventarios", tags=["inventário"])
 
+# Contar e montar a contagem são trabalhos diferentes, feitos por gente
+# diferente: quem vai à prateleira precisa de uma coisa só — abrir a contagem
+# que já existe e digitar o que viu.
 _perm = requer_permissao("estoque.inventario")
+_perm_criar = requer_permissao("estoque.inventario_criar")
+
+
+def _pode_contar(cur, id_inventario: int, ctx: Contexto) -> bool:
+    """Esta pessoa foi escalada para ESTA contagem?
+
+    🔑 **Lista vazia quer dizer "qualquer um que tenha a permissão"** — é o
+    comportamento de sempre, e é o que faz as contagens antigas continuarem
+    valendo sem ninguém reconfigurar nada.
+    ⚠️ Quem pode CRIAR passa por cima da escala: é quem monta a contagem, e
+    ficar de fora da própria contagem seria uma trava sem propósito.
+    """
+    if "estoque.inventario_criar" in ctx.permissoes:
+        return True
+    cur.execute(
+        "SELECT id_usuario FROM inventario_contadores WHERE id_inventario = %s",
+        (id_inventario,),
+    )
+    escalados = {r["id_usuario"] for r in cur.fetchall()}
+    return not escalados or ctx.id_usuario in escalados
+
+
+def _exigir_contador(cur, id_inventario: int, ctx: Contexto) -> None:
+    if not _pode_contar(cur, id_inventario, ctx):
+        raise HTTPException(
+            status_code=403,
+            detail=("Esta contagem foi escalada para outras pessoas. "
+                    "Quem a abriu escolhe quem conta."))
 
 
 def _locais_por_produto(cur, id_inventario: int) -> dict[int, list[int]]:
@@ -126,6 +157,16 @@ def _montar(cur, id_inventario: int) -> dict:
     # linha sem nada ali não diz o que se está contando.
     inv["local"] = inv.pop("local_unico", None) or _rotulo_do_recorte(inv)
 
+    # Quem foi escalado. Lista vazia = qualquer um com a permissão de contar, e
+    # a tela precisa dizer isso em vez de mostrar um espaço em branco.
+    cur.execute(
+        """SELECT c.id_usuario, u.nome FROM inventario_contadores c
+             JOIN usuarios u ON u.id = c.id_usuario
+            WHERE c.id_inventario = %s ORDER BY u.nome""",
+        (id_inventario,),
+    )
+    inv["contadores"] = [dict(r) for r in cur.fetchall()]
+
     cur.execute(
         """SELECT ii.id, ii.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
                   ii.qtd_sistema, ii.qtd_contada, ii.custo_medio, ii.observacao,
@@ -177,6 +218,12 @@ def listar(limite: int = Query(default=100, ge=1, le=500),
            resposta: Response = None,
            ctx: Contexto = Depends(_perm)) -> list[dict]:
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        # 🔑 **Quem só CONTA vê só o que pode contar.** Mostrar a lista inteira
+        # para o conferente seria oferecer contagens que ele abre e não consegue
+        # preencher — o 403 chegaria no primeiro número digitado, depois de ele
+        # ter andado até a prateleira. Escala vazia continua valendo para todos.
+        so_as_minhas = "estoque.inventario_criar" not in ctx.permissoes
         cur.execute(
             """SELECT i.id, i.nome, i.id_local, l.nome AS local_unico, i.data, i.status,
                       i.observacao, i.criado_em, i.fechado_em, i.cega,
@@ -187,9 +234,20 @@ def listar(limite: int = Query(default=100, ge=1, le=500),
                       count(*) OVER () AS _total
                  FROM inventarios i
                  LEFT JOIN locais_estoque l ON l.id = i.id_local
+                -- ⚠️ A listagem não filtrava por loja: com duas, a contagem de
+                -- uma aparecia na tela da outra. Mesma correção que a de vendas
+                -- já tinha precisado.
+                WHERE i.id_unidade = %(u)s
+                  AND (NOT %(so_minhas)s OR NOT EXISTS (
+                        SELECT 1 FROM inventario_contadores c
+                         WHERE c.id_inventario = i.id)
+                       OR EXISTS (
+                        SELECT 1 FROM inventario_contadores c
+                         WHERE c.id_inventario = i.id AND c.id_usuario = %(eu)s))
                 ORDER BY i.data DESC, i.id DESC
-                LIMIT %s OFFSET %s""",
-            (limite, offset),
+                LIMIT %(limite)s OFFSET %(offset)s""",
+            {"u": id_unidade, "so_minhas": so_as_minhas, "eu": ctx.id_usuario,
+             "limite": limite, "offset": offset},
         )
         linhas = []
         for r in cur.fetchall():
@@ -207,7 +265,7 @@ def previa(
     setores: list[int] = Query(default=[]),
     categorias: list[int] = Query(default=[]),
     tipos: list[str] = Query(default=[]),
-    ctx: Contexto = Depends(_perm),
+    ctx: Contexto = Depends(_perm_criar),
 ) -> dict:
     """Quantos itens este recorte traria — antes de abrir a contagem.
 
@@ -239,7 +297,7 @@ def obter(id_inventario: int, ctx: Contexto = Depends(_perm)) -> dict:
 
 
 @router.post("", status_code=201)
-def abrir(body: InventarioCreate, ctx: Contexto = Depends(_perm)) -> dict:
+def abrir(body: InventarioCreate, ctx: Contexto = Depends(_perm_criar)) -> dict:
     """Abre a contagem congelando o saldo de cada par produto × local, agora.
 
     Os quatro filtros combinam com E, e vazio quer dizer "todos". `id_local`
@@ -322,16 +380,32 @@ def abrir(body: InventarioCreate, ctx: Contexto = Depends(_perm)) -> dict:
                  par["custo_medio"]),
             )
 
+        # ⚠️ **Só quem existe e está ativo.** Escalar alguém desligado deixaria a
+        # contagem com um dono que não entra no sistema — e a lista vazia, que
+        # quer dizer "qualquer um", é o oposto do que se pediu.
+        if body.contadores:
+            cur.execute("SELECT id FROM usuarios WHERE id = ANY(%s) AND ativo",
+                        (list(set(body.contadores)),))
+            validos = [r["id"] for r in cur.fetchall()]
+            if not validos:
+                raise HTTPException(
+                    400, "Nenhum dos usuários escolhidos para contar está ativo.")
+            for id_u in validos:
+                cur.execute(
+                    """INSERT INTO inventario_contadores (id_inventario, id_usuario)
+                       VALUES (%s, %s) ON CONFLICT DO NOTHING""", (novo, id_u))
+
         auditoria.registrar(cur, ctx.id_usuario, "inventario", novo, "abrir",
                             depois={"nome": body.nome, "itens": len(pares),
                                     "locais": locais, "setores": body.setores,
-                                    "categorias": body.categorias, "tipos": body.tipos})
+                                    "categorias": body.categorias, "tipos": body.tipos,
+                                    "contadores": body.contadores})
         return _montar(cur, novo)
 
 
 @router.put("/{id_inventario}/nome")
 def renomear(id_inventario: int, body: InventarioRenomear,
-             ctx: Contexto = Depends(_perm)) -> dict:
+             ctx: Contexto = Depends(_perm_criar)) -> dict:
     """Troca o nome da contagem. É rótulo: não mexe em item nem em razão.
 
     Vale também depois de fechada — quem quer achar "a contagem do Natal" seis
@@ -353,6 +427,7 @@ def renomear(id_inventario: int, body: InventarioRenomear,
 def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_perm)) -> dict:
     """Grava a contagem. Ainda não mexe no razão — isso é no fechamento."""
     with get_cursor() as cur:
+        _exigir_contador(cur, id_inventario, ctx)
         cur.execute("SELECT status, id_local FROM inventarios WHERE id = %s", (id_inventario,))
         inv = cur.fetchone()
         if not inv:
@@ -478,7 +553,7 @@ def fechar(id_inventario: int, ctx: Contexto = Depends(requer_permissao("estoque
 
 
 @router.delete("/{id_inventario}")
-def cancelar(id_inventario: int, ctx: Contexto = Depends(_perm)) -> dict:
+def cancelar(id_inventario: int, ctx: Contexto = Depends(_perm_criar)) -> dict:
     with get_cursor() as cur:
         cur.execute("SELECT status FROM inventarios WHERE id = %s", (id_inventario,))
         inv = cur.fetchone()

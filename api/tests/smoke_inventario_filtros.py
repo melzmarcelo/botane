@@ -271,6 +271,83 @@ checar("e a recusa explica que só entra o que tem saldo",
        "saldo" in str(r.get("detail", "")), r.get("detail"))
 
 
+print("\n9b. contar e MONTAR a contagem sao permissoes diferentes")
+# 🔑 Ate 30/08/2026 `estoque.inventario` dava as duas coisas: quem ia a
+# prateleira contar podia abrir contagem nova, escolher o recorte e cancelar a
+# dos outros. Quem conta precisa de uma coisa so — abrir a que existe e digitar.
+marca_p = str(time.time_ns())[-6:]
+st, papel = chamar("POST", "/papeis", {
+    "nome": f"So conta {marca_p}", "descricao": "contador de teste",
+    "permissoes": ["estoque.inventario", "estoque.saldos"],
+}, token=token)
+id_papel = (papel or {}).get("id")
+st, usr = chamar("POST", "/usuarios", {
+    "nome": f"Contador {marca_p}", "email": f"conta.{marca_p}@botane.com.br",
+    "senha": "conta12345", "papeis": [{"id_papel": id_papel}],
+}, token=token)
+id_contador = (usr or {}).get("id")
+st, log = chamar("POST", "/auth/login",
+                 {"email": f"conta.{marca_p}@botane.com.br", "senha": "conta12345"})
+tk_conta = (log or {}).get("access_token")
+checar("o contador entra no sistema", bool(tk_conta), (st, log))
+
+st, me_c = chamar("GET", "/auth/me", token=tk_conta)
+checar("ele tem a chave de contar", "estoque.inventario" in (me_c or {}).get("permissoes", []))
+checar("e NAO tem a de montar",
+       "estoque.inventario_criar" not in (me_c or {}).get("permissoes", []))
+
+st, r = chamar("POST", "/inventarios", {"locais": [l2["id"]]}, token=tk_conta)
+checar("montar contagem e recusado a quem so conta", st == 403, (st, r))
+
+# ⚠️ Escala VAZIA continua valendo para todos: e o comportamento de sempre, e e
+# o que faz as contagens antigas nao pararem de funcionar.
+# ⚠️ Produto EXPLICITO e o outro local: o recorte por local ja esta tomado
+# pelas contagens das fases anteriores, e a guarda de choque recusaria.
+st, inv_livre = chamar("POST", "/inventarios",
+                       {"produtos": [outro], "locais": [l2["id"]],
+                        "cega": False}, token=token)
+id_livre = (inv_livre or {}).get("id")
+checar("a contagem sem escala abre", st == 201, (st, inv_livre))
+if id_livre:
+    st, det_l = chamar("GET", f"/inventarios/{id_livre}", token=tk_conta)
+    primeiro = ((det_l or {}).get("itens") or [{}])[0]
+    st, r = chamar("PUT", f"/inventarios/{id_livre}/contagem",
+                   {"itens": [{"id_produto": primeiro.get("id_produto"), "qtd_contada": 1}]}, token=tk_conta)
+    checar("sem escala, quem tem a chave conta", st == 200, (st, r))
+
+# 🔑 Com escala, so quem foi escalado digita — e a recusa diz por que.
+st, inv_escala = chamar("POST", "/inventarios",
+                        {"produtos": [duplo], "locais": [l2["id"]],
+                         "cega": False, "contadores": [1]}, token=token)
+id_escala = (inv_escala or {}).get("id")
+checar("a contagem com escala abre", st == 201, (st, inv_escala))
+if id_escala:
+    st, det = chamar("GET", f"/inventarios/{id_escala}", token=token)
+    checar("o detalhe diz quem foi escalado",
+           len((det or {}).get("contadores") or []) == 1, (det or {}).get("contadores"))
+    item_e = ((det or {}).get("itens") or [{}])[0]
+    st, r = chamar("PUT", f"/inventarios/{id_escala}/contagem",
+                   {"itens": [{"id_produto": item_e.get("id_produto"), "qtd_contada": 1}]}, token=tk_conta)
+    checar("quem nao foi escalado e recusado", st == 403, (st, r))
+    checar("e a recusa explica a escala",
+           "escalada" in str((r or {}).get("detail", "")).lower(), (r or {}).get("detail"))
+    # ⚠️ E ela nem aparece na lista dele: oferecer uma contagem que ele abre e
+    # nao consegue preencher e o 403 chegando depois da caminhada ate a
+    # prateleira.
+    st, lista_c = chamar("GET", "/inventarios", token=tk_conta)
+    checar("nem aparece na lista de quem nao conta ela",
+           not any(i["id"] == id_escala for i in (lista_c or [])),
+           [i["id"] for i in (lista_c or [])][:5])
+
+for _id in (id_livre, id_escala):
+    if _id:
+        chamar("DELETE", f"/inventarios/{_id}", token=token)
+if id_contador:
+    chamar("DELETE", f"/usuarios/{id_contador}", token=token)
+if id_papel:
+    chamar("DELETE", f"/papeis/{id_papel}", token=token)
+
+
 print("\n10. limpeza")
 # ⚠️ Os produtos saem no fim. Com movimento eles viram INATIVOS em vez de serem
 # apagados — e é isso que os tira do recorte da próxima rodada: sem esta linha,

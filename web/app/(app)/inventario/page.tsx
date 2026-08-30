@@ -65,7 +65,9 @@ export default function PaginaInventario() {
             até você fechar — e o acerto entra como movimento, com nome e rastro.
           </p>
         </div>
-        {pode("estoque.inventario") && (
+        {/* ⚠️ Montar a contagem é outra permissão. Quem só conta não vê o botão —
+            e o servidor barra de qualquer jeito: aqui é dica de interface. */}
+        {pode("estoque.inventario_criar") && (
           <Link href="/inventario/novo" className="btn btn-primario">
             Nova contagem
           </Link>

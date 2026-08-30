@@ -1159,6 +1159,37 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **Contar e MONTAR a contagem viraram permissões diferentes** (migração 045, 30/08/2026).
+  `estoque.inventario` dava as duas coisas: quem ia à prateleira contar podia abrir contagem
+  nova, escolher o recorte e cancelar a dos outros. A chave nova é **`estoque.inventario_criar`**
+  (abrir, configurar, renomear, cancelar); a antiga ficou sendo **contar**.
+  ⚠️ **A chave NOVA é a de criar, não a de contar** — e a escolha não é estética. Invertê-la
+  faria todo mundo que hoje conta parar de contar no instante do deploy, até alguém
+  reconfigurar os papéis. A migração dá a chave nova a quem já tinha a antiga: **ninguém perde
+  o que já fazia**.
+  🔑 **E cada contagem diz quem conta** (`inventario_contadores`). ⚠️ **Lista vazia quer dizer
+  "qualquer um com a permissão"** — é o comportamento de sempre, e é o que faz as contagens
+  antigas continuarem valendo sem ninguém reconfigurar nada.
+  ⚠️ **Não é permissão, é ESCALA.** A permissão diz o que a pessoa sabe fazer; a lista diz quem
+  está no turno de hoje. Misturar as duas obrigaria a mexer em papel toda vez que a equipe do
+  dia mudasse — e a desfazer amanhã. Quem pode CRIAR passa por cima da escala: ficar de fora da
+  própria contagem seria trava sem propósito.
+  ⚠️ **Quem só conta VÊ só o que pode contar.** Mostrar a lista inteira seria oferecer contagens
+  que a pessoa abre e não consegue preencher — o 403 chegaria no primeiro número digitado,
+  depois da caminhada até a prateleira. E a escala aparece no cabeçalho da contagem, para quem
+  não consegue digitar saber por quê sem perguntar a ninguém.
+  ⚠️ **A listagem de inventários não filtrava por LOJA** — com duas, a contagem de uma
+  apareceria na tela da outra. Mesma correção que a de vendas já precisou.
+  ⚠️ **E a checagem da "contagem cega" pegava a ÚLTIMA caixinha da página** — o cartão novo
+  "Quem vai contar" passou a ter caixinhas depois dela, e o teste media a escala de uma pessoa.
+  Achar por RÓTULO, nunca por posição: é a armadilha do "primeiro elemento que casa", pela
+  outra ponta.
+- 📄 **O estudo da SEGUNDA LOJA está em [`docs/segunda-loja.md`](docs/segunda-loja.md)**
+  (30/08/2026), com a ordem aprovada. 🔑 O achado que manda: **`custos.custo_do_insumo` faz a
+  média de `estoque_saldos` sem filtrar `id_unidade`** — com duas lojas, o insumo que uma
+  comprou a R$ 40 e a outra a R$ 52 passa a valer R$ 45,30 nas duas, contaminando ficha, CMV
+  teórico, margem e food cost. É silencioso, e o custo do item de venda é CONGELADO: o erro
+  fica gravado. Também não há transferência entre lojas, e a loja nova nasce sem local.
 - 🔑 **O botão "Importar cardápio" virou o momento de ALINHAR com o PDV** (30/08/2026,
   decisão do dono). Ele sobrescreve nome curto, categoria, setor, unidade, NCM, CEST, EAN,
   **situação** e **preço**. Antes só preenchia o que estava em branco, com a regra "reimportar
@@ -1614,12 +1645,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.453 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.464 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
-  `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
+  `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
   `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e

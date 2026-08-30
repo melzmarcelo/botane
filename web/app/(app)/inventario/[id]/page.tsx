@@ -74,6 +74,8 @@ type Inventario = {
     categorias: string[];
     tipos: string[];
   } | null;
+  /** Quem foi escalado. Vazio = qualquer um com permissão de contar. */
+  contadores?: { id_usuario: number; nome: string }[];
 };
 
 /**
@@ -305,7 +307,9 @@ export default function PaginaContagem() {
         ) : (
           <h1 className="mt-1 flex flex-wrap items-baseline gap-x-3 text-[24px] font-bold tracking-tight sm:text-[30px]">
             {inv.nome || inv.local}
-            {pode("estoque.inventario") && (
+            {/* Renomear é rótulo, mas é configuração da contagem: fica com
+                quem a monta. */}
+            {pode("estoque.inventario_criar") && (
               <button
                 className="link-acao"
                 onClick={() => {
@@ -325,6 +329,13 @@ export default function PaginaContagem() {
           {/* Quando a contagem cobre mais de um local, o cabeçalho diz de onde
               ela é — a lista de itens sozinha não responde isso de relance. */}
           {inv.id_local === null && <Etiqueta>vários locais</Etiqueta>}
+          {/* A escala fica à vista: quem abre a contagem e não consegue digitar
+              precisa saber por quê, sem ter de perguntar a alguém. */}
+          {!!inv.contadores?.length && (
+            <Etiqueta>
+              contam: {inv.contadores.map((c) => c.nome.split(" ")[0]).join(", ")}
+            </Etiqueta>
+          )}
           {aberto ? (
             <Etiqueta cor="alerta">aberto</Etiqueta>
           ) : (
