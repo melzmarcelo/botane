@@ -15,6 +15,7 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
 
 type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
@@ -74,6 +75,26 @@ export default function PaginaCadastros() {
   const primeira = (ABAS.find((a) => pode(a.chave)) ?? ABAS[0]).id;
   const aba: Aba = ABAS.some((a) => a.id === pedida) ? (pedida as Aba) : primeira;
   const setAba = (nova: Aba) => router.replace(`/cadastros?aba=${nova}`);
+  /**
+   * 🔑 **"Poucos por natureza" deixou de ser verdade.** Estas tabelas ficaram
+   * FORA da paginação de propósito, com o argumento de que rodapé de página em
+   * lista de três linhas é ruído. Numa base real são **180 locais, 86
+   * categorias e 52 setores** — e a lista inteira numa página só empurra o
+   * formulário de cadastro para fora da tela e obriga a rolar para achar o
+   * registro que se quer corrigir.
+   *
+   * ⚠️ **Aqui o corte é do NAVEGADOR, e isso não é a mentira que a regra da
+   * casa proíbe.** A regra existe para lista que pode crescer sem teto: trazer
+   * 3.226 produtos e fatiar aqui deixaria a lista cortada por um `LIMIT` que
+   * ninguém vê. Estas cinco vêm INTEIRAS do servidor porque a tela também as
+   * usa para editar, e o rodapé conta o que ela realmente tem em mãos — o total
+   * é o total de verdade, não uma promessa.
+   *
+   * ⚠️ A aba entra como FILTRO: trocar de aba volta para a primeira página,
+   * senão quem estava na página 5 dos locais cairia numa tela vazia nas
+   * unidades de medida.
+   */
+  const pag = usePaginacao("cadastros", { filtros: [aba] });
   const [setores, setSetores] = useState<Setor[] | null>(null);
   const [locais, setLocais] = useState<Local[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
@@ -117,6 +138,23 @@ export default function PaginaCadastros() {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível concluir");
     }
   }
+
+  // O total é o da aba VISÍVEL: um rodapé dizendo "de 180" numa lista de 10
+  // unidades de medida seria pior que rodapé nenhum.
+  const quantosNaAba =
+    aba === "setores"
+      ? setores?.length
+      : aba === "locais"
+        ? locais?.length
+        : aba === "categorias"
+          ? categorias?.length
+          : aba === "unidades"
+            ? ums?.length
+            : 0;
+  const { setTotal } = pag;
+  useEffect(() => {
+    setTotal(quantosNaAba ?? 0);
+  }, [quantosNaAba, setTotal]);
 
   const podeAba = (a: Aba) => pode(ABAS.find((x) => x.id === a)!.chave);
   const atual = ABAS.find((a) => a.id === aba)!;
@@ -203,7 +241,7 @@ export default function PaginaCadastros() {
                   virava um bloco cinza sem conteúdo. Sem itens, não há lista. */}
               {!setores.length && <Vazio>Nenhum setor.</Vazio>}
               <ul className="flex flex-col gap-px bg-linha empty:hidden">
-                {setores.map((s) => (
+                {fatiar(setores, pag).map((s) => (
                   <li
                     key={s.id}
                     className={`flex items-center justify-between gap-3 bg-superficie py-2.5 ${
@@ -252,6 +290,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
+              <Paginacao p={pag} rotulo="setor(es)" />
 
             </>
           )}
@@ -307,7 +346,7 @@ export default function PaginaCadastros() {
               )}
               {!locais.length && <Vazio>Nenhum local de estoque.</Vazio>}
               <ul className="flex flex-col gap-px bg-linha empty:hidden">
-                {locais.map((l) => (
+                {fatiar(locais, pag).map((l) => (
                   <li
                     key={l.id}
                     className={`flex flex-wrap items-center justify-between gap-3 bg-superficie py-2.5 ${
@@ -350,6 +389,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
+              <Paginacao p={pag} rotulo="local(is)" />
 
             </>
           )}
@@ -425,7 +465,7 @@ export default function PaginaCadastros() {
               )}
               {!categorias.length && <Vazio>Nenhuma categoria.</Vazio>}
               <ul className="flex flex-col gap-px bg-linha empty:hidden">
-                {categorias.map((c) => (
+                {fatiar(categorias, pag).map((c) => (
                   <li
                     key={c.id}
                     className={`flex flex-wrap items-center justify-between gap-3 bg-superficie py-2.5 ${
@@ -475,6 +515,7 @@ export default function PaginaCadastros() {
                   </li>
                 ))}
               </ul>
+              <Paginacao p={pag} rotulo="categoria(s)" />
 
             </>
           )}
@@ -568,7 +609,7 @@ export default function PaginaCadastros() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ums.map((u) => (
+                    {fatiar(ums, pag).map((u) => (
                       <tr key={u.sigla} className={u.ativo ? "" : "opacity-55"}>
                         <td className="mono font-semibold">{u.sigla}</td>
                         <td>{u.nome}</td>
@@ -594,6 +635,7 @@ export default function PaginaCadastros() {
                     ))}
                   </tbody>
                 </table>
+              <Paginacao p={pag} rotulo="unidade(s)" />
               </div>
 
             </>

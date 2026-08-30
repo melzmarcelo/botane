@@ -130,16 +130,27 @@ st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
 st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
 existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
+# ⚠️ **Cria quando NÃO existe.** A versão anterior só ajustava o que já
+# estava lá: depois de uma limpeza que leva os usuários de teste, o login
+# seguinte voltava 401 e a checagem tentava iterar a MENSAGEM de erro como
+# se fosse a lista de alertas — o traceback caía longe da causa.
 if existente:
     chamar("PUT", f"/usuarios/{existente['id']}",
            {"ativo": True, "senha": COZINHA[1], "papeis": [{"id_papel": id_cozinha}]}, token=token)
+else:
+    chamar("POST", "/usuarios",
+           {"nome": "Cozinha do teste", "email": COZINHA[0], "senha": COZINHA[1],
+            "papeis": [{"id_papel": id_cozinha}]}, token=token)
 st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
 tk = r.get("access_token")
 st, alertas_cozinha = chamar("GET", "/alertas", token=tk)
-checar("cozinha também recebe alertas", st == 200, st)
+checar("cozinha também recebe alertas", st == 200, (st, alertas_cozinha))
+# ⚠️ Só itera se veio LISTA: um corpo de erro é string, e indexá-lo como
+# dicionário derruba a suíte inteira longe do que falhou de verdade.
 checar("mas não os de compras e CMV",
-       not any(a["chave"].startswith(("compras.", "cmv.")) for a in alertas_cozinha),
-       [a["chave"] for a in alertas_cozinha])
+       isinstance(alertas_cozinha, list)
+       and not any(a["chave"].startswith(("compras.", "cmv.")) for a in alertas_cozinha),
+       alertas_cozinha)
 
 print("5. exportação em CSV")
 st, csv, cabecalhos = chamar("GET", "/exportar/saldos.csv", token=token, bruto=True)

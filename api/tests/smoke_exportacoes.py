@@ -266,7 +266,14 @@ checar("ela diz também se cabe em PDF",
 # ⚠️ A prévia tem de contar o ARQUIVO, anexo incluído: o CMV é 10 linhas de
 # apuração mais a margem por prato, e dizer "10" faria o contador abrir outra coisa.
 st, p_cmv = chamar("GET", f"/exportar/cmv/previa?{periodo}", token=token)
-checar("e conta o anexo junto no relatório composto", p_cmv["linhas"] > 10, p_cmv)
+# ⚠️ **Contra o TAMANHO do anexo, não contra "> 10".** Numa base sem venda a
+# margem por prato vem vazia e o arquivo tem só as 10 linhas da apuração — a
+# versão anterior lia isso como "o anexo sumiu" e acusava um defeito que não
+# existe. O que se afirma é a soma: apuração + anexo, seja qual for o anexo.
+st, _margem = chamar("GET", f"/cmv/margem?{periodo}", token=token)
+_anexo = len(_margem or []) if isinstance(_margem, list) else 0
+checar("e conta o anexo junto no relatório composto",
+       p_cmv["linhas"] == 10 + _anexo, (p_cmv, _anexo))
 
 
 print("7. planilha e PDF saem do MESMO recorte")

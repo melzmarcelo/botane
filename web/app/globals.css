@@ -18,6 +18,11 @@
   --color-latao: #9a6e24;
   --color-alerta: #a9711a;
   --color-erro: #95332a;
+  /* Fundos TINGIDOS dos avisos. O `erva-claro` já existia e servia ao verde;
+     sem os outros dois, aviso de erro e de atenção só podiam ser uma linha
+     colorida — e linha fina não separa recado de parágrafo. */
+  --color-erro-claro: #f7e7e4;
+  --color-alerta-claro: #f6ecd9;
 
   --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --font-corpo: "Newsreader", Georgia, serif;
@@ -77,6 +82,100 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
    CSS sem camada ganha da utilitária — foi assim que o "fechar" do menu
    quase passou a aparecer no desktop. */
 @layer components {
+  /* ---- o menu lateral ----
+     🔑 **O menu era SERIF.** `font-corpo` (Newsreader) é a fonte do texto que se
+     LÊ — parágrafo, descrição, tabela. Navegação não se lê: percorre-se com o
+     olho, item a item, procurando uma palavra. Serifa em lista curta e vertical
+     cansa a varredura e faz o menu parecer um índice de livro. Aqui vale a
+     `font-display`, que é a fonte dos controles do sistema — e a coerência já
+     existia: o `<button>` do grupo pegava a display por causa da regra de base,
+     e o `<a>` do item, não. Metade do menu estava numa fonte, metade na outra.
+
+     ⚠️ **Vão em `@layer components` porque definem `display`** — CSS sem camada
+     vence a utilitária do Tailwind, e um `lg:hidden` sobre elas deixaria de
+     valer. É a mesma nota do `.campo` e do `.link-acao`. */
+  .menu-grupo {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 9px;
+    padding: 7px 10px;
+    text-align: left;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-suave);
+  }
+  .menu-grupo:hover { background: var(--color-superficie2); }
+  /* "Você está aqui" com o grupo recolhido: o título é a única pista que sobra. */
+  .menu-grupo-ativo { color: var(--color-erva); }
+
+  .menu-item {
+    display: block;
+    position: relative;
+    border-radius: 9px;
+    padding: 9px 10px 9px 22px;
+    font-family: var(--font-display);
+    /* ⚠️ 15px no toque, 14.5 no ponteiro: o alvo do dedo não é o do mouse. */
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.004em;
+    color: var(--color-tinta);
+  }
+  .menu-item:hover { background: var(--color-superficie2); }
+  .menu-item-ativo {
+    background: var(--color-erva-claro);
+    font-weight: 600;
+    color: var(--color-erva);
+  }
+  /* A marca do item aberto é uma BARRA, não só a cor de fundo: com seis grupos
+     recolhidos, a pílula sozinha se perde entre os títulos. Feita com
+     `::before` para não empurrar o texto quando aparece. */
+  .menu-item-ativo::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--color-erva);
+  }
+  /* 🔑 **O Início é de PRIMEIRO nível, e tem de parecer.** Escrito com
+     `.menu-item` — 14,5px, caixa normal, indentado —, ele lia como um subitem
+     solto no topo, como se pertencesse a um grupo que não estava ali: a lista
+     começava com um filho antes do primeiro pai. Aqui ele usa a mesma tinta dos
+     títulos de grupo, que é o nível a que ele pertence. Sem chevron, porque não
+     abre nada — e é a ausência dele que diz isso. */
+  .menu-raiz {
+    display: block;
+    border-radius: 9px;
+    padding: 7px 10px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-suave);
+  }
+  .menu-raiz:hover { background: var(--color-superficie2); }
+  /* ⚠️ O título de grupo ativo só muda de COR: ele contém a tela aberta, não é
+     a tela aberta. O Início É — e por isso ganha o fundo, que é a marca de
+     "você está nesta". */
+  .menu-raiz-ativo {
+    background: var(--color-erva-claro);
+    color: var(--color-erva);
+  }
+
+  @media (min-width: 1024px) {
+    .menu-item { padding-top: 6.5px; padding-bottom: 6.5px; font-size: 14.5px; }
+    .menu-item-ativo::before { top: 6.5px; bottom: 6.5px; }
+  }
+
   /* Ação escrita com `.rotulo` — 10,5px, mono, MAIÚSCULAS, cinza — é a mesma tinta
      do `<th>` da tabela e da legenda do campo: lia como rótulo, não como controle.
      É exatamente o defeito que o "Voltar" tinha, repetido em trinta lugares —
@@ -148,7 +247,7 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 .campo {
   width: 100%;
   border: 1px solid var(--color-linha2);
-  border-radius: 4px;
+  border-radius: 9px;
   background: var(--color-superficie);
   padding: 8px 11px;
   font-size: 15px;
@@ -170,16 +269,56 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   border-color: var(--color-erva);
 }
 .campo:disabled { background: var(--color-superficie2); color: var(--color-suave); }
+/* 🔑 **4px de raio é canto vivo disfarçado.** A tela é feita de caixas — cartão,
+   aviso, etiqueta, botão, campo —, e num raio tão curto todas elas leem como
+   recorte de papel: a forma não se percebe, só a borda. Com 14px o cartão vira
+   um objeto pousado sobre o papel, que é o que ele quer dizer.
+   ⚠️ A sombra é DUPLA e quase invisível de propósito: uma linha de 1px logo
+   abaixo, que separa do fundo, e um halo largo e muito claro, que dá a altura.
+   Sombra única e escura faria a tela parecer um site de 2012. */
 .cartao {
   border: 1px solid var(--color-linha);
-  border-radius: 4px;
+  border-radius: 14px;
   background: var(--color-superficie);
+  box-shadow:
+    0 1px 2px rgba(20, 32, 26, 0.04),
+    0 10px 28px -18px rgba(20, 32, 26, 0.22);
+}
+
+/* ---- o balão de recado ----
+   🔑 **O aviso era uma LINHA, não um balão.** Uma barra de 2px à esquerda e o
+   texto solto no fundo da página: no meio de uma tela com cartões, ele lia como
+   mais um parágrafo com a cor trocada. Recado precisa de FORMA própria para o
+   olho parar nele — fundo tingido, borda da mesma família e cantos redondos. */
+.aviso {
+  border-radius: 12px;
+  border: 1px solid;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.aviso-info {
+  border-color: color-mix(in srgb, var(--color-alerta) 28%, transparent);
+  background: var(--color-alerta-claro);
+  color: var(--color-alerta);
+}
+.aviso-ok {
+  border-color: color-mix(in srgb, var(--color-erva) 28%, transparent);
+  background: var(--color-erva-claro);
+  color: var(--color-erva);
+}
+.aviso-erro {
+  border-color: color-mix(in srgb, var(--color-erro) 28%, transparent);
+  background: var(--color-erro-claro);
+  color: var(--color-erro);
 }
 .btn {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
-  border-radius: 4px;
+  /* ⚠️ Acompanha o cartão. Botão de canto vivo dentro de cartão redondo são
+     duas linguagens na mesma tela, e a mais dura é a que se nota. */
+  border-radius: 9px;
   padding: 8px 16px;
   border: 1px solid transparent;
   cursor: pointer;

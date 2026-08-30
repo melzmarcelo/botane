@@ -52,14 +52,11 @@ export function Campo({
 }
 
 export function Aviso({ tipo, children }: { tipo: "erro" | "ok" | "info"; children: ReactNode }) {
-  const cor =
-    tipo === "erro"
-      ? "border-erro text-erro"
-      : tipo === "ok"
-        ? "border-erva text-erva"
-        : "border-latao text-latao";
+  // A forma mora no CSS (`.aviso`), não em oito utilitárias repetidas aqui: o
+  // aviso aparece em quase toda tela, e um balão diferente por página seria a
+  // primeira coisa a divergir.
   return (
-    <p className={`border-l-2 py-1 pl-3 text-[14px] ${cor}`} role="status">
+    <p className={`aviso aviso-${tipo}`} role="status">
       {children}
     </p>
   );
@@ -81,7 +78,7 @@ export function Etiqueta({ cor = "neutro", children }: { cor?: "neutro" | "erva"
         ? "border-alerta/40 text-alerta"
         : "border-linha2 text-suave";
   return (
-    <span className={`mono inline-block rounded-full border px-2 py-0.5 text-[11px] ${estilo}`}>
+    <span className={`mono inline-block rounded-full border px-2.5 py-[3px] text-[11px] ${estilo}`}>
       {children}
     </span>
   );

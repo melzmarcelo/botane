@@ -262,6 +262,17 @@ não só se a caixinha está marcada.
 
 ## 6. Promover uma versão
 
+**Antes do merge, suba o último número da `VERSAO`** em `api/main.py` (`1.1.xx` → `1.1.xx+1`).
+
+🔑 **`xx` conta as PROMOÇÕES, não os commits.** É o número que aparece no rodapé do sistema e
+que a pessoa repete ao pedir ajuda: ele precisa responder *"qual entrega você está usando?"*.
+Contando commit, dois números diferentes poderiam ser o mesmo sistema no ar — e o rodapé
+deixaria de servir para o que existe.
+
+⚠️ **Quem mostra o número é `GET /saude`**, lido pelo rodapé — nunca uma constante compilada
+no front. Uma constante diria o que foi COMPILADO; o `/saude` diz o que está NO AR, que é a
+pergunta que se faz quando algo não bate. Mesma razão da `impressao`.
+
 ```bash
 git checkout producao && git merge main
 ```

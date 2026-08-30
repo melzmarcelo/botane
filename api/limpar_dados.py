@@ -45,6 +45,11 @@ OPERACAO = [
     # cadastro de produto e o que depende dele
     "kit_itens", "ficha_itens", "fichas_tecnicas",
     "produto_precos", "produto_fornecedor", "produto_unidades", "produtos", "fornecedores",
+    # o que já mandamos ao PDV — e o que estava esperando ir
+    # ⚠️ **A fila do PDV é DERIVADA, e por isso aguenta perder o histórico**: ela
+    # relê o cardápio de lá e reconhece o que já está adotado. O que não pode
+    # ficar é pendência e envio apontando para produto que não existe mais.
+    "pdv_pendencias", "pdv_envios",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]
@@ -82,7 +87,12 @@ def _sql_usuarios(so_o_admin: bool, contar: bool = False) -> str:
     filtro = (
         "email <> %s"
         if so_o_admin
+        # ⚠️ `semana.` faltava, e são CINCO por rodada: `cenario_semana.py` cria
+        # um usuário por papel (gerente, conferente, cozinha, salão, contador).
+        # Sem eles no filtro, a base "entregue ao cliente" ia com a equipe de
+        # uma suíte dentro.
         else """(email LIKE 'smoke.%%' OR email LIKE 'tela.%%'
+                 OR email LIKE 'semana.%%'
                  OR email LIKE '%%.teste@%%' OR email LIKE 'cozinha.teste@%%')
                 AND email <> %s"""
     )

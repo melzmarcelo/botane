@@ -1,7 +1,44 @@
 [
-  {"codigo": 328939, "nome": "ALMOCO", "corIcone": "F5821F", "codRefExterna": 0, "ativo": true},
-  {"codigo": 328953, "nome": "CAFETERIA", "corIcone": "2980B9", "codRefExterna": 0, "ativo": true},
-  {"codigo": 328954, "nome": "CHA", "corIcone": "27AE60", "codRefExterna": 0, "ativo": true},
-  {"codigo": 437095, "nome": "DIA DOS NAMORADOS", "corIcone": "95A5A6", "codRefExterna": 0, "ativo": false},
-  {"codigo": 999001, "nome": "GRUPO SO DO PDV", "corIcone": "7F8C8D", "codRefExterna": 0, "ativo": true}
+  {
+    "codigo": 328939,
+    "nome": "ALMOCO",
+    "corIcone": "F5821F",
+    "codRefExterna": 0,
+    "ativo": true
+  },
+  {
+    "codigo": 328953,
+    "nome": "CAFETERIA",
+    "corIcone": "2980B9",
+    "codRefExterna": 0,
+    "ativo": true
+  },
+  {
+    "codigo": 328954,
+    "nome": "CHA",
+    "corIcone": "27AE60",
+    "codRefExterna": 0,
+    "ativo": true
+  },
+  {
+    "codigo": 437095,
+    "nome": "DIA DOS NAMORADOS",
+    "corIcone": "95A5A6",
+    "codRefExterna": 0,
+    "ativo": false
+  },
+  {
+    "codigo": 999001,
+    "nome": "GRUPO SO DO PDV",
+    "corIcone": "7F8C8D",
+    "codRefExterna": 0,
+    "ativo": true
+  },
+  {
+    "codigo": 999002,
+    "nome": "GRUPO ORFAO DO PDV",
+    "corIcone": "F5821F",
+    "codRefExterna": 987654321,
+    "ativo": true
+  }
 ]

@@ -121,7 +121,11 @@ checar("ficha homologada", st == 200, (st, r))
 print("\n2. a venda")
 documento = f"VENDA-{marca}"
 st, r = chamar("POST", "/vendas/importar", {"vendas": [{
-    "data": hoje, "documento": documento, "origem": "MANUAL", "canal": "BALCAO",
+    # 🔑 A HORA do cupom. A coluna existia desde o comeco e o mapeador do PDV ja
+    # a lia — ela so nunca chegava ao INSERT, e o dado morria no caminho. Sem
+    # ela, todas as vendas de um dia sao a mesma coisa para quem procura uma.
+    "data": hoje, "hora": "14:37:05",
+    "documento": documento, "origem": "MANUAL", "canal": "BALCAO",
     "itens": [
         {"id_produto": prato, "quantidade": 3, "valor_unitario": 30},
         # ⚠️ Item sem produto de propósito: é ele que faz o detalhe ter de dizer
@@ -132,6 +136,12 @@ st, r = chamar("POST", "/vendas/importar", {"vendas": [{
 }]}, token=token)
 checar("venda importada", st == 201 and r.get("importadas") == 1, (st, r))
 checar("um item ficou sem vínculo", r.get("itens_sem_vinculo") == 1, r)
+
+# ⚠️ Ida e volta: gravada na importacao, devolvida na LISTA e no DETALHE. A do
+# detalhe ja aparecia na tela; a da lista nao existia.
+st, _lista = chamar("GET", f"/vendas?busca={documento}", token=token)
+checar("a hora do cupom volta na lista",
+       (_lista or [{}])[0].get("hora", "")[:5] == "14:37", _lista)
 
 st, r = chamar("POST", "/vendas/importar", {"vendas": [{
     "data": hoje, "documento": documento, "origem": "MANUAL",

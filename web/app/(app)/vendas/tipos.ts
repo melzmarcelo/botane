@@ -8,6 +8,8 @@
 export type Venda = {
   id: number;
   data: string;
+  /** A hora do cupom. Nula na venda digitada: a planilha não a tem. */
+  hora: string | null;
   origem: string;
   canal: string | null;
   documento: string | null;
@@ -103,6 +105,16 @@ export const ORIGEM_CUSTO: Record<string, string> = {
 
 export const dataBr = (d: string | null | undefined) =>
   d ? new Date(d.slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+
+/**
+ * A hora do cupom, curta.
+ *
+ * ⚠️ **Nunca "00:00" quando não há hora.** A venda digitada não tem hora
+ * nenhuma, e meia-noite é um horário — quem lesse concluiria que a casa vendeu
+ * na virada do dia. Sem hora, não se escreve nada.
+ */
+export const horaBr = (h: string | null | undefined) =>
+  h ? String(h).slice(0, 5) : "";
 
 /**
  * Lê a planilha colada (ou o CSV do PDV) e devolve as linhas.

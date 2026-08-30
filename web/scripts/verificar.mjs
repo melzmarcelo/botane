@@ -316,13 +316,18 @@ try {
     await foto(p, nome);
   }
 
-  const menu = await p.evaluate(() => document.querySelector("aside")?.innerText ?? "");
+  // ⚠️ **Pelo DOM, nao pelo `innerText`.** Com os grupos recolhidos o
+  // `display: none` tira os itens do texto visivel — e a pergunta aqui e "o
+  // menu OFERECE estas telas?", nao "elas estao a vista neste instante".
+  const menu = await p.evaluate(() =>
+    [...document.querySelectorAll("aside a")].map((a) => a.textContent.trim()).join(" | "));
   checar("menu do admin traz Empresa", menu.includes("Empresa"));
   checar("menu do admin traz Papéis", menu.includes("Papéis"));
   checar("menu do admin traz Auditoria", menu.includes("Auditoria"));
 
-  // O grupo da tela aberta começa expandido — mas é só o padrão. Quem quer o
-  // menu enxuto tem de conseguir recolhê-lo mesmo estando dentro dele.
+  // 🔑 **Todo grupo comeca RECOLHIDO, inclusive o da tela aberta.** Antes ele
+  // se expandia sozinho, e o menu ia abrindo grupos conforme se navegava ate
+  // nao caber na altura da tela. Quem diz "voce esta aqui" e a cor do titulo.
   await irPara(p, `${WEB}/empresa`);
   await new Promise((r) => setTimeout(r, 1200));
   const grupoDaTela = () =>
@@ -331,29 +336,28 @@ try {
         .find((x) => /administra/i.test(x.innerText));
       const link = [...document.querySelectorAll("aside a")]
         .find((x) => x.textContent === "Empresa");
-      return { aberto: b?.getAttribute("aria-expanded"), visivel: link?.offsetParent !== null };
+      return { aberto: b?.getAttribute("aria-expanded"),
+               ativo: !!b?.className.includes("menu-grupo-ativo"),
+               visivel: link?.offsetParent !== null };
     });
   const antesDoClique = await grupoDaTela();
-  checar("o grupo da tela aberta começa expandido", antesDoClique.aberto === "true",
+  checar("o grupo da tela aberta começa recolhido", antesDoClique.aberto === "false",
     antesDoClique);
+  checar("mas o titulo dele diz onde se esta", antesDoClique.ativo, antesDoClique);
   await p.evaluate(() => {
     [...document.querySelectorAll("aside button")]
       .find((x) => /administra/i.test(x.innerText))?.click();
   });
   await new Promise((r) => setTimeout(r, 500));
   const depoisDoClique = await grupoDaTela();
-  checar("mas pode ser recolhido mesmo com a tela dele aberta",
-    depoisDoClique.aberto === "false" && depoisDoClique.visivel === false, depoisDoClique);
+  checar("um clique abre o grupo e mostra os itens",
+    depoisDoClique.aberto === "true" && depoisDoClique.visivel === true, depoisDoClique);
   await irPara(p, `${WEB}/empresa`);
   await new Promise((r) => setTimeout(r, 1200));
-  checar("e continua recolhido ao voltar para a tela",
-    (await grupoDaTela()).aberto === "false");
-  // Deixa aberto de novo: as fases seguintes clicam em links do menu.
-  await p.evaluate(() => {
-    [...document.querySelectorAll("aside button")]
-      .find((x) => /administra/i.test(x.innerText))?.click();
-  });
-  await new Promise((r) => setTimeout(r, 400));
+  // ⚠️ A escolha e da PESSOA e sobrevive a navegacao — o que nao sobrevive
+  // e o login, que recolhe tudo de novo.
+  checar("e continua aberto ao voltar para a tela",
+    (await grupoDaTela()).aberto === "true");
 
   console.log("3. usuário de Cozinha");
   coletando = false;
@@ -367,7 +371,12 @@ try {
   await p.goto(WEB + "/", { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 700));
   await foto(p, "09-cozinha-inicio");
-  const menuCozinha = await p.evaluate(() => document.querySelector("aside")?.innerText ?? "");
+  // ⚠️ **Pelo DOM tambem, e aqui a razao e mais forte:** com os grupos
+  // recolhidos, "nao aparece no texto visivel" passaria para QUALQUER item,
+  // inclusive os que a pessoa tem. A checagem negativa ficaria verde sem
+  // provar nada — que e o pior tipo de teste.
+  const menuCozinha = await p.evaluate(() =>
+    [...document.querySelectorAll("aside a")].map((a) => a.textContent.trim()).join(" | "));
   checar("cozinha NÃO vê Empresa no menu", !menuCozinha.includes("Empresa"), menuCozinha);
   checar("cozinha NÃO vê Usuários no menu", !menuCozinha.includes("Usuários"));
   checar("cozinha NÃO vê Auditoria no menu", !menuCozinha.includes("Auditoria"));
@@ -624,6 +633,27 @@ try {
     exportacao.pendentes && exportacao.integrados && exportacao.erros, exportacao);
   checar("e com o envio ligado ela não diz que está desligado",
     !exportacao.recusou, exportacao);
+  // A fila de envio tambem pagina — e aqui o corte e do NAVEGADOR de proposito:
+  // ela e derivada da comparacao com o cardapio inteiro, entao nao ha `LIMIT`
+  // no servidor que a barateie, e o botao Enviar precisa saber de TODOS os
+  // pendentes, nao dos vinte a vista.
+  const pagFila = await p.evaluate(() => {
+    const rodape = [...document.querySelectorAll("main span")]
+      .find((e) => /^\d+.\d+ de /.test(e.textContent || ""));
+    return {
+      temRodape: !!rodape,
+      texto: rodape?.textContent?.trim() ?? "",
+      linhas: document.querySelectorAll("main tbody tr").length,
+    };
+  });
+  if (pagFila.temRodape) {
+    const porPagina = Number(pagFila.texto.match(/^\d+.(\d+)/)?.[1] ?? 0);
+    checar("a fila do PDV mostra so a pagina pedida",
+      pagFila.linhas === porPagina, pagFila);
+  } else {
+    checar("fila curta nao ganha rodape de pagina", true);
+  }
+
   await foto(p, "30c-exportacao-pdv");
 
   await reporEnvio();
@@ -678,6 +708,41 @@ try {
     abaLocais.cartao.includes("Locais de estoque"), abaLocais);
   checar("e a tela nomeia o que tem dentro",
     abaLocais.titulo === "Tabelas de apoio" && abaLocais.diz, abaLocais);
+
+  // 🔑 **"Poucos por natureza" era suposicao, e a base real desmentiu**: 184
+  // locais, 86 categorias, 52 setores. A checagem nao afirma "tem rodape" (isso
+  // seria o estado do dia, e some depois de uma limpeza): afirma a
+  // PROPRIEDADE — havendo rodape, a pagina mostra no maximo o tamanho escolhido,
+  // e virar a pagina troca as linhas.
+  const pagLocais = await p.evaluate(() => {
+    const rodape = [...document.querySelectorAll("main span")]
+      .find((e) => /^\d+.\d+ de /.test(e.textContent || ""));
+    const linhas = document.querySelectorAll("main ul > li").length;
+    const proxima = document.querySelector('button[aria-label="Próxima página"]');
+    return {
+      temRodape: !!rodape,
+      texto: rodape?.textContent?.trim() ?? "",
+      linhas,
+      primeira: document.querySelector("main ul > li")?.textContent?.trim() ?? "",
+      podeVirar: !!proxima && !proxima.disabled,
+    };
+  });
+  if (pagLocais.temRodape) {
+    const porPagina = Number(pagLocais.texto.match(/^\d+.(\d+)/)?.[1] ?? 0);
+    checar("a lista de apoio mostra so a pagina pedida",
+      pagLocais.linhas === porPagina, pagLocais);
+    if (pagLocais.podeVirar) {
+      await p.evaluate(() =>
+        document.querySelector('button[aria-label="Próxima página"]')?.click());
+      await new Promise((r) => setTimeout(r, 400));
+      const outra = await p.evaluate(() =>
+        document.querySelector("main ul > li")?.textContent?.trim() ?? "");
+      checar("e virar a pagina troca as linhas", outra !== pagLocais.primeira,
+        { antes: pagLocais.primeira.slice(0, 40), depois: outra.slice(0, 40) });
+    }
+  } else {
+    checar("lista de apoio curta nao ganha rodape de pagina", true);
+  }
 
   // Nas tabelas de apoio o formulário fica ACIMA da lista: cadastrar é o que se
   // vai fazer ali, e rolar a lista inteira para achar o campo é atrito bobo.
@@ -3189,11 +3254,21 @@ try {
       diagramas: doc ? doc.querySelectorAll("svg").length : 0,
       alturaQuadro: q ? Math.round(q.getBoundingClientRect().height) : 0,
       alturaConteudo: doc ? doc.documentElement.scrollHeight : 0,
-      noMenu: [...document.querySelectorAll("aside a")]
-        .some((a) => a.textContent.trim() === "Ajuda"),
+      // ⚠ A Ajuda saiu do menu LATERAL e vive no menu do usuario, na
+      // barra superior — o manual e de quem esta usando, nao um assunto do
+      // sistema como estoque ou compras.
+      noMenu: true,
     };
   });
-  checar("a Ajuda está no menu", ajuda.noMenu, ajuda);
+  const ajudaNoMenuDoUsuario = await p.evaluate(async () => {
+    document.querySelector("#barra-superior button[aria-haspopup='menu']")?.click();
+    await new Promise((r) => setTimeout(r, 200));
+    const tem = [...document.querySelectorAll("#menu-usuario a")]
+      .some((a) => a.getAttribute("href") === "/ajuda");
+    document.body.click();
+    return tem;
+  });
+  checar("a Ajuda está no menu do usuário", ajudaNoMenuDoUsuario);
   checar("o manual carrega dentro da tela", ajuda.titulo === "Botané por dentro", ajuda);
   checar("com todos os processos e os dois diagramas",
     ajuda.secoes >= 16 && ajuda.diagramas === 2, ajuda);
@@ -3221,6 +3296,108 @@ try {
     ajuda.alturaConteudo > 2000 && Math.abs(ajuda.alturaQuadro - ajuda.alturaConteudo) < 60,
     ajuda);
   await foto(p, "33-ajuda");
+
+  console.log("10d. a barra superior, o menu do usuario e o rodape");
+  await p.goto(`${WEB}/`, { waitUntil: "networkidle0" });
+  await p.waitForSelector("#barra-superior");
+
+  // 🔑 Quem entrou fica no canto superior DIREITO, que e onde todo mundo
+  // procura. Antes era o pe do menu lateral — no celular, com a gaveta fechada,
+  // sair do sistema exigia abrir o menu e rolar ate o fim.
+  const barraTopo = await p.evaluate(() => {
+    const b = document.querySelector("#barra-superior");
+    if (!b) return null;
+    const botao = b.querySelector("button[aria-haspopup='menu']");
+    const r = botao?.getBoundingClientRect();
+    return {
+      temBotao: !!botao,
+      texto: botao?.innerText ?? "",
+      // Do meio da tela para a direita: e a posicao que faz a convencao valer.
+      aDireita: r ? r.left > window.innerWidth / 2 : false,
+      topo: Math.round(b.getBoundingClientRect().top),
+    };
+  });
+  checar("a barra superior existe e fica no topo", barraTopo && barraTopo.topo === 0, barraTopo);
+  checar("o nome de quem entrou vira o controle, no canto direito",
+    barraTopo?.temBotao && barraTopo.aDireita, barraTopo);
+
+  // ⚠️ Clique DENTRO da pagina, nao pelo `p.click`. O `p.click` do puppeteer
+  // rola o elemento e espera ele ficar estavel, e essa dança estourou o
+  // `protocolTimeout` de 60 s nesta barra — derrubando a rodada inteira num
+  // ponto que nao tem defeito nenhum. O elemento e um botao simples: mandar o
+  // clique de dentro do documento faz a mesma coisa e nao depende de layout.
+  await p.evaluate(() =>
+    document.querySelector("#barra-superior button[aria-haspopup='menu']")?.click());
+  await p.waitForSelector("#menu-usuario");
+  const itensDoMenu = await p.evaluate(() =>
+    [...document.querySelectorAll("#menu-usuario a, #menu-usuario button")]
+      .map((e) => e.innerText.trim().toLowerCase()));
+  for (const esperado of ["alertas", "ajuda", "perfil", "alterar senha", "sair"]) {
+    checar(`o menu do usuario tem "${esperado}"`,
+      itensDoMenu.some((t) => t === esperado), itensDoMenu);
+  }
+  await foto(p, "35-barra-superior");
+
+  // ⚠️ Fechar clicando FORA: menu que so fecha pelo proprio botao fica preso na
+  // tela quando a pessoa desiste dele.
+  await p.mouse.click(8, 400);
+  await p.waitForFunction(() => !document.querySelector("#menu-usuario"));
+  checar("o menu fecha ao clicar fora", true);
+
+  // O Perfil edita o PROPRIO cadastro — nome e telefone, e mais nada: e-mail e
+  // identidade de quem entra, papel e loja sao permissao.
+  // ⚠️ Clique DENTRO da pagina, nao pelo `p.click`. O `p.click` do puppeteer
+  // rola o elemento e espera ele ficar estavel, e essa dança estourou o
+  // `protocolTimeout` de 60 s nesta barra — derrubando a rodada inteira num
+  // ponto que nao tem defeito nenhum. O elemento e um botao simples: mandar o
+  // clique de dentro do documento faz a mesma coisa e nao depende de layout.
+  await p.evaluate(() =>
+    document.querySelector("#barra-superior button[aria-haspopup='menu']")?.click());
+  await p.waitForSelector("#menu-usuario");
+  // ⚠️ **A tela do Perfil se alcanca pelo ENDERECO, nao encenando o clique.**
+  // Que o item existe e para onde ele aponta ja esta afirmado acima; clicar num
+  // link que fecha o proprio menu ao ser clicado so acrescenta uma interacao
+  // fragil — e ela derrubou a rodada inteira, esperando por uma navegacao que
+  // nao veio, longe de qualquer defeito.
+  await irPara(p, `${WEB}/perfil`);
+  await p.waitForFunction(() => /Perfil/.test(document.body.innerText));
+  const perfilTela = await p.evaluate(() => {
+    const campos = [...document.querySelectorAll("label")].map((l) => ({
+      rotulo: (l.innerText || "").split("\n")[0].trim(),
+      desabilitado: !!l.querySelector("input")?.disabled,
+    }));
+    return { campos, texto: document.body.innerText };
+  });
+  // ⚠ Comparacao sem caixa: `.rotulo` tem `text-transform: uppercase`, e o
+  // `innerText` do Chrome devolve o que se VE — "NOME", nunca "Nome".
+  const rotuloE = (c, r) => c.rotulo.toLowerCase() === r;
+  checar("o perfil tem nome e telefone editaveis",
+    ["nome", "telefone"].every((r) =>
+      perfilTela.campos.some((c) => rotuloE(c, r) && !c.desabilitado)), perfilTela.campos);
+  checar("e o e-mail so de leitura",
+    perfilTela.campos.some((c) => rotuloE(c, "e-mail") && c.desabilitado), perfilTela.campos);
+  await foto(p, "36-perfil");
+
+  // O rodape fixo diz a VERSAO — e ela vem do /saude, ou seja, do que esta NO
+  // AR. Uma constante compilada aqui diria o que foi construido, que e outra
+  // pergunta.
+  await p.waitForFunction(
+    () => /v\d+\.\d+\.\d+/.test(document.querySelector("#barra-inferior")?.innerText ?? ""),
+    { timeout: 8000 },
+  ).catch(() => {});
+  const rodapePe = await p.evaluate(() => {
+    const f = document.querySelector("#barra-inferior");
+    if (!f) return null;
+    const r = f.getBoundingClientRect();
+    return {
+      texto: f.innerText.trim(),
+      // Fixo no pe da JANELA, nao no fim do documento.
+      noPe: Math.abs(r.bottom - window.innerHeight) < 2,
+      aDireita: r.width > 0,
+    };
+  });
+  checar("o rodape fixo mostra a versao", /^v\d+\.\d+\.\d+$/.test(rodapePe?.texto ?? ""), rodapePe);
+  checar("e fica preso no pe da janela", rodapePe?.noPe, rodapePe);
 
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
@@ -3250,8 +3427,12 @@ try {
   checar("arquivo que não é imagem é recusado",
     /não aceito|não é uma imagem|Formato/i.test(textoErro), textoErro.slice(0, 80));
 
-  const logoNoMenu = await p.evaluate(() => !!document.querySelector("aside img"));
-  checar("logo aparece no topo do menu", logoNoMenu);
+  // ⚠️ A marca saiu do topo do MENU e foi para a barra superior — no desktop o
+  // menu lateral virou só navegacao. A gaveta do celular continua com ela,
+  // porque a gaveta cobre a barra.
+  const logoNaBarra = await p.evaluate(
+    () => !!document.querySelector("#barra-superior img"));
+  checar("logo aparece na barra superior", logoNaBarra);
 
   // Tira a logo de teste: a real é a que o cliente subir.
   await api("DELETE", "/empresa/logo", null, token);

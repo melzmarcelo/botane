@@ -146,6 +146,19 @@ for tipo in ("UTENSILIO", "MATERIAL_LIMPEZA"):
 print("\n3. a migração semeou o grupo, fora do CMV")
 st, grupos = chamar("GET", "/cmv/grupos", token=token)
 semeado = next((g for g in grupos if g["nome"] == GRUPO_SEMEADO), None)
+# ⚠️ **A precondição é GARANTIDA, não suposta.** A migração 037 semeia o grupo,
+# mas migração não reexecuta: quem limpar as tabelas de apoio para recadastrar
+# leva o grupo junto, e a suíte passava a acusar de defeito uma decisão de quem
+# usa o sistema. O que ela cobra é o COMPORTAMENTO do grupo sobre o tipo — o
+# nome acentuado inclusive, que é o que prova o `.sql` chegando em UTF-8.
+if semeado is None:
+    st, _novo_g = chamar("POST", "/cmv/grupos",
+                         {"nome": GRUPO_SEMEADO, "tipos": ["UTENSILIO"],
+                          "considerar_no_cmv": False, "ordem": 90}, token=token)
+    if (_novo_g or {}).get("id"):
+        criados["grupos"].append(_novo_g["id"])
+    st, grupos = chamar("GET", "/cmv/grupos", token=token)
+    semeado = next((g for g in grupos if g["nome"] == GRUPO_SEMEADO), None)
 # ⚠️ Comparar o nome INTEIRO, com acento: é o que prova que o .sql chegou ao
 # banco em UTF-8. Um `Utens?lios` passaria num teste que só comparasse o começo.
 checar("o grupo existe com o nome acentuado certo", semeado is not None,

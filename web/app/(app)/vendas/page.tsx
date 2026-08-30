@@ -9,7 +9,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
-import { CANAIS, dataBr, ORIGENS, Venda } from "./tipos";
+import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
 
 /**
  * A lista das vendas — só a lista.
@@ -215,7 +215,9 @@ export default function PaginaVendas() {
               >
                 <Link href={`/vendas/${v.id}`} className="min-w-0 text-left">
                   <span className="link-registro">
-                    {dataBr(v.data)} · {v.documento ?? `venda #${v.id}`}
+                    {dataBr(v.data)}
+                    {horaBr(v.hora) && ` às ${horaBr(v.hora)}`} ·{" "}
+                    {v.documento ?? `venda #${v.id}`}
                   </span>
                   <span className="block text-[13px] text-suave">
                     {ORIGENS[v.origem] ?? v.origem.toLowerCase()}

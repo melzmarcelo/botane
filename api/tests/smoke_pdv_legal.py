@@ -514,12 +514,33 @@ checar("item desligado no PDV entra, mas inativo",
 # `valor` vem preenchido em 629 dos 630.
 st_p, prods_p = chamar("GET", "/produtos?busca=CAFE EXPRESSO&incluir_inativos=true", token=token)
 _expresso = next((x for x in (prods_p or []) if x.get("codigo") == "PDV-10689993"), None)
-checar("o cardapio traz o preco de venda junto",
-       _expresso is None or float(_expresso.get("preco_venda") or 0) == 5.5,
-       (_expresso or {}).get("preco_venda"))
+# 🔑 **Quem manda aqui e o DONO do preco.** Com `enviar_ao_pdv` LIGADO o Botane
+# passou a ser o dono, e `cardapio.importar` para de ler `tabelapreco` — senao os
+# dois sistemas brigam: o preco alterado la volta por cima na sincronizacao
+# seguinte e o envio o desfaz. A checagem afirma a REGRA, nao o numero do dia.
+st_cfg, cfg_preco = chamar("GET", "/pdv/config", token=token)
+somos_donos = bool(cfg_preco.get("enviar_ao_pdv"))
+if somos_donos:
+    checar("com o envio ligado, o cardapio NAO traz preco",
+           _expresso is None or not _expresso.get("preco_venda"),
+           (_expresso or {}).get("preco_venda"))
+else:
+    checar("o cardapio traz o preco de venda junto",
+           _expresso is None or float(_expresso.get("preco_venda") or 0) == 5.5,
+           (_expresso or {}).get("preco_venda"))
 
-checar("e o de nome identico acha dono",
-       (r.get("vinculados") or 0) + (r.get("ja_vinculados") or 0) >= 1, r)
+# 🔑 **Nome identico NAO liga — e a checagem afirmava o contrario.** A cascata
+# por nome foi REMOVIDA deste projeto depois de ligar REDBULL a LIMAO TAITY e
+# PAO COM MANTEIGA a MANJERICAO. A versao anterior exigia que o prato criado
+# logo acima, com o nome EXATO do cardapio, achasse dono na importacao — e ela
+# passava por sorte: era o `PDV-10689993` de uma rodada ANTERIOR que entrava
+# como `ja_vinculados`, por CODIGO. Na base virgem a verdade apareceu.
+st_e, prod_e = chamar("GET", f"/produtos/{expresso}", token=token)
+checar("nome identico NAO liga sozinho: o prato continua sem codigo do PDV",
+       not (prod_e or {}).get("codigo_pdv"), (prod_e or {}).get("codigo_pdv"))
+# E nenhum item do cardapio fica orfao: o que nao acha dono NASCE rascunho.
+checar("e nenhum item do cardapio fica sem dono",
+       (r.get("sem_vinculo") or 0) == 0, r)
 
 st, ce = chamar("GET", f"/produtos/{expresso}", token=token)
 checar("o prato de nome identico existe", st == 200, st)
@@ -902,11 +923,14 @@ achada = next((x for x in cats if x["id"] == id_cat_pdv), {})
 checar("e a marca da categoria grava", achada.get("integrado_pdv") is True, achada)
 chamar("DELETE", f"/categorias/{id_cat_pdv}", token=token)
 
-# A carga da 041 marcou por FATO: o setor que ja tem produto no PDV. Na conta
-# real sao exatamente as tres impressoras — VITRINE, BAR e COZINHA.
+# ⚠️ **A versao anterior afirmava sobre a CARGA da 041** — "os setores marcados
+# sao VITRINE, BAR e COZINHA" —, e isso e o estado do dia: ficou falso no
+# instante em que a casa limpou as tabelas de apoio para recadastrar. O que se
+# afirma agora e a propriedade: setor MARCADO carrega a marca, e ela grava.
 st, setores_ = chamar("GET", "/setores", token=token)
 marcados = [x["nome"] for x in setores_ if x.get("integrado_pdv")]
-checar("a carga marcou os setores que ja tem produto no PDV", len(marcados) > 0, marcados)
+checar("a marca de integrado existe no setor",
+       not setores_ or "integrado_pdv" in setores_[0], (setores_ or [{}])[0])
 
 # 🔑 A dica de interface viaja no /auth/me — quem cadastra produto nao tem
 # `integracao.pdv` para perguntar ao /pdv/config.
@@ -938,6 +962,42 @@ checar("com as tres abas",
 # 🔑 O que mais importa nesta tela: o que JA EXISTE no PDV entra como ADOTAR,
 # nunca como CRIAR. Sem isso o primeiro envio duplicaria o cardapio inteiro do
 # cliente — 30 grupos que existem ha anos e nunca souberam do Botane.
+# ⚠️ **A precondicao e GARANTIDA, nao suposta.** Estas checagens contavam com a
+# CAFETERIA e o BAR que a importacao do cardapio tinha deixado na base — e
+# morreram no dia em que a casa limpou as tabelas de apoio para recadastrar.
+# Agora a suite cria os dois com os nomes que existem no cardapio simulado,
+# afirma, e desfaz.
+def _garantir(rota: str, corpo: dict, listagem: str) -> tuple[int | None, bool]:
+    """Cria, ou acha o que ja existe. Devolve (id, fui_eu_que_criei).
+
+    ⚠️ **Nome repetido devolve 409**, e a versao anterior tratava isso como
+    "sem id": a marca nao era gravada e a checagem seguinte acusava a fila de
+    nao reconhecer um setor que estava la. Precondicao GARANTIDA quer dizer
+    tambem "ja existia serve".
+    """
+    st_, r_ = chamar("POST", rota, corpo, token=token)
+    if st_ in (200, 201) and (r_ or {}).get("id"):
+        return r_["id"], True
+    st_, lista_ = chamar("GET", listagem, token=token)
+    # ⚠️ **Sem caixa.** A unicidade do nome no banco ignora maiusculas, entao o
+    # POST devolve 409 para "BAR" quando ja existe "Bar" — e a busca exata nao
+    # achava o registro que o proprio servidor acabou de citar. Resultado: a
+    # marca nao era gravada e a checagem acusava a fila de nao reconhecer um
+    # setor que estava la.
+    alvo_ = corpo["nome"].strip().upper()
+    achado = next((x for x in (lista_ or [])
+                   if (x.get("nome") or "").strip().upper() == alvo_), None)
+    return (achado or {}).get("id"), False
+
+id_cat_prova, _criei_cat = _garantir("/categorias", {"nome": "CAFETERIA", "tipo": "PRODUZIDO"},
+                                     "/categorias?incluir_inativas=true")
+if id_cat_prova:
+    chamar("PUT", f"/categorias/{id_cat_prova}", {"integrado_pdv": True}, token=token)
+id_set_prova, _criei_set = _garantir("/setores", {"nome": "BAR", "ordem": 0}, "/setores")
+if id_set_prova:
+    chamar("PUT", f"/setores/{id_set_prova}", {"integrado_pdv": True}, token=token)
+st, fila = chamar("GET", "/pdv/envio/fila", token=token)
+
 acoes = {(p["tipo"], p["nome"]): p["acao"] for p in fila["pendentes"]}
 cafeteria = next((a for (t, n), a in acoes.items()
                   if t == "CATEGORIA" and n == "CAFETERIA"), None)
@@ -952,9 +1012,37 @@ nomes_la = {"ALMOCO", "CAFETERIA", "CHA", "BAR", "CAIXA", "COZINHA", "VITRINE"}
 criar_indevido = [p["nome"] for p in fila["pendentes"]
                   if p["acao"] == "CRIAR" and p["nome"].upper() in nomes_la]
 checar("nunca propoe CRIAR para o que ja existe no PDV", not criar_indevido, criar_indevido)
-conhecidos = {p["nome"] for p in fila["pendentes"] + fila["integrados"]}
+# ⚠️ Comparado SEM CAIXA: nome de setor nao passa pelo gatilho de maiusculas
+# (esse e so do produto), entao a casa pode ter cadastrado "Bar".
+conhecidos = {(p["nome"] or "").strip().upper()
+              for p in fila["pendentes"] + fila["integrados"]}
 checar("e o setor que ja existe la e reconhecido", "BAR" in conhecidos,
        sorted(conhecidos)[:8])
+
+# 🔑 **Apagar uma categoria aqui nao pode virar cardapio DUPLICADO la.** O
+# `codRefExterna` do grupo aponta para o id da nossa categoria; apagada ela, o
+# grupo sumia do `por_ref` (ninguem o reivindica) E do `por_nome` (que so recebe
+# grupo sem dono) — e a categoria recadastrada com o MESMO nome nao achava nada
+# dos dois lados, fazendo a fila propor CRIAR. A fixture tem um grupo com dono
+# inexistente exatamente para provar isto.
+id_orfa, _criei_orfa = _garantir("/categorias",
+                                 {"nome": "GRUPO ORFAO DO PDV", "tipo": "PRODUZIDO"},
+                                 "/categorias?incluir_inativas=true")
+if id_orfa:
+    chamar("PUT", f"/categorias/{id_orfa}", {"integrado_pdv": True}, token=token)
+    st, fila_o = chamar("GET", "/pdv/envio/fila", token=token)
+    orfa = next((p["acao"] for p in fila_o["pendentes"] + fila_o["integrados"]
+                 if p["tipo"] == "CATEGORIA" and p["nome"] == "GRUPO ORFAO DO PDV"), None)
+    checar("categoria recriada ADOTA o grupo de dono perdido, nao duplica",
+           orfa == "ADOTAR", orfa)
+    if _criei_orfa:
+        chamar("DELETE", f"/categorias/{id_orfa}", token=token)
+# Desfaz so o que ESTA suite criou: apagar o que a casa ja tinha seria a suite
+# mexendo no cadastro de quem usa o sistema.
+for _id, _rota, _meu in ((id_cat_prova, "categorias", _criei_cat),
+                         (id_set_prova, "setores", _criei_set)):
+    if _id and _meu:
+        chamar("DELETE", f"/{_rota}/{_id}", token=token)
 
 # 🔑 **Um PUT que NAO manda o campo mantem o valor.** Este endpoint substitui a
 # linha inteira, e com `False` de padrao qualquer chamada que omitisse o campo
@@ -1061,7 +1149,23 @@ prods = [p for p in fila_p["pendentes"] if p["tipo"] == "PRODUTO"]
 criar = [p for p in prods if p["acao"] == "CRIAR"]
 adotar = [p for p in prods if p["acao"] == "ADOTAR"]
 checar("os produtos do cardapio entram na fila", len(prods) > 0, len(prods))
-checar("e como ADOTAR, nao CRIAR", len(adotar) > len(criar), (len(adotar), len(criar)))
+# ⚠️ **Invariante, nao o estado do dia.** "Nenhum CRIAR" passou a ser falso no
+# instante em que a casa cadastrou um produto novo de verdade — e acusava de
+# defeito uma decisao de quem usa. O que nunca pode acontecer e propor CRIAR
+# para quem JA esta no cardapio: e isso que duplicaria o cardapio do cliente.
+checar("nunca propoe CRIAR para quem ja esta no cardapio",
+       not [p for p in criar if p.get("codigo_pdv")],
+       [p["nome"] for p in criar if p.get("codigo_pdv")][:5])
+
+# 🔑 **Produto com `codigo_pdv` guardado NUNCA e ADOTAR.** Medido contra a conta
+# real: `produtos/update` responde "Registry updated successfully!" e IGNORA o
+# `codRefExterna`. Adotar, no produto, nao escreve nada — entao propor adocao
+# para quem ja tem o codigo aqui e uma fila que nunca esvazia, reescrevendo o
+# cardapio inteiro do cliente a cada clique em Enviar. Foram 630 assim.
+com_codigo = [p for p in prods if p.get("codigo_pdv")]
+checar("produto com codigo do PDV guardado nao vira adocao",
+       not [p for p in com_codigo if p["acao"] == "ADOTAR"],
+       [p["nome"] for p in com_codigo if p["acao"] == "ADOTAR"][:5])
 
 # ⚠️ O corpo do produto NAO leva imposto nenhum. Os campos fiscais da linha de
 # preco (CFOP, CSOSN, CST, PIS/Cofins, reforma tributaria) estao preenchidos em

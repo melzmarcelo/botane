@@ -119,6 +119,10 @@ def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
 
         vendas.append({
             "data": c["data"],
+            # ⚠️ A hora vem do caixa (`dtrecebimento`), a data vem do NEGÓCIO
+            # (`dtmovimento`). Elas discordam de propósito numa casa que fecha
+            # depois da meia-noite — e é a data que decide o dia do CMV.
+            "hora": c["hora"],
             "documento": c["documento"],
             "canal": c["canal"],
             "origem": ORIGEM,

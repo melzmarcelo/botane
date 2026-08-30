@@ -8,6 +8,11 @@
 
 const BASE = process.env.NEXT_PUBLIC_API ?? "http://127.0.0.1:9200";
 
+/** O endereço da API, para quem precisa falar com ela FORA do cliente — o
+    rodapé lê `/saude`, que é rota pública e não passa por token nem por
+    renovação. */
+export const BASE_API = BASE;
+
 const CHAVE_ACCESS = "botane.access";
 const CHAVE_REFRESH = "botane.refresh";
 const CHAVE_UNIDADE = "botane.unidade";
@@ -352,6 +357,16 @@ export const api = {
     if (erro) throw new ErroApi(r.status, erro);
     if (!r.ok) throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
     guardarSessao(dados as Sessao, manterConectado);
+    // 🔑 **Entrar recolhe o menu.** Os grupos abertos ficam no navegador porque
+    // são preferência de quem usa — mas essa preferência é da SESSÃO de
+    // trabalho, não da máquina: quem entrou de novo está começando outra coisa,
+    // e um menu com seis grupos abertos empurra o que interessa para fora da
+    // vista antes de a pessoa olhar para a tela.
+    try {
+      localStorage.removeItem("botane.menu");
+    } catch {
+      // navegador sem armazenamento: o menu abre recolhido do mesmo jeito
+    }
     return dados as Sessao;
   },
 

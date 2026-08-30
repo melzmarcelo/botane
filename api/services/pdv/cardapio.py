@@ -423,6 +423,23 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
                 resumo["criados"] += 1
                 if not item["ativo"]:
                     resumo["inativos"] += 1
+            else:
+                # 🔑 **O `ON CONFLICT DO NOTHING` engolia o caso em que o
+                # cadastro JÁ nasceu daqui e perdeu o vínculo.** `PDV-<codigo>` é
+                # derivado do código do PDV, então quem tem esse código É este
+                # item — não é palpite por nome, é o mesmo número. Sem isto, um
+                # `codigo_pdv` apagado (uma limpeza, um Vincular desfeito) virava
+                # item sem vínculo PARA SEMPRE: a criação colidia calada e a
+                # cascata não tinha por onde reconhecê-lo.
+                cur.execute("SELECT id FROM produtos WHERE codigo = %s",
+                            (f"PDV-{codigo}"[:40],))
+                achado = cur.fetchone()
+                if achado:
+                    id_produto, origem = achado["id"], "codigo_da_casa"
+                    cur.execute(
+                        """UPDATE produtos SET codigo_pdv = %s
+                            WHERE id = %s AND codigo_pdv IS NULL""",
+                        (str(codigo), id_produto))
 
         if not id_produto:
             resumo["sem_vinculo"] += 1

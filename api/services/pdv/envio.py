@@ -121,7 +121,7 @@ def corpo_de_saida(linha: dict, remoto: dict | None) -> dict:
 
 
 def corpo_do_produto(linha: dict, remoto: dict | None = None,
-                    adotar: bool = False) -> dict:
+                    adotar: bool = False, grupo_la: int | None = None) -> dict:
     """`produtos` → o cadastro do cardápio (`produtos/save|update`).
 
     ⚠️ **Só o que o cardápio enxerga, e NADA de imposto.** Os campos fiscais da
@@ -150,7 +150,14 @@ def corpo_do_produto(linha: dict, remoto: dict | None = None,
         "status": bool(linha["ativo"]),
     }
     if linha.get("id_categoria"):
+        # 🔑 **Quando a categoria já foi adotada, vai o código DELES.** O
+        # `codGrupoExterno` obriga o PDV a resolver o nosso id, e ele só resolve
+        # o que já foi adotado — mandar o número real é mais firme e não depende
+        # de uma tradução do outro lado. O externo continua junto: é ele que
+        # mantém o de-para visível lá.
         corpo["codGrupoExterno"] = linha["id_categoria"]
+        if grupo_la:
+            corpo["codGrupo"] = int(grupo_la)
     if linha.get("setor_codigo_pdv"):
         corpo["codigoImpressora"] = int(linha["setor_codigo_pdv"])
     for nosso, deles in (("um_estoque", "unidade"), ("ncm", "codigoNCM"),
@@ -225,11 +232,13 @@ def _registros(cur, id_unidade: int) -> list[dict]:
         """SELECT p.id, p.nome, p.nome_curto, p.ativo, p.integrado_pdv, p.codigo_pdv,
                   p.id_categoria, p.id_setor, p.um_estoque, p.ncm, p.cest,
                   p.codigo_barras, s.codigo_pdv AS setor_codigo_pdv,
+                  c.nome AS categoria_nome, c.integrado_pdv AS categoria_integrada,
                   (SELECT pp.preco_venda FROM produto_precos pp
                     WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
              FROM produtos p
              LEFT JOIN setores s ON s.id = p.id_setor
+             LEFT JOIN categorias c ON c.id = p.id_categoria
             WHERE p.integrado_pdv
                OR EXISTS (SELECT 1 FROM pdv_pendencias q
                            WHERE q.tipo = 'PRODUTO' AND q.id_registro = p.id
@@ -311,9 +320,57 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
     # 🔑 Sem saber o que existe do outro lado, a fila mandaria CRIAR para os 30
     # grupos que já estão no cardápio — e duplicaria o cardápio do cliente.
     la = _o_que_existe_la(cliente) if cliente is not None else None
+    if la:
+        # 🔑 **Grupo cujo dono daqui NÃO EXISTE MAIS volta a ser adotável.** O
+        # `codRefExterna` guardado no PDV aponta para o id de uma categoria
+        # nossa; se essa categoria for apagada, aquele grupo some do `por_ref`
+        # (ninguém o reivindica) **e do `por_nome`** (que só recebe grupo sem
+        # dono). Resultado: a categoria recadastrada com o MESMO nome não acha
+        # nada dos dois lados e a fila propõe **CRIAR** — duplicando o cardápio
+        # do cliente, que é exatamente o desastre que esta leitura existe para
+        # impedir. Basta apagar uma categoria para cair nisso.
+        cur.execute("SELECT id FROM categorias")
+        nossas = {r["id"] for r in cur.fetchall()}
+        orfaos = [g for ref, g in la[CATEGORIA]["por_ref"].items() if ref not in nossas]
+        for g in orfaos:
+            la[CATEGORIA]["por_ref"].pop(int(g["codRefExterna"]), None)
+            la[CATEGORIA]["por_nome"].setdefault(
+                str(g.get("nome", "")).strip().upper(), g)
     abertas = _pendencias_abertas(cur)
     pendentes: list[dict] = []
     integrados: list[dict] = []
+
+    def grupo_do(linha: dict) -> int | None:
+        """O código do grupo do PDV em que a categoria deste produto foi adotada."""
+        if not la or not linha.get("id_categoria"):
+            return None
+        g = la[CATEGORIA]["por_ref"].get(linha["id_categoria"])
+        return g.get("codigo") if g else None
+
+    def montar(linha: dict, remoto: dict | None = None, adotar: bool = False) -> dict:
+        if linha["tipo"] != PRODUTO:
+            return MONTADORES[linha["tipo"]](linha, remoto, adotar=adotar)
+        return corpo_do_produto(linha, remoto, adotar=adotar, grupo_la=grupo_do(linha))
+
+    def trava(linha: dict) -> str | None:
+        """O que impede este registro de sair — dito com as palavras da casa.
+
+        ⚠️ **A categoria vai ANTES do produto, e sem ela o PDV recusa.** O
+        produto carrega o grupo pelo `codGrupoExterno`, que o PDV só resolve se
+        aquela categoria já tiver sido adotada lá. Sem isso o envio volta com a
+        frase DELES, que não nomeia a categoria nem diz o caminho.
+        """
+        if linha["tipo"] != PRODUTO or not linha.get("id_categoria"):
+            return None
+        if grupo_do(linha):
+            return None
+        nome = linha.get("categoria_nome") or f"#{linha['id_categoria']}"
+        if not linha.get("categoria_integrada"):
+            return (f"A categoria “{nome}” não está marcada para integrar com o PDV. "
+                    "Marque-a no cadastro da categoria e envie a categoria primeiro — "
+                    "o produto precisa do grupo já existir lá.")
+        return (f"A categoria “{nome}” ainda não chegou ao PDV. Ela está nesta mesma "
+                "fila: envie a categoria primeiro e depois o produto.")
 
     for linha in _registros(cur, id_unidade):
         tipo = linha["tipo"]
@@ -364,20 +421,23 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
                                        {**remoto, "status": False}, anterior, remoto))
                 continue
             if linha["ativo"] and not remoto.get("status"):
-                corpo = MONTADORES[tipo](linha, remoto)
-                pendentes.append(_item(linha, REATIVAR, corpo, anterior, remoto))
+                corpo = montar(linha, remoto)
+                pendentes.append(_item(linha, REATIVAR, corpo, anterior, remoto,
+                                       trava(linha)))
                 continue
 
         # 1. Existe lá e já é nosso (o `codRefExterna` aponta para cá).
         if ja_e_nosso:
-            corpo = MONTADORES[tipo](linha, remoto)
+            corpo = montar(linha, remoto)
             # ⚠️ **A pendência manda, mas a REALIDADE tem voto.** Se o banco
             # registrou uma mudança, é pendente; se não registrou, ainda assim
             # entra quando o que está lá difere do que temos — é a rede que
             # pega o que mudou por fora (uma carga, um `UPDATE` na mão) e o
             # que o gatilho não viu porque nasceu depois dele.
-            if tem_pendencia or _difere(tipo, corpo, remoto):
-                pendentes.append(_item(linha, ATUALIZAR, corpo, anterior, remoto))
+            grupo_la = grupo_do(linha)
+            if tem_pendencia or _difere(tipo, corpo, remoto, grupo_la):
+                pendentes.append(_item(linha, ATUALIZAR, corpo, anterior, remoto,
+                                       trava(linha)))
             else:
                 integrados.append(_item(linha, ATUALIZAR, corpo, anterior, remoto))
             continue
@@ -387,7 +447,7 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
         # `codRefExterna` não estiver gravado lá, o vínculo não existe — e é
         # exatamente isso que a adoção conserta.
         if remoto:
-            corpo = MONTADORES[tipo](linha, remoto, adotar=True)
+            corpo = montar(linha, remoto, adotar=True)
             pendentes.append(_item(linha, ADOTAR, corpo, anterior, remoto))
             continue
 
@@ -409,8 +469,8 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
                 integrados.append(_item(linha, SEM_PAR, {"codigo_pdv": linha["codigo_pdv"]},
                                         anterior, None))
                 continue
-        corpo = MONTADORES[tipo](linha)
-        pendentes.append(_item(linha, CRIAR, corpo, anterior, None))
+        corpo = montar(linha)
+        pendentes.append(_item(linha, CRIAR, corpo, anterior, None, trava(linha)))
 
     em_erro = []
     for chave, e in erros.items():
@@ -439,13 +499,24 @@ def _remoto(la: dict, linha: dict) -> tuple[dict | None, bool]:
         if achado:
             return achado, True
     elif tipo == PRODUTO:
+        # 🔑 **No produto quem manda é o `codigo_pdv` guardado AQUI, não o
+        # `codRefExterna` de lá — e a razão é medida: `produtos/update`
+        # RESPONDE "Registry updated successfully!" e IGNORA o campo.** As 630
+        # adoções da primeira versão saíram todas "com sucesso" e o
+        # `codRefExterna` continuou `0` no cardápio; a fila relia, não achava
+        # dono, e propunha as mesmas 630 adoções de novo. Uma fila que nunca
+        # esvazia e reescreve o cardápio inteiro a cada clique.
+        # ⚠️ É a mesma lição do SETOR: **onde não há onde gravar o vínculo, o
+        # vínculo mora deste lado.** E aqui ele já morava — `produtos.codigo_pdv`
+        # é único, visível e editável desde a migração 035.
+        cod = str(linha.get("codigo_pdv") or "")
+        if cod:
+            achado = la[tipo]["por_codigo"].get(cod)
+            if achado:
+                return achado, True
         achado = la[tipo]["por_ref"].get(linha["id"])
         if achado:
             return achado, True
-        # Tem o código de lá guardado mas o `codRefExterna` ainda não aponta
-        # para cá: existe, é o mesmo, e falta só o vínculo — é adoção.
-        cod = str(linha.get("codigo_pdv") or "")
-        return (la[tipo]["por_codigo"].get(cod) if cod else None), False
     else:
         cod = str(linha.get("codigo_pdv") or "")
         if cod:
@@ -456,7 +527,7 @@ def _remoto(la: dict, linha: dict) -> tuple[dict | None, bool]:
     return la[tipo]["por_nome"].get((linha["nome"] or "").strip().upper()), False
 
 
-def _difere(tipo: str, corpo: dict, remoto: dict) -> bool:
+def _difere(tipo: str, corpo: dict, remoto: dict, grupo_la: int | None = None) -> bool:
     """Mudou algo que o PDV precisa saber?
 
     ⚠️ Compara só os campos que ENVIAMOS. O PDV devolve mais coisas que não
@@ -470,17 +541,34 @@ def _difere(tipo: str, corpo: dict, remoto: dict) -> bool:
         # ⚠️ Só o que ENVIAMOS. O PDV devolve dezenas de campos que não
         # controlamos (favorito, destaque, modificadores…); compará-los faria
         # todo produto parecer eternamente pendente.
-        return any(corpo.get(c) != remoto.get(c)
-                   for c in ("descricaoCupom", "descricaoDetalhada",
-                             "codGrupoExterno", "codigoImpressora")
-                   if c in corpo)
+        if any(corpo.get(c) != remoto.get(c)
+               for c in ("descricaoCupom", "descricaoDetalhada", "codigoImpressora")
+               if c in corpo):
+            return True
+        # 🔑 **O grupo NÃO se compara pelo campo que mandamos.** Mandamos
+        # `codGrupoExterno` (o id da nossa categoria) e o PDV devolve **sempre
+        # `0`** nele — ele resolve o grupo e guarda em `codGrupo`. Comparar um
+        # com o outro fazia os 630 produtos ficarem eternamente pendentes, e
+        # cada Enviar reescrever o cardápio inteiro sem nada ter mudado. É a
+        # mesma doença que a cor e o `ativo` já tinham: **campo que o outro lado
+        # não devolve não serve de comparação.**
+        # A pergunta certa é: o grupo que o produto tem LÁ é o mesmo em que a
+        # nossa categoria foi adotada?
+        if "codGrupoExterno" in corpo:
+            return grupo_la is None or int(remoto.get("codGrupo") or 0) != int(grupo_la)
+        return False
     campos = ("nome",)
     return any(corpo.get(c) != remoto.get(c) for c in campos)
 
 
 def _item(linha: dict, acao: str, corpo: dict, anterior: dict | None,
-          remoto: dict | None = None) -> dict:
+          remoto: dict | None = None, impedimento: str | None = None) -> dict:
     return {
+        # 🔑 **O que trava o envio é dito AQUI, não pelo PDV.** Um produto cuja
+        # categoria ainda não existe lá volta com "O código ou o nome do Grupo
+        # devem ser informados" — a frase do outro sistema, que não diz qual
+        # grupo nem o que fazer. A recusa daqui nomeia a categoria e a saída.
+        "impedimento": impedimento,
         "tipo": linha["tipo"],
         "id_registro": linha["id"],
         "nome": linha["nome"],
@@ -596,6 +684,11 @@ def enviar_um(cliente: ClientePdv, item: dict, filial: int | None = None) -> dic
     guardado aqui. Mandar antes daria um erro que fala de um campo obrigatório
     e não da ordem das coisas.
     """
+    if item.get("impedimento"):
+        # ⚠️ Recusa ANTES de falar com o PDV: a chamada voltaria com a frase
+        # dele, que não nomeia o que falta. E uma tentativa que já se sabe
+        # perdida é cota gasta.
+        raise ErroPdv(item["impedimento"])
     rotas = ROTAS[item["tipo"]]
     acao = item["acao"]
 
@@ -605,8 +698,15 @@ def enviar_um(cliente: ClientePdv, item: dict, filial: int | None = None) -> dic
     # mais nada. A primeira versão mandava um `impressoras/update` aqui: uma
     # escrita sem propósito no cardápio de quem está vendendo, que ainda por
     # cima falhou e derrubou o lote.
-    if item["tipo"] == SETOR and acao == ADOTAR:
-        return {"id": item["corpo"].get("codigo"), "somente_local": True}
+    # 🔑 **Adotar não escreve no PDV — nem setor, nem produto.** A impressora
+    # não tem campo de código externo (`{codigo, nome, kds}` é o modelo
+    # inteiro), e o produto TEM o campo mas o `update` o ignora, medido contra a
+    # conta real. Nos dois casos "reconhecer" é guardar o código DELES deste
+    # lado, e mais nada. Escrever assim mesmo seria uma volta no cardápio de
+    # quem está vendendo que não muda nada — e a primeira versão deu 630 delas.
+    if acao == ADOTAR and item["tipo"] in (SETOR, PRODUTO):
+        return {"id": item["corpo"].get("codigo") or item.get("codigo_pdv"),
+                "somente_local": True}
 
     if acao == DESATIVAR and "desativar" not in rotas:
         raise ErroPdv("Este cadastro não pode ser desativado no PDV — "

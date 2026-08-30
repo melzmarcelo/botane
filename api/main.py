@@ -56,7 +56,16 @@ from routers import (
 )
 from seguranca import hash_senha
 
-VERSAO = "0.1.0"
+# 🔑 **A versão é UMA linha, e o último número conta as PROMOÇÕES.** `1.1.xx`:
+# `xx` sobe a cada `main → producao` que vai ao ar, e mais nada — não é contagem
+# de commit nem de dia de trabalho. É o número que a pessoa lê no rodapé e
+# repete ao pedir ajuda, e ele precisa responder "qual entrega você está
+# usando?".
+# ⚠️ **Quem mostra é o rodapé do sistema, lendo `GET /saude`** — nunca uma
+# constante compilada no front. Um número gravado no build diz o que foi
+# COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
+# não bate. É a mesma razão da `impressao`.
+VERSAO = "1.1.0"
 
 
 def garantir_admin() -> None:

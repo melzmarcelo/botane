@@ -50,7 +50,8 @@ def listar(
         alvo = f"%{busca.strip()}%" if busca and busca.strip() else None
         return pagina(
             cur,
-            """SELECT v.id, v.data, v.origem, v.canal, v.documento, v.valor_total, v.cancelada,
+            """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.valor_total,
+                      v.cancelada,
                       count(vi.id) AS itens,
                       count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo
                  FROM vendas v
@@ -61,7 +62,10 @@ def listar(
                   AND (%s::text IS NULL OR v.origem = %s)
                   AND (%s::text IS NULL OR v.documento ILIKE %s)
                 GROUP BY v.id
-                ORDER BY v.data DESC, v.id DESC""",
+                -- Com a hora gravada, a ordem do DIA passa a ser a do relógio:
+                -- quem procura "a venda das 14h" não a acha pela ordem de
+                -- importação. NULLS LAST porque a planilha não tem hora.
+                ORDER BY v.data DESC, v.hora DESC NULLS LAST, v.id DESC""",
             (id_unidade, inicio, inicio, fim, fim, origem, origem, alvo, alvo),
             limite=limite, offset=offset, resposta=resposta,
         )
@@ -93,11 +97,11 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
 
             total = sum(i.quantidade * i.valor_unitario for i in venda.itens)
             cur.execute(
-                """INSERT INTO vendas (id_unidade, data, origem, canal, documento,
+                """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
                                        valor_total, id_usuario)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (id_unidade, venda.data, venda.origem, venda.canal, venda.documento,
-                 total, ctx.id_usuario),
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
+                 venda.documento, total, ctx.id_usuario),
             )
             id_venda = cur.fetchone()["id"]
             importadas += 1

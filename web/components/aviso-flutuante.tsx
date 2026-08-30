@@ -132,7 +132,7 @@ function Balao({ recado, aoFechar }: { recado: Recado; aoFechar: () => void }) {
       onMouseLeave={() => setPausado(false)}
       onFocusCapture={() => setPausado(true)}
       onBlurCapture={() => setPausado(false)}
-      className={`pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded border-l-4 bg-superficie px-4 py-3 shadow-[0_6px_24px_rgba(20,32,26,0.18)] transition-all duration-200 motion-reduce:transition-none ${
+      className={`pointer-events-auto relative flex items-start gap-3 overflow-hidden rounded-2xl border-l-4 bg-superficie px-4 py-3 shadow-[0_10px_34px_-8px_rgba(20,32,26,0.28)] transition-all duration-200 motion-reduce:transition-none ${
         entrou ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
       } ${erro ? "border-erro" : "border-erva"}`}
     >

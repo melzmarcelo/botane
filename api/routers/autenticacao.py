@@ -12,6 +12,7 @@ from models.acesso import (
     LoginRequest,
     LoginResponse,
     MeResponse,
+    PerfilUpdate,
     RedefinirSenhaRequest,
     RefreshRequest,
     TrocarSenhaRequest,
@@ -239,6 +240,33 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         "todas_unidades": ctx.todas_unidades,
         "enviar_ao_pdv": bool(linha_pdv["enviar_ao_pdv"]) if linha_pdv else False,
     }
+
+
+@router.put("/me")
+def atualizar_me(body: PerfilUpdate, request: Request,
+                 ctx: Contexto = Depends(contexto_atual)) -> dict:
+    """A pessoa corrige o próprio cadastro — nome e telefone, e mais nada.
+
+    ⚠️ **Não exige permissão de administrador, e não pode exigir.** Todo mundo
+    que entra tem um cadastro; quem digitou o próprio nome errado no primeiro
+    dia não vai abrir um chamado por causa disso. O que protege é o ESCOPO:
+    o `id` vem do token, nunca do corpo, então ninguém edita o cadastro alheio
+    por aqui.
+    """
+    nome = body.nome.strip()
+    telefone = (body.telefone or "").strip() or None
+    with get_cursor() as cur:
+        cur.execute("SELECT nome, telefone FROM usuarios WHERE id = %s", (ctx.id_usuario,))
+        antes = cur.fetchone()
+        if not antes:
+            raise HTTPException(404, "Usuário não encontrado")
+        cur.execute("UPDATE usuarios SET nome = %s, telefone = %s WHERE id = %s",
+                    (nome, telefone, ctx.id_usuario))
+        auditoria.registrar(
+            cur, ctx.id_usuario, "usuarios", ctx.id_usuario, "perfil_atualizar",
+            antes=dict(antes), depois={"nome": nome, "telefone": telefone}, ip=_ip(request),
+        )
+    return {"message": "Perfil atualizado"}
 
 
 @router.post("/trocar-senha")

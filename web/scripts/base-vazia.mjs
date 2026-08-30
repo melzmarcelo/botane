@@ -14,7 +14,7 @@ const CHROME =
 const WEB = "http://127.0.0.1:3100";
 
 const TELAS = [
-  "/", "/produtos", "/produtos/novo", "/produtos/duplicados", "/fornecedores",
+  "/", "/produtos", "/produtos/novo", "/fornecedores",
   "/cadastros", "/fichas", "/fichas/nova", "/estoque", "/ajustes", "/producao",
   "/inventario", "/inventario/novo", "/compras", "/compras/nova",
   "/vendas", "/vendas/lancar", "/vendas/sem-vinculo", "/cmv",

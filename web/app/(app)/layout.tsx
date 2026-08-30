@@ -8,6 +8,8 @@ import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
+import BarraSuperior from "@/components/barra-superior";
+import BarraInferior from "@/components/barra-inferior";
 
 /** O menu é montado pelas permissões de quem entrou. */
 /** `chave` pode ser uma lista: a tela de Ajustes serve a quatro permissões e
@@ -22,16 +24,6 @@ const MENU: {
     soComEnvioAoPdv?: boolean;
   }[];
 }[] = [
-  {
-    grupo: "Operação",
-    itens: [
-      { href: "/", nome: "Início" },
-      { href: "/alertas", nome: "Alertas" },
-      // Sem chave: o manual explica o sistema a quem usa o sistema, e quem tem
-      // menos permissão é justamente quem mais precisa dele.
-      { href: "/ajuda", nome: "Ajuda" },
-    ],
-  },
   {
     grupo: "Cadastros",
     itens: [
@@ -97,22 +89,53 @@ const MENU: {
   },
 ];
 
+/**
+ * O Início não pertence a grupo nenhum.
+ *
+ * 🔑 **Um grupo de um item só é uma pasta com um papel dentro.** "Operação"
+ * existia para abrigar Início, Alertas e Ajuda — e as duas últimas foram para o
+ * menu do usuário, onde a pessoa as procura: alerta e manual são de QUEM está
+ * usando, não de um assunto do sistema. Sobrou o Início, e um cabeçalho de
+ * grupo sobre ele só custava um clique para chegar à primeira tela.
+ */
+const INICIO = { href: "/", nome: "Início" };
+
 const CHAVE_MENU = "botane.menu";
 
-function Marca({ logo, nome }: { logo: string | null; nome: string }) {
+/**
+ * A marca — e, embaixo dela, em que LOJA se está.
+ *
+ * 🔑 **A loja é legenda da empresa, não item de menu.** Ela vivia no topo do
+ * menu lateral, do tamanho de um rótulo de seção, e no celular só aparecia com
+ * a gaveta aberta — ou seja, justamente quem tem duas lojas não via em qual
+ * estava sem abrir o menu. Aqui ela fica sempre à vista, e a hierarquia diz o
+ * que é: o nome da casa em cima, a loja embaixo, menor.
+ */
+function Marca({
+  logo,
+  nome,
+  loja,
+}: {
+  logo: string | null;
+  nome: string;
+  loja?: React.ReactNode;
+}) {
   return (
     <span className="flex min-w-0 items-center gap-2">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className="h-7 w-7 shrink-0 rounded object-contain" />
+        <img src={logo} alt="" className="h-8 w-8 shrink-0 rounded object-contain" />
       ) : null}
-      <span className="truncate text-[20px] font-extrabold tracking-[-0.03em]">{nome}</span>
+      <span className="flex min-w-0 flex-col leading-none">
+        <span className="truncate text-[19px] font-extrabold tracking-[-0.03em]">{nome}</span>
+        {loja}
+      </span>
     </span>
   );
 }
 
 function Casca({ children }: { children: React.ReactNode }) {
-  const { eu, carregando, pode, sair } = useSessao();
+  const { eu, carregando, pode } = useSessao();
   const caminho = usePathname();
   const [aberto, setAberto] = useState(false);
   // Quais grupos do menu estão abertos. Fica no navegador porque é preferência
@@ -189,6 +212,34 @@ function Casca({ children }: { children: React.ReactNode }) {
 
   const loja = eu.unidades[0];
 
+  // Com uma loja só, é legenda; com mais de uma, é escolha — e a escolha fica no
+  // mesmo lugar onde a legenda estaria, que é onde se olha para saber onde se está.
+  const daLoja =
+    eu.unidades.length > 1 ? (
+      <select
+        className="mono mt-0.5 -ml-1 max-w-[170px] truncate rounded border border-transparent bg-transparent px-1 py-0 text-[11.5px] text-suave hover:border-linha2"
+        value={unidadeAtual() ?? String(eu.unidades[0].id)}
+        aria-label="Loja"
+        onChange={(e) => {
+          definirUnidade(Number(e.target.value));
+          // Recarrega a página inteira de propósito: cada tela já buscou saldo,
+          // alerta e apuração da loja anterior, e atualizar uma por uma deixaria
+          // número de loja trocada na tela até a próxima navegação.
+          window.location.reload();
+        }}
+      >
+        {eu.unidades.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.apelido ?? u.nome}
+          </option>
+        ))}
+      </select>
+    ) : loja ? (
+      <span className="mono mt-0.5 truncate text-[11.5px] uppercase tracking-[0.06em] text-suave">
+        {loja.apelido ?? loja.nome}
+      </span>
+    ) : null;
+
   const navegacao = (
     <MenuLateral
             enviaAoPdv={!!eu?.enviar_ao_pdv}
@@ -200,52 +251,22 @@ function Casca({ children }: { children: React.ReactNode }) {
     />
   );
 
-  // Trocar senha e sair são AÇÕES: em maiúsculas miúdas pareciam legenda, e
-  // ninguém clica no que parece rótulo. Botão com borda, texto na caixa normal
-  // e alvo grande o bastante para o dedo.
-  const rodapeUsuario = (
-    <div className="border-t border-linha px-4 py-4">
-      <p className="truncate px-1 text-[14px] font-semibold">{eu.nome}</p>
-      <p className="truncate px-1 text-[12.5px] text-suave">
-        {eu.papeis.join(", ") || "sem papel"}
-      </p>
-      <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-        <Link
-          href="/trocar-senha"
-          className="btn btn-secundario whitespace-nowrap px-3 text-center text-[13px] no-underline"
-        >
-          Trocar senha
-        </Link>
-        <button
-          type="button"
-          className="btn btn-secundario whitespace-nowrap px-4 text-[13px] hover:border-erro hover:text-erro"
-          onClick={() => void sair()}
-        >
-          Sair
-        </button>
-      </div>
-    </div>
-  );
+  // 🔑 **O bloco de usuário saiu do pé do menu e foi para o topo.** Aqui ele
+  // era texto com dois botões pequenos, e no celular — onde a gaveta nasce
+  // fechada — sair do sistema exigia abrir o menu e rolar até o fim. Agora vive
+  // em `BarraSuperior`, no canto superior direito, que é onde todo mundo já
+  // procura. O menu lateral voltou a ser só navegação.
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
-      {/* ---------- celular: barra fixa + gaveta ---------- */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-linha bg-superficie px-4 py-3 lg:hidden">
-        <button
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-linha2 bg-superficie"
-          onClick={() => setAberto(true)}
-          aria-label="Abrir menu"
-          aria-expanded={aberto}
-        >
-          <span className="flex flex-col gap-[3px]">
-            <span className="block h-[2px] w-4 bg-tinta" />
-            <span className="block h-[2px] w-4 bg-tinta" />
-            <span className="block h-[2px] w-4 bg-tinta" />
-          </span>
-        </button>
-        <Marca logo={marca.logo} nome={marca.nome} />
-      </header>
+    <div className="min-h-screen">
+      {/* A barra do topo atravessa a tela inteira — inclusive no desktop, onde
+          antes só existia no celular. É ela que carrega a marca e quem entrou. */}
+      <BarraSuperior
+        marca={<Marca logo={marca.logo} nome={marca.nome} loja={daLoja} />}
+        aoAbrirMenu={() => setAberto(true)}
+      />
 
+      <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
       {aberto && (
         <div
           className="fixed inset-0 z-40 bg-tinta/35 lg:hidden"
@@ -254,12 +275,17 @@ function Casca({ children }: { children: React.ReactNode }) {
         />
       )}
 
+      {/* ⚠️ `top-14` e `h-[calc(100vh-3.5rem)]`: a barra do topo tem 56px, e sem
+          descontá-los o menu ficava com o próprio topo escondido atrás dela. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[268px] flex-col overflow-y-auto border-r border-linha bg-superficie transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[268px] flex-col overflow-y-auto border-r border-linha bg-superficie transition-transform duration-200 lg:sticky lg:top-14 lg:z-auto lg:h-[calc(100vh-3.5rem)] lg:w-auto lg:translate-x-0 ${
           aberto ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-4 pt-5">
+        {/* No desktop a marca já está na barra do topo — repeti-la aqui seria o
+            mesmo nome duas vezes na mesma linha do olho. Na gaveta do celular
+            ela fica, porque a gaveta COBRE a barra. */}
+        <div className="flex shrink-0 items-center justify-between gap-2 px-5 pb-4 pt-5 lg:hidden">
           <Marca logo={marca.logo} nome={marca.nome} />
           <button
             className="link-acao lg:hidden"
@@ -270,45 +296,22 @@ function Casca({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Com uma loja só o seletor não aparece — mas o dado já é por loja. */}
-        {loja && eu.unidades.length === 1 && (
-          <p className="rotulo shrink-0 truncate px-5 pb-3">{loja.apelido ?? loja.nome}</p>
-        )}
-        {eu.unidades.length > 1 && (
-          <div className="px-5 pb-3">
-            <select
-              className="campo mono py-1.5 text-[12px]"
-              value={unidadeAtual() ?? String(eu.unidades[0].id)}
-              onChange={(e) => {
-                definirUnidade(Number(e.target.value));
-                // Recarrega a página inteira de propósito: cada tela já buscou
-                // saldo, alerta e apuração da loja anterior, e atualizar uma por
-                // uma deixaria número de loja trocada na tela até a próxima
-                // navegação.
-                window.location.reload();
-              }}
-            >
-              {eu.unidades.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.apelido ?? u.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* min-h-0 + overflow no meio: sem isso o flex comprime os grupos do menu
             quando ele cresce, e os rótulos se sobrepõem. */}
         <div className="min-h-0 flex-1 overflow-y-auto">{navegacao}</div>
-        <div className="shrink-0">{rodapeUsuario}</div>
       </aside>
 
-      <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+      {/* ⚠️ `pb-14`: o rodapé é FIXO, então ele não empurra nada — sem a folga,
+          o último botão de um formulário fica atrás dele. */}
+      <main className="min-w-0 px-4 py-6 pb-14 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
         <div className="mx-auto max-w-[1180px]">
           <ConviteInstalar />
           {children}
         </div>
       </main>
+      </div>
+
+      <BarraInferior />
     </div>
   );
 }
@@ -341,7 +344,18 @@ function MenuLateral({
   aoNavegar: () => void;
 }) {
   return (
-    <nav className="px-3 pb-5">
+    // ⚠️ A folga do topo vive no `nav`, e não no `aside`: com a marca e a loja
+    // na barra superior, o Início era o primeiro elemento da lateral e encostava
+    // na borda de baixo da barra — dois blocos colados, sem respiro entre eles.
+    <nav className="px-3 pb-5 pt-4">
+      {/* Fora de grupo: a primeira tela não se abre com um clique a mais. */}
+      <Link
+        href={INICIO.href}
+        onClick={aoNavegar}
+        className={`menu-raiz mb-0.5 ${caminho === INICIO.href ? "menu-raiz-ativo" : ""}`}
+      >
+        {INICIO.nome}
+      </Link>
       {MENU.map((g) => {
         const itens = g.itens.filter(
           (i) =>
@@ -350,26 +364,26 @@ function MenuLateral({
         );
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);
-        // O grupo da tela aberta começa expandido — mas é só o padrão: se a
-        // pessoa o recolher, ele fica recolhido, inclusive nela. Quem quer o
-        // menu enxuto não deve ser obrigado a manter um grupo aberto. A pista
-        // de "você está aqui" não se perde: o título do grupo fica verde.
-        const expandido = abertos[g.grupo] ?? temAtivo;
+        // 🔑 **O padrão é RECOLHIDO — todos.** O grupo da tela aberta já veio
+        // expandido sozinho, e o efeito era um menu que ia abrindo grupos
+        // conforme se navegava: ao fim de dez minutos estavam todos abertos, e
+        // a lista de vinte itens não cabia mais na altura da tela. A pista de
+        // "você está aqui" não se perde — o título do grupo fica verde, e ele
+        // continua abrindo com um clique.
+        const expandido = abertos[g.grupo] ?? false;
         return (
-          <div key={g.grupo} className="mb-1.5 shrink-0">
+          <div key={g.grupo} className="mb-0.5 shrink-0">
             <button
               type="button"
               aria-expanded={expandido}
               onClick={() => alternarGrupo(g.grupo, expandido)}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-superficie2 ${
-                temAtivo ? "text-erva" : ""
-              }`}
+              className={`menu-grupo ${temAtivo ? "menu-grupo-ativo" : ""}`}
             >
-              <span className="rotulo">{g.grupo}</span>
+              <span>{g.grupo}</span>
               <svg
                 viewBox="0 0 10 6"
                 aria-hidden="true"
-                className={`h-[6px] w-[10px] shrink-0 transition-transform duration-150 ${
+                className={`h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
                   expandido ? "" : "-rotate-90"
                 }`}
               >
@@ -377,7 +391,7 @@ function MenuLateral({
                       strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            <ul className={`flex flex-col gap-0.5 pb-2 ${expandido ? "" : "hidden"}`}>
+            <ul className={`flex flex-col gap-px pb-2 ${expandido ? "" : "hidden"}`}>
               {itens.map((i) => {
                 const ativo = caminho === i.href;
                 return (
@@ -388,11 +402,7 @@ function MenuLateral({
                       // quatro tabelas de apoio compartilham o mesmo: sem
                       // fechar aqui, trocar de aba deixava o menu por cima.
                       onClick={aoNavegar}
-                      className={`block rounded py-2.5 pl-4 pr-2 text-[15px] lg:py-1.5 lg:text-[14.5px] ${
-                        ativo
-                          ? "bg-erva-claro font-semibold text-erva"
-                          : "text-tinta hover:bg-superficie2"
-                      }`}
+                      className={`menu-item ${ativo ? "menu-item-ativo" : ""}`}
                     >
                       {i.nome}
                     </Link>

@@ -1,6 +1,6 @@
 """Modelos de vendas e CMV."""
 
-from datetime import date
+from datetime import date, time
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,11 @@ class ItemVenda(BaseModel):
 
 class VendaImportar(BaseModel):
     data: date
+    # 🔑 **A HORA do cupom.** A coluna existe desde o começo e o mapeador do PDV
+    # já a lia — ela só nunca chegava ao `INSERT`, e o dado morria no caminho.
+    # ⚠️ Opcional porque a planilha não a tem: quem digita venda do dia informa
+    # o dia, e inventar meia-noite seria pior que não ter.
+    hora: time | None = None
     documento: str | None = Field(default=None, max_length=40)
     canal: str | None = None
     origem: str = "PLANILHA"
@@ -28,6 +33,7 @@ class ImportarVendasRequest(BaseModel):
 class VendaResponse(BaseModel):
     id: int
     data: date
+    hora: time | None = None
     origem: str
     canal: str | None = None
     documento: str | None = None

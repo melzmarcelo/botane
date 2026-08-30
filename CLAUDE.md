@@ -1159,6 +1159,114 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **A casca do sistema: barra superior, menu do usuário e rodapé com a VERSÃO**
+  (30/08/2026). A marca à esquerda e, embaixo dela, em que LOJA se está — pequeno. À
+  direita, o nome de quem entrou vira o controle, abrindo **Alertas · Ajuda · Perfil ·
+  Alterar senha · Sair**.
+  🔑 **O bloco do usuário saiu do pé do menu lateral.** Lá era texto com dois botões
+  pequenos, e no celular — onde a gaveta nasce fechada — sair do sistema exigia abrir o
+  menu e rolar até o fim. Canto superior direito é a convenção que a pessoa já traz.
+  ⚠️ **A loja é legenda da EMPRESA, não item de menu**: no menu ela tinha o tamanho de um
+  rótulo de seção e, no celular, só aparecia com a gaveta aberta — quem tem duas lojas não
+  via em qual estava. Com mais de uma, o seletor fica no mesmo lugar onde a legenda estaria.
+  ⚠️ **Alertas e Ajuda saíram do menu lateral**: são de QUEM está usando, não assunto do
+  sistema como estoque ou compras. E o grupo "Operação" acabou — sobrando só o Início, o
+  cabeçalho de grupo custava um clique para chegar à primeira tela. O Início virou item de
+  PRIMEIRO nível e usa a tinta dos títulos de grupo; sem chevron, porque não abre nada.
+  🔑 **A versão sai do `GET /saude`, nunca de constante compilada no front.** Uma constante
+  diz o que foi COMPILADO; esta diz o que está NO AR — e é justamente quando os dois
+  discordam que alguém precisa do número. Mesma razão da `impressao`. **`1.1.xx`: o `xx`
+  conta PROMOÇÕES**, não commits — é o número que a pessoa lê no rodapé e repete ao pedir
+  ajuda. Subir a `VERSAO` em `api/main.py` virou passo do roteiro em `docs/deploy.md`.
+  ⚠️ **Falha ao ler a versão não mostra nada** — nem "erro", nem "—": o rodapé é decoração
+  informativa, e um aviso ali assustaria por algo que não impede nada.
+  🔑 **`PUT /auth/me`** (nome e telefone) **não exige permissão de administrador, e não
+  pode**: todo mundo que entra tem um cadastro, e quem digitou o próprio nome errado não vai
+  abrir chamado. O que protege é o ESCOPO — o `id` vem do TOKEN, nunca do corpo.
+  ⚠️ **E-mail fica FORA**: é a identidade de quem entra, e trocá-lo derrubaria o login da
+  própria pessoa no instante seguinte. Papel e loja idem — quem se dá permissão não tem
+  permissão nenhuma.
+  🔑 **Entrar RECOLHE o menu**, e o padrão passou a ser recolhido para todos os grupos —
+  inclusive o da tela aberta, que se expandia sozinho. O efeito era um menu que ia abrindo
+  grupos conforme se navegava até não caber na altura da tela. Quem diz "você está aqui" é a
+  cor do título. O `login` limpa `botane.menu`: a preferência é da SESSÃO de trabalho, não
+  da máquina.
+  🔑 **O menu era SERIF.** `font-corpo` (Newsreader) é a fonte do texto que se LÊ; navegação
+  se percorre com o olho, item a item. E metade dele já estava certa sem ninguém notar: o
+  `<button>` do grupo pegava a `font-display` pela regra de base, o `<a>` do item não — duas
+  fontes na mesma lista. ⚠️ `.menu-grupo`, `.menu-item` e `.menu-raiz` vão em
+  `@layer components` porque definem `display` (a mesma nota do `.campo`).
+  ⚠️ **Item ativo é pílula COM BARRA à esquerda** (`::before`, para não empurrar o texto):
+  só o fundo se perdia entre seis títulos de grupo recolhidos.
+- 🔑 **4px de raio é canto vivo disfarçado** (30/08/2026). A tela é feita de caixas, e num
+  raio tão curto nenhuma tem forma perceptível — só borda. `.cartao` foi para **14px** com
+  **sombra dupla**: uma linha de 1px logo abaixo, que separa do papel, e um halo largo e
+  claríssimo, que dá a altura. Sombra única e escura é o que faz uma tela parecer de 2012.
+  Botão e campo foram para 9px — canto vivo dentro de cartão redondo são duas linguagens na
+  mesma tela, e a mais dura é a que se nota.
+  🔑 **E o aviso não era um balão, era uma LINHA**: barra de 2px à esquerda com o texto solto
+  no fundo da página, lendo como mais um parágrafo com a cor trocada. Virou `.aviso` +
+  `.aviso-{info,ok,erro}` — fundo tingido, borda da mesma família, 12px de canto. Entraram os
+  tokens que faltavam (`--color-erro-claro`, `--color-alerta-claro`); o `erva-claro` já
+  existia e servia só ao verde. ⚠️ A forma mora no CSS, não em oito utilitárias repetidas no
+  componente: o aviso aparece em quase toda tela, e um balão diferente por página seria a
+  primeira coisa a divergir.
+- 🔑 **"Poucos por natureza" era suposição, e a base real desmentiu** (30/08/2026): 184
+  locais, 86 categorias, 52 setores. **Tabelas de apoio** e **Exportação para o PDV** ganharam
+  rodapé de página.
+  ⚠️ **Nas duas o corte é do NAVEGADOR, e não é a mentira que a regra da casa proíbe.** A
+  regra existe para lista que cresce sem teto. Aqui as tabelas de apoio vêm inteiras porque a
+  própria tela as usa para EDITAR, e a fila do PDV é DERIVADA da comparação com o cardápio
+  inteiro — não há `LIMIT` no servidor que a barateie, e o botão Enviar precisa saber de
+  TODOS os pendentes, não dos vinte à vista. O total exibido é o total de verdade.
+  ⚠️ **A aba entra como filtro**: trocar de aba volta à primeira página, senão quem estava na
+  página 5 dos locais cairia numa tela vazia nas unidades de medida.
+  ⚠️ **A caixinha do cabeçalho marca a PÁGINA**, não a fila inteira: uma caixinha que
+  selecionasse 600 linhas invisíveis é armadilha — e quem quer mandar tudo já tem o botão,
+  que sem seleção vale por todos. ⚠️ O rodapé fica FORA do `overflow-x-auto`: dentro dele,
+  numa tabela larga, sairia da vista junto com as colunas da direita.
+- 🔑 **A HORA do cupom estava sendo jogada fora** (30/08/2026). A coluna `vendas.hora` existe
+  desde o começo e `mapeadores.cupom` já lia `dtrecebimento` — o `INSERT` da importação é que
+  não incluía o campo. Agora ela atravessa da busca no PDV até a tela, e a lista ordena pelo
+  relógio dentro do dia.
+  ⚠️ **Data e hora vêm de campos DIFERENTES, de propósito**: a data é `dtmovimento` (a do
+  negócio), a hora é `dtrecebimento` (a do caixa). Numa casa que fecha depois da meia-noite os
+  dois discordam — e quem decide o dia do CMV é a data.
+  ⚠️ **Venda digitada continua sem hora**: `horaBr` devolve vazio, nunca "00:00". Meia-noite é
+  um horário, e quem lesse concluiria que a casa vendeu na virada do dia.
+- 🔑 **Apagar uma categoria aqui poderia DUPLICAR o cardápio do cliente** (30/08/2026). O
+  `codRefExterna` do grupo aponta para o id da nossa categoria; sem ela, o grupo sumia do
+  `por_ref` (ninguém o reivindica) **e** do `por_nome` (que só recebe grupo sem dono) — e a
+  categoria recadastrada com o MESMO nome não achava nada dos dois lados: a fila proporia
+  **CRIAR**, e o botão Enviar criaria 30 grupos repetidos. Bastava apagar UMA categoria.
+  Agora grupo de dono inexistente volta a ser adotável pelo nome, e a fixture tem um grupo
+  órfão para a suíte cobrar isso sempre.
+- ⚠️ **A limpeza da base derrubou SEIS checagens, e nenhuma por defeito** (30/08/2026) — todas
+  supunham a precondição em vez de garanti-la. É a lição do "teste que descreve o estado do
+  dia", agora com a lista completa dos disfarces:
+  1. `smoke_utensilios` contava com o grupo semeado pela migração 037 — e **migração não
+     reexecuta**: quem limpa as tabelas de apoio leva o grupo junto. Cria se faltar.
+  2. `smoke_alertas` só AJUSTAVA o usuário de cozinha `if existente:` — depois de uma limpeza
+     que leva os usuários de teste, o login voltava 401 e a checagem iterava a MENSAGEM de
+     erro como se fosse a lista de alertas, com traceback longe da causa.
+  3. `smoke_pdv_legal` contava com a CAFETERIA e o BAR deixados pela importação do cardápio.
+     ⚠️ E `_garantir` precisou comparar **sem caixa**: a unicidade do nome ignora maiúsculas,
+     então o POST devolve 409 para "BAR" quando existe "Bar" — e a busca exata não achava o
+     registro que o próprio servidor acabou de citar.
+  4. 🔑 **A pior delas passava por SORTE há muito tempo:** *"o de nome idêntico acha dono"*
+     exigia que a importação vinculasse um prato criado com o nome exato do cardápio — mas a
+     **cascata por nome foi REMOVIDA** deste projeto. Ela passava porque o `PDV-10689993` de
+     uma rodada anterior entrava como `ja_vinculados`, por CÓDIGO. A base virgem expôs. Agora
+     afirma a regra: nome idêntico NÃO liga, e nenhum item fica órfão.
+  5. `smoke_exportacoes` exigia `> 10` linhas na prévia do CMV — sem venda, a margem por prato
+     vem vazia e o arquivo tem só as 10 da apuração. Passou a afirmar a SOMA: apuração + anexo.
+  6. A checagem do preço do cardápio virou pergunta ao `/pdv/config`: com o envio ligado o
+     Botané é dono do preço e o cardápio deixa de trazê-lo.
+- ⚠️ **`p.click` do puppeteer estourou o `protocolTimeout` na barra superior** — ele rola o
+  elemento e espera ele ficar estável, e a dança derrubou a rodada inteira num ponto sem
+  defeito. Clique de DENTRO do documento (`p.evaluate(... .click())`) faz a mesma coisa sem
+  depender de layout. ⚠️ E a tela do Perfil se alcança pelo ENDEREÇO: encenar o clique num
+  link que fecha o próprio menu ao ser clicado só acrescenta interação frágil.
 - 🔑 **O PRODUTO no envio, e o Botané virando DONO DO PREÇO** (migração 044, 29/08/2026).
   O que sai é **valor, nome, setor e categoria** — decisão do dono, nestas palavras.
   ⚠️ **NENHUM imposto é enviado, e isso é a trava mais importante do arquivo.** Os campos
@@ -1433,10 +1541,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (145), `smoke_vendas.py` (38), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (148), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (349, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (365, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

@@ -56,6 +56,21 @@ class MeResponse(BaseModel):
     enviar_ao_pdv: bool = False
 
 
+class PerfilUpdate(BaseModel):
+    """O que a pessoa muda no PRÓPRIO cadastro.
+
+    ⚠️ **O e-mail fica de fora, e não é esquecimento.** Ele é a identidade de
+    quem entra: trocá-lo aqui derrubaria o login da própria pessoa no instante
+    seguinte, e ainda esbarraria na unicidade sem que ela entendesse por quê.
+    Quem muda e-mail de alguém é o administrador, na tela de Usuários.
+    ⚠️ Papel e loja também ficam de fora — quem se dá permissão não tem
+    permissão nenhuma.
+    """
+
+    nome: str = Field(min_length=2, max_length=120)
+    telefone: str | None = Field(default=None, max_length=30)
+
+
 class TrocarSenhaRequest(BaseModel):
     senha_atual: str
     senha_nova: str = Field(min_length=SENHA_MINIMA)
