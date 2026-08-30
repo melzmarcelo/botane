@@ -1159,6 +1159,35 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **O botão "Importar cardápio" virou o momento de ALINHAR com o PDV** (30/08/2026,
+  decisão do dono). Ele sobrescreve nome curto, categoria, setor, unidade, NCM, CEST, EAN,
+  **situação** e **preço**. Antes só preenchia o que estava em branco, com a regra "reimportar
+  não desfaz correção de quem cadastrou aqui" — e o efeito era que nome, situação e preço
+  alterados no PDV **nunca** chegavam.
+  ⚠️ **"O que o PDV TEM", não "o que o PDV mandou".** Campo vazio de lá NÃO apaga o daqui: o
+  cardápio real tem produto com NCM e CEST em branco, e sobrescrever com vazio destruiria dado
+  que alguém preencheu. É a condição que o dono pôs na própria frase: *"com todas as
+  informações presentes no PDV, caso contrário não"*.
+  ⚠️ **`ativo` é a exceção e entra SEMPRE** — booleano nunca é "vazio", e o falso ali É a
+  informação. É por aqui que a desativação feita no PDV finalmente volta.
+  🔑 **O `nome` respeita o DONO.** Produto que também veio do Omie mantém o `nome` fiscal (o da
+  nota do fornecedor, o que se procura ao conferir uma compra); o do PDV vai para o
+  `nome_curto`, que é onde ele já morava. Só quem NÃO tem `codigo_omie` recebe o
+  `descricaoDetalhada` como nome. Sem isso, uma importação apagaria o nome fiscal de 2.189
+  cadastros — sem volta a não ser reimportando o catálogo do Omie inteiro.
+  🔑 **E o preço voltou a ser lido, mesmo com o Botané dono dele.** Houve uma versão que parava
+  de lê-lo quando `enviar_ao_pdv` estava ligado, para evitar o ping-pong; o remédio era pior
+  que a doença, porque o valor alterado lá simplesmente se perdia. **O que evita o ping-pong é
+  isto ser MANUAL**: esta função só roda pelo botão, e a busca de vendas — que roda por agenda
+  — chama a `reconciliar`, nunca a importação. "Ser dono do preço" quer dizer *o preço daqui é
+  o que SAI*; alinhar os dois é um clique de alguém.
+  ⚠️ **Venda de produto que só existe no PDV NÃO cria cadastro.** A importação de venda liga
+  por id, código e, em último recurso, nome exato de produto ativo; não achando, o item fica
+  **sem vínculo** (e o CMV teórico dele é zero) até alguém importar o cardápio. Cadastro não
+  nasce de efeito colateral de uma venda.
+  ⚠️ **Decidido NÃO construir o "trazer do PDV" por linha** na fila de exportação: com o botão
+  alinhando em lote, um segundo caminho para a mesma coisa seria duas regras para o mesmo
+  dado. A fila fica só com a VISÃO da divergência.
 - 🔑 **O preço divergente era INVISÍVEL dos dois lados** (30/08/2026). Com o Botané dono do
   preço, `cardapio.importar` parou de lê-lo — e a fila comparava só nome, grupo e impressora.
   Preço alterado no PDV não constava em lugar nenhum aqui, e o envio seguinte o sobrescrevia
@@ -1585,7 +1614,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.449 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.453 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),

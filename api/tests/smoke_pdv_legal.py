@@ -520,14 +520,14 @@ _expresso = next((x for x in (prods_p or []) if x.get("codigo") == "PDV-10689993
 # seguinte e o envio o desfaz. A checagem afirma a REGRA, nao o numero do dia.
 st_cfg, cfg_preco = chamar("GET", "/pdv/config", token=token)
 somos_donos = bool(cfg_preco.get("enviar_ao_pdv"))
-if somos_donos:
-    checar("com o envio ligado, o cardapio NAO traz preco",
-           _expresso is None or not _expresso.get("preco_venda"),
-           (_expresso or {}).get("preco_venda"))
-else:
-    checar("o cardapio traz o preco de venda junto",
-           _expresso is None or float(_expresso.get("preco_venda") or 0) == 5.5,
-           (_expresso or {}).get("preco_venda"))
+# 🔑 **O botao traz o preco SEMPRE, dono ou nao** — decisao do dono: o preco
+# que vale no cupom e o do PDV. Houve uma versao que parava de le-lo com o
+# envio ligado, para evitar o ping-pong, e o remedio era pior: o valor
+# alterado la simplesmente se perdia. O que evita o ping-pong e isto ser
+# MANUAL — a busca de vendas, que roda por agenda, nunca chama a importacao.
+checar("o cardapio traz o preco de venda junto",
+       _expresso is None or float(_expresso.get("preco_venda") or 0) == 5.5,
+       (_expresso or {}).get("preco_venda"))
 
 # 🔑 **Nome identico NAO liga — e a checagem afirmava o contrario.** A cascata
 # por nome foi REMOVIDA deste projeto depois de ligar REDBULL a LIMAO TAITY e
@@ -575,6 +575,15 @@ def _sem_rastro_do_ean():
         cur.execute("DELETE FROM produtos WHERE codigo = %s", (f"PDV-{CODIGO_FIXTURE}",))
         cur.execute("SELECT id, nome FROM produtos WHERE codigo_barras = %s", (EAN_FIXTURE,))
         dono = cur.fetchone()
+        if dono:
+            # ⚠️ **Devolve o NOME tambem.** Desde que o botao de importar passou a
+            # sobrescrever, uma rodada anterior deixava este produto ja com o nome
+            # do item da fixture — e a checagem seguinte, que exige nomes
+            # DIFERENTES para exercitar o passo do EAN, acusava um defeito que nao
+            # existe. Precondicao garantida, nao suposta.
+            cur.execute("UPDATE produtos SET nome = %s WHERE id = %s RETURNING id, nome",
+                        ("Tonica de conferencia do EAN", dono["id"]))
+            dono = cur.fetchone()
         if not dono:
             cur.execute(
                 """INSERT INTO produtos (codigo, nome, tipo, status, um_estoque,

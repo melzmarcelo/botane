@@ -80,8 +80,16 @@ def _item(bruto: dict) -> dict:
         "grupo": _primeiro(bruto, "nomeGrupo")[:80],
         "setor": "" if impressora.lower() in SEM_IMPRESSORA else impressora[:80],
         "ncm": re.sub(r"\D", "", _primeiro(bruto, "codigoNCM"))[:8],
+        "cest": re.sub(r"\D", "", _primeiro(bruto, "codigoCest"))[:7],
         "ean": re.sub(r"\D", "", _primeiro(bruto, "codigoEAN"))[:14],
         "unidade": SIGLAS.get(sigla, sigla)[:10],
+        # ⚠️ **O nome do cupom e o detalhado são campos DIFERENTES**, e viram
+        # coisas diferentes aqui: o do cupom é o `nome_curto` (o que sai impresso
+        # e aparece no botão do PDV), o detalhado só vira `nome` quando o produto
+        # não tem lado do Omie. Ver `_atualizar`.
+        "nome_cupom": _primeiro(bruto, "descricaoCupom", "descricao")[:60],
+        "nome_longo": _primeiro(bruto, "descricaoDetalhada", "descricaoCupom",
+                                "descricao")[:200],
     }
 
 
@@ -212,23 +220,46 @@ class _Apoio:
 # ficam de fora de propósito: o PDV não sabe se um item de mercearia é revenda ou
 # produção própria, e chutar poria o prato na fila errada — a de "falta ficha"
 # em vez da de "falta compra", ou o contrário.
-_DO_CARDAPIO = ("id_categoria", "id_setor", "ncm", "codigo_barras", "um_estoque")
+# O que o cardápio do PDV sabe sobre um produto e este sistema também guarda.
+# ⚠️ `nome` não entra aqui: ele é decidido à parte, porque tem DONO diferente
+# conforme a origem do cadastro — ver `_atualizar`.
+_DO_CARDAPIO = ("id_categoria", "id_setor", "ncm", "cest", "codigo_barras",
+                "um_estoque", "nome_curto", "ativo")
 
 
 # ⚠️ Colunas com índice ÚNICO. Escrever nelas um valor que já é de outro produto
 # não derruba só aquele item — derruba a importação inteira, porque a transação é
-# uma só. Ver `_completar`.
+# uma só. Ver `_atualizar`.
 _UNICOS = ("codigo_barras",)
 
 
-def _completar(cur, id_produto: int, campos: dict) -> tuple[bool, int]:
-    """Preenche só o que está EM BRANCO no produto. Devolve (mudou, conflitos).
+def _atualizar(cur, id_produto: int, campos: dict) -> tuple[bool, int]:
+    """Traz do PDV o que o PDV TEM. Devolve (mudou, conflitos).
 
-    ⚠️ **Nunca sobrescreve.** Reimportar o cardápio depois de alguém corrigir a
-    categoria de um prato não pode desfazer a correção — é a mesma lição do
-    importador de fornecedores do Omie. Sem isto, a reimportação também não
-    faria nada (`continue` no item já vinculado), e os rascunhos criados por uma
-    versão anterior ficariam vazios para sempre.
+    🔑 **O botão "Importar cardápio" passa a ser o momento de alinhar** — decisão
+    do dono, 30/08/2026. Antes ele só preenchia o que estava em branco, com a
+    regra "reimportar não desfaz correção de quem cadastrou aqui"; o efeito era
+    que nome, situação e preço alterados no PDV **nunca** chegavam. Agora ele
+    sobrescreve, e o que evita o ping-pong é ser MANUAL: nada disso acontece
+    sozinho, e a busca de vendas — que roda por agenda — não chama esta função.
+
+    ⚠️ **"O que o PDV TEM", não "o que o PDV mandou".** Campo vazio de lá NÃO
+    apaga o daqui: o cardápio real tem produto com NCM e CEST em branco, e
+    sobrescrever com vazio destruiria dado que alguém preencheu. Foi a condição
+    que o dono pôs na própria frase: *"com todas as informações presentes no PDV,
+    caso contrário não"*.
+
+    ⚠️ **`ativo` é a exceção e entra SEMPRE**: ele é booleano, nunca "vazio", e
+    trazê-lo é justamente a volta que se pediu — produto desligado no cardápio
+    fica inativo aqui na próxima importação.
+
+    ⚠️ **EAN que já pertence a OUTRO produto é PULADO, não gravado.** O cenário
+    acontece em três tempos: o item entra sem EAN e vira rascunho; depois o
+    catálogo do Omie traz o produto de verdade, com o EAN; depois alguém
+    preenche o EAN no PDV. Na reimportação o item já está vinculado — o primeiro
+    passo da cascata responde antes do EAN —, e a gravação batia no
+    `ux_produto_barras`. Não é um item que falha: é a importação inteira que
+    morre, e nada entra.
 
     ⚠️ **EAN que já pertence a OUTRO produto é PULADO, não gravado.** O cenário
     acontece em três tempos: o item entra sem EAN e vira rascunho; depois o
@@ -243,13 +274,24 @@ def _completar(cur, id_produto: int, campos: dict) -> tuple[bool, int]:
     mover o de-para, os itens de venda e o custo junto — repontar o vínculo aqui
     deixaria as vendas passadas presas no rascunho.
     """
+    # ⚠️ As colunas lidas saem das CHAVES do que veio, não de uma lista fixa: o
+    # `nome` entra só em alguns produtos (ver o chamador), e uma lista fixa
+    # ou o traria sempre ou nunca.
+    colunas = [c for c in campos if c in (*_DO_CARDAPIO, "nome")]
+    if not colunas:
+        return False, 0
     cur.execute(
-        f"SELECT {', '.join(_DO_CARDAPIO)} FROM produtos WHERE id = %s", (id_produto,)
+        f"SELECT {', '.join(colunas)} FROM produtos WHERE id = %s", (id_produto,)
     )
     antes = cur.fetchone()
     if not antes:
         return False, 0
-    faltando = {c: v for c, v in campos.items() if v is not None and not antes[c]}
+    # Só o que o PDV tem, e só o que está diferente daqui. `ativo` passa mesmo
+    # sendo `False`, porque ali o falso É a informação.
+    faltando = {
+        c: v for c, v in campos.items()
+        if (v not in (None, "") or c == "ativo") and antes[c] != v
+    }
 
     conflitos = 0
     for coluna in _UNICOS:
@@ -351,21 +393,17 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     itens = baixar(cliente)
     apoio = _Apoio(cur)
 
-    # 🔑 **Com o envio ligado, o Botané passa a ser o DONO do preço — e para de
-    # importá-lo.** Manter as duas direções faria os sistemas brigarem: um preço
-    # alterado no PDV voltaria por cima do que mandamos, o envio seguinte o
-    # desfaria, e `produto_precos` — que existe para responder "quando o preço
-    # subiu?" — viraria ruído de ida e volta.
-    # ⚠️ Só o PREÇO para de vir. O resto do cardápio (nome, grupo, impressora,
-    # NCM) continua sendo importado: dono do preço não é dono de tudo.
-    cur.execute(
-        """SELECT enviar_ao_pdv FROM integracoes
-            WHERE servico = 'PDV_LEGAL' AND id_unidade = %s""",
-        (id_unidade,),
-    )
-    linha_cfg = cur.fetchone()
-    somos_donos_do_preco = bool(linha_cfg and linha_cfg["enviar_ao_pdv"])
-    tabela = {} if somos_donos_do_preco else precos(cliente, filial)
+    # 🔑 **O preço vem, mesmo com o Botané sendo o dono dele** — decisão do dono,
+    # 30/08/2026: *"o preço que deve ser considerado no cupom é o que vem do
+    # PDV"*. Houve uma versão que parava de lê-lo quando `enviar_ao_pdv` estava
+    # ligado, para evitar o ping-pong; o remédio era pior que a doença, porque o
+    # valor alterado lá simplesmente se perdia.
+    # ⚠️ **O que evita o ping-pong é isto ser MANUAL.** Esta função só roda pelo
+    # botão "Importar cardápio"; a busca de vendas, que roda por agenda, chama a
+    # `reconciliar` e nunca esta. Então "ser dono do preço" quer dizer *o preço
+    # daqui é o que SAI* — e alinhar os dois é um clique de alguém, não um
+    # efeito colateral.
+    tabela = precos(cliente, filial)
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
@@ -386,8 +424,12 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             "id_categoria": apoio.categoria(item["grupo"]),
             "id_setor": apoio.setor(item["setor"]),
             "ncm": item["ncm"] or None,
+            "cest": item["cest"] or None,
             "codigo_barras": item["ean"] or None,
             "um_estoque": apoio.unidade(item["unidade"]),
+            # O que sai impresso no cupom e no botão do PDV.
+            "nome_curto": item["nome_cupom"] or None,
+            "ativo": item["ativo"],
         }
 
         # ---- porta 1: o código do PDV, principal ou apelido
@@ -446,7 +488,20 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             continue
 
         if origem != "criado":
-            mudou, conflitos = _completar(cur, id_produto, campos)
+            # 🔑 **O `nome` tem DONO diferente conforme a origem do cadastro.**
+            # Quando o produto existe nos dois sistemas, a decisão da casa é:
+            # `nome` = o do OMIE (o fiscal, o que aparece na nota do fornecedor e
+            # o que se procura ao conferir uma compra) e `nome_curto` = o do PDV
+            # (o que sai no cupom). Trazer o `descricaoDetalhada` por cima
+            # apagaria o nome fiscal — e não há como recuperá-lo sem reimportar o
+            # catálogo do Omie inteiro. Por isso ele só entra quando NÃO há lado
+            # do Omie; tendo, o do PDV já está guardado no `nome_curto`.
+            cur.execute("SELECT codigo_omie FROM produtos WHERE id = %s", (id_produto,))
+            do_omie = (cur.fetchone() or {}).get("codigo_omie")
+            campos_do_item = dict(campos)
+            if not do_omie and item["nome_longo"]:
+                campos_do_item["nome"] = item["nome_longo"]
+            mudou, conflitos = _atualizar(cur, id_produto, campos_do_item)
             resumo["completados"] += 1 if mudou else 0
             resumo["ean_de_outro"] += conflitos
             onde = vinculo.gravar(cur, id_produto, codigo, descricao, id_usuario)
