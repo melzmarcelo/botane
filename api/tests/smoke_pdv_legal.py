@@ -1037,6 +1037,37 @@ if id_orfa:
            orfa == "ADOTAR", orfa)
     if _criei_orfa:
         chamar("DELETE", f"/categorias/{id_orfa}", token=token)
+
+# 🔑 **Preco divergente aparece na fila — antes era INVISIVEL dos dois lados.**
+# Com o Botane dono do preco, `cardapio.importar` parou de le-lo, e a fila
+# comparava so nome, grupo e impressora: um preco alterado no PDV nao constava em
+# lugar nenhum aqui, e o envio seguinte o sobrescrevia calado.
+# ⚠️ Precisa da FILIAL configurada: preco e por filial, e sem ela nao se compara.
+st, _cfg_f = chamar("GET", "/pdv/config", token=token)
+chamar("PUT", "/pdv/config", {**base_cfg, "modo": "simulado", "enviar_ao_pdv": True,
+                              "filiais": "30638"}, token=token)
+st, prods_pr = chamar("GET", "/produtos?busca=CAFE EXPRESSO&incluir_inativos=true",
+                      token=token)
+_pr = next((x for x in (prods_pr or []) if x.get("codigo") == "PDV-10689993"), None)
+if _pr:
+    # A fixture cobra 5,50 nesse item; aqui o preco vai para 7,25 de proposito.
+    chamar("PUT", f"/produtos/{_pr['id']}",
+           {"integrado_pdv": True, "preco_venda": 7.25}, token=token)
+    st, fila_pr = chamar("GET", "/pdv/envio/fila", token=token)
+    _dele = next((i for i in fila_pr["pendentes"] + fila_pr["integrados"]
+                  if i["tipo"] == "PRODUTO" and i["id_registro"] == _pr["id"]), None)
+    checar("preco diferente do PDV poe o produto como pendente",
+           _dele and _dele["acao"] == "ATUALIZAR", _dele and _dele["acao"])
+    # ⚠️ Os DOIS lado a lado: dizer so "atualizar" faria quem confere abrir o PDV
+    # para descobrir qual dos dois valores esta velho.
+    checar("e a fila mostra o valor dos dois lados",
+           _dele and float(_dele.get("preco_no_pdv") or 0) == 5.5,
+           _dele and (_dele.get("preco"), _dele.get("preco_no_pdv")))
+    # Devolve: preco igual ao da fixture, e a marca como estava.
+    chamar("PUT", f"/produtos/{_pr['id']}",
+           {"integrado_pdv": False, "preco_venda": 5.5}, token=token)
+chamar("PUT", "/pdv/config", {**base_cfg, "modo": "simulado", "enviar_ao_pdv": True,
+                              "filiais": (_cfg_f or {}).get("filiais")}, token=token)
 # Desfaz so o que ESTA suite criou: apagar o que a casa ja tinha seria a suite
 # mexendo no cadastro de quem usa o sistema.
 for _id, _rota, _meu in ((id_cat_prova, "categorias", _criei_cat),

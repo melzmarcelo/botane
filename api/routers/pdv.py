@@ -77,6 +77,21 @@ class ConfigPdv(BaseModel):
     agenda_janela_dias: int | None = Field(default=None, ge=1, le=60)
 
 
+def _filial(cur, id_unidade: int) -> int | None:
+    """A filial da tabela de preços — uma só.
+
+    ⚠️ Preço é POR filial, e mandar (ou comparar) o daqui contra a loja errada
+    seria pior que não fazer nada. Com mais de uma configurada, devolve nulo.
+    """
+    cur.execute(
+        "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
+        (id_unidade, SERVICO))
+    linha = cur.fetchone()
+    filiais = (segredos.decifrar(linha["credenciais"]) if linha else {}).get("filiais")
+    so = [f.strip() for f in str(filiais or "").split(",") if f.strip()]
+    return int(so[0]) if len(so) == 1 else None
+
+
 def _cliente(cur, id_unidade: int) -> ClientePdv:
     cur.execute(
         "SELECT credenciais, modo FROM integracoes WHERE id_unidade = %s AND servico = %s",
@@ -460,7 +475,8 @@ def envio_fila(ctx: Contexto = Depends(requer_permissao("integracao.pdv",
         # ⚠️ O cliente vai junto: a fila PERGUNTA ao PDV o que já existe lá.
         # Sem isso ela mandaria CRIAR para os grupos que já estão no cardápio.
         try:
-            return envio.fila(cur, id_unidade, _cliente(cur, id_unidade))
+            return envio.fila(cur, id_unidade, _cliente(cur, id_unidade),
+                              _filial(cur, id_unidade))
         except ErroPdv as e:
             # ⚠️ Falhar a leitura NÃO pode virar "então crie tudo": a tela diz
             # que não deu para falar com o PDV, e o padrão seguro é não agir.
@@ -503,7 +519,7 @@ def envio_disparar(body: EnvioPedido,
         # 🔑 De quem é a conta — antes de escrever qualquer coisa.
         envio.conferir_a_conta(cliente, (empresa or {}).get("cnpj"))
 
-        panorama = envio.fila(cur, id_unidade, cliente)
+        panorama = envio.fila(cur, id_unidade, cliente, _filial(cur, id_unidade))
         pendentes = panorama["pendentes"]
 
         # 🔑 **Pendência sem o que fazer FECHA aqui.** Tirar do PDV uma
@@ -529,17 +545,8 @@ def envio_disparar(body: EnvioPedido,
     # A filial da tabela de preços: sem ela o preço não sai, e o cadastro sai
     # igual. ⚠️ Uma só — preço é POR filial, e mandar o daqui para a loja errada
     # seria pior que não mandar.
-    filial = None
     with get_cursor() as cur:
-        cur.execute(
-            "SELECT credenciais FROM integracoes WHERE id_unidade = %s AND servico = %s",
-            (id_unidade, SERVICO))
-        linha_cred = cur.fetchone()
-        filiais = (segredos.decifrar(linha_cred["credenciais"]) if linha_cred else {}).get(
-            "filiais")
-    if filiais:
-        so = [f.strip() for f in str(filiais).split(",") if f.strip()]
-        filial = int(so[0]) if len(so) == 1 else None
+        filial = _filial(cur, id_unidade)
 
     # ---- o envio: UMA TRANSAÇÃO POR ITEM ----
     # 🔑 **O PDV não volta atrás, e o banco daqui volta.** Na primeira versão o
@@ -557,7 +564,15 @@ def envio_disparar(body: EnvioPedido,
     for item in pendentes:
         try:
             resposta = envio.enviar_um(cliente, item, filial)
-            codigo = str((resposta or {}).get("id") or item.get("codigo_pdv") or "") or None
+            # 🔑 **Nem toda rota do PDV responde um OBJETO.** `impressoras/update`
+            # devolve a STRING "Registry updated successfully!", como o `delete`
+            # já fazia — e o `.get("id")` num `str` levanta AttributeError. O
+            # envio do setor dava **500 com corpo vazio** depois de o PDV ter
+            # gravado: a alteração ia, a pendência ficava aberta e a tela só
+            # sabia dizer que falhou. O cliente já tolerava a string; quem supunha
+            # o dicionário era esta linha.
+            corpo_resposta = resposta if isinstance(resposta, dict) else {}
+            codigo = str(corpo_resposta.get("id") or item.get("codigo_pdv") or "") or None
             with get_cursor() as cur:
                 cur.execute(
                     """INSERT INTO pdv_envios (id_unidade, tipo, id_registro, acao, estado,
@@ -575,6 +590,18 @@ def envio_disparar(body: EnvioPedido,
                 if item["tipo"] == envio.SETOR and codigo:
                     cur.execute("UPDATE setores SET codigo_pdv = %s WHERE id = %s",
                                 (codigo, item["id_registro"]))
+                # 🔑 **O produto também guarda o código, e não guardava.** O
+                # primeiro cadastro real foi criado no PDV (código 10735980) e o
+                # vínculo não voltou para cá: `produtos.codigo_pdv` continuou
+                # nulo. O que segurou a fila foi o `codRefExterna` gravado do
+                # outro lado — mas ele é a rede, não o vínculo: `codigo_pdv` é o
+                # que a tela mostra, o que o `enviar_preco` usa e o que sobrevive
+                # a alguém limpar o campo externo lá.
+                if item["tipo"] == envio.PRODUTO and codigo:
+                    cur.execute(
+                        """UPDATE produtos SET codigo_pdv = %s
+                            WHERE id = %s AND codigo_pdv IS NULL""",
+                        (codigo, item["id_registro"]))
                 # 🔑 **A pendência só fecha com o envio que deu CERTO.** No erro
                 # ela fica aberta de propósito: é o que faz o registro voltar
                 # para Pendentes depois de alguém corrigir o cadastro, sem

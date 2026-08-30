@@ -94,7 +94,8 @@ export default function PaginaCadastros() {
    * senão quem estava na página 5 dos locais cairia numa tela vazia nas
    * unidades de medida.
    */
-  const pag = usePaginacao("cadastros", { filtros: [aba] });
+  const [mostrarInativos, setMostrarInativos] = useState(false);
+  const pag = usePaginacao("cadastros", { filtros: [aba, mostrarInativos] });
   const [setores, setSetores] = useState<Setor[] | null>(null);
   const [locais, setLocais] = useState<Local[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[] | null>(null);
@@ -107,13 +108,24 @@ export default function PaginaCadastros() {
   const [novaCategoria, setNovaCategoria] = useState({ nome: "", id_pai: "", tipo: "INSUMO" });
   const [novaUm, setNovaUm] = useState({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
 
+  /**
+   * 🔑 **A lista abre com o que está EM USO.** O inativo continuava aparecendo,
+   * só com a opacidade baixa — e numa base com histórico ele é a maioria: quem
+   * procura um local para corrigir percorre uma lista cheia de coisa que não se
+   * usa mais. É o mesmo corte de Produtos, com a mesma caixinha.
+   * ⚠️ **O corte é do SERVIDOR** — os quatro endpoints já tinham o parâmetro, e
+   * o padrão deles sempre foi "só os ativos": era esta tela que pedia todos.
+   * ⚠️ Desativar não é apagar, aqui: cadastro com uso vira inativo e continua
+   * respondendo pelo histórico. Por isso a caixinha, e não um filtro escondido.
+   */
   const carregar = useCallback(async () => {
     try {
+      const q = mostrarInativos ? "true" : "false";
       const [s, l, c, u] = await Promise.all([
-        api.get<Setor[]>("/setores?incluir_inativos=true"),
-        api.get<Local[]>("/locais?incluir_inativos=true"),
-        api.get<Categoria[]>("/categorias?incluir_inativas=true"),
-        api.get<UnidadeMedida[]>("/unidades-medida?incluir_inativas=true"),
+        api.get<Setor[]>(`/setores?incluir_inativos=${q}`),
+        api.get<Local[]>(`/locais?incluir_inativos=${q}`),
+        api.get<Categoria[]>(`/categorias?incluir_inativas=${q}`),
+        api.get<UnidadeMedida[]>(`/unidades-medida?incluir_inativas=${q}`),
       ]);
       setSetores(s);
       setLocais(l);
@@ -122,7 +134,7 @@ export default function PaginaCadastros() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+  }, [mostrarInativos]);
 
   useEffect(() => {
     void carregar();
@@ -198,7 +210,19 @@ export default function PaginaCadastros() {
         ))}
       </nav>
 
-      <p className="-mt-3 max-w-[70ch] text-[14px] text-suave">{atual.explica}</p>
+      <div className="-mt-3 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-[70ch] text-[14px] text-suave">{atual.explica}</p>
+        {/* Mesma caixinha de Produtos, no mesmo lugar do olho: quem procura um
+            cadastro antigo sabe onde ligá-la. */}
+        <label className="flex shrink-0 items-center gap-2 text-[14px] text-suave">
+          <input
+            type="checkbox"
+            checked={mostrarInativos}
+            onChange={(e) => setMostrarInativos(e.target.checked)}
+          />
+          mostrar inativos
+        </label>
+      </div>
 
       {/* ---------------------------------------------------------- setores */}
       {/* ⚠️ A marca só aparece com o envio LIGADO. Um controle para um recurso

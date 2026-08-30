@@ -248,7 +248,7 @@ def _registros(cur, id_unidade: int) -> list[dict]:
     return linhas
 
 
-def _o_que_existe_la(cliente) -> dict[str, dict]:
+def _o_que_existe_la(cliente, filial: int | None = None) -> dict[str, dict]:
     """O estado do outro lado, por tipo: o que já existe no cardápio do PDV.
 
     🔑 **Sem esta leitura a fila é PERIGOSA.** `pdv_envios` só sabe o que ESTE
@@ -265,7 +265,18 @@ def _o_que_existe_la(cliente) -> dict[str, dict]:
     grupos = cliente.get("/grupoprodutos/get") or []
     impressoras = cliente.get("/impressoras/get") or []
     produtos = cliente.get("/produtos/get") or []
+    # 🔑 **O preço mora noutra rota, e sem lê-lo a divergência era INVISÍVEL.**
+    # Com o Botané dono do preço, `cardapio.importar` parou de trazê-lo — e a
+    # fila comparava só nome, grupo e impressora. Preço alterado no PDV não
+    # aparecia em lugar nenhum aqui, e o envio seguinte o sobrescrevia calado.
+    # Não é o preço "voltando": é ele deixando de sumir sem ninguém ver.
+    # ⚠️ Preço é POR filial. Sem filial única configurada, não se compara —
+    # melhor não dizer nada do que comparar com a loja errada.
+    precos = (cliente.get(f"/tabelapreco/get/{filial}") or []) if filial else []
     return {
+        # Só o valor: o resto da linha (CFOP, CSOSN, CST, PIS/Cofins) é do PDV e
+        # não se compara com nada daqui — não temos esses campos.
+        "PRECOS": {str(l.get("codProduto")): l.get("valor") for l in precos},
         CATEGORIA: {
             "por_ref": {int(g["codRefExterna"]): g for g in grupos if g.get("codRefExterna")},
             "por_nome": {str(g.get("nome", "")).strip().upper(): g for g in grupos
@@ -308,7 +319,8 @@ def _pendencias_abertas(cur) -> dict[tuple[str, int], dict]:
     return {(r["tipo"], r["id_registro"]): dict(r) for r in cur.fetchall()}
 
 
-def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
+def fila(cur, id_unidade: int, cliente=None, filial: int | None = None
+         ) -> dict[str, list[dict]]:
     """As três abas da tela, numa consulta só.
 
     - **pendentes**: marcado e nunca enviado, ou mudou desde o último envio OK
@@ -319,7 +331,7 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
     erros = _erros_abertos(cur, id_unidade)
     # 🔑 Sem saber o que existe do outro lado, a fila mandaria CRIAR para os 30
     # grupos que já estão no cardápio — e duplicaria o cardápio do cliente.
-    la = _o_que_existe_la(cliente) if cliente is not None else None
+    la = _o_que_existe_la(cliente, filial) if cliente is not None else None
     if la:
         # 🔑 **Grupo cujo dono daqui NÃO EXISTE MAIS volta a ser adotável.** O
         # `codRefExterna` guardado no PDV aponta para o id de uma categoria
@@ -352,6 +364,12 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
             return MONTADORES[linha["tipo"]](linha, remoto, adotar=adotar)
         return corpo_do_produto(linha, remoto, adotar=adotar, grupo_la=grupo_do(linha))
 
+    def preco_do(linha: dict, remoto: dict | None):
+        """O valor que a tabela de preço do PDV tem para este produto."""
+        if not la or not remoto:
+            return None
+        return la["PRECOS"].get(str(remoto.get("codigo")))
+
     def trava(linha: dict) -> str | None:
         """O que impede este registro de sair — dito com as palavras da casa.
 
@@ -360,8 +378,18 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
         aquela categoria já tiver sido adotada lá. Sem isso o envio volta com a
         frase DELES, que não nomeia a categoria nem diz o caminho.
         """
-        if linha["tipo"] != PRODUTO or not linha.get("id_categoria"):
+        if linha["tipo"] != PRODUTO:
             return None
+        # 🔑 **Produto SEM categoria não entra no cardápio — o grupo é
+        # obrigatório lá.** A versão anterior só travava quando a categoria
+        # existia e não estava no PDV; sem categoria nenhuma o corpo saía sem
+        # `codGrupoExterno` e o PDV devolvia *"O código ou o nome do Grupo devem
+        # ser informados"* — a frase DELE, que não diz de que produto se trata
+        # nem o que fazer. Foi o primeiro cadastro real que caiu nisso.
+        if not linha.get("id_categoria"):
+            return ("Este produto não tem categoria, e o PDV exige o grupo para "
+                    "cadastrar o item. Escolha a categoria no produto — ela precisa "
+                    "estar marcada para integrar e ter sido enviada antes.")
         if grupo_do(linha):
             return None
         nome = linha.get("categoria_nome") or f"#{linha['id_categoria']}"
@@ -435,11 +463,14 @@ def fila(cur, id_unidade: int, cliente=None) -> dict[str, list[dict]]:
             # pega o que mudou por fora (uma carga, um `UPDATE` na mão) e o
             # que o gatilho não viu porque nasceu depois dele.
             grupo_la = grupo_do(linha)
-            if tem_pendencia or _difere(tipo, corpo, remoto, grupo_la):
+            preco_la = preco_do(linha, remoto) if tipo == PRODUTO else None
+            if (tem_pendencia or _difere(tipo, corpo, remoto, grupo_la)
+                    or _preco_difere(linha, preco_la)):
                 pendentes.append(_item(linha, ATUALIZAR, corpo, anterior, remoto,
-                                       trava(linha)))
+                                       trava(linha), preco_la))
             else:
-                integrados.append(_item(linha, ATUALIZAR, corpo, anterior, remoto))
+                integrados.append(_item(linha, ATUALIZAR, corpo, anterior, remoto,
+                                        None, preco_la))
             continue
 
         # 2. Existe lá com o mesmo nome e sem dono: ADOTAR, nunca criar.
@@ -527,6 +558,22 @@ def _remoto(la: dict, linha: dict) -> tuple[dict | None, bool]:
     return la[tipo]["por_nome"].get((linha["nome"] or "").strip().upper()), False
 
 
+def _preco_difere(linha: dict, preco_la) -> bool:
+    """Preço daqui contra o da tabela do PDV, em centavos.
+
+    ⚠️ **Em centavos, não em `float`.** `19.90 != 19.9000000001` faria todo
+    produto parecer eternamente pendente, que é a doença que a cor e o `ativo` já
+    tiveram nesta comparação.
+    ⚠️ **Sem preço de um dos lados não é divergência.** Produto que ainda não tem
+    valor aqui, ou que ainda não tem linha na tabela de lá (o `produtos/save` NÃO
+    a cria — medido: 631 produtos no cardápio para 630 linhas de preço), não tem
+    o que comparar; forçar isso poria o cadastro inteiro na fila no primeiro dia.
+    """
+    if linha.get("tipo") != PRODUTO or preco_la is None or linha.get("preco_venda") is None:
+        return False
+    return round(float(linha["preco_venda"]) * 100) != round(float(preco_la) * 100)
+
+
 def _difere(tipo: str, corpo: dict, remoto: dict, grupo_la: int | None = None) -> bool:
     """Mudou algo que o PDV precisa saber?
 
@@ -562,7 +609,8 @@ def _difere(tipo: str, corpo: dict, remoto: dict, grupo_la: int | None = None) -
 
 
 def _item(linha: dict, acao: str, corpo: dict, anterior: dict | None,
-          remoto: dict | None = None, impedimento: str | None = None) -> dict:
+          remoto: dict | None = None, impedimento: str | None = None,
+          preco_no_pdv=None) -> dict:
     return {
         # 🔑 **O que trava o envio é dito AQUI, não pelo PDV.** Um produto cuja
         # categoria ainda não existe lá volta com "O código ou o nome do Grupo
@@ -579,6 +627,9 @@ def _item(linha: dict, acao: str, corpo: dict, anterior: dict | None,
         # rota própria. Misturá-lo ali mandaria um campo que `produtos/update`
         # ignora — e a tela diria que o preço saiu.
         "preco": linha.get("preco_venda"),
+        # ⚠️ Os DOIS lado a lado. Dizer só "atualizar" faria quem confere abrir o
+        # PDV para descobrir qual dos dois valores está velho.
+        "preco_no_pdv": preco_no_pdv,
         "codigo_pdv": (str((remoto or {}).get("codigo") or "")
                        or (anterior or {}).get("codigo_pdv")
                        or linha.get("codigo_pdv")),
@@ -718,15 +769,17 @@ def enviar_um(cliente: ClientePdv, item: dict, filial: int | None = None) -> dic
 
     if (item["tipo"] == PRODUTO and acao != DESATIVAR
             and item.get("preco") is not None and filial):
-        codigo = str((resposta or {}).get("id") or item.get("codigo_pdv") or "")
+        # ⚠️ Mesma armadilha do router: a resposta pode ser uma STRING pura.
+        corpo_resposta = resposta if isinstance(resposta, dict) else {}
+        codigo = str(corpo_resposta.get("id") or item.get("codigo_pdv") or "")
         if codigo:
             try:
-                resposta = {**(resposta or {}),
+                resposta = {**corpo_resposta,
                             "preco": enviar_preco(cliente, filial, codigo, item["preco"])}
             except ErroPdv as e:
                 # ⚠️ O cadastro FOI. Estourar aqui faria o item inteiro contar
                 # como erro e voltar para a fila, e o próximo envio repetiria um
                 # cadastro que já está certo. O que falhou foi o preço, e é isso
                 # que a resposta diz.
-                resposta = {**(resposta or {}), "preco_falhou": str(e)}
+                resposta = {**corpo_resposta, "preco_falhou": str(e)}
     return resposta

@@ -1159,6 +1159,56 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **O preço divergente era INVISÍVEL dos dois lados** (30/08/2026). Com o Botané dono do
+  preço, `cardapio.importar` parou de lê-lo — e a fila comparava só nome, grupo e impressora.
+  Preço alterado no PDV não constava em lugar nenhum aqui, e o envio seguinte o sobrescrevia
+  calado. Agora `_o_que_existe_la` lê `tabelapreco` e a fila mostra **os dois valores na
+  linha**. Não é o preço "voltando": é ele deixando de sumir sem ninguém ver.
+  ⚠️ **Comparado em CENTAVOS**: `19,90 != 19,9000000001` poria todo produto como eternamente
+  pendente — a doença que a cor e o `ativo` já tiveram nesta mesma comparação.
+  ⚠️ **Sem preço de um dos lados não é divergência**: forçar isso jogaria o cadastro inteiro
+  na fila no primeiro dia.
+  ⚠️ **Exige a FILIAL configurada** (`_filial`, agora num lugar só): preço é POR filial, e
+  comparar com a loja errada é pior que não comparar. Sem ela o preço também não é enviado, e
+  a busca de vendas nem roda.
+- 🔑 **Nem toda rota do PDV responde um OBJETO — e isso derrubava o envio DEPOIS de gravar**
+  (30/08/2026). `impressoras/update` devolve a STRING `"Registry updated successfully!"`, como
+  o `delete` já fazia. O router fazia `resposta.get("id")` e levantava `AttributeError`:
+  **500 com corpo vazio**, a alteração já feita do outro lado, a pendência continuando aberta
+  e a tela só sabendo dizer que falhou. Clicar de novo repetia o ciclo.
+  ⚠️ A nota da string já existia para o `delete` e o cliente HTTP já a tolerava — quem supunha
+  o dicionário era o router, um lugar só, que a nota não alcançou.
+- 🔑 **O código do PDV não voltava para o produto** (30/08/2026). O router gravava `codigo_pdv`
+  só para SETOR. O primeiro cadastro real foi criado lá (10735980) e ficou com o campo nulo
+  aqui; o que segurou a fila foi o `codRefExterna` gravado do outro lado — mas ele é a REDE,
+  não o vínculo: `codigo_pdv` é o que a tela mostra, o que o `enviar_preco` usa e o que
+  sobrevive a alguém limpar o campo externo lá.
+- 🔑 **`produtos/save` NÃO cria a linha de `tabelapreco` — medido** (30/08/2026): 631 produtos
+  no cardápio para **630** linhas de preço. O produto criado pelo Botané nasce **sem preço e
+  sem tributação** (CFOP, CSOSN, CST e `codICMS_ISS` vazios), e com `validarImpostos = true`
+  em todos os 630 é provável que ele trave no caixa. `tabelapreco/save` existe no catálogo —
+  criar essa linha é a decisão fiscal que ficou para depois.
+  ⚠️ **São CINCO campos fiscais obrigatórios na prática, não três**, e eles moram na linha de
+  PREÇO: `codCFOP` (5102), `codCSOSN` (102/103), `codCST` (00), `codICMS_ISS` (5) e
+  `codPisCofins` — este preenchido em **630 de 630**, o único que existe até no produto sem
+  CFOP. No cadastro do produto há só `codigoNCM`, `codigoCest` e `origem`.
+- ⚠️ **Desativar no PDV NÃO volta para o Botané, em nenhum dos três.** A importação do cardápio
+  completa apenas `id_categoria`, `id_setor`, `ncm`, `codigo_barras` e `um_estoque` — **`ativo`
+  não está na lista**, e o `status` de lá só é usado quando o produto NASCE aqui. Categoria e
+  setor a importação apenas cria. **Nome alterado no PDV também não volta**, pela mesma regra.
+  ⚠️ E a assimetria é deliberada: desativar AQUI tira do PDV (produto), porque o que autoriza
+  mexer no `status` de lá é a PENDÊNCIA — uma mudança feita neste sistema.
+  ⚠️ **Setor não tem como ser desativado**: o modelo da impressora é `{codigo, nome, kds}` e
+  mais nada. Por isso a tela diz "fora da integração", não "desativada".
+- 🔑 **A lista das tabelas de apoio abre com o que está EM USO** (30/08/2026), com a caixinha
+  "mostrar inativos" de Produtos. O inativo aparecia junto, só com opacidade baixa — e numa
+  base com histórico ele é a maioria. ⚠️ O corte é do SERVIDOR: os quatro endpoints já tinham
+  o parâmetro, e o padrão deles sempre foi "só os ativos" — era a TELA que pedia todos.
+- ⚠️ **Editar `api/` com o `--reload` ligado derruba a requisição de quem está usando o
+  sistema** — e o navegador só sabe dizer "Failed to fetch". Aconteceu duas vezes com o dono
+  no meio de um envio ao PDV. Vale igual para rodar suíte de API enquanto alguém cadastra: ela
+  escreve na MESMA base local, e deixou 13 produtos, 2 setores, 4 categorias e 14 pendências
+  órfãs no cadastro real dele.
 - 🔑 **A casca do sistema: barra superior, menu do usuário e rodapé com a VERSÃO**
   (30/08/2026). A marca à esquerda e, embaixo dela, em que LOJA se está — pequeno. À
   direita, o nome de quem entrou vira o controle, abrindo **Alertas · Ajuda · Perfil ·
@@ -1535,16 +1585,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.447 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.449 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (39),
-  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (148), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (365, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (366, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

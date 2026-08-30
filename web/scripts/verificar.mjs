@@ -709,6 +709,22 @@ try {
   checar("e a tela nomeia o que tem dentro",
     abaLocais.titulo === "Tabelas de apoio" && abaLocais.diz, abaLocais);
 
+  // 🔑 **A lista abre com o que esta EM USO.** O inativo aparecia junto, so com
+  // a opacidade baixa — e numa base com historico ele e a maioria. A checagem
+  // afirma a PROPRIEDADE, nao a contagem do dia: marcar a caixinha nunca DIMINUI
+  // a lista, e o que ela acrescenta e inativo.
+  const semInativos = await p.evaluate(() => document.querySelectorAll("main ul > li").length);
+  await p.evaluate(() => [...document.querySelectorAll('input[type="checkbox"]')]
+    .find((c) => c.closest("label")?.innerText.toLowerCase().includes("inativos"))?.click());
+  await new Promise((r) => setTimeout(r, 1500));
+  const comInativos = await p.evaluate(() => document.querySelectorAll("main ul > li").length);
+  checar("mostrar inativos nunca encolhe a lista de apoio",
+    comInativos >= semInativos, { semInativos, comInativos });
+  // Desmarca: as checagens seguintes contam com a lista no estado padrao.
+  await p.evaluate(() => [...document.querySelectorAll('input[type="checkbox"]')]
+    .find((c) => c.closest("label")?.innerText.toLowerCase().includes("inativos"))?.click());
+  await new Promise((r) => setTimeout(r, 1200));
+
   // 🔑 **"Poucos por natureza" era suposicao, e a base real desmentiu**: 184
   // locais, 86 categorias, 52 setores. A checagem nao afirma "tem rodape" (isso
   // seria o estado do dia, e some depois de uma limpeza): afirma a

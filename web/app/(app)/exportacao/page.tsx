@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import { api } from "@/lib/api";
+import { reais } from "@/lib/cadastros";
 import { useSessao } from "@/lib/sessao";
 
 /**
@@ -34,6 +35,9 @@ type Item = {
   nome_no_pdv: string | null;
   /** O que impede este registro de sair, dito com as palavras da casa. */
   impedimento: string | null;
+  /** O preço daqui e o que está na tabela do PDV — os dois, para comparar. */
+  preco: number | null;
+  preco_no_pdv: number | null;
 };
 
 type Erro = {
@@ -348,6 +352,21 @@ export default function PaginaExportacao() {
                             {/* ⚠️ O que trava aparece ANTES do clique. Sem isto
                                 a pessoa manda, espera, e recebe a frase do PDV
                                 — que não nomeia a categoria nem diz o caminho. */}
+                            {/* 🔑 **Preço divergente era INVISÍVEL dos dois lados.**
+                                Com o Botané dono do preço, o cardápio parou de
+                                trazê-lo e a fila comparava só nome e grupo: o
+                                valor alterado no PDV não constava aqui, e o
+                                envio seguinte o sobrescrevia calado. Os dois
+                                juntos, porque "atualizar" sozinho faria abrir o
+                                PDV para saber qual dos dois está velho. */}
+                            {i.preco != null &&
+                              i.preco_no_pdv != null &&
+                              Number(i.preco) !== Number(i.preco_no_pdv) && (
+                                <span className="mt-0.5 block text-[12.5px] leading-snug text-alerta">
+                                  preço {reais(Number(i.preco))} aqui · {reais(Number(i.preco_no_pdv))}{" "}
+                                  no PDV
+                                </span>
+                              )}
                             {i.impedimento && (
                               <span className="mt-1 block text-[12.5px] leading-snug text-erro">
                                 {i.impedimento}
