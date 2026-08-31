@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
-import FormularioUsuario, { Vinculo } from "../formulario";
+import FormularioUsuario, { Vinculo, arranjoMisto, lojasDosVinculos } from "../formulario";
 
 type Usuario = {
   id: number;
@@ -75,8 +75,11 @@ export default function PaginaUsuario() {
           email: u.email,
           telefone: u.telefone ?? "",
           senha: "",
-          papeis: u.papeis.map((v) => v.id_papel),
+          // ⚠️ Repetido, porque o mesmo papel aparece uma vez por loja.
+          papeis: [...new Set(u.papeis.map((v) => v.id_papel))],
+          unidades: lojasDosVinculos(u.papeis),
         }}
+        misto={arranjoMisto(u.papeis)}
         id={u.id}
         aoGravar={() => router.push("/usuarios")}
       />

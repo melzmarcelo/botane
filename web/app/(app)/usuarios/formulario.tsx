@@ -4,8 +4,9 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Campo, Carregando, Cartao } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
 import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
+import { useSessao } from "@/lib/sessao";
 
 /**
  * O cadastro do usuário — a mesma forma para criar e para corrigir.
@@ -18,6 +19,13 @@ import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
  *
  * ⚠️ **O papel decide o que a pessoa vê, e quem confere é o SERVIDOR.** A tela
  * escondendo um menu é conforto; a permissão é do backend.
+ *
+ * 🔑 **Em que loja a pessoa trabalha.** `usuario_papeis.id_unidade` existe desde
+ * o primeiro script — nulo quer dizer "todas" —, e esta tela mandava nulo
+ * SEMPRE. Com uma loja era a resposta certa; assim que a casa abriu a filial,
+ * todo mundo passou a enxergar as duas, e o `ve_unidade` que protege saldo,
+ * venda, inventário e remessa virou enfeite. O bloco só aparece com mais de uma
+ * loja: numa casa só, perguntar seria atrito sem ganho.
  */
 
 export type Papel = { id: number; nome: string; descricao: string | null; sistema: boolean };
@@ -28,23 +36,75 @@ export type Vinculo = {
   unidade: string | null;
 };
 
-type Form = { nome: string; email: string; telefone: string; senha: string; papeis: number[] };
+type Form = {
+  nome: string;
+  email: string;
+  telefone: string;
+  senha: string;
+  papeis: number[];
+  /** Nulo = todas as lojas, que é o padrão e o que vale numa casa só. */
+  unidades: number[] | null;
+};
 
-export const VAZIO: Form = { nome: "", email: "", telefone: "", senha: "", papeis: [] };
+export const VAZIO: Form = {
+  nome: "", email: "", telefone: "", senha: "", papeis: [], unidades: null,
+};
+
+/**
+ * Em que lojas estes vínculos põem a pessoa.
+ *
+ * ⚠️ Nulo = todas. Basta **um** vínculo sem loja para valer em todas: é assim
+ * que o servidor lê (`todas = any(id_unidade is None)`), e a tela tem de ler
+ * igual, senão as duas discordariam sobre o alcance da mesma pessoa.
+ */
+export function lojasDosVinculos(vinculos: Vinculo[]): number[] | null {
+  if (!vinculos.length || vinculos.some((v) => v.id_unidade === null)) return null;
+  return [...new Set(vinculos.map((v) => v.id_unidade as number))];
+}
+
+/**
+ * O mesmo papel está em lojas diferentes de outros?
+ *
+ * 🔑 **A tela simplifica, e precisa DIZER quando a simplificação perde algo.**
+ * O modelo permite "Cozinha na matriz e Gerente na filial"; este formulário
+ * aplica as lojas escolhidas a TODOS os papéis marcados. Salvar por cima de um
+ * arranjo misto alargaria o acesso da pessoa sem ninguém pedir — então quando
+ * ele existe, o aviso aparece antes do botão.
+ */
+export function arranjoMisto(vinculos: Vinculo[]): boolean {
+  const porPapel = new Map<number, string>();
+  for (const v of vinculos) {
+    const antes = porPapel.get(v.id_papel) ?? "";
+    porPapel.set(v.id_papel, `${antes}|${v.id_unidade ?? "todas"}`);
+  }
+  return new Set(porPapel.values()).size > 1;
+}
 
 export default function FormularioUsuario({
   inicial,
   id,
   aoGravar,
+  misto = false,
 }: {
   inicial: Form;
   id?: number;
   aoGravar: () => void;
+  /** O arranjo atual põe papéis em lojas diferentes — ver `arranjoMisto`. */
+  misto?: boolean;
 }) {
   const aviso = useAviso();
+  const { eu } = useSessao();
   const [form, setForm] = useState<Form>(inicial);
   const [papeis, setPapeis] = useState<Papel[] | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // 🔑 **As lojas oferecidas são as de QUEM ESTÁ CADASTRANDO**, e vêm da sessão
+  // — não de uma chamada a `/unidades`, que exigiria `admin.unidades` de quem
+  // só administra usuários. É também a lista certa: o servidor recusa dar acesso
+  // a loja que quem edita não enxerga, e oferecer o que vai levar 403 seria
+  // ensinar o erro.
+  const lojas = eu?.unidades ?? [];
+  const varias = lojas.length > 1;
 
   const carregar = useCallback(async () => {
     try {
@@ -62,8 +122,20 @@ export default function FormularioUsuario({
   async function salvar(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
-    // id_unidade nulo = vale em todas as lojas; com uma loja só é o que faz sentido
-    const vinculos = form.papeis.map((x) => ({ id_papel: x, id_unidade: null }));
+    // Lista vazia com "escolher lojas" marcado é um estado sem resposta: a
+    // pessoa não trabalharia em lugar nenhum e não veria nada. Melhor recusar
+    // aqui, com a frase, do que gravar o vazio.
+    if (varias && form.unidades !== null && form.unidades.length === 0) {
+      aviso.erro('Escolha ao menos uma loja — ou marque "todas as lojas".');
+      setSalvando(false);
+      return;
+    }
+    // ⚠️ **O produto cartesiano papéis × lojas.** `id_unidade` nulo vale em
+    // todas — é o caso comum e o de quem tem uma loja só. Escolhendo lojas, cada
+    // papel nasce uma vez por loja, que é exatamente como a tabela guarda.
+    const escopos: (number | null)[] = form.unidades?.length ? form.unidades : [null];
+    const vinculos = form.papeis.flatMap((x) =>
+      escopos.map((u) => ({ id_papel: x, id_unidade: u })));
     try {
       if (id) {
         const corpo: Record<string, unknown> = {
@@ -178,6 +250,84 @@ export default function FormularioUsuario({
           ))}
         </ul>
       </Cartao>
+
+      {/* ⚠️ **Só com mais de uma loja.** Numa casa só a resposta é sempre
+          "todas", e perguntar seria um campo a mais para responder sempre igual. */}
+      {varias && (
+        <Cartao
+          titulo="Onde trabalha"
+          descricao="Limita o que a pessoa enxerga: saldo, venda, contagem, remessa e apuração são de uma loja de cada vez."
+        >
+          <div className="flex flex-col gap-3">
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1 h-4 w-4 accent-erva"
+                checked={form.unidades === null}
+                onChange={() => setForm({ ...form, unidades: null })}
+              />
+              <span>
+                <span className="text-[14.5px] font-semibold">Todas as lojas</span>
+                <span className="block text-[12.5px] leading-snug text-suave">
+                  Vale também para as que a casa abrir depois.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1 h-4 w-4 accent-erva"
+                checked={form.unidades !== null}
+                onChange={() => setForm({ ...form, unidades: [] })}
+              />
+              <span>
+                <span className="text-[14.5px] font-semibold">Só estas lojas</span>
+                <span className="block text-[12.5px] leading-snug text-suave">
+                  A pessoa não vê nem escolhe as outras no seletor do topo.
+                </span>
+              </span>
+            </label>
+
+            {form.unidades !== null && (
+              <ul className="ml-6 grid gap-2 sm:grid-cols-2">
+                {lojas.map((u) => (
+                  <li key={u.id} className="flex items-center gap-2 rounded border border-linha p-2.5">
+                    <input
+                      id={`loja-${u.id}`}
+                      type="checkbox"
+                      className="h-4 w-4 accent-erva"
+                      checked={form.unidades?.includes(u.id) ?? false}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          unidades: e.target.checked
+                            ? [...(form.unidades ?? []), u.id]
+                            : (form.unidades ?? []).filter((x) => x !== u.id),
+                        })
+                      }
+                    />
+                    <label htmlFor={`loja-${u.id}`} className="cursor-pointer text-[14.5px]">
+                      {u.apelido ?? u.nome}
+                      {u.matriz && <span className="text-suave"> · matriz</span>}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* 🔑 A tela aplica as lojas escolhidas a TODOS os papéis marcados.
+                Quando o arranjo guardado é mais fino que isso, dizer antes do
+                botão — salvar por cima alargaria o acesso sem ninguém pedir. */}
+            {misto && (
+              <Aviso tipo="info">
+                Hoje esta pessoa tem <strong>papéis em lojas diferentes</strong>. Esta tela aplica
+                as lojas escolhidas a todos os papéis marcados — salvar aqui vai substituir o
+                arranjo atual.
+              </Aviso>
+            )}
+          </div>
+        </Cartao>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-primario" type="submit" disabled={salvando}>

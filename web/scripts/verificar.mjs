@@ -3572,6 +3572,49 @@ try {
   await p.select('select[aria-label="Loja"]', "1");
   await new Promise((r) => setTimeout(r, 1500));
 
+  console.log("10f. em que loja a pessoa trabalha");
+  // 🔑 **`usuario_papeis.id_unidade` existe desde o primeiro script e a tela
+  // mandava SEMPRE nulo.** Com uma loja era a resposta certa; com a filial
+  // aberta, todo mundo passou a enxergar as duas e o `ve_unidade` que protege
+  // saldo, venda, inventario e remessa virou enfeite.
+  // ⚠️ Este bloco fica AQUI, e nao junto do resto de usuarios, porque so faz
+  // sentido com a segunda loja de pe — e quem a cria e o bloco da remessa.
+  await irPara(p, `${WEB}/usuarios/novo`);
+  await p.waitForFunction(
+    () => /Onde trabalha/i.test(document.body.innerText), { timeout: 10000 },
+  ).catch(() => {});
+  const comLojas = await p.evaluate(() => document.body.innerText);
+  checar("o cadastro de usuario pergunta onde a pessoa trabalha",
+    /Onde trabalha/i.test(comLojas), comLojas.slice(0, 160));
+  checar("com todas as lojas como padrao",
+    /Todas as lojas/i.test(comLojas) && /S[oó] estas lojas/i.test(comLojas),
+    comLojas.slice(0, 200));
+
+  // A lista de lojas so aparece depois de escolher "so estas": um bloco de
+  // caixinhas sempre a vista sugere que e preciso marcar alguma.
+  // ⚠️ **Medir pelo ID da caixinha, nao pelo texto do documento.** O apelido da
+  // filial tambem aparece no SELETOR DE LOJA da barra superior, entao
+  // `body.innerText.includes(apelido)` era verdadeiro antes de a lista existir —
+  // e o teste acusava a tela de mostrar o que ela nao mostrava. E a armadilha do
+  // "primeiro elemento que casa" pela outra ponta: procurar no documento inteiro
+  // uma string que tambem mora na casca.
+  const caixinhaDaFilial = `#loja-${filialR.id}`;
+  const antesDeEscolher = await p.evaluate(
+    (sel) => !!document.querySelector(sel), caixinhaDaFilial);
+  checar("e a lista de lojas so aparece quando se escolhe restringir",
+    !antesDeEscolher, antesDeEscolher);
+
+  await p.evaluate(() => {
+    const alvo = [...document.querySelectorAll("label")]
+      .find((l) => /S[oó] estas lojas/i.test(l.innerText));
+    alvo?.querySelector("input")?.click();
+  });
+  await p.waitForSelector(caixinhaDaFilial, { timeout: 6000 }).catch(() => {});
+  const depoisDeEscolher = await p.evaluate(
+    (sel) => !!document.querySelector(sel), caixinhaDaFilial);
+  checar("e ai as lojas da casa aparecem para marcar", depoisDeEscolher, depoisDeEscolher);
+  await foto(p, "41-usuario-lojas");
+
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(

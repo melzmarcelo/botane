@@ -214,6 +214,23 @@ exige permissão e fica registrado.
 
 ---
 
+### Quem trabalha em qual loja
+
+No cadastro do usuário, com mais de uma loja aberta, aparece **Onde trabalha**:
+
+- **Todas as lojas** — o padrão, e o que vale para você e para quem circula entre elas;
+- **Só estas lojas** — a pessoa não vê nem escolhe as outras no seletor do topo. Saldo,
+  venda, contagem, remessa e apuração passam a ser só da loja dela.
+
+Duas travas que existem de propósito:
+
+- **você só dá acesso a loja que você mesmo enxerga.** Um gerente lotado na filial não
+  consegue criar alguém com acesso à matriz;
+- **você não reduz as suas próprias lojas.** Ficaria sem como voltar atrás — peça a outro
+  administrador.
+
+---
+
 ## Perguntas que sempre aparecem
 
 **Lancei errado, e agora?**

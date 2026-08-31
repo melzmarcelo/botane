@@ -30,7 +30,59 @@ def _papeis_do_usuario(cur, id_usuario: int) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
-def _gravar_papeis(cur, id_usuario: int, papeis) -> None:
+def _conferir_lojas(cur, papeis, ctx: Contexto) -> None:
+    """Só se dá acesso a loja que EXISTE e que quem está dando enxerga.
+
+    ⚠️ `id_unidade` nulo quer dizer **todas** — é o padrão de quem trabalha numa
+    casa só, e continua sendo o que a tela manda quando não há filial.
+    🔑 **Quem não enxerga a loja não põe ninguém dentro dela.** Sem esta trava,
+    um gerente escopado à filial poderia criar um usuário com acesso à matriz —
+    dando a outra pessoa um alcance que ele mesmo não tem, que é o caminho
+    clássico para escalar privilégio sem tocar em permissão nenhuma.
+    ⚠️ E loja inexistente estouraria na chave estrangeira, como 500: a frase
+    aqui diz o que aconteceu.
+    """
+    for id_unidade in {v.id_unidade for v in papeis if v.id_unidade is not None}:
+        cur.execute("SELECT nome, ativo FROM unidades WHERE id = %s", (id_unidade,))
+        loja = cur.fetchone()
+        if not loja:
+            raise HTTPException(status_code=404, detail="Loja não encontrada")
+        if not loja["ativo"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{loja['nome']} está inativa — não dá para lotar alguém nela.")
+        if not ctx.ve_unidade(id_unidade):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Você não tem acesso a {loja['nome']}, então não pode dá-lo a ninguém.")
+
+
+def _nao_encolher_o_proprio_alcance(id_usuario: int, papeis, ctx: Contexto) -> None:
+    """Ninguém se tranca para fora sozinho.
+
+    🔑 **Quem se restringe fica sem como voltar.** Um administrador que se
+    lotasse só na filial perderia a matriz de vista — e a trava de cima o
+    impediria de devolvê-la a si mesmo, porque ele já não a enxerga. Não é
+    hipótese: é o primeiro erro de quem está configurando as lojas e testa em
+    si. Mesma regra do `PUT /auth/me`, onde papel e loja ficam de fora.
+    ⚠️ Aumentar o próprio alcance também não passa — quem confere isso é a trava
+    de cima, e a mensagem daqui só fala do encolhimento.
+    """
+    if id_usuario != ctx.id_usuario:
+        return
+    novas = {v.id_unidade for v in papeis}
+    if None in novas:
+        return   # continua valendo em todas: não encolheu
+    if ctx.todas_unidades or not ctx.unidades.issubset(novas):
+        raise HTTPException(
+            status_code=400,
+            detail=("Você não pode reduzir as suas próprias lojas — ficaria sem como "
+                    "voltar atrás. Peça a outro administrador."))
+
+
+def _gravar_papeis(cur, id_usuario: int, papeis, ctx: Contexto) -> None:
+    _conferir_lojas(cur, papeis, ctx)
+    _nao_encolher_o_proprio_alcance(id_usuario, papeis, ctx)
     cur.execute("DELETE FROM usuario_papeis WHERE id_usuario = %s", (id_usuario,))
     for v in papeis:
         cur.execute(
@@ -97,7 +149,7 @@ def criar(body: UsuarioCreate, request: Request,
              body.ativo, ctx.id_usuario),
         )
         novo = cur.fetchone()["id"]
-        _gravar_papeis(cur, novo, body.papeis)
+        _gravar_papeis(cur, novo, body.papeis, ctx)
         auditoria.registrar(
             cur, ctx.id_usuario, "usuario", novo, "criar",
             depois={"nome": body.nome, "email": email, "ativo": body.ativo},
@@ -151,7 +203,7 @@ def atualizar(id_usuario: int, body: UsuarioUpdate, request: Request,
                 (id_usuario,),
             )
         if body.papeis is not None:
-            _gravar_papeis(cur, id_usuario, body.papeis)
+            _gravar_papeis(cur, id_usuario, body.papeis, ctx)
 
         auditoria.registrar(
             cur, ctx.id_usuario, "usuario", id_usuario, "atualizar",

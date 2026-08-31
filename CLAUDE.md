@@ -1288,6 +1288,38 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   por página contra um punhado de remessas abertas, e correlacionar cobraria o preço em toda
   listagem de saldo por causa de um caso que quase sempre vem vazio.
   ⚠️ O item de menu só aparece **com mais de uma loja**: numa casa só, remessa não existe.
+- 🔑 **Em que loja cada pessoa trabalha** (31/08/2026, pedido do dono). O escopo por loja
+  existe desde o **primeiro script**: `usuario_papeis.id_unidade`, nulo querendo dizer "todas".
+  A tela de usuário mandava **sempre nulo**, com o comentário `// com uma loja só é o que faz
+  sentido` — e fazia. Assim que a casa abriu a filial, todo mundo passou a enxergar as duas, e
+  o `ve_unidade` que protege saldo, venda, inventário, remessa e apuração virou enfeite. É a
+  mesma família do cadastro de loja: **o sistema sabia fazer e não oferecia isso a ninguém.**
+  ⚠️ **O bloco "Onde trabalha" só aparece com mais de uma loja** — numa casa só a resposta é
+  sempre "todas", e o campo seria um a mais para responder sempre igual.
+  ⚠️ **As lojas oferecidas são as de QUEM ESTÁ CADASTRANDO** (`eu.unidades`, da sessão), não
+  uma chamada a `/unidades` — que exigiria `admin.unidades` de quem só administra usuários. É
+  também a lista certa: o servidor recusa dar acesso a loja que quem edita não enxerga, e
+  oferecer o que vai levar 403 seria ensinar o erro.
+  🔑 **Quem não enxerga a loja não põe ninguém dentro dela** (`_conferir_lojas`). Sem essa
+  trava, um administrador escopado à filial criaria um usuário com acesso à matriz — dando a
+  outra pessoa um alcance que ele mesmo não tem, que é o caminho clássico para escalar
+  privilégio sem tocar em permissão nenhuma.
+  🔑 **E ninguém encolhe o próprio alcance** (`_nao_encolher_o_proprio_alcance`): quem se
+  lotasse só na filial perderia a matriz de vista — e a trava de cima o impediria de devolvê-la
+  a si mesmo, porque ele já não a enxerga. Não é hipótese: é o primeiro erro de quem está
+  configurando as lojas e testa em si. Mesma regra do `PUT /auth/me`, onde papel e loja ficam
+  de fora.
+  ⚠️ Loja **inexistente** estourava na chave estrangeira como 500 e loja **inativa** lotaria
+  alguém numa casa fechada — 404 e 400 com frase.
+  ⚠️ **A tela grava o produto cartesiano papéis × lojas**, que é como a tabela guarda. O modelo
+  permite mais do que o formulário oferece — "Cozinha na matriz e Gerente na filial" —, e por
+  isso ele **avisa quando o arranjo guardado é mais fino** (`arranjoMisto`): salvar por cima
+  alargaria o acesso da pessoa sem ninguém pedir.
+  ⚠️ **Ler o alcance é `any(id_unidade is None)`**, não "o primeiro vínculo": basta UM sem loja
+  para valer em todas, e é assim que o servidor lê. `lojasDosVinculos` existe para a tela ler
+  igual — duas leituras discordariam sobre o alcance da mesma pessoa.
+  ⚠️ E a lista de usuários **de-duplica o papel**: com duas lojas, o mesmo papel vem uma vez por
+  loja e a coluna mostrava "Cozinha, Cozinha".
 - 🔑 **`localStorage` está VAZIO até alguém mexer no seletor de loja** (31/08/2026), e a tela da
   remessa foi a primeira a DECIDIR com base nele: `Number(unidadeAtual() || 0)` dava **zero**
   para quem nunca trocou de loja — que é a maioria —, e aí nem o botão de receber nem o de
@@ -1597,6 +1629,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   (`window.location.reload()`), então os handles colhidos antes já não existem. O texto continua
   sendo o que identifica o botão; a procura é que tem de ser feita **de dentro do documento**,
   num `p.evaluate` só. Mesma família da nota abaixo.
+- ⚠️ **Procurar no DOCUMENTO INTEIRO uma string que também mora na casca.** A checagem "a lista
+  de lojas só aparece depois de escolher restringir" usava
+  `body.innerText.includes(apelido_da_filial)` — e o apelido aparece no **seletor de loja da
+  barra superior**, então ela era verdadeira antes de a lista existir e o teste acusava a tela
+  de mostrar o que ela não mostrava. Medir pelo **id do elemento** (`#loja-<id>`), que só existe
+  onde interessa. É a armadilha do "primeiro elemento que casa" pela outra ponta.
 - ⚠️ **Navegar com um parâmetro de URL que a tela não lê mede a tela errada.** A checagem do
   saldo em trânsito abria `/estoque?id_produto=…` — o filtro daquela tela é ESTADO dela, não
   query string, e o teste media a primeira página do cadastro inteiro. Digitar no campo é o
@@ -1874,17 +1912,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.555 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.578 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (119), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (149), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
-  `smoke_transferencias.py` (47),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (22),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (375, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (379, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

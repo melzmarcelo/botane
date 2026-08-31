@@ -7,7 +7,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
-import { Vinculo } from "./formulario";
+import { Vinculo, lojasDosVinculos } from "./formulario";
 
 /**
  * A lista de quem tem acesso — só a lista.
@@ -33,6 +33,9 @@ type Usuario = {
 export default function PaginaUsuarios() {
   const aviso = useAviso();
   const { eu } = useSessao();
+  // A coluna de lojas só existe quando há mais de uma: numa casa só ela
+  // diria "todas" em cada linha.
+  const variasLojas = (eu?.unidades?.length ?? 0) > 1;
   const [usuarios, setUsuarios] = useState<Usuario[] | null>(null);
   const [erro, setErro] = useState("");
   const [link, setLink] = useState<{ nome: string; url: string } | null>(null);
@@ -146,6 +149,7 @@ export default function PaginaUsuarios() {
                 <tr>
                   <th>Pessoa</th>
                   <th>Papéis</th>
+                  {variasLojas && <th>Lojas</th>}
                   <th>Último acesso</th>
                   <th></th>
                 </tr>
@@ -178,7 +182,9 @@ export default function PaginaUsuarios() {
                     <td>
                       <div className="flex flex-wrap gap-1">
                         {u.papeis.length ? (
-                          u.papeis.map((v) => (
+                          // ⚠️ Sem o `Map`, o mesmo papel apareceria uma vez por
+                          // LOJA — "Cozinha, Cozinha" para quem trabalha nas duas.
+                          [...new Map(u.papeis.map((v) => [v.id_papel, v])).values()].map((v) => (
                             <Etiqueta key={v.id_papel} cor="erva">
                               {v.papel}
                             </Etiqueta>
@@ -188,6 +194,19 @@ export default function PaginaUsuarios() {
                         )}
                       </div>
                     </td>
+                    {/* 🔑 Onde a pessoa trabalha é a segunda pergunta que se faz
+                        olhando esta lista, logo depois de "o que ela pode". */}
+                    {variasLojas && (
+                      <td className="text-[13px]">
+                        {lojasDosVinculos(u.papeis) === null ? (
+                          <span className="text-suave">todas</span>
+                        ) : (
+                          [...new Set(u.papeis.map((v) => v.unidade))]
+                            .filter(Boolean)
+                            .join(", ")
+                        )}
+                      </td>
+                    )}
                     <td className="mono text-[13px] text-suave">
                       {u.ultimo_acesso
                         ? new Date(u.ultimo_acesso).toLocaleString("pt-BR")
