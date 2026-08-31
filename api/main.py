@@ -7,9 +7,8 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
@@ -65,7 +64,7 @@ from seguranca import hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.1.3"
+VERSAO = "1.1.4"
 
 
 def garantir_admin() -> None:
@@ -140,7 +139,6 @@ def garantir_admin() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_pool()
-    arquivos.garantir_pasta()
     run_migrations()
     garantir_admin()
 
@@ -192,10 +190,28 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-Total"],
 )
 
-# Imagens enviadas pela tela (logo). Local por enquanto.
-# A pasta precisa existir ANTES do mount — o StaticFiles confere no import.
-arquivos.garantir_pasta()
-app.mount(arquivos.PREFIXO_URL, StaticFiles(directory=arquivos.PASTA), name="arquivos")
+@app.get(arquivos.PREFIXO_URL + "/{nome}", tags=["infra"])
+def servir_arquivo(nome: str):
+    """A logo, entregue do BANCO.
+
+    🔑 **Era um `StaticFiles` sobre `api/uploads/`, e o disco do App Platform é
+    EFÊMERO**: a cada deploy a pasta some e a logo com ela. Agora o arquivo vive
+    no banco, que sobrevive à publicação e já entra no backup.
+
+    ⚠️ **Rota PÚBLICA, como o estático era.** A logo aparece no topo de toda
+    tela e no cabeçalho dos PDFs; exigir token aqui faria a `<img>` do navegador
+    falhar — ela não manda cabeçalho de autenticação. O nome carrega sufixo
+    aleatório, então a URL não é adivinhável.
+    ⚠️ **Cache longo, e é seguro**: o nome muda a cada envio, então a versão
+    nova nunca é servida do cache antigo. Sem isto seria uma consulta ao banco
+    por tela aberta.
+    """
+    achado = arquivos.ler(f"{arquivos.PREFIXO_URL}/{nome}")
+    if not achado:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+    conteudo, tipo = achado
+    return Response(content=conteudo, media_type=tipo,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 app.include_router(autenticacao.router)
 app.include_router(usuarios.router)

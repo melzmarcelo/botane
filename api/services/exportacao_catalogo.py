@@ -199,7 +199,9 @@ def papel_timbrado(cur) -> dict:
     return {
         "nome": e.get("nome_fantasia") or e.get("razao_social") or "",
         "linhas": [l for l in linhas if l],
-        "logo": arquivos.caminho_local(e.get("logo_url")),
+        # Os BYTES, não um caminho: a logo mora no banco (migração 046), porque
+        # o disco do App Platform some a cada deploy.
+        "logo": (arquivos.ler(e.get("logo_url")) or (None,))[0],
     }
 
 

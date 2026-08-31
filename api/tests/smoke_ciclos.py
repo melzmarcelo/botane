@@ -112,8 +112,18 @@ checar("a apuração sem datas abre no mês", a.get("inicio") == str(hoje.replac
 # e o período ainda não fechou. O nome curto é reservado ao período inteiro —
 # chamar de "agosto" um recorte que para no dia 25 é o mesmo engano que a
 # movimentação evita ao dizer se o número é congelado.
-checar("e o rótulo mostra as pontas, porque o mês ainda está em curso",
-       " a " in str(a.get("rotulo")), a.get("rotulo"))
+# ⚠️ **No ULTIMO dia do mes o recorte E o mes inteiro** — e ai o nome curto
+# esta certo. A versao anterior exigia as duas pontas sempre, e quebrou
+# sozinha em 31/08, longe de qualquer commit: teste que descreve o estado
+# do dia envelhece, e este envelhecia todo fim de mes.
+import calendar as _cal  # noqa: E402
+_ultimo_do_mes = hoje.day == _cal.monthrange(hoje.year, hoje.month)[1]
+if _ultimo_do_mes:
+    checar("no ultimo dia do mes o rotulo e o nome curto do periodo",
+           " a " not in str(a.get("rotulo")), a.get("rotulo"))
+else:
+    checar("e o rótulo mostra as pontas, porque o mês ainda está em curso",
+           " a " in str(a.get("rotulo")), a.get("rotulo"))
 
 
 print("\n2. a prévia mostra o calendário antes de salvar")

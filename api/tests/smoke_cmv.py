@@ -204,9 +204,13 @@ st, r = chamar("POST", "/vendas/importar", {"vendas": [{
 }]}, token=token)
 checar("importa mesmo sem achar o produto", st == 201, r)
 checar("conta o item sem vínculo", r.get("itens_sem_vinculo") == 1, r)
-st, pendentes = chamar("GET", "/vendas/sem-vinculo", token=token)
+# ⚠️ **Pergunta pelo item DESTA rodada.** A fila e cortada nos 100 de maior
+# receita, e o fantasma de R$ 60 saiu do topo assim que a base ganhou venda
+# de verdade — a checagem acusava a fila de perder um item que estava la.
+st, pendentes = chamar("GET", f"/vendas/sem-vinculo?busca={marca}", token=token)
 checar("o item aparece na fila de de-para",
-       any(marca in (x.get("descricao_pdv") or "") for x in pendentes), pendentes[:2])
+       any(marca in (x.get("descricao_pdv") or "") for x in (pendentes or [])),
+       (st, (pendentes or [])[:2]))
 st, a2 = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)
 checar("cobertura de ficha cai quando há prato sem custo",
        float(a2["cobertura_ficha_pct"]) < float(a["cobertura_ficha_pct"]),

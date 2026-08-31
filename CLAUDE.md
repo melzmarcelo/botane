@@ -1159,6 +1159,34 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **A logo sumia a cada deploy, e agora mora no BANCO** (migração 046, 31/08/2026). O
+  filesystem do App Platform é EFÊMERO: `api/uploads/` some a cada publicação. O risco estava
+  anotado desde o preparo da subida, com o Spaces como saída — mas para UMA imagem de até 2 MB
+  o banco é a resposta mais honesta: ele já sobrevive ao deploy, já entra no backup do roteiro,
+  e não pede bucket, chave nem segredo. **Este projeto já perdeu duas credenciais guardadas; a
+  melhor credencial é a que não existe.**
+  ⚠️ **Quem chama continua recebendo uma URL** e não sabe de onde ela vem — foi para isso que
+  `api/arquivos.py` existe desde o começo, e é por isso que a troca coube em cinco pontos.
+  ⚠️ **O `StaticFiles` virou rota, e ela é PÚBLICA como o estático era**: a logo aparece no topo
+  de toda tela e no cabeçalho dos PDFs, e a `<img>` do navegador não manda cabeçalho de
+  autenticação. O nome tem sufixo aleatório, então a URL não é adivinhável.
+  ⚠️ **Cache de um ano, e é seguro PORQUE o nome muda a cada envio** — sem isso seria uma
+  consulta ao banco por tela aberta. E `_nome_da_url` recusa `..`, subpasta e prefixo de fora.
+  ⚠️ **O PDF recebe os BYTES**, não um caminho: ele DESENHA a logo, não a busca por HTTP.
+  ⚠️ **A limpeza da versão anterior é na MESMA transação** da gravação: falhando, a antiga
+  continua valendo. ⚠️ E no dia do deploy a logo **não migra sozinha** — ela já não existe no
+  disco do servidor; é reenviar uma vez.
+  ⚠️ No dia em que houver foto de produto ou anexo de nota — arquivo grande, muitos, servidos
+  direto —, o Spaces volta a ser a resposta, e é só `arquivos.py` que muda.
+- ⚠️ **Três checagens caíram no dia 31, e duas pela MESMA causa: corte no topo** (31/08/2026).
+  1. O rótulo da apuração exigia as duas pontas ("01/08 a 31/08") porque o mês estaria em
+     curso — mas **no último dia do mês o recorte É o mês inteiro**, e o nome curto está certo.
+     O teste envelhecia todo fim de mês, longe de qualquer commit.
+  2. e 3. `/vendas/sem-vinculo` devolve **os 100 de maior receita**, e o item fantasma de R$ 10
+     das suítes saiu do topo assim que a base ganhou venda de verdade. É a lição do ranking de
+     margem outra vez: **relatório cortado no topo esconde o registro que se procura**, e "não
+     achei" lê como "já foi resolvido". A fila ganhou **busca** por código ou descrição — não
+     para o teste: com 100 pendências, achar a que se quer resolver é o que uma pessoa faz.
 - 🔑 **Contar e MONTAR a contagem viraram permissões diferentes** (migração 045, 30/08/2026).
   `estoque.inventario` dava as duas coisas: quem ia à prateleira contar podia abrir contagem
   nova, escolher o recorte e cancelar a dos outros. A chave nova é **`estoque.inventario_criar`**
@@ -1645,13 +1673,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.464 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.473 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (95), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
   `web/scripts/verificar.mjs` (366, no Chrome, com fotos em `web/scripts/_fotos`).

@@ -1,17 +1,25 @@
 """Guarda de arquivos enviados pela tela (hoje: a logo da empresa).
 
-Local por enquanto — `api/uploads/`, servido em `/arquivos`. Quando houver
-nuvem, só este módulo muda: quem chama recebe uma URL e não sabe de onde veio.
+🔑 **Mora no BANCO, e não em disco — porque o disco do App Platform é
+EFÊMERO.** `api/uploads/` some a cada deploy: a casa pôs a logo, publicou uma
+versão e a logo sumiu, sem nada explicando. O risco estava previsto no preparo
+da subida, com o Spaces como saída; para UMA imagem de até 2 MB o banco é a
+resposta mais honesta — ele já sobrevive ao deploy, já entra no backup do
+roteiro, e não pede bucket, chave nem segredo. Este projeto já perdeu duas
+credenciais guardadas; a melhor credencial é a que não existe.
+
+⚠️ **Quem chama continua recebendo uma URL, e não sabe de onde ela vem.** Foi
+para isso que este módulo existe desde o começo. No dia em que houver foto de
+produto ou anexo de nota — arquivo grande, muitos, servidos direto —, o Spaces
+volta a ser a resposta, e é só este arquivo que muda.
 """
 
-import os
 import secrets
-from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 
-BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
-PASTA = BASE_DIR / "uploads"
+from database import get_cursor
+
 PREFIXO_URL = "/arquivos"
 
 # SVG fica de fora de propósito: SVG é executável (pode carregar script) e a
@@ -24,8 +32,19 @@ TIPOS = {
 LIMITE_BYTES = 2 * 1024 * 1024
 
 
-def garantir_pasta() -> None:
-    PASTA.mkdir(parents=True, exist_ok=True)
+def _nome_da_url(url: str | None) -> str | None:
+    """O nome do arquivo dentro da URL, recusando qualquer outra coisa.
+
+    ⚠️ A URL vem do banco, mas nada impede alguém de chamar a rota com um
+    caminho inventado. Só passa o que tem exatamente uma barra depois do
+    prefixo — sem `..`, sem subpasta, sem nome vazio.
+    """
+    if not url or not url.startswith(PREFIXO_URL + "/"):
+        return None
+    nome = url[len(PREFIXO_URL) + 1:]
+    if not nome or "/" in nome or "\\" in nome or ".." in nome:
+        return None
+    return nome
 
 
 async def salvar_imagem(arquivo: UploadFile, nome_base: str) -> str:
@@ -46,51 +65,58 @@ async def salvar_imagem(arquivo: UploadFile, nome_base: str) -> str:
     # Confere que o conteúdo é mesmo uma imagem — content-type é só o que o
     # navegador diz, não o que o arquivo é.
     try:
-        from PIL import Image
         from io import BytesIO
+
+        from PIL import Image
 
         with Image.open(BytesIO(conteudo)) as img:
             img.verify()
     except Exception:
         raise HTTPException(status_code=400, detail="O arquivo não é uma imagem válida.")
 
-    garantir_pasta()
     # Sufixo aleatório troca o nome a cada envio: sem isso o navegador continua
     # mostrando a logo antiga do cache.
     nome = f"{nome_base}-{secrets.token_hex(4)}{extensao}"
-    (PASTA / nome).write_bytes(conteudo)
-
-    # Limpa versões anteriores do mesmo dono.
-    for antigo in PASTA.glob(f"{nome_base}-*"):
-        if antigo.name != nome:
-            antigo.unlink(missing_ok=True)
+    with get_cursor() as cur:
+        cur.execute(
+            """INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (nome, nome_base, arquivo.content_type, conteudo, len(conteudo)),
+        )
+        # Limpa versões anteriores do mesmo dono, na MESMA transação: se a
+        # gravação falhar, a antiga continua valendo.
+        cur.execute("DELETE FROM arquivos WHERE dono = %s AND nome <> %s",
+                    (nome_base, nome))
 
     return f"{PREFIXO_URL}/{nome}"
 
 
-def caminho_local(url: str | None) -> Path | None:
-    """A URL de volta ao arquivo em disco, para quem precisa do CONTEÚDO.
+def ler(url: str | None) -> tuple[bytes, str] | None:
+    """O CONTEÚDO do arquivo e o tipo dele, ou `None` quando não está lá.
 
-    O PDF **desenha** a logo, não a busca por HTTP — pedir a si mesmo por rede
-    para carimbar um cabeçalho seria uma requisição a mais por relatório, e
-    falharia justamente onde o PDF é gerado sem navegador nenhum.
+    Serve a rota que entrega a imagem ao navegador e o PDF, que a **desenha** —
+    pedir a si mesmo por rede para carimbar um cabeçalho seria uma requisição a
+    mais por relatório, e falharia justamente onde o PDF é gerado sem navegador
+    nenhum.
 
-    ⚠️ Mora aqui, e não em quem monta o PDF, pela mesma razão que `remover`:
-    este é o único módulo que sabe onde os arquivos ficam. No dia do Spaces é
-    só ele que muda — quem chama continua recebendo bytes.
-    ⚠️ Devolve `None` quando o arquivo não está lá. No App Platform a pasta é
-    EFÊMERA e some a cada deploy: o cabeçalho tem de sair sem a logo em vez de
-    derrubar o relatório.
+    ⚠️ **Devolve `None` em vez de levantar.** Logo ausente é estado normal — a
+    casa pode nunca ter enviado uma —, e o cabeçalho tem de sair sem ela em vez
+    de derrubar o relatório.
     """
-    if not url or not url.startswith(PREFIXO_URL + "/"):
+    nome = _nome_da_url(url)
+    if not nome:
         return None
-    alvo = PASTA / Path(url).name
-    return alvo if alvo.parent == PASTA and alvo.exists() else None
+    with get_cursor() as cur:
+        cur.execute("SELECT conteudo, tipo FROM arquivos WHERE nome = %s", (nome,))
+        linha = cur.fetchone()
+    if not linha:
+        return None
+    return bytes(linha["conteudo"]), linha["tipo"]
 
 
 def remover(url: str | None) -> None:
-    if not url or not url.startswith(PREFIXO_URL + "/"):
+    nome = _nome_da_url(url)
+    if not nome:
         return
-    alvo = PASTA / Path(url).name
-    if alvo.parent == PASTA:
-        alvo.unlink(missing_ok=True)
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM arquivos WHERE nome = %s", (nome,))

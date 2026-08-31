@@ -243,8 +243,16 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
 
 
 @router.get("/sem-vinculo")
-def sem_vinculo(ctx: Contexto = Depends(_ver)) -> list[dict]:
-    """Itens vendidos que não achamos no cadastro — a fila de de-para do PDV."""
+def sem_vinculo(busca: str | None = None, ctx: Contexto = Depends(_ver)) -> list[dict]:
+    """Itens vendidos que não achamos no cadastro — a fila de de-para do PDV.
+
+    ⚠️ **A lista é cortada no topo por RECEITA, e por isso tem busca.** São os
+    100 que mais pesam; num cardápio grande, o item que alguém quer resolver
+    raramente está entre eles — e não achá-lo lê como "já foi resolvido", que é
+    outra coisa. É a mesma lição do ranking de margem, que ganhou `id_produto`
+    pelo mesmo motivo.
+    """
+    alvo = f"%{busca.strip()}%" if busca and busca.strip() else None
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
@@ -252,10 +260,13 @@ def sem_vinculo(ctx: Contexto = Depends(_ver)) -> list[dict]:
                       sum(vi.quantidade) AS quantidade, sum(vi.valor_total) AS receita
                  FROM venda_itens vi
                  JOIN vendas v ON v.id = vi.id_venda
-                WHERE vi.id_produto IS NULL AND NOT v.cancelada AND v.id_unidade = %s
+                WHERE vi.id_produto IS NULL AND NOT v.cancelada AND v.id_unidade = %(u)s
+                  AND (%(alvo)s::text IS NULL
+                       OR vi.codigo_pdv ILIKE %(alvo)s
+                       OR vi.descricao_pdv ILIKE %(alvo)s)
                 GROUP BY vi.codigo_pdv, vi.descricao_pdv
                 ORDER BY receita DESC LIMIT 100""",
-            (id_unidade,),
+            {"u": id_unidade, "alvo": alvo},
         )
         return [dict(r) for r in cur.fetchall()]
 

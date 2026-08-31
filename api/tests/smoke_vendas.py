@@ -173,9 +173,15 @@ print("\n4. a rota do detalhe não engoliu a fila de de-para")
 # ⚠️ O FastAPI casa rotas na ordem de declaração: com `/{id_venda}` na frente,
 # "sem-vinculo" viraria um id e o pedido morreria em 422.
 st, fila = chamar("GET", "/vendas/sem-vinculo", token=token)
+# ⚠️ **Pergunta pelo item DESTA rodada.** A fila e cortada nos 100 de maior
+# receita, e o fantasma de R$ 10 saiu do topo assim que a base ganhou venda
+# de verdade — a checagem acusava a fila de perder um item que estava la.
+st_f, so_meu = chamar("GET", f"/vendas/sem-vinculo?busca=NAO-EXISTE-{marca}",
+                      token=token)
 checar("/vendas/sem-vinculo continua respondendo", st == 200 and isinstance(fila, list), st)
 checar("e a fila tem o fantasma desta rodada",
-       any(f"NAO-EXISTE-{marca}" == (x.get("codigo_pdv") or "") for x in fila), len(fila))
+       any(f"NAO-EXISTE-{marca}" == (x.get("codigo_pdv") or "") for x in (so_meu or [])),
+       (st_f, len(so_meu or []), len(fila)))
 
 print("\n5. o detalhe")
 st, d = chamar("GET", f"/vendas/{id_venda}", token=token)

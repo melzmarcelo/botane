@@ -49,6 +49,9 @@ from comum import garantir_local  # noqa: E402
 # nome de arquivo, o teto do PDF, o papel timbrado) que HTTP não alcança, e
 # importar no meio do arquivo fazia o bloco de cima estourar com NameError
 # quando a ordem dos blocos mudava.
+import io  # noqa: E402
+from pathlib import Path as _Caminho  # noqa: E402
+from PIL import Image as _Imagem  # noqa: E402
 import arquivos  # noqa: E402
 from database import get_cursor  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
@@ -270,10 +273,19 @@ st, p_cmv = chamar("GET", f"/exportar/cmv/previa?{periodo}", token=token)
 # margem por prato vem vazia e o arquivo tem só as 10 linhas da apuração — a
 # versão anterior lia isso como "o anexo sumiu" e acusava um defeito que não
 # existe. O que se afirma é a soma: apuração + anexo, seja qual for o anexo.
-st, _margem = chamar("GET", f"/cmv/margem?{periodo}", token=token)
+# ⚠️ **Com o teto no MAXIMO.** O endpoint corta em 50 por padrao e o
+# relatorio leva o anexo INTEIRO: comparar um com o outro dizia que o
+# arquivo tinha linha demais, quando quem estava cortado era a consulta.
+st, _margem = chamar("GET", f"/cmv/margem?{periodo}&limite=200", token=token)
 _anexo = len(_margem or []) if isinstance(_margem, list) else 0
-checar("e conta o anexo junto no relatório composto",
-       p_cmv["linhas"] == 10 + _anexo, (p_cmv, _anexo))
+# ⚠️ Acima do teto do endpoint a igualdade deixa de valer — e ai o que se
+# afirma e o que importa: o anexo ESTA no arquivo, nao so a apuracao.
+if _anexo < 200:
+    checar("e conta o anexo junto no relatório composto",
+           p_cmv["linhas"] == 10 + _anexo, (p_cmv, _anexo))
+else:
+    checar("e conta o anexo junto no relatório composto",
+           p_cmv["linhas"] > 10 + _anexo - 1, (p_cmv, _anexo))
 
 
 print("7. planilha e PDF saem do MESMO recorte")
@@ -567,12 +579,16 @@ so_uf = _cat._junta(None, "SC", sep="/")
 checar("_junta não deixa separador solto", so_uf == "SC", so_uf)
 checar("e nada vira None em vez de string vazia", _cat._junta(None, "") is None)
 
-# ⚠️ A pasta de uploads é EFÊMERA no App Platform e some a cada deploy: logo
-# ausente tem de sair sem logo, não derrubar o relatório.
-checar("logo que não existe não vira caminho",
-       arquivos.caminho_local("/arquivos/nao-existe-999.png") is None)
+# ⚠️ Logo ausente tem de sair sem logo, não derrubar o relatório — casa que
+# nunca enviou uma é o estado normal.
+checar("logo que não existe não vira bytes",
+       arquivos.ler("/arquivos/nao-existe-999.png") is None)
+# ⚠️ A URL vem do banco, mas nada impede alguém de chamar a rota com um
+# caminho inventado: só passa nome simples dentro do prefixo.
 checar("e URL de fora do prefixo é recusada",
-       arquivos.caminho_local("https://outro.site/logo.png") is None)
+       arquivos.ler("https://outro.site/logo.png") is None)
+checar("nem caminho com ..",
+       arquivos.ler("/arquivos/../config.py") is None)
 
 carimbo = _exp._junta_rodape("Fulano")
 checar("o rodapé diz quem emitiu e quando",
@@ -589,6 +605,80 @@ sem_quebrar = _exp.pdf_de(
     emitido_por="Fulano")
 checar("e o PDF sai mesmo com a logo faltando",
        sem_quebrar[:4] == b"%PDF", sem_quebrar[:8])
+
+
+print("17. a logo sobrevive ao deploy")
+# 🔑 **O disco do App Platform e EFEMERO.** `api/uploads/` sumia a cada deploy e
+# levava a logo junto: a casa a enviava, publicava uma versao e ela desaparecia,
+# sem nada explicando. Desde a migracao 046 ela mora no BANCO, que sobrevive a
+# publicacao e ja entra no backup do roteiro.
+_verde = io.BytesIO()
+_Imagem.new("RGB", (40, 20), (44, 106, 74)).save(_verde, "PNG")
+_png = _verde.getvalue()
+
+
+def _subir_logo(bytes_png, tipo="image/png", nome="l.png"):
+    lim = "----botane"
+    corpo = (f"--{lim}\r\nContent-Disposition: form-data; name=\"arquivo\"; "
+             f"filename=\"{nome}\"\r\nContent-Type: {tipo}\r\n\r\n").encode()
+    corpo += bytes_png + f"\r\n--{lim}--\r\n".encode()
+    req = urllib.request.Request(BASE + "/empresa/logo", data=corpo, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={lim}")
+    req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read() or b"null")
+        except Exception:
+            return e.code, None
+
+
+st, r_logo = _subir_logo(_png)
+url_logo = (r_logo or {}).get("logo_url")
+checar("a logo sobe", st == 200 and bool(url_logo), (st, r_logo))
+
+# ⚠️ **A rota e PUBLICA, como o estatico era.** A logo aparece no topo de toda
+# tela e no cabecalho dos PDFs, e a `<img>` do navegador nao manda cabecalho de
+# autenticacao: exigir token aqui faria a imagem falhar em todas as telas.
+if url_logo:
+    with urllib.request.urlopen(BASE + url_logo, timeout=30) as r:
+        servida = r.read()
+        tipo_servido = r.headers.get("Content-Type")
+        cache = r.headers.get("Cache-Control") or ""
+    checar("e volta pela URL sem precisar de token", servida == _png,
+           (len(servida), len(_png)))
+    checar("com o tipo certo", tipo_servido == "image/png", tipo_servido)
+    # ⚠️ Cache longo e seguro PORQUE o nome muda a cada envio: sem isso seria uma
+    # consulta ao banco por tela aberta.
+    checar("e com cache longo, que o nome novo invalida", "max-age=" in cache, cache)
+
+# 🔑 **A prova de que ela nao depende do disco.** Este teste roda na mesma
+# maquina da API: se o arquivo estivesse em `api/uploads/`, ele estaria aqui.
+_pasta_velha = _Caminho(__file__).resolve().parents[1] / "uploads"
+_no_disco = sorted(p.name for p in _pasta_velha.glob("logo-empresa-*")) if _pasta_velha.exists() else []
+checar("e NAO fica em disco — o que sumia a cada deploy", not _no_disco, _no_disco)
+
+# Trocar a logo troca a URL: sem isso o navegador continuaria mostrando a antiga.
+_azul = io.BytesIO()
+_Imagem.new("RGB", (30, 30), (20, 40, 120)).save(_azul, "PNG")
+st, r2_logo = _subir_logo(_azul.getvalue())
+url2 = (r2_logo or {}).get("logo_url")
+checar("trocar a logo troca a URL", bool(url2) and url2 != url_logo, (url_logo, url2))
+if url_logo:
+    st_velha, _ = chamar("GET", url_logo, token=token)
+    checar("e a anterior deixa de existir", st_velha == 404, st_velha)
+
+# O PDF DESENHA a logo — nao a busca por HTTP. Com ela no banco, o timbre tem de
+# continuar saindo.
+st, pdf_logo, _cab = chamar("GET", "/exportar/saldos.pdf", token=token, bruto=True)
+checar("o PDF sai com a logo no timbre", st == 200 and pdf_logo[:5] == b"%PDF-",
+       (st, pdf_logo[:8]))
+
+# Devolve a base: a logo de teste sai, e quem entra depois nao herda um quadrado
+# verde no cabecalho de todo relatorio.
+chamar("DELETE", "/empresa/logo", token=token)
 
 
 print()

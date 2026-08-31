@@ -358,19 +358,21 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
                 textColor=_SUAVE)))
 
         celula_logo = ""
-        caminho = empresa.get("logo")
-        if caminho:
+        # ⚠️ **Os BYTES da logo, não um caminho.** Ela mora no banco desde a
+        # migração 046 — o disco do App Platform é efêmero e a apagava a cada
+        # deploy. O `reportlab` aceita um arquivo em memória do mesmo jeito.
+        bruto = empresa.get("logo")
+        if bruto:
             # ⚠️ Altura fixa e largura pela PROPORÇÃO: logo esticada é pior que
             # logo nenhuma, e cada casa manda a sua no formato que tiver.
             try:
-                largura_img, altura_img = ImageReader(str(caminho)).getSize()
+                largura_img, altura_img = ImageReader(io.BytesIO(bruto)).getSize()
                 alta = 14 * mm
-                celula_logo = Image(str(caminho), width=alta * largura_img / altura_img,
-                                    height=alta)
+                celula_logo = Image(io.BytesIO(bruto),
+                                    width=alta * largura_img / altura_img, height=alta)
             except Exception:
-                # ⚠️ Arquivo ilegível não derruba o relatório: o cabeçalho sai
-                # sem a logo. No App Platform a pasta é efêmera e some a cada
-                # deploy — é um estado normal, não um erro.
+                # ⚠️ Imagem ilegível não derruba o relatório: o cabeçalho sai
+                # sem a logo. Casa que nunca enviou uma é o estado normal.
                 celula_logo = ""
 
         cabecalho = Table([[celula_logo, texto]],
