@@ -19,7 +19,7 @@ from datetime import date
 from fastapi import APIRouter, Depends
 
 from database import get_cursor
-from seguranca import Contexto, contexto_atual, unidade_atual
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import periodos, relatorios
@@ -116,3 +116,86 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             ]
 
     return resposta
+
+
+@router.get("/rede")
+def rede(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
+    """As lojas lado a lado — o painel de quem responde pelas duas.
+
+    🔑 **Toda tela do sistema responde por UMA loja**, e está certo: quem opera
+    opera numa de cada vez. Mas o dono de duas não tem onde ver as duas — e
+    somar de cabeça dois food costs de bases diferentes é a conta que ninguém
+    faz certo. Esta é a tela que passa a existir quando existe a segunda loja.
+
+    ⚠️ **Roda a MESMA apuração de cada loja, uma por vez** — nunca uma consulta
+    nova que some tudo. Uma segunda implementação divergiria no primeiro caso de
+    borda (ciclo de fechamento diferente, grupo fora do CMV configurado só numa
+    delas), e o consolidado passaria a discordar do painel de cada uma. Assim,
+    se a soma não bate, o erro está numa das partes — não entre elas.
+
+    ⚠️ **Cada loja tem o SEU ciclo**: uma pode fechar por semana e a outra por
+    mês. O período vai declarado em cada linha, porque um total que junta
+    períodos diferentes precisa dizer que faz isso.
+
+    ⚠️ **Só as lojas que a pessoa ENXERGA.** Gerente de uma loja que abrir esta
+    tela vê a dele, e o total é o dela — não um consolidado que ele não pode ver.
+    """
+    hoje = date.today()
+    linhas: list[dict] = []
+    total_cmv = total_receita = total_estoque = total_perdas = 0.0
+
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id, nome, apelido, matriz FROM unidades WHERE ativo "
+            "ORDER BY matriz DESC, id")
+        lojas = [dict(r) for r in cur.fetchall() if ctx.ve_unidade(r["id"])]
+
+        for loja in lojas:
+            ciclo = periodos.config(cur, loja["id"])
+            inicio, fim_do_ciclo = periodos.periodo_do_dia(
+                hoje, ciclo["ciclo"], dia_semana=ciclo["dia_semana"],
+                dia_mes=ciclo["dia_mes"])
+            fim = min(fim_do_ciclo, hoje)
+            a = cmv_motor.apurar(cur, loja["id"], inicio, fim)
+            estoque = float(cmv_motor.valor_do_estoque(cur, loja["id"]))
+            receita = float(a["receita"])
+            linhas.append({
+                "id_unidade": loja["id"],
+                "loja": loja["apelido"] or loja["nome"],
+                "matriz": loja["matriz"],
+                "periodo": {
+                    "inicio": inicio, "fim": fim,
+                    "rotulo": periodos.rotulo(inicio, fim_do_ciclo, ciclo["ciclo"]),
+                    "ciclo": ciclo["ciclo"],
+                },
+                "estoque_agora": estoque,
+                "compras": float(a["compras"]),
+                "cmv": float(a["cmv_real"]),
+                "perdas": float(a["perdas"]),
+                "receita": receita,
+                "vendas": a["vendas"],
+                # Número verdadeiro ou nenhum: sem venda, food cost zero
+                # pareceria um resultado excelente.
+                "food_cost_pct": _float(a["food_cost_pct"]) if receita else None,
+                "cobertura_ficha_pct": float(a["cobertura_ficha_pct"]),
+            })
+            total_cmv += float(a["cmv_real"])
+            total_receita += receita
+            total_estoque += estoque
+            total_perdas += float(a["perdas"])
+
+    return {
+        "lojas": linhas,
+        "total": {
+            "estoque_agora": total_estoque,
+            "cmv": total_cmv,
+            "perdas": total_perdas,
+            "receita": total_receita,
+            # 🔑 **O food cost da rede se RECALCULA, não se soma.** Média de
+            # percentuais dá o mesmo peso à loja que vendeu R$ 100 mil e à que
+            # vendeu R$ 5 mil — e erra justamente para quem tem uma grande e uma
+            # pequena, que é o caso comum de quem abre a segunda.
+            "food_cost_pct": (round(total_cmv / total_receita * 100, 2)
+                              if total_receita else None),
+        },
+    }

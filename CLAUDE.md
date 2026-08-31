@@ -1159,6 +1159,48 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **Transferência ENTRE LOJAS: dois movimentos ligados, cada um na sua loja** (31/08/2026,
+  decisão do dono). `transferir` recebia UMA loja e dois locais: escolhendo um local da outra,
+  o razão gravava saída e entrada sob a loja de quem estava na tela — o saldo das duas ficava
+  errado e **nada denunciava**. Agora cada lado é lançado na loja do seu próprio local.
+  🔑 **O custo ATRAVESSA a fronteira**: a entrada usa o `custo_unitario` que a saída apurou (o
+  médio da origem). É isso que faz a origem perder exatamente o valor que o destino ganha.
+  ⚠️ **Quem não enxerga a loja não empurra mercadoria para dentro dela** — a transferência toca
+  DUAS, e mandar para uma loja que a pessoa não vê seria mexer num estoque que ela não pode nem
+  consultar. Validado com o mesmo `ve_unidade`.
+  ⚠️ **`/locais?todas_lojas=true` nasceu por causa disso**: o destino pode ser a prateleira da
+  outra loja, e `/locais` tinha acabado de passar a filtrar pela atual. O nome da loja vem
+  junto, senão a lista mostraria dois "Estoque".
+  🔑 **E a remessa ENTRA na apuração como compra do destino e compra negativa da origem.**
+  Dentro de uma loja a transferência se anula e por isso nunca contou como compra; entre lojas
+  ela NÃO se anula — o destino recebe mercadoria que não comprou (CMV **negativo**) e a origem
+  perde mercadoria que não vendeu (CMV inchado). Quem mostrou foi a TELA da rede: a filial que
+  só recebeu uma remessa aparecia com **CMV de −R$ 160,00**. Somando de um lado e subtraindo do
+  outro, as duas fecham e o total da rede não muda.
+  ⚠️ **E isso quebrou a identidade "a soma dos grupos é o CMV do período"** em R$ 1.120,00: o
+  relatório por grupo não conhecia a remessa. Ela entrou em TRÊS lugares da consulta — a coluna
+  de compras, a expressão do **CMV** (esquecê-la ali manteve a diferença na primeira tentativa)
+  e o `HAVING`, senão um grupo cujo único movimento fosse uma remessa sumiria da lista.
+  ⚠️ A checagem do CMV da filial tem folga de **um centavo**: o custo unitário tem 6 casas e a
+  conta encadeia entrada, saída e estoque — o resíduo é de milionésimos de real.
+- 🔑 **A visão da REDE** (`GET /inicio/rede` + tela `/rede`, 31/08/2026). Toda outra tela
+  responde por UMA loja, e está certo: quem opera opera numa de cada vez. Mas o dono de duas
+  não tinha onde ver as duas — e somar de cabeça dois food costs de bases diferentes é a conta
+  que ninguém faz certo.
+  ⚠️ **Roda a MESMA `apurar` de cada loja, uma por vez** — nunca uma consulta nova que soma
+  tudo. Uma segunda implementação divergiria no primeiro caso de borda (ciclo diferente, grupo
+  fora do CMV configurado só numa delas), e o consolidado passaria a discordar do painel de
+  cada uma. Assim, **se a soma não bate, o erro está numa das partes**.
+  🔑 **O food cost da rede se RECALCULA, não se soma**: média de percentuais dá o mesmo peso à
+  loja que vendeu R$ 100 mil e à que vendeu R$ 5 mil — e erra justamente para quem tem uma
+  grande e uma pequena, que é o caso de quem abre a segunda. A tela diz isso, porque quem
+  confere com a calculadora acharia outro número.
+  ⚠️ **Cada loja declara o SEU período** (uma pode fechar por semana e a outra por mês), e a
+  tela avisa quando eles diferem. ⚠️ Só as lojas que a pessoa ENXERGA entram, e sem
+  `cmv.painel` a tela não abre.
+  ⚠️ **O item de menu só aparece com MAIS DE UMA loja** (`soComVariasLojas`): com uma só, a
+  visão da rede é o Início repetido, e item de menu que leva a tela redundante ensina a
+  ignorar o menu.
 - 🔑 **O custo do insumo passou a ser da LOJA** (31/08/2026, primeiro passo da segunda loja).
   `custos.custo_do_insumo` somava `estoque_saldos` inteiro, sem filtrar `id_unidade`: o café que
   a matriz comprou a R$ 40/kg e a filial a R$ 52/kg valia **R$ 45,30 nas duas — e nenhuma pagou
@@ -1698,8 +1740,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.479 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (89), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.495 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (105), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),

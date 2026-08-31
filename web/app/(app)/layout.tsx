@@ -22,6 +22,10 @@ const MENU: {
     chave?: string | string[];
     /** Só entra no menu com o envio ao PDV ligado — ver `enviar_ao_pdv`. */
     soComEnvioAoPdv?: boolean;
+    /** 🔑 Só entra com MAIS DE UMA loja. Com uma só, a visão da rede é o
+        Início repetido — e item de menu que leva a uma tela redundante ensina
+        a ignorar o menu. */
+    soComVariasLojas?: boolean;
   }[];
 }[] = [
   {
@@ -73,6 +77,7 @@ const MENU: {
     grupo: "CMV",
     itens: [
       { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
+      { href: "/rede", nome: "Visão da rede", chave: "cmv.painel", soComVariasLojas: true },
       { href: "/vendas", nome: "Vendas", chave: "cmv.painel" },
     ],
   },
@@ -243,6 +248,7 @@ function Casca({ children }: { children: React.ReactNode }) {
   const navegacao = (
     <MenuLateral
             enviaAoPdv={!!eu?.enviar_ao_pdv}
+      variasLojas={(eu?.unidades.length ?? 0) > 1}
       caminho={caminho}
       pode={pode}
       abertos={abertos}
@@ -331,6 +337,7 @@ function MenuLateral({
   caminho,
   pode,
   enviaAoPdv,
+  variasLojas,
   abertos,
   alternarGrupo,
   aoNavegar,
@@ -339,6 +346,8 @@ function MenuLateral({
   pode: (chave: string) => boolean;
   /** Dica de interface: item de menu para recurso desligado é porta que não leva a nada. */
   enviaAoPdv: boolean;
+  /** A casa tem mais de uma loja que esta pessoa enxerga. */
+  variasLojas: boolean;
   abertos: Record<string, boolean>;
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
@@ -360,7 +369,8 @@ function MenuLateral({
         const itens = g.itens.filter(
           (i) =>
             (!i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave))) &&
-            (!i.soComEnvioAoPdv || enviaAoPdv),
+            (!i.soComEnvioAoPdv || enviaAoPdv) &&
+            (!i.soComVariasLojas || variasLojas),
         );
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);

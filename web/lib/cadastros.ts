@@ -18,6 +18,8 @@ export type Local = {
   tipo: string;
   principal: boolean;
   ativo: boolean;
+  /** O nome da loja dona da prateleira — importa quando há mais de uma. */
+  loja?: string | null;
 };
 export type Categoria = {
   id: number;

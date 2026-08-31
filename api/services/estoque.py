@@ -470,20 +470,47 @@ def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None)
     )
 
 
+def _unidade_do_local(cur, id_local: int, padrao: int) -> int:
+    cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
+    linha = cur.fetchone()
+    if not linha:
+        raise HTTPException(status_code=404, detail="Local não encontrado")
+    return linha["id_unidade"] or padrao
+
+
 def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_origem: int,
                id_local_destino: int, id_usuario: int, observacao: str | None = None) -> dict:
     """Sai de um local e entra no outro **pelo mesmo custo** — transferência não
-    cria nem destrói valor."""
+    cria nem destrói valor.
+
+    🔑 **Cada lado é lançado na LOJA do seu próprio local.** A versão anterior
+    usava a mesma loja nos dois: escolhendo um local da outra, o razão gravava
+    saída e entrada sob a loja de quem estava na tela — o saldo das duas ficava
+    errado e **nada denunciava**. Numa casa com duas lojas, mandar produção da
+    matriz para a filial é o que se faz toda semana.
+
+    🔑 **O custo ATRAVESSA a fronteira**: a entrada usa o `custo_unitario` que a
+    saída apurou, que é o médio da origem. É isso que mantém a identidade
+    `inicial + entradas − saídas = final` fechando **nas duas** — a origem perde
+    exatamente o valor que o destino ganha. Transferência não cria nem destrói
+    dinheiro, e entre lojas ela também não pode criar.
+    ⚠️ **E não é receita de ninguém.** O tipo continua sendo
+    `TRANSFERENCIA_SAIDA`/`ENTRADA`, que a apuração já sabe que é transformação
+    interna e não entra na conta de compras.
+    """
     if id_local_origem == id_local_destino:
         raise HTTPException(status_code=400, detail="Origem e destino são o mesmo local.")
 
+    unidade_origem = _unidade_do_local(cur, id_local_origem, id_unidade)
+    unidade_destino = _unidade_do_local(cur, id_local_destino, id_unidade)
+
     saida = lancar(
-        cur, id_unidade=id_unidade, id_local=id_local_origem, id_produto=id_produto,
+        cur, id_unidade=unidade_origem, id_local=id_local_origem, id_produto=id_produto,
         tipo="TRANSFERENCIA_SAIDA", quantidade=quantidade, origem_tipo="TRANSFERENCIA",
         observacao=observacao, id_usuario=id_usuario,
     )
     entrada = lancar(
-        cur, id_unidade=id_unidade, id_local=id_local_destino, id_produto=id_produto,
+        cur, id_unidade=unidade_destino, id_local=id_local_destino, id_produto=id_produto,
         tipo="TRANSFERENCIA_ENTRADA", quantidade=quantidade,
         custo_unitario=saida["custo_unitario"], origem_tipo="TRANSFERENCIA",
         origem_id=saida["id"], observacao=observacao, id_usuario=id_usuario,
@@ -492,7 +519,9 @@ def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_or
         "UPDATE estoque_movimentos SET origem_id = %s WHERE id = %s",
         (entrada["id"], saida["id"]),
     )
-    return {"saida": saida, "entrada": entrada}
+    return {"saida": saida, "entrada": entrada,
+            "entre_lojas": unidade_origem != unidade_destino,
+            "id_unidade_origem": unidade_origem, "id_unidade_destino": unidade_destino}
 
 
 def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,

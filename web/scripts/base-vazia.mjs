@@ -17,7 +17,7 @@ const TELAS = [
   "/", "/produtos", "/produtos/novo", "/fornecedores",
   "/cadastros", "/fichas", "/fichas/nova", "/estoque", "/ajustes", "/producao",
   "/inventario", "/inventario/novo", "/compras", "/compras/nova",
-  "/vendas", "/vendas/lancar", "/vendas/sem-vinculo", "/cmv",
+  "/vendas", "/vendas/lancar", "/vendas/sem-vinculo", "/cmv", "/rede",
   "/integracoes", "/lojas", "/usuarios", "/papeis", "/auditoria", "/empresa", "/ajuda",
 ];
 

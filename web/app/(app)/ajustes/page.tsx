@@ -162,6 +162,10 @@ export default function PaginaAjustes() {
   const [tipo, setTipo] = useState<Tipo | null>(null);
   const [produto, setProduto] = useState<{ id: number; rotulo: string } | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
+  const [locaisTodos, setLocaisTodos] = useState<Local[]>([]);
+  /** Este local é de outra loja que não a atual? Só então o nome dela importa. */
+  const outraLoja = (l: Local) =>
+    !!l.loja && locais.length > 0 && l.id_unidade !== locais[0]?.id_unidade;
   const [motivos, setMotivos] = useState<Motivo[]>([]);
   const [recentes, setRecentes] = useState<Movimento[] | null>(null);
   const [f, setF] = useState({ ...VAZIO });
@@ -190,6 +194,10 @@ export default function PaginaAjustes() {
 
   useEffect(() => {
     api.get<Local[]>("/locais").then(setLocais).catch(() => {});
+    // 🔑 **O destino da transferência pode ser a prateleira da OUTRA loja** — é
+    // o que a casa faz quando a matriz produz e manda para a filial. Só as
+    // lojas que a pessoa enxerga vêm; o servidor barra o resto.
+    api.get<Local[]>("/locais?todas_lojas=true").then(setLocaisTodos).catch(() => {});
     api.get<Motivo[]>("/estoque/motivos-perda").then(setMotivos).catch(() => {});
     void carregarRecentes();
   }, [carregarRecentes]);
@@ -618,11 +626,15 @@ export default function PaginaAjustes() {
                   onChange={(e) => setF({ ...f, id_local_destino: e.target.value })}
                 >
                   <option value="">— escolha —</option>
-                  {locais
+                  {(locaisTodos.length ? locaisTodos : locais)
                     .filter((l) => l.id.toString() !== f.id_local)
                     .map((l) => (
                       <option key={l.id} value={l.id}>
+                        {/* ⚠️ O nome da loja entra quando há mais de uma: sem
+                            ele a lista mostraria dois "Estoque" e quem escolhe
+                            não teria como saber qual é qual. */}
                         {l.nome}
+                        {outraLoja(l) ? ` · ${l.loja}` : ""}
                       </option>
                     ))}
                 </select>

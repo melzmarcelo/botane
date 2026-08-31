@@ -76,6 +76,9 @@ class LocalResponse(BaseModel):
     tipo: str
     principal: bool
     ativo: bool
+    # Só vem com `todas_lojas`: sem o nome da loja, a lista mostraria dois
+    # "Estoque" e quem escolhe não teria como saber qual é qual.
+    loja: str | None = None
 
 
 # ---------------------------------------------------------------- categorias

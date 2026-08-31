@@ -272,6 +272,32 @@ def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos,
     return dec(cur.fetchone()["valor"])
 
 
+def _transferencia_entre_lojas(cur, id_unidade: int, inicio, fim, fora) -> Decimal:
+    """O que ENTROU de outra loja menos o que SAIU para outra, em dinheiro.
+
+    ⚠️ Só o que atravessa a fronteira. A transferência entre dois locais da
+    MESMA loja continua se anulando sozinha e não aparece aqui — quem decide é
+    a loja do movimento do outro lado, achado pelo `origem_id` que liga os dois.
+    """
+    cur.execute(
+        """SELECT coalesce(sum(
+                    CASE WHEN m.tipo = 'TRANSFERENCIA_ENTRADA' THEN m.custo_total
+                         ELSE -m.custo_total END), 0) AS valor
+             FROM estoque_movimentos m
+             JOIN estoque_movimentos o ON o.id = m.origem_id
+             JOIN produtos pr ON pr.id = m.id_produto
+            WHERE m.id_unidade = %(u)s
+              AND m.tipo IN ('TRANSFERENCIA_ENTRADA', 'TRANSFERENCIA_SAIDA')
+              AND m.origem_tipo = 'TRANSFERENCIA'
+              AND o.id_unidade <> m.id_unidade
+              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+        {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
+         "fora": fora or None},
+    )
+    return dec((cur.fetchone() or {}).get("valor"))
+
+
 def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     """A conta do período inteiro, com os pedaços que explicam a variância."""
     # ⚠️ **Os tipos que a casa tirou do CMV saem das TRÊS pontas.** Detergente e
@@ -285,6 +311,19 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     estoque_inicial = valor_do_estoque(cur, id_unidade, inicio - timedelta(days=1), fora)
     estoque_final = valor_do_estoque(cur, id_unidade, fim, fora)
     compras = _soma_movimentos(cur, id_unidade, inicio, fim, TIPOS_COMPRA, fora)
+
+    # 🔑 **Transferência ENTRE LOJAS entra na conta como compra — e como compra
+    # negativa do outro lado.** Dentro de uma loja a transferência se anula
+    # (sai de um local, entra em outro) e por isso nunca contou como compra. Já
+    # entre lojas ela NÃO se anula: o destino recebe mercadoria que não comprou
+    # (o estoque final sobe e o CMV dele fica NEGATIVO) e a origem perde
+    # mercadoria que não vendeu (o final cai e o CMV dela incha). Foi a tela da
+    # rede que mostrou: a filial que só recebeu uma remessa aparecia com CMV de
+    # −R$ 160,00.
+    # ⚠️ Somando de um lado e subtraindo do outro, **as duas voltam a fechar e o
+    # total da rede não muda** — a remessa é transporte, não é compra nem venda.
+    transferido = _transferencia_entre_lojas(cur, id_unidade, inicio, fim, fora)
+    compras += transferido
 
     cmv_real = estoque_inicial + compras - estoque_final
 

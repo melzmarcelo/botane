@@ -497,6 +497,132 @@ if id_prod_f and local_matriz:
     checar("e sem loja a conta continua sendo a da rede",
            40.0 < float(c_rede or 0) < 52.0, c_rede)
 
+print("9c. transferencia ENTRE lojas")
+# 🔑 Ate 31/08/2026 `transferir` recebia UMA loja e dois locais: escolhendo um
+# local da outra, o razao gravava saida e entrada sob a loja de quem estava na
+# tela — o saldo das duas ficava errado e nada denunciava. Numa casa com duas
+# lojas, mandar producao da matriz para a filial e o que se faz toda semana.
+if id_filial and id_prod_f:
+    st, l_fil2 = chamar("GET", "/locais", token=token, unidade=id_filial)
+    local_filial = (l_fil2 or [{}])[0].get("id")
+
+    def _saldo(id_prod, unid):
+        _st, s_ = chamar("GET", f"/estoque/saldos?id_produto={id_prod}", token=token,
+                         unidade=unid)
+        return sum(float(x["quantidade"]) for x in (s_ or []))
+
+    antes_matriz = _saldo(id_prod_f, 1)
+    antes_filial = _saldo(id_prod_f, id_filial)
+
+    st, tr = chamar("POST", "/estoque/transferencias", {
+        "id_produto": id_prod_f, "quantidade": 4,
+        "id_local_origem": local_matriz["id"], "id_local_destino": local_filial,
+        "observacao": f"matriz -> filial {marca_f}",
+    }, token=token)
+    checar("a transferencia entre lojas e aceita", st == 201, (st, tr))
+    checar("e ela se declara como entre lojas", (tr or {}).get("entre_lojas") is True, tr)
+
+    depois_matriz = _saldo(id_prod_f, 1)
+    depois_filial = _saldo(id_prod_f, id_filial)
+    checar("a origem perde a quantidade", round(antes_matriz - depois_matriz, 4) == 4.0,
+           (antes_matriz, depois_matriz))
+    checar("e o destino ganha a MESMA quantidade",
+           round(depois_filial - antes_filial, 4) == 4.0, (antes_filial, depois_filial))
+
+    # 🔑 **O custo ATRAVESSA a fronteira.** A entrada usa o custo que a saida
+    # apurou — o medio da origem. E isso que faz a origem perder exatamente o
+    # valor que o destino ganha, e a identidade do CMV fechar NAS DUAS.
+    with get_cursor() as _cur:
+        _cur.execute(
+            """SELECT tipo, id_unidade, custo_unitario, quantidade
+                 FROM estoque_movimentos
+                WHERE id_produto = %s AND origem_tipo = 'TRANSFERENCIA'
+                ORDER BY id DESC LIMIT 2""",
+            (id_prod_f,),
+        )
+        movs = {r["tipo"]: dict(r) for r in _cur.fetchall()}
+    m_saida = movs.get("TRANSFERENCIA_SAIDA") or {}
+    m_entrada = movs.get("TRANSFERENCIA_ENTRADA") or {}
+    checar("a saida fica na loja da ORIGEM", m_saida.get("id_unidade") == 1, m_saida)
+    checar("e a entrada na loja do DESTINO",
+           m_entrada.get("id_unidade") == id_filial, m_entrada)
+    checar("e as duas pelo MESMO custo — transferencia nao cria valor",
+           m_saida.get("custo_unitario") == m_entrada.get("custo_unitario"),
+           (m_saida.get("custo_unitario"), m_entrada.get("custo_unitario")))
+
+    # 🔑 **Transferencia entre lojas nao pode virar CMV de ninguem.** Dentro de
+    # UMA loja ela se anula (sai de um local, entra em outro) e por isso nunca
+    # contou como compra. Entre lojas ela NAO se anula: o destino recebe
+    # mercadoria que nao comprou — o estoque final sobe e o CMV dele fica
+    # NEGATIVO — e a origem perde mercadoria que nao vendeu, inchando o dela.
+    # Foi a tela da rede que mostrou: a filial que so recebeu uma remessa
+    # aparecia com CMV de −R$ 160,00.
+    st, ap_fil = chamar("GET", "/cmv/apuracao", token=token, unidade=id_filial)
+    # ⚠️ Com folga de UM CENTAVO. O custo unitario tem 6 casas e a conta
+    # encadeia entrada, saida e estoque: o residuo fica em milionesimos de
+    # real (-0,000006 na primeira rodada). Exigir zero exato acusaria de
+    # defeito o arredondamento que o projeto ja assume em todo relatorio.
+    checar("a filial que so RECEBEU nao tem CMV negativo",
+           float((ap_fil or {}).get("cmv_real", -1)) >= -0.01,
+           (ap_fil or {}).get("cmv_real"))
+    # ⚠️ A remessa entra como compra no destino: sem isso, `inicial + compras −
+    # final` nao teria como fechar num estoque que apareceu do nada.
+    checar("e a remessa entra como compra dela",
+           float((ap_fil or {}).get("compras", 0)) > 0, (ap_fil or {}).get("compras"))
+
+
+    # ⚠️ Quem nao enxerga a loja nao empurra mercadoria para dentro dela.
+    st, r_coz = chamar("POST", "/estoque/transferencias", {
+        "id_produto": id_prod_f, "quantidade": 1,
+        "id_local_origem": local_matriz["id"], "id_local_destino": local_filial,
+    }, token=tk)
+    checar("e quem nao lanca transferencia continua barrado", st == 403, st)
+
+
+print("9d. o painel da REDE")
+# 🔑 Toda tela do sistema responde por UMA loja, e esta certo: quem opera opera
+# numa de cada vez. Mas o dono de duas nao tinha onde ver as duas — e somar de
+# cabeca dois food costs de bases diferentes e a conta que ninguem faz certo.
+st, uma_so = chamar("GET", "/inicio/rede", token=token)
+checar("o painel da rede responde", st == 200 and "lojas" in (uma_so or {}), st)
+if id_filial:
+    nomes = [l["loja"] for l in (uma_so or {}).get("lojas", [])]
+    checar("e traz a filial junto da matriz", len(nomes) >= 2, nomes)
+
+    # ⚠️ O total SOMA dinheiro. Nao e uma consulta nova: cada linha sai da mesma
+    # `apurar` que o painel de cada loja usa — uma segunda implementacao
+    # divergiria no primeiro caso de borda e o consolidado passaria a discordar
+    # das partes.
+    linhas = (uma_so or {}).get("lojas", [])
+    soma_cmv = round(sum(l["cmv"] for l in linhas), 2)
+    checar("e o total e a soma das partes",
+           round((uma_so or {}).get("total", {}).get("cmv", 0), 2) == soma_cmv,
+           ((uma_so or {}).get("total", {}).get("cmv"), soma_cmv))
+
+    # 🔑 O food cost da rede se RECALCULA, nao se soma: media de percentuais
+    # daria o mesmo peso a loja que vendeu R$ 100 mil e a que vendeu R$ 5 mil.
+    total = (uma_so or {}).get("total", {})
+    if total.get("receita"):
+        esperado = round(total["cmv"] / total["receita"] * 100, 2)
+        checar("e o food cost da rede se recalcula, nao e media de percentuais",
+               total.get("food_cost_pct") == esperado,
+               (total.get("food_cost_pct"), esperado))
+    else:
+        # ⚠️ Sem receita ele e NULO, nao zero: zero pareceria um resultado
+        # excelente.
+        checar("sem receita, o food cost da rede e nulo",
+               total.get("food_cost_pct") is None, total.get("food_cost_pct"))
+
+    # ⚠️ Cada loja declara o SEU periodo: uma pode fechar por semana e a outra
+    # por mes, e um total que junta periodos diferentes precisa dizer isso.
+    checar("e cada linha declara o periodo dela",
+           all(l.get("periodo", {}).get("rotulo") for l in linhas), linhas[:1])
+
+# ⚠️ Sem `cmv.painel` a rede nao abre: sao numeros de dinheiro das duas lojas.
+st, r_coz = chamar("GET", "/inicio/rede", token=tk)
+checar("quem nao ve dinheiro nao abre o painel da rede", st == 403, st)
+
+
 # ⚠️ A filial de teste sai: a base e compartilhada, e uma loja a mais por
 # rodada faria o seletor da tela crescer sem parar. Ela vira INATIVA em vez
 # de ser apagada — tem movimento no razao, e razao nao se apaga.

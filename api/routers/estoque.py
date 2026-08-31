@@ -289,6 +289,17 @@ def transferencia(body: TransferenciaRequest,
                   ctx: Contexto = Depends(requer_permissao("estoque.transferencias"))) -> dict:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # ⚠️ **Quem não enxerga a loja não empurra mercadoria para dentro
+        # dela.** A transferência entre lojas toca DUAS: mandar para uma loja
+        # que a pessoa não vê seria mexer num estoque que ela não pode nem
+        # consultar. A mesma validação do resto do sistema — `ve_unidade`.
+        for id_local in (body.id_local_origem, body.id_local_destino):
+            cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
+            linha = cur.fetchone()
+            if linha and not ctx.ve_unidade(linha["id_unidade"]):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Sem acesso à loja de um dos locais desta transferência.")
         r = motor.transferir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local_origem=body.id_local_origem, id_local_destino=body.id_local_destino,
@@ -296,10 +307,13 @@ def transferencia(body: TransferenciaRequest,
         )
         auditoria.registrar(cur, ctx.id_usuario, "estoque", r["saida"]["id"], "transferencia",
                             depois={"produto": body.id_produto, "qtd": body.quantidade,
-                                    "de": body.id_local_origem, "para": body.id_local_destino},
+                                    "de": body.id_local_origem, "para": body.id_local_destino,
+                                    "entre_lojas": r["entre_lojas"]},
                             id_unidade=id_unidade)
     return {"saida": r["saida"]["id"], "entrada": r["entrada"]["id"],
-            "message": "Transferência lançada"}
+            "entre_lojas": r["entre_lojas"],
+            "message": ("Transferência entre lojas lançada" if r["entre_lojas"]
+                        else "Transferência lançada")}
 
 
 @router.post("/movimentos/{id_movimento}/estornar", status_code=201)

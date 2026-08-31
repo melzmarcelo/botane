@@ -119,7 +119,8 @@ def desativar_setor(id_setor: int,
 
 
 @router.get("/locais", response_model=list[LocalResponse])
-def listar_locais(incluir_inativos: bool = False, ctx: Contexto = Depends(contexto_atual)):
+def listar_locais(incluir_inativos: bool = False, todas_lojas: bool = False,
+                  ctx: Contexto = Depends(contexto_atual)):
     """As prateleiras da loja ATUAL.
 
     🔑 **Filtra pela loja, e não só pelo que a pessoa pode ver.** O
@@ -129,16 +130,36 @@ def listar_locais(incluir_inativos: bool = False, ctx: Contexto = Depends(contex
     opera numa loja de cada vez; a que vale é a do seletor.
     ⚠️ Mesma correção que a listagem de vendas e a de inventários já
     precisaram. Toda lista de coisa que tem `id_unidade` nasce com essa dívida.
+
+    🔑 **`todas_lojas` existe por causa da TRANSFERÊNCIA ENTRE LOJAS.** O destino
+    de uma transferência pode ser a prateleira da outra loja — é o que a casa faz
+    quando a matriz produz e manda para a filial. Só as lojas que a pessoa
+    ENXERGA entram: quem não vê a loja não empurra mercadoria para dentro dela.
+    ⚠️ Aí o nome da loja vem junto (`loja`), senão a lista mostraria dois
+    "Estoque" e quem escolhe não teria como saber qual é qual.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
-            """SELECT id, id_unidade, nome, tipo, principal, ativo FROM locais_estoque
-                WHERE (%s OR ativo) AND id_unidade = %s
-                ORDER BY principal DESC, nome""",
-            (incluir_inativos, id_unidade),
+            """SELECT l.id, l.id_unidade, l.nome, l.tipo, l.principal, l.ativo,
+                      u.apelido AS loja_apelido, u.nome AS loja_nome
+                 FROM locais_estoque l
+                 JOIN unidades u ON u.id = l.id_unidade
+                WHERE (%(inativos)s OR l.ativo)
+                  AND (%(todas)s OR l.id_unidade = %(u)s)
+                  AND (NOT %(todas)s OR u.ativo)
+                ORDER BY (l.id_unidade = %(u)s) DESC, u.id, l.principal DESC, l.nome""",
+            {"inativos": incluir_inativos, "todas": todas_lojas, "u": id_unidade},
         )
-        return [dict(r) for r in cur.fetchall()]
+        linhas = [dict(r) for r in cur.fetchall()]
+    saida = []
+    for l in linhas:
+        if todas_lojas and not ctx.ve_unidade(l["id_unidade"]):
+            continue
+        l["loja"] = l.pop("loja_apelido", None) or l.pop("loja_nome", None)
+        l.pop("loja_nome", None)
+        saida.append(l)
+    return saida
 
 
 def _recusar_repetido(cur, sql: str, parametros: tuple, mensagem: str) -> None:

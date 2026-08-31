@@ -76,6 +76,26 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
                AND data_movimento >= %s AND data_movimento < %s
              GROUP BY id_produto
         ),
+        -- 🔑 **A remessa entre lojas conta como compra aqui também.** A
+        -- apuração passou a somá-la (entrada) e subtraí-la (saída) — sem a
+        -- mesma linha neste relatório, **a soma dos grupos deixa de fechar com
+        -- o CMV do período**, que é a propriedade que dá sentido ao corte por
+        -- grupo. Foi o que a bateria acusou: R$ 1.120,00 de diferença.
+        -- ⚠️ Só o que ATRAVESSA a fronteira: a transferência entre dois locais
+        -- da mesma loja continua se anulando sozinha.
+        transferencias AS (
+            SELECT m.id_produto,
+                   sum(CASE WHEN m.tipo = 'TRANSFERENCIA_ENTRADA' THEN m.custo_total
+                            ELSE -m.custo_total END) AS valor
+              FROM estoque_movimentos m
+              JOIN estoque_movimentos o ON o.id = m.origem_id
+             WHERE m.id_unidade = %s
+               AND m.tipo IN ('TRANSFERENCIA_ENTRADA', 'TRANSFERENCIA_SAIDA')
+               AND m.origem_tipo = 'TRANSFERENCIA'
+               AND o.id_unidade <> m.id_unidade
+               AND m.data_movimento >= %s AND m.data_movimento < %s
+             GROUP BY m.id_produto
+        ),
         perdas AS (
             SELECT id_produto, sum(abs(custo_total)) AS valor
               FROM estoque_movimentos
@@ -85,10 +105,14 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         )
         SELECT coalesce(g.nome, %s) AS grupo,
                coalesce(sum(i.valor), 0) AS estoque_inicial,
-               coalesce(sum(c.valor), 0) AS compras,
+               coalesce(sum(c.valor), 0) + coalesce(sum(t.valor), 0) AS compras,
                coalesce(sum(f.valor), 0) AS estoque_final,
+               -- ⚠️ A remessa entre lojas entra AQUI também, não só na coluna
+               -- de compras: é o `cmv` que precisa fechar com a apuração, e
+               -- somá-la de um lado e esquecer do outro foi o que abriu os
+               -- R$ 1.120,00 que a bateria acusou.
                coalesce(sum(i.valor), 0) + coalesce(sum(c.valor), 0)
-                   - coalesce(sum(f.valor), 0) AS cmv,
+                   + coalesce(sum(t.valor), 0) - coalesce(sum(f.valor), 0) AS cmv,
                coalesce(sum(pd.valor), 0) AS perdas,
                count(DISTINCT p.id) FILTER (
                    WHERE coalesce(i.valor, 0) <> 0 OR coalesce(c.valor, 0) <> 0
@@ -100,14 +124,18 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
           LEFT JOIN (SELECT id_produto, sum(valor) AS valor FROM final GROUP BY 1) f
                  ON f.id_produto = p.id
           LEFT JOIN compras c ON c.id_produto = p.id
+          LEFT JOIN transferencias t ON t.id_produto = p.id
           LEFT JOIN perdas pd ON pd.id_produto = p.id
          GROUP BY 1
+        -- ⚠️ A remessa entra no HAVING: um grupo cujo único movimento no período
+        -- foi uma transferência entre lojas tem CMV, e sumiria da lista.
         HAVING coalesce(sum(i.valor), 0) <> 0 OR coalesce(sum(c.valor), 0) <> 0
-            OR coalesce(sum(f.valor), 0) <> 0
+            OR coalesce(sum(f.valor), 0) <> 0 OR coalesce(sum(t.valor), 0) <> 0
          ORDER BY 5 DESC
         """,
         (id_unidade, inicio, id_unidade, fim + timedelta(days=1),
          id_unidade, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
+         id_unidade, inicio, fim + timedelta(days=1),
          id_unidade, inicio, fim + timedelta(days=1), rotulo),
     )
     linhas = [dict(r) for r in cur.fetchall()]
