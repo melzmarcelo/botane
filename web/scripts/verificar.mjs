@@ -419,22 +419,28 @@ try {
   // `TIPOS_PRODUTO` (web/lib/cadastros.ts) são listas separadas: mexer só numa
   // faz o servidor aceitar um tipo que ninguém consegue escolher. É a lição do
   // EAN na direção inversa — e essa não quebra nada, só nunca aparece.
+  // 🔑 **`main select`, nunca `select` solto.** O seletor de LOJA vive na
+  // barra superior e e o primeiro `<select>` do documento assim que existe a
+  // segunda loja — as checagens de tipo de produto passaram a ler os ids das
+  // lojas ("1", "15") e `p.select` chegaria a TROCAR a loja no meio do teste.
+  // E a armadilha do "primeiro elemento que casa", de novo: ela some enquanto
+  // ha uma loja so, e volta no dia em que a casa abre a filial.
   const tiposNaTela = await p.evaluate(() =>
-    [...(document.querySelector("select")?.options ?? [])].map((o) => o.value));
+    [...(document.querySelector("main select")?.options ?? [])].map((o) => o.value));
   checar("a tela oferece os sete tipos de produto", tiposNaTela.length === 7, tiposNaTela);
   checar("inclusive utensílios e enxoval", tiposNaTela.includes("UTENSILIO"), tiposNaTela);
 
   // A ajuda do tipo é o que explica a escolha a quem cadastra; sem ela
   // "Utensílios" fica indistinguível de "Material de limpeza".
-  await p.select("select", "UTENSILIO");
+  await p.select("main select", "UTENSILIO");
   await new Promise((r) => setTimeout(r, 300));
   const ajudaUtensilio = await textoVisivel(p);
   checar("e explica que utensílio não é consumido pela receita",
     /quebra, some e é reposto/i.test(ajudaUtensilio),
     ajudaUtensilio.slice(0, 200));
 
-  await p.select("select", "INSUMO");
-  const selects = await p.$$("select");
+  await p.select("main select", "INSUMO");
+  const selects = await p.$$("main select");
   // ordem dos selects: tipo, categoria, setor, um_estoque, um_compra
   await selects[3].select("KG");
   await Promise.all([
@@ -839,7 +845,7 @@ try {
        itemEscolhido.includes(`Tela farinha ${marca}`.toUpperCase()),
     itemEscolhido);
   await numeros[2].type("500");
-  const selectsUm = await p.$$("select");
+  const selectsUm = await p.$$("main select");
   // Sem o select do produto sobraram dois: 0 rendimento_um, 1 unidade do item.
   await selectsUm[1].select("G");
   await Promise.all([
@@ -1498,7 +1504,7 @@ try {
   // entrada — nesta a lista continua inteira de propósito, porque a primeira
   // entrada de um produto novo não tem saldo em lugar nenhum.
   const totalDeLocais = await p.evaluate(
-    () => document.querySelectorAll("select")[0]?.options.length ?? 0);
+    () => document.querySelectorAll("main select")[0]?.options.length ?? 0);
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((x) =>
       /ajuste de estoque/i.test(x.textContent ?? ""));
@@ -1512,7 +1518,7 @@ try {
     await new Promise((r) => setTimeout(r, 1600));
   }
   const apos = await p.evaluate(() => {
-    const s = document.querySelectorAll("select")[0];
+    const s = document.querySelectorAll("main select")[0];
     return {
       total: s?.options.length ?? 0,
       rotulos: [...(s?.options ?? [])].map((o) => o.textContent?.trim() ?? "").slice(0, 3),
@@ -1891,7 +1897,7 @@ try {
   checar("digitar nota leva para a página dela", linkDigitar === "/compras/nova", linkDigitar);
   await irPara(p, `${WEB}/compras/nova`);
   await new Promise((r) => setTimeout(r, 1200));
-  const seletoresNota = await p.$$("select");
+  const seletoresNota = await p.$$("main select");
   checar("o formulário de digitação abre", seletoresNota.length >= 3, seletoresNota.length);
 
   // Digitar o código e dar Tab tem de trazer o produto: quem copia de um papel
@@ -3011,7 +3017,10 @@ try {
   await api("PUT", "/unidades/1/parametros",
     { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
 
-  await irPara(p, `${WEB}/lojas`);
+  // ⚠️ Os parametros sairam da LISTA e foram para dentro de cada loja —
+  // consultar e cadastrar sao telas diferentes, como em Compras e Vendas.
+  // O id 1 e a matriz, a mesma que a linha acima acabou de configurar.
+  await irPara(p, `${WEB}/lojas/1`);
   await new Promise((r) => setTimeout(r, 1600));
   // ⚠️ O título está num `.rotulo`, que o CSS põe em maiúsculas — e `innerText`
   // devolve o texto RENDERIZADO, não o que está no JSX. Procurar pela frase
@@ -3043,7 +3052,7 @@ try {
   // Trocar para semanal muda a pergunta e a prévia — que vem do servidor, do
   // mesmo código que vai fechar o período de verdade.
   await p.evaluate(() => {
-    const sel = [...document.querySelectorAll("select")]
+    const sel = [...document.querySelectorAll("main select")]
       .find((s) => [...s.options].some((o) => o.value === "SEMANAL"));
     if (!sel) return;
     sel.value = "SEMANAL";
@@ -3067,7 +3076,7 @@ try {
   await new Promise((r) => setTimeout(r, 2200));
   const noCmv = await p.evaluate(() => {
     const texto = document.body.innerText;
-    const opcoes = [...document.querySelectorAll("select")]
+    const opcoes = [...document.querySelectorAll("main select")]
       .flatMap((s) => [...s.options].map((o) => o.textContent?.trim() ?? ""));
     return {
       temSeletor: opcoes.some((o) => /^semana de /.test(o)),

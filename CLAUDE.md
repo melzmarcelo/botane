@@ -1159,6 +1159,33 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **A loja ganhou cadastro de verdade** (31/08/2026): `/lojas` virou só a LISTA, com botão
+  de **Nova loja**; `/lojas/nova` e `/lojas/[id]` compartilham o mesmo formulário — nome,
+  apelido, CNPJ, IE, endereço, contato e mesas.
+  ⚠️ **O sistema sabia criar loja pela API e não oferecia isso a ninguém**, o que é o mesmo que
+  não saber. A tela antiga juntava lista, seleção por clique na linha e o formulão de
+  parâmetros embaixo, e trazia um bilhete admitindo o vão: *"cadastro completo da loja entra
+  junto com a segunda unidade"*. Ela chegou.
+  🔑 **Os parâmetros foram para DENTRO de cada loja**: o endereço passa a guardar a loja — dá
+  para voltar, guardar o link e saber de qual se está falando. Mesmo corte de Compras, Vendas,
+  Fornecedores e Usuários.
+  ⚠️ **A caixa "é a matriz" não se desmarca sozinha**: só uma loja é matriz, e desmarcar a
+  atual deixaria a casa sem nenhuma — a matriz é a resposta padrão de quem não escolheu loja.
+  Para trocar, marca-se na outra, e o servidor tira daqui.
+  ⚠️ **A integração NÃO ficou na tela da loja**, de propósito: ela é por loja, mas mora em
+  Integrações, resolvida pelo seletor do topo. Duas portas para a mesma configuração seriam
+  duas versões da mesma verdade. A tela de nova loja DIZ isso antes de salvar — quem abre a
+  filial esperando que ela já converse com o PDV descobriria o contrário no primeiro dia.
+- 🔑 **O seletor de LOJA virou o primeiro `<select>` do documento** (31/08/2026) — e derrubou
+  DEZ checagens do navegador assim que existiu a segunda loja. Elas liam `["1","15"]`, os ids
+  das lojas, achando que liam os tipos de produto; e `p.select("select", …)` chegaria a
+  **trocar a loja no meio do teste**, com a falha aparecendo três telas adiante. Tudo passou a
+  ser escopado em **`main select`** — o conteúdo da página, não a casca.
+  ⚠️ É a armadilha do "primeiro elemento que casa" outra vez, e a pior versão dela: **some
+  enquanto há uma loja só e volta no dia em que a casa abre a filial**.
+  ⚠️ **E a filial de teste da suíte tinha ficado ATIVA na base do dono** — a limpeza do fim só
+  roda quando a rodada chega lá. Virou `atexit`, que roda mesmo com traceback: mesma lição do
+  `preservar_credenciais`.
 - 🔑 **Transferência ENTRE LOJAS: dois movimentos ligados, cada um na sua loja** (31/08/2026,
   decisão do dono). `transferir` recebia UMA loja e dois locais: escolhendo um local da outra,
   o razão gravava saída e entrada sob a loja de quem estava na tela — o saldo das duas ficava
@@ -1740,7 +1767,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.495 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+- Testes (1.491 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
   `smoke_fichas.py` (37), `smoke_estoque.py` (105), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
@@ -1749,7 +1776,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (367, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (366, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

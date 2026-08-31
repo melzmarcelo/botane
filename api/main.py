@@ -64,7 +64,7 @@ from seguranca import hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.1.5"
+VERSAO = "1.1.6"
 
 
 def garantir_admin() -> None:

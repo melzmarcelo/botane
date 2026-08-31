@@ -37,7 +37,11 @@ from database import get_cursor, init_pool  # noqa: E402
 OPERACAO = [
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",
-    "inventario_itens", "inventarios", "producao_agenda", "producoes",
+    # ⚠️ `inventario_contadores` aponta para `inventarios`: sem ela aqui, o
+    # TRUNCATE falha no meio e quem rodou acha que limpou. Foi a guarda do
+    # próprio script que avisou — a mensagem do Postgres passa longe disso.
+    "inventario_contadores", "inventario_itens", "inventarios",
+    "producao_agenda", "producoes",
     # compras
     "nota_itens", "notas_entrada", "codigos_externos", "sync_log",
     # vendas e apuração
@@ -91,8 +95,11 @@ def _sql_usuarios(so_o_admin: bool, contar: bool = False) -> str:
         # um usuário por papel (gerente, conferente, cozinha, salão, contador).
         # Sem eles no filtro, a base "entregue ao cliente" ia com a equipe de
         # uma suíte dentro.
+        # ⚠️ `conta.` entrou depois: é o contador que a suíte do inventário cria
+        # a cada rodada, para provar que quem conta não monta a contagem. Sem
+        # ele no filtro, a base "entregue ao cliente" ia com dezesseis deles.
         else """(email LIKE 'smoke.%%' OR email LIKE 'tela.%%'
-                 OR email LIKE 'semana.%%'
+                 OR email LIKE 'semana.%%' OR email LIKE 'conta.%%'
                  OR email LIKE '%%.teste@%%' OR email LIKE 'cozinha.teste@%%')
                 AND email <> %s"""
     )

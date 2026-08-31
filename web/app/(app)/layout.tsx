@@ -85,7 +85,7 @@ const MENU: {
     grupo: "Administração",
     itens: [
       { href: "/empresa", nome: "Empresa", chave: "admin.empresa" },
-      { href: "/lojas", nome: "Lojas e parâmetros", chave: "admin.unidades" },
+      { href: "/lojas", nome: "Lojas", chave: "admin.unidades" },
       { href: "/usuarios", nome: "Usuários", chave: "admin.usuarios" },
       { href: "/papeis", nome: "Papéis e permissões", chave: "admin.papeis" },
       { href: "/integracoes", nome: "Integrações", chave: "admin.integracoes" },

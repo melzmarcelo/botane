@@ -13,6 +13,7 @@ produção consome a ficha e o custo do insumo passa a vir do estoque.
     python tests/smoke_estoque.py            (API de pé na 9200)
 """
 
+import atexit
 import json
 import sys
 from datetime import date, timedelta
@@ -442,6 +443,24 @@ st, r = chamar("POST", "/estoque/saidas", {
 checar("cozinha PODE apontar perda", st == 201, (st, r))
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=tk)
 checar("cozinha NÃO fecha inventário (403)", st == 403, st)
+
+# 🔑 **A filial sai mesmo se a suite estourar no meio.** A limpeza no fim so
+# roda quando a rodada chega la — e uma que quebrou antes deixou a loja ATIVA na
+# base do dono. Com duas lojas ativas, o seletor de loja aparece na barra
+# superior e vira o PRIMEIRO `<select>` do documento: as checagens de tipo de
+# produto do teste de navegador passaram a ler ids de loja. Mesma licao do
+# `preservar_credenciais`.
+def _desativar_filiais_de_teste():
+    try:
+        st_, lista_ = chamar("GET", "/unidades?incluir_inativas=true", token=token)
+        for u_ in (lista_ or []):
+            if u_.get("ativo") and str(u_.get("nome", "")).startswith("Filial de teste"):
+                chamar("PUT", f"/unidades/{u_['id']}", {"ativo": False}, token=token)
+    except Exception:
+        pass
+
+
+atexit.register(_desativar_filiais_de_teste)
 
 print("9b. a segunda loja")
 # 🔑 **O custo do insumo e da LOJA.** Ate 31/08/2026 `custo_do_insumo` somava
