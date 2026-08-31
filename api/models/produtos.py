@@ -144,6 +144,16 @@ class ProdutoUpdate(ProdutoBase):
     fornecedores: list[FornecedorDoProduto] | None = None
 
 
+class PrecoDaLoja(BaseModel):
+    """O preço desta loja. Nulo APAGA o dela e devolve o da casa.
+
+    ⚠️ Nulo não é zero: zero é um preço (de graça), e apagar é outra coisa —
+    é dizer "aqui vale o da casa".
+    """
+
+    preco_venda: float | None = Field(default=None, ge=0)
+
+
 class ProdutoResponse(BaseModel):
     id: int
     codigo: str
@@ -194,6 +204,10 @@ class ProdutoResponse(BaseModel):
     preco_venda: float | None = None
     preco_desde: date | None = None
     fornecedores: list[dict] = []
+    # 🔑 Os DOIS, para a tela dizer de quem é o número. "R$ 12,00" sem dono não
+    # responde se esta loja cobra isso ou se herdou da casa.
+    preco_casa: float | None = None
+    preco_loja: float | None = None
 
 
 class ProdutoResumo(BaseModel):

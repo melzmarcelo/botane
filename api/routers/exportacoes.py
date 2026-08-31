@@ -248,13 +248,15 @@ def produto(nome: str, formato: str | None = None,
             """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao,
                       (SELECT pp.preco_venda FROM produto_precos pp
                         WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                        ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                          AND (pp.id_unidade = %s OR pp.id_unidade IS NULL)
+                        ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
                  FROM produtos p
                  LEFT JOIN categorias c ON c.id = p.id_categoria
                  LEFT JOIN setores s ON s.id = p.id_setor
                  LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                 WHERE p.id = %s""",
-            (id_produto,),
+            # A loja vem primeiro: o `%s` dela está na lista do SELECT.
+            (id_unidade, id_produto),
         )
         prod = cur.fetchone()
         if not prod:

@@ -344,31 +344,22 @@ def precos(cliente: ClientePdv, filial: str) -> dict[str, float]:
     return tabela
 
 
-def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int) -> bool:
-    """Abre o preço de venda vigente, se ele mudou.
+def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int,
+                  id_unidade: int | None = None) -> bool:
+    """O preço que veio do cardápio — e ele é **da loja**, não da casa.
 
-    ⚠️ **Só grava quando MUDA.** `produto_precos` é histórico: uma linha nova a
-    cada importação transformaria "quando o preço subiu" em ruído, e é essa
-    pergunta que a tabela existe para responder.
+    🔑 **`tabelapreco/get/{filial}` é POR FILIAL**, e por isso o preço importado
+    passa a nascer com `id_unidade`. Gravá-lo como preço da casa fazia o valor da
+    filial sobrescrever o da matriz a cada importação, sem nada denunciando —
+    duas lojas que cobram diferente pelo mesmo prato terminavam com um preço só,
+    o da última que sincronizou.
+
+    ⚠️ **Só grava quando MUDA**: `produto_precos` é histórico, e uma linha por
+    importação transformaria "quando o preço subiu?" em ruído.
     """
-    cur.execute(
-        """SELECT id, preco_venda FROM produto_precos
-            WHERE id_produto = %s AND id_unidade IS NULL AND vigente_ate IS NULL""",
-        (id_produto,),
-    )
-    atual = cur.fetchone()
-    if atual and float(atual["preco_venda"]) == float(preco):
-        return False
-    if atual:
-        cur.execute(
-            "UPDATE produto_precos SET vigente_ate = current_date WHERE id = %s", (atual["id"],)
-        )
-    cur.execute(
-        "INSERT INTO produto_precos (id_produto, preco_venda, criado_por) VALUES (%s, %s, %s)",
-        (id_produto, preco, id_usuario),
-    )
-    return True
+    from services import precos
 
+    return precos.gravar(cur, id_produto, preco, id_usuario, id_unidade)
 
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
              criar_ausentes: bool = True, id_unidade: int = 1) -> dict:
@@ -510,7 +501,7 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             resumo["por_ean"] += 1 if origem == "ean" else 0
 
         preco = tabela.get(str(codigo))
-        if preco and _gravar_preco(cur, id_produto, preco, id_usuario):
+        if preco and _gravar_preco(cur, id_produto, preco, id_usuario, id_unidade):
             resumo["precos"] += 1
 
     return resumo

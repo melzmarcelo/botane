@@ -10,6 +10,7 @@ import {
   Categoria,
   Fornecedor,
   Local,
+  reais,
   Setor,
   TIPOS_PRODUTO,
   UnidadeMedida,
@@ -87,6 +88,12 @@ export default function FormularioProduto() {
   const novo = id === "novo";
   const router = useRouter();
   const { pode, eu } = useSessao();
+  // 🔑 O preço por loja só faz sentido com mais de uma: com uma só, "da casa"
+  // e "desta loja" são a mesma coisa, e o bloco seria ruído.
+  const variasLojas = (eu?.unidades.length ?? 0) > 1;
+  const [precoLoja, setPrecoLoja] = useState("");
+  const [precoCasa, setPrecoCasa] = useState<number | null>(null);
+  const [salvandoPreco, setSalvandoPreco] = useState(false);
   const enviaAoPdv = !!eu?.enviar_ao_pdv;
   const podeEditar = pode("cadastros.produtos");
 
@@ -135,10 +142,33 @@ export default function FormularioProduto() {
           ),
         } as Form);
         setVinculos((p.fornecedores as VinculoFornecedor[]) ?? []);
+        // ⚠️ O campo do formulário mostra o preço DA CASA, não o resolvido:
+        // senão, editar um produto numa filial que cobra diferente gravaria o
+        // preço dela como se fosse o da casa.
+        const casa = p.preco_casa as number | null;
+        setPrecoCasa(casa ?? null);
+        setF((atual) => ({ ...atual, preco_venda: casa === null || casa === undefined ? "" : String(casa) }));
+        const daLoja = p.preco_loja as number | null;
+        setPrecoLoja(daLoja === null || daLoja === undefined ? "" : String(daLoja));
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
   }, [id, novo]);
+
+  async function salvarPrecoDaLoja(valor: number | null) {
+    setSalvandoPreco(true);
+    try {
+      const r = await api.put<{ message: string }>(`/produtos/${id}/preco-loja`, {
+        preco_venda: valor,
+      });
+      setPrecoLoja(valor === null ? "" : String(valor));
+      aviso.sucesso(r.message);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar o preço");
+    } finally {
+      setSalvandoPreco(false);
+    }
+  }
 
   function set<K extends keyof Form>(campo: K, valor: Form[K]) {
     setF((atual) => {
@@ -452,7 +482,13 @@ export default function FormularioProduto() {
               onChange={(e) => set("fator_compra", e.target.value)}
             />
           </Campo>
-          <Campo rotulo="Preço de venda" dica="grava com data de vigência">
+          {/* ⚠️ Este é o preço da CASA. O da loja tem bloco próprio abaixo:
+              fazer este campo gravar por loja faria o preço "da casa" nunca ser
+              definido — cada filial teria o seu e nenhuma herdaria nada. */}
+          <Campo
+            rotulo={variasLojas ? "Preço de venda da casa" : "Preço de venda"}
+            dica="grava com data de vigência"
+          >
             <input
               className="campo mono"
               type="number"
@@ -465,6 +501,58 @@ export default function FormularioProduto() {
           </Campo>
         </div>
       </Cartao>
+
+      {/* 🔑 **O preço da LOJA, e só com mais de uma.** O da casa vale para todas;
+          este sobrepõe nesta. É a mesma forma da reserva do custo — o específico
+          primeiro, o geral depois — e é o que permite a filial cobrar diferente
+          sem recadastrar centenas de pratos que custam o mesmo nos dois lugares. */}
+      {variasLojas && !novo && (
+        <Cartao
+          titulo="Preço nesta loja"
+          descricao={
+            precoCasa === null
+              ? "Sem preço da casa: o que valer aqui vale só aqui."
+              : `Sem um preço aqui, vale o da casa: ${reais(precoCasa)}.`
+          }
+        >
+          <div className="flex flex-wrap items-end gap-3">
+            <Campo rotulo="Preço" className="w-[180px]">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.01"
+                min="0"
+                disabled={!podeEditar}
+                placeholder={precoCasa === null ? "" : String(precoCasa)}
+                value={precoLoja}
+                onChange={(e) => setPrecoLoja(e.target.value)}
+              />
+            </Campo>
+            {podeEditar && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primario"
+                  disabled={salvandoPreco}
+                  onClick={() => void salvarPrecoDaLoja(precoLoja.trim() === "" ? null : Number(precoLoja))}
+                >
+                  {salvandoPreco ? "Salvando…" : "Salvar preço daqui"}
+                </button>
+                {/* ⚠️ Apagar não é zerar: zero seria dizer que aqui o prato é de
+                    graça. Limpar devolve o preço da casa. */}
+                <button
+                  type="button"
+                  className="link-acao-erro"
+                  disabled={salvandoPreco}
+                  onClick={() => void salvarPrecoDaLoja(null)}
+                >
+                  usar o preço da casa
+                </button>
+              </>
+            )}
+          </div>
+        </Cartao>
+      )}
 
       <Cartao titulo="Estoque">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

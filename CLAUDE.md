@@ -1159,6 +1159,28 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **Preço de venda POR LOJA — e sem migração** (`services/precos.py`, 31/08/2026). O índice
+  único já previa os dois donos: `(id_produto, coalesce(id_unidade, 0)) WHERE vigente_ate IS
+  NULL`. A regra é **o preço da loja manda; sem ele, vale o da casa** — a mesma forma da reserva
+  do custo, o específico primeiro e o geral depois.
+  ⚠️ **A queda para o preço da casa é o CASO COMUM, não conveniência**: quem abre a segunda loja
+  cobra o mesmo na maioria dos itens, e obrigar a cadastrar duas vezes faria a filial nascer com
+  centenas de pratos sem preço — e prato sem preço não vende.
+  🔑 **A leitura nem filtrava por loja**: pegava a linha de `vigente_de` mais recente, de quem
+  fosse — com um preço da casa e um de loja, o resultado era **arbitrário**. Estava assim em
+  SEIS consultas, cada uma com a regra copiada por dentro. Agora ela é escrita uma vez.
+  🔑 **E o gravador do cardápio estava errado de origem**: `tabelapreco/get/{filial}` é POR
+  FILIAL, e o preço importado nascia como preço DA CASA. Com duas lojas, o valor da filial
+  sobrescreveria o da matriz a cada importação — as duas terminariam com um preço só, o da
+  última que sincronizou.
+  ⚠️ **O formulário do produto grava o da CASA**, de propósito: fazê-lo gravar por loja faria o
+  preço da casa nunca ser definido — cada filial teria o seu e nenhuma herdaria nada. O da loja
+  tem bloco próprio, e os dois só aparecem separados com mais de uma loja.
+  ⚠️ **Apagar não é ZERAR**: limpar devolve o preço da casa; zero diz que ali o prato é de
+  graça. São coisas diferentes, e o histórico guarda as duas.
+  ⚠️ **Setor continua GLOBAL e local por loja** — decisão registrada, não omissão: setor é
+  organização do cardápio (o mesmo prato sai do bar nas duas lojas), local é prateleira física,
+  que é de cada uma.
 - 🔑 **A loja ganhou cadastro de verdade** (31/08/2026): `/lojas` virou só a LISTA, com botão
   de **Nova loja**; `/lojas/nova` e `/lojas/[id]` compartilham o mesmo formulário — nome,
   apelido, CNPJ, IE, endereço, contato e mesas.
@@ -1767,8 +1789,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.491 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (105), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.503 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (113), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),

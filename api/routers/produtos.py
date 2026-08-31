@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    PrecoDaLoja,
     KitRequest,
     UnidadesCompraRequest,
     ContagemProdutos,
@@ -21,8 +22,8 @@ from models.produtos import (
     VincularRequest,
 )
 from paginacao import pagina
-from seguranca import Contexto, contexto_atual, requer_permissao
-from services import kits, produtos_vinculo
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
+from services import kits, precos, produtos_vinculo
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -126,27 +127,17 @@ def _valida_basico(dados: dict) -> None:
 
 
 def _gravar_preco(cur, id_produto: int, preco: float | None, id_usuario: int) -> None:
-    """Fecha o preço vigente e abre outro. O histórico é o que sustenta a margem."""
-    if preco is None:
-        return
-    cur.execute(
-        """SELECT id, preco_venda FROM produto_precos
-            WHERE id_produto = %s AND id_unidade IS NULL AND vigente_ate IS NULL""",
-        (id_produto,),
-    )
-    atual = cur.fetchone()
-    if atual and float(atual["preco_venda"]) == float(preco):
-        return
-    if atual:
-        cur.execute(
-            "UPDATE produto_precos SET vigente_ate = current_date WHERE id = %s", (atual["id"],)
-        )
-    cur.execute(
-        """INSERT INTO produto_precos (id_produto, preco_venda, criado_por)
-           VALUES (%s, %s, %s)""",
-        (id_produto, preco, id_usuario),
-    )
+    """Fecha o preço vigente e abre outro. O histórico é o que sustenta a margem.
 
+    ⚠️ **O formulário do produto grava o preço da CASA**, não o da loja atual —
+    de propósito. Numa casa de uma loja só não existe distinção, e fazer o
+    formulário gravar por loja faria o preço "da casa" nunca ser definido: cada
+    filial teria o seu e nenhuma herdaria nada. O preço de uma loja específica
+    se define no bloco próprio da tela do produto.
+    """
+    from services import precos
+
+    precos.gravar(cur, id_produto, preco, id_usuario, None)
 
 def _gravar_fornecedores(cur, id_produto: int, lista) -> None:
     """Só sai da tabela quem saiu da lista.
@@ -200,15 +191,20 @@ def listar(
     ctx: Contexto = Depends(contexto_atual),
 ) -> list[dict]:
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         linhas = pagina(
             cur,
             """
             SELECT p.id, p.codigo, p.nome, p.tipo, c.nome AS categoria, s.nome AS setor,
                    p.um_estoque, p.producao_propria, p.controla_estoque, p.controla_lote,
                    p.status, p.ativo,
+                   -- ⚠️ Nem filtrava por loja: com um preço da casa e um da
+                   -- loja, escolhia o de `vigente_de` mais recente, que é
+                   -- arbitrário. A regra mora em `services/precos.py`.
                    (SELECT pp.preco_venda FROM produto_precos pp
                      WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                     ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                       AND (pp.id_unidade = %s OR pp.id_unidade IS NULL)
+                     ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
               FROM produtos p
               LEFT JOIN categorias c ON c.id = p.id_categoria
               LEFT JOIN setores s ON s.id = p.id_setor
@@ -225,7 +221,11 @@ def listar(
                     OR coalesce(p.codigo_barras, '') LIKE '%%' || %s || '%%')
              ORDER BY p.ativo DESC, lower(p.nome)
             """,
-            (incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
+            # ⚠️ A loja vai PRIMEIRO: o `%s` dela está na lista do SELECT, que
+            # vem antes do WHERE. Parâmetro posicional é assim — a ordem do SQL
+            # é a ordem da tupla.
+            (id_unidade,
+             incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
              status, status, sem_ficha, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
@@ -297,6 +297,7 @@ def vincular(id_produto: int, body: VincularRequest,
 @router.get("/{id_produto}", response_model=ProdutoResponse)
 def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao
                  FROM produtos p
@@ -311,15 +312,24 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         produto = dict(p)
 
+        # 🔑 Os DOIS lado a lado: o da casa e o desta loja. A tela precisa
+        # dizer de quem é o número que está mostrando — "R$ 12,00" sem dono não
+        # responde se a filial cobra isso ou se herdou da matriz.
         cur.execute(
-            """SELECT preco_venda, vigente_de FROM produto_precos
-                WHERE id_produto = %s AND vigente_ate IS NULL
-                ORDER BY vigente_de DESC LIMIT 1""",
-            (id_produto,),
+            """SELECT id_unidade, preco_venda, vigente_de FROM produto_precos
+                WHERE id_produto = %(p)s AND vigente_ate IS NULL
+                  AND (id_unidade = %(u)s OR id_unidade IS NULL)""",
+            {"p": id_produto, "u": id_unidade},
         )
-        preco = cur.fetchone()
-        produto["preco_venda"] = preco["preco_venda"] if preco else None
-        produto["preco_desde"] = preco["vigente_de"] if preco else None
+        # ⚠️ Não chamar de `precos`: o módulo `services.precos` está importado
+        # neste arquivo, e a variável local o sombrearia dentro da função.
+        vigentes = {r["id_unidade"]: r for r in cur.fetchall()}
+        da_casa, da_loja = vigentes.get(None), vigentes.get(id_unidade)
+        vale = da_loja or da_casa
+        produto["preco_venda"] = vale["preco_venda"] if vale else None
+        produto["preco_desde"] = vale["vigente_de"] if vale else None
+        produto["preco_casa"] = da_casa["preco_venda"] if da_casa else None
+        produto["preco_loja"] = da_loja["preco_venda"] if da_loja else None
 
         # ⚠️ Os códigos EXTRAS do cardápio. "ENTREGA" tem quatro na conta real;
         # o campo `codigo_pdv` guarda o principal e estes são os apelidos — sem
@@ -377,6 +387,47 @@ def criar(body: ProdutoCreate,
         auditoria.registrar(cur, ctx.id_usuario, "produto", novo, "criar",
                             depois={"codigo": codigo, "nome": dados["nome"], "tipo": dados["tipo"]})
     return {"id": novo, "codigo": codigo, "message": "Produto criado"}
+
+
+@router.put("/{id_produto}/preco-loja")
+def preco_da_loja(id_produto: int, body: PrecoDaLoja,
+                  ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Define — ou apaga — o preço DESTA loja para este produto.
+
+    🔑 **O preço da loja manda; sem ele, vale o da casa.** É a mesma forma da
+    reserva do custo: o específico primeiro, o geral depois. E é o que permite a
+    filial cobrar diferente sem obrigar a recadastrar centenas de pratos que
+    custam o mesmo nos dois lugares.
+
+    ⚠️ **Apagar não é zerar.** Mandar nulo fecha a linha da loja e o produto
+    volta a valer o preço da casa; mandar zero seria dizer que ali ele é de
+    graça. São coisas diferentes, e o histórico guarda as duas.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute("SELECT nome FROM produtos WHERE id = %s", (id_produto,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+        if body.preco_venda is None:
+            cur.execute(
+                """UPDATE produto_precos SET vigente_ate = current_date
+                    WHERE id_produto = %s AND id_unidade = %s AND vigente_ate IS NULL""",
+                (id_produto, id_unidade),
+            )
+            mudou = bool(cur.rowcount)
+            mensagem = ("Preço desta loja removido — vale o preço da casa."
+                        if mudou else "Esta loja já usava o preço da casa.")
+        else:
+            mudou = precos.gravar(cur, id_produto, body.preco_venda, ctx.id_usuario,
+                                  id_unidade)
+            mensagem = "Preço desta loja salvo." if mudou else "O preço já era esse."
+
+        if mudou:
+            auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "preco_da_loja",
+                                depois={"preco_venda": body.preco_venda},
+                                id_unidade=id_unidade)
+    return {"message": mensagem}
 
 
 @router.put("/{id_produto}")

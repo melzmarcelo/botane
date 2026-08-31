@@ -642,6 +642,58 @@ st, r_coz = chamar("GET", "/inicio/rede", token=tk)
 checar("quem nao ve dinheiro nao abre o painel da rede", st == 403, st)
 
 
+print("9e. preco de venda POR LOJA")
+# 🔑 `produto_precos.id_unidade` existia desde o comeco e ninguem usava: todo
+# preco nascia global. No PDV ele e POR FILIAL, e duas lojas podem cobrar
+# valores diferentes pelo mesmo prato — sem resolucao, a filial que cobra mais
+# barato teria o preco da matriz no cardapio e na margem.
+if id_filial:
+    st, prod_p = chamar("POST", "/produtos", {
+        "codigo": f"PRECO{marca_f}", "nome": f"Prato de duas lojas {marca_f}",
+        "tipo": "PRODUZIDO", "um_estoque": "UN", "preco_venda": 12.0,
+    }, token=token)
+    id_prod_p = (prod_p or {}).get("id")
+    checar("o produto nasce com o preco da CASA", st == 201, (st, prod_p))
+
+    def _precos(unid=None):
+        st_, d_ = chamar("GET", f"/produtos/{id_prod_p}", token=token, unidade=unid)
+        return ((d_ or {}).get("preco_casa"), (d_ or {}).get("preco_loja"),
+                (d_ or {}).get("preco_venda"))
+
+    casa, loja, vale = _precos()
+    checar("sem preco da loja, vale o da casa",
+           float(casa or 0) == 12.0 and loja is None and float(vale or 0) == 12.0,
+           (casa, loja, vale))
+
+    # ⚠️ O preco da loja SOBREPOE o da casa — e so naquela loja.
+    st, r = chamar("PUT", f"/produtos/{id_prod_p}/preco-loja",
+                   {"preco_venda": 15.5}, token=token, unidade=id_filial)
+    checar("da para definir o preco de uma loja", st == 200, (st, r))
+    casa, loja, vale = _precos(id_filial)
+    checar("e na filial vale o dela", float(vale or 0) == 15.5, (casa, loja, vale))
+    casa_m, loja_m, vale_m = _precos(1)
+    checar("enquanto a matriz continua com o da casa",
+           float(vale_m or 0) == 12.0 and loja_m is None, (casa_m, loja_m, vale_m))
+
+    # 🔑 Apagar NAO e zerar: zero seria dizer que ali o prato e de graca.
+    st, r = chamar("PUT", f"/produtos/{id_prod_p}/preco-loja",
+                   {"preco_venda": None}, token=token, unidade=id_filial)
+    checar("apagar o da loja devolve o da casa", st == 200, (st, r))
+    casa, loja, vale = _precos(id_filial)
+    checar("e a filial volta a valer 12,00",
+           float(vale or 0) == 12.0 and loja is None, (casa, loja, vale))
+
+    # ⚠️ Zero e um PRECO, nao a ausencia dele.
+    chamar("PUT", f"/produtos/{id_prod_p}/preco-loja",
+           {"preco_venda": 0}, token=token, unidade=id_filial)
+    casa, loja, vale = _precos(id_filial)
+    checar("e zero e um preco, nao a ausencia dele",
+           float(vale) == 0.0 and loja is not None, (casa, loja, vale))
+
+    if id_prod_p:
+        chamar("DELETE", f"/produtos/{id_prod_p}", token=token)
+
+
 # ⚠️ A filial de teste sai: a base e compartilhada, e uma loja a mais por
 # rodada faria o seletor da tela crescer sem parar. Ela vira INATIVA em vez
 # de ser apagada — tem movimento no razao, e razao nao se apaga.

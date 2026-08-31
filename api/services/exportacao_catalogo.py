@@ -309,6 +309,9 @@ def _movimentos(cur, id_unidade: int, f: dict) -> Saida:
 
 
 def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
+    # ⚠️ O `_` do nome dizia "não uso a loja" — e passou a usar: o preço de venda
+    # é resolvido por loja (o dela, caindo para o da casa). O nome fica como
+    # está para não mexer na assinatura que o catálogo inteiro compartilha.
     situacao = _lista(f.get("situacao"))
     cur.execute(
         """SELECT p.codigo, p.nome AS produto, p.tipo, c.nome AS categoria,
@@ -317,7 +320,8 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
                   p.ncm, p.codigo_barras, p.status, p.ativo,
                   (SELECT pp.preco_venda FROM produto_precos pp
                     WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                    ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                      AND (pp.id_unidade = %(uni)s OR pp.id_unidade IS NULL)
+                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
              FROM produtos p
              LEFT JOIN categorias c ON c.id = p.id_categoria
              LEFT JOIN setores s ON s.id = p.id_setor
@@ -331,7 +335,7 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
             ORDER BY lower(p.nome)""",
         {"tipos": _lista(f.get("tipos_produto")),
          "categorias": _lista(f.get("categorias")), "setores": _lista(f.get("setores")),
-         "situacao": situacao},
+         "situacao": situacao, "uni": _id_unidade},
     )
     linhas = [dict(r) for r in cur.fetchall()]
     return Saida(

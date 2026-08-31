@@ -235,7 +235,8 @@ def _registros(cur, id_unidade: int) -> list[dict]:
                   c.nome AS categoria_nome, c.integrado_pdv AS categoria_integrada,
                   (SELECT pp.preco_venda FROM produto_precos pp
                     WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
-                    ORDER BY pp.vigente_de DESC LIMIT 1) AS preco_venda
+                      AND (pp.id_unidade = %(uni)s OR pp.id_unidade IS NULL)
+                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
              FROM produtos p
              LEFT JOIN setores s ON s.id = p.id_setor
              LEFT JOIN categorias c ON c.id = p.id_categoria
@@ -243,7 +244,7 @@ def _registros(cur, id_unidade: int) -> list[dict]:
                OR EXISTS (SELECT 1 FROM pdv_pendencias q
                            WHERE q.tipo = 'PRODUTO' AND q.id_registro = p.id
                              AND q.resolvido_em IS NULL)
-            ORDER BY p.nome""")
+            ORDER BY p.nome""", {"uni": id_unidade})
     linhas += [{**dict(r), "tipo": PRODUTO} for r in cur.fetchall()]
     return linhas
 
