@@ -42,6 +42,9 @@ OPERACAO = [
     # próprio script que avisou — a mensagem do Postgres passa longe disso.
     "inventario_contadores", "inventario_itens", "inventarios",
     "producao_agenda", "producoes",
+    # remessa entre lojas: os itens apontam para movimentos do razão, e a
+    # cabeça aponta para locais e usuários
+    "transferencia_itens", "transferencias",
     # compras
     "nota_itens", "notas_entrada", "codigos_externos", "sync_log",
     # vendas e apuração

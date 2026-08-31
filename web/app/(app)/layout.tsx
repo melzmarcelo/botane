@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
-import { api, definirUnidade, unidadeAtual, urlArquivo } from "@/lib/api";
+import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
@@ -64,6 +64,14 @@ const MENU: {
         // custo (ou só a de perda) também precisa chegar nela.
         chave: ["estoque.entradas", "estoque.saidas", "estoque.perdas",
                 "estoque.transferencias", "estoque.custo"],
+      },
+      {
+        href: "/transferencias",
+        nome: "Remessas entre lojas",
+        // ⚠️ Só aparece com mais de uma loja: numa casa só, remessa não existe
+        // — a transferência entre prateleiras é imediata e mora em Ajustes.
+        soComVariasLojas: true,
+        chave: ["estoque.transferencias", "estoque.transferencia_receber"],
       },
       { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
       { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },
@@ -140,7 +148,7 @@ function Marca({
 }
 
 function Casca({ children }: { children: React.ReactNode }) {
-  const { eu, carregando, pode } = useSessao();
+  const { eu, carregando, pode, unidade } = useSessao();
   const caminho = usePathname();
   const [aberto, setAberto] = useState(false);
   // Quais grupos do menu estão abertos. Fica no navegador porque é preferência
@@ -219,11 +227,15 @@ function Casca({ children }: { children: React.ReactNode }) {
 
   // Com uma loja só, é legenda; com mais de uma, é escolha — e a escolha fica no
   // mesmo lugar onde a legenda estaria, que é onde se olha para saber onde se está.
+  // ⚠️ O valor marcado vem da SESSÃO, que aplica a mesma regra do servidor.
+  // `unidadeAtual()` sozinho é nulo até alguém mexer no seletor, e o "primeiro
+  // da lista" como reserva não é o padrão do servidor quando a matriz não é a
+  // de menor id — o seletor mostraria uma loja e o pedido iria para outra.
   const daLoja =
     eu.unidades.length > 1 ? (
       <select
         className="mono mt-0.5 -ml-1 max-w-[170px] truncate rounded border border-transparent bg-transparent px-1 py-0 text-[11.5px] text-suave hover:border-linha2"
-        value={unidadeAtual() ?? String(eu.unidades[0].id)}
+        value={String(unidade)}
         aria-label="Loja"
         onChange={(e) => {
           definirUnidade(Number(e.target.value));

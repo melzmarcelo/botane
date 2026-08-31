@@ -44,6 +44,7 @@ from routers import (
     historico,
     inicio,
     inventario,
+    transferencias,
     notas,
     omie,
     papeis,
@@ -64,7 +65,7 @@ from seguranca import hash_senha
 # constante compilada no front. Um número gravado no build diz o que foi
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
-VERSAO = "1.1.7"
+VERSAO = "1.1.8"
 
 
 def garantir_admin() -> None:
@@ -225,6 +226,7 @@ app.include_router(produtos.router)
 app.include_router(fichas.router)
 app.include_router(estoque.router)
 app.include_router(inventario.router)
+app.include_router(transferencias.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
 app.include_router(notas.router)

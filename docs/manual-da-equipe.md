@@ -100,6 +100,29 @@ problemas diferentes.
 **Perda não apontada não desaparece** — ela reaparece como variância no fim do
 mês, sem nome e sem responsável. Apontar é melhor para todo mundo.
 
+### Mandar mercadoria para outra loja
+
+Menu **Estoque → Ajustes → Transferência**. Escolha o produto, a prateleira de
+onde ele sai e, no destino, a prateleira **da outra loja** — o nome da loja
+aparece ao lado, para não confundir dois "Estoque".
+
+Entre lojas isso vira uma **remessa**, e ela não é imediata:
+
+- enquanto está no caminho, **a mercadoria continua contando no estoque daqui**.
+  O saldo mostra quanto dele já está na estrada, para você não despachar duas
+  vezes a mesma coisa;
+- **quem recebe é a outra loja.** Ela abre a remessa em *Estoque → Remessas entre
+  lojas*, confere item a item e dá entrada. Só nesse momento o produto sai daqui
+  e entra lá;
+- **o que não chegou vira perda desta loja**, com motivo. Não é punição: a
+  mercadoria saiu da prateleira daqui, e fingir que ela ainda está faz a falta
+  reaparecer na próxima contagem sem ninguém saber de onde veio;
+- **desistiu antes de chegar? Cancele.** Nada foi lançado, então não há nada a
+  consertar.
+
+Dentro da **mesma loja** — da câmara para o seco, por exemplo — continua sendo
+imediato: alguém carrega a caixa e pronto.
+
 ---
 
 ## Cozinha

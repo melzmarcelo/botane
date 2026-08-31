@@ -441,11 +441,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   com `cmv.painel` — quem não tem recebe `dinheiro: null`, não um valor zerado. A cobertura
   de ficha viaja junto porque é ela que diz o quanto dá para confiar na variância.
 - Telas: `/produtos`, `/fornecedores`, `/cadastros`, `/fichas`, `/estoque`, `/ajustes`,
-  `/producao`, `/inventario`, `/compras`, `/cmv`, `/vendas`, `/integracoes`. As que têm
-  detalhe e formulário em página própria: `/compras/[id]`, `/compras/nova`,
-  `/inventario/[id]`, `/inventario/novo`, `/producao/[id]`, `/produtos/[id]`, `/fichas/[id]`,
-  `/vendas/[id]`, `/vendas/lancar`, `/vendas/sem-vinculo`, `/fornecedores/novo`,
-  `/fornecedores/[id]`, `/usuarios/novo` e `/usuarios/[id]`.
+  `/producao`, `/inventario`, `/transferencias`, `/compras`, `/cmv`, `/vendas`,
+  `/integracoes`. As que têm detalhe e formulário em página própria: `/compras/[id]`,
+  `/compras/nova`, `/inventario/[id]`, `/inventario/novo`, `/producao/[id]`, `/produtos/[id]`,
+  `/fichas/[id]`, `/transferencias/[id]`, `/vendas/[id]`, `/vendas/lancar`,
+  `/vendas/sem-vinculo`, `/fornecedores/novo`, `/fornecedores/[id]`, `/usuarios/novo`,
+  `/usuarios/[id]`, `/lojas/nova` e `/lojas/[id]`.
 - **Busca de cadastro é o padrão onde havia combobox** (21/08/2026):
   `components/busca-cadastro.tsx` + `lib/busca-cadastro.ts`. Digita-se código ou nome e dá
   **Tab**: um resultado preenche e segue; mais de um (ou nenhum) abre a janela de pesquisa já
@@ -1232,6 +1233,80 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   e o `HAVING`, senão um grupo cujo único movimento fosse uma remessa sumiria da lista.
   ⚠️ A checagem do CMV da filial tem folga de **um centavo**: o custo unitário tem 6 casas e a
   conta encadeia entrada, saída e estoque — o resíduo é de milionésimos de real.
+- 🔑 **A remessa: entre lojas a mercadoria leva TEMPO no caminho, e agora alguém confere na
+  chegada** (migração 047, `services/transferencias.py`, tela **Estoque ▸ Remessas entre
+  lojas**, 31/08/2026, pedido do dono). Saída e entrada eram gravadas na mesma transação: o
+  carro saía hoje e chegava amanhã, e a filial já aparecia com o produto na prateleira. Pior,
+  **quem recebia não conferia nada** — chegando menos, a diferença só apareceria na contagem
+  seguinte como *ajuste de inventário*, que é exatamente onde a diferença some sem nome.
+  🔑 **A decisão difícil não é a tela, é de QUEM É O VALOR no caminho.** Dar baixa no envio e
+  entrada só no recebimento faria o valor **desaparecer das duas lojas** nesse intervalo,
+  inflando o CMV da origem — um buraco que nenhum relatório explicaria. Por isso **o envio não
+  escreve no razão**: a quantidade continua contando no estoque da ORIGEM, marcada como em
+  trânsito, e os dois movimentos nascem juntos no recebimento, como sempre nasceram. A
+  identidade `inicial + entradas − saídas = final` continua fechando nas duas em qualquer data
+  de corte, e o dinheiro nunca fica sem dono.
+  ⚠️ **Dentro da MESMA loja nada muda** — prateleira para prateleira alguém carrega a caixa.
+  Continua imediata, e `POST /estoque/transferencias` é quem **ramifica**: mesma loja lança na
+  hora, lojas diferentes criam a remessa. A frase de sucesso vem do servidor porque as duas
+  coisas são diferentes, e escrevê-la no navegador seria repetir a regra lá.
+  🔑 **O que não chegou vira PERDA na ORIGEM, não sobra de saldo.** A mercadoria saiu da
+  prateleira do mesmo jeito; transferir só o que chegou deixaria a origem com um saldo que ela
+  não tem, e a contagem seguinte cobriria o buraco como ajuste anônimo. Como perda ela tem
+  nome, dono e uma linha própria no CMV de quem mandou. O recebimento parcial pede o motivo.
+  ⚠️ **Nulo e zero são afirmações diferentes** em `qtd_recebida`: nulo é "ainda não conferido"
+  (e, no corpo do recebimento, "chegou o que foi mandado" — o caso comum não se digita); zero é
+  "conferi e não veio nada".
+  ⚠️ **O custo é o do RECEBIMENTO, não o do envio.** A mercadoria foi da origem até chegar,
+  então quem responde por ela é o médio da origem no dia em que ela sai de lá. Congelar no
+  envio criaria um terceiro número, que não seria nem de quem mandou nem de quem recebeu.
+  🔑 **Os dois movimentos apontam UM PARA O OUTRO, não para a remessa** — e isso quase virou um
+  defeito calado. `_transferencia_entre_lojas` acha o outro lado com
+  `JOIN estoque_movimentos o ON o.id = m.origem_id` para saber se a mercadoria atravessou a
+  fronteira; pôr ali o id da remessa faria o JOIN cair num movimento QUALQUER de mesmo número, e
+  o CMV das duas lojas passaria a depender de uma coincidência de numeração. Quem liga o
+  movimento à remessa é `transferencia_itens`. Pela mesma razão a perda usa
+  **`origem_tipo = 'REMESSA'`**: naquele vocabulário `origem_id` é um movimento, e aqui não há
+  outro lado.
+  ⚠️ **Cancelar não estorna nada, porque nada foi lançado** — é a vantagem silenciosa deste
+  desenho, e a frase diz isso: quem cancela espera ter de consertar o razão. Depois de recebida
+  não há cancelamento, só estorno dos movimentos.
+  🔑 **Quem recebe é o DESTINO, e a pergunta é a LOJA ATUAL — não `ve_unidade`.** A primeira
+  versão usou a visibilidade, e o administrador vê todas: com ele a trava **não travava nada**, e
+  quem despachou daria entrada na outra loja sem ninguém ter conferido — que é o processo inteiro
+  que o recebimento existe para impedir. A loja atual é a do seletor do topo. A frase nomeia a
+  loja e manda trocar, senão um 403 seco deixa a pessoa procurando permissão que ela já tem.
+  ⚠️ **`estoque.transferencia_receber` é a chave NOVA, não a de enviar** — quem transferia ontem
+  continua transferindo e ganha o recebimento de graça. Invertida, o deploy tiraria de todo mundo
+  uma coisa que já fazia. Mesma escolha do inventário (045).
+  ⚠️ **A lista mostra os DOIS lados da loja atual** — o que ela mandou e o que ela espera.
+  Filtrar só pela origem esconderia da filial justamente a remessa que ela precisa receber; a
+  etiqueta "a receber" é que separa as duas.
+  ⚠️ **O saldo da origem DIZ quanto já está na estrada** (`em_transito` em `/estoque/saldos`).
+  Sem isso o "continua contando" vira armadilha: quem olha o saldo da matriz vê mercadoria que
+  já está no carro e despacha de novo. Vem de **uma consulta só**, casada em memória — 200 linhas
+  por página contra um punhado de remessas abertas, e correlacionar cobraria o preço em toda
+  listagem de saldo por causa de um caso que quase sempre vem vazio.
+  ⚠️ O item de menu só aparece **com mais de uma loja**: numa casa só, remessa não existe.
+- 🔑 **`localStorage` está VAZIO até alguém mexer no seletor de loja** (31/08/2026), e a tela da
+  remessa foi a primeira a DECIDIR com base nele: `Number(unidadeAtual() || 0)` dava **zero**
+  para quem nunca trocou de loja — que é a maioria —, e aí nem o botão de receber nem o de
+  cancelar apareciam. Quem abrisse a própria remessa não tinha o que fazer com ela. O layout
+  disfarçava o buraco porque só usava o valor para MARCAR a opção do `<select>`, com
+  `?? eu.unidades[0].id` na frente.
+  ⚠️ A resposta mora em `useSessao().unidade` e **espelha `seguranca.unidade_atual` passo a
+  passo**: a escolhida no seletor, senão a matriz para quem enxerga todas, senão a de menor id.
+  "O primeiro da lista" como reserva NÃO é o padrão do servidor quando a matriz não é a de
+  menor id — o seletor mostraria uma loja e o pedido iria para outra.
+  ⚠️ Ler `localStorage` no render é seguro **ali** porque `eu` nasce nulo: a primeira pintura do
+  cliente é igual à do servidor, e o valor só aparece depois do `/auth/me`.
+- ⚠️ **`produtos.id_local_padrao` é UM local, e local pertence a UMA loja** (31/08/2026). A
+  produção usava esse local direto, com o `id_unidade` de quem estava produzindo: a filial que
+  fizesse um molho cujo local padrão é a câmara da MATRIZ gravaria o movimento com a loja da
+  filial e a prateleira da matriz. O saldo tem chave `(loja, local, produto)` — nascia uma
+  **linha fantasma**, e o produto ficava num lugar onde ninguém o acha. `_local_desta_loja`
+  aceita o local padrão só na loja dona dele; fora dela, cai no principal de quem produz.
+  ⚠️ Não é o cadastro que está errado: o local padrão é a resposta certa na loja dele.
 - 🔑 **A visão da REDE** (`GET /inicio/rede` + tela `/rede`, 31/08/2026). Toda outra tela
   responde por UMA loja, e está certo: quem opera opera numa de cada vez. Mas o dono de duas
   não tinha onde ver as duas — e somar de cabeça dois food costs de bases diferentes é a conta
@@ -1516,6 +1591,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
      vem vazia e o arquivo tem só as 10 da apuração. Passou a afirmar a SOMA: apuração + anexo.
   6. A checagem do preço do cardápio virou pergunta ao `/pdv/config`: com o envio ligado o
      Botané é dono do preço e o cardápio deixa de trazê-lo.
+- ⚠️ **Handle de elemento ENVELHECE, e `p.evaluate(fn, handle)` estoura o `protocolTimeout`.**
+  O laço `for (const b of await p.$$("button")) { await p.evaluate(el => el.innerText, b) }`
+  derrubou a rodada inteira num ponto sem defeito nenhum — a troca de loja recarrega a página
+  (`window.location.reload()`), então os handles colhidos antes já não existem. O texto continua
+  sendo o que identifica o botão; a procura é que tem de ser feita **de dentro do documento**,
+  num `p.evaluate` só. Mesma família da nota abaixo.
+- ⚠️ **Navegar com um parâmetro de URL que a tela não lê mede a tela errada.** A checagem do
+  saldo em trânsito abria `/estoque?id_produto=…` — o filtro daquela tela é ESTADO dela, não
+  query string, e o teste media a primeira página do cadastro inteiro. Digitar no campo é o
+  único caminho que existe de verdade.
 - ⚠️ **`p.click` do puppeteer estourou o `protocolTimeout` na barra superior** — ele rola o
   elemento e espera ele ficar estável, e a dança derrubou a rodada inteira num ponto sem
   defeito. Clique de DENTRO do documento (`p.evaluate(... .click())`) faz a mesma coisa sem
@@ -1789,16 +1874,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.503 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (113), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.555 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (119), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (149), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_transferencias.py` (47),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (366, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (375, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

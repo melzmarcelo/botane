@@ -541,6 +541,34 @@ if id_filial and id_prod_f:
     checar("a transferencia entre lojas e aceita", st == 201, (st, tr))
     checar("e ela se declara como entre lojas", (tr or {}).get("entre_lojas") is True, tr)
 
+    # 🔑 **Entre lojas ela nasce EM TRANSITO, e o razao nao se mexe.** A
+    # mercadoria leva tempo no caminho: dizer que ja chegou some com o valor da
+    # origem e faz o destino aparecer com o que ainda nao tem.
+    id_remessa = (tr or {}).get("remessa")
+    checar("e nasce como remessa em transito",
+           (tr or {}).get("em_transito") is True and bool(id_remessa), tr)
+    checar("a origem ainda NAO perdeu a quantidade",
+           round(_saldo(id_prod_f, 1) - antes_matriz, 4) == 0.0, _saldo(id_prod_f, 1))
+    checar("e o destino ainda nao ganhou nada",
+           round(_saldo(id_prod_f, id_filial) - antes_filial, 4) == 0.0,
+           _saldo(id_prod_f, id_filial))
+    # ⚠️ O saldo da origem continua contando — e por isso precisa DIZER quanto
+    # dele ja esta na estrada, senao a segunda remessa do dia despacha o que ja
+    # saiu.
+    st, s_tr = chamar("GET", f"/estoque/saldos?id_produto={id_prod_f}", token=token, unidade=1)
+    checar("e o saldo da origem avisa o que esta em transito",
+           any(float(x.get("em_transito") or 0) >= 4 for x in (s_tr or [])), s_tr)
+
+    # ⚠️ Quem recebe e o DESTINO. Sem esta trava, quem despachou daria entrada
+    # na outra loja sem ninguem ter conferido nada — que e o processo que o
+    # recebimento existe para impedir.
+    st, r_rec = chamar("POST", f"/transferencias/{id_remessa}/receber", {}, token=token,
+                       unidade=id_filial)
+    checar("o destino recebe a remessa", st == 201, (st, r_rec))
+    st, r_rec2 = chamar("POST", f"/transferencias/{id_remessa}/receber", {}, token=token,
+                        unidade=id_filial)
+    checar("e receber de novo e recusado (409)", st == 409, (st, r_rec2))
+
     depois_matriz = _saldo(id_prod_f, 1)
     depois_filial = _saldo(id_prod_f, id_filial)
     checar("a origem perde a quantidade", round(antes_matriz - depois_matriz, 4) == 4.0,

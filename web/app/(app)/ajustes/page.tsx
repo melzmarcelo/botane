@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -155,6 +157,7 @@ const qtd = (n: number | string) =>
   Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function PaginaAjustes() {
+  const router = useRouter();
   const aviso = useAviso();
   const { pode } = useSessao();
 
@@ -397,14 +400,24 @@ export default function PaginaAjustes() {
         });
         aviso.sucesso(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
       } else if (tipo === "transferencia") {
-        await api.post("/estoque/transferencias", {
-          id_produto: base.id_produto,
-          quantidade: base.quantidade,
-          id_local_origem: Number(f.id_local),
-          id_local_destino: Number(f.id_local_destino),
-          observacao: base.observacao,
-        });
-        aviso.sucesso("Transferência lançada.");
+        const r = await api.post<{ message: string; em_transito?: boolean; remessa?: number }>(
+          "/estoque/transferencias", {
+            id_produto: base.id_produto,
+            quantidade: base.quantidade,
+            id_local_origem: Number(f.id_local),
+            id_local_destino: Number(f.id_local_destino),
+            observacao: base.observacao,
+          });
+        // 🔑 **A frase vem do SERVIDOR** porque as duas transferências são
+        // coisas diferentes: dentro da loja o estoque já se mexeu; entre lojas
+        // nasceu uma remessa que ainda espera conferência do outro lado.
+        // Escrever a frase aqui exigiria repetir essa regra no navegador.
+        aviso.sucesso(
+          r.message,
+          r.remessa
+            ? { texto: "ver a remessa", ao: () => router.push(`/transferencias/${r.remessa}`) }
+            : undefined,
+        );
       } else {
         const r = await api.post<{
           custo_unitario: number;

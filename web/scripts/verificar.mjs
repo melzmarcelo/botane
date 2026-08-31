@@ -3429,6 +3429,149 @@ try {
   checar("o rodape fixo mostra a versao", /^v\d+\.\d+\.\d+$/.test(rodapePe?.texto ?? ""), rodapePe);
   checar("e fica preso no pe da janela", rodapePe?.noPe, rodapePe);
 
+  console.log("10e. remessa entre lojas: em transito e recebimento");
+  // 🔑 **A remessa em transito continua contando no estoque de quem mandou** — e
+  // esta tela existe para esse "continua contando" nao virar armadilha. O que se
+  // prova aqui e o que a tela promete, nao o estado do dia: que ela DIZ que nada
+  // foi lancado, e que o botao de receber so aparece na loja de DESTINO.
+  const marcaR = String(Date.now()).slice(-6);
+  const { dados: filialR } = await api("POST", "/unidades", {
+    nome: `Filial tela ${marcaR}`, apelido: `T${marcaR}`,
+  }, token);
+  // ⚠️ A filial sai mesmo se o roteiro estourar no meio: com duas lojas ativas o
+  // seletor aparece na barra e vira o primeiro `<select>` do documento, e as
+  // checagens que leem `select` passam a ler id de loja. Mesma licao do
+  // `preservar_credenciais`.
+  aoTerminar.push(async () => {
+    await api("PUT", `/unidades/${filialR.id}`, { ativo: false }, token);
+    // E a loja escolhida volta a ser a matriz: a escolha mora no localStorage do
+    // navegador, e deixa-la na filial faria a proxima rodada abrir tudo na loja
+    // errada — inclusive as telas que nada tem a ver com remessa.
+    try {
+      await p.evaluate(() => localStorage.setItem("botane.unidade", "1"));
+    } catch { /* a pagina pode ja ter sido fechada */ }
+  });
+
+  // ⚠️ `garantirLocal` devolve o ID, não o objeto.
+  const idLocalMatrizR = await garantirLocal();
+  const { dados: locaisFilR } = await fetch(`${API}/locais`, {
+    headers: { Authorization: `Bearer ${token}`, "X-Unidade": String(filialR.id) },
+  }).then(async (r) => ({ dados: await r.json() }));
+  const { dados: prodR } = await api("POST", "/produtos", {
+    codigo: `TELAREM${marcaR}`, nome: `Insumo remessa tela ${marcaR}`,
+    tipo: "INSUMO", um_estoque: "KG", controla_estoque: true,
+  }, token);
+  await api("POST", "/estoque/entradas", {
+    id_produto: prodR.id, id_local: idLocalMatrizR, quantidade: 15, custo_unitario: 4,
+  }, token);
+  const { dados: remessaR } = await api("POST", "/transferencias", {
+    id_local_origem: idLocalMatrizR, id_local_destino: locaisFilR[0].id,
+    itens: [{ id_produto: prodR.id, quantidade: 5 }],
+  }, token);
+
+  await irPara(p, `${WEB}/transferencias`);
+  // ⚠️ Espere por algo que so existe na tela de DESTINO — dormir um tempo fixo e
+  // afirmar e supor a precondicao.
+  await p.waitForFunction(
+    (id) => document.body.innerText.includes(`#${id}`),
+    { timeout: 8000 }, remessaR.id,
+  ).catch(() => {});
+  const listaRemessas = await p.evaluate(() => document.body.innerText);
+  checar("a remessa aparece em transito", listaRemessas.includes(`#${remessaR.id}`),
+    listaRemessas.slice(0, 120));
+
+  await irPara(p, `${WEB}/transferencias/${remessaR.id}`);
+  await p.waitForFunction(
+    () => /em tr[aâ]nsito/i.test(document.body.innerText), { timeout: 8000 },
+  ).catch(() => {});
+  const naOrigem = await p.evaluate(() => ({
+    texto: document.body.innerText,
+    botoes: [...document.querySelectorAll("button")].map((b) => b.innerText.trim()),
+  }));
+  checar("a tela diz que nada foi lancado ainda",
+    /continua contando/i.test(naOrigem.texto), naOrigem.texto.slice(0, 140));
+  // 🔑 A tela NAO pode oferecer um botao que vai levar 403. Quem recebe e o
+  // destino, e a pergunta e a loja ATUAL — nao a visibilidade, que no
+  // administrador e sempre verdadeira.
+  checar("na loja de ORIGEM nao ha botao de receber",
+    !naOrigem.botoes.some((b) => /Receber no estoque/i.test(b)), naOrigem.botoes);
+  checar("mas ha o de cancelar, que e de quem despachou",
+    naOrigem.botoes.some((b) => /Cancelar remessa/i.test(b)), naOrigem.botoes);
+
+  // O saldo da origem precisa DIZER quanto ja esta na estrada, senao a segunda
+  // remessa do dia despacha o que ja saiu.
+  // ⚠️ **A tela nao le `?id_produto` da URL** — o filtro e estado dela. Digitar
+  // no campo e o unico caminho que existe de verdade; navegar com um parametro
+  // inventado mede a primeira pagina do cadastro inteiro.
+  await irPara(p, `${WEB}/estoque`);
+  await p.waitForSelector('input[placeholder="produto ou código"]', { timeout: 10000 });
+  await p.type('input[placeholder="produto ou código"]', `remessa tela ${marcaR}`);
+  await p.waitForFunction(
+    (nome) => document.body.innerText.toUpperCase().includes(nome),
+    { timeout: 12000 }, `INSUMO REMESSA TELA ${marcaR}`,
+  ).catch(() => {});
+  const nosSaldos = await p.evaluate(() => document.body.innerText);
+  checar("e o saldo da origem avisa o que esta em transito",
+    /em tr[aâ]nsito/i.test(nosSaldos), nosSaldos.slice(-260));
+
+  // Troca de loja pelo seletor da barra — e o rotulo dele que o identifica, nao
+  // a posicao no DOM: o seletor de loja e o primeiro `<select>` do documento.
+  await irPara(p, `${WEB}/transferencias/${remessaR.id}`);
+  await p.waitForSelector('select[aria-label="Loja"]', { timeout: 8000 });
+  await p.select('select[aria-label="Loja"]', String(filialR.id));
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")]
+      .some((b) => /Receber no estoque/i.test(b.innerText)),
+    { timeout: 10000 },
+  ).catch(() => {});
+  const noDestino = await p.evaluate(() =>
+    [...document.querySelectorAll("button")].map((b) => b.innerText.trim()));
+  checar("na loja de DESTINO o botao de receber aparece",
+    noDestino.some((b) => /Receber no estoque/i.test(b)), noDestino);
+  checar("e o de cancelar some — quem cancela e quem despachou",
+    !noDestino.some((b) => /Cancelar remessa/i.test(b)), noDestino);
+
+  // 🔑 **Clicar de DENTRO do documento.** `p.$$("button")` seguido de
+  // `p.evaluate(el => ..., handle)` estoura o `protocolTimeout` do Chrome quando
+  // os handles envelhecem — e a troca de loja recarrega a pagina inteira, entao
+  // eles envelhecem sempre. Aconteceu aqui: a ProtocolError derrubou a rodada
+  // num ponto sem defeito nenhum. O texto continua sendo o que identifica o
+  // botao; so a procura mudou de lado.
+  const clicarPorTexto = (padrao) =>
+    p.evaluate((p_) => {
+      const alvo = [...document.querySelectorAll("button")]
+        .find((b) => new RegExp(p_, "i").test(b.innerText.trim()));
+      if (alvo) alvo.click();
+      return !!alvo;
+    }, padrao);
+
+  await clicarPorTexto("Receber no estoque");
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")].some((b) => /^Receber$/i.test(b.innerText.trim())),
+    { timeout: 8000 },
+  ).catch(() => {});
+  await clicarPorTexto("^Receber$");
+  await p.waitForFunction(
+    () => /recebida/i.test(document.body.innerText), { timeout: 10000 },
+  ).catch(() => {});
+  const depoisDeReceber = await p.evaluate(() => document.body.innerText);
+  checar("receber deixa a remessa recebida", /recebida/i.test(depoisDeReceber),
+    depoisDeReceber.slice(0, 140));
+  await foto(p, "40-remessa");
+
+  // E o razao andou nas DUAS lojas: a filial ganhou o que a matriz perdeu.
+  const { dados: saldoFil } = await fetch(
+    `${API}/estoque/saldos?id_produto=${prodR.id}`,
+    { headers: { Authorization: `Bearer ${token}`, "X-Unidade": String(filialR.id) } },
+  ).then(async (r) => ({ dados: await r.json() }));
+  checar("e a filial passou a ter as 5 unidades",
+    Math.abs(saldoFil.reduce((s, x) => s + Number(x.quantidade), 0) - 5) < 0.01, saldoFil);
+
+  // ⚠️ Volta para a matriz ANTES do resto do roteiro: as checagens seguintes
+  // supoem a loja de sempre, e uma tela na filial nao tem nada dentro.
+  await p.select('select[aria-label="Loja"]', "1");
+  await new Promise((r) => setTimeout(r, 1500));
+
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type
   const png = Buffer.from(

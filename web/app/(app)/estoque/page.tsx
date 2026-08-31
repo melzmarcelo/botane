@@ -21,6 +21,8 @@ type Saldo = {
   id_local: number;
   local: string;
   quantidade: number;
+  /** Já despachado para outra loja e ainda não recebido lá. */
+  em_transito?: number;
   custo_medio: number;
   valor: number;
   abaixo_do_minimo: boolean;
@@ -301,6 +303,16 @@ export default function PaginaEstoque() {
                         <td className="text-suave">{s.local}</td>
                         <td className={`num ${Number(s.quantidade) < 0 ? "text-erro" : ""}`}>
                           {qtd(s.quantidade)} {s.um_estoque ?? ""}
+                          {/* 🔑 **Parte deste saldo já está no carro.** O
+                              número continua contando aqui de propósito — é o
+                              que mantém o valor com dono enquanto a mercadoria
+                              viaja —, mas sem esta linha quem despacha de novo
+                              mandaria o que já saiu. */}
+                          {Number(s.em_transito) > 0 && (
+                            <div className="text-[12px] text-alerta">
+                              {qtd(Number(s.em_transito))} em trânsito
+                            </div>
+                          )}
                         </td>
                         <td className="num">{reais(Number(s.custo_medio))}</td>
                         <td className="num font-semibold">{reais(Number(s.valor))}</td>

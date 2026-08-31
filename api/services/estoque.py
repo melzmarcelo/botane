@@ -643,6 +643,25 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     }
 
 
+def _local_desta_loja(cur, id_local: int | None, id_unidade: int, alternativo: int) -> int:
+    """O local do produto, mas só se ele for DESTA loja.
+
+    🔑 **`produtos.id_local_padrao` é um local só, e local pertence a UMA loja.**
+    A produção usava esse local direto, com o `id_unidade` da loja que estava
+    produzindo: a filial que fizesse um molho cujo local padrão é a câmara da
+    MATRIZ gravaria o movimento com a loja da filial e a prateleira da matriz.
+    O saldo tem chave `(loja, local, produto)`, então nascia uma linha
+    fantasma — e o produto ficava num lugar onde ninguém o encontra.
+    ⚠️ Não é o cadastro que está errado: o local padrão é a resposta certa na
+    loja dona dele. Fora dela, a resposta é o local principal de quem produz.
+    """
+    if not id_local:
+        return alternativo
+    cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
+    linha = cur.fetchone()
+    return id_local if linha and linha["id_unidade"] == id_unidade else alternativo
+
+
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
              id_usuario: int, observacao: str | None = None) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque.
@@ -738,7 +757,8 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         # a baixa num lugar por onde o insumo nunca passou, e o saldo do lugar
         # certo continuava cheio. É a mesma regra da nota de entrada.
         r = lancar(
-            cur, id_unidade=id_unidade, id_local=local_do_item or id_local,
+            cur, id_unidade=id_unidade,
+            id_local=_local_desta_loja(cur, local_do_item, id_unidade, id_local),
             id_produto=id_alvo,
             tipo="SAIDA_PRODUCAO", quantidade=convertida, origem_tipo="PRODUCAO",
             origem_id=id_producao, id_usuario=id_usuario,
@@ -753,8 +773,9 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     # para onde por acaso se lançou a produção.
     cur.execute("SELECT id_local_padrao FROM produtos WHERE id = %s", (id_produto,))
     local_produzido = (cur.fetchone() or {}).get("id_local_padrao")
+    local_produzido = _local_desta_loja(cur, local_produzido, id_unidade, id_local)
     entrada = lancar(
-        cur, id_unidade=id_unidade, id_local=local_produzido or id_local,
+        cur, id_unidade=id_unidade, id_local=local_produzido,
         id_produto=id_produto,
         tipo="ENTRADA_PRODUCAO", quantidade=qtd, custo_unitario=unitario,
         origem_tipo="PRODUCAO", origem_id=id_producao, id_usuario=id_usuario,
@@ -775,5 +796,5 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         "movimento_entrada": entrada["id"],
         # Onde o produzido entrou — quem produz por causa de uma venda precisa
         # dar a baixa no MESMO local, senão o saldo fica preso lá.
-        "id_local": local_produzido or id_local,
+        "id_local": local_produzido,
     }

@@ -17,6 +17,11 @@ class SaldoResponse(BaseModel):
     valor: float
     estoque_minimo: float | None = None
     abaixo_do_minimo: bool = False
+    # 🔑 **Já despachado desta prateleira e ainda não recebido do outro lado.**
+    # Continua dentro de `quantidade` — é isso que mantém o valor com dono
+    # enquanto a mercadoria está no caminho —, mas quem olha o saldo para
+    # despachar de novo precisa saber que parte dele já está na estrada.
+    em_transito: float = 0
     atualizado_em: datetime | None = None
 
 
@@ -163,3 +168,33 @@ class InventarioResponse(BaseModel):
     filtros: dict | None = None
     # Quem foi escalado para contar. Vazio = qualquer um com a permissão.
     contadores: list[dict] = []
+
+
+# ---------------------------------------------------------------------------
+# Remessa entre lojas
+# ---------------------------------------------------------------------------
+class RemessaItem(BaseModel):
+    id_produto: int
+    quantidade: float = Field(gt=0)
+    observacao: str | None = None
+
+
+class RemessaCreate(BaseModel):
+    id_local_origem: int
+    id_local_destino: int
+    itens: list[RemessaItem]
+    observacao: str | None = None
+
+
+class ItemConferido(BaseModel):
+    id_item: int
+    # ⚠️ Nulo quer dizer "chegou o que foi mandado" — o caso comum não precisa
+    # ser digitado. Zero é uma afirmação diferente: conferi e não veio nada.
+    qtd_recebida: float | None = Field(default=None, ge=0)
+    id_motivo_perda: int | None = None
+    observacao: str | None = None
+
+
+class RecebimentoRequest(BaseModel):
+    itens: list[ItemConferido] = []
+    observacao: str | None = None

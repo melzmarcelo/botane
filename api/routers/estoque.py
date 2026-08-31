@@ -23,6 +23,7 @@ from models.estoque import (
 from paginacao import com_total, pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import estoque as motor
+from services import transferencias as transito_servico
 
 router = APIRouter(prefix="/estoque", tags=["estoque"])
 
@@ -72,6 +73,15 @@ def saldos(
              apenas_com_saldo, abaixo_do_minimo, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
+        # ⚠️ **Uma consulta só, casada em memória** — e não uma subconsulta por
+        # linha. São 200 linhas por página contra um punhado de remessas
+        # abertas; correlacionar cobraria o preço em toda listagem de saldo por
+        # causa de um caso que quase sempre vem vazio.
+        transito = transito_servico.em_transito_por_local(cur, id_unidade)
+        if transito:
+            for linha in linhas:
+                linha["em_transito"] = transito.get(
+                    (linha["id_produto"], linha["id_local"]), 0)
     return linhas
 
 
@@ -300,6 +310,33 @@ def transferencia(body: TransferenciaRequest,
                 raise HTTPException(
                     status_code=403,
                     detail="Sem acesso à loja de um dos locais desta transferência.")
+        # 🔑 **Entre LOJAS a transferência vira remessa; dentro da mesma, não.**
+        # Prateleira para prateleira da mesma casa alguém carrega a caixa — e
+        # exigir recebimento ali seria burocracia inventada. Entre lojas a
+        # mercadoria leva tempo no caminho, e dizer que ela já chegou é mentir
+        # para as duas: a origem some com o que ainda é dela e o destino
+        # aparece com o que ainda não tem.
+        unidades = []
+        for id_local in (body.id_local_origem, body.id_local_destino):
+            cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
+            linha = cur.fetchone()
+            unidades.append(linha and linha["id_unidade"])
+        if unidades[0] != unidades[1]:
+            remessa = transito_servico.enviar(
+                cur, id_local_origem=body.id_local_origem,
+                id_local_destino=body.id_local_destino,
+                itens=[{"id_produto": body.id_produto, "quantidade": body.quantidade}],
+                id_usuario=ctx.id_usuario, observacao=body.observacao)
+            auditoria.registrar(
+                cur, ctx.id_usuario, "transferencia", remessa["id"], "enviar",
+                depois={"produto": body.id_produto, "qtd": body.quantidade,
+                        "de": remessa["origem"], "para": remessa["destino"]},
+                id_unidade=remessa["id_unidade_origem"])
+            return {"remessa": remessa["id"], "entre_lojas": True, "em_transito": True,
+                    "message": (f"Remessa {remessa['id']} em trânsito para "
+                                f"{remessa['destino']}. A quantidade continua no estoque "
+                                "daqui até alguém conferir e receber lá.")}
+
         r = motor.transferir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local_origem=body.id_local_origem, id_local_destino=body.id_local_destino,
@@ -311,9 +348,8 @@ def transferencia(body: TransferenciaRequest,
                                     "entre_lojas": r["entre_lojas"]},
                             id_unidade=id_unidade)
     return {"saida": r["saida"]["id"], "entrada": r["entrada"]["id"],
-            "entre_lojas": r["entre_lojas"],
-            "message": ("Transferência entre lojas lançada" if r["entre_lojas"]
-                        else "Transferência lançada")}
+            "entre_lojas": False, "em_transito": False,
+            "message": "Transferência lançada"}
 
 
 @router.post("/movimentos/{id_movimento}/estornar", status_code=201)

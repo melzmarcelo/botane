@@ -26,6 +26,18 @@ planilha, se o volume justificar.
 
 ## 🟠 Falta construir
 
+### Remessa de VÁRIOS produtos numa vez (31/08/2026)
+`POST /transferencias` já aceita N itens, e a tela de recebimento confere item a item — mas o
+**envio** só nasce por *Estoque ▸ Ajustes*, um produto de cada vez, então na prática cada
+remessa tem um item só. Quem manda a produção da semana para a filial despacha oito produtos
+juntos, num carro só, e hoje isso vira oito remessas para o outro lado conferir uma a uma.
+
+Falta a tela `/transferencias/nova`: escolher origem, destino e ir somando produtos, no modelo
+de `/compras/nova`. **O servidor não muda** — é só o formulário que falta.
+
+⚠️ E aí vale a mesma prévia do inventário: quantos itens, e o saldo de cada um na prateleira de
+origem, ANTES do botão.
+
 ### Foto na ficha e no produto
 A coluna `foto_url` existe em `fichas_tecnicas`; não há upload nem exibição. Só a logo da
 empresa tem caminho de envio hoje. A cozinha reconhece prato por foto, não por código.
