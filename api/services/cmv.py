@@ -485,8 +485,9 @@ def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int 
     return linhas
 
 
-def custo_teorico_do_produto(cur, id_produto: int,
-                            _nivel: int = 0) -> tuple[Decimal | None, str]:
+def custo_teorico_do_produto(cur, id_produto: int, _nivel: int = 0,
+                            id_unidade: int | None = None
+                            ) -> tuple[Decimal | None, str]:
     """Quanto uma unidade vendida deste produto deveria custar.
 
     Três regras, nesta ordem:
@@ -495,6 +496,11 @@ def custo_teorico_do_produto(cur, id_produto: int,
       função — é o que faz o combo do PDV deixar de entrar sem custo.
     * **Produção própria**: pela ficha homologada vigente.
     * **Revenda**: pelo custo médio do estoque, que é o que ela custou mesmo.
+
+    ⚠️ **A loja atravessa as três regras.** É este número que vai CONGELADO no
+    item de venda — errado aqui, fica errado para sempre naquele mês. Sem
+    `id_unidade` a conta é a da rede, que é a resposta certa para uma prévia
+    ou um relatório consolidado; quem grava venda passa a loja.
     """
     from services import custos  # ciclo de import: só aqui dentro
 
@@ -503,7 +509,7 @@ def custo_teorico_do_produto(cur, id_produto: int,
     if linha and linha["tipo"] == "KIT":
         from services import kits
 
-        valor, origem, _detalhe = kits.custo(cur, id_produto, _nivel)
+        valor, origem, _detalhe = kits.custo(cur, id_produto, _nivel, id_unidade)
         return valor, origem
 
     cur.execute(
@@ -514,7 +520,7 @@ def custo_teorico_do_produto(cur, id_produto: int,
     )
     ficha = cur.fetchone()
     if ficha:
-        calculo = custos.custo_da_ficha(cur, ficha["id"])
+        calculo = custos.custo_da_ficha(cur, ficha["id"], id_unidade=id_unidade)
         if calculo["completo"] or calculo["custo_total"] > 0:
             rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
             return (calculo["custo_total"] / rendimento), (
@@ -522,5 +528,5 @@ def custo_teorico_do_produto(cur, id_produto: int,
             )
         return None, "ficha_sem_custo"
 
-    unitario, origem = custos.custo_do_insumo(cur, id_produto)
+    unitario, origem = custos.custo_do_insumo(cur, id_produto, id_unidade)
     return unitario, origem

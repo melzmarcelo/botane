@@ -96,7 +96,8 @@ def gravar(cur, id_kit: int, itens: list[dict]) -> dict:
     return {"itens": len(itens)}
 
 
-def custo(cur, id_kit: int, _nivel: int = 0) -> tuple[Decimal | None, str, list[dict]]:
+def custo(cur, id_kit: int, _nivel: int = 0,
+          id_unidade: int | None = None) -> tuple[Decimal | None, str, list[dict]]:
     """Custo teórico do kit: a soma dos componentes, cada um pela regra dele.
 
     Devolve (custo, origem, detalhe). `origem` diz o quanto dá para confiar:
@@ -120,7 +121,10 @@ def custo(cur, id_kit: int, _nivel: int = 0) -> tuple[Decimal | None, str, list[
 
     total, faltou, detalhe = Decimal(0), False, []
     for item in itens:
-        unitario, origem = custo_teorico_do_produto(cur, item["id_componente"], _nivel + 1)
+        # A loja desce: cada componente resolve o custo pela regra dele, e a
+        # prateleira de onde ele sai é a mesma do combo.
+        unitario, origem = custo_teorico_do_produto(cur, item["id_componente"],
+                                                   _nivel + 1, id_unidade)
         qtd = dec(item["quantidade"])
         parcial = (dec(unitario) * qtd) if unitario is not None else None
         if parcial is None:

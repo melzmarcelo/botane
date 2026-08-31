@@ -575,7 +575,7 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
             (onde, id_alvo, id_unidade),
         )
         saldo = cur.fetchone()
-        unitario, _origem = custos.custo_do_insumo(cur, id_alvo)
+        unitario, _origem = custos.custo_do_insumo(cur, id_alvo, id_unidade)
         necessario = convertida if convertida is not None else None
         custo_linha = (necessario * unitario) if (necessario and unitario) else None
         if custo_linha:

@@ -137,6 +137,21 @@ def criar_unidade(body: UnidadeCreate,
         )
         nova = cur.fetchone()["id"]
         cur.execute("INSERT INTO parametros (id_unidade) VALUES (%s)", (nova,))
+        # 🔑 **A loja nasce com um LOCAL, senão ela nasce inutilizável.** Sem
+        # local de estoque nada se movimenta — nem entrada, nem produção, nem
+        # inventário —, e a mensagem que aparecia era "Local não encontrado",
+        # que não diz o que fazer. Quem abre a segunda loja não deveria
+        # descobrir isso na primeira nota.
+        # ⚠️ Nasce PRINCIPAL porque estoque, produção e inventário usam o
+        # principal como padrão, e loja sem nenhum marcado já custou um 404 com
+        # o local à vista na tela (migração 016). O nome é genérico de
+        # propósito: é para ser renomeado, não para fingir que se sabe como a
+        # casa chama a prateleira dela.
+        cur.execute(
+            """INSERT INTO locais_estoque (id_unidade, nome, tipo, principal, ativo)
+               VALUES (%s, 'Estoque', 'SECO', true, true)""",
+            (nova,),
+        )
         auditoria.registrar(cur, ctx.id_usuario, "unidade", nova, "criar", depois=dados)
     return {"id": nova, "message": "Loja criada"}
 

@@ -554,7 +554,10 @@ def reconciliar(cur, id_unidade: int) -> dict:
     for item in pendentes:
         id_produto = item["id_produto"]
         if id_produto not in custos:
-            custos[id_produto] = motor.custo_teorico_do_produto(cur, id_produto)
+            # A loja vai junto: este custo é CONGELADO no item de venda, e a
+            # reconciliação é justamente quem o grava depois do fato.
+            custos[id_produto] = motor.custo_teorico_do_produto(
+                cur, id_produto, id_unidade=id_unidade)
         custo, origem = custos[id_produto]
         cur.execute(
             """UPDATE venda_itens

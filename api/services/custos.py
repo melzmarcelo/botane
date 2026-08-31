@@ -28,23 +28,45 @@ def dec(valor) -> Decimal:
         return Decimal(0)
 
 
-def custo_do_insumo(cur, id_produto: int) -> tuple[Decimal | None, str]:
+def custo_do_insumo(cur, id_produto: int,
+                    id_unidade: int | None = None) -> tuple[Decimal | None, str]:
     """Custo de UMA unidade de estoque do insumo, e de onde ele veio.
 
-    Ordem: **custo médio do estoque** → último preço do fornecedor. Devolve
-    (None, "sem_custo") quando ninguém sabe quanto custa — o que a tela precisa
-    dizer em vez de mostrar zero.
+    Ordem: **custo médio do estoque DA LOJA** → último preço do fornecedor.
+    Devolve (None, "sem_custo") quando ninguém sabe quanto custa — o que a tela
+    precisa dizer em vez de mostrar zero.
 
     O custo médio ganha do preço de tabela porque é o que a casa realmente pagou
     pelo que está na prateleira, frete e desconto já embutidos.
+
+    🔑 **O médio é da LOJA, e sem isso duas lojas mentem uma para a outra.** A
+    versão anterior somava `estoque_saldos` inteiro, sem filtrar `id_unidade`:
+    o café que a matriz comprou a R$ 40/kg e a filial a R$ 52/kg valia R$ 45,30
+    nas duas — e nenhuma pagou isso. Não fica contido: este número alimenta a
+    ficha técnica, o custo CONGELADO do item de venda e a baixa por vínculo,
+    ou seja, contamina ficha, CMV teórico, margem e food cost das duas ao mesmo
+    tempo. E é silencioso: nenhum valor fica absurdo, só errado.
+
+    ⚠️ **Sem `id_unidade` a conta é a de antes** — todas as lojas. É proposital:
+    há caminhos que perguntam o custo sem estar dentro de uma operação de loja
+    (uma prévia de ficha, um relatório da rede), e para eles a média geral
+    continua sendo a melhor resposta disponível. Quem lança, produz ou vende
+    passa a loja, porque ali o número vira dinheiro gravado.
+
+    ⚠️ **A reserva é do fornecedor, e ela é da REDE de propósito** — decisão do
+    dono, 31/08/2026. Preço negociado vale para as duas lojas, e é o que deixa a
+    filial nova calcular ficha e CMV desde o primeiro dia, antes de ter recebido
+    o insumo. Cair no médio da OUTRA loja seria voltar a misturar o que este
+    filtro separa, e sem dizer que misturou.
     """
     cur.execute(
         """
         SELECT sum(quantidade * custo_medio) AS valor, sum(quantidade) AS qtd
           FROM estoque_saldos
-         WHERE id_produto = %s AND quantidade > 0 AND custo_medio > 0
+         WHERE id_produto = %(p)s AND quantidade > 0 AND custo_medio > 0
+           AND (%(u)s::int IS NULL OR id_unidade = %(u)s)
         """,
-        (id_produto,),
+        {"p": id_produto, "u": id_unidade},
     )
     linha = cur.fetchone()
     if linha and linha["qtd"] and dec(linha["qtd"]) > 0:
@@ -151,7 +173,8 @@ def _carregar_ums(cur) -> dict:
 
 
 def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
-                   _ums: dict | None = None, _nivel: int = 0) -> dict:
+                   _ums: dict | None = None, _nivel: int = 0,
+                   id_unidade: int | None = None) -> dict:
     """Custo total de uma ficha, item a item, descendo nas sub-fichas.
 
     Devolve `{custo_total, custo_por_porcao, custo_por_unidade_rendimento,
@@ -226,7 +249,7 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
         }
 
         if l["id_insumo"]:
-            unitario, origem = custo_do_insumo(cur, l["id_insumo"])
+            unitario, origem = custo_do_insumo(cur, l["id_insumo"], id_unidade)
             detalhe["origem_custo"] = origem
             # A receita pode estar em grama e o estoque em quilo — ou em caixa,
             # e aí quem sabe o tamanho da caixa é o cadastro do produto.
@@ -243,7 +266,11 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
                 detalhe["custo_unitario"] = unitario
                 detalhe["custo_total"] = (convertida * unitario).quantize(CASAS_CUSTO)
         else:
-            sub = custo_da_ficha(cur, l["id_subficha"], visitadas, ums, _nivel + 1)
+            # ⚠️ A loja desce junto: a sub-ficha consome o insumo da MESMA
+            # prateleira, e perder o filtro aqui traria de volta a média das
+            # duas lojas por dentro da receita.
+            sub = custo_da_ficha(cur, l["id_subficha"], visitadas, ums, _nivel + 1,
+                                 id_unidade)
             rendimento = dec(l["sub_rendimento"]) or Decimal(1)
             # Sub-ficha rende numa unidade de verdade (2 KG de molho), não numa
             # embalagem — aqui a conversão de grandeza basta.

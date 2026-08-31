@@ -1159,6 +1159,31 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   junto. ⚠️ E `docs/pdv-legal-api.md` documenta a conta ERRADA — lendo, isso já custou 46
   vendas de terceiro na base; escrevendo, cadastraria produto do Botané no PDV de outra
   empresa. A guarda de CNPJ por lote é pré-requisito de qualquer rota de escrita.
+- 🔑 **O custo do insumo passou a ser da LOJA** (31/08/2026, primeiro passo da segunda loja).
+  `custos.custo_do_insumo` somava `estoque_saldos` inteiro, sem filtrar `id_unidade`: o café que
+  a matriz comprou a R$ 40/kg e a filial a R$ 52/kg valia **R$ 45,30 nas duas — e nenhuma pagou
+  isso**. Não ficava contido: alimenta a ficha, o custo **CONGELADO** do item de venda e a baixa
+  por vínculo, ou seja contaminava ficha, CMV teórico, margem e food cost das duas ao mesmo
+  tempo. E era silencioso — nenhum valor ficava absurdo, só errado, e gravado.
+  A loja atravessa agora `custo_do_insumo` → `custo_da_ficha` (e as sub-fichas) → 
+  `custo_teorico_do_produto` → `kits.custo`. Quem GRAVA passa a loja: importação de venda,
+  reconciliação do cardápio, baixa do Vincular e previsão de produção.
+  ⚠️ **Sem `id_unidade` a conta continua sendo a da REDE, e é proposital**: há caminhos que
+  perguntam o custo fora de uma operação de loja — prévia de ficha, relatório consolidado — e
+  para eles a média geral é a melhor resposta disponível.
+  ⚠️ **A reserva é o último preço do FORNECEDOR, e ela é da rede** (decisão do dono): preço
+  negociado vale para as duas lojas, e é o que deixa a filial nova calcular ficha e CMV antes de
+  ter recebido o insumo. Cair no médio da OUTRA loja seria voltar a misturar o que o filtro
+  separa, e sem dizer que misturou.
+  🔑 **A loja nova nasce com um LOCAL, principal.** Sem local nada se movimenta, e a mensagem
+  era "Local não encontrado", que não diz o que fazer. O nome é genérico ("Estoque") de
+  propósito: é para ser renomeado, não para fingir que se sabe como a casa chama a prateleira.
+  🔑 **E `/locais` não filtrava por loja** — filtrava por "o que a pessoa pode VER"
+  (`ve_unidade`), que para quem enxerga todas devolve tudo. Assim que a filial existiu, o
+  administrador passou a ver os locais das duas na mesma lista, **com dois "Estoque" marcados
+  como principal**, e SETE checagens caíram em quatro suítes. Elas estavam certas: a segunda
+  loja provou. ⚠️ Mesma correção que vendas e inventários já precisaram — **toda lista de coisa
+  que tem `id_unidade` nasce com essa dívida**.
 - 🔑 **A logo sumia a cada deploy, e agora mora no BANCO** (migração 046, 31/08/2026). O
   filesystem do App Platform é EFÊMERO: `api/uploads/` some a cada publicação. O risco estava
   anotado desde o preparo da subida, com o Spaces como saída — mas para UMA imagem de até 2 MB
@@ -1673,8 +1698,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.473 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (83), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.479 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (89), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
@@ -1682,7 +1707,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (366, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (367, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

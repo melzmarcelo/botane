@@ -22,7 +22,10 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_locais  # noqa: E402
+from comum import garantir_local, garantir_locais  # noqa: E402
+
+sys.path.insert(0, ".")
+from database import get_cursor  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -33,13 +36,17 @@ falhas: list[str] = []
 criados: dict[str, list] = {"produtos": [], "fichas": [], "inventarios": []}
 
 
-def chamar(metodo, caminho, corpo=None, token=None):
+def chamar(metodo, caminho, corpo=None, token=None, unidade=None):
     # Acento e espaço na query quebram o urllib — codifica aqui, uma vez só.
     caminho = urllib.parse.quote(caminho, safe="/?=&")
     req = urllib.request.Request(BASE + caminho, method=metodo)
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
+    # ⚠️ A loja vai no cabeçalho `X-Unidade`, como a tela manda — e o
+    # servidor a valida: mandar o cabeçalho não dá acesso a loja nenhuma.
+    if unidade:
+        req.add_header("X-Unidade", str(unidade))
     dados = json.dumps(corpo).encode() if corpo is not None else None
     try:
         with urllib.request.urlopen(req, dados, timeout=25) as r:
@@ -435,6 +442,69 @@ st, r = chamar("POST", "/estoque/saidas", {
 checar("cozinha PODE apontar perda", st == 201, (st, r))
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=tk)
 checar("cozinha NÃO fecha inventário (403)", st == 403, st)
+
+print("9b. a segunda loja")
+# 🔑 **O custo do insumo e da LOJA.** Ate 31/08/2026 `custo_do_insumo` somava
+# `estoque_saldos` inteiro, sem filtrar `id_unidade`: o cafe que a matriz
+# comprou a R$ 40/kg e a filial a R$ 52/kg valia R$ 45,30 nas duas, e nenhuma
+# pagou isso. Nao fica contido — este numero alimenta a ficha, o custo CONGELADO
+# do item de venda e a baixa por vinculo.
+marca_f = str(time.time_ns())[-6:]
+st, filial = chamar("POST", "/unidades", {
+    "nome": f"Filial de teste {marca_f}", "apelido": f"F{marca_f}",
+}, token=token)
+id_filial = (filial or {}).get("id")
+checar("a filial e criada", st == 201 and bool(id_filial), (st, filial))
+
+# 🔑 **E ela nasce UTILIZAVEL.** Sem local de estoque nada se movimenta, e a
+# mensagem que aparecia era "Local nao encontrado" — quem abre a segunda loja
+# nao deveria descobrir isso na primeira nota.
+st, locais_f = chamar("GET", "/locais", token=token, unidade=id_filial)
+checar("e ja nasce com um local de estoque", bool(locais_f), locais_f)
+checar("e ele nasce PRINCIPAL, que e o padrao de estoque e producao",
+       any(l.get("principal") for l in (locais_f or [])), locais_f)
+
+# ⚠️ Um produto com saldo SO na matriz: na filial ele nao tem medio, e a reserva
+# do fornecedor — que e da REDE — e quem responde.
+st, prod_f = chamar("POST", "/produtos", {
+    "codigo": f"FIL{marca_f}", "nome": f"Insumo de duas lojas {marca_f}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+}, token=token)
+id_prod_f = (prod_f or {}).get("id")
+local_matriz = garantir_local(chamar, token)
+if id_prod_f and local_matriz:
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": id_prod_f, "id_local": local_matriz["id"],
+        "quantidade": 10, "custo_unitario": 40,
+    }, token=token)
+    st, l_fil = chamar("GET", "/locais", token=token, unidade=id_filial)
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": id_prod_f, "id_local": l_fil[0]["id"],
+        "quantidade": 10, "custo_unitario": 52,
+    }, token=token, unidade=id_filial)
+
+    with get_cursor() as _cur:
+        from services import custos as _custos
+        c_matriz, o_matriz = _custos.custo_do_insumo(_cur, id_prod_f, 1)
+        c_filial, o_filial = _custos.custo_do_insumo(_cur, id_prod_f, id_filial)
+        c_rede, _ = _custos.custo_do_insumo(_cur, id_prod_f)
+    checar("o custo da matriz e o que a MATRIZ pagou", float(c_matriz or 0) == 40.0,
+           (c_matriz, o_matriz))
+    checar("o da filial e o que a FILIAL pagou", float(c_filial or 0) == 52.0,
+           (c_filial, o_filial))
+    # 🔑 A prova do defeito que existia: sem loja, a media das duas — 45,30 —
+    # que e o numero que nenhuma das duas pagou.
+    checar("e sem loja a conta continua sendo a da rede",
+           40.0 < float(c_rede or 0) < 52.0, c_rede)
+
+# ⚠️ A filial de teste sai: a base e compartilhada, e uma loja a mais por
+# rodada faria o seletor da tela crescer sem parar. Ela vira INATIVA em vez
+# de ser apagada — tem movimento no razao, e razao nao se apaga.
+if id_prod_f:
+    chamar("DELETE", f"/produtos/{id_prod_f}", token=token)
+if id_filial:
+    chamar("PUT", f"/unidades/{id_filial}", {"ativo": False}, token=token)
+
 
 print("10. limpeza")
 for id_ficha in criados["fichas"]:

@@ -26,7 +26,7 @@ from models.cadastros import (
     UnidadeMedidaResponse,
     UnidadeMedidaUpdate,
 )
-from seguranca import Contexto, contexto_atual, requer_permissao
+from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 
 router = APIRouter(tags=["cadastros"])
 
@@ -120,14 +120,25 @@ def desativar_setor(id_setor: int,
 
 @router.get("/locais", response_model=list[LocalResponse])
 def listar_locais(incluir_inativos: bool = False, ctx: Contexto = Depends(contexto_atual)):
+    """As prateleiras da loja ATUAL.
+
+    🔑 **Filtra pela loja, e não só pelo que a pessoa pode ver.** O
+    `ve_unidade` sozinho devolve tudo para quem enxerga todas as lojas — e no
+    dia em que existiu a segunda, o administrador passou a ver os locais das
+    duas na mesma lista, com dois "Estoque" marcados como principal. Quem opera
+    opera numa loja de cada vez; a que vale é a do seletor.
+    ⚠️ Mesma correção que a listagem de vendas e a de inventários já
+    precisaram. Toda lista de coisa que tem `id_unidade` nasce com essa dívida.
+    """
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT id, id_unidade, nome, tipo, principal, ativo FROM locais_estoque
-                WHERE (%s OR ativo) ORDER BY principal DESC, nome""",
-            (incluir_inativos,),
+                WHERE (%s OR ativo) AND id_unidade = %s
+                ORDER BY principal DESC, nome""",
+            (incluir_inativos, id_unidade),
         )
-        linhas = [dict(r) for r in cur.fetchall()]
-    return [l for l in linhas if ctx.ve_unidade(l["id_unidade"])]
+        return [dict(r) for r in cur.fetchall()]
 
 
 def _recusar_repetido(cur, sql: str, parametros: tuple, mensagem: str) -> None:

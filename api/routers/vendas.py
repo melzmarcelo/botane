@@ -126,7 +126,11 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 custo, origem = (None, "sem_produto")
                 if id_produto:
                     if id_produto not in custos_cache:
-                        custos_cache[id_produto] = motor.custo_teorico_do_produto(cur, id_produto)
+                        # 🔑 A loja vai junto: este custo é CONGELADO no item de
+                        # venda. Calculado com o estoque das duas lojas, o erro
+                        # fica gravado no CMV daquele mês, sem conserto.
+                        custos_cache[id_produto] = motor.custo_teorico_do_produto(
+                            cur, id_produto, id_unidade=id_unidade)
                     custo, origem = custos_cache[id_produto]
                 else:
                     sem_vinculo += 1

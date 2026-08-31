@@ -426,7 +426,20 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
         "SELECT id, custo_ficha_unitario FROM venda_itens WHERE id_produto = %s", (id_sai,)
     )
     itens = [dict(r) for r in cur.fetchall()]
-    custo, origem_custo = motor.custo_teorico_do_produto(cur, id_fica)
+    # ⚠️ A loja do custo é a do LOCAL onde a baixa vai acontecer — e, sem baixa,
+    # a matriz. Este número é congelado no item de venda: calculado com o
+    # estoque das duas lojas, o erro fica gravado no CMV daquele mês.
+    _baixa = conferido.get("baixa") or {}
+    id_unidade_custo = None
+    if _baixa.get("id_local"):
+        cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s",
+                    (_baixa["id_local"],))
+        id_unidade_custo = (cur.fetchone() or {}).get("id_unidade")
+    if not id_unidade_custo:
+        cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
+        id_unidade_custo = (cur.fetchone() or {}).get("id")
+    custo, origem_custo = motor.custo_teorico_do_produto(
+        cur, id_fica, id_unidade=id_unidade_custo)
     recalculados = 0
     for item in itens:
         if item["custo_ficha_unitario"] is None:
