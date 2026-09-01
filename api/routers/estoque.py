@@ -17,6 +17,8 @@ from models.estoque import (
     MovimentoResponse,
     ProducaoRequest,
     SaidaRequest,
+    SaldoRedeForaResponse,
+    SaldoRedeResponse,
     SaldoResponse,
     TransferenciaRequest,
 )
@@ -83,6 +85,155 @@ def saldos(
                 linha["em_transito"] = transito.get(
                     (linha["id_produto"], linha["id_local"]), 0)
     return linhas
+
+
+def _lojas_que_ve(cur, ctx: Contexto) -> list[dict]:
+    """As lojas ATIVAS que esta pessoa enxerga, na ordem de sempre.
+
+    ⚠️ Mesma regra da tela da rede: gerente de uma loja que abrir a visão
+    consolidada vê a dele, e o total é o dela — nunca um consolidado que ele não
+    pode ver. Somar o que a pessoa não pode consultar seria vazar pelo total.
+    """
+    cur.execute("SELECT id, nome, apelido FROM unidades WHERE ativo "
+                "ORDER BY matriz DESC, id")
+    return [dict(r) for r in cur.fetchall() if ctx.ve_unidade(r["id"])]
+
+
+@router.get("/saldos-rede", response_model=list[SaldoRedeResponse])
+def saldos_rede(
+    busca: str | None = Query(default=None, max_length=80),
+    id_produto: int | None = None,
+    apenas_com_saldo: bool = False,
+    abaixo_do_minimo: bool = False,
+    incluir_inativos: bool = False,
+    limite: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
+    ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
+) -> list[dict]:
+    """O estoque da EMPRESA: uma linha por produto, somando as lojas.
+
+    🔑 **A tela da rede dizia quanto VALE o estoque da empresa e não dizia de
+    quê.** Para conferir um item era preciso trocar de loja no seletor e somar
+    de cabeça — a mesma conta que a visão consolidada existe para evitar.
+
+    ⚠️ **A prateleira sai da linha.** Aqui a pergunta é "quanto a rede tem de
+    café", não "em que estante ele está": agrupar por local devolveria a mesma
+    lista de sempre, só que mais longa. Onde ele está vem em `por_loja`.
+
+    ⚠️ **Transferência em trânsito não aparece.** Entre lojas ela é movimento
+    INTERNO da rede: a mercadoria continua contando na origem e o total não
+    muda. Mostrá-la aqui sugeriria que parte do estoque da empresa está fora
+    dela, o que não é verdade.
+    """
+    with get_cursor() as cur:
+        lojas = _lojas_que_ve(cur, ctx)
+        if not lojas:
+            return []
+        ids = [l["id"] for l in lojas]
+
+        # ⚠️ **O corte é do SERVIDOR**, como em todo grid da casa — e aqui ele
+        # é por PRODUTO, então o `LIMIT` só pode entrar depois do `GROUP BY`.
+        sql = """
+            SELECT s.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+                   p.estoque_minimo,
+                   sum(s.quantidade) AS quantidade,
+                   round(sum(s.quantidade * s.custo_medio), 2) AS valor,
+                   -- 🔑 **Ponderado, nunca a média dos médios**: a matriz com
+                   -- 10 kg a 40 e a filial com 1 kg a 52 dão 41,09 na rede.
+                   CASE WHEN sum(s.quantidade) <> 0
+                        THEN round(sum(s.quantidade * s.custo_medio)
+                                   / sum(s.quantidade), 6) END AS custo_medio,
+                   (p.estoque_minimo IS NOT NULL
+                    AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo
+              FROM estoque_saldos s
+              JOIN produtos p ON p.id = s.id_produto
+             WHERE s.id_unidade = ANY(%s)
+               AND (%s OR p.ativo)
+               AND (%s::int IS NULL OR s.id_produto = %s)
+               AND (%s::varchar IS NULL
+                    OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                    OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
+             GROUP BY s.id_produto, p.codigo, p.nome, p.um_estoque, p.estoque_minimo
+            HAVING (NOT %s OR sum(s.quantidade) <> 0)
+               AND (NOT %s OR (p.estoque_minimo IS NOT NULL
+                               AND sum(s.quantidade) < p.estoque_minimo))
+             ORDER BY lower(p.nome)
+        """
+        params = (ids, incluir_inativos, id_produto, id_produto,
+                  busca, busca, busca, apenas_com_saldo, abaixo_do_minimo)
+        linhas = pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
+
+        # ⚠️ **Uma consulta a mais para a PÁGINA, não uma por linha.** Só os
+        # produtos que a página traz, e o de-para é feito em memória — mesma
+        # escolha do `em_transito` dos saldos.
+        if linhas:
+            cur.execute(
+                """SELECT s.id_produto, s.id_unidade, sum(s.quantidade) AS quantidade,
+                          round(sum(s.quantidade * s.custo_medio), 2) AS valor
+                     FROM estoque_saldos s
+                    WHERE s.id_unidade = ANY(%s) AND s.id_produto = ANY(%s)
+                    GROUP BY 1, 2""",
+                (ids, [l["id_produto"] for l in linhas]))
+            nomes = {l["id"]: (l["apelido"] or l["nome"]) for l in lojas}
+            por_produto: dict[int, list[dict]] = {}
+            for r in cur.fetchall():
+                por_produto.setdefault(r["id_produto"], []).append({
+                    "id_unidade": r["id_unidade"], "loja": nomes.get(r["id_unidade"], "—"),
+                    "quantidade": float(r["quantidade"]), "valor": float(r["valor"] or 0),
+                })
+            for linha in linhas:
+                # Na ordem das lojas, não na que o banco devolveu: coluna que
+                # troca de lugar entre uma página e outra é coluna que ninguém lê.
+                dele = {x["id_unidade"]: x for x in por_produto.get(linha["id_produto"], [])}
+                linha["por_loja"] = [dele[i] for i in ids if i in dele]
+    return linhas
+
+
+@router.get("/saldos-rede/inativos", response_model=SaldoRedeForaResponse)
+def saldos_rede_inativos(
+    busca: str | None = Query(default=None, max_length=80),
+    id_produto: int | None = None,
+    apenas_com_saldo: bool = False,
+    ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
+) -> dict:
+    """O que a lista consolidada deixou de fora por o produto estar inativo.
+
+    🔑 **É a linha que faz os dois números da empresa fecharem.** O painel da
+    rede soma `estoque_saldos` inteiro — e está certo: tirar o inativo do
+    estoque final inflaria o CMV. A lista filtra por ativo — e está certa
+    também: ela mostra o que se opera. Sem dizer quanto ficou de fora, quem
+    confere um contra o outro conclui que um dos dois mente.
+
+    ⚠️ **Os MESMOS filtros da lista, sempre.** Um aviso que responde por outro
+    recorte é pior que aviso nenhum: diria "e mais R$ 24 mil" com um produto só
+    na tela. Por isso ele mora aqui e não numa consulta escrita na tela.
+
+    ⚠️ **Só as lojas que a pessoa enxerga**, como a lista: o aviso é um TOTAL, e
+    total é o pior lugar para vazar — nada nele denuncia um número maior do que
+    devia.
+    """
+    with get_cursor() as cur:
+        lojas = _lojas_que_ve(cur, ctx)
+        if not lojas:
+            return {"produtos": 0, "valor": 0.0}
+        cur.execute(
+            """SELECT count(*) AS produtos, coalesce(sum(valor), 0) AS valor
+                 FROM (SELECT round(sum(s.quantidade * s.custo_medio), 2) AS valor
+                         FROM estoque_saldos s
+                         JOIN produtos p ON p.id = s.id_produto
+                        WHERE s.id_unidade = ANY(%s)
+                          AND NOT p.ativo
+                          AND (%s::int IS NULL OR s.id_produto = %s)
+                          AND (%s::varchar IS NULL
+                               OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                               OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
+                        GROUP BY s.id_produto
+                       HAVING (NOT %s OR sum(s.quantidade) <> 0)) AS _fora""",
+            ([l["id"] for l in lojas], id_produto, id_produto,
+             busca, busca, busca, apenas_com_saldo))
+        r = cur.fetchone()
+    return {"produtos": int(r["produtos"]), "valor": float(r["valor"] or 0)}
 
 
 @router.get("/movimentos", response_model=list[MovimentoResponse])

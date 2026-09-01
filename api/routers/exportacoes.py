@@ -563,6 +563,21 @@ def ficha(nome: str, formato: str | None = None,
         nome_arq, ext)
 
 
+def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:
+    """Põe no filtro as lojas que ESTA pessoa enxerga.
+
+    🔑 **Só o relatório da rede usa, e ele não poderia resolver isto sozinho:**
+    `exportacao_catalogo` não conhece `ve_unidade`, e inventar a lista lá
+    somaria estoque de loja que a pessoa não pode consultar — vazando pelo
+    total, que é o pior lugar para vazar, porque nada na tela denuncia.
+    ⚠️ Vai com `_` na frente: é um parâmetro INTERNO, não um filtro que a janela
+    oferece. Quem escolhe as lojas é a permissão, não quem baixa.
+    """
+    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id")
+    filtros["_lojas"] = [r["id"] for r in cur.fetchall() if ctx.ve_unidade(r["id"])]
+    return filtros
+
+
 @router.get("/{relatorio}/previa")
 def previa(relatorio: str, filtros: _Filtros = Depends(),
            ctx: Contexto = Depends(contexto_atual)) -> dict:
@@ -579,7 +594,7 @@ def previa(relatorio: str, filtros: _Filtros = Depends(),
     _exige(ctx, rel.permissao)
     with get_cursor() as cur:
         saida = catalogo_motor.montar(cur, relatorio, unidade_atual(cur, ctx),
-                                      filtros.como_dict)
+                                      _com_as_lojas(cur, ctx, filtros.como_dict))
     # O número tem de ser o do ARQUIVO, anexo incluído — senão a prévia diz 10
     # e o contador abre uma planilha de 500 linhas.
     total = len(saida.linhas) + sum(len(a[0]) for a in saida.anexos)
@@ -604,7 +619,8 @@ def exportar(relatorio: str, formato: str | None = None, filtros: _Filtros = Dep
     _exige(ctx, rel.permissao)
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        saida = catalogo_motor.montar(cur, chave, id_unidade, filtros.como_dict)
+        saida = catalogo_motor.montar(cur, chave, id_unidade,
+                                      _com_as_lojas(cur, ctx, filtros.como_dict))
         timbre = catalogo_motor.papel_timbrado(cur)
         auditoria.registrar(
             cur, ctx.id_usuario, "exportacao", chave, "exportar",

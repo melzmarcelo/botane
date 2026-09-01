@@ -15,6 +15,8 @@ O que este arquivo cobra:
 4. **ninguém encolhe o próprio alcance** e fica sem como voltar
 5. loja inativa e loja inexistente são recusadas com frase, não com 500
 6. tirar a loja devolve o "vale em todas"
+7. **a visão consolidada não vaza pelo total** — quem só vê a filial soma só a
+   filial, e a matriz não aparece nem na quantidade nem no valor
 
     python tests/smoke_lojas_do_usuario.py     (API de pé na 9200)
 
@@ -138,6 +140,44 @@ checar("sem cabeçalho nenhum, a loja resolvida é a filial", st == 200, (st, sa
 # cabeçalho é uma escolha, não uma chave.
 st, r = chamar("GET", "/estoque/saldos", token=tk, unidade=1)
 checar("mandar X-Unidade da matriz é recusado (403)", st == 403, (st, r))
+
+
+# 🔑 **E o consolidado NÃO pode vazar pelo total.** A visão de empresa soma as
+# lojas; somando uma que a pessoa não enxerga, o número entregaria justamente o
+# que a trava esconde — e é o pior lugar para vazar, porque nada na tela
+# denuncia um total maior do que devia.
+st, prod_r = chamar("POST", "/produtos", {
+    "codigo": f"RED{marca}", "nome": f"Insumo de duas lojas {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True}, token=token)
+id_prod_r = (prod_r or {}).get("id")
+st, locais_m = chamar("GET", "/locais", token=token, unidade=1)
+st, locais_f = chamar("GET", "/locais", token=token, unidade=id_filial)
+local_filial = (locais_f or [{}])[0].get("id")
+if id_prod_r and locais_m and local_filial:
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": id_prod_r, "id_local": locais_m[0]["id"],
+        "quantidade": 10, "custo_unitario": 40}, token=token, unidade=1)
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": id_prod_r, "id_local": local_filial,
+        "quantidade": 2, "custo_unitario": 52}, token=token, unidade=id_filial)
+
+    st, rede_admin = chamar(
+        "GET", f"/estoque/saldos-rede?id_produto={id_prod_r}", token=token)
+    linha_admin = (rede_admin or [{}])[0]
+    checar("o administrador soma as duas lojas",
+           abs(float(linha_admin.get("quantidade", 0)) - 12) < 0.0001, linha_admin)
+
+    st, rede_dele = chamar(
+        "GET", f"/estoque/saldos-rede?id_produto={id_prod_r}", token=tk)
+    linha_dele = (rede_dele or [{}])[0]
+    checar("mas quem so ve a filial soma SO a filial",
+           abs(float(linha_dele.get("quantidade", 0)) - 2) < 0.0001, linha_dele)
+    checar("e a matriz nao aparece na quebra por loja",
+           [x["id_unidade"] for x in (linha_dele.get("por_loja") or [])] == [id_filial],
+           linha_dele.get("por_loja"))
+    # ⚠️ O valor idem: 2 × 52 = 104, e nao os 520 das duas somadas.
+    checar("nem pelo valor", abs(float(linha_dele.get("valor", 0)) - 104) < 0.01,
+           linha_dele.get("valor"))
 
 
 print("\n3. ninguém dá acesso a loja que não enxerga")

@@ -626,6 +626,121 @@ if id_filial and id_prod_f:
     checar("e quem nao lanca transferencia continua barrado", st == 403, st)
 
 
+print("9c2. o estoque da EMPRESA, somando as lojas")
+# 🔑 A tela da rede dizia quanto VALE o estoque da empresa e nao dizia de que.
+# Para conferir um item era preciso trocar de loja no seletor e somar de cabeca
+# — a mesma conta que a visao consolidada existe para evitar.
+if id_filial and id_prod_f:
+    st, linhas_rede = chamar(
+        "GET", f"/estoque/saldos-rede?id_produto={id_prod_f}", token=token)
+    checar("a visao consolidada responde", st == 200, (st, linhas_rede))
+    linha = (linhas_rede or [{}])[0]
+    checar("com UMA linha para o produto, nao uma por prateleira",
+           len(linhas_rede or []) == 1, len(linhas_rede or []))
+
+    # A matriz e a filial tem saldo deste produto: o total tem de ser a soma.
+    def _qtd(unid):
+        _st, s_ = chamar("GET", f"/estoque/saldos?id_produto={id_prod_f}", token=token,
+                         unidade=unid)
+        return sum(float(x["quantidade"]) for x in (s_ or []))
+
+    soma = _qtd(1) + _qtd(id_filial)
+    checar("e a quantidade e a SOMA das lojas",
+           abs(float(linha.get("quantidade", 0)) - soma) < 0.0001,
+           (linha.get("quantidade"), soma))
+    checar("com as duas lojas nomeadas na linha",
+           len(linha.get("por_loja") or []) == 2, linha.get("por_loja"))
+
+    # 🔑 **O custo medio da rede e PONDERADO, nunca a media dos medios.** A
+    # matriz comprou a 40 e a filial a 52: a media simples daria 46, que nao e o
+    # custo de nada. O certo e valor total / quantidade total.
+    if float(linha.get("quantidade", 0)):
+        esperado = float(linha["valor"]) / float(linha["quantidade"])
+        checar("e o custo medio e ponderado, nao a media dos medios",
+               abs(float(linha["custo_medio"]) - esperado) < 0.01,
+               (linha.get("custo_medio"), esperado))
+        checar("e cai entre o que a matriz e a filial pagaram",
+               40.0 <= float(linha["custo_medio"]) <= 52.0, linha.get("custo_medio"))
+
+    # ⚠️ **So as lojas que a pessoa ENXERGA entram na soma.** Somar o que ela
+    # nao pode consultar vazaria pelo TOTAL, que e o pior lugar para vazar —
+    # nada na tela denuncia. Quem cobra o caso restrito e smoke_lojas_do_usuario;
+    # aqui a afirmacao e que nenhuma loja de fora entra na linha.
+    st, eu_lojas = chamar("GET", "/auth/me", token=token)
+    visiveis = {u["id"] for u in (eu_lojas or {}).get("unidades", [])}
+    de_fora = [x for x in (linha.get("por_loja") or []) if x["id_unidade"] not in visiveis]
+    checar("e nenhuma loja de fora entra na linha", not de_fora, de_fora)
+
+    # E ela sai em planilha, como todo relatorio da casa.
+    texto = baixar_texto("/exportar/saldos-rede.csv", token)
+    checar("a posicao da rede se exporta", "Posi" in texto and "Lojas somadas" in texto,
+           texto[:80])
+    # ⚠️ **Contra o numero de lojas ATIVAS, nao contra um numero fixo.** Esta
+    # suite cria uma filial propria, entao "2" seria o estado do dia — e o teste
+    # quebraria sozinho na primeira vez que a casa abrisse outra loja.
+    checar("e o arquivo declara quantas lojas somou",
+           f"Lojas somadas;{len(visiveis)}" in texto,
+           [l for l in texto.splitlines() if "Lojas" in l])
+
+    # 🔑 **A rede com ZERO daquele item derrubava a lista inteira com 500.**
+    # O custo medio da rede e uma DIVISAO pela quantidade: com o saldo zerado
+    # ele nao existe, e o modelo de resposta exigia um numero. O caminho e o
+    # comum — desmarcar "so com saldo" na tela —, e a resposta que morria era a
+    # da PAGINA toda, nao a daquela linha: a tela ficava vazia sem dizer por que.
+    st, prod_z = chamar("POST", "/produtos", {
+        "codigo": f"ZER{marca}", "nome": f"Est zerado {marca}", "tipo": "INSUMO",
+        "um_estoque": "KG", "controla_estoque": True}, token=token)
+    id_zerado = (prod_z or {}).get("id")
+    if id_zerado:
+        criados["produtos"].append(id_zerado)
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": id_zerado, "id_local": principal["id"], "quantidade": 5,
+        "custo_unitario": 10}, token=token)
+    chamar("POST", "/estoque/saidas", {
+        "id_produto": id_zerado, "id_local": principal["id"], "quantidade": 5,
+        "tipo": "SAIDA_CONSUMO_INTERNO"}, token=token)
+    st, zerados = chamar(
+        "GET", f"/estoque/saldos-rede?id_produto={id_zerado}", token=token)
+    checar("produto zerado na rede nao derruba a lista", st == 200, (st, zerados))
+    z = (zerados or [{}])[0]
+    checar("e a quantidade e zero mesmo", abs(float(z.get("quantidade", 1))) < 0.0001,
+           z.get("quantidade"))
+    # ⚠️ **Nulo, nunca zero.** "Nao custa nada" e "nao ha nada para custar" se
+    # leem igual na tela, e so o primeiro e um custo. A tela mostra traco.
+    checar("e o custo medio vem NULO, nao zero", z.get("custo_medio") is None,
+           z.get("custo_medio"))
+
+    # 🔑 **O painel da rede e a lista consolidada NAO fechavam, e nada dizia por
+    # que.** O painel soma `estoque_saldos` inteiro (e esta certo: tirar o
+    # inativo do estoque final inflaria o CMV); a lista filtra por ativo (e esta
+    # certa: mostra o que se opera). Quem soma a coluna e compara com o painel
+    # concluia que um dos dois mente. A lista passou a DIZER quanto ficou de
+    # fora, e este e o numero que fecha a diferenca.
+    st, fora = chamar("GET", "/estoque/saldos-rede/inativos", token=token)
+    checar("a lista diz quanto ficou de fora por estar inativo", st == 200, (st, fora))
+    st, so_ativos = chamar("GET", "/estoque/saldos-rede?limite=1000", token=token)
+    st, com_inativos = chamar(
+        "GET", "/estoque/saldos-rede?limite=1000&incluir_inativos=true", token=token)
+    soma_ativos = sum(float(x["valor"]) for x in (so_ativos or []))
+    soma_tudo = sum(float(x["valor"]) for x in (com_inativos or []))
+    # ⚠️ Folga de um centavo por linha: cada `valor` ja vem arredondado no banco.
+    folga = 0.01 * max(1, len(com_inativos or []))
+    checar("e esse numero FECHA a diferenca entre os dois",
+           abs((soma_ativos + float(fora.get("valor", 0))) - soma_tudo) <= folga,
+           (soma_ativos, fora.get("valor"), soma_tudo))
+    checar("e conta os produtos que ficaram de fora",
+           fora.get("produtos") == len(com_inativos or []) - len(so_ativos or []),
+           (fora.get("produtos"), len(com_inativos or []), len(so_ativos or [])))
+
+    # ⚠️ **O aviso segue os MESMOS filtros da lista.** Um numero que responde por
+    # outro recorte e pior que numero nenhum: diria "e mais R$ 24 mil" com um
+    # produto so na tela. O produto zerado acima esta ATIVO, entao filtrando por
+    # ele nada fica de fora.
+    st, fora_um = chamar(
+        "GET", f"/estoque/saldos-rede/inativos?id_produto={id_zerado}", token=token)
+    checar("e o aviso obedece ao filtro da tela", fora_um.get("produtos") == 0, fora_um)
+
+
 print("9d. o painel da REDE")
 # 🔑 Toda tela do sistema responde por UMA loja, e esta certo: quem opera opera
 # numa de cada vez. Mas o dono de duas nao tinha onde ver as duas — e somar de

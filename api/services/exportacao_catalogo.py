@@ -516,6 +516,55 @@ def _precos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _saldos_rede(cur, id_unidade: int, f: dict) -> Saida:
+    """O estoque da EMPRESA, somando as lojas — uma linha por produto.
+
+    ⚠️ **As lojas vêm no filtro, resolvidas por quem tem o contexto.** Este
+    módulo não conhece `ve_unidade`, e inventar a lista aqui somaria estoque de
+    loja que a pessoa não pode consultar — vazando pelo total.
+    ⚠️ A prateleira sai da linha, como na tela: aqui a pergunta é quanto a REDE
+    tem de cada item.
+    """
+    lojas = _lista(f.get("_lojas")) or [id_unidade]
+    cur.execute(
+        """SELECT p.codigo, p.nome AS produto, c.nome AS categoria, p.um_estoque,
+                  sum(s.quantidade) AS quantidade,
+                  -- 🔑 Ponderado, nunca a média dos médios.
+                  CASE WHEN sum(s.quantidade) <> 0
+                       THEN round(sum(s.quantidade * s.custo_medio)
+                                  / sum(s.quantidade), 6) END AS custo_medio,
+                  round(sum(s.quantidade * s.custo_medio), 2) AS valor,
+                  p.estoque_minimo,
+                  count(DISTINCT s.id_unidade) AS lojas
+             FROM estoque_saldos s
+             JOIN produtos p ON p.id = s.id_produto
+             LEFT JOIN categorias c ON c.id = p.id_categoria
+            WHERE s.id_unidade = ANY(%(lojas)s) AND p.ativo
+              AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
+              AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
+              AND (%(tipos)s::varchar[] IS NULL OR p.tipo = ANY(%(tipos)s))
+              AND (%(produtos)s::int[] IS NULL OR s.id_produto = ANY(%(produtos)s))
+            GROUP BY p.codigo, p.nome, c.nome, p.um_estoque, p.estoque_minimo
+           HAVING sum(s.quantidade) <> 0
+            ORDER BY lower(p.nome)""",
+        {"lojas": lojas, "setores": _lista(f.get("setores")),
+         "categorias": _lista(f.get("categorias")),
+         "tipos": _lista(f.get("tipos_produto")), "produtos": _lista(f.get("produtos"))},
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    total = sum(float(l["valor"] or 0) for l in linhas)
+    return Saida(
+        linhas,
+        [("codigo", "Código"), ("produto", "Produto"), ("categoria", "Categoria"),
+         ("um_estoque", "Unidade"), ("quantidade", "Saldo da rede"),
+         ("custo_medio", "Custo médio ponderado"), ("valor", "Valor em estoque"),
+         ("lojas", "Em quantas lojas"), ("estoque_minimo", "Estoque mínimo")],
+        "Posição de estoque da rede",
+        [("Produtos", len(linhas)), ("Lojas somadas", len(lojas)),
+         ("Valor total em estoque", round(total, 2))],
+    )
+
+
 @dataclass(frozen=True)
 class Relatorio:
     rotulo: str
@@ -531,6 +580,11 @@ RELATORIOS: dict[str, Relatorio] = {
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
         "estoque.saldos", "estoque",
         ("locais", "setores", "categorias", "tipos_produto", "produtos"), _saldos),
+    "saldos-rede": Relatorio(
+        "Posição de estoque da rede",
+        "O mesmo, somando as lojas: uma linha por produto, com o custo médio ponderado.",
+        "estoque.saldos", "estoque",
+        ("setores", "categorias", "tipos_produto", "produtos"), _saldos_rede),
     "movimentos": Relatorio(
         "Razão de estoque", "Cada movimento do período, com saldo e custo médio depois dele.",
         "estoque.saldos", "movimentos",
@@ -567,9 +621,17 @@ def catalogo(cur, id_unidade: int, pode: Callable[[str], bool]) -> list[dict]:
     quatro requisições a mais só para saber o que oferecer, e a tela piscaria
     quatro vezes antes de deixar escolher.
     """
+    # ⚠️ **Sem segunda loja, o relatório da rede é o de sempre com uma coluna a
+    # mais** — oferecer os dois lado a lado faria escolher entre duas versões da
+    # mesma coisa. Mesma regra do item de menu da remessa e da visão da rede.
+    cur.execute("SELECT count(*) AS n FROM unidades WHERE ativo")
+    varias_lojas = cur.fetchone()["n"] > 1
+
     saida = []
     for chave, r in RELATORIOS.items():
         if not pode(r.permissao):
+            continue
+        if chave == "saldos-rede" and not varias_lojas:
             continue
         filtros = []
         for nome in r.filtros:

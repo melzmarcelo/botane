@@ -214,6 +214,25 @@ exige permissão e fica registrado.
 
 ---
 
+### Quanto a empresa inteira tem
+
+Em **Estoque → Saldos**, com mais de uma loja, marque **somar todas as lojas**. A lista
+deixa de ser por prateleira e passa a ser por produto: quanto a rede tem, em que lojas
+está e quanto vale — com uma coluna para cada loja.
+
+O custo médio dessa linha é **ponderado**: valor total dividido pela quantidade total.
+Não é a média dos custos das lojas, que daria o mesmo peso a um estoque grande e a um
+pequeno.
+
+⚠️ Você só soma as lojas que você enxerga. Quem trabalha numa loja só vê o total dela.
+
+Abaixo da lista pode aparecer um aviso dizendo **quanto ficou de fora por o produto estar
+inativo**. Não é erro: o painel da rede conta tudo o que está na prateleira, inclusive o que
+foi descontinuado, porque é isso que o CMV precisa contar. A lista mostra o que se opera.
+Marcando **incluir inativos** os dois números passam a ser o mesmo.
+
+---
+
 ### Quem trabalha em qual loja
 
 No cadastro do usuário, com mais de uma loja aberta, aparece **Onde trabalha**:

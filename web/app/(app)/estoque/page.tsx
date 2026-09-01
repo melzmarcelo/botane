@@ -13,6 +13,22 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
 
+/** Uma linha da visão de EMPRESA: o produto somando as lojas. */
+type SaldoRede = {
+  id_produto: number;
+  codigo: string;
+  produto: string;
+  um_estoque: string | null;
+  quantidade: number;
+  valor: number;
+  /** ⚠️ Nulo quando a rede tem zero daquele item: é uma divisão pela
+      quantidade, e "não custa nada" não é a mesma coisa que "não há nada
+      para custar". */
+  custo_medio: number | null;
+  abaixo_do_minimo: boolean;
+  por_loja: { id_unidade: number; loja: string; quantidade: number; valor: number }[];
+};
+
 type Saldo = {
   id_produto: number;
   codigo: string;
@@ -60,7 +76,8 @@ const PRODUTOS = fonteProdutos();
 
 export default function PaginaEstoque() {
   const aviso = useAviso();
-  const { pode } = useSessao();
+  const { pode, eu } = useSessao();
+  const variasLojas = (eu?.unidades?.length ?? 0) > 1;
   // Quem pode lançar qualquer um dos quatro ajustes vê o atalho para a tela.
   const podeAjustar = ["estoque.entradas", "estoque.saidas", "estoque.perdas",
                        "estoque.transferencias"].some(pode);
@@ -74,6 +91,19 @@ export default function PaginaEstoque() {
   const [produtoSaldo, setProdutoSaldo] = useState<{ id: number; rotulo: string } | null>(null);
   const [idLocal, setIdLocal] = useState("");
   const [comSaldo, setComSaldo] = useState(true);
+  // 🔑 **A visão de EMPRESA.** Toda tela do sistema responde por uma loja, e
+  // está certo — quem opera opera numa de cada vez. Mas quem responde pelas
+  // duas precisava trocar de loja no seletor e somar de cabeça para saber
+  // quanto a rede tem de um item. Aqui a linha vira o PRODUTO, e a prateleira
+  // sai: agrupar por local devolveria a mesma lista, só que mais longa.
+  const [rede, setRede] = useState(false);
+  const [saldosRede, setSaldosRede] = useState<SaldoRede[] | null>(null);
+  // 🔑 **O painel da rede conta o produto INATIVO que ainda tem saldo; esta
+  // lista não.** As duas regras estão certas — o painel responde ao CMV, a
+  // lista mostra o que se opera —, mas os números não fechavam e nada dizia por
+  // quê. Agora a tela diz quanto ficou de fora, e a caixinha inclui.
+  const [inativos, setInativos] = useState(false);
+  const [fora, setFora] = useState<{ produtos: number; valor: number } | null>(null);
   const [erro, setErro] = useState("");
   // O que mexe no razão pergunta antes: estorno não se desfaz, ele contrapõe.
   const [confirmando, setConfirmando] = useState<Movimento | null>(null);
@@ -88,7 +118,9 @@ export default function PaginaEstoque() {
   const [movFim, setMovFim] = useState("");
   const [tipos, setTipos] = useState<TipoMovimento[]>([]);
   const pagSaldos = usePaginacao("saldos", {
-    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo],
+    // ⚠️ `rede` entra como filtro: trocar de modo muda o número de linhas, e
+    // quem estava na página 7 cairia numa tela vazia sem nada explicando.
+    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo, rede, inativos],
   });
   const pagMov = usePaginacao("razao", {
     padrao: 100,
@@ -100,8 +132,29 @@ export default function PaginaEstoque() {
       const q = new URLSearchParams(pagSaldos.parametros);
       if (produtoSaldo) q.set("id_produto", String(produtoSaldo.id));
       else if (busca.trim()) q.set("busca", busca.trim());
-      if (idLocal) q.set("id_local", idLocal);
       if (comSaldo) q.set("apenas_com_saldo", "true");
+      if (rede) {
+        // ⚠️ O local sai do pedido de propósito: na visão de empresa a linha é
+        // o produto, e mandar um filtro que o servidor não usa faria a tela
+        // prometer um corte que não acontece.
+        if (inativos) q.set("incluir_inativos", "true");
+        const r = await api.listar<SaldoRede>(`/estoque/saldos-rede?${q}`);
+        setSaldosRede(r.itens);
+        pagSaldos.setTotal(r.total);
+        // ⚠️ **Os MESMOS filtros da lista**, e quem responde é o servidor: um
+        // aviso que fala de outro recorte diria "e mais R$ 24 mil" com um
+        // produto só na tela. Com os inativos já dentro não há o que avisar.
+        if (inativos) setFora(null);
+        else {
+          const f = new URLSearchParams();
+          if (produtoSaldo) f.set("id_produto", String(produtoSaldo.id));
+          else if (busca.trim()) f.set("busca", busca.trim());
+          if (comSaldo) f.set("apenas_com_saldo", "true");
+          setFora(await api.get(`/estoque/saldos-rede/inativos?${f}`));
+        }
+        return;
+      }
+      if (idLocal) q.set("id_local", idLocal);
       const r = await api.listar<Saldo>(`/estoque/saldos?${q}`);
       setSaldos(r.itens);
       pagSaldos.setTotal(r.total);
@@ -109,7 +162,8 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, produtoSaldo, idLocal, comSaldo, pagSaldos.offset, pagSaldos.porPagina]);
+  }, [busca, produtoSaldo, idLocal, comSaldo, rede, inativos,
+      pagSaldos.offset, pagSaldos.porPagina]);
 
   const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio || movFim);
 
@@ -158,7 +212,13 @@ export default function PaginaEstoque() {
     }
   }
 
-  const valorTotal = saldos?.reduce((s, x) => s + Number(x.valor), 0) ?? 0;
+  // ⚠️ **Isto soma a PÁGINA, não a base** — e por isso o rótulo diz qual das
+  // duas coisas é. Chamar de "valor em estoque" o total de vinte linhas de
+  // duzentas é a mentira que a casa já pagou noutra tela: quem lê acha que
+  // confere o estoque inteiro e confere um pedaço.
+  const listaNaTela = rede ? saldosRede : saldos;
+  const valorTotal = listaNaTela?.reduce((s, x) => s + Number(x.valor), 0) ?? 0;
+  const temMaisPaginas = (listaNaTela?.length ?? 0) < pagSaldos.total;
 
   /** O que a janela de exportação recebe já preenchido.
 
@@ -241,21 +301,25 @@ export default function PaginaEstoque() {
                   />
                 </div>
               </div>
-              <label className="sm:w-[200px]">
-                <span className="rotulo">Local</span>
-                <select
-                  className="campo mt-1.5"
-                  value={idLocal}
-                  onChange={(e) => setIdLocal(e.target.value)}
-                >
-                  <option value="">Todos</option>
-                  {locais.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {/* ⚠️ O filtro de local SOME na visão de empresa: ali a linha é o
+                  produto, e um seletor que não corta nada é promessa falsa. */}
+              {!rede && (
+                <label className="sm:w-[200px]">
+                  <span className="rotulo">Local</span>
+                  <select
+                    className="campo mt-1.5"
+                    value={idLocal}
+                    onChange={(e) => setIdLocal(e.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {locais.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="flex items-center gap-2 pb-2">
                 <input
                   type="checkbox"
@@ -265,14 +329,131 @@ export default function PaginaEstoque() {
                 />
                 <span className="text-[14px]">só com saldo</span>
               </label>
+              {/* Só com mais de uma loja: numa casa só, "somar as lojas" é a
+                  mesma tela com uma coluna a mais. */}
+              {variasLojas && (
+                <label className="flex items-center gap-2 pb-2">
+                  <input
+                    type="checkbox"
+                    id="somar-lojas"
+                    className="h-4 w-4 accent-erva"
+                    checked={rede}
+                    onChange={(e) => setRede(e.target.checked)}
+                  />
+                  <span className="text-[14px]">somar todas as lojas</span>
+                </label>
+              )}
+              {/* Só faz sentido na visão de empresa: é ela que promete explicar
+                  o total do painel da rede. */}
+              {rede && (
+                <label className="flex items-center gap-2 pb-2">
+                  <input
+                    type="checkbox"
+                    id="incluir-inativos"
+                    className="h-4 w-4 accent-erva"
+                    checked={inativos}
+                    onChange={(e) => setInativos(e.target.checked)}
+                  />
+                  <span className="text-[14px]">incluir inativos</span>
+                </label>
+              )}
             </div>
+            {rede && (
+              <p className="mt-3 text-[12.5px] text-suave">
+                Uma linha por produto, somando as lojas que você enxerga. O custo médio da rede
+                é <strong>ponderado</strong> — valor total dividido pela quantidade total —, não
+                a média dos custos de cada loja.
+              </p>
+            )}
           </Cartao>
 
           <Cartao
-            titulo={saldos ? `${pagSaldos.total} linha(s)` : "Saldos"}
-            descricao={`Valor em estoque: ${reais(valorTotal)}`}
+            titulo={
+              listaNaTela
+                ? `${pagSaldos.total} ${rede ? "produto(s)" : "linha(s)"}`
+                : "Saldos"
+            }
+            descricao={
+              temMaisPaginas
+                ? `Valor nesta página: ${reais(valorTotal)}`
+                : `Valor em estoque: ${reais(valorTotal)}`
+            }
           >
-            {!saldos ? (
+            {rede ? (
+              !saldosRede ? (
+                <Carregando />
+              ) : !saldosRede.length ? (
+                <Vazio>Nada em estoque em loja nenhuma. Comece por uma entrada.</Vazio>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="tabela">
+                    <thead>
+                      <tr>
+                        <th>Produto</th>
+                        {/* Uma coluna por loja, na ordem de sempre — coluna que
+                            troca de lugar entre uma página e outra ninguém lê. */}
+                        {(eu?.unidades ?? []).map((u) => (
+                          <th key={u.id} className="num">
+                            {u.apelido ?? u.nome}
+                          </th>
+                        ))}
+                        <th className="num">Total</th>
+                        <th className="num">Custo médio</th>
+                        <th className="num">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saldosRede.map((s) => (
+                        <tr key={s.id_produto}>
+                          <td>
+                            <span className="font-semibold">{s.produto}</span>
+                            <span className="mono ml-2 text-[12px] text-suave">{s.codigo}</span>
+                            {s.abaixo_do_minimo && (
+                              <span className="ml-2">
+                                <Etiqueta cor="alerta">abaixo do mínimo</Etiqueta>
+                              </span>
+                            )}
+                          </td>
+                          {(eu?.unidades ?? []).map((u) => {
+                            const daLoja = s.por_loja.find((x) => x.id_unidade === u.id);
+                            return (
+                              <td key={u.id} className="num text-suave">
+                                {/* ⚠️ Traço, não zero: "não tem saldo aqui" e
+                                    "tem zero" se leem igual, mas só o segundo é
+                                    uma linha de estoque. */}
+                                {daLoja ? qtd(daLoja.quantidade) : "—"}
+                              </td>
+                            );
+                          })}
+                          <td className={`num ${Number(s.quantidade) < 0 ? "text-erro" : ""}`}>
+                            <span className="font-semibold">{qtd(s.quantidade)}</span>{" "}
+                            {s.um_estoque ?? ""}
+                          </td>
+                          <td className="num">
+                            {/* Traço quando a rede tem zero: com saldos que se
+                                anulam entre lojas, custo médio não existe. */}
+                            {s.custo_medio === null ? "—" : reais(Number(s.custo_medio))}
+                          </td>
+                          <td className="num font-semibold">{reais(Number(s.valor))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {/* 🔑 **A linha que faz os dois números da empresa fecharem.**
+                      O painel da rede conta o produto inativo que ainda tem
+                      saldo — é o que o CMV precisa contar —, e esta lista não.
+                      Sem dizer quanto ficou de fora, quem confere um contra o
+                      outro conclui que um dos dois mente. */}
+                  {!!fora?.produtos && (
+                    <p id="fora-da-lista" className="mt-3 text-[12.5px] text-suave">
+                      E mais <strong>{reais(fora.valor)}</strong> em {fora.produtos} produto(s)
+                      <strong> inativos</strong> que ainda têm saldo — o painel da rede os conta.
+                      Marque <em>incluir inativos</em> para somá-los aqui.
+                    </p>
+                  )}
+                </div>
+              )
+            ) : !saldos ? (
               <Carregando />
             ) : !saldos.length ? (
               <Vazio>Nada em estoque ainda. Comece por uma entrada.</Vazio>

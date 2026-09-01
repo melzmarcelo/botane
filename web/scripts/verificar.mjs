@@ -3514,6 +3514,84 @@ try {
   checar("e o saldo da origem avisa o que esta em transito",
     /em tr[aâ]nsito/i.test(nosSaldos), nosSaldos.slice(-260));
 
+  // 🔑 **O estoque da EMPRESA**: o mesmo produto somando as lojas. So existe com
+  // mais de uma loja — numa casa so seria a tela de sempre com uma coluna a mais.
+  // ⚠️ O que se afirma aqui e a PROPRIEDADE, nao o estado do dia: que o
+  // interruptor existe, que a linha vira o produto (o filtro de prateleira sai,
+  // porque seletor que nao corta nada e promessa falsa) e que a loja SEM aquele
+  // produto mostra traco — "nao tem linha aqui" e "tem zero" se leem igual e so
+  // o segundo e um saldo.
+  const temSomarLojas = await p.$("#somar-lojas");
+  checar("com duas lojas, os saldos oferecem somar todas", !!temSomarLojas);
+  if (temSomarLojas) {
+    const rotuloLocal = () => p.evaluate(() => [...document.querySelectorAll("main .rotulo")]
+      .some((x) => (x.textContent ?? "").trim() === "Local"));
+    const localAntes = await rotuloLocal();
+    await p.evaluate(() => document.querySelector("#somar-lojas")?.click());
+    // ⚠️ **Esperar pela frase explicativa nao espera nada**: ela aparece no
+    // instante do clique, antes de a lista voltar do servidor — e a checagem
+    // media a tabela ainda vazia. Espere pela COLUNA da filial, que so existe
+    // depois de a resposta chegar.
+    await p.waitForFunction(
+      (apelido) => [...document.querySelectorAll("main table thead th")]
+        .some((t) => (t.textContent ?? "").trim() === apelido),
+      { timeout: 15000 }, `T${marcaR}`,
+    ).catch(() => {});
+    const naRede = await p.evaluate((apelido) => {
+      const th = [...document.querySelectorAll("main table thead th")]
+        .map((t) => (t.textContent ?? "").trim());
+      const tr = [...document.querySelectorAll("main table tbody tr")][0];
+      const tds = [...(tr?.children ?? [])].map((c) => (c.textContent ?? "").trim());
+      return { th, tds, coluna: th.indexOf(apelido) };
+    }, `T${marcaR}`);
+    checar("a barra deixa de oferecer o filtro de prateleira",
+      localAntes && !(await rotuloLocal()), { localAntes });
+    checar("e a tabela ganha uma coluna para cada loja",
+      naRede.coluna > 0 && naRede.th.includes("Total"), naRede.th);
+    checar("a loja que nao tem o produto mostra traco, nao zero",
+      naRede.tds[naRede.coluna] === "—", naRede.tds);
+    // 🔑 **A linha que faz os dois numeros da empresa fecharem.** O painel da
+    // rede conta o produto inativo que ainda tem saldo; esta lista nao. Sem
+    // dizer quanto ficou de fora, quem confere um contra o outro conclui que um
+    // dos dois mente. ⚠️ Afirmo a PROPRIEDADE, nao o estado do dia: quando ha
+    // inativo com saldo o aviso aparece, e a caixinha que os inclui existe.
+    checar("a visao de empresa oferece incluir os inativos",
+      await p.evaluate(() => !!document.querySelector("#incluir-inativos")));
+    // ⚠️ **O aviso obedece a BUSCA, e e isso que ele tem de fazer** — com o
+    // campo preenchido ele fala so daquele produto. Para medi-lo contra a API e
+    // preciso olhar a mesma lista que ela responde: limpo o campo antes.
+    // (A primeira versao comparava a tela filtrada com a API inteira e acusava
+    // de defeito exatamente o comportamento certo.)
+    // ⚠️ **`elementHandle.click()` rola o elemento e estoura o `protocolTimeout`**
+    // — derrubou a rodada inteira aqui, num ponto sem defeito nenhum. Focar de
+    // DENTRO do documento faz a mesma coisa sem depender de layout.
+    await p.evaluate(() => {
+      const c = document.querySelector('input[placeholder="produto ou código"]');
+      if (c instanceof HTMLInputElement) c.focus();
+    });
+    await p.keyboard.down("Control");
+    await p.keyboard.press("KeyA");
+    await p.keyboard.up("Control");
+    await p.keyboard.press("Backspace");
+    const { dados: foraApi } = await api(
+      "GET", "/estoque/saldos-rede/inativos?apenas_com_saldo=true", null, token);
+    await p.waitForFunction(
+      (n) => (n === 0) === !document.querySelector("#fora-da-lista"),
+      { timeout: 15000 }, foraApi.produtos,
+    ).catch(() => {});
+    const oAviso = await p.evaluate(() => ({
+      texto: document.querySelector("#fora-da-lista")?.textContent?.trim() ?? "",
+    }));
+    checar("e diz quanto ficou de fora quando ha inativo com saldo",
+      foraApi.produtos === 0
+        ? oAviso.texto === ""
+        : /inativos/i.test(oAviso.texto) && oAviso.texto.includes(String(foraApi.produtos)),
+      { foraApi, ...oAviso });
+    // Volta ao modo de sempre: o proximo bloco le a lista por prateleira.
+    await p.evaluate(() => document.querySelector("#somar-lojas")?.click());
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
   // Troca de loja pelo seletor da barra — e o rotulo dele que o identifica, nao
   // a posicao no DOM: o seletor de loja e o primeiro `<select>` do documento.
   await irPara(p, `${WEB}/transferencias/${remessaR.id}`);

@@ -1575,6 +1575,48 @@
         quantidade continua contando no estoque de quem mandou.
       </p>
 
+      <h3>O estoque da empresa</h3>
+      <p>
+        Em <strong>Estoque ▸ Saldos</strong>, com mais de uma loja, aparece
+        <strong>somar todas as lojas</strong>. A linha deixa de ser a prateleira e passa a ser o
+        <em>produto</em>: quanto a rede tem, em que lojas está, e quanto vale. Sem isso a
+        resposta exigia trocar de loja no seletor e somar de cabeça — a mesma conta que a visão
+        consolidada existe para evitar.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O custo médio da rede é ponderado</p>
+        <p>
+          Matriz com 10 kg a R$ 40 e filial com 1 kg a R$ 52 dão <strong>R$ 41,09</strong> na
+          rede — não R$ 46. A média simples daria o mesmo peso ao estoque grande e ao pequeno,
+          e o resultado não seria o custo de nada.
+        </p>
+      </div>
+      <p>
+        <strong>Só as lojas que você enxerga entram na soma.</strong> Quem está lotado numa loja
+        vê o consolidado <em>dela</em> — somar o que a pessoa não pode consultar entregaria pelo
+        total justamente o que a restrição esconde, e o total é o pior lugar para isso, porque
+        nada na tela denuncia um número maior do que devia.
+      </p>
+      <p>
+        A mercadoria <strong>em trânsito não aparece à parte</strong>: entre lojas ela é
+        movimento interno da rede — continua contando na origem, e o total da empresa não muda.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Por que esta lista pode somar menos que o painel da rede</p>
+        <p>
+          O painel conta <em>tudo</em> o que está na prateleira, inclusive o produto já
+          desativado que ainda tem saldo — e tem de contar: o CMV é
+          <em>estoque inicial + compras − estoque final</em>, e tirar o descontinuado do
+          estoque final faria o custo do período aparecer maior do que foi. Esta lista mostra o
+          que se <em>opera</em>, e por isso filtra o inativo, como toda tela de saldos.
+        </p>
+        <p>
+          As duas estão certas, e por isso a lista <strong>diz quanto ficou de fora</strong>
+          logo abaixo dela. Marcando <strong>incluir inativos</strong> os dois números passam a
+          ser o mesmo, ao centavo.
+        </p>
+      </div>
+
       <h3>A visão da rede</h3>
       <p>
         Toda outra tela responde por <em>uma</em> loja, e está certo. Mas o dono de duas precisa

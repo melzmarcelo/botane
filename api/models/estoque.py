@@ -25,6 +25,63 @@ class SaldoResponse(BaseModel):
     atualizado_em: datetime | None = None
 
 
+class SaldoDaLoja(BaseModel):
+    id_unidade: int
+    loja: str
+    quantidade: float
+    valor: float
+
+
+class SaldoRedeResponse(BaseModel):
+    """O saldo de um produto somando as lojas — a visão de EMPRESA.
+
+    🔑 **Uma linha por produto, não por prateleira.** A tela da rede já dizia
+    quanto vale o estoque da empresa; não dizia **de quê**. Para conferir um
+    item era preciso trocar de loja e somar de cabeça — que é exatamente a conta
+    que a visão consolidada existe para evitar.
+    """
+
+    id_produto: int
+    codigo: str
+    produto: str
+    um_estoque: str | None = None
+    quantidade: float
+    valor: float
+    # ⚠️ **Ponderado, nunca a média dos médios.** A matriz com 10 kg a R$ 40 e a
+    # filial com 1 kg a R$ 52 dão R$ 41,09 na rede — não R$ 46. A média simples
+    # daria o mesmo peso ao estoque grande e ao pequeno.
+    # ⚠️ **E ele é NULO quando a rede tem zero daquele item**, porque é uma
+    # divisão pela quantidade. Não é detalhe de tipagem: com "só com saldo"
+    # desmarcado a lista traz esses produtos, e um `float` obrigatório fazia a
+    # resposta INTEIRA morrer em 500 — a tela ficava vazia sem dizer por quê.
+    # Zero também não serve: "não custa nada" e "não há nada para custar" se
+    # leem igual, e só o primeiro é um custo. A tela mostra traço.
+    custo_medio: float | None = None
+    estoque_minimo: float | None = None
+    abaixo_do_minimo: bool = False
+    # Onde ele está. Só as lojas que a pessoa enxerga entram na soma.
+    por_loja: list[SaldoDaLoja] = []
+
+
+class SaldoRedeForaResponse(BaseModel):
+    """Quanto a lista consolidada deixou de fora por o produto estar INATIVO.
+
+    🔑 **Sem isto os dois números da empresa não fecham, e nada diz por quê.**
+    O painel da rede conta `estoque_saldos` inteiro — é o que o CMV precisa:
+    tirar o inativo do estoque final inflaria o custo. A lista de saldos filtra
+    por ativo desde sempre, aqui e na visão de uma loja só. As duas regras estão
+    certas, mas agora existe uma tela que promete EXPLICAR aquele total, e quem
+    soma a coluna e compara com o painel conclui que um dos dois mente.
+
+    ⚠️ **Segue os MESMOS filtros da lista.** Um número que responde por outro
+    recorte é pior que número nenhum: diria "e mais R$ 24 mil" enquanto a tela
+    mostra um produto só.
+    """
+
+    produtos: int
+    valor: float
+
+
 class MovimentoResponse(BaseModel):
     id: int
     data_movimento: datetime

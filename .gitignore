@@ -26,6 +26,9 @@ api/arquivos/
 
 # saída dos testes de tela
 web/scripts/_fotos/
+# O relatório da rodada: registro do dia, não código — e ele muda a cada
+# execução, então versioná-lo enche o diff sem dizer nada sobre o sistema.
+web/scripts/_saida-navegador.txt
 # Perfil do Chrome do verificar.mjs — volume, nao codigo. Fica no D: de
 # proposito: no TEMP do C: o Chrome falha com erro de PROTOCOLO, nao com
 # "disco cheio", e parece instabilidade do teste.

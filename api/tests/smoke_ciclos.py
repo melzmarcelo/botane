@@ -116,14 +116,29 @@ checar("a apuração sem datas abre no mês", a.get("inicio") == str(hoje.replac
 # esta certo. A versao anterior exigia as duas pontas sempre, e quebrou
 # sozinha em 31/08, longe de qualquer commit: teste que descreve o estado
 # do dia envelhece, e este envelhecia todo fim de mes.
+# 🔑 **A afirmacao e sobre o NOME CURTO, nao sobre "ter duas pontas".** A
+# versao anterior exigia " a " no rotulo sempre que nao fosse o ultimo dia do
+# mes — e quebrou no dia 1º, quando o recorte e um DIA so e o rotulo e
+# "01/09/2026", sem pontas e sem estar errado. Antes disso ja tinha quebrado em
+# 31/08 pela outra ponta. Duas quebras, nenhuma por defeito: as duas descreviam
+# o estado do dia.
+# A propriedade e uma: o nome do MES por extenso so aparece quando o recorte e
+# o mes INTEIRO. Chamar de "setembro" um pedaco que para no dia 25 e o mesmo
+# engano que a movimentacao evita ao dizer se o numero e congelado.
 import calendar as _cal  # noqa: E402
-_ultimo_do_mes = hoje.day == _cal.monthrange(hoje.year, hoje.month)[1]
-if _ultimo_do_mes:
-    checar("no ultimo dia do mes o rotulo e o nome curto do periodo",
-           " a " not in str(a.get("rotulo")), a.get("rotulo"))
+_MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+          "agosto", "setembro", "outubro", "novembro", "dezembro")
+_mes_por_extenso = _MESES[hoje.month - 1]
+_mes_inteiro = hoje.day == _cal.monthrange(hoje.year, hoje.month)[1]
+_rotulo = str(a.get("rotulo", "")).lower()
+if _mes_inteiro:
+    checar("com o mes inteiro no recorte, o rotulo e o nome curto do periodo",
+           _mes_por_extenso in _rotulo, a.get("rotulo"))
 else:
-    checar("e o rótulo mostra as pontas, porque o mês ainda está em curso",
-           " a " in str(a.get("rotulo")), a.get("rotulo"))
+    checar("o rotulo NAO usa o nome do mes enquanto o recorte e um pedaco dele",
+           _mes_por_extenso not in _rotulo, a.get("rotulo"))
+    checar("e mostra a data, que e o que o recorte de fato cobre",
+           str(hoje.day).zfill(2) in _rotulo, a.get("rotulo"))
 
 
 print("\n2. a prévia mostra o calendário antes de salvar")

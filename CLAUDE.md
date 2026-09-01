@@ -1350,6 +1350,60 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   **linha fantasma**, e o produto ficava num lugar onde ninguém o acha. `_local_desta_loja`
   aceita o local padrão só na loja dona dele; fora dela, cai no principal de quem produz.
   ⚠️ Não é o cadastro que está errado: o local padrão é a resposta certa na loja dele.
+- 🔑 **O estoque da EMPRESA: `GET /estoque/saldos-rede`** (01/09/2026, pedido do dono). A tela
+  da rede dizia quanto **VALE** o estoque da empresa e não dizia **de quê** — para conferir um
+  item era preciso trocar de loja no seletor e somar de cabeça, que é exatamente a conta que a
+  visão consolidada existe para evitar. Interruptor **"somar todas as lojas"** na aba de saldos
+  de `/estoque`, só com mais de uma loja.
+  ⚠️ **A linha vira o PRODUTO e a prateleira sai.** Agrupar por local devolveria a mesma lista
+  de sempre, só que mais longa; onde ele está vem em `por_loja`, uma coluna por loja. O filtro
+  de local **some** da barra nesse modo — seletor que não corta nada é promessa falsa.
+  🔑 **O custo médio da rede é PONDERADO, nunca a média dos médios.** Matriz com 10 kg a R$ 40 e
+  filial com 1 kg a R$ 52 dão **R$ 41,09**, não R$ 46 — a média simples daria o mesmo peso ao
+  estoque grande e ao pequeno. É a mesma lição do food cost da rede.
+  🔑 **Só as lojas que a pessoa ENXERGA entram na soma**, e essa é a trava que mais importa
+  aqui: somar uma loja que ela não pode consultar entregaria pelo **total** justamente o que o
+  `ve_unidade` esconde — e o total é o pior lugar para vazar, porque nada na tela denuncia um
+  número maior do que devia. `smoke_lojas_do_usuario` cobra que quem só vê a filial some só a
+  filial, na quantidade **e** no valor.
+  ⚠️ **Transferência em trânsito não aparece**: entre lojas ela é movimento INTERNO da rede, a
+  mercadoria continua contando na origem e o total não muda. Mostrá-la sugeriria que parte do
+  estoque da empresa está fora dela.
+  ⚠️ **Traço, não zero**, na coluna de uma loja sem aquele produto: "não tem linha aqui" e "tem
+  zero" se leem igual e só o segundo é um saldo.
+  ⚠️ **O relatório `saldos-rede` some do catálogo com uma loja só** — ali ele é o de sempre com
+  uma coluna a mais, e oferecer os dois lado a lado faria escolher entre duas versões da mesma
+  coisa. As lojas visíveis chegam ao montador por `_com_as_lojas`, num parâmetro `_lojas` com
+  underscore: é INTERNO, não um filtro que a janela oferece — `exportacao_catalogo` não conhece
+  `ve_unidade`, e resolver a lista lá dentro somaria o que a pessoa não pode ver.
+  ⚠️ **O total do cartão de saldos somava a PÁGINA e se chamava "valor em estoque"** — a mentira
+  que a casa já pagou noutra tela. Agora o rótulo diz qual das duas coisas é: "valor nesta
+  página" quando há mais de uma.
+  ⚠️ **A rede com ZERO daquele item derrubava a lista INTEIRA com 500.** O custo médio da rede
+  é uma divisão pela quantidade — com o saldo zerado ele não existe —, e o modelo de resposta
+  exigia `float`. O caminho é o comum (desmarcar "só com saldo"), e o que morria era a resposta
+  da PÁGINA, não daquela linha: a tela ficava vazia sem dizer por quê. Agora ele é **nulo**, e
+  a tela mostra traço — zero não serve, porque "não custa nada" e "não há nada para custar" se
+  leem igual e só o primeiro é um custo.
+  🔑 **O painel da rede e a lista consolidada NÃO fechavam, e nada dizia por quê**
+  (`GET /estoque/saldos-rede/inativos`, 01/09/2026). Medido na base local: o painel dizia
+  R$ 34.893,38 e a lista somava R$ 9.984,88 — **R$ 24.908,50 em 162 produtos INATIVOS que ainda
+  têm saldo**. As duas regras estão certas e são antigas: o painel soma `estoque_saldos` inteiro
+  (tirar o inativo do estoque final inflaria o CMV) e a lista de saldos filtra por ativo desde
+  sempre, aqui e na visão de uma loja só. O que mudou é que passou a existir uma tela que
+  **promete explicar** aquele total — e explicava menos de um terço dele. Agora a lista diz
+  quanto ficou de fora, com a caixinha para incluí-los; com ela marcada os dois fecham ao
+  centavo, e a suíte cobra essa identidade.
+  ⚠️ **O aviso segue os MESMOS filtros da lista** — busca, produto e "só com saldo". Número que
+  responde por outro recorte é pior que número nenhum: diria "e mais R$ 24 mil" com um produto
+  só na tela. Por isso ele é do servidor, não uma conta escrita na tela.
+  ⚠️ **E só as lojas que a pessoa enxerga**, como a lista: o aviso é um TOTAL, e total é o pior
+  lugar para vazar — nada nele denuncia um número maior do que devia.
+  ⚠️ **Endpoint próprio em vez de mais um cabeçalho.** `X-Total` é o padrão da casa para isso,
+  mas ele passa por `api.listar`, que serve a TODA lista do sistema: alargar o contrato dele
+  por causa de uma tela sairia caro em todas as outras. ⚠️ A mesma divergência existe entre
+  `/inicio` e `/estoque` numa loja só — lá continua sem aviso, de propósito, porque ali a lista
+  nunca prometeu explicar o painel.
 - 🔑 **A visão da REDE** (`GET /inicio/rede` + tela `/rede`, 31/08/2026). Toda outra tela
   responde por UMA loja, e está certo: quem opera opera numa de cada vez. Mas o dono de duas
   não tinha onde ver as duas — e somar de cabeça dois food costs de bases diferentes é a conta
@@ -1634,6 +1688,18 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
      vem vazia e o arquivo tem só as 10 da apuração. Passou a afirmar a SOMA: apuração + anexo.
   6. A checagem do preço do cardápio virou pergunta ao `/pdv/config`: com o envio ligado o
      Botané é dono do preço e o cardápio deixa de trazê-lo.
+- ⚠️ **Comparar a tela FILTRADA com a API inteira acusa de defeito o comportamento certo.**
+  A checagem do aviso "quanto ficou de fora por estar inativo" lia o texto com a busca de um
+  produto preenchida e o comparava com `/estoque/saldos-rede/inativos` **sem filtro**: a API
+  dizia 181 produtos, a tela dizia nada — e ela estava certa, porque o aviso obedece à busca,
+  que é exatamente o que ele tem de fazer. Ou se limpa o filtro antes de medir, ou se pergunta
+  à API pelo MESMO recorte. É a família do "teste que descreve o estado do dia", pela ponta do
+  recorte em vez da do tempo.
+- ⚠️ **`elementHandle.click()` também estoura o `protocolTimeout`** — e não só o `p.click`.
+  Limpar o campo de busca com `(await p.$(campo)).click()` derrubou a rodada inteira num ponto
+  sem defeito nenhum: ele rola o elemento e espera ele ficar estável. Focar de DENTRO do
+  documento (`p.evaluate(() => input.focus())`) e seguir com `p.keyboard` faz a mesma coisa sem
+  depender de layout.
 - ⚠️ **Handle de elemento ENVELHECE, e `p.evaluate(fn, handle)` estoura o `protocolTimeout`.**
   O laço `for (const b of await p.$$("button")) { await p.evaluate(el => el.innerText, b) }`
   derrubou a rodada inteira num ponto sem defeito nenhum — a troca de loja recarrega a página
@@ -1923,17 +1989,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.578 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (119), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.599 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (135), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
-  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (31),
+  `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
   `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
-  `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (22),
+  `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (379, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (385, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

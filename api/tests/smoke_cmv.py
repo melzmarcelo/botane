@@ -289,9 +289,18 @@ checar("apuração e movimentação fecham no mesmo estoque final",
 
 # E o de ONTEM continua indo ao razão: a diferença entre os dois é o que se
 # movimentou hoje, nem mais nem menos.
-ontem = (hoje - timedelta(days=1)).isoformat()
-st, ap_ontem = chamar("GET", f"/cmv/apuracao?inicio={inicio_mes}&fim={ontem}", token=token)
-st, mov_ontem = chamar("GET", f"/cmv/movimentacao?inicio={inicio_mes}&fim={ontem}", token=token)
+ontem_data = hoje - timedelta(days=1)
+ontem = ontem_data.isoformat()
+# ⚠️ **No dia 1º não existe "deste mês até ontem".** Com `inicio_mes` fixo, o
+# pedido virava `01/09 a 31/08` e o servidor devolvia 400 com a frase certa — o
+# teste é que quebrava, uma vez por mês, longe de qualquer commit. O que se
+# quer aqui é um período que TERMINA no passado, para provar que ele vai ao
+# razão em vez de usar o atalho do saldo de hoje; qual o começo não importa.
+inicio_ate_ontem = min(inicio_mes, ontem_data)
+st, ap_ontem = chamar(
+    "GET", f"/cmv/apuracao?inicio={inicio_ate_ontem}&fim={ontem}", token=token)
+st, mov_ontem = chamar(
+    "GET", f"/cmv/movimentacao?inicio={inicio_ate_ontem}&fim={ontem}", token=token)
 fora_ontem = _fora_do_cmv(mov_ontem, ap_ontem.get("tipos_fora_do_cmv") or [])
 checar("o período que termina ONTEM também fecha entre as duas telas",
        perto(float(ap_ontem["estoque_final"]),
@@ -366,7 +375,12 @@ checar("o fechamento aparece na lista", any(f["id"] == id_fech for f in fechamen
 # O fechamento congela também o relatório que EXPLICA o número, não só o número.
 # ⚠️ O congelado é do MÊS INTEIRO: pedir "dia 1 até hoje" é outro recorte, e a
 # resposta avisa que existe um mês fechado por trás dele.
-st, parcial = chamar("GET", f"/cmv/movimentacao?{periodo}", token=token)
+# ⚠️ **Um recorte que ENGLOBA o dia fechado, e nunca `periodo`.** No dia 1º o
+# recorte "do mês até hoje" É exatamente o dia que acabou de ser fechado — e aí
+# ele vem congelado, com razão, e a checagem acusava de defeito a resposta
+# certa. Uma janela de dois dias contém o dia fechado em qualquer data.
+st, parcial = chamar(
+    "GET", f"/cmv/movimentacao?inicio={ontem}&fim={hoje}", token=token)
 checar("recorte dentro do período fechado não vem congelado",
        parcial.get("congelado") is False, parcial.get("congelado"))
 # ⚠️ Com ciclo diário a relação é a inversa: o recorte do mês não cai DENTRO do
