@@ -353,7 +353,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ Ficaram de fora, de propósito: abas com sublinhado, cartão selecionável com borda, o × de
   fechar (é símbolo, não palavra) e link dentro de frase — sublinhado já é a convenção do link.
 - Manuais: `docs/manual-da-equipe.md` (o que cada função faz no dia a dia) e
-  **`web/public/ajuda.html`** — o manual de referência: os onze processos e o caminho do dado,
+  **`web/public/ajuda.html`** — o manual de referência: os treze processos e o caminho do dado,
   de onde entra até virar número.
   🔑 **A seção "De onde vem cada número" é o coração dele** (28/08/2026): segue UM quilo de
   café da nota até a variância, com a aritmética real em cada passo — custo de aquisição com
@@ -422,6 +422,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `produto_unidades` e com `cmv_movimentacao`: a limpeza estourava no meio e quem rodou achava
   que tinha limpado. O script agora **confere antes** (`referenciam()`) e recusa nomeando o que
   falta na lista.
+- 🔑 **`--filiais-de-teste` na limpeza** (01/09/2026): as suítes criam uma loja por rodada e
+  ninguém as apagava — `unidades` está em `PRESERVADAS`, e numa casa de verdade a loja fica.
+  Dezenove tinham se acumulado. Não é só sujeira de lista: **filial ATIVA muda a barra
+  superior**, porque o seletor de loja aparece e vira o primeiro `<select>` do documento.
+  ⚠️ **O critério é estar INATIVA, não o nome.** As suítes desativam a filial delas no
+  `atexit`, então "inativa" é exatamente a marca que elas deixam; casar por nome seria o
+  palpite que este projeto já removeu uma vez. A matriz nunca entra.
+  ⚠️ Roda **depois** do TRUNCATE: com movimento, venda ou nota apontando para a loja, a
+  exclusão bate na chave estrangeira.
+  ⚠️ Locais, setores e categorias com marca de suíte continuam saindo **na mão** —
+  `--tabelas-de-apoio` esvazia tudo, inclusive o que a casa usa.
 - ⚠️ **A limpeza NÃO toca nas tabelas de apoio** (locais, setores, categorias): elas são
   cadastro base e ficam. Mas as suítes criam locais e setores com marcador a cada rodada, e a
   lista incha — vale tirar o que não é da semente de fábrica depois de uma bateria. A flag

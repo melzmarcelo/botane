@@ -293,6 +293,8 @@
       <li><a href="#cmv">9 · CMV e fechamento</a></li>
       <li><a href="#alertas">10 · Alertas</a></li>
       <li><a href="#acesso">11 · Acesso e auditoria</a></li>
+      <li><a href="#lojas">12 · Mais de uma loja</a></li>
+      <li><a href="#exportar">13 · Levar o número para fora</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
@@ -761,6 +763,66 @@
         folha. O local informado no lançamento vale apenas como reserva, para o produto que
         ainda não tem um definido.
       </p>
+      <p>
+        Com mais de uma loja, o local padrão só vale <strong>na loja dona dele</strong>: a
+        filial que produz um molho cujo local padrão é a câmara da matriz manda o produzido para
+        a prateleira principal <em>dela</em>. Não é o cadastro que está errado — o local padrão
+        é a resposta certa na loja dele.
+      </p>
+
+      <h3>Mandar o cadastro para o PDV</h3>
+      <p>
+        Até aqui a integração era de mão única: o sistema lia cardápio, preços e vendas.
+        Escrever de volta mexe no sistema que a casa usa para <em>vender</em>, no meio do
+        expediente de alguém — então ela começa <strong>desligada</strong>, por loja, e se liga
+        em Integrações.
+      </p>
+      <p>
+        Ligada, aparece <strong>Cadastros ▸ Exportação para o PDV</strong>, com três abas:
+        <em>pendentes</em> — com o botão de enviar —, <em>integrados</em> e <em>erros</em>, este
+        com a mensagem do PDV ao lado do que foi mandado, porque “erro 400” sozinho não diz o
+        que ajustar. O que sai é <strong>valor, nome, setor e categoria</strong>.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Alterar aqui não escreve lá</p>
+        <p>
+          Salvar um cadastro <strong>gera uma pendência</strong>, que espera alguém abrir a
+          tela, conferir e mandar. Escrever no cardápio de quem está vendendo não pode ser
+          efeito colateral de salvar um formulário.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">A fila pergunta ao PDV o que já existe lá</p>
+        <p>
+          Sem isso ela concluiria “nunca enviei, logo <em>criar</em>” para os grupos que já
+          estão no cardápio — e um clique duplicaria o cardápio do cliente. Quando o registro já
+          existe do outro lado, a ação é <strong>adotar</strong>: um reconhecimento que só grava
+          o vínculo e <strong>não reescreve</strong> nome, cor ou situação de lá. Adotar é
+          reconhecer, não impor.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Nenhum imposto é enviado</p>
+        <p>
+          Os campos fiscais estão preenchidos no PDV e o Botané não tem nenhum deles. Mandá-los
+          <em>zerados</em> derrubaria a emissão fiscal da casa — então eles simplesmente não
+          entram no que sai daqui.
+        </p>
+      </div>
+      <p>
+        <strong>A situação tem donos diferentes dos dois lados.</strong> Aqui “ativo” quer dizer
+        <em>uso este cadastro</em>; lá quer dizer <em>aparece no cardápio para vender agora</em>.
+        Categorias sazonais ficam ativas aqui e desligadas lá conforme a época — mandar o nosso
+        “ativo” reativaria a Páscoa em agosto. Por isso a categoria e o setor ficam com a
+        situação <em>de lá</em>, e só o produto leva a daqui: ali é a pendência — uma mudança
+        feita neste sistema — que autoriza mexer no outro.
+      </p>
+      <p>
+        Antes de cada lote o sistema <strong>confere o CNPJ</strong> contra o que o PDV
+        responde. Credencial de integração não diz de quem ela é, e já aconteceu de um par de
+        chaves apontar para outra empresa — na leitura isso custou vendas de terceiro dentro da
+        base; na escrita, cadastraria produto da casa no PDV de outro.
+      </p>
     </section>
 
     <!-- ================================================================= nota -->
@@ -1111,6 +1173,30 @@
         um “salvar tudo” no fim é contagem que se perde. E a unidade é escolhível: quem conta
         conta caixa, e converter de cabeça é onde o erro entra.
       </p>
+
+      <h3>Quem monta e quem conta são pessoas diferentes</h3>
+      <p>
+        São duas permissões. <strong>Contar</strong> abre a contagem que já existe e digita o
+        que viu; <strong>montar</strong> abre contagem nova, escolhe o recorte e cancela. Quem
+        vai à prateleira precisa só da primeira — dar as duas fazia de qualquer contador alguém
+        que podia cancelar a contagem dos outros.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Escala não é permissão</p>
+        <p>
+          Ao montar a contagem dá para dizer <strong>quem vai contar aquela contagem</strong>.
+          Deixar a lista <em>vazia</em> quer dizer “qualquer um que tenha a permissão” — que é o
+          comportamento de sempre. A permissão diz o que a pessoa sabe fazer; a lista diz quem
+          está no turno de hoje, e misturar as duas obrigaria a mexer em papel toda vez que a
+          equipe do dia mudasse.
+        </p>
+      </div>
+      <p>
+        Quem só conta <strong>vê só o que pode contar</strong>: mostrar a lista inteira seria
+        oferecer contagens que a pessoa abre e não consegue preencher — e o “não pode” chegaria
+        no primeiro número digitado, depois da caminhada até a prateleira. A escala aparece no
+        cabeçalho da contagem, para quem não consegue digitar saber por quê sem perguntar.
+      </p>
     </section>
 
     <!-- ================================================================ venda -->
@@ -1392,6 +1478,201 @@
         <strong>aba nova</strong> pede login de novo. É o preço de encerrar ao fechar — e é
         justamente o que a caixinha resolve para quem prefere o contrário.
       </p>
+
+      <h3>Em que loja a pessoa trabalha</h3>
+      <p>
+        Com mais de uma loja aberta, o cadastro do usuário ganha <strong>Onde trabalha</strong>:
+        <em>todas as lojas</em> — o padrão, e o que vale para quem circula entre elas — ou
+        <em>só estas lojas</em>. Restringindo, a pessoa não vê nem escolhe as outras no seletor
+        do topo: saldo, venda, contagem, remessa e apuração passam a ser só da loja dela.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Você só dá o acesso que você tem</p>
+        <p>
+          Quem está lotado na filial <strong>não consegue criar alguém com acesso à matriz</strong>.
+          Sem essa trava, daria para entregar a outra pessoa um alcance que quem entrega não tem
+          — que é como se amplia acesso sem tocar em permissão nenhuma.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">E ninguém se tranca para fora</p>
+        <p>
+          <strong>Reduzir as próprias lojas é recusado.</strong> Quem se lotasse só na filial
+          perderia a matriz de vista — e a regra de cima o impediria de devolvê-la a si mesmo,
+          porque ele já não a enxerga. Para mudar o seu próprio alcance, peça a outro
+          administrador.
+        </p>
+      </div>
+      <p>
+        A tela aplica as lojas escolhidas a <strong>todos os papéis marcados</strong>. O sistema
+        guarda arranjos mais finos que isso — <em>cozinha na matriz e gerente na filial</em> —, e
+        quando encontra um ele <strong>avisa antes do botão</strong>: salvar por cima
+        substituiria o arranjo atual.
+      </p>
+    </section>
+
+    <!-- ================================================================ lojas -->
+    <section id="lojas">
+      <h2>12 · Mais de uma loja</h2>
+      <p class="chamada">
+        Cada loja tem estoque, custo e preço próprios. Quem opera, opera numa de cada vez.
+      </p>
+
+      <p>
+        A loja se cadastra em <strong>Administração ▸ Lojas ▸ Nova loja</strong> — nome, CNPJ,
+        endereço, contato e mesas. Ela <strong>nasce com um local de estoque</strong> chamado
+        “Estoque”: sem local nenhum, nada se movimenta, e o nome é genérico de propósito, para
+        ser trocado pelo que a casa realmente chama aquela prateleira.
+      </p>
+      <p>
+        Os parâmetros de operação — ritmo do fechamento, travas, alertas — ficam
+        <strong>dentro de cada loja</strong>. As integrações com o PDV e o Omie também são por
+        loja, mas moram em <strong>Integrações</strong>, resolvidas pelo seletor do topo: duas
+        portas para a mesma configuração seriam duas versões da mesma verdade.
+      </p>
+
+      <div class="regra">
+        <p class="rotulo">O custo do insumo é da LOJA</p>
+        <p>
+          O café que a matriz comprou a R$ 40/kg e a filial a R$ 52/kg <strong>não vale
+          R$ 45,30 nas duas</strong> — nenhuma pagou isso. Cada loja calcula pelo próprio custo
+          médio, e é esse número que entra na ficha, no custo congelado da venda, na margem e no
+          food cost. Um erro aqui não fica contido, e não faz barulho: nenhum valor parece
+          absurdo, só fica errado e gravado.
+        </p>
+      </div>
+      <p>
+        <strong>A reserva é da rede.</strong> Quando a loja ainda não recebeu o insumo, o custo
+        cai no <em>último preço do fornecedor</em>, que vale para as duas — preço negociado é da
+        casa, não da prateleira. É isso que deixa a filial nova calcular ficha e CMV antes da
+        primeira compra dela.
+      </p>
+
+      <h3>O preço de venda também pode ser por loja</h3>
+      <p>
+        A regra é simples: <strong>o preço da loja manda; sem ele, vale o preço da casa</strong>.
+        A queda não é conveniência — é o caso comum: quem abre a segunda loja cobra o mesmo na
+        maioria dos itens, e obrigar a cadastrar duas vezes faria a filial nascer com centenas
+        de pratos sem preço. E prato sem preço não vende.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Apagar não é zerar</p>
+        <p>
+          Limpar o preço da loja devolve o preço da casa. Pôr <strong>zero</strong> diz que ali
+          o prato é de graça. São afirmações diferentes, e o histórico guarda as duas.
+        </p>
+      </div>
+      <p>
+        <strong>Setor continua global, local é de cada loja</strong> — e isso é decisão, não
+        esquecimento: setor é organização do cardápio (o mesmo prato sai do bar nas duas lojas),
+        local é prateleira física, que é de cada uma.
+      </p>
+
+      <h3>Mandar mercadoria de uma para a outra</h3>
+      <p>
+        É a <strong>remessa</strong>, descrita em <a href="#ajustes">Ajustes de estoque</a>: sai
+        daqui, alguém confere lá, e só então o razão anda nas duas. Enquanto está no caminho, a
+        quantidade continua contando no estoque de quem mandou.
+      </p>
+
+      <h3>A visão da rede</h3>
+      <p>
+        Toda outra tela responde por <em>uma</em> loja, e está certo. Mas o dono de duas precisa
+        ver as duas — e somar de cabeça dois food costs de bases diferentes é a conta que
+        ninguém faz certo. A tela <strong>Rede</strong> roda a <em>mesma</em> apuração de cada
+        loja, uma por vez, e mostra lado a lado.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O food cost da rede se recalcula, não se soma</p>
+        <p>
+          Média de percentuais dá o mesmo peso à loja que vendeu R$ 100 mil e à que vendeu
+          R$ 5 mil — e erra justamente para quem tem uma grande e uma pequena, que é o caso de
+          quem acabou de abrir a segunda. O consolidado divide o CMV total pela receita total.
+        </p>
+      </div>
+      <p>
+        Cada loja declara o <strong>seu</strong> período: uma pode fechar por semana e a outra
+        por mês, e a tela avisa quando eles diferem. E como cada linha sai da mesma apuração que
+        o painel daquela loja usa, <strong>se a soma não bater, o erro está numa das partes</strong>
+        — nunca numa segunda conta escrita só para o consolidado.
+      </p>
+    </section>
+
+    <!-- ============================================================= exportar -->
+    <section id="exportar">
+      <h2>13 · Levar o número para fora</h2>
+      <p class="chamada">
+        O relatório que se manda ao contador, se leva à reunião ou se prende no armário da
+        cozinha.
+      </p>
+
+      <p>
+        Em cada tela de consulta há o botão <strong>Baixar</strong>, e ele abre uma janela: os
+        filtros pertinentes <em>àquele</em> relatório, e a escolha entre
+        <strong>planilha</strong> e <strong>PDF</strong>.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Baixar não é um clique cego</p>
+        <p>
+          Antes, o botão despejava o cadastro inteiro, sempre — e filtrar um produto na tela e
+          baixar dava a planilha completa, calada. Agora a janela diz
+          <strong>quantas linhas viriam</strong> antes do clique, e o que se pediu é o que sai.
+        </p>
+      </div>
+      <p>
+        <strong>Planilha para conferir, PDF para ler.</strong> Os números saem formatados
+        diferente de propósito: a planilha usa vírgula decimal sem separador de milhar (com ele o
+        Excel lê como texto e não soma), e o PDF é para o olho — “1.284.532,10” se lê enquanto
+        “1284532,1” não. O PDF tem teto de linhas; acima dele a resposta manda usar a planilha,
+        que não tem teto.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Todo PDF sai em papel timbrado, e com o carimbo de quem emitiu</p>
+        <p>
+          Um PDF sai da tela e circula: vira anexo de e-mail, papel na mesa do contador, foto no
+          grupo. O cabeçalho leva logo, nome, CNPJ e contato; o rodapé, em três partes, leva o
+          <strong>título do relatório</strong>, <strong>quem emitiu e quando</strong> e a
+          <strong>página X de Y</strong>. Sem essas duas coisas, uma folha solta não se confere
+          contra nada.
+        </p>
+      </div>
+
+      <h3>A ficha técnica se imprime</h3>
+      <p>
+        A ficha existe para ser <em>seguida</em>, e quem segue está de pé na cozinha — não na
+        frente do monitor. Ela sai em <strong>retrato</strong>, com os ingredientes e o modo de
+        preparo, no formato de quem vai prender o papel no armário. Coluna sem informação
+        <strong>não entra</strong>: numa receita simples, “qtd líquida” e “fator de correção”
+        viriam vazias e empurrariam o documento para paisagem — e voltam sozinhas na receita que
+        as usa.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Ver a ficha e ver o custo são permissões diferentes</p>
+        <p>
+          Sem a permissão de custo, <strong>nenhuma coluna nem linha de dinheiro entra no
+          arquivo</strong> — quem esconde é o servidor, como já era na tela. Um PDF é justamente
+          o que sai e circula; se o dinheiro vazasse por aqui, a regra da tela viraria enfeite.
+        </p>
+      </div>
+
+      <h3>A folha de um produto</h3>
+      <p>
+        Na tela do produto, <strong>Baixar</strong> leva cadastro, saldo por local, embalagens de
+        compra, quem fornece e os <strong>últimos</strong> movimentos — não o razão inteiro, que
+        tem relatório próprio. O bloco de estoque exige a permissão de saldos: saldo e custo
+        médio são dados de estoque, e não deixam de ser por estarem no arquivo de um produto.
+      </p>
+      <p>
+        O nome do arquivo carrega o <strong>nome do registro</strong>, não só o número:
+        <code>botane-ficha-bolo-de-cenoura-v2-20260901.pdf</code>. Quem baixa cinco fichas
+        seguidas não fica com cinco números na pasta de Downloads — e na ficha a versão entra
+        junto, porque duas versões do mesmo prato são dois documentos diferentes.
+      </p>
+      <p>
+        E <strong>toda exportação vai para a auditoria com o filtro que a gerou</strong>: sem
+        ele o registro diria só “fulano exportou o estoque”, e a pergunta que se faz depois é
+        sempre <em>o quê, exatamente</em>.
+      </p>
     </section>
 
     <!-- =============================================================== regras -->
@@ -1492,6 +1773,30 @@
               <td>Inventário no celular</td>
               <td><code>inventarios</code>, <code>inventario_itens</code></td>
               <td>Estoque ▸ Inventário</td>
+            </tr>
+            <tr>
+              <td>Remessa entre lojas</td>
+              <td>Transferência com destino em outra loja</td>
+              <td><code>transferencias</code>, <code>transferencia_itens</code></td>
+              <td>Estoque ▸ Remessas entre lojas</td>
+            </tr>
+            <tr>
+              <td>Preço de venda</td>
+              <td>Cadastro do produto, cardápio do PDV</td>
+              <td><code>produto_precos</code> (da casa ou da loja)</td>
+              <td>Produto ▸ Preço</td>
+            </tr>
+            <tr>
+              <td>Em que loja a pessoa trabalha</td>
+              <td>Cadastro do usuário</td>
+              <td><code>usuario_papeis</code> (loja vazia = todas)</td>
+              <td>Administração ▸ Usuários</td>
+            </tr>
+            <tr>
+              <td>Fila de envio ao PDV</td>
+              <td>Alteração de cadastro, com o envio ligado</td>
+              <td><code>pdv_pendencias</code>, <code>pdv_envios</code></td>
+              <td>Cadastros ▸ Exportação para o PDV</td>
             </tr>
             <tr>
               <td>Fechamento do período</td>

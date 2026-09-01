@@ -76,6 +76,34 @@ OPERACAO = [
 # existir não é dado, é lixo.
 APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores"]
 
+# ---------------------------------------------------------------------------
+# Filiais de teste
+# ---------------------------------------------------------------------------
+# 🔑 **As suítes criam uma loja por rodada, e ninguém as apagava.** `unidades`
+# está em PRESERVADAS — é cadastro base, e numa casa de verdade a loja fica —,
+# então elas se acumulavam: dezenove numa base de desenvolvimento. E não é só
+# sujeira de lista: **filial ATIVA muda a barra superior**, porque o seletor de
+# loja aparece e vira o primeiro `<select>` do documento; aí checagens de tela
+# que nada têm a ver com loja passam a ler id de loja.
+#
+# ⚠️ **O critério é ESTAR INATIVA, não o nome.** As suítes desativam a filial
+# delas no `atexit`, então "inativa" é exatamente a marca que elas deixam — e
+# casar por nome ("Filial de teste…") seria adivinhação, que é o palpite que
+# este projeto já removeu uma vez. A loja que a casa usa está ativa, e fica.
+# ⚠️ A matriz nunca entra, marcada ou não: sem ela não há loja padrão.
+_FILIAIS = "SELECT id FROM unidades WHERE NOT ativo AND NOT matriz"
+
+_SQL_FILIAIS_CONTAR = f"SELECT count(*) AS n FROM ({_FILIAIS}) AS f"
+
+# A ordem importa: o que aponta para a loja sai antes dela.
+_SQL_FILIAIS = [
+    f"DELETE FROM locais_estoque WHERE id_unidade IN ({_FILIAIS})",
+    f"DELETE FROM setores WHERE id_unidade IN ({_FILIAIS})",
+    f"DELETE FROM parametros WHERE id_unidade IN ({_FILIAIS})",
+    f"DELETE FROM integracoes WHERE id_unidade IN ({_FILIAIS})",
+    f"DELETE FROM unidades WHERE id IN ({_FILIAIS})",
+]
+
 PRESERVADAS = [
     "empresa", "unidades", "parametros", "locais_estoque",
     "setores", "categorias", "unidades_medida", "perda_motivos",
@@ -146,6 +174,7 @@ def main() -> int:
     limpar_usuarios = "--usuarios-de-teste" in argumentos
     so_o_admin = "--so-o-admin" in argumentos
     limpar_apoio = "--tabelas-de-apoio" in argumentos
+    limpar_filiais = "--filiais-de-teste" in argumentos
 
     # A trava que importa: este script existe para a base LOCAL de
     # desenvolvimento. Apontado para outro servidor, ele para aqui.
@@ -199,6 +228,13 @@ def main() -> int:
         rotulo = "além do administrador" if so_o_admin else "de teste"
         print(f"\n  + {quantos} usuário(s) {rotulo} também sairão")
 
+    if limpar_filiais:
+        with get_cursor() as cur:
+            cur.execute(_SQL_FILIAIS_CONTAR)
+            quantas = cur.fetchone()["n"]
+        print(f"\n  + {quantas} loja(s) INATIVA(s) tambem sairao, com os locais,")
+        print("    parametros, setores e integracoes que sao so delas")
+
     if simular:
         print("\n(--simular: nada foi apagado)")
         return 0
@@ -226,6 +262,13 @@ def main() -> int:
             # truncados acima. O administrador nunca entra na conta: sem ele
             # ninguém entra para criar os outros.
             cur.execute(_sql_usuarios(so_o_admin), (ADMIN_EMAIL,))
+
+        if limpar_filiais:
+            # ⚠️ **Depois do TRUNCATE**, nunca antes: enquanto houver movimento,
+            # venda ou nota apontando para a loja, a exclusão bate na chave
+            # estrangeira. Limpa a operação primeiro e a loja fica solta.
+            for comando in _SQL_FILIAIS:
+                cur.execute(comando)
 
         depois = contar(cur, alvos)
 
