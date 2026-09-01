@@ -218,6 +218,49 @@ checar("deixa lançar saída sem saldo", st == 201, r)
 checar("mas marca como custo provisório", r.get("custo_provisorio") is True, r)
 checar("saldo fica negativo (-3)", perto(r.get("saldo"), -3), r.get("saldo"))
 
+# 🔑 **E dá para PERGUNTAR quais são.** A etiqueta na linha do razão existe
+# desde sempre, mas com centenas de movimentos ela só ajuda quem já está
+# olhando para a linha certa — não havia filtro. Cada linha destas é uma
+# entrada que ninguém lançou, e cada uma deixa o CMV torto até ser lançada.
+st, provisorios = chamar(
+    "GET", f"/estoque/movimentos?apenas_provisorios=true&id_produto={novo}", token=token)
+checar("o razão filtra por custo provisório", st == 200, st)
+checar("e traz a saída que acabou de sair provisória",
+       any(m["id"] == r.get("id") for m in (provisorios or [])),
+       [m["id"] for m in (provisorios or [])])
+checar("e NADA que tenha custo firme entra no filtro",
+       all(m["custo_provisorio"] for m in (provisorios or [])),
+       [m["id"] for m in (provisorios or []) if not m["custo_provisorio"]])
+# ⚠️ Contra a lista SEM o filtro, nunca contra um número fixo: a base é
+# compartilhada e "19 provisórias" seria o estado do dia.
+st, todos_do_produto = chamar(
+    "GET", f"/estoque/movimentos?id_produto={novo}", token=token)
+checar("e o filtro de fato corta alguma coisa",
+       len(provisorios or []) <= len(todos_do_produto or []),
+       (len(provisorios or []), len(todos_do_produto or [])))
+
+# ⚠️ **O ARQUIVO tem de aceitar o mesmo filtro.** Filtrar na tela e baixar
+# outra coisa faz quem confere os dois achar que um deles mente — é a razão de
+# o razão exportado já espelhar período, produto, tipo e local.
+texto = baixar_texto(
+    "/exportar/movimentos.csv?inicio=2020-01-01&fim=2030-01-01&provisorio=true", token)
+checar("a planilha do razão aceita o filtro", "Custo provis" in texto, texto[:200])
+linhas_csv = [l for l in texto.splitlines() if l.startswith("Movimentos;")]
+checar("e conta as mesmas linhas que a tela",
+       linhas_csv and int(linhas_csv[0].split(";")[1]) >= len(provisorios or []),
+       (linhas_csv, len(provisorios or [])))
+
+# 🔑 **O razão não filtrava por LOJA** — e o CSV sempre filtrou. Com duas lojas
+# a tela misturava os movimentos das duas enquanto o arquivo trazia só os
+# desta: a divergência exata que o razão exportado existe para não ter.
+st, do_razao = chamar("GET", "/estoque/movimentos?limite=200", token=token, unidade=1)
+if do_razao:
+    with get_cursor() as cur:
+        cur.execute("SELECT count(DISTINCT id_unidade) AS n FROM estoque_movimentos "
+                    "WHERE id = ANY(%s)", ([m["id"] for m in do_razao],))
+        lojas_na_resposta = cur.fetchone()["n"]
+    checar("o razão responde por UMA loja, a atual", lojas_na_resposta == 1, lojas_na_resposta)
+
 print("4c. movimento no futuro não existe")
 # ⚠️ A trava do período fechado olha para trás; para a frente não olhava
 # ninguém. Uma venda datada com o dia de UTC — às 22h de Brasília, já é o dia

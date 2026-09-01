@@ -1269,6 +1269,50 @@ try {
   const temLupaNoFiltro = await p.evaluate(
     () => document.querySelectorAll('button[aria-label="Buscar produto"]').length);
   checar("o filtro do razão tem a lupa de busca", temLupaNoFiltro > 0, temLupaNoFiltro);
+
+  // 🔑 **A saída que não achou saldo sai por custo PROVISÓRIO**, e cada uma é
+  // uma entrada que ninguém lançou. A etiqueta na linha sempre existiu; o que
+  // faltava era poder PERGUNTAR quais são.
+  // ⚠️ A afirmação é sobre a propriedade, não sobre o estado do dia: marcando
+  // a caixinha, tudo o que sobrar tem de estar marcado como provisório — e
+  // lista vazia é resposta legítima (quer dizer que não há entrada faltando).
+  const temCaixaProvisorio = await p.evaluate(
+    () => !!document.querySelector("#so-provisorios"));
+  checar("o razão oferece filtrar só o custo provisório", temCaixaProvisorio);
+  if (temCaixaProvisorio) {
+    await p.evaluate(() => document.querySelector("#so-provisorios")?.click());
+    await p.waitForFunction(
+      () => !document.body.innerText.includes("Carregando"), { timeout: 12000 },
+    ).catch(() => {});
+    await new Promise((r) => setTimeout(r, 1400));
+    const soProvisorios = await p.evaluate(() => {
+      const linhas = [...document.querySelectorAll("main table tbody tr")];
+      return {
+        linhas: linhas.length,
+        // A etiqueta mora na mesma célula do tipo do movimento.
+        todasMarcadas: linhas.every((tr) => /custo provis[óo]rio/i.test(tr.innerText)),
+        explica: /custo\s+estimado|entrada que falta/i.test(document.body.innerText),
+        vazioExplica: /n[ãa]o h[áa] entrada faltando/i.test(document.body.innerText),
+      };
+    });
+    checar("e o que sobra está todo marcado como provisório",
+      soProvisorios.linhas === 0 || soProvisorios.todasMarcadas, soProvisorios);
+    // ⚠️ Lista vazia é a BOA notícia — e precisa dizer isso, senão parece que o
+    // filtro não funcionou.
+    checar("dizendo o que fazer, ou que não há nada a fazer",
+      soProvisorios.linhas ? soProvisorios.explica : soProvisorios.vazioExplica,
+      soProvisorios);
+    // ⚠️ **O ARQUIVO tem de oferecer o mesmo recorte.** Filtro que existe num
+    // lado só recria a divergência que o razão exportado existe para não ter —
+    // e quem declara o que a janela oferece é o catálogo do SERVIDOR.
+    const { dados: catalogo } = await api("GET", "/exportar/catalogo", null, token);
+    const razaoNoCatalogo = (catalogo ?? []).find((r) => r.chave === "movimentos");
+    checar("e a janela de exportação oferece o mesmo filtro",
+      (razaoNoCatalogo?.filtros ?? []).some((f) => f.nome === "provisorio"),
+      (razaoNoCatalogo?.filtros ?? []).map((f) => f.nome));
+    await p.evaluate(() => document.querySelector("#so-provisorios")?.click());
+    await new Promise((r) => setTimeout(r, 1200));
+  }
   await p.evaluate(() => {
     document.querySelector('button[aria-label="Buscar produto"]')?.click();
   });

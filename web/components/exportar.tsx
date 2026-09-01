@@ -32,7 +32,7 @@ type Opcao = { valor: string | number; nome: string };
 
 type FiltroDoServidor = {
   nome: string;
-  tipo: "periodo" | "multipla" | "produtos" | "texto" | "numero";
+  tipo: "periodo" | "multipla" | "produtos" | "texto" | "numero" | "sim_nao";
   rotulo: string;
   ajuda: string;
   opcoes?: Opcao[];
@@ -75,6 +75,10 @@ function comoQuery(valores: ValoresIniciais): string {
   const q = new URLSearchParams();
   for (const [chave, valor] of Object.entries(valores)) {
     if (valor === null || valor === undefined || valor === "") continue;
+    // ⚠️ Caixinha desmarcada é "não filtrei": mandar `provisorio=false` funciona
+    // (o servidor lê o mesmo), mas suja a URL e a auditoria com um filtro que
+    // ninguém escolheu.
+    if (valor === false) continue;
     if (Array.isArray(valor)) {
       for (const v of valor) q.append(chave, String(v));
     } else {
@@ -334,6 +338,24 @@ function Dialogo({
                         </ul>
                       )}
                     </div>
+                  );
+                }
+
+                if (f.tipo === "sim_nao") {
+                  return (
+                    <label key={f.nome} className="flex items-start gap-2 self-end pb-2">
+                      <input
+                        type="checkbox"
+                        id={`filtro-${f.nome}`}
+                        className="mt-0.5 h-4 w-4 accent-erva"
+                        checked={valores[f.nome] === true}
+                        onChange={(e) => trocar(f.nome, e.target.checked)}
+                      />
+                      <span>
+                        <span className="block text-[14px]">{f.rotulo}</span>
+                        <span className="block text-[12.5px] text-suave">{f.ajuda}</span>
+                      </span>
+                    </label>
                   );
                 }
 

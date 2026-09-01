@@ -107,6 +107,12 @@ FILTROS: dict[str, dict] = {
     "produtos": {"tipo": "produtos", "rotulo": "Produtos",
                  "ajuda": "todos os produtos"},
     "busca": {"tipo": "texto", "rotulo": "Produto contém", "ajuda": "código ou parte do nome"},
+    # 🔑 A saída que não achou saldo sai por um custo PROVISÓRIO, e cada uma
+    # delas é uma entrada que ninguém lançou. ⚠️ Vale como filtro do ARQUIVO
+    # porque a tela passou a oferecê-lo: filtro que existe num lado só recria a
+    # divergência que o razão exportado existe para não ter.
+    "provisorio": {"tipo": "sim_nao", "rotulo": "Só custo provisório",
+                   "ajuda": "todos os movimentos"},
     "dias": {"tipo": "numero", "rotulo": "Vencendo em até (dias)",
              "ajuda": "o prazo configurado na loja"},
 }
@@ -269,7 +275,9 @@ def _movimentos(cur, id_unidade: int, f: dict) -> Saida:
     cur.execute(
         """SELECT m.data_movimento, m.tipo, p.codigo, p.nome AS produto, l.nome AS local,
                   m.quantidade, m.custo_unitario, m.custo_total, m.saldo_apos,
-                  m.custo_medio_apos, m.documento, pm.nome AS motivo, m.observacao,
+                  m.custo_medio_apos,
+                  CASE WHEN m.custo_provisorio THEN 'sim' END AS provisorio,
+                  m.documento, pm.nome AS motivo, m.observacao,
                   u.nome AS usuario
              FROM estoque_movimentos m
              JOIN produtos p ON p.id = m.id_produto
@@ -284,12 +292,14 @@ def _movimentos(cur, id_unidade: int, f: dict) -> Saida:
               AND (%(busca)s::varchar IS NULL
                    OR lower(p.nome) LIKE lower('%%' || %(busca)s || '%%')
                    OR lower(p.codigo) LIKE lower('%%' || %(busca)s || '%%'))
+              AND (NOT %(provisorio)s OR m.custo_provisorio)
             ORDER BY m.id""",
         # ⚠️ `fim` é dia CHEIO: `<= fim` cortaria o que foi lançado às 14h do
         # próprio dia, porque `data_movimento` guarda data e hora.
         {"unidade": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),
          "tipos": _lista(f.get("tipos_movimento")), "locais": _lista(f.get("locais")),
-         "produtos": _lista(f.get("produtos")), "busca": f.get("busca") or None},
+         "produtos": _lista(f.get("produtos")), "busca": f.get("busca") or None,
+         "provisorio": bool(f.get("provisorio"))},
     )
     linhas = [dict(r) for r in cur.fetchall()]
     for l in linhas:
@@ -300,6 +310,9 @@ def _movimentos(cur, id_unidade: int, f: dict) -> Saida:
          ("produto", "Produto"), ("local", "Local"), ("quantidade", "Quantidade"),
          ("custo_unitario", "Custo unitário"), ("custo_total", "Custo total"),
          ("saldo_apos", "Saldo depois"), ("custo_medio_apos", "Custo médio depois"),
+         # ⚠️ Vazia quando o custo é firme, e não "não": a coluna é um alerta,
+         # e uma coluna com 600 "não" e 3 "sim" esconde os três.
+         ("provisorio", "Custo provisório"),
          ("documento", "Documento"), ("motivo", "Motivo"), ("observacao", "Observação"),
          ("usuario", "Quem lançou")],
         f"Razão de estoque — {_intervalo(inicio, fim)}",
@@ -588,7 +601,8 @@ RELATORIOS: dict[str, Relatorio] = {
     "movimentos": Relatorio(
         "Razão de estoque", "Cada movimento do período, com saldo e custo médio depois dele.",
         "estoque.saldos", "movimentos",
-        ("periodo", "tipos_movimento", "locais", "produtos", "busca"), _movimentos),
+        ("periodo", "tipos_movimento", "locais", "produtos", "busca", "provisorio"),
+        _movimentos),
     "produtos": Relatorio(
         "Cadastro de produtos", "A ficha de cadastro de cada item, com unidade e preço.",
         "cadastros.produtos", "produtos",

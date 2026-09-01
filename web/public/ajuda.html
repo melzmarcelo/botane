@@ -1097,6 +1097,28 @@
         </p>
       </div>
 
+      <h3>A saída que sai por um custo estimado</h3>
+      <p>
+        A cozinha usa antes de a nota chegar. Travar a operação por causa disso seria pior, então
+        o sistema deixa a saída passar: ela sai pelo <strong>último custo conhecido</strong> —
+        ou por zero, se aquele produto nunca teve entrada — e a linha nasce marcada no razão como
+        <strong>custo provisório</strong>. O saldo fica negativo, à vista.
+      </p>
+      <p>
+        Quando a entrada que faltava é lançada, ela <strong>revaloriza o que já saiu</strong>: o
+        custo médio passa a valer para o saldo negativo inteiro. É por isso que, enquanto o
+        buraco existe, o relatório de movimentação pode não fechar por alguns reais — não é erro
+        de cálculo, é uma correção que ainda não aconteceu.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Como achar todas de uma vez</p>
+        <p>
+          Em <strong>Estoque ▸ Movimentos</strong>, marque <strong>só custo provisório</strong>.
+          Cada linha é uma entrada que ninguém lançou. Lista vazia é a boa notícia. O botão de
+          baixar aceita o mesmo recorte, e a planilha traz a coluna <em>Custo provisório</em>.
+        </p>
+      </div>
+
       <h3>Lote e validade</h3>
       <p>
         Opcionais, ligados só em quem precisa. Quando ligados, a saída escolhe o lote sozinha:

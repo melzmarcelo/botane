@@ -262,6 +262,13 @@ Não. A cozinha usa antes de a nota chegar, e travar a operação por causa diss
 seria pior. O movimento fica marcado como **custo provisório**, e se acerta
 quando a nota entra.
 
+**Como eu acho todas as saídas com custo provisório?**
+Em **Estoque → Movimentos**, marque **só custo provisório**. Cada linha que
+aparecer é uma entrada que ainda não foi lançada — lançar a nota que falta
+resolve as duas coisas de uma vez: o saldo volta ao lugar e o custo daquela
+saída passa a ser o de verdade. Lista vazia é a boa notícia. O botão de baixar
+aceita o mesmo recorte, e a planilha traz a coluna **Custo provisório**.
+
 **Por que não vejo os valores?**
 Custo é informação restrita por papel. Cozinha vê a receita e não vê o dinheiro.
 Se você precisa ver, peça ao administrador.

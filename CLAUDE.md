@@ -134,6 +134,32 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.
+- 🔑 **"Quais são as provisórias?" não tinha resposta** (01/09/2026, pedido do dono). A saída
+  que não acha saldo sai por um custo **estimado** e a linha nasce marcada no razão — mas com
+  centenas de movimentos a etiqueta só ajuda quem já está olhando para a linha certa. Cada uma
+  delas é **uma entrada que ninguém lançou**, e deixa o CMV torto até ser lançada.
+  `?apenas_provisorios=true` no razão, caixinha **"só custo provisório"** na tela.
+  ⚠️ **Caixinha, não mais um valor no seletor de Movimento**: não é um TIPO de movimento — é
+  uma marca que qualquer saída pode ter. Dentro daquela lista pareceria excludente das outras.
+  ⚠️ **Lista vazia é a BOA notícia**, e a tela diz isso ("não há entrada faltando"): o
+  "nenhum movimento com esses filtros" de sempre faria parecer que o filtro não funcionou.
+  ⚠️ **E a lista precisa dizer o que FAZER** — ela é de saídas esperando uma entrada, não de
+  erros a corrigir no razão, que é append-only.
+  ⚠️ **O ARQUIVO aceita o mesmo filtro**, e ganhou a coluna "Custo provisório" — filtro que
+  existe num lado só recria a divergência que o razão exportado existe para não ter. A coluna
+  vem **vazia** quando o custo é firme, e não "não": ela é um alerta, e 600 "não" ao lado de 3
+  "sim" escondem os três.
+  🔑 **Nasceu daí o primeiro filtro de SIM OU NÃO da janela de exportação** (`tipo: "sim_nao"`).
+  ⚠️ E `False` sai do que vai para a auditoria **por identidade** (`v is not False`): registrar
+  `provisorio: false` em toda exportação é ruído, mas `v not in (None, [], "", False)` levaria
+  junto o `dias=0`, que é filtro legítimo — em Python `0 == False`.
+- 🔑 **E o razão NÃO filtrava por loja** (01/09/2026). `GET /estoque/movimentos` não tinha
+  `id_unidade` no `WHERE` — enquanto o CSV do razão sempre teve. Com duas lojas a tela
+  misturava os movimentos das duas e o arquivo baixado trazia só os desta: a divergência exata
+  que aquele endpoint documenta querer evitar. Medido na base local: 22 linhas de outras lojas
+  numa página de 500. É a mesma dívida que vendas, inventários e locais já pagaram — **toda
+  lista de coisa que tem `id_unidade` nasce com ela**, e ela só aparece no dia em que a segunda
+  loja existe.
 - **O razão filtra por período, produto, tipo e local** (20/08/2026): `GET /estoque/movimentos`
   ganhou `inicio`/`fim`/`busca` (os mesmos nomes do CSV) e a tela ganhou a barra de filtro com
   paginação de 100 por `X-Total`. ⚠️ `fim` é dia **cheio** (`< fim + 1`): `<= fim` cortaria o que
@@ -1989,8 +2015,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.599 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (135), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.606 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
+  `smoke_fichas.py` (37), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
@@ -1999,7 +2025,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (385, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (389, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

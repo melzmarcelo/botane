@@ -247,12 +247,26 @@ def movimentos(
     inicio: date | None = None,
     fim: date | None = None,
     busca: str | None = None,
+    # 🔑 **A saída que não achou saldo sai por um custo PROVISÓRIO** — o último
+    # que o sistema conhece, ou zero. A linha nasce marcada no razão, mas com
+    # centenas de movimentos a etiqueta só ajuda quem já está olhando para ela:
+    # não havia como perguntar "quais são?". A resposta é uma entrada que
+    # ninguém lançou, e cada uma delas está deixando o CMV torto até ser
+    # lançada.
+    apenas_provisorios: bool = False,
     limite: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
     ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
 ) -> list[dict]:
     with get_cursor() as cur:
+        # 🔑 **O razão não filtrava por LOJA** — e o CSV do razão sempre filtrou.
+        # Com duas lojas a tela mostrava os movimentos das duas misturados
+        # enquanto o arquivo baixado trazia só os desta, que é a divergência
+        # exata que este endpoint documenta querer evitar. Mesma dívida que
+        # vendas, inventários e locais já pagaram: toda lista de coisa que tem
+        # `id_unidade` nasce com ela.
+        id_unidade = unidade_atual(cur, ctx)
         linhas = pagina(
             cur,
             """
@@ -271,7 +285,8 @@ def movimentos(
               JOIN locais_estoque l ON l.id = m.id_local
               LEFT JOIN perda_motivos pm ON pm.id = m.id_motivo_perda
               LEFT JOIN usuarios u ON u.id = m.id_usuario
-             WHERE (%s::int IS NULL OR m.id_produto = %s)
+             WHERE m.id_unidade = %s
+               AND (%s::int IS NULL OR m.id_produto = %s)
                AND (%s::int IS NULL OR m.id_local = %s)
                AND (%s::varchar IS NULL OR m.tipo = %s)
                AND (%s::date IS NULL OR m.data_movimento >= %s)
@@ -281,10 +296,11 @@ def movimentos(
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
+               AND (NOT %s OR m.custo_provisorio)
              ORDER BY m.id DESC
             """,
-            (id_produto, id_produto, id_local, id_local, tipo, tipo,
-             inicio, inicio, fim, fim, busca, busca, busca),
+            (id_unidade, id_produto, id_produto, id_local, id_local, tipo, tipo,
+             inicio, inicio, fim, fim, busca, busca, busca, apenas_provisorios),
             limite=limite, offset=offset, resposta=resposta,
         )
     for l in linhas:

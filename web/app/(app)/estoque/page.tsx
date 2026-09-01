@@ -116,6 +116,11 @@ export default function PaginaEstoque() {
   const [movLocal, setMovLocal] = useState("");
   const [movInicio, setMovInicio] = useState("");
   const [movFim, setMovFim] = useState("");
+  // 🔑 **A saída que não achou saldo sai por um custo PROVISÓRIO**, e cada uma
+  // é uma entrada que ninguém lançou. A etiqueta na linha sempre existiu, mas
+  // com centenas de movimentos ela só ajuda quem já está olhando para a linha
+  // certa — não havia como perguntar "quais são?".
+  const [movProvisorio, setMovProvisorio] = useState(false);
   const [tipos, setTipos] = useState<TipoMovimento[]>([]);
   const pagSaldos = usePaginacao("saldos", {
     // ⚠️ `rede` entra como filtro: trocar de modo muda o número de linhas, e
@@ -124,7 +129,7 @@ export default function PaginaEstoque() {
   });
   const pagMov = usePaginacao("razao", {
     padrao: 100,
-    filtros: [movBusca, produtoMov?.id, movTipo, movLocal, movInicio, movFim],
+    filtros: [movBusca, produtoMov?.id, movTipo, movLocal, movInicio, movFim, movProvisorio],
   });
 
   const carregar = useCallback(async () => {
@@ -165,7 +170,8 @@ export default function PaginaEstoque() {
   }, [busca, produtoSaldo, idLocal, comSaldo, rede, inativos,
       pagSaldos.offset, pagSaldos.porPagina]);
 
-  const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio || movFim);
+  const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio
+    || movFim || movProvisorio);
 
   const carregarMovimentos = useCallback(async () => {
     try {
@@ -176,6 +182,7 @@ export default function PaginaEstoque() {
       if (movLocal) q.set("id_local", movLocal);
       if (movInicio) q.set("inicio", movInicio);
       if (movFim) q.set("fim", movFim);
+      if (movProvisorio) q.set("apenas_provisorios", "true");
       const { itens, total } = await api.listar<Movimento>(`/estoque/movimentos?${q}`);
       setMovimentos(itens);
       pagMov.setTotal(total);
@@ -183,7 +190,7 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim,
+  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim, movProvisorio,
       pagMov.offset, pagMov.porPagina]);
 
   useEffect(() => {
@@ -233,6 +240,7 @@ export default function PaginaEstoque() {
     locais: movLocal ? [Number(movLocal)] : [],
     produtos: produtoMov ? [{ id: produtoMov.id, rotulo: produtoMov.rotulo }] : [],
     busca: produtoMov ? "" : movBusca.trim(),
+    provisorio: movProvisorio,
   };
 
   return (
@@ -575,6 +583,19 @@ export default function PaginaEstoque() {
                 ))}
               </select>
             </label>
+            {/* ⚠️ Caixinha, e não mais um valor no seletor de Movimento: não é
+                um TIPO de movimento — é uma marca que qualquer saída pode ter.
+                Dentro daquela lista ela pareceria excludente das outras. */}
+            <label className="flex items-center gap-2 pb-2">
+              <input
+                type="checkbox"
+                id="so-provisorios"
+                className="h-4 w-4 accent-erva"
+                checked={movProvisorio}
+                onChange={(e) => setMovProvisorio(e.target.checked)}
+              />
+              <span className="text-[14px]">só custo provisório</span>
+            </label>
             {temFiltroMov && (
               <button
                 type="button"
@@ -586,6 +607,7 @@ export default function PaginaEstoque() {
                   setMovLocal("");
                   setMovInicio("");
                   setMovFim("");
+                  setMovProvisorio(false);
                 }}
               >
                 Limpar
@@ -602,13 +624,27 @@ export default function PaginaEstoque() {
               : undefined
           }
         >
+          {/* Quem liga o filtro precisa saber o que fazer com o resultado: a
+              lista é de saídas esperando uma entrada, não de erros a corrigir
+              no razão — que é append-only. */}
+          {movProvisorio && !!movimentos?.length && (
+            <p className="mb-3 text-[12.5px] text-suave">
+              Cada linha saiu por um custo <strong>estimado</strong> porque não havia saldo do
+              produto na hora. Lançar a entrada que falta resolve: ela revaloriza o que já saiu
+              e o custo passa a ser o de verdade.
+            </p>
+          )}
           {!movimentos ? (
             <Carregando />
           ) : !movimentos.length ? (
             <Vazio>
-              {temFiltroMov
-                ? "Nenhum movimento com esses filtros."
-                : "Nenhum movimento ainda."}
+              {/* ⚠️ Lista vazia aqui é a BOA notícia, e "nenhum movimento com
+                  esses filtros" faria parecer que o filtro não funcionou. */}
+              {movProvisorio
+                ? "Nenhuma saída por custo provisório no recorte — não há entrada faltando."
+                : temFiltroMov
+                  ? "Nenhum movimento com esses filtros."
+                  : "Nenhum movimento ainda."}
             </Vazio>
           ) : (
             <div className="overflow-x-auto">

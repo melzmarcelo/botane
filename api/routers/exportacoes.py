@@ -132,18 +132,30 @@ class _Filtros:
         produtos: list[int] | None = Query(default=None),
         busca: str | None = None,
         dias: int | None = Query(default=None, ge=0, le=365),
+        # ⚠️ Booleano, e não lista: "só as provisórias" é uma pergunta de sim ou
+        # não. Ausente e `false` são a mesma coisa — todos os movimentos.
+        provisorio: bool = False,
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "locais": locais, "setores": setores,
             "categorias": categorias, "tipos_produto": tipos_produto,
             "tipos_movimento": tipos_movimento, "situacao": situacao,
             "classes": classes, "produtos": produtos, "busca": busca, "dias": dias,
+            "provisorio": provisorio,
         }
 
     def preenchidos(self) -> dict:
-        """Só o que veio — é isto que vai para a auditoria."""
+        """Só o que veio — é isto que vai para a auditoria.
+
+        ⚠️ **`False` sai por IDENTIDADE, não por igualdade.** Um booleano
+        desmarcado é "não filtrei", e registrá-lo em toda exportação encheria a
+        auditoria de `provisorio: false`. Mas `v not in (None, [], "", False)`
+        derrubaria junto o `dias=0` — que é um filtro legítimo ("vencendo
+        hoje") —, porque em Python `0 == False`.
+        """
         return {k: (str(v) if isinstance(v, date) else v)
-                for k, v in self.como_dict.items() if v not in (None, [], "")}
+                for k, v in self.como_dict.items()
+                if v is not False and v not in (None, [], "")}
 
 
 # ⚠️ `/catalogo` e `/inventario/...` são declarados ANTES de `/{relatorio}`: o
