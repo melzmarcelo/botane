@@ -117,9 +117,13 @@ export default function FormularioFornecedor({
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <Cartao titulo="Identificação">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* ⚠️ `uppercase` é só CSS, e é de propósito: o valor gravado é
+              normalizado pelo BANCO (gatilho da migração 050). A classe existe
+              para quem digita ver o que vai ser gravado, em vez de descobrir
+              depois — mesma dica que o cadastro de produto tem. */}
           <Campo rotulo="Razão social / nome" className="sm:col-span-2">
             <input
-              className="campo"
+              className="campo uppercase"
               required
               minLength={2}
               value={f.nome}
@@ -128,7 +132,7 @@ export default function FormularioFornecedor({
           </Campo>
           <Campo rotulo="Nome fantasia">
             <input
-              className="campo"
+              className="campo uppercase"
               value={f.nome_fantasia}
               onChange={(e) => setF({ ...f, nome_fantasia: e.target.value })}
             />

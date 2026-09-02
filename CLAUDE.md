@@ -471,8 +471,37 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **Toda suíte que compara nome de produto precisa de `.upper()`** — onze checagens de API e
   seis de tela caíram de uma vez quando o gatilho entrou, e nenhuma por bug: elas afirmavam sobre
   o que mandaram, não sobre o que foi gravado.
-  ⚠️ Nome de **fornecedor** NÃO segue a regra: é razão social, vem de um lugar só, e "Cia.
-  Brasileira de Distribuição" em caixa alta perde a leitura sem ganhar nada.
+  ⚠️ ~~Nome de **fornecedor** NÃO segue a regra~~ — **revertido em 01/09/2026** (ver a
+  migração 050 logo abaixo). O argumento era: "é razão social, vem de um lugar só, e 'Cia.
+  Brasileira de Distribuição' em caixa alta perde a leitura sem ganhar nada".
+- 🔑 **Fornecedor e tabelas de apoio também em MAIÚSCULAS** (migração 050, 01/09/2026, pedido
+  do dono — e é uma REVERSÃO da nota acima). O argumento antigo vale para LER um nome isolado;
+  é falso para o que a casa faz o dia inteiro, que é percorrer uma COLUNA procurando um item.
+  Ali a caixa alternada quebra a varredura — e ter produto em caixa alta ao lado de fornecedor
+  em caixa mista deixa a tela com duas convenções.
+  Estado da base: 43 fornecedores, 31 setores, 111 locais, 14 categorias e 17 unidades fora do
+  padrão. Cobre `fornecedores.nome` e `nome_fantasia`, `setores`, `locais_estoque`,
+  `categorias` e `unidades_medida.nome`.
+  ⚠️ **Gatilho, e não helper — a mesma razão da 036.** Estes nomes são escritos pelo
+  formulário, pelo importador de fornecedores do Omie, pela família do Omie que vira categoria,
+  pelo grupo e pela impressora do cardápio do PDV, e pela loja nova que nasce com um local.
+  ⚠️ **NENHUMA colisão era possível**, e foi medido: a unicidade de `setores`, `locais_estoque`
+  e `perda_motivos` já é `lower(nome)` — dois nomes que só diferem na caixa nunca puderam
+  coexistir. Os 65 "ESTOQUE" da base são de 65 lojas, e a unicidade do local é
+  `(id_unidade, lower(nome))`.
+  ⚠️ **`unidades_medida.sigla` fica FORA, e não é esquecimento**: é chave primária referenciada
+  por produto, ficha, item de nota e razão — subir a caixa ali não renomeia um rótulo, quebra o
+  de-para. Mesma razão pela qual `produtos.codigo` ficou fora da 036.
+  ⚠️ **`perda_motivos` fica fora de propósito**: não é uma das quatro tabelas da tela, e
+  "Quebra no transporte" é uma frase, não um rótulo de coluna.
+  ⚠️ **Dez checagens de API e três de tela caíram de uma vez, e nenhuma por defeito** — em
+  `smoke_cadastros`, `smoke_notas`, `smoke_pdv_legal`, `smoke_produto_do_omie`, nos dois
+  cenários e no `verificar.mjs`. Todas afirmavam sobre o que MANDARAM, não sobre o que foi
+  gravado. É exatamente o que a 036 já tinha custado a onze; a lição não muda, mas o número de
+  suítes que a esquecem, sim.
+  ⚠️ **E a LIMPEZA da suíte de tela também casava pelo nome que mandou** — o setor de teste
+  ficava ATIVO e a base acumulava um por rodada. Ao mexer numa regra de dado, procurar o nome
+  nas asserções **e** no teardown.
 - 🔑 **As tabelas de apoio deixaram de ser só-leitura depois de criadas**
   (01/09/2026, pedido do dono). Dava para criar e desativar, e **não dava para
   CORRIGIR** — os quatro PUT existem no servidor desde o começo e nenhuma tela os
@@ -2272,6 +2301,12 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   explicar. Virou `BuscaCadastro`, que é o padrão da casa exatamente para isto. A regra de bolso
   do `<select>` continua valendo — **poucos por natureza** (categoria, setor, local, unidade) —,
   e produto nunca foi disso.
+- ⚠️ **Sono fixo depois de abrir a CONTAGEM derrubou a rodada três vezes num dia** (01/09/2026).
+  Os 2,2 s bastavam com dez linhas e pararam de bastar com uma contagem de centenas: a checagem
+  media a tela ainda em branco e acusava a contagem de não ter campo nenhum. Virou espera pelo
+  campo de digitar. ⚠️ E o passo seguinte fazia `c.focus()` sem guarda: com a tela vazia era
+  `Cannot read properties of null`, e a rodada INTEIRA morria ali — **um `checar` que falha
+  custa uma linha; uma exceção custa as trezentas checagens seguintes.**
 - ⚠️ **Foto de página inteira não pode derrubar a bateria.** `fullPage` estoura o
   `protocolTimeout` do Chrome numa tela longa; aconteceu com o painel de CMV e voltou a acontecer
   quando Integrações ganhou o segundo bloco de agenda — e levou junto as 280 checagens da rodada.

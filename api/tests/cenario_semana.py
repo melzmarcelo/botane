@@ -164,11 +164,13 @@ checar("gerente NÃO administra usuários", st == 403, st)
 print("\n3. segunda: o gerente cadastra")
 
 st, locais = chamar("GET", "/locais", token=tokens["gerente"])
-if not any(l["nome"] == f"Cozinha {SUF}" for l in locais):
+# ⚠️ `.upper()`: o nome do local é normalizado pelo BANCO (gatilho da migração
+# 050), como já era o do produto. O cenário afirma sobre o que foi GRAVADO.
+if not any(l["nome"] == f"Cozinha {SUF}".upper() for l in locais):
     chamar("POST", "/locais", {"nome": f"Cozinha {SUF}", "tipo": "SECO"},
            token=tokens["gerente"])
     st, locais = chamar("GET", "/locais", token=tokens["gerente"])
-local = next(l for l in locais if l["nome"] == f"Cozinha {SUF}")
+local = next(l for l in locais if l["nome"] == f"Cozinha {SUF}".upper())
 checar("gerente cria o local", bool(local["id"]), local)
 
 st, r = chamar("POST", "/fornecedores",

@@ -826,12 +826,19 @@ try {
   // mesma forma, para o olho reconhecer. A checagem afirma a PROPRIEDADE: o que
   // se clica em "editar" volta preenchido no formulário, e salvar troca o nome
   // na lista. Nada aqui depende de quantos setores a base tem hoje.
+  // ⚠️ **`.toUpperCase()`: quem normaliza o nome é o BANCO** (gatilho da
+  // migração 050, que estendeu ao fornecedor e às tabelas de apoio o que a 036
+  // fez com o produto). A checagem procura pelo que foi GRAVADO — procurar
+  // pelo que ela mandou faz a linha "não existir" e acusa a tela de um defeito
+  // que é do teste. É a mesma correção que a 036 já tinha exigido.
   const marcaEd = Date.now().toString().slice(-6);
+  const APOIO = `Tela apoio ${marcaEd}`.toUpperCase();
+  const APOIO_CORRIGIDO = `Tela corrigido ${marcaEd}`.toUpperCase();
   await api("POST", "/setores", { nome: `Tela apoio ${marcaEd}` }, token);
   await irPara(p, `${WEB}/cadastros?aba=setores`);
   await p.waitForFunction(
     (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
-    `Tela apoio ${marcaEd}`,
+    APOIO,
   ).catch(() => {});
   const abriuEdicao = await p.evaluate((nome) => {
     const li = [...document.querySelectorAll("main ul > li")]
@@ -840,7 +847,7 @@ try {
       .find((b) => b.textContent?.trim() === "editar");
     botao?.click();
     return { achouLinha: !!li, achouBotao: !!botao };
-  }, `Tela apoio ${marcaEd}`);
+  }, APOIO);
   checar("a linha da tabela de apoio oferece editar",
     abriuEdicao.achouLinha && abriuEdicao.achouBotao, abriuEdicao);
   await new Promise((r) => setTimeout(r, 600));
@@ -857,7 +864,7 @@ try {
     };
   });
   checar("e traz o registro para o MESMO formulário do cadastro",
-    noFormulario.valor === `Tela apoio ${marcaEd}`, noFormulario);
+    noFormulario.valor === APOIO, noFormulario);
   checar("com o botão dizendo Salvar, e uma saída ao lado",
     noFormulario.botao === "Salvar" && noFormulario.temCancelar, noFormulario);
   await p.evaluate((nome) => {
@@ -867,10 +874,10 @@ try {
     set.call(campo, nome);
     campo.dispatchEvent(new Event("input", { bubbles: true }));
     document.querySelector('#form-apoio button[type="submit"]')?.click();
-  }, `Tela corrigido ${marcaEd}`);
+  }, APOIO_CORRIGIDO);
   await p.waitForFunction(
     (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
-    `Tela corrigido ${marcaEd}`,
+    APOIO_CORRIGIDO,
   ).catch(() => {});
   const depoisDeCorrigir = await p.evaluate((antigo) => ({
     texto: document.body.innerText,
@@ -878,9 +885,9 @@ try {
     botao: document.querySelector('#form-apoio button[type="submit"]')?.textContent?.trim(),
     campo: document.querySelector("#form-apoio input")?.value ?? "",
     aindaTemOAntigo: document.body.innerText.includes(antigo),
-  }), `Tela apoio ${marcaEd}`);
+  }), APOIO);
   checar("salvar troca o nome na lista, sem criar outro registro",
-    depoisDeCorrigir.texto.includes(`Tela corrigido ${marcaEd}`)
+    depoisDeCorrigir.texto.includes(APOIO_CORRIGIDO)
     && !depoisDeCorrigir.aindaTemOAntigo, depoisDeCorrigir);
   checar("e o formulário volta a ser o de cadastro",
     depoisDeCorrigir.botao === "Adicionar" && depoisDeCorrigir.campo === "",
@@ -889,7 +896,9 @@ try {
   {
     const { dados: setoresAgora } = await api(
       "GET", "/setores?incluir_inativos=true", null, token);
-    const meu = (setoresAgora ?? []).find((x) => x.nome === `Tela corrigido ${marcaEd}`);
+    // ⚠️ A limpeza também casa pelo nome GRAVADO — sem isso o setor de teste
+    // fica ATIVO e a base acumula um por rodada, que foi o que aconteceu.
+    const meu = (setoresAgora ?? []).find((x) => x.nome === APOIO_CORRIGIDO);
     if (meu) await api("PUT", `/setores/${meu.id}`, { ativo: false }, token);
   }
 
@@ -1246,6 +1255,14 @@ try {
   // Contar tem tela própria: quem conta anda pela despensa com o celular, e
   // uma tabela de dez colunas não serve na mão.
   checar("abrir a contagem leva para a tela dela", /\/inventario\/\d+/.test(p.url()), p.url());
+  // ⚠️ **Esperar pela tela de DESTINO, não por um tempo fixo.** Os 2,2 s que
+  // havia aqui bastavam com uma contagem de dez linhas e pararam de bastar com
+  // uma de centenas: a checagem media a tela ainda em branco e acusava a
+  // contagem de não ter campo nenhum. Falhou três vezes num dia sem que nada
+  // do sistema tivesse mudado — que é o pior tipo de teste frágil.
+  await p.waitForFunction(
+    () => !!document.querySelector('input[inputmode="decimal"]'), { timeout: 20000 },
+  ).catch(() => {});
   const telaContagem = await p.evaluate(() => {
     const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
     const campo = document.querySelector('input[inputmode="decimal"]');
@@ -1305,6 +1322,11 @@ try {
     const cartao = [...document.querySelectorAll("li")].find(
       (l) => l.querySelector("p")?.textContent?.trim().toUpperCase() === nome);
     const c = (cartao ?? document).querySelector('input[inputmode="decimal"]');
+    // ⚠️ **Sai sem estourar quando a tela não pintou.** Sem esta guarda o
+    // `c.focus()` levantava `Cannot read properties of null`, e a rodada
+    // INTEIRA morria ali — um `checar` que falha custa uma linha; uma exceção
+    // custa as trezentas checagens seguintes.
+    if (!c) return;
     const set = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value").set;
     // ⚠️ Sem FOCAR antes, `blur()` não dispara nada — e é o blur que grava.
@@ -3624,7 +3646,12 @@ try {
   await new Promise((r) => setTimeout(r, 2500));
   const { dados: fornCriados } = await api(
     "GET", `/fornecedores?busca=Fornecedor tela ${mCad}`, null, token);
-  const meuForn = (fornCriados ?? []).find((f) => f.nome === `Fornecedor tela ${mCad}`);
+  // ⚠️ **`.toUpperCase()`: o nome do fornecedor é normalizado pelo BANCO**
+  // (gatilho da migração 050, que estendeu a ele o que a 036 fez com o
+  // produto). A checagem afirma sobre o que foi GRAVADO, não sobre o que ela
+  // digitou na tela.
+  const meuForn = (fornCriados ?? [])
+    .find((f) => f.nome === `Fornecedor tela ${mCad}`.toUpperCase());
   checar("cadastrar pela pagina grava o fornecedor", !!meuForn, (fornCriados ?? []).length);
   if (meuForn) {
     aoTerminar.push(() => api("DELETE", `/fornecedores/${meuForn.id}`, null, token));
@@ -3633,7 +3660,8 @@ try {
     await new Promise((r) => setTimeout(r, 1600));
     const edicao = await textoVisivel(p);
     checar("e a edicao abre com o nome no titulo",
-      edicao.includes(`Fornecedor tela ${mCad}`), edicao.slice(0, 160));
+      edicao.toUpperCase().includes(`Fornecedor tela ${mCad}`.toUpperCase()),
+      edicao.slice(0, 160));
   }
 
   await irPara(p, `${WEB}/usuarios`);

@@ -299,8 +299,12 @@ export default function PaginaCadastros() {
                 >
                   <label className="min-w-0 flex-1">
                     <span className="rotulo">{editandoAqui ? "Corrigir setor" : "Novo setor"}</span>
+                    {/* ⚠️ `uppercase` é só CSS: quem normaliza é o BANCO
+                        (gatilho da migração 050). A classe existe para quem
+                        digita ver o que vai ser gravado, e não descobrir
+                        depois — mesma dica do cadastro de produto. */}
                     <input
-                      className="campo mt-1.5"
+                      className="campo mt-1.5 uppercase"
                       required
                       minLength={2}
                       value={novoSetor}
@@ -408,7 +412,7 @@ export default function PaginaCadastros() {
                   <label className="min-w-0 flex-1">
                     <span className="rotulo">{editandoAqui ? "Corrigir local" : "Novo local"}</span>
                     <input
-                      className="campo mt-1.5"
+                      className="campo mt-1.5 uppercase"
                       required
                       minLength={2}
                       value={novoLocal.nome}
@@ -528,7 +532,7 @@ export default function PaginaCadastros() {
                 >
                   <Campo rotulo={editandoAqui ? "Corrigir categoria" : "Nova categoria"}>
                     <input
-                      className="campo"
+                      className="campo uppercase"
                       required
                       minLength={2}
                       value={novaCategoria.nome}
@@ -723,7 +727,7 @@ export default function PaginaCadastros() {
                   </Campo>
                   <Campo rotulo="Nome">
                     <input
-                      className="campo"
+                      className="campo uppercase"
                       required
                       minLength={2}
                       value={novaUm.nome}

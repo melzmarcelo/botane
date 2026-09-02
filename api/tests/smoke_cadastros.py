@@ -109,8 +109,12 @@ id_set = (r or {}).get("id")
 st, r = chamar("PUT", f"/setores/{id_set}", {"nome": f"Setor certo {marca_ed}"}, token=token)
 checar("o setor se corrige", st == 200, (st, r))
 st, lista = chamar("GET", "/setores?incluir_inativos=true", token=token)
+# ⚠️ `.upper()`: quem normaliza é o BANCO (gatilho da migração 050), então a
+# suíte afirma sobre o que foi GRAVADO, nunca sobre o que ela mandou. É a mesma
+# correção que a 036 exigiu de onze checagens de uma vez.
 checar("e a lista mostra o nome novo",
-       any(x["id"] == id_set and x["nome"] == f"Setor certo {marca_ed}" for x in lista),
+       any(x["id"] == id_set and x["nome"] == f"Setor certo {marca_ed}".upper()
+           for x in lista),
        [x["nome"] for x in lista if x["id"] == id_set])
 chamar("PUT", f"/setores/{id_set}", {"ativo": False}, token=token)
 
@@ -149,7 +153,7 @@ if st == 201:
     st, lista = chamar("GET", "/unidades-medida?incluir_inativas=true", token=token)
     achada = next((x for x in lista if x["sigla"] == sigla_ed), {})
     checar("com o nome e o fator novos",
-           achada.get("nome") == "Certa" and float(achada.get("fator_base", 0)) == 1000,
+           achada.get("nome") == "CERTA" and float(achada.get("fator_base", 0)) == 1000,
            achada)
     chamar("PUT", f"/unidades-medida/{sigla_ed}", {"ativo": False}, token=token)
 
@@ -163,7 +167,8 @@ checar("cria subcategoria", st == 201, r)
 filha = r.get("id")
 st, lista = chamar("GET", "/categorias", token=token)
 item = next((c for c in lista if c["id"] == filha), None)
-checar("caminho da filha vem montado", item and item["caminho"] == "Smoke Raiz › Smoke Filha",
+checar("caminho da filha vem montado",
+       item and item["caminho"] == "SMOKE RAIZ › SMOKE FILHA",
        item.get("caminho") if item else None)
 checar("nível da filha é 1", item and item["nivel"] == 1)
 
@@ -204,7 +209,8 @@ prod = r.get("id")
 checar("código foi gerado sozinho", str(r.get("codigo", "")).startswith("P"), r.get("codigo"))
 
 st, p = chamar("GET", f"/produtos/{prod}", token=token)
-checar("produto traz a categoria resolvida", p.get("categoria") == "Smoke Filha", p.get("categoria"))
+checar("produto traz a categoria resolvida", p.get("categoria") == "SMOKE FILHA",
+       p.get("categoria"))
 checar("produto traz o fornecedor vinculado", len(p.get("fornecedores", [])) == 1)
 checar("fornecedor preferencial marcado", p["fornecedores"][0]["preferencial"] is True)
 

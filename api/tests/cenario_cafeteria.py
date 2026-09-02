@@ -128,13 +128,15 @@ def delta(campo):
 print("1. cadastros da casa")
 
 st, locais = chamar("GET", "/locais", token=token)
-seco = next((l for l in locais if l["nome"] == f"Estoque seco {SUF}"), None)
+# ⚠️ `.upper()`: o nome do local é normalizado pelo BANCO (gatilho da migração
+# 050), como já era o do produto. O cenário afirma sobre o que foi GRAVADO.
+seco = next((l for l in locais if l["nome"] == f"Estoque seco {SUF}".upper()), None)
 if not seco:
     st, r = chamar("POST", "/locais", {"nome": f"Estoque seco {SUF}", "tipo": "SECO"},
                    token=token)
     checar("cria o estoque seco", st == 201, r)
     st, locais = chamar("GET", "/locais", token=token)
-    seco = next(l for l in locais if l["nome"] == f"Estoque seco {SUF}")
+    seco = next(l for l in locais if l["nome"] == f"Estoque seco {SUF}".upper())
 checar("o primeiro local nasce principal (ninguém marcou nada)",
        any(l["principal"] for l in locais), [(l["nome"], l["principal"]) for l in locais])
 
@@ -142,7 +144,8 @@ st, r = chamar("POST", "/locais", {"nome": f"Câmara fria {SUF}", "tipo": "RESFR
                token=token)
 checar("cria a câmara fria", st == 201, r)
 st, locais = chamar("GET", "/locais", token=token)
-camara = precisa(next((l for l in locais if l["nome"] == f"Câmara fria {SUF}"), None),
+camara = precisa(next((l for l in locais
+                       if l["nome"] == f"Câmara fria {SUF}".upper()), None),
                  f"não criou a câmara fria: {r}")
 
 st, r = chamar("POST", "/setores", {"nome": f"Cozinha {SUF}"}, token=token)

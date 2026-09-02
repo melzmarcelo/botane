@@ -193,6 +193,26 @@ reconhece é você.
 
 ---
 
+### Os nomes são gravados em MAIÚSCULAS
+
+Produto, fornecedor, setor, local, categoria e unidade de medida: o nome que você
+digita é gravado em caixa alta, seja qual for a tela. O campo já mostra assim
+enquanto você escreve.
+
+Não é enfeite — é para a **lista poder ser lida**. Numa conferência de compra o
+olho percorre a coluna procurando um item, e caixa alternada quebra essa
+varredura. Como os nomes chegam de três lugares (o Omie, o cardápio do PDV e a
+mão de quem cadastra), cada um com sua convenção, sem isso a mesma tela fica com
+três jeitos de escrever.
+
+⚠️ A **sigla** da unidade de medida e o **código** do produto não são tocados:
+são chaves, e mexer neles quebraria o vínculo com as notas e o histórico.
+
+⚠️ Observação, endereço e contato também ficam de fora: são texto para ser lido,
+e em maiúsculas viram grito.
+
+---
+
 ### Corrigir um setor, local, categoria ou unidade
 
 Menu **Cadastros → Tabelas de apoio**. Cada linha tem **editar**: o registro

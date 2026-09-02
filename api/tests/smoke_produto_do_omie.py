@@ -136,7 +136,9 @@ checar("usando as famílias como categoria", (r or {}).get("categorias_usadas", 
 
 st, cats = chamar("GET", "/categorias", token=token)
 nomes = {c["nome"] for c in (cats or [])}
-checar("a categoria da família existe agora", "Laticínios" in nomes,
+# ⚠️ `.upper()`: a categoria nascida da família do Omie é normalizada pelo
+# BANCO (gatilho da migração 050).
+checar("a categoria da família existe agora", "LATICÍNIOS" in nomes,
        sorted(nomes)[:8])
 
 

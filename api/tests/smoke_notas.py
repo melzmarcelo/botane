@@ -159,8 +159,12 @@ st, r = enviar_xmls([("nota9001.xml", xml_nfe(CHAVE, 9001, ITENS, 30.0))], token
 checar("importa o XML", st == 200 and r.get("novas") == 1, r)
 resultado = (r.get("resultados") or [{}])[0]
 id_nota = resultado.get("id")
+# ⚠️ `.upper()`: o nome do fornecedor é normalizado pelo BANCO (gatilho da
+# migração 050), como já era o do produto. A checagem afirma sobre o que foi
+# GRAVADO, não sobre o que o XML mandou.
 checar("reconhece o fornecedor pelo emitente",
-       (resultado.get("fornecedor") or "").startswith("Distribuidora Teste"), resultado)
+       (resultado.get("fornecedor") or "").upper().startswith("DISTRIBUIDORA TESTE"),
+       resultado)
 checar("leu os dois itens", resultado.get("itens") == 2, resultado)
 checar("os dois caem na fila de conciliação", resultado.get("pendentes") == 2, resultado)
 checar("guardou a chave da NF-e", resultado.get("chave_nfe") == CHAVE, resultado.get("chave_nfe"))

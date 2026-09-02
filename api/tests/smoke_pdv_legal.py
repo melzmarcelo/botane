@@ -1173,6 +1173,11 @@ print("\n8l. a tabela intermediaria de pendencias")
 # espera alguem conferir e mandar. E quem alimenta a tabela e o GATILHO, nao o
 # codigo: nenhum caminho da aplicacao consegue esquecer, nem o que ainda vai ser
 # escrito. A suite usa um setor DELA, criado e apagado aqui.
+# ⚠️ `.upper()`: o nome do setor é normalizado pelo BANCO (gatilho da migração
+# 050), como já era o do produto. Todas as comparações abaixo usam o nome
+# GRAVADO — afirmar sobre o que a suíte mandou é a armadilha que a 036 já
+# custou a onze checagens.
+NOME_SETOR_PEND = f"Pend setor {marca}".upper()
 st, s_p = chamar("POST", "/setores", {"nome": f"Pend setor {marca}",
                                       "integrado_pdv": True}, token=token)
 id_sp = s_p.get("id")
@@ -1181,7 +1186,7 @@ checar("cria o setor desta rodada, ja marcado", st == 201, (st, s_p))
 st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
 nomes_pend = {p["nome"] for p in fila_p["pendentes"]}
 # Ele nao existe no PDV simulado: entra como CRIAR.
-achado = next((p for p in fila_p["pendentes"] if p["nome"] == f"Pend setor {marca}"), None)
+achado = next((p for p in fila_p["pendentes"] if p["nome"] == NOME_SETOR_PEND), None)
 checar("o setor novo entra na fila", achado is not None, sorted(nomes_pend)[:6])
 checar("e como CRIAR, porque nao existe la",
        (achado or {}).get("acao") == "CRIAR", (achado or {}).get("acao"))
@@ -1192,14 +1197,14 @@ checar("e como CRIAR, porque nao existe la",
 chamar("PUT", f"/setores/{id_sp}", {"nome": f"Pend setor {marca}"}, token=token)
 chamar("PUT", f"/setores/{id_sp}", {"ativo": True}, token=token)
 st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
-quantos = sum(1 for p in fila_p["pendentes"] if p["nome"] == f"Pend setor {marca}")
+quantos = sum(1 for p in fila_p["pendentes"] if p["nome"] == NOME_SETOR_PEND)
 checar("salvar sem mudar nada nao duplica a fila", quantos == 1, quantos)
 
 # ⚠️ Uma pendencia ABERTA por registro: dez correcoes viram uma linha, nao dez.
 for i in range(3):
     chamar("PUT", f"/setores/{id_sp}", {"nome": f"Pend setor {marca} v{i}"}, token=token)
 st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
-quantos = sum(1 for p in fila_p["pendentes"] if p["nome"].startswith(f"Pend setor {marca}"))
+quantos = sum(1 for p in fila_p["pendentes"] if p["nome"].startswith(NOME_SETOR_PEND))
 checar("tres alteracoes seguidas dao UMA linha", quantos == 1, quantos)
 
 # 🔑 **A guarda de conta recusa o lote INTEIRO em simulado — e esta certo.** A
@@ -1217,7 +1222,7 @@ checar("e a frase diz que a conta e de outra empresa",
 # que faz o registro voltar para Pendentes depois de alguem corrigir, sem ter
 # de mexer no cadastro so para reenfileirar.
 st, fila_p = chamar("GET", "/pdv/envio/fila", token=token)
-ainda = any(p["nome"].startswith(f"Pend setor {marca}") for p in fila_p["pendentes"])
+ainda = any(p["nome"].startswith(NOME_SETOR_PEND) for p in fila_p["pendentes"])
 checar("e a pendencia continua ABERTA", ainda, ainda)
 
 chamar("DELETE", f"/setores/{id_sp}", token=token)
