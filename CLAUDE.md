@@ -252,6 +252,20 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   precisa de `fichas.editar`.
   ⚠️ **O `dono` do arquivo é a FICHA, não o produto** (`ficha-{id}`): duas versões do mesmo
   prato podem ter fotos diferentes, e é a montagem que muda entre elas.
+  🔑 **O cartão aparece TAMBÉM na tela de CRIAR, e a primeira versão o escondia ali.** A ficha
+  nova não tem id e a foto não teria para onde ir — então o cartão simplesmente não existia em
+  `/fichas/nova`. Só que é EXATAMENTE ali que a pessoa está com a foto na mão, e ela concluiu
+  que o sistema não tinha o campo (foi assim que o dono o encontrou faltando, no mesmo dia).
+  Agora a imagem fica guardada no estado e sobe logo depois do `POST /fichas`, com prévia local
+  (`URL.createObjectURL`, revogada na limpeza) enquanto não há nada no servidor.
+  ⚠️ **Falhar o envio da foto NÃO é "não foi possível salvar"**: a ficha já existe daquele
+  ponto em diante, e a frase genérica mandaria cadastrar tudo de novo — criando uma segunda
+  ficha do mesmo prato. O `try` é só do upload, e a mensagem diz o que aconteceu e onde
+  reenviar.
+  ⚠️ **E a checagem do estado vazio mudou de lugar por causa disso**: "diz quando não há
+  nenhuma" era afirmado na tela da ficha recém-criada — que agora nasce COM foto. O único lugar
+  onde o vazio é garantido é a tela de criar, antes de escolher o arquivo. Mesma família do
+  teste que descreve o estado do dia.
   ⚠️ **A suíte apaga a foto ANTES de arquivar a ficha**: arquivar não apaga o arquivo (nem
   deveria — ficha arquivada continua respondendo pelo histórico), e sem isso cada rodada
   deixaria mais duas imagens na tabela `arquivos`.
@@ -2086,7 +2100,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (399, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (403, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

@@ -85,6 +85,12 @@ export default function EditorFicha() {
   const [fichas, setFichas] = useState<FichaListada[]>([]);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const seletorFoto = useRef<HTMLInputElement>(null);
+  // 🔑 **Na tela de CRIAR a ficha ainda não tem id, e a foto não teria para
+  // onde ir.** A primeira versão simplesmente escondia o cartão ali — e quem
+  // estava cadastrando o prato, com a foto na mão, não achava onde pôr. Agora
+  // a imagem fica guardada aqui e sobe assim que a ficha nasce.
+  const [fotoPendente, setFotoPendente] = useState<File | null>(null);
+  const [previaFoto, setPrevia] = useState<string | null>(null);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [carregando, setCarregando] = useState(!nova);
   const [salvando, setSalvando] = useState(false);
@@ -146,6 +152,19 @@ export default function EditorFicha() {
 
   const travada = ficha?.status === "HOMOLOGADA" || ficha?.status === "ARQUIVADA";
   const editavel = podeEditar && !travada;
+
+  // A prévia local do arquivo escolhido, antes de existir URL no servidor.
+  // ⚠️ `revokeObjectURL` na limpeza: sem ele cada troca de arquivo deixa um
+  // blob preso na memória da aba.
+  useEffect(() => {
+    if (!fotoPendente) {
+      setPrevia(null);
+      return;
+    }
+    const url = URL.createObjectURL(fotoPendente);
+    setPrevia(url);
+    return () => URL.revokeObjectURL(url);
+  }, [fotoPendente]);
 
   /** 🔑 A foto do prato pronto — o que a cozinha compara com o que está na mão.
 
@@ -214,6 +233,24 @@ export default function EditorFicha() {
           ...corpo,
           id_produto: Number(idProduto),
         });
+        // ⚠️ **A ficha JÁ EXISTE daqui em diante.** Se o envio da foto falhar,
+        // a mensagem tem de dizer isso — "não foi possível salvar" mandaria a
+        // pessoa cadastrar tudo de novo e criaria uma segunda ficha do mesmo
+        // prato. Por isso o try é só do upload, e a frase é outra.
+        if (fotoPendente) {
+          try {
+            const fd = new FormData();
+            fd.append("arquivo", fotoPendente);
+            await api.upload(`/fichas/${r.id}/foto`, fd);
+            setFotoPendente(null);
+          } catch (errFoto) {
+            aviso.erro(
+              `Ficha criada, mas a foto não subiu: ${
+                errFoto instanceof Error ? errFoto.message : "falha no envio"
+              }. Envie de novo na tela da ficha.`,
+            );
+          }
+        }
         router.replace(`/fichas/${r.id}`);
         // Criar uma ficha e não dizer nada era o pior caso: a tela trocava de
         // endereço e nada confirmava que gravou.
@@ -697,59 +734,82 @@ export default function EditorFicha() {
       {/* 🔑 **A foto do prato pronto.** A ficha existe para ser SEGUIDA, e
           quem segue está de pé na cozinha: "está pronto?" é uma pergunta
           visual, e nenhuma descrição de montagem responde o que a imagem
-          responde. Ela sai junto no PDF, que é o papel que fica pendurado. */}
-      {!nova && (
-        <Cartao
-          titulo="Foto do prato"
-          descricao="Como ele deve chegar à mesa. Sai junto na ficha impressa."
-        >
-          <div className="flex flex-wrap items-start gap-5">
-            <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-linha bg-papel">
-              {ficha?.foto_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={urlArquivo(ficha.foto_url) ?? ""}
-                  alt={`Foto de ${ficha.produto}`}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="rotulo text-center leading-tight">sem<br />foto</span>
-              )}
-            </div>
-            {podeEditar ? (
-              <div className="flex min-w-0 flex-col gap-2">
-                <input
-                  ref={seletorFoto}
-                  id="foto-da-ficha"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="text-[13px]"
-                  disabled={enviandoFoto}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void enviarFoto(f);
-                  }}
-                />
-                <p className="text-[12.5px] text-suave">
-                  PNG, JPG ou WEBP, até 2 MB.
-                  {/* ⚠️ A foto vale mesmo com a ficha publicada: o prato só
-                      existe para ser fotografado DEPOIS de pronto. */}
-                  {travada && " A ficha está publicada, mas a foto ainda pode ser trocada."}
-                </p>
-                {ficha?.foto_url && (
-                  <button type="button" className="link-acao-erro self-start" onClick={removerFoto}>
-                    remover foto
-                  </button>
-                )}
-              </div>
+          responde. Ela sai junto no PDF, que é o papel que fica pendurado.
+          ⚠️ **O cartão aparece TAMBÉM ao criar a ficha.** Ele já esteve escondido
+          ali, porque a ficha ainda não tem id e a foto não teria para onde ir —
+          e quem estava cadastrando o prato, com a foto na mão, não achava onde
+          pô-la. Agora a imagem fica guardada e sobe assim que a ficha nasce. */}
+      <Cartao
+        titulo="Foto do prato"
+        descricao={
+          nova
+            ? "Como ele deve chegar à mesa. Ela sobe junto quando você criar a ficha."
+            : "Como ele deve chegar à mesa. Sai junto na ficha impressa."
+        }
+      >
+        <div className="flex flex-wrap items-start gap-5">
+          <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-linha bg-papel">
+            {previaFoto || ficha?.foto_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                // A prévia local manda quando existe: é o arquivo que a pessoa
+                // acabou de escolher, e ainda não há nada no servidor.
+                src={previaFoto ?? urlArquivo(ficha?.foto_url) ?? ""}
+                alt={`Foto de ${ficha?.produto ?? "prato"}`}
+                className="h-full w-full object-cover"
+              />
             ) : (
-              <p className="text-[13px] text-suave">
-                Você tem acesso de leitura: a foto só pode ser trocada por quem edita fichas.
-              </p>
+              <span className="rotulo text-center leading-tight">sem<br />foto</span>
             )}
           </div>
-        </Cartao>
-      )}
+          {podeEditar ? (
+            <div className="flex min-w-0 flex-col gap-2">
+              <input
+                ref={seletorFoto}
+                id="foto-da-ficha"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="text-[13px]"
+                disabled={enviandoFoto}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  // Ficha que ainda não existe: guarda e sobe no "Criar ficha".
+                  if (nova) setFotoPendente(f);
+                  else void enviarFoto(f);
+                }}
+              />
+              <p className="text-[12.5px] text-suave">
+                PNG, JPG ou WEBP, até 2 MB.
+                {nova && " Ela é enviada quando a ficha for criada."}
+                {/* ⚠️ A foto vale mesmo com a ficha publicada: o prato só
+                    existe para ser fotografado DEPOIS de pronto. */}
+                {travada && " A ficha está publicada, mas a foto ainda pode ser trocada."}
+              </p>
+              {(fotoPendente || ficha?.foto_url) && (
+                <button
+                  type="button"
+                  className="link-acao-erro self-start"
+                  onClick={() => {
+                    if (fotoPendente) {
+                      setFotoPendente(null);
+                      if (seletorFoto.current) seletorFoto.current.value = "";
+                    } else {
+                      void removerFoto();
+                    }
+                  }}
+                >
+                  {fotoPendente ? "tirar a imagem escolhida" : "remover foto"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-[13px] text-suave">
+              Você tem acesso de leitura: a foto só pode ser trocada por quem edita fichas.
+            </p>
+          )}
+        </div>
+      </Cartao>
 
       {editavel && (
         <div className="flex justify-end gap-2">

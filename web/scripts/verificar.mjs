@@ -373,11 +373,19 @@ try {
   checar("um clique abre o grupo e mostra os itens",
     depoisDoClique.aberto === "true" && depoisDoClique.visivel === true, depoisDoClique);
   await irPara(p, `${WEB}/empresa`);
-  await new Promise((r) => setTimeout(r, 1200));
+  // ⚠️ **Esperar pela tela de DESTINO, não por um tempo fixo.** Com 1200 ms a
+  // checagem afirmava sobre um menu que ainda não tinha voltado — e falhava
+  // longe de qualquer defeito, na primeira vez que a compilação da página
+  // demorou. A espera é pela navegação; a AFIRMAÇÃO continua sendo sobre o
+  // estado do menu, que é outra coisa.
+  await p.waitForFunction(
+    () => /Marca/.test(document.querySelector("main")?.innerText ?? ""),
+    { timeout: 15000 },
+  ).catch(() => {});
   // ⚠️ A escolha e da PESSOA e sobrevive a navegacao — o que nao sobrevive
   // e o login, que recolhe tudo de novo.
-  checar("e continua aberto ao voltar para a tela",
-    (await grupoDaTela()).aberto === "true");
+  const aoVoltar = await grupoDaTela();
+  checar("e continua aberto ao voltar para a tela", aoVoltar.aberto === "true", aoVoltar);
 
   console.log("3. usuário de Cozinha");
   coletando = false;
@@ -939,6 +947,43 @@ try {
        itemEscolhido.includes(`Tela farinha ${marca}`.toUpperCase()),
     itemEscolhido);
   await numeros[2].type("500");
+
+  // 🔑 **A foto tem de estar aqui, na tela de CRIAR.** A primeira versão só a
+  // oferecia depois de a ficha existir — e quem cadastra o prato está com a
+  // foto na mão naquele momento; ele não achava onde pô-la e concluía que o
+  // sistema não tinha o campo. Foi assim que o dono a encontrou faltando.
+  const campoFotoNova = await p.$("#foto-da-ficha");
+  checar("a tela de CRIAR a ficha também pede a foto do prato", !!campoFotoNova);
+  const avisaEnvio = await p.evaluate(() => ({
+    diz: /enviada quando a ficha for criada/i.test(document.body.innerText),
+    // ⚠️ **O estado vazio se afirma AQUI**, na ficha que ainda não existe — é o
+    // único lugar onde ele é garantido. Afirmá-lo na tela de uma ficha que
+    // acabou de nascer com foto é descrever o estado do dia.
+    semFoto: /sem\s*foto/i.test(document.body.innerText),
+    aceita: document.querySelector("#foto-da-ficha")?.getAttribute("accept") ?? "",
+  }));
+  // ⚠️ E ela precisa DIZER que sobe junto com a ficha: um seletor de arquivo
+  // que não dá retorno imediato parece um que não funcionou.
+  checar("dizendo que ela sobe junto com a ficha", avisaEnvio.diz, avisaEnvio);
+  checar("e que aceita só imagem, dizendo quando não há nenhuma",
+    avisaEnvio.aceita.includes("image/") && avisaEnvio.semFoto, avisaEnvio);
+  if (campoFotoNova) {
+    // PNG de verdade: o servidor ABRE a imagem para conferir que ela é uma.
+    // ⚠️ Em `_fotos/`, que é ignorado pelo git e fica no D: como tudo aqui.
+    writeFileSync(`${FOTOS}/_prato-teste.png`, Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE"
+      + "hQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+    await campoFotoNova.uploadFile(`${FOTOS}/_prato-teste.png`);
+    await new Promise((r) => setTimeout(r, 700));
+    const previa = await p.evaluate(() => {
+      const img = document.querySelector('img[alt^="Foto de"]');
+      return { tem: !!img, ehLocal: (img?.getAttribute("src") ?? "").startsWith("blob:") };
+    });
+    // A prévia é local: ainda não há nada no servidor para onde apontar.
+    checar("e mostra a imagem escolhida antes de gravar",
+      previa.tem && previa.ehLocal, previa);
+  }
+
   const selectsUm = await p.$$("main select");
   // Sem o select do produto sobraram dois: 0 rendimento_um, 1 unidade do item.
   await selectsUm[1].select("G");
@@ -949,6 +994,14 @@ try {
   await new Promise((r) => setTimeout(r, 1800));
   const criouFicha = /\/fichas\/\d+/.test(p.url());
   checar("cria ficha pela tela", criouFicha, p.url());
+  if (criouFicha && campoFotoNova) {
+    // ⚠️ Pelo SERVIDOR, não pela tela: o que se prova aqui é que a imagem
+    // escolhida antes de a ficha existir chegou até ela.
+    const { dados: recem } = await api(
+      "GET", `/fichas/${p.url().match(/fichas\/(\d+)/)?.[1]}`, null, token);
+    checar("e a foto escolhida na criação chega junto", !!recem?.foto_url,
+      recem?.foto_url);
+  }
   await foto(p, "16-ficha");
 
   if (criouFicha) {
@@ -1003,20 +1056,17 @@ try {
     // montagem responde o que a imagem responde. A coluna existia desde a
     // etapa 3 e nunca tinha sido usada.
     const cartaoFoto = await p.evaluate(() => {
-      const texto = document.body.innerText;
       const campo = document.querySelector("#foto-da-ficha");
       return {
-        temCartao: /Foto do prato/i.test(texto),
+        temCartao: /Foto do prato/i.test(document.body.innerText),
         temCampo: !!campo,
         // Só imagem: o servidor recusa o resto, e oferecer tudo ensina o erro.
         aceita: campo?.getAttribute("accept") ?? "",
-        semFoto: /sem\s*foto/i.test(texto),
       };
     });
     checar("a ficha tem o cartão da foto do prato",
-      cartaoFoto.temCartao && cartaoFoto.temCampo, cartaoFoto);
-    checar("que aceita só imagem e diz quando não há nenhuma",
-      cartaoFoto.aceita.includes("image/") && cartaoFoto.semFoto, cartaoFoto);
+      cartaoFoto.temCartao && cartaoFoto.temCampo && cartaoFoto.aceita.includes("image/"),
+      cartaoFoto);
     // ⚠️ Envio de arquivo pela API, não pelo seletor do navegador: o que se
     // mede aqui é a TELA mostrando a foto, e encenar o clique no seletor de
     // arquivos do sistema operacional é frágil sem provar mais nada.
