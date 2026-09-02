@@ -109,6 +109,53 @@ export default function PaginaCadastros() {
   const [novaUm, setNovaUm] = useState({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
 
   /**
+   * 🔑 **Dava para criar e desativar, e não dava para CORRIGIR.** Os quatro PUT
+   * existem no servidor desde o começo; a tela só nunca os ofereceu. Um setor
+   * cadastrado com o nome errado no primeiro dia ficava errado para sempre — e
+   * o jeito de "consertar" era desativar e criar outro, que deixa o histórico
+   * apontando para um cadastro morto.
+   *
+   * ⚠️ **A correção usa o MESMO formulário do cadastro**, e não uma janela nem
+   * campos na linha: criar e corrigir têm a mesma forma, para o olho reconhecer
+   * — é o corte que Fornecedores e Usuários já usam. O botão troca de palavra e
+   * aparece um "cancelar" ao lado.
+   * ⚠️ Com 180 locais, o formulário está fora da tela quando se clica em
+   * "editar" na linha 90: por isso ele é trazido para a vista.
+   */
+  const [editando, setEditando] = useState<{ aba: Aba; id: number | string } | null>(null);
+  const editandoAqui = editando?.aba === aba ? editando : null;
+
+  function limparFormularios() {
+    setNovoSetor("");
+    setNovoLocal({ nome: "", tipo: "SECO" });
+    setNovaCategoria({ nome: "", id_pai: "", tipo: "INSUMO" });
+    setNovaUm({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
+  }
+
+  function comecarEdicao(id: number | string, preencher: () => void) {
+    setEditando({ aba, id });
+    preencher();
+    // ⚠️ `requestAnimationFrame` e não `scrollIntoView` direto: o formulário só
+    // ganha os valores no render seguinte, e rolar antes disso leva a pessoa a
+    // um formulário que ainda está vazio.
+    requestAnimationFrame(() =>
+      document.getElementById("form-apoio")?.scrollIntoView({ block: "center" }));
+  }
+
+  function cancelarEdicao() {
+    setEditando(null);
+    limparFormularios();
+  }
+
+  // ⚠️ Trocar de aba com uma edição aberta deixaria o formulário da outra aba
+  // preenchido com os dados desta — e o botão dizendo "Salvar" para um registro
+  // que não está mais na tela.
+  useEffect(() => {
+    if (editando && editando.aba !== aba) cancelarEdicao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aba]);
+
+  /**
    * 🔑 **A lista abre com o que está EM USO.** O inativo continuava aparecendo,
    * só com a opacidade baixa — e numa base com histórico ele é a maioria: quem
    * procura um local para corrigir percorre uma lista cheia de coisa que não se
@@ -237,17 +284,21 @@ export default function PaginaCadastros() {
             <>
               {podeAba("setores") && (
                 <form
+                  id="form-apoio"
                   className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
+                    const alvo = editandoAqui;
                     void acao(async () => {
-                      await api.post("/setores", { nome: novoSetor });
+                      if (alvo) await api.put(`/setores/${alvo.id}`, { nome: novoSetor });
+                      else await api.post("/setores", { nome: novoSetor });
                       setNovoSetor("");
-                    }, "Setor criado.");
+                      setEditando(null);
+                    }, alvo ? "Setor corrigido." : "Setor criado.");
                   }}
                 >
                   <label className="min-w-0 flex-1">
-                    <span className="rotulo">Novo setor</span>
+                    <span className="rotulo">{editandoAqui ? "Corrigir setor" : "Novo setor"}</span>
                     <input
                       className="campo mt-1.5"
                       required
@@ -257,8 +308,13 @@ export default function PaginaCadastros() {
                     />
                   </label>
                   <button className="btn btn-secundario" type="submit">
-                    Adicionar
+                    {editandoAqui ? "Salvar" : "Adicionar"}
                   </button>
+                  {editandoAqui && (
+                    <button type="button" className="link-acao" onClick={cancelarEdicao}>
+                      cancelar
+                    </button>
+                  )}
                 </form>
               )}
               {/* A lista pinta o próprio fundo para separar as linhas; vazia, ela
@@ -300,6 +356,12 @@ export default function PaginaCadastros() {
                         )}
                         <button
                           className="link-acao"
+                          onClick={() => comecarEdicao(s.id, () => setNovoSetor(s.nome))}
+                        >
+                          editar
+                        </button>
+                        <button
+                          className="link-acao"
                           onClick={() =>
                             acao(
                               () => api.put(`/setores/${s.id}`, { ativo: !s.ativo }),
@@ -330,17 +392,21 @@ export default function PaginaCadastros() {
             <>
               {podeAba("locais") && (
                 <form
+                  id="form-apoio"
                   className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
+                    const alvo = editandoAqui;
                     void acao(async () => {
-                      await api.post("/locais", novoLocal);
+                      if (alvo) await api.put(`/locais/${alvo.id}`, novoLocal);
+                      else await api.post("/locais", novoLocal);
                       setNovoLocal({ nome: "", tipo: "SECO" });
-                    }, "Local criado.");
+                      setEditando(null);
+                    }, alvo ? "Local corrigido." : "Local criado.");
                   }}
                 >
                   <label className="min-w-0 flex-1">
-                    <span className="rotulo">Novo local</span>
+                    <span className="rotulo">{editandoAqui ? "Corrigir local" : "Novo local"}</span>
                     <input
                       className="campo mt-1.5"
                       required
@@ -364,8 +430,13 @@ export default function PaginaCadastros() {
                     </select>
                   </label>
                   <button className="btn btn-secundario" type="submit">
-                    Adicionar
+                    {editandoAqui ? "Salvar" : "Adicionar"}
                   </button>
+                  {editandoAqui && (
+                    <button type="button" className="link-acao" onClick={cancelarEdicao}>
+                      cancelar
+                    </button>
+                  )}
                 </form>
               )}
               {!locais.length && <Vazio>Nenhum local de estoque.</Vazio>}
@@ -384,6 +455,14 @@ export default function PaginaCadastros() {
                     </span>
                     {podeAba("locais") && (
                       <span className="flex gap-3">
+                        <button
+                          className="link-acao"
+                          onClick={() =>
+                            comecarEdicao(l.id, () => setNovoLocal({ nome: l.nome, tipo: l.tipo }))
+                          }
+                        >
+                          editar
+                        </button>
                         {!l.principal && l.ativo && (
                           <button
                             className="link-acao"
@@ -429,20 +508,25 @@ export default function PaginaCadastros() {
             <>
               {podeAba("categorias") && (
                 <form
+                  id="form-apoio"
                   className="mb-4 grid gap-3 sm:grid-cols-[1fr_200px_160px_auto] sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
+                    const alvo = editandoAqui;
                     void acao(async () => {
-                      await api.post("/categorias", {
+                      const corpo = {
                         nome: novaCategoria.nome,
                         tipo: novaCategoria.tipo,
                         id_pai: novaCategoria.id_pai ? Number(novaCategoria.id_pai) : null,
-                      });
+                      };
+                      if (alvo) await api.put(`/categorias/${alvo.id}`, corpo);
+                      else await api.post("/categorias", corpo);
                       setNovaCategoria({ nome: "", id_pai: "", tipo: "INSUMO" });
-                    }, "Categoria criada.");
+                      setEditando(null);
+                    }, alvo ? "Categoria corrigida." : "Categoria criada.");
                   }}
                 >
-                  <Campo rotulo="Nova categoria">
+                  <Campo rotulo={editandoAqui ? "Corrigir categoria" : "Nova categoria"}>
                     <input
                       className="campo"
                       required
@@ -462,6 +546,17 @@ export default function PaginaCadastros() {
                       <option value="">— raiz —</option>
                       {categorias
                         .filter((c) => c.ativo)
+                        // ⚠️ Corrigindo uma categoria, ela e as filhas saem da
+                        // lista de pais: dentro de si mesma seria um ciclo, e a
+                        // consulta recursiva da árvore entraria em laço. Quem
+                        // de fato barra é o servidor (400 com frase) — a lista
+                        // só evita oferecer o que vai ser recusado.
+                        .filter((c) => {
+                          const alvo = editandoAqui
+                            && categorias.find((x) => x.id === editandoAqui.id);
+                          if (!alvo) return true;
+                          return c.id !== alvo.id && !c.caminho.startsWith(`${alvo.caminho} `);
+                        })
                         .map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.caminho}
@@ -482,9 +577,16 @@ export default function PaginaCadastros() {
                       ))}
                     </select>
                   </Campo>
-                  <button className="btn btn-secundario" type="submit">
-                    Adicionar
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button className="btn btn-secundario" type="submit">
+                      {editandoAqui ? "Salvar" : "Adicionar"}
+                    </button>
+                    {editandoAqui && (
+                      <button type="button" className="link-acao" onClick={cancelarEdicao}>
+                        cancelar
+                      </button>
+                    )}
+                  </div>
                 </form>
               )}
               {!categorias.length && <Vazio>Nenhuma categoria.</Vazio>}
@@ -505,6 +607,22 @@ export default function PaginaCadastros() {
                     </span>
                     {podeAba("categorias") && (
                       <span className="flex gap-3">
+                        <button
+                          className="link-acao"
+                          onClick={() =>
+                            comecarEdicao(c.id, () =>
+                              setNovaCategoria({
+                                nome: c.nome,
+                                // ⚠️ O pai vem como TEXTO: o `<select>` compara
+                                // por string, e um número aqui deixaria a
+                                // categoria-mãe aparecendo como "— raiz —".
+                                id_pai: c.id_pai ? String(c.id_pai) : "",
+                                tipo: c.tipo,
+                              }))
+                          }
+                        >
+                          editar
+                        </button>
                         {enviaAoPdv && (
                           <button
                             className="link-acao"
@@ -563,23 +681,42 @@ export default function PaginaCadastros() {
             <>
               {podeAba("unidades") && (
                 <form
+                  id="form-apoio"
                   className="mb-4 grid gap-3 sm:grid-cols-[110px_1fr_180px_140px_auto] sm:items-end"
                   onSubmit={(e: FormEvent) => {
                     e.preventDefault();
+                    const alvo = editandoAqui;
                     void acao(async () => {
-                      await api.post("/unidades-medida", {
-                        ...novaUm,
-                        fator_base: Number(novaUm.fator_base),
-                      });
+                      if (alvo) {
+                        // ⚠️ A SIGLA não vai no corpo: ela é a chave primária, e
+                        // dela dependem produto, ficha, item de nota e razão.
+                        // Renomear seria repontar tudo isso — quem quer outra
+                        // sigla cria outra unidade.
+                        await api.put(`/unidades-medida/${alvo.id}`, {
+                          nome: novaUm.nome,
+                          grandeza: novaUm.grandeza,
+                          fator_base: Number(novaUm.fator_base),
+                        });
+                      } else {
+                        await api.post("/unidades-medida", {
+                          ...novaUm,
+                          fator_base: Number(novaUm.fator_base),
+                        });
+                      }
                       setNovaUm({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
-                    }, "Unidade criada.");
+                      setEditando(null);
+                    }, alvo ? "Unidade corrigida." : "Unidade criada.");
                   }}
                 >
-                  <Campo rotulo="Sigla">
+                  <Campo
+                    rotulo="Sigla"
+                    dica={editandoAqui ? "não muda: é a chave" : undefined}
+                  >
                     <input
                       className="campo mono"
                       required
                       maxLength={6}
+                      disabled={!!editandoAqui}
                       value={novaUm.sigla}
                       onChange={(e) => setNovaUm({ ...novaUm, sigla: e.target.value.toUpperCase() })}
                     />
@@ -616,9 +753,16 @@ export default function PaginaCadastros() {
                       onChange={(e) => setNovaUm({ ...novaUm, fator_base: e.target.value })}
                     />
                   </Campo>
-                  <button className="btn btn-secundario" type="submit">
-                    Adicionar
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button className="btn btn-secundario" type="submit">
+                      {editandoAqui ? "Salvar" : "Adicionar"}
+                    </button>
+                    {editandoAqui && (
+                      <button type="button" className="link-acao" onClick={cancelarEdicao}>
+                        cancelar
+                      </button>
+                    )}
+                  </div>
                 </form>
               )}
               <div className="overflow-x-auto">
@@ -641,6 +785,21 @@ export default function PaginaCadastros() {
                         <td className="num">{Number(u.fator_base)}</td>
                         <td className="text-right">
                           {podeAba("unidades") && (
+                            <span className="flex justify-end gap-3">
+                            <button
+                              className="link-acao"
+                              onClick={() =>
+                                comecarEdicao(u.sigla, () =>
+                                  setNovaUm({
+                                    sigla: u.sigla,
+                                    nome: u.nome,
+                                    grandeza: u.grandeza,
+                                    fator_base: String(u.fator_base),
+                                  }))
+                              }
+                            >
+                              editar
+                            </button>
                             <button
                               className="link-acao"
                               onClick={() =>
@@ -653,6 +812,7 @@ export default function PaginaCadastros() {
                             >
                               {u.ativo ? "desativar" : "reativar"}
                             </button>
+                            </span>
                           )}
                         </td>
                       </tr>

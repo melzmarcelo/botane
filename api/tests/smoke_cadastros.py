@@ -96,6 +96,64 @@ checar("KG converte para grama", kg and float(kg["fator_base"]) == 1000, kg)
 categorias = garantir_categorias(chamar, token, 2)
 checar("categorias respondem", isinstance(categorias, list) and len(categorias) >= 2, categorias)
 
+print("1b. corrigir o que foi cadastrado errado")
+# 🔑 **Dava para criar e desativar, e não dava para CORRIGIR pela tela.** Os
+# quatro PUT existem no servidor desde o começo e nenhuma tela os oferecia: um
+# setor cadastrado com o nome errado no primeiro dia ficava errado para sempre,
+# e o "conserto" era desativar e criar outro — deixando o histórico apontando
+# para um cadastro morto. A suíte cobra os quatro, porque é a tela que passou a
+# depender deles.
+marca_ed = uuid.uuid4().hex[:6]
+st, r = chamar("POST", "/setores", {"nome": f"Setor errado {marca_ed}"}, token=token)
+id_set = (r or {}).get("id")
+st, r = chamar("PUT", f"/setores/{id_set}", {"nome": f"Setor certo {marca_ed}"}, token=token)
+checar("o setor se corrige", st == 200, (st, r))
+st, lista = chamar("GET", "/setores?incluir_inativos=true", token=token)
+checar("e a lista mostra o nome novo",
+       any(x["id"] == id_set and x["nome"] == f"Setor certo {marca_ed}" for x in lista),
+       [x["nome"] for x in lista if x["id"] == id_set])
+chamar("PUT", f"/setores/{id_set}", {"ativo": False}, token=token)
+
+st, r = chamar("POST", "/locais",
+               {"nome": f"Local errado {marca_ed}", "tipo": "SECO"}, token=token)
+id_loc = (r or {}).get("id")
+st, r = chamar("PUT", f"/locais/{id_loc}",
+               {"nome": f"Local certo {marca_ed}", "tipo": "CONGELADO"}, token=token)
+checar("o local se corrige, nome e tipo", st == 200, (st, r))
+st, lista = chamar("GET", "/locais?incluir_inativos=true", token=token)
+achado = next((x for x in lista if x["id"] == id_loc), {})
+checar("e o tipo novo vale", achado.get("tipo") == "CONGELADO", achado)
+chamar("DELETE", f"/locais/{id_loc}", token=token)
+
+st, r = chamar("POST", "/categorias",
+               {"nome": f"Cat errada {marca_ed}", "tipo": "INSUMO"}, token=token)
+id_cat = (r or {}).get("id")
+st, r = chamar("PUT", f"/categorias/{id_cat}",
+               {"nome": f"Cat certa {marca_ed}", "tipo": "REVENDA"}, token=token)
+checar("a categoria se corrige", st == 200, (st, r))
+# ⚠️ **Dentro de si mesma seria um ciclo** — e a consulta recursiva da árvore
+# entraria em laço. A tela já não oferece a própria categoria como mãe; quem de
+# fato barra é o servidor.
+st, r = chamar("PUT", f"/categorias/{id_cat}", {"id_pai": id_cat}, token=token)
+checar("mas não pode virar mãe de si mesma", st == 400, (st, r))
+chamar("DELETE", f"/categorias/{id_cat}", token=token)
+
+sigla_ed = f"Z{marca_ed[:4]}".upper()[:6]
+st, r = chamar("POST", "/unidades-medida",
+               {"sigla": sigla_ed, "nome": "Errada", "grandeza": "MASSA",
+                "fator_base": 1}, token=token)
+if st == 201:
+    st, r = chamar("PUT", f"/unidades-medida/{sigla_ed}",
+                   {"nome": "Certa", "fator_base": 1000}, token=token)
+    checar("a unidade de medida se corrige", st == 200, (st, r))
+    st, lista = chamar("GET", "/unidades-medida?incluir_inativas=true", token=token)
+    achada = next((x for x in lista if x["sigla"] == sigla_ed), {})
+    checar("com o nome e o fator novos",
+           achada.get("nome") == "Certa" and float(achada.get("fator_base", 0)) == 1000,
+           achada)
+    chamar("PUT", f"/unidades-medida/{sigla_ed}", {"ativo": False}, token=token)
+
+
 print("2. árvore de categorias")
 st, r = chamar("POST", "/categorias", {"nome": "Smoke Raiz", "tipo": "INSUMO"}, token=token)
 checar("cria categoria raiz", st == 201, r)

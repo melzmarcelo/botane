@@ -31,7 +31,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_local  # noqa: E402
+from comum import garantir_cozinha, garantir_local  # noqa: E402
 from datetime import date
 
 BASE = "http://127.0.0.1:9200"
@@ -215,8 +215,11 @@ checar("mexer no combo depois NÃO reescreve o CMV da venda",
        (apuracao.get("cmv_teorico"), depois.get("cmv_teorico")))
 
 print("8. custo do combo é dinheiro — obedece a chave de custo")
-st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
-tk = r.get("access_token")
+# ⚠️ **GARANTIR, não supor.** Esta suíte só fazia o login: o usuário de cozinha
+# pode não existir (base recém-instalada) ou estar inativo, deixado assim por
+# outra rodada — e aí o 401 vira "usuário de cozinha disponível: falso", uma
+# falha que não fala do sistema. Mesma lição que `smoke_alertas` já pagou.
+tk = garantir_cozinha(chamar, token)
 if tk:
     st, k = chamar("GET", f"/produtos/{combo['id']}/kit", token=tk)
     checar("cozinha vê a composição", st == 200 and len(k["itens"]) >= 1, k)

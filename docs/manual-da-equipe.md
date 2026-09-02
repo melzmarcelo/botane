@@ -125,6 +125,19 @@ imediato: alguém carrega a caixa e pronto.
 
 ---
 
+### Corrigir um setor, local, categoria ou unidade
+
+Menu **Cadastros → Tabelas de apoio**. Cada linha tem **editar**: o registro
+sobe para o mesmo formulário do cadastro, o botão passa a dizer **Salvar** e
+aparece um *cancelar* ao lado.
+
+⚠️ **Corrigir é melhor que desativar e criar outro.** O cadastro antigo continua
+apontado por todo o histórico — nota, razão, ficha —, e criar um substituto
+deixa metade do passado num nome e metade no outro.
+
+⚠️ A **sigla** da unidade de medida não muda: é ela que produto, ficha e razão
+guardam. Quem precisa de outra sigla cria outra unidade.
+
 ## Cozinha
 
 ### Ficha técnica
@@ -138,6 +151,11 @@ quanto rende.
   **sub-ficha**, não como ingrediente solto.
 - **Ficha homologada não se edita.** Mudou a receita? **Nova versão.** Editar a
   antiga reescreveria o custo de tudo que já foi vendido.
+- **A foto do prato pronto** entra no cartão *Foto do prato*, e sai junto na
+  ficha impressa — é ela que responde "está pronto?" para quem está montando.
+  ⚠️ A foto é a única coisa que se troca mesmo com a ficha **publicada**: o
+  prato só pode ser fotografado depois de feito. Ao criar uma versão nova, ela
+  vem junto.
 
 ### Produção
 

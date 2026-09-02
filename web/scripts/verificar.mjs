@@ -68,6 +68,26 @@ async function api(metodo, caminho, corpo, token) {
   };
 }
 
+/** POST multipart — o `api()` só fala JSON, e upload é formulário.
+ *
+ * ⚠️ O conteúdo é um PNG mínimo de verdade: o servidor abre a imagem para
+ * conferir que ela é uma imagem, e bytes inventados levariam 400.
+ */
+async function enviarArquivo(caminho, token) {
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAA"
+    + "DklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII=", "base64");
+  const corpo = new FormData();
+  corpo.append("arquivo", new Blob([png], { type: "image/png" }), "prato.png");
+  const r = await fetch(API + caminho, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: corpo,
+  });
+  const texto = await r.text();
+  return { status: r.status, dados: texto ? JSON.parse(texto) : null };
+}
+
 async function entrar(pagina, quem) {
   await pagina.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await pagina.type('input[type="email"]', quem.email);
@@ -784,6 +804,80 @@ try {
     ordemCadastro.listaY === null || ordemCadastro.formY < ordemCadastro.listaY,
     ordemCadastro);
 
+  // 🔑 **Dava para criar e desativar, e não dava para CORRIGIR.** Os quatro PUT
+  // existem no servidor desde o começo e a tela nunca os ofereceu: um setor
+  // cadastrado com o nome errado no primeiro dia ficava errado para sempre.
+  // ⚠️ A correção usa o MESMO formulário do cadastro — criar e corrigir têm a
+  // mesma forma, para o olho reconhecer. A checagem afirma a PROPRIEDADE: o que
+  // se clica em "editar" volta preenchido no formulário, e salvar troca o nome
+  // na lista. Nada aqui depende de quantos setores a base tem hoje.
+  const marcaEd = Date.now().toString().slice(-6);
+  await api("POST", "/setores", { nome: `Tela apoio ${marcaEd}` }, token);
+  await irPara(p, `${WEB}/cadastros?aba=setores`);
+  await p.waitForFunction(
+    (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
+    `Tela apoio ${marcaEd}`,
+  ).catch(() => {});
+  const abriuEdicao = await p.evaluate((nome) => {
+    const li = [...document.querySelectorAll("main ul > li")]
+      .find((x) => x.innerText.includes(nome));
+    const botao = li && [...li.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "editar");
+    botao?.click();
+    return { achouLinha: !!li, achouBotao: !!botao };
+  }, `Tela apoio ${marcaEd}`);
+  checar("a linha da tabela de apoio oferece editar",
+    abriuEdicao.achouLinha && abriuEdicao.achouBotao, abriuEdicao);
+  await new Promise((r) => setTimeout(r, 600));
+  const noFormulario = await p.evaluate(() => {
+    const form = document.querySelector("#form-apoio");
+    const campo = form?.querySelector("input");
+    return {
+      valor: campo?.value ?? "",
+      // ⚠️ O botão troca de palavra: "Adicionar" num formulário que vai
+      // SUBSTITUIR um registro faria criar um duplicado por engano.
+      botao: form?.querySelector('button[type="submit"]')?.textContent?.trim() ?? "",
+      temCancelar: [...(form?.querySelectorAll("button") ?? [])]
+        .some((b) => b.textContent?.trim() === "cancelar"),
+    };
+  });
+  checar("e traz o registro para o MESMO formulário do cadastro",
+    noFormulario.valor === `Tela apoio ${marcaEd}`, noFormulario);
+  checar("com o botão dizendo Salvar, e uma saída ao lado",
+    noFormulario.botao === "Salvar" && noFormulario.temCancelar, noFormulario);
+  await p.evaluate((nome) => {
+    const campo = document.querySelector("#form-apoio input");
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    set.call(campo, nome);
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector('#form-apoio button[type="submit"]')?.click();
+  }, `Tela corrigido ${marcaEd}`);
+  await p.waitForFunction(
+    (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
+    `Tela corrigido ${marcaEd}`,
+  ).catch(() => {});
+  const depoisDeCorrigir = await p.evaluate((antigo) => ({
+    texto: document.body.innerText,
+    // Voltou a ser um formulário de cadastro: nada preso da edição anterior.
+    botao: document.querySelector('#form-apoio button[type="submit"]')?.textContent?.trim(),
+    campo: document.querySelector("#form-apoio input")?.value ?? "",
+    aindaTemOAntigo: document.body.innerText.includes(antigo),
+  }), `Tela apoio ${marcaEd}`);
+  checar("salvar troca o nome na lista, sem criar outro registro",
+    depoisDeCorrigir.texto.includes(`Tela corrigido ${marcaEd}`)
+    && !depoisDeCorrigir.aindaTemOAntigo, depoisDeCorrigir);
+  checar("e o formulário volta a ser o de cadastro",
+    depoisDeCorrigir.botao === "Adicionar" && depoisDeCorrigir.campo === "",
+    depoisDeCorrigir);
+  // Sai da lista ativa: a suíte não deixa setor de teste para trás.
+  {
+    const { dados: setoresAgora } = await api(
+      "GET", "/setores?incluir_inativos=true", null, token);
+    const meu = (setoresAgora ?? []).find((x) => x.nome === `Tela corrigido ${marcaEd}`);
+    if (meu) await api("PUT", `/setores/${meu.id}`, { ativo: false }, token);
+  }
+
   console.log("5. fichas técnicas (etapa 3)");
   // Cenário montado pela API: insumo com preço + produto produzido.
   const marca = Date.now().toString().slice(-5);
@@ -903,6 +997,49 @@ try {
       document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
     });
     await new Promise((r) => setTimeout(r, 500));
+
+    // 🔑 **A foto do prato pronto.** A ficha é seguida por quem está de pé na
+    // cozinha, e "está pronto?" é uma pergunta VISUAL: nenhuma descrição de
+    // montagem responde o que a imagem responde. A coluna existia desde a
+    // etapa 3 e nunca tinha sido usada.
+    const cartaoFoto = await p.evaluate(() => {
+      const texto = document.body.innerText;
+      const campo = document.querySelector("#foto-da-ficha");
+      return {
+        temCartao: /Foto do prato/i.test(texto),
+        temCampo: !!campo,
+        // Só imagem: o servidor recusa o resto, e oferecer tudo ensina o erro.
+        aceita: campo?.getAttribute("accept") ?? "",
+        semFoto: /sem\s*foto/i.test(texto),
+      };
+    });
+    checar("a ficha tem o cartão da foto do prato",
+      cartaoFoto.temCartao && cartaoFoto.temCampo, cartaoFoto);
+    checar("que aceita só imagem e diz quando não há nenhuma",
+      cartaoFoto.aceita.includes("image/") && cartaoFoto.semFoto, cartaoFoto);
+    // ⚠️ Envio de arquivo pela API, não pelo seletor do navegador: o que se
+    // mede aqui é a TELA mostrando a foto, e encenar o clique no seletor de
+    // arquivos do sistema operacional é frágil sem provar mais nada.
+    const subiu = await enviarArquivo(`/fichas/${idFicha}/foto`, token);
+    checar("a foto sobe pela rota da ficha",
+      subiu.status === 200 && !!subiu.dados?.foto_url, subiu);
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await p.waitForFunction(
+      () => !!document.querySelector('img[alt^="Foto de"]'), { timeout: 12000 },
+    ).catch(() => {});
+    const comFoto = await p.evaluate(() => {
+      const img = document.querySelector('img[alt^="Foto de"]');
+      return {
+        tem: !!img,
+        // ⚠️ `naturalWidth` e não só o `src`: a tag pode estar lá apontando
+        // para uma URL que devolve 404, e a tela pareceria certa.
+        carregou: (img?.naturalWidth ?? 0) > 0,
+        oferece: /remover foto/i.test(document.body.innerText),
+      };
+    });
+    checar("e a tela passa a mostrá-la", comFoto.tem && comFoto.carregou, comFoto);
+    checar("com a saída para tirá-la", comFoto.oferece, comFoto);
+    await api("DELETE", `/fichas/${idFicha}/foto`, null, token);
 
     // A cozinha vê a receita e não vê dinheiro — na tela, não só na API.
     await p.evaluate(() => localStorage.clear());

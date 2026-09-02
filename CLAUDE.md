@@ -224,6 +224,40 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ela pela URL, e ela é o caminho previsto para quem conta no papel. Ganhou o botão em
   `/inventario/[id]`, no modo "avulso" da janela (um registro só: pergunta o formato e mais
   nada). Em contagem CEGA aberta o servidor continua tirando as colunas do sistema.
+- 🔑 **A ficha técnica ganhou FOTO do prato pronto** (01/09/2026, pedido do dono). A coluna
+  `fichas_tecnicas.foto_url` **existe desde a etapa 3 e nunca tinha sido usada** — não houve
+  migração. A ficha é seguida por quem está de pé na cozinha, e *"está pronto?"* é uma pergunta
+  **visual**: nenhuma descrição de montagem responde o que a imagem responde. Ela aparece no
+  cartão do prato, vira miniatura na lista de fichas e **sai no PDF**, que é o papel que fica
+  pendurado.
+  🔑 **A foto é a EXCEÇÃO da regra "ficha homologada não se edita".** A ficha publicada é
+  congelada porque mexer nela mudaria custo histórico; a foto não entra em conta nenhuma. E o
+  prato só pode ser fotografado DEPOIS de pronto, que é depois de homologado — a trava
+  obrigaria a abrir uma versão que não difere em nada, e cada versão carrega histórico de
+  custo. Mesmo raciocínio do nome do inventário, editável com a contagem fechada: rótulo não
+  mexe em item nem em razão.
+  🔑 **A nova versão leva a foto, e `arquivos.copiar` duplica o ARQUIVO — não a URL.** Copiar só
+  a URL deixaria as duas fichas apontando para o mesmo arquivo, cujo `dono` é a versão VELHA — e
+  `salvar_imagem` apaga as versões anteriores do mesmo dono. Trocar a foto da versão 1 apagaria
+  a da versão 2, que ninguém tocou, e a imagem sumiria da tela sem nada explicando. A suíte
+  cobra exatamente esse caminho.
+  ⚠️ **No PDF ela sai AO LADO do resumo, não abaixo.** A caixa do resumo tem 106 mm e a página
+  em retrato tem 186: sobrava metade da largura vazia, e a foto embaixo empurraria os
+  ingredientes para a segunda página — que é justamente a que ninguém pendura.
+  ⚠️ **`larga_max` porque foto de celular vem DEITADA**: a 34 mm de altura ela passa dos 78 mm
+  da coluna e estoura a tabela. O `_figura` saiu de dentro do código da logo, que já fazia
+  altura fixa com largura proporcional e já tolerava imagem ilegível — os dois usam o mesmo
+  helper agora.
+  ⚠️ **Ver a foto NÃO depende de `fichas.custos`**: ela não é dinheiro. Quem manda a foto
+  precisa de `fichas.editar`.
+  ⚠️ **O `dono` do arquivo é a FICHA, não o produto** (`ficha-{id}`): duas versões do mesmo
+  prato podem ter fotos diferentes, e é a montagem que muda entre elas.
+  ⚠️ **A suíte apaga a foto ANTES de arquivar a ficha**: arquivar não apaga o arquivo (nem
+  deveria — ficha arquivada continua respondendo pelo histórico), e sem isso cada rodada
+  deixaria mais duas imagens na tabela `arquivos`.
+  ⚠️ **O corpo multipart precisa do CRLF antes do fecho da fronteira.** Sem ele o servidor não
+  acha o campo e devolve 422 "Field required" — que se lê como rota errada, não como teste
+  errado. Custou meia hora na primeira versão do helper da suíte.
 - 🔑 **A ficha técnica se imprime** (`GET /exportar/ficha/{id}.pdf`, botão em `/fichas/[id]`,
   29/08/2026). A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha — não na
   frente do monitor. Sem o papel, a receita fica presa numa tela que ninguém leva para perto
@@ -414,6 +448,29 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   o que mandaram, não sobre o que foi gravado.
   ⚠️ Nome de **fornecedor** NÃO segue a regra: é razão social, vem de um lugar só, e "Cia.
   Brasileira de Distribuição" em caixa alta perde a leitura sem ganhar nada.
+- 🔑 **As tabelas de apoio deixaram de ser só-leitura depois de criadas**
+  (01/09/2026, pedido do dono). Dava para criar e desativar, e **não dava para
+  CORRIGIR** — os quatro PUT existem no servidor desde o começo e nenhuma tela os
+  oferecia. Um setor cadastrado com o nome errado no primeiro dia ficava errado para sempre, e
+  o "conserto" era desativar e criar outro, deixando o histórico apontando para um cadastro
+  morto. É a mesma família do cadastro de loja e do "onde a pessoa trabalha": **o sistema sabia
+  fazer e não oferecia isso a ninguém.**
+  ⚠️ **A correção usa o MESMO formulário do cadastro**, e não uma janela nem campos na linha:
+  criar e corrigir têm a mesma forma, para o olho reconhecer — o corte que Fornecedores e
+  Usuários já usam. O botão troca "Adicionar" por "Salvar" e ganha um "cancelar" ao lado.
+  ⚠️ **O formulário é trazido para a VISTA** (`#form-apoio` + `scrollIntoView`): com 184 locais,
+  clicar em "editar" na linha 90 preencheria um formulário fora da tela, e a pessoa concluiria
+  que o botão não fez nada. Em `requestAnimationFrame`, senão a rolagem chega antes dos valores.
+  ⚠️ **Trocar de aba cancela a edição aberta**: senão o formulário das unidades de medida
+  apareceria preenchido com o nome de um setor, dizendo "Salvar" para um registro que não está
+  mais na tela.
+  ⚠️ **A SIGLA da unidade de medida não se edita** — é a chave primária, e dela dependem
+  produto, ficha, item de nota e razão. O campo fica desabilitado com a dica dizendo por quê;
+  quem quer outra sigla cria outra unidade.
+  ⚠️ **A categoria em edição sai da lista de "dentro de"**, ela e as filhas (casadas pelo
+  `caminho`): dentro de si mesma seria um ciclo, e a consulta recursiva da árvore entraria em
+  laço. Quem de fato barra é o servidor, com 400 e frase — a lista só evita oferecer o que vai
+  ser recusado.
 - ⚠️ **Cadastro em coluna lateral não cabe no cadastro.** Fornecedor (13 campos em 360 px) e
   usuário (uma lista de papéis que cresce, cada um com descrição de duas linhas, em 380 px) eram
   formulários na direita da lista: quem cadastrava rolava a tela para achar o botão, e no de
@@ -1701,6 +1758,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   2. `smoke_alertas` só AJUSTAVA o usuário de cozinha `if existente:` — depois de uma limpeza
      que leva os usuários de teste, o login voltava 401 e a checagem iterava a MENSAGEM de
      erro como se fosse a lista de alertas, com traceback longe da causa.
+     ⚠️ **`smoke_kits` tinha a mesma doença e ficou de fora daquela correção**, e apareceu em
+     01/09/2026 com o usuário deixado INATIVO por outra rodada: a falha dizia "usuário de
+     cozinha disponível: falso", que não fala do sistema. Ao corrigir uma armadilha destas,
+     **procurar todos os chamadores** — não só o que está vermelho naquele dia.
   3. `smoke_pdv_legal` contava com a CAFETERIA e o BAR deixados pela importação do cardápio.
      ⚠️ E `_garantir` precisou comparar **sem caixa**: a unicidade do nome ignora maiúsculas,
      então o POST devolve 409 para "BAR" quando existe "Bar" — e a busca exata não achava o
@@ -2015,8 +2076,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.606 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (47),
-  `smoke_fichas.py` (37), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.627 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+  `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
@@ -2025,7 +2086,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (389, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (399, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

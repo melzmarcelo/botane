@@ -42,6 +42,52 @@ def chamar(metodo, caminho, corpo=None, token=None):
             return e.code, {"detail": bruto.decode(errors="replace")}
 
 
+def enviar_arquivo(caminho, nome_arquivo, conteudo, tipo, token):
+    """POST multipart na unha — o urllib não monta formulário sozinho."""
+    import uuid
+    limite = uuid.uuid4().hex
+    fim = chr(13) + chr(10)   # CRLF: é o que o multipart exige
+    cabeca = (
+        "--" + limite + fim
+        + 'Content-Disposition: form-data; name="arquivo"; filename="'
+        + nome_arquivo + '"' + fim
+        + "Content-Type: " + tipo + fim + fim
+    ).encode()
+    # ⚠️ O CRLF ANTES do fecho faz parte do formato: sem ele o servidor não
+    # encontra o campo e devolve 422 "Field required" — que se lê como se a
+    # rota estivesse errada, não o teste.
+    corpo = cabeca + conteudo + (fim + "--" + limite + "--" + fim).encode()
+    req = urllib.request.Request(BASE + caminho, method="POST", data=corpo)
+    req.add_header("Content-Type", f"multipart/form-data; boundary={limite}")
+    req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        bruto = e.read()
+        try:
+            return e.code, json.loads(bruto or b"null")
+        except json.JSONDecodeError:
+            return e.code, {"detail": bruto.decode(errors="replace")}
+
+
+def baixar_bytes(caminho, token):
+    req = urllib.request.Request(BASE + caminho)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=40) as r:
+        return r.read()
+
+
+def imagem_de_teste(cor=(180, 120, 60)) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (600, 400), cor).save(buf, "JPEG")
+    return buf.getvalue()
+
+
 def checar(nome, condicao, extra=""):
     global ok
     if condicao:
@@ -179,6 +225,74 @@ checar("homologa a versão 2", st == 200, r)
 st, f1 = chamar("GET", f"/fichas/{ficha_base}", token=token)
 checar("a versão 1 foi arquivada", f1.get("status") == "ARQUIVADA", f1.get("status"))
 
+print("5b. a foto do prato pronto")
+# 🔑 **A coluna `foto_url` existe desde a etapa 3 e nunca tinha sido usada.** A
+# ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha: "está
+# pronto?" é uma pergunta visual, e nenhuma descrição de montagem responde o
+# que a foto responde.
+st, r = enviar_arquivo(f"/fichas/{v2}/foto", "prato.jpg", imagem_de_teste(),
+                       "image/jpeg", token)
+checar("a ficha recebe a foto do prato", st == 200 and r.get("foto_url"), (st, r))
+url_foto = (r or {}).get("foto_url")
+st, f2 = chamar("GET", f"/fichas/{v2}", token=token)
+# ⚠️ `bool(url_foto)` junto: sem isso, dois `None` fariam a checagem passar —
+# ela diria que a foto voltou quando não houve foto nenhuma.
+checar("e ela volta no detalhe",
+       bool(url_foto) and f2.get("foto_url") == url_foto, (f2.get("foto_url"), url_foto))
+st, lista_f = chamar("GET", f"/fichas?id_produto={f2['id_produto']}", token=token)
+checar("e na lista, que a usa como miniatura",
+       any(x.get("foto_url") == url_foto for x in (lista_f or [])),
+       [x.get("foto_url") for x in (lista_f or [])])
+
+# 🔑 **A foto vale mesmo com a ficha HOMOLOGADA — é a exceção da regra.** A
+# ficha publicada é congelada porque mexer nela mudaria custo histórico; a foto
+# não entra em conta nenhuma. E o prato só pode ser fotografado DEPOIS de
+# pronto, que é depois de homologado: a trava obrigaria a abrir uma versão que
+# não difere em nada. Mesmo raciocínio do nome do inventário, editável com a
+# contagem fechada.
+checar("e a versão 2 está mesmo homologada", f2.get("status") == "HOMOLOGADA",
+       f2.get("status"))
+st, r = chamar("PUT", f"/fichas/{v2}", {"porcoes": 9}, token=token)
+checar("o RESTO da ficha homologada continua travado", st == 400, (st, r))
+
+st, r = enviar_arquivo(f"/fichas/{v2}/foto", "vazio.jpg", b"nao sou imagem",
+                       "image/jpeg", token)
+checar("arquivo que não é imagem é recusado", st == 400, (st, r))
+
+# 🔑 **A nova versão leva a foto — e o ARQUIVO é copiado, não a URL.** Copiar
+# só a URL deixaria as duas apontando para o mesmo arquivo, cujo dono é a
+# versão velha: trocar a foto de lá apagaria a daqui, sem ninguém ter tocado
+# nesta ficha. É o defeito que a suíte cobra logo abaixo.
+st, r = chamar("POST", f"/fichas/{v2}/nova-versao", token=token)
+v3 = (r or {}).get("id")
+if v3:
+    criados["fichas"].append(v3)
+    st, f3 = chamar("GET", f"/fichas/{v3}", token=token)
+    checar("a nova versão nasce com a foto", bool(f3.get("foto_url")), f3.get("foto_url"))
+    checar("mas com arquivo PRÓPRIO, não o mesmo endereço",
+           f3.get("foto_url") != url_foto, (f3.get("foto_url"), url_foto))
+    # Trocar a foto da versão VELHA não pode matar a da nova.
+    enviar_arquivo(f"/fichas/{v2}/foto", "outro.jpg", imagem_de_teste((20, 90, 160)),
+                   "image/jpeg", token)
+    conteudo = baixar_bytes(f3["foto_url"], token) if f3.get("foto_url") else b""
+    checar("e trocar a foto da versão anterior não apaga a dela",
+           len(conteudo) > 100, len(conteudo))
+
+# 🔑 **A foto vai no PAPEL, que é onde a ficha serve.** Quem segue a receita
+# está de pé na cozinha, não na frente do monitor.
+pdf = baixar_bytes(f"/exportar/ficha/{v2}.pdf", token)
+checar("a ficha impressa sai com a foto", pdf[:4] == b"%PDF" and len(pdf) > 4000,
+       (pdf[:4], len(pdf)))
+
+st, r = chamar("DELETE", f"/fichas/{v2}/foto", token=token)
+checar("e a foto se remove", st == 200, (st, r))
+st, f2 = chamar("GET", f"/fichas/{v2}", token=token)
+checar("voltando a ficar sem nenhuma", f2.get("foto_url") is None, f2.get("foto_url"))
+# ⚠️ Ficha sem foto continua imprimindo: foto ausente é o estado normal.
+pdf = baixar_bytes(f"/exportar/ficha/{v2}.pdf", token)
+checar("e a ficha SEM foto continua imprimindo", pdf[:4] == b"%PDF", pdf[:4])
+
+
 print("6. dinheiro é permissão à parte")
 st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
@@ -223,6 +337,10 @@ checar("recusa arquivar ficha usada como sub-ficha", st == 409, (st, r))
 
 print("8. limpeza")
 for id_ficha in reversed(criados["fichas"]):
+    # ⚠️ A foto sai ANTES: arquivar a ficha não apaga o arquivo (nem deveria —
+    # ficha arquivada continua respondendo pelo histórico), e sem isto cada
+    # rodada deixaria mais duas imagens na tabela `arquivos`.
+    chamar("DELETE", f"/fichas/{id_ficha}/foto", token=token)
     chamar("DELETE", f"/fichas/{id_ficha}", token=token)
 for id_produto in criados["produtos"]:
     chamar("DELETE", f"/produtos/{id_produto}", token=token)

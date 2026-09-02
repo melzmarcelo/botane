@@ -54,6 +54,9 @@ class FichaResumo(BaseModel):
     porcoes: float
     itens: int = 0
     atualizada_em: datetime | None = None
+    # A foto do prato pronto. Na LISTA ela vale como miniatura: um cardápio de
+    # 464 pratos se percorre pelo olho, não lendo 464 nomes.
+    foto_url: str | None = None
     # Só vem para quem tem `fichas.custos`.
     custo_total: float | None = None
     custo_por_porcao: float | None = None
@@ -79,6 +82,10 @@ class FichaResponse(BaseModel):
     homologada_em: datetime | None = None
     homologada_por: str | None = None
     criado_em: datetime | None = None
+    # 🔑 **A coluna existe desde a etapa 3 e nunca tinha sido usada.** A ficha é
+    # seguida por quem está de pé na cozinha, e "está pronto?" é uma pergunta
+    # visual — nenhuma descrição de montagem responde o que uma foto responde.
+    foto_url: str | None = None
     itens: list[dict] = []
     # Bloco de dinheiro — ausente para quem não tem `fichas.custos`.
     custo_total: float | None = None

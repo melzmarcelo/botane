@@ -6,10 +6,17 @@ Duas regras de acesso que valem a pena ler antes de mexer:
    nenhum campo de dinheiro sai daqui — não é só a tela que esconde.
 2. **Ficha homologada não se edita.** Alterar receita publicada mudaria o custo
    histórico. Quem quer mudar cria uma nova versão.
+3. 🔑 **A FOTO é a exceção da regra 2, e por um motivo prático:** o prato só
+   pode ser fotografado depois de feito, e ele é feito depois de a ficha ser
+   homologada. Exigir uma versão nova para pendurar a foto criaria uma versão
+   que não difere em nada — e cada versão carrega histórico de custo. É o mesmo
+   raciocínio do nome do inventário, editável com a contagem fechada: rótulo
+   não mexe em item nem em razão.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
+import arquivos
 import auditoria
 from database import get_cursor
 from paginacao import com_total
@@ -85,6 +92,7 @@ def listar(
             """
             SELECT f.id, f.id_produto, p.nome AS produto, p.codigo, f.versao, f.status,
                    f.rendimento_qtd, f.rendimento_um, f.porcoes, f.criado_em AS atualizada_em,
+                   f.foto_url,
                    (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
                    count(*) OVER () AS _total
               FROM fichas_tecnicas f
@@ -178,6 +186,7 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         "homologada_em": ficha["homologada_em"],
         "homologada_por": ficha["homologada_por_nome"],
         "criado_em": ficha["criado_em"],
+        "foto_url": ficha["foto_url"],
         "itens": itens,
         "ve_custo": ve_custo,
     }
@@ -325,6 +334,16 @@ def nova_versao(id_ficha: int,
              ctx.id_usuario),
         )
         nova = cur.fetchone()["id"]
+        # 🔑 **A foto vem junto, e o ARQUIVO é copiado — não a URL.** A versão
+        # nova quase sempre é a mesma receita com um ajuste, e o prato continua
+        # o mesmo: nascer sem foto obrigaria a fotografar de novo a cada
+        # versão. ⚠️ Copiar só a URL deixaria as duas apontando para o mesmo
+        # arquivo, cujo dono é a versão VELHA — e trocar a foto de lá apagaria
+        # a daqui, sem ninguém ter tocado nesta ficha.
+        nova_foto = arquivos.copiar(f["foto_url"], f"ficha-{nova}")
+        if nova_foto:
+            cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s",
+                        (nova_foto, nova))
         cur.execute(
             """INSERT INTO ficha_itens (id_ficha, id_insumo, id_subficha, qtd_bruta, qtd_liquida,
                                         um, fator_correcao, fator_coccao, observacao, ordem)
@@ -358,3 +377,54 @@ def arquivar(id_ficha: int,
         )
         auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "arquivar")
     return {"message": "Ficha arquivada"}
+
+
+@router.post("/{id_ficha}/foto")
+async def enviar_foto(
+    id_ficha: int,
+    arquivo: UploadFile = File(...),
+    ctx: Contexto = Depends(requer_permissao("fichas.editar")),
+) -> dict:
+    """A foto do prato pronto — o que a cozinha compara com o que está na mão.
+
+    🔑 **Não passa pelo `_travar_se_homologada`, e é deliberado.** A ficha
+    homologada é congelada porque mexer nela mudaria custo histórico; a foto não
+    entra em conta nenhuma. E o prato só existe para ser fotografado DEPOIS de
+    homologado — a trava obrigaria a abrir uma versão que não difere em nada
+    para pendurar uma imagem.
+
+    ⚠️ Quem manda a foto precisa de `fichas.editar`. VER a foto segue a ficha:
+    ela não é dinheiro, então `fichas.custos` não a esconde.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT foto_url FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        antes = cur.fetchone()
+        if not antes:
+            raise HTTPException(status_code=404, detail="Ficha não encontrada")
+
+    # ⚠️ O `dono` é a FICHA, não o produto: duas versões do mesmo prato podem ter
+    # fotos diferentes, e é a montagem que muda entre elas.
+    url = await arquivos.salvar_imagem(arquivo, f"ficha-{id_ficha}")
+
+    with get_cursor() as cur:
+        cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s", (url, id_ficha))
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "foto",
+                            antes={"foto_url": antes["foto_url"]}, depois={"foto_url": url})
+    return {"foto_url": url, "message": "Foto atualizada"}
+
+
+@router.delete("/{id_ficha}/foto")
+def remover_foto(id_ficha: int,
+                 ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    with get_cursor() as cur:
+        cur.execute("SELECT foto_url FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        atual = cur.fetchone()
+        if not atual:
+            raise HTTPException(status_code=404, detail="Ficha não encontrada")
+        cur.execute("UPDATE fichas_tecnicas SET foto_url = NULL WHERE id = %s", (id_ficha,))
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "foto_remover",
+                            antes={"foto_url": atual["foto_url"]})
+    # ⚠️ Fora da transação: apagar o arquivo é irreversível, e a linha do banco
+    # tem de estar gravada antes. Mesma ordem da logo da empresa.
+    arquivos.remover(atual["foto_url"])
+    return {"message": "Foto removida"}

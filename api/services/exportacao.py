@@ -297,12 +297,35 @@ class _CanvasNumerado(rl_canvas.Canvas):
         super().save()
 
 
+def _figura(bruto: bytes | None, alta: float, larga_max: float | None = None):
+    """Bytes de imagem → um `Image` do reportlab, ou `None` se não der.
+
+    ⚠️ **Altura fixa e largura pela PROPORÇÃO**: imagem esticada é pior que
+    imagem nenhuma, e cada foto chega no formato que o aparelho tirou.
+    ⚠️ **Imagem ilegível NÃO derruba o documento.** Foto ausente é o estado
+    normal — a maioria das fichas não tem uma —, e um relatório que morre por
+    causa de um arquivo corrompido é pior que um relatório sem a figura.
+    """
+    if not bruto:
+        return None
+    try:
+        largura_img, altura_img = ImageReader(io.BytesIO(bruto)).getSize()
+        larga = alta * largura_img / altura_img
+        # Foto DEITADA (o caso comum de celular) estouraria a coluna: aí quem
+        # manda é a largura, e a altura acompanha.
+        if larga_max and larga > larga_max:
+            larga, alta = larga_max, larga_max * altura_img / largura_img
+        return Image(io.BytesIO(bruto), width=larga, height=alta)
+    except Exception:
+        return None
+
+
 def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
            titulo: str | None = None, resumo: list[tuple[str, object]] | None = None,
            subtitulo: str | None = None, anexos: list[tuple] | None = None,
            notas: list[tuple[str, str]] | None = None,
            orientacao: str = "auto", empresa: dict | None = None,
-           emitido_por: str | None = None,
+           emitido_por: str | None = None, imagem: bytes | None = None,
            vazio: str = "Nenhuma linha para o filtro escolhido.") -> bytes:
     """`colunas` = [(chave_no_dict, "Cabeçalho"), ...] — igual ao `csv_de`.
 
@@ -310,6 +333,8 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
 
     `empresa` = {"nome", "linhas", "logo"} de `exportacao_catalogo.papel_timbrado`.
     `emitido_por` = o nome de quem pediu o arquivo.
+    `imagem` = os BYTES de uma foto do assunto do documento (hoje: o prato da
+    ficha técnica). Sai ao lado do resumo, que deixa metade da largura livre.
 
     ⚠️ **O PDF sai da tela e circula** — vira anexo de e-mail, papel na mesa do
     contador, foto no grupo. Sem o timbre ele não diz de que casa é; sem o
@@ -357,23 +382,11 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
                 "casaLinha", fontName="Helvetica", fontSize=7.5, leading=10,
                 textColor=_SUAVE)))
 
-        celula_logo = ""
         # ⚠️ **Os BYTES da logo, não um caminho.** Ela mora no banco desde a
         # migração 046 — o disco do App Platform é efêmero e a apagava a cada
         # deploy. O `reportlab` aceita um arquivo em memória do mesmo jeito.
-        bruto = empresa.get("logo")
-        if bruto:
-            # ⚠️ Altura fixa e largura pela PROPORÇÃO: logo esticada é pior que
-            # logo nenhuma, e cada casa manda a sua no formato que tiver.
-            try:
-                largura_img, altura_img = ImageReader(io.BytesIO(bruto)).getSize()
-                alta = 14 * mm
-                celula_logo = Image(io.BytesIO(bruto),
-                                    width=alta * largura_img / altura_img, height=alta)
-            except Exception:
-                # ⚠️ Imagem ilegível não derruba o relatório: o cabeçalho sai
-                # sem a logo. Casa que nunca enviou uma é o estado normal.
-                celula_logo = ""
+        # ⚠️ Imagem ilegível não derruba o relatório: o cabeçalho sai sem ela.
+        celula_logo = _figura(empresa.get("logo"), alta=14 * mm) or ""
 
         cabecalho = Table([[celula_logo, texto]],
                           colWidths=[22 * mm if celula_logo else 0, largura -
@@ -425,8 +438,39 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]))
-            historia.append(KeepTogether(caixa))
+            # 🔑 **A foto entra AO LADO do resumo, não abaixo.** A caixa do
+            # resumo tem 106 mm e a página em retrato tem 186 — sobrava metade
+            # da largura vazia, e a foto embaixo empurraria os ingredientes
+            # para a segunda página, que é justamente a que ninguém pendura.
+            # ⚠️ Só no bloco PRINCIPAL: anexo é outro assunto do mesmo
+            # documento, e a foto repetida em cada quadro vira ruído.
+            # ⚠️ `larga_max` porque foto de celular vem DEITADA: a 34 mm de
+            # altura ela passa dos 78 mm da coluna e estoura a tabela.
+            foto = (_figura(imagem, alta=34 * mm, larga_max=largura - 110 * mm)
+                    if (principal and imagem) else None)
+            if foto is not None:
+                lado_a_lado = Table([[caixa, foto]],
+                                    colWidths=[108 * mm, largura - 108 * mm],
+                                    hAlign="LEFT")
+                lado_a_lado.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (0, 0), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]))
+                historia.append(KeepTogether(lado_a_lado))
+            else:
+                historia.append(KeepTogether(caixa))
             historia.append(Spacer(1, 6 * mm))
+
+        elif principal and imagem:
+            # Sem resumo não há ao lado do quê pôr a foto — ela vai sozinha, em
+            # vez de sumir. Documento que engole o que recebeu é o pior dos dois.
+            sozinha = _figura(imagem, alta=34 * mm, larga_max=largura)
+            if sozinha is not None:
+                historia.append(sozinha)
+                historia.append(Spacer(1, 6 * mm))
 
         # ⚠️ Sem COLUNAS o bloco é só o cabeçalho: é como o relatório de UM
         # registro monta a folha — o título e o resumo em cima, e cada quadro

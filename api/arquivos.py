@@ -114,6 +114,33 @@ def ler(url: str | None) -> tuple[bytes, str] | None:
     return bytes(linha["conteudo"]), linha["tipo"]
 
 
+def copiar(url: str | None, novo_dono: str) -> str | None:
+    """Duplica o arquivo sob outro dono e devolve a URL nova.
+
+    🔑 **Existe por causa da nova versão da ficha.** Copiar só a URL deixaria
+    duas fichas apontando para o MESMO arquivo, cujo dono continua sendo a
+    versão velha — e `salvar_imagem` apaga as versões anteriores do mesmo dono.
+    Trocar a foto da versão 1 apagaria a foto da versão 2, que ninguém tocou, e
+    a imagem sumiria da tela sem nada explicando.
+
+    ⚠️ Devolve `None` quando não há o que copiar: ficha sem foto é o caso comum,
+    e a versão nova nasce sem uma em vez de falhar.
+    """
+    achado = ler(url)
+    if not achado:
+        return None
+    conteudo, tipo = achado
+    extensao = TIPOS.get(tipo or "", ".jpg")
+    nome = f"{novo_dono}-{secrets.token_hex(4)}{extensao}"
+    with get_cursor() as cur:
+        cur.execute(
+            """INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (nome, novo_dono, tipo, conteudo, len(conteudo)),
+        )
+    return f"{PREFIXO_URL}/{nome}"
+
+
 def remover(url: str | None) -> None:
     nome = _nome_da_url(url)
     if not nome:

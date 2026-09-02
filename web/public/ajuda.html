@@ -675,6 +675,27 @@
         não. Estoque, produção e inventário usam o principal como padrão — sem nenhum marcado,
         o sistema pedia um local que a tela mostrava mas não enviava.
       </p>
+
+      <h3>Corrigir o que foi cadastrado errado</h3>
+      <p>
+        Cada linha das quatro listas tem <strong>editar</strong>: o registro sobe para o
+        <em>mesmo</em> formulário do cadastro, o botão passa a dizer <strong>Salvar</strong> e
+        aparece um <em>cancelar</em> ao lado.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Corrigir, não desativar e recriar</p>
+        <p>
+          O cadastro antigo continua apontado por todo o histórico — nota, razão, ficha,
+          inventário. Criar um substituto deixa metade do passado num nome e metade no outro, e
+          o relatório que agrupa por setor passa a mostrar os dois. É por isso que a correção
+          existe: para o nome mudar em um lugar só.
+        </p>
+        <p>
+          A <strong>sigla</strong> da unidade de medida é a exceção e não muda: é ela que
+          produto, ficha, item de nota e razão guardam. Quem precisa de outra sigla cria outra
+          unidade.
+        </p>
+      </div>
     </section>
 
     <!-- ============================================================== produto -->
@@ -990,9 +1011,32 @@
         </p>
       </div>
 
+      <h3>A foto do prato pronto</h3>
+      <p>
+        A ficha existe para ser <em>seguida</em>, e quem segue está de pé na cozinha:
+        <strong>&ldquo;está pronto?&rdquo; é uma pergunta visual</strong>, e nenhuma descrição de
+        montagem responde o que a imagem responde. A foto aparece no cartão do prato, vira
+        miniatura na lista de fichas e sai junto na <strong>ficha impressa</strong>, ao lado do
+        resumo.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A foto é a exceção do &ldquo;homologada não se edita&rdquo;</p>
+        <p>
+          A ficha publicada é congelada porque mexer nela mudaria custo histórico — e a foto não
+          entra em conta nenhuma. Além disso, o prato só pode ser fotografado <em>depois</em> de
+          feito, que é depois de homologado: exigir uma versão nova para pendurar a imagem
+          criaria uma versão que não difere em nada.
+        </p>
+        <p>
+          Ao criar uma versão nova, a foto <strong>vem junto</strong> — e como cópia própria:
+          trocar a imagem de uma versão nunca apaga a da outra.
+        </p>
+      </div>
+
       <p>
         <strong>Ver a receita e ver o custo são permissões separadas.</strong> A chef edita
-        ingredientes e modo de preparo sem que nenhum valor em dinheiro saia do servidor.
+        ingredientes e modo de preparo sem que nenhum valor em dinheiro saia do servidor. A
+        foto segue a ficha, não o dinheiro: quem vê a receita vê a foto.
       </p>
     </section>
 

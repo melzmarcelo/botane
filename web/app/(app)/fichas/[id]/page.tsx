@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { api, ErroApi, urlArquivo } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
@@ -44,6 +44,7 @@ type Ficha = {
   modo_preparo: string | null;
   alergenos: string | null;
   observacao: string | null;
+  foto_url: string | null;
   homologada_por: string | null;
   itens: Record<string, unknown>[];
   custo_total: number | null;
@@ -82,6 +83,8 @@ export default function EditorFicha() {
   });
   const [itens, setItens] = useState<Item[]>([{ ...ITEM_VAZIO }]);
   const [fichas, setFichas] = useState<FichaListada[]>([]);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const seletorFoto = useRef<HTMLInputElement>(null);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [carregando, setCarregando] = useState(!nova);
   const [salvando, setSalvando] = useState(false);
@@ -143,6 +146,39 @@ export default function EditorFicha() {
 
   const travada = ficha?.status === "HOMOLOGADA" || ficha?.status === "ARQUIVADA";
   const editavel = podeEditar && !travada;
+
+  /** 🔑 A foto do prato pronto — o que a cozinha compara com o que está na mão.
+
+      ⚠️ Vale mesmo com a ficha HOMOLOGADA, ao contrário do resto do formulário.
+      O prato só pode ser fotografado depois de feito, e ele é feito depois de a
+      ficha ser publicada: exigir uma versão nova para pendurar a imagem criaria
+      uma versão que não difere em nada, e cada versão carrega custo histórico. */
+  async function enviarFoto(arquivo: File) {
+    setEnviandoFoto(true);
+    try {
+      const corpo = new FormData();
+      corpo.append("arquivo", arquivo);
+      const r = await api.upload<{ foto_url: string }>(`/fichas/${id}/foto`, corpo);
+      setFicha((f) => (f ? { ...f, foto_url: r.foto_url } : f));
+      aviso.sucesso("Foto atualizada.");
+    } catch (err) {
+      aviso.erro(err instanceof ErroApi ? err.message : "Não foi possível enviar a imagem");
+    } finally {
+      setEnviandoFoto(false);
+      // Sem isto, escolher o MESMO arquivo de novo não dispara o `change`.
+      if (seletorFoto.current) seletorFoto.current.value = "";
+    }
+  }
+
+  async function removerFoto() {
+    try {
+      await api.delete(`/fichas/${id}/foto`);
+      setFicha((f) => (f ? { ...f, foto_url: null } : f));
+      aviso.sucesso("Foto removida.");
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível remover");
+    }
+  }
 
   const corpoItens = () =>
     itens
@@ -657,6 +693,63 @@ export default function EditorFicha() {
           </Campo>
         </div>
       </Cartao>
+
+      {/* 🔑 **A foto do prato pronto.** A ficha existe para ser SEGUIDA, e
+          quem segue está de pé na cozinha: "está pronto?" é uma pergunta
+          visual, e nenhuma descrição de montagem responde o que a imagem
+          responde. Ela sai junto no PDF, que é o papel que fica pendurado. */}
+      {!nova && (
+        <Cartao
+          titulo="Foto do prato"
+          descricao="Como ele deve chegar à mesa. Sai junto na ficha impressa."
+        >
+          <div className="flex flex-wrap items-start gap-5">
+            <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-linha bg-papel">
+              {ficha?.foto_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={urlArquivo(ficha.foto_url) ?? ""}
+                  alt={`Foto de ${ficha.produto}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="rotulo text-center leading-tight">sem<br />foto</span>
+              )}
+            </div>
+            {podeEditar ? (
+              <div className="flex min-w-0 flex-col gap-2">
+                <input
+                  ref={seletorFoto}
+                  id="foto-da-ficha"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="text-[13px]"
+                  disabled={enviandoFoto}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void enviarFoto(f);
+                  }}
+                />
+                <p className="text-[12.5px] text-suave">
+                  PNG, JPG ou WEBP, até 2 MB.
+                  {/* ⚠️ A foto vale mesmo com a ficha publicada: o prato só
+                      existe para ser fotografado DEPOIS de pronto. */}
+                  {travada && " A ficha está publicada, mas a foto ainda pode ser trocada."}
+                </p>
+                {ficha?.foto_url && (
+                  <button type="button" className="link-acao-erro self-start" onClick={removerFoto}>
+                    remover foto
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-[13px] text-suave">
+                Você tem acesso de leitura: a foto só pode ser trocada por quem edita fichas.
+              </p>
+            )}
+          </div>
+        </Cartao>
+      )}
 
       {editavel && (
         <div className="flex justify-end gap-2">

@@ -22,6 +22,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
+import arquivos
 import auditoria
 from database import get_cursor
 from seguranca import Contexto, contexto_atual, unidade_atual
@@ -449,6 +450,12 @@ def ficha(nome: str, formato: str | None = None,
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
         calculo = custos.custo_da_ficha(cur, id_ficha)
         timbre = catalogo_motor.papel_timbrado(cur)
+        # 🔑 **A foto do prato vai no PAPEL, que é onde a ficha serve.** Quem
+        # segue a receita está de pé na cozinha, e "está pronto?" é uma
+        # pergunta visual: nenhuma descrição de montagem responde o que a foto
+        # responde. Os BYTES, não a URL — o PDF desenha a imagem, não a busca
+        # por HTTP, e é gerado sem navegador nenhum.
+        foto = (arquivos.ler(f["foto_url"]) or (None,))[0]
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"ficha-{id_ficha}",
                             "exportar", depois={"formato": ext, "com_custo": ve_custo})
 
@@ -564,6 +571,7 @@ def ficha(nome: str, formato: str | None = None,
                               subtitulo=(f"versão {f['versao']}"
                                          f" · {str(f['status']).lower()}"),
                               notas=notas, empresa=timbre, emitido_por=ctx.nome,
+                              imagem=foto,
                               # A ficha é um CARTÃO DE RECEITA: sai em retrato,
                               # que é a forma do papel que se pendura. Só cede à
                               # paisagem quando a receita usa colunas demais.
