@@ -207,6 +207,20 @@ export default function PaginaCmv() {
         </div>
         <div className="nao-imprimir flex flex-wrap items-end gap-2">
           <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
+          {/* 🔑 **A memória de cálculo** (pedido da contabilidade, 02/09/2026).
+              O arquivo do contador dizia o RESULTADO em dez linhas; este abre
+              cada uma nos documentos que a compõem — o estoque inicial e o
+              final item a item, as compras por nota, e a conciliação que
+              explica por que a soma das notas não é a linha "Compras".
+              ⚠️ Fica ao LADO do outro, não no lugar dele: um é o resumo que se
+              lê, o outro é o anexo que se confere. Quem quer um raramente quer
+              o outro no mesmo momento. */}
+          <BotaoExportar
+            relatorio="memoria-cmv"
+            rotulo="Memória de cálculo"
+            iniciais={{ inicio, fim }}
+            formatoPadrao="pdf"
+          />
           {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
               os cartões e os gráficos. O PDF da janela é a tabela do relatório
               — são duas coisas, e quem quer uma raramente quer a outra. */}

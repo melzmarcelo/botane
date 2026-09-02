@@ -322,6 +322,26 @@ export default function FormularioProduto() {
               }}
             />
           )}
+          {/* 🔑 **A memória de cálculo deste insumo** (pedido da contabilidade,
+              02/09/2026): a resposta para "como você chegou nesse custo
+              unitário?". Cada movimento do período com a CONTA do custo médio
+              escrita na linha — `(saldo × médio + entrada × custo) ÷ novo
+              saldo` —, para o número deixar de aparecer pronto e passar a se
+              conferir na calculadora.
+              ⚠️ O produto vem SEMEADO: é o que está na tela, e obrigar a
+              procurá-lo de novo na janela seria pedir duas vezes a mesma coisa.
+              ⚠️ Pede `estoque.saldos` — custo médio é dado de ESTOQUE, e não
+              passa a ser de cadastro por estar na tela do produto. */}
+          {!novo && f.controla_estoque && pode("estoque.saldos") && (
+            <BotaoExportar
+              relatorio="memoria-produto"
+              rotulo="Memória de cálculo"
+              formatoPadrao="pdf"
+              iniciais={{
+                produtos: [{ id: Number(id), rotulo: f.nome || `Produto ${id}` }],
+              }}
+            />
+          )}
           {podeEditar && (
             <>
             {/* ⚠️ **O caminho para dizer que dois cadastros são o mesmo.** Não

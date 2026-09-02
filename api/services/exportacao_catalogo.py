@@ -39,6 +39,7 @@ from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import estoque as estoque_motor
 from services import exportacao
+from services import memoria_calculo as memoria
 from services import relatorios
 
 SITUACOES = [("ativos", "Ativos"), ("inativos", "Inativos"), ("rascunhos", "Rascunhos")]
@@ -115,6 +116,10 @@ FILTROS: dict[str, dict] = {
                    "ajuda": "todos os movimentos"},
     "dias": {"tipo": "numero", "rotulo": "Vencendo em até (dias)",
              "ajuda": "o prazo configurado na loja"},
+    # ⚠️ Uma DATA, não um período: o inventário valorizado responde "quanto
+    # valia o estoque naquele dia", e oferecer duas pontas ali faria escolher um
+    # intervalo para uma pergunta que tem uma data só.
+    "data": {"tipo": "data", "rotulo": "Na data de", "ajuda": "hoje, se não escolher"},
 }
 
 
@@ -588,6 +593,224 @@ class Relatorio:
     montar: Callable[..., Saida]
 
 
+def _em_reais(linhas: list[dict]) -> list[dict]:
+    """Dinheiro em CENTAVOS, custo unitário com as seis casas que ele tem.
+
+    ⚠️ **Arredondamento de APRESENTAÇÃO, e quem arredonda é a linha do
+    relatório — nunca o motor.** A composição do estoque encadeia custo unitário
+    de 6 casas, e o valor da linha saía como `100,0000000000`: isso não é um
+    valor em reais, e num documento que vai para a contabilidade parece defeito.
+    O número da CONTA continua com toda a precisão.
+
+    ⚠️ **O custo unitário NÃO vai a centavos.** Ele é um PREÇO (R$ por KG), e
+    arredondá-lo faria `quantidade × custo` deixar de reproduzir o valor da
+    linha — que é justamente o que o contador refaz na calculadora.
+    """
+    saida = []
+    for l in linhas:
+        saida.append({
+            **l,
+            "valor": Decimal(str(l["valor"])).quantize(Decimal("0.01"), ROUND_HALF_UP),
+            "custo_unitario": Decimal(str(l["custo_unitario"])).quantize(
+                Decimal("0.000001"), ROUND_HALF_UP),
+        })
+    return saida
+
+
+def _fecha(linhas: list[dict], campo: str, autorizado) -> list[tuple]:
+    """O rodapé do quadro: o que a coluna soma, e o número da apuração ao lado.
+
+    🔑 **Os dois aparecem de propósito.** O total do quadro soma as linhas
+    ARREDONDADAS, porque é ele que fecha com a coluna que alguém confere à mão;
+    o número da apuração é o AUTORIZADO, o mesmo do painel e do fechamento. Em
+    centenas de linhas os dois podem diferir em centavos, e esconder um dos dois
+    seria pior: ou o contador soma a coluna e não bate, ou ele bate com o painel
+    e a coluna não soma. Vendo os dois, a diferença tem nome — arredondamento.
+    """
+    somado = sum((Decimal(str(l[campo] or 0)) for l in linhas), Decimal(0))
+    resumo = [("Total do quadro (soma da coluna)",
+               somado.quantize(Decimal("0.01"), ROUND_HALF_UP))]
+    if autorizado is not None:
+        resumo.append(("Linha da apuração",
+                       Decimal(str(autorizado)).quantize(Decimal("0.01"), ROUND_HALF_UP)))
+    return resumo
+
+
+def _esta_fechado(cur, id_unidade: int, inicio: date, fim: date) -> bool:
+    cur.execute(
+        """SELECT 1 FROM cmv_fechamentos
+            WHERE id_unidade = %s AND inicio = %s AND fim = %s AND status = 'FECHADO'""",
+        (id_unidade, inicio, fim),
+    )
+    return cur.fetchone() is not None
+
+
+def _memoria_cmv(cur, id_unidade: int, f: dict) -> Saida:
+    """A apuração ABERTA nos documentos que a compõem — a memória de cálculo.
+
+    🔑 **Pedido da contabilidade (02/09/2026).** A apuração dizia o resultado em
+    dez linhas e não dizia de ONDE cada linha veio. Perguntado "estes R$ X de
+    compras, de quais notas são?", o sistema não tinha resposta.
+
+    O documento tem quatro quadros, e cada um FECHA com a linha que explica:
+    o estoque inicial item a item, as compras por nota, o estoque final item a
+    item, e a conciliação que leva da soma das notas até a linha "Compras".
+
+    ⚠️ **Os quadros vão como ANEXOS do mesmo arquivo, não em quatro arquivos.**
+    Eles só se leem juntos: separados, quem recebe teria de juntar de novo — e o
+    contador confere um contra o outro. Mesma razão do relatório do contador.
+    """
+    inicio, fim = _periodo(f)
+    a = cmv_motor.apurar(cur, id_unidade, inicio, fim)
+    fora = cmv_motor.tipos_fora_do_cmv(cur)
+    vespera = inicio - timedelta(days=1)
+
+    def reais(v) -> Decimal:
+        return Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    principal = [
+        {"linha": f"Estoque inicial (posição em {vespera.strftime('%d/%m/%Y')})",
+         "valor": reais(a["estoque_inicial"]), "quadro": "quadro 1"},
+        {"linha": "(+) Compras do período", "valor": reais(a["compras"]),
+         "quadro": "quadros 2 e 4"},
+        {"linha": f"(−) Estoque final (posição em {fim.strftime('%d/%m/%Y')})",
+         "valor": reais(-a["estoque_final"]), "quadro": "quadro 3"},
+        {"linha": "(=) CMV real do período", "valor": reais(a["cmv_real"]), "quadro": ""},
+    ]
+
+    inicial = _em_reais(memoria.estoque_em(cur, id_unidade, vespera, fora))
+    final = _em_reais(memoria.estoque_em(cur, id_unidade, fim, fora))
+    notas = memoria.compras_por_nota(cur, id_unidade, inicio, fim, fora)
+    concilia = memoria.conciliacao_compras(cur, id_unidade, inicio, fim, fora)
+
+    colunas_estoque = [
+        ("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Un."),
+        ("categoria", "Categoria"), ("quantidade", "Quantidade"),
+        ("custo_unitario", "Custo unitário"), ("valor", "Valor (R$)"),
+    ]
+    return Saida(
+        principal,
+        [("linha", "Composição do CMV"), ("valor", "Valor (R$)"),
+         ("quadro", "Aberto em")],
+        f"Memória de cálculo do CMV — {_intervalo(inicio, fim)}",
+        [("Método de custeio", "custo médio ponderado móvel"),
+         ("Produtos no estoque inicial", len(inicial)),
+         ("Documentos de compra", len(notas)),
+         ("Produtos no estoque final", len(final)),
+         # ⚠️ **Período fechado é o que se manda ao contador**: aberto, o número
+         # ainda pode mudar depois de o arquivo sair da casa. É a mesma frase do
+         # relatório de movimentação, e pela mesma razão — só que aqui ela pesa
+         # mais, porque este documento é o que se assina embaixo.
+         ("Situação do período",
+          "fechado (congelado)" if _esta_fechado(cur, id_unidade, inicio, fim)
+          else "aberto — o número ainda pode mudar")],
+        inicio, fim,
+        anexos=[
+            (inicial, colunas_estoque,
+             f"Quadro 1 — Estoque inicial, item a item (posição em "
+             f"{vespera.strftime('%d/%m/%Y')})",
+             _fecha(inicial, "valor", a["estoque_inicial"])),
+            (notas,
+             [("documento", "Documento"), ("fornecedor", "Fornecedor"),
+              ("data_entrada", "Entrada"), ("itens", "Itens"),
+              ("valor_da_nota", "Total da nota (R$)"),
+              ("valor_frete", "Frete (R$)"), ("valor_outros", "IPI/ST (R$)"),
+              ("valor_no_razao", "Entrou no estoque (R$)"),
+              ("diferenca", "Diferença (R$)")],
+             "Quadro 2 — Compras do período, por documento",
+             # ⚠️ Este quadro NÃO fecha com a linha "Compras", e é de propósito:
+             # falta a remessa entre lojas, que é compra do destino sem nota. O
+             # rodapé manda para o quadro 4 em vez de deixar a diferença solta.
+             _fecha(notas, "valor_no_razao", None)
+             + [("A linha “Compras” da apuração", "ver o quadro 4")]),
+            (final, colunas_estoque,
+             f"Quadro 3 — Estoque final, item a item (posição em "
+             f"{fim.strftime('%d/%m/%Y')})",
+             _fecha(final, "valor", a["estoque_final"])),
+            (concilia, [("linha", "Da soma das notas até a linha Compras"),
+                        ("valor", "Valor (R$)")],
+             "Quadro 4 — Conciliação: por que a soma das notas não é a linha Compras",
+             None),
+        ],
+    )
+
+
+def _inventario(cur, id_unidade: int, f: dict) -> Saida:
+    """O estoque valorizado NUMA DATA — o documento do balanço.
+
+    ⚠️ **Uma data, não um período.** A pergunta é "quanto valia o estoque em
+    31/12", e ela tem uma resposta só.
+
+    ⚠️ **Sai do mesmo lugar que a apuração**, inclusive no atalho de hoje: se
+    esta lista somasse diferente da linha "Estoque final", o documento estaria
+    contradizendo o número que ele existe para compor.
+    """
+    ate = f.get("data") or date.today()
+    # ⚠️ **SEM tirar os tipos fora do CMV.** Aquele filtro é da conta do custo da
+    # comida; o inventário do balanço é o que a casa POSSUI, e detergente em
+    # estoque é patrimônio igual. Misturar as duas perguntas faria o balanço
+    # declarar menos do que existe.
+    linhas = _em_reais(memoria.estoque_em(cur, id_unidade, ate, None))
+    # ⚠️ **Soma as linhas ARREDONDADAS**, não o valor exato: é o total que a
+    # pessoa confere somando a coluna com o dedo, e um rodapé que não fecha com
+    # a própria coluna é pior que centavo nenhum de diferença.
+    total = sum((Decimal(str(l["valor"])) for l in linhas), Decimal(0))
+    return Saida(
+        linhas,
+        [("codigo", "Código"), ("produto", "Produto"), ("um_estoque", "Un."),
+         ("categoria", "Categoria"), ("setor", "Setor"), ("quantidade", "Quantidade"),
+         ("custo_unitario", "Custo unitário"), ("valor", "Valor (R$)")],
+        f"Inventário valorizado — posição em {ate.strftime('%d/%m/%Y')}",
+        [("Método de custeio", "custo médio ponderado móvel"),
+         ("Itens com saldo", len(linhas)),
+         ("Valor total (R$)", total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+         ("Abrangência", "todos os tipos de produto, inclusive os que ficam fora do CMV")],
+        ate, ate,
+    )
+
+
+def _memoria_produto(cur, id_unidade: int, f: dict) -> Saida:
+    """Um insumo, movimento a movimento, com a CONTA do custo médio à vista.
+
+    🔑 É a resposta para *"como você chegou nesse custo unitário?"*. O razão já
+    guardava o saldo e o médio depois de cada movimento; o que faltava era
+    mostrar a aritmética entre um e outro, para o número deixar de aparecer
+    pronto e passar a se conferir na calculadora.
+    """
+    inicio, fim = _periodo(f)
+    escolhidos = _lista(f.get("produtos"))
+    if not escolhidos:
+        return Saida(
+            [], [("aviso", "")],
+            f"Memória de cálculo por produto — {_intervalo(inicio, fim)}",
+            [("Escolha um produto", "esta memória segue UM insumo de cada vez")],
+            inicio, fim,
+        )
+
+    id_produto = int(escolhidos[0])
+    cur.execute("SELECT codigo, nome, um_estoque FROM produtos WHERE id = %s", (id_produto,))
+    p = cur.fetchone() or {}
+    linhas = memoria.memoria_do_produto(cur, id_unidade, id_produto, inicio, fim)
+    abertura, fechamento = linhas[0], linhas[-1]
+    return Saida(
+        linhas,
+        [("data", "Data"), ("movimento", "Movimento"), ("local", "Local"),
+         ("documento", "Documento"), ("quantidade", "Quantidade"),
+         ("custo_unitario", "Custo unitário"), ("valor", "Valor (R$)"),
+         ("saldo_apos", "Saldo depois"), ("custo_medio_apos", "Custo médio depois"),
+         ("conta", "Como o custo médio foi obtido")],
+        f"Memória de cálculo — {p.get('nome', '')} — {_intervalo(inicio, fim)}",
+        [("Produto", f"{p.get('codigo', '')} — {p.get('nome', '')}"),
+         ("Unidade de estoque", p.get("um_estoque") or "—"),
+         ("Método de custeio", "custo médio ponderado móvel"),
+         ("Saldo de abertura", abertura["quantidade"]),
+         ("Custo médio de abertura", abertura["custo_medio_apos"]),
+         ("Saldo de fechamento", fechamento["quantidade"]),
+         ("Custo médio de fechamento", fechamento["custo_medio_apos"])],
+        inicio, fim,
+    )
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -621,6 +844,24 @@ RELATORIOS: dict[str, Relatorio] = {
         "Movimentação do estoque", "Inicial, entradas, saídas e final de cada produto.",
         "cmv.relatorios", "movimentacao",
         ("periodo", "categorias", "setores"), _movimentacao),
+    "memoria-cmv": Relatorio(
+        "Memória de cálculo do CMV",
+        "A apuração aberta nos documentos: estoque inicial e final item a item, "
+        "as compras por nota e a conciliação com o total das notas.",
+        "cmv.relatorios", "cmv", ("periodo",), _memoria_cmv),
+    # ⚠️ A chave é `inventario-valorizado`, não `inventario`: já existe a rota
+    # `/exportar/inventario/{id}` — a folha de CONTAGEM. Dois endereços parecidos
+    # para documentos diferentes é a divergência que só aparece no dia em que
+    # alguém baixa o errado e manda ao contador.
+    "inventario-valorizado": Relatorio(
+        "Inventário valorizado",
+        "O estoque numa data: item, quantidade, custo unitário e valor — o documento do balanço.",
+        "estoque.saldos", "estoque",
+        ("data", "categorias", "setores", "tipos_produto", "produtos"), _inventario),
+    "memoria-produto": Relatorio(
+        "Memória de cálculo por produto",
+        "Um insumo movimento a movimento, com a conta do custo médio escrita em cada linha.",
+        "estoque.saldos", "movimentos", ("periodo", "produtos"), _memoria_produto),
     "precos": Relatorio(
         "Evolução de preço",
         "O que subiu, quanto pesou e com quem sai mais barato, com o peso por setor junto.",

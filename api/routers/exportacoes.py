@@ -123,6 +123,9 @@ class _Filtros:
         self,
         inicio: date | None = None,
         fim: date | None = None,
+        # ⚠️ Uma DATA sozinha, e não um período: o inventário valorizado responde
+        # "quanto valia o estoque naquele dia", que é uma pergunta de data só.
+        data: date | None = None,
         locais: list[int] | None = Query(default=None),
         setores: list[int] | None = Query(default=None),
         categorias: list[int] | None = Query(default=None),
@@ -138,7 +141,8 @@ class _Filtros:
         provisorio: bool = False,
     ):
         self.como_dict = {
-            "inicio": inicio, "fim": fim, "locais": locais, "setores": setores,
+            "inicio": inicio, "fim": fim, "data": data,
+            "locais": locais, "setores": setores,
             "categorias": categorias, "tipos_produto": tipos_produto,
             "tipos_movimento": tipos_movimento, "situacao": situacao,
             "classes": classes, "produtos": produtos, "busca": busca, "dias": dias,

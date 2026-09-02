@@ -32,7 +32,7 @@ type Opcao = { valor: string | number; nome: string };
 
 type FiltroDoServidor = {
   nome: string;
-  tipo: "periodo" | "multipla" | "produtos" | "texto" | "numero" | "sim_nao";
+  tipo: "periodo" | "data" | "multipla" | "produtos" | "texto" | "numero" | "sim_nao";
   rotulo: string;
   ajuda: string;
   opcoes?: Opcao[];
@@ -263,6 +263,27 @@ function Dialogo({
                           onChange={(e) => trocar("fim", e.target.value)}
                         />
                       </div>
+                    </div>
+                  );
+                }
+
+                // ⚠️ Uma DATA sozinha, não um período: o inventário valorizado
+                // responde "quanto valia o estoque naquele dia", e oferecer duas
+                // pontas faria escolher um intervalo para uma pergunta que tem
+                // uma data só.
+                if (f.tipo === "data") {
+                  return (
+                    <div key={f.nome} className="flex flex-col gap-2">
+                      <div>
+                        <span className="rotulo">{f.rotulo}</span>
+                        <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+                      </div>
+                      <input
+                        type="date"
+                        className="campo w-auto"
+                        value={String(valores.data ?? "")}
+                        onChange={(e) => trocar("data", e.target.value)}
+                      />
                     </div>
                   );
                 }

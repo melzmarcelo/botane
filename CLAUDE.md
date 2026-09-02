@@ -2398,6 +2398,55 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
   30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
   produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
+- 🔑 **A MEMÓRIA DE CÁLCULO** (`services/memoria_calculo.py`, três relatórios novos,
+  02/09/2026, pedido da contabilidade numa reunião). O sistema já dizia o **resultado** (a
+  apuração, dez linhas) e já provava a **identidade** (a movimentação por produto, onde
+  `inicial + entradas − saídas = final` fecha na própria planilha). Faltava o passo do meio:
+  **os documentos que compõem cada linha**. Perguntado *"estes R$ X de compras, de quais notas
+  são?"*, não havia resposta — era abrir Compras, filtrar o período e somar à mão.
+  🔑 **E somar as notas à mão dá OUTRO número, de propósito** — este é o ponto que faria a
+  reunião seguinte terminar mal. A linha "Compras" **não** é a soma dos totais das notas: ela
+  soma os MOVIMENTOS de entrada (com frete, IPI e ST já rateados por item), **tira** os grupos
+  fora do CMV e **soma** a remessa recebida de outra loja. O contador que soma as notas encontra
+  diferença, e ela parece erro. O **Quadro 4** é a conciliação que leva de uma à outra em linhas
+  nomeadas, terminando exatamente no número da apuração.
+  **Os três relatórios**, todos pela janela de exportação (CSV e PDF, timbre e rodapé de graça):
+  * **`memoria-cmv`** (botão em `/cmv`, ao lado do arquivo do contador) — a apuração com quatro
+    quadros anexos: estoque inicial item a item, compras por documento, estoque final item a
+    item, e a conciliação.
+  * **`inventario-valorizado`** (botão em `/estoque`) — o estoque NUMA DATA, com o método de
+    custeio declarado no cabeçalho. É o documento do balanço.
+  * **`memoria-produto`** (botão em `/produtos/[id]`, com o produto já semeado) — um insumo
+    movimento a movimento, com a **conta escrita na linha**:
+    `(saldo × médio + entrada × custo) ÷ novo saldo`. É a resposta para *"como você chegou nesse
+    custo unitário?"*: sem a conta, o número aparece pronto e não se confere.
+  ⚠️ **Nada aqui recalcula.** Toda ponta sai de `cmv.valor_do_estoque` e dos mesmos tipos de
+  movimento da apuração — `estoque_em` espelha até o ATALHO de hoje (`estoque_saldos` para hoje,
+  fotografia do razão para data passada). Uma segunda implementação divergiria no primeiro caso
+  de borda, e o sintoma seria a memória discordando do número que ela existe para explicar: pior
+  que memória nenhuma. **`smoke_memoria` cobra que cada quadro FECHE com a linha.**
+  ⚠️ **Cada quadro traz DOIS totais: o da coluna e o da apuração.** O do quadro soma as linhas
+  ARREDONDADAS (é ele que fecha com a coluna que alguém confere à mão); o da apuração é o
+  AUTORIZADO. Em 158 linhas os dois deram 2 centavos de diferença — e esconder um deles seria
+  pior: ou a coluna não soma, ou não bate com o painel. Vendo os dois, a diferença tem nome.
+  ⚠️ **O custo unitário NÃO vai a centavos**, ao contrário do valor: ele é um PREÇO (R$ por KG),
+  e arredondá-lo faria `quantidade × custo` deixar de reproduzir o valor da linha — que é
+  justamente a conta que o contador refaz.
+  ⚠️ **O inventário do balanço NÃO tira os tipos fora do CMV.** Aquele filtro é da conta do
+  custo da comida; o balanço é o que a casa POSSUI, e detergente em estoque é patrimônio igual.
+  ⚠️ **Uma DATA, não um período** — filtro novo (`tipo: "data"`) no catálogo e na janela. A
+  pergunta "quanto valia o estoque em 31/12" tem uma resposta só, e duas pontas fariam escolher
+  um intervalo para ela.
+  ⚠️ **A chave é `inventario-valorizado`, não `inventario`**: já existe `/exportar/inventario/{id}`,
+  a folha de CONTAGEM. Dois endereços parecidos para documentos diferentes é a divergência que
+  só aparece no dia em que alguém baixa o errado e manda ao contador.
+  ⚠️ **O sinal vai no VALOR, não no rótulo.** A conciliação dizia "(−) o que não vira mercadoria"
+  e somava um número positivo: a conta andava para o lado contrário do texto. Aquela diferença
+  vai para os dois lados — item ignorado tira, acessória rateada põe — e só o número sabe qual.
+  ⚠️ **O documento diz se o período está FECHADO.** Aberto, o número ainda pode mudar depois de
+  o arquivo sair da casa — e este é o que se assina embaixo.
+  ⚠️ Sem escolher o produto, a memória por produto sai com uma frase mandando escolher, e não
+  vazia: vazio se lê como "não houve movimento", que é outra coisa.
 - 🔑 **A DIÁRIA só rodava se alguém estivesse acordado na hora marcada — e o dia inteiro
   passava em branco** (02/09/2026, pedido do dono). `deve_rodar` exigia
   `agora.hour == agenda_hora`: o disparo existia dentro daqueles sessenta minutos e em mais
@@ -2482,7 +2531,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.725 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.762 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (55), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
@@ -2490,9 +2539,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
   `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (54), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
+  `smoke_memoria.py` (37),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (443, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (450, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

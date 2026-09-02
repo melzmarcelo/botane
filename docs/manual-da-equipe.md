@@ -402,6 +402,39 @@ abrir um arquivo de três mil linhas para descobrir que não era aquilo.
 Deixar tudo em branco quer dizer **tudo**: nenhum filtro marcado não é "nada", é
 "sem recorte".
 
+### O que mandar para a contabilidade
+
+Três documentos, e cada um responde uma pergunta diferente. Todos saem pelo botão
+**Baixar**, em planilha ou em PDF.
+
+**1. Memória de cálculo do CMV** — botão em *CMV*, ao lado do arquivo do contador.
+É a apuração **aberta**: o estoque inicial item a item, as compras agrupadas por
+nota, o estoque final item a item, e a conciliação. Cada quadro fecha com a linha
+que ele explica.
+
+⚠️ **A soma das notas fiscais não é a linha "Compras", e o quadro 4 explica por
+quê.** A linha soma o que de fato entrou no estoque — com frete e IPI já
+rateados por item —, tira o que é limpeza, embalagem e utensílio, e soma a
+remessa recebida de outra loja. Sem esse quadro, quem soma as notas encontra
+diferença e ela parece erro.
+
+**2. Inventário valorizado** — botão em *Estoque*. O estoque **numa data**:
+item, quantidade, custo unitário e valor, com o método de custeio declarado no
+cabeçalho. É o documento do balanço.
+
+⚠️ Ele conta **tudo o que a casa possui**, inclusive limpeza e embalagem — que
+ficam de fora do CMV mas são patrimônio igual.
+
+**3. Memória de cálculo por produto** — botão na tela do produto. Um insumo
+movimento a movimento, com a **conta escrita em cada linha**:
+`(saldo × médio + entrada × custo) ÷ novo saldo`. É a resposta para *"como você
+chegou nesse custo unitário?"* — dá para refazer na calculadora.
+
+⚠️ **Mande o período FECHADO.** O documento diz, no cabeçalho, se o período está
+aberto — e período aberto ainda pode mudar depois de o arquivo sair daqui.
+
+---
+
 ### Fechar o mês
 
 No painel, **Fechar o mês**. Depois disso, lançamento com data daquele período é

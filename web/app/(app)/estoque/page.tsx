@@ -297,8 +297,20 @@ export default function PaginaEstoque() {
           )}
           {/* Baixar deixou de ser um clique cego: a janela pergunta o recorte
               e o formato antes de gerar. */}
+          {/* ⚠️ **A posição de HOJE e o inventário NUMA DATA são perguntas
+              diferentes.** A primeira é operacional ("o que tem na prateleira
+              agora"); a segunda é o documento do balanço ("quanto valia o
+              estoque em 31/12"), declara o método de custeio e conta inclusive
+              o que fica fora do CMV — detergente em estoque é patrimônio igual.
+              Oferecer só uma faria a outra ser respondida errado. */}
           {aba === "saldos" ? (
-            <BotaoExportar relatorio="saldos" />
+            <>
+              <BotaoExportar relatorio="saldos" />
+              <BotaoExportar
+                relatorio="inventario-valorizado"
+                rotulo="Inventário valorizado"
+              />
+            </>
           ) : (
             <BotaoExportar relatorio="movimentos" iniciais={semeaduraDoRazao} />
           )}

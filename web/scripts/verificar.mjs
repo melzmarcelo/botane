@@ -2752,6 +2752,24 @@ try {
     (doCadastro?.filtros ?? []).map((f) => f.nome).includes("tipos_produto"),
     doCadastro?.filtros?.map((f) => f.nome));
 
+  // 🔑 A memória de cálculo (pedido da contabilidade, 02/09/2026). Os três
+  // entram pelo CATÁLOGO, então aparecem em toda tela que tem o botão Baixar —
+  // não há lista escrita no front que possa divergir.
+  const chavesCat = new Set((catalogo ?? []).map((r) => r.chave));
+  checar("a memória de cálculo do CMV está no catálogo",
+    chavesCat.has("memoria-cmv"), [...chavesCat]);
+  checar("o inventário valorizado também", chavesCat.has("inventario-valorizado"),
+    [...chavesCat]);
+  checar("e a memória por produto também", chavesCat.has("memoria-produto"),
+    [...chavesCat]);
+  // ⚠️ Uma DATA, não um período: o inventário responde "quanto valia o estoque
+  // NAQUELE dia", e duas pontas fariam escolher um intervalo para uma pergunta
+  // que tem uma data só.
+  const doInventario = (catalogo ?? []).find((r) => r.chave === "inventario-valorizado");
+  checar("e o inventário pede uma data, não um período",
+    (doInventario?.filtros ?? []).some((f) => f.tipo === "data"),
+    doInventario?.filtros);
+
   await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1800));
   await p.evaluate(() => {
@@ -2817,6 +2835,47 @@ try {
     document.querySelector('[role="dialog"] [aria-label="fechar"]')?.click();
   });
   await new Promise((r) => setTimeout(r, 600));
+
+  // 🔑 **O inventário valorizado tem botão próprio em /estoque**, ao lado da
+  // posição de hoje: são perguntas diferentes — uma é operacional, a outra é o
+  // documento do balanço. E é ele que exercita o filtro de DATA, um tipo novo
+  // na janela: sem a renderização dele o inventário sairia sempre com a data de
+  // hoje, e ninguém veria por quê, porque o campo não apareceria.
+  await irPara(p, `${WEB}/estoque`);
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")]
+      .some((b) => /Inventário valorizado/i.test(b.textContent ?? "")),
+    { timeout: 15000 });
+  checar("a tela de estoque oferece o inventário valorizado", true);
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => /Inventário valorizado/i.test(b.textContent ?? ""))?.click();
+  });
+  await p.waitForSelector('[role="dialog"] input[type="date"]', { timeout: 15000 });
+  const janelaInv = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      rotulos: [...(d?.querySelectorAll("span.rotulo") ?? [])].map((x) => x.textContent?.trim()),
+      // Uma data só: o período tem duas caixas de data, este tem uma.
+      datas: (d?.querySelectorAll('input[type="date"]') ?? []).length,
+    };
+  });
+  checar("e a janela dele pede UMA data, não um período",
+    janelaInv.rotulos.includes("Na data de") && janelaInv.datas === 1, janelaInv);
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => b.textContent?.trim() === "Cancelar")?.click();
+  });
+
+  // A memória de cálculo do CMV fica ao LADO do arquivo do contador, não no
+  // lugar dele: um é o resumo que se lê, o outro é o anexo que se confere.
+  await irPara(p, `${WEB}/cmv`);
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")]
+      .some((b) => /Memória de cálculo/i.test(b.textContent ?? "")),
+    { timeout: 20000 });
+  checar("o painel de CMV oferece a memória de cálculo", true);
 
   const { dados: listaAlertas } = await api("GET", "/alertas", null, token);
   checar("a API devolve alerta com ação e link",
