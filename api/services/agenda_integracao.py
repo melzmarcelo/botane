@@ -19,6 +19,10 @@ cada minuto numa casa sem nota nova — que é a casa normal de domingo. Por iss
 `marcar` avança o relógio **mesmo com erro**: o erro fica à vista em
 `agenda_ultimo_erro` e a próxima tentativa é no horário seguinte. Repetir em
 cima de um bloqueio do fornecedor só o prolonga.
+
+⚠️ **E só o AGENDADOR move esse relógio.** Busca manual não consome a cota do
+dia: quem clica no botão está pedindo agora, não dispensando a busca da
+madrugada. As duas coisas são pedidos diferentes, feitos por razões diferentes.
 """
 
 from datetime import datetime, timedelta
@@ -34,8 +38,29 @@ INTERVALO_DE_CHECAGEM = 60
 def deve_rodar(linha: dict, agora: datetime) -> bool:
     """Chegou a hora desta integração?
 
-    ⚠️ A DIÁRIA dispara na hora escolhida **e só uma vez no dia**: sem a segunda
-    condição, ela rodaria a cada minuto durante os sessenta minutos daquela hora.
+    🔑 **A DIÁRIA é "uma vez por dia, a partir da hora escolhida" — e não "na
+    hora escolhida, se alguém estiver acordado".** A primeira versão exigia
+    `agora.hour == agenda_hora`: o disparo só existia dentro daqueles sessenta
+    minutos, e fora deles o dia inteiro passava em branco. Se a API estivesse
+    parada às 4h — um deploy, um reinício, a máquina desligada —, a busca
+    daquele dia **simplesmente não acontecia**, e nada dizia isso: a tela
+    mostrava a última sincronização (que uma busca manual havia atualizado) e a
+    agenda parecia em dia. Medido na base local em 02/09/2026: a diária das 4h
+    tinha rodado pela última vez em **31/08**, pulando dois dias inteiros de
+    notas e cupons — compra a menos e receita a menos no CMV, em silêncio.
+
+    Agora a pergunta é a que a casa faz: *já buscou hoje?* Não tendo buscado e
+    já passada a hora marcada, busca — assim que houver alguém para buscar.
+
+    ⚠️ **E continua sendo UMA vez por dia.** Voltando depois de três dias fora
+    do ar, roda uma vez, não três: quem responde é a data do último disparo, não
+    quantos horários passaram. Três buscas seguidas só gastariam cota — e a
+    janela adaptativa da busca já cobre o período inteiro numa ida só.
+
+    ⚠️ **O relógio é `agenda_rodou_em`, e só o AGENDADOR o move.** Busca manual
+    não consome a cota do dia: quem clica no botão está pedindo agora, não
+    dispensando a busca da madrugada. Era o pedido do dono, e o `marcar` já era
+    chamado só daqui — a exceção estava no cardápio do PDV, corrigida junto.
     """
     freq = linha["agenda_frequencia"]
     if freq == "MANUAL" or not linha["ativa"]:
@@ -46,9 +71,9 @@ def deve_rodar(linha: dict, agora: datetime) -> bool:
         return ultima is None or (agora - ultima) >= timedelta(hours=1)
 
     if freq == "DIARIA":
-        if agora.hour != linha["agenda_hora"]:
-            return False
-        return ultima is None or ultima.date() < agora.date()
+        if ultima is not None and ultima.date() >= agora.date():
+            return False  # já buscou hoje
+        return agora.hour >= linha["agenda_hora"]
 
     return False
 

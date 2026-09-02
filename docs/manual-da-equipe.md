@@ -160,6 +160,27 @@ desativar por ausência apagaria dezenas de pratos de uma vez.
 
 ---
 
+### A busca automática, e o que ela promete
+
+Em **Integrações** você escolhe se o sistema procura as notas do Omie e os cupons
+do PDV sozinho: **manual**, **a cada hora** ou **uma vez por dia**, na hora que a
+casa escolher.
+
+**"Uma vez por dia" quer dizer *a partir* daquela hora, não *só* naquela hora.**
+Se o sistema estiver fora do ar às 4h — uma publicação, um reinício, o computador
+desligado —, a busca daquele dia acontece assim que ele voltar. Antes ela
+simplesmente não acontecia, e nada dizia isso: a tela mostrava a última
+sincronização, que uma busca manual tinha atualizado, e a agenda parecia em dia.
+
+⚠️ Mesmo depois de dias parado, ela roda **uma vez**, não uma por dia perdido: a
+janela da busca cobre o período inteiro de uma vez só.
+
+⚠️ **Buscar no botão não dispensa a busca do dia.** A cota diária é do
+agendamento: quem clica em *Buscar* está pedindo agora, não abrindo mão da
+passada da madrugada.
+
+---
+
 ### O mesmo produto com vários códigos
 
 O catálogo do Omie cria **um cadastro por código** — e o mesmo abacate aparece uma

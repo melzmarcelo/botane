@@ -3574,6 +3574,16 @@ try {
     await p.evaluate(() =>
       [...document.querySelectorAll("#agenda-omie span.rotulo")].some((r) =>
         /A que hora/i.test(r.textContent ?? ""))));
+  // 🔑 A diária é "uma vez por dia, A PARTIR dessa hora" — antes era "nessa
+  // hora, se alguém estiver acordado", e o dia inteiro passava em branco quando
+  // a API estava parada às 4h. Quem escolhe a hora precisa saber o que acontece
+  // quando ninguém está de pé nela — e que o botão não substitui a busca do dia.
+  checar("e explica que ela busca assim que o sistema voltar",
+    await p.evaluate(() =>
+      /busca assim que voltar/i.test(document.body.innerText)));
+  checar("e que buscar no botao nao dispensa a busca do dia",
+    await p.evaluate(() =>
+      /n[ãa]o substitui/i.test(document.body.innerText)));
   await foto(p, "29-agenda-omie");
 
   await api("PUT", "/omie/config", {

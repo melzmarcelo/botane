@@ -2398,6 +2398,34 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
   30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
   produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
+- 🔑 **A DIÁRIA só rodava se alguém estivesse acordado na hora marcada — e o dia inteiro
+  passava em branco** (02/09/2026, pedido do dono). `deve_rodar` exigia
+  `agora.hour == agenda_hora`: o disparo existia dentro daqueles sessenta minutos e em mais
+  nenhum instante. Com a API parada às 4h — um deploy, um reinício, a máquina desligada — a
+  busca daquele dia **simplesmente não acontecia**, e nada dizia isso: a tela mostrava a última
+  sincronização, que uma busca manual tinha atualizado, e a agenda parecia em dia.
+  **Medido na base local**: a diária das 4h do PDV tinha rodado pela última vez em **31/08**,
+  com hoje sendo 02/09 — dois dias de notas e cupons perdidos, ou seja compra a menos e receita
+  a menos no CMV, em silêncio.
+  A regra virou a pergunta que a casa faz: *já buscou hoje?* Não tendo buscado e já passada a
+  hora marcada, busca — assim que houver alguém para buscar.
+  ⚠️ **Continua sendo UMA vez por dia.** Voltando depois de três dias fora do ar, roda uma vez e
+  não três: quem responde é a DATA do último disparo, não quantos horários passaram. Três buscas
+  seguidas só gastariam cota, e a janela adaptativa cobre o período inteiro numa ida só.
+  ⚠️ **E a primeira configuração dispara logo**, quando a hora escolhida já passou — em vez de
+  esperar até a madrugada seguinte. A tela diz isso.
+- 🔑 **Busca MANUAL não consome a cota do dia** (mesmo pedido). `agenda_rodou_em` sempre foi
+  movido só pelo agendador — mas o **cardápio do PDV** tinha um segundo relógio, `cardapio_em`,
+  e ele era marcado dentro de `cardapio.sincronizar_cadastros`, que roda pelos DOIS caminhos.
+  Um clique em "Buscar no PDV" às 10h fazia a busca agendada da madrugada **pular os cadastros**,
+  e o prato criado no PDV depois disso esperava mais um dia para nascer aqui, sem nada dizendo
+  por quê. O relógio saiu de lá e virou `cardapio.marcar_cardapio`, chamado **só pelo agendador**.
+  ⚠️ **O "uma vez por dia" é do AGENDAMENTO, não de todo mundo**: quem clica no botão está
+  pedindo agora, não dispensando a passada da madrugada. São dois pedidos diferentes, feitos por
+  razões diferentes.
+  ⚠️ O agendador marca o relógio **mesmo quando o cardápio dá erro** — mesma razão do
+  `agenda_rodou_em`: reler 630 itens a cada minuto em cima de uma conta bloqueada só prolonga o
+  bloqueio. O erro viaja em `cadastros.erro`.
 - 🔑 **A ficha em RASCUNHO custeia a venda — e a origem DIZ isso** (02/09/2026, pedido do dono).
   O prato com receita ainda não homologada entrava no item de venda com custo **ZERO**: o CMV
   teórico saía subestimado, a margem alta demais e o food cost bom demais, **sem nada
@@ -2454,17 +2482,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.719 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.725 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (55), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (154), `smoke_vendas.py` (54), `smoke_vinculo.py` (84),
+  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (54), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (440, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (443, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

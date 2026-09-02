@@ -789,9 +789,23 @@ if alvo_p and outra:
     checar("e a categoria corrigida a mao NAO foi desfeita",
            depois_p.get("id_categoria") == outra["id"],
            (depois_p.get("id_categoria"), outra["id"]))
+    # 🔑 **O botao NAO consome a cota do dia** (pedido do dono, 02/09/2026). O
+    # relogio do cardapio era marcado dentro de `sincronizar_cadastros`, que roda
+    # pelos DOIS caminhos: um clique as 10h fazia a busca agendada da madrugada
+    # pular os cadastros, e o prato criado no PDV depois disso esperava mais um
+    # dia para nascer aqui — sem nada dizendo por que. O "uma vez por dia" e do
+    # AGENDAMENTO, nao de todo mundo.
     with _cur_pdv() as _c:
-        checar("o dia fica marcado, e a agenda nao rele o cardapio a cada hora",
+        checar("a busca MANUAL nao marca o dia — a cota diaria e do agendamento",
+               _cardapio.cadastros_de_hoje(_c, 1) is False, True)
+    # ⚠️ E quem marca e o agendador, pela funcao propria. Sem ela, a agenda
+    # HORARIA releria os 630 itens do cardapio 24 vezes por dia.
+    with _cur_pdv() as _c:
+        _cardapio.marcar_cardapio(_c, 1)
+    with _cur_pdv() as _c:
+        checar("mas o agendador marca, e ai ele nao rele o cardapio a cada hora",
                _cardapio.cadastros_de_hoje(_c, 1) is True, False)
+        _c.execute("UPDATE integracoes SET cardapio_em = NULL WHERE servico = 'PDV_LEGAL'")
 
 
 print("\n8h. reconciliar liga as vendas que estavam pendentes")

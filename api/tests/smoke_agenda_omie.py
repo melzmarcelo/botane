@@ -136,9 +136,9 @@ checar("HORARIA roda uma hora depois",
        regra.deve_rodar(linha("HORARIA", agora - timedelta(hours=1, minutes=1)), agora))
 
 
-print("\n3. a diária dispara uma vez no dia, não a cada minuto")
+print("\n3. a diária: uma vez por dia, A PARTIR da hora escolhida")
 checar("DIARIA roda na hora escolhida", regra.deve_rodar(linha("DIARIA", hora=3), agora))
-checar("e NÃO roda numa hora que não é a dela",
+checar("e NÃO roda ANTES da hora marcada",
        not regra.deve_rodar(linha("DIARIA", hora=5), agora))
 # ⚠️ Sem esta regra ela rodaria a cada minuto durante os sessenta minutos da
 # hora escolhida: sessenta buscas onde se pediu uma.
@@ -148,6 +148,30 @@ checar("e NÃO repete depois de já ter rodado hoje",
 checar("mas roda de novo no dia seguinte",
        regra.deve_rodar(
            linha("DIARIA", agora - timedelta(days=1), hora=3), agora))
+
+# 🔑 **O dia inteiro passava em branco quando ninguém estava acordado às 4h.**
+# A regra antiga exigia `agora.hour == agenda_hora`: fora daqueles sessenta
+# minutos não havia disparo nenhum, e a API parada naquela hora — um deploy, um
+# reinício, a máquina desligada — fazia a busca daquele dia simplesmente não
+# acontecer. Medido na base local em 02/09/2026: a diária das 4h tinha rodado
+# pela última vez em 31/08, pulando dois dias de notas e cupons.
+tarde = agora.replace(hour=15, minute=5)
+checar("passada a hora e sem ter buscado hoje, ela busca — nao espera o dia seguinte",
+       regra.deve_rodar(linha("DIARIA", agora - timedelta(days=2), hora=4), tarde))
+checar("e busca tambem quando nunca rodou, passada a hora",
+       regra.deve_rodar(linha("DIARIA", None, hora=4), tarde))
+# ⚠️ **UMA vez, nao uma por dia perdido.** Quem responde e a data do ultimo
+# disparo, nao quantos horarios passaram: tres buscas seguidas so gastariam
+# cota, e a janela adaptativa cobre o periodo inteiro numa ida so.
+checar("mas depois de buscar hoje ela para, por mais tarde que seja",
+       not regra.deve_rodar(linha("DIARIA", tarde.replace(hour=4), hora=4), tarde))
+
+# ⚠️ **Busca MANUAL nao consome a cota do dia.** Quem clica no botao esta
+# pedindo agora, nao dispensando a busca da madrugada — e quem move
+# `agenda_rodou_em` e so o agendador. Era o pedido do dono.
+sem_ter_rodado = linha("DIARIA", agora - timedelta(days=1), hora=4)
+checar("e o relogio da agenda so olha para ela mesma, nunca para o botao",
+       regra.deve_rodar(sem_ter_rodado, tarde))
 
 
 print("\n4. salvar a agenda não mexe na credencial nem no modo")

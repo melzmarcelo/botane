@@ -123,6 +123,11 @@ def rodar_uma(cur, linha: dict) -> dict:
         # ⚠️ **Falhar aqui não impede a busca de vendas**, e a ordem é essa de
         # propósito: venda não importada é receita faltando no CMV; cadastro não
         # sincronizado é um item que fica na fila mais um dia.
+        # ⚠️ **O relógio do cardápio é marcado AQUI, não lá dentro.** A mesma
+        # função roda pelo botão "Buscar no PDV", e marcar dentro dela fazia um
+        # clique às 10h consumir a cota do dia: a busca agendada pulava os
+        # cadastros, e o prato criado no PDV depois disso esperava mais um dia
+        # para nascer aqui. O "uma vez por dia" é do AGENDAMENTO.
         if not cardapio.cadastros_de_hoje(cur, linha["id_unidade"]):
             try:
                 resultado["cadastros"] = cardapio.sincronizar_cadastros(
@@ -130,6 +135,10 @@ def rodar_uma(cur, linha: dict) -> dict:
                     linha["id_unidade"])
             except ErroPdv as e:
                 resultado["cadastros"] = {"erro": e.mensagem}
+            # Marca mesmo tendo dado erro, pela razão do `agenda_rodou_em`:
+            # repetir a leitura de 630 itens a cada minuto em cima de uma conta
+            # bloqueada só prolonga o bloqueio. O erro viaja em `cadastros.erro`.
+            cardapio.marcar_cardapio(cur, linha["id_unidade"])
 
         r = importador.sincronizar(cur, cliente, linha["id_unidade"], filiais,
                                    dias=linha["agenda_janela_dias"], desde=None)

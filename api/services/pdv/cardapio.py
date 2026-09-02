@@ -534,11 +534,19 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
 
 
 def cadastros_de_hoje(cur, id_unidade: int) -> bool:
-    """Os cadastros do cardápio já foram sincronizados hoje nesta loja?
+    """A AGENDA já sincronizou os cadastros hoje nesta loja?
 
     ⚠️ **Relógio PRÓPRIO** (`integracoes.cardapio_em`), e não
     `ultima_sincronizacao`: aquela é o relógio das VENDAS e avança a cada busca.
     É a mesma lição do `agenda_rodou_em`.
+
+    🔑 **E quem move esse relógio é só o AGENDADOR** (pedido do dono,
+    02/09/2026). Ele também era movido pelo botão "Buscar no PDV", e o efeito
+    era a busca manual consumir a cota do dia: quem clicasse às 10h fazia a
+    busca agendada pular os cadastros — o prato criado no PDV depois disso
+    esperava mais um dia para nascer aqui, sem nada dizendo por quê. **O "uma
+    vez por dia" é do agendamento, não de todo mundo**: quem clica no botão está
+    pedindo agora, não dispensando a passada da madrugada.
     """
     cur.execute(
         """SELECT cardapio_em FROM integracoes
@@ -564,18 +572,32 @@ def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str
     630 itens numa rota sem avisar que faltavam sessenta, e uma leitura truncada
     desativaria dezenas de pratos de uma vez — derrubando o vínculo das vendas
     que chegassem depois.
+
+    ⚠️ **Quem marca o relógio do dia é o AGENDADOR, não esta função.** Ela roda
+    pelos dois caminhos — o botão e a agenda —, e marcar aqui fazia o clique de
+    alguém consumir a cota diária da busca automática. Ver `marcar_cardapio`.
     """
     r = importar(cur, cliente, id_usuario, filial, criar_ausentes=True,
                  id_unidade=id_unidade, alinhar=False)
+    return {"itens": r["itens"], "criados": r["criados"],
+            # `completados` aqui só pode ser mudança de situação: é o único
+            # campo que o modo desligado escreve.
+            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"]}
+
+
+def marcar_cardapio(cur, id_unidade: int) -> None:
+    """Registra que a AGENDA sincronizou os cadastros hoje.
+
+    🔑 Existe separada de `sincronizar_cadastros` porque aquela roda pelos dois
+    caminhos — o botão e a agenda — e só um deles consome a cota do dia. Antes o
+    relógio era marcado lá dentro, e um clique às 10h fazia a busca agendada
+    pular os cadastros.
+    """
     cur.execute(
         """UPDATE integracoes SET cardapio_em = now()
             WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""",
         (id_unidade,),
     )
-    return {"itens": r["itens"], "criados": r["criados"],
-            # `completados` aqui só pode ser mudança de situação: é o único
-            # campo que o modo desligado escreve.
-            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"]}
 
 
 def reconciliar(cur, id_unidade: int) -> dict:

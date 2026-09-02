@@ -400,6 +400,21 @@ export default function PaginaIntegracoes() {
               )}
             </div>
 
+            {/* 🔑 A diária é "uma vez por dia, a partir dessa hora" — e não "nessa
+                hora, se o sistema estiver de pé". A regra antiga fazia o dia
+                inteiro passar em branco quando a API estava parada às 4h (um
+                deploy, um reinício), e nada dizia isso. A tela precisa contar a
+                regra: quem escolhe 4h precisa saber o que acontece se às 4h
+                ninguém estiver ligado. */}
+            {form.agenda_frequencia === "DIARIA" && (
+              <p className="mt-3 text-[13px] leading-snug text-suave">
+                Uma busca por dia, a partir dessa hora. Se o sistema estiver fora do ar na
+                hora marcada, ele <b>busca assim que voltar</b> — e mesmo depois de dias
+                parado roda uma vez só, porque a janela cobre todo o período de uma vez.
+                Buscar no botão <b>não substitui</b> a busca do dia.
+              </p>
+            )}
+
             {form.agenda_frequencia === "HORARIA" && (
               <p className="mt-3 text-[13px] leading-snug text-alerta">
                 A cada hora são 24 buscas por dia. O Omie limita o uso e{" "}

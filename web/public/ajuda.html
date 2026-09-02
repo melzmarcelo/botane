@@ -1052,7 +1052,8 @@
         <p>
           Na agenda automática o cardápio é lido <strong>uma vez por dia</strong>: prato novo não
           nasce de hora em hora, e ler 630 itens 24 vezes por dia é caro sem ser mais útil. O
-          botão sincroniza sempre.
+          botão sincroniza sempre &mdash; e <strong>não consome</strong> a leitura do dia: o
+          &ldquo;uma vez por dia&rdquo; é do agendamento.
         </p>
       </div>
       <p>
@@ -1144,6 +1145,39 @@
           dia: se a casa não recebe nota de hora em hora, uma vez por dia entrega o mesmo
           resultado por uma fração da cota. Pela mesma razão, o agendador <strong>não
           insiste</strong> quando falha — registra o erro e tenta no horário seguinte.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">&ldquo;Uma vez por dia&rdquo; é a partir daquela hora, não só naquela hora</p>
+        <p>
+          A diária buscava <em>apenas</em> dentro dos sessenta minutos da hora escolhida. Com o
+          sistema fora do ar às 4h &mdash; uma publicação, um reinício, a máquina desligada
+          &mdash; a busca daquele dia <strong>simplesmente não acontecia</strong>, e nada dizia
+          isso: a tela mostrava a última sincronização, que uma busca manual havia atualizado, e
+          a agenda parecia em dia. Foi assim que uma diária das 4h ficou <strong>dois dias sem
+          rodar</strong>: compra a menos e receita a menos no CMV, em silêncio.
+        </p>
+        <p>
+          Agora a pergunta é a que a casa faz: <em>já buscou hoje?</em> Não tendo buscado e já
+          passada a hora marcada, ela busca assim que houver alguém para buscar.
+        </p>
+        <p>
+          ⚠️ <strong>Continua sendo uma vez por dia.</strong> Voltando depois de três dias fora do
+          ar, roda uma vez e não três &mdash; quem responde é a data do último disparo, não
+          quantos horários passaram. A janela da busca cobre o período inteiro numa ida só.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">Buscar no botão não dispensa a busca do dia</p>
+        <p>
+          A cota diária é <strong>do agendamento</strong>, não de todo mundo: quem clica em
+          <em>Buscar</em> está pedindo agora, não abrindo mão da passada da madrugada. São dois
+          pedidos diferentes, feitos por razões diferentes.
+        </p>
+        <p>
+          Isso já valia para as notas e os cupons. Faltava valer para o <strong>cardápio do
+          PDV</strong>, que tem relógio próprio: um clique às 10h fazia a busca agendada pular os
+          cadastros, e o prato criado no PDV depois disso esperava mais um dia para nascer aqui.
         </p>
       </div>
       <div class="regra">
