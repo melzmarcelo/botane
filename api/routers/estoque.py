@@ -17,6 +17,7 @@ from models.estoque import (
     MovimentoResponse,
     ProducaoRequest,
     SaidaRequest,
+    SaldoAgrupadoResponse,
     SaldoRedeForaResponse,
     SaldoRedeResponse,
     SaldoResponse,
@@ -84,6 +85,91 @@ def saldos(
             for linha in linhas:
                 linha["em_transito"] = transito.get(
                     (linha["id_produto"], linha["id_local"]), 0)
+    return linhas
+
+
+@router.get("/saldos-agrupados", response_model=list[SaldoAgrupadoResponse])
+def saldos_agrupados(
+    busca: str | None = Query(default=None, max_length=80),
+    id_produto: int | None = None,
+    id_setor: int | None = None,
+    apenas_com_saldo: bool = False,
+    abaixo_do_minimo: bool = False,
+    incluir_inativos: bool = False,
+    limite: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    resposta: Response = None,
+    ctx: Contexto = Depends(requer_permissao("estoque.saldos")),
+) -> list[dict]:
+    """Uma linha por PRODUTO, somando os locais desta loja.
+
+    🔑 **O processo da casa põe o mesmo produto em vários locais.** O açúcar
+    entra no Estoque Central e de manhã cada setor leva um pacote para o seu
+    canto — Bar, Confeitaria, Cozinha. A lista por prateleira responde "onde
+    está"; esta responde "quanto a loja tem", que é a pergunta de quem vai
+    comprar. As duas são necessárias, e é por isso que a tela escolhe.
+
+    ⚠️ **`id_setor` corta pelo setor do LOCAL**, não pelo do produto: a pergunta
+    aqui é "o que a Confeitaria tem na mão", e quem responde isso é onde a
+    mercadoria está — não como o produto foi classificado no cadastro.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        sql = """
+            SELECT s.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+                   p.estoque_minimo,
+                   sum(s.quantidade) AS quantidade,
+                   round(sum(s.quantidade * s.custo_medio), 2) AS valor,
+                   -- Ponderado, nunca a media dos medios: o mesmo cafe pode
+                   -- estar na camara e no bar com custos diferentes.
+                   CASE WHEN sum(s.quantidade) <> 0
+                        THEN round(sum(s.quantidade * s.custo_medio)
+                                   / sum(s.quantidade), 6) END AS custo_medio,
+                   (p.estoque_minimo IS NOT NULL
+                    AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo
+              FROM estoque_saldos s
+              JOIN produtos p ON p.id = s.id_produto
+              JOIN locais_estoque l ON l.id = s.id_local
+             WHERE s.id_unidade = %s
+               AND (%s OR p.ativo)
+               AND (%s::int IS NULL OR s.id_produto = %s)
+               AND (%s::int IS NULL OR l.id_setor = %s)
+               AND (%s::varchar IS NULL
+                    OR lower(p.nome) LIKE lower('%%' || %s || '%%')
+                    OR lower(p.codigo) LIKE lower('%%' || %s || '%%'))
+             GROUP BY s.id_produto, p.codigo, p.nome, p.um_estoque, p.estoque_minimo
+            HAVING (NOT %s OR sum(s.quantidade) <> 0)
+               AND (NOT %s OR (p.estoque_minimo IS NOT NULL
+                               AND sum(s.quantidade) < p.estoque_minimo))
+             ORDER BY lower(p.nome)
+        """
+        params = (id_unidade, incluir_inativos, id_produto, id_produto,
+                  id_setor, id_setor, busca, busca, busca,
+                  apenas_com_saldo, abaixo_do_minimo)
+        linhas = pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
+
+        # Uma consulta a mais para a PAGINA, nao uma por linha — a mesma
+        # escolha do `em_transito` e da visao de empresa.
+        if linhas:
+            cur.execute(
+                """SELECT s.id_produto, s.id_local, l.nome AS local, se.nome AS setor,
+                          sum(s.quantidade) AS quantidade,
+                          round(sum(s.quantidade * s.custo_medio), 2) AS valor
+                     FROM estoque_saldos s
+                     JOIN locais_estoque l ON l.id = s.id_local
+                     LEFT JOIN setores se ON se.id = l.id_setor
+                    WHERE s.id_unidade = %s AND s.id_produto = ANY(%s)
+                    GROUP BY 1, 2, 3, 4, l.principal, l.nome
+                    ORDER BY l.principal DESC, lower(l.nome)""",
+                (id_unidade, [l["id_produto"] for l in linhas]))
+            por_produto: dict[int, list[dict]] = {}
+            for r in cur.fetchall():
+                por_produto.setdefault(r["id_produto"], []).append({
+                    "id_local": r["id_local"], "local": r["local"], "setor": r["setor"],
+                    "quantidade": float(r["quantidade"]), "valor": float(r["valor"] or 0),
+                })
+            for linha in linhas:
+                linha["por_local"] = por_produto.get(linha["id_produto"], [])
     return linhas
 
 

@@ -662,13 +662,52 @@
       </table>
 
       <div class="regra">
-        <p class="rotulo">Local não é setor</p>
+        <p class="rotulo">Local não é setor — mas um local pertence a um setor</p>
         <p>
           A confusão custa caro: o inventário conta <em>local</em> (a câmara fria tem 12 kg de
-          filé) e o CMV agrupa por <em>setor</em> (a cozinha consumiu R$ 4.000). Um produto
-          tem um local; um produto pertence a um setor. São perguntas diferentes.
+          filé) e o CMV agrupa por <em>setor</em> (a cozinha consumiu R$ 4.000). São perguntas
+          diferentes, e continuam sendo.
+        </p>
+        <p>
+          O que liga as duas é o cadastro do local dizer <strong>a que setor ele pertence</strong>.
+          O processo da casa é este: o açúcar entra no <em>Estoque Central</em> e de manhã cada
+          setor leva um pacote para o seu canto. Esse canto é um <strong>local</strong> — ele
+          guarda mercadoria, recebe transferência e é contado num inventário próprio.
+        </p>
+        <p>
+          E aí o &ldquo;mesmo produto em vários setores&rdquo; deixa de ser um problema: o
+          açúcar não precisa de quatro setores no cadastro, ele tem <strong>saldo em quatro
+          locais</strong>.
         </p>
       </div>
+
+      <h3>O açúcar que se reparte entre os setores</h3>
+      <table>
+        <thead><tr><th>Passo</th><th>Onde</th></tr></thead>
+        <tbody>
+          <tr><td>A nota entra no Estoque Central</td><td>Compras, ou uma entrada</td></tr>
+          <tr><td>De manhã cada setor leva o que vai usar</td><td>Estoque ▸ Ajustes ▸ Transferência</td></tr>
+          <tr><td>Durante a semana o setor gasta</td><td>Produção, informando o local do setor</td></tr>
+          <tr><td>No fim, cada setor conta o seu</td><td>Inventário, filtrando pelo local daquele setor</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <strong>A produção sai de onde se produz.</strong> Produzindo na Confeitaria, os insumos
+        baixam do estoque dela — senão o pacote que ela pegou de manhã nunca baixaria, e a
+        contagem do fim da semana acusaria uma sobra que não existe.
+      </p>
+      <p>
+        ⚠️ <strong>Se acabou no setor, a produção busca no local padrão do produto</strong> em
+        vez de deixar saldo negativo. É de propósito: uma receita usa leite da câmara e café do
+        seco ao mesmo tempo, e forçar tudo num local só faria a saída bater onde o insumo nunca
+        passou — com custo provisório contaminando o custo do prato.
+      </p>
+      <p>
+        Em <strong>Estoque ▸ Saldos</strong>, o seletor <em>Ver por</em> troca a pergunta:
+        <strong>prateleira</strong> responde &ldquo;onde está&rdquo;, que é o que quem conta
+        precisa; <strong>produto</strong> responde &ldquo;quanto a loja tem&rdquo;, que é o que
+        quem compra precisa.
+      </p>
 
       <p>
         <strong>O primeiro local cadastrado nasce principal</strong>, marque-se a caixinha ou

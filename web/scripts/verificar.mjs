@@ -819,6 +819,26 @@ try {
     ordemCadastro.listaY === null || ordemCadastro.formY < ordemCadastro.listaY,
     ordemCadastro);
 
+  // 🔑 **O local pode dizer a que SETOR pertence** (migração 051). O processo
+  // da casa é: o açúcar entra no Estoque Central e de manhã cada setor leva um
+  // pacote para o seu canto. O canto do setor é um LOCAL, e é essa coluna que
+  // liga "onde a mercadoria está" a "quem a consome".
+  // ⚠️ Vazio é resposta legítima e é o padrão: o Estoque Central não pertence
+  // a setor nenhum — ele serve a todos.
+  await irPara(p, `${WEB}/cadastros?aba=locais`);
+  await p.waitForSelector("#setor-do-local", { timeout: 12000 }).catch(() => {});
+  const setorDoLocal = await p.evaluate(() => {
+    const sel = document.querySelector("#setor-do-local");
+    return {
+      existe: !!sel,
+      primeira: sel?.options?.[0]?.value ?? null,
+      opcoes: sel?.options?.length ?? 0,
+    };
+  });
+  checar("o local declara a que setor pertence", setorDoLocal.existe, setorDoLocal);
+  checar("e o padrão é NENHUM, que é o estoque geral",
+    setorDoLocal.primeira === "" && setorDoLocal.opcoes > 1, setorDoLocal);
+
   // 🔑 **Dava para criar e desativar, e não dava para CORRIGIR.** Os quatro PUT
   // existem no servidor desde o começo e a tela nunca os ofereceu: um setor
   // cadastrado com o nome errado no primeiro dia ficava errado para sempre.
@@ -836,6 +856,12 @@ try {
   const APOIO_CORRIGIDO = `Tela corrigido ${marcaEd}`.toUpperCase();
   await api("POST", "/setores", { nome: `Tela apoio ${marcaEd}` }, token);
   await irPara(p, `${WEB}/cadastros?aba=setores`);
+  // ⚠️ **A lista de apoio PAGINA, e o registro desta rodada cai fora da
+  // primeira página.** "Poucos por natureza" era suposição: a base real tem
+  // dezenas de setores, e um nome que começa com T fica na página 2. A checagem
+  // acusava a tela de não oferecer editar numa linha que ela nem mostrava.
+  // Aumentar a página é o que uma pessoa faria — e é o que o rodapé oferece.
+  await p.select('select[aria-label="Registros por página"]', "100").catch(() => {});
   await p.waitForFunction(
     (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
     APOIO,
@@ -886,9 +912,19 @@ try {
     campo: document.querySelector("#form-apoio input")?.value ?? "",
     aindaTemOAntigo: document.body.innerText.includes(antigo),
   }), APOIO);
+  // ⚠️ **Pelo SERVIDOR, não pelo texto da página.** A afirmação é sobre o
+  // ESTADO: um registro só, com o nome novo. A lista de apoio pagina — "poucos
+  // por natureza" era suposição, e a base real tem 184 locais e dezenas de
+  // setores —, então o registro corrigido pode não estar na página à vista, e a
+  // checagem acusaria a tela de não ter salvo o que salvou. É a lição do
+  // "relatório cortado no topo esconde o registro que se procura".
+  const { dados: setoresDepois } = await api(
+    "GET", "/setores?incluir_inativos=true", null, token);
+  const comNomeNovo = (setoresDepois ?? []).filter((x) => x.nome === APOIO_CORRIGIDO);
+  const comNomeVelho = (setoresDepois ?? []).filter((x) => x.nome === APOIO);
   checar("salvar troca o nome na lista, sem criar outro registro",
-    depoisDeCorrigir.texto.includes(APOIO_CORRIGIDO)
-    && !depoisDeCorrigir.aindaTemOAntigo, depoisDeCorrigir);
+    comNomeNovo.length === 1 && comNomeVelho.length === 0,
+    { novo: comNomeNovo.length, velho: comNomeVelho.length });
   checar("e o formulário volta a ser o de cadastro",
     depoisDeCorrigir.botao === "Adicionar" && depoisDeCorrigir.campo === "",
     depoisDeCorrigir);
@@ -1350,8 +1386,17 @@ try {
   // homologada nenhuma neste ponto do roteiro — a que a fase do CMV homologa só
   // aparece muito depois. O bloco todo passava a depender do resíduo da rodada
   // anterior, que é justamente o que uma suíte não pode fazer.
+  // ⚠️ **A ficha tem de ser de produto ATIVO.** Ficha homologada apontando para
+  // produto desativado existe — produto com movimento vira inativo em vez de
+  // sumir, e a ficha dele fica —, e agendar nela devolve 400 "está inativo". O
+  // POST não era conferido, então a agenda ficava vazia e a falha aparecia três
+  // checagens adiante, dizendo que a agenda não abre a folha.
   const { dados: fichasProd } = await api("GET", "/fichas", null, token);
-  let homologada = (fichasProd ?? []).find((f) => f.status === "HOMOLOGADA");
+  const { dados: ativosProd } = await api(
+    "GET", "/produtos?tipo=PRODUZIDO&limite=1000", null, token);
+  const idsAtivos = new Set((ativosProd ?? []).map((x) => x.id));
+  let homologada = (fichasProd ?? []).find(
+    (f) => f.status === "HOMOLOGADA" && idsAtivos.has(f.id_produto));
   if (!homologada) {
     const marcaFicha = String(Date.now()).slice(-5);
     const { dados: insFicha } = await api("POST", "/produtos",
@@ -1367,8 +1412,12 @@ try {
   }
   checar("há ficha homologada para a agenda usar", !!homologada, fichasProd?.length);
   const amanhaISO = diaLocal(1);
-  await api("POST", "/producao-agenda",
+  // ⚠️ **Confere o POST.** Sem isto, uma recusa aqui vira "a agenda não abre a
+  // folha" lá embaixo — a falha longe da causa que esta suíte já pagou caro.
+  const { status: stAgenda, dados: dAgenda } = await api("POST", "/producao-agenda",
     { id_produto: homologada.id_produto, data_prevista: amanhaISO, quantidade: 3 }, token);
+  checar("a linha da agenda é criada", stAgenda === 201 || stAgenda === 200,
+    [stAgenda, dAgenda]);
 
   await irPara(p, `${WEB}/producao`);
   await new Promise((r) => setTimeout(r, 1400));
@@ -1388,6 +1437,14 @@ try {
 
   // O nome da linha abre a FOLHA da produção: quanto de cada insumo, quanto
   // existe no local e o que falta — antes de ligar o forno.
+  // ⚠️ **Espera limitada pelo link, não um sono fixo.** A agenda vem do
+  // servidor e a lista cresceu com a base: a checagem media a tela antes de a
+  // linha existir e acusava a agenda de não abrir a folha.
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("a")]
+      .some((x) => /\/producao\/\d+$/.test(x.getAttribute("href") ?? "")),
+    { timeout: 15000 },
+  ).catch(() => {});
   const alvoFolha = await p.evaluate(() => {
     const a = [...document.querySelectorAll("a")].find((x) =>
       /\/producao\/\d+$/.test(x.getAttribute("href") ?? ""));
@@ -3935,13 +3992,23 @@ try {
   // porque seletor que nao corta nada e promessa falsa) e que a loja SEM aquele
   // produto mostra traco — "nao tem linha aqui" e "tem zero" se leem igual e so
   // o segundo e um saldo.
-  const temSomarLojas = await p.$("#somar-lojas");
-  checar("com duas lojas, os saldos oferecem somar todas", !!temSomarLojas);
+  // 🔑 **Tres granularidades da mesma pergunta**, e nao duas caixinhas: por
+  // prateleira ("onde esta"), por produto ("quanto a loja tem") e por empresa.
+  // O processo da casa poe o mesmo produto em varios locais — o acucar entra
+  // no Estoque Central e cada setor leva um pacote para o seu canto —, e a
+  // lista por prateleira mostra quatro linhas e nenhum total.
+  const opcoesVisao = await p.evaluate(() =>
+    [...(document.querySelector("#visao-saldos")?.options ?? [])].map((o) => o.value));
+  checar("os saldos escolhem a granularidade", opcoesVisao.length >= 2, opcoesVisao);
+  checar("com prateleira, produto e — havendo mais de uma loja — empresa",
+    opcoesVisao.includes("prateleira") && opcoesVisao.includes("produto")
+    && opcoesVisao.includes("empresa"), opcoesVisao);
+  const temSomarLojas = opcoesVisao.includes("empresa");
   if (temSomarLojas) {
     const rotuloLocal = () => p.evaluate(() => [...document.querySelectorAll("main .rotulo")]
       .some((x) => (x.textContent ?? "").trim() === "Local"));
     const localAntes = await rotuloLocal();
-    await p.evaluate(() => document.querySelector("#somar-lojas")?.click());
+    await p.select("#visao-saldos", "empresa");
     // ⚠️ **Esperar pela frase explicativa nao espera nada**: ela aparece no
     // instante do clique, antes de a lista voltar do servidor — e a checagem
     // media a tabela ainda vazia. Espere pela COLUNA da filial, que so existe
@@ -4002,7 +4069,7 @@ try {
         : /inativos/i.test(oAviso.texto) && oAviso.texto.includes(String(foraApi.produtos)),
       { foraApi, ...oAviso });
     // Volta ao modo de sempre: o proximo bloco le a lista por prateleira.
-    await p.evaluate(() => document.querySelector("#somar-lojas")?.click());
+    await p.select("#visao-saldos", "prateleira");
     await new Promise((r) => setTimeout(r, 800));
   }
 

@@ -13,6 +13,20 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
 
+/** Uma linha por PRODUTO somando os locais desta loja. */
+type SaldoAgrupado = {
+  id_produto: number;
+  codigo: string;
+  produto: string;
+  um_estoque: string | null;
+  quantidade: number;
+  valor: number;
+  custo_medio: number | null;
+  abaixo_do_minimo: boolean;
+  por_local: { id_local: number; local: string; setor: string | null;
+               quantidade: number; valor: number }[];
+};
+
 /** Uma linha da visão de EMPRESA: o produto somando as lojas. */
 type SaldoRede = {
   id_produto: number;
@@ -96,8 +110,15 @@ export default function PaginaEstoque() {
   // duas precisava trocar de loja no seletor e somar de cabeça para saber
   // quanto a rede tem de um item. Aqui a linha vira o PRODUTO, e a prateleira
   // sai: agrupar por local devolveria a mesma lista, só que mais longa.
-  const [rede, setRede] = useState(false);
+  // 🔑 **Três granularidades, não duas caixinhas.** O processo da casa põe o
+  // mesmo produto em vários locais — o açúcar entra no Estoque Central e cada
+  // setor leva um pacote para o seu canto. "Onde está" e "quanto a loja tem"
+  // são perguntas diferentes, e a de empresa é uma terceira. Duas caixinhas
+  // que interagem fariam quatro combinações, duas delas sem sentido.
+  const [visao, setVisao] = useState<"prateleira" | "produto" | "empresa">("prateleira");
+  const rede = visao === "empresa";
   const [saldosRede, setSaldosRede] = useState<SaldoRede[] | null>(null);
+  const [saldosAgrupados, setAgrupados] = useState<SaldoAgrupado[] | null>(null);
   // 🔑 **O painel da rede conta o produto INATIVO que ainda tem saldo; esta
   // lista não.** As duas regras estão certas — o painel responde ao CMV, a
   // lista mostra o que se opera —, mas os números não fechavam e nada dizia por
@@ -125,7 +146,7 @@ export default function PaginaEstoque() {
   const pagSaldos = usePaginacao("saldos", {
     // ⚠️ `rede` entra como filtro: trocar de modo muda o número de linhas, e
     // quem estava na página 7 cairia numa tela vazia sem nada explicando.
-    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo, rede, inativos],
+    filtros: [busca, produtoSaldo?.id, idLocal, comSaldo, visao, inativos],
   });
   const pagMov = usePaginacao("razao", {
     padrao: 100,
@@ -159,6 +180,15 @@ export default function PaginaEstoque() {
         }
         return;
       }
+      if (visao === "produto") {
+        // ⚠️ O local sai do pedido: aqui a linha é o produto, e mandar um
+        // filtro que o servidor não usa faria a tela prometer um corte que
+        // não acontece. Onde ele está vem em `por_local`.
+        const r = await api.listar<SaldoAgrupado>(`/estoque/saldos-agrupados?${q}`);
+        setAgrupados(r.itens);
+        pagSaldos.setTotal(r.total);
+        return;
+      }
       if (idLocal) q.set("id_local", idLocal);
       const r = await api.listar<Saldo>(`/estoque/saldos?${q}`);
       setSaldos(r.itens);
@@ -167,7 +197,7 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, produtoSaldo, idLocal, comSaldo, rede, inativos,
+  }, [busca, produtoSaldo, idLocal, comSaldo, visao, inativos,
       pagSaldos.offset, pagSaldos.porPagina]);
 
   const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio
@@ -223,7 +253,8 @@ export default function PaginaEstoque() {
   // duas coisas é. Chamar de "valor em estoque" o total de vinte linhas de
   // duzentas é a mentira que a casa já pagou noutra tela: quem lê acha que
   // confere o estoque inteiro e confere um pedaço.
-  const listaNaTela = rede ? saldosRede : saldos;
+  const listaNaTela =
+    visao === "empresa" ? saldosRede : visao === "produto" ? saldosAgrupados : saldos;
   const valorTotal = listaNaTela?.reduce((s, x) => s + Number(x.valor), 0) ?? 0;
   const temMaisPaginas = (listaNaTela?.length ?? 0) < pagSaldos.total;
 
@@ -311,7 +342,7 @@ export default function PaginaEstoque() {
               </div>
               {/* ⚠️ O filtro de local SOME na visão de empresa: ali a linha é o
                   produto, e um seletor que não corta nada é promessa falsa. */}
-              {!rede && (
+              {visao === "prateleira" && (
                 <label className="sm:w-[200px]">
                   <span className="rotulo">Local</span>
                   <select
@@ -337,20 +368,26 @@ export default function PaginaEstoque() {
                 />
                 <span className="text-[14px]">só com saldo</span>
               </label>
-              {/* Só com mais de uma loja: numa casa só, "somar as lojas" é a
-                  mesma tela com uma coluna a mais. */}
-              {variasLojas && (
-                <label className="flex items-center gap-2 pb-2">
-                  <input
-                    type="checkbox"
-                    id="somar-lojas"
-                    className="h-4 w-4 accent-erva"
-                    checked={rede}
-                    onChange={(e) => setRede(e.target.checked)}
-                  />
-                  <span className="text-[14px]">somar todas as lojas</span>
-                </label>
-              )}
+              {/* 🔑 **Três granularidades da mesma pergunta.** Por prateleira
+                  responde "onde está" — é o que quem conta precisa. Por produto
+                  responde "quanto a loja tem", que é a pergunta de quem compra:
+                  com o açúcar espalhado em quatro setores, a lista por
+                  prateleira mostra quatro linhas e nenhum total.
+                  ⚠️ A de EMPRESA só aparece com mais de uma loja: numa casa só
+                  ela é a do meio com uma coluna a mais. */}
+              <label className="sm:w-[210px]">
+                <span className="rotulo">Ver por</span>
+                <select
+                  id="visao-saldos"
+                  className="campo mt-1.5"
+                  value={visao}
+                  onChange={(e) => setVisao(e.target.value as typeof visao)}
+                >
+                  <option value="prateleira">prateleira (onde está)</option>
+                  <option value="produto">produto (soma os locais)</option>
+                  {variasLojas && <option value="empresa">produto, todas as lojas</option>}
+                </select>
+              </label>
               {/* Só faz sentido na visão de empresa: é ela que promete explicar
                   o total do painel da rede. */}
               {rede && (
@@ -366,6 +403,12 @@ export default function PaginaEstoque() {
                 </label>
               )}
             </div>
+            {visao === "produto" && (
+              <p className="mt-3 text-[12.5px] text-suave">
+                Uma linha por produto, somando os locais desta loja. O detalhe de cada
+                prateleira — e o setor dela — vem abaixo do nome.
+              </p>
+            )}
             {rede && (
               <p className="mt-3 text-[12.5px] text-suave">
                 Uma linha por produto, somando as lojas que você enxerga. O custo médio da rede
@@ -378,7 +421,7 @@ export default function PaginaEstoque() {
           <Cartao
             titulo={
               listaNaTela
-                ? `${pagSaldos.total} ${rede ? "produto(s)" : "linha(s)"}`
+                ? `${pagSaldos.total} ${visao === "prateleira" ? "linha(s)" : "produto(s)"}`
                 : "Saldos"
             }
             descricao={
@@ -387,7 +430,61 @@ export default function PaginaEstoque() {
                 : `Valor em estoque: ${reais(valorTotal)}`
             }
           >
-            {rede ? (
+            {visao === "produto" ? (
+              !saldosAgrupados ? (
+                <Carregando />
+              ) : !saldosAgrupados.length ? (
+                <Vazio>Nada em estoque nesta loja. Comece por uma entrada.</Vazio>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="tabela">
+                    <thead>
+                      <tr>
+                        <th>Produto</th>
+                        <th>Onde está</th>
+                        <th className="num">Total</th>
+                        <th className="num">Custo médio</th>
+                        <th className="num">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saldosAgrupados.map((s) => (
+                        <tr key={s.id_produto}>
+                          <td>
+                            <span className="font-semibold">{s.produto}</span>
+                            <span className="mono ml-2 text-[12px] text-suave">{s.codigo}</span>
+                            {s.abaixo_do_minimo && (
+                              <span className="ml-2">
+                                <Etiqueta cor="alerta">abaixo do mínimo</Etiqueta>
+                              </span>
+                            )}
+                          </td>
+                          <td className="text-[12.5px] text-suave">
+                            {/* A prateleira com o SETOR dela: "Confeitaria — 3 KG"
+                                é o que o processo da casa precisa ler. */}
+                            {s.por_local.map((l) => (
+                              <span key={l.id_local} className="block">
+                                {l.local}
+                                {l.setor ? ` · ${l.setor}` : ""} — {qtd(l.quantidade)}{" "}
+                                {s.um_estoque ?? ""}
+                              </span>
+                            ))}
+                          </td>
+                          <td className={`num ${Number(s.quantidade) < 0 ? "text-erro" : ""}`}>
+                            <span className="font-semibold">{qtd(s.quantidade)}</span>{" "}
+                            {s.um_estoque ?? ""}
+                          </td>
+                          <td className="num">
+                            {s.custo_medio === null ? "—" : reais(Number(s.custo_medio))}
+                          </td>
+                          <td className="num font-semibold">{reais(Number(s.valor))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : rede ? (
               !saldosRede ? (
                 <Carregando />
               ) : !saldosRede.length ? (

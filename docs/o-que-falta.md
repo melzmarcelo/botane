@@ -12,6 +12,27 @@ real do cliente. O que segue é o que resta.
 
 ## 🔴 Sem isto, metade do sistema não produz número
 
+### O CMV por setor sai do cadastro do produto, não de onde a mercadoria saiu
+
+`relatorios.cmv_por_grupo(agrupar="setor")` agrupa por `produtos.id_setor` — **o setor do
+PRODUTO, um só**. O processo real da casa põe o mesmo insumo em vários setores: o açúcar entra
+no Estoque Central e de manhã Bar, Confeitaria, Cozinha e Cafeteria levam um pacote cada. Hoje
+todo o consumo de açúcar é atribuído a um setor.
+
+A ponte já existe desde a migração 051: `locais_estoque.id_setor` diz de quem é a prateleira, e
+`estoque_movimentos.id_local` diz de onde a mercadoria saiu. Falta o relatório passar a somar
+pelo setor do **local do movimento**, com o setor do produto como reserva para o que sair de um
+local sem setor.
+
+⚠️ **Não é uma troca de `JOIN`.** As três CTEs (`inicial`, `compras`, `final`) agregam por
+`id_produto`; passariam a agregar por `(id_produto, id_local)`. As fotografias de estoque já são
+`DISTINCT ON (id_produto, id_local)`, então o dado está lá — mas a identidade *a soma dos grupos
+fecha com o CMV do período* é cobrada pela bateria, e é ela que dá sentido ao corte por grupo.
+Merece entrega própria, com a bateria inteira em cima dela.
+
+⚠️ E muda número de relatório já lido pelo dono: o "quanto a cozinha pesou" de antes e o de
+depois não vão bater, e a tela precisa dizer por quê.
+
 ### Carga inicial das fichas técnicas
 
 **Há zero fichas.** Sem elas não existe CMV teórico; sem CMV teórico não existe variância nem

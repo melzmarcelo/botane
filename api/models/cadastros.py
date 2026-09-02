@@ -57,6 +57,13 @@ class SetorResponse(BaseModel):
 class LocalCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=80)
     tipo: str = "SECO"
+    # 🔑 **A que setor esta prateleira pertence** (migração 051). O processo da
+    # casa é: o açúcar entra no Estoque Central e de manhã cada setor leva um
+    # pacote para o seu canto. O canto do setor é um LOCAL — ele guarda, recebe
+    # transferência e é contado num inventário próprio.
+    # ⚠️ NULO é resposta legítima e é o padrão: o Estoque Central não pertence a
+    # setor nenhum, ele serve a todos.
+    id_setor: int | None = None
     id_unidade: int | None = None
     principal: bool = False
     ativo: bool = True
@@ -65,6 +72,7 @@ class LocalCreate(BaseModel):
 class LocalUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=2, max_length=80)
     tipo: str | None = None
+    id_setor: int | None = None
     principal: bool | None = None
     ativo: bool | None = None
 
@@ -76,6 +84,9 @@ class LocalResponse(BaseModel):
     tipo: str
     principal: bool
     ativo: bool
+    id_setor: int | None = None
+    # O nome vem junto: "id_setor: 3" não diz nada numa lista.
+    setor: str | None = None
     # Só vem com `todas_lojas`: sem o nome da loja, a lista mostraria dois
     # "Estoque" e quem escolhe não teria como saber qual é qual.
     loja: str | None = None

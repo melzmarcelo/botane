@@ -594,7 +594,12 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         convertida, como = custos.converter_para_estoque(
             cur, bruta, id_alvo, item["um"], um_destino, ums)
 
-        onde = local_item or id_local
+        # ⚠️ **A folha resolve o local do MESMO jeito que a produção.** Prever
+        # com outra regra seria prever outra coisa: a folha diria que falta
+        # açúcar no central enquanto a produção o tiraria da Confeitaria, e
+        # quem lesse a previsão iria comprar o que já tem.
+        onde = _de_onde_sai(cur, id_alvo, id_unidade, id_local,
+                            local_item or id_local, convertida or 0)
         cur.execute(
             """SELECT coalesce(sum(quantidade), 0) AS aqui,
                       coalesce(sum(quantidade) FILTER (WHERE id_local = %s), 0) AS no_local,
@@ -660,6 +665,40 @@ def _local_desta_loja(cur, id_local: int | None, id_unidade: int, alternativo: i
     cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
     linha = cur.fetchone()
     return id_local if linha and linha["id_unidade"] == id_unidade else alternativo
+
+
+def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int | None,
+                 id_local_do_produto: int, quantidade) -> int:
+    """O local de quem PRODUZ, quando o insumo está lá; senão, o do produto.
+
+    🔑 **A ordem é o processo da casa** (01/09/2026): o açúcar entra no Estoque
+    Central e de manhã cada setor leva um pacote para o seu canto. Se a
+    Confeitaria produz, o açúcar tem de sair do estoque DELA — senão o que ela
+    pegou de manhã nunca baixa, e a contagem do fim da semana acusa uma sobra
+    que não existe.
+
+    ⚠️ **A reserva não é conveniência, é um caso real.** Uma receita usa leite
+    da câmara e café do seco ao mesmo tempo: forçar tudo no local de quem
+    produz faria a saída bater num lugar por onde o insumo nunca passou, com
+    saldo NEGATIVO e custo provisório — e custo provisório contamina o custo do
+    prato produzido, que é justamente o número que a produção existe para
+    apurar.
+
+    ⚠️ **Pergunta pelo saldo do dia, não pelo cadastro.** Se a Confeitaria tem
+    açúcar, sai de lá; se acabou, sai do central. Decidir pelo cadastro faria a
+    produção falhar no dia em que o pacote da manhã acabou no meio da tarde.
+    """
+    if not id_local_producao or id_local_producao == id_local_do_produto:
+        return id_local_do_produto
+    cur.execute(
+        """SELECT quantidade FROM estoque_saldos
+            WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+        (id_unidade, id_local_producao, id_produto),
+    )
+    linha = cur.fetchone()
+    if linha and dec(linha["quantidade"]) >= dec(quantidade):
+        return id_local_producao
+    return id_local_do_produto
 
 
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
@@ -751,14 +790,24 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
                 detail=(f"{nome}: {um_origem or '?'} não converte para "
                         f"{um_destino or '?'}. Cadastre esta unidade de compra no produto."),
             )
-        # Cada insumo sai de ONDE ELE MORA. Uma receita usa leite da câmara e
-        # café do estoque seco ao mesmo tempo: um local só para a produção
-        # inteira faria a saída bater num local sem saldo — o razão registrava
-        # a baixa num lugar por onde o insumo nunca passou, e o saldo do lugar
-        # certo continuava cheio. É a mesma regra da nota de entrada.
+        # 🔑 **O insumo sai de ONDE SE PRODUZ, quando ele está lá.** A casa
+        # trabalha assim: o açúcar entra no Estoque Central e de manhã cada
+        # setor leva um pacote para o seu canto — Bar, Confeitaria, Cozinha. Se
+        # a Confeitaria produz, o açúcar tem de sair do estoque DELA, senão o
+        # que ela pegou de manhã nunca baixa e a contagem do fim da semana
+        # acusa uma sobra que não existe.
+        # ⚠️ **Mas só quando há saldo lá.** A regra anterior — cada insumo sai
+        # do local DELE — existe por um caso igualmente real: uma receita usa
+        # leite da câmara e café do seco ao mesmo tempo, e forçar tudo no local
+        # de quem produz faria a saída bater num lugar por onde o insumo nunca
+        # passou, com saldo negativo e custo provisório. Então a ordem é: o
+        # local de quem produz primeiro, o local do produto como reserva.
+        onde = _de_onde_sai(cur, id_alvo, id_unidade, id_local,
+                            _local_desta_loja(cur, local_do_item, id_unidade, id_local),
+                            convertida)
         r = lancar(
             cur, id_unidade=id_unidade,
-            id_local=_local_desta_loja(cur, local_do_item, id_unidade, id_local),
+            id_local=onde,
             id_produto=id_alvo,
             tipo="SAIDA_PRODUCAO", quantidade=convertida, origem_tipo="PRODUCAO",
             origem_id=id_producao, id_usuario=id_usuario,

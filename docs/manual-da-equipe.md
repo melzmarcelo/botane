@@ -193,6 +193,36 @@ reconhece é você.
 
 ---
 
+### O mesmo produto em vários setores
+
+O açúcar chega e entra no **Estoque Central**. De manhã, cada setor leva o que vai
+usar para o seu canto — e esse canto é um **local de estoque** com o nome dele:
+"Bar", "Confeitaria", "Cozinha". No cadastro do local você diz **a que setor ele
+pertence**; o Estoque Central fica sem setor, porque serve a todos.
+
+O caminho no dia a dia:
+
+1. A nota entra no **Estoque Central**.
+2. De manhã, **Estoque → Ajustes → Transferência**: do Central para o local do
+   setor. É imediata.
+3. Durante a semana o setor gasta do que pegou — inclusive pela **produção**: ao
+   produzir informando o local do setor, os insumos saem **do estoque dele**.
+4. No fim, **um inventário por setor**: em *Inventário → Nova contagem*, filtre
+   pelo local daquele setor e conte só o que está lá.
+
+⚠️ Se o insumo **acabou** no local do setor, a produção busca no local padrão do
+produto em vez de deixar o saldo negativo. É de propósito: uma receita usa leite
+da câmara e café do seco ao mesmo tempo.
+
+Em **Estoque → Saldos**, o seletor **Ver por** troca a pergunta:
+
+- **prateleira** — onde está cada parte. É o que quem conta precisa.
+- **produto** — quanto a loja tem no total, com o detalhe de cada prateleira e o
+  setor dela embaixo. É o que quem compra precisa.
+- **produto, todas as lojas** — só com mais de uma loja.
+
+---
+
 ### Os nomes são gravados em MAIÚSCULAS
 
 Produto, fornecedor, setor, local, categoria e unidade de medida: o nome que você

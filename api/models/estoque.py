@@ -25,6 +25,37 @@ class SaldoResponse(BaseModel):
     atualizado_em: datetime | None = None
 
 
+class SaldoDoLocal(BaseModel):
+    id_local: int
+    local: str
+    setor: str | None = None
+    quantidade: float
+    valor: float
+
+
+class SaldoAgrupadoResponse(BaseModel):
+    """O saldo de um produto somando os LOCAIS de uma loja.
+
+    🔑 **O processo da casa põe o mesmo produto em vários locais**: o açúcar
+    entra no Estoque Central e de manhã cada setor leva um pacote para o seu
+    canto. A lista por prateleira responde "onde está"; esta responde "quanto a
+    loja tem", que é a pergunta de quem vai comprar.
+    """
+
+    id_produto: int
+    codigo: str
+    produto: str
+    um_estoque: str | None = None
+    quantidade: float
+    valor: float
+    # Ponderado, nunca a média dos médios — o mesmo da visão de empresa.
+    custo_medio: float | None = None
+    estoque_minimo: float | None = None
+    abaixo_do_minimo: bool = False
+    # Onde ele está, com o setor de cada prateleira quando ela tem um.
+    por_local: list[SaldoDoLocal] = []
+
+
 class SaldoDaLoja(BaseModel):
     id_unidade: int
     loja: str

@@ -669,6 +669,104 @@ if id_filial and id_prod_f:
     checar("e quem nao lanca transferencia continua barrado", st == 403, st)
 
 
+print("9c1. o acucar em varios setores: local com setor, transferencia e producao")
+# 🔑 **O processo REAL da casa, descrito pelo dono em 01/09/2026:** o acucar
+# entra no Estoque Central, e de manha cada setor leva um pacote para o seu
+# canto — Bar, Confeitaria, Cozinha. Durante a semana cada um gasta do que
+# pegou; no fim, cada setor conta o SEU estoque.
+# 🔑 **O que ele chama de "setor" nesse fluxo e um LOCAL** — guarda mercadoria,
+# recebe transferencia e e contado num inventario proprio. Modelar assim faz o
+# processo funcionar com o que ja existe; o que faltava era o local DIZER a que
+# setor pertence, e a producao sair de onde se produz.
+st, r = chamar("POST", "/setores", {"nome": f"Confeitaria {marca}"}, token=token)
+id_setor_conf = (r or {}).get("id")
+st, r = chamar("POST", "/locais", {"nome": f"Central {marca}", "tipo": "SECO"}, token=token)
+id_central = (r or {}).get("id")
+st, r = chamar("POST", "/locais", {"nome": f"Canto da confeitaria {marca}", "tipo": "SECO",
+                                   "id_setor": id_setor_conf}, token=token)
+id_conf = (r or {}).get("id")
+checar("o local pode declarar a que setor pertence", st == 201, (st, r))
+st, locais_s = chamar("GET", "/locais", token=token)
+meu_local = next((l for l in (locais_s or []) if l["id"] == id_conf), {})
+checar("e a lista traz o nome do setor junto, nao so o id",
+       meu_local.get("setor") == f"Confeitaria {marca}".upper(), meu_local)
+# ⚠️ Nulo e resposta legitima: o Estoque Central nao pertence a setor nenhum.
+central_s = next((l for l in (locais_s or []) if l["id"] == id_central), {})
+checar("e o estoque geral fica SEM setor, que e a resposta certa",
+       central_s.get("id_setor") is None, central_s)
+st, r = chamar("POST", "/locais", {"nome": f"Local setor errado {marca}", "tipo": "SECO",
+                                   "id_setor": 99999999}, token=token)
+checar("setor que nao existe e recusado com frase, nao 500", st == 400, (st, r))
+
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ACU{marca}", "nome": f"Acucar do processo {marca}", "tipo": "INSUMO",
+    "um_estoque": "KG", "controla_estoque": True, "id_local_padrao": id_central}, token=token)
+id_acucar = (r or {}).get("id")
+criados["produtos"].append(id_acucar)
+chamar("POST", "/estoque/entradas", {
+    "id_produto": id_acucar, "quantidade": 12, "custo_unitario": 5,
+    "id_local": id_central}, token=token)
+st, r = chamar("POST", "/estoque/transferencias", {
+    "id_produto": id_acucar, "quantidade": 3,
+    "id_local_origem": id_central, "id_local_destino": id_conf}, token=token)
+checar("a transferencia da manha leva 3 para o canto do setor", st in (200, 201), (st, r))
+
+# 🔑 A pergunta "quanto a loja tem" e diferente de "onde esta", e as duas
+# precisam existir: a lista por prateleira mostra quatro linhas e nenhum total.
+st, ag = chamar("GET", f"/estoque/saldos-agrupados?id_produto={id_acucar}", token=token)
+linha_ag = (ag or [{}])[0]
+checar("o saldo agrupado soma os locais da loja",
+       abs(float(linha_ag.get("quantidade", 0)) - 12) < 0.0001, linha_ag.get("quantidade"))
+checar("e diz em que prateleira esta cada parte",
+       sorted(float(x["quantidade"]) for x in (linha_ag.get("por_local") or [])) == [3.0, 9.0],
+       linha_ag.get("por_local"))
+checar("com o setor de cada prateleira",
+       any(x.get("setor") == f"Confeitaria {marca}".upper()
+           for x in (linha_ag.get("por_local") or [])), linha_ag.get("por_local"))
+# ⚠️ O corte por setor e pelo setor do LOCAL, nao pelo do produto: a pergunta e
+# "o que a Confeitaria tem na mao".
+st, por_setor = chamar(
+    "GET", f"/estoque/saldos-agrupados?id_setor={id_setor_conf}&id_produto={id_acucar}",
+    token=token)
+checar("e o corte por setor mostra so o que aquele setor tem",
+       abs(float((por_setor or [{}])[0].get("quantidade", 0)) - 3) < 0.0001, por_setor)
+
+# 🔑 **A producao sai de ONDE SE PRODUZ.** Sem isso, o pacote que a Confeitaria
+# pegou de manha nunca baixa, e a contagem do fim da semana acusa uma sobra que
+# nao existe.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"BOL{marca}", "nome": f"Bolo do processo {marca}", "tipo": "PRODUZIDO",
+    "um_estoque": "UN", "producao_propria": True, "controla_estoque": True,
+    "id_local_padrao": id_conf}, token=token)
+id_bolo = (r or {}).get("id")
+criados["produtos"].append(id_bolo)
+st, f_bolo = chamar("POST", "/fichas", {
+    "id_produto": id_bolo, "rendimento_qtd": 1, "rendimento_um": "UN", "porcoes": 1,
+    "itens": [{"id_insumo": id_acucar, "qtd_bruta": 1, "um": "KG"}]}, token=token)
+chamar("POST", f"/fichas/{f_bolo['id']}/homologar", token=token)
+chamar("POST", "/estoque/producoes", {
+    "id_produto": id_bolo, "quantidade": 2, "id_local": id_conf}, token=token)
+st, ag = chamar("GET", f"/estoque/saldos-agrupados?id_produto={id_acucar}", token=token)
+por_local = {x["local"]: float(x["quantidade"]) for x in ((ag or [{}])[0].get("por_local") or [])}
+checar("produzir na Confeitaria baixa do estoque DELA",
+       abs(por_local.get(f"Canto da confeitaria {marca}".upper(), 0) - 1) < 0.0001, por_local)
+checar("e nao encosta no Estoque Central",
+       abs(por_local.get(f"Central {marca}".upper(), 0) - 9) < 0.0001, por_local)
+
+# ⚠️ **A reserva nao e conveniencia, e um caso real**: uma receita usa leite da
+# camara e cafe do seco ao mesmo tempo. Sem saldo no local de quem produz, cai
+# no local do PRODUTO — senao a saida bateria num lugar por onde o insumo nunca
+# passou, com saldo negativo e custo provisorio contaminando o custo do prato.
+chamar("POST", "/estoque/producoes", {
+    "id_produto": id_bolo, "quantidade": 5, "id_local": id_conf}, token=token)
+st, ag = chamar("GET", f"/estoque/saldos-agrupados?id_produto={id_acucar}", token=token)
+por_local = {x["local"]: float(x["quantidade"]) for x in ((ag or [{}])[0].get("por_local") or [])}
+checar("faltando no setor, a producao cai no local do produto",
+       abs(por_local.get(f"Central {marca}".upper(), 0) - 4) < 0.0001, por_local)
+checar("e o pouco que sobrou no setor fica intacto",
+       abs(por_local.get(f"Canto da confeitaria {marca}".upper(), 0) - 1) < 0.0001, por_local)
+
+
 print("9c2. o estoque da EMPRESA, somando as lojas")
 # 🔑 A tela da rede dizia quanto VALE o estoque da empresa e nao dizia de que.
 # Para conferir um item era preciso trocar de loja no seletor e somar de cabeca

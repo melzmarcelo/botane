@@ -1591,6 +1591,46 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   menor id — o seletor mostraria uma loja e o pedido iria para outra.
   ⚠️ Ler `localStorage` no render é seguro **ali** porque `eu` nasce nulo: a primeira pintura do
   cliente é igual à do servidor, e o valor só aparece depois do `/auth/me`.
+- 🔑 **O açúcar em vários setores: o local ganhou um SETOR** (migração 051, 01/09/2026, processo
+  descrito pelo dono). O fluxo real: o açúcar entra no **Estoque Central**, e de manhã cada
+  setor leva um pacote para o seu canto — Bar, Confeitaria, Cozinha, Cafeteria. Durante a
+  semana cada um gasta do que pegou; no fim, **cada setor conta o seu estoque**.
+  🔑 **O que ele chama de "setor" nesse fluxo é, no vocabulário do sistema, um LOCAL** — o teste
+  é o comportamento: guarda mercadoria, recebe transferência e é contado num inventário próprio.
+  Modelando assim, a transferência da manhã, o inventário por setor e o saldo por setor
+  funcionam com o que **já existe** — e o "um produto pode ter vários setores" deixa de ser
+  problema: ele não precisa de vários setores, ele tem **saldo em vários locais**
+  (`estoque_saldos` é por local).
+  ⚠️ **NULO é resposta legítima e é o padrão**: o Estoque Central não pertence a setor nenhum,
+  ele serve a todos. Exigir setor em todo local obrigaria a inventar um para a despensa, e setor
+  inventado suja o relatório que a coluna existe para melhorar.
+  ⚠️ `ON DELETE SET NULL`: apagar um setor não pode levar junto a prateleira, que guarda saldo e
+  razão. Perder a classificação é o custo certo; perder o local, não.
+  🔑 **A produção passou a sair de ONDE SE PRODUZ** (`estoque._de_onde_sai`). Sem isso, o pacote
+  que a Confeitaria pegou de manhã nunca baixava, e a contagem do fim da semana acusava uma
+  sobra que não existe.
+  ⚠️ **Mas só quando há saldo lá** — e a reserva não é conveniência. A regra anterior (cada
+  insumo sai do local DELE) existe por um caso igualmente real: uma receita usa leite da câmara
+  e café do seco ao mesmo tempo. Forçar tudo no local de quem produz faria a saída bater num
+  lugar por onde o insumo nunca passou, com saldo negativo e **custo provisório contaminando o
+  custo do prato** — que é justamente o número que a produção existe para apurar. A ordem é: o
+  local de quem produz primeiro, o local do produto como reserva.
+  ⚠️ **Pergunta pelo SALDO do dia, não pelo cadastro**: se a Confeitaria tem açúcar, sai de lá;
+  se acabou no meio da tarde, sai do central. Decidir pelo cadastro faria a produção falhar
+  justamente no dia em que o pacote da manhã acabou.
+  ⚠️ **A folha da previsão resolve o local do MESMO jeito.** Prever com outra regra seria prever
+  outra coisa: ela diria que falta açúcar no central enquanto a produção o tiraria da
+  Confeitaria, e quem lesse iria comprar o que já tem.
+  🔑 **`GET /estoque/saldos-agrupados`, e a tela escolhe a granularidade**: prateleira ("onde
+  está" — o que quem conta precisa), produto ("quanto a loja tem" — o que quem compra precisa)
+  e empresa. Um seletor, não duas caixinhas: duas fariam quatro combinações, duas delas sem
+  sentido. ⚠️ O corte por setor ali é pelo setor do **LOCAL**, não pelo do produto — a pergunta
+  é "o que a Confeitaria tem na mão", e quem responde é onde a mercadoria está.
+  ⚠️ **O CMV por setor continua saindo de `produtos.id_setor`, e isso é uma DÍVIDA conhecida.**
+  Com açúcar em quatro setores, todo o consumo de açúcar é atribuído a um só. A ponte para
+  consertar já existe (`locais_estoque.id_setor` + `estoque_movimentos.id_local`), mas trocar
+  isso reescreve `relatorios.cmv_por_grupo`, cuja identidade — *a soma dos grupos fecha com o
+  CMV do período* — a bateria cobra. É entrega própria; ver `docs/o-que-falta.md`.
 - ⚠️ **`produtos.id_local_padrao` é UM local, e local pertence a UMA loja** (31/08/2026). A
   produção usava esse local direto, com o `id_unidade` de quem estava produzindo: a filial que
   fizesse um molho cujo local padrão é a câmara da MATRIZ gravaria o movimento com a loja da
@@ -2280,8 +2320,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.659 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
-  `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (116),
+- Testes (1.672 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+  `smoke_fichas.py` (50), `smoke_estoque.py` (155), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
@@ -2290,7 +2330,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (421, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (425, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
@@ -2301,6 +2341,18 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   explicar. Virou `BuscaCadastro`, que é o padrão da casa exatamente para isto. A regra de bolso
   do `<select>` continua valendo — **poucos por natureza** (categoria, setor, local, unidade) —,
   e produto nunca foi disso.
+- 🔑 **A suíte pegava "a primeira ficha HOMOLOGADA" e caía numa de produto INATIVO.** Produto
+  com movimento vira inativo em vez de sumir, e a ficha dele fica: a base tinha **57** fichas
+  homologadas apontando para produto desativado. Agendar produção numa delas devolve 400 "está
+  inativo" — e o POST não era conferido, então a agenda ficava vazia e a falha aparecia **três
+  checagens adiante**, dizendo que a agenda não abre a folha. Duas correções, e as duas valem
+  como regra: **filtrar pelo produto ATIVO** e **conferir o POST que monta a precondição**.
+- 🔑 **A lista das TABELAS DE APOIO pagina, e o registro da rodada cai fora da primeira
+  página.** "Poucos por natureza" era suposição — a base tem dezenas de setores, e um nome que
+  começa com T fica na página 2. A checagem acusava a tela de não oferecer "editar" numa linha
+  que ela nem mostrava. A suíte passou a aumentar a página para 100 antes de procurar, que é o
+  que uma pessoa faria. ⚠️ E a afirmação "salvar troca o nome sem criar outro registro" passou
+  a ser feita pelo SERVIDOR: ela é sobre o ESTADO, não sobre o que cabe na tela.
 - ⚠️ **Sono fixo depois de abrir a CONTAGEM derrubou a rodada três vezes num dia** (01/09/2026).
   Os 2,2 s bastavam com dez linhas e pararam de bastar com uma contagem de centenas: a checagem
   media a tela ainda em branco e acusava a contagem de não ter campo nenhum. Virou espera pelo

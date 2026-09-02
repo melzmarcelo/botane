@@ -18,6 +18,10 @@ export type Local = {
   tipo: string;
   principal: boolean;
   ativo: boolean;
+  /** A que setor esta prateleira pertence. Nulo no estoque geral, que serve a
+      todos os setores — e é a resposta certa para o Estoque Central. */
+  id_setor?: number | null;
+  setor?: string | null;
   /** O nome da loja dona da prateleira — importa quando há mais de uma. */
   loja?: string | null;
 };

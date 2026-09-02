@@ -142,9 +142,11 @@ def listar_locais(incluir_inativos: bool = False, todas_lojas: bool = False,
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT l.id, l.id_unidade, l.nome, l.tipo, l.principal, l.ativo,
+                      l.id_setor, s.nome AS setor,
                       u.apelido AS loja_apelido, u.nome AS loja_nome
                  FROM locais_estoque l
                  JOIN unidades u ON u.id = l.id_unidade
+                 LEFT JOIN setores s ON s.id = l.id_setor
                 WHERE (%(inativos)s OR l.ativo)
                   AND (%(todas)s OR l.id_unidade = %(u)s)
                   AND (NOT %(todas)s OR u.ativo)
@@ -205,10 +207,21 @@ def criar_local(body: LocalCreate,
                 "SELECT 1 FROM locais_estoque WHERE id_unidade = %s AND principal", (id_unidade,)
             )
             principal = cur.fetchone() is None
+        # ⚠️ O setor é conferido: id inventado estouraria na chave estrangeira
+        # como 500, e setor de OUTRA loja classificaria a prateleira daqui com
+        # o trabalho de lá.
+        if body.id_setor is not None:
+            cur.execute(
+                """SELECT 1 FROM setores
+                    WHERE id = %s AND (id_unidade IS NULL OR id_unidade = %s)""",
+                (body.id_setor, id_unidade))
+            if not cur.fetchone():
+                raise HTTPException(status_code=400,
+                                    detail="Setor não encontrado nesta loja.")
         cur.execute(
-            """INSERT INTO locais_estoque (id_unidade, nome, tipo, principal, ativo)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (id_unidade, body.nome.strip(), body.tipo, principal, body.ativo),
+            """INSERT INTO locais_estoque (id_unidade, nome, tipo, principal, ativo, id_setor)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            (id_unidade, body.nome.strip(), body.tipo, principal, body.ativo, body.id_setor),
         )
         novo = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "local", novo, "criar",
@@ -224,13 +237,25 @@ def atualizar_local(id_local: int, body: LocalUpdate,
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
     with get_cursor() as cur:
+        # ⚠️ O campo novo entra no "antes": sem ele, mudar o setor da prateleira
+        # entraria na auditoria como se nada tivesse mudado. Mesma lição do
+        # `um_estoque` que faltava no PUT do produto.
         cur.execute(
-            "SELECT id_unidade, nome, tipo, principal, ativo FROM locais_estoque WHERE id = %s",
+            """SELECT id_unidade, nome, tipo, principal, ativo, id_setor
+                 FROM locais_estoque WHERE id = %s""",
             (id_local,),
         )
         antes = cur.fetchone()
         if not antes:
             raise HTTPException(status_code=404, detail="Local não encontrado")
+        if dados.get("id_setor") is not None:
+            cur.execute(
+                """SELECT 1 FROM setores
+                    WHERE id = %s AND (id_unidade IS NULL OR id_unidade = %s)""",
+                (dados["id_setor"], antes["id_unidade"]))
+            if not cur.fetchone():
+                raise HTTPException(status_code=400,
+                                    detail="Setor não encontrado nesta loja.")
         if dados.get("principal"):
             cur.execute(
                 "UPDATE locais_estoque SET principal = false WHERE id_unidade = %s AND id <> %s",

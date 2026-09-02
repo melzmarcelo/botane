@@ -104,7 +104,11 @@ export default function PaginaCadastros() {
 
   // formulários de criação, um por aba
   const [novoSetor, setNovoSetor] = useState("");
-  const [novoLocal, setNovoLocal] = useState({ nome: "", tipo: "SECO" });
+  // 🔑 **O local pertence a um setor** (migração 051): o processo da casa é o
+  // açúcar entrar no Estoque Central e cada setor levar um pacote para o seu
+  // canto. O canto do setor é um LOCAL — e dizer a que setor ele pertence é o
+  // que liga "onde a mercadoria está" a "quem a consome".
+  const [novoLocal, setNovoLocal] = useState({ nome: "", tipo: "SECO", id_setor: "" });
   const [novaCategoria, setNovaCategoria] = useState({ nome: "", id_pai: "", tipo: "INSUMO" });
   const [novaUm, setNovaUm] = useState({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
 
@@ -127,7 +131,7 @@ export default function PaginaCadastros() {
 
   function limparFormularios() {
     setNovoSetor("");
-    setNovoLocal({ nome: "", tipo: "SECO" });
+    setNovoLocal({ nome: "", tipo: "SECO", id_setor: "" });
     setNovaCategoria({ nome: "", id_pai: "", tipo: "INSUMO" });
     setNovaUm({ sigla: "", nome: "", grandeza: "UNIDADE", fator_base: "1" });
   }
@@ -402,9 +406,17 @@ export default function PaginaCadastros() {
                     e.preventDefault();
                     const alvo = editandoAqui;
                     void acao(async () => {
-                      if (alvo) await api.put(`/locais/${alvo.id}`, novoLocal);
-                      else await api.post("/locais", novoLocal);
-                      setNovoLocal({ nome: "", tipo: "SECO" });
+                      const corpo = {
+                        nome: novoLocal.nome,
+                        tipo: novoLocal.tipo,
+                        // ⚠️ Vazio quer dizer "não pertence a setor nenhum", que
+                        // é a resposta certa para o Estoque Central: ele serve
+                        // a todos. Mandar 0 apontaria para um setor inexistente.
+                        id_setor: novoLocal.id_setor ? Number(novoLocal.id_setor) : null,
+                      };
+                      if (alvo) await api.put(`/locais/${alvo.id}`, corpo);
+                      else await api.post("/locais", corpo);
+                      setNovoLocal({ nome: "", tipo: "SECO", id_setor: "" });
                       setEditando(null);
                     }, alvo ? "Local corrigido." : "Local criado.");
                   }}
@@ -433,6 +445,25 @@ export default function PaginaCadastros() {
                       ))}
                     </select>
                   </label>
+                  {/* 🔑 De quem é esta prateleira. Vazio é resposta legítima e é
+                      o padrão: o Estoque Central não pertence a setor nenhum,
+                      ele serve a todos. */}
+                  <label className="sm:w-[190px]">
+                    <span className="rotulo">Setor</span>
+                    <select
+                      id="setor-do-local"
+                      className="campo mt-1.5"
+                      value={novoLocal.id_setor}
+                      onChange={(e) => setNovoLocal({ ...novoLocal, id_setor: e.target.value })}
+                    >
+                      <option value="">— nenhum (estoque geral) —</option>
+                      {(setores ?? []).filter((x) => x.ativo).map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <button className="btn btn-secundario" type="submit">
                     {editandoAqui ? "Salvar" : "Adicionar"}
                   </button>
@@ -455,6 +486,7 @@ export default function PaginaCadastros() {
                     <span className="flex items-center gap-2">
                       <span className="font-medium">{l.nome}</span>
                       <Etiqueta>{l.tipo.toLowerCase()}</Etiqueta>
+                      {l.setor && <Etiqueta cor="erva">{l.setor}</Etiqueta>}
                       {l.principal && <Etiqueta cor="erva">padrão</Etiqueta>}
                     </span>
                     {podeAba("locais") && (
@@ -462,7 +494,13 @@ export default function PaginaCadastros() {
                         <button
                           className="link-acao"
                           onClick={() =>
-                            comecarEdicao(l.id, () => setNovoLocal({ nome: l.nome, tipo: l.tipo }))
+                            // ⚠️ O setor vai como TEXTO: o `<select>` compara
+                            // por string, e um número deixaria o setor da
+                            // prateleira aparecendo como "nenhum".
+                            comecarEdicao(l.id, () => setNovoLocal({
+                              nome: l.nome, tipo: l.tipo,
+                              id_setor: l.id_setor ? String(l.id_setor) : "",
+                            }))
                           }
                         >
                           editar
