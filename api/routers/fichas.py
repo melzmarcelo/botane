@@ -340,7 +340,7 @@ def nova_versao(id_ficha: int,
         # versão. ⚠️ Copiar só a URL deixaria as duas apontando para o mesmo
         # arquivo, cujo dono é a versão VELHA — e trocar a foto de lá apagaria
         # a daqui, sem ninguém ter tocado nesta ficha.
-        nova_foto = arquivos.copiar(f["foto_url"], f"ficha-{nova}")
+        nova_foto = arquivos.copiar(f["foto_url"], f"ficha-{nova}", cur)
         if nova_foto:
             cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s",
                         (nova_foto, nova))
@@ -396,18 +396,25 @@ async def enviar_foto(
     ⚠️ Quem manda a foto precisa de `fichas.editar`. VER a foto segue a ficha:
     ela não é dinheiro, então `fichas.custos` não a esconde.
     """
+    # Os bytes vêm antes da transação: ler 2 MB da rede com uma conexão do pool
+    # presa é prendê-la pelo tempo do envio.
+    conteudo, tipo, extensao = await arquivos.ler_enviada(arquivo)
+
+    # 🔑 **Gravar a nova, apontar para ela e apagar a antiga é UMA transação.**
+    # Antes eram três, e entre a segunda e a terceira a foto antiga já tinha
+    # sido apagada com a ficha ainda apontando para ela — a imagem sumia da
+    # tela e do PDF, sem volta.
     with get_cursor() as cur:
         cur.execute("SELECT foto_url FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
         antes = cur.fetchone()
         if not antes:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
 
-    # ⚠️ O `dono` é a FICHA, não o produto: duas versões do mesmo prato podem ter
-    # fotos diferentes, e é a montagem que muda entre elas.
-    url = await arquivos.salvar_imagem(arquivo, f"ficha-{id_ficha}")
-
-    with get_cursor() as cur:
+        # ⚠️ O `dono` é a FICHA, não o produto: duas versões do mesmo prato podem
+        # ter fotos diferentes, e é a montagem que muda entre elas.
+        url = arquivos.gravar(cur, conteudo, tipo, extensao, f"ficha-{id_ficha}")
         cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s", (url, id_ficha))
+        arquivos.remover(antes["foto_url"], cur)
         auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "foto",
                             antes={"foto_url": antes["foto_url"]}, depois={"foto_url": url})
     return {"foto_url": url, "message": "Foto atualizada"}

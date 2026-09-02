@@ -68,22 +68,33 @@ async def enviar_logo(
     arquivo: UploadFile = File(...),
     ctx: Contexto = Depends(requer_permissao("admin.empresa")),
 ) -> dict:
-    """Recebe a imagem, guarda e já grava a URL na empresa."""
+    """Recebe a imagem, guarda e já grava a URL na empresa.
+
+    🔑 **Gravar a nova, apontar para ela e apagar a antiga é UMA transação.**
+    Antes eram três, e entre a segunda e a terceira havia uma janela em que a
+    logo antiga já tinha sido apagada e a empresa ainda apontava para ela: a
+    logo sumia da barra e do cabeçalho dos PDFs, sem volta e sem nada
+    explicando. Ou as três acontecem, ou nenhuma.
+    """
+    # Os bytes vêm ANTES da transação: ler 2 MB da rede com uma conexão do pool
+    # presa é prendê-la pelo tempo do envio, não pelo tempo do banco.
+    conteudo, tipo, extensao = await arquivos.ler_enviada(arquivo)
+
     with get_cursor() as cur:
         cur.execute("SELECT logo_url FROM empresa WHERE id = 1")
         antes = cur.fetchone()
+        anterior = antes["logo_url"] if antes else None
 
-    url = await arquivos.salvar_imagem(arquivo, "logo-empresa")
-
-    with get_cursor() as cur:
+        url = arquivos.gravar(cur, conteudo, tipo, extensao, "logo-empresa")
         cur.execute(
             "UPDATE empresa SET logo_url = %s, atualizado_em = now(), atualizado_por = %s WHERE id = 1",
             (url, ctx.id_usuario),
         )
+        # Só agora — a empresa já aponta para a nova.
+        arquivos.remover(anterior, cur)
         auditoria.registrar(
             cur, ctx.id_usuario, "empresa", 1, "logo",
-            antes={"logo_url": antes["logo_url"] if antes else None},
-            depois={"logo_url": url},
+            antes={"logo_url": anterior}, depois={"logo_url": url},
         )
     return {"logo_url": url, "message": "Logo atualizada"}
 

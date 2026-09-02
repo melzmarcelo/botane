@@ -1672,10 +1672,41 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   não passam a ser de cadastro por estarem na tela do produto.
   ⚠️ E o cartão só aparece para quem **controla estoque** — produto que não controla não tem
   prateleira nenhuma.
+  🔑 **O cartão aparece TAMBÉM na tela de CRIAR** (02/09/2026, pedido do dono). A primeira
+  versão o escondia ali, com a justificativa de que o produto não tem id e a linha de saldo não
+  teria para onde apontar. Só que é EXATAMENTE ali que a pessoa está decidindo onde o produto
+  vai morar — e o dono queria justamente "não precisar criar o local só na transferência". As
+  prateleiras escolhidas ficam no estado e sobem logo depois do `POST /produtos`, com prévia da
+  lista montada. **É o mesmo caminho da foto da ficha**, e pela mesma razão: campo que não
+  aparece na hora do cadastro é campo que a pessoa conclui que não existe.
+  ⚠️ **Falhar ao gravar as prateleiras NÃO é "não foi possível salvar"**: o produto já existe
+  daquele ponto em diante, e a frase genérica mandaria cadastrar tudo de novo — criando um
+  segundo cadastro do mesmo item. A mensagem diz quantas não foram e onde acrescentá-las.
+  ⚠️ **Na criação a tabela não mostra saldo, custo nem valor**: não há nenhum, e uma coluna de
+  zeros afirma que há.
 - ⚠️ **A linha de unidade de compra se remove ONDE ELA ESTÁ** (02/09/2026, pedido do dono).
   O rodapé dizia "remover a última": quem tinha caixa, fardo e palete e queria tirar o fardo
   apagava dois e redigitava um. Cada linha ganhou o seu `remover`, e ele some quando resta uma
   só — produto sem nenhuma unidade de compra não converte nota nenhuma.
+- 🔑 **Reaproveitar "a primeira ficha homologada da base" caiu pela SEGUNDA vez** (02/09/2026),
+  e agora num produto **`NA_HORA`** — que é produzido e baixado no mesmo instante da venda e por
+  isso não se agenda. A primeira vez tinha sido num produto inativo. E o filtro não tinha como
+  ser feito pela lista: **`/produtos` não devolve `modo_producao`**, então o teste "filtrava" por
+  um campo que não vinha e o filtro era um no-op silencioso. A checagem passou a criar a
+  **própria** ficha, sempre. **Precondição garantida, nunca suposta** — e cada suíte procura os
+  registros DELA.
+- ⚠️ **"A primeira `table.tabela` da página" media a tabela errada.** A checagem do custo inicial
+  do Omie perguntava se havia linhas com um seletor que casa com QUALQUER tabela da tela de
+  Integrações: ela dizia "há o que aplicar" quando a lista estava vazia. Casar por **id**
+  (`#custos-iniciais`). É a armadilha do "primeiro elemento que casa" outra vez.
+  ⚠️ E a afirmação virou uma **propriedade**, não o estado do dia: havendo o que aplicar, o
+  gravar é um botão separado; não havendo, a tela DIZ por que a lista está vazia. Exigir o botão
+  sempre acusava a tela de um defeito que era do dado — e passou a falhar no instante em que a
+  base foi limpa.
+- ⚠️ **Duas rodadas do `verificar.mjs` no mesmo arquivo de saída se atropelam.** As duas escrevem
+  em `scripts/_saida-navegador.txt` e disputam a mesma API local: o resultado lido era o da
+  rodada velha, com falhas que a nova já tinha corrigido. É a versão de dois processos da nota
+  "rodar a suíte de API junto com a de navegador inventa falha".
 - ⚠️ **Identidade que soma a lista INTEIRA precisa varrer a lista inteira** (02/09/2026). A
   checagem da conciliação do estoque da rede pedia `limite=1000`, que é o **teto** do endpoint:
   assim que a base passou de mil produtos com saldo, ela lia 1.000 de 1.065 e acusava a conta de
@@ -1805,6 +1836,38 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   disco do servidor; é reenviar uma vez.
   ⚠️ No dia em que houver foto de produto ou anexo de nota — arquivo grande, muitos, servidos
   direto —, o Spaces volta a ser a resposta, e é só `arquivos.py` que muda.
+- 🔑 **A logo e a foto da ficha PODIAM SUMIR na troca, e a janela era de duas transações**
+  (02/09/2026, pedido do dono: *"garantir que a imagem da ficha técnica não seja perdida, a logo
+  da empresa por vezes foi perdida também"*). Gravar uma imagem eram **três** transações: ler a
+  URL atual; inserir a nova **e apagar a antiga**; e só então apontar o registro para a nova.
+  Falhando a última — a API reiniciada, a requisição abortada, um erro no meio —, a antiga já
+  não existia e o registro continuava apontando para ela: a imagem sumia da tela e do PDF, com
+  o link quebrado e nada explicando. Agora inserir, apontar e apagar são **uma transação só**.
+  ⚠️ `arquivos.salvar_imagem` deixou de existir e virou duas peças: **`ler_enviada`** (valida e
+  devolve os bytes, sem tocar no banco) e **`gravar(cur, …)`**, que insere no cursor de quem
+  chama. `remover` e `copiar` passaram a aceitar o cursor pela mesma razão.
+  ⚠️ **`gravar` não apaga nada** — quem apaga é `remover`, chamado pelo dono do registro DEPOIS
+  de a URL nova estar gravada, no mesmo cursor. Era o `salvar_imagem` apagando por conta própria
+  que abria a janela.
+  ⚠️ **Os bytes são lidos ANTES da transação**: ler 2 MB da rede com uma conexão do pool presa
+  é prendê-la pelo tempo do ENVIO, não pelo tempo do banco.
+  🔑 **Mas a perda que de fato aconteceu foi outra: as SUÍTES apagavam a logo do cliente.**
+  `smoke_exportacoes` e `verificar.mjs` sobem uma logo de teste por cima e depois chamam
+  `DELETE /empresa/logo`, com o comentário *"a real é a que o cliente subir"* — só que a real já
+  estava lá. A marca sumia da barra superior e do cabeçalho de todo PDF emitido depois, e quem
+  rodou a bateria não tinha como ligar uma coisa à outra. `comum.preservar_logo` (registrado no
+  **`atexit`**) e o `restaurarLogo` em `aoTerminar` devolvem os BYTES que encontraram. Mesma
+  lição do `preservar_credenciais` e do `devolver_o_modo_original`: **suíte devolve o que
+  encontrou**, nunca um estado "limpo" que ela supõe ser o certo.
+  ⚠️ **Sem logo também é um estado a devolver**: não havendo nenhuma antes, o restauro APAGA a
+  de teste em vez de deixá-la lá.
+  ⚠️ **A URL muda a cada envio** (o sufixo aleatório é o que invalida o cache do navegador), e
+  por isso a checagem compara os **bytes**, nunca o endereço.
+  ⚠️ **E `limpar_dados.py` deixava as fotos órfãs.** `arquivos` não entra no TRUNCATE de
+  propósito — é lá que mora a logo, que é cadastro e fica —, mas a foto do prato tem
+  `dono = 'ficha-<id>'` e as fichas saem: sobravam megabytes apontando para nada, e o
+  `RESTART IDENTITY` ainda faz a numeração recomeçar, então uma ficha nova herda o id de uma
+  cujo arquivo continua ali. Agora o script apaga só o que é de ficha; a logo não é tocada.
 - ⚠️ **Três checagens caíram no dia 31, e duas pela MESMA causa: corte no topo** (31/08/2026).
   1. O rótulo da apuração exigia as duas pontas ("01/08 a 31/08") porque o mês estaria em
      curso — mas **no último dia do mês o recorte É o mês inteiro**, e o nome curto está certo.
@@ -2335,6 +2398,26 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
   30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
   produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
+- 🔑 **A ficha em RASCUNHO custeia a venda — e a origem DIZ isso** (02/09/2026, pedido do dono).
+  O prato com receita ainda não homologada entrava no item de venda com custo **ZERO**: o CMV
+  teórico saía subestimado, a margem alta demais e o food cost bom demais, **sem nada
+  denunciando** — o item nem contava como "sem custo" na leitura de quem olhava o número. A
+  cozinha escreve a receita muito antes de alguém homologá-la, e o prato já está sendo vendido
+  nesse meio tempo, que é exatamente quando o número importa.
+  ⚠️ **A homologada vem PRIMEIRO, sempre.** O rascunho é a reserva e só responde quando não há
+  versão aprovada vigente — senão homologar uma receita não mudaria o custo de nada.
+  ⚠️ **Vale só para CUSTEAR. A PRODUÇÃO continua exigindo ficha homologada**: ali a receita move
+  mercadoria de verdade no razão, e seguir uma versão não aprovada baixaria estoque errado.
+  ⚠️ **O custo continua CONGELADO no item de venda.** O rascunho muda depois, então duas vendas
+  do mesmo prato podem ficar com custos diferentes — e está certo: cada uma guarda o que se
+  sabia na hora dela. A suíte cobra que homologar depois **não reescreva** a venda anterior.
+  ⚠️ Origens novas: `ficha_rascunho`, `ficha_rascunho_parcial` e `ficha_rascunho_sem_custo` —
+  espelhando as três que já existiam. `ORIGEM_CUSTO` (front) as nomeia em português.
+  ⚠️ **O aviso é obrigatório, e é o que o pedido dizia** ("avisa que tá em rascunho ainda"):
+  `GET /vendas/{id}` devolve `itens_ficha_rascunho` e a tela mostra o aviso ANTES dos números,
+  como já fazia com o item sem custo. Sem ele, o custo de uma receita em rascunho seria
+  indistinguível do de uma aprovada. A resposta da importação também conta — e a frase só cita
+  o número **quando ele não é zero**, senão vira ruído em toda importação.
 - **O custo da ficha é congelado no item de venda** (`venda_itens.custo_ficha_unitario`):
   corrigir receita hoje não reescreve o CMV teórico do mês passado.
 - Compras contam só `ENTRADA_NF` e `ENTRADA_MANUAL`; produção e transferência são
@@ -2371,17 +2454,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.694 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
-  `smoke_fichas.py` (50), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
+- Testes (1.719 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+  `smoke_fichas.py` (55), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (155), `smoke_vendas.py` (39), `smoke_vinculo.py` (84),
+  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (154), `smoke_vendas.py` (54), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (434, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (440, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

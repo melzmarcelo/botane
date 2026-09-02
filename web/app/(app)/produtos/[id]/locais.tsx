@@ -15,6 +15,12 @@ import { Aviso, Cartao, Carregando, Etiqueta, Vazio } from "@/components/ui";
  * preparar a casa antes de operar, nem como ver de relance em quantos cantos o
  * mesmo insumo mora.
  *
+ * 🔑 **E o cartão aparece TAMBÉM na tela de criar.** É ali que a pessoa está
+ * decidindo onde o produto vai morar — esconder o campo até o produto existir
+ * faz concluir que o sistema não o tem. Sem id não há para onde gravar, então
+ * as prateleiras escolhidas ficam no estado e sobem logo depois do
+ * `POST /produtos`. Mesmo caminho da foto da ficha.
+ *
  * ⚠️ **Não há tabela nova**: a linha de `estoque_saldos` com quantidade zero já
  * quer dizer "mora aqui, vazio no momento". Uma segunda tabela para declarar a
  * mesma coisa daria duas versões da mesma verdade, e elas divergiriam no
@@ -44,12 +50,19 @@ export default function LocaisDoProduto({
   podeEditar,
   podeVerCusto,
   umEstoque,
+  pendentes = [],
+  aoMudarPendentes,
 }: {
-  idProduto: number;
+  /** Nulo na tela de CRIAR: o produto ainda não existe e não há onde gravar. */
+  idProduto: number | null;
   podeEditar: boolean;
   podeVerCusto: boolean;
   umEstoque: string | null;
+  /** Só na criação: as prateleiras escolhidas, guardadas pelo formulário. */
+  pendentes?: number[];
+  aoMudarPendentes?: (ids: number[]) => void;
 }) {
+  const criando = idProduto === null;
   const aviso = useAviso();
   const [linhas, setLinhas] = useState<LocalDoProduto[] | null>(null);
   const [todos, setTodos] = useState<Local[]>([]);
@@ -59,12 +72,15 @@ export default function LocaisDoProduto({
 
   const carregar = useCallback(async () => {
     try {
-      const [l, t] = await Promise.all([
-        api.get<LocalDoProduto[]>(`/produtos/${idProduto}/locais`),
-        api.get<Local[]>("/locais"),
-      ]);
-      setLinhas(l);
+      const t = await api.get<Local[]>("/locais");
       setTodos(t);
+      // Na criação não há o que perguntar ao servidor: o produto não existe, e
+      // a lista é a que a pessoa está montando agora.
+      setLinhas(
+        idProduto === null
+          ? []
+          : await api.get<LocalDoProduto[]>(`/produtos/${idProduto}/locais`),
+      );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar os locais");
     }
@@ -76,6 +92,11 @@ export default function LocaisDoProduto({
 
   async function acrescentar() {
     if (!escolhido) return;
+    if (criando) {
+      aoMudarPendentes?.([...pendentes, Number(escolhido)]);
+      setEscolhido("");
+      return;
+    }
     setSalvando(true);
     try {
       const r = await api.post<{ message: string }>(`/produtos/${idProduto}/locais`, {
@@ -91,16 +112,20 @@ export default function LocaisDoProduto({
     }
   }
 
-  async function tirar(l: LocalDoProduto) {
+  async function tirar(idLocal: number, nome: string) {
+    if (criando) {
+      aoMudarPendentes?.(pendentes.filter((x) => x !== idLocal));
+      return;
+    }
     setSalvando(true);
     try {
       const r = await api.delete<{ message: string }>(
-        `/produtos/${idProduto}/locais/${l.id_local}`,
+        `/produtos/${idProduto}/locais/${idLocal}`,
       );
       aviso.sucesso(r.message);
       await carregar();
     } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Falha ao tirar o local");
+      aviso.erro(e instanceof Error ? e.message : `Falha ao tirar ${nome}`);
     } finally {
       setSalvando(false);
     }
@@ -119,23 +144,48 @@ export default function LocaisDoProduto({
       </Cartao>
     );
 
+  // Na criação as linhas são as escolhidas até aqui; depois, o que o servidor
+  // diz — com o saldo e o custo de cada prateleira.
+  const escolhidas: LocalDoProduto[] = criando
+    ? pendentes
+        .map((id) => todos.find((t) => t.id === id))
+        .filter((t): t is Local => !!t)
+        .map((t) => ({
+          id_local: t.id,
+          local: t.nome,
+          setor: t.setor ?? null,
+          principal: t.principal,
+          quantidade: 0,
+          custo_medio: 0,
+          valor: 0,
+          atualizado_em: null,
+        }))
+    : linhas;
+
   // Só os que ainda não estão na lista — oferecer o que já está seria oferecer
   // uma ação que não faz nada.
   const disponiveis = todos.filter(
-    (t) => t.ativo && !linhas.some((l) => l.id_local === t.id),
+    (t) => t.ativo && !escolhidas.some((l) => l.id_local === t.id),
   );
-  const totalQtd = linhas.reduce((s, l) => s + Number(l.quantidade), 0);
-  const totalValor = linhas.reduce((s, l) => s + Number(l.valor), 0);
+  const totalQtd = escolhidas.reduce((s, l) => s + Number(l.quantidade), 0);
+  const totalValor = escolhidas.reduce((s, l) => s + Number(l.valor), 0);
+  // ⚠️ Na criação não há saldo nenhum, e uma coluna de zeros sugere que há.
+  const mostraNumeros = !criando;
 
   return (
     <Cartao
       titulo="Onde este produto fica"
-      descricao="As prateleiras deste produto nesta loja, com o saldo e o custo do momento."
+      descricao={
+        criando
+          ? "As prateleiras onde ele vai morar. Passam a existir vazias quando o produto for criado."
+          : "As prateleiras deste produto nesta loja, com o saldo e o custo do momento."
+      }
     >
-      {linhas.length === 0 ? (
+      {escolhidas.length === 0 ? (
         <Vazio>
-          Este produto ainda não está em nenhuma prateleira desta loja. Acrescente os
-          locais aqui para já poder transferir e contar por eles.
+          {criando
+            ? "Escolha abaixo em que prateleiras este produto vai ficar — ou deixe em branco: elas passam a existir sozinhas na primeira entrada."
+            : "Este produto ainda não está em nenhuma prateleira desta loja. Acrescente os locais aqui para já poder transferir e contar por eles."}
         </Vazio>
       ) : (
         <div className="overflow-x-auto">
@@ -144,29 +194,35 @@ export default function LocaisDoProduto({
               <tr>
                 <th className="rotulo text-left">Local</th>
                 <th className="rotulo text-left">Setor</th>
-                <th className="rotulo text-right">Saldo</th>
-                {podeVerCusto && <th className="rotulo text-right">Custo médio</th>}
-                {podeVerCusto && <th className="rotulo text-right">Valor</th>}
+                {mostraNumeros && <th className="rotulo text-right">Saldo</th>}
+                {mostraNumeros && podeVerCusto && (
+                  <th className="rotulo text-right">Custo médio</th>
+                )}
+                {mostraNumeros && podeVerCusto && (
+                  <th className="rotulo text-right">Valor</th>
+                )}
                 <th />
               </tr>
             </thead>
             <tbody>
-              {linhas.map((l) => (
+              {escolhidas.map((l) => (
                 <tr key={l.id_local} className="border-t border-linha">
                   <td className="py-2">
                     {l.local} {l.principal && <Etiqueta cor="erva">principal</Etiqueta>}
                   </td>
                   <td className="py-2 text-suave">{l.setor ?? "—"}</td>
-                  <td className="py-2 text-right tabular-nums">
-                    {qtd(l.quantidade)}{" "}
-                    <span className="text-suave">{umEstoque ?? ""}</span>
-                  </td>
-                  {podeVerCusto && (
+                  {mostraNumeros && (
+                    <td className="py-2 text-right tabular-nums">
+                      {qtd(l.quantidade)}{" "}
+                      <span className="text-suave">{umEstoque ?? ""}</span>
+                    </td>
+                  )}
+                  {mostraNumeros && podeVerCusto && (
                     <td className="py-2 text-right tabular-nums">
                       {reais(Number(l.custo_medio))}
                     </td>
                   )}
-                  {podeVerCusto && (
+                  {mostraNumeros && podeVerCusto && (
                     <td className="py-2 text-right tabular-nums">
                       {reais(Number(l.valor))}
                     </td>
@@ -178,7 +234,7 @@ export default function LocaisDoProduto({
                         className="link-acao link-acao-erro"
                         disabled={salvando}
                         aria-label={`tirar ${l.local}`}
-                        onClick={() => void tirar(l)}
+                        onClick={() => void tirar(l.id_local, l.local)}
                       >
                         tirar
                       </button>
@@ -187,7 +243,7 @@ export default function LocaisDoProduto({
                 </tr>
               ))}
             </tbody>
-            {linhas.length > 1 && (
+            {mostraNumeros && escolhidas.length > 1 && (
               <tfoot>
                 <tr className="border-t border-linha font-semibold">
                   <td className="py-2" colSpan={2}>
@@ -239,9 +295,9 @@ export default function LocaisDoProduto({
       )}
 
       <p className="mt-3 text-[13px] text-suave">
-        Acrescentar um local não movimenta nada: ele passa a existir vazio, pronto para
-        receber a transferência e para entrar na contagem. Só sai da lista quem está com
-        saldo zero — com mercadoria, o caminho é transferir ou lançar a saída.
+        {criando
+          ? "Acrescentar um local não movimenta nada: a prateleira passa a existir vazia junto com o produto, pronta para receber a transferência e para entrar na contagem."
+          : "Acrescentar um local não movimenta nada: ele passa a existir vazio, pronto para receber a transferência e para entrar na contagem. Só sai da lista quem está com saldo zero — com mercadoria, o caminho é transferir ou lançar a saída."}
       </p>
     </Cartao>
   );

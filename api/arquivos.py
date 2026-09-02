@@ -47,8 +47,14 @@ def _nome_da_url(url: str | None) -> str | None:
     return nome
 
 
-async def salvar_imagem(arquivo: UploadFile, nome_base: str) -> str:
-    """Grava a imagem e devolve a URL relativa. Recusa o que não é imagem."""
+async def ler_enviada(arquivo: UploadFile) -> tuple[bytes, str, str]:
+    """Confere o que chegou e devolve `(conteúdo, tipo, extensão)`. Não toca no banco.
+
+    🔑 **Separado da gravação de propósito.** Ler o corpo da requisição pode
+    demorar (são até 2 MB vindos pela rede), e fazer isso com uma transação
+    aberta prende uma conexão do pool durante todo o envio. Assim a conexão só
+    é pedida quando já se tem os bytes na mão.
+    """
     extensao = TIPOS.get(arquivo.content_type or "")
     if not extensao:
         raise HTTPException(
@@ -74,20 +80,33 @@ async def salvar_imagem(arquivo: UploadFile, nome_base: str) -> str:
     except Exception:
         raise HTTPException(status_code=400, detail="O arquivo não é uma imagem válida.")
 
+    return conteudo, arquivo.content_type or "image/png", extensao
+
+
+def gravar(cur, conteudo: bytes, tipo: str, extensao: str, nome_base: str) -> str:
+    """Insere a imagem NO CURSOR DE QUEM CHAMA e devolve a URL relativa.
+
+    🔑 **Recebe o cursor, e essa é a correção que importa.** A versão anterior
+    abria transação própria, inseria a nova imagem e **apagava a anterior** ali
+    mesmo — e só depois, numa TERCEIRA transação, o chamador gravava a URL nova
+    no registro. Entre uma e outra havia uma janela: falhando a última (a API
+    reiniciada, a requisição abortada, um erro no meio), a imagem antiga já
+    tinha sido apagada e o registro continuava apontando para ela. A logo e a
+    foto da ficha **sumiam sem volta**, com o link quebrado e nada explicando.
+    Agora inserir a nova, apontar para ela e apagar a velha são uma coisa só:
+    ou as três acontecem, ou nenhuma.
+
+    ⚠️ **E este não apaga nada** — quem apaga é `remover`, chamado pelo dono do
+    registro DEPOIS de a nova URL estar gravada, no mesmo cursor.
+    """
     # Sufixo aleatório troca o nome a cada envio: sem isso o navegador continua
     # mostrando a logo antiga do cache.
     nome = f"{nome_base}-{secrets.token_hex(4)}{extensao}"
-    with get_cursor() as cur:
-        cur.execute(
-            """INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (nome, nome_base, arquivo.content_type, conteudo, len(conteudo)),
-        )
-        # Limpa versões anteriores do mesmo dono, na MESMA transação: se a
-        # gravação falhar, a antiga continua valendo.
-        cur.execute("DELETE FROM arquivos WHERE dono = %s AND nome <> %s",
-                    (nome_base, nome))
-
+    cur.execute(
+        """INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (nome, nome_base, tipo, conteudo, len(conteudo)),
+    )
     return f"{PREFIXO_URL}/{nome}"
 
 
@@ -114,7 +133,7 @@ def ler(url: str | None) -> tuple[bytes, str] | None:
     return bytes(linha["conteudo"]), linha["tipo"]
 
 
-def copiar(url: str | None, novo_dono: str) -> str | None:
+def copiar(url: str | None, novo_dono: str, cur=None) -> str | None:
     """Duplica o arquivo sob outro dono e devolve a URL nova.
 
     🔑 **Existe por causa da nova versão da ficha.** Copiar só a URL deixaria
@@ -131,19 +150,27 @@ def copiar(url: str | None, novo_dono: str) -> str | None:
         return None
     conteudo, tipo = achado
     extensao = TIPOS.get(tipo or "", ".jpg")
-    nome = f"{novo_dono}-{secrets.token_hex(4)}{extensao}"
-    with get_cursor() as cur:
-        cur.execute(
-            """INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (nome, novo_dono, tipo, conteudo, len(conteudo)),
-        )
-    return f"{PREFIXO_URL}/{nome}"
+    # ⚠️ No cursor de quem chama quando ele existe: a cópia e a ficha nova
+    # nascem juntas ou não nascem — senão um rollback lá fora deixaria o
+    # arquivo órfão no banco.
+    if cur is not None:
+        return gravar(cur, conteudo, tipo, extensao, novo_dono)
+    with get_cursor() as proprio:
+        return gravar(proprio, conteudo, tipo, extensao, novo_dono)
 
 
-def remover(url: str | None) -> None:
+def remover(url: str | None, cur=None) -> None:
+    """Apaga o arquivo. **Chamar só depois de o registro já apontar para outro.**
+
+    ⚠️ Aceita o cursor de quem chama, e é assim que deve ser usado na TROCA de
+    imagem: apontar para a nova e apagar a velha na mesma transação. Fora dela,
+    um erro entre as duas deixaria o registro órfão de imagem.
+    """
     nome = _nome_da_url(url)
     if not nome:
         return
-    with get_cursor() as cur:
+    if cur is not None:
         cur.execute("DELETE FROM arquivos WHERE nome = %s", (nome,))
+        return
+    with get_cursor() as proprio:
+        proprio.execute("DELETE FROM arquivos WHERE nome = %s", (nome,))

@@ -43,7 +43,7 @@ from datetime import date
 # a de onde se chamou — e `services` não estaria no caminho.
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
-from comum import garantir_local  # noqa: E402
+from comum import garantir_local, preservar_logo  # noqa: E402
 
 # ⚠️ Importados no TOPO: alguns blocos afirmam sobre funções puras (o slug do
 # nome de arquivo, o teto do PDF, o papel timbrado) que HTTP não alcança, e
@@ -116,6 +116,11 @@ if st != 200:
     print("API não respondeu ao login:", st, r)
     sys.exit(1)
 token = r["access_token"]
+
+# ⚠️ **A logo real da casa volta no fim.** Esta suíte sobe uma de teste por cima
+# e a apaga depois — e a apagada era a do cliente. Mesma lição do
+# `preservar_credenciais`: suíte devolve o que encontrou.
+preservar_logo(BASE, token)
 
 marca = str(time.time_ns())[-6:]
 hoje = date.today()
@@ -670,15 +675,40 @@ if url_logo:
     st_velha, _ = chamar("GET", url_logo, token=token)
     checar("e a anterior deixa de existir", st_velha == 404, st_velha)
 
+# 🔑 **A troca nao pode PERDER a logo — essa era a janela real.** A gravacao
+# acontecia em TRES transacoes: a nova imagem entrava e a antiga era APAGADA
+# numa; so depois, noutra, a empresa passava a apontar para a nova. Falhando a
+# ultima — a API reiniciada, a requisicao abortada —, a antiga ja nao existia e
+# a empresa continuava apontando para ela: a marca sumia da barra superior e do
+# cabecalho de todo PDF, sem volta. Agora as tres sao uma transacao so.
+#
+# O que se prova aqui e a INVARIANTE: depois de cada troca, o endereco que a
+# empresa guarda RESPONDE.
+_anterior = url2
+for _vez in range(3):
+    _cinza = io.BytesIO()
+    _Imagem.new("RGB", (12 + _vez, 12), (30 * _vez, 60, 90)).save(_cinza, "PNG")
+    _st, _r = _subir_logo(_cinza.getvalue())
+    _st_e, _emp = chamar("GET", "/empresa", token=token)
+    _url = (_emp or {}).get("logo_url")
+    # ⚠️ `bruto=True`: a resposta e um PNG, e o `chamar` normal tenta ler JSON.
+    _st_img = chamar("GET", _url, token=token, bruto=True)[0] if _url else 0
+    checar(f"trocar a logo ({_vez + 1}a vez) deixa o endereco da empresa respondendo",
+           _st_img == 200, (_url, _st_img))
+    if _anterior:
+        checar(f"e a anterior ({_vez + 1}a) sai junto, na mesma transacao",
+               chamar("GET", _anterior, token=token)[0] == 404, _anterior)
+    _anterior = _url
+
 # O PDF DESENHA a logo — nao a busca por HTTP. Com ela no banco, o timbre tem de
 # continuar saindo.
 st, pdf_logo, _cab = chamar("GET", "/exportar/saldos.pdf", token=token, bruto=True)
 checar("o PDF sai com a logo no timbre", st == 200 and pdf_logo[:5] == b"%PDF-",
        (st, pdf_logo[:8]))
 
-# Devolve a base: a logo de teste sai, e quem entra depois nao herda um quadrado
-# verde no cabecalho de todo relatorio.
-chamar("DELETE", "/empresa/logo", token=token)
+# ⚠️ A logo de teste NAO e apagada aqui: quem devolve a base e o `preservar_logo`
+# registrado no atexit, que repoe a REAL quando havia uma. Apagar aqui deixaria
+# a casa sem marca no cabecalho de todo relatorio — foi o que acontecia.
 
 
 print()

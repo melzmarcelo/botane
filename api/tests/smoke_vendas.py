@@ -236,6 +236,85 @@ checar("cancelar de novo é recusado", st == 400, st)
 st, r = chamar("GET", "/vendas/99999999", token=token)
 checar("venda inexistente é 404", st == 404, st)
 
+print("\n7. a ficha em RASCUNHO custeia a venda, e a origem diz isso")
+# 🔑 **Pedido do dono (02/09/2026):** o prato com ficha ainda nao homologada
+# entrava na venda com custo ZERO. O CMV teorico saia subestimado, a margem alta
+# demais e o food cost bom demais — e nada denunciava. A cozinha escreve a
+# receita muito antes de alguem homologa-la, e o prato ja esta sendo vendido
+# nesse meio tempo, que e exatamente quando o numero importa.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"VD-RAS-{marca}", "nome": f"Prato rascunho {marca}", "tipo": "PRODUZIDO",
+    "um_estoque": "UN", "producao_propria": True, "controla_estoque": False,
+    "modo_producao": "NA_HORA", "status": "ATIVO",
+}, token=token)
+prato_r = r.get("id")
+checar("prato do rascunho criado", st == 201, (st, r))
+st, r = chamar("POST", "/fichas", {
+    "id_produto": prato_r, "rendimento_qtd": 1, "rendimento_um": "UN", "porcoes": 1,
+    "itens": [{"id_insumo": insumo, "qtd_bruta": 0.25, "um": "KG"}],
+}, token=token)
+ficha_r = r.get("id")
+checar("e a ficha fica em RASCUNHO, sem homologar", st == 201, (st, r))
+st, fr = chamar("GET", f"/fichas/{ficha_r}", token=token)
+checar("a ficha esta mesmo em rascunho", fr.get("status") == "RASCUNHO", fr.get("status"))
+
+doc_r = f"VENDA-RAS-{marca}"
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "documento": doc_r, "data": str(date.today()), "origem": "MANUAL",
+    "itens": [{"id_produto": prato_r, "quantidade": 2,
+               "valor_unitario": 30, "descricao": f"Prato rascunho {marca}"}],
+}]}, token=token)
+checar("a venda do prato em rascunho entra", st in (200, 201), (st, r))
+# ⚠️ Antes este numero era 1: o item entrava sem custo nenhum.
+checar("e ela NAO conta como item sem custo", (r or {}).get("itens_sem_custo") == 0, r)
+checar("a resposta diz quantos vieram de ficha em rascunho",
+       (r or {}).get("itens_ficha_rascunho") == 1, r)
+checar("e a frase avisa", "RASCUNHO" in ((r or {}).get("message") or ""), r)
+
+st, lista_r = chamar("GET", f"/vendas?busca={doc_r}", token=token)
+id_venda_r = (lista_r or [{}])[0].get("id")
+st, dr = chamar("GET", f"/vendas/{id_venda_r}", token=token)
+item_r = (dr.get("itens") or [{}])[0]
+# 0,25 kg x 20,00/kg = 5,00 por unidade.
+checar("o custo saiu da ficha em rascunho (5,00)",
+       abs(float(item_r.get("custo_ficha_unitario") or 0) - 5) < 0.01, item_r)
+checar("e a origem NOMEIA o rascunho",
+       item_r.get("origem_custo") == "ficha_rascunho", item_r.get("origem_custo"))
+checar("o detalhe conta os itens de rascunho para a tela avisar",
+       dr.get("itens_ficha_rascunho") == 1, dr)
+checar("e o custo teorico da venda deixa de ser zero",
+       abs(float(dr.get("custo_teorico") or 0) - 10) < 0.01, dr.get("custo_teorico"))
+
+# 🔑 **A homologada vem PRIMEIRO, sempre.** O rascunho e a reserva e so responde
+# quando nao ha versao aprovada vigente — senao homologar uma receita nao mudaria
+# o custo de nada.
+st, r = chamar("POST", f"/fichas/{ficha_r}/homologar", token=token)
+checar("homologar a ficha responde", st == 200, (st, r))
+doc_h = f"VENDA-HOM-{marca}"
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "documento": doc_h, "data": str(date.today()), "origem": "MANUAL",
+    "itens": [{"id_produto": prato_r, "quantidade": 1,
+               "valor_unitario": 30, "descricao": f"Prato rascunho {marca}"}],
+}]}, token=token)
+checar("depois de homologada, nenhum item e de rascunho",
+       (r or {}).get("itens_ficha_rascunho") == 0, r)
+st, lista_h = chamar("GET", f"/vendas?busca={doc_h}", token=token)
+st, dh = chamar("GET", f"/vendas/{(lista_h or [{}])[0].get('id')}", token=token)
+checar("e a origem volta a ser a ficha, sem ressalva",
+       (dh.get("itens") or [{}])[0].get("origem_custo") == "ficha",
+       (dh.get("itens") or [{}])[0].get("origem_custo"))
+# ⚠️ O custo do item JA GRAVADO nao muda: ele e congelado no momento da venda.
+st, dr2 = chamar("GET", f"/vendas/{id_venda_r}", token=token)
+checar("e a venda anterior guarda o custo que tinha na hora dela",
+       abs(float((dr2.get("itens") or [{}])[0].get("custo_ficha_unitario") or 0) - 5) < 0.01,
+       dr2.get("itens"))
+
+for _lista in (lista_r, lista_h):
+    for _v in (_lista or []):
+        chamar("DELETE", f"/vendas/{_v['id']}", token=token)
+chamar("DELETE", f"/produtos/{prato_r}", token=token)
+
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")

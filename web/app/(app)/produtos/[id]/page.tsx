@@ -105,6 +105,10 @@ export default function FormularioProduto() {
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
+  // 🔑 As prateleiras escolhidas na tela de CRIAR. Sem id não há para onde
+  // gravar, então ficam aqui e sobem logo depois do `POST /produtos` — mesmo
+  // caminho da foto da ficha.
+  const [locaisPendentes, setLocaisPendentes] = useState<number[]>([]);
   const [carregando, setCarregando] = useState(!novo);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -230,7 +234,25 @@ export default function FormularioProduto() {
     try {
       if (novo) {
         const r = await api.post<{ id: number }>("/produtos", corpo);
+        // ⚠️ **Falhar aqui NÃO é "não foi possível salvar".** O produto já
+        // existe deste ponto em diante, e a frase genérica mandaria cadastrar
+        // tudo de novo — criando um segundo cadastro do mesmo item. Mesma
+        // lição da foto da ficha.
+        const naoForam: number[] = [];
+        for (const idLocal of locaisPendentes) {
+          try {
+            await api.post(`/produtos/${r.id}/locais`, { id_local: idLocal });
+          } catch {
+            naoForam.push(idLocal);
+          }
+        }
         router.replace(`/produtos/${r.id}`);
+        if (naoForam.length) {
+          aviso.erro(
+            `${f.nome.trim()} foi criado, mas ${naoForam.length} local(is) não foram` +
+              " gravados. Acrescente-os no cartão “Onde este produto fica”.",
+          );
+        }
         // Quem cadastra um produto costuma cadastrar o próximo. O caminho para
         // isso vai junto do aviso, em vez de exigir voltar à lista e achar o
         // botão de novo.
@@ -934,15 +956,17 @@ export default function FormularioProduto() {
         )}
       </Cartao>
 
-      {/* 🔑 As prateleiras onde o produto mora. Só depois de ele existir — a
-          linha de saldo aponta para ele. E só para quem controla estoque:
-          produto que não controla não tem prateleira nenhuma. */}
-      {!novo && f.controla_estoque && (
+      {/* 🔑 As prateleiras onde o produto mora — e o cartão aparece TAMBÉM na
+          tela de criar, porque é ali que a pessoa está decidindo isso. Só para
+          quem controla estoque: produto que não controla não tem prateleira. */}
+      {f.controla_estoque && (
         <LocaisDoProduto
-          idProduto={Number(id)}
+          idProduto={novo ? null : Number(id)}
           podeEditar={podeEditar}
           podeVerCusto={pode("estoque.saldos")}
           umEstoque={f.um_estoque || null}
+          pendentes={locaisPendentes}
+          aoMudarPendentes={setLocaisPendentes}
         />
       )}
 

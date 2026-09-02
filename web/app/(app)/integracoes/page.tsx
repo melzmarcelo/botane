@@ -555,7 +555,10 @@ export default function PaginaIntegracoes() {
           ) : (
             <>
               <div className="mt-3 overflow-x-auto">
-                <table className="tabela">
+                {/* O id existe para a checagem apontar para ESTA tabela: a tela
+                    de Integrações tem outras, e "a primeira que casa" mede a
+                    errada. */}
+                <table className="tabela" id="custos-iniciais">
                   <thead>
                     <tr>
                       <th>Código</th>

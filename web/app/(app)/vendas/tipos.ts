@@ -69,6 +69,9 @@ export type VendaDetalhe = {
   custo_teorico: number;
   itens_sem_custo: number;
   itens_sem_vinculo: number;
+  /** Itens custeados por ficha ainda em RASCUNHO — o número vale, mas pode
+      mudar quando a receita for homologada. */
+  itens_ficha_rascunho: number;
 };
 
 export const ORIGENS: Record<string, string> = {
@@ -95,6 +98,12 @@ export const ORIGEM_CUSTO: Record<string, string> = {
   ficha: "ficha técnica",
   ficha_parcial: "ficha com insumo sem custo",
   ficha_sem_custo: "a ficha existe, mas nenhum insumo tem custo",
+  // 🔑 A ficha em rascunho custeia a venda — antes o item entrava com custo
+  // zero e a margem saía alta demais. O rótulo diz que o número ainda pode
+  // mudar: a receita não foi homologada.
+  ficha_rascunho: "ficha técnica em RASCUNHO",
+  ficha_rascunho_parcial: "ficha em RASCUNHO, com insumo sem custo",
+  ficha_rascunho_sem_custo: "a ficha em rascunho existe, mas nenhum insumo tem custo",
   kit: "composição do combo",
   kit_parcial: "combo com componente sem custo",
   custo_medio: "custo médio do estoque",

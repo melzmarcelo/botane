@@ -257,6 +257,17 @@ def main() -> int:
         if "produtos" in alvos:
             cur.execute("ALTER SEQUENCE IF EXISTS seq_codigo_produto RESTART")
 
+        # 🔑 **As fotos das fichas ficavam órfãs.** `arquivos` não entra no
+        # TRUNCATE de propósito — é lá que mora a LOGO da empresa, que é
+        # cadastro e fica. Mas a foto do prato tem `dono = 'ficha-<id>'`, e as
+        # fichas acabaram de sair: sobravam megabytes de imagem apontando para
+        # nada, e o `RESTART IDENTITY` ainda faz a numeração recomeçar, então
+        # uma ficha nova acaba herdando o id de uma cujo arquivo continua ali.
+        # ⚠️ Só o que é de ficha. A logo tem `dono = 'logo-empresa'` e não é
+        # tocada: apagá-la seria a mesma perda que as suítes causavam.
+        if "fichas_tecnicas" in alvos:
+            cur.execute("DELETE FROM arquivos WHERE dono LIKE 'ficha-%'")
+
         if limpar_usuarios or so_o_admin:
             # O vínculo com papéis cai por CASCADE; sessões e tokens já foram
             # truncados acima. O administrador nunca entra na conta: sem ele

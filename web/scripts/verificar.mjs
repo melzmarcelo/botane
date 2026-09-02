@@ -73,12 +73,15 @@ async function api(metodo, caminho, corpo, token) {
  * ⚠️ O conteúdo é um PNG mínimo de verdade: o servidor abre a imagem para
  * conferir que ela é uma imagem, e bytes inventados levariam 400.
  */
-async function enviarArquivo(caminho, token) {
-  const png = Buffer.from(
+async function enviarArquivo(caminho, token, imagem = null) {
+  // Sem `imagem`, manda um PNG 8x8 de teste. Com ela, manda os bytes dados —
+  // é assim que a logo original da casa volta ao lugar no fim da rodada.
+  const png = imagem?.buffer ?? Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAIAQMAAAD+wSzIAAAABlBMVEX///+/v7+jQ3Y5AAAA"
     + "DklEQVQI12P4AIX8EAgALgAD/aNpbtEAAAAASUVORK5CYII=", "base64");
+  const tipo = imagem?.tipo ?? "image/png";
   const corpo = new FormData();
-  corpo.append("arquivo", new Blob([png], { type: "image/png" }), "prato.png");
+  corpo.append("arquivo", new Blob([png], { type: tipo }), imagem?.nome ?? "prato.png");
   const r = await fetch(API + caminho, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -1398,26 +1401,27 @@ try {
   // sumir, e a ficha dele fica —, e agendar nela devolve 400 "está inativo". O
   // POST não era conferido, então a agenda ficava vazia e a falha aparecia três
   // checagens adiante, dizendo que a agenda não abre a folha.
-  const { dados: fichasProd } = await api("GET", "/fichas", null, token);
-  const { dados: ativosProd } = await api(
-    "GET", "/produtos?tipo=PRODUZIDO&limite=1000", null, token);
-  const idsAtivos = new Set((ativosProd ?? []).map((x) => x.id));
-  let homologada = (fichasProd ?? []).find(
-    (f) => f.status === "HOMOLOGADA" && idsAtivos.has(f.id_produto));
-  if (!homologada) {
-    const marcaFicha = String(Date.now()).slice(-5);
-    const { dados: insFicha } = await api("POST", "/produtos",
-      { nome: `Agenda insumo ${marcaFicha}`, tipo: "INSUMO", um_estoque: "KG" }, token);
-    const { dados: prodFicha } = await api("POST", "/produtos",
-      { nome: `Agenda preparo ${marcaFicha}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
-    const { dados: novaFicha } = await api("POST", "/fichas", {
-      id_produto: prodFicha.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
-      itens: [{ id_insumo: insFicha.id, qtd_bruta: 0.2, um: "KG" }],
-    }, token);
-    await api("POST", `/fichas/${novaFicha.id}/homologar`, null, token);
-    homologada = { id: novaFicha.id, id_produto: prodFicha.id, status: "HOMOLOGADA" };
-  }
-  checar("há ficha homologada para a agenda usar", !!homologada, fichasProd?.length);
+  // 🔑 **A suite cria a PROPRIA ficha, sempre.** Reaproveitar "a primeira
+  // homologada da base" ja caiu duas vezes por motivos diferentes: uma vez num
+  // produto INATIVO, outra num produto NA_HORA — que e produzido e baixado no
+  // mesmo instante da venda e por isso nao se agenda. E o filtro nao tem como
+  // ser feito pela lista: `/produtos` nao devolve `modo_producao`. Precondicao
+  // GARANTIDA, nunca suposta — e cada suite procura os registros DELA.
+  const marcaFicha = String(Date.now()).slice(-5);
+  const { dados: insFicha } = await api("POST", "/produtos",
+    { nome: `Agenda insumo ${marcaFicha}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+  const { dados: prodFicha } = await api("POST", "/produtos",
+    { nome: `Agenda preparo ${marcaFicha}`, tipo: "PRODUZIDO", um_estoque: "UN",
+      modo_producao: "PARA_ESTOQUE" }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${prodFicha.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${insFicha.id}`, null, token));
+  const { dados: novaFicha } = await api("POST", "/fichas", {
+    id_produto: prodFicha.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+    itens: [{ id_insumo: insFicha.id, qtd_bruta: 0.2, um: "KG" }],
+  }, token);
+  await api("POST", `/fichas/${novaFicha.id}/homologar`, null, token);
+  const homologada = { id: novaFicha.id, id_produto: prodFicha.id, status: "HOMOLOGADA" };
+  checar("há ficha homologada para a agenda usar", !!homologada, homologada);
   const amanhaISO = diaLocal(1);
   // ⚠️ **Confere o POST.** Sem isto, uma recusa aqui vira "a agenda não abre a
   // folha" lá embaixo — a falha longe da causa que esta suíte já pagou caro.
@@ -2353,6 +2357,79 @@ try {
       omieDepois?.modo);
     checar("e a credencial continua configurada", omieDepois?.configurada === true, omieDepois);
   }
+
+  console.log("7y. as prateleiras ja na CRIACAO do produto");
+  // 🔑 Pedido do dono (02/09/2026): o cartao aparecia so depois de o produto
+  // existir. E ali, cadastrando, que a pessoa decide onde ele vai morar —
+  // esconder o campo faz concluir que o sistema nao o tem. Sem id nao ha onde
+  // gravar, entao as prateleiras ficam no estado e sobem depois do POST.
+  const mNovo = String(Date.now()).slice(-6);
+  const idLocalNovo = await garantirLocal();
+  const { dados: localExtra } = await api(
+    "POST", "/locais", { nome: `Canto criacao ${mNovo}`, tipo: "SECO" }, token);
+
+  await irPara(p, `${WEB}/produtos/novo`);
+  await p.waitForSelector("#local-a-acrescentar", { timeout: 15000 });
+  checar("a tela de criar produto ja tem o cartao das prateleiras", true);
+  const textoNovo = await textoVisivel(p);
+  checar("e explica que elas nascem vazias junto com o produto",
+    /passam a existir vazias|nascem vazias|vao morar|vai morar/i.test(textoNovo),
+    textoNovo.slice(0, 300));
+
+  await p.select("#local-a-acrescentar", String(localExtra.id));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Acrescentar")?.click();
+  });
+  await p.waitForSelector("#locais-do-produto", { timeout: 10000 });
+  // ⚠️ Nada foi ao servidor ainda: o produto nem existe.
+  const linhaPendente = await p.evaluate(() =>
+    [...document.querySelectorAll("#locais-do-produto tbody tr")].map((t) => t.innerText));
+  checar("a prateleira escolhida entra na lista antes de o produto existir",
+    linhaPendente.some((l) => l.includes(`CANTO CRIACAO ${mNovo}`)), linhaPendente);
+
+  // Preenche o minimo e cria. As prateleiras sobem logo depois do POST.
+  await p.evaluate((nome) => {
+    const campos = [...document.querySelectorAll("input.campo")];
+    const alvo = campos.find((c) => c.closest("label")?.innerText?.match(/Nome/i));
+    const nativo = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    nativo.call(alvo, nome);
+    alvo.dispatchEvent(new Event("input", { bubbles: true }));
+  }, `Produto criacao ${mNovo}`);
+  await p.evaluate(() => {
+    const s = [...document.querySelectorAll("main select")]
+      .find((x) => [...x.options].some((o) => /KG/.test(o.textContent ?? "")));
+    if (!s) return;
+    const o = [...s.options].find((x) => /^KG/.test(x.textContent ?? ""));
+    if (!o) return;
+    const nativo = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, "value").set;
+    nativo.call(s, o.value);
+    s.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Criar produto")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 3000));
+  const { dados: achados } = await api(
+    "GET", `/produtos?busca=${encodeURIComponent(`Produto criacao ${mNovo}`)}`, null, token);
+  const produtoCriado = (achados ?? [])[0];
+  checar("o produto e criado pela tela", !!produtoCriado, achados);
+  if (produtoCriado) {
+    aoTerminar.push(() => api("DELETE", `/produtos/${produtoCriado.id}`, null, token));
+    const { dados: locaisDoNovo } = await api(
+      "GET", `/produtos/${produtoCriado.id}/locais`, null, token);
+    checar("e a prateleira escolhida na criacao ja esta gravada",
+      (locaisDoNovo ?? []).some((l) => l.id_local === localExtra.id), locaisDoNovo);
+    checar("com saldo zero — declarar nao movimenta nada",
+      Number((locaisDoNovo ?? []).find((l) => l.id_local === localExtra.id)?.quantidade) === 0,
+      locaisDoNovo);
+    await api("DELETE", `/produtos/${produtoCriado.id}/locais/${localExtra.id}`, null, token);
+  }
+  await api("DELETE", `/locais/${localExtra.id}`, null, token);
+  void idLocalNovo;
 
   console.log("7z. as prateleiras no cadastro do produto");
   // 🔑 O cadastro só tinha o local PADRÃO, aquele por onde o produto ENTRA. As
@@ -3418,11 +3495,24 @@ try {
     dizQueNaoMexeNoRazao: /nada entra no raz[ãa]o/i.test(document.body.innerText),
     temAplicar: [...document.querySelectorAll("button")]
       .some((b) => /^Aplicar em \d+ produto/.test(b.textContent?.trim() ?? "")),
+    // ⚠️ ESTA tabela, pelo id: a tela de Integracoes tem outras, e "a primeira
+    // que casa" media a errada — dizia que havia o que aplicar quando nao havia.
+    temLinhas: !!document.querySelector("#custos-iniciais tbody tr"),
+    explicaOVazio: /n[ãa]o h[áa] o que trazer|ainda n[ãa]o foi importado/i
+      .test(document.body.innerText),
   }));
   checar("dizendo que e REFERENCIA, nao movimento de estoque",
     previaCusto.dizReferencia && previaCusto.dizQueNaoMexeNoRazao, previaCusto);
-  checar("e o gravar fica num botao separado, depois da previa",
-    previaCusto.temAplicar, previaCusto);
+  // ⚠️ **A afirmacao e sobre a PROPRIEDADE, nao sobre o estado do dia.** Havendo
+  // o que aplicar, o gravar e um botao SEPARADO — a previa nunca grava sozinha.
+  // Nao havendo (base recem-limpa, catalogo do Omie ainda nao importado), a tela
+  // tem de DIZER por que a lista esta vazia. Exigir o botao sempre acusava a
+  // tela de um defeito que era do dado.
+  checar(previaCusto.temLinhas
+    ? "havendo o que aplicar, o gravar fica num botao separado"
+    : "sem nada a aplicar, a tela explica a lista vazia em vez de oferecer o botao",
+    previaCusto.temLinhas ? previaCusto.temAplicar : previaCusto.explicaOVazio,
+    previaCusto);
   await foto(p, "33b-custo-inicial");
 
   console.log("10y. buscar notas do Omie sozinho");
@@ -4289,6 +4379,35 @@ try {
   );
   writeFileSync(`${FOTOS}/_logo-teste.png`, png);
 
+  // 🔑 Guarda a logo que a casa tem AGORA e devolve no fim, aconteça o que
+  // acontecer. Sem isto a bateria apagava a marca do cliente.
+  const { dados: empresaAntes } = await api("GET", "/empresa", null, token);
+  const logoOriginal = empresaAntes?.logo_url ?? null;
+  let bytesOriginais = null;
+  if (logoOriginal) {
+    // A rota é pública: a `<img>` do navegador não manda cabeçalho nenhum.
+    const r = await fetch(`${API}${logoOriginal}`);
+    if (r.ok) {
+      bytesOriginais = {
+        buffer: Buffer.from(await r.arrayBuffer()),
+        tipo: r.headers.get("content-type") ?? "image/png",
+      };
+    }
+  }
+  const restaurarLogo = async () => {
+    if (!bytesOriginais) {
+      // Sem logo também é um estado a devolver.
+      await api("DELETE", "/empresa/logo", null, token);
+      return;
+    }
+    await enviarArquivo("/empresa/logo", token, {
+      buffer: bytesOriginais.buffer, tipo: bytesOriginais.tipo, nome: "logo",
+    });
+  };
+  // A rede de segurança: roda no `finally`, mesmo se o roteiro estourar antes
+  // de chegar ao fim deste bloco. Repetir é inofensivo — são os mesmos bytes.
+  aoTerminar.push(restaurarLogo);
+
   await p.goto(`${WEB}/empresa`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 900));
   const entradaArquivo = await p.$('input[type="file"]');
@@ -4316,8 +4435,32 @@ try {
     () => !!document.querySelector("#barra-superior img"));
   checar("logo aparece na barra superior", logoNaBarra);
 
-  // Tira a logo de teste: a real é a que o cliente subir.
-  await api("DELETE", "/empresa/logo", null, token);
+  // 🔑 **A bateria APAGAVA a logo do cliente.** Ela subia esta de teste por
+  // cima e depois chamava `DELETE /empresa/logo` — "a real é a que o cliente
+  // subir" —, só que a real já estava lá. A marca sumia da barra e do cabeçalho
+  // de todo PDF, e quem rodou a bateria não tinha como ligar uma coisa à outra.
+  // Mesma lição do `preservar_credenciais` e do modo do PDV: **suíte devolve o
+  // que encontrou**, e não um estado "limpo" que ela supõe ser o certo.
+  await restaurarLogo();
+  const { dados: empresaDepois } = await api("GET", "/empresa", null, token);
+  if (logoOriginal) {
+    const r = await fetch(`${API}${empresaDepois?.logo_url ?? ""}`);
+    const voltou = r.ok
+      && Buffer.from(await r.arrayBuffer()).equals(bytesOriginais.buffer);
+    // ⚠️ A URL MUDA — o nome ganha sufixo novo a cada envio, e é isso que
+    // invalida o cache do navegador. O que tem de voltar são os BYTES.
+    checar("a logo que a casa tinha volta ao lugar no fim da rodada", voltou,
+      empresaDepois?.logo_url);
+  } else {
+    checar("sem logo antes, a de teste sai e a base fica como estava",
+      (empresaDepois?.logo_url ?? null) === null, empresaDepois?.logo_url);
+  }
+
+  // ⚠️ A logo de teste NÃO é apagada aqui — quem devolve a base é o
+  // `restaurarLogo` registrado em `aoTerminar` no começo deste bloco. A versão
+  // anterior chamava `DELETE /empresa/logo` dizendo "a real é a que o cliente
+  // subir": só que a real já estava lá, e sumia da barra e do cabeçalho de todo
+  // PDF. Mesma lição do `preservar_credenciais` e do modo do PDV.
 } finally {
   // O que precisa voltar ao lugar mesmo se o roteiro estourar no meio.
   for (const desfazer of aoTerminar) {

@@ -197,3 +197,74 @@ def preservar_credenciais(servico: str = "OMIE"):
 
     atexit.register(repor)
     return repor
+
+
+def preservar_logo(base: str, token: str) -> None:
+    """Guarda a logo da empresa AGORA e a devolve quando a suíte terminar.
+
+    🔑 **Duas suítes apagavam a logo real da casa e ninguém notava.** Elas
+    sobem uma imagem de teste por cima e, no fim, chamam `DELETE /empresa/logo`
+    com o comentário "a real é a que o cliente subir" — só que a real já estava
+    lá. O efeito é a marca sumindo da barra superior e do cabeçalho de todo PDF
+    que a casa emitir depois, sem nada explicando: quem rodou a bateria não tem
+    como ligar uma coisa à outra.
+
+    É a mesma lição de `preservar_credenciais` e do `devolver_o_modo_original`
+    do PDV — **suíte devolve o que encontrou**, e não um estado "limpo" que ela
+    supõe ser o certo.
+
+    ⚠️ Registrado no `atexit`, não no fim do roteiro: a suíte já estourou no
+    meio antes, e foi assim que uma credencial se perdeu de vez.
+    ⚠️ **Sem logo também é um estado a devolver**: se a casa não tinha nenhuma,
+    o `atexit` apaga a de teste em vez de deixá-la lá.
+    """
+    import atexit
+    import json
+    import urllib.error
+    import urllib.request
+
+    def _pedir(metodo, caminho, dados=None, tipo=None):
+        req = urllib.request.Request(base + caminho, data=dados, method=metodo)
+        if tipo:
+            req.add_header("Content-Type", tipo)
+        req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    st, bruto = _pedir("GET", "/empresa")
+    if st != 200:
+        return
+    url = (json.loads(bruto or b"{}") or {}).get("logo_url")
+
+    guardado = None
+    if url:
+        try:
+            # A rota é pública — a `<img>` do navegador não manda cabeçalho.
+            with urllib.request.urlopen(base + url, timeout=30) as r:
+                guardado = (r.read(), r.headers.get("Content-Type") or "image/png")
+        except Exception:
+            # ⚠️ URL apontando para arquivo que não existe mais é estado
+            # possível. Não dá para devolver o que não se conseguiu ler, e
+            # derrubar a suíte por causa disso seria pior.
+            guardado = None
+
+    def devolver():
+        if not guardado:
+            _pedir("DELETE", "/empresa/logo")
+            return
+        conteudo, tipo = guardado
+        extensao = {"image/png": ".png", "image/jpeg": ".jpg",
+                    "image/webp": ".webp"}.get(tipo, ".png")
+        lim = "----botane-logo"
+        corpo = (f'--{lim}\r\nContent-Disposition: form-data; name="arquivo"; '
+                 f'filename="logo{extensao}"\r\nContent-Type: {tipo}\r\n\r\n').encode()
+        # ⚠️ O CRLF antes do fecho da fronteira é obrigatório: sem ele o
+        # servidor não acha o campo e devolve 422 "Field required".
+        corpo += conteudo + f"\r\n--{lim}--\r\n".encode()
+        _pedir("POST", "/empresa/logo", corpo,
+               f"multipart/form-data; boundary={lim}")
+
+    atexit.register(devolver)

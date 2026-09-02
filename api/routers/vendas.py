@@ -78,6 +78,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         raise HTTPException(status_code=400, detail="Nenhuma venda na importação.")
 
     importadas, repetidas, itens_total, sem_vinculo, sem_custo = 0, 0, 0, 0, 0
+    # Itens cujo custo saiu de uma ficha ainda em RASCUNHO.
+    de_rascunho = 0
     produzidos_na_hora, baixados = 0, 0
     custos_cache: dict[int, tuple] = {}
 
@@ -136,6 +138,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     sem_vinculo += 1
                 if custo is None:
                     sem_custo += 1
+                if origem.startswith("ficha_rascunho"):
+                    de_rascunho += 1
 
                 cur.execute(
                     """INSERT INTO venda_itens (id_venda, codigo_pdv, descricao_pdv, id_produto,
@@ -195,12 +199,17 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         "itens": itens_total,
         "itens_sem_vinculo": sem_vinculo,
         "itens_sem_custo": sem_custo,
+        "itens_ficha_rascunho": de_rascunho,
         "produzidos_na_hora": produzidos_na_hora,
         "itens_baixados": baixados,
         "message": f"{importadas} venda(s) importada(s)"
         + (f", {repetidas} já existiam" if repetidas else "")
         + (f", {baixados} item(ns) baixado(s) do estoque" if baixados else "")
-        + (f" ({produzidos_na_hora} produzido[s] na hora)" if produzidos_na_hora else ""),
+        + (f" ({produzidos_na_hora} produzido[s] na hora)" if produzidos_na_hora else "")
+        # ⚠️ Só quando ACONTECEU: "0 item com ficha em rascunho" em toda
+        # importação é ruído, e ruído esconde o dia em que o número não é zero.
+        + (f" — {de_rascunho} item(ns) custeado(s) por ficha em RASCUNHO"
+           if de_rascunho else ""),
     }
 
 
@@ -359,4 +368,11 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         "custo_teorico": custo,
         "itens_sem_custo": sum(1 for i in itens if i["custo_ficha_unitario"] is None),
         "itens_sem_vinculo": sum(1 for i in itens if i["id_produto"] is None),
+        # 🔑 **Custo que veio de ficha em RASCUNHO é um número, não um buraco —
+        # mas ele ainda pode mudar.** Sem esta contagem, o custo de uma receita
+        # não homologada seria indistinguível do de uma aprovada. É a mesma
+        # razão do `itens_sem_custo`: o número entra na conta, e quem lê precisa
+        # saber de onde ele veio.
+        "itens_ficha_rascunho": sum(
+            1 for i in itens if (i["origem_custo"] or "").startswith("ficha_rascunho")),
     }

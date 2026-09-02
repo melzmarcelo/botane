@@ -278,6 +278,30 @@ if v3:
     checar("e trocar a foto da versão anterior não apaga a dela",
            len(conteudo) > 100, len(conteudo))
 
+# 🔑 **TROCAR a foto não pode perdê-la — e essa era a janela real.** A gravação
+# acontecia em TRÊS transações: a nova imagem entrava e a antiga era APAGADA
+# numa; só depois, noutra, a ficha passava a apontar para a nova. Falhando a
+# última — a API reiniciada, a requisição abortada —, a antiga já não existia e
+# a ficha continuava apontando para ela: a foto sumia da tela e do PDF, sem
+# volta e sem nada explicando. Agora as três são uma transação só.
+#
+# O que se prova aqui é a INVARIANTE que ela garante: depois de qualquer troca,
+# o endereço que a ficha guarda RESPONDE — e o anterior deixa de existir, que é
+# o que mantém uma imagem por ficha em vez de uma por troca.
+_antes_troca = None
+for _vez, _cor in enumerate(((200, 40, 40), (40, 200, 40), (40, 40, 200))):
+    enviar_arquivo(f"/fichas/{v2}/foto", "troca.jpg", imagem_de_teste(_cor),
+                   "image/jpeg", token)
+    st, _f = chamar("GET", f"/fichas/{v2}", token=token)
+    _bytes = baixar_bytes(_f["foto_url"], token) if _f.get("foto_url") else b""
+    checar(f"trocar a foto ({_vez + 1}a vez) deixa o endereco respondendo",
+           len(_bytes) > 100, (_f.get("foto_url"), len(_bytes)))
+    if _antes_troca:
+        _st_velha, _ = chamar("GET", _antes_troca, token=token)
+        checar(f"e a imagem anterior ({_vez}a) sai junto, na mesma transacao",
+               _st_velha == 404, (_antes_troca, _st_velha))
+    _antes_troca = _f.get("foto_url")
+
 # 🔑 **A foto vai no PAPEL, que é onde a ficha serve.** Quem segue a receita
 # está de pé na cozinha, não na frente do monitor.
 pdf = baixar_bytes(f"/exportar/ficha/{v2}.pdf", token)

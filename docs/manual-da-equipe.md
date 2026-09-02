@@ -227,6 +227,10 @@ médio** de cada uma. Ali você acrescenta os cantos dos setores sem esperar a
 primeira transferência: escolha o local e clique em *Acrescentar*. Ele passa a
 existir vazio, já pronto para receber a mercadoria e para entrar na contagem.
 
+O cartão está **também na tela de cadastrar um produto novo** — é ali que se
+decide onde ele vai morar. As prateleiras escolhidas são gravadas junto com o
+produto, vazias.
+
 ⚠️ **Acrescentar um local não movimenta nada** — não é entrada, não vai para o
 razão e não muda saldo nenhum. É só o cadastro dizendo que o produto mora ali.
 
@@ -293,6 +297,22 @@ quanto rende.
   ⚠️ A foto é a única coisa que se troca mesmo com a ficha **publicada**: o
   prato só pode ser fotografado depois de feito. Ao criar uma versão nova, ela
   vem junto.
+
+**Ficha em rascunho já custeia a venda — mas o sistema avisa.** A receita
+escrita e ainda não homologada passou a valer para calcular o custo do prato
+vendido. Antes ele entrava com **custo zero**, e o resultado era margem alta
+demais e food cost bom demais, sem nada denunciando. Na tela da venda, o item
+aparece com a origem *"ficha técnica em RASCUNHO"* e um aviso acima dos números
+dizendo que aquele custo ainda pode mudar.
+
+⚠️ **A homologada manda, sempre.** O rascunho só responde quando não existe
+versão aprovada. Homologar não muda o custo das vendas já registradas: ele é
+**congelado** no momento da venda, e é assim que o CMV do mês passado não se
+reescreve sozinho.
+
+⚠️ **Produzir continua exigindo ficha homologada.** Ali a receita tira
+mercadoria do estoque de verdade — seguir uma versão não aprovada baixaria o
+insumo errado.
 
 ### Produção
 

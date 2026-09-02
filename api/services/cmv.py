@@ -551,21 +551,41 @@ def custo_teorico_do_produto(cur, id_produto: int, _nivel: int = 0,
         valor, origem, _detalhe = kits.custo(cur, id_produto, _nivel, id_unidade)
         return valor, origem
 
+    # 🔑 **A ficha em RASCUNHO também custeia a venda — e a origem DIZ isso.**
+    # Antes, prato com receita ainda não homologada entrava na venda com custo
+    # ZERO: o CMV teórico saía subestimado, a margem saía alta demais e o food
+    # cost bom demais, sem nada denunciando. A cozinha escreve a receita muito
+    # antes de alguém homologá-la, e o prato já está sendo vendido nesse meio
+    # tempo — que é exatamente quando o número importa.
+    # ⚠️ **A homologada vem PRIMEIRO, sempre.** O rascunho é a reserva, e só
+    # responde quando não há versão aprovada vigente.
+    # ⚠️ **O custo continua CONGELADO no item de venda.** O rascunho muda depois,
+    # e duas vendas do mesmo prato no mesmo dia podem ficar com custos
+    # diferentes — está certo: cada uma guarda o que se sabia na hora dela.
+    # ⚠️ E isto vale só para CUSTEAR. A PRODUÇÃO continua exigindo ficha
+    # homologada: ali a receita move mercadoria de verdade no razão, e seguir
+    # uma versão não aprovada baixaria estoque errado.
     cur.execute(
-        """SELECT f.id, f.rendimento_qtd
+        """SELECT f.id, f.rendimento_qtd, f.status
              FROM fichas_tecnicas f
-            WHERE f.id_produto = %s AND f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL""",
+            WHERE f.id_produto = %s AND f.vigente_ate IS NULL
+              AND f.status IN ('HOMOLOGADA', 'RASCUNHO')
+            ORDER BY (f.status = 'HOMOLOGADA') DESC, f.versao DESC, f.id DESC
+            LIMIT 1""",
         (id_produto,),
     )
     ficha = cur.fetchone()
     if ficha:
+        rascunho = ficha["status"] == "RASCUNHO"
         calculo = custos.custo_da_ficha(cur, ficha["id"], id_unidade=id_unidade)
         if calculo["completo"] or calculo["custo_total"] > 0:
             rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
-            return (calculo["custo_total"] / rendimento), (
-                "ficha" if calculo["completo"] else "ficha_parcial"
-            )
-        return None, "ficha_sem_custo"
+            if calculo["completo"]:
+                origem = "ficha_rascunho" if rascunho else "ficha"
+            else:
+                origem = "ficha_rascunho_parcial" if rascunho else "ficha_parcial"
+            return (calculo["custo_total"] / rendimento), origem
+        return None, "ficha_rascunho_sem_custo" if rascunho else "ficha_sem_custo"
 
     unitario, origem = custos.custo_do_insumo(cur, id_produto, id_unidade)
     return unitario, origem

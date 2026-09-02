@@ -100,6 +100,19 @@ export default function PaginaVenda() {
           desta venda.
         </Aviso>
       )}
+      {/* 🔑 **Custo vindo de ficha em RASCUNHO é um número de verdade — e ainda
+          pode mudar.** Antes o item entrava com custo ZERO e a margem saía alta
+          demais, sem nada denunciando; agora ele custeia, e o aviso diz que a
+          receita não passou por homologação. Sem o aviso, o custo de uma receita
+          em rascunho seria indistinguível do de uma aprovada. */}
+      {venda.itens_ficha_rascunho > 0 && (
+        <Aviso tipo="info">
+          {venda.itens_ficha_rascunho} item(ns) com custo vindo de{" "}
+          <b>ficha técnica em rascunho</b>: a receita ainda não foi homologada, e este
+          custo pode mudar quando ela for. O valor abaixo é o que se sabia no momento da
+          venda — ele fica congelado, mesmo depois da homologação.
+        </Aviso>
+      )}
       {venda.itens_sem_vinculo > 0 && (
         <Aviso tipo="info">
           {venda.itens_sem_vinculo} item(ns) não acharam produto no cadastro.{" "}
