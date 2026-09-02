@@ -763,14 +763,20 @@ export default function EditorFicha() {
             )}
           </div>
           {podeEditar ? (
-            <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex min-w-0 flex-col items-start gap-2">
+              {/* ⚠️ **O seletor de arquivo do navegador fica ESCONDIDO, e quem
+                  aparece é um botão da casa** — é o corte da tela de Empresa,
+                  e ele existe por dois motivos. O controle nativo tem a cara do
+                  sistema operacional (muda em cada máquina) e não se parece com
+                  nada mais do sistema: o dono olhou a tela e não achou o botão.
+                  ⚠️ O `id` fica no input, não no botão: é ele que o teste
+                  preenche, e `uploadFile` funciona em campo escondido. */}
               <input
                 ref={seletorFoto}
                 id="foto-da-ficha"
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                className="text-[13px]"
-                disabled={enviandoFoto}
+                className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (!f) return;
@@ -779,17 +785,27 @@ export default function EditorFicha() {
                   else void enviarFoto(f);
                 }}
               />
-              <p className="text-[12.5px] text-suave">
-                PNG, JPG ou WEBP, até 2 MB.
-                {nova && " Ela é enviada quando a ficha for criada."}
-                {/* ⚠️ A foto vale mesmo com a ficha publicada: o prato só
-                    existe para ser fotografado DEPOIS de pronto. */}
-                {travada && " A ficha está publicada, mas a foto ainda pode ser trocada."}
-              </p>
+              <button
+                type="button"
+                className="btn btn-secundario"
+                disabled={enviandoFoto}
+                onClick={() => seletorFoto.current?.click()}
+              >
+                {enviandoFoto
+                  ? "Enviando…"
+                  : fotoPendente || ficha?.foto_url
+                    ? "Trocar imagem"
+                    // ⚠️ Na ficha que ainda não existe é ESCOLHER, não enviar:
+                    // nada sobe até o "Criar ficha", e prometer envio aqui
+                    // faria a pessoa achar que já foi.
+                    : nova
+                      ? "Escolher imagem"
+                      : "Enviar imagem"}
+              </button>
               {(fotoPendente || ficha?.foto_url) && (
                 <button
                   type="button"
-                  className="link-acao-erro self-start"
+                  className="link-acao link-acao-erro"
                   onClick={() => {
                     if (fotoPendente) {
                       setFotoPendente(null);
@@ -799,9 +815,16 @@ export default function EditorFicha() {
                     }
                   }}
                 >
-                  {fotoPendente ? "tirar a imagem escolhida" : "remover foto"}
+                  {fotoPendente ? "tirar a imagem escolhida" : "remover"}
                 </button>
               )}
+              <span className="text-[12.5px] text-suave">
+                PNG, JPG ou WEBP, até 2 MB.
+                {nova && " Ela é enviada quando a ficha for criada."}
+                {/* ⚠️ A foto vale mesmo com a ficha publicada: o prato só
+                    existe para ser fotografado DEPOIS de pronto. */}
+                {travada && " A ficha está publicada, mas a foto ainda pode ser trocada."}
+              </span>
             </div>
           ) : (
             <p className="text-[13px] text-suave">

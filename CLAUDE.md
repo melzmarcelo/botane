@@ -266,6 +266,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   nenhuma" era afirmado na tela da ficha recém-criada — que agora nasce COM foto. O único lugar
   onde o vazio é garantido é a tela de criar, antes de escolher o arquivo. Mesma família do
   teste que descreve o estado do dia.
+  🔑 **O seletor de arquivo do NAVEGADOR não conta como botão** (01/09/2026, segunda correção
+  no mesmo dia). A primeira versão usava o `<input type="file">` cru: ele tem a cara do sistema
+  operacional, muda em cada máquina e não se parece com nada mais do sistema — o dono olhou a
+  tela e **não achou o botão**, com o campo bem ali. Agora é o corte da tela de Empresa: input
+  `hidden` e um `.btn btn-secundario` que o clica ("Escolher imagem" na ficha que ainda não
+  existe, "Enviar imagem" na que existe sem foto, "Trocar imagem" com foto).
+  ⚠️ **E o teste passava assim**, porque perguntava só se o input EXISTIA — e input escondido
+  responde "sim" do mesmo jeito. Passou a exigir o botão da casa e o campo fora da vista.
+  ⚠️ Casar por `button.btn` DENTRO do cartão, não por texto solto na página: o rótulo "remover"
+  ficou igual ao da empresa, e a checagem que procurava "remover foto" quebrou no instante em
+  que os dois passaram a falar igual.
   ⚠️ **A suíte apaga a foto ANTES de arquivar a ficha**: arquivar não apaga o arquivo (nem
   deveria — ficha arquivada continua respondendo pelo histórico), e sem isso cada rodada
   deixaria mais duas imagens na tabela `arquivos`.
@@ -2100,7 +2111,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (403, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (405, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto
