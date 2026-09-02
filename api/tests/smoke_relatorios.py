@@ -231,6 +231,111 @@ if tk:
 else:
     checar("usuário de cozinha disponível para o teste de permissão", False, r)
 
+print()
+print("8b. o setor do CMV vem de ONDE a mercadoria saiu")
+# 🔑 **O caso do açúcar, descrito pelo dono.** O mesmo insumo é consumido por
+# vários setores: ele entra no Estoque Central e de manhã Bar, Confeitaria,
+# Cozinha e Cafeteria levam um pacote cada. Enquanto o relatório agrupava por
+# `produtos.id_setor` — um setor só —, TODO o consumo de açúcar era atribuído a
+# um deles, e a resposta para "a confeitaria está pesando mais que o bar?" era
+# ficção. Quem sabe de onde a mercadoria saiu é o MOVIMENTO.
+st, r = chamar("POST", "/setores", {"nome": f"Bar rel {marca}"}, token=token)
+setor_bar = (r or {}).get("id")
+st, r = chamar("POST", "/setores", {"nome": f"Confeitaria rel {marca}"}, token=token)
+setor_conf = (r or {}).get("id")
+st, r = chamar("POST", "/locais", {"nome": f"Canto do bar {marca}", "tipo": "SECO",
+                                   "id_setor": setor_bar}, token=token)
+local_bar = (r or {}).get("id")
+st, r = chamar("POST", "/locais", {"nome": f"Canto da conf {marca}", "tipo": "SECO",
+                                   "id_setor": setor_conf}, token=token)
+local_conf = (r or {}).get("id")
+
+# ⚠️ O cadastro do produto diz BAR — e é justamente o que NÃO pode mandar
+# sozinho: o mesmo açúcar é consumido nos dois cantos.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ACUREL{marca}", "nome": f"Acucar do relatorio {marca}", "tipo": "INSUMO",
+    "um_estoque": "KG", "controla_estoque": True, "id_setor": setor_bar}, token=token)
+acucar_rel = (r or {}).get("id")
+
+for onde in (local_bar, local_conf):
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": acucar_rel, "quantidade": 10, "custo_unitario": 5,
+        "id_local": onde}, token=token)
+# Cada canto consome o seu: 2 KG no bar (10,00) e 6 KG na confeitaria (30,00).
+chamar("POST", "/estoque/saidas", {
+    "id_produto": acucar_rel, "quantidade": 2, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": local_bar}, token=token)
+chamar("POST", "/estoque/saidas", {
+    "id_produto": acucar_rel, "quantidade": 6, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": local_conf}, token=token)
+
+hoje_rel = date.today().isoformat()
+st, por_setor = chamar(
+    "GET", f"/cmv/por-grupo?agrupar=setor&inicio={hoje_rel}&fim={hoje_rel}", token=token)
+linhas_setor = {l["grupo"]: l for l in (por_setor or [])}
+nome_bar = f"Bar rel {marca}".upper()
+nome_conf = f"Confeitaria rel {marca}".upper()
+checar("o mesmo insumo aparece nos DOIS setores que o consumiram",
+       nome_bar in linhas_setor and nome_conf in linhas_setor, sorted(linhas_setor)[:8])
+# 🔑 O que prova a mudança: a confeitaria consumiu o TRIPLO do bar, e antes
+# esses R$ 30,00 iriam para o bar — o setor do cadastro.
+checar("e a confeitaria pesa o que ela de fato gastou",
+       perto(float(linhas_setor.get(nome_conf, {}).get("cmv", 0)), 30),
+       linhas_setor.get(nome_conf, {}).get("cmv"))
+checar("enquanto o bar pesa só o dele",
+       perto(float(linhas_setor.get(nome_bar, {}).get("cmv", 0)), 10),
+       linhas_setor.get(nome_bar, {}).get("cmv"))
+
+# 🔑 **A identidade continua fechando** — é ela que dá sentido ao corte por
+# grupo, e é o que este relatório arriscava ao mudar de grão.
+st, apur = chamar("GET", f"/cmv/apuracao?inicio={hoje_rel}&fim={hoje_rel}", token=token)
+soma_setores = sum(float(l["cmv"]) for l in (por_setor or []))
+folga = 0.01 * max(1, len(por_setor or []))
+checar("e a soma dos setores continua fechando com o CMV do periodo",
+       abs(soma_setores - float(apur.get("cmv_real", 0))) <= folga,
+       (soma_setores, apur.get("cmv_real")))
+
+# ⚠️ **Categoria e grupo NÃO mudaram um centavo**: são atributos do PRODUTO, e o
+# grão fino só é enrolado depois. Somar é associativo.
+st, por_cat = chamar(
+    "GET", f"/cmv/por-grupo?agrupar=categoria&inicio={hoje_rel}&fim={hoje_rel}", token=token)
+soma_cat = sum(float(l["cmv"]) for l in (por_cat or []))
+checar("a soma por CATEGORIA fecha com a mesma conta",
+       abs(soma_cat - soma_setores) <= folga, (soma_cat, soma_setores))
+
+# ⚠️ **A reserva é o setor do PRODUTO**: prateleira sem setor não vira "Sem
+# setor", senão toda casa que ainda não classificou os locais veria o relatorio
+# inteiro virar uma linha só.
+st, r = chamar("POST", "/locais", {"nome": f"Central rel {marca}", "tipo": "SECO"}, token=token)
+local_central = (r or {}).get("id")
+chamar("POST", "/estoque/entradas", {
+    "id_produto": acucar_rel, "quantidade": 4, "custo_unitario": 5,
+    "id_local": local_central}, token=token)
+chamar("POST", "/estoque/saidas", {
+    "id_produto": acucar_rel, "quantidade": 1, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": local_central}, token=token)
+st, por_setor2 = chamar(
+    "GET", f"/cmv/por-grupo?agrupar=setor&inicio={hoje_rel}&fim={hoje_rel}", token=token)
+linhas2 = {l["grupo"]: l for l in (por_setor2 or [])}
+# ⚠️ **A afirmação é a PROPRIEDADE, não um número que eu calculei de cabeça.**
+# A primeira versão esperava 11,00 somando só a saída de 1 KG — e esqueceu que a
+# entrada de 4 KG no central também é COMPRA, então o CMV daquele pedaço é
+# 20 − 15 = 5, não 5 − 4. O que importa provar é que o movimento do central
+# ENGORDOU a linha do setor do produto em vez de criar uma linha "Sem setor".
+cmv_bar_antes = float(linhas_setor.get(nome_bar, {}).get("cmv", 0))
+cmv_bar_depois = float(linhas2.get(nome_bar, {}).get("cmv", 0))
+checar("saida de prateleira SEM setor cai no setor do produto",
+       nome_bar in linhas2 and cmv_bar_depois > cmv_bar_antes,
+       (cmv_bar_antes, cmv_bar_depois))
+checar("e nao inventa uma linha 'Sem setor' para ela",
+       float(linhas2.get("Sem setor", {}).get("cmv", 0))
+       == float(linhas_setor.get("Sem setor", {}).get("cmv", 0)),
+       (linhas_setor.get("Sem setor", {}).get("cmv"),
+        linhas2.get("Sem setor", {}).get("cmv")))
+
+chamar("DELETE", f"/produtos/{acucar_rel}", token=token)
+
+
 print("9. limpeza")
 for p in list(produtos.values()) + [sem_setor.get("id"), insumo.get("id"), unico.get("id")]:
     chamar("DELETE", f"/produtos/{p}", token=token)

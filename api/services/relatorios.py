@@ -30,6 +30,26 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
     classificação é justamente o que ninguém olha, e some da conta se a junção
     for interna.
 
+    🔑 **O SETOR vem do LOCAL do movimento, não do cadastro do produto**
+    (01/09/2026). O processo da casa põe o mesmo insumo em vários setores: o
+    açúcar entra no Estoque Central e de manhã Bar, Confeitaria, Cozinha e
+    Cafeteria levam um pacote cada. Enquanto isto saía de `produtos.id_setor` —
+    um setor só —, **todo o consumo de açúcar era atribuído a um deles**, e a
+    resposta para "a confeitaria está pesando mais que o bar?" era ficção. Quem
+    sabe de onde a mercadoria saiu é o MOVIMENTO, e ele guarda `id_local` desde
+    sempre; o que faltava era o local dizer a que setor pertence (migração 051).
+
+    ⚠️ **A reserva é o setor do PRODUTO**, não "Sem setor". O Estoque Central
+    não pertence a setor nenhum, e sem a reserva toda casa que ainda não
+    classificou as prateleiras veria o relatório inteiro virar uma linha só.
+    Assim, quem não configurou nada continua vendo exatamente o que via.
+
+    🔑 **O grão da conta virou `(produto, local)`, e é isso que preserva a
+    identidade.** Somar é associativo: agregar no grão fino e enrolar depois
+    pelo grupo dá exatamente os mesmos totais que agregar por produto — então
+    `categoria` e `grupo`, que são atributos do PRODUTO, não mudam um centavo.
+    Só o setor passa a ler outra coluna.
+
     ⚠️ `agrupar="grupo"` usa os **grupos do CMV** que a casa montou por tipo de
     produto (`cmv_grupos` + `cmv_grupo_tipos`), que é como o dono separa o que
     não é comida — detergente e marmita entram no custo pela mesma porta dos
@@ -39,7 +59,10 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         raise ValueError("agrupar deve ser 'setor', 'categoria' ou 'grupo'")
 
     junta = {
-        "setor": "LEFT JOIN setores g ON g.id = p.id_setor",
+        # ⚠️ `coalesce(l.id_setor, p.id_setor)`: o setor de ONDE saiu, e o do
+        # cadastro como reserva para a prateleira que não declarou nenhum.
+        "setor": """LEFT JOIN locais_estoque l ON l.id = k.id_local
+                    LEFT JOIN setores g ON g.id = coalesce(l.id_setor, p.id_setor)""",
         "categoria": "LEFT JOIN categorias g ON g.id = p.id_categoria",
         # ⚠️ O grupo do CMV é por TIPO de produto, não por uma coluna do
         # produto: quem diz que EMBALAGEM e MATERIAL_LIMPEZA andam juntos é a
@@ -57,24 +80,24 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         f"""
         WITH inicial AS (
             SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, saldo_apos * custo_medio_apos AS valor
+                   id_produto, id_local, saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
              WHERE id_unidade = %s AND data_movimento < %s
              ORDER BY id_produto, id_local, id DESC
         ),
         final AS (
             SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, saldo_apos * custo_medio_apos AS valor
+                   id_produto, id_local, saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
              WHERE id_unidade = %s AND data_movimento < %s
              ORDER BY id_produto, id_local, id DESC
         ),
         compras AS (
-            SELECT id_produto, sum(abs(custo_total)) AS valor
+            SELECT id_produto, id_local, sum(abs(custo_total)) AS valor
               FROM estoque_movimentos
              WHERE id_unidade = %s AND tipo = ANY(%s)
                AND data_movimento >= %s AND data_movimento < %s
-             GROUP BY id_produto
+             GROUP BY 1, 2
         ),
         -- 🔑 **A remessa entre lojas conta como compra aqui também.** A
         -- apuração passou a somá-la (entrada) e subtraí-la (saída) — sem a
@@ -84,7 +107,7 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         -- ⚠️ Só o que ATRAVESSA a fronteira: a transferência entre dois locais
         -- da mesma loja continua se anulando sozinha.
         transferencias AS (
-            SELECT m.id_produto,
+            SELECT m.id_produto, m.id_local,
                    sum(CASE WHEN m.tipo = 'TRANSFERENCIA_ENTRADA' THEN m.custo_total
                             ELSE -m.custo_total END) AS valor
               FROM estoque_movimentos m
@@ -94,14 +117,25 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
                AND m.origem_tipo = 'TRANSFERENCIA'
                AND o.id_unidade <> m.id_unidade
                AND m.data_movimento >= %s AND m.data_movimento < %s
-             GROUP BY m.id_produto
+             GROUP BY 1, 2
         ),
         perdas AS (
-            SELECT id_produto, sum(abs(custo_total)) AS valor
+            SELECT id_produto, id_local, sum(abs(custo_total)) AS valor
               FROM estoque_movimentos
              WHERE id_unidade = %s AND tipo = 'SAIDA_PERDA'
                AND data_movimento >= %s AND data_movimento < %s
-             GROUP BY id_produto
+             GROUP BY 1, 2
+        ),
+        -- ⚠️ **O grão da conta é (produto, LOCAL).** Antes era só o produto, e
+        -- era por isso que o setor tinha de vir do cadastro. Somar é
+        -- associativo, então o total por categoria e por grupo é idêntico ao
+        -- de antes — só o setor passa a ler outra coluna.
+        chaves AS (
+            SELECT id_produto, id_local FROM inicial
+            UNION SELECT id_produto, id_local FROM final
+            UNION SELECT id_produto, id_local FROM compras
+            UNION SELECT id_produto, id_local FROM transferencias
+            UNION SELECT id_produto, id_local FROM perdas
         )
         SELECT coalesce(g.nome, %s) AS grupo,
                coalesce(sum(i.valor), 0) AS estoque_inicial,
@@ -117,15 +151,19 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
                count(DISTINCT p.id) FILTER (
                    WHERE coalesce(i.valor, 0) <> 0 OR coalesce(c.valor, 0) <> 0
                       OR coalesce(f.valor, 0) <> 0) AS produtos
-          FROM produtos p
+          FROM chaves k
+          JOIN produtos p ON p.id = k.id_produto
           {junta}
-          LEFT JOIN (SELECT id_produto, sum(valor) AS valor FROM inicial GROUP BY 1) i
-                 ON i.id_produto = p.id
-          LEFT JOIN (SELECT id_produto, sum(valor) AS valor FROM final GROUP BY 1) f
-                 ON f.id_produto = p.id
-          LEFT JOIN compras c ON c.id_produto = p.id
-          LEFT JOIN transferencias t ON t.id_produto = p.id
-          LEFT JOIN perdas pd ON pd.id_produto = p.id
+          LEFT JOIN inicial i
+                 ON i.id_produto = k.id_produto AND i.id_local = k.id_local
+          LEFT JOIN final f
+                 ON f.id_produto = k.id_produto AND f.id_local = k.id_local
+          LEFT JOIN compras c
+                 ON c.id_produto = k.id_produto AND c.id_local = k.id_local
+          LEFT JOIN transferencias t
+                 ON t.id_produto = k.id_produto AND t.id_local = k.id_local
+          LEFT JOIN perdas pd
+                 ON pd.id_produto = k.id_produto AND pd.id_local = k.id_local
          GROUP BY 1
         -- ⚠️ A remessa entra no HAVING: um grupo cujo único movimento no período
         -- foi uma transferência entre lojas tem CMV, e sumiria da lista.

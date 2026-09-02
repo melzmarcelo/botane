@@ -165,7 +165,14 @@ async function irPara(pagina, url) {
       await pagina.goto(url, { waitUntil: "networkidle2" });
       return;
     } catch (e) {
-      if (!/detached|Target closed|Navigating frame/i.test(String(e)) || tentativa === 2) throw e;
+      // ⚠️ **`ProtocolError: … timed out` na navegação também é transitório**, e
+      // era re-lançado: derrubou a rodada inteira num `goto` comum, depois de
+      // 280 checagens verdes. É a mesma família do "detached Frame" que este
+      // laço já trata — navegação que não termina limpa. Três tentativas
+      // continuam sendo o teto: um travamento de verdade ainda estoura, só que
+      // depois de o sistema ter tido chance.
+      if (!/detached|Target closed|Navigating frame|ProtocolError|timed out/i.test(String(e))
+          || tentativa === 2) throw e;
       await new Promise((r) => setTimeout(r, 800));
     }
   }
@@ -2743,7 +2750,16 @@ try {
   // O administrador gera o link pela tela de Usuários.
   await entrar(p, ADMIN);
   await irPara(p, `${WEB}/usuarios`);
-  await new Promise((r) => setTimeout(r, 1200));
+  // ⚠️ **A lista de usuários PAGINA, e o desta rodada cai fora da primeira
+  // página.** A base acumula um usuário por rodada — usuário com histórico
+  // vira inativo em vez de sumir —, e a checagem acusava a tela de não oferecer
+  // o link numa linha que ela nem mostrava. Aumentar a página é o que uma
+  // pessoa faria, e é o que o rodapé oferece. Mesma correção da lista de apoio.
+  await p.select('select[aria-label="Registros por página"]', "100").catch(() => {});
+  await p.waitForFunction(
+    (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
+    `Tela Senha ${marcaSenha}`,
+  ).catch(() => {});
   const clicou = await p.evaluate((nome) => {
     const linha = [...document.querySelectorAll("tr")].find((t) => t.innerText.includes(nome));
     const b = linha && [...linha.querySelectorAll("button")]

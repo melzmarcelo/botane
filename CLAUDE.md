@@ -1626,11 +1626,23 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   e empresa. Um seletor, não duas caixinhas: duas fariam quatro combinações, duas delas sem
   sentido. ⚠️ O corte por setor ali é pelo setor do **LOCAL**, não pelo do produto — a pergunta
   é "o que a Confeitaria tem na mão", e quem responde é onde a mercadoria está.
-  ⚠️ **O CMV por setor continua saindo de `produtos.id_setor`, e isso é uma DÍVIDA conhecida.**
-  Com açúcar em quatro setores, todo o consumo de açúcar é atribuído a um só. A ponte para
-  consertar já existe (`locais_estoque.id_setor` + `estoque_movimentos.id_local`), mas trocar
-  isso reescreve `relatorios.cmv_por_grupo`, cuja identidade — *a soma dos grupos fecha com o
-  CMV do período* — a bateria cobra. É entrega própria; ver `docs/o-que-falta.md`.
+  🔑 **E o CMV por setor passou a sair do LOCAL do movimento** (02/09/2026), fechando o
+  desenho. Enquanto ele agrupava por `produtos.id_setor` — um setor só —, **todo o consumo de
+  açúcar era atribuído a um deles**, e a resposta para *"a confeitaria está pesando mais que o
+  bar?"* era ficção. Quem sabe de onde a mercadoria saiu é o MOVIMENTO, e ele guarda `id_local`
+  desde sempre.
+  🔑 **O grão da conta virou `(produto, LOCAL)`, e é isso que preserva a identidade.** Somar é
+  associativo: agregar no grão fino e enrolar depois pelo grupo dá exatamente os mesmos totais
+  que agregar por produto — então `categoria` e `grupo`, que são atributos do PRODUTO, **não
+  mudam um centavo**, e *a soma dos grupos fecha com o CMV do período* continua valendo. Era o
+  risco inteiro da mudança, e a suíte cobra as duas coisas.
+  ⚠️ **A reserva é o setor do PRODUTO, não "Sem setor"**: o Estoque Central não pertence a setor
+  nenhum, e sem a reserva toda casa que ainda não classificou as prateleiras veria o relatório
+  inteiro virar uma linha só. Quem não configurou nada continua vendo exatamente o que via.
+  ⚠️ **A checagem afirma a PROPRIEDADE, não um número calculado de cabeça.** A primeira versão
+  esperava R$ 11,00 da saída do central e esqueceu que a ENTRADA de lá também é compra — o CMV
+  daquele pedaço é `20 − 15 = 5`. O que importa provar é que o movimento engordou a linha do
+  setor do produto em vez de criar uma linha "Sem setor".
 - ⚠️ **`produtos.id_local_padrao` é UM local, e local pertence a UMA loja** (31/08/2026). A
   produção usava esse local direto, com o `id_unidade` de quem estava produzindo: a filial que
   fizesse um molho cujo local padrão é a câmara da MATRIZ gravaria o movimento com a loja da
@@ -2320,10 +2332,10 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.672 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.679 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (50), `smoke_estoque.py` (155), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
-  `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
+  `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
   `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (155), `smoke_vendas.py` (39), `smoke_vinculo.py` (84),
@@ -2347,6 +2359,15 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   inativo" — e o POST não era conferido, então a agenda ficava vazia e a falha aparecia **três
   checagens adiante**, dizendo que a agenda não abre a folha. Duas correções, e as duas valem
   como regra: **filtrar pelo produto ATIVO** e **conferir o POST que monta a precondição**.
+- 🔑 **`irPara` re-lançava `ProtocolError: … timed out` e derrubava a rodada inteira** num
+  `goto` comum, depois de 280 checagens verdes. O laço já tratava "detached Frame" — é a mesma
+  família: navegação que não termina limpa. Três tentativas continuam sendo o teto, então um
+  travamento de verdade ainda estoura, só que depois de o sistema ter tido chance. **Uma
+  exceção custa as trezentas checagens seguintes; um `checar` que falha custa uma linha.**
+- 🔑 **A lista de USUÁRIOS também pagina** — a base acumula um por rodada, porque usuário com
+  histórico vira inativo em vez de sumir, e a checagem do link de recuperação acusava a tela de
+  não oferecer o botão numa linha que ela nem mostrava. Mesma correção da lista de apoio:
+  aumentar a página para 100 antes de procurar, que é o que uma pessoa faria.
 - 🔑 **A lista das TABELAS DE APOIO pagina, e o registro da rodada cai fora da primeira
   página.** "Poucos por natureza" era suposição — a base tem dezenas de setores, e um nome que
   começa com T fica na página 2. A checagem acusava a tela de não oferecer "editar" numa linha

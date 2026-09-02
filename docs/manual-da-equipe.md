@@ -221,6 +221,11 @@ Em **Estoque → Saldos**, o seletor **Ver por** troca a pergunta:
   setor dela embaixo. É o que quem compra precisa.
 - **produto, todas as lojas** — só com mais de uma loja.
 
+⚠️ **O CMV por setor passou a somar pela prateleira de onde a mercadoria saiu**,
+não pelo setor do cadastro do produto. Com o açúcar em quatro cantos, antes todo
+o consumo dele ia para um setor só. Saída do Estoque Central — que não pertence
+a setor nenhum — continua caindo no setor do produto.
+
 ---
 
 ### Os nomes são gravados em MAIÚSCULAS
