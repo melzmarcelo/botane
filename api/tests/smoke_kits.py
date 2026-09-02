@@ -197,7 +197,12 @@ st, venda = chamar("POST", "/vendas/importar", {
 }, token=token)
 checar("a venda do combo importa", st in (200, 201), venda)
 
-st, itens = chamar("GET", f"/vendas?inicio={hoje}&fim={hoje}&limite=50", token=token)
+# ⚠️ **Busca no SERVIDOR, não fatiar a página.** Isto pedia as 50 primeiras
+# vendas do dia e procurava a sua no meio — e caiu no dia em que a base ganhou
+# 83 vendas reais do PDV: a do teste saiu do corte, e a checagem acusava a venda
+# de não ter sido importada. É a lição do "relatório cortado no topo esconde o
+# registro que se procura", agora pela lista de vendas.
+st, itens = chamar("GET", f"/vendas?inicio={hoje}&fim={hoje}&busca=KIT{marca}", token=token)
 nossa = next((v for v in (itens or []) if v.get("documento") == f"KIT{marca}"), None)
 checar("a venda aparece", nossa is not None, [v.get("documento") for v in (itens or [])[:5]])
 

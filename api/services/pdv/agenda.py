@@ -30,6 +30,7 @@ from models.cmv import ImportarVendasRequest, VendaImportar
 from seguranca import carregar_contexto
 from services import agenda_integracao as regra
 from services import segredos
+from services.pdv import cardapio
 from services.pdv import importador
 from services.pdv.cliente import ClientePdv, ErroPdv
 
@@ -110,8 +111,27 @@ def rodar_uma(cur, linha: dict) -> dict:
         cliente = ClientePdv(cred.get("username"), cred.get("password"),
                              cred.get("client_id"), cred.get("client_secret"), linha["modo"])
 
-        r = importador.sincronizar(cur, cliente, linha["id_unidade"],
-                                   _filiais(cur, cliente, cred),
+        filiais = _filiais(cur, cliente, cred)
+
+        # 🔑 **O cardápio entra UMA VEZ POR DIA, não a cada disparo.** A agenda
+        # pode ser HORÁRIA, e ler os 630 itens 24 vezes por dia para achar um
+        # prato novo é caro sem ser mais útil: prato novo não nasce de hora em
+        # hora. O botão "Buscar no PDV" sincroniza sempre — lá é alguém pedindo.
+        # ⚠️ **Só criar e desativar**, nunca alinhar: rodar o alinhamento
+        # sozinho desfaria calada a correção de quem arrumou a categoria de um
+        # prato à mão, que é exatamente o que "ser manual" protegia.
+        # ⚠️ **Falhar aqui não impede a busca de vendas**, e a ordem é essa de
+        # propósito: venda não importada é receita faltando no CMV; cadastro não
+        # sincronizado é um item que fica na fila mais um dia.
+        if not cardapio.cadastros_de_hoje(cur, linha["id_unidade"]):
+            try:
+                resultado["cadastros"] = cardapio.sincronizar_cadastros(
+                    cur, cliente, ctx.id_usuario, filiais.split(",")[0].strip(),
+                    linha["id_unidade"])
+            except ErroPdv as e:
+                resultado["cadastros"] = {"erro": e.mensagem}
+
+        r = importador.sincronizar(cur, cliente, linha["id_unidade"], filiais,
                                    dias=linha["agenda_janela_dias"], desde=None)
         vendas = r.pop("vendas")
         gravado = {"importadas": 0, "repetidas": 0}
@@ -119,7 +139,7 @@ def rodar_uma(cur, linha: dict) -> dict:
             gravado = rota_vendas.importar(
                 ImportarVendasRequest(vendas=[VendaImportar(**v) for v in vendas]), ctx
             )
-        resultado = {**r, **gravado}
+        resultado = {**resultado, **r, **gravado}
 
         cur.execute(
             """UPDATE integracoes

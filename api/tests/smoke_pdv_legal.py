@@ -756,6 +756,44 @@ checar("o codigo do PDV passou para o cadastro da casa",
        depois and depois["id_produto"] == identico, depois)
 
 
+print()
+print("8g2. a busca de vendas traz os cadastros junto — criar e desativar, so isso")
+# 🔑 **Pedido do dono (01/09/2026): prato novo no PDV nasce aqui, prato desligado
+# la e desativado aqui, e isso roda junto com a busca de vendas.** O que NAO roda
+# junto e o ALINHAMENTO (nome curto, categoria, setor, unidade, NCM, CEST, EAN,
+# preco): ele continua sendo o botao "Importar cardapio". Rodar o alinhamento
+# sozinho, de hora em hora, desfaria calada a correcao de quem arrumou a
+# categoria de um prato a mao — e era isso que "ser manual" protegia.
+sys.path.insert(0, ".")
+from database import get_cursor as _cur_pdv        # noqa: E402
+from services.pdv import cardapio as _cardapio     # noqa: E402
+
+st, achados = chamar("GET", "/produtos?busca=PDV-&incluir_inativos=true&limite=5", token=token)
+alvo_p = next((p for p in (achados or []) if str(p.get("codigo", "")).startswith("PDV-")), None)
+st, cats = chamar("GET", "/categorias", token=token)
+outra = next((c for c in (cats or []) if alvo_p and c["id"] != alvo_p.get("id_categoria")), None)
+if alvo_p and outra:
+    chamar("PUT", f"/produtos/{alvo_p['id']}", {"id_categoria": outra["id"]}, token=token)
+    with _cur_pdv() as _c:
+        _c.execute("UPDATE integracoes SET cardapio_em = NULL WHERE servico = 'PDV_LEGAL'")
+        checar("antes de sincronizar, o dia ainda nao foi marcado",
+               _cardapio.cadastros_de_hoje(_c, 1) is False, True)
+    st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    checar("a busca de vendas responde com o bloco de cadastros",
+           st == 200 and "cadastros" in (r or {}), (st, list(r or {})))
+    checar("e nenhum item ficou sem vinculo, porque o cardapio veio ANTES",
+           (r or {}).get("cadastros", {}).get("sem_vinculo") == 0,
+           (r or {}).get("cadastros"))
+    st, depois_p = chamar("GET", f"/produtos/{alvo_p['id']}", token=token)
+    # 🔑 A afirmacao central: a correcao feita A MAO sobrevive.
+    checar("e a categoria corrigida a mao NAO foi desfeita",
+           depois_p.get("id_categoria") == outra["id"],
+           (depois_p.get("id_categoria"), outra["id"]))
+    with _cur_pdv() as _c:
+        checar("o dia fica marcado, e a agenda nao rele o cardapio a cada hora",
+               _cardapio.cadastros_de_hoje(_c, 1) is True, False)
+
+
 print("\n8h. reconciliar liga as vendas que estavam pendentes")
 st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
 st, r = chamar("POST", "/pdv/reconciliar", token=token)

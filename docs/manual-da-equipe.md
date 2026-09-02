@@ -125,6 +125,24 @@ imediato: alguém carrega a caixa e pronto.
 
 ---
 
+### Prato novo no PDV aparece aqui sozinho
+
+Toda busca de vendas traz os cadastros junto: o prato que nasceu no cardápio do
+PDV é criado aqui como **rascunho**, e o que foi desligado lá fica **inativo**
+aqui. Não precisa fazer nada — mas o prato novo entra sem ficha, e prato sem
+ficha não tem custo. Ele aparece na fila de "produzido sem ficha".
+
+⚠️ **O que a busca NÃO faz é alinhar o resto.** Nome curto, categoria, setor,
+unidade e preço continuam como estão aqui — se você corrigiu a categoria de um
+prato à mão, ela fica. Para trazer tudo do PDV de uma vez, use o botão
+**Importar cardápio**, em Integrações: aí sim ele sobrescreve.
+
+⚠️ Produto que apenas **some** da lista do PDV não é desativado aqui. Só o que
+vier marcado como desligado. A lista do PDV já veio incompleta sem avisar, e
+desativar por ausência apagaria dezenas de pratos de uma vez.
+
+---
+
 ### O mesmo produto com vários códigos
 
 O catálogo do Omie cria **um cadastro por código** — e o mesmo abacate aparece uma

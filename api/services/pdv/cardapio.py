@@ -27,6 +27,8 @@ nasciam sem preço nenhum, com o número a uma chamada de distância.
 
 import re
 
+from datetime import date
+
 from services.pdv import vinculo
 from services.pdv.cliente import ClientePdv, ErroPdv
 
@@ -362,8 +364,22 @@ def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int,
     return precos.gravar(cur, id_produto, preco, id_usuario, id_unidade)
 
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
-             criar_ausentes: bool = True, id_unidade: int = 1) -> dict:
+             criar_ausentes: bool = True, id_unidade: int = 1,
+             alinhar: bool = True) -> dict:
     """Traz o cardápio e liga o que o CÓDIGO manda ligar.
+
+    🔑 **`alinhar` separa as duas coisas que esta função faz** (01/09/2026,
+    decisão do dono). Com ele LIGADO — o botão "Importar cardápio" — ela alinha:
+    traz nome curto, categoria, setor, unidade, NCM, CEST, EAN, situação e
+    preço, sobrescrevendo o que está aqui. Com ele DESLIGADO, ela faz só o que
+    ninguém discute: **cria o prato que nasceu no PDV e desativa o que foi
+    desligado lá**.
+
+    ⚠️ **É a versão desligada que roda junto com a busca de vendas.** Rodar o
+    alinhamento sozinho, de hora em hora, desfaria calada a correção de quem
+    arrumou a categoria de um prato à mão — e era exatamente isso que "ser
+    manual" protegia. Separar em duas o que era uma coisa só é o que deixa a
+    sincronização automática existir sem reverter aquela decisão.
 
     ⚠️ **Duas portas, e nenhuma delas é palpite**: o código do PDV
     (`vinculo.por_codigo`, que olha o campo do produto e os apelidos) e o **EAN**,
@@ -394,7 +410,10 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     # `reconciliar` e nunca esta. Então "ser dono do preço" quer dizer *o preço
     # daqui é o que SAI* — e alinhar os dois é um clique de alguém, não um
     # efeito colateral.
-    tabela = precos(cliente, filial)
+    # ⚠️ Só no alinhamento: preço é UMA CHAMADA a mais (`tabelapreco/get`), e na
+    # sincronização automática ele nem seria gravado — pedir seria gastar
+    # requisição para jogar fora.
+    tabela = precos(cliente, filial) if alinhar else {}
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
@@ -492,6 +511,13 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             campos_do_item = dict(campos)
             if not do_omie and item["nome_longo"]:
                 campos_do_item["nome"] = item["nome_longo"]
+            if not alinhar:
+                # ⚠️ **Só a SITUAÇÃO.** É o único campo que a sincronização
+                # automática tem autoridade para mexer: produto desligado no
+                # cardápio tem de sumir das listas daqui, e ninguém corrige
+                # `ativo` à mão esperando que ele fique. Todo o resto é
+                # alinhamento, e alinhamento é um clique de alguém.
+                campos_do_item = {"ativo": item["ativo"]}
             mudou, conflitos = _atualizar(cur, id_produto, campos_do_item)
             resumo["completados"] += 1 if mudou else 0
             resumo["ean_de_outro"] += conflitos
@@ -505,6 +531,51 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
             resumo["precos"] += 1
 
     return resumo
+
+
+def cadastros_de_hoje(cur, id_unidade: int) -> bool:
+    """Os cadastros do cardápio já foram sincronizados hoje nesta loja?
+
+    ⚠️ **Relógio PRÓPRIO** (`integracoes.cardapio_em`), e não
+    `ultima_sincronizacao`: aquela é o relógio das VENDAS e avança a cada busca.
+    É a mesma lição do `agenda_rodou_em`.
+    """
+    cur.execute(
+        """SELECT cardapio_em FROM integracoes
+            WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    quando = (linha or {}).get("cardapio_em")
+    return bool(quando and quando.date() == date.today())
+
+
+def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str,
+                          id_unidade: int) -> dict:
+    """Cria o prato que nasceu no PDV, desativa o que foi desligado lá — e nada mais.
+
+    🔑 **É esta que roda junto com a busca de vendas**, não a `importar` inteira.
+    O alinhamento (nome curto, categoria, setor, unidade, NCM, CEST, EAN, preço)
+    continua sendo o botão "Importar cardápio": rodá-lo sozinho, de hora em hora,
+    desfaria calada a correção de quem arrumou a categoria de um prato à mão.
+
+    ⚠️ **Nada é desativado por AUSÊNCIA.** Só o item que vier com a situação
+    desligada. Sumir da lista é ambíguo: a própria API do PDV já devolveu 570 de
+    630 itens numa rota sem avisar que faltavam sessenta, e uma leitura truncada
+    desativaria dezenas de pratos de uma vez — derrubando o vínculo das vendas
+    que chegassem depois.
+    """
+    r = importar(cur, cliente, id_usuario, filial, criar_ausentes=True,
+                 id_unidade=id_unidade, alinhar=False)
+    cur.execute(
+        """UPDATE integracoes SET cardapio_em = now()
+            WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""",
+        (id_unidade,),
+    )
+    return {"itens": r["itens"], "criados": r["criados"],
+            # `completados` aqui só pode ser mudança de situação: é o único
+            # campo que o modo desligado escreve.
+            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"]}
 
 
 def reconciliar(cur, id_unidade: int) -> dict:

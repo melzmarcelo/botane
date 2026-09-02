@@ -313,6 +313,22 @@ def sincronizar(
                 )
             filiais = codigos[0]
 
+        # 🔑 **O cadastro vem ANTES da venda, e é por isso que a ordem importa.**
+        # Prato criado no PDV hoje e vendido hoje: se a venda entrasse primeiro,
+        # o item ficaria sem vínculo e sem custo, esperando alguém percorrer a
+        # fila. Sincronizando antes, ele já existe quando a venda chega.
+        # ⚠️ **Só criar e desativar**, nunca alinhar — ver `sincronizar_cadastros`.
+        # ⚠️ **Falhar aqui NÃO impede a busca de vendas.** Venda não importada é
+        # receita faltando no CMV; cadastro não sincronizado é um item que fica
+        # na fila mais um dia. Derrubar a segunda por causa da primeira trocaria
+        # um problema pequeno por um grande.
+        cadastros: dict = {}
+        try:
+            cadastros = cardapio.sincronizar_cadastros(
+                cur, cliente, ctx.id_usuario, filiais.split(",")[0].strip(), id_unidade)
+        except ErroPdv as e:
+            cadastros = {"erro": e.mensagem}
+
         try:
             r = importador.sincronizar(cur, cliente, id_unidade, filiais, dias, desde)
         except ErroPdv as e:
@@ -354,13 +370,22 @@ def sincronizar(
                             id_unidade=id_unidade)
 
     return {
-        **r, **gravado,
+        **r, **gravado, "cadastros": cadastros,
         # ⚠️ O MODO viaja na resposta, como na busca do Omie. Sem ele, quem está
         # em simulado importa vendas de demonstração e não tem como saber — os
         # números aparecem no CMV como se fossem da casa.
         "modo": cliente.modo,
+        # ⚠️ O cadastro entra na frase só quando ACONTECEU alguma coisa: dizer
+        # "0 produto novo" em toda busca é ruído, e ruído esconde o dia em que o
+        # número não é zero.
         "message": (f"{gravado.get('importadas', 0)} venda(s) nova(s) de {r['cupons']} "
-                    f"cupom(ns) — {r['janela']}"),
+                    f"cupom(ns) — {r['janela']}"
+                    + (f". {cadastros['criados']} produto(s) novo(s) do PDV"
+                       if cadastros.get("criados") else "")
+                    + (f", {cadastros['situacao_mudou']} com a situação alterada"
+                       if cadastros.get("situacao_mudou") else "")
+                    + (f". Cadastros não sincronizados: {cadastros['erro']}"
+                       if cadastros.get("erro") else "")),
     }
 
 

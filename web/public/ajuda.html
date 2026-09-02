@@ -924,6 +924,34 @@
         <em>Reconciliar</em> passa a cascata de novo quando o cadastro fica pronto.
       </p>
 
+      <h3>Os cadastros vêm junto com as vendas</h3>
+      <p>
+        Toda busca de vendas sincroniza o cardápio antes: o prato que nasceu no PDV é criado
+        aqui como <strong>rascunho</strong>, e o que foi desligado lá fica <strong>inativo</strong>
+        aqui. A ordem importa — prato criado hoje e vendido hoje entraria como item sem vínculo
+        e sem custo se a venda viesse primeiro.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Criar e desativar, não alinhar</p>
+        <p>
+          A sincronização automática mexe só na <em>situação</em>. Nome curto, categoria, setor,
+          unidade, NCM e preço continuam como estão aqui: rodar o alinhamento sozinho, de hora
+          em hora, desfaria calada a correção de quem arrumou a categoria de um prato à mão.
+          Alinhar tudo é o botão <strong>Importar cardápio</strong> — um clique de alguém.
+        </p>
+        <p>
+          Na agenda automática o cardápio é lido <strong>uma vez por dia</strong>: prato novo não
+          nasce de hora em hora, e ler 630 itens 24 vezes por dia é caro sem ser mais útil. O
+          botão sincroniza sempre.
+        </p>
+      </div>
+      <p>
+        <strong>Produto que apenas some da lista não é desativado.</strong> Só o que vier
+        marcado como desligado. A API do PDV já devolveu 570 de 630 itens numa rota sem avisar
+        que faltavam sessenta — desativar por ausência apagaria dezenas de pratos de uma vez, e
+        as vendas que chegassem depois ficariam sem vínculo.
+      </p>
+
       <h3>O mesmo produto com vários códigos</h3>
       <p>
         O catálogo do Omie cria <strong>um cadastro por código</strong>, e o mesmo abacate

@@ -1686,6 +1686,38 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   comprou a R$ 40 e a outra a R$ 52 passa a valer R$ 45,30 nas duas, contaminando ficha, CMV
   teórico, margem e food cost. É silencioso, e o custo do item de venda é CONGELADO: o erro
   fica gravado. Também não há transferência entre lojas, e a loja nova nasce sem local.
+- 🔑 **A busca de vendas passou a trazer os CADASTROS junto** (migração 048,
+  `cardapio.sincronizar_cadastros`, 01/09/2026, pedido do dono). Prato que nasce no PDV é
+  cadastrado aqui; prato desligado lá é desativado aqui. E o cadastro vem **antes** da venda,
+  de propósito: prato criado hoje e vendido hoje entraria como item sem vínculo e sem custo,
+  esperando alguém percorrer a fila.
+  🔑 **Mas só CRIAR e DESATIVAR — nunca alinhar** (`importar(alinhar=False)`). O alinhamento
+  (nome curto, categoria, setor, unidade, NCM, CEST, EAN, preço) continua sendo o botão
+  "Importar cardápio", e a razão é a que já estava escrita no código: *o que evita o ping-pong
+  é ser MANUAL*. Rodá-lo sozinho, de hora em hora, desfaria **calada** a correção de quem
+  arrumou a categoria de um prato à mão. Separar em duas o que era uma função só é o que deixa
+  a sincronização automática existir sem reverter a decisão de 30/08.
+  ⚠️ **`ativo` é o único campo que a sincronização automática escreve**, e é o que se pediu:
+  ninguém corrige `ativo` à mão esperando que ele fique — produto desligado no cardápio tem de
+  sumir das listas daqui.
+  ⚠️ **Nada é desativado por AUSÊNCIA.** Só o item que vier com a situação desligada. Sumir da
+  lista é ambíguo: `getlistaresumida` já devolveu 570 de 630 sem avisar que faltavam sessenta,
+  e uma leitura truncada desativaria dezenas de pratos de uma vez — derrubando o vínculo das
+  vendas que chegassem depois.
+  🔑 **Na agenda, UMA VEZ POR DIA** (`integracoes.cardapio_em`). A busca de vendas pode ser
+  HORÁRIA, e ler os 630 itens 24 vezes por dia para achar um prato novo é caro sem ser mais
+  útil: prato novo não nasce de hora em hora. O botão "Buscar no PDV" sincroniza **sempre** —
+  ali é alguém pedindo.
+  ⚠️ **Relógio PRÓPRIO, não `ultima_sincronizacao`** — aquela é o relógio das VENDAS e avança a
+  cada busca. Mesma lição do `agenda_rodou_em`.
+  ⚠️ **Falhar o cadastro NÃO impede a busca de vendas**, e a ordem é essa de propósito: venda
+  não importada é receita faltando no CMV; cadastro não sincronizado é um item que fica na fila
+  mais um dia. Derrubar a segunda por causa da primeira trocaria um problema pequeno por um
+  grande. O erro viaja na resposta, em `cadastros.erro`.
+  ⚠️ **O preço nem é PEDIDO no modo desligado**: `tabelapreco/get` é uma chamada a mais, e ele
+  não seria gravado — pedir seria gastar requisição para jogar fora.
+  ⚠️ E o número dos cadastros entra na frase só quando **aconteceu** alguma coisa: "0 produto
+  novo" em toda busca é ruído, e ruído esconde o dia em que o número não é zero.
 - 🔑 **O botão "Importar cardápio" virou o momento de ALINHAR com o PDV** (30/08/2026,
   decisão do dono). Ele sobrescreve nome curto, categoria, setor, unidade, NCM, CEST, EAN,
   **situação** e **preço**. Antes só preenchia o que estava em branco, com a regra "reimportar
@@ -2180,13 +2212,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.643 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.648 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (84),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (155), `smoke_vendas.py` (39), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
