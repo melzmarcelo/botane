@@ -131,6 +131,7 @@ export default function UnidadesDeCompra({
               <th className="num w-[140px] min-w-[140px]">Quantos {umEstoque ?? "?"}</th>
               <th className="w-[92px] min-w-[92px]">Padrão</th>
               <th className="min-w-[160px]">Observação</th>
+              {podeEditar && <th className="w-[80px] min-w-[80px]"></th>}
             </tr>
           </thead>
           <tbody>
@@ -179,6 +180,27 @@ export default function UnidadesDeCompra({
                     onChange={(e) => mudar(i, "observacao", e.target.value)}
                   />
                 </td>
+                {podeEditar && (
+                  <td className="text-right">
+                    {/* 🔑 **O remover é da LINHA, não "a última".** Antes só dava
+                        para tirar a de baixo, então quem quisesse remover a
+                        caixa de 12 tinha de apagar o fardo e o palete pelo
+                        caminho — e recadastrá-los depois.
+                        ⚠️ A última linha não se remove: `produto_unidades` sem
+                        nenhuma é o produto sem conversão de compra, e aí a tela
+                        não teria onde a pessoa voltar a cadastrar. */}
+                    {linhas.length > 1 && (
+                      <button
+                        type="button"
+                        className="link-acao link-acao-erro"
+                        aria-label={`remover ${l.um || "esta unidade"}`}
+                        onClick={() => setLinhas(linhas.filter((_x, j) => j !== i))}
+                      >
+                        remover
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -196,15 +218,9 @@ export default function UnidadesDeCompra({
           >
             + unidade
           </button>
-          {linhas.length > 1 && (
-            <button
-              type="button"
-              className="link-acao link-acao-erro"
-              onClick={() => setLinhas(linhas.slice(0, -1))}
-            >
-              remover a última
-            </button>
-          )}
+          {/* 🔑 O remover saiu daqui e foi para a LINHA. "Remover a última"
+              obrigava a apagar as de baixo para chegar na do meio — e a pessoa
+              que quer tirar a caixa de 12 não quer tocar no fardo. */}
         </div>
       )}
 

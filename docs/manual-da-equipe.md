@@ -221,6 +221,20 @@ Em **Estoque → Saldos**, o seletor **Ver por** troca a pergunta:
   setor dela embaixo. É o que quem compra precisa.
 - **produto, todas as lojas** — só com mais de uma loja.
 
+**Prepare o cadastro antes de operar.** Na tela do produto, o cartão **Onde este
+produto fica** lista as prateleiras dele nesta loja, com o **saldo** e o **custo
+médio** de cada uma. Ali você acrescenta os cantos dos setores sem esperar a
+primeira transferência: escolha o local e clique em *Acrescentar*. Ele passa a
+existir vazio, já pronto para receber a mercadoria e para entrar na contagem.
+
+⚠️ **Acrescentar um local não movimenta nada** — não é entrada, não vai para o
+razão e não muda saldo nenhum. É só o cadastro dizendo que o produto mora ali.
+
+⚠️ **Só sai da lista a prateleira VAZIA.** Com mercadoria, o sistema recusa e diz
+quanto tem: o caminho é transferir ou lançar a saída primeiro. Apagar ali faria o
+estoque sumir da vista sem nenhum movimento explicando para onde ele foi. E o que
+já passou por aquela prateleira continua no razão depois de ela sair do cadastro.
+
 ⚠️ **O CMV por setor passou a somar pela prateleira de onde a mercadoria saiu**,
 não pelo setor do cadastro do produto. Com o açúcar em quatro cantos, antes todo
 o consumo dele ia para um setor só. Saída do Estoque Central — que não pertence

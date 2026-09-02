@@ -4,11 +4,15 @@ Leitura só exige autenticação: a cozinha consulta produto sem poder editar.
 Escrita exige `cadastros.produtos`.
 """
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    LocalDoProduto,
+    LocalDoProdutoRequest,
     PrecoDaLoja,
     KitRequest,
     UnidadesCompraRequest,
@@ -294,6 +298,124 @@ def vincular(id_produto: int, body: VincularRequest,
     return r
 
 
+def _sem_zeros(v) -> str:
+    """3.0000 não é uma quantidade que alguém escreve — 3 é."""
+    return f"{Decimal(str(v)).normalize():f}"
+
+
+def _locais_do_produto(cur, id_produto: int, id_unidade: int) -> list[dict]:
+    """As prateleiras onde este produto mora nesta loja, com o que há em cada uma.
+
+    Escrito UMA vez porque responde em dois lugares — no cadastro inteiro e no
+    cartão que se recarrega depois de acrescentar ou tirar um local. Duas
+    consultas divergiriam no primeiro campo novo.
+    """
+    cur.execute(
+        """SELECT s.id_local, l.nome AS local, l.principal, se.nome AS setor,
+                  s.quantidade, s.custo_medio,
+                  round(s.quantidade * s.custo_medio, 2) AS valor, s.atualizado_em
+             FROM estoque_saldos s
+             JOIN locais_estoque l ON l.id = s.id_local
+             LEFT JOIN setores se ON se.id = l.id_setor
+            WHERE s.id_produto = %s AND s.id_unidade = %s
+            ORDER BY l.principal DESC, lower(l.nome)""",
+        (id_produto, id_unidade),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+@router.get("/{id_produto}/locais", response_model=list[LocalDoProduto])
+def listar_locais(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
+    """Onde este produto fica, com o saldo e o custo de AGORA."""
+    with get_cursor() as cur:
+        return _locais_do_produto(cur, id_produto, unidade_atual(cur, ctx))
+
+
+@router.post("/{id_produto}/locais", status_code=201)
+def acrescentar_local(id_produto: int, body: LocalDoProdutoRequest, resposta: Response,
+                      ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Diz que este produto também mora nesta prateleira.
+
+    🔑 **Sem tabela nova: cria a linha de saldo com quantidade ZERO.**
+    `estoque_saldos` já é a relação (loja, local, produto) — e uma linha zerada
+    diz exatamente "mora aqui, vazio no momento". Uma segunda tabela para dizer
+    a mesma coisa daria duas versões da mesma verdade, e elas divergiriam no
+    primeiro movimento.
+
+    ⚠️ **Serve para preparar a casa ANTES de operar.** Até aqui o vínculo só
+    nascia na primeira transferência, então não havia como deixar o cadastro
+    pronto — e o local só aparecia na contagem depois de já ter mercadoria.
+    Declarado, ele entra no inventário desde a primeira contagem, que é onde a
+    diferença precisa aparecer.
+
+    ⚠️ Não mexe em saldo nem no razão: nada é lançado.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute("SELECT 1 FROM produtos WHERE id = %s", (id_produto,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        cur.execute(
+            "SELECT nome FROM locais_estoque WHERE id = %s AND id_unidade = %s AND ativo",
+            (body.id_local, id_unidade))
+        local = cur.fetchone()
+        if not local:
+            raise HTTPException(status_code=400,
+                                detail="Local não encontrado nesta loja, ou inativo.")
+        cur.execute(
+            """INSERT INTO estoque_saldos (id_unidade, id_local, id_produto)
+               VALUES (%s, %s, %s) ON CONFLICT DO NOTHING""",
+            (id_unidade, body.id_local, id_produto))
+        criou = cur.rowcount
+        if criou:
+            auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto,
+                                "local_acrescentar", depois={"local": local["nome"]},
+                                id_unidade=id_unidade)
+    # ⚠️ Repetir não cria nada, e dizer 201 ali afirmaria que criou. O 200 é a
+    # resposta honesta de "já estava assim" — e a frase diz qual dos dois foi.
+    if not criou:
+        resposta.status_code = 200
+    return {"message": (f"{local['nome']} passa a ser um local deste produto."
+                        if criou else f"{local['nome']} já era um local deste produto.")}
+
+
+@router.delete("/{id_produto}/locais/{id_local}")
+def tirar_local(id_produto: int, id_local: int,
+                ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Tira a prateleira do produto — só quando ela está VAZIA.
+
+    ⚠️ **Com saldo, é recusado com frase.** Apagar a linha de `estoque_saldos`
+    de um produto que tem mercadoria ali faria o estoque sumir da vista sem um
+    movimento no razão explicando — e o razão é a única memória do custo. Quem
+    quer esvaziar a prateleira transfere ou lança a saída; aí a linha fica em
+    zero e pode sair.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT s.quantidade, l.nome FROM estoque_saldos s
+                 JOIN locais_estoque l ON l.id = s.id_local
+                WHERE s.id_produto = %s AND s.id_local = %s AND s.id_unidade = %s""",
+            (id_produto, id_local, id_unidade))
+        linha = cur.fetchone()
+        if not linha:
+            raise HTTPException(status_code=404,
+                                detail="Este produto não está neste local.")
+        if float(linha["quantidade"]) != 0:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"{linha['nome']} tem {_sem_zeros(linha['quantidade'])} em estoque. "
+                        "Transfira ou lance a saída antes de tirar o local — apagar aqui "
+                        "faria o saldo sumir sem um movimento explicando."))
+        cur.execute(
+            """DELETE FROM estoque_saldos
+                WHERE id_produto = %s AND id_local = %s AND id_unidade = %s""",
+            (id_produto, id_local, id_unidade))
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "local_tirar",
+                            antes={"local": linha["nome"]}, id_unidade=id_unidade)
+    return {"message": f"{linha['nome']} deixou de ser um local deste produto."}
+
+
 @router.get("/{id_produto}", response_model=ProdutoResponse)
 def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
@@ -355,6 +477,15 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         # nunca de uma segunda consulta que possa divergir dela.
         produto["apelidos_pdv"] = [c["codigo"] for c in produto["codigos_externos"]
                                    if c["sistema"] == "PDV_LEGAL"]
+
+        # 🔑 **Onde este produto fica, e o que há em cada prateleira AGORA.**
+        # Antes o cadastro só tinha o local PADRÃO, e os demais só passavam a
+        # existir quando alguém fazia a primeira transferência — então não havia
+        # como preparar a casa antes de operar, nem como ver de relance que o
+        # açúcar está no central e em três cantos.
+        # ⚠️ Sai da loja ATUAL: prateleira é da loja, e somar as duas aqui
+        # mostraria dois "Estoque" sem dizer de quem é cada um.
+        produto["locais"] = _locais_do_produto(cur, id_produto, id_unidade)
 
         cur.execute(
             """SELECT pf.id_fornecedor, f.nome AS fornecedor, pf.codigo_no_fornecedor,

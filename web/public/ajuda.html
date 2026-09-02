@@ -709,6 +709,35 @@
         quem compra precisa.
       </p>
       <div class="regra">
+        <p class="rotulo">O cadastro do produto diz em que prateleiras ele mora</p>
+        <p>
+          Na tela do produto, o cartão <strong>Onde este produto fica</strong> lista as
+          prateleiras dele nesta loja com o <strong>saldo</strong> e o <strong>custo médio</strong>
+          de cada uma. Antes o cadastro só tinha o local <em>padrão</em>, aquele por onde o
+          produto entra: as demais prateleiras só passavam a existir na primeira transferência,
+          e o canto do Bar não existia até alguém levar o primeiro pacote para lá.
+        </p>
+        <p>
+          Agora dá para <strong>preparar a casa antes de operar</strong>: escolha o local e
+          clique em <em>Acrescentar</em>. Ele passa a existir vazio, pronto para receber a
+          transferência da manhã e para entrar na contagem do fim da semana.
+        </p>
+        <p>
+          ⚠️ <strong>Acrescentar não movimenta nada.</strong> Não é entrada, não vai para o razão
+          e não muda saldo nenhum — é o cadastro dizendo que o produto mora ali. Por baixo, o
+          sistema não criou tabela nova: a linha de saldo daquela prateleira passa a existir com
+          quantidade zero, que é exatamente a frase &ldquo;mora aqui, vazio no momento&rdquo;.
+        </p>
+        <p>
+          ⚠️ <strong>Só sai da lista a prateleira vazia.</strong> Com mercadoria, o sistema
+          recusa e diz quanto tem: transfira ou lance a saída antes. Apagar ali faria o estoque
+          sumir da vista sem nenhum movimento explicando para onde ele foi — e o razão é a única
+          memória do custo. O que já passou por aquela prateleira continua no razão mesmo depois
+          de ela sair do cadastro.
+        </p>
+      </div>
+
+      <div class="regra">
         <p class="rotulo">E é por isso que o CMV por setor ficou certo</p>
         <p>
           O relatório de CMV por setor somava pelo setor do <em>cadastro do produto</em> — um

@@ -20,6 +20,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import ComposicaoKit from "./kit";
+import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
 import Vincular from "./vincular";
 
@@ -932,6 +933,18 @@ export default function FormularioProduto() {
           </ul>
         )}
       </Cartao>
+
+      {/* 🔑 As prateleiras onde o produto mora. Só depois de ele existir — a
+          linha de saldo aponta para ele. E só para quem controla estoque:
+          produto que não controla não tem prateleira nenhuma. */}
+      {!novo && f.controla_estoque && (
+        <LocaisDoProduto
+          idProduto={Number(id)}
+          podeEditar={podeEditar}
+          podeVerCusto={pode("estoque.saldos")}
+          umEstoque={f.um_estoque || null}
+        />
+      )}
 
       {/* A conversão também só existe depois do produto: ela aponta para ele. */}
       {!novo && f.controla_estoque && (

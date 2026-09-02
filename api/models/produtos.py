@@ -154,6 +154,30 @@ class PrecoDaLoja(BaseModel):
     preco_venda: float | None = Field(default=None, ge=0)
 
 
+class LocalDoProdutoRequest(BaseModel):
+    id_local: int
+
+
+class LocalDoProduto(BaseModel):
+    """Uma prateleira onde este produto mora, com o que há nela AGORA.
+
+    🔑 **Não há tabela nova: `estoque_saldos` já é a relação (loja, local,
+    produto).** Uma linha com quantidade ZERO diz "o produto mora aqui, vazio no
+    momento" — que é exatamente o que faltava poder declarar antes da primeira
+    transferência. Criar uma segunda tabela para dizer a mesma coisa daria duas
+    versões da mesma verdade, e elas divergiriam no primeiro movimento.
+    """
+
+    id_local: int
+    local: str
+    setor: str | None = None
+    principal: bool = False
+    quantidade: float
+    custo_medio: float
+    valor: float
+    atualizado_em: datetime | None = None
+
+
 class CodigoExterno(BaseModel):
     """Um código de fora que aponta para um produto daqui.
 
@@ -219,6 +243,9 @@ class ProdutoResponse(BaseModel):
     # fornecedor, e juntá-los só é confiável se dá para VER que aquele cadastro
     # já responde por cinco códigos de lá.
     codigos_externos: list[CodigoExterno] = []
+    # 🔑 Onde este produto fica, com o saldo e o custo do momento. O açúcar mora
+    # no Estoque Central e nos cantos do Bar, da Confeitaria e da Cozinha.
+    locais: list[LocalDoProduto] = []
     # 🔑 **O último degrau da cascata de custo** (migração 049): quanto vale uma
     # unidade quando não há médio no razão nem preço de fornecedor. Não é saldo
     # nem movimento — só destrava a ficha e o CMV teórico de quem entraria na

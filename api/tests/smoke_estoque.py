@@ -767,6 +767,83 @@ checar("e o pouco que sobrou no setor fica intacto",
        abs(por_local.get(f"Canto da confeitaria {marca}".upper(), 0) - 1) < 0.0001, por_local)
 
 
+print("9c3. os locais no CADASTRO do produto")
+# 🔑 Ate aqui o cadastro so tinha o local PADRAO — aquele por onde o produto
+# entra. Os demais so passavam a existir na primeira transferencia, entao nao
+# havia como preparar a casa antes de operar: o canto do Bar nao existia ate
+# alguem levar o primeiro pacote para la.
+# ⚠️ **Sem tabela nova**: a linha de `estoque_saldos` com quantidade ZERO ja
+# quer dizer "mora aqui, vazio no momento". Duas tabelas dizendo a mesma coisa
+# divergiriam no primeiro movimento.
+st, cad = chamar("GET", f"/produtos/{id_acucar}/locais", token=token)
+nos_locais = {x["local"]: x for x in (cad or [])}
+checar("o cadastro diz em que prateleiras o produto esta", st == 200 and len(cad) == 2,
+       (st, [x["local"] for x in (cad or [])]))
+checar("com o saldo e o custo de cada uma",
+       abs(float(nos_locais.get(f"Central {marca}".upper(), {}).get("quantidade", 0)) - 4) < 0.0001
+       and perto(nos_locais.get(f"Central {marca}".upper(), {}).get("custo_medio"), 5),
+       nos_locais)
+checar("e com o setor da prateleira, que e o que separa um canto do estoque geral",
+       nos_locais.get(f"Canto da confeitaria {marca}".upper(), {}).get("setor")
+       == f"Confeitaria {marca}".upper(), nos_locais)
+
+# 🔑 Declarar um local NAO movimenta nada — e o ponto do pedido: a prateleira
+# passa a existir vazia, pronta para receber a transferencia e para entrar na
+# contagem.
+st, r = chamar("POST", "/locais", {"nome": f"Canto do bar {marca}", "tipo": "SECO"},
+               token=token)
+id_canto_bar = (r or {}).get("id")
+st, mov_antes = chamar("GET", f"/estoque/movimentos?id_produto={id_acucar}", token=token)
+st, r = chamar("POST", f"/produtos/{id_acucar}/locais", {"id_local": id_canto_bar},
+               token=token)
+checar("acrescentar um local ao cadastro e aceito", st == 201, (st, r))
+st, mov_depois = chamar("GET", f"/estoque/movimentos?id_produto={id_acucar}", token=token)
+checar("e nao lanca movimento nenhum no razao",
+       len(mov_depois or []) == len(mov_antes or []),
+       (len(mov_antes or []), len(mov_depois or [])))
+st, cad = chamar("GET", f"/produtos/{id_acucar}/locais", token=token)
+zerado = next((x for x in (cad or []) if x["id_local"] == id_canto_bar), {})
+checar("a prateleira nova aparece com saldo zero",
+       zerado != {} and abs(float(zerado.get("quantidade", -1))) < 0.0001, zerado)
+# ⚠️ Repetir nao cria nada, e dizer 201 ali afirmaria que criou.
+st, r = chamar("POST", f"/produtos/{id_acucar}/locais", {"id_local": id_canto_bar},
+               token=token)
+checar("repetir responde 200, nao 201 — nada foi criado", st == 200, (st, r))
+st, r = chamar("POST", f"/produtos/{id_acucar}/locais", {"id_local": 99999999}, token=token)
+checar("local que nao existe e recusado com frase, nao 500", st == 400, (st, r))
+
+# 🔑 A declaracao vale para o que vem depois: a prateleira vazia ja e um destino
+# de transferencia legitimo, que era justamente o que se queria preparar.
+st, r = chamar("POST", "/estoque/transferencias", {
+    "id_produto": id_acucar, "quantidade": 1,
+    "id_local_origem": id_central, "id_local_destino": id_canto_bar}, token=token)
+checar("e a prateleira declarada recebe transferencia", st in (200, 201), (st, r))
+
+# ⚠️ **Tirar so com a prateleira VAZIA.** Apagar a linha com saldo faria o
+# estoque sumir da vista sem um movimento no razao explicando — e o razao e a
+# unica memoria do custo.
+st, r = chamar("DELETE", f"/produtos/{id_acucar}/locais/{id_canto_bar}", token=token)
+checar("com saldo, tirar o local e recusado", st == 409, (st, r))
+checar("e a frase diz o quanto tem e o que fazer",
+       "1" in str((r or {}).get("detail", "")) and "ransfira" in str((r or {}).get("detail", "")),
+       r)
+chamar("POST", "/estoque/transferencias", {
+    "id_produto": id_acucar, "quantidade": 1,
+    "id_local_origem": id_canto_bar, "id_local_destino": id_central}, token=token)
+st, r = chamar("DELETE", f"/produtos/{id_acucar}/locais/{id_canto_bar}", token=token)
+checar("vazia, ela sai do cadastro", st == 200, (st, r))
+st, cad = chamar("GET", f"/produtos/{id_acucar}/locais", token=token)
+checar("e some da lista", not any(x["id_local"] == id_canto_bar for x in (cad or [])), cad)
+st, r = chamar("DELETE", f"/produtos/{id_acucar}/locais/{id_canto_bar}", token=token)
+checar("tirar o que ja saiu responde 404, nao 500", st == 404, (st, r))
+# ⚠️ O razao NAO se apaga: as duas transferencias continuam la depois de o
+# vinculo sair. Tirar o local e cadastro, nao correcao de movimento.
+st, mov = chamar("GET", f"/estoque/movimentos?id_produto={id_acucar}", token=token)
+checar("e o razao daquela prateleira continua inteiro",
+       len([m for m in (mov or []) if m.get("local") == f"Canto do bar {marca}".upper()]) >= 2,
+       len(mov or []))
+
+
 print("9c2. o estoque da EMPRESA, somando as lojas")
 # 🔑 A tela da rede dizia quanto VALE o estoque da empresa e nao dizia de que.
 # Para conferir um item era preciso trocar de loja no seletor e somar de cabeca
@@ -859,9 +936,26 @@ if id_filial and id_prod_f:
     # fora, e este e o numero que fecha a diferenca.
     st, fora = chamar("GET", "/estoque/saldos-rede/inativos", token=token)
     checar("a lista diz quanto ficou de fora por estar inativo", st == 200, (st, fora))
-    st, so_ativos = chamar("GET", "/estoque/saldos-rede?limite=1000", token=token)
-    st, com_inativos = chamar(
-        "GET", "/estoque/saldos-rede?limite=1000&incluir_inativos=true", token=token)
+    # ⚠️ **Paginar, e nao pedir "tudo num limite grande".** O teto do endpoint e
+    # 1.000, e a base real passou dele: a checagem lia 1.000 de 1.065 e acusava a
+    # conta de nao fechar — um defeito que so existia no teste, e que apareceria
+    # sozinho num dia qualquer, longe de qualquer commit. Identidade que soma a
+    # lista INTEIRA precisa varrer a lista inteira.
+    def rede_inteira(incluir_inativos: bool) -> list:
+        tudo, offset = [], 0
+        while True:
+            st, p = chamar(
+                "GET",
+                f"/estoque/saldos-rede?limite=1000&offset={offset}"
+                + ("&incluir_inativos=true" if incluir_inativos else ""),
+                token=token)
+            tudo += p or []
+            if len(p or []) < 1000:
+                return tudo
+            offset += 1000
+
+    so_ativos = rede_inteira(False)
+    com_inativos = rede_inteira(True)
     soma_ativos = sum(float(x["valor"]) for x in (so_ativos or []))
     soma_tudo = sum(float(x["valor"]) for x in (com_inativos or []))
     # ⚠️ Folga de um centavo por linha: cada `valor` ja vem arredondado no banco.

@@ -1643,6 +1643,45 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   esperava R$ 11,00 da saída do central e esqueceu que a ENTRADA de lá também é compra — o CMV
   daquele pedaço é `20 − 15 = 5`. O que importa provar é que o movimento engordou a linha do
   setor do produto em vez de criar uma linha "Sem setor".
+- 🔑 **As prateleiras do produto entram no CADASTRO** (`GET/POST/DELETE /produtos/{id}/locais`,
+  cartão "Onde este produto fica", 02/09/2026, pedido do dono). O cadastro só tinha o local
+  **padrão** — aquele por onde o produto ENTRA. Os demais só passavam a existir na primeira
+  transferência: o canto do Bar não existia até alguém levar o primeiro pacote para lá. Não
+  havia como preparar a casa antes de operar, nem como ver de relance em quantos cantos o mesmo
+  açúcar mora, com quanto e a que custo em cada um.
+  🔑 **Não há tabela nova, e a razão é que ela já existe**: `estoque_saldos` É a relação
+  `(loja, local, produto)`, e uma linha com quantidade **ZERO** diz exatamente *"mora aqui,
+  vazio no momento"* — que é o que faltava poder declarar. Uma segunda tabela para dizer a
+  mesma coisa daria duas versões da mesma verdade, e elas divergiriam no primeiro movimento.
+  Acrescentar é o `INSERT ... ON CONFLICT DO NOTHING` que `_travar_saldo` já fazia.
+  ⚠️ **Declarar NÃO lança nada no razão** — e a suíte cobra isso contando os movimentos antes e
+  depois. A prateleira passa a existir vazia, pronta para receber a transferência e para entrar
+  na contagem; se declarar movimentasse, o cadastro estaria inventando estoque.
+  ⚠️ **Tirar só com a prateleira VAZIA** (409 com frase que diz o quanto tem e o que fazer).
+  Apagar a linha de um produto com mercadoria ali faria o saldo sumir da vista sem um movimento
+  explicando — e o razão é a única memória do custo. Quem quer esvaziar transfere ou lança a
+  saída; aí a linha fica em zero e pode sair.
+  ⚠️ **O razão da prateleira FICA depois de ela sair do cadastro.** Tirar o local é cadastro,
+  não correção de movimento — `estoque_movimentos` é append-only, e o que aconteceu lá aconteceu.
+  ⚠️ **Repetir responde 200, não 201.** Nada foi criado, e dizer 201 ali afirmaria que sim; a
+  frase diz qual dos dois casos foi ("passa a ser" / "já era").
+  ⚠️ **Sai da loja ATUAL**: prateleira é da loja, e somar as duas no cadastro mostraria dois
+  "ESTOQUE" sem dizer de quem é cada um. O setor da prateleira vem junto — é ele que separa o
+  canto da Confeitaria do estoque geral.
+  ⚠️ O custo médio e o valor pedem **`estoque.saldos`**, como na ficha: são dados de ESTOQUE, e
+  não passam a ser de cadastro por estarem na tela do produto.
+  ⚠️ E o cartão só aparece para quem **controla estoque** — produto que não controla não tem
+  prateleira nenhuma.
+- ⚠️ **A linha de unidade de compra se remove ONDE ELA ESTÁ** (02/09/2026, pedido do dono).
+  O rodapé dizia "remover a última": quem tinha caixa, fardo e palete e queria tirar o fardo
+  apagava dois e redigitava um. Cada linha ganhou o seu `remover`, e ele some quando resta uma
+  só — produto sem nenhuma unidade de compra não converte nota nenhuma.
+- ⚠️ **Identidade que soma a lista INTEIRA precisa varrer a lista inteira** (02/09/2026). A
+  checagem da conciliação do estoque da rede pedia `limite=1000`, que é o **teto** do endpoint:
+  assim que a base passou de mil produtos com saldo, ela lia 1.000 de 1.065 e acusava a conta de
+  não fechar — um defeito que só existia no teste, e que apareceria sozinho num dia qualquer,
+  longe de qualquer commit. Agora ela **pagina** até acabar. É a mesma família do "relatório
+  cortado no topo esconde o registro que se procura".
 - ⚠️ **`produtos.id_local_padrao` é UM local, e local pertence a UMA loja** (31/08/2026). A
   produção usava esse local direto, com o `id_unidade` de quem estava produzindo: a filial que
   fizesse um molho cujo local padrão é a câmara da MATRIZ gravaria o movimento com a loja da
@@ -2332,8 +2371,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.679 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
-  `smoke_fichas.py` (50), `smoke_estoque.py` (155), `smoke_cmv.py` (63), `smoke_omie.py` (116),
+- Testes (1.694 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+  `smoke_fichas.py` (50), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
@@ -2342,7 +2381,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (425, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (434, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

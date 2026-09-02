@@ -2354,6 +2354,97 @@ try {
     checar("e a credencial continua configurada", omieDepois?.configurada === true, omieDepois);
   }
 
+  console.log("7z. as prateleiras no cadastro do produto");
+  // 🔑 O cadastro só tinha o local PADRÃO, aquele por onde o produto ENTRA. As
+  // demais prateleiras só passavam a existir na primeira transferência — não
+  // havia como preparar a casa antes de operar, nem como ver de relance em
+  // quantos cantos o mesmo insumo mora.
+  const mLoc = String(Date.now()).slice(-6);
+  const idLocalA = await garantirLocal();
+  const { dados: localB } = await api(
+    "POST", "/locais", { nome: `Canto tela ${mLoc}`, tipo: "SECO" }, token);
+  const { dados: prodLoc } = await api("POST", "/produtos", {
+    codigo: `TLOC-${mLoc}`, nome: `Insumo dos locais ${mLoc}`, tipo: "INSUMO",
+    um_estoque: "KG", controla_estoque: true, id_local_padrao: idLocalA,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${prodLoc.id}`, null, token));
+  await api("POST", "/estoque/entradas", {
+    id_produto: prodLoc.id, quantidade: 8, custo_unitario: 2.5, id_local: idLocalA,
+  }, token);
+
+  await irPara(p, `${WEB}/produtos/${prodLoc.id}`);
+  // ⚠️ Esperar pelo que se vai MEDIR, nunca um tempo fixo: o cartão só existe
+  // depois de `/produtos/{id}/locais` responder, e dormir e afirmar é supor a
+  // precondição.
+  await p.waitForSelector("#locais-do-produto", { timeout: 15000 });
+  const textoLoc = await textoVisivel(p);
+  checar("a tela do produto diz em que prateleiras ele está",
+    /Onde este produto fica/i.test(textoLoc), textoLoc.slice(0, 160));
+  const linhasLoc = await p.evaluate(() =>
+    [...document.querySelectorAll("#locais-do-produto tbody tr")].map((t) => t.innerText));
+  checar("com o saldo daquela prateleira",
+    linhasLoc.some((l) => /8/.test(l)), linhasLoc);
+  checar("e com o custo médio dela",
+    linhasLoc.some((l) => /R\$\s*2,50/.test(l)), linhasLoc);
+
+  // 🔑 Declarar uma prateleira NÃO movimenta nada — é o ponto do pedido: ela
+  // passa a existir vazia, pronta para receber a transferência.
+  await p.select("#local-a-acrescentar", String(localB.id));
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Acrescentar")?.click();
+  });
+  await p.waitForFunction(
+    (nome) => [...document.querySelectorAll("#locais-do-produto tbody tr")]
+      .some((t) => t.innerText.includes(nome)),
+    { timeout: 15000 }, `Canto tela ${mLoc}`.toUpperCase());
+  const { dados: locaisApi } = await api(
+    "GET", `/produtos/${prodLoc.id}/locais`, null, token);
+  checar("acrescentar um local pela tela grava no servidor",
+    (locaisApi ?? []).some((l) => l.id_local === localB.id), locaisApi);
+  checar("e a prateleira nova nasce com saldo zero",
+    Number((locaisApi ?? []).find((l) => l.id_local === localB.id)?.quantidade) === 0,
+    locaisApi);
+  const { dados: movLoc } = await api(
+    "GET", `/estoque/movimentos?id_produto=${prodLoc.id}`, null, token);
+  checar("e nenhum movimento entrou no razão por causa disso",
+    (movLoc ?? []).length === 1, (movLoc ?? []).length);
+  await foto(p, "37a-locais-do-produto");
+
+  // ⚠️ Tirar só com a prateleira VAZIA — quem recusa é o servidor. Aqui ela
+  // está vazia, então sai.
+  await p.evaluate((nome) => {
+    const linha = [...document.querySelectorAll("#locais-do-produto tbody tr")]
+      .find((t) => t.innerText.includes(nome));
+    linha?.querySelector("button")?.click();
+  }, `Canto tela ${mLoc}`.toUpperCase());
+  await p.waitForFunction(
+    (nome) => ![...document.querySelectorAll("#locais-do-produto tbody tr")]
+      .some((t) => t.innerText.includes(nome)),
+    { timeout: 15000 }, `Canto tela ${mLoc}`.toUpperCase());
+  const { dados: locaisDepois } = await api(
+    "GET", `/produtos/${prodLoc.id}/locais`, null, token);
+  checar("e tirar a prateleira vazia some com ela no servidor também",
+    !(locaisDepois ?? []).some((l) => l.id_local === localB.id), locaisDepois);
+  // ⚠️ A que tem saldo continua: apagá-la faria o estoque sumir da vista sem um
+  // movimento no razão explicando.
+  checar("enquanto a que tem saldo continua no cadastro",
+    (locaisDepois ?? []).some((l) => l.id_local === idLocalA), locaisDepois);
+
+  // 🔑 **Excluir a LINHA que se quer, não a última.** O rodapé antigo removia
+  // sempre a de baixo: quem tinha três embalagens e queria tirar a do meio
+  // apagava duas e redigitava uma.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => (b.textContent ?? "").trim() === "+ unidade")?.click();
+  });
+  const removedores = await p.evaluate(() =>
+    [...document.querySelectorAll('button[aria-label^="remover "]')].length);
+  checar("cada linha de unidade de compra tem o próprio remover", removedores >= 1,
+    removedores);
+
+  await api("DELETE", `/locais/${localB.id}`, null, token);
+
   console.log("7a. combo: uma linha do PDV que vale por dois produtos");
   const marcaKit = String(Date.now()).slice(-6);
   const idLocalKit = await garantirLocal();
