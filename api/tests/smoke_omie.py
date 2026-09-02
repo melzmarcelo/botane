@@ -22,7 +22,12 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "tests")
-from comum import garantir_cozinha, garantir_local, preservar_credenciais  # noqa: E402
+from comum import (  # noqa: E402
+    garantir_cozinha,
+    garantir_fornecedor,
+    garantir_local,
+    preservar_credenciais,
+)
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -438,6 +443,81 @@ st, todos = chamar("GET", "/omie/conferencia?so_divergentes=false", token=token)
 checar("sem o filtro, traz também o que bate",
        len(todos.get("linhas") or []) >= len(conf.get("linhas") or []),
        (len(todos.get("linhas") or []), len(conf.get("linhas") or [])))
+
+print()
+print("6c. o custo inicial vindo do Omie")
+# 🔑 **Medido na base em 01/09/2026: 2.323 produtos ativos que controlam estoque
+# sem custo nenhum** — nunca entrou nota deles aqui e não há preço de
+# fornecedor. Sem custo não há ficha, nem CMV teórico, nem margem: o prato entra
+# na conta valendo zero e o food cost sai bom demais, calado. O Omie já sabe o
+# número (o CMC da posição de estoque).
+# ⚠️ **É REFERÊNCIA, não movimento**: nada entra no razão e nenhum saldo muda.
+st, previa = chamar("GET", "/omie/custos-iniciais/previa", token=token)
+checar("a prévia responde antes de gravar", st == 200 and "produtos" in (previa or {}),
+       (st, list(previa or {})))
+checar("e não gravou nada", previa.get("aplicado") is False, previa.get("aplicado"))
+alvo_custo = next((l for l in (previa.get("linhas") or [])
+                   if l["id_produto"] == produto_conf), None)
+checar("o produto sem custo desta rodada entra na prévia", alvo_custo is not None,
+       [l["codigo"] for l in (previa.get("linhas") or [])][:5])
+if alvo_custo:
+    checar("com o CMC do Omie, não um palpite",
+           abs(alvo_custo["custo_omie"] - _alvo["nCMC"]) < 0.0001, alvo_custo)
+
+st, aplicou = chamar("POST", "/omie/custos-iniciais", token=token)
+checar("aplicar grava", st == 200 and aplicou.get("aplicado") is True, (st, aplicou))
+st, p_depois = chamar("GET", f"/produtos/{produto_conf}", token=token)
+checar("e o produto passa a ter custo de referência",
+       abs(float(p_depois.get("custo_referencia") or 0) - _alvo["nCMC"]) < 0.0001,
+       p_depois.get("custo_referencia"))
+checar("com a origem registrada, para se saber de onde veio",
+       p_depois.get("custo_referencia_origem") == "OMIE",
+       p_depois.get("custo_referencia_origem"))
+
+# 🔑 **O que isto existe para destravar**: a ficha passa a calcular.
+sys.path.insert(0, ".")
+from database import get_cursor as _cur_custo       # noqa: E402
+from services import custos as _custos             # noqa: E402
+with _cur_custo() as _c:
+    valor, origem = _custos.custo_do_insumo(_c, produto_conf)
+checar("e a cascata de custo passa a responder por ele",
+       valor is not None and origem == "referencia", (valor, origem))
+
+# ⚠️ **A referência é o ÚLTIMO degrau — o preço do fornecedor ganha dela.** O
+# fornecedor é o que a casa negociou; a referência é o que outro sistema acha.
+# ⚠️ **Num produto PRÓPRIO, e sem tocar no razão.** A primeira versão provava
+# isso lançando uma entrada no produto da conferência — e o razão é append-only:
+# o saldo ficava lá, e a rodada SEGUINTE falhava em "o saldo daqui, que é zero"
+# e em "entra na prévia", acusando defeitos que não existiam. Teste que deixa
+# rastro derruba a próxima; aqui o rastro seria permanente.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"REF-{marca}", "nome": f"Insumo so com referencia {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True}, token=token)
+so_referencia = r.get("id")
+with _cur_custo() as _c:
+    _c.execute("""UPDATE produtos SET custo_referencia = 7.5,
+                         custo_referencia_origem = 'OMIE' WHERE id = %s""", (so_referencia,))
+with _cur_custo() as _c:
+    valor, origem = _custos.custo_do_insumo(_c, so_referencia)
+checar("sem mais nada, a referência responde",
+       origem == "referencia" and abs(float(valor) - 7.5) < 0.001, (valor, origem))
+
+id_forn_ref = garantir_fornecedor(chamar, token, f"Fornecedor ref {marca}",
+                                  f"92{marca}000199")
+with _cur_custo() as _c:
+    _c.execute("""INSERT INTO produto_fornecedor (id_produto, id_fornecedor, ultimo_preco)
+                  VALUES (%s, %s, 4.25)
+                  ON CONFLICT (id_produto, id_fornecedor)
+                  DO UPDATE SET ultimo_preco = 4.25""", (so_referencia, id_forn_ref))
+with _cur_custo() as _c:
+    valor, origem = _custos.custo_do_insumo(_c, so_referencia)
+checar("mas o preço do fornecedor ganha dela",
+       origem == "ultima_compra" and abs(float(valor) - 4.25) < 0.001, (valor, origem))
+chamar("DELETE", f"/produtos/{so_referencia}", token=token)
+
+st, previa2 = chamar("GET", "/omie/custos-iniciais/previa", token=token)
+checar("e a prévia continua respondendo depois de aplicada",
+       st == 200 and previa2.get("aplicado") is False, (st, previa2.get("aplicado")))
 
 
 print("6b. o catálogo destrava as notas: nome limpo, de-para pelo id do Omie e a trava da unidade")

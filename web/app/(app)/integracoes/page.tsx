@@ -70,6 +70,26 @@ type Conferencia = {
   message: string;
 };
 
+/** O custo médio do Omie para os produtos que aqui não têm custo nenhum. */
+type CustosIniciais = {
+  linhas: {
+    id_produto: number;
+    codigo: string;
+    produto: string;
+    custo_omie: number;
+    ja_era_referencia: boolean;
+  }[];
+  produtos: number;
+  conferidos: number;
+  sem_cadastro_aqui: number;
+  ja_tinham_custo: number;
+  sem_custo_no_omie: number;
+  /** Falso na prévia, verdadeiro depois de gravar. */
+  aplicado: boolean;
+  truncado: boolean;
+  message: string;
+};
+
 type Vinculo = {
   codigo: string;
   descricao_externa: string | null;
@@ -91,6 +111,11 @@ export default function PaginaIntegracoes() {
     agenda_frequencia: "MANUAL", agenda_hora: "3", agenda_janela_dias: "",
   });
   const [conferencia, setConferencia] = useState<Conferencia | null>(null);
+  // 🔑 **O custo inicial dos produtos.** Medido na base: 2.323 produtos ativos
+  // que controlam estoque sem custo nenhum — nunca entrou nota deles aqui e não
+  // há preço de fornecedor. Sem custo não há ficha, nem CMV teórico, nem
+  // margem: o prato entra na conta valendo zero e o food cost sai bom demais.
+  const [custos, setCustos] = useState<CustosIniciais | null>(null);
   const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -166,6 +191,33 @@ export default function PaginaIntegracoes() {
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível concluir");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function verCustos() {
+    setOcupado(true);
+    setErro("");
+    try {
+      // ⚠️ **A prévia SEMPRE antes.** Com 2.323 produtos, descobrir o efeito
+      // depois é tarde: a mesma varredura, sem gravar nada.
+      setCustos(await api.get<CustosIniciais>("/omie/custos-iniciais/previa"));
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Falha ao consultar os custos");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function aplicarCustos() {
+    setOcupado(true);
+    try {
+      const r = await api.post<CustosIniciais>("/omie/custos-iniciais");
+      setCustos(r);
+      aviso.sucesso(r.message);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível aplicar");
     } finally {
       setOcupado(false);
     }
@@ -453,11 +505,99 @@ export default function PaginaIntegracoes() {
             <button className="btn btn-secundario" onClick={conferir} disabled={ocupado}>
               Conferir estoque com o Omie
             </button>
+            <button
+              className="btn btn-secundario"
+              onClick={verCustos}
+              disabled={ocupado}
+              title="Traz o custo médio do Omie para os produtos que aqui não têm custo nenhum"
+            >
+              Trazer o custo inicial
+            </button>
           </div>
           <p className="mt-3 text-[13px] text-suave">
             O catálogo entra como <b>rascunho</b>: nasce com nome, NCM e EAN, e só entra no
             estoque depois que alguém definir a unidade e o fator de conversão.
           </p>
+        </Cartao>
+      )}
+
+      {/* 🔑 **O custo inicial.** Sem custo não há ficha, nem CMV teórico, nem
+          margem — o prato entra na conta valendo zero e o food cost sai bom
+          demais, sem nada denunciando. O Omie já sabe o número.
+          ⚠️ **É REFERÊNCIA, não movimento**: nada entra no razão e nenhum saldo
+          muda. E a tela precisa DIZER isso antes do botão, senão quem clica
+          espera ver o estoque encher. */}
+      {custos && (
+        <Cartao
+          titulo="Custo inicial vindo do Omie"
+          descricao="Para os produtos que aqui não têm custo nenhum — nem médio do razão, nem preço de fornecedor."
+        >
+          <p className="mb-3 text-[13.5px]">{custos.message}</p>
+          <Aviso tipo="info">
+            Isto grava um <b>custo de referência</b>: nada entra no razão e nenhum saldo muda. O
+            CMV real continua saindo do que a casa comprou e contou — o que isto destrava é a
+            ficha, o CMV teórico e a margem de quem hoje entra na conta valendo zero.
+            {" "}O custo médio do estoque e o preço do fornecedor continuam ganhando dele.
+          </Aviso>
+          {custos.truncado && (
+            <div className="mt-3">
+              <Aviso tipo="erro">
+                A varredura parou no teto de páginas — há mais produtos no Omie.
+              </Aviso>
+            </div>
+          )}
+          {!custos.linhas.length ? (
+            <p className="mt-3 text-[13.5px] text-suave">
+              {custos.conferidos
+                ? "Nenhum produto sem custo entre os que existem dos dois lados — não há o que trazer."
+                : "Nenhum produto conferido: o catálogo do Omie ainda não foi importado."}
+            </p>
+          ) : (
+            <>
+              <div className="mt-3 overflow-x-auto">
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th className="num">Custo no Omie</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {custos.linhas.slice(0, 200).map((c) => (
+                      <tr key={c.id_produto}>
+                        <td className="mono">{c.codigo}</td>
+                        <td>
+                          {c.produto}
+                          {/* Já tinha referência de uma rodada anterior: o
+                              número novo substitui. Referência sobrescreve
+                              referência, nunca custo de verdade. */}
+                          {c.ja_era_referencia && (
+                            <span className="ml-2">
+                              <Etiqueta>já tinha referência</Etiqueta>
+                            </span>
+                          )}
+                        </td>
+                        <td className="num">{reais(c.custo_omie)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {custos.linhas.length > 200 && (
+                <p className="mt-2 text-[12.5px] text-suave">
+                  Mostrando 200 de {custos.produtos} — o botão aplica em todos.
+                </p>
+              )}
+              {!custos.aplicado && (
+                <div className="mt-4">
+                  <button className="btn btn-primario" onClick={aplicarCustos} disabled={ocupado}>
+                    {ocupado ? "Aplicando…" : `Aplicar em ${custos.produtos} produto(s)`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </Cartao>
       )}
 

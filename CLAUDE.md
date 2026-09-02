@@ -674,6 +674,37 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   XML/Omie é o documento do fornecedor, e mudar valor ali faria o sistema divergir da nota
   fiscal sem rastro. Os itens são reescritos inteiros — nada virou movimento ainda, e casar
   linha a linha só abriria caminho para item órfão.
+- 🔑 **O custo inicial vindo do Omie** (migração 049, `importador.custos_iniciais`, botão
+  **Trazer o custo inicial** em Integrações, 01/09/2026, pedido do dono). Medido na base:
+  **2.323 produtos ativos que controlam estoque estavam sem custo NENHUM** — nunca entrou nota
+  deles aqui e não há preço de fornecedor. Sem custo não há ficha, nem CMV teórico, nem margem:
+  o prato entra na conta **valendo zero** e o food cost sai bom demais, sem nada denunciando. O
+  Omie já sabe o número (o CMC da posição de estoque), e a tela só sabia COMPARAR os dois.
+  🔑 **É REFERÊNCIA, não movimento — e essa é a decisão que importa.** Nada entra no razão e
+  nenhum saldo muda: o CMV real continua saindo do que a casa comprou e contou. Como movimento,
+  2.323 linhas erradas entrariam no CMV do período da carga e **não se apagariam** — o razão é
+  append-only, e a única saída seria estornar 2.323 movimentos.
+  ⚠️ **`produtos.custo_referencia` é o ÚLTIMO degrau de `custos.custo_do_insumo`**, depois do
+  médio do razão e do último preço do fornecedor. A ordem é a da confiança: o médio é o que a
+  casa pagou com o frete DELA rateado dentro; o preço do fornecedor é o que ela negociou; a
+  referência é o que outro sistema acha — melhor que nada e pior que os dois.
+  ⚠️ **Só quem NÃO tem custo**, e rodar de novo só alcança quem continua sem. Referência
+  sobrescreve referência; custo de verdade, nunca.
+  ⚠️ **CMC zero é PULADO.** Zero não é um custo: é o Omie dizendo que não sabe, e gravá-lo faria
+  a ficha calcular com um número inventado — pior que calcular sem, porque o aviso de
+  "sem_custo" some.
+  ⚠️ **`custo_referencia_origem` existe para daqui a seis meses**: sem ela ninguém sabe se
+  aquele número foi importado ou digitado, e é essa diferença que decide se ele pode ser
+  sobrescrito sem perguntar.
+  ⚠️ **A prévia vem antes, sempre** (`GET /omie/custos-iniciais/previa`): mesma varredura, sem
+  gravar. Com 2.323 produtos, descobrir o efeito depois é tarde. E o de-para é
+  `vinculo.por_codigo_omie` — a coluna e depois os apelidos, senão o principal que absorveu um
+  duplicado ficaria de fora.
+  ⚠️ **A suíte provava a precedência lançando uma ENTRADA no produto da conferência** — e o
+  razão é append-only: o saldo ficava lá e a rodada seguinte falhava em "o saldo daqui é zero",
+  acusando um defeito que não existia. Agora ela usa produto próprio e escreve o
+  `custo_referencia` direto. **Teste que deixa rastro derruba a próxima; aqui o rastro seria
+  permanente.**
 - **Cadastro pode vir do Omie por três caminhos** (20/08/2026): catálogo de produtos (já
   existia, nasce RASCUNHO), **catálogo de fornecedores** (`importar_fornecedores`) e
   **criar produto direto do item da nota** (`POST /notas/itens/{id}/criar-produto`, que já
@@ -2220,8 +2251,8 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.648 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
-  `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
+- Testes (1.659 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+  `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
@@ -2230,7 +2261,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (418, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (421, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

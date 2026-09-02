@@ -1185,6 +1185,126 @@ def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
             "tag": tag, "modo": cliente.modo}
 
 
+def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
+                    aplicar: bool = False) -> dict:
+    """Traz o custo médio do Omie para os produtos que aqui não têm custo nenhum.
+
+    🔑 **O problema, medido na base em 01/09/2026: 2.323 produtos ativos que
+    controlam estoque sem custo algum** — nunca entrou nota deles aqui e não há
+    preço de fornecedor. Sem custo não há ficha, nem CMV teórico, nem margem: o
+    prato entra na conta valendo zero e o food cost sai bom demais, calado. O
+    Omie já sabe o número (o CMC da posição de estoque), e trazê-lo destrava a
+    conta para todos de uma vez.
+
+    ⚠️ **É REFERÊNCIA, não movimento.** Nada aqui cria saldo nem entra no razão:
+    o CMV real continua saindo do que a casa comprou e contou. Fosse movimento,
+    uma carga errada não se apagaria — o razão é append-only —, e 2.323 linhas
+    erradas entrariam no CMV do período em que a carga fosse feita.
+
+    ⚠️ **Só quem NÃO tem custo.** Nunca sobrescreve o médio do razão (que é o
+    que a casa pagou de verdade, com o frete desta casa rateado dentro) nem o
+    último preço negociado com o fornecedor. Rodar de novo só alcança quem
+    continua sem — é o mesmo "completa o que está em branco" do importador de
+    fornecedores e do de produtos.
+
+    ⚠️ **CMC zero é PULADO.** Zero não é um custo: é o Omie dizendo que não
+    sabe, e gravá-lo faria a ficha calcular com um número inventado — pior que
+    calcular sem, porque o "sem_custo" some do aviso.
+
+    ⚠️ **O de-para é o mesmo da nota** (`vinculo.por_codigo_omie`): a coluna e
+    depois os apelidos. Um cadastro que absorveu o duplicado responde pelos
+    códigos dos dois, e olhar só a coluna deixaria o principal de fora.
+
+    `aplicar=False` é a PRÉVIA — mesma varredura, sem gravar. Ela existe porque
+    2.323 produtos é grande demais para se descobrir o efeito depois.
+    """
+    achados: list[dict] = []
+    vistos = 0
+    sem_cadastro = 0
+    ja_tem_custo = 0
+    sem_cmc = 0
+    truncou = {"foi": False}
+
+    def marcar(trazidos, total):
+        truncou["foi"] = True
+        truncou["trazidos"], truncou["total"] = trazidos, total
+
+    try:
+        for _dados, registros in cliente.paginar(
+            "estoque/consulta", "ListarPosEstoque", "produtos",
+            dialeto=DIALETO_POSICAO, por_pagina=200, maximo=30, ao_truncar=marcar,
+        ):
+            for bruto in registros:
+                pos = mapeadores.posicao_de_estoque(bruto)
+                if not pos["codigo_omie"]:
+                    continue
+                vistos += 1
+                id_produto = vinculo.por_codigo_omie(cur, pos["codigo_omie"])
+                if not id_produto:
+                    sem_cadastro += 1
+                    continue
+                if not pos["cmc"] or pos["cmc"] <= 0:
+                    sem_cmc += 1
+                    continue
+
+                # ⚠️ Pergunta pela MESMA cascata que a ficha usa — e sem loja,
+                # porque a referência é da rede: o custo que veio de fora não é
+                # de uma prateleira, é do produto.
+                atual, origem = custos.custo_do_insumo(cur, id_produto)
+                if atual is not None and origem != "referencia":
+                    ja_tem_custo += 1
+                    continue
+
+                cur.execute("SELECT codigo, nome FROM produtos WHERE id = %s", (id_produto,))
+                p = cur.fetchone()
+                achados.append({
+                    "id_produto": id_produto,
+                    "codigo": p["codigo"],
+                    "produto": p["nome"],
+                    "codigo_omie": pos["codigo_omie"],
+                    "custo_omie": float(pos["cmc"]),
+                    # Já tinha referência de uma rodada anterior? A linha diz, e
+                    # o número novo substitui — referência sobrescreve
+                    # referência, nunca custo de verdade.
+                    "ja_era_referencia": origem == "referencia",
+                })
+    except ErroOmie as e:
+        raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
+
+    if aplicar and achados:
+        for a in achados:
+            cur.execute(
+                """UPDATE produtos
+                      SET custo_referencia = %s, custo_referencia_em = now(),
+                          custo_referencia_origem = 'OMIE'
+                    WHERE id = %s""",
+                (a["custo_omie"], a["id_produto"]),
+            )
+
+    achados.sort(key=lambda x: -x["custo_omie"])
+    return {
+        "linhas": achados[:500],
+        "produtos": len(achados),
+        "conferidos": vistos,
+        "sem_cadastro_aqui": sem_cadastro,
+        "ja_tinham_custo": ja_tem_custo,
+        "sem_custo_no_omie": sem_cmc,
+        "aplicado": bool(aplicar),
+        "truncado": truncou["foi"],
+        "message": (
+            (f"{len(achados)} produto(s) receberam custo de referência do Omie"
+             if aplicar else
+             f"{len(achados)} produto(s) receberiam custo de referência do Omie")
+            + f" — {vistos} conferido(s)"
+            + (f", {ja_tem_custo} já tinham custo" if ja_tem_custo else "")
+            + (f", {sem_cadastro} sem cadastro aqui" if sem_cadastro else "")
+            + (f", {sem_cmc} sem custo no Omie" if sem_cmc else "")
+            + (". A varredura parou no teto de páginas — há mais no Omie."
+               if truncou["foi"] else "")
+        ),
+    }
+
+
 def conferir_estoque(cur, cliente: ClienteOmie, so_divergentes: bool = True) -> dict:
     """Saldo e custo médio daqui × posição de estoque do Omie.
 

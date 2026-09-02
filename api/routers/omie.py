@@ -283,6 +283,46 @@ def conferencia_notas(
         return importador.conferir_notas(cur, id_unidade, _cliente(cur, id_unidade), inicio, fim)
 
 
+@router.get("/custos-iniciais/previa")
+def previa_custos_iniciais(
+    ctx: Contexto = Depends(requer_permissao("integracao.omie")),
+) -> dict:
+    """Quantos produtos receberiam custo do Omie, e quais — antes de gravar.
+
+    ⚠️ Existe pelo mesmo motivo da prévia do inventário e da exportação: 2.323
+    produtos é grande demais para se descobrir o efeito depois. A varredura é a
+    mesma; o que muda é não escrever nada.
+    """
+    with get_cursor() as cur:
+        cliente = _cliente(cur, unidade_atual(cur, ctx))
+        return importador.custos_iniciais(cur, cliente, ctx.id_usuario, aplicar=False)
+
+
+@router.post("/custos-iniciais")
+def aplicar_custos_iniciais(
+    ctx: Contexto = Depends(requer_permissao("integracao.omie")),
+) -> dict:
+    """Grava o custo médio do Omie nos produtos que aqui não têm custo nenhum.
+
+    🔑 **É REFERÊNCIA, não movimento**: nada entra no razão e nenhum saldo muda.
+    O CMV real continua saindo do que a casa comprou e contou; o que isto
+    destrava é a ficha, o CMV teórico e a margem dos produtos que hoje entram na
+    conta valendo zero.
+
+    ⚠️ **Só quem NÃO tem custo.** O médio do razão e o último preço do
+    fornecedor ganham sempre — o primeiro é o que a casa pagou com o frete dela
+    dentro, o segundo é o que ela negociou.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cliente = _cliente(cur, id_unidade)
+        r = importador.custos_iniciais(cur, cliente, ctx.id_usuario, aplicar=True)
+        auditoria.registrar(
+            cur, ctx.id_usuario, "integracao", SERVICO, "custos_iniciais",
+            depois={k: v for k, v in r.items() if k != "linhas"}, id_unidade=id_unidade)
+    return r
+
+
 @router.get("/conferencia")
 def conferencia(so_divergentes: bool = True,
                 ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:

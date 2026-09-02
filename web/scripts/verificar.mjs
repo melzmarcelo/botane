@@ -3206,6 +3206,39 @@ try {
     /conferido\(s\)/i.test(conf) || /Nenhum produto/i.test(conf), conf.slice(0, 200));
   await foto(p, "33-conferencia-estoque");
 
+  // 🔑 **O custo inicial.** Medido na base: 2.323 produtos ativos que controlam
+  // estoque sem custo nenhum — nunca entrou nota deles aqui e nao ha preco de
+  // fornecedor. Sem custo nao ha ficha, nem CMV teorico, nem margem: o prato
+  // entra na conta valendo ZERO e o food cost sai bom demais, calado.
+  // ⚠️ A tela tem de DIZER que e referencia e nao movimento — quem clica sem
+  // isso espera ver o estoque encher, e nada no saldo vai mudar.
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => /Trazer o custo inicial/i.test(x.textContent ?? ""));
+    b?.click();
+  });
+  let custosTexto = "";
+  for (let tentativa = 0; tentativa < 30; tentativa++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    custosTexto = await textoVisivel(p);
+    if (/receberiam custo de refer[êe]ncia|Falha ao consultar/i.test(custosTexto)) break;
+  }
+  checar("a previa do custo inicial responde",
+    /receberiam custo de refer[êe]ncia/i.test(custosTexto), custosTexto.slice(0, 200));
+  // ⚠️ **A previa NAO grava**, e a tela precisa mostrar o botao de aplicar
+  // separado: com 2.323 produtos, descobrir o efeito depois e tarde.
+  const previaCusto = await p.evaluate(() => ({
+    dizReferencia: /custo de refer[êe]ncia/i.test(document.body.innerText),
+    dizQueNaoMexeNoRazao: /nada entra no raz[ãa]o/i.test(document.body.innerText),
+    temAplicar: [...document.querySelectorAll("button")]
+      .some((b) => /^Aplicar em \d+ produto/.test(b.textContent?.trim() ?? "")),
+  }));
+  checar("dizendo que e REFERENCIA, nao movimento de estoque",
+    previaCusto.dizReferencia && previaCusto.dizQueNaoMexeNoRazao, previaCusto);
+  checar("e o gravar fica num botao separado, depois da previa",
+    previaCusto.temAplicar, previaCusto);
+  await foto(p, "33b-custo-inicial");
+
   console.log("10y. buscar notas do Omie sozinho");
   // ⚠️ A agenda nasce MANUAL e este bloco a devolve assim — a conta configurada
   // aqui pode ser a REAL, e deixar HORARIA ligada faria a máquina buscar notas

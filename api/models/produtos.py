@@ -219,6 +219,14 @@ class ProdutoResponse(BaseModel):
     # fornecedor, e juntá-los só é confiável se dá para VER que aquele cadastro
     # já responde por cinco códigos de lá.
     codigos_externos: list[CodigoExterno] = []
+    # 🔑 **O último degrau da cascata de custo** (migração 049): quanto vale uma
+    # unidade quando não há médio no razão nem preço de fornecedor. Não é saldo
+    # nem movimento — só destrava a ficha e o CMV teórico de quem entraria na
+    # conta valendo zero. `origem` diz de onde veio; sem ela, daqui a seis meses
+    # ninguém sabe se o número foi importado ou digitado.
+    custo_referencia: float | None = None
+    custo_referencia_em: datetime | None = None
+    custo_referencia_origem: str | None = None
     sincronizado_em: datetime | None = None
     origem: str
     status: str

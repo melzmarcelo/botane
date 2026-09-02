@@ -125,6 +125,23 @@ imediato: alguém carrega a caixa e pronto.
 
 ---
 
+### Produto sem custo: trazer do Omie
+
+Produto que nunca teve nota lançada aqui não tem custo — e sem custo ele entra
+na ficha e no CMV **valendo zero**, o que faz a margem parecer melhor do que é.
+
+Em **Integrações**, o botão **Trazer o custo inicial** busca o custo médio que o
+Omie tem e o grava nos produtos que aqui não têm custo nenhum. Antes de gravar
+ele mostra a lista e o total; o botão de aplicar vem depois.
+
+⚠️ **Isso não mexe no estoque.** Nenhum saldo muda e nada entra no razão — é só
+um custo de referência, para a conta poder ser feita. O custo médio das notas
+lançadas aqui e o preço negociado com o fornecedor continuam ganhando dele.
+
+⚠️ Rodar de novo só alcança quem continua sem custo.
+
+---
+
 ### Prato novo no PDV aparece aqui sozinho
 
 Toda busca de vendas traz os cadastros junto: o prato que nasceu no cardápio do

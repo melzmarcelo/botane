@@ -32,7 +32,8 @@ def custo_do_insumo(cur, id_produto: int,
                     id_unidade: int | None = None) -> tuple[Decimal | None, str]:
     """Custo de UMA unidade de estoque do insumo, e de onde ele veio.
 
-    Ordem: **custo médio do estoque DA LOJA** → último preço do fornecedor.
+    Ordem: **custo médio do estoque DA LOJA** → último preço do fornecedor →
+    **custo de referência** (o que veio de fora, quando ninguém mais sabe).
     Devolve (None, "sem_custo") quando ninguém sabe quanto custa — o que a tela
     precisa dizer em vez de mostrar zero.
 
@@ -85,14 +86,32 @@ def custo_do_insumo(cur, id_produto: int,
         (id_produto,),
     )
     linha = cur.fetchone()
-    if not linha:
-        return None, "sem_custo"
+    if linha:
+        # `ultimo_preco` é gravado pelo lançamento da nota JÁ por unidade de
+        # estoque (o `custo_aquisicao_unitario`, com frete e desconto dentro).
+        # Dividir pelo fator de novo aplicaria a caixa duas vezes: 12,00 a caixa
+        # de 12 viraria 0,08 o pacote.
+        return dec(linha["ultimo_preco"]).quantize(CASAS_CUSTO), "ultima_compra"
 
-    # `ultimo_preco` é gravado pelo lançamento da nota JÁ por unidade de estoque
-    # (o `custo_aquisicao_unitario`, com frete e desconto dentro). Dividir pelo
-    # fator de novo aplicaria a caixa duas vezes: 12,00 a caixa de 12 viraria
-    # 0,08 o pacote.
-    return dec(linha["ultimo_preco"]).quantize(CASAS_CUSTO), "ultima_compra"
+    # 🔑 **O último degrau: o custo de REFERÊNCIA** (migração 049, 01/09/2026).
+    # Medido na base: 2.323 produtos ativos que controlam estoque não chegavam
+    # aqui com número nenhum — nunca entrou nota deles e não há preço de
+    # fornecedor. Sem custo não há ficha, nem CMV teórico, nem margem: o prato
+    # entra na conta valendo zero e o food cost sai bom demais, calado.
+    #
+    # ⚠️ **Vem por ÚLTIMO de propósito.** O médio do razão é o que a casa pagou
+    # de verdade, com frete dentro; o preço do fornecedor é o que ela negociou.
+    # A referência é o que OUTRO sistema acha — melhor que nada e pior que os
+    # dois, então só responde quando ninguém mais sabe.
+    cur.execute(
+        "SELECT custo_referencia FROM produtos WHERE id = %s AND custo_referencia > 0",
+        (id_produto,),
+    )
+    linha = cur.fetchone()
+    if linha:
+        return dec(linha["custo_referencia"]).quantize(CASAS_CUSTO), "referencia"
+
+    return None, "sem_custo"
 
 
 def converter(qtd: Decimal, de: str | None, para: str | None, ums: dict) -> Decimal | None:
