@@ -1022,8 +1022,24 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                         p["um"] = None
                 id_categoria = _categoria_da_familia(cur, p["familia"], categorias)
 
+                # 🔑 **A COLUNA e depois os APELIDOS** — e sem o segundo o
+                # duplicado renascia por esta porta. Ao juntar dois cadastros do
+                # mesmo abacate, o código do absorvido vira apelido e a coluna
+                # dele é zerada: esta consulta não achava mais nada e o catálogo
+                # criava um rascunho novo, desfazendo o trabalho de juntar. É o
+                # mesmo defeito que a cascata da nota já tinha, pela outra porta.
+                # ⚠️ Sem `AND ativo`, ao contrário da cascata: aqui a pergunta é
+                # "este produto do Omie já existe aqui?", e cadastro inativo
+                # existe — completá-lo é certo, duplicá-lo não.
                 cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (p["codigo_omie"],))
                 existente = cur.fetchone()
+                if not existente:
+                    cur.execute(
+                        """SELECT id_produto AS id FROM codigos_externos
+                            WHERE sistema = %s AND codigo = %s""",
+                        (vinculo.SISTEMA_PRODUTO, str(p["codigo_omie"])),
+                    )
+                    existente = cur.fetchone()
                 if existente:
                     # ⚠️ **Produto que já existe passou a RECEBER o que falta.**
                     # Antes esta linha só contava "atualizado" e seguia sem

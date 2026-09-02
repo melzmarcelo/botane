@@ -1108,6 +1108,19 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **O apelido NÃO filtra por `ativo`**, ao contrário da coluna: ele É a decisão de alguém,
   gravada para apontar para o principal. A contrapartida é que um principal desativado depois
   continuaria recebendo — aceito, e é o mesmo comportamento do vínculo de nível 1.
+  🔑 **E o CATÁLOGO do Omie tinha o mesmo defeito, pela porta do lado** (01/09/2026).
+  `importar_catalogo` procurava só pela COLUNA `codigo_omie` — e ao juntar dois cadastros a do
+  absorvido é zerada, então o código passa a existir **só como apelido**: a consulta não achava
+  nada e um **rascunho novo** era criado. O duplicado renascia na sincronização seguinte,
+  desfazendo o trabalho de juntar, e sem ninguém ter feito nada. Ele agora consulta a coluna e
+  depois os apelidos.
+  ⚠️ **Sem `AND ativo` ali, ao contrário da cascata**: a pergunta do catálogo é "este produto do
+  Omie já existe aqui?", e cadastro inativo existe — completá-lo é certo, duplicá-lo não.
+  ⚠️ **Fornecedor NOVO com código novo não tem como cair no principal sozinho**, e está certo:
+  a cascata tenta o EAN (que resolve quando a nota traz `cEAN` e o principal tem o mesmo) e o
+  código no fornecedor; falhando, o item fica PENDENTE com sugestão, e quem reconhece decide —
+  vincular com "aprender" grava o de-para e a próxima nota daquele fornecedor entra sozinha.
+  Adivinhar por semelhança é o que este projeto removeu.
 - **O vínculo entre cadastros é DECLARADO, não detectado** (`services/produtos_vinculo.py`,
   botão **Vincular** na tela do produto, 27/08/2026). O sistema recebe produto por três portas —
   catálogo do Omie (o que se compra), cardápio do PDV (o que se vende) e a mão de quem cadastra —
@@ -2167,13 +2180,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.641 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.643 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (82),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e

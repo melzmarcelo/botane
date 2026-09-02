@@ -437,6 +437,21 @@ checar("a nota com o código do ABSORVIDO cai no principal",
        _antes[0] == abacate, (_antes[0], abacate))
 checar("e o caminho é o do código do Omie, não um palpite",
        _antes[3] == "codigo_omie", _antes[3])
+# 🔑 **E o CATÁLOGO tem de achar o mesmo — senão o duplicado renasce por outra
+# porta.** A importação procurava só pela COLUNA `codigo_omie`; ao juntar, a do
+# absorvido é zerada e o código só existe como apelido: a consulta não achava
+# nada e um rascunho novo era criado, desfazendo o trabalho de juntar. Mesmo
+# defeito da cascata da nota, pela porta do lado.
+with _cursor() as _cur:
+    _cur.execute("SELECT id FROM produtos WHERE codigo_omie = %s", (f"OM2{marca}",))
+    _pela_coluna = _cur.fetchone()
+    _cur.execute("""SELECT id_produto FROM codigos_externos
+                     WHERE sistema = 'OMIE_PRODUTO' AND codigo = %s""", (f"OM2{marca}",))
+    _pelo_apelido = _cur.fetchone()
+checar("a coluna do absorvido foi zerada — o catálogo não o acha por ela",
+       _pela_coluna is None, _pela_coluna)
+checar("mas o apelido responde, e é ele que evita o rascunho duplicado",
+       (_pelo_apelido or {}).get("id_produto") == abacate, _pelo_apelido)
 
 print()
 print("7b. a prévia MOSTRA por quais códigos o cadastro vai responder")
