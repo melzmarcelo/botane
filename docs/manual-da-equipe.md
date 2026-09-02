@@ -125,6 +125,39 @@ imediato: alguém carrega a caixa e pronto.
 
 ---
 
+### O mesmo produto com vários códigos
+
+O catálogo do Omie cria **um cadastro por código** — e o mesmo abacate aparece uma
+vez para cada fornecedor que já o vendeu. Para juntar tudo num produto só há dois
+caminhos, e eles não são a mesma coisa:
+
+Abra o cadastro que vai ser o **principal** e clique em **Vincular**, no alto da
+tela. Procure o outro cadastro, e **vá acrescentando quantos quiser** — cada um
+vira uma etiqueta na lista.
+
+Antes do botão, a janela mostra:
+
+- **Fica** e **Sai (vira inativo)** — quem sobrevive e quem é absorvido;
+- **Como fica** — com que nome o produto vai ficar;
+- **Códigos que passam a cair neste cadastro** — a lista dos códigos de fora que
+  o principal vai responder depois da fusão.
+
+⚠️ **O código do Omie de cada absorvido não se perde**: ele passa a apontar para o
+principal. É por ele que a próxima nota daquele fornecedor entra no cadastro
+certo, sem criar o duplicado de novo.
+
+⚠️ **Cadastro com história não é absorvido.** O que já recebeu nota lançada tem
+movimento no estoque, e a janela recusa com o motivo — juntar duas histórias
+exigiria reescrever o razão, que não se reescreve. Para esses, o caminho é a
+própria nota: no item pendente, **vincular** ao produto certo com a caixinha de
+aprender marcada. Da próxima vez ele entra sozinho, e o estoque entra no
+principal.
+
+⚠️ O sistema **nunca adivinha** que dois cadastros são o mesmo produto. Quem
+reconhece é você.
+
+---
+
 ### Corrigir um setor, local, categoria ou unidade
 
 Menu **Cadastros → Tabelas de apoio**. Cada linha tem **editar**: o registro

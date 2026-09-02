@@ -185,6 +185,11 @@ def previa(cur, id_tela: int, id_escolhido: int) -> dict:
             "codigo_barras": fica["codigo_barras"] or sai["codigo_barras"],
         },
         "itens_de_venda": itens_venda,
+        # 🔑 **As linhas de código EXTERNO que o cadastro passa a ter.** É o que
+        # responde ao ABACATE: o catálogo do Omie cria um produto por código, e
+        # juntar os cinco só é confiável se dá para ver, ANTES de confirmar, que
+        # o principal vai responder pelos cinco códigos de lá.
+        "codigos_externos": _codigos_do_resultado(cur, fica, sai),
         # ⚠️ A tela precisa saber que a direção foi trocada — senão a pessoa
         # confirma achando que o cadastro que ela abriu é o que fica.
         "invertido": invertido,
@@ -195,6 +200,47 @@ def previa(cur, id_tela: int, id_escolhido: int) -> dict:
         "completa": [c for c in _COMPLETAVEIS
                      if not fica.get(c) and sai.get(c)],
     }
+
+
+def _codigos_do_resultado(cur, fica: dict, sai: dict) -> list[dict]:
+    """Os códigos de fora que vão cair no cadastro que fica, e de onde vêm.
+
+    Três origens, e a tela mostra as três porque respondem a perguntas
+    diferentes:
+
+    * **principal** — a coluna `codigo_omie`/`codigo_pdv` do que fica;
+    * **vira apelido** — a coluna do ABSORVIDO, quando os dois lados têm uma.
+      É a linha que não existia: o `codigo_omie` de sair era simplesmente
+      descartado, e a próxima nota que o trouxesse não achava o principal;
+    * **já aponta** — o que já estava em `codigos_externos` dos dois lados (o do
+      absorvido muda de dono na fusão).
+    """
+    linhas: list[dict] = []
+    for coluna, sistema in (("codigo_omie", "OMIE_PRODUTO"), ("codigo_pdv", "PDV_LEGAL")):
+        if fica.get(coluna):
+            linhas.append({"sistema": sistema, "codigo": fica[coluna],
+                           "origem": "principal", "descricao": fica["nome"]})
+        if sai.get(coluna):
+            # Sem código do lado que fica, ele sobe a PRINCIPAL em vez de virar
+            # apelido — é o que `_absorver` faz, e a prévia tem de dizer o mesmo.
+            linhas.append({
+                "sistema": sistema, "codigo": sai[coluna],
+                "origem": "principal" if not fica.get(coluna) else "vira apelido",
+                "descricao": sai["nome"],
+            })
+
+    cur.execute(
+        """SELECT c.sistema, c.codigo, c.descricao_externa, f.nome AS fornecedor
+             FROM codigos_externos c
+             LEFT JOIN fornecedores f ON f.id = c.id_fornecedor
+            WHERE c.id_produto = ANY(%s)
+            ORDER BY c.sistema, c.codigo""",
+        ([fica["id"], sai["id"]],),
+    )
+    for r in cur.fetchall():
+        linhas.append({"sistema": r["sistema"], "codigo": r["codigo"], "origem": "já aponta",
+                       "descricao": r["descricao_externa"] or r["fornecedor"]})
+    return linhas
 
 
 def _baixa_pendente(cur, fica: dict, sai: dict) -> dict | None:
@@ -328,6 +374,7 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
     número é o do dia em que a venda aconteceu.
     """
     from services import cmv as motor
+    from services.omie import vinculo as vinculo_omie
     from services.pdv import vinculo
 
     conferido = previa(cur, id_tela, id_escolhido)
@@ -369,11 +416,21 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
             vinculo.gravar(cur, id_fica, sai[coluna], sai["nome"], id_usuario)
             movidos["apelido_pdv"] = sai[coluna]
 
-    # ⚠️ Dois códigos do Omie são DOIS produtos lá — não é duplicado de entrada.
-    # A `previa` não trava isso porque o cadastro daqui pode ser o mesmo produto
-    # mesmo assim; o que não se pode é escolher qual código vale.
+    # 🔑 **Dois códigos do Omie também é caso REAL, e o de sair virava LIXO.**
+    # Aqui ficava um `movidos["codigo_omie_descartado"]` e mais nada — a mesma
+    # situação do PDV, tratada de dois jeitos na mesma função. O efeito: a casa
+    # juntava os cinco cadastros de ABACATE que o catálogo tinha criado (um por
+    # fornecedor) e, na primeira nota que trouxesse o código de um absorvido, o
+    # sistema não achava o principal — a cascata filtra `AND ativo` e o
+    # absorvido está arquivado. O item caía na fila de pendentes e quem
+    # clicasse em "criar produto" recriava o duplicado: o trabalho de juntar se
+    # desfazia sozinho.
+    # ⚠️ A coluna do absorvido é ZERADA junto: ela é única, e deixá-la lá
+    # manteria o código preso a um cadastro arquivado.
     if sai["codigo_omie"] and fica["codigo_omie"]:
-        movidos["codigo_omie_descartado"] = sai["codigo_omie"]
+        cur.execute("UPDATE produtos SET codigo_omie = NULL WHERE id = %s", (id_sai,))
+        vinculo_omie.gravar_apelido(cur, id_fica, sai["codigo_omie"], sai["nome"], id_usuario)
+        movidos["apelido_omie"] = sai["codigo_omie"]
 
     # -------------------------------------- o que estiver em branco no que fica
     completados = []

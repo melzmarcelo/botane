@@ -1049,6 +1049,53 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **Cada DIA da janela é uma requisição** (é o único jeito sem teto de 100 cupons): a horária
   com janela de 30 dias são 720 chamadas por dia para reler o mesmo mês. A tela diz a conta,
   porque "a cada hora" não parece caro até alguém multiplicar.
+- 🔑 **O ABACATE: um cadastro por fornecedor, e o de-para que junta os cinco** (01/09/2026,
+  pedido do dono). O catálogo do Omie cria um produto por CÓDIGO, e o mesmo abacate aparece uma
+  vez para cada fornecedor que já o vendeu. O pedido foi "um produto principal e poder vincular
+  os demais, por uma tabela auxiliar com os códigos do Omie".
+  ⚠️ **A tabela já existia** — `codigos_externos`, chave `(sistema, código) → id_produto`, com
+  fornecedor, fator, a descrição de lá e quem confirmou. Ela é o **nível 1 da cascata** de
+  conciliação da nota, e o "aprender" do item pendente já a alimentava. O que faltava era o
+  lado do PRODUTO do Omie, e uma tela.
+  🔑 **A fusão DESCARTAVA o `codigo_omie` do absorvido** — enquanto o `codigo_pdv` virava
+  apelido, na MESMA função, com a justificativa de que senão "ele voltaria a criar rascunho na
+  importação seguinte". A mesma situação, tratada de dois jeitos. O efeito era o trabalho se
+  desfazendo sozinho: juntavam-se os cinco abacates e, na primeira nota que trouxesse o código
+  de um absorvido, o sistema não achava o principal (a cascata filtra `AND ativo`, e ele está
+  arquivado) — o item caía na fila de pendentes e quem clicasse em "criar produto" recriava o
+  duplicado. Agora ele vira apelido, e a coluna do absorvido é **zerada** junto: ela é única, e
+  deixá-la lá manteria o código preso a um cadastro arquivado.
+  ⚠️ **`SISTEMA_PRODUTO = "OMIE_PRODUTO"` é um espaço de nome NOVO, e tinha de ser.** O
+  `sistema = "OMIE"` guarda o código que vem na LINHA da nota (o do fornecedor); o identificador
+  do produto no Omie é outra coisa, que pode ter o mesmo valor. Enfiar os dois na mesma chave é
+  a família do erro que ligou REDBULL a LIMÃO TAITY.
+  🔑 **Tudo pelo MESMO botão Vincular, e ele passou a aceitar VÁRIOS** (decisão do dono, depois
+  de ver a primeira versão). Houve um cartão separado "Outros códigos deste produto" no cadastro,
+  com endpoints próprios para gravar e tirar código à mão — e ele **saiu**: duas portas para a
+  mesma coisa são duas versões da mesma verdade, e a janela do Vincular já é onde se reconhece
+  que dois cadastros são o mesmo produto. Juntar os cinco abacates um a um seria abrir aquela
+  janela cinco vezes, e a quinta já não lembraria o que a primeira decidiu.
+  🔑 **E o "Como fica" mostra as LINHAS DE CÓDIGO EXTERNO que vão sobrar**
+  (`previa.codigos_externos`), com a origem de cada uma: **principal** (a coluna do que fica),
+  **vira apelido** (a coluna do absorvido, a linha que antes era descartada) e **já aponta** (o
+  que os dois lados já tinham). É o que faz a fusão em lote ser confiável — sem ver por quais
+  códigos o cadastro vai responder, confirma-se no escuro e o defeito só aparece na nota que
+  não achou dono.
+  ⚠️ **Sem código do lado que fica, o do absorvido sobe a PRINCIPAL** em vez de virar apelido —
+  a prévia diz exatamente o que `_absorver` faz, e a suíte cobra os dois caminhos.
+  ⚠️ **Todos os escolhidos têm de cair no MESMO principal.** A direção é dos fatos: um cadastro
+  com história puxa a fusão para o lado dele. Num lote isso vira trava com frase, porque o
+  sobrevivente seria outro e a pessoa confirmaria uma coisa acontecendo outra.
+  ⚠️ **Um pedido por cadastro, em ordem, e parar no meio deixa as anteriores feitas** — que é um
+  estado bom, não pela metade: cada fusão é a mesma operação repetida. A mensagem de erro diz
+  quantas já foram.
+  ⚠️ **`key={escolhidos.length}` no `BuscaCadastro`**: ele guarda o texto digitado em estado
+  próprio e só o sincroniza quando o `selecionado` muda — passando `null` sempre, o nome do
+  produto anterior ficaria no campo e o próximo seria digitado por cima dele.
+  ⚠️ **Continua sem detector.** Nada aqui adivinha quais cadastros são o mesmo abacate: a tela
+  guarda o que a pessoa disse. Mesma decisão que removeu a cascata por semelhança.
+  ⚠️ E para o duplicado que a fusão RECUSA (já tem movimento no razão), o caminho continua
+  sendo o item da nota: vincular com "aprender" grava o de-para, e o estoque entra no principal.
 - **O vínculo entre cadastros é DECLARADO, não detectado** (`services/produtos_vinculo.py`,
   botão **Vincular** na tela do produto, 27/08/2026). O sistema recebe produto por três portas —
   catálogo do Omie (o que se compra), cardápio do PDV (o que se vende) e a mão de quem cadastra —
@@ -1787,6 +1834,13 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
      01/09/2026 com o usuário deixado INATIVO por outra rodada: a falha dizia "usuário de
      cozinha disponível: falso", que não fala do sistema. Ao corrigir uma armadilha destas,
      **procurar todos os chamadores** — não só o que está vermelho naquele dia.
+     ⚠️ **E `smoke_pdv_legal` tinha a versão dela pela ponta da CONFIGURAÇÃO** (01/09/2026):
+     o restauro do `enviar_ao_pdv` era feito EM LINHA, no meio da suíte, devolvendo o
+     interruptor para o que a casa tinha — e o bloco seguinte, escrito depois, precisa dele
+     LIGADO. A suíte passava só quando a casa por acaso estava com o envio ligado, e quebrou
+     com 409 no dia em que ele estava desligado. Restauro de configuração vai no **`atexit`**,
+     como `preservar_credenciais` e `devolver_o_modo_original` — que era o que o comentário ao
+     lado dele já mandava fazer.
   3. `smoke_pdv_legal` contava com a CAFETERIA e o BAR deixados pela importação do cardápio.
      ⚠️ E `_garantir` precisou comparar **sem caixa**: a unicidade do nome ignora maiúsculas,
      então o POST devolve 409 para "BAR" quando existe "Bar" — e a busca exata não achava o
@@ -2101,17 +2155,17 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.627 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.639 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (50), `smoke_estoque.py` (142), `smoke_cmv.py` (63), `smoke_omie.py` (105),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (37), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (68),
+  `smoke_exportacoes.py` (104), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (27), `smoke_pdv_legal.py` (150), `smoke_vendas.py` (39), `smoke_vinculo.py` (80),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (405, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (414, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

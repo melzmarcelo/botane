@@ -23,6 +23,7 @@ from services import estoque as motor
 from services import custos
 from services.custos import CASAS_CUSTO, dec
 from services.omie import mapeadores
+from services.omie import vinculo
 from services.omie.cliente import DIALETO_HUNGARO, DIALETO_POSICAO, ClienteOmie, ErroOmie
 
 SISTEMA = "OMIE"
@@ -85,13 +86,15 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
     # `nIdProduto`, e o catálogo importado guardou esse mesmo número em
     # `codigo_omie`: é o de-para que o Omie já fez, e não depende de EAN nem de
     # texto. Quem importou o catálogo antes das notas encontra tudo por aqui.
+    # 🔑 **A coluna, e depois os APELIDOS** (`vinculo.por_codigo_omie`). Um
+    # produto da casa pode ser vários lá — o catálogo cria um cadastro por
+    # código, e o ABACATE aparece uma vez por fornecedor. Ao juntá-los, o código
+    # do absorvido vira apelido; sem este passo, a próxima nota que o trouxesse
+    # não acharia o principal e o duplicado renasceria.
     if item.get("codigo_omie"):
-        cur.execute(
-            "SELECT id FROM produtos WHERE codigo_omie = %s AND ativo", (item["codigo_omie"],)
-        )
-        achado = cur.fetchone()
+        achado = vinculo.por_codigo_omie(cur, item["codigo_omie"])
         if achado:
-            return achado["id"], None, 100.0, "codigo_omie"
+            return achado, None, 100.0, "codigo_omie"
 
     # 3. EAN — chave natural, não depende de quem digitou
     if ean:

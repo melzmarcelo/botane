@@ -331,15 +331,30 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         produto["preco_casa"] = da_casa["preco_venda"] if da_casa else None
         produto["preco_loja"] = da_loja["preco_venda"] if da_loja else None
 
-        # ⚠️ Os códigos EXTRAS do cardápio. "ENTREGA" tem quatro na conta real;
-        # o campo `codigo_pdv` guarda o principal e estes são os apelidos — sem
-        # eles, a tela diria que o produto tem um vínculo quando tem quatro.
+        # 🔑 **Todos os códigos de fora que apontam para este produto.** As
+        # colunas `codigo_omie` e `codigo_pdv` guardam UM cada; estes são os
+        # outros — e eles são a resposta para o caso do ABACATE, que o catálogo
+        # do Omie cria uma vez por fornecedor. Sem ver a lista, não há como
+        # saber que aquele cadastro já responde por cinco códigos de lá.
+        # ⚠️ Com o nome do fornecedor junto quando existe: "código 8821" não
+        # diz nada; "8821 — Hortifruti Silva" diz de quem é.
         cur.execute(
-            """SELECT codigo FROM codigos_externos
-                WHERE sistema = 'PDV_LEGAL' AND id_produto = %s ORDER BY codigo""",
+            """SELECT c.sistema, c.codigo, c.descricao_externa, c.fator,
+                      c.origem_vinculo, c.confirmado_em,
+                      f.nome AS fornecedor, u.nome AS confirmado_por
+                 FROM codigos_externos c
+                 LEFT JOIN fornecedores f ON f.id = c.id_fornecedor
+                 LEFT JOIN usuarios u ON u.id = c.confirmado_por
+                WHERE c.id_produto = %s
+                ORDER BY c.sistema, c.codigo""",
             (id_produto,),
         )
-        produto["apelidos_pdv"] = [r["codigo"] for r in cur.fetchall()]
+        produto["codigos_externos"] = [dict(r) for r in cur.fetchall()]
+        # ⚠️ Continua saindo separado porque a tela do PDV o usa para dizer
+        # quantos códigos de cardápio o produto tem — derivado da lista acima,
+        # nunca de uma segunda consulta que possa divergir dela.
+        produto["apelidos_pdv"] = [c["codigo"] for c in produto["codigos_externos"]
+                                   if c["sistema"] == "PDV_LEGAL"]
 
         cur.execute(
             """SELECT pf.id_fornecedor, f.nome AS fornecedor, pf.codigo_no_fornecedor,

@@ -1120,8 +1120,14 @@ checar("enviar em simulado nao finge que gravou",
 # o dono ligar o envio e o deixou DESLIGADO, sem avisar — a tela de Exportacao
 # some do menu e nada explica por que. Mesma licao do `devolver_o_modo_original`
 # e do `preservar_credenciais`: teste que mexe em configuracao devolve o que achou.
-chamar("PUT", "/pdv/config",
-       {**base_cfg, "enviar_ao_pdv": cfg_atual.get("enviar_ao_pdv", False)}, token=token)
+# 🔑 **E o restauro vai no `atexit`, não aqui.** Feito em linha, ele devolvia o
+# interruptor no MEIO da suíte — e o bloco 8l, escrito depois, precisa dele
+# LIGADO: a suíte passava só quando a casa por acaso tinha o envio ligado, e
+# quebrava com 409 no dia em que ele estava desligado. É a mesma armadilha do
+# "teste que descreve o estado do dia", pela ponta da configuração.
+atexit.register(lambda: chamar(
+    "PUT", "/pdv/config",
+    {**base_cfg, "enviar_ao_pdv": cfg_atual.get("enviar_ao_pdv", False)}, token=token))
 
 
 print("\n8l. a tabela intermediaria de pendencias")

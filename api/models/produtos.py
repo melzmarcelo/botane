@@ -154,6 +154,25 @@ class PrecoDaLoja(BaseModel):
     preco_venda: float | None = Field(default=None, ge=0)
 
 
+class CodigoExterno(BaseModel):
+    """Um código de fora que aponta para um produto daqui.
+
+    ⚠️ `sistema` é o ESPAÇO DE NOME, e ele importa: o código que vem na linha
+    da nota (o do fornecedor) e o identificador do produto no Omie são coisas
+    diferentes que podem ter o mesmo valor. Misturá-los é a família do erro que
+    ligou REDBULL a LIMÃO TAITY.
+    """
+
+    sistema: str
+    codigo: str
+    descricao_externa: str | None = None
+    fator: float | None = None
+    origem_vinculo: str | None = None
+    confirmado_em: datetime | None = None
+    fornecedor: str | None = None
+    confirmado_por: str | None = None
+
+
 class ProdutoResponse(BaseModel):
     id: int
     codigo: str
@@ -195,6 +214,11 @@ class ProdutoResponse(BaseModel):
     # Os códigos EXTRAS do cardápio que apontam para este produto: "ENTREGA" tem
     # quatro na conta real, e um campo só perderia três.
     apelidos_pdv: list[str] = []
+    # 🔑 **Todos os códigos de fora que apontam para este produto.** É o que
+    # responde ao caso do ABACATE: o catálogo do Omie cria um cadastro por
+    # fornecedor, e juntá-los só é confiável se dá para VER que aquele cadastro
+    # já responde por cinco códigos de lá.
+    codigos_externos: list[CodigoExterno] = []
     sincronizado_em: datetime | None = None
     origem: str
     status: str

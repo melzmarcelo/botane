@@ -913,7 +913,7 @@
       <p>Uma cascata, do mais confiável para o menos:</p>
       <ol>
         <li><strong>Vínculo confirmado</strong> — alguém já disse que este código é este produto.</li>
-        <li><strong>Identidade no Omie</strong> — o item traz o id do produto no Omie, e o catálogo importado guardou o mesmo número.</li>
+        <li><strong>Identidade no Omie</strong> — o item traz o id do produto no Omie, e o catálogo importado guardou o mesmo número. Vale para o código principal do cadastro <em>e</em> para os outros que apontem para ele.</li>
         <li><strong>Código de barras</strong> — chave natural, não depende de quem digitou.</li>
         <li><strong>Código no fornecedor</strong> — resolve hortifrúti e distribuidor sem EAN.</li>
         <li><strong>Semelhança de texto</strong> — só <em>sugere</em>. “Filé frango cong” e “filé frango resf” são parecidos e não são a mesma coisa.</li>
@@ -922,6 +922,50 @@
         Vincular um item <strong>ensina o sistema</strong>: a próxima nota daquele fornecedor
         reconhece sozinha. Item que não achou dono fica na fila de pendências — e o botão
         <em>Reconciliar</em> passa a cascata de novo quando o cadastro fica pronto.
+      </p>
+
+      <h3>O mesmo produto com vários códigos</h3>
+      <p>
+        O catálogo do Omie cria <strong>um cadastro por código</strong>, e o mesmo abacate
+        aparece uma vez para cada fornecedor que já o vendeu. Juntá-los tem dois caminhos, e
+        eles não fazem a mesma coisa:
+      </p>
+      <table>
+        <thead><tr><th>Caminho</th><th>O que acontece</th><th>Quando serve</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Vincular</strong> (botão no alto do produto)</td>
+            <td>Funde os cadastros escolhidos: cada um vira inativo e arquivado, e tudo passa para o principal. Dá para escolher <em>vários de uma vez</em></td>
+            <td>Quando o duplicado <em>não tem história</em> — nada no razão, nenhum lote, nenhuma contagem</td>
+          </tr>
+          <tr>
+            <td><strong>Vincular pelo item da nota</strong>, com a caixinha de aprender</td>
+            <td>Os cadastros ficam como estão; só o <em>código</em> passa a apontar para o principal, e o estoque entra nele</td>
+            <td>Quando o duplicado já recebeu nota lançada — a fusão recusa, de propósito</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Antes do botão, a janela do Vincular mostra <strong>por quais códigos o principal vai
+        passar a responder</strong> — o dele, os que vêm de cada absorvido e os que já
+        apontavam. Sem essa lista, confirma-se no escuro: o defeito só apareceria na primeira
+        nota que não achasse dono.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Ao fundir, o código do Omie não se perde</p>
+        <p>
+          O código do cadastro que sai vira um dos <em>outros códigos</em> do que fica. Sem
+          isso, a próxima nota daquele fornecedor não acharia o principal — o item cairia na
+          fila de pendências e quem clicasse em &ldquo;criar produto&rdquo; recriaria o
+          duplicado. O trabalho de juntar se desfaria sozinho.
+        </p>
+      </div>
+      <p>
+        <strong>O sistema nunca adivinha</strong> que dois cadastros são o mesmo produto.
+        Existiu um cruzamento por semelhança de nome e ele foi removido: não achava
+        &ldquo;BEB CERV HEINEKEN 350ML&rdquo; contra &ldquo;CERVEJA HEINEKEN PILSEN&rdquo; — o
+        mesmo produto — e juntava &ldquo;CAKE BOARD N19&rdquo; com &ldquo;N21&rdquo;, que são
+        tamanhos diferentes. Quem reconhece produto é gente.
       </p>
 
       <h3>O custo de aquisição não é o valor da nota</h3>

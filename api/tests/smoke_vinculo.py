@@ -382,6 +382,86 @@ st, rec = chamar("POST", "/pdv/reconciliar", token=token)
 checar("a reconciliação acha o produto pelo apelido",
        (rec.get("vinculados") or 0) >= 1, rec)
 
+print()
+print("7. dois códigos do OMIE: o de sair virava LIXO")
+# 🔑 **O caso do ABACATE.** O catálogo do Omie cria um cadastro por código, e o
+# mesmo abacate aparece uma vez por fornecedor. A fusão DESCARTAVA o
+# `codigo_omie` do absorvido — enquanto o do PDV virava apelido, na mesma
+# função. O efeito: na primeira nota que trouxesse o código do absorvido, o
+# sistema não achava o principal (a cascata filtra `AND ativo`, e ele está
+# arquivado), o item caía na fila de pendentes e quem clicasse em "criar
+# produto" recriava o duplicado. O trabalho de juntar se desfazia sozinho.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ABA1-{marca}", "nome": f"ABACATE PRINCIPAL {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+    "codigo_omie": f"OM1{marca}",
+}, token=token)
+abacate = r.get("id")
+checar("o abacate principal", st == 201, (st, r))
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ABA2-{marca}", "nome": f"ABACATE DO OUTRO FORNECEDOR {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+    "codigo_omie": f"OM2{marca}",
+}, token=token)
+abacate_dup = r.get("id")
+checar("e o duplicado que o catálogo criou", st == 201, (st, r))
+
+st, r = chamar("POST", f"/produtos/{abacate}/vincular", {"id_sai": abacate_dup}, token=token)
+checar("a fusão aceita os dois com código do Omie", st == 200, (st, r))
+checar("e o do absorvido virou APELIDO, não lixo",
+       r.get("apelido_omie") == f"OM2{marca}", r)
+
+st, fica = chamar("GET", f"/produtos/{abacate}", token=token)
+codigos = {(c["sistema"], c["codigo"]) for c in (fica.get("codigos_externos") or [])}
+checar("o principal continua com o código dele",
+       fica.get("codigo_omie") == f"OM1{marca}", fica.get("codigo_omie"))
+checar("e o outro aparece na lista de códigos do produto",
+       ("OMIE_PRODUTO", f"OM2{marca}") in codigos, codigos)
+# ⚠️ A coluna do absorvido é zerada: ela é única, e deixá-la lá manteria o
+# código preso a um cadastro arquivado.
+st, saiu = chamar("GET", f"/produtos/{abacate_dup}", token=token)
+checar("e o absorvido não guarda mais o código", saiu.get("codigo_omie") is None,
+       saiu.get("codigo_omie"))
+
+print()
+print("7b. a prévia MOSTRA por quais códigos o cadastro vai responder")
+# 🔑 **É o que faz a fusão em lote ser confiável.** Juntar os cinco abacates só
+# se decide vendo, ANTES de confirmar, que o principal passa a responder pelos
+# cinco códigos de lá — senão a pessoa confirma no escuro e descobre depois, na
+# nota que não achou dono.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ABA3-{marca}", "nome": f"ABACATE TERCEIRO {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+    "codigo_omie": f"OM3{marca}",
+}, token=token)
+terceiro = r.get("id")
+st, prev = chamar("GET", f"/produtos/{abacate}/vincular/previa?id_sai={terceiro}", token=token)
+linhas = prev.get("codigos_externos") or []
+por_codigo = {l["codigo"]: l for l in linhas}
+checar("a prévia traz as linhas de código do resultado", st == 200 and linhas, (st, linhas))
+checar("o código do que FICA aparece como principal",
+       por_codigo.get(f"OM1{marca}", {}).get("origem") == "principal", por_codigo)
+checar("e o do que SAI aparece como apelido — não some",
+       por_codigo.get(f"OM3{marca}", {}).get("origem") == "vira apelido", por_codigo)
+# ⚠️ O apelido que a fusão anterior criou continua na lista: ele JÁ aponta.
+checar("e o que já apontava continua listado",
+       por_codigo.get(f"OM2{marca}", {}).get("origem") == "já aponta", por_codigo)
+
+# ⚠️ Sem código do lado que fica, o do absorvido sobe a PRINCIPAL em vez de
+# virar apelido — a prévia tem de dizer o mesmo que `_absorver` faz.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ABA4-{marca}", "nome": f"ABACATE SEM CODIGO {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True}, token=token)
+sem_codigo = r.get("id")
+st, prev = chamar("GET", f"/produtos/{sem_codigo}/vincular/previa?id_sai={terceiro}",
+                  token=token)
+linhas = {l["codigo"]: l for l in (prev.get("codigos_externos") or [])}
+checar("com o lado que fica vazio, o código do absorvido vira o PRINCIPAL",
+       linhas.get(f"OM3{marca}", {}).get("origem") == "principal", linhas)
+
+for _p in (abacate, terceiro, sem_codigo):
+    chamar("DELETE", f"/produtos/{_p}", token=token)
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")

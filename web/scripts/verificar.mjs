@@ -3023,11 +3023,61 @@ try {
     // de calar: caixinha ausente sem explicacao lê como funcionalidade faltando.
     checar("e explica que nao ha o que baixar do estoque",
       /Nada a baixar do estoque/i.test(previa), previa.slice(0, 400));
+
+    // 🔑 **O "Como fica" mostra por quais CÓDIGOS o cadastro vai responder.**
+    // É o que faz a fusão ser confiável no caso do ABACATE: o catálogo do Omie
+    // cria um cadastro por código, e o do absorvido era DESCARTADO — a próxima
+    // nota que o trouxesse não achava o principal, o item caía na fila de
+    // pendências e quem clicasse em "criar produto" recriava o duplicado.
+    const linhasDeCodigo = await p.evaluate(() =>
+      [...document.querySelectorAll("#codigos-do-resultado tbody tr")].map((tr) =>
+        [...tr.children].map((td) => (td.textContent ?? "").trim())));
+    checar("o Como fica mostra as linhas de código externo",
+      linhasDeCodigo.length >= 2, linhasDeCodigo);
+    checar("com o do cadastro que fica como principal",
+      linhasDeCodigo.some((l) => l.includes(`771${mVinc}`) && l.includes("principal")),
+      linhasDeCodigo);
+    // ⚠️ Aqui o lado que fica não tem código do PDV, então o do absorvido SOBE
+    // a principal em vez de virar apelido — a prévia diz o mesmo que a fusão faz.
+    checar("e o do que sai também passa a cair aqui",
+      linhasDeCodigo.some((l) => l.includes(`991${mVinc}`)), linhasDeCodigo);
+
+    // 🔑 **Vários de uma vez**: juntar um a um seria abrir esta janela cinco
+    // vezes, e a quinta já não lembraria o que a primeira decidiu.
+    const { dados: vincC } = await api("POST", "/produtos", {
+      codigo: `TVINC-C-${mVinc}`, nome: `HEINEKEN 600 ${mVinc}`,
+      tipo: "REVENDA", um_estoque: "UN", controla_estoque: true, status: "ATIVO",
+      codigo_omie: `773${mVinc}`,
+    }, token);
+    aoTerminar.push(() => api("DELETE", `/produtos/${vincC.id}`, null, token));
+    const buscaMais = await p.$('input[aria-label="Buscar produto"]');
+    if (buscaMais) {
+      await buscaMais.type(`HEINEKEN 600 ${mVinc}`);
+      await p.keyboard.press("Tab");
+      await p.waitForFunction(
+        (codigo) => document.body.innerText.includes(codigo),
+        { timeout: 12000 }, `773${mVinc}`,
+      ).catch(() => {});
+    }
+    const comDois = await p.evaluate(() => ({
+      // Cada escolhido vira uma etiqueta com × para tirar da lista.
+      etiquetas: [...document.querySelectorAll('button[aria-label^="tirar "]')].length,
+      botao: [...document.querySelectorAll("button")]
+        .map((b) => b.textContent?.trim() ?? "")
+        .find((t) => t.startsWith("Vincular e fundir")) ?? "",
+      codigos: [...document.querySelectorAll("#codigos-do-resultado tbody tr")].length,
+    }));
+    checar("dá para acrescentar mais de um cadastro", comDois.etiquetas === 2, comDois);
+    // ⚠️ O botão DIZ quantos vão junto: "Vincular e fundir" no singular faria
+    // parecer que só o último conta.
+    checar("e o botão diz quantos vão junto", /os 2/.test(comDois.botao), comDois);
+    checar("com os códigos dos dois no Como fica",
+      comDois.codigos >= linhasDeCodigo.length + 1, comDois);
     await foto(p, "32-vincular");
 
     await p.evaluate(() => {
       const b = [...document.querySelectorAll("button")].find(
-        (x) => x.textContent?.trim() === "Vincular e fundir");
+        (x) => (x.textContent?.trim() ?? "").startsWith("Vincular e fundir"));
       b?.click();
     });
     await new Promise((r) => setTimeout(r, 2600));
@@ -3041,6 +3091,11 @@ try {
       [depois.codigo_omie, depois.codigo_pdv]);
     const { dados: saiu } = await api("GET", `/produtos/${vincB.id}`, null, token);
     checar("e o outro ficou inativo, nao apagado", saiu.ativo === false, saiu.ativo);
+    // 🔑 E o código do Omie do terceiro não se perdeu: virou apelido, e é por
+    // ele que a próxima nota daquele fornecedor cai neste cadastro.
+    checar("o codigo do Omie do absorvido virou apelido, nao lixo",
+      (depois.codigos_externos ?? []).some((c) => c.codigo === `773${mVinc}`),
+      depois.codigos_externos);
   }
 
   console.log("10x. PDV Legal: a credencial e o que ainda falta");
