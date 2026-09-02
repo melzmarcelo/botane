@@ -423,6 +423,21 @@ st, saiu = chamar("GET", f"/produtos/{abacate_dup}", token=token)
 checar("e o absorvido não guarda mais o código", saiu.get("codigo_omie") is None,
        saiu.get("codigo_omie"))
 
+# 🔑 **A PROMESSA INTEIRA: a nota com o código do absorvido cai no principal.**
+# Tudo o mais neste bloco é meio do caminho — o que importa é onde o estoque
+# entra. A checagem chama a própria cascata, que é quem decide o dono do item:
+# pela HTTP só se chegaria aqui com uma nota do Omie inteira, e o que se quer
+# provar é a decisão, não o transporte.
+sys.path.insert(0, ".")
+from database import get_cursor as _cursor                    # noqa: E402
+from services.omie.importador import conciliar_item           # noqa: E402
+with _cursor() as _cur:
+    _antes = conciliar_item(_cur, {"codigo_omie": f"OM2{marca}"}, None)
+checar("a nota com o código do ABSORVIDO cai no principal",
+       _antes[0] == abacate, (_antes[0], abacate))
+checar("e o caminho é o do código do Omie, não um palpite",
+       _antes[3] == "codigo_omie", _antes[3])
+
 print()
 print("7b. a prévia MOSTRA por quais códigos o cadastro vai responder")
 # 🔑 **É o que faz a fusão em lote ser confiável.** Juntar os cinco abacates só
