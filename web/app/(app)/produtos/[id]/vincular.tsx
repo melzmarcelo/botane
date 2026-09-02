@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Campo, Etiqueta } from "@/components/ui";
+import { Aviso, Campo, Etiqueta, Modal } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
@@ -220,21 +220,48 @@ export default function Vincular({
     }
   }
 
+  // ⚠️ **A janela é o `Modal` da casa, não um overlay próprio.** Esta tela
+  // montava o seu: cresceu com a lista de escolhidos e a tabela de códigos, e
+  // passou a sair da tela sem barra de rolagem em lugar nenhum — o corpo da
+  // página fica travado enquanto a janela está aberta. O `Modal` já resolveu
+  // isso em 29/08: o cartão cabe na altura da janela, o cabeçalho e o rodapé
+  // ficam parados e só o miolo rola. Uma segunda implementação da mesma coisa
+  // ia divergir na primeira correção — e divergiu.
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
-      <div className="w-full max-w-[720px] rounded-[14px] border border-linha bg-superficie p-5 shadow-lg">
-        <p className="rotulo">Vincular cadastros</p>
-        <h2 className="mt-1 text-[20px] font-bold tracking-tight">
-          Que outros cadastros são este mesmo produto?
-        </h2>
-        <p className="mt-2 text-[13.5px] leading-snug text-suave">
-          O que você escolher será <b>fundido neste</b> e ficará inativo. A descrição fica com o
-          nome do lado do Omie e a descrição curta com o do PDV; os campos em branco se
-          completam, e <b>o código de cada absorvido continua caindo aqui</b> — é por ele que a
-          próxima nota daquele fornecedor entra no cadastro certo.
-        </p>
-
-        <div className="mt-4">
+    <Modal
+      titulo="Que outros cadastros são este mesmo produto?"
+      descricao={
+        "O que você escolher será fundido neste e ficará inativo. A descrição fica com o nome "
+        + "do lado do Omie e a curta com o do PDV; os campos em branco se completam, e o "
+        + "código de cada absorvido continua caindo aqui — é por ele que a próxima nota "
+        + "daquele fornecedor entra no cadastro certo."
+      }
+      aoFechar={aoFechar}
+      rodape={
+        // ⚠️ Os botões ficam FORA da rolagem: numa janela longa eles rolam para
+        // fora da vista, e quem não acha o botão conclui que a janela não tem
+        // saída. É o `rodape` que o `Modal` ganhou justamente por isso.
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="btn btn-primario"
+            type="button"
+            disabled={ocupado || !podeFundir}
+            onClick={fundir}
+          >
+            {ocupado
+              ? "Vinculando…"
+              : previas.length > 1
+                ? `Vincular e fundir os ${previas.length}`
+                : "Vincular e fundir"}
+          </button>
+          <button className="btn btn-secundario" type="button" onClick={aoFechar}>
+            Cancelar
+          </button>
+        </div>
+      }
+    >
+      <>
+        <div>
           <Campo
             rotulo="Acrescentar cadastro"
             dica="código ou nome — pode escolher vários, um de cada vez"
@@ -456,24 +483,7 @@ export default function Vincular({
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <button
-            className="btn btn-primario"
-            type="button"
-            disabled={ocupado || !podeFundir}
-            onClick={fundir}
-          >
-            {ocupado
-              ? "Vinculando…"
-              : previas.length > 1
-                ? `Vincular e fundir os ${previas.length}`
-                : "Vincular e fundir"}
-          </button>
-          <button className="btn btn-secundario" type="button" onClick={aoFechar}>
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   );
 }

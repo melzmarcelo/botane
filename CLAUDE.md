@@ -1092,6 +1092,14 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **`key={escolhidos.length}` no `BuscaCadastro`**: ele guarda o texto digitado em estado
   próprio e só o sincroniza quando o `selecionado` muda — passando `null` sempre, o nome do
   produto anterior ficaria no campo e o próximo seria digitado por cima dele.
+  ⚠️ **E a janela passou a ser o `Modal` da casa, não um overlay próprio** (01/09/2026, pedido
+  do dono). Ela montava o seu — e com a lista de escolhidos e a tabela de códigos passou a sair
+  da tela **sem barra de rolagem em lugar nenhum**, porque o corpo da página fica travado
+  enquanto ela está aberta. É o mesmo defeito que a janela de exportação já tinha tido em
+  29/08, e a segunda implementação divergiu na primeira correção — que é sempre o que acontece.
+  Os botões vão no `rodape`, fora da rolagem.
+  ⚠️ A checagem mede numa tela de **1440×760**: a altura de 1000 do resto da bateria esconde
+  exatamente esta classe de defeito.
   ⚠️ **Continua sem detector.** Nada aqui adivinha quais cadastros são o mesmo abacate: a tela
   guarda o que a pessoa disse. Mesma decisão que removeu a cascata por semelhança.
   ⚠️ E para o duplicado que a fusão RECUSA (já tem movimento no razão), o caminho continua
@@ -2222,7 +2230,7 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (414, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (418, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

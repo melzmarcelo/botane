@@ -3073,6 +3073,39 @@ try {
     checar("e o botão diz quantos vão junto", /os 2/.test(comDois.botao), comDois);
     checar("com os códigos dos dois no Como fica",
       comDois.codigos >= linhasDeCodigo.length + 1, comDois);
+
+    // ⚠️ **A janela tem de CABER na tela e rolar POR DENTRO.** Esta montava o
+    // próprio overlay em vez de usar o `Modal` da casa — e com a lista de
+    // escolhidos e a tabela de códigos ela passou a sair da tela sem barra de
+    // rolagem em lugar nenhum, porque o corpo da página fica travado enquanto
+    // ela está aberta. É o mesmo defeito que a janela de exportação já teve, e
+    // a segunda implementação divergiu na primeira correção.
+    // ⚠️ Medido numa tela de notebook de verdade: a altura de 1000 do resto da
+    // bateria esconde exatamente esta classe de defeito.
+    await p.setViewport({ width: 1440, height: 760 });
+    await new Promise((r) => setTimeout(r, 700));
+    const coubeVinc = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      if (!d) return { achou: false };
+      const corpo = d.children[1];
+      corpo.scrollTop = corpo.scrollHeight;
+      const botao = [...d.querySelectorAll("button")].find((b) =>
+        (b.textContent?.trim() ?? "").startsWith("Vincular e fundir"));
+      const cartao = d.getBoundingClientRect();
+      const bb = botao?.getBoundingClientRect();
+      return {
+        achou: true,
+        cabe: cartao.bottom <= window.innerHeight + 1 && cartao.top >= -1,
+        rola: corpo.scrollHeight > corpo.clientHeight + 1,
+        botaoAlcancavel: !!bb && bb.bottom <= window.innerHeight + 1 && bb.top >= 0,
+      };
+    });
+    checar("a janela de vincular cabe na tela de um notebook", coubeVinc.cabe, coubeVinc);
+    checar("com o miolo rolando por dentro", coubeVinc.rola, coubeVinc);
+    // O botão fica FORA da rolagem: rolado até o fim, continua onde estava.
+    checar("e o botão de fundir sempre à vista", coubeVinc.botaoAlcancavel, coubeVinc);
+    await p.setViewport({ width: 1440, height: 1000 });
+    await new Promise((r) => setTimeout(r, 500));
     await foto(p, "32-vincular");
 
     await p.evaluate(() => {
