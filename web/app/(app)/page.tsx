@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao } from "@/components/ui";
+import VendasDoDia, { Dia } from "./vendas-do-dia";
 
 /**
  * A tela inicial: a casa inteira num olhar.
@@ -54,6 +55,8 @@ type Painel = {
     cobertura_ficha_pct: number;
     cmv_teorico: number;
   } | null;
+  /** O movimento do dia da última venda — nulo para quem não vê dinheiro. */
+  dia: Dia | null;
   pesos: { grupo: string; cmv: number; participacao_pct: number }[];
 };
 
@@ -135,6 +138,12 @@ export default function Inicio() {
           .
         </Aviso>
       )}
+
+      {/* 🔑 **O dia vem ANTES do período** (pedido do dono, 03/09/2026): o
+          painel respondia pelo mês inteiro e não dizia como foi o último dia —
+          que é a primeira coisa que se olha de manhã. As setas andam entre dias
+          que TÊM venda; quem diz para onde dá para ir é o servidor. */}
+      {p.dia && <VendasDoDia inicial={p.dia} />}
 
       {d && (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

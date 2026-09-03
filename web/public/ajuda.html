@@ -606,6 +606,7 @@
           <tr><td>Variância</td><td>real − teórico</td></tr>
           <tr><td>Food cost</td><td>CMV real ÷ receita do período</td></tr>
           <tr><td>Receita</td><td>soma do valor dos itens de venda, sem os cancelados</td></tr>
+          <tr><td>Ticket médio do dia</td><td>receita do dia ÷ número de vendas do dia (cupons), sem os cancelados</td></tr>
           <tr><td>Preço de venda</td><td>a tabela de preços do PDV, na importação do cardápio</td></tr>
         </tbody>
       </table>
@@ -680,6 +681,29 @@
         <p>
           O documento diz no cabeçalho se o período está aberto. Período aberto ainda pode mudar
           depois de o arquivo sair da casa &mdash; e este é o arquivo que se assina embaixo.
+        </p>
+      </div>
+
+      <div class="regra">
+        <p class="rotulo">O cartão &ldquo;Vendas do dia&rdquo; abre no dia da ÚLTIMA venda</p>
+        <p>
+          Não em hoje. De manhã &mdash; ou num dia em que a busca no PDV ainda não rodou
+          &mdash; hoje é um dia sem venda nenhuma, e um cartão zerado se lê como <em>&ldquo;a
+          casa não vendeu&rdquo;</em>, que é diferente de <em>&ldquo;ainda não
+          importou&rdquo;</em>. Abrindo no último dia com venda, o número na tela é sempre um
+          número de verdade. É a mesma regra do food cost que aparece como &ldquo;—&rdquo; sem
+          venda importada, aplicada à escolha do dia.
+        </p>
+        <p>
+          ⚠️ <strong>As setas andam entre dias que têm venda</strong>, não entre dias do
+          calendário: numa casa que fecha na segunda, avançar um dia cairia num zero. Quem sabe
+          se há para onde ir é o servidor, e a seta fica apagada quando não há.
+        </p>
+        <p>
+          ⚠️ O <strong>ticket médio</strong> é a receita dividida pelo número de <em>vendas</em>
+          &mdash; o quanto cada cliente gastou &mdash;, nunca pelo número de itens. E vem
+          &ldquo;—&rdquo; num dia sem venda: um ticket de zero real seria uma afirmação, não a
+          ausência de uma.
         </p>
       </div>
 

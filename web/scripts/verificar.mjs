@@ -329,6 +329,78 @@ try {
   await p.goto(`${WEB}/trocar-senha`, { waitUntil: "networkidle2" });
   await foto(p, "02-trocar-senha");
 
+  console.log("1b. o painel abre no dia da ultima venda, com setas");
+  // 🔑 **Pedido do dono (03/09/2026).** O painel respondia pelo mês inteiro e
+  // não dizia como foi o último dia — que é a primeira coisa que se olha de
+  // manhã. ⚠️ Abre no dia da ÚLTIMA venda, não em hoje: de manhã "hoje" é um
+  // dia sem venda nenhuma, e um cartão zerado se lê como "a casa não vendeu".
+  await irPara(p, `${WEB}/`);
+  const { dados: painelDia } = await api("GET", "/inicio", null, token);
+  if (painelDia?.dia) {
+    await p.waitForFunction(
+      () => /VENDAS DO DIA|Vendas do dia/i.test(document.body.innerText),
+      { timeout: 15000 });
+    const cartaoDia = await p.evaluate(() => {
+      const b = (rot) =>
+        [...document.querySelectorAll("button")]
+          .find((x) => x.getAttribute("aria-label") === rot);
+      const texto = document.body.innerText;
+      return {
+        temTicket: /Ticket médio/i.test(texto),
+        temValor: /Valor total/i.test(texto),
+        // ⚠️ Pelo `aria-label`, não pelo caractere: "‹" e "›" são símbolos, e
+        // procurá-los por texto casaria com qualquer chevron da página.
+        voltar: !!b("dia anterior com venda"),
+        avancar: !!b("próximo dia com venda"),
+        avancarDesligado: b("próximo dia com venda")?.disabled,
+      };
+    });
+    checar("o painel mostra as vendas do dia", cartaoDia.temValor && cartaoDia.temTicket,
+      cartaoDia);
+    checar("com as duas setas de navegação", cartaoDia.voltar && cartaoDia.avancar, cartaoDia);
+    // 🔑 **A seta que não leva a lugar nenhum tem de PARECER desligada.** O dia
+    // mais recente não tem próximo; uma seta viva que não faz nada ao ser
+    // clicada se lê como tela quebrada. Quem sabe se há para onde ir é o
+    // servidor (`proximo`), e a afirmação é sobre a PROPRIEDADE — não sobre o
+    // estado do dia, que muda a cada venda importada.
+    checar("e a seta de avançar acompanha o que o servidor diz",
+      cartaoDia.avancarDesligado === (painelDia.dia.proximo === null),
+      { tela: cartaoDia.avancarDesligado, servidor: painelDia.dia.proximo });
+    await foto(p, "01b-vendas-do-dia");
+
+    // Andar para trás troca a data e os números — sem recarregar o painel.
+    if (painelDia.dia.anterior) {
+      const antes = await p.evaluate(() => document.body.innerText);
+      await p.evaluate(() => {
+        [...document.querySelectorAll("button")]
+          .find((x) => x.getAttribute("aria-label") === "dia anterior com venda")?.click();
+      });
+      await p.waitForFunction(
+        (texto) => document.body.innerText !== texto, { timeout: 15000 }, antes);
+      const { dados: r } = await api(
+        "GET", `/inicio/dia?data=${painelDia.dia.anterior}`, null, token);
+      const naTela = await p.evaluate(() => document.body.innerText);
+      // ⚠️ A data na tela sai por extenso ("01 Set 2026"): compara-se o DIA e o
+      // ano, que é o que o formato garante — não a string ISO, que a tela não
+      // mostra em lugar nenhum.
+      const [ano, , dia] = painelDia.dia.anterior.split("-");
+      checar("a seta volta para o dia anterior com venda",
+        naTela.includes(`${dia} `) && naTela.includes(ano), painelDia.dia.anterior);
+      checar("e os números passam a ser os dele",
+        naTela.includes(String(r.dia.vendas)), r?.dia);
+      // ⚠️ **Só o dia navegou**: o resto do painel continua o que era. Trocar de
+      // dia não pode custar a apuração do período nem a lista de alertas.
+      checar("sem recarregar o resto do painel",
+        /Precisa da sua atenção|Custo do que saiu/i.test(naTela), naTela.slice(0, 120));
+    }
+  } else {
+    // ⚠️ Base sem venda nenhuma é estado legítimo (é o primeiro dia da casa), e
+    // o cartão simplesmente não existe. Afirmar que ele está lá faria a suíte
+    // acusar de defeito a decisão de "número verdadeiro ou nenhum".
+    checar("sem venda importada, o painel não inventa um cartão de vendas",
+      !(await p.evaluate(() => /Ticket médio/i.test(document.body.innerText))));
+  }
+
   console.log("2. telas de administração");
   for (const [rota, nome] of [
     ["/", "03-inicio"],

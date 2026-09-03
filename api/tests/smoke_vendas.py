@@ -32,7 +32,7 @@ from datetime import date
 
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
-from comum import garantir_locais  # noqa: E402
+from comum import garantir_cozinha, garantir_locais  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -313,6 +313,86 @@ for _lista in (lista_r, lista_h):
     for _v in (_lista or []):
         chamar("DELETE", f"/vendas/{_v['id']}", token=token)
 chamar("DELETE", f"/produtos/{prato_r}", token=token)
+
+
+print("\n8. o painel abre no dia da ultima venda, e as setas andam entre dias com venda")
+# 🔑 **Pedido do dono (03/09/2026).** O painel respondia pelo mes inteiro e nao
+# dizia como foi o ultimo dia — que e a primeira coisa que se olha de manha.
+# ⚠️ Abre no dia da ULTIMA venda, nao em hoje: de manha, ou num dia em que a
+# busca no PDV ainda nao rodou, "hoje" e um dia sem venda nenhuma, e um cartao
+# zerado se le como "a casa nao vendeu" — que e diferente de "ainda nao importou".
+st, painel = chamar("GET", "/inicio", token=token)
+checar("o painel responde", st == 200, st)
+# ⚠️ **No MESMO pacote**, nao numa segunda chamada: painel que faz seis
+# requisicoes pisca seis vezes.
+checar("e traz o dia junto, sem segunda requisicao", "dia" in (painel or {}), list(painel or {}))
+dia = (painel or {}).get("dia") or {}
+checar("o dia tem as tres informacoes pedidas",
+       {"vendas", "receita", "ticket_medio"} <= set(dia), sorted(dia))
+
+st, ultimo = chamar("GET", "/inicio/dia", token=token)
+checar("e a rota do dia, sem data, responde o mesmo dia",
+       (ultimo or {}).get("dia", {}).get("data") == dia.get("data"),
+       (dia.get("data"), (ultimo or {}).get("dia", {}).get("data")))
+# 🔑 O dia mais recente NAO tem para onde avancar — e e isso que desliga a seta.
+checar("no dia mais recente nao ha proximo", dia.get("proximo") is None, dia.get("proximo"))
+
+# ⚠️ **Ticket medio e receita ÷ numero de VENDAS**, nao ÷ itens: e o quanto cada
+# cliente gastou.
+if dia.get("vendas"):
+    checar("o ticket medio e a receita dividida pelas vendas",
+           abs(float(dia["ticket_medio"]) - float(dia["receita"]) / dia["vendas"]) < 0.0001,
+           (dia.get("ticket_medio"), dia.get("receita"), dia.get("vendas")))
+
+# 🔑 **As setas andam entre dias que TEM venda, nao entre dias do calendario.**
+# Avancar um dia cairia num domingo fechado e mostraria zero — o mesmo engano
+# pela outra porta.
+if dia.get("anterior"):
+    st, r = chamar("GET", f"/inicio/dia?data={dia['anterior']}", token=token)
+    d2 = (r or {}).get("dia") or {}
+    checar("o dia anterior existe e TEM venda", d2.get("vendas", 0) > 0, d2)
+    checar("e o proximo dele aponta de volta para o que estava na tela",
+           d2.get("proximo") == dia.get("data"), (d2.get("proximo"), dia.get("data")))
+
+# ⚠️ **Venda CANCELADA nao conta** — aqui como em todo lugar.
+doc_c = f"VENDA-DIA-{marca}"
+st, r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "documento": doc_c, "data": str(date.today()), "origem": "MANUAL",
+    "itens": [{"id_produto": prato, "quantidade": 1, "valor_unitario": 999,
+               "descricao": f"Prato venda {marca}"}]}]}, token=token)
+st, r = chamar("GET", f"/inicio/dia?data={date.today()}", token=token)
+com_ela = (r or {}).get("dia") or {}
+st, lista_c = chamar("GET", f"/vendas?busca={doc_c}", token=token)
+if lista_c:
+    chamar("DELETE", f"/vendas/{lista_c[0]['id']}", token=token)
+    st, r = chamar("GET", f"/inicio/dia?data={date.today()}", token=token)
+    sem_ela = (r or {}).get("dia") or {}
+    checar("cancelar a venda tira ela da contagem do dia",
+           sem_ela.get("vendas") == com_ela.get("vendas") - 1,
+           (com_ela.get("vendas"), sem_ela.get("vendas")))
+    checar("e tira o valor dela junto",
+           abs(float(com_ela["receita"]) - float(sem_ela["receita"]) - 999) < 0.01,
+           (com_ela.get("receita"), sem_ela.get("receita")))
+
+# ⚠️ **Dia sem venda devolve ticket NULO, nao zero**: um ticket de zero real e
+# uma afirmacao, e nao a ausencia de uma.
+st, r = chamar("GET", "/inicio/dia?data=2020-01-01", token=token)
+vazio = (r or {}).get("dia") or {}
+checar("dia sem venda vem com zero venda", vazio.get("vendas") == 0, vazio)
+checar("e com ticket medio NULO, nao zero", vazio.get("ticket_medio") is None, vazio)
+# ⚠️ E ele ainda diz para onde da para ir: e assim que se volta de um dia vazio.
+checar("mas ainda aponta o proximo dia com venda",
+       vazio.get("proximo") is not None, vazio)
+
+# ⚠️ **Dinheiro obedece a permissao**, como o resto do painel: quem nao tem
+# `cmv.painel` recebe `dia: null`, nao um cartao com o valor zerado.
+tk_coz = garantir_cozinha(chamar, token)
+if tk_coz:
+    st, p_coz = chamar("GET", "/inicio", token=tk_coz)
+    checar("quem nao ve dinheiro recebe o dia NULO, nao zerado",
+           (p_coz or {}).get("dia") is None, (p_coz or {}).get("dia"))
+    st, _ = chamar("GET", "/inicio/dia", token=tk_coz)
+    checar("e a rota do dia recusa para ele", st == 403, st)
 
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")

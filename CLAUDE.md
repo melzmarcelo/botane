@@ -2398,6 +2398,38 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
   30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
   produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
+- 🔑 **O painel abre no dia da ÚLTIMA venda** (`GET /inicio/dia`, cartão "Vendas do dia",
+  03/09/2026, pedido do dono). A tela inicial respondia pelo período inteiro e não dizia como
+  foi o último dia — que é a primeira coisa que se olha de manhã. Três números: **quantidade de
+  vendas, valor total e ticket médio**, com setas na data para andar para trás e para a frente.
+  🔑 **Abre no dia da última venda, NÃO em hoje.** De manhã, ou num dia em que a busca no PDV
+  ainda não rodou, "hoje" é um dia sem venda nenhuma — e um cartão zerado se lê como *"a casa
+  não vendeu"*, que é diferente de *"ainda não importou"*. Abrindo no último dia com venda, o
+  número na tela é sempre um número de verdade. É a regra "número verdadeiro ou nenhum" que o
+  painel já seguia, aplicada à escolha do DIA.
+  🔑 **As setas andam entre dias que TÊM venda, não entre dias do calendário.** Numa casa que
+  fecha na segunda, avançar um dia cairia num zero — o mesmo engano pela outra porta. Quem diz
+  para onde dá para ir é o SERVIDOR: `anterior` e `proximo` vêm nulos quando não há para onde, e
+  é isso que desliga a seta. ⚠️ E a seta desligada **parece** desligada (`.link-acao:disabled`,
+  que já existia): seta viva que não faz nada ao ser clicada se lê como tela quebrada.
+  ⚠️ **O dia vem no MESMO pacote do painel**, não numa segunda chamada — painel que faz seis
+  requisições pisca seis vezes. Só a NAVEGAÇÃO custa uma ida ao servidor, e aí é alguém pedindo.
+  ⚠️ **E só o dia navega**: trocar de dia não recarrega a apuração do período, os alertas nem o
+  peso por setor. Seria refazer a tela toda para mudar três números.
+  ⚠️ **A receita sai de `venda_itens`, como a do CMV** — não do `vendas.valor_total` do
+  cabeçalho. Hoje os dois concordam por construção (o cabeçalho é a soma dos itens), mas ler de
+  fontes diferentes é como um painel passa a discordar de si mesmo: a receita do período está
+  logo acima, na mesma tela.
+  ⚠️ **Ticket médio é receita ÷ número de VENDAS**, não ÷ itens — é o quanto cada cliente
+  gastou. E vem **nulo** num dia sem venda: um ticket de zero real é uma afirmação, não a
+  ausência de uma.
+  ⚠️ **Venda cancelada não conta**, aqui como em todo lugar. A suíte cobra os dois lados: a
+  contagem e o valor.
+  ⚠️ **Dinheiro obedece à permissão**: sem `cmv.painel` o `dia` vem nulo e a rota recusa. Um
+  cartão só com a contagem seria uma quarta coisa a explicar em troca de nada.
+  ⚠️ E quando o dia mostrado é o mais recente **e não é hoje**, o cartão diz isso ("é o dia mais
+  recente com venda importada"): é a resposta para *"por que não estou vendo o movimento de
+  hoje?"* antes de a pergunta ser feita.
 - 🔑 **A MEMÓRIA DE CÁLCULO** (`services/memoria_calculo.py`, três relatórios novos,
   02/09/2026, pedido da contabilidade numa reunião). O sistema já dizia o **resultado** (a
   apuração, dez linhas) e já provava a **identidade** (a movimentação por produto, onde
@@ -2531,18 +2563,18 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.762 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.777 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (55), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (54), `smoke_vinculo.py` (84),
+  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (69), `smoke_vinculo.py` (84),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `smoke_memoria.py` (37),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (450, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (456, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

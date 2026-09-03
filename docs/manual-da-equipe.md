@@ -367,6 +367,23 @@ quem cuida do cadastro.
 Tela de **Início**: ela mostra o que precisa de atenção — produto abaixo do
 mínimo, lote vencendo, nota parada esperando conferência.
 
+### O movimento do último dia
+
+Logo no alto da tela inicial: **Vendas do dia** — quantas vendas, quanto entrou e
+o **ticket médio** (quanto cada cliente gastou em média). As setinhas ao lado da
+data andam para trás e para a frente.
+
+⚠️ **Ele abre no dia da última venda, não em hoje.** De manhã, ou num dia em que
+a busca no PDV ainda não rodou, hoje é um dia sem venda nenhuma — e um cartão
+zerado se lê como "a casa não vendeu", que é diferente de "ainda não importou".
+
+⚠️ **As setas pulam para o próximo dia que TEM venda**, não para o dia seguinte
+do calendário. Numa casa que fecha na segunda, avançar um dia mostraria zero. A
+seta fica apagada quando não há para onde ir.
+
+⚠️ Quando o dia na tela é o mais recente e não é hoje, o cartão avisa — é o sinal
+de que falta importar as vendas de hoje.
+
 ### O que olhar todo mês
 
 Menu **CMV → Painel de CMV**:

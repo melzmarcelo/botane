@@ -31,6 +31,89 @@ def _float(v):
     return None if v is None else float(v)
 
 
+def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | None:
+    """O movimento de UM dia, com os vizinhos que têm venda.
+
+    🔑 **Abre no dia da ÚLTIMA venda, não em hoje** (pedido do dono, 03/09/2026).
+    De manhã, ou num dia em que a busca no PDV ainda não rodou, "hoje" é um dia
+    sem venda nenhuma — e um cartão zerado se lê como *"a casa não vendeu"*, que
+    é diferente de *"ainda não importou"*. Abrindo no último dia com venda, o
+    número na tela é sempre um número de verdade.
+
+    🔑 **As setas andam entre dias que TÊM venda, não entre dias do calendário.**
+    Numa casa que fecha na segunda, avançar um dia cairia num zero — e seria o
+    mesmo engano por outra porta. Por isso quem diz para onde dá para ir é o
+    servidor: `anterior` e `proximo` vêm nulos quando não há para onde, e é isso
+    que desliga a seta.
+
+    ⚠️ **A receita sai de `venda_itens`, como a do CMV** — e não do
+    `vendas.valor_total` do cabeçalho. Hoje os dois concordam por construção (o
+    cabeçalho é a soma dos itens), mas ler de fontes diferentes é como um painel
+    passa a discordar de si mesmo no primeiro caso de borda. O painel já mostra
+    a receita do período logo acima: as duas têm de vir do mesmo lugar.
+
+    ⚠️ **Venda cancelada fica de fora**, aqui como em todo lugar.
+
+    ⚠️ **Ticket médio é receita ÷ número de VENDAS**, não ÷ itens: é o quanto
+    cada cliente gastou. E vem **nulo** sem venda no dia — zero ali seria um
+    ticket de zero real, que é uma afirmação, não a ausência de uma.
+    """
+    if data is None:
+        cur.execute(
+            "SELECT max(data) AS d FROM vendas WHERE id_unidade = %s AND NOT cancelada",
+            (id_unidade,),
+        )
+        data = (cur.fetchone() or {}).get("d")
+        if data is None:
+            return None  # a casa ainda não tem venda nenhuma
+
+    cur.execute(
+        """SELECT count(DISTINCT v.id) AS vendas,
+                  coalesce(sum(vi.valor_total), 0) AS receita,
+                  coalesce(sum(vi.quantidade), 0) AS itens
+             FROM vendas v
+             LEFT JOIN venda_itens vi ON vi.id_venda = v.id
+            WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data = %s""",
+        (id_unidade, data),
+    )
+    r = dict(cur.fetchone())
+
+    cur.execute(
+        """SELECT max(data) FILTER (WHERE data < %(d)s) AS anterior,
+                  min(data) FILTER (WHERE data > %(d)s) AS proximo
+             FROM vendas WHERE id_unidade = %(u)s AND NOT cancelada""",
+        {"u": id_unidade, "d": data},
+    )
+    vizinhos = dict(cur.fetchone())
+
+    receita = float(r["receita"])
+    return {
+        "data": data,
+        "vendas": r["vendas"],
+        "itens": float(r["itens"]),
+        "receita": receita,
+        "ticket_medio": (receita / r["vendas"]) if r["vendas"] else None,
+        "anterior": vizinhos["anterior"],
+        "proximo": vizinhos["proximo"],
+    }
+
+
+@router.get("/dia")
+def dia(data: date | None = None,
+        ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
+    """O movimento de um dia — é o que as setas do painel pedem.
+
+    ⚠️ **Endpoint próprio, e não um parâmetro do painel inteiro.** Navegar entre
+    dias não pode custar a apuração do período, a lista de alertas e o peso por
+    setor: seria refazer a tela toda para trocar três números.
+
+    ⚠️ Sem `data`, responde o dia da última venda — a mesma resposta com que o
+    painel abre.
+    """
+    with get_cursor() as cur:
+        return {"dia": _dia_de_vendas(cur, unidade_atual(cur, ctx), data)}
+
+
 @router.get("")
 def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
     hoje = date.today()
@@ -82,6 +165,10 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             "operacao": operacao,
             "alertas": alertas_motor.levantar(cur, id_unidade),
             "dinheiro": None,
+            # ⚠️ Nulo para quem não vê dinheiro, como o resto: o cartão do dia
+            # é valor e ticket médio, e um cartão só com a contagem seria uma
+            # quarta coisa a explicar em troca de nada.
+            "dia": None,
             "pesos": [],
         }
 
@@ -106,6 +193,11 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             "cobertura_ficha_pct": float(a["cobertura_ficha_pct"]),
             "cmv_teorico": float(a["cmv_teorico"]),
         }
+
+        # ⚠️ **Vem no mesmo pacote**, não numa segunda chamada: o painel que faz
+        # seis requisições pisca seis vezes. Só a NAVEGAÇÃO pelas setas custa
+        # uma ida ao servidor, e aí é alguém pedindo.
+        resposta["dia"] = _dia_de_vendas(cur, id_unidade)
 
         if ctx.pode("cmv.relatorios") or ctx.pode("cmv.painel"):
             grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, "setor")
