@@ -28,6 +28,7 @@ from models.produtos import (
 )
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
+from services import custos as motor_custos
 from services import kits, precos, produtos_vinculo
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
@@ -302,6 +303,34 @@ def fundir_duplicados(body: FundirGrupoRequest,
         auditoria.registrar(cur, ctx.id_usuario, "produto", body.id_principal,
                             "vincular_grupo", depois=r)
     return {**r, "message": f"{len(r['juntados'])} cadastro(s) juntado(s) num só."}
+
+
+@router.get("/{id_produto}/custo")
+def custo_do_produto(id_produto: int,
+                     ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
+    """Quanto este produto custa hoje, e o que mudou isso.
+
+    🔑 **O número não tinha onde ser consultado** (pedido do dono, 03/09/2026).
+    Ele já alimentava ficha, CMV teórico e margem, mas nenhuma tela o mostrava:
+    para saber quanto custava um insumo era preciso abrir uma ficha que o
+    usasse. E a "Memória de cálculo" só sabe explicar o custo MÉDIO, que nasce
+    de movimento — numa casa que importou o catálogo e ainda não lançou nota ela
+    sai vazia, enquanto o custo de referência responde pela cascata sem aparecer
+    em lugar nenhum.
+
+    ⚠️ **Pede `estoque.saldos`, a mesma chave da memória de cálculo.** Custo é
+    dado de estoque e não passa a ser de cadastro por estar na tela do produto —
+    é a regra que já vale para o botão de memória ao lado.
+
+    ⚠️ **A cascata é a MESMA que a ficha usa** (`custo_do_insumo`). Uma segunda
+    conta aqui faria a tela do produto e a ficha discordarem sobre o custo do
+    mesmo insumo, e ninguém saberia qual das duas acreditar.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT 1 FROM produtos WHERE id = %s", (id_produto,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        return motor_custos.historico(cur, id_produto, unidade_atual(cur, ctx))
 
 
 @router.get("/{id_produto}/vincular/previa")

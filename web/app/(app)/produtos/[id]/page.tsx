@@ -20,6 +20,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import ComposicaoKit from "./kit";
+import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
 import Vincular from "./vincular";
@@ -594,6 +595,19 @@ export default function FormularioProduto() {
               </>
             )}
           </div>
+        </Cartao>
+      )}
+
+      {/* 🔑 **O custo, que não tinha onde ser consultado** (pedido do dono,
+          03/09/2026). Fica ACIMA do cartão de Estoque porque é a pergunta que
+          se faz primeiro ao abrir um insumo — e porque a "Memória de cálculo"
+          do topo só explica o custo médio, que numa casa recém-importada ainda
+          não existe.
+          ⚠️ `estoque.saldos` é a mesma chave do botão de memória ao lado: custo
+          é dado de estoque e não vira dado de cadastro por estar nesta tela. */}
+      {!novo && f.controla_estoque && pode("estoque.saldos") && (
+        <Cartao titulo="Custo">
+          <CustoDoProduto idProduto={Number(id)} um={f.um_estoque || null} />
         </Cartao>
       )}
 

@@ -2574,6 +2574,55 @@ try {
     (movLoc ?? []).length === 1, (movLoc ?? []).length);
   await foto(p, "37a-locais-do-produto");
 
+  // 🔑 **O custo do produto, que nao tinha onde ser consultado** (pedido do
+  // dono, 03/09/2026). Ele ja alimentava ficha, CMV teorico e margem, mas
+  // nenhuma tela o mostrava. ⚠️ E a "Memoria de calculo" ao lado nao cobre o
+  // caso: ela explica o custo MEDIO, que nasce de movimento — numa casa que
+  // importou o catalogo e ainda nao lancou nota ela sai vazia, enquanto o custo
+  // de referencia responde pela cascata sem aparecer em lugar nenhum.
+  const custoNaTela = await p.evaluate(() => {
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+    return {
+      temCartao: !!cartao,
+      // ⚠️ A ORIGEM vem junto do valor: "R$ 20,03" sem dizer se e o que a casa
+      // pagou, o que o fornecedor cobra ou o que outro sistema acha nao
+      // responde a pergunta que se faz em seguida.
+      dizAOrigem: /custo m[ée]dio|fornecedor|refer[êe]ncia|ningu[ée]m sabe/i
+        .test(cartao?.innerText ?? ""),
+      botao: [...(cartao?.querySelectorAll("button") ?? [])]
+        .some((b) => b.textContent?.trim() === "Histórico"),
+    };
+  });
+  checar("a tela do produto mostra o custo", custoNaTela.temCartao, custoNaTela);
+  checar("dizendo de ONDE o numero veio", custoNaTela.dizAOrigem, custoNaTela);
+  checar("com o botao de historico", custoNaTela.botao, custoNaTela);
+
+  await p.evaluate(() => {
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+    [...(cartao?.querySelectorAll("button") ?? [])]
+      .find((b) => b.textContent?.trim() === "Histórico")?.click();
+  });
+  await p.waitForSelector('[role="dialog"]', { timeout: 10000 }).catch(() => {});
+  const historico = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      abriu: !!d,
+      titulo: d?.querySelector("h2")?.textContent ?? "",
+      // 🔑 A distincao que evita a leitura errada: so o razao e uma linha do
+      // tempo. Fornecedor e referencia guardam so o valor corrente.
+      explicaAsFontes: /linha do tempo/i.test(d?.textContent ?? ""),
+    };
+  });
+  checar("o historico abre numa janela", historico.abriu, historico);
+  checar("com o titulo dizendo o que e",
+    /Hist[óo]rico de custo/i.test(historico.titulo), historico);
+  checar("e explicando que so o razao e uma linha do tempo",
+    historico.explicaAsFontes, historico);
+  await foto(p, "37b-custo-do-produto");
+  await p.keyboard.press("Escape");
+
   // ⚠️ Tirar só com a prateleira VAZIA — quem recusa é o servidor. Aqui ela
   // está vazia, então sai.
   await p.evaluate((nome) => {

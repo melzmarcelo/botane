@@ -346,3 +346,140 @@ def descendentes_da_ficha(cur, id_ficha: int) -> set[int]:
         (id_ficha,),
     )
     return {r["id"] for r in cur.fetchall()}
+
+
+# ---------------------------------------------------------------- histórico
+
+# 🔑 **O custo do produto não tinha onde ser CONSULTADO** (pedido do dono,
+# 03/09/2026). O número existia e alimentava ficha, CMV teórico e margem, mas
+# nenhuma tela o mostrava: para saber quanto custava um insumo era preciso abrir
+# uma ficha que o usasse. E a "Memória de cálculo" que já existe só sabe explicar
+# o custo MÉDIO, que nasce de movimento — numa casa que acabou de importar o
+# catálogo e ainda não lançou nota, ela sai vazia, e o custo de referência que
+# está respondendo pela cascata não aparece em lugar nenhum.
+#
+# ⚠️ **Não existe tabela de histórico de custo, e não se cria uma.** O razão já
+# é a memória do custo: `estoque_movimentos.custo_medio_apos` guarda o médio
+# depois de cada movimento, que é exatamente a série que se quer ver. Criar uma
+# tabela nova começaria vazia para tudo o que já aconteceu — e passaria a haver
+# duas versões da mesma verdade.
+#
+# ⚠️ As outras duas pontas da cascata NÃO têm série, e a tela precisa dizer
+# isso: `produto_fornecedor.ultimo_preco` e `produtos.custo_referencia` guardam
+# só o valor CORRENTE e a data dele. Mostrá-los como se fossem uma linha do
+# tempo faria parecer que o sistema sabe o que não sabe.
+
+_ORIGEM_EM_PORTUGUES = {
+    "custo_medio": "custo médio do estoque desta loja",
+    "ultima_compra": "último preço pago ao fornecedor",
+    "referencia": "custo de referência, vindo de fora",
+    "sem_custo": "ninguém sabe quanto custa",
+}
+
+
+def historico(cur, id_produto: int, id_unidade: int | None = None,
+              limite: int = 60) -> dict:
+    """O custo de agora e o que o mudou — na ordem em que aconteceu.
+
+    Devolve `atual` (o resultado da MESMA cascata que a ficha usa, para os dois
+    números nunca discordarem) e `linhas`, do mais recente para o mais antigo.
+
+    ⚠️ Cada linha diz de QUAL fonte veio. Misturar o médio do razão com o preço
+    do fornecedor e com a referência de fora, sem etiqueta, faria três coisas
+    diferentes parecerem a mesma medida.
+    """
+    atual, origem = custo_do_insumo(cur, id_produto, id_unidade)
+
+    linhas: list[dict] = []
+
+    # ---- o razão: a única série de verdade -------------------------------
+    # ⚠️ Só as linhas em que o médio MUDOU. Uma saída não muda o custo médio, e
+    # listar todas transformaria o histórico de custo num extrato de estoque —
+    # com o que interessa perdido no meio.
+    cur.execute(
+        """SELECT * FROM (
+             SELECT m.id, m.data_movimento, m.criado_em, m.tipo, m.documento,
+                    m.quantidade, m.custo_unitario, m.custo_medio_apos, m.saldo_apos,
+                    m.custo_provisorio, l.nome AS local,
+                    lag(m.custo_medio_apos) OVER (
+                        PARTITION BY m.id_local ORDER BY m.id) AS antes
+               FROM estoque_movimentos m
+               LEFT JOIN locais_estoque l ON l.id = m.id_local
+              WHERE m.id_produto = %(p)s
+                AND (%(u)s::int IS NULL OR m.id_unidade = %(u)s)
+           ) t
+          WHERE t.custo_medio_apos IS NOT NULL
+            AND (t.antes IS NULL OR t.antes <> t.custo_medio_apos)
+          ORDER BY t.id DESC
+          LIMIT %(n)s""",
+        {"p": id_produto, "u": id_unidade, "n": limite},
+    )
+    for r in cur.fetchall():
+        linhas.append({
+            "fonte": "movimento",
+            "quando": r["data_movimento"],
+            "custo": float(r["custo_medio_apos"]),
+            "custo_do_documento": (float(r["custo_unitario"])
+                                   if r["custo_unitario"] is not None else None),
+            "anterior": float(r["antes"]) if r["antes"] is not None else None,
+            "quantidade": float(r["quantidade"]),
+            "saldo_apos": float(r["saldo_apos"]) if r["saldo_apos"] is not None else None,
+            "detalhe": r["tipo"].replace("_", " ").lower(),
+            "documento": r["documento"],
+            "local": r["local"],
+            # ⚠️ Custo provisório é entrada sem nota lançada: o número vale, mas
+            # muda quando a nota chegar. Esconder isso faria a linha parecer
+            # definitiva.
+            "provisorio": bool(r["custo_provisorio"]),
+        })
+
+    # ---- o fornecedor: valor corrente, sem série -------------------------
+    cur.execute(
+        """SELECT pf.ultimo_preco, pf.ultima_compra, pf.preferencial, f.nome AS fornecedor
+             FROM produto_fornecedor pf
+             JOIN fornecedores f ON f.id = pf.id_fornecedor
+            WHERE pf.id_produto = %s AND pf.ultimo_preco IS NOT NULL
+            ORDER BY pf.preferencial DESC, pf.ultima_compra DESC NULLS LAST""",
+        (id_produto,),
+    )
+    for r in cur.fetchall():
+        linhas.append({
+            "fonte": "fornecedor",
+            "quando": r["ultima_compra"],
+            "custo": float(r["ultimo_preco"]),
+            "detalhe": f"último preço de {r['fornecedor']}"
+                       + (" (preferencial)" if r["preferencial"] else ""),
+            "documento": None, "local": None, "provisorio": False,
+            "anterior": None, "custo_do_documento": None,
+            "quantidade": None, "saldo_apos": None,
+        })
+
+    # ---- a referência: valor corrente, sem série -------------------------
+    cur.execute(
+        """SELECT custo_referencia, custo_referencia_em, custo_referencia_origem
+             FROM produtos WHERE id = %s AND custo_referencia IS NOT NULL""",
+        (id_produto,),
+    )
+    r = cur.fetchone()
+    if r:
+        linhas.append({
+            "fonte": "referencia",
+            "quando": r["custo_referencia_em"],
+            "custo": float(r["custo_referencia"]),
+            "detalhe": f"trazido de {r['custo_referencia_origem'] or 'fora'}",
+            "documento": None, "local": None, "provisorio": False,
+            "anterior": None, "custo_do_documento": None,
+            "quantidade": None, "saldo_apos": None,
+        })
+
+    # ⚠️ Data nula vai para o FIM, não para o começo: `ultima_compra` pode estar
+    # em branco num vínculo antigo, e `None` primeiro poria o registro mais
+    # obscuro no topo do histórico.
+    linhas.sort(key=lambda x: (x["quando"] is not None, x["quando"]), reverse=True)
+
+    return {
+        "atual": float(atual) if atual is not None else None,
+        "origem": origem,
+        "origem_texto": _ORIGEM_EM_PORTUGUES.get(origem, origem),
+        "linhas": linhas,
+    }
