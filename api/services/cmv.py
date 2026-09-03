@@ -370,15 +370,25 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
                   count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS itens_sem_custo,
                   coalesce(sum(vi.valor_total) FILTER (WHERE vi.custo_ficha_unitario IS NOT NULL), 0)
                       AS receita_com_custo,
-                  count(DISTINCT v.id) AS vendas
+                  count(DISTINCT v.id) AS vendas,
+                  -- 🔑 **O desconto do cupom, para a receita ser LÍQUIDA.** O
+                  -- PDV informa o valor cobrado; gravar a soma dos itens
+                  -- inflava a receita, e receita é o DENOMINADOR do food cost:
+                  -- inflada, ela faz o food cost parecer melhor do que é.
+                  -- ⚠️ Subconsulta, não `sum(v.desconto)`: o join com os itens
+                  -- repete o cabeçalho uma vez por linha, e somá-lo ali
+                  -- multiplicaria o desconto pelo número de itens do cupom.
+                  coalesce((SELECT sum(d.desconto) FROM vendas d
+                             WHERE d.id_unidade = %s AND NOT d.cancelada
+                               AND d.data BETWEEN %s AND %s), 0) AS descontos
              FROM venda_itens vi
              JOIN vendas v ON v.id = vi.id_venda
             WHERE v.id_unidade = %s AND NOT v.cancelada
               AND v.data BETWEEN %s AND %s""",
-        (id_unidade, inicio, fim),
+        (id_unidade, inicio, fim, id_unidade, inicio, fim),
     )
     v = cur.fetchone()
-    receita = dec(v["receita"])
+    receita = dec(v["receita"]) - dec(v["descontos"])
     cmv_teorico = dec(v["teorico"])
 
     cobertura = (

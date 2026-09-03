@@ -568,3 +568,46 @@
   de reserva sem precisar de linha nova.
   ⚠️ O endpoint manda os DOIS (`produto` e `produto_curto`) e a tela escolhe. Fazer o servidor
   decidir com um `coalesce` mudaria o significado do campo em todo lugar que já o consome.
+
+- 🔑 **O cupom CANCELADO entra, marcado — e o painel diz quantos e quanto** (03/09/2026, pedido
+  do dono). Ele era descartado em `preparar`, e o efeito era a conferência não fechar: medido na
+  conta real, o PDV dizia **164 cupons** em 02/09 e o Botané mostrava **154**, sem nada
+  explicando os 10. Quem confere não tinha como distinguir "excluídos de propósito" de "sumiram"
+  — e a desconfiança foi relatada como perda de dado grave.
+  ⚠️ **Ele NÃO baixa estoque**, e é isso que o deixa entrar: mercadoria que voltou para a
+  prateleira (ou nunca saiu) não pode sair do razão, que é append-only. A suíte cobra que
+  `venda cancelada do PDV × movimento de estoque` seja zero.
+  ⚠️ **E não conta em receita nenhuma**: tudo que soma dinheiro já filtrava `NOT cancelada` —
+  conferido em `services/cmv.py:376` e `:501` e no painel antes de mexer.
+  ⚠️ **Item cancelado dentro de cupom VÁLIDO continua fora.** São dois níveis de cancelamento, e
+  o segundo é o que passa despercebido. Já no cupom cancelado os itens entram como vieram:
+  filtrar ali faria a venda cancelada valer menos do que o PDV diz que ela valia, e é contra o
+  número do PDV que ela existe para ser conferida.
+
+- 🔑 **O DESCONTO do cupom passou a ser importado** (`vendas.desconto`, 03/09/2026). A coluna
+  existia desde o começo e nunca foi preenchida — a mesma história do `usuario_setores`. O
+  Botané gravava a soma dos ITENS (bruto) e o PDV informa o valor cobrado (líquido). Medido na
+  conta real: **02/09 diferia 26,50, 29/08 diferia 13,50 e 28/08 diferia 722,00** — em todos,
+  exatamente o desconto do dia.
+  ⚠️ **Receita é o DENOMINADOR do food cost**: inflada, ela faz o food cost parecer melhor do
+  que é. É o mesmo erro silencioso do custo zero.
+  ⚠️ **O desconto fica no CABEÇALHO, não rateado nos itens.** Ele é um fato do cupom, e
+  distribuí-lo entre as linhas seria invenção. A consequência, declarada: a receita **por
+  produto** (`services/cmv.py:495`, os mais vendidos) continua BRUTA. O total do dia e o do
+  período estão exatos.
+  ⚠️ **A soma do desconto vai por SUBCONSULTA**, nunca `sum(v.desconto)` no mesmo SELECT: o join
+  com os itens repete o cabeçalho uma vez por linha, e somá-lo ali multiplicaria o desconto pelo
+  número de itens do cupom.
+  Depois disso, 02/09 fecha no centavo: 154 cupons, 10 cancelados, R$ 21.897,50 — os três iguais
+  ao PDV.
+
+- 🔑 **O filtro de DIA na tela de Vendas** (03/09/2026). O servidor já aceitava `inicio` e `fim`
+  desde sempre; a tela nunca ofereceu, e conferir um dia contra o PDV exigia rolar a lista até
+  achar onde a data virava. Um campo só, não um par: a pergunta é "como foi o dia X".
+  ⚠️ **Medir a lista de vendas é `<li>`, não `<table>`.** A checagem desta tela errou o lugar
+  DUAS vezes: primeiro com `textoVisivel`, que anexa o VALOR dos campos de input — a caixa de
+  busca continha o documento, então "a lista tem a venda" dava verdadeiro com a lista vazia, e a
+  checagem irmã passava com a tela quebrada; depois com `tbody tr`, que é sempre zero ali, e aí
+  "esvaziou" passava trivialmente e "voltou" falhava sempre, acusando a tela de um defeito que
+  ela não tinha. Validar o seletor numa sonda isolada antes de gastar a bateria é o que separou
+  as três coisas.

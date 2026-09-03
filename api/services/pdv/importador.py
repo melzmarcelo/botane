@@ -79,24 +79,36 @@ def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
              ) -> tuple[list[dict], dict]:
     """Separa o que vira venda do que não vira, e conta os dois.
 
-    ⚠️ **Cupom cancelado não entra**, e **item cancelado dentro de cupom válido
-    também não**: contá-lo infla a receita e o CMV teórico do período. São dois
-    níveis de cancelamento, e o segundo é o que passa despercebido.
+    🔑 **Cupom cancelado ENTRA, marcado** (pedido do dono, 03/09/2026). Ele era
+    descartado aqui, e o efeito era a conferência não fechar: o PDV dizia 164
+    cupons no dia e o Botané mostrava 154, sem nada explicando os 10 — quem
+    confere não tinha como distinguir "foram excluídos de propósito" de
+    "sumiram". Marcado, ele aparece na lista, **não baixa estoque** e não conta
+    em receita nenhuma: tudo que soma dinheiro filtra `NOT cancelada`.
 
-    ⚠️ **Cupom que fica sem item nenhum some.** Um cupom cujas linhas foram todas
-    canceladas é um cupom cancelado na prática; gravá-lo vazio criaria uma venda
-    de valor zero que aparece na contagem e não explica nada.
+    ⚠️ **Item cancelado dentro de cupom VÁLIDO continua fora**: contá-lo infla a
+    receita e o CMV teórico do período. São dois níveis de cancelamento, e o
+    segundo é o que passa despercebido.
+
+    ⚠️ **No cupom cancelado os itens entram como vieram**, sem filtrar os
+    cancelados de dentro. O cupom inteiro já não conta para nada; filtrar ali
+    faria a venda cancelada valer menos do que o PDV diz que ela valia — e é
+    justamente contra o número do PDV que ela existe para ser conferida.
+
+    ⚠️ **Cupom VÁLIDO que fica sem item nenhum some.** Um cupom cujas linhas
+    foram todas canceladas é um cupom cancelado na prática; gravá-lo vazio
+    criaria uma venda de valor zero que aparece na contagem e não explica nada.
     """
     vendas, resumo = [], {"cancelados": 0, "itens_cancelados": 0, "sem_item": 0}
 
     for c in cupons:
-        if c["cancelada"]:
+        cancelada = bool(c["cancelada"])
+        if cancelada:
             resumo["cancelados"] += 1
-            continue
 
         itens = []
         for i in c["itens"]:
-            if i["cancelado"]:
+            if i["cancelado"] and not cancelada:
                 resumo["itens_cancelados"] += 1
                 continue
             if i["quantidade"] <= 0:
@@ -114,7 +126,11 @@ def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
             })
 
         if not itens:
-            resumo["sem_item"] += 1
+            # ⚠️ Vale para os dois: cupom sem linha nenhuma não vira venda, nem
+            # marcado como cancelado — não haveria o que mostrar nem o que
+            # conferir.
+            if not cancelada:
+                resumo["sem_item"] += 1
             continue
 
         vendas.append({
@@ -126,6 +142,9 @@ def preparar(cupons: list[dict], vinculos: dict[str, int] | None = None
             "documento": c["documento"],
             "canal": c["canal"],
             "origem": ORIGEM,
+            "cancelada": cancelada,
+            # 🔑 O desconto do cupom, que era lido pelo mapeador e morria aqui.
+            "desconto": float(c["desconto"] or 0),
             "itens": itens,
         })
 

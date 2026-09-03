@@ -190,6 +190,26 @@ faltando no estoque, e isso é pior que um cadastro que espera mais um dia.
 
 ---
 
+### Por que o PDV mostra mais cupons que o Botané
+
+Não mostra mais: mostra a mesma coisa contada de outro jeito. O PDV conta os
+**cupons emitidos**, incluindo os cancelados; o Botané conta as **vendas**.
+
+O painel do dia diz a conta em português — *"10 cupom(ns) cancelado(s) no PDV,
+somando R$ 1.529,00 — lá o dia tem 164 cupons"*. Some os dois e o número do PDV
+aparece.
+
+Os cancelados **entram no sistema, marcados**: aparecem na lista de vendas
+esmaecidos, não baixam estoque e não entram em receita nem no CMV.
+
+⚠️ **O desconto do cupom também vem.** O valor que o Botané mostra é o que a
+casa recebeu, não a soma das etiquetas — é por isso que ele bate com o PDV no
+centavo.
+
+Para conferir um dia, use o **filtro de dia** na tela de Vendas.
+
+---
+
 ### O cupom mostra o nome do PDV
 
 Ao abrir uma venda, cada linha traz o nome do jeito que ele aparece no PDV — é o

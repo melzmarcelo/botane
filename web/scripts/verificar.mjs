@@ -2072,6 +2072,45 @@ try {
   checar("a busca da lista acha a venda desta rodada",
     (await textoVisivel(p)).includes(doc6), (await textoVisivel(p)).slice(0, 120));
 
+  // 🔑 **O filtro de DIA** (pedido do dono, 03/09/2026). O servidor ja aceitava
+  // `inicio` e `fim` desde sempre; a tela nunca ofereceu, e conferir um dia
+  // contra o PDV exigia rolar a lista ate achar onde a data virava.
+  const temCampoDia = await p.evaluate(() =>
+    !!document.querySelector('input[type="date"][aria-label="Dia"]'));
+  checar("a tela de vendas oferece filtrar por dia", temCampoDia, temCampoDia);
+
+  // ⚠️ Um dia SEM venda tem de esvaziar a lista — se o filtro nao chegasse ao
+  // servidor, a venda desta rodada continuaria na tela e o teste passaria por
+  // engano.
+  await p.evaluate(() => {
+    const c = document.querySelector('input[type="date"][aria-label="Dia"]');
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    setter.call(c, "2001-01-01");
+    c.dispatchEvent(new Event("input", { bubbles: true }));
+    c.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  // ⚠️ **Medir na LISTA, e ela e um `<ul>`.** Duas medicoes erradas antes desta:
+  // `textoVisivel` anexa o VALOR dos campos de input, e a caixa de busca ainda
+  // contem o documento — procura-lo no texto da tela devolvia verdadeiro com a
+  // lista vazia, ou seja, o teste media o que ele mesmo tinha digitado. Depois,
+  // `tbody tr` deu sempre ZERO, porque a lista de vendas nao e tabela: ali a
+  // afirmacao "esvaziou" passava trivialmente e a "voltou" falhava sempre,
+  // acusando a tela de um defeito que ela nao tinha.
+  const vendaNaLista = () => p.evaluate((d) =>
+    [...document.querySelectorAll("li")].some((l) => l.innerText.includes(d)), doc6);
+  checar("filtrar um dia sem venda esvazia a lista", !(await vendaNaLista()));
+
+  // ⚠️ E ha como VOLTAR: um `type="date"` nao se esvazia sozinho em todo
+  // navegador, e sem a saida quem filtrou fica preso no dia.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => /Todos os dias/i.test(b.textContent ?? ""))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  checar("e o botao Todos os dias devolve a lista", await vendaNaLista());
+
   // A venda inteira numa página só: itens, custo congelado e o que saiu do
   // estoque. Antes a lista mostrava data, origem e total — e mais nada.
   const { dados: minhas } = await api("GET", `/vendas?busca=${doc6}`, null, token);

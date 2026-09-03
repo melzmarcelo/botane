@@ -149,6 +149,25 @@ st, r = chamar("POST", "/vendas/importar", {"vendas": [{
 }]}, token=token)
 checar("mesmo documento não duplica", r.get("repetidas") == 1, r)
 
+# 🔑 **O DESCONTO do cupom** (pedido do dono, 03/09/2026). O Botane gravava a
+# soma dos ITENS (bruto) e o PDV informa o valor cobrado (liquido) — medido na
+# conta real, 02/09 diferia 26,50, 29/08 diferia 13,50 e 28/08 diferia 722,00,
+# em todos exatamente o desconto do dia.
+# ⚠️ Receita e o DENOMINADOR do food cost: inflada, ela faz o food cost parecer
+# melhor do que e. E o mesmo erro silencioso do custo zero.
+doc_desc = f"DESC-{marca}"
+st, rd = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": hoje, "documento": doc_desc, "origem": "PLANILHA", "desconto": 7.5,
+    "itens": [{"id_produto": prato, "quantidade": 2, "valor_unitario": 25}],
+}]}, token=token)
+# ⚠️ 201, nao 200: importar CRIA venda.
+checar("a importacao aceita desconto", st == 201, (st, rd))
+st, lista_d = chamar("GET", f"/vendas?busca={doc_desc}", token=token)
+vd = (lista_d or [{}])[0]
+# 2 x 25 = 50 de itens, menos 7,50 = 42,50 cobrados.
+checar("e o total gravado e o LIQUIDO, como o PDV informa",
+       abs(float(vd.get("valor_total") or 0) - 42.5) < 0.01, vd.get("valor_total"))
+
 print("\n3. a lista")
 st, lista = chamar("GET", f"/vendas?busca={documento}", token=token)
 checar("a busca vai ao servidor", st == 200 and len(lista) == 1, (st, len(lista or [])))

@@ -35,17 +35,28 @@ export default function PaginaVendas() {
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [origem, setOrigem] = useState("");
+  // 🔑 **O filtro de DIA** (pedido do dono, 03/09/2026). O servidor já aceitava
+  // `inicio` e `fim` desde sempre; a tela nunca ofereceu, e conferir um dia
+  // contra o PDV exigia rolar a lista até achar onde a data virava.
+  // ⚠️ Um campo só, e não um par: a pergunta que se faz é "como foi o dia X",
+  // e um intervalo pediria duas respostas para uma pergunta.
+  const [dia, setDia] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   // ⚠️ `filtros:` faz a busca voltar para a primeira página. Sem isso, quem
   // está na página 7 e digita um documento cai numa tela vazia sem explicação.
-  const pag = usePaginacao("vendas", { padrao: 50, filtros: [busca, origem] });
+  const pag = usePaginacao("vendas", { padrao: 50, filtros: [busca, origem, dia] });
 
   const carregar = useCallback(async () => {
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
       if (origem) q.set("origem", origem);
+      // O mesmo dia nas duas pontas: é assim que o servidor recorta um dia só.
+      if (dia) {
+        q.set("inicio", dia);
+        q.set("fim", dia);
+      }
       const [v, p] = await Promise.all([
         api.listar<Venda>(`/vendas?${q}`),
         api.get<unknown[]>("/vendas/sem-vinculo"),
@@ -57,7 +68,7 @@ export default function PaginaVendas() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.offset, pag.porPagina, busca, origem]);
+  }, [pag.offset, pag.porPagina, busca, origem, dia]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 350 : 0);
@@ -194,13 +205,27 @@ export default function PaginaVendas() {
               </option>
             ))}
           </select>
+          <input
+            className="campo max-w-[190px]"
+            type="date"
+            aria-label="Dia"
+            value={dia}
+            onChange={(e) => setDia(e.target.value)}
+          />
+          {dia && (
+            // ⚠️ Um `type="date"` não tem como se esvaziar sozinho em todo
+            // navegador — sem esta saída, quem filtrou um dia fica preso nele.
+            <button type="button" className="btn btn-secundario" onClick={() => setDia("")}>
+              Todos os dias
+            </button>
+          )}
         </div>
 
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
           <Vazio>
-            {busca || origem
+            {busca || origem || dia
               ? "Nenhuma venda com esse filtro."
               : "Nenhuma venda ainda. Lance uma, cole a planilha do PDV ou ligue a integração."}
           </Vazio>

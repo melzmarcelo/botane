@@ -362,14 +362,48 @@ checar("e o MODO, para a tela poder avisar que e demonstracao",
 
 # A fixture tem 3 cupons: um cancelado, um com item cancelado dentro, e um bom.
 checar("le os tres cupons da fixture", r.get("cupons") == 3, r.get("cupons"))
-# ⚠️ Cupom cancelado nao vira venda: contá-lo inflaria a receita do periodo.
-checar("cupom cancelado fica de fora", r.get("cancelados") == 1, r.get("cancelados"))
+# 🔑 **Cupom cancelado ENTRA, marcado** (pedido do dono, 03/09/2026). Ele era
+# descartado, e o efeito era a conferencia nao fechar: o PDV dizia 164 cupons no
+# dia e o Botane mostrava 154, sem nada explicando os 10 — quem confere nao tinha
+# como distinguir "excluidos de proposito" de "sumiram".
+checar("o cupom cancelado e contado", r.get("cancelados") == 1, r.get("cancelados"))
+checar("e entra como venda CANCELADA, nao descartado",
+       r.get("canceladas") in (0, 1), (r.get("canceladas"), r.get("repetidas")))
 # ⚠️ E o cancelamento por ITEM, dentro de cupom valido, e o que passa
 # despercebido — sem esta regra a receita e o CMV teorico saem inflados.
 checar("item cancelado dentro de cupom valido tambem",
        r.get("itens_cancelados") == 1, r.get("itens_cancelados"))
 checar("sobram duas vendas", r.get("importadas") in (0, 2),
        (r.get("importadas"), r.get("repetidas")))
+
+# 🔑 **E o cancelado NAO baixa estoque** — e a razao de ele poder entrar.
+# Mercadoria que voltou para a prateleira (ou nunca saiu) nao pode sair do razao,
+# que e append-only e nao teria como desfazer.
+sys.path.insert(0, ".")
+from database import get_cursor as _cur_pdv  # noqa: E402
+
+with _cur_pdv() as _c:
+    _c.execute("""SELECT count(*) AS n FROM vendas v
+                    JOIN estoque_movimentos m
+                      ON m.origem_id = v.id AND m.origem_tipo = 'VENDA'
+                   WHERE v.cancelada AND v.origem = 'PDV_LEGAL'""")
+    _movs = _c.fetchone()["n"]
+checar("cupom cancelado do PDV nao move estoque", _movs == 0, _movs)
+
+# 🔑 **O painel aponta quantos e QUANTO** — e o que faz a conferencia com o PDV
+# fechar sozinha. Sem o numero a vista, 164 la e 154 aqui se le como perda de
+# dado; sem o valor, "10 cancelados" nao diz se foram dez cafes ou dez bolos.
+with _cur_pdv() as _c:
+    _c.execute("""SELECT max(data) AS d FROM vendas
+                   WHERE cancelada AND origem = 'PDV_LEGAL'""")
+    _dia_c = (_c.fetchone() or {}).get("d")
+if _dia_c:
+    st, _p = chamar("GET", f"/inicio/dia?data={_dia_c.isoformat()}", token=token)
+    _d = (_p or {}).get("dia") or {}
+    checar("o painel do dia diz quantos cupons foram cancelados",
+           _d.get("canceladas", 0) >= 1, _d.get("canceladas"))
+    checar("e quanto eles somam", (_d.get("valor_cancelado") or 0) > 0,
+           _d.get("valor_cancelado"))
 
 st, r2 = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
 # ⚠️ A idempotencia e do BANCO, pelo `documento` = `venda_id`: reimportar o

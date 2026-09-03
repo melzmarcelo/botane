@@ -23,6 +23,21 @@ class VendaImportar(BaseModel):
     documento: str | None = Field(default=None, max_length=40)
     canal: str | None = None
     origem: str = "PLANILHA"
+    # 🔑 **O cupom cancelado ENTRA, marcado** (pedido do dono, 03/09/2026).
+    # Antes ele era descartado na preparação, e o efeito era a conferência não
+    # fechar: o PDV dizia 164 cupons no dia e o Botané mostrava 154, sem nada
+    # explicando os 10 — e quem confere não tem como saber se sumiram ou se
+    # foram excluídos de propósito. Marcado, ele aparece, não move estoque e
+    # não conta em receita nenhuma (tudo que soma filtra `NOT cancelada`).
+    cancelada: bool = False
+    # 🔑 **O desconto do cupom** (pedido do dono, 03/09/2026). A coluna
+    # `vendas.desconto` existe desde o começo e nunca foi preenchida: o Botané
+    # gravava a soma dos ITENS (bruto) e o PDV informa o valor cobrado
+    # (líquido). Medido na conta real: 02/09 diferia 26,50, 29/08 diferia 13,50,
+    # 28/08 diferia 722,00 — em todos, exatamente o desconto do dia.
+    # ⚠️ Receita é o DENOMINADOR do food cost: receita inflada faz o food cost
+    # parecer melhor do que é, que é o mesmo erro silencioso do custo zero.
+    desconto: float = 0
     itens: list[ItemVenda]
 
 

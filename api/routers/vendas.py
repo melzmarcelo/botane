@@ -78,6 +78,9 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         raise HTTPException(status_code=400, detail="Nenhuma venda na importação.")
 
     importadas, repetidas, itens_total, sem_vinculo, sem_custo = 0, 0, 0, 0, 0
+    # Cupons que entraram MARCADOS como cancelados: contam para a conferência
+    # com o PDV e para nada mais.
+    canceladas = 0
     # Itens cujo custo saiu de uma ficha ainda em RASCUNHO.
     de_rascunho = 0
     produzidos_na_hora, baixados = 0, 0
@@ -97,16 +100,25 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     repetidas += 1
                     continue
 
-            total = sum(i.quantidade * i.valor_unitario for i in venda.itens)
+            bruto = sum(i.quantidade * i.valor_unitario for i in venda.itens)
+            # ⚠️ **`valor_total` guarda o LÍQUIDO**, que é o que a casa recebeu e
+            # o que o PDV informa no cupom. O bruto continua reconstituível pela
+            # soma dos itens, e o desconto vai na coluna própria — assim a
+            # conferência com o PDV fecha sem ninguém precisar refazer a conta.
+            total = bruto - (venda.desconto or 0)
             cur.execute(
                 """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
-                                       valor_total, id_usuario)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                       valor_total, desconto, cancelada, id_usuario)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                 (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
-                 venda.documento, total, ctx.id_usuario),
+                 venda.documento, total, venda.desconto or 0, venda.cancelada,
+                 ctx.id_usuario),
             )
             id_venda = cur.fetchone()["id"]
-            importadas += 1
+            if venda.cancelada:
+                canceladas += 1
+            else:
+                importadas += 1
 
             for item in venda.itens:
                 id_produto = item.id_produto
@@ -159,7 +171,12 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 # O que é feito NA HORA nasce e morre aqui: produz e baixa no
                 # mesmo lançamento, e o saldo volta a zero. O que é PARA
                 # ESTOQUE só baixa — foi produzido antes.
-                if id_produto:
+                # ⚠️ **Cupom cancelado NÃO baixa estoque**, e é a razão de ele
+                # poder entrar. Ele existe aqui para a conferência com o PDV
+                # fechar e para aparecer no painel — mercadoria que voltou para
+                # a prateleira (ou nunca saiu) não pode sair do razão, que é
+                # append-only e não teria como desfazer.
+                if id_produto and not venda.cancelada:
                     cur.execute(
                         """SELECT controla_estoque, id_local_padrao FROM produtos
                             WHERE id = %s""",
@@ -187,7 +204,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                         baixados += 1
 
         auditoria.registrar(cur, ctx.id_usuario, "vendas", None, "importar",
-                            depois={"vendas": importadas, "itens": itens_total,
+                            depois={"vendas": importadas, "canceladas": canceladas,
+                                    "itens": itens_total,
                                     "repetidas": repetidas, "sem_vinculo": sem_vinculo,
                                     "produzidos_na_hora": produzidos_na_hora,
                                     "baixados": baixados},
@@ -195,6 +213,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
 
     return {
         "importadas": importadas,
+        "canceladas": canceladas,
         "repetidas": repetidas,
         "itens": itens_total,
         "itens_sem_vinculo": sem_vinculo,

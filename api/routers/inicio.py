@@ -68,15 +68,48 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
             return None  # a casa ainda não tem venda nenhuma
 
     cur.execute(
+        # ⚠️ **A receita é LÍQUIDA: a soma dos itens menos o desconto do
+        # cupom.** O PDV informa o valor cobrado, e era essa a diferença que
+        # fazia a conferência não fechar. O desconto sai de uma subconsulta
+        # porque o join com os itens repetiria o valor do cabeçalho uma vez por
+        # linha do cupom — somá-lo ali multiplicaria o desconto pelo número de
+        # itens.
         """SELECT count(DISTINCT v.id) AS vendas,
-                  coalesce(sum(vi.valor_total), 0) AS receita,
+                  coalesce(sum(vi.valor_total), 0)
+                    - coalesce((SELECT sum(d.desconto) FROM vendas d
+                                 WHERE d.id_unidade = %s AND NOT d.cancelada
+                                   AND d.data = %s), 0) AS receita,
                   coalesce(sum(vi.quantidade), 0) AS itens
              FROM vendas v
              LEFT JOIN venda_itens vi ON vi.id_venda = v.id
             WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data = %s""",
-        (id_unidade, data),
+        (id_unidade, data, id_unidade, data),
     )
     r = dict(cur.fetchone())
+
+    # 🔑 **Os cupons CANCELADOS do dia, em número** (pedido do dono,
+    # 03/09/2026). Eles passaram a ser importados marcados, e é este número que
+    # faz a conferência com o PDV fechar sozinha: lá o dia tinha 164 cupons e
+    # aqui 154, sem nada explicando a diferença. Com ele à vista, 154 + 10 = 164
+    # e ninguém precisa desconfiar de perda de dado.
+    # ⚠️ Consulta PRÓPRIA, e não um `FILTER` na de cima: aquela tem `NOT
+    # cancelada` no WHERE e o join com os itens, então um filtro ali contaria
+    # ITENS de venda cancelada, não vendas.
+    # ⚠️ **O valor sai de `venda_itens`, como a receita** — e não do
+    # `vendas.valor_total` do cabeçalho. Hoje os dois concordam por construção,
+    # mas ler de fontes diferentes é como um painel passa a discordar de si
+    # mesmo no primeiro caso de borda. O cancelado tem de ser comparável ao
+    # vendido, e comparável quer dizer medido do mesmo jeito.
+    cur.execute(
+        """SELECT count(DISTINCT v.id) AS n,
+                  coalesce(sum(vi.valor_total), 0) AS valor
+             FROM vendas v
+             LEFT JOIN venda_itens vi ON vi.id_venda = v.id
+            WHERE v.id_unidade = %s AND v.cancelada AND v.data = %s""",
+        (id_unidade, data),
+    )
+    canc = dict(cur.fetchone())
+    canceladas, valor_cancelado = canc["n"], float(canc["valor"])
 
     cur.execute(
         """SELECT max(data) FILTER (WHERE data < %(d)s) AS anterior,
@@ -90,6 +123,11 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
     return {
         "data": data,
         "vendas": r["vendas"],
+        "canceladas": canceladas,
+        # Quanto o dia deixou de faturar por cancelamento. ⚠️ Vai como número,
+        # não como texto: quem formata é a tela, que sabe se quem olha pode ver
+        # dinheiro.
+        "valor_cancelado": valor_cancelado,
         "itens": float(r["itens"]),
         "receita": receita,
         "ticket_medio": (receita / r["vendas"]) if r["vendas"] else None,

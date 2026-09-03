@@ -26,6 +26,17 @@ import { reais } from "@/lib/cadastros";
 export type Dia = {
   data: string;
   vendas: number;
+  /**
+   * Cupons cancelados no PDV neste dia.
+   *
+   * 🔑 **É o número que faz a conferência fechar.** O PDV conta os cupons
+   * emitidos, incluindo os cancelados; aqui só as vendas contam. Sem este
+   * número à vista, 164 lá e 154 aqui se lê como perda de dado — e foi
+   * exatamente a desconfiança que gerou esta linha.
+   */
+  canceladas: number;
+  /** Quanto o dia deixou de faturar por cancelamento. */
+  valor_cancelado: number;
   itens: number;
   receita: number;
   ticket_medio: number | null;
@@ -161,6 +172,20 @@ export default function VendasDoDia({ inicial }: { inicial: Dia }) {
         ) : (
           <>
             {inteiro(dia.itens)} item(ns) vendido(s).{" "}
+            {/* ⚠️ **A frase diz a CONTA, não só o número.** "10 cancelados"
+                sozinho não responde por que o PDV mostra outro total; escrever
+                a soma responde. */}
+            {dia.canceladas > 0 && (
+              <>
+                {/* ⚠️ **O valor junto do número, e não só a contagem.** "10
+                    cancelados" não diz se foram dez cafés ou dez bolos
+                    inteiros — e é o valor que decide se aquilo merece uma
+                    conversa com o caixa. */}
+                <b>{inteiro(dia.canceladas)}</b> cupom(ns) cancelado(s) no PDV, somando{" "}
+                <b>{reais(dia.valor_cancelado)}</b> — lá o dia tem{" "}
+                <b>{inteiro(dia.vendas + dia.canceladas)}</b> cupons.{" "}
+              </>
+            )}
             <Link href="/vendas" className="text-erva underline underline-offset-2">
               ver as vendas
             </Link>
