@@ -7,6 +7,7 @@
     python limpar_dados.py --so-o-admin          deixa SÓ o administrador
     python limpar_dados.py --tabelas-de-apoio    zera setores, locais e categorias
     python limpar_dados.py --residuo-de-teste    recolhe o apoio e os papéis das suítes
+    python limpar_dados.py --cliente-novo        a base do primeiro dia, com o seed de volta
     python limpar_dados.py --manter-auditoria    preserva o histórico
 
 **O que sai:** tudo que é operação — produtos, fornecedores, fichas, o razão de
@@ -25,12 +26,13 @@ medida) está na lista dos que ficam, então a base limpa é exatamente a base d
 um primeiro dia — que é o cenário que interessa testar.
 """
 
+import os
 import re
 import sys
 
 sys.path.insert(0, ".")
 
-from config import ADMIN_EMAIL, DB_HOST, DB_NAME  # noqa: E402
+from config import ADMIN_EMAIL, DB_HOST, DB_NAME, SCRIPTS_DIR  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 
 # A ordem não importa: o TRUNCATE é um só, e o conjunto é fechado — nenhuma
@@ -243,6 +245,42 @@ def residuo_completo(cur, ignorar: set[str]) -> dict[str, list[dict]]:
             return achados
 
 
+# ---------------------------------------------------------------------------
+# A base do primeiro dia
+# ---------------------------------------------------------------------------
+# 🔑 **`--tabelas-de-apoio` deixa a base MAIS VAZIA que uma instalação nova, e
+# isso é de propósito** — sem local de estoque nenhum movimento entra, que é o
+# cenário que se quer testar às vezes. Mas quem pede "deixa como cliente novo"
+# quer o contrário: a base que o cliente recebe, com os setores, locais e
+# categorias que o seed cria no primeiro dia.
+#
+# ⚠️ **O seed NÃO volta sozinho.** Ele é a migração 005, e o `db_updater` a
+# registra por checksum: aplicada uma vez, nunca mais roda. Truncar o apoio sem
+# reaplicá-la deixa a casa sem categoria e sem prateleira, para sempre — e a
+# diferença só aparece quando alguém tenta cadastrar o primeiro produto.
+#
+# ⚠️ Ele já se protege sozinho (`WHERE NOT EXISTS`): reaplicá-lo numa tabela que
+# tem linha não duplica nada.
+_SEED = "005_cadastros_iniciais.sql"
+
+# ⚠️ **O que NÃO sai nem com `--cliente-novo`, e é decisão, não esquecimento:**
+# `empresa` (nome, CNPJ e a logo da casa) e `integracoes` (as credenciais do
+# Omie e do PDV, cifradas). Apagá-las obrigaria a redigitar app_key/app_secret
+# antes de qualquer teste de importação — que é justamente o que se ia testar.
+# Já se perdeu uma credencial neste projeto por descuido de script.
+
+
+def semear(cur) -> int:
+    """Reaplica o seed do primeiro dia. Devolve quantas linhas de apoio nasceram."""
+    with open(os.path.join(SCRIPTS_DIR, _SEED), encoding="utf-8") as f:
+        cur.execute(f.read())
+    total = 0
+    for t in ("setores", "locais_estoque", "categorias"):
+        cur.execute(f'SELECT count(*) AS n FROM "{t}"')
+        total += cur.fetchone()["n"]
+    return total
+
+
 PRESERVADAS = [
     "empresa", "unidades", "parametros", "locais_estoque",
     "setores", "categorias", "unidades_medida", "perda_motivos",
@@ -327,6 +365,15 @@ def main() -> int:
     limpar_filiais = "--filiais-de-teste" in argumentos
     limpar_residuo = "--residuo-de-teste" in argumentos
 
+    # 🔑 **Uma opção, uma intenção.** "Deixa como cliente novo" é a soma de
+    # quatro escolhas mais o seed de volta; pedir as cinco à mão é o tipo de
+    # combinação que se erra por esquecer uma — e a que se esquece é sempre o
+    # seed, cuja falta só aparece dias depois, quando alguém tenta cadastrar o
+    # primeiro produto e não há categoria nenhuma.
+    cliente_novo = "--cliente-novo" in argumentos
+    if cliente_novo:
+        so_o_admin = limpar_apoio = limpar_filiais = limpar_residuo = True
+
     # A trava que importa: este script existe para a base LOCAL de
     # desenvolvimento. Apontado para outro servidor, ele para aqui.
     if DB_HOST not in ("localhost", "127.0.0.1", "::1"):
@@ -371,6 +418,9 @@ def main() -> int:
 
     if limpar_apoio:
         print("\n  ! sem local de estoque, nenhum movimento entra até criarem o primeiro")
+        if cliente_novo:
+            print("    (mas o seed do primeiro dia volta em seguida: setores,")
+            print("     locais e categorias como o cliente os recebe)")
 
     if limpar_usuarios or so_o_admin:
         with get_cursor() as cur:
@@ -479,10 +529,20 @@ def main() -> int:
                         (alvos_residuo,))
                 cur.execute(f'DELETE FROM "{tabela}" WHERE id = ANY(%s)', (alvos_residuo,))
 
+        if cliente_novo:
+            # ⚠️ **Depois de tudo**, nunca antes: o TRUNCATE do apoio levaria o
+            # seed junto, e a base terminaria vazia do mesmo jeito — com a
+            # diferença de que o script teria dito que semeou.
+            nasceram = semear(cur)
+
         depois = contar(cur, alvos)
 
     sobrou = sum(depois.values())
     print(f"\nApagados {total - sobrou + _do_residuo(residuo)} registro(s).")
+    if cliente_novo:
+        print(f"Seed do primeiro dia reaplicado: {nasceram} linha(s) de apoio.")
+        print("Empresa e credenciais de integração foram PRESERVADAS — sem elas não")
+        print("haveria o que importar.")
     print("A base está como uma instalação nova: cadastre os primeiros produtos e comece.")
     print("Entre com o administrador de sempre — usuários e papéis foram preservados.")
     return 0
