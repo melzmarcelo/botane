@@ -16,6 +16,8 @@ type Usuario = {
   bloqueado: boolean;
   ultimo_acesso: string | null;
   papeis: Vinculo[];
+  /** ⚠️ Vazio quer dizer TODOS — a mesma convenção da loja. */
+  setores: { id: number; nome: string }[];
 };
 
 /** Corrigir um usuário — a mesma forma da criação, para o olho reconhecer. */
@@ -78,6 +80,11 @@ export default function PaginaUsuario() {
           // ⚠️ Repetido, porque o mesmo papel aparece uma vez por loja.
           papeis: [...new Set(u.papeis.map((v) => v.id_papel))],
           unidades: lojasDosVinculos(u.papeis),
+          // ⚠️ **Vazio vira NULO aqui**, e não uma lista vazia: no formulário,
+          // nulo é "a casa toda" e lista vazia é "só estes, e ainda não escolhi
+          // nenhum" — um estado que a tela recusa salvar. Ler vazio como vazio
+          // abriria o cadastro de todo mundo já em erro.
+          setores: u.setores?.length ? u.setores.map((st) => st.id) : null,
         }}
         misto={arranjoMisto(u.papeis)}
         id={u.id}

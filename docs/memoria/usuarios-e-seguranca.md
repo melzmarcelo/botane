@@ -56,6 +56,45 @@
   ⚠️ E a lista de usuários **de-duplica o papel**: com duas lojas, o mesmo papel vem uma vez por
   loja e a coluna mostrava "Cozinha, Cozinha".
 
+- 🔑 **De que SETOR cada pessoa cuida** (`usuario_setores`, migração 052, cadastro de usuário
+  ▸ "De que setor cuida", 03/09/2026, pedido do dono).
+  🔑 **A tabela existia desde o script 004 e NUNCA foi lida por nada.** O comentário dela dizia
+  "Restrição por setor (o ajudante conta só a área dele). Sem linha = sem limite." — e ficou
+  vazia: nenhuma tela oferecia o campo, nenhum endpoint a consultava. É literalmente a mesma
+  história de `usuario_papeis.id_unidade`, que também esperou a tela aparecer: **o sistema sabia
+  fazer e não oferecia isso a ninguém.** Por isso a migração 052 não cria nada — só acrescenta o
+  índice que faltava e registra o dia em que a tabela passou a valer.
+  ⚠️ **Lista VAZIA quer dizer TODOS**, como o 004 já dizia — a mesma convenção da loja
+  (`id_unidade` nulo) e da escala do inventário. É o que faz o deploy não tirar nada de ninguém:
+  quem está cadastrado hoje continua vendo o que via.
+  ⚠️ **`todos_setores` é a resposta, não o tamanho da lista.** Com ele ligado, `/auth/me` devolve
+  a lista **cheia** (todos os ativos) — é ela que o formulário oferece para marcar, e um
+  administrador com lista vazia não teria o que oferecer a ninguém. Deduzir "todos" de uma lista
+  vazia faria tela e servidor discordarem exatamente no caso comum.
+  ⚠️ **Nulo NÃO é lista vazia no `UsuarioUpdate`**: nulo é "não mexi nos setores" — é o que uma
+  tela antiga manda — e vazio é a escolha explícita de "todos". Tratá-los igual faria qualquer
+  PUT antigo apagar em silêncio a restrição que alguém acabou de configurar. A suíte cobra os
+  dois caminhos.
+  ⚠️ **Isto NÃO é permissão, e a tela DIZ isso.** A permissão diz o que a pessoa sabe fazer
+  (`producao.agenda`); o setor diz de que parte da casa ela cuida. Quem lesse "só estes setores"
+  como bloqueio deixaria de configurar o papel — e a pessoa continuaria abrindo as telas pelo
+  menu. Misturar os dois obrigaria a criar um papel por setor ("Cozinha da Confeitaria",
+  "Cozinha do Bar") e a repetir cada mudança de permissão em todos eles.
+  ⚠️ **O alcance é o do PAINEL e o da agenda, não o do sistema inteiro** (decisão do dono).
+  Transformar setor em escopo global, como a loja é, tiraria do ar no instante do deploy telas
+  que a pessoa usa hoje.
+  🔑 **As mesmas duas travas da loja**: quem não cuida do setor não põe ninguém nele, e ninguém
+  encolhe o próprio alcance — quem se restringisse perderia os outros de vista, e a primeira
+  trava o impediria de devolvê-los a si mesmo.
+  ⚠️ **Só setores ATIVOS contam** ao montar o contexto: um setor desativado que continuasse na
+  lista deixaria a pessoa restrita a um lugar que não existe mais, e o sintoma seria um painel
+  vazio sem explicação. Desativar o último setor de alguém a devolve a "todos".
+  ⚠️ **`DELETE /setores` APAGA o setor que nunca foi usado** e só desativa o que tem produto —
+  a suíte precisa prender um produto ao setor antes de desativá-lo, senão a recusa volta como
+  404 "não encontrado", que é outra afirmação.
+  Coberto por `tests/smoke_setor_do_usuario.py` (29 checagens) e pelo bloco `10g` do
+  `verificar.mjs`.
+
 - 🔑 **Contar e MONTAR a contagem viraram permissões diferentes** (migração 045, 30/08/2026).
   `estoque.inventario` dava as duas coisas: quem ia à prateleira contar podia abrir contagem
   nova, escolher o recorte e cancelar a dos outros. A chave nova é **`estoque.inventario_criar`**

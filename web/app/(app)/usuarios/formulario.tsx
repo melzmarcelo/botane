@@ -44,10 +44,20 @@ type Form = {
   papeis: number[];
   /** Nulo = todas as lojas, que é o padrão e o que vale numa casa só. */
   unidades: number[] | null;
+  /**
+   * Nulo = todos os setores.
+   *
+   * ⚠️ **Nulo e lista vazia são coisas DIFERENTES aqui**, e o servidor lê os
+   * dois: nulo é "não mexi", lista vazia é a escolha explícita de "todos". A
+   * tela nunca manda lista vazia — ela manda nulo, que é o mesmo resultado com
+   * a intenção declarada.
+   */
+  setores: number[] | null;
 };
 
 export const VAZIO: Form = {
   nome: "", email: "", telefone: "", senha: "", papeis: [], unidades: null,
+  setores: null,
 };
 
 /**
@@ -106,6 +116,12 @@ export default function FormularioUsuario({
   const lojas = eu?.unidades ?? [];
   const varias = lojas.length > 1;
 
+  // 🔑 **Os setores oferecidos são os de QUEM ESTÁ CADASTRANDO**, pela mesma
+  // razão das lojas: o servidor recusa dar um setor que quem edita não tem, e
+  // oferecer o que vai levar 403 seria ensinar o erro. Vêm do `/auth/me`, que
+  // toda tela já carrega — e com `todos_setores` a lista chega inteira.
+  const setores = eu?.setores ?? [];
+
   const carregar = useCallback(async () => {
     try {
       setPapeis(await api.get<Papel[]>("/papeis"));
@@ -130,6 +146,13 @@ export default function FormularioUsuario({
       setSalvando(false);
       return;
     }
+    // Mesma armadilha das lojas, pela outra ponta: "só estes setores" sem
+    // marcar nenhum é um estado sem resposta.
+    if (form.setores !== null && form.setores.length === 0) {
+      aviso.erro('Escolha ao menos um setor — ou marque "todos os setores".');
+      setSalvando(false);
+      return;
+    }
     // ⚠️ **O produto cartesiano papéis × lojas.** `id_unidade` nulo vale em
     // todas — é o caso comum e o de quem tem uma loja só. Escolhendo lojas, cada
     // papel nasce uma vez por loja, que é exatamente como a tabela guarda.
@@ -143,6 +166,9 @@ export default function FormularioUsuario({
           email: form.email,
           telefone: form.telefone || null,
           papeis: vinculos,
+          // ⚠️ Nulo vira lista VAZIA na API: lá, vazio é "todos" e nulo é "não
+          // mexi". A tela sempre mexe, então sempre declara.
+          setores: form.setores ?? [],
         };
         // ⚠️ Senha em branco MANTÉM a que está: exigir redigitá-la para mudar um
         // papel é o caminho mais curto para alguém escolher uma senha fraca.
@@ -156,6 +182,7 @@ export default function FormularioUsuario({
           telefone: form.telefone || null,
           senha: form.senha,
           papeis: vinculos,
+          setores: form.setores ?? [],
         });
         aviso.sucesso("Usuário criado. A senha precisa ser trocada no primeiro acesso.");
       }
@@ -325,6 +352,88 @@ export default function FormularioUsuario({
                 arranjo atual.
               </Aviso>
             )}
+          </div>
+        </Cartao>
+      )}
+
+      {/* 🔑 **De que parte da casa a pessoa cuida** (pedido do dono, 03/09/2026).
+          A tabela `usuario_setores` existe desde o script 004 e nunca foi usada
+          por nada — é a mesma história da loja, que também esperou a tela
+          aparecer. ⚠️ Hoje isto recorta o PAINEL e a agenda de produção, não o
+          sistema inteiro: quem é da Confeitaria abre o Início já vendo o que a
+          Confeitaria tem para assar, em vez de percorrer a agenda do Bar junto. */}
+      {!!setores.length && (
+        <Cartao
+          titulo="De que setor cuida"
+          descricao="Recorta o painel e a agenda de produção — a pessoa abre o Início já vendo o que é dela."
+        >
+          <div className="flex flex-col gap-3">
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1 h-4 w-4 accent-erva"
+                checked={form.setores === null}
+                onChange={() => setForm({ ...form, setores: null })}
+              />
+              <span>
+                <span className="text-[14.5px] font-semibold">A casa toda</span>
+                <span className="block text-[12.5px] leading-snug text-suave">
+                  Vale também para os setores que a casa criar depois.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input
+                type="radio"
+                className="mt-1 h-4 w-4 accent-erva"
+                checked={form.setores !== null}
+                onChange={() => setForm({ ...form, setores: [] })}
+              />
+              <span>
+                <span className="text-[14.5px] font-semibold">Só estes setores</span>
+                <span className="block text-[12.5px] leading-snug text-suave">
+                  O painel mostra só a produção destes — o resto continua acessível pelo menu.
+                </span>
+              </span>
+            </label>
+
+            {form.setores !== null && (
+              <ul className="ml-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {setores.map((st) => (
+                  <li
+                    key={st.id}
+                    className="flex items-center gap-2 rounded border border-linha p-2.5"
+                  >
+                    <input
+                      id={`setor-${st.id}`}
+                      type="checkbox"
+                      className="h-4 w-4 accent-erva"
+                      checked={form.setores?.includes(st.id) ?? false}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          setores: e.target.checked
+                            ? [...(form.setores ?? []), st.id]
+                            : (form.setores ?? []).filter((x) => x !== st.id),
+                        })
+                      }
+                    />
+                    <label htmlFor={`setor-${st.id}`} className="cursor-pointer text-[14.5px]">
+                      {st.nome}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* ⚠️ **Setor NÃO é permissão, e a tela precisa dizer isso.** Quem
+                lesse "só estes setores" como bloqueio deixaria de configurar o
+                papel — e a pessoa continuaria abrindo as telas pelo menu. */}
+            <Aviso tipo="info">
+              Isto <b>não é permissão</b>: diz de que parte da casa a pessoa cuida, para o painel
+              dela abrir no que interessa. Quem decide o que ela pode <i>fazer</i> é o papel,
+              acima.
+            </Aviso>
           </div>
         </Cartao>
       )}

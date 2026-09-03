@@ -355,6 +355,20 @@ try {
         avancarDesligado: b("próximo dia com venda")?.disabled,
       };
     });
+    // 🔑 **O dia da semana, junto da data** (pedido do dono, 03/09/2026): um
+    // sábado e uma segunda não se comparam, e a data sozinha obriga quem olha a
+    // fazer essa conta de cabeça.
+    // ⚠️ **Conferido contra a data que o SERVIDOR mandou**, e calculado aqui em
+    // hora local — `new Date('aaaa-mm-dd')` é meia-noite UTC, que em Brasília é
+    // o dia anterior a partir das 21h. Um teste que caísse na mesma armadilha
+    // da tela concordaria com o erro em vez de pegá-lo.
+    const SEMANA_ESPERADA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira",
+      "quinta-feira", "sexta-feira", "sábado"];
+    const [aa, mm, dd] = String(painelDia.dia.data).slice(0, 10).split("-").map(Number);
+    const esperado = SEMANA_ESPERADA[new Date(aa, mm - 1, dd).getDay()];
+    const semanaNaTela = await p.evaluate(() => document.body.innerText);
+    checar("o cartao do dia diz o dia da semana",
+      semanaNaTela.includes(esperado), { esperado, data: painelDia.dia.data });
     checar("o painel mostra as vendas do dia", cartaoDia.temValor && cartaoDia.temTicket,
       cartaoDia);
     checar("com as duas setas de navegação", cartaoDia.voltar && cartaoDia.avancar, cartaoDia);
@@ -4785,6 +4799,69 @@ try {
     (sel) => !!document.querySelector(sel), caixinhaDaFilial);
   checar("e ai as lojas da casa aparecem para marcar", depoisDeEscolher, depoisDeEscolher);
   await foto(p, "41-usuario-lojas");
+
+  console.log("10g. de que setor a pessoa cuida");
+  // 🔑 **`usuario_setores` existe desde o script 004 e nunca foi lida por
+  // nada** — "Restrição por setor (o ajudante conta só a área dele). Sem linha
+  // = sem limite.", dizia o comentário. É a mesma história da loja acima: o
+  // sistema sabia fazer e não oferecia isso a ninguém. Agora o cadastro
+  // pergunta, e o painel da pessoa abre no que é dela.
+  const semSetor = await p.evaluate(() => ({
+    pergunta: /De que setor cuida/i.test(document.body.innerText),
+    // O padrão é a casa toda: ninguém perde nada no dia do deploy.
+    padrao: /A casa toda/i.test(document.body.innerText),
+    restringe: /S[oó] estes setores/i.test(document.body.innerText),
+    // ⚠️ **A tela tem de DIZER que setor não é permissão.** Quem lesse "só
+    // estes setores" como bloqueio deixaria de configurar o papel — e a pessoa
+    // continuaria abrindo as telas pelo menu.
+    avisaQueNaoEPermissao: /n[ãa]o é permiss[ãa]o/i.test(document.body.innerText),
+    // A lista de setores só aparece depois de escolher restringir, como a de lojas.
+    listaEscondida: !document.querySelector("[id^='setor-']"),
+  }));
+  checar("o cadastro de usuario pergunta de que setor a pessoa cuida",
+    semSetor.pergunta, semSetor);
+  checar("com a casa toda como padrao", semSetor.padrao && semSetor.restringe, semSetor);
+  checar("dizendo que setor NAO e permissao", semSetor.avisaQueNaoEPermissao, semSetor);
+  checar("e a lista de setores so aparece quando se escolhe restringir",
+    semSetor.listaEscondida, semSetor);
+
+  await p.evaluate(() => {
+    const alvo = [...document.querySelectorAll("label")]
+      .find((l) => /S[oó] estes setores/i.test(l.innerText));
+    alvo?.querySelector("input")?.click();
+  });
+  await p.waitForSelector("[id^='setor-']", { timeout: 6000 }).catch(() => {});
+  const comSetores = await p.evaluate(() =>
+    [...document.querySelectorAll("[id^='setor-']")].length);
+  checar("e ai os setores da casa aparecem para marcar", comSetores > 0, comSetores);
+  await foto(p, "41b-usuario-setores");
+
+  // 🔑 **O que o pedido pede de verdade: o painel abre no que é da pessoa.**
+  // ⚠️ Medido pelo SERVIDOR e pela TELA: a API diz que recorta, e a tela tem de
+  // mostrar o cartão — um endpoint certo com tela muda não entrega nada.
+  const { dados: painelAdmin } = await api("GET", "/inicio", null, token);
+  checar("o painel traz a agenda de producao",
+    !!painelAdmin.producao, Object.keys(painelAdmin));
+  checar("e quem nao tem setor marcado ve a casa inteira",
+    painelAdmin.producao?.todos_setores === true, painelAdmin.producao);
+
+  await irPara(p, `${WEB}/`);
+  await p.waitForFunction(
+    () => /Para produzir/i.test(document.body.innerText), { timeout: 15000 },
+  ).catch(() => {});
+  const painelTela = await p.evaluate(() => {
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").includes("Para produzir"));
+    return {
+      temCartao: !!cartao,
+      // O caminho para a agenda inteira: o cartão mostra as primeiras linhas.
+      abreAgenda: !!cartao?.querySelector("a[href='/producao']"),
+      texto: (cartao?.innerText ?? "").slice(0, 120),
+    };
+  });
+  checar("e a tela inicial mostra o cartao Para produzir", painelTela.temCartao, painelTela);
+  checar("com o caminho para a agenda inteira", painelTela.abreAgenda, painelTela);
+  await foto(p, "41c-painel-producao");
 
   console.log("11. logo da empresa");
   // PNG 1x1 de verdade, para o servidor validar a imagem e não só o content-type

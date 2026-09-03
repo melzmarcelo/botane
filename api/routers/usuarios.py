@@ -30,6 +30,69 @@ def _papeis_do_usuario(cur, id_usuario: int) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+def _setores_do_usuario(cur, id_usuario: int) -> list[dict]:
+    """Os setores da pessoa. ⚠️ **Vazio quer dizer TODOS** — ver a migração 052."""
+    cur.execute(
+        """SELECT s.id, s.nome FROM usuario_setores us
+             JOIN setores s ON s.id = us.id_setor
+            WHERE us.id_usuario = %s AND s.ativo
+            ORDER BY s.ordem, s.nome""",
+        (id_usuario,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _gravar_setores(cur, id_usuario: int, setores: list[int], ctx: Contexto) -> None:
+    """Grava de que parte da casa a pessoa cuida.
+
+    ⚠️ **Lista vazia é "todos", não "nenhum"** — e é por isso que ela apaga as
+    linhas sem gravar nada. Um usuário sem linha nenhuma vê a casa inteira, que
+    é o padrão de quem nunca respondeu a pergunta.
+
+    🔑 **Quem não enxerga o setor não põe ninguém nele**, pela mesma razão da
+    loja: dar a outra pessoa um alcance que quem edita não tem é o caminho
+    clássico para escalar acesso sem tocar em permissão. ⚠️ Com `todos_setores`
+    ligado — o caso de todo administrador hoje — a trava não barra nada, e é
+    isso que faz esta migração não travar a configuração inicial.
+
+    🔑 **E ninguém encolhe o PRÓPRIO alcance.** Quem se restringisse a um setor
+    perderia os outros de vista, e a trava de cima o impediria de devolvê-los a
+    si mesmo. É o mesmo erro que a loja já paga, pela outra porta.
+    """
+    pedidos = sorted(set(setores))
+    for id_setor in pedidos:
+        cur.execute("SELECT nome, ativo FROM setores WHERE id = %s", (id_setor,))
+        setor = cur.fetchone()
+        if not setor:
+            raise HTTPException(status_code=404, detail="Setor não encontrado")
+        if not setor["ativo"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{setor['nome']} está inativo — não dá para lotar alguém nele.")
+        if not ctx.ve_setor(id_setor):
+            raise HTTPException(
+                status_code=403,
+                detail=(f"Você não cuida de {setor['nome']}, então não pode "
+                        "colocar ninguém nele."))
+
+    if id_usuario == ctx.id_usuario and pedidos:
+        # Sem `todos_setores`, o conjunto novo tem de conter o atual: encolher o
+        # próprio alcance deixa a pessoa sem como voltar.
+        if ctx.todos_setores or not ctx.setores.issubset(set(pedidos)):
+            raise HTTPException(
+                status_code=400,
+                detail=("Você não pode reduzir os seus próprios setores — ficaria sem "
+                        "como voltar atrás. Peça a outro administrador."))
+
+    cur.execute("DELETE FROM usuario_setores WHERE id_usuario = %s", (id_usuario,))
+    for id_setor in pedidos:
+        cur.execute(
+            """INSERT INTO usuario_setores (id_usuario, id_setor)
+               VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+            (id_usuario, id_setor),
+        )
+
+
 def _conferir_lojas(cur, papeis, ctx: Contexto) -> None:
     """Só se dá acesso a loja que EXISTE e que quem está dando enxerga.
 
@@ -112,6 +175,7 @@ def listar(incluir_inativos: bool = False,
         com_total(usuarios, resposta, offset)
         for u in usuarios:
             u["papeis"] = _papeis_do_usuario(cur, u["id"])
+            u["setores"] = _setores_do_usuario(cur, u["id"])
     return usuarios
 
 
@@ -130,6 +194,7 @@ def obter(id_usuario: int) -> dict:
             raise HTTPException(status_code=404, detail="Usuário não encontrado")
         u = dict(u)
         u["papeis"] = _papeis_do_usuario(cur, id_usuario)
+        u["setores"] = _setores_do_usuario(cur, id_usuario)
     return u
 
 
@@ -150,6 +215,7 @@ def criar(body: UsuarioCreate, request: Request,
         )
         novo = cur.fetchone()["id"]
         _gravar_papeis(cur, novo, body.papeis, ctx)
+        _gravar_setores(cur, novo, body.setores, ctx)
         auditoria.registrar(
             cur, ctx.id_usuario, "usuario", novo, "criar",
             depois={"nome": body.nome, "email": email, "ativo": body.ativo},
@@ -204,6 +270,11 @@ def atualizar(id_usuario: int, body: UsuarioUpdate, request: Request,
             )
         if body.papeis is not None:
             _gravar_papeis(cur, id_usuario, body.papeis, ctx)
+        # ⚠️ `is not None`, nunca `if body.setores`: lista vazia é a escolha
+        # explícita de "todos os setores" e precisa apagar as linhas. Testar a
+        # verdade do valor confundiria "não mexi" com "liberei tudo".
+        if body.setores is not None:
+            _gravar_setores(cur, id_usuario, body.setores, ctx)
 
         auditoria.registrar(
             cur, ctx.id_usuario, "usuario", id_usuario, "atualizar",

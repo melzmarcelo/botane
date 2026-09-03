@@ -103,3 +103,33 @@
   navegador, limpar com ctrl+A, senão o valor entra colado (1 + 8 = 18).
 
 ## Stack e portas
+
+- 🔑 **O painel abre com o que a cozinha DESTA pessoa tem para fazer** (`GET /inicio`, bloco
+  `producao`, cartão **Para produzir**, 03/09/2026, pedido do dono). A agenda de produção
+  existia desde a etapa de fichas, mas só na tela dela: quem entrava de manhã via o painel do
+  mês e tinha de navegar até Produção para descobrir o que assar hoje. E, com Bar, Confeitaria e
+  Cafeteria na mesma lista, quem é da Confeitaria percorria a agenda inteira para achar as duas
+  linhas dela.
+  🔑 **O bloco vem ANTES do corte do dinheiro, de propósito.** `GET /inicio` devolve cedo para
+  quem não tem `cmv.painel`; pôr a produção depois desse `return` daria à cozinha um painel só
+  de contagens — que é justamente o que o pedido veio corrigir. Hoje a cozinha abre o sistema e
+  vê o que tem para produzir.
+  ⚠️ **E isso não abriu valor nenhum.** O bloco carrega quantidade e data, nunca custo; a suíte
+  cobra que nenhuma chave de linha contenha "custo" ou "valor", e que `dinheiro`, `dia` e
+  `pesos` continuem vazios para quem não vê dinheiro.
+  ⚠️ **Sete dias à frente, só `PLANEJADA`, de ontem em diante** — as mesmas regras da tela de
+  agenda. Ler diferente faria as duas discordarem sobre o que está pendente.
+  ⚠️ **Produto SEM setor aparece para todos**: ele não é de ninguém, e escondê-lo sumiria com a
+  linha do painel da casa inteira, sem nada dizendo por quê.
+  ⚠️ **A resposta diz se é recorte ou casa inteira** (`todos_setores`), e a tela usa isso na
+  frase do vazio: "nada planejado" sem essa distinção se lê como "a casa não produz nada".
+  ⚠️ **`new Date('aaaa-mm-dd')` é meia-noite UTC** — em Brasília, o dia anterior às 21h. A data
+  da linha é fatiada do texto (`diaCurto`), nunca construída: senão a agenda de amanhã apareceria
+  como hoje. Mesma armadilha que `lib/datas.ts` documenta, pela ponta da leitura.
+
+- 🔑 **Dinheiro no painel já obedecia a permissão, e continua** (`cmv.painel`). Medido em
+  03/09/2026 com um usuário de Cozinha: `dinheiro`, `dia` e `pesos` voltam nulos/vazios, e
+  sobram as contagens e os alertas, que são texto sem valor. `/inicio/dia` e `/inicio/rede`
+  exigem a mesma chave. Hoje a têm Administrador, Gerente e Contador; não a têm Cozinha,
+  Conferente e Salão. ⚠️ **Quem quiser mudar isso mexe no PAPEL, não no código** — é a chave que
+  decide, e ela é configurável na tela de Papéis.

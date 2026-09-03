@@ -58,6 +58,29 @@ type Painel = {
   /** O movimento do dia da última venda — nulo para quem não vê dinheiro. */
   dia: Dia | null;
   pesos: { grupo: string; cmv: number; participacao_pct: number }[];
+  /**
+   * O que a cozinha DESTA pessoa tem para fazer.
+   *
+   * ⚠️ Nulo para quem não tem `producao.agenda` — não uma lista vazia, que se
+   * leria como "não há nada para produzir".
+   */
+  producao: {
+    linhas: {
+      id: number;
+      id_produto: number;
+      produto: string;
+      um_estoque: string | null;
+      data_prevista: string;
+      quantidade: number;
+      setor: string | null;
+      atrasada: boolean;
+    }[];
+    total: number;
+    atrasadas: number;
+    hoje: number;
+    todos_setores: boolean;
+    setores: string[];
+  } | null;
 };
 
 function Indicador({
@@ -92,6 +115,16 @@ function Indicador({
 }
 
 const pct = (n: number) => `${n.toFixed(1).replace(".", ",")}%`;
+
+/**
+ * "04/09" — a data da linha da agenda, curta.
+ *
+ * ⚠️ **Sem `new Date(iso)`**: o construtor lê `aaaa-mm-dd` como MEIA-NOITE UTC,
+ * e no fuso de Brasília isso é o dia anterior às 21h. A agenda de amanhã
+ * apareceria como hoje. É a mesma armadilha que `lib/datas.ts` documenta, pela
+ * ponta da leitura — aqui o texto já vem pronto do servidor e só é fatiado.
+ */
+const diaCurto = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 export default function Inicio() {
   const { eu } = useSessao();
@@ -144,6 +177,80 @@ export default function Inicio() {
           que é a primeira coisa que se olha de manhã. As setas andam entre dias
           que TÊM venda; quem diz para onde dá para ir é o servidor. */}
       {p.dia && <VendasDoDia inicial={p.dia} />}
+
+      {/* 🔑 **O que a cozinha DESTA pessoa tem para fazer** (pedido do dono,
+          03/09/2026). A agenda existia só na tela dela: quem entrava de manhã
+          via o painel do mês e tinha de navegar até Produção para descobrir o
+          que assar hoje. E fica AQUI, acima dos números do período, porque para
+          quem não vê dinheiro este é o painel inteiro — o cartão do dia e os
+          indicadores vêm nulos. */}
+      {p.producao && (
+        <Cartao
+          titulo="Para produzir"
+          descricao={
+            p.producao.todos_setores
+              ? "O plano da casa para os próximos sete dias."
+              : `O plano de ${p.producao.setores.join(", ") || "quem você cuida"} para os próximos sete dias.`
+          }
+          acao={
+            <Link href="/producao" className="btn btn-secundario">
+              Abrir a agenda
+            </Link>
+          }
+        >
+          {!p.producao.total ? (
+            // ⚠️ A frase diz se o vazio é da CASA ou só do recorte da pessoa —
+            // senão "nada para produzir" se lê como "a casa não produz nada".
+            <p className="text-[14.5px] text-suave">
+              Nada planejado para os próximos sete dias
+              {p.producao.todos_setores ? "" : " nos seus setores"}.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13.5px]">
+                <span>
+                  <b className="mono">{p.producao.hoje}</b> para hoje
+                </span>
+                {p.producao.atrasadas > 0 && (
+                  <span className="text-erro">
+                    <b className="mono">{p.producao.atrasadas}</b> atrasada(s)
+                  </span>
+                )}
+                <span className="text-suave">
+                  <b className="mono">{p.producao.total}</b> no total
+                </span>
+              </div>
+              <ul className="mt-3 flex flex-col gap-px bg-linha text-[14.5px]">
+                {p.producao.linhas.map((l) => (
+                  <li
+                    key={l.id}
+                    className="flex flex-wrap items-baseline gap-x-3 bg-superficie py-2.5"
+                  >
+                    <span
+                      className={`mono text-[13px] ${l.atrasada ? "text-erro" : "text-suave"}`}
+                    >
+                      {diaCurto(l.data_prevista)}
+                    </span>
+                    <Link href={`/produtos/${l.id_produto}`} className="link-registro">
+                      {l.produto}
+                    </Link>
+                    {l.setor && <span className="text-[12.5px] text-suave">{l.setor}</span>}
+                    <span className="mono ml-auto font-semibold">
+                      {l.quantidade.toLocaleString("pt-BR")}{" "}
+                      <span className="font-normal text-suave">{l.um_estoque ?? ""}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {p.producao.total > p.producao.linhas.length && (
+                <p className="mt-3 text-[13px] text-suave">
+                  Mostrando as {p.producao.linhas.length} primeiras — as outras estão na agenda.
+                </p>
+              )}
+            </>
+          )}
+        </Cartao>
+      )}
 
       {d && (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

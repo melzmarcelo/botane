@@ -327,6 +327,24 @@ guardam. Quem precisa de outra sigla cria outra unidade.
 
 ## Cozinha
 
+### O painel já abre no que é seu
+
+Ao entrar, o cartão **Para produzir** mostra o que está planejado para os
+próximos sete dias — o que é para hoje, o que ficou atrasado e quanto de cada
+coisa. Se o seu cadastro tem um setor marcado, a lista já vem só com o seu: quem
+é da Confeitaria não precisa percorrer a agenda do Bar para achar as duas linhas
+que são dela.
+
+O botão **Abrir a agenda** leva à lista inteira, onde se marca o que foi feito.
+
+⚠️ Não aparecendo nada, a frase diz se é a casa que não tem nada planejado ou se
+é só o seu setor — as duas coisas são diferentes.
+
+⚠️ Quem define o seu setor é quem cadastra os usuários. Se o painel está
+mostrando setor que não é o seu, é lá que se corrige.
+
+---
+
 ### Ficha técnica
 
 Menu **Cadastros → Fichas técnicas**. A ficha diz o que entra em cada prato e
@@ -518,6 +536,41 @@ Duas travas que existem de propósito:
   consegue criar alguém com acesso à matriz;
 - **você não reduz as suas próprias lojas.** Ficaria sem como voltar atrás — peça a outro
   administrador.
+
+---
+
+### De que setor cada pessoa cuida
+
+No mesmo cadastro do usuário, o cartão **De que setor cuida**:
+
+- **A casa toda** — o padrão, e o que vale para todo mundo hoje. Serve também
+  para os setores que a casa criar depois;
+- **Só estes setores** — o painel da pessoa passa a mostrar só a produção
+  planejada para eles.
+
+⚠️ **Isto não é permissão.** Ele diz de que parte da casa a pessoa cuida, para o
+painel dela abrir no que interessa — não bloqueia tela nenhuma. Quem decide o que
+alguém *pode fazer* é o **papel**, no cartão acima.
+
+⚠️ Produto sem setor cadastrado aparece para todo mundo: ele não é de ninguém, e
+escondê-lo o faria sumir do painel da casa inteira.
+
+As mesmas duas travas das lojas valem aqui: você só põe alguém num setor que você
+mesmo enxerga, e não reduz os seus próprios setores.
+
+---
+
+### Quem vê os valores
+
+Os números de dinheiro do painel — custo do que saiu, food cost, o que está
+parado na prateleira, perdas, o movimento do dia — só aparecem para quem tem a
+permissão **Ver o painel de CMV**, em **Papéis e permissões**. Quem não a tem
+abre o mesmo Início e vê a parte operacional: o que tem para produzir, os
+alertas e as contagens da casa. **Não é um zero no lugar do valor — o valor
+simplesmente não vai até lá.**
+
+Hoje a têm Administrador, Gerente e Contador. Cozinha, Conferente e Salão não.
+Para mudar, mexa no **papel**, não em cada pessoa.
 
 ---
 

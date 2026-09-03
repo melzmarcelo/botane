@@ -218,6 +218,20 @@ def me(ctx: Contexto = Depends(contexto_atual)):
             )
         unidades = [dict(r) for r in cur.fetchall()]
 
+        # 🔑 **Os setores da pessoa, para a tela poder dizer de que parte da casa
+        # o painel dela está falando.** ⚠️ Com `todos_setores`, vêm TODOS os
+        # ativos — e não uma lista vazia: o formulário de usuário oferece esta
+        # mesma lista para marcar, e um administrador sem setor marcado não teria
+        # o que oferecer a ninguém.
+        if ctx.todos_setores:
+            cur.execute("SELECT id, nome FROM setores WHERE ativo ORDER BY ordem, nome")
+        else:
+            cur.execute(
+                "SELECT id, nome FROM setores WHERE ativo AND id = ANY(%s) ORDER BY ordem, nome",
+                (list(ctx.setores) or [0],),
+            )
+        setores = [dict(r) for r in cur.fetchall()]
+
         # A loja ATUAL decide: o envio ao PDV é configurado por loja, e quem
         # troca de loja no seletor tem de ver a marca da loja em que está.
         cur.execute(
@@ -238,6 +252,8 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         "papeis": papeis,
         "unidades": unidades,
         "todas_unidades": ctx.todas_unidades,
+        "setores": setores,
+        "todos_setores": ctx.todos_setores,
         "enviar_ao_pdv": bool(linha_pdv["enviar_ao_pdv"]) if linha_pdv else False,
     }
 

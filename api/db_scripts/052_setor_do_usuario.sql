@@ -1,0 +1,37 @@
+-- Botané 052 — o setor do usuário sai do papel. Idempotente.
+--
+-- 🔑 **A tabela já existia, e ninguém nunca a usou.** `usuario_setores` nasceu
+-- no script **004**, na primeira leva de cadastros, com o comentário
+-- "Restrição por setor (o ajudante conta só a área dele). Sem linha = sem
+-- limite." — e ficou vazia desde então: nenhuma tela oferecia o campo, nenhum
+-- endpoint lia a tabela. É a mesma história de `usuario_papeis.id_unidade`,
+-- que existia desde o primeiro script enquanto a tela mandava sempre nulo:
+-- **o sistema sabia fazer e não oferecia isso a ninguém.**
+--
+-- Por isso esta migração não cria nada — criar de novo seria fingir que a
+-- decisão é de hoje. Ela só acrescenta o índice que faltava e registra o
+-- momento em que a tabela passou a ser lida (pedido do dono, 03/09/2026).
+--
+-- 🔑 **Lista VAZIA quer dizer TODOS os setores**, como o 004 já dizia — a mesma
+-- convenção da loja (`id_unidade` nulo = todas) e da escala do inventário
+-- (`inventario_contadores` vazio = qualquer um com a permissão). É o que faz
+-- esta entrega não mudar nada para quem já está cadastrado: no dia do deploy,
+-- todo mundo continua vendo o que via.
+--
+-- ⚠️ **Isto NÃO é permissão, e a diferença importa.** A permissão diz o que a
+-- pessoa sabe fazer (`producao.agenda`); esta tabela diz de que parte da casa
+-- ela cuida. Misturar as duas obrigaria a criar um papel por setor — "Cozinha
+-- da Confeitaria", "Cozinha do Bar" — e a repetir cada mudança de permissão em
+-- todos eles.
+--
+-- ⚠️ **O alcance é o do PAINEL e o da agenda de produção, não o do sistema
+-- inteiro** (decisão do dono, 03/09/2026). Transformar setor em escopo global,
+-- como a loja é, tiraria do ar — no instante do deploy — telas que a pessoa usa
+-- hoje. Este é o degrau de baixo: grava a resposta e usa onde foi pedido.
+
+-- A pergunta que o painel faz é "quais são os setores DESTA pessoa?", e ela é
+-- feita por usuário, a cada carregamento da tela inicial. A chave primária
+-- (id_usuario, id_setor) já serviria, mas só porque o usuário é a PRIMEIRA
+-- coluna dela — um índice próprio não depende dessa ordem continuar a mesma.
+CREATE INDEX IF NOT EXISTS ix_usuario_setores_usuario
+    ON usuario_setores (id_usuario);

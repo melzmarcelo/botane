@@ -54,6 +54,16 @@ export type Eu = {
   unidades: { id: number; nome: string; apelido: string | null; matriz: boolean }[];
   todas_unidades: boolean;
   /**
+   * De que parte da casa a pessoa cuida — Bar, Confeitaria, Cafeteria.
+   *
+   * ⚠️ **`todos_setores` é a resposta, não o tamanho da lista.** Com ele ligado
+   * a lista vem CHEIA (todos os setores ativos), porque é ela que o cadastro de
+   * usuário oferece para marcar — deduzir "todos" de uma lista vazia faria a
+   * tela discordar do servidor exatamente no caso comum.
+   */
+  setores: { id: number; nome: string }[];
+  todos_setores: boolean;
+  /**
    * O envio ao PDV está ligado NESTA loja.
    *
    * ⚠️ É dica de INTERFACE, não permissão: a marca "integrado com PDV" no

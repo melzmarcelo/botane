@@ -98,6 +98,63 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
     }
 
 
+def _producao_do_setor(cur, id_unidade: int, ctx: Contexto) -> dict:
+    """O que a cozinha DESTA pessoa tem para fazer — o plano, não o dinheiro.
+
+    🔑 **Pedido do dono (03/09/2026).** A agenda de produção existe desde a
+    etapa de fichas, mas só na tela dela: quem entra de manhã via o painel do
+    mês e tinha de navegar até Produção para descobrir o que assar hoje. E, com
+    Bar, Confeitaria e Cafeteria na mesma lista, quem é da Confeitaria percorria
+    a agenda inteira para achar as duas linhas dela.
+
+    🔑 **O recorte é o SETOR do usuário** (`usuario_setores`, migração 052).
+    ⚠️ **Sem setor marcado, vem a casa inteira** — a mesma convenção da loja. É
+    o que faz esta tela nascer útil para quem já está cadastrado, em vez de
+    nascer vazia esperando alguém reconfigurar todo mundo.
+
+    ⚠️ **De ONTEM em diante, não de hoje.** A linha planejada que ninguém
+    cumpriu é a que mais importa ver, e ela está no passado — é a mesma regra da
+    tela de agenda, e ler diferente faria as duas discordarem sobre o que está
+    pendente.
+
+    ⚠️ **Só PLANEJADA.** Linha cumprida sai da lista de tarefas: misturar o que
+    foi feito com o que falta é o que faz uma agenda crescer para sempre e
+    esconder o pendente no meio do histórico.
+
+    ⚠️ **Contagem e quantidade, nunca custo.** Este bloco vale para quem não vê
+    dinheiro — é justamente a cozinha —, então nada aqui pode carregar valor.
+    """
+    cur.execute(
+        """SELECT a.id, a.id_produto, p.nome AS produto, p.um_estoque,
+                  a.data_prevista, a.quantidade, s.nome AS setor,
+                  (a.data_prevista < current_date) AS atrasada
+             FROM producao_agenda a
+             JOIN produtos p ON p.id = a.id_produto
+             LEFT JOIN setores s ON s.id = p.id_setor
+            WHERE a.id_unidade = %(u)s
+              AND a.status = 'PLANEJADA'
+              AND a.data_prevista <= current_date + 7
+              -- ⚠️ Produto SEM setor entra sempre: ele não é de ninguém, e
+              -- escondê-lo faria a linha sumir do painel de toda a casa.
+              AND (%(todos)s OR p.id_setor IS NULL OR p.id_setor = ANY(%(setores)s))
+            ORDER BY a.data_prevista, lower(p.nome)""",
+        {"u": id_unidade, "todos": ctx.todos_setores,
+         "setores": list(ctx.setores) or [0]},
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    hoje = date.today()
+    return {
+        "linhas": [{**l, "quantidade": float(l["quantidade"])} for l in linhas[:8]],
+        "total": len(linhas),
+        "atrasadas": sum(1 for l in linhas if l["atrasada"]),
+        "hoje": sum(1 for l in linhas if l["data_prevista"] == hoje),
+        # A tela precisa saber se está mostrando um recorte ou a casa inteira —
+        # senão "nada para produzir" se lê como "a casa não tem produção".
+        "todos_setores": ctx.todos_setores,
+        "setores": sorted({l["setor"] for l in linhas if l["setor"]}),
+    }
+
+
 @router.get("/dia")
 def dia(data: date | None = None,
         ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
@@ -164,6 +221,12 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             },
             "operacao": operacao,
             "alertas": alertas_motor.levantar(cur, id_unidade),
+            # 🔑 **Vem ANTES do corte do dinheiro, de propósito**: é a parte
+            # do painel que serve a quem NÃO vê valor — a cozinha. Deixá-lo
+            # depois do `return` daria à cozinha um painel só de contagens, que
+            # é justamente o que o pedido veio corrigir.
+            "producao": (_producao_do_setor(cur, id_unidade, ctx)
+                         if ctx.pode("producao.agenda") else None),
             "dinheiro": None,
             # ⚠️ Nulo para quem não vê dinheiro, como o resto: o cartão do dia
             # é valor e ticket médio, e um cartão só com a contagem seria uma

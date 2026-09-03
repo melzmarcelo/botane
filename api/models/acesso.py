@@ -48,6 +48,11 @@ class MeResponse(BaseModel):
     papeis: list[str]
     unidades: list[dict]
     todas_unidades: bool
+    # De que parte da casa a pessoa cuida. ⚠️ **Lista vazia = TODOS**, e
+    # `todos_setores` diz isso sem a tela ter de deduzir do tamanho da lista —
+    # que é onde front e servidor passariam a discordar.
+    setores: list[dict] = []
+    todos_setores: bool = True
     # ⚠️ Dica de INTERFACE, não permissão. A marca "integrado com PDV" no
     # cadastro de produto, setor e categoria só faz sentido com o envio ligado —
     # e quem cadastra produto não tem `integracao.pdv` para perguntar ao
@@ -100,6 +105,9 @@ class UsuarioCreate(BaseModel):
     telefone: str | None = None
     ativo: bool = True
     papeis: list[PapelVinculo] = []
+    # ⚠️ **Vazio quer dizer TODOS os setores** — a mesma convenção do
+    # `id_unidade` nulo. Quem não responde não fica sem nada; fica com tudo.
+    setores: list[int] = []
 
 
 class UsuarioUpdate(BaseModel):
@@ -109,6 +117,11 @@ class UsuarioUpdate(BaseModel):
     ativo: bool | None = None
     senha: str | None = Field(default=None, min_length=SENHA_MINIMA)
     papeis: list[PapelVinculo] | None = None
+    # ⚠️ **Nulo NÃO é lista vazia aqui.** Nulo é "não mexi nos setores" — é o
+    # que uma tela que ainda não conhece o campo manda —, e lista vazia é a
+    # escolha explícita de "todos". Tratá-los igual faria qualquer PUT antigo
+    # apagar em silêncio a restrição que alguém acabou de configurar.
+    setores: list[int] | None = None
 
 
 class UsuarioResponse(BaseModel):
@@ -120,6 +133,7 @@ class UsuarioResponse(BaseModel):
     ultimo_acesso: datetime | None = None
     bloqueado: bool = False
     papeis: list[dict] = []
+    setores: list[dict] = []
 
 
 # ---------------------------------------------------------------- papéis

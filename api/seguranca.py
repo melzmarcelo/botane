@@ -86,13 +86,21 @@ class Contexto:
     """Quem está chamando, e o que essa pessoa pode fazer."""
 
     def __init__(self, id_usuario: int, email: str, nome: str, permissoes: set[str],
-                 unidades: set[int], todas_unidades: bool, unidade_pedida: int | None = None):
+                 unidades: set[int], todas_unidades: bool, unidade_pedida: int | None = None,
+                 setores: set[int] | None = None, todos_setores: bool = True):
         self.id_usuario = id_usuario
         self.email = email
         self.nome = nome
         self.permissoes = permissoes
         self.unidades = unidades
         self.todas_unidades = todas_unidades
+        # De que parte da casa esta pessoa cuida. ⚠️ **Vazio quer dizer TODOS**,
+        # e é por isso que `todos_setores` nasce verdadeiro: a mesma convenção da
+        # loja (`id_unidade` nulo = todas). Sem isso, o deploy tiraria a agenda
+        # de produção do painel de todo mundo até alguém reconfigurar pessoa por
+        # pessoa.
+        self.setores = setores or set()
+        self.todos_setores = todos_setores
         # A loja escolhida no seletor da tela, se houver. Vem do cabeçalho
         # `X-Unidade` — nunca do corpo: assim vale para GET também, e uma tela
         # não precisa lembrar de repassá-la em cada chamada.
@@ -105,6 +113,18 @@ class Contexto:
         if id_unidade is None or self.todas_unidades:
             return True
         return id_unidade in self.unidades
+
+    def ve_setor(self, id_setor: int | None) -> bool:
+        """O setor é desta pessoa?
+
+        ⚠️ **Produto SEM setor responde que sim**, como a loja nula. Ele não é
+        de ninguém, e escondê-lo faria a linha da agenda sumir do painel de toda
+        a casa — sem nada dizendo por quê. Setor em branco é falta de cadastro,
+        não uma decisão de acesso.
+        """
+        if id_setor is None or self.todos_setores:
+            return True
+        return id_setor in self.setores
 
 
 def carregar_contexto(id_usuario: int) -> Contexto:
@@ -134,9 +154,22 @@ def carregar_contexto(id_usuario: int) -> Contexto:
         )
         linhas = cur.fetchall()
 
+        # ⚠️ **Só os setores ATIVOS contam.** Um setor desativado que continuasse
+        # na lista deixaria a pessoa restrita a um lugar que não existe mais — e
+        # o sintoma seria um painel vazio sem explicação. Desativar o último
+        # setor de alguém a devolve a "todos", que é o padrão.
+        cur.execute(
+            """SELECT us.id_setor FROM usuario_setores us
+                 JOIN setores s ON s.id = us.id_setor AND s.ativo
+                WHERE us.id_usuario = %s""",
+            (id_usuario,),
+        )
+        setores = {r["id_setor"] for r in cur.fetchall()}
+
     todas = any(r["id_unidade"] is None for r in linhas)
     unidades = {r["id_unidade"] for r in linhas if r["id_unidade"] is not None}
-    return Contexto(u["id"], u["email"], u["nome"], permissoes, unidades, todas)
+    return Contexto(u["id"], u["email"], u["nome"], permissoes, unidades, todas,
+                    setores=setores, todos_setores=not setores)
 
 
 def contexto_atual(request: Request) -> Contexto:

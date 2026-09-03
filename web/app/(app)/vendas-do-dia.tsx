@@ -36,10 +36,36 @@ export type Dia = {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
   "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira",
+  "quinta-feira", "sexta-feira", "sábado"];
+
 /** "2026-09-02" → "02 Set 2026", sem depender do ICU do navegador. */
 function porExtenso(iso: string) {
   const [ano, mes, dia] = iso.split("-").map(Number);
   return `${String(dia).padStart(2, "0")} ${MESES[mes - 1]} ${ano}`;
+}
+
+/**
+ * "2026-09-02" → "quarta-feira" (pedido do dono, 03/09/2026).
+ *
+ * 🔑 **O dia da semana é o que explica o número.** Um sábado e uma segunda não
+ * se comparam, e a data sozinha obriga quem olha a fazer essa conta de cabeça —
+ * ou a errar a leitura de um movimento que estava normal para aquele dia.
+ *
+ * ⚠️ **`new Date(iso)` está PROIBIDO aqui.** O construtor lê `aaaa-mm-dd` como
+ * meia-noite UTC, e em Brasília isso é o dia ANTERIOR a partir das 21h: o
+ * sábado apareceria como sexta, e justamente no fim de semana, que é quando a
+ * casa mais olha. `new Date(ano, mes - 1, dia)` é meia-noite LOCAL, e aí o dia
+ * da semana é o que a pessoa tem no calendário da parede. Mesma armadilha que
+ * `lib/datas.ts` documenta, pela ponta da leitura.
+ *
+ * ⚠️ Os nomes são NOSSOS, e não `toLocaleDateString`, pela mesma razão dos
+ * meses: sem o ICU completo o navegador devolve o nome em inglês, e o cartão
+ * sairia com "Wednesday" no meio do português.
+ */
+function diaDaSemana(iso: string) {
+  const [ano, mes, dia] = iso.split("-").map(Number);
+  return SEMANA[new Date(ano, mes - 1, dia).getDay()];
 }
 
 const inteiro = (n: number) =>
@@ -82,10 +108,16 @@ export default function VendasDoDia({ inicial }: { inicial: Dia }) {
           >
             ‹
           </button>
-          <div className="min-w-[130px] text-center">
+          <div className="min-w-[150px] text-center">
             <p className="rotulo">Vendas do dia</p>
             <p className="mono mt-0.5 text-[19px] font-bold leading-none">
               {porExtenso(dia.data)}
+            </p>
+            {/* 🔑 Embaixo da data e menor: quem procura a data acha a data, e
+                quem quer comparar com a semana passada já tem a resposta sem
+                contar nos dedos. */}
+            <p className="mt-1 text-[12.5px] leading-none text-suave">
+              {diaDaSemana(dia.data)}
             </p>
           </div>
           <button
