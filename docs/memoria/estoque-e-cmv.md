@@ -906,3 +906,50 @@
 
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o
   original. Produto desativado mantém saldo e razão (a lista de saldos filtra por padrão).
+
+- 🔑 **O custo do produto passou a ter onde ser CONSULTADO** (`GET /produtos/{id}/custo`, cartão
+  **Custo** + botão **Histórico** na tela do produto, 03/09/2026, pedido do dono). O número já
+  alimentava ficha, CMV teórico e margem, mas nenhuma tela o mostrava: para saber quanto custava
+  um insumo era preciso abrir uma ficha que o usasse.
+  🔑 **E a "Memória de cálculo" não cobria o caso.** Ela explica o custo MÉDIO, que nasce de
+  movimento — numa casa que importou o catálogo e ainda não lançou nota ela sai VAZIA, enquanto o
+  custo de referência responde pela cascata sem aparecer em lugar nenhum. Foi exatamente o
+  sintoma relatado depois da carga do Omie.
+  ⚠️ **A ORIGEM vem junto do valor, sempre.** "R$ 20,03" sozinho não responde se é o que a casa
+  pagou, o que o fornecedor cobra ou o que outro sistema acha — três coisas que valem diferente.
+  ⚠️ **Sem custo é "—", nunca R$ 0,00.** Zero é uma afirmação, e é o número que faz o food cost
+  sair bom demais sem ninguém desconfiar.
+  ⚠️ **NÃO se criou tabela de histórico, e não é economia.** O razão já é a memória do custo:
+  `estoque_movimentos.custo_medio_apos` guarda o médio depois de cada movimento. Tabela nova
+  nasceria vazia para tudo o que já aconteceu e criaria duas versões da mesma verdade. Só as
+  linhas em que o médio MUDOU entram (`lag` por local) — listar todas viraria extrato de estoque.
+  ⚠️ **As outras duas pontas da cascata não têm série, e a janela DIZ isso**:
+  `produto_fornecedor.ultimo_preco` e `produtos.custo_referencia` guardam só o valor corrente e a
+  data dele. Mostrá-los como linha do tempo faria parecer que o sistema sabe o que não sabe.
+  ⚠️ Pede `estoque.saldos`, a mesma chave da memória de cálculo: custo é dado de ESTOQUE e não
+  vira dado de cadastro por estar na tela do produto.
+
+- 🔑 **As vendas antigas que entraram valendo ZERO passam a ser custeadas** (`custos_iniciais`,
+  `_custear_vendas_sem_custo`, 03/09/2026, pedido do dono). Trazer o custo para o produto
+  consertava METADE do problema: o item de venda guarda o custo congelado do dia da venda, e os
+  que entraram antes de existir custo ficavam com nada — contando zero no CMV teórico, que é o
+  que faz o food cost sair bom demais sem nada denunciando. Medido: 2.121 de 2.122 itens sem
+  custo.
+  🔑 **É a MESMA regra que o vínculo de cadastros já aplicava** (`fundir`): só quem está sem
+  custo é tocado. Item com número guarda o que se sabia no dia da venda.
+  ⚠️ **Mês FECHADO fica de fora — a fronteira que não se cruza.** Ele já foi ao contador. O
+  relatório dele sobreviveria (o fechamento congela `cmv_teorico` e a movimentação por produto),
+  mas reescrever as linhas por baixo faz o número congelado deixar de se reproduzir a partir dos
+  dados — e reabrir o período o mudaria sozinho. A suíte prova nos DOIS sentidos: fechado não
+  recusteia, aberto recusteia o mesmo item.
+  ⚠️ **A origem vai GRAVADA** (`origem_custo`). A referência é o degrau mais fraco da cascata:
+  congelar um palpite dentro do CMV de um mês passado só é aceitável porque a linha diz que é um
+  palpite. Sem essa marca, isto não deveria existir.
+  🔑 **O escopo errado devolveu ZERO, e o erro ensina onde o custo anda.** A primeira versão
+  recalculava só as vendas dos produtos que acabaram de receber referência — e o custo do Omie
+  cai nos INSUMOS comprados, enquanto quem foi vendido são os itens do cardápio do PDV, cadastros
+  diferentes: dos 215 produtos vendidos, ZERO recebeu referência. O ganho chega ao prato pela
+  FICHA, cujos insumos agora têm custo. Varre-se todo item sem custo, não os da carga.
+  ⚠️ **Custo nulo continua NULO, não vira zero** — é justamente a afirmação falsa que se está
+  corrigindo. Sobraram 213 produtos vendidos sem custo porque não têm ficha; a cada ficha nova,
+  rodar o custo inicial de novo os alcança.

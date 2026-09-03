@@ -13,7 +13,7 @@ aparece na fila de pendências — importar errado é pior que não importar.
 """
 
 import unicodedata
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from difflib import SequenceMatcher
 
@@ -1185,6 +1185,84 @@ def importar_fornecedores(cur, cliente: ClienteOmie, id_usuario: int,
             "tag": tag, "modo": cliente.modo}
 
 
+def _custear_vendas_sem_custo(cur) -> int:
+    """Dá custo às vendas antigas que entraram valendo ZERO. Devolve quantas.
+
+    🔑 **Trazer o custo para o produto consertava metade do problema** (pedido do
+    dono, 03/09/2026). O item de venda guarda o custo CONGELADO do dia em que a
+    venda aconteceu; os que entraram antes de existir custo ficaram com nada, e
+    contam zero no CMV teórico — que é exatamente o que faz o food cost sair bom
+    demais sem nada denunciando. Medido na base: 2.121 de 2.122 itens sem custo.
+
+    🔑 **É a MESMA regra que o vínculo de cadastros já aplica** (`fundir`): só
+    quem está sem custo é tocado. Item com número guarda o que se sabia no dia
+    da venda — sobrescrevê-lo reescreveria história que estava certa.
+
+    ⚠️ **Varre TODOS os itens sem custo, não só os dos produtos que acabaram de
+    receber referência** — e a diferença é a razão de existir desta função. O
+    custo do Omie cai nos INSUMOS comprados; quem foi vendido são os itens do
+    cardápio, que são outros cadastros. Medido na base: dos 215 produtos
+    vendidos, ZERO recebeu referência. O ganho chega ao prato pela FICHA, cujos
+    insumos agora têm custo — filtrar pelos produtos da carga devolvia sempre
+    zero, e o recálculo parecia não funcionar.
+
+    ⚠️ **Mês FECHADO fica de fora, e essa é a fronteira que não se cruza.** Ele
+    já foi ao contador. O relatório dele até sobreviveria (o fechamento congela
+    `cmv_teorico` e a movimentação por produto), mas reescrever as linhas por
+    baixo faz o número congelado deixar de se reproduzir a partir dos dados — e
+    se alguém reabrir o período, ele muda sozinho, sem ninguém ter pedido. É a
+    mesma trava que o lançamento retroativo de estoque já respeita.
+
+    ⚠️ **A origem vai GRAVADA no item** (`origem_custo`). A referência é o
+    degrau mais fraco da cascata: é o que outro sistema acha, não o que a casa
+    pagou. Congelar um palpite dentro do CMV de um mês passado só é aceitável
+    porque a linha diz que é um palpite — as telas de venda e de CMV já nomeiam
+    a origem em português. Sem essa marca, isto não deveria existir.
+    """
+    from services import cmv as motor
+
+    # ⚠️ A loja sai da VENDA, não da matriz: `custo_teorico_do_produto` resolve
+    # o médio da loja, e usar a errada gravaria no item o custo de outra casa.
+    cur.execute(
+        """SELECT vi.id, vi.id_produto, v.id_unidade
+             FROM venda_itens vi
+             JOIN vendas v ON v.id = vi.id_venda
+            WHERE vi.custo_ficha_unitario IS NULL
+              AND vi.id_produto IS NOT NULL
+              AND NOT v.cancelada
+              AND NOT EXISTS (
+                    SELECT 1 FROM cmv_fechamentos f
+                     WHERE f.id_unidade = v.id_unidade AND f.status = 'FECHADO'
+                       AND v.data BETWEEN f.inicio AND f.fim)
+            ORDER BY vi.id""",
+    )
+    itens = [dict(r) for r in cur.fetchall()]
+    if not itens:
+        return 0
+
+    # Um custo por (produto, loja): a mesma venda repete o produto muitas vezes,
+    # e resolver a cascata por linha custaria uma varredura de ficha por item.
+    cache: dict[tuple[int, int], tuple] = {}
+    feitos = 0
+    for item in itens:
+        chave = (item["id_produto"], item["id_unidade"])
+        if chave not in cache:
+            cache[chave] = motor.custo_teorico_do_produto(
+                cur, item["id_produto"], id_unidade=item["id_unidade"])
+        custo, origem = cache[chave]
+        # ⚠️ Custo nulo continua nulo — não vira zero. Zero é uma afirmação, e é
+        # justamente a que se está corrigindo aqui.
+        if custo is None:
+            continue
+        cur.execute(
+            """UPDATE venda_itens SET custo_ficha_unitario = %s, origem_custo = %s
+                WHERE id = %s""",
+            (custo, origem, item["id"]),
+        )
+        feitos += 1
+    return feitos
+
+
 def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                     aplicar: bool = False) -> dict:
     """Traz o custo médio do Omie para os produtos que aqui não têm custo nenhum.
@@ -1271,6 +1349,7 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
     except ErroOmie as e:
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
+    vendas_recalculadas = 0
     if aplicar and achados:
         for a in achados:
             cur.execute(
@@ -1280,11 +1359,21 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                     WHERE id = %s""",
                 (a["custo_omie"], a["id_produto"]),
             )
+    if aplicar:
+        # ⚠️ Fora do `if achados`: mesmo sem produto novo recebendo referência,
+        # a carga anterior pode ter dado custo a um insumo cuja ficha custeia um
+        # prato vendido. Amarrar o recálculo aos achados desta rodada deixaria
+        # esse caso para sempre em zero.
+        vendas_recalculadas = _custear_vendas_sem_custo(cur)
 
     achados.sort(key=lambda x: -x["custo_omie"])
     return {
         "linhas": achados[:500],
         "produtos": len(achados),
+        # Quantos itens de venda antigos deixaram de contar ZERO no CMV
+        # teórico. Sem este número, trazer o custo consertava metade do
+        # problema e escondia a outra.
+        "vendas_recalculadas": vendas_recalculadas,
         "conferidos": vistos,
         "sem_cadastro_aqui": sem_cadastro,
         "ja_tinham_custo": ja_tem_custo,
@@ -1299,6 +1388,11 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
             + (f", {ja_tem_custo} já tinham custo" if ja_tem_custo else "")
             + (f", {sem_cadastro} sem cadastro aqui" if sem_cadastro else "")
             + (f", {sem_cmc} sem custo no Omie" if sem_cmc else "")
+            # 🔑 O número das VENDAS entra na frase: sem ele, "1.971 produtos
+            # receberam custo" não diz que 2.121 itens de venda deixaram de
+            # contar zero no CMV teórico — que é o efeito que interessa.
+            + (f". {vendas_recalculadas} item(ns) de venda antigos deixaram de "
+               "contar zero no CMV teórico" if vendas_recalculadas else "")
             + (". A varredura parou no teto de páginas — há mais no Omie."
                if truncou["foi"] else "")
         ),
@@ -1407,3 +1501,81 @@ def conferir_estoque(cur, cliente: ClienteOmie, so_divergentes: bool = True) -> 
                if truncou["foi"] else "")
         ),
     }
+
+
+# ---------------------------------------------------- o cadastro antes da nota
+
+def catalogo_de_hoje(cur, id_unidade: int) -> bool:
+    """A AGENDA já trouxe o catálogo hoje nesta loja?
+
+    ⚠️ **Relógio PRÓPRIO** (`integracoes.catalogo_em`), e não
+    `ultima_sincronizacao`: aquela é o relógio das NOTAS e avança a cada busca.
+    Mesma lição do `agenda_rodou_em` e do `cardapio_em` do PDV.
+
+    🔑 **E quem move esse relógio é só o AGENDADOR.** O botão não consome a cota
+    do dia: quem clica está pedindo agora, não dispensando a passada da
+    madrugada. É a correção que o cardápio do PDV já precisou fazer uma vez.
+    """
+    cur.execute(
+        """SELECT catalogo_em FROM integracoes
+            WHERE id_unidade = %s AND servico = 'OMIE'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    quando = linha["catalogo_em"] if linha else None
+    return quando is not None and quando.date() >= datetime.now().astimezone().date()
+
+
+def marcar_catalogo(cur, id_unidade: int) -> None:
+    """Registra que a AGENDA trouxe o catálogo hoje. Só ela chama isto."""
+    cur.execute(
+        """UPDATE integracoes SET catalogo_em = now()
+            WHERE id_unidade = %s AND servico = 'OMIE'""",
+        (id_unidade,),
+    )
+
+
+def sincronizar_completo(cur, id_unidade: int, cliente: ClienteOmie,
+                         id_usuario: int | None = None, dias: int | None = None,
+                         desde: date | None = None, catalogo: bool = True) -> dict:
+    """O catálogo primeiro, as notas depois — o caminho que os DOIS chamadores usam.
+
+    🔑 **O cadastro vem ANTES da nota** (pedido do dono, 03/09/2026, espelhando
+    o PDV). Produto criado no Omie hoje e comprado hoje: se a nota entrasse
+    primeiro, o item ficaria sem vínculo, iria para a fila de pendências e
+    esperaria alguém lembrar de clicar em "Importar catálogo" — um segundo botão
+    que ninguém sabe que precisa apertar.
+
+    🔑 **Mora aqui, e não no router, porque há DOIS chamadores**: o botão e o
+    agendador. A primeira versão desta mudança ficou só no router, e o job
+    diário — que chama `sincronizar` direto — continuaria criando pendência. É a
+    lição que o projeto já pagou no relógio do cardápio: lógica em dois lugares
+    diverge na primeira correção, e o sintoma é uma integração funcionando pelo
+    botão e não pela agenda, sem nada explicando.
+
+    ⚠️ **Falhar no catálogo NÃO impede a busca de notas.** Nota não importada é
+    compra faltando no estoque e no CMV; cadastro não sincronizado é um item que
+    fica na fila mais um dia. Derrubar a segunda por causa do primeiro trocaria
+    um problema pequeno por um grande.
+
+    ⚠️ **Não existe aqui o "só criar, nunca alinhar" do PDV.** O `importar` do
+    cardápio sobrescreve campo, então rodá-lo a cada busca desfaria calada a
+    correção de quem arrumou a categoria de um prato à mão. O
+    `_completar_produto` do Omie usa `coalesce(coluna, valor)`: preenche só o
+    que está nulo. Reimportar o catálogo inteiro não desfaz nada de ninguém.
+    """
+    cadastros: dict = {}
+    if catalogo:
+        try:
+            cadastros = importar_catalogo(cur, cliente, id_usuario)
+        except HTTPException as e:
+            # ⚠️ A frase do erro viaja na resposta. O passo falhar em silêncio
+            # seria pior que ele não existir: a fila de pendências encheria e
+            # ninguém saberia que o catálogo parou de vir.
+            cadastros = {"erro": str(e.detail)}
+        except Exception as e:  # noqa: BLE001 — o catálogo não derruba as notas
+            cadastros = {"erro": f"{type(e).__name__}: {e}"}
+
+    r = sincronizar(cur, id_unidade, cliente, dias, desde)
+    r["cadastros"] = cadastros
+    return r

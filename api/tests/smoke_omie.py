@@ -130,12 +130,22 @@ checar("teste de conexão responde", st == 200 and r.get("ok") is True, r)
 checar("teste diz que está em modo simulado", r.get("modo") == "simulado", r)
 
 print("2. sincronização importa as notas das fixtures")
-st, r = chamar("POST", "/omie/sincronizar?dias=60", token=token)
+# ⚠️ **`catalogo=false` AQUI, e o motivo importa.** A partir de 03/09/2026 a
+# sincronizacao traz o catalogo ANTES das notas — e com ele os produtos das
+# fixtures passam a existir, o de-para acha tudo e a fila de pendencias fica
+# vazia. O bloco 3, logo abaixo, existe justamente para provar o caminho
+# CONTRARIO: nota com item sem produto nao se lanca. Sem este parametro, a
+# premissa dele desaparece e ele acusa a conciliacao de um defeito que nao tem.
+# O passo do catalogo e provado logo adiante, com chamada propria.
+st, r = chamar("POST", "/omie/sincronizar?dias=60&catalogo=false", token=token)
 checar("sincroniza", st == 200, r)
 primeira = r.get("novas", 0)
-st, r2 = chamar("POST", "/omie/sincronizar?dias=60", token=token)
+st, r2 = chamar("POST", "/omie/sincronizar?dias=60&catalogo=false", token=token)
 checar("reimportar não duplica (chave da NF-e)", r2.get("novas") == 0 and r2.get("repetidas") >= 1,
        r2)
+# ⚠️ E `catalogo=false` tem de DIZER que pulou: `cadastros` vazio e diferente de
+# "o catalogo rodou e nao trouxe nada".
+checar("e pular o catálogo deixa o passo vazio", (r2 or {}).get("cadastros") == {}, r2)
 
 st, notas = chamar("GET", "/notas", token=token)
 checar("as notas aparecem na lista", st == 200 and len(notas) >= 2, len(notas) if st == 200 else notas)
@@ -483,6 +493,68 @@ with _cur_custo() as _c:
 checar("e a cascata de custo passa a responder por ele",
        valor is not None and origem == "referencia", (valor, origem))
 
+# 🔑 **As vendas ANTIGAS que entraram valendo zero** (pedido do dono,
+# 03/09/2026). O item de venda guarda o custo CONGELADO do dia da venda; os que
+# entraram antes de existir custo ficaram com nada e contam zero no CMV teorico
+# — que e o que faz o food cost sair bom demais sem nada denunciando.
+checar("a aplicacao diz quantas vendas antigas foram custeadas",
+       "vendas_recalculadas" in (aplicou or {}), list(aplicou or {}))
+
+with _cur_custo() as _c:
+    # ⚠️ **Item que JA tinha custo nao se toca**: aquele numero e o do dia em que
+    # a venda aconteceu, e sobrescreve-lo reescreveria historia que estava certa.
+    _c.execute("""SELECT id, custo_ficha_unitario FROM venda_itens
+                   WHERE custo_ficha_unitario IS NOT NULL LIMIT 1""")
+    _ja = _c.fetchone()
+_antes = float(_ja["custo_ficha_unitario"]) if _ja else None
+chamar("POST", "/omie/custos-iniciais", token=token)
+if _ja:
+    with _cur_custo() as _c:
+        _c.execute("SELECT custo_ficha_unitario FROM venda_itens WHERE id = %s", (_ja["id"],))
+        _depois = float(_c.fetchone()["custo_ficha_unitario"])
+    checar("e NAO reescreve o custo de um item que ja tinha", _depois == _antes,
+           (_antes, _depois))
+
+# 🔑 **A fronteira que nao se cruza: mes FECHADO.** Ele ja foi ao contador. O
+# relatorio dele sobreviveria (o fechamento congela cmv_teorico e a movimentacao
+# por produto), mas reescrever as linhas por baixo faz o numero congelado deixar
+# de se reproduzir a partir dos dados — e se alguem reabrir o periodo, ele muda
+# sozinho, sem ninguem ter pedido.
+with _cur_custo() as _c:
+    _c.execute("""SELECT vi.id, v.id_unidade, v.data FROM venda_itens vi
+                    JOIN vendas v ON v.id = vi.id_venda
+                   WHERE vi.custo_ficha_unitario IS NOT NULL AND NOT v.cancelada
+                   LIMIT 1""")
+    _lin = _c.fetchone()
+if _lin:
+    with _cur_custo() as _c:
+        # zera o custo do item e fecha o periodo em que a venda dele caiu
+        _c.execute("UPDATE venda_itens SET custo_ficha_unitario = NULL WHERE id = %s",
+                   (_lin["id"],))
+        _c.execute("""INSERT INTO cmv_fechamentos
+                          (id_unidade, competencia, inicio, fim, status)
+                      VALUES (%s, %s, %s, %s, 'FECHADO') RETURNING id""",
+                   # ⚠️ `competencia` e DATE, nao texto "aaaa-mm": o primeiro
+                   # dia do mes e o que a coluna espera.
+                   (_lin["id_unidade"], _lin["data"].replace(day=1),
+                    _lin["data"], _lin["data"]))
+        _fech = _c.fetchone()["id"]
+    chamar("POST", "/omie/custos-iniciais", token=token)
+    with _cur_custo() as _c:
+        _c.execute("SELECT custo_ficha_unitario FROM venda_itens WHERE id = %s", (_lin["id"],))
+        _ficou = _c.fetchone()["custo_ficha_unitario"]
+    checar("item de venda em mes FECHADO nao e recusteado", _ficou is None, _ficou)
+    with _cur_custo() as _c:
+        # desfaz o cenario: tira o fechamento e deixa o recusteio acontecer
+        _c.execute("DELETE FROM cmv_fechamentos WHERE id = %s", (_fech,))
+    chamar("POST", "/omie/custos-iniciais", token=token)
+    with _cur_custo() as _c:
+        _c.execute("SELECT custo_ficha_unitario FROM venda_itens WHERE id = %s", (_lin["id"],))
+        _voltou = _c.fetchone()["custo_ficha_unitario"]
+    # 🔑 A prova de que a recusa foi do FECHAMENTO e nao falta de custo: com o
+    # periodo aberto, o mesmo item recebe o numero.
+    checar("e com o periodo aberto ele recebe o custo", _voltou is not None, _voltou)
+
 # ⚠️ **A referência é o ÚLTIMO degrau — o preço do fornecedor ganha dela.** O
 # fornecedor é o que a casa negociou; a referência é o que outro sistema acha.
 # ⚠️ **Num produto PRÓPRIO, e sem tocar no razão.** A primeira versão provava
@@ -650,6 +722,34 @@ st, mov = chamar("GET", f"/estoque/movimentos?id_produto={cafe}", token=token)
 checar("o movimento original continua no razão, com a contrapartida", len(mov) == 2, len(mov))
 st, r = chamar("DELETE", f"/notas/vinculos/CAF-500", token=token)
 checar("desfaz o vínculo aprendido", st == 200, r)
+
+print("8b. o cadastro vem ANTES da nota")
+# 🔑 **Pedido do dono, 03/09/2026, espelhando o que o PDV ja fazia.** Produto
+# criado no Omie hoje e comprado hoje ficava sem vinculo, ia para a fila de
+# pendencias e esperava alguem lembrar de clicar em "Importar catalogo" — um
+# segundo botao que ninguem sabe que precisa apertar.
+# ⚠️ Fica no FIM da suite de proposito: com o catalogo importado, os produtos das
+# fixtures passam a existir e a fila de pendencias esvazia. Rodando antes, ele
+# apagaria a premissa do bloco 3, que prova o caminho contrario.
+st, comCat = chamar("POST", "/omie/sincronizar?dias=60", token=token)
+cad = (comCat or {}).get("cadastros") or {}
+checar("a sincronizacao traz o catalogo junto", st == 200 and cad != {}, comCat)
+checar("dizendo quantos produtos ela conferiu",
+       (cad.get("criados", 0) + cad.get("ja_existiam", 0)) > 0, cad)
+checar("e sem erro no passo do catalogo", not cad.get("erro"), cad)
+
+# ⚠️ **O relogio do catalogo e do AGENDADOR, nao do botao.** Quem clica esta
+# pedindo agora, nao dispensando a passada da madrugada — a mesma correcao que o
+# cardapio do PDV precisou fazer uma vez.
+from database import get_cursor as _cur  # noqa: E402
+from services.omie import importador as _imp  # noqa: E402
+
+with _cur() as _c:
+    _c.execute("SELECT id_unidade FROM integracoes WHERE servico='OMIE' LIMIT 1")
+    _u = (_c.fetchone() or {}).get("id_unidade")
+    checar("o botao NAO consome a cota diaria do agendador",
+           _u is not None and not _imp.catalogo_de_hoje(_c, _u), _u)
+
 
 print("9. limpeza")
 for p in (cafe, leite):

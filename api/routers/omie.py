@@ -186,17 +186,41 @@ def testar_conexao(ctx: Contexto = Depends(requer_permissao("integracao.omie",
 @router.post("/sincronizar")
 def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
                 desde: date | None = None,
+                catalogo: bool = True,
                 ctx: Contexto = Depends(requer_permissao("integracao.omie"))) -> dict:
-    """Puxa as notas de entrada do Omie.
+    """Puxa o catálogo e depois as notas de entrada do Omie.
 
     Sem parâmetro nenhum, a janela **se adapta**: vai desde a última
     sincronização, com folga. `desde` faz a carga inicial do histórico; `dias`
     fixa uma janela.
+
+    🔑 **O cadastro vem ANTES da nota** (pedido do dono, 03/09/2026, espelhando
+    o que o PDV já fazia). Produto criado no Omie hoje e comprado hoje: se a
+    nota entrasse primeiro, o item ficaria sem vínculo, iria para a fila de
+    pendências e esperaria alguém lembrar de clicar em "Importar catálogo" —
+    que é um segundo botão que ninguém sabe que precisa apertar. Trazendo o
+    catálogo antes, o produto já existe quando a nota chega e o de-para acha
+    sozinho.
+
+    As razões de a ordem ser essa, e de o erro do catálogo não derrubar as notas,
+    estão em `importador.sincronizar_completo` — que é o que o agendador também
+    chama.
+
+    ⚠️ **`catalogo=false` pula esse passo.** A varredura do catálogo é paginada
+    sobre milhares de produtos e custa dezenas de segundos; para o job diário é
+    irrelevante, para quem está clicando o botão e só quer as notas, não.
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cliente = _cliente(cur, id_unidade)
-        r = importador.sincronizar(cur, id_unidade, cliente, dias, desde)
+
+        # 🔑 **A MESMA função que o agendador chama.** A primeira versão desta
+        # mudança ficou só aqui, e o job diário — que chama `sincronizar`
+        # direto — continuaria criando pendência: a integração funcionaria pelo
+        # botão e não pela agenda, sem nada explicando.
+        r = importador.sincronizar_completo(
+            cur, id_unidade, cliente, ctx.id_usuario, dias, desde, catalogo=catalogo)
+        cadastros = r.get("cadastros") or {}
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, modo, ultima_sincronizacao,
                                         ultimo_status, ultima_mensagem)
@@ -209,8 +233,15 @@ def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
         )
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "sincronizar", depois=r,
                             id_unidade=id_unidade)
-    return r | {"message": (f"{r['novas']} nota(s) nova(s) importada(s) — "
-                           f"{r['janela']}, {r['repetidas']} já existiam")}
+    # A frase diz o que aconteceu nos DOIS passos. Sem o primeiro, "0 nota nova"
+    # depois de uma busca que criou 12 produtos parece que nada aconteceu.
+    criados = (cadastros or {}).get("criados") or 0
+    erro_catalogo = (cadastros or {}).get("erro")
+    return r | {"message": (
+        (f"{criados} produto(s) novo(s) do catálogo. " if criados else "")
+        + f"{r['novas']} nota(s) nova(s) importada(s) — "
+          f"{r['janela']}, {r['repetidas']} já existiam"
+        + (f". ⚠️ O catálogo não veio: {erro_catalogo}" if erro_catalogo else ""))}
 
 
 @router.post("/importar-catalogo")

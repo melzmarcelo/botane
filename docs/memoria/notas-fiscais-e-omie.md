@@ -207,3 +207,34 @@
   zero é o emitente dizendo "neste item não há frete". Tratar zero como ausente joga o item no
   rateio por valor e cobra dele um frete que a nota não pôs. Se **algum** item traz o campo, o
   rateio é do emitente e os outros recebem zero — senão o frete entraria duas vezes.
+
+- 🔑 **O cadastro vem ANTES da nota** (`importador.sincronizar_completo`, migração 053,
+  03/09/2026, pedido do dono, espelhando o que o PDV já fazia). Produto criado no Omie hoje e
+  comprado hoje ficava sem vínculo, ia para a fila de pendências e esperava alguém lembrar de
+  clicar em "Importar catálogo" — um segundo botão que ninguém sabe que precisa apertar.
+  🔑 **A lógica mora no SERVIÇO, não no router, porque há DOIS chamadores.** A primeira versão
+  ficou só no endpoint, e o agendador chama `sincronizar` direto: a integração funcionaria pelo
+  botão e não pela madrugada, sem nada explicando. É a mesma lição do relógio do cardápio.
+  ⚠️ **Falhar no catálogo NÃO impede a busca de notas.** Nota não importada é compra faltando no
+  estoque e no CMV; cadastro não sincronizado é um item que fica na fila mais um dia.
+  ⚠️ **Aqui NÃO existe o "só criar, nunca alinhar" do PDV**, e a diferença é real: o `importar`
+  do cardápio sobrescreve campo, então rodá-lo a cada busca desfaria calada a correção de quem
+  arrumou a categoria de um prato à mão. O `_completar_produto` do Omie usa
+  `coalesce(coluna, valor)` — preenche só o que está nulo. Reimportar não desfaz nada.
+  ⚠️ **O catálogo custa ~115 s** contra a conta real (2.201 produtos, paginados), enquanto as
+  notas sozinhas levam 4 s. Medido, não estimado — a estimativa inicial era de 15 a 30 s e estava
+  errada por um fator de quatro. Por isso: a agenda faz o catálogo **uma vez por dia**
+  (`integracoes.catalogo_em`), `?catalogo=false` pula o passo, e a tela avisa que a busca demora.
+  ⚠️ **A agenda do Omie aceita frequência HORÁRIA** — sem a trava diária, a varredura de 2.201
+  produtos rodaria vinte e quatro vezes por dia para achar os dois que nasceram.
+  ⚠️ **O relógio é do AGENDADOR, não do botão**: quem clica está pedindo agora, não dispensando a
+  passada da madrugada. Mesma correção que o `cardapio_em` do PDV já precisou.
+  ⚠️ **A premissa de um teste caiu junto, e não se enfraqueceu o teste.** O bloco "sem produto,
+  sem lançamento" dependia de a nota chegar antes de o produto existir; com o catálogo na frente,
+  a fila esvazia. Aquela sincronização passou a usar `catalogo=false` (com o porquê escrito) e o
+  caminho novo ganhou bloco próprio, o `8b`.
+  ⚠️ **Achado à parte, não regressão:** um item de nota descrevendo café estava ligado a
+  `LARANJA PERA KG`. A causa é a conta REUSAR códigos — o item traz `codigo_fornecedor` PRD00004
+  e o catálogo atual diz que PRD00004 é laranja. O vínculo saiu do nível 1 da cascata
+  (`codigos_externos`), que já existia. Se a conta recicla códigos, cada reciclagem vira um
+  vínculo silencioso e errado numa nota antiga — vale uma investigação própria.

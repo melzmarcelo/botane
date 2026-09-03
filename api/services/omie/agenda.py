@@ -60,9 +60,22 @@ def rodar_uma(cur, linha: dict) -> dict:
     resultado: dict = {}
     erro: str | None = None
     try:
-        resultado = importador.sincronizar(
-            cur, linha["id_unidade"], cliente, dias=linha["agenda_janela_dias"]
+        # 🔑 **O catálogo antes das notas — mas UMA VEZ POR DIA.** A agenda do
+        # Omie aceita frequência horária, e a varredura do catálogo é paginada
+        # sobre milhares de produtos: sem esta trava ela rodaria vinte e quatro
+        # vezes por dia para achar os dois produtos que nasceram. Produto novo
+        # espera algumas horas; nota nova não espera nada.
+        primeira_do_dia = not importador.catalogo_de_hoje(cur, linha["id_unidade"])
+        resultado = importador.sincronizar_completo(
+            cur, linha["id_unidade"], cliente, linha.get("agenda_id_usuario"),
+            dias=linha["agenda_janela_dias"], catalogo=primeira_do_dia,
         )
+        if primeira_do_dia:
+            # ⚠️ Marca mesmo tendo dado erro, pela razão do `agenda_rodou_em`:
+            # repetir a varredura de milhares de produtos a cada hora em cima de
+            # uma conta bloqueada só prolonga o bloqueio. O erro viaja em
+            # `cadastros.erro` e aparece na tela de Integrações.
+            importador.marcar_catalogo(cur, linha["id_unidade"])
     except ErroOmie as e:
         erro = e.mensagem
     except Exception as e:  # noqa: BLE001 — o agendador não pode morrer por uma loja

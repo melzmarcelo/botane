@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { hoje, somarMeses } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
-import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 /**
  * Buscar notas no Omie e conferir se não ficou nenhuma para trás.
@@ -79,7 +79,7 @@ export default function NotasOmie() {
   return (
     <Cartao
       titulo="Notas de entrada do Omie"
-      descricao="A busca comum vai desde a última vez, com folga — não precisa escolher período."
+      descricao="Traz primeiro os produtos novos do catálogo e depois as notas — a busca vai desde a última vez, com folga."
       acao={
         <button
           className="btn btn-primario"
@@ -91,7 +91,23 @@ export default function NotasOmie() {
       }
     >
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* 🔑 **O cadastro vem ANTES da nota** (pedido do dono, 03/09/2026,
+          espelhando o PDV): produto criado no Omie hoje e comprado hoje ficava
+          sem vínculo e ia para a fila de pendências, esperando alguém lembrar
+          de clicar em "Importar catálogo" — um segundo botão que ninguém sabe
+          que precisa apertar.
+          ⚠️ **E o catálogo é CARO: medido em ~2 min** contra a conta real
+          (2.201 produtos, paginados), enquanto as notas sozinhas levam 4 s. Sem
+          dizer isso, quem clica acha que a tela travou e clica de novo. */}
+      <Aviso tipo="info">
+        A busca traz <b>primeiro o catálogo</b> e depois as notas — assim o produto que nasceu
+        no Omie hoje já existe aqui quando a nota dele chega, em vez de cair na fila de
+        pendências. Por isso ela leva <b>alguns minutos</b>: são milhares de produtos, uma
+        página de cada vez. A busca automática da madrugada faz o catálogo{" "}
+        <b>uma vez por dia</b>, e as notas em toda passada.
+      </Aviso>
+
+      <div className="mt-4 grid gap-6 lg:grid-cols-2">
         <div>
           <p className="rotulo">Trazer o histórico</p>
           <p className="mt-1 text-[13.5px] leading-snug text-suave">

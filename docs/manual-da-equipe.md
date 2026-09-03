@@ -125,6 +125,27 @@ imediato: alguém carrega a caixa e pronto.
 
 ---
 
+### Quanto um produto custa, e desde quando
+
+Abra o produto: o cartão **Custo** mostra o valor de uma unidade de estoque e,
+embaixo, **de onde ele veio** — que é a parte que importa:
+
+- **custo médio do estoque desta loja** — o que a casa pagou de verdade, com o
+  frete já rateado dentro. É o melhor número que existe;
+- **último preço pago ao fornecedor** — o que ela negociou, para quem ainda não
+  teve entrada no estoque;
+- **custo de referência, vindo de fora** — o que o Omie acha. Vale enquanto não
+  houver melhor: na primeira nota daquele produto, o custo médio assume.
+
+O botão **Histórico** abre a lista do que mudou o custo, com a fonte de cada
+linha. Só o **razão** é uma linha do tempo — cada movimento guarda o custo médio
+depois dele. Fornecedor e referência guardam apenas o valor de agora.
+
+⚠️ **Sem custo aparece "—", não R$ 0,00.** Zero diria que o produto não custa
+nada, e é justamente o número que faz o food cost parecer melhor do que é.
+
+---
+
 ### Produto sem custo: trazer do Omie
 
 Produto que nunca teve nota lançada aqui não tem custo — e sem custo ele entra
@@ -139,6 +160,33 @@ um custo de referência, para a conta poder ser feita. O custo médio das notas
 lançadas aqui e o preço negociado com o fornecedor continuam ganhando dele.
 
 ⚠️ Rodar de novo só alcança quem continua sem custo.
+
+⚠️ **Ele também acerta as vendas antigas que entraram valendo zero.** Um prato
+vendido antes de ter custo ficou registrado sem nenhum, e contava zero no CMV
+teórico. Ao trazer o custo, esses itens passam a contar o que custam, e a
+mensagem diz quantos foram. **Item que já tinha custo não é tocado** — aquele
+número é o do dia da venda — e **mês fechado fica de fora**, porque já foi ao
+contador.
+
+⚠️ Isso só alcança o prato que **tem ficha**: é a receita que transforma o custo
+do insumo em custo do prato. Prato sem ficha continua sem custo — que é
+diferente de valer zero, e é assim que deve ser.
+
+---
+
+### A busca de notas traz os produtos novos junto
+
+O botão **Buscar notas novas**, em Integrações, traz **primeiro o catálogo** e
+depois as notas. Assim o produto que nasceu no Omie hoje já existe aqui quando a
+nota dele chega, em vez de cair na fila de pendências esperando alguém importar
+o catálogo à mão.
+
+⚠️ **Por isso ela demora alguns minutos** — são milhares de produtos, uma página
+de cada vez. A busca automática da madrugada faz o catálogo **uma vez por dia** e
+as notas em toda passada.
+
+⚠️ Falhar no catálogo não impede as notas de entrar: nota que não entra é compra
+faltando no estoque, e isso é pior que um cadastro que espera mais um dia.
 
 ---
 
