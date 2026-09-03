@@ -190,6 +190,18 @@ faltando no estoque, e isso é pior que um cadastro que espera mais um dia.
 
 ---
 
+### O cupom mostra o nome do PDV
+
+Ao abrir uma venda, cada linha traz o nome do jeito que ele aparece no PDV — é o
+que o caixa e o cliente viram. Quando esse nome é diferente do nome do cadastro,
+o do cadastro aparece logo abaixo, marcado como **cadastro:**, para você saber em
+que produto a linha caiu ao conferir.
+
+Produto lançado à mão aqui nunca teve nome de PDV: nesse caso a linha mostra o
+nome do cadastro mesmo.
+
+---
+
 ### Prato novo no PDV aparece aqui sozinho
 
 Toda busca de vendas traz os cadastros junto: o prato que nasceu no cardápio do

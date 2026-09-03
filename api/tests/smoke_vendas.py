@@ -195,6 +195,19 @@ item = next((i for i in d["itens"] if i["id_produto"] == prato), None)
 # 036), e a suíte afirma sobre o que foi GRAVADO, não sobre o que mandou.
 checar("o item vinculado traz o nome do produto",
        item and item["produto"] == f"Prato venda {marca}".upper(), item)
+# 🔑 **No cupom vale o nome do PDV** (pedido do dono, 03/09/2026): e o que o
+# caixa e o cliente viram. O detalhe manda os DOIS, e a tela escolhe — mandar so
+# um deixaria quem confere o cupom contra o cadastro sem saber em que produto a
+# linha caiu.
+# ⚠️ Este produto foi cadastrado a mao e nunca teve nome de PDV, entao o curto
+# vem NULO — e a tela cai no nome do cadastro. E o caminho de reserva, e ele
+# precisa estar coberto tanto quanto o outro.
+checar("o detalhe manda o nome curto junto", item and "produto_curto" in item, item)
+# ⚠️ `.get`, nao `[]`: campo ausente tem de virar uma FALHA com nome, nao um
+# KeyError que derruba a suite e esconde as checagens seguintes.
+checar("nulo para quem nunca teve nome de PDV", item and item.get("produto_curto") is None,
+       item and item.get("produto_curto"))
+
 # 0,5 kg × 20/kg = 10,00 por unidade — o custo CONGELADO, não o de hoje.
 checar("e o custo congelado da ficha (10,00)",
        item and abs(float(item["custo_ficha_unitario"]) - 10) < 0.01, item)

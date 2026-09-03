@@ -552,3 +552,19 @@
   (`hoje`, `diaLocal`, `somarDias`, `somarMeses`, `primeiroDiaDoMes`) — `sv-SE` é o formato
   ISO no fuso de quem está olhando. É a mesma armadilha que o banco resolve com a sessão em
   `America/Sao_Paulo`.
+
+- 🔑 **No cupom vale o nome do PDV, não o do cadastro** (`venda_itens` no detalhe da venda,
+  03/09/2026, pedido do dono). É o que o caixa e o cliente viram — e, medido na base real, ele
+  costuma ser **melhor** que o do cadastro: `produtos.nome` chega **truncado em 40 caracteres**
+  nos itens de catering (o mapeador apara no tamanho da coluna), enquanto `nome_curto` traz a
+  descrição inteira; e um rascunho chamado `RASCUNHO ANTIGO DO PAO DE QUEIJO 085800` tem
+  `PAO DE QUEIJO` como nome de PDV.
+  ⚠️ **O nome do CADASTRO não some**: quando os dois diferem, ele aparece embaixo como
+  `cadastro: …`. Quem confere o cupom contra o cadastro precisa saber em que produto a linha
+  caiu — mostrar só o do PDV esconderia justamente o que se está conferindo. São **10 casos em
+  639** produtos do PDV, então não polui.
+  ⚠️ **Sem nome de PDV, cai no do cadastro.** Produto lançado à mão nunca teve um, e é por isso
+  que a checagem antiga ("com o prato vendido") continua valendo: ela passou a cobrir o caminho
+  de reserva sem precisar de linha nova.
+  ⚠️ O endpoint manda os DOIS (`produto` e `produto_curto`) e a tela escolhe. Fazer o servidor
+  decidir com um `coalesce` mudaria o significado do campo em todo lugar que já o consome.

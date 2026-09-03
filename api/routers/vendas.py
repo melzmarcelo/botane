@@ -317,7 +317,8 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
             """SELECT vi.id, vi.codigo_pdv, vi.descricao_pdv, vi.id_produto,
                       vi.quantidade, vi.valor_unitario, vi.valor_total,
                       vi.custo_ficha_unitario, vi.origem_custo,
-                      p.nome AS produto, p.codigo AS produto_codigo, p.tipo,
+                      p.nome AS produto, p.nome_curto AS produto_curto,
+                      p.codigo AS produto_codigo, p.tipo,
                       c.nome AS categoria, s.nome AS setor
                  FROM venda_itens vi
                  LEFT JOIN produtos p ON p.id = vi.id_produto

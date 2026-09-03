@@ -31,6 +31,17 @@ export type ItemVenda = {
   custo_ficha_unitario: number | null;
   origem_custo: string | null;
   produto: string | null;
+  /**
+   * O nome do PDV — é ele que sai no cupom.
+   *
+   * 🔑 **Num cupom, o nome certo é o que o caixa e o cliente viram**, não o do
+   * cadastro. E na base real ele é frequentemente MELHOR: `nome` chega
+   * truncado em 40 caracteres nos itens de catering (o mapeador apara no
+   * tamanho da coluna), enquanto o curto traz a descrição inteira; e um
+   * rascunho antigo chamado "RASCUNHO ANTIGO DO PAO DE QUEIJO 085800" tem
+   * "PAO DE QUEIJO" como nome de PDV.
+   */
+  produto_curto: string | null;
   produto_codigo: string | null;
   tipo: string | null;
   categoria: string | null;

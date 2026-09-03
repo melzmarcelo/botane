@@ -2090,6 +2090,33 @@ try {
   // 10 pratos × 5,00 de ficha = 50,00 — o congelado, não o custo de hoje.
   checar("e vale os 50,00 da ficha", /50,00/.test(textoDet), textoDet.slice(0, 300));
   checar("o movimento no estoque aparece", /Movimento no estoque/i.test(textoDet));
+
+  // 🔑 **No cupom vale o nome do PDV** (pedido do dono, 03/09/2026): e o que o
+  // caixa e o cliente viram. Na base real ele costuma ser MELHOR que o do
+  // cadastro — o `nome` chega truncado em 40 caracteres nos itens de catering,
+  // enquanto o curto traz a descricao inteira, e um rascunho antigo chamado
+  // "RASCUNHO ANTIGO DO PAO DE QUEIJO 085800" tem "PAO DE QUEIJO" como curto.
+  // ⚠️ A checagem acima ja cobre o caminho de RESERVA: aquele prato foi
+  // cadastrado a mao, nunca teve nome de PDV, e a tela caiu no do cadastro.
+  const nomePdv = `PDV ${m6} CURTO`;
+  await api("PUT", `/produtos/${prod6.id}`, { nome_curto: nomePdv }, token);
+  await p.reload({ waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  const comCurto = await p.evaluate(() => {
+    const linha = [...document.querySelectorAll("tbody tr")]
+      .find((t) => /CURTO/i.test(t.innerText));
+    return { texto: linha?.innerText ?? "", achou: !!linha };
+  });
+  checar("o cupom passa a mostrar o nome do PDV", comCurto.achou, comCurto);
+  // ⚠️ **E o do CADASTRO nao some.** Quem confere o cupom contra o cadastro
+  // precisa saber em que produto a linha caiu — mostrar so o do PDV esconderia
+  // justamente o que se esta conferindo.
+  checar("e o nome do cadastro continua a vista, marcado como tal",
+    /cadastro:/i.test(comCurto.texto) && new RegExp(`CMV TELA PRATO ${m6}`, "i")
+      .test(comCurto.texto), comCurto);
+  // Devolve o produto como estava: nome curto e do PDV, e este foi posto a mao.
+  await api("PUT", `/produtos/${prod6.id}`, { nome_curto: null }, token);
+
   await foto(p, "24b-venda-detalhe");
 
   // A conta: 10 pratos a 5,00 de custo = 50,00 de CMV teórico; receita 300,00.

@@ -162,9 +162,16 @@ export default function PaginaVenda() {
               {venda.itens.map((i) => (
                 <tr key={i.id}>
                   <td>
+                    {/* 🔑 **No cupom vale o nome do PDV** (pedido do dono,
+                        03/09/2026): é o que o caixa e o cliente viram. E na
+                        base real ele costuma ser melhor que o do cadastro — o
+                        `nome` chega truncado em 40 caracteres nos itens de
+                        catering, enquanto o curto traz a descrição inteira.
+                        ⚠️ Cai no nome do cadastro quando não há curto: produto
+                        cadastrado à mão nunca teve nome de PDV. */}
                     {i.id_produto ? (
                       <Link href={`/produtos/${i.id_produto}`} className="link-registro">
-                        {i.produto}
+                        {i.produto_curto || i.produto}
                       </Link>
                     ) : (
                       <span className="text-suave">
@@ -172,7 +179,21 @@ export default function PaginaVenda() {
                       </span>
                     )}
                     <span className="block text-[12.5px] text-suave">
-                      {[i.produto_codigo, i.setor, i.categoria].filter(Boolean).join(" · ") ||
+                      {/* ⚠️ **Os dois nomes quando DIFEREM.** Quem confere o
+                          cupom contra o cadastro precisa saber em qual produto
+                          a linha caiu — mostrar só o do PDV esconderia
+                          justamente o que se está conferindo. São 10 casos em
+                          639 na base real, então não polui. */}
+                      {[
+                        i.produto_curto && i.produto && i.produto_curto !== i.produto
+                          ? `cadastro: ${i.produto}`
+                          : null,
+                        i.produto_codigo,
+                        i.setor,
+                        i.categoria,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") ||
                         (i.codigo_pdv ? `código no PDV ${i.codigo_pdv}` : "")}
                     </span>
                   </td>
