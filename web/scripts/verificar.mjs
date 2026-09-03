@@ -3508,6 +3508,13 @@ try {
       b?.click();
     });
     await new Promise((r) => setTimeout(r, 2600));
+    // ⚠️ **Esperar o `window.location.reload()` que a fusão dispara.** A tela
+    // recarrega para mostrar o nome e os códigos novos; seguir por cima dele
+    // faz o recarregamento chegar no MEIO do bloco seguinte, desmontando a
+    // janela que ele acabou de abrir — e o sintoma aparece longe da causa, como
+    // uma busca que não seleciona nada.
+    await p.waitForNavigation({ waitUntil: "networkidle2", timeout: 8000 })
+      .catch(() => {});
     const { dados: depois } = await api("GET", `/produtos/${vincA.id}`, null, token);
     checar("a fusao pela tela junta os dois nomes",
       depois.nome === `BEB CERV HEINEKEN 350ML ${mVinc}`
@@ -3523,6 +3530,137 @@ try {
     checar("o codigo do Omie do absorvido virou apelido, nao lixo",
       (depois.codigos_externos ?? []).some((c) => c.codigo === `773${mVinc}`),
       depois.codigos_externos);
+  }
+
+  // 🔑 **Fundir A PARTIR do cadastro que NÃO vai ficar** (achado pelo dono,
+  // 03/09/2026). Vincular dois cadastros do Omie funcionava; um do PDV com um
+  // do Omie devolvia *"Escolha dois cadastros diferentes"* — com dois cadastros
+  // diferentes escolhidos.
+  //
+  // A causa era da TELA: a prévia resolve a direção e devolve `id_sai`; quando
+  // ela inverte, `id_sai` É o cadastro em que a pessoa está, e era esse id que
+  // voltava ao servidor como "o que sai". O pedido chegava com o mesmo id dos
+  // dois lados. O bloco acima nunca pegou isso porque começa do lado do Omie,
+  // onde a direção NÃO inverte — e por isso este bloco começa do outro lado.
+  const mInv = Date.now().toString().slice(-5);
+  const { dados: invOmie } = await api("POST", "/produtos", {
+    codigo: `TINV-O-${mInv}`, nome: `AGUA COM GAS ${mInv}`, tipo: "REVENDA",
+    um_estoque: "UN", controla_estoque: true, status: "ATIVO",
+    codigo_omie: `881${mInv}`,
+  }, token);
+  const { dados: invPdv } = await api("POST", "/produtos", {
+    codigo: `TINV-P-${mInv}`, nome: `AGUA GAS PDV ${mInv}`, tipo: "PRODUZIDO",
+    producao_propria: true, controla_estoque: false, status: "RASCUNHO",
+    codigo_pdv: `991${mInv}`,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${invOmie.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${invPdv.id}`, null, token));
+
+  // Começa no RASCUNHO do PDV — o que vai ser absorvido.
+  // ⚠️ **O bloco acima termina com um `window.location.reload()` em voo** (é o
+  // que a tela faz depois de fundir, para recarregar nome e códigos). Navegar
+  // por cima dele fazia o recarregamento chegar DEPOIS e devolver a página
+  // anterior — onde o botão "Vincular" também existe. A busca então casava com
+  // o produto errado e a espera estourava, três linhas adiante da causa.
+  await irPara(p, `${WEB}/produtos/${invPdv.id}`);
+  // Espera por algo que só existe na tela de DESTINO: o código deste cadastro.
+  await p.waitForFunction(
+    (codigo) => document.body.innerText.includes(codigo),
+    { timeout: 20000 }, `TINV-P-${mInv}`);
+  await p.waitForFunction(
+    () => [...document.querySelectorAll("button")]
+      .some((b) => b.textContent?.trim() === "Vincular"), { timeout: 15000 });
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((x) => x.textContent?.trim() === "Vincular")?.click();
+  });
+  await p.waitForSelector('input[aria-label="Buscar produto"]', { timeout: 15000 });
+
+  /**
+   * Escolhe um cadastro na busca da janela e espera a prévia aparecer.
+   *
+   * ⚠️ **Digita de DENTRO do documento, não por um handle.** O handle envelhece
+   * — um recarregamento tardio da tela anterior desmonta a janela, e digitar
+   * num input descartado não dá erro nenhum: some no vazio, e a falha aparece
+   * como "a busca não seleciona".
+   * ⚠️ **Confere o valor antes do Tab.** Sem isso, um `type` que não pegou vira
+   * um Tab em campo vazio, que abre a janela de pesquisa e não escolhe nada.
+   * ⚠️ **E tenta duas vezes**: a busca tem debounce e vai ao servidor; sob a
+   * carga da bateria a primeira tentativa às vezes chega antes da resposta.
+   */
+  const escolherNaBusca = async (texto, marcaEsperada) => {
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      const escreveu = await p.evaluate((t) => {
+        const campo = document.querySelector('input[aria-label="Buscar produto"]');
+        if (!campo) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, "value").set;
+        setter.call(campo, t);
+        campo.dispatchEvent(new Event("input", { bubbles: true }));
+        campo.focus();
+        return campo.value === t;
+      }, texto);
+      if (!escreveu) {
+        // A janela sumiu: reabre e tenta de novo.
+        await p.evaluate(() => {
+          [...document.querySelectorAll("button")]
+            .find((x) => x.textContent?.trim() === "Vincular")?.click();
+        });
+        await p.waitForSelector('input[aria-label="Buscar produto"]', { timeout: 15000 });
+        continue;
+      }
+      // Deixa a busca ir ao servidor e voltar antes do Tab.
+      await new Promise((r) => setTimeout(r, 1800));
+      await p.keyboard.press("Tab");
+      const achou = await p
+        .waitForFunction((c) => document.body.innerText.includes(c),
+          { timeout: 12000 }, marcaEsperada)
+        .then(() => true)
+        .catch(() => false);
+      if (achou) return true;
+    }
+    return false;
+  };
+
+  try {
+    const escolheu = await escolherNaBusca(`AGUA COM GAS ${mInv}`, `881${mInv}`);
+    checar("a busca da janela escolhe o cadastro do Omie", escolheu);
+    if (escolheu) {
+      const avisoInv = await textoVisivel(p);
+      // ⚠️ **Inverter calado seria pior que não inverter**: a pessoa confirma
+      // achando que o cadastro que abriu é o que fica.
+      checar("a previa avisa que a direcao foi invertida",
+        /invertid|controla estoque/i.test(avisoInv), avisoInv.slice(0, 300));
+
+      await p.evaluate(() => {
+        [...document.querySelectorAll("button")]
+          .find((x) => (x.textContent?.trim() ?? "").startsWith("Vincular e fundir"))?.click();
+      });
+      await new Promise((r) => setTimeout(r, 2600));
+      const textoDepois = await textoVisivel(p);
+      // 🔑 A afirmação central: a tela mandava o `id_sai` da prévia de volta, e
+      // na direção invertida ele É o cadastro da tela — o pedido chegava com o
+      // mesmo id dos dois lados.
+      checar("fundir do lado que sai NAO devolve 'escolha dois cadastros diferentes'",
+        !/dois cadastros diferentes/i.test(textoDepois), textoDepois.slice(0, 300));
+      const { dados: ficouInv } = await api("GET", `/produtos/${invOmie.id}`, null, token);
+      const { dados: saiuInv } = await api("GET", `/produtos/${invPdv.id}`, null, token);
+      checar("o cadastro que controla estoque sobrevive",
+        ficouInv.ativo === true && ficouInv.codigo_pdv === `991${mInv}`,
+        [ficouInv.ativo, ficouInv.codigo_pdv]);
+      checar("e o rascunho do PDV, que era o da tela, foi absorvido",
+        saiuInv.ativo === false, saiuInv.ativo);
+    }
+  } catch (e) {
+    // O diagnóstico vai junto: sem ele a falha diz só "timeout", e o que se
+    // precisa saber é em que tela e com que janela ela aconteceu.
+    const diag = await p.evaluate(() => ({
+      url: location.pathname,
+      janelas: document.querySelectorAll('[role="dialog"]').length,
+      texto: (document.querySelector('[role="dialog"]')?.innerText ?? "").slice(0, 300),
+    })).catch(() => null);
+    checar("fundir a partir do lado invertido pela tela", false,
+      String(e).slice(0, 110) + " | " + JSON.stringify(diag));
   }
 
   console.log("10x. PDV Legal: a credencial e o que ainda falta");

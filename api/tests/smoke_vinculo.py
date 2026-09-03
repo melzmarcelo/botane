@@ -214,6 +214,42 @@ if forn:
     st, prev = chamar("GET", f"/produtos/{ce_pdv}/vincular/previa?id_sai={ce_omie}", token=token)
     checar("e continua podendo ser fundido", prev.get("pode") is True, prev.get("impedimentos"))
 
+print("\n4d. fundir A PARTIR do lado que NAO fica — a direcao invertida")
+# 🔑 **O defeito que a tela teve (03/09/2026, achado pelo dono).** Vincular dois
+# cadastros do Omie funcionava; um do PDV com um do Omie devolvia "Escolha dois
+# cadastros diferentes" — com dois cadastros diferentes escolhidos.
+#
+# A causa: a PRÉVIA resolve a direção e devolve `id_sai`. Quando ela inverte,
+# `id_sai` É o cadastro em que a pessoa está — e a tela mandava esse `id_sai` de
+# volta como "o que sai", chegando ao servidor com o mesmo id dos dois lados.
+# Entre dois do Omie não há inversão (nenhum controla estoque a mais que o
+# outro), e por isso aquele caminho passava.
+#
+# O que se cobra aqui é a PROPRIEDADE que faltava: **fundir a partir de
+# QUALQUER um dos dois lados chega no mesmo resultado**. A suíte já provava que
+# a prévia inverte; nunca provava que a fusão acontece a partir do lado
+# invertido, que era justamente o caminho quebrado.
+st, r = chamar("POST", f"/produtos/{ce_pdv}/vincular", {"id_sai": ce_omie}, token=token)
+checar("fundir estando no cadastro que SAI e aceito", st == 200, (st, r))
+checar("e o servidor diz que inverteu", (r or {}).get("invertido") is True, r)
+# ⚠️ Quem fica e o que CONTROLA ESTOQUE, mesmo tendo sido o "escolhido": sem
+# isso o rascunho do PDV sobreviveria e a compra deixaria de entrar no razao.
+checar("quem ficou foi o que controla estoque",
+       (r or {}).get("fica", {}).get("id") == ce_omie, r.get("fica"))
+checar("e quem saiu foi o cadastro em que a pessoa estava",
+       (r or {}).get("saiu", {}).get("id") == ce_pdv, r.get("saiu"))
+st, sobrou = chamar("GET", f"/produtos/{ce_omie}", token=token)
+checar("o sobrevivente continua ativo e controlando estoque",
+       sobrou.get("ativo") is True and sobrou.get("controla_estoque") is True, sobrou)
+st, foi = chamar("GET", f"/produtos/{ce_pdv}", token=token)
+checar("e o outro virou arquivado", foi.get("status") == "ARQUIVADO", foi.get("status"))
+# ⚠️ **Mandar o mesmo id dos dois lados continua sendo recusado** — a trava e
+# certa, e era a tela que a acionava sem querer. Tirar a trava esconderia o
+# defeito em vez de corrige-lo.
+st, r = chamar("POST", f"/produtos/{ce_omie}/vincular", {"id_sai": ce_omie}, token=token)
+checar("mandar o mesmo cadastro dos dois lados continua recusado", st == 400, (st, r))
+
+
 print("\n5. a fusão, na direção certa")
 st, r = chamar("POST", f"/produtos/{do_omie}/vincular", {"id_sai": do_pdv}, token=token)
 checar("vincular responde", st == 200, (st, r))

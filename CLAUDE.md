@@ -1229,6 +1229,25 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   ⚠️ **Inverter calado seria pior que não inverter**: a resposta traz `invertido` e
   `motivo_da_direcao`, e a tela avisa — senão a pessoa confirma achando que o cadastro que abriu
   é o que fica.
+  🔑 **E foi a inversão que quebrou a tela — só do lado do PDV** (03/09/2026, achado pelo dono:
+  *"vincular dois produtos do Omie funciona, mas PDV com Omie diz que é o mesmo produto"*). A
+  prévia resolve a direção e devolve `id_sai`; **quando ela inverte, `id_sai` É o cadastro em
+  que a pessoa está** — e a tela mandava esse `id_sai` de volta como "o que sai". O pedido
+  chegava em `POST /produtos/{X}/vincular {id_sai: X}`, e o servidor recusava com "Escolha dois
+  cadastros diferentes" — com dois cadastros diferentes escolhidos.
+  ⚠️ **A trava do servidor está certa e não se mexe nela**: era a tela que a acionava sem
+  querer. Afrouxá-la esconderia o defeito em vez de corrigi-lo, e a suíte passou a cobrar que
+  mandar o mesmo id dos dois lados continue sendo 400.
+  ⚠️ **A tela manda o cadastro ESCOLHIDO**, nunca o `id_sai` resolvido — o servidor re-resolve a
+  direção pela mesma `previa`, então o que a pessoa confirmou é o que acontece, venha o pedido
+  de que lado vier. O id escolhido viaja DENTRO da prévia, não casado por índice na lista.
+  ⚠️ **Entre dois cadastros do Omie não há inversão** (nenhum controla estoque a mais que o
+  outro), e por isso aquele caminho sempre funcionou — o defeito só existia no par PDV × Omie,
+  que é justamente onde o critério "controla estoque" decide.
+  🔑 **As duas suítes provavam a INVERSÃO e nunca a FUSÃO a partir do lado invertido.** A de API
+  parava na prévia; a de navegador funde de verdade, mas começa do lado do Omie — onde não há
+  inversão. **Um caminho que nenhuma das duas percorre é onde o defeito mora**: as duas ganharam
+  o caso que começa no cadastro que vai ser absorvido.
   ⚠️ **Só absorve cadastro SEM história, e a lista de travas já foi MAIOR.** Ela barrava nota de
   entrada e vínculo de fornecedor, e isso estava errado: são PONTEIROS, não história — um item de
   nota diz "esta linha é deste produto", e se os dois cadastros são o mesmo produto, a linha muda
@@ -2140,6 +2159,16 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   que é exatamente o que ele tem de fazer. Ou se limpa o filtro antes de medir, ou se pergunta
   à API pelo MESMO recorte. É a família do "teste que descreve o estado do dia", pela ponta do
   recorte em vez da do tempo.
+- ⚠️ **Digitar por um HANDLE some no vazio quando a tela recarrega.** A checagem nova do
+  Vincular ficou três rodadas falhando com "a busca não seleciona": a fusão do bloco anterior
+  dispara `window.location.reload()`, e o recarregamento chegava DEPOIS, desmontando a janela
+  recém-aberta. Digitar num input descartado **não dá erro nenhum** — o texto some, o Tab cai
+  em campo vazio e a falha aparece como defeito da busca. Duas correções, e as duas valem como
+  regra: **esperar a navegação pendente** (`waitForNavigation(...).catch(() => {})` depois da
+  ação que recarrega) e **digitar de DENTRO do documento**, conferindo o valor antes de seguir.
+- ⚠️ **Um bloco de tela que depende de rede vai num `try`.** Uma exceção custa as checagens do
+  resto da rodada; um `checar` que falha custa uma linha — e o `catch` leva junto a URL e o
+  texto da janela, senão a falha diz só "timeout" e não onde.
 - ⚠️ **`elementHandle.click()` também estoura o `protocolTimeout`** — e não só o `p.click`.
   Limpar o campo de busca com `(await p.$(campo)).click()` derrubou a rodada inteira num ponto
   sem defeito nenhum: ele rola o elemento e espera ele ficar estável. Focar de DENTRO do
@@ -2563,18 +2592,18 @@ Ainda **não há remoto nem servidor**: os dois branches são locais. Quando hou
   desligado** (`/sw.js?dev=1`), senão o HMR do Next serve pedaço velho e vira caça a bug que
   não existe. ⚠️ `apple-mobile-web-app-capable` está declarado à mão em `metadata.other`: o
   Next 16 só emite o nome padronizado, que o Safari entende do iOS 17.4 em diante.
-- Testes (1.777 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
+- Testes (1.784 verificações de API): `smoke_fundacao.py` (47, 48 em base virgem), `smoke_cadastros.py` (55),
   `smoke_fichas.py` (55), `smoke_estoque.py` (170), `smoke_cmv.py` (63), `smoke_omie.py` (116),
   `smoke_notas.py` (70), `smoke_senha.py` (40), `smoke_email_prazo.py` (15), `smoke_sessao.py` (17), `smoke_lotes.py` (28),
   `smoke_relatorios.py` (44), `smoke_kits.py` (29), `smoke_conversao.py` (29),
   `smoke_producao.py` (46), `smoke_alertas.py` (28), `smoke_paginacao.py` (25), `smoke_ajustes.py` (48), `smoke_ciclos.py` (32),
   `smoke_grupos_cmv.py` (45), `smoke_utensilios.py` (23), `smoke_inventario_filtros.py` (50),
-  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (69), `smoke_vinculo.py` (84),
+  `smoke_exportacoes.py` (110), `smoke_produto_do_omie.py` (31), `smoke_agenda_omie.py` (31), `smoke_pdv_legal.py` (156), `smoke_vendas.py` (69), `smoke_vinculo.py` (91),
   `smoke_transferencias.py` (47), `smoke_lojas_do_usuario.py` (26),
   `smoke_memoria.py` (37),
   `cenario_cafeteria.py` (57) e `cenario_semana.py` (54); mais
   `web/scripts/testar-sw.mjs` (17, sem navegador) e
-  `web/scripts/verificar.mjs` (456, no Chrome, com fotos em `web/scripts/_fotos`).
+  `web/scripts/verificar.mjs` (461, no Chrome, com fotos em `web/scripts/_fotos`).
   Todos idempotentes; os de CMV medem **delta** sobre a apuração anterior, porque o banco
   local já tem dado de outras rodadas.
 - ⚠️ **`<select>` alimentado por endpoint paginado é uma lista mentirosa — e MUDA.** O produto

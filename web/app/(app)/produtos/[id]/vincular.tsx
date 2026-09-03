@@ -85,6 +85,13 @@ type Previa = {
   completa: string[];
   id_fica: number;
   id_sai: number;
+  /**
+   * 🔑 **O cadastro que a pessoa ESCOLHEU — que não é o mesmo que `id_sai`.**
+   * `id_sai` é o RESULTADO da resolução de direção, e quando ela inverte ele é
+   * o cadastro em que a pessoa está. Mandar `id_sai` de volta ao servidor
+   * fazia o pedido chegar com o mesmo id dos dois lados.
+   */
+  escolhido: number;
 };
 
 const PRODUTOS = fonteProdutos();
@@ -142,9 +149,14 @@ export default function Vincular({
       // par, e um deles pode inverter — é isso que a tela precisa mostrar.
       setPrevias(
         await Promise.all(
-          escolhidos.map((e) =>
-            api.get<Previa>(`/produtos/${idProduto}/vincular/previa?id_sai=${e.id}`),
-          ),
+          escolhidos.map(async (e) => ({
+            ...(await api.get<Previa>(
+              `/produtos/${idProduto}/vincular/previa?id_sai=${e.id}`)),
+            // ⚠️ Guardado JUNTO da prévia, não por posição na lista: é ele que
+            // volta ao servidor na hora de fundir, e casar por índice quebraria
+            // em silêncio se a ordem mudasse.
+            escolhido: e.id,
+          })),
         ),
       );
     } catch (e) {
@@ -197,8 +209,18 @@ export default function Vincular({
       // repetida, e parar no meio deixa as anteriores feitas — que é um estado
       // bom, não um pela metade. A mensagem diz quantas foram.
       for (const p of previas) {
+        // 🔑 **Manda o cadastro ESCOLHIDO, nunca o `id_sai` da prévia.** O
+        // `id_sai` é o resultado da resolução de direção — quando ela inverte,
+        // ele É o cadastro da tela, e o pedido chegava com o mesmo id dos dois
+        // lados: "Escolha dois cadastros diferentes", com dois cadastros
+        // diferentes escolhidos. Aparecia só na inversão, que é exatamente o
+        // caso PDV × Omie (o critério "controla estoque"); entre dois do Omie
+        // não há inversão, e por isso aquilo funcionava.
+        // ⚠️ O servidor RESOLVE a direção de novo, pela mesma `previa` — então
+        // o que a pessoa confirmou é o que acontece, venha o pedido de que lado
+        // vier.
         await api.post(`/produtos/${idProduto}/vincular`, {
-          id_sai: p.id_sai,
+          id_sai: p.escolhido,
           baixar_vendas: baixar,
         });
         feitos += 1;
