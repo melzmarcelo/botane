@@ -214,6 +214,31 @@ reconhece é você.
 
 ---
 
+### Muitos cadastros com o mesmo nome, de uma vez
+
+Menu **Administração → Integrações**, cartão **Cadastros com o mesmo nome**,
+botão **Mesmo nome**. Fica ali, e não em Produtos, porque o repetido não é erro de
+quem cadastra: ele nasce das importações. O catálogo do Omie cria um cadastro por
+código, então o mesmo abacate aparece uma vez para cada fornecedor que já o
+vendeu — e o cardápio do PDV traz o dele. A tela lista os grupos de cadastros que
+têm o nome **exatamente igual**, mostra qual fica e quais são absorvidos, e junta
+o grupo num clique.
+
+⚠️ **Confira os códigos antes de juntar. Nome igual não é prova.** Dentro do
+catálogo do Omie quase sempre é o mesmo item — mas *VALE-PRESENTE* pode ser três
+valores diferentes com o mesmo nome, e o importador corta nomes longos no tamanho
+do campo, o que faz dois nomes diferentes chegarem iguais. **A fusão não tem
+desfazer.**
+
+⚠️ Grupo em que **mais de um** cadastro já tem movimento no estoque aparece
+marcado e não se junta: unir dois históricos de estoque não é possível.
+
+⚠️ Depois de juntar, **os códigos dos absorvidos continuam caindo no cadastro que
+ficou** — é isso que faz a próxima nota daquele fornecedor entrar no lugar certo,
+em vez de criar o duplicado de novo.
+
+---
+
 ### O mesmo produto em vários setores
 
 O açúcar chega e entra no **Estoque Central**. De manhã, cada setor leva o que vai

@@ -250,6 +250,110 @@ st, r = chamar("POST", f"/produtos/{ce_omie}/vincular", {"id_sai": ce_omie}, tok
 checar("mandar o mesmo cadastro dos dois lados continua recusado", st == 400, (st, r))
 
 
+print("\n4e. os cadastros com o MESMO NOME, em lote — o ABACATE")
+# 🔑 **Pedido do dono (03/09/2026).** O catálogo do Omie cria um cadastro por
+# CÓDIGO, e o mesmo abacate aparece uma vez para cada fornecedor que já o vendeu.
+# Juntar de dois em dois pela tela resolve, mas com centenas ninguém percorre a
+# lista — e o trabalho não é feito.
+#
+# ⚠️ **Isto DETECTA, e quem decide é gente.** O projeto já removeu uma cascata
+# que vinculava sozinha por semelhança de nome. Nome IDÊNTICO é um sinal muito
+# mais forte — mas continua sendo um sinal, e a fusão não tem desfazer.
+abac = []
+for i in range(3):
+    st, r = chamar("POST", "/produtos", {
+        # ⚠️ Prefixo PRÓPRIO: `ABA1-`/`ABA2-` já são da fase 7, e o 409 do código
+        # repetido aparecia como "o abacate principal falhou" doze checagens
+        # adiante. Cada fase procura (e cria) os registros DELA.
+        "codigo": f"LOTE{i}-{marca}", "nome": f"ABACATE LOTE {marca}", "tipo": "INSUMO",
+        "um_estoque": "KG", "controla_estoque": True, "status": "ATIVO",
+        "codigo_omie": f"6{i}{marca}",
+    }, token=token)
+    abac.append((r or {}).get("id"))
+checar("tres cadastros com o mesmo nome, codigos diferentes", all(abac), abac)
+
+st, grupos = chamar("GET", "/produtos/duplicados?so_do_omie=true&limite=200", token=token)
+meu = next((g for g in (grupos or []) if g["nome"] == f"ABACATE LOTE {marca}"), None)
+checar("a lista de duplicados acha o grupo", meu is not None, len(grupos or []))
+if meu:
+    checar("com os tres juntos", meu["quantos"] == 3, meu["quantos"])
+    checar("e diz que da para juntar", meu["pode"] is True, meu)
+    # ⚠️ O principal e resolvido pelos MESMOS criterios da tela; sem historia
+    # nem diferenca de controle de estoque, o desempate e o menor id — o mais
+    # antigo —, que e o unico criterio estavel num grupo sem "a tela".
+    checar("o principal e o cadastro mais antigo do grupo",
+           meu["id_principal"] == min(abac), (meu["id_principal"], abac))
+    # ⚠️ Cada linha traz o CODIGO de cada cadastro: e o que permite reconhecer
+    # que "VALE-PRESENTE" sao tres valores diferentes ANTES de juntar.
+    checar("e cada linha mostra o codigo externo de cada um",
+           all(i.get("codigo_omie") for i in meu["itens"]), meu["itens"])
+
+st, r = chamar("POST", "/produtos/duplicados/fundir", {
+    "id_principal": abac[0], "ids_que_saem": abac[1:], "baixar_vendas": True}, token=token)
+checar("juntar o grupo inteiro responde", st == 200, (st, r))
+checar("e diz quantos foram absorvidos", len((r or {}).get("juntados") or []) == 2, r)
+
+st, fica = chamar("GET", f"/produtos/{abac[0]}", token=token)
+checar("o principal continua ativo", fica.get("ativo") is True, fica.get("ativo"))
+# 🔑 **A razao de existir: os codigos dos absorvidos viram APELIDOS.** Sem isso a
+# proxima nota que trouxesse o codigo de um deles nao acharia o principal, o item
+# cairia na fila de pendentes, e quem clicasse em "criar produto" recriaria o
+# duplicado — o trabalho de juntar se desfazendo sozinho.
+apelidos = {c["codigo"] for c in (fica.get("codigos_externos") or [])}
+checar("e os codigos dos absorvidos passam a cair nele",
+       {f"6{i}{marca}" for i in (1, 2)} <= apelidos, sorted(apelidos))
+for i in abac[1:]:
+    st, saiu = chamar("GET", f"/produtos/{i}", token=token)
+    checar(f"o cadastro {i} virou arquivado", saiu.get("status") == "ARQUIVADO",
+           saiu.get("status"))
+    # ⚠️ A coluna e zerada junto: ela e unica, e deixa-la la manteria o codigo
+    # preso a um cadastro arquivado.
+    checar(f"e o codigo_omie de {i} foi zerado", saiu.get("codigo_omie") is None,
+           saiu.get("codigo_omie"))
+
+# ⚠️ **O grupo some da lista depois de junto**, porque so ATIVOS entram: sem
+# isso a lista nunca esvaziaria, propondo de novo o que ja foi feito.
+st, grupos = chamar("GET", "/produtos/duplicados?so_do_omie=true&limite=200", token=token)
+checar("e o grupo sai da lista depois de junto",
+       not any(g["nome"] == f"ABACATE LOTE {marca}" for g in (grupos or [])), grupos)
+
+# ⚠️ Mandar o principal na lista dos que saem seria o mesmo id dos dois lados —
+# o defeito que a tela do Vincular teve.
+st, r = chamar("POST", "/produtos/duplicados/fundir",
+               {"id_principal": abac[0], "ids_que_saem": [abac[0]]}, token=token)
+checar("o principal na lista dos que saem e recusado", st == 400, (st, r))
+st, r = chamar("POST", "/produtos/duplicados/fundir",
+               {"id_principal": abac[0], "ids_que_saem": []}, token=token)
+checar("e lista vazia tambem", st == 400, (st, r))
+
+# 🔑 **Grupo com DOIS que tem historia nao se junta**, e a lista DIZ isso em vez
+# de omitir: unir dois razoes exigiria reescrever movimento, e o custo medio
+# resultante seria invencao.
+st, locais_d = chamar("GET", "/locais", token=token)
+local_d = next((x for x in locais_d if x.get("principal")), locais_d[0])
+hist = []
+for i in range(2):
+    st, r = chamar("POST", "/produtos", {
+        "codigo": f"HIST{i}-{marca}", "nome": f"COM HISTORIA {marca}", "tipo": "INSUMO",
+        "um_estoque": "KG", "controla_estoque": True, "status": "ATIVO"}, token=token)
+    hist.append((r or {}).get("id"))
+    chamar("POST", "/estoque/entradas", {
+        "id_produto": hist[i], "quantidade": 1, "custo_unitario": 5,
+        "id_local": local_d["id"]}, token=token)
+st, grupos = chamar("GET", "/produtos/duplicados?limite=300", token=token)
+com_hist = next((g for g in (grupos or []) if g["nome"] == f"COM HISTORIA {marca}"), None)
+checar("o grupo com dois historicos aparece na lista", com_hist is not None, com_hist)
+if com_hist:
+    checar("mas marcado como NAO podendo ser junto", com_hist["pode"] is False, com_hist)
+    checar("e nomeando quem impede", len(com_hist["impedidos"]) >= 1, com_hist["impedidos"])
+st, r = chamar("POST", "/produtos/duplicados/fundir",
+               {"id_principal": hist[0], "ids_que_saem": [hist[1]]}, token=token)
+checar("e juntar assim mesmo e recusado, com a frase", st == 400, (st, r))
+checar("dizendo que tem historia", "história" in str((r or {}).get("detail", "")), r)
+for i in hist:
+    chamar("DELETE", f"/produtos/{i}", token=token)
+
+
 print("\n5. a fusão, na direção certa")
 st, r = chamar("POST", f"/produtos/{do_omie}/vincular", {"id_sai": do_pdv}, token=token)
 checar("vincular responde", st == 200, (st, r))

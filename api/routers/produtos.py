@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    FundirGrupoRequest,
     LocalDoProduto,
     LocalDoProdutoRequest,
     PrecoDaLoja,
@@ -252,6 +253,55 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
         "rascunhos": sum(l["rascunhos"] for l in linhas),
         "inativos": sum(l["inativos"] for l in linhas),
     }
+
+
+@router.get("/duplicados")
+def duplicados(so_do_omie: bool = False, limite: int = Query(default=300, ge=1, le=1000),
+               ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> list[dict]:
+    """Cadastros ATIVOS com exatamente o mesmo nome — os candidatos a fusão.
+
+    🔑 **A tela que faltava.** O sistema já mandava para cá (o cartão do PDV em
+    Integrações tem "ver possíveis duplicados"), e o endereço não existia: o
+    link levava a lugar nenhum.
+
+    ⚠️ **Isto DETECTA, e quem decide é gente.** Nome idêntico é um sinal forte
+    dentro de um catálogo só — o do Omie cria um cadastro por código, e o mesmo
+    abacate aparece uma vez por fornecedor —, mas continua sendo um sinal:
+    "VALE-PRESENTE" pode ser três valores diferentes com o mesmo nome, e o
+    mapeador do Omie apara texto no tamanho da coluna, o que faz nomes longos e
+    diferentes chegarem aqui iguais. A lista existe para ser OLHADA.
+
+    ⚠️ Declarado ANTES de `/{id_produto}`: o FastAPI casa rotas na ordem de
+    declaração, e com o parâmetro na frente "duplicados" viraria um id e o
+    pedido morreria em 422.
+    """
+    with get_cursor() as cur:
+        return produtos_vinculo.grupos_por_nome(cur, so_do_omie, limite)
+
+
+@router.post("/duplicados/fundir")
+def fundir_duplicados(body: FundirGrupoRequest,
+                      ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Junta um grupo inteiro num cadastro só.
+
+    ⚠️ **Recebe os ids que a pessoa VIU**, não o nome: entre ver a lista e
+    confirmar, uma importação pode ter criado mais um cadastro com aquele nome —
+    e fundir o que ninguém olhou é o oposto do que esta tela existe para fazer.
+    """
+    with get_cursor() as cur:
+        try:
+            r = produtos_vinculo.fundir_grupo(
+                cur, body.id_principal, body.ids_que_saem, ctx.id_usuario,
+                body.baixar_vendas)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        auditoria.registrar(cur, ctx.id_usuario, "produto", body.id_principal,
+                            "vincular_grupo", depois=r)
+    return {**r, "message": f"{len(r['juntados'])} cadastro(s) juntado(s) num só."}
 
 
 @router.get("/{id_produto}/vincular/previa")

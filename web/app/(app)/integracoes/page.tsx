@@ -469,6 +469,34 @@ export default function PaginaIntegracoes() {
           conta: um traz o que entrou (nota), o outro o que saiu (venda). */}
       {(pode("integracao.pdv") || pode("admin.integracoes")) && <PdvLegal />}
 
+      {/* 🔑 **O caso do ABACATE mora AQUI, e não em Produtos.** O duplicado não
+          é erro de quem cadastra: ele nasce das duas integrações acima — o
+          catálogo do Omie cria um cadastro por CÓDIGO (o mesmo abacate uma vez
+          por fornecedor que já o vendeu) e o cardápio do PDV cria o dele. É
+          consequência de sincronizar, então o caminho para desfazê-la fica ao
+          lado do que a produz.
+          ⚠️ A permissão é a do endpoint (`cadastros.produtos`), NÃO a de
+          integração: mostrar o cartão a quem só configura credencial daria um
+          403 depois do clique. */}
+      {pode("cadastros.produtos") && (
+        <Cartao
+          titulo="Cadastros com o mesmo nome"
+          descricao="O mesmo produto cadastrado mais de uma vez pelas importações — juntados num só."
+          acao={
+            <Link href="/produtos/duplicados" className="btn btn-secundario">
+              Mesmo nome
+            </Link>
+          }
+        >
+          <p className="max-w-[70ch] text-[14px] text-suave">
+            O catálogo do Omie cria um cadastro por código, então o mesmo abacate aparece uma
+            vez para cada fornecedor que já o vendeu — e o cardápio do PDV traz o dele. A tela
+            põe os repetidos lado a lado, com os códigos à vista, e junta o grupo num clique.{" "}
+            <b>Nome igual não é prova</b>: confira antes, porque a fusão não tem desfazer.
+          </p>
+        </Cartao>
+      )}
+
       {pode("integracao.omie") && (
         <Cartao
           titulo="Trazer outros dados do Omie"

@@ -154,6 +154,19 @@ class PrecoDaLoja(BaseModel):
     preco_venda: float | None = Field(default=None, ge=0)
 
 
+class FundirGrupoRequest(BaseModel):
+    """Juntar num só os cadastros que a pessoa acabou de ver na lista.
+
+    ⚠️ Os IDS, e não o nome do grupo: entre ver a lista e confirmar, uma
+    importação pode ter criado mais um cadastro com aquele nome — e fundir o que
+    ninguém olhou é o oposto do que a tela de duplicados existe para fazer.
+    """
+
+    id_principal: int
+    ids_que_saem: list[int]
+    baixar_vendas: bool = True
+
+
 class LocalDoProdutoRequest(BaseModel):
     id_local: int
 

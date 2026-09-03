@@ -142,6 +142,124 @@ def direcao(cur, id_tela: int, id_escolhido: int) -> tuple[int, int, bool]:
     return id_tela, id_escolhido, False
 
 
+def grupos_por_nome(cur, so_do_omie: bool = False, limite: int = 300) -> list[dict]:
+    """Cadastros ATIVOS que têm exatamente o mesmo nome — os candidatos a fusão.
+
+    🔑 **O caso do ABACATE, em lote** (pedido do dono, 03/09/2026). O catálogo do
+    Omie cria um cadastro por CÓDIGO, e o mesmo abacate aparece uma vez para cada
+    fornecedor que já o vendeu. Juntar de dois em dois pela tela do Vincular
+    resolve, mas com centenas de repetidos ninguém percorre a lista.
+
+    ⚠️ **Isto DETECTA, e não decide.** É a distinção que o projeto já pagou uma
+    vez: existiu uma cascata que vinculava sozinha por semelhança de nome, e ela
+    foi removida porque errava nos dois sentidos — não achava "BEB CERV HEINEKEN
+    350ML" contra "CERVEJA HEINEKEN PILSEN" (o mesmo produto) e juntava "CAKE
+    BOARD N19" com "CAKE BOARD N21", que são tamanhos diferentes.
+    **Nome IDÊNTICO é um sinal muito mais forte que semelhança** — dentro de um
+    catálogo só, é quase sempre o mesmo item —, mas continua sendo um sinal: o
+    mapeador do Omie **apara todo texto no tamanho da coluna**, e dois nomes
+    longos e diferentes podem chegar aqui iguais. Por isso a lista existe para
+    ser OLHADA antes de virar fusão, e quem confirma é gente.
+
+    ⚠️ **Só ATIVOS.** O absorvido de uma fusão anterior fica inativo e com o
+    mesmo nome; incluí-lo faria a lista nunca esvaziar, propondo de novo o que já
+    foi feito.
+
+    ⚠️ **O principal é resolvido pelos MESMOS critérios da tela** (`direcao`),
+    dobrando o grupo dois a dois — história primeiro, depois quem controla
+    estoque. O desempate final é o **menor id**, que é o cadastro mais antigo:
+    num grupo não há "a tela" para desempatar, e um critério estável é o que faz
+    a prévia e a execução concordarem.
+    """
+    cur.execute(
+        """SELECT p.nome, count(*) AS n
+             FROM produtos p
+            WHERE p.ativo
+              AND (NOT %(so_omie)s OR p.codigo_omie IS NOT NULL)
+            GROUP BY p.nome
+           HAVING count(*) > 1
+            ORDER BY count(*) DESC, p.nome
+            LIMIT %(limite)s""",
+        {"so_omie": so_do_omie, "limite": limite},
+    )
+    nomes = [dict(r) for r in cur.fetchall()]
+
+    grupos = []
+    for linha in nomes:
+        cur.execute(
+            """SELECT p.id, p.codigo, p.nome, p.codigo_omie, p.codigo_pdv, p.tipo,
+                      p.controla_estoque, p.um_estoque, c.nome AS categoria,
+                      (SELECT count(*) FROM estoque_movimentos m WHERE m.id_produto = p.id)
+                          AS movimentos
+                 FROM produtos p
+                 LEFT JOIN categorias c ON c.id = p.id_categoria
+                WHERE p.ativo AND p.nome = %(nome)s
+                  AND (NOT %(so_omie)s OR p.codigo_omie IS NOT NULL)
+                ORDER BY p.id""",
+            {"nome": linha["nome"], "so_omie": so_do_omie},
+        )
+        itens = [dict(r) for r in cur.fetchall()]
+        for i in itens:
+            i["travas"] = impedimentos(cur, i["id"])
+
+        # O principal, pelos mesmos critérios da tela, dobrando o grupo.
+        principal = itens[0]["id"]
+        for outro in itens[1:]:
+            principal, _sai, _inv = direcao(cur, principal, outro["id"])
+
+        # ⚠️ **Grupo com DOIS que têm história não se funde**, e a lista diz isso
+        # em vez de omitir: juntar duas histórias de estoque exigiria reescrever
+        # o razão, e o custo médio resultante seria invenção.
+        com_travas = [i for i in itens if i["travas"] and i["id"] != principal]
+        grupos.append({
+            "nome": linha["nome"],
+            "quantos": len(itens),
+            "id_principal": principal,
+            "itens": itens,
+            "pode": not com_travas,
+            "impedidos": [i["id"] for i in com_travas],
+        })
+    return grupos
+
+
+def fundir_grupo(cur, id_principal: int, ids_que_saem: list[int], id_usuario: int,
+                 baixar_vendas: bool = True) -> dict:
+    """Funde vários cadastros num só — o grupo inteiro de uma vez.
+
+    🔑 **É a mesma `fundir`, repetida**, nunca uma segunda implementação: o
+    de-para, a baixa do que foi vendido e sem sair do estoque, o custo dos itens
+    de venda e o arquivamento do absorvido são os mesmos do botão Vincular. Duas
+    implementações divergiriam na primeira correção.
+
+    ⚠️ **Recusa ANTES de começar quando algum dos que saem tem história.** No
+    meio do laço a recusa deixaria o grupo pela metade, e quem olhasse a lista
+    depois não saberia dizer o que aconteceu com quais.
+
+    ⚠️ **Recusa também quando o principal está na lista dos que saem** — seria o
+    mesmo id dos dois lados, que é justamente o defeito que a tela do Vincular
+    teve.
+    """
+    if id_principal in ids_que_saem:
+        raise ValueError("O cadastro que fica não pode estar na lista dos que saem.")
+    if not ids_que_saem:
+        raise ValueError("Nenhum cadastro para juntar.")
+
+    travados = {i: impedimentos(cur, i) for i in ids_que_saem}
+    travados = {i: t for i, t in travados.items() if t}
+    if travados:
+        raise ValueError(
+            "Estes cadastros têm história e não podem ser absorvidos: "
+            + "; ".join(f"{i} ({', '.join(t)})" for i, t in travados.items()))
+
+    feitos, baixados = [], 0
+    for id_sai in ids_que_saem:
+        r = fundir(cur, id_principal, id_sai, id_usuario, baixar_vendas)
+        feitos.append(id_sai)
+        # A chave real é `baixa_de_estoque`, posta só quando houve baixa.
+        baixados += 1 if r.get("baixa_de_estoque") else 0
+    return {"id_principal": id_principal, "juntados": feitos, "baixas": baixados}
+
+
 def previa(cur, id_tela: int, id_escolhido: int) -> dict:
     """O que a fusão faria — para ver ANTES de mandar.
 

@@ -3251,6 +3251,17 @@ try {
   );
   checar("formulário da empresa cabe na tela do celular", semEstouro);
 
+  // ⚠️ **A aba do celular FECHA aqui, e a principal volta para a frente.**
+  // Ela ficava aberta até o fim da rodada, e isso deixava `p` em segundo plano
+  // de lá em diante — onde o Chrome congela o `requestAnimationFrame`. O
+  // `waitForFunction` do Puppeteer pesquisa por rAF: a condição é avaliada uma
+  // vez na instalação e, se ainda não for verdadeira, **nunca mais é olhada**.
+  // Toda espera por algo que ainda vai acontecer virava um timeout inevitável,
+  // com a tela já no estado certo — foi o que aconteceu com a fusão em lote,
+  // acusada de não recarregar a lista quando ela tinha recarregado.
+  await c.close();
+  await p.bringToFront();
+
   console.log("10z. grupos do CMV: separar o que não é comida");
   // A casa monta os próprios grupos por tipo de produto. O que se prova aqui é
   // o que a tela promete: o tipo já usado aparece TRAVADO, dizendo onde está —
@@ -3661,6 +3672,131 @@ try {
     })).catch(() => null);
     checar("fundir a partir do lado invertido pela tela", false,
       String(e).slice(0, 110) + " | " + JSON.stringify(diag));
+  }
+
+  console.log("10w2. os cadastros com o MESMO NOME, em lote");
+  // 🔑 **A tela que já era referenciada e nunca existiu**: o cartão do PDV em
+  // Integrações manda para `/produtos/duplicados`, e o endereço dava 404.
+  // ⚠️ Ela DETECTA e não decide — o projeto já removeu uma cascata que
+  // vinculava sozinha por semelhança de nome. Nome idêntico é um sinal mais
+  // forte, mas segue sendo um sinal: "VALE-PRESENTE" pode ser três valores
+  // diferentes. Por isso o aviso vem ANTES da lista e nada acontece sem clique.
+  const mDup = Date.now().toString().slice(-5);
+  const dups = [];
+  for (let i = 0; i < 3; i++) {
+    const { dados } = await api("POST", "/produtos", {
+      codigo: `TDUP${i}-${mDup}`, nome: `ABACATE TELA ${mDup}`, tipo: "INSUMO",
+      um_estoque: "KG", controla_estoque: true, status: "ATIVO",
+      codigo_omie: `55${i}${mDup}`,
+    }, token);
+    dups.push(dados.id);
+    aoTerminar.push(() => api("DELETE", `/produtos/${dados.id}`, null, token));
+  }
+
+  // 🔑 **O caminho mora em INTEGRAÇÕES, e não em Produtos** (movido a pedido do
+  // dono). O duplicado não é erro de quem cadastra: ele nasce das duas
+  // importações. O teste entra por onde a pessoa entra — um link que existe mas
+  // não está no caminho de ninguém é o mesmo que não existir.
+  await irPara(p, `${WEB}/integracoes`);
+  const portaDup = await p.evaluate(() => {
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").includes("mesmo nome"));
+    return {
+      temCartao: !!cartao,
+      // O aviso de que nome igual não prova nada já aparece aqui, antes do clique.
+      avisa: /não é prova/i.test(cartao?.innerText ?? ""),
+      destino: cartao?.querySelector("a[href='/produtos/duplicados']")?.textContent?.trim() ?? "",
+    };
+  });
+  checar("o caminho para os duplicados esta em Integracoes", portaDup.temCartao, portaDup);
+  checar("com o botao Mesmo nome apontando para a tela",
+    portaDup.destino === "Mesmo nome", portaDup);
+  checar("e ja avisando ali que nome igual nao e prova", portaDup.avisa, portaDup);
+
+  // ⚠️ E NÃO está mais no cabeçalho de Produtos: sair de um lugar faz parte de
+  // mudar de lugar — dois caminhos para a mesma tela é o que se quis evitar.
+  await irPara(p, `${WEB}/produtos`);
+  const sobrouEmProdutos = await p.evaluate(() =>
+    !!document.querySelector("a[href='/produtos/duplicados']"));
+  checar("e nao ficou duplicado no cabecalho de Produtos", !sobrouEmProdutos);
+
+  await irPara(p, `${WEB}/produtos/duplicados`);
+  await p.waitForFunction(
+    (nome) => document.body.innerText.includes(nome), { timeout: 20000 },
+    `ABACATE TELA ${mDup}`);
+  const telaDup = await p.evaluate((nome) => {
+    const texto = document.body.innerText;
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").includes(nome));
+    return {
+      // O aviso vem ANTES da lista: quem lê a lista primeiro já começou a clicar.
+      avisaQueNomeNaoEProva: /não é prova/i.test(texto),
+      dizQueNaoTemDesfazer: /não tem desfazer/i.test(texto),
+      linhas: cartao ? cartao.querySelectorAll("tbody tr").length : 0,
+      // Uma linha diz "fica"; as outras, "vira inativo".
+      temFica: (cartao?.innerText ?? "").includes("fica"),
+      botao: [...(cartao?.querySelectorAll("button") ?? [])]
+        .map((b) => b.textContent?.trim() ?? "")
+        .find((t) => t.startsWith("Juntar")) ?? "",
+    };
+  }, `ABACATE TELA ${mDup}`);
+  checar("a tela de duplicados existe e lista o grupo", telaDup.linhas === 3, telaDup);
+  checar("dizendo que nome igual NAO e prova, antes da lista",
+    telaDup.avisaQueNomeNaoEProva && telaDup.dizQueNaoTemDesfazer, telaDup);
+  checar("e marcando qual cadastro fica", telaDup.temFica, telaDup);
+  checar("com o botao dizendo quantos vao junto", /Juntar os 3/.test(telaDup.botao), telaDup);
+  await foto(p, "32c-duplicados");
+
+  // ⚠️ Fusão não tem desfazer, e por isso PERGUNTA antes — e a pergunta é do
+  // sistema, não do navegador.
+  try {
+    await p.evaluate((nome) => {
+      const cartao = [...document.querySelectorAll("section.cartao")]
+        .find((c) => (c.querySelector("h2")?.textContent ?? "").includes(nome));
+      [...(cartao?.querySelectorAll("button") ?? [])]
+        .find((b) => (b.textContent?.trim() ?? "").startsWith("Juntar"))?.click();
+    }, `ABACATE TELA ${mDup}`);
+    await p.waitForSelector('[role="dialog"]', { timeout: 15000 });
+    checar("juntar pergunta antes, no padrao do sistema", true);
+    await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      [...(d?.querySelectorAll("button") ?? [])]
+        .find((b) => b.textContent?.trim() === "Juntar")?.click();
+    });
+    // ⚠️ **Esperar o CARTÃO sumir, não o nome sair da página.** O aviso de
+    // sucesso repete o nome do grupo — e ele para de contar enquanto o foco
+    // está dentro dele, então o nome pode ficar na tela indefinidamente. A
+    // afirmação é sobre a LISTA, e é nela que se mede.
+    await p.waitForFunction(
+      (nome) => ![...document.querySelectorAll("section.cartao")]
+        .some((c) => (c.querySelector("h2")?.textContent ?? "").includes(nome)),
+      { timeout: 25000 }, `ABACATE TELA ${mDup}`);
+    // ⚠️ Só ATIVOS entram na lista: sem isso ela nunca esvaziaria, propondo de
+    // novo o que já foi feito.
+    checar("o grupo sai da lista depois de junto", true);
+    const { dados: ficouDup } = await api("GET", `/produtos/${dups[0]}`, null, token);
+    checar("o principal sobrevive", ficouDup.ativo === true, ficouDup.ativo);
+    // 🔑 A razão de existir: os códigos dos absorvidos passam a cair no principal.
+    // Sem isso a próxima nota que trouxesse o código de um deles não acharia o
+    // sobrevivente, e o duplicado renasceria na importação seguinte.
+    const codigosDup = (ficouDup.codigos_externos ?? []).map((c) => c.codigo);
+    checar("e os codigos dos absorvidos passam a cair nele",
+      codigosDup.includes(`551${mDup}`) && codigosDup.includes(`552${mDup}`), codigosDup);
+  } catch (e) {
+    // ⚠️ **A falha tem de dizer o que a TELA mostrava.** "TimeoutError" sozinho
+    // não distingue as três causas possíveis — o POST não saiu, saiu e voltou
+    // erro, ou voltou 200 e a lista não recarregou —, e sem isso a investigação
+    // vira adivinhação. O `juntar` da página só recarrega no caminho de
+    // SUCESSO: um erro de rede depois de o servidor ter gravado deixa o grupo
+    // na tela, e é esse estado que este dump captura.
+    const diagDup = await p.evaluate(() => ({
+      avisos: [...document.querySelectorAll('[role="status"]')].map((x) => x.innerText),
+      dialogoAberto: !!document.querySelector('[role="dialog"]'),
+      cartoes: [...document.querySelectorAll("section.cartao")]
+        .map((c) => c.querySelector("h2")?.textContent ?? ""),
+    })).catch(() => null);
+    checar("juntar o grupo pela tela", false,
+      String(e).slice(0, 120) + " | " + JSON.stringify(diagDup));
   }
 
   console.log("10x. PDV Legal: a credencial e o que ainda falta");
