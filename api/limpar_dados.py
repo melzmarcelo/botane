@@ -6,6 +6,7 @@
     python limpar_dados.py --usuarios-de-teste   leva junto os usuários smoke./tela.
     python limpar_dados.py --so-o-admin          deixa SÓ o administrador
     python limpar_dados.py --tabelas-de-apoio    zera setores, locais e categorias
+    python limpar_dados.py --residuo-de-teste    recolhe o apoio e os papéis das suítes
     python limpar_dados.py --manter-auditoria    preserva o histórico
 
 **O que sai:** tudo que é operação — produtos, fornecedores, fichas, o razão de
@@ -24,6 +25,7 @@ medida) está na lista dos que ficam, então a base limpa é exatamente a base d
 um primeiro dia — que é o cenário que interessa testar.
 """
 
+import re
 import sys
 
 sys.path.insert(0, ".")
@@ -104,6 +106,143 @@ _SQL_FILIAIS = [
     f"DELETE FROM unidades WHERE id IN ({_FILIAIS})",
 ]
 
+# ---------------------------------------------------------------------------
+# Resíduo de teste no cadastro de apoio
+# ---------------------------------------------------------------------------
+# 🔑 **As suítes criam setor, local, categoria e PAPEL por rodada, e ninguém os
+# recolhia.** Depois de uma limpeza completa a base ficava com 73 setores, 121
+# locais e 28 papéis — dos quais 68, 117 e 22 eram carimbo de rodada. É o mesmo
+# buraco que as filiais de teste tinham, numa tabela diferente: `--filiais-de-
+# teste` nasceu por isso, e parou nas lojas.
+#
+# ⚠️ **Aqui o critério é o NOME, e isso é uma exceção consciente.** Para as
+# filiais o critério é "estar inativa", que é a marca que a própria suíte deixa
+# no `atexit` — não há palpite. Setor e papel não têm marca equivalente: o que
+# as suítes deixam é o carimbo de tempo no fim do nome (`COZINHA D05A`,
+# `So conta 537000`, `TELA CORRIGIDO 692972`). Casar por nome é justamente o
+# tipo de adivinhação que este projeto já removeu uma vez — então ela só é
+# aceitável com as duas guardas abaixo, e nunca sozinha:
+#
+#   1. **nada pode referenciar a linha.** É a guarda de verdade: um setor que
+#      algum produto usa não sai, case o nome ou não. Quem responde não é uma
+#      lista escrita à mão — é o catálogo do Postgres (`_quem_referencia`), que
+#      não envelhece quando alguém cria uma tabela nova.
+#   2. **a lista é IMPRESSA antes**, e `--simular` existe para ser usado. Quem
+#      confirma é gente, como na tela de duplicados.
+#
+# ⚠️ O carimbo de 4 caracteres precisa ter LETRA hexadecimal (`D05A`, `CA0D`):
+# só dígitos em quatro casas é um ano, e "COZINHA 2024" é nome plausível de
+# casa de verdade. De cinco ou seis caracteres o risco desaparece — ninguém
+# chama um setor de "SALA 537000".
+_CARIMBO = re.compile(r" (?:[0-9A-F]{5,6}|(?=[0-9A-F]{4}$)[0-9A-F]*[A-F][0-9A-F]*)$")
+
+# ⚠️ `papeis` entra junto porque é o mesmo tipo de sujeira, ainda que não seja
+# "apoio": a suíte do inventário cria um papel por rodada para provar que quem
+# conta não monta a contagem, e eles poluem o cartão "Papéis" de todo cadastro
+# de usuário.
+RESIDUO = ["setores", "locais_estoque", "categorias", "papeis"]
+
+
+def _quem_referencia(cur, tabela: str) -> list[tuple[str, str]]:
+    """Quem aponta para o `id` desta tabela — perguntado ao Postgres.
+
+    ⚠️ **Nunca uma lista escrita à mão.** Este script já foi pego duas vezes por
+    tabela nova (`produto_unidades`, `cmv_movimentacao`), e uma lista fixa aqui
+    envelheceria do mesmo jeito — só que apagando o que não devia em vez de
+    estourar.
+    """
+    cur.execute(
+        """SELECT filha.relname AS tabela, att.attname AS coluna
+             FROM pg_constraint c
+             JOIN pg_class filha ON filha.oid = c.conrelid
+             JOIN pg_class mae ON mae.oid = c.confrelid
+             JOIN unnest(c.conkey) WITH ORDINALITY k(attnum, ord) ON true
+             JOIN pg_attribute att
+               ON att.attrelid = c.conrelid AND att.attnum = k.attnum
+            WHERE c.contype = 'f' AND mae.relname = %s""",
+        (tabela,),
+    )
+    return [(r["tabela"], r["coluna"]) for r in cur.fetchall()]
+
+
+# ⚠️ **Nem toda filha é uma referência EXTERNA.** `papel_permissoes` é parte do
+# papel — todo papel tem as dela, e tratá-la como "alguém usa isto" fazia a
+# varredura devolver ZERO papéis: cada um estava preso pelas próprias
+# permissões. A lista aqui é de tabelas que PERTENCEM à linha e saem com ela.
+_PROPRIAS = {"papeis": {"papel_permissoes"}}
+
+
+def residuo_de_teste(cur, tabela: str, ignorar: set[str] | None = None,
+                     saindo: dict[str, set[int]] | None = None) -> list[dict]:
+    """As linhas com carimbo de rodada que NINGUÉM referencia.
+
+    As duas condições valem juntas, sempre: o nome levanta o candidato, e a
+    ausência de referência é o que autoriza apagá-lo.
+
+    ⚠️ `ignorar` são as tabelas que vão deixar de existir neste mesmo comando —
+    a operação inteira, que está prestes a ser truncada. Sem isso, a lista
+    impressa para o operador seria menor que a lista realmente apagada (metade
+    dos setores está presa a produtos que vão sumir três linhas adiante), e
+    confirmar uma lista que não é a que vai acontecer é pior do que não mostrar
+    lista nenhuma.
+    """
+    ignorar = (ignorar or set()) | _PROPRIAS.get(tabela, set())
+    saindo = saindo or {}
+    cur.execute(f'SELECT id, nome FROM "{tabela}" ORDER BY id')
+    candidatos = [dict(r) for r in cur.fetchall() if _CARIMBO.search(r["nome"] or "")]
+    if not candidatos:
+        return []
+
+    ligacoes = [(f, c) for f, c in _quem_referencia(cur, tabela) if f not in ignorar]
+    presos: set[int] = set()
+    ids = [c["id"] for c in candidatos]
+    for filha, coluna in ligacoes:
+        # ⚠️ A auto-referência (`categorias.id_pai`) conta: categoria que é mãe
+        # de outra não sai, senão a filha ficaria órfã.
+        # ⚠️ **`saindo` exclui as LINHAS da filha que também vão embora**, e não
+        # a filha inteira: um local de VERDADE apontando para um setor tem de
+        # continuar segurando aquele setor. Ignorar a tabela toda seria rápido e
+        # apagaria cadastro bom.
+        fora = list(saindo.get(filha, set()))
+        cur.execute(
+            f'SELECT DISTINCT "{coluna}" AS id FROM "{filha}" '
+            f'WHERE "{coluna}" = ANY(%s) AND NOT (id = ANY(%s))'
+            if fora else
+            f'SELECT DISTINCT "{coluna}" AS id FROM "{filha}" WHERE "{coluna}" = ANY(%s)',
+            (ids, fora) if fora else (ids,),
+        )
+        presos |= {r["id"] for r in cur.fetchall() if r["id"] is not None}
+    return [c for c in candidatos if c["id"] not in presos]
+
+
+def residuo_completo(cur, ignorar: set[str]) -> dict[str, list[dict]]:
+    """A varredura inteira, repetida até parar de render.
+
+    🔑 **Uma passada só não basta, e a razão é o setor.** Desde a migração 051 o
+    local de estoque aponta para um setor: o setor de rodada fica preso ao local
+    de rodada, que só some na mesma varredura. Uma passada deixaria 45 setores
+    para trás e a próxima limpeza os encontraria — dando a impressão de que a
+    varredura não funciona.
+
+    ⚠️ **Ponto fixo, não uma ordem escrita à mão.** Ordenar as tabelas à mão
+    resolveria hoje e quebraria na primeira chave estrangeira nova, em silêncio.
+    Repetir até nada mais sair não envelhece.
+    """
+    achados: dict[str, list[dict]] = {t: [] for t in RESIDUO}
+    vistos: dict[str, set[int]] = {t: set() for t in RESIDUO}
+    while True:
+        novos = 0
+        for tabela in RESIDUO:
+            for linha in residuo_de_teste(cur, tabela, ignorar, vistos):
+                if linha["id"] in vistos[tabela]:
+                    continue
+                vistos[tabela].add(linha["id"])
+                achados[tabela].append(linha)
+                novos += 1
+        if not novos:
+            return achados
+
+
 PRESERVADAS = [
     "empresa", "unidades", "parametros", "locais_estoque",
     "setores", "categorias", "unidades_medida", "perda_motivos",
@@ -136,6 +275,17 @@ def _sql_usuarios(so_o_admin: bool, contar: bool = False) -> str:
     )
     alvo = "SELECT count(*) AS n" if contar else "DELETE"
     return f"{alvo} FROM usuarios WHERE {filtro}"
+
+
+def _do_residuo(residuo: dict[str, list[dict]]) -> int:
+    """Quantas linhas de apoio a varredura levantou.
+
+    ⚠️ **As duas frases que mais importam do script contavam SÓ a operação.**
+    Numa base já limpa isso dava "Isto apaga 0 registro(s)" com 209 linhas
+    prestes a sair — a pergunta que pede confirmação mostrando o número errado —
+    e, no fim, "Apagados 0 registro(s)" depois de apagar 209.
+    """
+    return sum(len(v) for v in residuo.values())
 
 
 def contar(cur, tabelas: list[str]) -> dict[str, int]:
@@ -175,6 +325,7 @@ def main() -> int:
     so_o_admin = "--so-o-admin" in argumentos
     limpar_apoio = "--tabelas-de-apoio" in argumentos
     limpar_filiais = "--filiais-de-teste" in argumentos
+    limpar_residuo = "--residuo-de-teste" in argumentos
 
     # A trava que importa: este script existe para a base LOCAL de
     # desenvolvimento. Apontado para outro servidor, ele para aqui.
@@ -235,12 +386,36 @@ def main() -> int:
         print(f"\n  + {quantas} loja(s) INATIVA(s) tambem sairao, com os locais,")
         print("    parametros, setores e integracoes que sao so delas")
 
+    # ⚠️ **A lista sai por INTEIRO, nome a nome.** Um total ("68 setores") não
+    # deixa ninguém conferir nada, e é exatamente aqui que um nome de verdade
+    # apanhado pelo carimbo apareceria. É a mesma regra da tela de duplicados: o
+    # que a máquina levantou existe para ser OLHADO antes de virar exclusão.
+    residuo: dict[str, list[dict]] = {}
+    if limpar_residuo:
+        with get_cursor() as cur:
+            # ⚠️ `alvos` entra como "vai deixar de existir": sem isso a lista
+            # impressa seria menor que a apagada — metade dos setores está presa
+            # a produtos que somem três linhas adiante.
+            residuo = residuo_completo(cur, set(alvos))
+        quantos = _do_residuo(residuo)
+        if not quantos:
+            print("  + nenhuma linha de apoio com carimbo de rodada — nada a recolher")
+        else:
+            print(f"  + {quantos} linha(s) de apoio com carimbo de rodada, que")
+            print("    ninguem referencia, tambem sairao:")
+        for tabela, linhas in residuo.items():
+            if not linhas:
+                continue
+            print(f"      {tabela} ({len(linhas)}):")
+            for linha in linhas:
+                print(f"        {linha['id']:>5}  {linha['nome']}")
+
     if simular:
         print("\n(--simular: nada foi apagado)")
         return 0
 
     if not sem_perguntar:
-        print(f"\nIsto apaga {total} registro(s) e NÃO tem desfazer.")
+        print(f"\nIsto apaga {total + _do_residuo(residuo)} registro(s) e NÃO tem desfazer.")
         resposta = input('Digite "limpar" para confirmar: ').strip().lower()
         if resposta != "limpar":
             print("Cancelado — nada foi apagado.")
@@ -281,10 +456,33 @@ def main() -> int:
             for comando in _SQL_FILIAIS:
                 cur.execute(comando)
 
+        if limpar_residuo:
+            # ⚠️ **Recalculado DEPOIS do TRUNCATE, não reaproveitado de cima.**
+            # A lista impressa foi levantada com a operação ainda de pé, quando
+            # produto e movimento ainda prendiam metade das linhas; aplicá-la
+            # agora deixaria para trás justamente o que a limpeza acabou de
+            # soltar. Recalcular só pode CRESCER a lista, e cada linha nova
+            # passou pelas mesmas duas guardas.
+            # A MESMA varredura da lista impressa, agora com a operação já
+            # truncada — o `ignorar` fica vazio porque as tabelas já estão
+            # vazias de verdade. Duas implementações divergiriam, e a divergência
+            # seria exatamente entre o que a pessoa confirmou e o que aconteceu.
+            for tabela, linhas in residuo_completo(cur, set()).items():
+                alvos_residuo = [x["id"] for x in linhas]
+                if not alvos_residuo:
+                    continue
+                if tabela == "papeis":
+                    # `papel_permissoes` não tem CASCADE: sem apagá-la antes, a
+                    # exclusão do papel bate na chave estrangeira.
+                    cur.execute(
+                        "DELETE FROM papel_permissoes WHERE id_papel = ANY(%s)",
+                        (alvos_residuo,))
+                cur.execute(f'DELETE FROM "{tabela}" WHERE id = ANY(%s)', (alvos_residuo,))
+
         depois = contar(cur, alvos)
 
     sobrou = sum(depois.values())
-    print(f"\nApagados {total - sobrou} registro(s).")
+    print(f"\nApagados {total - sobrou + _do_residuo(residuo)} registro(s).")
     print("A base está como uma instalação nova: cadastre os primeiros produtos e comece.")
     print("Entre com o administrador de sempre — usuários e papéis foram preservados.")
     return 0

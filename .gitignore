@@ -34,3 +34,6 @@ web/scripts/_saida-navegador.txt
 # "disco cheio", e parece instabilidade do teste.
 web/scripts/_chrome-perfil/
 web/tsconfig.tsbuildinfo
+
+# Dump da base local antes de uma limpeza — volume, nao codigo, e fica no D:
+.backup/
