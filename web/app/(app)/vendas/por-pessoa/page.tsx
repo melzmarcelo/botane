@@ -7,6 +7,7 @@ import { hoje, primeiroDiaDoMes } from "@/lib/datas";
 import { reais } from "@/lib/cadastros";
 import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import BotaoExportar from "@/components/exportar";
 import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
 import { dataBr } from "../tipos";
 
@@ -101,6 +102,23 @@ export default function PaginaConsumoPorPessoa() {
           O que cada um consumiu no período, quanto custaria e quanto está sendo cobrado.
         </p>
       </header>
+
+      {/* ⚠️ **O arquivo nasce dos MESMOS filtros da tela.** Semear o botão com o
+          que está aqui é o que impede a planilha entregue ao funcionário de
+          discordar do que ele viu — quem conferisse os dois acharia que um dos
+          dois mente. */}
+      <div className="flex flex-wrap gap-2">
+        <BotaoExportar
+          relatorio="consumo-pessoa"
+          rotulo="Baixar"
+          iniciais={{
+            inicio,
+            fim,
+            pessoas: pessoa ? [pessoa.id] : [],
+            detalhe: [detalhe],
+          }}
+        />
+      </div>
 
       <Cartao
         titulo="Período"

@@ -596,6 +596,57 @@
   ⚠️ **O filtro de pessoas do relatório exportável só oferece quem TEM política.** As demais
   nunca trariam linha, e escolhê-las devolveria um arquivo vazio sem dizer por quê.
 
+- 🔑 **O período de consumo: abre, acumula, fecha no pagamento** (migração 057,
+  `services/consumo_periodo.py`, telas `/consumo` e `/meu-consumo`, 04/09/2026).
+  ⚠️ **"Em aberto" é a venda SEM carimbo de período** (`vendas.id_consumo_periodo`), nunca
+  uma conta de datas. Fosse por data, corrigir as datas de um ciclo depois moveria dívida já
+  paga de volta para aberto, e o saldo de quem já acertou mudaria sozinho. O carimbo é um
+  fato do fechamento, e fatos não se recalculam.
+  ⚠️ **O fechamento varre tudo que está em aberto ATÉ a data final**, não só o que cai dentro
+  do início. Deixar de fora um consumo de agosto ainda não pago, enquanto se marca setembro
+  como pago, faria o saldo daquela pessoa ficar errado para sempre — e ninguém olharia para
+  trás. Como surpreende, `previa_do_fechamento` separa o que vem de antes, a tela mostra
+  antes do clique e a resposta repete.
+  ⚠️ **Venda posterior ao fim NÃO entra**: seria cobrar hoje o consumo de amanhã.
+  ⚠️ **Um período aberto por loja, e a garantia é do ÍNDICE ÚNICO parcial** — a checagem em
+  código perde a corrida entre dois cliques, e o efeito seriam dois ciclos disputando o mesmo
+  consumo, cada um fechando metade da dívida. Sobreposição de datas também é recusada: um
+  mesmo dia em dois ciclos cobraria aquele dia duas vezes.
+  ⚠️ **A ordem no fechamento é RECIBO e depois carimbo.** O recibo se calcula sobre o que
+  ainda está em aberto; carimbar antes faria a consulta não achar nada e gravar zero para
+  todo mundo.
+  🔑 **O recibo (`consumo_periodo_pessoas`) é congelado**, não recalculado: o que foi cobrado
+  de cada pessoa naquele dia é um fato, e precisa continuar respondível depois de alguém
+  cancelar ou corrigir uma venda antiga.
+  🔑 **`reabrir` existe porque fechar sem volta seria um beco** — o fechamento reescreve
+  centenas de vendas num clique. ⚠️ Só o ÚLTIMO fechado se reabre: reabrir um antigo
+  devolveria para aberto vendas que os ciclos seguintes já cobraram.
+  🔑 **`DELETE` do período ABERTO existe porque a alternativa era destrutiva.** Sem ele, quem
+  errasse as datas só sairia do ciclo FECHANDO — e fechar carimba todo o consumo como pago.
+  O conserto de um engano de digitação não pode ser cobrar todo mundo. Só o aberto se apaga:
+  nada foi carimbado nele.
+  ⚠️ **O consumo NÃO espera o ciclo existir.** Quem come hoje deve hoje; o ciclo é só o
+  momento em que se cobra. Exigir período aberto para lançar faria a casa parar de registrar
+  consumo enquanto ninguém abrisse um.
+  ⚠️ **Período aberto é um SINGLETON por loja, e isso atrapalha teste.** Uma sonda que deixou
+  um aberto fez a suíte seguinte falhar em cascata no `abrir`. A suíte apaga o que encontrar
+  aberto antes de criar o seu, e apaga o próprio no fim.
+
+- 🔑 **`/consumo/meu` e a tela *Meu consumo* não exigem permissão, só autenticação** — como a
+  Ajuda, e pelo mesmo motivo: ninguém precisa de autorização para ver a própria dívida, e
+  quem tem menos acesso é justamente quem mais precisa da tela. Ela vive no **menu do
+  usuário** (pedido do dono), não no menu lateral.
+  ⚠️ **O escopo vem do vínculo usuário↔pessoa NO SERVIDOR**, nunca de um `id_pessoa` vindo da
+  tela: aceitá-lo deixaria qualquer um ler o consumo de qualquer outro. A suíte cobra isso
+  com uma pessoa vizinha cujo cupom não pode aparecer.
+  ⚠️ **`cmv.painel` NÃO abre as telas de período.** Elas mostram o que cada PESSOA deve —
+  dívida individual, não número de negócio — e `cmv.painel` é a chave mais larga da casa:
+  quem só acompanha o CMV passaria a ver o saldo dos colegas. Ficam com `consumo.periodos` ou
+  `cmv.relatorios`.
+  ⚠️ **Login sem pessoa ligada não é erro**, é o estado da maioria — e a tela diz isso em vez
+  de mostrar zero: "não devo nada" e "não estou ligado a um cadastro" são coisas diferentes,
+  e a segunda se resolve no cadastro de usuários.
+
 ## Armadilhas já pagas
 
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de

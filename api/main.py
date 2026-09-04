@@ -35,6 +35,7 @@ from routers import (
     autenticacao,
     cadastros,
     cmv,
+    consumo,
     email_config,
     empresa,
     estoque,
@@ -44,13 +45,13 @@ from routers import (
     historico,
     inicio,
     inventario,
-    transferencias,
     notas,
     omie,
     papeis,
     pdv,
     producao_agenda,
     produtos,
+    transferencias,
     usuarios,
     vendas,
 )
@@ -227,6 +228,7 @@ app.include_router(fichas.router)
 app.include_router(estoque.router)
 app.include_router(inventario.router)
 app.include_router(transferencias.router)
+app.include_router(consumo.router)
 app.include_router(vendas.router)
 app.include_router(cmv.router)
 app.include_router(notas.router)

@@ -127,6 +127,14 @@ export default function BarraSuperior({
               <Link href="/ajuda" className={item} onClick={() => setAberto(false)}>
                 Ajuda
               </Link>
+              {/* 🔑 **Meu consumo vive aqui pelo mesmo motivo que a Ajuda**
+                  (04/09/2026, pedido do dono: "isto pode estar dentro do menu
+                  do usuario"). É do QUEM está usando, não assunto do sistema —
+                  e, como a Ajuda, não exige permissão nenhuma: ninguém precisa
+                  de autorização para ver a própria dívida. */}
+              <Link href="/meu-consumo" className={item} onClick={() => setAberto(false)}>
+                Meu consumo
+              </Link>
               <Link href="/perfil" className={item} onClick={() => setAberto(false)}>
                 Perfil
               </Link>

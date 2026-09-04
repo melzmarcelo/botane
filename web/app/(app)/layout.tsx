@@ -92,6 +92,14 @@ const MENU: {
       { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
       { href: "/rede", nome: "Visão da rede", chave: "cmv.painel", soComVariasLojas: true },
       { href: "/vendas", nome: "Vendas", chave: "cmv.painel" },
+      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
+      // deve — dívida individual, não número de negócio — e a chave do painel é
+      // a mais larga da casa. Fica com as mesmas do servidor.
+      {
+        href: "/consumo",
+        nome: "Períodos de consumo",
+        chave: ["consumo.periodos", "cmv.relatorios"],
+      },
     ],
   },
   {

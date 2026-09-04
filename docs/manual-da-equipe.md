@@ -737,6 +737,43 @@ por pessoa*), com os mesmos números da tela.
 ⚠️ **Cupom cancelado não entra.** Ele existe para a conferência com o PDV
 fechar, mas não se cobra o que foi cancelado.
 
+### Períodos de consumo: abrir, acumular, fechar no pagamento
+
+Em **CMV → Períodos de consumo**. É o ciclo da cobrança.
+
+1. **Abrir** — escolha de que dia a que dia. Um por loja de cada vez.
+2. O consumo do pessoal vai se acumulando. A tela mostra, a qualquer momento,
+   quanto há em aberto e de quem.
+3. **Fechar**, quando o pagamento acontecer. Isso grava o recibo de cada pessoa
+   e zera o que estava em aberto.
+
+⚠️ **O consumo não espera o período existir.** Quem consome hoje deve hoje;
+abrir o período é só o jeito de organizar a cobrança.
+
+⚠️ **Fechar leva junto o consumo anterior ao início que ainda não foi pago.** É
+proposital: deixá-lo de fora faria o saldo daquela pessoa ficar errado para
+sempre. A tela avisa quantos cupons são, antes de você confirmar.
+
+⚠️ **Consumo com data depois do fim fica para o próximo ciclo.**
+
+**Errou as datas?** Apague o período (só funciona enquanto ele está aberto) e
+abra de novo. Não feche para "corrigir" — fechar cobra todo mundo.
+
+**Fechou por engano?** **Reabrir** desfaz: os cupons voltam para em aberto e o
+recibo é apagado. Só o último fechado se reabre, e só se não houver outro aberto.
+
+### Meu consumo
+
+No **menu do seu nome**, no canto superior direito. Mostra o que você consumiu e
+ainda não pagou, cupom a cupom, com o valor cheio, o desconto e o que há a pagar
+— além dos períodos já fechados.
+
+Não precisa de permissão nenhuma: é a sua conta.
+
+Se aparecer que seu login não está ligado a um cadastro de pessoa, quem cuida
+dos usuários faz essa ligação no cadastro do usuário, no cartão **Quem é esta
+pessoa**.
+
 ### Ligar o login à pessoa
 
 No cadastro do usuário, o cartão **Quem é esta pessoa** liga o login a um

@@ -507,7 +507,11 @@ try {
 
   // Digitar a rota na barra de endereço não abre porta nenhuma: quem barra é a API.
   await p.goto(`${WEB}/usuarios`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 900));
+  // ⚠️ Espera a tela PARAR de carregar, não 900 ms. Numa compilação fria ela
+  // ainda dizia "carregando…" e a checagem acusava a API de deixar passar quem
+  // ela tinha barrado — um defeito de segurança que não existia.
+  await p.waitForFunction(() => !/^\s*carregando/i.test(document.body.innerText),
+    { timeout: 30000, polling: 250 }).catch(() => {});
   const textoBarrado = await p.evaluate(() => document.body.innerText);
   checar("cozinha na rota /usuarios recebe recusa do servidor",
     /Sem permissão/i.test(textoBarrado), textoBarrado.slice(0, 90));
@@ -813,8 +817,16 @@ try {
   // produtos na base — uma conta real —, abrir a lista e esperar ver o que
   // acabou de ser criado é esperar a sorte. Procura-se como se procura.
   await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 600));
-  const campoBuscaProduto = (await p.$$('input[placeholder="nome, código ou código de barras"]'))[0];
+  // ⚠️ **Espera pelo CAMPO, não por um relógio.** Os 600 ms fixos bastavam até
+  // a tela crescer; numa compilação fria do Next a lista ainda dizia
+  // "carregando…" e o seletor voltava `undefined` — o que não FALHAVA a
+  // checagem, derrubava a bateria inteira num TypeError, escondendo tudo que
+  // vinha depois. Falhar é aceitável; abortar a rodada não é.
+  const seletorBuscaProduto = 'input[placeholder="nome, código ou código de barras"]';
+  await p.waitForSelector(seletorBuscaProduto, { timeout: 30000 }).catch(() => {});
+  const campoBuscaProduto = (await p.$$(seletorBuscaProduto))[0];
+  checar("a lista de produtos oferece a busca", !!campoBuscaProduto);
+  if (!campoBuscaProduto) throw new Error("campo de busca de produto nao apareceu");
   await campoBuscaProduto.type(nomeProduto);
   await new Promise((r) => setTimeout(r, 1200));
   const naLista = await esperarTexto(p, nomeProduto);
@@ -2229,6 +2241,61 @@ try {
   checar("e a escolha entre sintetico e analitico",
     /sint[eé]tico/i.test(textoConsumo) && /anal[ií]tico/i.test(textoConsumo),
     textoConsumo.slice(0, 400));
+
+  // 🔑 **O botao de baixar** (04/09/2026, pedido do dono: "tem a opcao de baixar
+  // o arquivo do consumo por pessoa"). ⚠️ Ele so aparece se o CATALOGO do
+  // servidor der a permissao — uma copia da regra escrita na tela deixaria o
+  // botao visivel para quem levaria 403 ao clicar.
+  const temBaixar = await p.evaluate(() =>
+    [...document.querySelectorAll("button")].some(
+      (b) => b.textContent?.trim() === "Baixar"));
+  checar("com o botao de baixar o arquivo", temBaixar);
+
+  // 🔑 **O periodo de consumo** (04/09/2026): abre, acumula e fecha no
+  // pagamento. ⚠️ Este bloco monta o proprio cenario e desfaz no fim — periodo
+  // aberto e um singleton por loja, e um que sobrasse faria a proxima rodada
+  // recusar o `abrir` de qualquer outra suite.
+  await p.goto(`${WEB}/consumo`, { waitUntil: "networkidle2" });
+  await p.waitForFunction(() => /Per[ií]odos de consumo/i.test(document.body.innerText),
+    { timeout: 20000, polling: 300 }).catch(() => {});
+  const textoCiclos = await textoVisivel(p);
+  checar("a tela de periodos de consumo abre",
+    /Per[ií]odos de consumo/i.test(textoCiclos), textoCiclos.slice(0, 140));
+  // 🔑 O numero que a casa quer saber antes de fechar: quanto ha para cobrar.
+  checar("dizendo quanto esta em aberto agora",
+    /Em aberto agora/i.test(textoCiclos), textoCiclos.slice(0, 400));
+  checar("e qual e o ciclo atual", /Ciclo atual/i.test(textoCiclos),
+    textoCiclos.slice(0, 400));
+
+  // ⚠️ **Meu consumo nao exige permissao nenhuma**, como a Ajuda: ninguem
+  // precisa de autorizacao para ver a propria divida. A checagem entra pelo
+  // caminho do MENU DO USUARIO, que e onde o dono pediu que ela vivesse.
+  const noMenuDoUsuario = await p.evaluate(() => {
+    // ⚠️ O gatilho se acha por `aria-haspopup`, nao por `aria-controls` — que
+    // nao existe nesta barra. Conferido no componente antes de escrever.
+    const botao = document.querySelector('button[aria-haspopup="menu"]');
+    (botao instanceof HTMLElement) && botao.click();
+    return new Promise((r) => setTimeout(() => {
+      const links = [...document.querySelectorAll('#menu-usuario a')];
+      r(links.some((a) => a.textContent?.includes("Meu consumo")));
+    }, 400));
+  });
+  checar("Meu consumo esta no menu do usuario", noMenuDoUsuario);
+
+  await p.goto(`${WEB}/meu-consumo`, { waitUntil: "networkidle2" });
+  await p.waitForFunction(() => /Meu consumo/i.test(document.body.innerText),
+    { timeout: 20000, polling: 300 }).catch(() => {});
+  const textoMeu = await textoVisivel(p);
+  checar("a tela Meu consumo abre", /Meu consumo/i.test(textoMeu),
+    textoMeu.slice(0, 140));
+  // ⚠️ **"Nao devo nada" e "nao estou ligado a um cadastro" sao coisas
+  // diferentes**, e mostrar zero nos dois casos esconderia a segunda — que se
+  // resolve no cadastro de usuarios, nao nesta tela. Uma das duas frases tem de
+  // estar la; qual delas depende de o admin ter pessoa ligada.
+  checar("dizendo o saldo ou que o login nao tem pessoa ligada",
+    /Em aberto/i.test(textoMeu) || /ligado a um cadastro/i.test(textoMeu),
+    textoMeu.slice(0, 400));
+
 
   // A venda inteira numa página só: itens, custo congelado e o que saiu do
   // estoque. Antes a lista mostrava data, origem e total — e mais nada.
