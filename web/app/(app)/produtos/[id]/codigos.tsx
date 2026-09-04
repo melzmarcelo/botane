@@ -77,7 +77,15 @@ export default function CodigosDoProduto({
         fator: valor,
       });
       aviso.sucesso(r.message);
-      setRascunho({ ...rascunho, [k]: "" });
+      // ⚠️ **APAGAR a chave, não pôr string vazia.** O campo lê
+      // `rascunho[k] ?? String(atual)`, e `""` NÃO é `undefined`: o `??` não
+      // caía no valor do servidor e o campo ficava em branco depois de gravar,
+      // até alguém recarregar a página. O número estava salvo — só não aparecia.
+      setRascunho((r0) => {
+        const resto = { ...r0 };
+        delete resto[k];
+        return resto;
+      });
       aoMudar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar a conversão");
@@ -160,9 +168,12 @@ export default function CodigosDoProduto({
                       <button
                         type="button"
                         className="btn btn-secundario"
-                        disabled={salvando === k || (rascunho[k] ?? String(atual)) === String(atual)
-                          ? salvando === k
-                          : false}
+                        // ⚠️ **Só desabilita enquanto grava.** Gravar sem mudar
+                        // o número é ação legítima: confirmar o 1 que está ali
+                        // é uma AFIRMAÇÃO, e é ela que faz a cascata passar a
+                        // respeitar o valor. Desabilitar "sem mudança" tiraria
+                        // justamente o caso do pacote de 1 kg.
+                        disabled={salvando === k}
                         onClick={() => void gravar(c)}
                       >
                         {salvando === k ? "…" : "Gravar"}

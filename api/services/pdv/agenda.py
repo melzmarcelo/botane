@@ -178,7 +178,9 @@ def rodar_pendentes() -> list[dict]:
         if not regra.peguei_o_lock(cur, LOCK_AGENDA_PDV):
             return feitos
 
-        agora = datetime.now().astimezone()
+        # ⚠️ A hora da CASA, nunca a do contêiner: no App Platform ele roda
+        # em UTC, e "buscar às 20h" disparava às 17h de Brasília.
+        agora = regra.agora_da_casa()
         for linha in regra.pendentes(cur, SERVICO, agora):
             feitos.append(rodar_uma(cur, linha))
     return feitos

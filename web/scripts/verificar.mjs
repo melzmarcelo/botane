@@ -2700,6 +2700,11 @@ try {
   await foto(p, "37b-custo-do-produto");
   await p.keyboard.press("Escape");
 
+  // 🔑 **A conversao do codigo de fora** (o ACUCAR DE CONFEITEIRO): o fornecedor
+  // manda o pacote de 1 kg e o de 500 g como produtos DIFERENTES, e aqui os dois
+  // sao o mesmo. Depois da fusao, a nota do de 500 g entrava como 1 kg por
+  // unidade — o estoque dobrava calado.
+  // ⚠️ Este produto foi fundido no bloco do Vincular, entao tem apelido.
   // ⚠️ Tirar só com a prateleira VAZIA — quem recusa é o servidor. Aqui ela
   // está vazia, então sai.
   await p.evaluate((nome) => {
@@ -2733,6 +2738,73 @@ try {
     removedores);
 
   await api("DELETE", `/locais/${localB.id}`, null, token);
+
+  // ⚠️ **Este bloco NAVEGA para outro produto, entao vem DEPOIS das checagens
+  // de prateleira.** Posto antes, ele levava a tela embora e as tres checagens
+  // seguintes mediam a pagina errada — a falha apareceu como "tirar a
+  // prateleira vazia nao sumiu", num comportamento que funciona.
+  // ⚠️ **O cenario e MONTADO aqui, e nao aproveitado de outro bloco.** A primeira
+  // versao dependia de o produto da vez ter codigo de fora — nao tinha, o `if`
+  // pulava tudo em silencio e a rodada fechava com a MESMA contagem de antes.
+  // Checagem que nao roda e pior que checagem que falha: ela diz verde.
+  const mCod = Date.now().toString().slice(-6);
+  const { dados: acu1 } = await api("POST", "/produtos", {
+    codigo: `TACU1-${mCod}`, nome: `ACUCAR TELA 1KG ${mCod}`, tipo: "INSUMO",
+    um_estoque: "KG", controla_estoque: true, status: "ATIVO", codigo_omie: `TA1${mCod}`,
+  }, token);
+  const { dados: acu5 } = await api("POST", "/produtos", {
+    codigo: `TACU5-${mCod}`, nome: `ACUCAR TELA 500G ${mCod}`, tipo: "INSUMO",
+    um_estoque: "KG", controla_estoque: true, status: "ATIVO", codigo_omie: `TA5${mCod}`,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${acu1.id}`, null, token));
+  aoTerminar.push(() => api("DELETE", `/produtos/${acu5.id}`, null, token));
+  // A fusao e o que cria o apelido — e e o apelido que recebe a conversao.
+  await api("POST", `/produtos/${acu1.id}/vincular`, { id_sai: acu5.id }, token);
+
+  await irPara(p, `${WEB}/produtos/${acu1.id}`);
+  await p.waitForFunction(() => /Códigos de fora/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  const temCartaoCodigos = await p.evaluate(() =>
+    [...document.querySelectorAll("section.cartao")]
+      .some((c) => /Códigos de fora/i.test(c.querySelector("h2")?.textContent ?? "")));
+  checar("o produto fundido mostra o cartao de codigos de fora", temCartaoCodigos);
+  if (temCartaoCodigos) {
+    const campoConv = await p.evaluate(() => {
+      const i = document.querySelector('input[aria-label^="conversão de"]');
+      return i ? { rotulo: i.getAttribute("aria-label"), valor: i.value } : null;
+    });
+    checar("o cartao de codigos de fora oferece a conversao", !!campoConv, campoConv);
+    if (campoConv) {
+      // ⚠️ **O valor tem de FICAR na tela depois de gravar.** Ele sumia: o campo
+      // lia `rascunho ?? valor do servidor` e o gravar limpava o rascunho com
+      // string VAZIA — que nao e `undefined`, entao o `??` nao caia no valor de
+      // volta. O numero estava salvo o tempo todo e so nao aparecia, e por isso
+      // recarregar "resolvia" — que e o que faz esse tipo de defeito passar
+      // despercebido.
+      await p.evaluate(() => {
+        const c = document.querySelector('input[aria-label^="conversão de"]');
+        const s2 = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, "value").set;
+        s2.call(c, "0.5");
+        c.dispatchEvent(new Event("input", { bubbles: true }));
+        [...c.closest("tr").querySelectorAll("button")]
+          .find((b) => /Gravar/i.test(b.textContent ?? ""))?.click();
+      });
+      await new Promise((r) => setTimeout(r, 2500));
+      const depoisDeGravar = await p.evaluate(() => {
+        const c = document.querySelector('input[aria-label^="conversão de"]');
+        return { valor: c?.value, naoInformada: /não informada/i.test(c?.closest("tr")?.innerText ?? "") };
+      });
+      checar("e o valor gravado CONTINUA na tela, sem recarregar",
+        Number(String(depoisDeGravar.valor).replace(",", ".")) === 0.5, depoisDeGravar);
+      // A etiqueta "nao informada" separa o 1 automatico do 1 digitado; gravada
+      // a conversao, ela tem de sair.
+      checar("e a etiqueta de nao informada sai", !depoisDeGravar.naoInformada,
+        depoisDeGravar);
+      await foto(p, "37c-conversao-do-codigo");
+    }
+  }
+
 
   console.log("7a. combo: uma linha do PDV que vale por dois produtos");
   const marcaKit = String(Date.now()).slice(-6);

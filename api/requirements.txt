@@ -19,3 +19,9 @@ Pillow==12.2.0
 httpx==0.28.1
 cryptography==45.0.7
 reportlab==5.0.1
+# ⚠️ **O banco de fusos, e ele NÃO vem no contêiner.** `zoneinfo` lê a base do
+# sistema operacional, e a imagem enxuta do deploy não a traz: sem este pacote,
+# `ZoneInfo("America/Sao_Paulo")` levanta `ZoneInfoNotFoundError` — em produção,
+# no start, falando de um fuso que ninguém tocou. Em Windows ele é obrigatório
+# sempre, porque lá essa base nunca existe.
+tzdata==2025.2

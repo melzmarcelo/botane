@@ -37,3 +37,8 @@ web/tsconfig.tsbuildinfo
 
 # Dump da base local antes de uma limpeza — volume, nao codigo, e fica no D:
 .backup/
+
+# Saida das rodadas de bateria — registro do dia, nao codigo
+web/_v*.log
+api/_todos.log
+api/_api.log

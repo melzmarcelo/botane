@@ -35,6 +35,19 @@ MAX_TENTATIVAS_LOGIN = int(os.getenv("MAX_TENTATIVAS_LOGIN", "5"))
 BLOQUEIO_MINUTOS = int(os.getenv("BLOQUEIO_MINUTOS", "15"))
 
 # --- servidor ---
+# 🔑 **O fuso da CASA, e não o do contêiner** (04/09/2026). O agendador
+# perguntava a hora ao sistema operacional (`datetime.now().astimezone()`), e no
+# App Platform o contêiner roda em **UTC**: quem configurava "buscar às 20h"
+# tinha a busca disparada às 20h UTC, que são 17h em Brasília — e nunca achava
+# registro no horário que escolheu.
+#
+# ⚠️ **É invisível em desenvolvimento**, porque a máquina de casa está no mesmo
+# fuso que o sistema presumia. Nenhuma suíte pegaria: todas rodam local.
+#
+# ⚠️ O banco já resolvia isso do lado dele (`database.py` abre a sessão em
+# America/Sao_Paulo); faltava o processo Python fazer o mesmo.
+FUSO_DA_CASA = os.getenv("FUSO_DA_CASA", "America/Sao_Paulo")
+
 PORT = int(os.getenv("PORT", "9200"))
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 CORS_ORIGINS = [

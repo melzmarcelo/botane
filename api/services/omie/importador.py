@@ -278,7 +278,11 @@ def calcular_nota(cur, id_nota: int) -> dict:
             cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (item["id_produto"],))
             um_estoque = cur.fetchone()["um_estoque"]
             fator = _fator_do_item(cur, item["id_produto"], nota["id_fornecedor"],
-                                   item["codigo_fornecedor"], item["um_nota"])
+                                   item["codigo_fornecedor"], item["um_nota"],
+                                   # 🔑 Sem este argumento o degrau da conversão
+                                   # ditada na tela nunca é consultado, e o
+                                   # pacote de 500 g fundido entra como 1 kg.
+                                   item.get("codigo_omie"))
             # A quantidade da nota vira quantidade de estoque por um de dois
             # caminhos, e a ORDEM importa: CX e UN são as duas "unidade" com
             # fator 1, então a conversão de grandeza diria que 4 CX = 4 UN e

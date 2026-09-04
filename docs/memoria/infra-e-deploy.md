@@ -72,3 +72,30 @@
   alternadamente e metade dos pedidos volta do código velho (endpoint novo dando 404 no meio
   de um teste que já tinha passado). Ao reiniciar a API na mão, conferir se sobrou
   `multiprocessing-fork` órfão: `Get-CimInstance Win32_Process -Filter "Name='python.exe'"`.
+
+- 🔑 **O agendador dispara na hora da CASA, não na do contêiner** (`FUSO_DA_CASA`,
+  `agenda_integracao.agora_da_casa`, 04/09/2026, relato do dono). Ele configurou a busca para as
+  20h em produção e **nunca havia registro daquela execução**. A suspeita era que a busca manual
+  consumisse a cota do dia — não consumia: `regra.marcar`, único lugar que move
+  `agenda_rodou_em`, tem exatamente dois chamadores, os dois agendadores.
+  ⚠️ **A causa era o FUSO.** O agendador perguntava a hora ao sistema operacional
+  (`datetime.now().astimezone()`), e o App Platform roda o contêiner em **UTC**: "20h" era
+  avaliado contra 20h UTC, que são **17h em Brasília**. A busca não deixava de rodar — rodava
+  três horas antes, e por isso nunca havia registro no horário escolhido.
+  🔑 **É invisível em desenvolvimento**, porque a máquina de casa está no mesmo fuso que o
+  código presumia. **Nenhuma suíte pegaria rodando normal** — todas rodam local. Por isso o
+  `smoke_agenda_fuso.py` força o que só acontece no ar: um `agora` em UTC, e prova que o mesmo
+  instante lido nos dois fusos dá respostas opostas.
+  ⚠️ **O segundo efeito era pior porque é intermitente**: `agenda_rodou_em` volta do banco com o
+  fuso da sessão (São Paulo) e o `agora` estava em UTC. Entre 21h e a meia-noite as datas
+  divergem, e o `.date() >= .date()` fazia o agendador ora pular um dia, ora rodar duas vezes.
+  Agora as duas datas são comparadas no mesmo fuso.
+  ⚠️ **`tzdata` entrou no `requirements.txt` por causa disto.** `zoneinfo` lê a base do sistema
+  operacional, e a imagem enxuta do deploy não a traz: sem o pacote, o próprio conserto
+  levantaria `ZoneInfoNotFoundError` no start, em produção, falando de um fuso que ninguém
+  tocou. Há queda para `-03:00` fixo **com aviso no log** — o Brasil não tem horário de verão
+  desde 2019, então acerta hoje, e o aviso é o que impede a descoberta pelo relatório errado se
+  ele voltar.
+  ⚠️ **Se `agenda_rodou_em` estiver NULO**, não é o fuso: é `agenda_frequencia` ainda em
+  `MANUAL`, a integração inativa, ou o processo não ficando de pé — o laço vive no `lifespan` e
+  morre com o contêiner.
