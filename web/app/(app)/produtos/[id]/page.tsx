@@ -120,7 +120,7 @@ export default function FormularioProduto() {
       api.get<Categoria[]>("/categorias"),
       api.get<Setor[]>("/setores"),
       api.get<UnidadeMedida[]>("/unidades-medida"),
-      api.get<Fornecedor[]>("/fornecedores"),
+      api.get<Fornecedor[]>("/fornecedores?so_fornecedores=true"),
       api.get<Local[]>("/locais"),
     ])
       .then(([c, s, u, fo, lo]) => {

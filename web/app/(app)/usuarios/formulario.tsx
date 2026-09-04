@@ -7,6 +7,8 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
 import { SENHA_MINIMA, dicaSenha } from "@/lib/senha";
 import { useSessao } from "@/lib/sessao";
+import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
+import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
 
 /**
  * O cadastro do usuário — a mesma forma para criar e para corrigir.
@@ -27,6 +29,8 @@ import { useSessao } from "@/lib/sessao";
  * venda, inventário e remessa virou enfeite. O bloco só aparece com mais de uma
  * loja: numa casa só, perguntar seria atrito sem ganho.
  */
+
+const PESSOAS = fontePessoas();
 
 export type Papel = { id: number; nome: string; descricao: string | null; sistema: boolean };
 export type Vinculo = {
@@ -53,11 +57,22 @@ type Form = {
    * a intenção declarada.
    */
   setores: number[] | null;
+  /**
+   * Quem esta pessoa é — o cadastro, separado da credencial.
+   *
+   * 🔑 Duas portas, nunca as duas: vincular uma que existe, ou criar uma aqui
+   * com nome e e-mail. O servidor recusa as duas juntas, porque não haveria como
+   * saber qual vale.
+   */
+  id_pessoa: number | null;
+  /** Só para a tela: o nome da pessoa já vinculada, para a busca abrir com ela. */
+  pessoa_rotulo: string | null;
+  pessoa_nova: { nome: string; email: string } | null;
 };
 
 export const VAZIO: Form = {
   nome: "", email: "", telefone: "", senha: "", papeis: [], unidades: null,
-  setores: null,
+  setores: null, id_pessoa: null, pessoa_rotulo: null, pessoa_nova: null,
 };
 
 /**
@@ -107,6 +122,11 @@ export default function FormularioUsuario({
   const [form, setForm] = useState<Form>(inicial);
   const [papeis, setPapeis] = useState<Papel[] | null>(null);
   const [salvando, setSalvando] = useState(false);
+  // "Vincular uma existente" está escolhido, mesmo antes de a pessoa ser
+  // achada — senão o rádio saltaria de volta para "sem vínculo" a cada clique.
+  // ⚠️ **Abre JÁ vinculando quando o usuário tem pessoa**, senão editar alguém
+  // vinculado mostraria "sem vínculo" e salvar o desvincularia sem ninguém pedir.
+  const [vinculando, setVinculando] = useState(!!inicial.id_pessoa);
 
   // 🔑 **As lojas oferecidas são as de QUEM ESTÁ CADASTRANDO**, e vêm da sessão
   // — não de uma chamada a `/unidades`, que exigiria `admin.unidades` de quem
@@ -121,6 +141,17 @@ export default function FormularioUsuario({
   // oferecer o que vai levar 403 seria ensinar o erro. Vêm do `/auth/me`, que
   // toda tela já carrega — e com `todos_setores` a lista chega inteira.
   const setores = eu?.setores ?? [];
+
+  // 🔑 **A pessoa se ESCOLHE pela janela de pesquisa**, a mesma do produto
+  // (04/09/2026, relato do dono: com combobox fica ruim a visualização). Uma
+  // lista de 800 nomes num `<select>` não se percorre.
+  // ⚠️ Guardado como {id, rotulo} porque a janela devolve isso, e o rótulo é o
+  // que fica na tela depois de escolher.
+  const [pessoaEscolhida, setPessoaEscolhida] = useState<{ id: number; rotulo: string } | null>(
+    inicial.id_pessoa
+      ? { id: inicial.id_pessoa, rotulo: inicial.pessoa_rotulo ?? `pessoa ${inicial.id_pessoa}` }
+      : null,
+  );
 
   const carregar = useCallback(async () => {
     try {
@@ -169,6 +200,11 @@ export default function FormularioUsuario({
           // ⚠️ Nulo vira lista VAZIA na API: lá, vazio é "todos" e nulo é "não
           // mexi". A tela sempre mexe, então sempre declara.
           setores: form.setores ?? [],
+          // ⚠️ `0` DESVINCULA: nulo já quer dizer "não mexi" no PUT, e sem um
+          // valor para "tire o vínculo" não haveria como desfazer, só trocar.
+          ...(form.pessoa_nova
+            ? { pessoa_nova: form.pessoa_nova }
+            : { id_pessoa: form.id_pessoa ?? 0 }),
         };
         // ⚠️ Senha em branco MANTÉM a que está: exigir redigitá-la para mudar um
         // papel é o caminho mais curto para alguém escolher uma senha fraca.
@@ -183,6 +219,11 @@ export default function FormularioUsuario({
           senha: form.senha,
           papeis: vinculos,
           setores: form.setores ?? [],
+          ...(form.pessoa_nova
+            ? { pessoa_nova: form.pessoa_nova }
+            : form.id_pessoa
+              ? { id_pessoa: form.id_pessoa }
+              : {}),
         });
         aviso.sucesso("Usuário criado. A senha precisa ser trocada no primeiro acesso.");
       }
@@ -437,6 +478,114 @@ export default function FormularioUsuario({
           </div>
         </Cartao>
       )}
+
+      {/* 🔑 **Quem esta pessoa É** (04/09/2026, pedido do dono). O usuário é a
+          credencial; a pessoa é o cadastro. Sem o vínculo, o funcionário que
+          compra com desconto e o usuário que abre o sistema são dois registros
+          que ninguém liga. */}
+      <Cartao
+        titulo="Quem é esta pessoa"
+        descricao="Liga o login a um cadastro de Pessoas — é ele que carrega a política de cupom."
+      >
+        <div className="flex flex-col gap-3">
+          <label className="flex items-start gap-2">
+            <input
+              type="radio"
+              className="mt-1 h-4 w-4 accent-erva"
+              checked={!form.pessoa_nova && !form.id_pessoa && !vinculando}
+              onChange={() => {
+                setVinculando(false);
+                setPessoaEscolhida(null);
+                setForm({ ...form, id_pessoa: null, pessoa_nova: null });
+              }}
+            />
+            <span>
+              <span className="text-[14.5px] font-semibold">Sem vínculo</span>
+              <span className="block text-[12.5px] leading-snug text-suave">
+                É o caso comum: quem só usa o sistema não precisa de cadastro de pessoa.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2">
+            <input
+              type="radio"
+              className="mt-1 h-4 w-4 accent-erva"
+              checked={vinculando}
+              onChange={() => {
+                setVinculando(true);
+                setForm({ ...form, pessoa_nova: null });
+              }}
+            />
+            <span className="text-[14.5px] font-semibold">Vincular uma pessoa que já existe</span>
+          </label>
+          {vinculando && (
+            <div className="ml-6 max-w-[420px]">
+              <BuscaCadastro
+                fonte={PESSOAS}
+                selecionado={pessoaEscolhida}
+                aoEscolher={(item: ItemBusca | null) => {
+                  setPessoaEscolhida(item ? { id: item.id, rotulo: rotuloDe(item) } : null);
+                  setForm({ ...form, pessoa_nova: null, id_pessoa: item ? item.id : null });
+                }}
+              />
+            </div>
+          )}
+
+          <label className="flex items-start gap-2">
+            <input
+              type="radio"
+              className="mt-1 h-4 w-4 accent-erva"
+              checked={!!form.pessoa_nova}
+              onChange={() => {
+                setVinculando(false);
+                setPessoaEscolhida(null);
+                setForm({
+                  ...form,
+                  id_pessoa: null,
+                  // ⚠️ Nasce com o nome e o e-mail do usuário: é quase sempre a
+                  // mesma pessoa, e redigitá-los seria pedir duas vezes o que
+                  // acabou de ser dito.
+                  pessoa_nova: { nome: form.nome, email: form.email },
+                });
+              }}
+            />
+            <span>
+              <span className="text-[14.5px] font-semibold">Criar uma pessoa agora</span>
+              <span className="block text-[12.5px] leading-snug text-suave">
+                Só nome e e-mail. Ela nasce <b>sem</b> a marca de fornecedor — o resto se
+                completa em Pessoas.
+              </span>
+            </span>
+          </label>
+          {form.pessoa_nova && (
+            <div className="ml-6 grid gap-4 sm:grid-cols-2">
+              <Campo rotulo="Nome da pessoa">
+                <input
+                  className="campo"
+                  value={form.pessoa_nova.nome}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      pessoa_nova: { ...form.pessoa_nova!, nome: e.target.value },
+                    })}
+                />
+              </Campo>
+              <Campo rotulo="E-mail da pessoa">
+                <input
+                  className="campo"
+                  value={form.pessoa_nova.email}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      pessoa_nova: { ...form.pessoa_nova!, email: e.target.value },
+                    })}
+                />
+              </Campo>
+            </div>
+          )}
+        </div>
+      </Cartao>
 
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-primario" type="submit" disabled={salvando}>

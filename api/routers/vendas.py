@@ -7,6 +7,7 @@ uma receita em abril.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -71,6 +72,57 @@ def listar(
         )
 
 
+def _politica_da_pessoa(cur, id_pessoa: int | None) -> dict | None:
+    """A política de cupom da pessoa — ou nada, que é o caso comum.
+
+    ⚠️ Política que não muda nada devolve nada: base VENDA sem desconto é
+    exatamente o comportamento padrão, e devolvê-la faria a resposta anunciar um
+    ajuste que não houve.
+    """
+    if not id_pessoa:
+        return None
+    cur.execute(
+        """SELECT id, nome, cupom_base, cupom_desconto_pct FROM fornecedores
+            WHERE id = %s AND ativo""",
+        (id_pessoa,),
+    )
+    p = cur.fetchone()
+    if not p:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada ou inativa.")
+    if p["cupom_base"] == "VENDA" and not float(p["cupom_desconto_pct"] or 0):
+        return None
+    return dict(p)
+
+
+def _aplicar_politica(cur, id_unidade: int, venda, politica: dict, cache: dict) -> None:
+    """Reescreve o valor unitário dos itens conforme a política — antes de gravar.
+
+    ⚠️ **Pelo CUSTO usa `custo_teorico_do_produto`**, a mesma cascata da ficha e
+    do CMV. Uma segunda conta aqui faria a venda ao funcionário discordar do
+    custo que o próprio sistema atribui ao prato.
+
+    ⚠️ **Item sem produto ou sem custo conhecido fica como está.** Zerá-lo faria
+    a venda sair de graça, e o CMV contaria receita zero contra custo real — o
+    oposto do que a política quer dizer.
+    """
+    desconto = Decimal(str(politica["cupom_desconto_pct"] or 0)) / Decimal(100)
+    for item in venda.itens:
+        if politica["cupom_base"] == "CUSTO":
+            if not item.id_produto:
+                continue
+            if item.id_produto not in cache:
+                cache[item.id_produto] = motor.custo_teorico_do_produto(
+                    cur, item.id_produto, id_unidade=id_unidade)
+            custo, _origem = cache[item.id_produto]
+            if custo is None:
+                continue
+            item.valor_unitario = float(custo)
+        if desconto:
+            item.valor_unitario = float(
+                (Decimal(str(item.valor_unitario)) * (Decimal(1) - desconto))
+                .quantize(Decimal("0.01")))
+
+
 @router.post("/importar", status_code=201)
 def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> dict:
     """Importa um lote. Documento repetido é ignorado — reimportar não duplica."""
@@ -81,6 +133,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     # Cupons que entraram MARCADOS como cancelados: contam para a conferência
     # com o PDV e para nada mais.
     canceladas = 0
+    # O que a política da pessoa fez em cada venda, em português, para a tela.
+    politicas_aplicadas: list[str] = []
     # Itens cujo custo saiu de uma ficha ainda em RASCUNHO.
     de_rascunho = 0
     produzidos_na_hora, baixados = 0, 0
@@ -100,6 +154,29 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     repetidas += 1
                     continue
 
+            # 🔑 **A política de cupom da PESSOA** (04/09/2026, pedido do dono).
+            # A venda à mão sempre puxa o preço de venda; informando a pessoa,
+            # o item passa a valer o CUSTO, ou o preço com desconto. É o
+            # desconto de funcionário e o consumo do proprietário com a mesma
+            # mecânica — o que muda é a política no cadastro dela.
+            #
+            # ⚠️ **A conta acontece AQUI, no servidor.** Se a regra vivesse na
+            # tela, uma venda lançada por outro caminho sairia com outro número
+            # — e o custo congelado no item ficaria errado para sempre.
+            politica = _politica_da_pessoa(cur, venda.id_pessoa)
+            if politica:
+                _aplicar_politica(cur, id_unidade, venda, politica, custos_cache)
+                # 🔑 **A tela precisa DIZER o que aconteceu** (pedido do dono:
+                # "apresente uma mensagem", "demonstrando isto"). Um cupom que
+                # sai por outro valor sem explicar por quê é indistinguível de
+                # erro de digitação.
+                politicas_aplicadas.append(
+                    f"{politica['nome']}: "
+                    + ("lançado pelo CUSTO" if politica["cupom_base"] == "CUSTO"
+                       else "pelo preço de venda")
+                    + (f", com {float(politica['cupom_desconto_pct']):g}% de desconto"
+                       if float(politica["cupom_desconto_pct"] or 0) else ""))
+
             bruto = sum(i.quantidade * i.valor_unitario for i in venda.itens)
             # ⚠️ **`valor_total` guarda o LÍQUIDO**, que é o que a casa recebeu e
             # o que o PDV informa no cupom. O bruto continua reconstituível pela
@@ -108,11 +185,12 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
             total = bruto - (venda.desconto or 0)
             cur.execute(
                 """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
-                                       valor_total, desconto, cancelada, id_usuario)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                       valor_total, desconto, cancelada, id_pessoa,
+                                       id_usuario)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                 (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
                  venda.documento, total, venda.desconto or 0, venda.cancelada,
-                 ctx.id_usuario),
+                 venda.id_pessoa, ctx.id_usuario),
             )
             id_venda = cur.fetchone()["id"]
             if venda.cancelada:
@@ -214,6 +292,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     return {
         "importadas": importadas,
         "canceladas": canceladas,
+        "politicas": politicas_aplicadas,
         "repetidas": repetidas,
         "itens": itens_total,
         "itens_sem_vinculo": sem_vinculo,
@@ -228,7 +307,11 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         # ⚠️ Só quando ACONTECEU: "0 item com ficha em rascunho" em toda
         # importação é ruído, e ruído esconde o dia em que o número não é zero.
         + (f" — {de_rascunho} item(ns) custeado(s) por ficha em RASCUNHO"
-           if de_rascunho else ""),
+           if de_rascunho else "")
+        # 🔑 A política entra na FRASE, e não só num campo: quem lança precisa
+        # ver por que o cupom saiu por outro valor, na mesma linha em que soube
+        # que ele foi gravado.
+        + (" · " + "; ".join(politicas_aplicadas) if politicas_aplicadas else ""),
     }
 
 

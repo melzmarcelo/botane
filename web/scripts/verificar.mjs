@@ -2008,7 +2008,48 @@ try {
   // a primeira dobra e as vendas — o assunto da página — começavam abaixo do
   // campo de colar texto; com 1.375 vendas num mês isso é a tela errada.
   await p.goto(`${WEB}/vendas/lancar`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1200));
+  await p.waitForFunction(() => /Para quem/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+
+  // 🔑 **O preço vem junto do produto** (04/09/2026, relato do dono: escolhi o
+  // produto e o valor não veio). Ele ja viajava na lista e ninguem o usava —
+  // quem lancava relia o preco na tela do produto e digitava de novo.
+  const { dados: comPreco } = await api("POST", "/produtos", {
+    nome: `Prato preco tela ${m6}`, tipo: "REVENDA", um_estoque: "UN",
+    preco_venda: 37.5,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${comPreco.id}`, null, token));
+  await p.reload({ waitUntil: "networkidle2" });
+  await p.waitForFunction(() => /Para quem/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  // ⚠️ **O BuscaCadastro se dirige DIGITANDO e apertando Tab** — nao por botao.
+  // Minha primeira versao procurava um botao "Buscar/Escolher" que nao existe, e
+  // a checagem falhou acusando a tela de nao carregar o preco. Sondei a tela
+  // isolada para descobrir: e o mesmo padrao que a ficha ja usa desde sempre.
+  const buscaItemVenda = await p.$('input[aria-label^="Buscar produto"]');
+  checar("o item da venda se escolhe por busca", !!buscaItemVenda);
+  if (buscaItemVenda) {
+    await buscaItemVenda.type(`Prato preco tela ${m6}`);
+    await p.keyboard.press("Tab");
+    await new Promise((r) => setTimeout(r, 1600));
+  }
+  const valorCarregado = await p.evaluate(() => {
+    const nums = [...document.querySelectorAll('input[type="number"]')]
+      .map((c) => c.value).filter(Boolean);
+    return nums;
+  });
+  checar("escolher o produto carrega o preco de venda sozinho",
+    valorCarregado.some((v) => Math.abs(Number(v) - 37.5) < 0.01), valorCarregado);
+
+  // 🔑 **A pessoa se escolhe pela JANELA, nao por combobox** (mesmo relato).
+  // Uma lista de 800 nomes num select nao se percorre, e a politica de cupom —
+  // que e o motivo de escolher a pessoa — some.
+  const semCombo = await p.evaluate(() =>
+    !document.querySelector('select[aria-label="Pessoa do cupom"]'));
+  checar("a pessoa NAO e mais um combobox", semCombo, semCombo);
+
+  await p.reload({ waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1500));
   const doc6 = `TELA-${m6}`;
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")]
@@ -4495,16 +4536,27 @@ try {
   const listaForn = await textoVisivel(p);
   // ⚠️ A lista nao pode mais ter o formulario dentro: se "Razao social" aparecer
   // aqui, o cartao voltou para a direita.
-  checar("a lista de fornecedores nao tem mais o formulario",
+  checar("a lista de pessoas nao tem mais o formulario",
     !/Raz[ãa]o social/i.test(listaForn), listaForn.slice(0, 160));
+  // ⚠️ **"Nova pessoa", nao "Novo fornecedor"** (04/09/2026): a tela passou a
+  // guardar quem nao vende nada para a casa, e o rotulo seguiu. A ROTA continua
+  // `/fornecedores`, de proposito — mudar a URL espalharia risco por Compras,
+  // Integracoes e exportacoes para o usuario ver a mesma tela.
   checar("e o botao leva para a pagina nova", await p.evaluate(() =>
     [...document.querySelectorAll("a")].some(
-      (a) => /Novo fornecedor/i.test(a.textContent ?? "") && a.getAttribute("href") === "/fornecedores/novo")));
+      (a) => /Nova pessoa/i.test(a.textContent ?? "") && a.getAttribute("href") === "/fornecedores/novo")));
 
   await irPara(p, `${WEB}/fornecedores/novo`);
   await new Promise((r) => setTimeout(r, 1400));
   const formForn = await textoVisivel(p);
-  checar("a pagina de novo fornecedor abre", /Novo fornecedor/i.test(formForn), formForn.slice(0, 140));
+  checar("a pagina de nova pessoa abre", /Nova pessoa/i.test(formForn), formForn.slice(0, 140));
+  // 🔑 A marca que decide onde a pessoa aparece: sem ela, o seletor de
+  // fornecedor da nota viraria uma lista de funcionarios.
+  checar("com a caixa de 'e fornecedor'", /[ÉE] fornecedor/i.test(formForn),
+    formForn.slice(0, 400));
+  // 🔑 E a politica de cupom, que e o motivo de a pessoa existir na venda.
+  checar("e a politica de cupom da pessoa",
+    /No cupom desta pessoa/i.test(formForn), formForn.slice(0, 400));
   checar("com os campos separados por assunto",
     /Identifica[çc][ãa]o/i.test(formForn) && /Contato/i.test(formForn) && /Entrega/i.test(formForn),
     formForn.slice(0, 260));

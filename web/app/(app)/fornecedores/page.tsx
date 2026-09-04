@@ -64,15 +64,16 @@ export default function PaginaFornecedores() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="rotulo">Cadastros</p>
-          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Fornecedores</h1>
+          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Pessoas</h1>
           <p className="mt-1 max-w-[62ch] text-suave">
-            De quem a casa compra. O CNPJ é o que liga a nota fiscal que vem do Omie ao
-            fornecedor certo — sem ele, a conciliação vira trabalho manual.
+            Quem a casa conhece: de quem ela compra, quem trabalha nela, quem consome dela. O
+            <b> CNPJ</b> é o que liga a nota fiscal que vem do Omie ao fornecedor certo — sem
+            ele, a conciliação vira trabalho manual.
           </p>
         </div>
         {podeEditar && (
           <Link href="/fornecedores/novo" className="btn btn-primario">
-            Novo fornecedor
+            Nova pessoa
           </Link>
         )}
       </header>

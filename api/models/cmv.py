@@ -38,6 +38,13 @@ class VendaImportar(BaseModel):
     # ⚠️ Receita é o DENOMINADOR do food cost: receita inflada faz o food cost
     # parecer melhor do que é, que é o mesmo erro silencioso do custo zero.
     desconto: float = 0
+    # 🔑 **A PESSOA do cupom** (04/09/2026, pedido do dono). A venda lançada à
+    # mão sempre puxa o preço de venda; informando a pessoa, ela passa a valer o
+    # CUSTO ou o preço com desconto, conforme a política do cadastro dela. É o
+    # desconto de funcionário e o consumo do proprietário com a mesma mecânica.
+    # ⚠️ Só a venda MANUAL usa isto. O cupom que vem do PDV traz os valores
+    # cobrados de verdade, e reescrevê-los aqui inventaria receita.
+    id_pessoa: int | None = None
     itens: list[ItemVenda]
 
 

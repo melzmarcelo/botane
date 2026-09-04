@@ -91,7 +91,10 @@ export function fonteFornecedores(): FonteBusca {
     placeholder: "nome, fantasia ou CNPJ",
     singular: "fornecedor",
     async buscar(termo, limite) {
-      const q = new URLSearchParams({ limite: String(limite) });
+      // 🔑 **Só quem VENDE para a casa** (04/09/2026). A tabela de pessoas passou
+      // a guardar funcionário e sócio; sem este recorte, o seletor de fornecedor
+      // da nota viraria uma lista de gente da casa.
+      const q = new URLSearchParams({ limite: String(limite), so_fornecedores: "true" });
       if (termo.trim()) q.set("busca", termo.trim());
       const { itens, total } = await api.listar<FornecedorBruto>(`/fornecedores?${q}`);
       return {
@@ -102,6 +105,53 @@ export function fonteFornecedores(): FonteBusca {
           detalhe: [f.nome_fantasia ? f.nome : null, f.cidade].filter(Boolean).join(" · ") || null,
           bruto: f as unknown as Record<string, unknown>,
         })),
+        total: total ?? itens.length,
+      };
+    },
+  };
+}
+
+/**
+ * Todas as PESSOAS — não só quem vende para a casa.
+ *
+ * 🔑 **A mesma janela de pesquisa do produto** (04/09/2026, relato do dono:
+ * "na busca da pessoa, coloca o mesmo padrão do produto, com o combobox fica
+ * ruim a visualização"). Um `<select>` de 800 nomes não se percorre: o nome
+ * inteiro não cabe, não há busca, e a política de cupom — que é o motivo de
+ * escolher a pessoa — fica invisível.
+ *
+ * ⚠️ **Sem `so_fornecedores`, de propósito.** Quem se escolhe num cupom é
+ * justamente quem NÃO vende para a casa: funcionário, sócio.
+ */
+export function fontePessoas(): FonteBusca {
+  return {
+    titulo: "Buscar pessoa",
+    placeholder: "nome ou CNPJ",
+    singular: "pessoa",
+    async buscar(termo, limite) {
+      const q = new URLSearchParams({ limite: String(limite) });
+      if (termo.trim()) q.set("busca", termo.trim());
+      const { itens, total } = await api.listar<FornecedorBruto>(`/fornecedores?${q}`);
+      return {
+        itens: itens.map((f) => {
+          const p = f as unknown as {
+            cupom_base?: string; cupom_desconto_pct?: number; fornecedor?: boolean;
+          };
+          // 🔑 **A política aparece na LINHA da busca.** Escolher a pessoa muda
+          // o valor do cupom; descobrir isso só depois de lançar seria tarde.
+          const politica = [
+            p.cupom_base === "CUSTO" ? "pelo custo" : null,
+            Number(p.cupom_desconto_pct) > 0 ? `${Number(p.cupom_desconto_pct)}% off` : null,
+            p.fornecedor ? "fornecedor" : null,
+          ].filter(Boolean).join(" · ");
+          return {
+            id: f.id,
+            codigo: f.cnpj,
+            nome: f.nome_fantasia || f.nome,
+            detalhe: politica || (f.cidade ?? null),
+            bruto: f as unknown as Record<string, unknown>,
+          };
+        }),
         total: total ?? itens.length,
       };
     },

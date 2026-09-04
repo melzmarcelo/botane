@@ -9,7 +9,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
-import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
+import { fontePessoas, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { CANAIS, lerPlanilha } from "../tipos";
 
 /**
@@ -25,6 +25,7 @@ import { CANAIS, lerPlanilha } from "../tipos";
  */
 
 const PRODUTOS = fonteProdutos();
+const PESSOAS = fontePessoas();
 
 type ItemManual = {
   id_produto: string;
@@ -34,6 +35,14 @@ type ItemManual = {
 };
 
 const ITEM_VAZIO: ItemManual = { id_produto: "", rotulo: "", quantidade: "", valor_unitario: "" };
+
+/** A pessoa e a política que ela carrega para o cupom. */
+type PessoaCupom = {
+  id: number;
+  nome: string;
+  cupom_base?: "VENDA" | "CUSTO";
+  cupom_desconto_pct?: number;
+};
 
 export default function PaginaLancarVenda() {
   const router = useRouter();
@@ -45,6 +54,19 @@ export default function PaginaLancarVenda() {
   const [data, setData] = useState(hoje());
   const [documento, setDocumento] = useState("");
   const [canal, setCanal] = useState("");
+  // 🔑 **A pessoa do cupom** (04/09/2026, pedido do dono). Sem ela, a venda sai
+  // pelo preço de venda — que é o normal. Informando-a, o servidor aplica a
+  // política dela: o custo no lugar do preço, ou o preço com desconto.
+  // 🔑 **A pessoa se ESCOLHE pela janela de pesquisa**, não por combobox
+  // (04/09/2026, relato do dono). Uma lista de 800 nomes num `<select>` não se
+  // percorre, e a política — que é o motivo de escolher a pessoa — some.
+  // ⚠️ A política vem no `bruto` da escolha: sem uma segunda busca, e sem a
+  // lista inteira na memória da tela.
+  const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
+  const [politica, setPolitica] = useState<PessoaCupom | null>(null);
+
+  const mudaAlgo =
+    !!politica && (politica.cupom_base === "CUSTO" || Number(politica.cupom_desconto_pct) > 0);
   const [itens, setItens] = useState<ItemManual[]>([{ ...ITEM_VAZIO }]);
   const [texto, setTexto] = useState("");
 
@@ -108,6 +130,7 @@ export default function PaginaLancarVenda() {
             documento: documento || null,
             canal: canal || null,
             origem: "MANUAL",
+            id_pessoa: pessoa ? pessoa.id : null,
             itens: prontos.map((i) => ({
               id_produto: Number(i.id_produto),
               quantidade: Number(i.quantidade.replace(",", ".")),
@@ -134,6 +157,7 @@ export default function PaginaLancarVenda() {
             documento: documento || null,
             canal: canal || null,
             origem: "PLANILHA",
+            id_pessoa: pessoa ? pessoa.id : null,
             itens: previa.linhas.map((l) => ({
               codigo: l.codigo || null,
               descricao: l.descricao || null,
@@ -203,7 +227,49 @@ export default function PaginaLancarVenda() {
               ))}
             </select>
           </Campo>
+          {/* 🔑 **Para quem é esta venda** (04/09/2026, pedido do dono). Sem
+              pessoa, sai pelo preço de venda — o normal. Com ela, o servidor
+              aplica a política do cadastro: o custo no lugar do preço, ou o
+              preço com desconto. */}
+          <Campo rotulo="Para quem" dica="opcional — muda o valor do cupom">
+            <BuscaCadastro
+              fonte={PESSOAS}
+              selecionado={pessoa}
+              aoEscolher={(item: ItemBusca | null) => {
+                setPessoa(item ? { id: item.id, rotulo: rotuloDe(item) } : null);
+                setPolitica(
+                  item ? (item.bruto as unknown as PessoaCupom) : null,
+                );
+              }}
+            />
+          </Campo>
         </div>
+
+        {/* ⚠️ **A consequência dita ANTES de lançar** (pedido do dono:
+            "apresente uma mensagem", "demonstrando isto"). Um cupom que sai por
+            outro valor sem explicar por quê é indistinguível de erro de
+            digitação — e o servidor repete a frase na resposta, para valer
+            também para quem lançou por outro caminho. */}
+        {mudaAlgo && (
+          <div className="mt-4">
+            <Aviso tipo="info">
+              Esta venda vai sair{" "}
+              {politica!.cupom_base === "CUSTO" ? (
+                <>
+                  <b>pelo custo</b> de cada item — o preço de venda é ignorado
+                </>
+              ) : (
+                <>pelo preço de venda</>
+              )}
+              {Number(politica!.cupom_desconto_pct) > 0 && (
+                <>
+                  , com <b>{Number(politica!.cupom_desconto_pct)}% de desconto</b>
+                </>
+              )}
+              . Quem calcula é o servidor, e o valor gravado é o que aparece na venda.
+            </Aviso>
+          </div>
+        )}
       </Cartao>
 
       {aba === "manual" ? (
@@ -235,12 +301,28 @@ export default function PaginaLancarVenda() {
                           selecionado={
                             i.id_produto ? { id: Number(i.id_produto), rotulo: i.rotulo } : null
                           }
-                          aoEscolher={(item: ItemBusca | null) =>
+                          aoEscolher={(item: ItemBusca | null) => {
+                            // 🔑 **O preço vem junto do produto** (04/09/2026,
+                            // relato do dono: escolhi o produto e o valor não
+                            // veio). Ele já viaja na lista (`bruto.preco_venda`)
+                            // e ninguém o usava — quem lançava relia o preço na
+                            // tela do produto e digitava de novo.
+                            // ⚠️ **Só preenche o que está EM BRANCO.** Sobrescrever
+                            // um valor digitado apagaria a correção de quem
+                            // cobrou diferente, que é o motivo de o campo ser
+                            // editável.
+                            const preco = Number(
+                              (item?.bruto as { preco_venda?: number } | undefined)
+                                ?.preco_venda ?? 0,
+                            );
                             trocar(n, {
                               id_produto: item ? String(item.id) : "",
                               rotulo: item ? rotuloDe(item) : "",
-                            })
-                          }
+                              ...(preco > 0 && !itens[n].valor_unitario.trim()
+                                ? { valor_unitario: String(preco) }
+                                : {}),
+                            });
+                          }}
                         />
                       </td>
                       <td>

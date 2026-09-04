@@ -24,6 +24,12 @@ def _so_digitos(cnpj: str | None) -> str | None:
 def listar(
     busca: str | None = Query(default=None, max_length=80),
     incluir_inativos: bool = False,
+    # 🔑 **O filtro que os seletores de COMPRA usam** (04/09/2026). A tabela
+    # passou a guardar gente que não vende nada para a casa — funcionário,
+    # sócio —, e sem este recorte o seletor de fornecedor da nota viraria uma
+    # lista de funcionários. ⚠️ Nulo traz TODOS: a tela de Pessoas é a lista
+    # inteira, e é ela que herda o comportamento antigo.
+    so_fornecedores: bool | None = None,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -36,15 +42,20 @@ def listar(
                        (SELECT count(*) FROM produto_fornecedor pf
                          WHERE pf.id_fornecedor = f.id) AS produtos,
                        (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
-                         WHERE pf.id_fornecedor = f.id) AS ultima_compra
+                         WHERE pf.id_fornecedor = f.id) AS ultima_compra,
+                       -- Quem entra no sistema como esta pessoa. Nulo é o caso
+                       -- comum: a maioria das pessoas não tem login.
+                       (SELECT u.nome FROM usuarios u
+                         WHERE u.id_pessoa = f.id AND u.ativo LIMIT 1) AS usuario
                   FROM fornecedores f
                  WHERE (%s OR f.ativo)
+                   AND (%s::bool IS NULL OR f.fornecedor = %s)
                    AND (%s::varchar IS NULL
                         OR lower(f.nome) LIKE lower('%%' || %s || '%%')
                         OR lower(coalesce(f.nome_fantasia, '')) LIKE lower('%%' || %s || '%%')
                         OR coalesce(f.cnpj, '') LIKE '%%' || %s || '%%')
                  ORDER BY f.ativo DESC, lower(f.nome)""",
-            (incluir_inativos, busca, busca, busca, busca),
+            (incluir_inativos, so_fornecedores, so_fornecedores, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas
@@ -54,7 +65,10 @@ def listar(
 def obter(id_fornecedor: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
         cur.execute(
-            f"SELECT id, {', '.join(_CAMPOS)} FROM fornecedores WHERE id = %s", (id_fornecedor,)
+            f"""SELECT id, {', '.join(_CAMPOS)},
+                       (SELECT u.nome FROM usuarios u
+                         WHERE u.id_pessoa = fornecedores.id AND u.ativo LIMIT 1) AS usuario
+                  FROM fornecedores WHERE id = %s""", (id_fornecedor,)
         )
         f = cur.fetchone()
         if not f:

@@ -18,14 +18,15 @@ export default function PaginaNovoFornecedor() {
     <div className="flex flex-col gap-6">
       <header>
         <Link href="/fornecedores" className="link-voltar">
-          fornecedores
+          pessoas
         </Link>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
-          Novo fornecedor
+          Nova pessoa
         </h1>
         <p className="mt-2 max-w-[70ch] text-suave">
-          De quem a casa compra. O <b>CNPJ</b> é o que liga a nota fiscal que vem do Omie ao
-          fornecedor certo — sem ele, a conciliação vira trabalho manual.
+          Quem a casa conhece: de quem ela compra, quem trabalha nela, quem consome dela. Para
+          um <b>fornecedor</b>, o CNPJ é o que liga a nota fiscal que vem do Omie ao cadastro
+          certo — sem ele, a conciliação vira trabalho manual.
         </p>
       </header>
 

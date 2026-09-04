@@ -45,7 +45,7 @@ export default function PaginaFornecedor() {
     <div className="flex flex-col gap-6">
       <header>
         <Link href="/fornecedores" className="link-voltar">
-          fornecedores
+          pessoas
         </Link>
         <h1 className="mt-1 break-words text-[24px] font-bold tracking-tight sm:text-[30px]">
           {x.nome}

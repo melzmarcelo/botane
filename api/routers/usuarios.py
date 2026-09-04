@@ -93,6 +93,65 @@ def _gravar_setores(cur, id_usuario: int, setores: list[int], ctx: Contexto) -> 
         )
 
 
+def _resolver_pessoa(cur, body, id_usuario: int | None, ctx: Contexto) -> int | None | str:
+    """Qual pessoa este usuário é. Devolve o id, `None`, ou "nao mexer".
+
+    🔑 **Duas portas, nunca as duas ao mesmo tempo**: vincular uma pessoa que já
+    existe (`id_pessoa`) ou criar uma ali mesmo com nome e e-mail
+    (`pessoa_nova`). Mandar os dois é ambíguo — qual delas vale? — e a resposta
+    honesta é recusar em vez de escolher por quem pediu.
+
+    ⚠️ **A pessoa criada daqui NÃO nasce fornecedor.** Quem cadastra um usuário
+    está cadastrando gente da casa, não quem vende para ela: marcá-la faria o
+    seletor de fornecedor da nota encher de funcionários. Quem for as duas
+    coisas marca a caixa depois, na tela de Pessoas.
+
+    ⚠️ **`id_pessoa: 0` DESVINCULA.** Nulo já quer dizer "não mexi" no PUT, e
+    sem um valor para "tire o vínculo" não haveria como desfazer — só trocar.
+    """
+    tem_nova = getattr(body, "pessoa_nova", None) is not None
+    tem_id = getattr(body, "id_pessoa", None) is not None
+    if tem_nova and tem_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Escolha uma pessoa existente OU crie uma nova — não os dois.")
+
+    if tem_nova:
+        cur.execute(
+            """INSERT INTO fornecedores (nome, email, fornecedor, ativo, criado_por)
+               VALUES (%s, %s, false, true, %s) RETURNING id""",
+            (body.pessoa_nova.nome.strip(), body.pessoa_nova.email, ctx.id_usuario),
+        )
+        return cur.fetchone()["id"]
+
+    if not tem_id:
+        return "nao mexer"
+    if body.id_pessoa == 0:
+        return None
+
+    cur.execute("SELECT nome, ativo FROM fornecedores WHERE id = %s", (body.id_pessoa,))
+    pessoa = cur.fetchone()
+    if not pessoa:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada")
+    if not pessoa["ativo"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{pessoa['nome']} está inativa — reative antes de vincular.")
+    # ⚠️ Uma pessoa, um usuário. Dois logins apontando para a mesma pessoa
+    # fariam a política de cupom dela responder por duas credenciais, e ninguém
+    # saberia qual das duas comprou.
+    cur.execute(
+        "SELECT nome FROM usuarios WHERE id_pessoa = %s AND id <> coalesce(%s, 0) AND ativo",
+        (body.id_pessoa, id_usuario),
+    )
+    outro = cur.fetchone()
+    if outro:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{pessoa['nome']} já está vinculada ao usuário {outro['nome']}.")
+    return body.id_pessoa
+
+
 def _conferir_lojas(cur, papeis, ctx: Contexto) -> None:
     """Só se dá acesso a loja que EXISTE e que quem está dando enxerga.
 
@@ -162,7 +221,9 @@ def listar(incluir_inativos: bool = False,
            resposta: Response = None) -> list[dict]:
     with get_cursor() as cur:
         cur.execute(
-            """SELECT id, nome, email, telefone, ativo, ultimo_acesso,
+            """SELECT id, nome, email, telefone, ativo, ultimo_acesso, id_pessoa,
+                      (SELECT f.nome FROM fornecedores f WHERE f.id = usuarios.id_pessoa)
+                          AS pessoa,
                       (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado,
                       count(*) OVER () AS _total
                  FROM usuarios
@@ -183,7 +244,9 @@ def listar(incluir_inativos: bool = False,
 def obter(id_usuario: int) -> dict:
     with get_cursor() as cur:
         cur.execute(
-            """SELECT id, nome, email, telefone, ativo, ultimo_acesso,
+            """SELECT id, nome, email, telefone, ativo, ultimo_acesso, id_pessoa,
+                      (SELECT f.nome FROM fornecedores f WHERE f.id = usuarios.id_pessoa)
+                          AS pessoa,
                       (bloqueado_ate IS NOT NULL AND bloqueado_ate > now()) AS bloqueado,
                       count(*) OVER () AS _total
                  FROM usuarios WHERE id = %s""",
@@ -214,6 +277,9 @@ def criar(body: UsuarioCreate, request: Request,
              body.ativo, ctx.id_usuario),
         )
         novo = cur.fetchone()["id"]
+        pessoa = _resolver_pessoa(cur, body, novo, ctx)
+        if pessoa != "nao mexer":
+            cur.execute("UPDATE usuarios SET id_pessoa = %s WHERE id = %s", (pessoa, novo))
         _gravar_papeis(cur, novo, body.papeis, ctx)
         _gravar_setores(cur, novo, body.setores, ctx)
         auditoria.registrar(
@@ -275,6 +341,10 @@ def atualizar(id_usuario: int, body: UsuarioUpdate, request: Request,
         # verdade do valor confundiria "não mexi" com "liberei tudo".
         if body.setores is not None:
             _gravar_setores(cur, id_usuario, body.setores, ctx)
+        pessoa = _resolver_pessoa(cur, body, id_usuario, ctx)
+        if pessoa != "nao mexer":
+            cur.execute("UPDATE usuarios SET id_pessoa = %s WHERE id = %s",
+                        (pessoa, id_usuario))
 
         auditoria.registrar(
             cur, ctx.id_usuario, "usuario", id_usuario, "atualizar",

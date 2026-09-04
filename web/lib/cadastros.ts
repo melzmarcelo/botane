@@ -62,6 +62,19 @@ export type Fornecedor = {
   observacao: string | null;
   ativo: boolean;
   produtos?: number;
+  /**
+   * Esta pessoa vende para a casa?
+   *
+   * ⚠️ **Opcional, e ausente quer dizer SIM.** A coluna nasceu em 04/09/2026
+   * com padrão verdadeiro; um cadastro lido de uma resposta antiga não a traz, e
+   * tratá-lo como "não é fornecedor" o sumiria dos seletores de compra.
+   */
+  fornecedor?: boolean;
+  /** A base do cupom na venda lançada à mão: o preço de venda ou o custo. */
+  cupom_base?: "VENDA" | "CUSTO";
+  cupom_desconto_pct?: number;
+  /** Quem entra no sistema como esta pessoa — nulo é o caso comum. */
+  usuario?: string | null;
 };
 
 export type ProdutoResumo = {

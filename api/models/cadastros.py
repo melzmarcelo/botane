@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 TIPOS_LOCAL = ("SECO", "RESFRIADO", "CONGELADO", "BAR")
@@ -172,6 +174,19 @@ class FornecedorCreate(BaseModel):
     observacao: str | None = None
     codigo_omie: str | None = None
     ativo: bool = True
+    # 🔑 **A pessoa é FORNECEDOR?** (04/09/2026). A tabela passou a guardar
+    # gente que não vende nada para a casa — funcionário, sócio —, e o seletor
+    # de fornecedor da nota e do produto filtra por isto. Sem a marca, aquele
+    # seletor viraria uma lista de funcionários.
+    # ⚠️ Padrão VERDADEIRO: é o que faz todo cadastro de hoje continuar
+    # aparecendo onde sempre apareceu.
+    fornecedor: bool = True
+    # 🔑 **A política do cupom.** A venda lançada à mão sempre puxa o preço de
+    # venda; informando a pessoa, ela passa a valer o CUSTO ou o preço com
+    # desconto. É o desconto de funcionário e o consumo do proprietário com a
+    # mesma mecânica.
+    cupom_base: Literal["VENDA", "CUSTO"] = "VENDA"
+    cupom_desconto_pct: float = Field(default=0, ge=0, le=100)
 
 
 class FornecedorUpdate(FornecedorCreate):
@@ -182,3 +197,5 @@ class FornecedorResponse(FornecedorCreate):
     id: int
     produtos: int = 0
     ultima_compra: date | None = None
+    # Quem entra no sistema como esta pessoa — nulo é o caso comum.
+    usuario: str | None = None

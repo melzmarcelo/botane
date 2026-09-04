@@ -679,6 +679,44 @@ Para mudar, mexa no **papel**, não em cada pessoa.
 
 ---
 
+### Pessoas: quem a casa conhece
+
+Menu **Cadastros → Pessoas**. É o mesmo lugar onde os fornecedores sempre
+estiveram — agora ele guarda também quem trabalha na casa e quem consome dela.
+
+⚠️ **A caixa "é fornecedor" decide onde a pessoa aparece.** Marcada, ela entra
+nos seletores da nota de entrada e do produto. Desmarcada, ela continua aqui e
+some de lá — é o caso do funcionário e do sócio.
+
+### O cupom da pessoa
+
+No cadastro da pessoa, o cartão **No cupom desta pessoa**:
+
+- **o preço de venda** — o normal;
+- **o custo** — para o consumo do proprietário;
+- e um **desconto em percentual**, que se aplica sobre o que foi escolhido.
+
+Ao lançar uma venda à mão, o campo **Para quem** aplica isso. Sem pessoa, a venda
+sai pelo preço de venda. Com ela, a tela avisa antes o que vai acontecer, e a
+mensagem de sucesso repete o que foi aplicado.
+
+⚠️ **Essa venda baixa estoque e entra no CMV** como qualquer outra — com margem
+menor, ou negativa se o desconto for sobre o custo. É o que aconteceu, e o painel
+mostra.
+
+⚠️ Isso **não** vale para o cupom que vem do PDV: aquele traz os valores
+cobrados de verdade.
+
+### Ligar o login à pessoa
+
+No cadastro do usuário, o cartão **Quem é esta pessoa** liga o login a um
+cadastro de Pessoas — ou cria um ali mesmo, com nome e e-mail. A pessoa criada
+assim nasce **sem** a marca de fornecedor.
+
+Uma pessoa só pode estar ligada a um usuário.
+
+---
+
 ## Perguntas que sempre aparecem
 
 **Lancei errado, e agora?**

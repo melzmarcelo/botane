@@ -18,6 +18,8 @@ type Usuario = {
   papeis: Vinculo[];
   /** ⚠️ Vazio quer dizer TODOS — a mesma convenção da loja. */
   setores: { id: number; nome: string }[];
+  id_pessoa: number | null;
+  pessoa: string | null;
 };
 
 /** Corrigir um usuário — a mesma forma da criação, para o olho reconhecer. */
@@ -85,6 +87,9 @@ export default function PaginaUsuario() {
           // nenhum" — um estado que a tela recusa salvar. Ler vazio como vazio
           // abriria o cadastro de todo mundo já em erro.
           setores: u.setores?.length ? u.setores.map((st) => st.id) : null,
+          id_pessoa: u.id_pessoa ?? null,
+          pessoa_rotulo: u.pessoa ?? null,
+          pessoa_nova: null,
         }}
         misto={arranjoMisto(u.papeis)}
         id={u.id}

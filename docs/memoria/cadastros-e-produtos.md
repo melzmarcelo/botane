@@ -847,3 +847,56 @@
   ⚠️ O `id_produto` entra no WHERE do UPDATE: sem ele, mandar o código de outro produto
   repontaria a conversão para o cadastro errado. E fator zero é recusado (422) — a nota inteira
   entraria como nada, e é erro de digitação plausível.
+
+- 🔑 **O fornecedor virou PESSOA — visualmente** (migração 055, 04/09/2026, pedido do dono).
+  "Hoje temos somente o cadastro de fornecedores, podemos tratar ele como pessoa; na base
+  podemos manter a mesma estrutura." É o que foi feito: **nenhuma tabela foi renomeada**.
+  `fornecedores` continua `fornecedores`, e `notas_entrada`, `produto_fornecedor` e
+  `codigos_externos` não mudaram uma linha.
+  ⚠️ **A ROTA também continua `/fornecedores`.** Mudá-la espalharia risco por Compras,
+  Integrações e exportações para o usuário ver exatamente a mesma tela. O nome que importa é o
+  do menu.
+  🔑 **`fornecedores.fornecedor` nasce TRUE, e é isso que faz a mudança não mexer em nada.**
+  Toda linha da tabela era oferecida no seletor de fornecedor da nota e do produto; com gente
+  da casa entrando ali, aquele seletor viraria uma lista de funcionários. Os seletores passaram
+  a pedir `?so_fornecedores=true`; a tela de Pessoas não filtra, e é ela que herda a lista
+  inteira.
+  ⚠️ **No tipo do front o campo é OPCIONAL, e ausente quer dizer SIM** — um cadastro lido de
+  resposta antiga não o traz, e tratá-lo como "não é fornecedor" o sumiria dos seletores.
+
+- 🔑 **O vínculo entre o USUÁRIO e a PESSOA** (`usuarios.id_pessoa`). O usuário é a credencial;
+  a pessoa é o cadastro. Sem o vínculo, o funcionário que compra com desconto e o usuário que
+  abre o sistema são dois registros que ninguém liga.
+  🔑 **Duas portas, nunca as duas juntas**: vincular uma que existe ou criar na hora com nome e
+  e-mail. Mandar as duas é ambíguo — qual vale? — e a resposta honesta é recusar (400) em vez de
+  escolher por quem pediu.
+  ⚠️ **A pessoa criada a partir do usuário NÃO nasce fornecedor.** Quem cadastra um usuário está
+  cadastrando gente da casa.
+  ⚠️ **Uma pessoa, UM usuário** (409): dois logins na mesma pessoa fariam a política de cupom
+  dela responder por duas credenciais, e ninguém saberia qual comprou.
+  ⚠️ **`id_pessoa: 0` DESVINCULA.** Nulo já quer dizer "não mexi" no PUT — sem um valor para
+  "tire o vínculo", só daria para trocar, nunca desfazer.
+
+- 🔑 **A política de cupom da pessoa** (`cupom_base`, `cupom_desconto_pct`, 04/09/2026). A venda
+  lançada à mão **sempre puxa o preço de venda**; informando a pessoa, o item passa a valer o
+  CUSTO ou o preço com desconto. É o desconto de funcionário e o consumo do proprietário com a
+  mesma mecânica — o que muda é a política no cadastro dela. Conferido com preço 100 e custo 40:
+  sem pessoa 100, pelo custo 40, com 20% 80, custo com 10% 36.
+  ⚠️ **A conta acontece no SERVIDOR.** Se a regra vivesse na tela, uma venda lançada por outro
+  caminho sairia com outro número — e o custo congelado no item ficaria errado para sempre.
+  ⚠️ **Pelo custo usa `custo_teorico_do_produto`**, a mesma cascata da ficha e do CMV. Uma
+  segunda conta faria a venda ao funcionário discordar do custo que o sistema atribui ao prato.
+  ⚠️ **Item sem produto ou sem custo conhecido fica como está.** Zerá-lo faria a venda sair de
+  graça, e o CMV contaria receita zero contra custo real.
+  ⚠️ **Política que não muda nada devolve NADA** (base VENDA sem desconto): devolvê-la faria
+  toda venda anunciar um ajuste que não houve.
+  ⚠️ **Só a venda MANUAL usa isto.** O cupom que vem do PDV traz os valores cobrados de verdade,
+  e reescrevê-los inventaria receita.
+  ⚠️ E a venda para a pessoa **baixa estoque e entra no CMV** como qualquer venda — com margem
+  menor, ou negativa se o desconto for sobre o custo. A tela diz isso antes de lançar.
+  🔑 **Dois erros que só apareceram testando contra o SERVIDOR**, e ambos teriam ido para
+  produção: o `@router.post` grudou na função errada (as auxiliares foram inseridas entre o
+  decorador e o `importar`, e o FastAPI passou a expor `_politica_da_pessoa` como endpoint,
+  pedindo um cursor por query string — quebraria TODA importação de venda); e `Decimal` não
+  estava importado no arquivo, então a venda sem política passava e as com política davam 500
+  com corpo vazio. Exercitar os QUATRO casos é o que os separou.

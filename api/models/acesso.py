@@ -93,6 +93,19 @@ class RedefinirSenhaRequest(BaseModel):
 # ---------------------------------------------------------------- usuários
 
 
+class PessoaMinima(BaseModel):
+    """O mínimo para a pessoa existir, criada de dentro do cadastro do usuário.
+
+    ⚠️ **Nome e e-mail, e mais nada.** Quem está cadastrando um usuário não está
+    cadastrando um fornecedor: pedir CNPJ, prazo de entrega e pedido mínimo ali
+    seria um formulário inteiro no meio de outro. O resto se completa depois, na
+    tela de Pessoas.
+    """
+
+    nome: str = Field(min_length=2, max_length=160)
+    email: str | None = Field(default=None, max_length=160)
+
+
 class PapelVinculo(BaseModel):
     id_papel: int
     id_unidade: int | None = None
@@ -108,6 +121,15 @@ class UsuarioCreate(BaseModel):
     # ⚠️ **Vazio quer dizer TODOS os setores** — a mesma convenção do
     # `id_unidade` nulo. Quem não responde não fica sem nada; fica com tudo.
     setores: list[int] = []
+    # 🔑 **Quem esta pessoa É** (04/09/2026, pedido do dono). O usuário é a
+    # credencial; a pessoa é o cadastro. Sem o vínculo, o funcionário que compra
+    # com desconto e o usuário que abre o sistema são dois registros que ninguém
+    # liga — e a política de cupom não teria como achar a pessoa a partir de
+    # quem está logado.
+    id_pessoa: int | None = None
+    # ⚠️ Alternativa a `id_pessoa`, não companheira: criar a pessoa a partir do
+    # usuário, com nome e e-mail. Mandar os dois é ambíguo, e o servidor recusa.
+    pessoa_nova: "PessoaMinima | None" = None
 
 
 class UsuarioUpdate(BaseModel):
@@ -122,6 +144,10 @@ class UsuarioUpdate(BaseModel):
     # escolha explícita de "todos". Tratá-los igual faria qualquer PUT antigo
     # apagar em silêncio a restrição que alguém acabou de configurar.
     setores: list[int] | None = None
+    # ⚠️ Nulo é "não mexi"; zero não existe aqui. Para DESVINCULAR, a tela manda
+    # `id_pessoa: 0` — ver o router.
+    id_pessoa: int | None = None
+    pessoa_nova: PessoaMinima | None = None
 
 
 class UsuarioResponse(BaseModel):
@@ -134,6 +160,8 @@ class UsuarioResponse(BaseModel):
     bloqueado: bool = False
     papeis: list[dict] = []
     setores: list[dict] = []
+    id_pessoa: int | None = None
+    pessoa: str | None = None
 
 
 # ---------------------------------------------------------------- papéis

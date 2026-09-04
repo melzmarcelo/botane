@@ -132,7 +132,7 @@ export default function NotaManual({
 
   useEffect(() => {
     void api
-      .get<Fornecedor[]>("/fornecedores")
+      .get<Fornecedor[]>("/fornecedores?so_fornecedores=true")
       .then(setFornecedores)
       .catch(() => setFornecedores([]));
     void api

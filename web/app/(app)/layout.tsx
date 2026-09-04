@@ -33,7 +33,12 @@ const MENU: {
     itens: [
       { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
       { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
-      { href: "/fornecedores", nome: "Fornecedores", chave: "cadastros.fornecedores" },
+      // 🔑 **"Pessoas", e não "Fornecedores"** (04/09/2026, pedido do dono): a
+      // tabela passou a guardar quem não vende nada para a casa —
+      // funcionário, sócio. ⚠️ A ROTA continua `/fornecedores`: mudá-la
+      // espalharia risco por Compras, Integrações e exportações para o
+      // usuário ver exatamente a mesma tela. O nome que importa é o do menu.
+      { href: "/fornecedores", nome: "Pessoas", chave: "cadastros.fornecedores" },
       // As quatro num item só. Quem procura "local de estoque" no menu não o
       // encontra pelo nome — por isso a tela DIZ o que tem dentro, logo abaixo
       // do título, e cada aba tem endereço próprio (`?aba=locais`).
