@@ -2048,6 +2048,57 @@ try {
     !document.querySelector('select[aria-label="Pessoa do cupom"]'));
   checar("a pessoa NAO e mais um combobox", semCombo, semCombo);
 
+  // 🔑 **A PREVIA do que o cupom vai sair** (04/09/2026, pedido do dono:
+  // "gostaria que o valor fosse ajustado ao digitar para ter esta percepcao
+  // visual"). Com o item de 37,50 na tela, escolher uma pessoa com 20% de
+  // desconto tem de mostrar 30,00 — e mostrar os DOIS numeros.
+  const pessoaOffCupom = await api("POST", "/fornecedores", {
+    nome: `DESCONTO TELA ${m6}`, fornecedor: false,
+    cupom_base: "VENDA", cupom_desconto_pct: 20,
+  }, token);
+  const buscaPessoaCupom = await p.$('input[aria-label^="Buscar pessoa"]');
+  checar("a pessoa do cupom se escolhe por busca", !!buscaPessoaCupom);
+  if (buscaPessoaCupom) {
+    // ⚠️ **A QUANTIDADE e obrigatoria para haver previa** — sem ela a linha nao
+    // esta pronta e a tela nao pergunta nada ao servidor. Minha primeira versao
+    // esqueceu isso e acusou a tela de nao mostrar o valor; sondei o cenario
+    // isolado e o 30,00 aparecia assim que a quantidade entrava.
+    await p.evaluate(() => {
+      const qtd = document.querySelector('input[type="number"]');
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, "value").set;
+      setter.call(qtd, "2");
+      qtd.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await buscaPessoaCupom.type(`DESCONTO TELA ${m6}`);
+    await p.keyboard.press("Tab");
+    // ⚠️ **Esperar por "Sai por" NAO servia**: aquele e o cabecalho da coluna, e
+    // ele aparece so por existir politica — a espera terminava ANTES de a
+    // previa chegar, e a medicao lia o estado anterior. O rodape com o cheio so
+    // existe quando a resposta do servidor chegou, entao e nele que se espera.
+    await p.waitForFunction(() => /cheio\s*R\$/i.test(document.body.innerText),
+      { timeout: 20000, polling: 250 }).catch(() => {});
+  }
+  const textoPreviaCupom = await p.evaluate(() => document.body.innerText);
+  // 🔑 37,50 menos 20% = 30,00. O numero PROVA que a conta veio do servidor:
+  // a tela nunca soube o percentual, ele viaja so na politica da pessoa.
+  checar("a previa mostra por quanto o item vai sair",
+    /30,00/.test(textoPreviaCupom), textoPreviaCupom.slice(0, 300));
+  // ⚠️ **Os dois numeros, nao so o ajustado.** O campo editavel continua com o
+  // preco CHEIO: pusesse o descontado ali, o envio levaria o valor ja
+  // descontado e o servidor descontaria de novo — 20% viraria 36%, calado.
+  const cheioNoCampoCupom = await p.evaluate(() =>
+    [...document.querySelectorAll('input[type="number"]')].map((c) => c.value));
+  checar("e o campo editavel continua com o preco CHEIO",
+    cheioNoCampoCupom.some((v) => Math.abs(Number(v) - 37.5) < 0.01), cheioNoCampoCupom);
+  // 🔑 **Os tres numeros do rodape**: 2 x 37,50 = 75,00 cheio, 15,00 de desconto
+  // e 60,00 a pagar. ⚠️ Afirmar so a PALAVRA "desconto" passaria pelo aviso do
+  // cabecalho, que ja diz "20% de desconto" — a checagem passaria com o rodape
+  // quebrado.
+  checar("com o cheio, o desconto e o total no rodape",
+    /75,00/.test(textoPreviaCupom) && /15,00/.test(textoPreviaCupom)
+      && /60,00/.test(textoPreviaCupom), textoPreviaCupom.slice(0, 400));
+
   await p.reload({ waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1500));
   const doc6 = `TELA-${m6}`;
@@ -2152,6 +2203,33 @@ try {
   await new Promise((r) => setTimeout(r, 1600));
   checar("e o botao Todos os dias devolve a lista", await vendaNaLista());
 
+  // 🔑 **O relatorio de consumo por pessoa** (04/09/2026, pedido do dono: "o
+  // funcionario vai comprar, lancamos e depois cobramos o valor dele"). O
+  // caminho vive em Vendas pelo mesmo motivo que a busca do PDV: quem quer
+  // saber o que fulano consumiu abre Vendas, nao Exportar.
+  const temCaminhoConsumo = await p.evaluate(() =>
+    [...document.querySelectorAll("a")].some(
+      (a) => a.textContent?.includes("Consumo por pessoa")));
+  checar("o caminho para o consumo por pessoa esta em Vendas", temCaminhoConsumo);
+
+  await p.goto(`${WEB}/vendas/por-pessoa`, { waitUntil: "networkidle2" });
+  await p.waitForFunction(() => /Consumo por pessoa/i.test(document.body.innerText),
+    { timeout: 20000, polling: 300 }).catch(() => {});
+  const textoConsumo = await textoVisivel(p);
+  checar("a tela de consumo por pessoa abre", /Consumo por pessoa/i.test(textoConsumo),
+    textoConsumo.slice(0, 140));
+  // 🔑 **As tres colunas.** So o valor a cobrar nao seria aceito por quem paga:
+  // o funcionario quer ver o beneficio, e por isso o cheio e o desconto ficam
+  // ao lado do total.
+  checar("com o cheio, o desconto e o a cobrar",
+    /Valor cheio/i.test(textoConsumo) && /Desconto/i.test(textoConsumo)
+      && /A cobrar/i.test(textoConsumo), textoConsumo.slice(0, 400));
+  // ⚠️ Sintetico e analitico sao dois documentos, e a tela tem de oferecer os
+  // dois — o pedido foi explicito em "podendo ser sintetico ou analitico".
+  checar("e a escolha entre sintetico e analitico",
+    /sint[eé]tico/i.test(textoConsumo) && /anal[ií]tico/i.test(textoConsumo),
+    textoConsumo.slice(0, 400));
+
   // A venda inteira numa página só: itens, custo congelado e o que saiu do
   // estoque. Antes a lista mostrava data, origem e total — e mais nada.
   const { dados: minhas } = await api("GET", `/vendas?busca=${doc6}`, null, token);
@@ -2198,6 +2276,46 @@ try {
   await api("PUT", `/produtos/${prod6.id}`, { nome_curto: null }, token);
 
   await foto(p, "24b-venda-detalhe");
+
+  // 🔑 **O cupom da PESSOA mostra o cheio e o desconto** (04/09/2026, pedido do
+  // dono: "ao acessar este cupom, ver o valor cheio e o valor do desconto").
+  // ⚠️ **Este bloco monta o proprio cenario**, e nao reaproveita a venda acima:
+  // aquela nao tem pessoa, entao as colunas novas nao apareceriam e a checagem
+  // passaria pelo motivo errado — foi assim que o cartao de codigos passou
+  // verde sem nunca ter rodado.
+  const pessoaCupom = await api("POST", "/fornecedores", {
+    nome: `CUPOM PESSOA ${m6}`, fornecedor: false,
+    cupom_base: "VENDA", cupom_desconto_pct: 20,
+  }, token);
+  await api("POST", "/vendas/importar", { vendas: [{
+    data: hoje6, documento: `PESSOA-${m6}`, origem: "MANUAL",
+    id_pessoa: pessoaCupom.dados.id,
+    itens: [{ id_produto: prod6.id, quantidade: 2, valor_unitario: 50 }],
+  }] }, token);
+  const { dados: comPessoa } = await api("GET", `/vendas?busca=PESSOA-${m6}`, null, token);
+  checar("a venda com pessoa entra", comPessoa.length === 1, comPessoa.length);
+  if (comPessoa.length) {
+    aoTerminar.push(() => api("DELETE", `/vendas/${comPessoa[0].id}`, null, token));
+    await p.goto(`${WEB}/vendas/${comPessoa[0].id}`, { waitUntil: "networkidle2" });
+    await p.waitForFunction(() => /Receita/i.test(document.body.innerText),
+      { timeout: 20000, polling: 300 }).catch(() => {});
+    const textoPessoa = await textoVisivel(p);
+    checar("o cupom diz para quem foi",
+      new RegExp(`CUPOM PESSOA ${m6}`, "i").test(textoPessoa), textoPessoa.slice(0, 300));
+    // 🔑 100 cheio, 20 de desconto, 80 cobrado. Os tres numeros na tela — e o
+    // 100,00 so existe porque o preco de tabela passou a ser GUARDADO: antes a
+    // politica o reescrevia e ele se perdia.
+    checar("com o valor cheio de 100,00 a vista",
+      /100,00/.test(textoPessoa), textoPessoa.slice(0, 400));
+    checar("e o desconto de 20,00 dito",
+      /desconto de/i.test(textoPessoa) && /20,00/.test(textoPessoa),
+      textoPessoa.slice(0, 400));
+    // ⚠️ **A politica CONGELADA**, nao a do cadastro de hoje: quem passar de 20%
+    // para 30% faria este cupom se explicar por uma regra que nao valia quando
+    // ele nasceu.
+    checar("e a regra que valia no dia, escrita no cabecalho",
+      /20% de desconto/i.test(textoPessoa), textoPessoa.slice(0, 400));
+  }
 
   // A conta: 10 pratos a 5,00 de custo = 50,00 de CMV teórico; receita 300,00.
   const { dados: ap } = await api("GET", `/cmv/apuracao?inicio=${hoje6}&fim=${hoje6}`, null, token);

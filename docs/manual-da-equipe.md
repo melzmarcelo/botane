@@ -692,13 +692,24 @@ some de lá — é o caso do funcionário e do sócio.
 
 No cadastro da pessoa, o cartão **No cupom desta pessoa**:
 
-- **o preço de venda** — o normal;
-- **o custo** — para o consumo do proprietário;
+- **o preço de venda**;
+- **o custo**;
 - e um **desconto em percentual**, que se aplica sobre o que foi escolhido.
 
 Ao lançar uma venda à mão, o campo **Para quem** aplica isso. Sem pessoa, a venda
 sai pelo preço de venda. Com ela, a tela avisa antes o que vai acontecer, e a
 mensagem de sucesso repete o que foi aplicado.
+
+**Você vê o valor antes de gravar.** Escolhida a pessoa, aparece a coluna
+**Sai por**, com o que cada linha vai custar de verdade, e o rodapé mostra os
+três números: cheio, desconto e total.
+
+⚠️ **O campo continua com o preço cheio, de propósito.** O ajuste aparece ao
+lado, não dentro dele. Quem calcula é o servidor, e é ele que grava.
+
+⚠️ **Item sem custo cadastrado sai pelo preço de venda**, mesmo num cupom "pelo
+custo" — e a tela diz quantos são. O sistema não inventa um custo que não sabe.
+Para corrigir, cadastre a ficha técnica ou o custo do produto.
 
 ⚠️ **Essa venda baixa estoque e entra no CMV** como qualquer outra — com margem
 menor, ou negativa se o desconto for sobre o custo. É o que aconteceu, e o painel
@@ -706,6 +717,25 @@ mostra.
 
 ⚠️ Isso **não** vale para o cupom que vem do PDV: aquele traz os valores
 cobrados de verdade.
+
+**Abrindo o cupom depois**, ele mostra para quem foi, a regra que valia **no
+dia**, o valor cheio, o desconto e o cobrado — linha a linha. A regra fica
+congelada: mudar o desconto no cadastro não reescreve cupom antigo.
+
+### Cobrar o funcionário: Consumo por pessoa
+
+Em **Vendas → Consumo por pessoa**. Escolha o período e, se quiser, uma pessoa.
+
+- **Sintético** — um total por pessoa: cupons, itens, valor cheio, desconto e o
+  que há a cobrar. É o número da cobrança.
+- **Analítico** — item a item, com os dois preços lado a lado. É o que se manda
+  para quem quer conferir o que consumiu.
+
+O mesmo relatório sai em **planilha ou PDF** pelo botão de exportar (*Consumo
+por pessoa*), com os mesmos números da tela.
+
+⚠️ **Cupom cancelado não entra.** Ele existe para a conferência com o PDV
+fechar, mas não se cobra o que foi cancelado.
 
 ### Ligar o login à pessoa
 

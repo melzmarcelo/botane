@@ -543,6 +543,59 @@
   desativado antes) em vez de suposta. ⚠️ `web/scripts/base-vazia.mjs` passa pelas 26 telas com a
   base zerada — é o estado que ninguém testa e que o cliente vê no primeiro dia.
 
+- 🔑 **O preço CHEIO do item passou a ser guardado** (`venda_itens.valor_unitario_cheio`,
+  migração 056, 04/09/2026). A política da pessoa **reescreve** `valor_unitario` antes de
+  gravar — o custo no lugar do preço, ou o preço com desconto — e o valor de tabela não
+  sobrava em lugar nenhum. Sem ele não há como dizer quanto foi o desconto: `cheio - cobrado`
+  é a única conta honesta, e ela precisa dos dois lados.
+  ⚠️ **NULO quer dizer "a política não tocou nesta linha"**, e aí o cheio É o cobrado.
+  Repetir o mesmo valor nos dois campos faria o relatório anunciar um desconto de zero onde
+  não houve política alguma — "sem desconto" e "não se aplica" são coisas diferentes. E
+  tratá-lo como zero faria a tela anunciar 100% de desconto em todo cupom comum.
+  ⚠️ **O cliente NÃO pode declará-lo.** `importar` zera o campo antes de aplicar a política;
+  aceitá-lo de fora deixaria qualquer chamador inventar um desconto que nunca houve, e o
+  relatório de cobrança somaria dinheiro que ninguém deixou de pagar.
+  ⚠️ **A política vai CONGELADA no cabeçalho** (`vendas.cupom_base`, `cupom_desconto_pct`),
+  como o custo da ficha: ela muda no cadastro, e sem isso o cupom de março passaria a se
+  explicar por uma regra de setembro.
+
+- 🔑 **A prévia do cupom sai do SERVIDOR** (`POST /vendas/previa`, 04/09/2026, pedido do dono:
+  "gostaria que o valor fosse ajustado ao digitar para ter esta percepção visual"). Antes a
+  tela só AVISAVA que o servidor ia ajustar; o número aparecia depois de gravar.
+  ⚠️ **A tela não recalcula por conta própria, e não deve.** O desconto ela até saberia
+  aplicar, mas o CUSTO vem da cascata da ficha — a segunda implementação divergiria no dia em
+  que a cascata mudasse, e o número prometido não seria o gravado. A prévia chama o mesmo
+  `_aplicar_politica` do lançamento, e a suíte cobra que os dois cheguem ao mesmo total.
+  ⚠️ **O campo editável continua com o preço CHEIO; o ajustado aparece numa coluna à parte.**
+  Pôr o valor já descontado dentro do campo faria o envio levar o descontado e o servidor
+  descontaria de novo — **20% viraria 36%, calado**. É a armadilha central desta feature.
+  ⚠️ Resposta atrasada de um pedido velho é descartada (`valeu`): sem isso, digitar rápido
+  faria a resposta de dois itens atrás sobrescrever a atual.
+
+- 🔑 **Linha sem custo conhecido dentro de um cupom "pelo custo" é DITA** (04/09/2026).
+  `_aplicar_politica` devolve quais linhas não conseguiu custear, e a tela e a resposta
+  dizem quantas. Sem isso quem lança presume que a política valeu para tudo e só descobre na
+  hora de cobrar.
+  ⚠️ **O desconto também não se aplica ali, e é deliberado**: 10% sobre o preço de venda não
+  é 10% sobre o custo, e cobrar quase o preço cheio de quem foi configurado para pagar o
+  custo seria pior do que dizer que não deu para calcular.
+
+- 🔑 **O relatório de consumo por pessoa** (`GET /vendas/por-pessoa`, tela
+  `/vendas/por-pessoa`, relatório exportável `consumo-pessoa`, 04/09/2026). O caso do dono:
+  "o funcionário vai comprar, lançamos e depois cobramos o valor dele".
+  ⚠️ **A consulta mora em `services/consumo_pessoa.py` porque tem DOIS consumidores**: a tela
+  e o arquivo de `/exportar`. Escrita duas vezes, a tela mostraria um valor e o arquivo
+  entregue ao funcionário mostraria outro — e a diferença apareceria numa discussão sobre
+  dinheiro.
+  ⚠️ **Cupom cancelado fica de fora.** Ele existe na base para a conferência com o PDV
+  fechar, mas cobrar alguém por um cupom cancelado seria cobrar o que não foi consumido.
+  ⚠️ **As somas dos itens saem de uma CTE**, nunca do mesmo SELECT do cabeçalho: juntar
+  `vendas` com `venda_itens` repete o cabeçalho uma vez por linha, e `sum(v.desconto)` ali
+  multiplicaria o desconto pelo número de itens — a armadilha que já custou a conferência do
+  dia 02/09.
+  ⚠️ **O filtro de pessoas do relatório exportável só oferece quem TEM política.** As demais
+  nunca trariam linha, e escolhê-las devolveria um arquivo vazio sem dizer por quê.
+
 ## Armadilhas já pagas
 
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de

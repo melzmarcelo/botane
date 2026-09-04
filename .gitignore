@@ -42,3 +42,7 @@ web/tsconfig.tsbuildinfo
 web/_v*.log
 api/_todos.log
 api/_api.log
+
+# Log do uvicorn local (o processo segura o arquivo)
+_api.log
+_api.err

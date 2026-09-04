@@ -148,6 +148,12 @@ export default function PaginaVendas() {
               Lançar
             </Link>
           )}
+          {/* 🔑 **O caminho para a cobrança do funcionário** (04/09/2026). O
+              relatório vive aqui pelo mesmo motivo que a busca do PDV: quem
+              quer saber o que fulano consumiu abre Vendas, não Exportar. */}
+          <Link href="/vendas/por-pessoa" className="btn btn-secundario">
+            Consumo por pessoa
+          </Link>
           {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
               tela do assunto: quem abre Vendas para ver as vendas não vai
               lembrar que ela mora em Integrações — e venda não buscada é receita

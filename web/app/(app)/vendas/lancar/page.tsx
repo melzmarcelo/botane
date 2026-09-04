@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -35,6 +35,23 @@ type ItemManual = {
 };
 
 const ITEM_VAZIO: ItemManual = { id_produto: "", rotulo: "", quantidade: "", valor_unitario: "" };
+
+/** O que o servidor responde quando perguntam quanto o cupom vai sair. */
+type Previa = {
+  politica: string | null;
+  /** Linhas que a política "pelo custo" não conseguiu custear. */
+  sem_custo: number;
+  itens: {
+    id_produto: number | null;
+    valor_unitario_cheio: number;
+    valor_unitario: number;
+    mudou: boolean;
+    total: number;
+  }[];
+  total_cheio: number;
+  total: number;
+  desconto: number;
+};
 
 /** A pessoa e a política que ela carrega para o cupom. */
 type PessoaCupom = {
@@ -79,6 +96,56 @@ export default function PaginaLancarVenda() {
     0,
   );
   const prontos = itens.filter((i) => i.id_produto && Number(i.quantidade.replace(",", ".")) > 0);
+
+  // 🔑 **A prévia do que vai sair** (04/09/2026, pedido do dono: "gostaria que
+  // o valor fosse ajustado ao digitar para ter esta percepção visual"). Antes a
+  // tela só AVISAVA que o servidor ia ajustar; o número aparecia depois de
+  // gravar, e quem lançava não tinha como conferir o que ia cobrar.
+  //
+  // ⚠️ **Quem calcula é o SERVIDOR, pelo mesmo código do lançamento.** O
+  // desconto a tela até saberia aplicar, mas o CUSTO vem da cascata da ficha —
+  // e a segunda implementação divergiria no dia em que a cascata mudasse.
+  const [cupomPrevia, setCupomPrevia] = useState<Previa | null>(null);
+  const corpoPrevia = JSON.stringify(
+    prontos.map((i) => ({
+      id_produto: Number(i.id_produto),
+      quantidade: Number(i.quantidade.replace(",", ".")) || 0,
+      valor_unitario: Number(i.valor_unitario.replace(",", ".")) || 0,
+    })),
+  );
+  useEffect(() => {
+    // Sem política não há o que prever: o total local já é o valor final, e
+    // pedir ao servidor seria uma requisição por tecla digitada para nada.
+    const lista = JSON.parse(corpoPrevia) as object[];
+    if (!mudaAlgo || !pessoa || !lista.length) {
+      setCupomPrevia(null);
+      return;
+    }
+    let valeu = true;
+    const t = setTimeout(() => {
+      api
+        .post<Previa>("/vendas/previa", { id_pessoa: pessoa.id, itens: lista })
+        // ⚠️ **Resposta atrasada de um pedido velho é DESCARTADA.** Sem o
+        // `valeu`, digitar rápido faria a resposta de dois itens atrás
+        // sobrescrever a atual, e a tela mostraria um valor que não é o do que
+        // está na tela.
+        .then((r) => valeu && setCupomPrevia(r))
+        .catch(() => valeu && setCupomPrevia(null));
+    }, 350);
+    return () => {
+      valeu = false;
+      clearTimeout(t);
+    };
+  }, [corpoPrevia, mudaAlgo, pessoa]);
+
+  /** O que a linha `n` vai custar de verdade — ou nada, se não muda. */
+  function ajustada(n: number) {
+    if (!cupomPrevia) return null;
+    // ⚠️ A prévia só traz as linhas PRONTAS, e o índice delas não é o da tela.
+    const ordem = itens.filter((i) => i.id_produto && Number(i.quantidade.replace(",", ".")) > 0);
+    const pos = ordem.indexOf(itens[n]);
+    return pos >= 0 ? cupomPrevia.itens[pos] ?? null : null;
+  }
 
   function trocar(indice: number, mudanca: Partial<ItemManual>) {
     setItens(itens.map((i, n) => (n === indice ? { ...i, ...mudanca } : i)));
@@ -270,6 +337,21 @@ export default function PaginaLancarVenda() {
             </Aviso>
           </div>
         )}
+
+        {/* ⚠️ **A diferença que seria silenciosa** (04/09/2026). Linha sem custo
+            conhecido sai pelo preço CHEIO dentro de um cupom "pelo custo" — e
+            sem este aviso quem lança presume que a política valeu para tudo, e
+            só descobre na hora de cobrar. O desconto também não se aplica ali:
+            10% sobre o preço de venda não é 10% sobre o custo. */}
+        {cupomPrevia && cupomPrevia.sem_custo > 0 && (
+          <div className="mt-3">
+            <Aviso tipo="info">
+              <b>{cupomPrevia.sem_custo} item(ns) sem custo conhecido</b> — esses saem
+              pelo preço de venda, porque o sistema não sabe quanto custam. Cadastre a
+              ficha técnica ou o custo do produto para que a política valha para eles.
+            </Aviso>
+          </div>
+        )}
       </Cartao>
 
       {aba === "manual" ? (
@@ -284,8 +366,17 @@ export default function PaginaLancarVenda() {
                       Qtd
                     </th>
                     <th className="num" style={{ width: 140, minWidth: 140 }}>
-                      Valor unitário
+                      {mudaAlgo ? "Preço cheio" : "Valor unitário"}
                     </th>
+                    {/* ⚠️ **Coluna à parte, e o campo editável continua com o
+                        preço CHEIO.** Pôr o valor já ajustado dentro do campo
+                        faria o envio levar o descontado, e o servidor
+                        descontaria de novo: 20% viraria 36%, calado. */}
+                    {mudaAlgo && (
+                      <th className="num" style={{ width: 130, minWidth: 130 }}>
+                        Sai por
+                      </th>
+                    )}
                     <th className="num" style={{ width: 120, minWidth: 120 }}>
                       Total
                     </th>
@@ -345,10 +436,30 @@ export default function PaginaLancarVenda() {
                           onChange={(e) => trocar(n, { valor_unitario: e.target.value })}
                         />
                       </td>
+                      {mudaAlgo && (
+                        <td className="num tabular-nums">
+                          {(() => {
+                            const a = ajustada(n);
+                            if (!a) return <span className="text-suave">—</span>;
+                            return a.mudou ? (
+                              <b className="text-destaque">{reais(a.valor_unitario)}</b>
+                            ) : (
+                              // Linha que a política não muda (item sem custo
+                              // conhecido, na base CUSTO) sai pelo preço de
+                              // tabela — e dizer isso evita que quem lança
+                              // pense que o desconto falhou.
+                              <span className="text-suave">{reais(a.valor_unitario)}</span>
+                            );
+                          })()}
+                        </td>
+                      )}
                       <td className="num tabular-nums">
                         {reais(
-                          (Number(i.quantidade.replace(",", ".")) || 0) *
-                            (Number(i.valor_unitario.replace(",", ".")) || 0),
+                          ajustada(n)
+                            ? (Number(i.quantidade.replace(",", ".")) || 0) *
+                                (ajustada(n)!.valor_unitario ?? 0)
+                            : (Number(i.quantidade.replace(",", ".")) || 0) *
+                                (Number(i.valor_unitario.replace(",", ".")) || 0),
                         )}
                       </td>
                       <td className="text-right">
@@ -376,9 +487,27 @@ export default function PaginaLancarVenda() {
               >
                 Mais um item
               </button>
+              {/* 🔑 **Cheio, desconto e cobrado — os três** (pedido do dono).
+                  Só o total final não deixaria ninguém conferir o desconto, que
+                  é justamente o número que o funcionário vai querer ver. */}
               <p className="text-[15px]">
-                <span className="text-suave">total </span>
-                <b className="tabular-nums">{reais(totalManual)}</b>
+                {cupomPrevia && cupomPrevia.desconto > 0 ? (
+                  <>
+                    <span className="text-suave">cheio </span>
+                    <span className="tabular-nums line-through text-suave">
+                      {reais(cupomPrevia.total_cheio)}
+                    </span>
+                    <span className="text-suave"> · desconto </span>
+                    <span className="tabular-nums">{reais(cupomPrevia.desconto)}</span>
+                    <span className="text-suave"> · total </span>
+                    <b className="tabular-nums">{reais(cupomPrevia.total)}</b>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-suave">total </span>
+                    <b className="tabular-nums">{reais(cupomPrevia ? cupomPrevia.total : totalManual)}</b>
+                  </>
+                )}
               </p>
             </div>
 

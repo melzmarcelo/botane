@@ -57,6 +57,16 @@ export default function PaginaVenda() {
   if (!venda) return <Carregando />;
 
   const margem = venda.receita - venda.custo_teorico;
+  // 🔑 **O que a política da pessoa tirou deste cupom.** ⚠️ O preço cheio nulo
+  // cai no cobrado: nulo é "a política não tocou nesta linha", e tratá-lo como
+  // zero faria todo cupom comum anunciar 100% de desconto.
+  const totalCheio = venda.itens.reduce(
+    (soma, i) =>
+      soma + Number(i.quantidade) * Number(i.valor_unitario_cheio ?? i.valor_unitario),
+    0,
+  );
+  const descontoPolitica =
+    totalCheio - venda.itens.reduce((soma, i) => soma + Number(i.valor_total), 0);
   const parcial = venda.itens_sem_custo > 0;
 
   return (
@@ -76,6 +86,27 @@ export default function PaginaVenda() {
             {venda.canal ? ` · ${CANAIS[venda.canal] ?? venda.canal.toLowerCase()}` : ""}
             {venda.mesa ? ` · mesa ${venda.mesa}` : ""}
           </p>
+          {/* 🔑 **Para quem foi o cupom, e por qual regra** (04/09/2026). A
+              política vem CONGELADA do dia do lançamento, não do cadastro de
+              hoje: quem passou de 20% para 30% de desconto faria este cupom
+              antigo se explicar por uma regra que não valia quando ele nasceu. */}
+          {venda.pessoa && (
+            <p className="mt-1 text-[13.5px]">
+              <span className="text-suave">para </span>
+              <Link href={`/fornecedores/${venda.id_pessoa}`} className="link-registro">
+                {venda.pessoa}
+              </Link>
+              {venda.cupom_base && (
+                <span className="text-suave">
+                  {" · "}
+                  {venda.cupom_base === "CUSTO" ? "pelo custo" : "pelo preço de venda"}
+                  {Number(venda.cupom_desconto_pct) > 0
+                    ? `, com ${Number(venda.cupom_desconto_pct)}% de desconto`
+                    : ""}
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {venda.cancelada ? (
@@ -130,6 +161,23 @@ export default function PaginaVenda() {
               desconto de {reais(Number(venda.desconto))} já descontado
             </p>
           )}
+          {/* 🔑 **O valor cheio e o desconto da política** (04/09/2026, pedido
+              do dono: "ao acessar este cupom, ver o valor cheio e o valor do
+              desconto"). O desconto do CABEÇALHO acima vem do PDV; este vem da
+              política da pessoa e é calculado linha a linha, sobre o preço de
+              tabela guardado em cada item. São coisas diferentes e aparecem
+              separadas — somá-los esconderia qual dos dois explicou a
+              diferença. */}
+          {descontoPolitica > 0 && (
+            <p className="mt-1 text-[13px]">
+              <span className="text-suave">cheio </span>
+              <span className="tabular-nums line-through text-suave">
+                {reais(totalCheio)}
+              </span>
+              <span className="text-suave"> · desconto de </span>
+              <b className="tabular-nums">{reais(descontoPolitica)}</b>
+            </p>
+          )}
         </Cartao>
         <Cartao titulo={parcial ? "Custo teórico (parcial)" : "Custo teórico"}>
           <p className="text-[26px] font-bold tabular-nums">{reais(venda.custo_teorico)}</p>
@@ -152,6 +200,7 @@ export default function PaginaVenda() {
               <tr>
                 <th>Produto</th>
                 <th className="num">Qtd</th>
+                {descontoPolitica > 0 && <th className="num">Cheio</th>}
                 <th className="num">Unitário</th>
                 <th className="num">Total</th>
                 <th className="num">Custo un.</th>
@@ -198,6 +247,20 @@ export default function PaginaVenda() {
                     </span>
                   </td>
                   <td className="num tabular-nums">{Number(i.quantidade)}</td>
+                  {descontoPolitica > 0 && (
+                    <td className="num tabular-nums text-suave">
+                      {/* Linha que a política não mexeu mostra um traço, não o
+                          mesmo número duas vezes: repetir sugeriria um desconto
+                          de zero onde não houve desconto nenhum. */}
+                      {i.valor_unitario_cheio === null ? (
+                        "—"
+                      ) : (
+                        <span className="line-through">
+                          {reais(Number(i.valor_unitario_cheio))}
+                        </span>
+                      )}
+                    </td>
+                  )}
                   <td className="num tabular-nums">{reais(Number(i.valor_unitario))}</td>
                   <td className="num font-semibold tabular-nums">
                     {reais(Number(i.valor_total))}

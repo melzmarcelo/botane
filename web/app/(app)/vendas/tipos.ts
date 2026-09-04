@@ -27,6 +27,14 @@ export type ItemVenda = {
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
+  /**
+   * O preço de tabela, ANTES da política da pessoa.
+   *
+   * ⚠️ **NULO quer dizer "a política não tocou nesta linha"**, e aí o cheio É o
+   * `valor_unitario`. Tratá-lo como zero faria a tela anunciar um desconto de
+   * 100% em todo cupom comum.
+   */
+  valor_unitario_cheio: number | null;
   /** ⚠️ CONGELADO no momento da importação — não é o custo de hoje. */
   custo_ficha_unitario: number | null;
   origem_custo: string | null;
@@ -74,6 +82,11 @@ export type VendaDetalhe = {
   cancelada: boolean;
   importada_em: string | null;
   usuario: string | null;
+  /** Para quem foi este cupom — e a política que valia NO DIA, congelada. */
+  id_pessoa: number | null;
+  pessoa: string | null;
+  cupom_base: "VENDA" | "CUSTO" | null;
+  cupom_desconto_pct: number | null;
   itens: ItemVenda[];
   movimentos: MovimentoDaVenda[];
   receita: number;

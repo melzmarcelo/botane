@@ -11,6 +11,12 @@ class ItemVenda(BaseModel):
     descricao: str | None = None
     quantidade: float = Field(gt=0)
     valor_unitario: float = Field(default=0, ge=0)
+    # 🔑 **O preço de tabela, antes da política da pessoa** (04/09/2026).
+    # ⚠️ **Quem preenche é o SERVIDOR, nunca o cliente.** `_aplicar_politica` o
+    # grava ao reescrever o valor, e `importar` o zera antes disso — aceitá-lo
+    # de fora deixaria qualquer chamador declarar um desconto que não houve, e
+    # o relatório de consumo somaria um desconto inventado.
+    valor_unitario_cheio: float | None = None
 
 
 class VendaImportar(BaseModel):
@@ -50,6 +56,21 @@ class VendaImportar(BaseModel):
 
 class ImportarVendasRequest(BaseModel):
     vendas: list[VendaImportar]
+
+
+class PreviaCupomRequest(BaseModel):
+    """O que a tela de lançamento pergunta antes de gravar: quanto vai sair.
+
+    🔑 **Existe para que a regra tenha UMA implementação** (04/09/2026, pedido
+    do dono: "que o valor fosse ajustado ao digitar para ter esta percepção
+    visual"). A tela poderia multiplicar pelo desconto sozinha, mas o CUSTO ela
+    não sabe calcular — ele vem da mesma cascata da ficha — e as duas contas
+    divergiriam no dia em que a cascata mudasse. Aqui a prévia sai do MESMO
+    código que o lançamento usa.
+    """
+
+    id_pessoa: int | None = None
+    itens: list[ItemVenda]
 
 
 class VendaResponse(BaseModel):

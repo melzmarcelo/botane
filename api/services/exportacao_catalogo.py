@@ -37,6 +37,7 @@ import arquivos
 from models.produtos import TIPOS
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
+from services import consumo_pessoa as consumo_motor
 from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
@@ -81,6 +82,25 @@ def _opcoes_situacao(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": v, "nome": n} for v, n in SITUACOES]
 
 
+def _opcoes_pessoas(cur, _id_unidade: int) -> list[dict]:
+    """As pessoas que TÊM política de cupom — não o cadastro inteiro.
+
+    ⚠️ Oferecer as 800 do cadastro faria a lista virar a mentira do `<select>`
+    paginado. Quem tem política é quem aparece neste relatório; as demais nunca
+    trariam linha alguma, e escolhê-las devolveria um arquivo vazio sem dizer
+    por quê.
+    """
+    cur.execute("""SELECT id AS valor, nome FROM fornecedores
+                    WHERE ativo AND (cupom_base = 'CUSTO' OR coalesce(cupom_desconto_pct, 0) > 0)
+                    ORDER BY lower(nome)""")
+    return [dict(r) for r in cur.fetchall()]
+
+
+def _opcoes_detalhe(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": "sintetico", "nome": "Sintético — um total por pessoa"},
+            {"valor": "analitico", "nome": "Analítico — item a item"}]
+
+
 def _opcoes_classes(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": c, "nome": f"Classe {c}"} for c in ("A", "B", "C")]
 
@@ -120,6 +140,13 @@ FILTROS: dict[str, dict] = {
     # valia o estoque naquele dia", e oferecer duas pontas ali faria escolher um
     # intervalo para uma pergunta que tem uma data só.
     "data": {"tipo": "data", "rotulo": "Na data de", "ajuda": "hoje, se não escolher"},
+    "pessoas": {"tipo": "multipla", "rotulo": "Pessoas", "ajuda": "todas com política",
+                "opcoes": _opcoes_pessoas},
+    # ⚠️ Escolha múltipla porque é o vocabulário da janela — mas o relatório usa
+    # só a PRIMEIRA: sintético e analítico são dois documentos, e um arquivo com
+    # os dois faria quem recebe separar de novo.
+    "detalhe": {"tipo": "multipla", "rotulo": "Detalhe", "ajuda": "sintético",
+                "opcoes": _opcoes_detalhe},
 }
 
 
@@ -811,6 +838,44 @@ def _memoria_produto(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
+    """O que cada pessoa consumiu e quanto teve de desconto — o documento da cobrança.
+
+    ⚠️ **A consulta é a MESMA da tela** (`services.consumo_pessoa`). Repetir o
+    SQL aqui faria a tela mostrar um valor e o arquivo entregue ao funcionário
+    mostrar outro, e a diferença apareceria numa discussão sobre dinheiro.
+    """
+    inicio, fim = _periodo(f)
+    pessoas = _lista(f.get("pessoas"))
+    # ⚠️ Um documento por arquivo: sintético e analítico respondem perguntas
+    # diferentes, e juntá-los faria quem recebe separar de novo.
+    detalhe = (_lista(f.get("detalhe")) or ["sintetico"])[0]
+    linhas = consumo_motor.apurar(
+        cur, id_unidade, inicio, fim,
+        [int(p) for p in pessoas] if pessoas else None, detalhe)
+
+    if detalhe == "analitico":
+        colunas = [("data", "Data"), ("documento", "Documento"), ("pessoa", "Pessoa"),
+                   ("produto_codigo", "Código"), ("produto", "Produto"),
+                   ("quantidade", "Quantidade"), ("unitario_cheio", "Preço cheio"),
+                   ("unitario", "Cobrado"), ("total_cheio", "Total cheio"),
+                   ("desconto", "Desconto"), ("total", "Total cobrado")]
+    else:
+        colunas = [("pessoa", "Pessoa"), ("cupons", "Cupons"), ("itens", "Itens"),
+                   ("total_cheio", "Valor cheio"), ("desconto", "Desconto"),
+                   ("total", "A cobrar")]
+
+    cheio = sum(float(l["total_cheio"] or 0) for l in linhas)
+    total = sum(float(l["total"] or 0) for l in linhas)
+    return Saida(
+        linhas, colunas,
+        f"Consumo por pessoa — {detalhe}",
+        [("Valor cheio", round(cheio, 2)),
+         ("Desconto", round(cheio - total, 2)),
+         ("A cobrar", round(total, 2))],
+    )
+
+
 RELATORIOS: dict[str, Relatorio] = {
     "saldos": Relatorio(
         "Posição de estoque", "O que existe hoje, por produto e prateleira, com o valor.",
@@ -862,6 +927,12 @@ RELATORIOS: dict[str, Relatorio] = {
         "Memória de cálculo por produto",
         "Um insumo movimento a movimento, com a conta do custo médio escrita em cada linha.",
         "estoque.saldos", "movimentos", ("periodo", "produtos"), _memoria_produto),
+    "consumo-pessoa": Relatorio(
+        "Consumo por pessoa",
+        "O que cada um consumiu, quanto custaria e quanto está sendo cobrado — "
+        "o documento para cobrar o funcionário.",
+        "cmv.relatorios", "vendas",
+        ("periodo", "pessoas", "detalhe"), _consumo_pessoa),
     "precos": Relatorio(
         "Evolução de preço",
         "O que subiu, quanto pesou e com quem sai mais barato, com o peso por setor junto.",
