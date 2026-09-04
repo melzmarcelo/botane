@@ -167,6 +167,23 @@ class FundirGrupoRequest(BaseModel):
     baixar_vendas: bool = True
 
 
+class ConversaoDoCodigoRequest(BaseModel):
+    """Quantas unidades de ESTOQUE vêm em uma unidade daquele código de fora.
+
+    🔑 **O caso do açúcar de confeiteiro** (pedido do dono, 04/09/2026): o
+    fornecedor manda o pacote de 1 kg e o de 500 g como produtos diferentes, e
+    aqui os dois são o mesmo. Depois da fusão, o código do de 500 g vira apelido
+    do sobrevivente e a nota dele entrava como 1 kg por unidade — o estoque
+    dobrava, calado.
+    """
+
+    sistema: str = Field(min_length=1, max_length=20)
+    codigo: str = Field(min_length=1, max_length=60)
+    # ⚠️ Maior que zero: fator zero faria a nota inteira entrar como nada, e é
+    # um erro de digitação plausível (a vírgula no lugar errado).
+    fator: float = Field(gt=0, le=100000)
+
+
 class LocalDoProdutoRequest(BaseModel):
     id_local: int
 
@@ -204,6 +221,11 @@ class CodigoExterno(BaseModel):
     codigo: str
     descricao_externa: str | None = None
     fator: float | None = None
+    # 🔑 **A marca que faz o 1 valer** (migração 054). `fator` nasce 1 e a
+    # cascata ignora esse 1 de propósito — senão o apelido criado pela fusão
+    # encobriria o fator de compra do produto. Digitada por gente na tela, a
+    # conversão vale seja qual for o número, inclusive 1.
+    fator_confirmado: bool = False
     origem_vinculo: str | None = None
     confirmado_em: datetime | None = None
     fornecedor: str | None = None

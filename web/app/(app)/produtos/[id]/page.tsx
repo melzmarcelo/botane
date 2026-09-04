@@ -19,6 +19,7 @@ import BotaoExportar from "@/components/exportar";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
+import CodigosDoProduto, { CodigoExterno } from "./codigos";
 import ComposicaoKit from "./kit";
 import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
@@ -132,11 +133,18 @@ export default function FormularioProduto() {
       .catch((e) => setErro(e.message));
   }, []);
 
+  // 🔑 Os códigos de fora que caem neste produto — o de-para que a fusão e o
+  // vínculo de nota criaram. Guardado à parte do formulário porque não é campo
+  // do cadastro: é o que o mundo lá fora chama este produto.
+  const [codigos, setCodigos] = useState<CodigoExterno[]>([]);
+  const [recarga, setRecarga] = useState(0);
+
   useEffect(() => {
     if (novo) return;
     api
       .get<Record<string, unknown>>(`/produtos/${id}`)
       .then((p) => {
+        setCodigos((p.codigos_externos as CodigoExterno[]) ?? []);
         setF({
           ...VAZIO,
           ...Object.fromEntries(
@@ -159,7 +167,7 @@ export default function FormularioProduto() {
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
-  }, [id, novo]);
+  }, [id, novo, recarga]);
 
   async function salvarPrecoDaLoja(valor: number | null) {
     setSalvandoPreco(true);
@@ -608,6 +616,28 @@ export default function FormularioProduto() {
       {!novo && f.controla_estoque && pode("estoque.saldos") && (
         <Cartao titulo="Custo">
           <CustoDoProduto idProduto={Number(id)} um={f.um_estoque || null} />
+        </Cartao>
+      )}
+
+      {/* 🔑 **O caso do açúcar de confeiteiro** (pedido do dono, 04/09/2026): o
+          fornecedor manda o pacote de 1 kg e o de 500 g como produtos
+          diferentes, e aqui os dois são o mesmo. Depois da fusão, a nota do de
+          500 g entrava como 1 kg por unidade — o estoque dobrava calado.
+          ⚠️ Só quando HÁ código: um produto cadastrado à mão e nunca vinculado
+          não tem o que mostrar, e um cartão vazio em toda tela de produto seria
+          ruído em troca de nada. */}
+      {!novo && !!codigos.length && (
+        <Cartao
+          titulo="Códigos de fora, e quanto cada um vale"
+          descricao="O que o Omie, o PDV e os fornecedores chamam deste produto — e quantas unidades de estoque vêm em cada um."
+        >
+          <CodigosDoProduto
+            idProduto={Number(id)}
+            codigos={codigos}
+            umEstoque={f.um_estoque || null}
+            podeEditar={podeEditar}
+            aoMudar={() => setRecarga((n) => n + 1)}
+          />
         </Cartao>
       )}
 

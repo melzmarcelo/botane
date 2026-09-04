@@ -261,6 +261,31 @@ passada da madrugada.
 
 ---
 
+### O mesmo produto em embalagens diferentes
+
+O fornecedor manda o açúcar de confeiteiro em pacote de 1 kg e às vezes em
+pacote de 500 g — e para ele são **produtos diferentes**, com códigos
+diferentes. Aqui os dois são o mesmo produto.
+
+Junte os dois cadastros com o botão **Vincular**. Feito isso, abra o produto e
+vá ao cartão **Códigos de fora, e quanto cada um vale**: cada código aparece
+com o que ele é lá e de onde veio. No do pacote de 500 g, informe a conversão
+**0,5** — quer dizer *"uma unidade deste código é meio quilo"*.
+
+⚠️ **A unidade de estoque tem de ser a medida, não a embalagem.** Açúcar em
+`KG`, nunca em `PCT`: com o estoque contado em pacotes, o de 500 g não teria como
+ser representado, e a ficha técnica consome em gramas.
+
+⚠️ **Por padrão a conversão é 1**, e códigos que ninguém informou aparecem como
+*"não informada"*. Informar 1 também vale — é uma afirmação, e o sistema passa a
+tratá-la como tal.
+
+⚠️ **Vale da próxima nota em diante.** O que já foi lançado não muda: a entrada
+antiga ficou com a quantidade que se acreditava na época, e corrigir isso é
+estorno, à mão.
+
+---
+
 ### O mesmo produto com vários códigos
 
 O catálogo do Omie cria **um cadastro por código** — e o mesmo abacate aparece uma

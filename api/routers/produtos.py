@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    ConversaoDoCodigoRequest,
     FundirGrupoRequest,
     LocalDoProduto,
     LocalDoProdutoRequest,
@@ -305,6 +306,50 @@ def fundir_duplicados(body: FundirGrupoRequest,
     return {**r, "message": f"{len(r['juntados'])} cadastro(s) juntado(s) num só."}
 
 
+@router.put("/{id_produto}/codigos/conversao")
+def conversao_do_codigo(id_produto: int, body: ConversaoDoCodigoRequest,
+                        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Diz quantas unidades de estoque vêm em uma unidade daquele código de fora.
+
+    🔑 **O caso do AÇÚCAR DE CONFEITEIRO.** O fornecedor manda o pacote de 1 kg
+    e o de 500 g como produtos DIFERENTES, com códigos diferentes — e aqui os
+    dois são o mesmo produto. Feita a fusão, o código do de 500 g vira apelido
+    do sobrevivente, e a nota dele passava a entrar como **1 kg por unidade**: o
+    estoque dobrava sem nada denunciando, e a diferença só apareceria na
+    primeira contagem, como "ajuste de inventário".
+
+    ⚠️ **Isto NÃO recalcula nota já lançada.** O razão é append-only, e as
+    entradas antigas ficaram com a quantidade que se acreditava na época. A
+    conversão vale da próxima nota em diante; corrigir o passado é estorno, à
+    mão, por quem sabe o que aconteceu.
+
+    ⚠️ **Marca `fator_confirmado`**, e é isso que faz o 1 valer: a coluna nasce
+    com 1 e a cascata ignora esse 1 de propósito (senão o vínculo criado pelo
+    lançamento encobriria o `fator_compra` do produto). Digitado por gente, 1 é
+    uma afirmação.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """UPDATE codigos_externos
+                  SET fator = %s, fator_confirmado = true,
+                      confirmado_por = %s, confirmado_em = now()
+                WHERE sistema = %s AND codigo = %s AND id_produto = %s
+              RETURNING codigo""",
+            (body.fator, ctx.id_usuario, body.sistema.upper(), body.codigo, id_produto),
+        )
+        if not cur.fetchone():
+            # ⚠️ Só os códigos DESTE produto: mandar o de outro repontaria a
+            # conversão para o lugar errado, e o `id_produto` no WHERE é o que
+            # impede isso.
+            raise HTTPException(status_code=404,
+                                detail="Este código não aponta para este produto.")
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "conversao_codigo",
+                            depois={"sistema": body.sistema, "codigo": body.codigo,
+                                    "fator": body.fator})
+    return {"message": (f"1 {body.codigo} passa a entrar como {body.fator:g} "
+                        "unidade(s) de estoque. Vale da próxima nota em diante.")}
+
+
 @router.get("/{id_produto}/custo")
 def custo_do_produto(id_produto: int,
                      ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> dict:
@@ -541,6 +586,7 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         # diz nada; "8821 — Hortifruti Silva" diz de quem é.
         cur.execute(
             """SELECT c.sistema, c.codigo, c.descricao_externa, c.fator,
+                      c.fator_confirmado,
                       c.origem_vinculo, c.confirmado_em,
                       f.nome AS fornecedor, u.nome AS confirmado_por
                  FROM codigos_externos c

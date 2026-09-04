@@ -138,13 +138,18 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
 
 
 def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str | None,
-                   um_nota: str | None = None) -> Decimal:
+                   um_nota: str | None = None, item_codigo_omie: str | None = None) -> Decimal:
     """Quantas unidades de estoque vêm em uma unidade da nota.
 
     A ordem é da resposta mais específica para a mais genérica:
 
     1. **de-para confirmado** — alguém disse que este código deste fornecedor é
        este produto, com este fator. Ninguém sabe mais que quem confirmou.
+    1b. **a conversão dita para o produto do Omie** — o degrau que faz o caso do
+       açúcar de confeiteiro funcionar: o fornecedor manda o pacote de 1 kg e o
+       de 500 g como produtos DIFERENTES, os dois são fundidos num só aqui, e o
+       que sobra do absorvido é o apelido em `OMIE_PRODUTO`. Sem ele não há
+       como dizer que aquele código vale meio quilo.
     2. **a unidade da nota no cadastro do produto** — a caixa desta água tem 12.
        Vem antes do fator do fornecedor porque casa pela UNIDADE: o fornecedor
        pode ter mudado de embalagem, e o número dele ficou para trás.
@@ -161,12 +166,43 @@ def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str 
     # Quem quer dizer "um por um" não precisa dizer nada: 1 já é o resultado.
     if codigo:
         cur.execute(
-            "SELECT fator FROM codigos_externos WHERE sistema = %s AND codigo = %s",
+            """SELECT fator, fator_confirmado FROM codigos_externos
+                WHERE sistema = %s AND codigo = %s""",
             (SISTEMA, codigo),
         )
         linha = cur.fetchone()
-        if linha and dec(linha["fator"]) > 0 and dec(linha["fator"]) != 1:
+        # 🔑 **`fator_confirmado` faz o 1 valer** (migração 054). O caso do
+        # açúcar de confeiteiro: o fornecedor manda o pacote de 1 kg e o de
+        # 500 g como produtos diferentes, e aqui os dois são o mesmo. Feita a
+        # fusão, o código do de 500 g vira apelido e a nota dele entrava como
+        # 1 kg por unidade — o estoque dobrava calado. Quem digita a conversão
+        # na tela do produto marca esta coluna, e aí o número vale seja ele qual
+        # for; o 1 AUTOMÁTICO da coluna continua sendo ignorado, pela razão de
+        # sempre.
+        if linha and dec(linha["fator"]) > 0 and (
+                linha["fator_confirmado"] or dec(linha["fator"]) != 1):
             return dec(linha["fator"])
+    # 🔑 **O identificador do produto NO OMIE, quando a conversão foi dita**
+    # (04/09/2026, o caso do açúcar de confeiteiro). O passo acima olha o código
+    # do FORNECEDOR, que só existe quando alguém vinculou um item com
+    # "aprender". Depois de uma FUSÃO não há linha dessas: o que sobra é o
+    # apelido em `OMIE_PRODUTO`, e sem este degrau o pacote de 500 g fundido no
+    # de 1 kg entrava como 1 kg por unidade — o estoque dobrava, calado.
+    # ⚠️ **Só com a conversão CONFIRMADA.** Estes apelidos nascem em massa na
+    # fusão, todos com fator 1; aceitá-los sem a marca faria cada fusão
+    # encobrir o `fator_compra` do produto, que é exatamente o defeito que a
+    # regra do "fator 1 não é resposta" existe para impedir.
+    if item_codigo_omie:
+        cur.execute(
+            """SELECT fator FROM codigos_externos
+                WHERE sistema = %s AND codigo = %s AND id_produto = %s
+                  AND fator_confirmado AND fator > 0""",
+            (vinculo.SISTEMA_PRODUTO, str(item_codigo_omie), id_produto),
+        )
+        linha = cur.fetchone()
+        if linha:
+            return dec(linha["fator"])
+
     da_embalagem = custos.fator_de_embalagem(cur, id_produto, um_nota)
     if da_embalagem:
         return da_embalagem
@@ -202,6 +238,9 @@ def calcular_nota(cur, id_nota: int) -> dict:
     cur.execute(
         """SELECT id, quantidade, valor_unitario, valor_total, valor_desconto,
                   valor_acrescimo, um_nota, id_produto, codigo_fornecedor,
+                  -- O identificador do produto no Omie: e por ele que a
+                  -- conversao dita na tela do produto encontra a embalagem.
+                  codigo_omie,
                   frete_informado, outros_informado
              FROM nota_itens WHERE id_nota = %s ORDER BY seq""",
         (id_nota,),

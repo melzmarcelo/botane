@@ -592,6 +592,27 @@
         receita. É a régua com que se compara mês a mês.
       </p>
 
+      <h3>Onde ver o custo de um produto</h3>
+      <p>
+        Abra o produto: o cartão <strong>Custo</strong> mostra o valor de uma unidade de estoque
+        e, embaixo, <strong>de onde ele veio</strong> — custo médio do estoque desta loja,
+        último preço pago ao fornecedor, ou custo de referência trazido de fora. As três coisas
+        valem diferente, e por isso o número nunca aparece sozinho.
+      </p>
+      <p>
+        O botão <strong>Histórico</strong> abre o que mudou o custo, com a fonte de cada linha.
+        Só o <em>razão</em> é uma linha do tempo: cada movimento guarda o custo médio depois
+        dele. Fornecedor e referência guardam apenas o valor de agora — o sistema não tem os
+        anteriores, e a janela diz isso em vez de fingir que tem.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Sem custo é &ldquo;—&rdquo;, nunca R$ 0,00</p>
+        <p>
+          Zero é uma afirmação: diz que o produto não custa nada. É justamente o número que faz
+          o food cost sair bom demais sem ninguém desconfiar.
+        </p>
+      </div>
+
       <h3>Resumo: cada número e sua origem</h3>
       <table>
         <thead><tr><th>O número na tela</th><th>Vem de</th></tr></thead>
@@ -1116,6 +1137,20 @@
         </p>
       </div>
 
+      <h3>Os produtos vêm junto com as notas</h3>
+      <p>
+        A busca de notas no Omie traz <strong>primeiro o catálogo</strong> e depois as notas.
+        Assim o produto que nasceu lá hoje já existe aqui quando a nota dele chega, em vez de
+        cair na fila de pendências esperando alguém importar o catálogo à mão.
+      </p>
+      <p>
+        Por isso ela <strong>leva alguns minutos</strong>: são milhares de produtos, uma página
+        de cada vez. A busca automática da madrugada faz o catálogo <strong>uma vez por
+        dia</strong> e as notas em toda passada. Falhar no catálogo não impede as notas de
+        entrar — nota que não entra é compra faltando no estoque, e isso é pior que um cadastro
+        que espera mais um dia.
+      </p>
+
       <h3>Conciliação: como o item da nota encontra o produto daqui</h3>
       <p>Uma cascata, do mais confiável para o menos:</p>
       <ol>
@@ -1202,6 +1237,34 @@
         &ldquo;BEB CERV HEINEKEN 350ML&rdquo; contra &ldquo;CERVEJA HEINEKEN PILSEN&rdquo; — o
         mesmo produto — e juntava &ldquo;CAKE BOARD N19&rdquo; com &ldquo;N21&rdquo;, que são
         tamanhos diferentes. Quem reconhece produto é gente.
+      </p>
+
+      <h3>O mesmo produto em embalagens diferentes</h3>
+      <p>
+        O fornecedor manda o açúcar de confeiteiro em pacote de 1&nbsp;kg e às vezes em pacote
+        de 500&nbsp;g — e para ele são <strong>produtos diferentes</strong>, com códigos
+        diferentes. Aqui os dois são o mesmo produto: junte-os com <strong>Vincular</strong>.
+      </p>
+      <p>
+        Feito isso, abra o produto e vá ao cartão <strong>Códigos de fora, e quanto cada um
+        vale</strong>. Cada código aparece com o que ele é lá e de onde veio; no do pacote de
+        500&nbsp;g, informe a conversão <strong>0,5</strong> — quer dizer <em>&ldquo;uma
+        unidade deste código é meio quilo&rdquo;</em>.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Sem isso, o estoque dobra em silêncio</p>
+        <p>
+          Depois da fusão, o código do pacote de 500&nbsp;g passa a cair no cadastro que ficou —
+          e, sem conversão, a nota dele entra como <strong>1&nbsp;kg por unidade</strong>. Nada
+          denuncia: a diferença só aparece na primeira contagem, como &ldquo;ajuste de
+          inventário&rdquo;, que é onde a diferença some sem nome.
+        </p>
+      </div>
+      <p>
+        <strong>Por padrão a conversão é 1</strong>, e o código que ninguém informou aparece
+        como <em>não informada</em>. Informar 1 também vale — é uma afirmação, e o sistema passa
+        a tratá-la como tal. E ela <strong>vale da próxima nota em diante</strong>: o que já foi
+        lançado não muda, porque o razão não se reescreve.
       </p>
 
       <h3>O custo de aquisição não é o valor da nota</h3>
@@ -1662,6 +1725,33 @@
         dentro infla receita e CMV teórico ao mesmo tempo.
       </p>
 
+      <h3>Por que o PDV mostra mais cupons que o Botané</h3>
+      <p>
+        Não mostra mais: mostra a mesma coisa contada de outro jeito. O PDV conta os
+        <strong>cupons emitidos</strong>, incluindo os cancelados; o Botané conta as
+        <strong>vendas</strong>. O painel do dia diz a conta em português —
+        <em>&ldquo;10 cupom(ns) cancelado(s) no PDV, somando R$ 1.529,00 — lá o dia tem 164
+        cupons&rdquo;</em>. Some os dois e o número do PDV aparece.
+      </p>
+      <p>
+        Os cancelados <strong>entram no sistema, marcados</strong>: aparecem na lista de vendas
+        esmaecidos, <strong>não baixam estoque</strong> e não entram em receita nem no CMV.
+        Mercadoria que voltou para a prateleira — ou que nunca saiu — não pode sair do razão.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O valor é o que a casa recebeu</p>
+        <p>
+          O desconto do cupom vem junto e é descontado da receita. Sem isso o Botané somaria as
+          etiquetas em vez do que foi cobrado — e receita é o <em>denominador</em> do food cost:
+          inflada, ela faz o food cost parecer melhor do que é.
+        </p>
+      </div>
+      <p>
+        Para conferir um dia contra o PDV, use o <strong>filtro de dia</strong> na tela de
+        Vendas. E, dentro do cupom, cada linha mostra o <strong>nome do PDV</strong> — o que o
+        caixa e o cliente viram —, com o nome do cadastro logo abaixo quando os dois diferem.
+      </p>
+
       <h3>O item da venda precisa achar o produto daqui</h3>
       <p>
         O vínculo é pelo <strong>código do PDV</strong>, guardado no cadastro do produto. Item
@@ -1931,6 +2021,31 @@
 
     <!-- ================================================================ lojas -->
     <section id="lojas">
+      <h3>De que setor cada pessoa cuida</h3>
+      <p>
+        No cadastro do usuário, o cartão <strong>De que setor cuida</strong> recorta o painel
+        daquela pessoa: quem é da Confeitaria abre o Início já vendo o que a Confeitaria tem
+        para produzir, em vez de percorrer a agenda do Bar junto. O padrão é <strong>a casa
+        toda</strong>.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Setor não é permissão</p>
+        <p>
+          Ele diz de que parte da casa a pessoa cuida, para o painel dela abrir no que
+          interessa — não bloqueia tela nenhuma. Quem decide o que alguém <em>pode fazer</em> é
+          o <strong>papel</strong>.
+        </p>
+      </div>
+
+      <h3>Quem vê os valores</h3>
+      <p>
+        Os números de dinheiro do painel — custo do que saiu, food cost, o que está parado na
+        prateleira, perdas, o movimento do dia — só aparecem para quem tem a permissão
+        <strong>Ver o painel de CMV</strong>. Quem não a tem abre o mesmo Início e vê a parte
+        operacional: o que há para produzir, os alertas e as contagens da casa.
+        <strong>Não é um zero no lugar do valor — o valor simplesmente não vai até lá.</strong>
+      </p>
+
       <h2>12 · Mais de uma loja</h2>
       <p class="chamada">
         Cada loja tem estoque, custo e preço próprios. Quem opera, opera numa de cada vez.

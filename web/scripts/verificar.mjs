@@ -2165,7 +2165,14 @@ try {
   checar("receita entra na apuração", Number(ap.receita) >= 300, ap.receita);
 
   await p.goto(`${WEB}/cmv?`, { waitUntil: "networkidle2" });
-  await new Promise((r) => setTimeout(r, 1500));
+  // ⚠️ **Esperar o CONTEÚDO, nunca um tempo fixo.** Eram 1,5 s, e a rota do CMV
+  // e compilada sob demanda em desenvolvimento: com o app maior a primeira
+  // visita passou disso, e as quatro checagens abaixo passaram a medir a casca
+  // do app — acusando a tela de nao mostrar numeros que ela mostra. E a mesma
+  // licao que `esperarTexto` ja carrega: teste que falha "as vezes" e pior que
+  // teste que nao existe, porque ensina a ignorar o vermelho.
+  await p.waitForFunction(() => /Food cost/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
   const textoCmv = await p.evaluate(() => document.body.innerText);
   checar("painel mostra CMV real e teórico",
     /CMV REAL/i.test(textoCmv) && /CMV TEÓRICO/i.test(textoCmv), textoCmv.slice(0, 80));
@@ -2403,7 +2410,11 @@ try {
   });
   checar("digitar nota leva para a página dela", linkDigitar === "/compras/nova", linkDigitar);
   await irPara(p, `${WEB}/compras/nova`);
-  await new Promise((r) => setTimeout(r, 1200));
+  // ⚠️ Mesma razao do CMV: 1,2 s fixos nao bastam para a rota compilada sob
+  // demanda em desenvolvimento, e a falha aparecia como "o formulario nao abre"
+  // num formulario que abre.
+  await p.waitForFunction(() => document.querySelectorAll("main select").length >= 3,
+    { timeout: 30000, polling: 300 }).catch(() => {});
   const seletoresNota = await p.$$("main select");
   checar("o formulário de digitação abre", seletoresNota.length >= 3, seletoresNota.length);
 

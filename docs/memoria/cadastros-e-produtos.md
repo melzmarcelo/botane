@@ -817,3 +817,33 @@
   apagava tudo e reinseria, levando junto `ultima_compra` e `ultimo_preco` — e com eles o custo
   de reserva de toda ficha de insumo sem entrada no estoque. Agora só sai da tabela quem saiu
   da lista.
+
+- 🔑 **A conversão do código de fora, dita na tela do produto** (`codigos_externos.fator` +
+  `fator_confirmado`, migração 054, cartão **Códigos de fora, e quanto cada um vale**,
+  04/09/2026, pedido do dono). **O caso do AÇÚCAR DE CONFEITEIRO**: o fornecedor manda o pacote
+  de 1 kg e o de 500 g como produtos DIFERENTES, com códigos diferentes — e aqui os dois são o
+  mesmo produto. Feita a fusão, o código do de 500 g vira apelido do sobrevivente e a nota dele
+  passava a entrar como **1 kg por unidade**: o estoque dobrava calado, e a diferença só
+  apareceria na primeira contagem, como "ajuste de inventário".
+  🔑 **Dois obstáculos reais apareceram ao construir, e os dois eram de projeto.**
+  ⚠️ **Primeiro: a cascata IGNORA o fator 1 de propósito.** A coluna nasce com 1 e o lançamento
+  da nota cria linhas com 1 só para guardar o último preço — aceitá-lo como informação fazia o
+  vínculo recém-criado encobrir o `fator_compra` do produto (foi assim que o azeite de 5 L
+  entrou certo na primeira nota e virou 1 L na segunda). Mas "por padrão 1" foi o pedido, e 1
+  digitado por gente **é uma afirmação**. `fator_confirmado` separa o 1 automático do 1 dito.
+  ⚠️ **Segundo, e maior: são DOIS espaços de nome de código**, e `_fator_do_item` só olhava um.
+  `OMIE` é o código do produto **no fornecedor**, que vem na linha da nota e só existe quando
+  alguém vinculou um item com "aprender"; `OMIE_PRODUTO` é o identificador do produto **no
+  Omie**, que é o que a FUSÃO transforma em apelido. Sem o degrau novo, **produto fundido nunca
+  poderia ter conversão por embalagem** — por construção, não por esquecimento.
+  ⚠️ O degrau novo exige `fator_confirmado`: estes apelidos nascem em massa na fusão, todos com
+  fator 1, e aceitá-los sem a marca faria cada fusão encobrir o `fator_compra` do produto — o
+  defeito que a regra do "fator 1 não é resposta" existe para impedir.
+  ⚠️ **Não recalcula nota já lançada.** O razão é append-only e a entrada antiga ficou com a
+  quantidade que se acreditava na época; corrigir o passado é estorno, à mão.
+  ⚠️ **`response_model` descarta chave não declarada**: o campo novo saía do SELECT e sumia na
+  resposta até ser declarado em `models/produtos.CodigoExterno`. O sintoma foi o teste dizendo
+  que a marca não gravava, quando ela gravava e não viajava.
+  ⚠️ O `id_produto` entra no WHERE do UPDATE: sem ele, mandar o código de outro produto
+  repontaria a conversão para o cadastro errado. E fator zero é recusado (422) — a nota inteira
+  entraria como nada, e é erro de digitação plausível.

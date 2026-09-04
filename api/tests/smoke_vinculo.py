@@ -354,6 +354,7 @@ for i in hist:
     chamar("DELETE", f"/produtos/{i}", token=token)
 
 
+
 print("\n5. a fusão, na direção certa")
 st, r = chamar("POST", f"/produtos/{do_omie}/vincular", {"id_sai": do_pdv}, token=token)
 checar("vincular responde", st == 200, (st, r))
@@ -592,6 +593,65 @@ checar("a coluna do absorvido foi zerada — o catálogo não o acha por ela",
        _pela_coluna is None, _pela_coluna)
 checar("mas o apelido responde, e é ele que evita o rascunho duplicado",
        (_pelo_apelido or {}).get("id_produto") == abacate, _pelo_apelido)
+
+print()
+print("7c. a conversao do codigo de fora — o ACUCAR DE CONFEITEIRO")
+# 🔑 **O caso do ACUCAR DE CONFEITEIRO** (pedido do dono, 04/09/2026). O
+# fornecedor manda o pacote de 1 kg e o de 500 g como produtos DIFERENTES, com
+# codigos diferentes — e aqui os dois sao o mesmo produto. Feita a fusao, o
+# codigo do de 500 g vira apelido do sobrevivente, e a nota dele entrava como
+# 1 KG POR UNIDADE: o estoque dobrava calado, e a diferenca so apareceria na
+# primeira contagem como "ajuste de inventario".
+st, com_codigos = chamar("GET", f"/produtos/{abacate}", token=token)
+alvo_cod = next((c for c in (com_codigos.get("codigos_externos") or [])
+                 if c["sistema"] == "OMIE_PRODUTO"), None)
+checar("a tela do produto recebe os codigos de fora", alvo_cod is not None,
+       com_codigos.get("codigos_externos"))
+if alvo_cod:
+    # ⚠️ **Por padrao 1, e "nao informada"** — a coluna nasce com 1 e a cascata
+    # ignora esse 1 de proposito, senao o apelido criado pela fusao encobriria o
+    # fator de compra do produto. A marca separa o 1 automatico do 1 digitado.
+    checar("que nascem com a conversao NAO informada",
+           alvo_cod.get("fator_confirmado") is False, alvo_cod)
+
+    st, r = chamar("PUT", f"/produtos/{abacate}/codigos/conversao",
+                   {"sistema": alvo_cod["sistema"], "codigo": alvo_cod["codigo"],
+                    "fator": 0.5}, token=token)
+    checar("informar a conversao responde", st == 200, (st, r))
+    checar("e a frase diz que vale da PROXIMA nota em diante",
+           "pr" in str((r or {}).get("message", "")).lower(), r)
+
+    st, depois_cod = chamar("GET", f"/produtos/{abacate}", token=token)
+    linha = next((c for c in depois_cod["codigos_externos"]
+                  if c["codigo"] == alvo_cod["codigo"]), None)
+    checar("a conversao fica gravada", linha and abs(float(linha["fator"]) - 0.5) < 0.001,
+           linha)
+    checar("e marcada como informada por gente",
+           linha and linha.get("fator_confirmado") is True, linha)
+
+    # 🔑 **A prova do pedido: a cascata passa a usar o numero.** Sem este degrau
+    # o apelido da fusao nao era consultado para fator nenhum, e o pacote de
+    # 500 g entrava como 1 kg.
+    from services.omie.importador import _fator_do_item as _ff  # noqa: E402
+    from database import get_cursor as _cf  # noqa: E402
+
+    with _cf() as _c:
+        f_com = _ff(_c, abacate, None, None, None, alvo_cod["codigo"])
+    checar("e a nota passa a converter por ela", abs(float(f_com) - 0.5) < 0.001, f_com)
+
+    # ⚠️ Codigo de OUTRO produto nao se reaponta por aqui: o id_produto no WHERE
+    # e o que impede a conversao de cair no cadastro errado.
+    st, r = chamar("PUT", f"/produtos/{abacate_dup}/codigos/conversao",
+                   {"sistema": alvo_cod["sistema"], "codigo": alvo_cod["codigo"],
+                    "fator": 2}, token=token)
+    checar("codigo de outro produto e recusado", st == 404, (st, r))
+    # ⚠️ Fator zero faria a nota inteira entrar como nada — erro de digitacao
+    # plausivel, a virgula no lugar errado.
+    st, r = chamar("PUT", f"/produtos/{abacate}/codigos/conversao",
+                   {"sistema": alvo_cod["sistema"], "codigo": alvo_cod["codigo"],
+                    "fator": 0}, token=token)
+    checar("e conversao zero tambem", st == 422, (st, r))
+
 
 print()
 print("7b. a prévia MOSTRA por quais códigos o cadastro vai responder")
