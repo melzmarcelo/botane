@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    ColherEanRequest,
     ConversaoDoCodigoRequest,
     FundirGrupoRequest,
     LocalDoProduto,
@@ -30,7 +31,8 @@ from models.produtos import (
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import custos as motor_custos
-from services import kits, precos, produtos_vinculo
+from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo
+from services import troca_de_unidade
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
 
@@ -257,6 +259,49 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
     }
 
 
+@router.get("/ean-das-notas")
+def ean_das_notas_previa(
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O código de barras que as notas já trouxeram, e que o cadastro não tem.
+
+    🔑 **A maior fonte gratuita de EAN é a própria compra.** Medido na base:
+    2.019 produtos não têm código de barras nenhum, e nenhuma API de GTIN ajuda
+    quem não tem o número. O XML da NF-e traz `cEAN`, o parser já o guarda em
+    `nota_itens.codigo_barras`, e ele ficava parado ali.
+
+    ⚠️ **É prévia, não aplicação** — as três armadilhas estão no serviço, e as
+    três aparecem aqui: o EAN pode ser o da CAIXA e não o da unidade (a resposta
+    marca quando a unidade da nota difere da do estoque), o de-para pode estar
+    errado, e `codigo_barras` é único.
+    """
+    with get_cursor() as cur:
+        return ean_das_notas.previa(cur, unidade_atual(cur, ctx))
+
+
+@router.post("/ean-das-notas")
+def ean_das_notas_colher(
+        body: ColherEanRequest,
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Grava o EAN nos produtos escolhidos.
+
+    ⚠️ **A tela manda ids, nunca o par (produto, código).** O código de cada um
+    é recalculado aqui — aceitá-lo de fora deixaria qualquer chamador plantar um
+    código em qualquer produto, e o campo é único: o plantado bloquearia para
+    sempre o produto legítimo daquele código.
+    """
+    with get_cursor() as cur:
+        r = ean_das_notas.colher(cur, unidade_atual(cur, ctx),
+                                 body.ids_produto, ctx.id_usuario)
+        if r["gravados"]:
+            # ⚠️ Um registro para o LOTE, com os ids dentro: preencher código de
+            # barras em massa é o tipo de coisa que alguém vai querer rastrear
+            # depois ("de onde saiu este código?"), e a nota de origem está na
+            # prévia, não aqui.
+            auditoria.registrar(cur, ctx.id_usuario, "produto", None,
+                                "ean_das_notas", depois=r | {"ids": body.ids_produto})
+        return r
+
+
 @router.get("/duplicados")
 def duplicados(so_do_omie: bool = False, limite: int = Query(default=300, ge=1, le=1000),
                ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> list[dict]:
@@ -376,6 +421,39 @@ def custo_do_produto(id_produto: int,
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         return motor_custos.historico(cur, id_produto, unidade_atual(cur, ctx))
+
+
+@router.get("/{id_produto}/openfoodfacts")
+def sugestoes_openfoodfacts(
+        id_produto: int,
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O que o Open Food Facts sabe do código de barras deste produto.
+
+    🔑 **Sugere, não escreve** (08/09/2026, pedido do dono). Quem aplica é a
+    pessoa, campo a campo, olhando o produto — a mesma regra do "Vincular" ao
+    lado, e pela mesma razão: não existe detector honesto.
+
+    ⚠️ **A razão de não aplicar sozinho tem nome.** Na base real, o produto
+    `CAIXA 30X30X14 1KG BR` (código `0000000027083`) casa no OFF com "Made
+    Without Wheat Blueberry Muffins": o código é interno, preenchido com zeros,
+    e por acaso bate com um registro de lá. Aplicado automaticamente, este
+    recurso renomearia uma caixa de papelão.
+
+    ⚠️ **O código é recusado ANTES da chamada** quando não é um GTIN de verdade,
+    e a resposta diz por quê — "não achamos" e "isto não é código global" são
+    coisas diferentes, e a segunda é sobre o cadastro daqui.
+
+    ⚠️ **Nunca levanta por falha do OFF.** A tela do produto funciona sem esta
+    consulta; derrubá-la porque um serviço de fora não respondeu seria trocar um
+    enfeite por um cadastro inacessível.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT codigo_barras FROM produtos WHERE id = %s", (id_produto,))
+        linha = cur.fetchone()
+        if not linha:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    r = openfoodfacts.consultar(linha["codigo_barras"])
+    return {"codigo_barras": linha["codigo_barras"], **r}
 
 
 @router.get("/{id_produto}/vincular/previa")
@@ -713,7 +791,8 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
             # ⚠️ `um_estoque` entra aqui porque a validação o consulta: sem ele
             # no "antes", um PUT que só muda o preço pareceria estar deixando o
             # produto ativo sem unidade — e levava 400 sem ter mexido nisso.
-            "SELECT codigo, nome, tipo, status, producao_propria, um_estoque "
+            "SELECT codigo, nome, tipo, status, producao_propria, um_estoque, "
+            "       um_compra, fator_compra "
             "  FROM produtos WHERE id = %s",
             (id_produto,),
         )
@@ -734,12 +813,37 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
             if outro:
                 raise HTTPException(status_code=409, detail=f"O código já é de {outro['nome']}")
 
+        # 🔑 **Trocar a unidade de estoque converte o que depende dela**
+        # (08/09/2026, pedido do dono): custo de referencia, minimo, maximo e os
+        # fatores de embalagem sao todos POR unidade de estoque. Sem isto, trocar
+        # CX por UN divide ou multiplica por doze, calado, o custo de tudo que
+        # usa o insumo -- e o erro so aparece no CMV do mes, longe da causa.
+        #
+        # ⚠️ **Nao dando para converter, RECUSA com a frase que diz o que fazer.**
+        # Gravar a unidade nova deixando o custo velho seria o pior dos mundos:
+        # o cadastro diria uma coisa e o numero, outra.
+        plano = troca_de_unidade.avaliar(
+            cur, id_produto,
+            antes["um_estoque"],
+            dados.get("um_estoque", antes["um_estoque"]),
+            dados.get("um_compra", antes["um_compra"]),
+            dados.get("fator_compra", antes["fator_compra"]),
+            motor_custos._carregar_ums(cur),
+        )
+        if plano["muda"] and not plano["pode"]:
+            raise HTTPException(status_code=400, detail=plano["motivo"])
+
         campos = {k: v for k, v in dados.items() if k in _EDITAVEIS}
         if campos:
             sets = ", ".join(f"{c} = %s" for c in campos)
             cur.execute(
                 f"UPDATE produtos SET {sets} WHERE id = %s", [*campos.values(), id_produto]
             )
+        # ⚠️ **Depois do UPDATE da unidade, e no MESMO cursor.** Meio caminho
+        # aqui seria um custo dividido por doze num produto que continuou em CX.
+        if plano["muda"] and plano["pode"]:
+            troca_de_unidade.aplicar(cur, id_produto, plano)
+
         _gravar_preco(cur, id_produto, preco, ctx.id_usuario)
         if fornecedores is not None:
             _gravar_fornecedores(cur, id_produto, body.fornecedores or [])

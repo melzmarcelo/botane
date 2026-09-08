@@ -832,6 +832,34 @@ try {
   const naLista = await esperarTexto(p, nomeProduto);
   checar("produto aparece na lista quando procurado pelo nome", naLista, nomeProduto);
 
+  // 🔑 **A colheita de EAN das notas** (08/09/2026). O caminho vive na lista de
+  // produtos, e não em Integrações: código de barras é campo do cadastro, e quem
+  // vai preenchê-lo em lote está olhando esta lista.
+  const temCaminhoEan = await p.evaluate(() =>
+    [...document.querySelectorAll("a")].some(
+      (a) => a.textContent?.includes("Código de barras das notas")));
+  checar("o caminho para a colheita de EAN esta na lista de produtos", temCaminhoEan);
+
+  await p.goto(`${WEB}/produtos/ean-das-notas`, { waitUntil: "networkidle2" });
+  await p.waitForFunction(
+    () => /C[oó]digo de barras das notas/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  const textoEan = await textoVisivel(p);
+  checar("a tela da colheita de EAN abre",
+    /C[oó]digo de barras das notas/i.test(textoEan), textoEan.slice(0, 140));
+  // ⚠️ **Nada pode ser gravado sem clique.** O botao de aplicar nasce
+  // DESABILITADO porque a selecao nasce vazia — marcar tudo por padrao faria um
+  // clique gravar centenas de codigos que ninguem olhou, que e exatamente o que
+  // esta tela existe para nao fazer.
+  const aplicarTravado = await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => /Aplicar em/i.test(x.textContent ?? ""));
+    return b ? b.disabled : "sem-botao";
+  });
+  checar("o botao de aplicar nasce desabilitado (ou nao ha o que aplicar)",
+    aplicarTravado === true || aplicarTravado === "sem-botao", aplicarTravado);
+  await foto(p, "08c-ean-das-notas");
+
   // Limpa: desativa o produto criado pelo teste.
   if (criou) {
     const idProduto = p.url().match(/produtos\/(\d+)/)?.[1];

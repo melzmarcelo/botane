@@ -900,3 +900,70 @@
   pedindo um cursor por query string — quebraria TODA importação de venda); e `Decimal` não
   estava importado no arquivo, então a venda sem política passava e as com política davam 500
   com corpo vazio. Exercitar os QUATRO casos é o que os separou.
+
+- 🔑 **Open Food Facts completa o cadastro pelo código de barras** (08/09/2026, pedido do dono;
+  `services/openfoodfacts.py`, `GET /produtos/{id}/openfoodfacts`, botão na tela do produto).
+  Medido na base real ANTES de escrever a integração, com `api/sonda_openfoodfacts.py`:
+  **1.162 dos 3.071 produtos têm código de barras, e o OFF conhece ~30% deles** — duas amostras
+  independentes de 60 deram 17 e 18 acertos. São ~350 fichas hoje pela metade.
+  🔑 **Ele SUGERE, nunca escreve** — quem aplica é a pessoa, campo a campo. Mesma regra do
+  "Vincular" ao lado, e pela mesma razão: não existe detector honesto.
+  ⚠️ **A razão de não aplicar sozinho tem nome, e apareceu sozinha na amostra:** o produto
+  `CAIXA 30X30X14 1KG BR`, de código `0000000027083`, casa no OFF com *"Made Without Wheat
+  Blueberry Muffins"*, da Marks & Spencer. O código é interno, preenchido com zeros, e por
+  acaso ocupa um número real de lá. Uma caixa de papelão viraria muffin de mirtilo, calada.
+  ⚠️ **`codigo_utilizavel` recusa ANTES da chamada** e diz por quê: prefixo `2` (faixa de uso
+  interno da loja / peso variável), zeros à esquerda, comprimento fora de 8/12/13/14, e dígito
+  verificador que não confere. Na base há **21 códigos assim** (5 com zeros, 16 na faixa 2).
+  "Não achamos" e "isto não é um código global" são coisas diferentes — a segunda é sobre o
+  cadastro daqui, e a frase precisa dizer qual das duas é.
+  ⚠️ **Quantidade e categoria do OFF NÃO viram campo, de propósito.** A quantidade é texto
+  livre e vem errada: `AGUA MIN CRYSTAL 1 5L` voltou como `1`, não 1,5 L — e fator de conversão
+  errado contamina o custo de tudo que usa o insumo. A categoria é a taxonomia deles
+  (`en:whole-pasteurised-milks`), que não é a tabela desta casa. Ficam como ajuda visual.
+  ⚠️ **O nome sugerido é MAIÚSCULO**: os 3.071 produtos da base estão assim, e o OFF devolve
+  "Leite UHT Integral". Uma linha em caixa mista salta na lista antes de qualquer outra coisa.
+  ⚠️ **O endereço é `world.openfoodfacts.org/api/v2/product/<ean>.json`** — sem o `world` e o
+  `api/v2` a chamada não existe. Foi o primeiro tropeço.
+  ⚠️ **O teto real de chamadas é MUITO menor que os 100/min documentados.** Com 0,7 s entre
+  pedidos o OFF devolveu **429 em metade** de uma amostra de 60 — e a primeira versão da sonda
+  contou cada 429 como erro de rede, produzindo uma taxa de acerto de **8% que não media nada**.
+  429 não é falha, é "pergunte mais devagar". Com 1,6 s e recuo honrando `Retry-After`: zero
+  erros. Uma varredura dos 1.162 levaria ~31 min — é trabalho de fila, nunca de tela.
+  ⚠️ **Falha do OFF nunca derruba a tela do produto**: o cadastro funciona sem a consulta.
+  ⚠️ `smoke_openfoodfacts.py` **não depende da internet** — todas as checagens param antes da
+  chamada externa. Suíte que precisa de serviço de fora falha quando ele cai e ensina a ignorar
+  o vermelho.
+
+- 🔑 **Colher o código de barras que a NOTA já trouxe** (08/09/2026, pedido do dono;
+  `services/ean_das_notas.py`, `GET/POST /produtos/ean-das-notas`, tela
+  `/produtos/ean-das-notas`). Medido na base real: **2.019 dos 3.183 produtos não têm código
+  de barras nenhum** — e nenhuma API de GTIN ajuda quem não tem o número. O XML da NF-e traz
+  `cEAN`, `nfe_xml` já o guardava em `nota_itens.codigo_barras`, e ele ficava parado ali.
+  🔑 **É fonte melhor que qualquer base pública**: o fornecedor declara o GTIN do que ELE
+  mandou, num documento fiscal, e cobre exatamente o que a casa compra — inclusive o item de
+  food service que o Open Food Facts nunca vai ter.
+  ⚠️ **Ainda assim SUGERE, e não aplica sozinho**, por três armadilhas que a prévia mostra:
+  1. **O EAN pode ser o da CAIXA.** `cEAN` é o GTIN da unidade COMERCIAL: se a nota vende
+     caixa com 12, o código é o da caixa, e gravá-lo rotula errado o que se conta na
+     prateleira. A prévia mostra a unidade da nota ao lado da do estoque e marca a divergência
+     — e o aviso vem ANTES da tabela, porque depois dela ninguém leria.
+  2. **O de-para item→produto pode estar errado**, e leva o EAN do produto do vizinho.
+  3. **`codigo_barras` é ÚNICO** (`ux_produto_barras`): dois produtos com o mesmo EAN é o
+     sintoma de (2), e o banco recusaria o segundo no meio do lote. Vira conflito na prévia.
+  ⚠️ **A régua do dígito verificador é obrigatória, mas a da faixa 2 NÃO se aplica aqui** —
+  diferente do Open Food Facts. Lá o código precisa identificar o produto no mundo; aqui basta
+  ser um GTIN bem formado que o fornecedor declarou. São perguntas diferentes.
+  ⚠️ **A nota mais RECENTE ganha** quando o produto aparece em várias: embalagem muda.
+  ⚠️ **`colher` recalcula a prévia em vez de confiar no que a tela mandou.** A tela manda só
+  ids; o CÓDIGO vem do servidor. Aceitar o par (produto, código) do cliente deixaria qualquer
+  chamador plantar um código em qualquer produto — e sendo único, o plantado bloquearia para
+  sempre o produto legítimo daquele número.
+  ⚠️ **Os conflitos ficam à vista, não escondidos**: quem vê "80 sem código" e uma lista de 60
+  quer saber dos outros 20, e cada motivo aponta um problema real do cadastro.
+  ⚠️ **A seleção nasce VAZIA.** Marcar tudo por padrão faria um clique gravar centenas de
+  códigos que ninguém olhou.
+  ⚠️ **Os EANs da suíte nascem da marca da rodada, com dígito calculado.** A primeira versão
+  usou códigos reais (`7891000315507`) que já eram de produtos do catálogo: o cenário não
+  subia e três checagens caíam acusando um código intacto — e uma rodada que quebrasse no meio
+  deixava produtos donos daqueles números, envenenando a seguinte.

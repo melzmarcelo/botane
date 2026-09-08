@@ -326,3 +326,15 @@ class ContagemProdutos(BaseModel):
     por_tipo: dict[str, int]
     rascunhos: int
     inativos: int
+
+
+class ColherEanRequest(BaseModel):
+    """Quais produtos recebem o código de barras que a nota trouxe.
+
+    ⚠️ **Só os ids.** O CÓDIGO de cada um é recalculado no servidor: aceitar o
+    par (produto, código) do cliente deixaria qualquer chamador plantar um
+    código em qualquer produto — e `codigo_barras` é único, então o plantado
+    bloquearia para sempre o produto legítimo daquele número.
+    """
+
+    ids_produto: list[int]

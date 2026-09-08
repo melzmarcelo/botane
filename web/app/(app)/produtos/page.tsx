@@ -78,6 +78,15 @@ export default function PaginaProdutos() {
               recorte nenhum. Agora a janela pergunta tipo, categoria, setor e
               situação antes de gerar. */}
           <BotaoExportar relatorio="produtos" />
+          {/* 🔑 **O caminho para a colheita de EAN vive AQUI** (08/09/2026), e
+              não em Integrações: o código de barras é campo do cadastro, e quem
+              vai preenchê-lo em lote está olhando a lista de produtos. Mesmo
+              raciocínio do relatório de consumo, que mora em Vendas. */}
+          {podeEditar && (
+            <Link href="/produtos/ean-das-notas" className="btn btn-secundario">
+              Código de barras das notas
+            </Link>
+          )}
           {podeEditar && (
             <Link href="/produtos/novo" className="btn btn-primario">
               Novo produto
