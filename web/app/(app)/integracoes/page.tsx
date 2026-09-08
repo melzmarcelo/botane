@@ -90,15 +90,6 @@ type CustosIniciais = {
   message: string;
 };
 
-type Vinculo = {
-  codigo: string;
-  descricao_externa: string | null;
-  produto: string;
-  codigo_produto: string;
-  fator: number;
-  confirmado_por: string | null;
-};
-
 export default function PaginaIntegracoes() {
   const aviso = useAviso();
   const { pode } = useSessao();
@@ -116,7 +107,6 @@ export default function PaginaIntegracoes() {
   // há preço de fornecedor. Sem custo não há ficha, nem CMV teórico, nem
   // margem: o prato entra na conta valendo zero e o food cost sai bom demais.
   const [custos, setCustos] = useState<CustosIniciais | null>(null);
-  const [vinculos, setVinculos] = useState<Vinculo[]>([]);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -129,7 +119,6 @@ export default function PaginaIntegracoes() {
                 agenda_frequencia: c.agenda_frequencia ?? "MANUAL",
                 agenda_hora: String(c.agenda_hora ?? 3),
                 agenda_janela_dias: c.agenda_janela_dias ? String(c.agenda_janela_dias) : "" });
-      setVinculos(await api.get<Vinculo[]>("/notas/vinculos"));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -732,40 +721,6 @@ export default function PaginaIntegracoes() {
           )}
         </Cartao>
       )}
-
-      <Cartao
-        titulo="De-para aprendido"
-        descricao="Cada vínculo confirmado uma vez faz as próximas notas entrarem sozinhas."
-      >
-        {!vinculos.length ? (
-          <Vazio>Nenhum vínculo ainda.</Vazio>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Código no Omie</th>
-                  <th>Descrição de lá</th>
-                  <th>Produto daqui</th>
-                  <th className="num">Fator</th>
-                  <th>Quem confirmou</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vinculos.map((v) => (
-                  <tr key={v.codigo}>
-                    <td className="mono">{v.codigo}</td>
-                    <td className="text-suave">{v.descricao_externa ?? "—"}</td>
-                    <td className="font-semibold">{v.produto}</td>
-                    <td className="num">{Number(v.fator)}</td>
-                    <td className="text-suave">{v.confirmado_por ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Cartao>
 
       <EmailSmtp />
 
