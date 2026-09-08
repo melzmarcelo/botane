@@ -38,8 +38,19 @@ coisa à vontade. Só o que passou por isso é promovido.
   propósito: `DEBUG`, `CORS_ORIGINS`, `WEB_URL`, `DB_*` e a senha do admin são de cada
   ambiente. O que estiver online tem o `.env` dele
 
-Ainda **não há remoto nem servidor**: os dois branches são locais. Quando houver, `producao`
-é quem aponta para lá.
+Há remoto (`github.com/melzmarcelo/botane`) e os dois branches estão publicados nele.
+`producao` é quem alimenta o que está no ar: **https://sistema.botanedeliecafe.com.br**,
+um app no DigitalOcean App Platform.
+
+⚠️ **Push em `producao` NÃO põe no ar.** `deploy_on_push: false` nos dois componentes do
+`.do/app.yaml`, de propósito: cada promoção é um ato consciente, feito à mão
+(`doctl apps update <id> --spec .do/app.yaml`, ou o botão do painel). O efeito colateral é
+que o branch e o ar andam separados, e é normal o segundo ficar para trás sem que nada
+avise — conferir sempre com `curl https://sistema.botanedeliecafe.com.br/api/saude`, que
+devolve a versão e a última migração aplicada.
+⚠️ Em 08/09/2026 o ar estava em **1.1.13 / migração 054** enquanto `producao` já tinha
+1.1.14 / migração 057: as três entregas de setembro (pessoas, cupom cheio, período de
+consumo) estavam commitadas e empurradas, mas ainda não implantadas.
 
 ### Preparado para o dia do deploy
 - **`.do/app.yaml`** — o app inteiro no DigitalOcean App Platform: web em `/`, API em `/api` e
@@ -120,7 +131,8 @@ Se a tarefa tocar numa dessas áreas, abra o arquivo correspondente antes de edi
 | Web | Next.js App Router + Tailwind, PWA | 3100 |
 | App | Capacitor sobre o mesmo web (fase 8) | — |
 
-Não há deploy: o projeto roda só local nesta primeira parte.
+As portas acima são as de casa. No ar, web e API dividem o mesmo domínio (a API sob
+`/api`) — ver a seção de branches e [`docs/deploy.md`](docs/deploy.md).
 
 ## Regras que valem para todo código deste repositório
 
