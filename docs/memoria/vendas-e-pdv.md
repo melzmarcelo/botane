@@ -625,9 +625,10 @@
   errasse as datas só sairia do ciclo FECHANDO — e fechar carimba todo o consumo como pago.
   O conserto de um engano de digitação não pode ser cobrar todo mundo. Só o aberto se apaga:
   nada foi carimbado nele.
-  ⚠️ **O consumo NÃO espera o ciclo existir.** Quem come hoje deve hoje; o ciclo é só o
-  momento em que se cobra. Exigir período aberto para lançar faria a casa parar de registrar
-  consumo enquanto ninguém abrisse um.
+  ⚠️ ~~**O consumo NÃO espera o ciclo existir.**~~ **REVERTIDO em 08/09/2026** — ver a entrada
+  "Consumo de pessoa exige ciclo aberto" abaixo. A regra era: quem come hoje deve hoje, e o
+  ciclo é só o momento em que se cobra. O dono pediu o contrário, e o preço que esta linha
+  previa é exatamente o que passou a valer.
   ⚠️ **Período aberto é um SINGLETON por loja, e isso atrapalha teste.** Uma sonda que deixou
   um aberto fez a suíte seguinte falhar em cascata no `abrir`. A suíte apaga o que encontrar
   aberto antes de criar o seu, e apaga o próprio no fim.
@@ -646,6 +647,51 @@
   ⚠️ **Login sem pessoa ligada não é erro**, é o estado da maioria — e a tela diz isso em vez
   de mostrar zero: "não devo nada" e "não estou ligado a um cadastro" são coisas diferentes,
   e a segunda se resolve no cadastro de usuários.
+
+- 🔑 **Consumo de pessoa exige ciclo ABERTO** (08/09/2026, pedido do dono; `routers/vendas.py`,
+  tela `vendas/lancar`). **Inverte a decisão de 04/09** registrada acima: o consumo passou a
+  só se lançar dentro de um ciclo, porque é nele que a dívida se acumula e por ele que ela se
+  cobra.
+  ⚠️ **O preço é o que a decisão anterior já previa**: sem ciclo aberto a casa para de
+  registrar consumo de pessoa. Por isso a mensagem diz o CAMINHO ("abra um período em
+  Consumo") e a tela oferece o link — um "não foi possível" aqui deixaria quem lança sem
+  saber que o conserto mora em outra tela.
+  ⚠️ **A checagem é do SERVIDOR, e vale para todo caminho.** A tela avisa antes e desabilita o
+  botão, mas ela não é a única porta: a importação do PDV chega no mesmo `/vendas/importar`.
+  ⚠️ **Só bloqueia venda COM pessoa.** Venda de balcão continua entrando sem ciclo nenhum —
+  travar o caixa porque ninguém abriu um ciclo fecharia a casa.
+  ⚠️ **A tela só bloqueia quando o servidor DISSE que não há ciclo.** Enquanto a resposta não
+  chega, e se a pergunta falhar, o padrão é não atrapalhar: travar por não ter conseguido
+  perguntar impediria também a venda sem pessoa. `GET /vendas/periodo-aberto` mora no router de
+  vendas, e não em `/consumo`, por causa da chave — aquele pede `consumo.periodos` ou
+  `cmv.relatorios`, e quem lança venda tem `cmv.fechamento` ou `cmv.painel`: buscado lá, o
+  aviso daria 403 justamente para quem precisa dele.
+
+- 🔑 **O relatório de consumo por pessoa recorta por CICLO, não por datas** (08/09/2026, pedido
+  do dono; `services/consumo_pessoa.recorte`, tela e arquivo).
+  ⚠️ **A seleção é pelo CARIMBO** (`vendas.id_consumo_periodo`), a mesma regra que a migração
+  057 gravou. O fechamento leva tudo que estava em aberto até a data final, **inclusive consumo
+  anterior ao início do ciclo**: filtrar por data mostraria um conjunto diferente do que foi
+  cobrado — e este relatório é o documento da cobrança.
+  ⚠️ **Ciclo ABERTO ainda não carimbou nada**: o que pertence a ele é o que está em aberto até
+  o `fim` dele, exatamente como `previa_do_fechamento` calcula. Venda posterior ao fim é do
+  próximo ciclo.
+  🔑 **"Em aberto" é uma OPÇÃO, não a ausência de escolha** — é o que a casa tem a receber e
+  ainda não cobrou, a pergunta mais frequente, e o único recorte possível numa loja que nunca
+  fechou um ciclo. Sem ela o filtro nasceria vazio no primeiro dia.
+  ⚠️ **A tela recebe os ciclos junto com os dados**, do próprio `/vendas/por-pessoa`. Buscá-los
+  em `/consumo/periodos` daria 403 para quem entra por `cmv.painel` — que abre este relatório
+  mas não as telas de ciclo — e o filtro apareceria vazio sem explicação.
+  ⚠️ **O filtro do arquivo chama-se `ciclo`, não `periodo`**, e o cabeçalho do arquivo nomeia o
+  ciclo: dois arquivos de ciclos diferentes seriam indistinguíveis depois de salvos, e a
+  conversa viraria "mas eu já paguei esse".
+
+- ⚠️ **Suíte que lança consumo precisa de ciclo aberto, e as datas dele NÃO podem ser fixas.**
+  `comum.garantir_ciclo_de_consumo` abre um começando depois do último ciclo existente e
+  devolve o id só se foi ela que o criou. Datas constantes colidem com os ciclos reais da base
+  de trabalho e `abrir` devolve 409 por sobreposição — a suíte inteira desaba em cascata
+  acusando de quebrado um código intacto. Custou uma investigação: um ciclo de um dia só,
+  criado à mão na base, derrubou sete checagens de `smoke_consumo_periodo`.
 
 ## Armadilhas já pagas
 

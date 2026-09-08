@@ -31,6 +31,8 @@ import urllib.request
 
 sys.path.insert(0, ".")
 
+from comum import garantir_ciclo_de_consumo  # noqa: E402
+
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
 
@@ -82,6 +84,10 @@ token = r["access_token"]
 
 marca = str(time.time_ns())[-6:]
 criados: dict = {"produtos": [], "vendas": []}
+# 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
+# ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa
+# nao e lixo de teste, e apaga-lo levaria junto o ciclo em curso dela.
+ciclo_da_suite = garantir_ciclo_de_consumo(chamar, token)
 
 
 def _limpar():
@@ -91,6 +97,8 @@ def _limpar():
     for p in criados["produtos"]:
         if p:
             chamar("DELETE", f"/produtos/{p}", token=token)
+    if ciclo_da_suite:
+        chamar("DELETE", f"/consumo/periodos/{ciclo_da_suite}", token=token)
 
 
 atexit.register(_limpar)
@@ -187,7 +195,7 @@ checar("mudar a politica no cadastro NAO reescreve o cupom antigo",
 
 print("\n5. o RELATORIO sintetico — o documento da cobranca")
 st, rel = chamar(
-    "GET", f"/vendas/por-pessoa?inicio=2026-09-04&fim=2026-09-04&id_pessoa={funcionario}",
+    "GET", f"/vendas/por-pessoa?id_pessoa={funcionario}",
     token=token)
 checar("o sintetico responde", st == 200, (st, rel))
 linha = (rel.get("linhas") or [{}])[0]
@@ -200,7 +208,7 @@ checar("e 80 a cobrar", perto(linha.get("total"), 80), linha.get("total"))
 print("\n6. o RELATORIO analitico — item a item")
 st, rea = chamar(
     "GET",
-    f"/vendas/por-pessoa?inicio=2026-09-04&fim=2026-09-04&id_pessoa={funcionario}"
+    f"/vendas/por-pessoa?id_pessoa={funcionario}"
     "&detalhe=analitico",
     token=token)
 la = (rea.get("linhas") or [{}])[0]
@@ -223,7 +231,7 @@ st, imp = chamar("POST", "/vendas/importar", {"vendas": [{
 st, lc = chamar("GET", f"/vendas?busca=CANC{marca}", token=token)
 criados["vendas"].append((lc or [{}])[0].get("id"))
 st, rel2 = chamar(
-    "GET", f"/vendas/por-pessoa?inicio=2026-09-04&fim=2026-09-04&id_pessoa={funcionario}",
+    "GET", f"/vendas/por-pessoa?id_pessoa={funcionario}",
     token=token)
 # 🔑 Ele existe na base para a conferencia com o PDV fechar — mas cobrar alguem
 # por um cupom cancelado seria cobrar o que nao foi consumido.
@@ -237,10 +245,20 @@ st, cat = chamar("GET", "/exportar/catalogo", token=token)
 alvo = next((c for c in (cat or []) if c["chave"] == "consumo-pessoa"), None)
 checar("o relatorio esta no catalogo", alvo is not None,
        [c["chave"] for c in (cat or [])])
-checar("com periodo, pessoas e detalhe",
-       alvo and {f["nome"] for f in alvo["filtros"]} == {"periodo", "pessoas", "detalhe"},
+# ⚠️ **`ciclo`, nao `periodo`.** O recorte deste relatorio e o ciclo de
+# consumo, nao um intervalo de datas: o fechamento leva tudo que estava em
+# aberto ate a data final, inclusive consumo anterior ao inicio dele, e um par
+# de datas devolveria um conjunto diferente do que foi cobrado.
+checar("com ciclo, pessoas e detalhe",
+       alvo and {f["nome"] for f in alvo["filtros"]} == {"ciclo", "pessoas", "detalhe"},
        alvo and [f["nome"] for f in alvo["filtros"]])
-st, csv = chamar("GET", "/exportar/consumo-pessoa.csv?inicio=2026-09-04&fim=2026-09-04",
+ciclo_f = next((f for f in (alvo or {}).get("filtros", []) if f["nome"] == "ciclo"), None)
+# 🔑 "Em aberto" precisa ser uma OPCAO, e nao a ausencia de escolha: e a
+# pergunta mais frequente, e o unico recorte possivel antes do primeiro ciclo.
+checar("e o filtro de ciclo oferece 'em aberto'",
+       ciclo_f and any(o["valor"] == "aberto" for o in ciclo_f.get("opcoes", [])),
+       ciclo_f)
+st, csv = chamar("GET", "/exportar/consumo-pessoa.csv",
                  token=token, cru=True)
 checar("a planilha sai", st == 200 and isinstance(csv, bytes) and len(csv) > 100, st)
 # ⚠️ **O arquivo e a tela nao podem discordar**: a diferenca apareceria numa
@@ -248,8 +266,7 @@ checar("a planilha sai", st == 200 and isinstance(csv, bytes) and len(csv) > 100
 # funcao (`services.consumo_pessoa`), e esta linha cobra isso pelo numero.
 texto = csv.decode("utf-8-sig", "replace") if isinstance(csv, bytes) else ""
 checar("e o arquivo traz o mesmo total que a tela", "80" in texto, texto[:200])
-st, pdf = chamar("GET", "/exportar/consumo-pessoa.pdf?inicio=2026-09-04&fim=2026-09-04"
-                        "&detalhe=analitico", token=token, cru=True)
+st, pdf = chamar("GET", "/exportar/consumo-pessoa.pdf?detalhe=analitico", token=token, cru=True)
 checar("e o PDF tambem, no analitico",
        st == 200 and isinstance(pdf, bytes) and pdf[:4] == b"%PDF", st)
 

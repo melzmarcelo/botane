@@ -15,10 +15,36 @@ discussão sobre dinheiro.
 from datetime import date
 
 
-def apurar(cur, id_unidade: int, inicio: date, fim: date,
+def recorte(periodo: dict | None) -> tuple[str, tuple]:
+    """O WHERE que isola um ciclo, e os parametros dele.
+
+    🔑 **A selecao e pelo CARIMBO, nunca pelas datas** (`vendas.id_consumo_periodo`).
+    E a mesma regra que a migracao 057 gravou, aplicada agora ao relatorio: o
+    fechamento leva tudo que estava em aberto ate a data final, INCLUSIVE
+    consumo anterior ao inicio do ciclo. Selecionar por data mostraria um
+    conjunto diferente do que foi cobrado -- e este relatorio e o documento da
+    cobranca, entao a diferenca apareceria numa discussao sobre dinheiro.
+
+    ⚠️ O ciclo ABERTO ainda nao carimbou nada: o que pertence a ele e o que
+    esta em aberto ate o `fim` dele, exatamente como `previa_do_fechamento` ja
+    calcula. Venda posterior ao fim e do proximo ciclo.
+
+    `None` e "tudo em aberto", sem recorte de data -- o que a casa tem a receber
+    hoje, e o unico recorte possivel numa loja que nunca abriu um ciclo.
+    """
+    if periodo is None:
+        return "AND v.id_consumo_periodo IS NULL", ()
+    if periodo["status"] == "ABERTO":
+        return "AND v.id_consumo_periodo IS NULL AND v.data <= %s", (periodo["fim"],)
+    return "AND v.id_consumo_periodo = %s", (periodo["id"],)
+
+
+def apurar(cur, id_unidade: int, periodo: dict | None,
            ids_pessoa: list[int] | None = None,
            detalhe: str = "sintetico") -> list[dict]:
-    """As linhas do período — um total por pessoa, ou item a item.
+    """As linhas de um ciclo — um total por pessoa, ou item a item.
+
+    ⚠️ **O recorte e o do CARIMBO** (ver `recorte`), nao um intervalo de datas.
 
     ⚠️ **Cupom CANCELADO fica de fora.** Ele existe na base para a conferência
     com o PDV fechar, mas cobrar alguém por um cupom cancelado seria cobrar o
@@ -34,11 +60,12 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date,
     de itens do cupom — a armadilha que já custou a conferência do dia 02/09.
     """
     ids = ids_pessoa or None
-    filtro = (id_unidade, inicio, fim, ids, ids)
+    onde, ps = recorte(periodo)
+    filtro = (id_unidade, *ps, ids, ids)
 
     if detalhe == "analitico":
         cur.execute(
-            """SELECT v.id AS id_venda, v.data, v.hora, v.documento,
+            f"""SELECT v.id AS id_venda, v.data, v.hora, v.documento,
                       f.id AS id_pessoa, f.nome AS pessoa,
                       v.cupom_base, v.cupom_desconto_pct,
                       coalesce(p.nome_curto, p.nome, vi.descricao_pdv) AS produto,
@@ -56,7 +83,7 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date,
                  JOIN venda_itens vi ON vi.id_venda = v.id
                  LEFT JOIN produtos p ON p.id = vi.id_produto
                 WHERE v.id_unidade = %s AND NOT v.cancelada
-                  AND v.data BETWEEN %s AND %s
+                  {onde}
                   AND (%s::int[] IS NULL OR v.id_pessoa = ANY(%s))
                 ORDER BY f.nome, v.data, v.hora NULLS LAST, v.id, vi.id""",
             filtro,
@@ -64,7 +91,7 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date,
         return [dict(r) for r in cur.fetchall()]
 
     cur.execute(
-        """WITH cupom AS (
+        f"""WITH cupom AS (
                SELECT v.id, v.id_pessoa, v.desconto,
                       sum(vi.quantidade * coalesce(vi.valor_unitario_cheio,
                                                    vi.valor_unitario)) AS cheio,
@@ -73,7 +100,7 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date,
                  FROM vendas v
                  JOIN venda_itens vi ON vi.id_venda = v.id
                 WHERE v.id_unidade = %s AND NOT v.cancelada
-                  AND v.data BETWEEN %s AND %s
+                  {onde}
                   AND (%s::int[] IS NULL OR v.id_pessoa = ANY(%s))
                   AND v.id_pessoa IS NOT NULL
                 GROUP BY v.id, v.id_pessoa, v.desconto

@@ -2241,6 +2241,18 @@ try {
   checar("e a escolha entre sintetico e analitico",
     /sint[eé]tico/i.test(textoConsumo) && /anal[ií]tico/i.test(textoConsumo),
     textoConsumo.slice(0, 400));
+  // 🔑 **O recorte e o CICLO, nao um par de datas** (08/09/2026, pedido do
+  // dono). ⚠️ O fechamento leva tudo que estava em aberto ate a data final,
+  // inclusive consumo anterior ao inicio do ciclo: filtrar por data mostraria
+  // um conjunto diferente do que foi cobrado, e esta tela E o documento da
+  // cobranca. A checagem cobra os DOIS lados — o seletor entrou e as datas
+  // sairam — porque so a primeira metade passaria com os dois na tela.
+  checar("o filtro e o ciclo de consumo, com 'em aberto' como padrao",
+    /Ciclo de consumo/i.test(textoConsumo) && /Em aberto/i.test(textoConsumo),
+    textoConsumo.slice(0, 500));
+  const camposData = await p.evaluate(
+    () => document.querySelectorAll('input[type="date"]').length);
+  checar("e os dois campos de data sairam da tela", camposData === 0, camposData);
 
   // 🔑 **O botao de baixar** (04/09/2026, pedido do dono: "tem a opcao de baixar
   // o arquivo do consumo por pessoa"). ⚠️ Ele so aparece se o CATALOGO do
@@ -2354,6 +2366,33 @@ try {
     nome: `CUPOM PESSOA ${m6}`, fornecedor: false,
     cupom_base: "VENDA", cupom_desconto_pct: 20,
   }, token);
+  // 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026). Sem
+  // isto o lancamento abaixo volta 400 e as seis checagens do cupom caem em
+  // cascata, acusando a tela de nao mostrar o que ela nunca recebeu.
+  // ⚠️ **As datas nascem depois do ultimo ciclo existente**: um ciclo real da
+  // casa sobrepondo o do teste faz `abrir` devolver 409 por sobreposicao.
+  // ⚠️ E o ciclo so se apaga se foi ESTA bateria que o abriu — um ciclo da casa
+  // nao e lixo de teste.
+  const { dados: ciclos } = await api("GET", "/consumo/periodos", null, token);
+  let cicloDaBateria = null;
+  if (!ciclos.aberto) {
+    const ultimo = (ciclos.periodos || []).reduce(
+      (mx, x) => (!mx || x.fim > mx ? x.fim : mx), null);
+    const base = new Date(ultimo ? `${ultimo}T12:00:00` : Date.now());
+    if (ultimo) base.setDate(base.getDate() + 1);
+    const dia = (d) => d.toISOString().slice(0, 10);
+    const fim = new Date(base);
+    fim.setDate(fim.getDate() + 29);
+    const novo = await api("POST", "/consumo/periodos", {
+      inicio: dia(base), fim: dia(fim), nome: `Ciclo bateria ${m6}`,
+    }, token);
+    cicloDaBateria = novo.dados?.id ?? null;
+    if (cicloDaBateria) {
+      aoTerminar.push(() => api("DELETE", `/consumo/periodos/${cicloDaBateria}`, null, token));
+    }
+  }
+  checar("ha ciclo de consumo aberto para a venda com pessoa",
+    !!(ciclos.aberto || cicloDaBateria), { aberto: ciclos.aberto, cicloDaBateria });
   await api("POST", "/vendas/importar", { vendas: [{
     data: hoje6, documento: `PESSOA-${m6}`, origem: "MANUAL",
     id_pessoa: pessoaCupom.dados.id,

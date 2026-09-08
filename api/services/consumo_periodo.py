@@ -42,6 +42,40 @@ def periodo_aberto(cur, id_unidade: int) -> dict | None:
     return dict(linha) if linha else None
 
 
+def para_escolher(cur, id_unidade: int) -> list[dict]:
+    """Os ciclos que servem de filtro, o mais recente primeiro.
+
+    So o que o filtro precisa: identificacao e datas, nenhum valor. E o que
+    permite oferece-los a quem ve o relatorio de consumo sem ter a chave das
+    telas de ciclo -- ali estao os valores de cada pessoa, aqui so os rotulos.
+    """
+    cur.execute(
+        """SELECT id, nome, inicio, fim, status
+             FROM consumo_periodos
+            WHERE id_unidade = %s
+            ORDER BY fim DESC, id DESC""",
+        (id_unidade,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def por_id(cur, id_unidade: int, id_periodo: int) -> dict | None:
+    """Um ciclo desta loja.
+
+    ⚠️ O `id_unidade` no WHERE nao e decoracao: sem ele, um id chutado leria o
+    ciclo de outra loja, e o relatorio de consumo mostraria o que aquela gente
+    deve.
+    """
+    cur.execute(
+        """SELECT id, nome, inicio, fim, status
+             FROM consumo_periodos
+            WHERE id = %s AND id_unidade = %s""",
+        (id_periodo, id_unidade),
+    )
+    linha = cur.fetchone()
+    return dict(linha) if linha else None
+
+
 def em_aberto_por_pessoa(cur, id_unidade: int,
                          id_pessoa: int | None = None) -> list[dict]:
     """O que cada pessoa deve hoje: vendas com pessoa e sem período.

@@ -20,6 +20,7 @@ import atexit
 import json
 import sys
 import time
+from datetime import date, timedelta
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -134,32 +135,54 @@ st, usuario = chamar("POST", "/usuarios", {
 checar("o cenario nasce", bool(produto and eu.get("id") and usuario.get("id")),
        (produto, eu, usuario))
 
-# 2 x 40 = 80 cheio, 10% off = 72
-_venda(eu["id"], f"EU{marca}", 2, 40)
-# 5 x 40 = 200 cheio, 50% off = 100 — e este NAO pode aparecer para o outro
-_venda(outro["id"], f"OU{marca}", 5, 40)
-
-
-print("\n2. antes de qualquer periodo, ja ha consumo EM ABERTO")
-# 🔑 O consumo nao espera o ciclo existir: quem come hoje deve hoje, e o ciclo e
-# so o momento em que se cobra. Exigir periodo aberto para lancar faria a casa
-# parar de registrar consumo enquanto ninguem abrisse um.
-st, lista = chamar("GET", "/consumo/periodos", token=token)
-meu = next((l for l in lista["em_aberto"] if l["id_pessoa"] == eu["id"]), None)
-checar("o consumo entra em aberto sem periodo nenhum", meu is not None, lista.get("em_aberto"))
-checar("com o valor ja descontado: 80 cheio, 72 a pagar",
-       meu and perto(meu["total_cheio"], 80) and perto(meu["total"], 72), meu)
-
-
-print("\n3. abre o ciclo")
+print("\n2. sem ciclo aberto, consumo de pessoa nao se lanca")
+# 🔑 **Pedido do dono (08/09/2026), e uma INVERSAO da regra de 04/09.** Antes,
+# o consumo nao esperava o ciclo existir. Agora exige: ele so se lanca dentro de
+# um ciclo, porque e nele que a divida se acumula e por ele que ela se cobra.
+# O preco e o que a decisao anterior ja previa -- sem ciclo aberto a casa para
+# de registrar consumo -- e por isso a mensagem tem de dizer o que fazer.
+#
 # ⚠️ **Periodo aberto e um SINGLETON por loja**, entao a suite nao pode presumir
 # que nao ha nenhum: numa base de trabalho quase sempre ha. Se houver, ela o
-# apaga — esta ABERTO, logo nada foi carimbado nele e nada se perde.
+# apaga -- esta ABERTO, logo nada foi carimbado nele e nada se perde. Aqui isso
+# ganha um segundo papel: garantir que NAO ha ciclo, que e o que esta em teste.
 st, antes_de_tudo = chamar("GET", "/consumo/periodos", token=token)
 if antes_de_tudo.get("aberto"):
     chamar("DELETE", f"/consumo/periodos/{antes_de_tudo['aberto']['id']}", token=token)
+st, recusada = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2026-09-03", "documento": f"SEMCICLO{marca}", "origem": "MANUAL",
+    "id_pessoa": eu["id"],
+    "itens": [{"id_produto": produto, "quantidade": 1, "valor_unitario": 40}],
+}]}, token=token)
+checar("a venda com pessoa e recusada sem ciclo aberto", st == 400, (st, recusada))
+checar("e a mensagem diz o que fazer, nao so que nao deu",
+       "Abra um periodo" in str((recusada or {}).get("detail", "")), recusada)
+
+# ⚠️ **Venda SEM pessoa continua entrando.** O bloqueio e do consumo, nao da
+# venda: travar o balcao porque ninguem abriu um ciclo fecharia a casa.
+st, avulsa = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2026-09-03", "documento": f"AVULSA{marca}", "origem": "MANUAL",
+    "itens": [{"id_produto": produto, "quantidade": 1, "valor_unitario": 40}],
+}]}, token=token)
+checar("venda sem pessoa entra normalmente", st == 201, (st, avulsa))
+st, achada = chamar("GET", f"/vendas?busca=AVULSA{marca}", token=token)
+if achada:
+    criados["vendas"].append(achada[0]["id"])
+
+
+print("\n3. abre o ciclo")
+# ⚠️ **As datas NAO podem ser constantes.** Elas eram "2026-09-01 a 2026-09-30",
+# e um ciclo REAL da casa caindo em setembro faz `abrir` devolver 409 por
+# sobreposicao -- e dali a suite inteira desaba em cascata, acusando de
+# quebrado um codigo intacto. Custou uma investigacao: a base de trabalho tinha
+# um ciclo de um dia so, criado a mao, e a suite morreu em sete checagens.
+# O ciclo do teste comeca DEPOIS do ultimo que existir.
+_ultimo = max((x["fim"] for x in (antes_de_tudo.get("periodos") or [])), default=None)
+_base = (date.fromisoformat(_ultimo) + timedelta(days=1)) if _ultimo else date(2026, 9, 1)
+INICIO, FIM = _base, _base + timedelta(days=29)
 st, per = chamar("POST", "/consumo/periodos", {
-    "inicio": "2026-09-01", "fim": "2026-09-30", "nome": f"Ciclo {marca}"}, token=token)
+    "inicio": INICIO.isoformat(), "fim": FIM.isoformat(),
+    "nome": f"Ciclo {marca}"}, token=token)
 checar("o periodo abre", st == 201, (st, per))
 periodo = per.get("id")
 if periodo:
@@ -168,14 +191,33 @@ if periodo:
 # ⚠️ Dois ciclos abertos disputariam o mesmo consumo, cada um fechando metade da
 # divida — e a garantia e do indice unico, nao so da checagem em codigo.
 st, dois = chamar("POST", "/consumo/periodos", {
-    "inicio": "2026-10-01", "fim": "2026-10-31"}, token=token)
+    "inicio": (FIM + timedelta(days=10)).isoformat(),
+    "fim": (FIM + timedelta(days=20)).isoformat()}, token=token)
 checar("um segundo periodo aberto e recusado", st == 409, (st, dois))
 
 # ⚠️ Sobreposicao tambem: um mesmo dia em dois ciclos cobraria aquele dia duas
 # vezes, e nada na tela denunciaria.
 st, sobre = chamar("POST", "/consumo/periodos", {
-    "inicio": "2026-09-15", "fim": "2026-09-20"}, token=token)
+    "inicio": (INICIO + timedelta(days=5)).isoformat(),
+    "fim": (INICIO + timedelta(days=10)).isoformat()}, token=token)
 checar("e um periodo que se sobrepoe tambem", st == 409, (st, sobre))
+
+# Agora que ha ciclo aberto, o consumo entra.
+# 2 x 40 = 80 cheio, 10% off = 72
+_venda(eu["id"], f"EU{marca}", 2, 40)
+# 5 x 40 = 200 cheio, 50% off = 100 -- e este NAO pode aparecer para o outro
+_venda(outro["id"], f"OU{marca}", 5, 40)
+
+# 🔑 **Entrar num ciclo aberto nao e ser carimbado por ele.** O carimbo e um
+# fato do FECHAMENTO: ate la a venda continua sem periodo, que e o que "em
+# aberto" quer dizer. Sem esta checagem, uma implementacao que carimbasse na
+# hora do lancamento passaria por todo o resto da suite.
+st, lista = chamar("GET", "/consumo/periodos", token=token)
+meu = next((l for l in lista["em_aberto"] if l["id_pessoa"] == eu["id"]), None)
+checar("o consumo do ciclo aberto conta como EM ABERTO", meu is not None,
+       lista.get("em_aberto"))
+checar("com o valor ja descontado: 80 cheio, 72 a pagar",
+       meu and perto(meu["total_cheio"], 80) and perto(meu["total"], 72), meu)
 
 
 print("\n4. o usuario ve o PROPRIO consumo")
@@ -233,7 +275,20 @@ checar("e o ciclo aparece como fechado", det["periodo"]["status"] == "FECHADO",
 print("\n7. consumo NOVO depois do fechamento fica em aberto de novo")
 # ⚠️ O ciclo fechado nao captura o que veio depois: cobrar hoje o consumo de
 # amanha seria cobrar o que ainda nao aconteceu.
+# ⚠️ **Lancar exige ciclo aberto, e o ciclo do teste acabou de FECHAR** — entao
+# abre-se o seguinte, como a casa faria no dia seguinte ao pagamento.
+st, prox = chamar("POST", "/consumo/periodos", {
+    "inicio": (FIM + timedelta(days=1)).isoformat(),
+    "fim": (FIM + timedelta(days=30)).isoformat(),
+    "nome": f"Proximo {marca}"}, token=token)
+checar("o ciclo seguinte abre depois do pagamento", st == 201, (st, prox))
 _venda(eu["id"], f"EU2{marca}", 1, 40)
+# ⚠️ **E o ciclo seguinte SAI antes da secao 8.** `reabrir` devolveria um segundo
+# ciclo ABERTO, e o indice unico parcial recusa — a suite morreria num 409 que
+# nada tem a ver com o que ela testa ali. Apagar e seguro: esta aberto, logo
+# nada foi carimbado nele, e a venda acima continua em aberto, que e o ponto.
+if prox.get("id"):
+    chamar("DELETE", f"/consumo/periodos/{prox['id']}", token=token)
 st, novo = chamar("GET", "/consumo/meu", token=token_eu)
 checar("o consumo seguinte volta a aparecer em aberto",
        perto(novo.get("total"), 36), novo.get("total"))

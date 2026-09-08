@@ -19,6 +19,7 @@ from models.cmv import ImportarVendasRequest, PreviaCupomRequest, VendaResponse
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
+from services import consumo_periodo as ciclo
 from services import estoque as motor_estoque
 from services import producao_agenda as agenda
 
@@ -250,6 +251,26 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+
+        # 🔑 **Consumo de pessoa exige ciclo ABERTO** (pedido do dono,
+        # 08/09/2026). O consumo so se lanca dentro de um ciclo: e nele que a
+        # divida se acumula e por ele que ela se cobra.
+        #
+        # ⚠️ **A checagem e do SERVIDOR, e vale para todo caminho.** A tela de
+        # lancamento avisa antes, mas ela nao e a unica porta: a importacao do
+        # PDV chega aqui tambem. Uma venda com pessoa gravada fora de ciclo
+        # ficaria em aberto para sempre, sem nunca aparecer num fechamento.
+        #
+        # ⚠️ Isto INVERTE a decisao de 04/09 ("o consumo nao espera o ciclo
+        # existir"), a pedido de quem usa. O preco e o previsto la: sem ciclo
+        # aberto, a casa para de registrar consumo de pessoa -- e a mensagem
+        # abaixo precisa dizer exatamente o que fazer, ou vira um "nao deu".
+        if any(v.id_pessoa for v in body.vendas) and not ciclo.periodo_aberto(cur, id_unidade):
+            raise HTTPException(
+                status_code=400,
+                detail="Nao ha periodo de consumo aberto nesta loja. "
+                       "Abra um periodo em Consumo antes de lancar venda com pessoa.",
+            )
 
         for venda in body.vendas:
             if venda.documento:
@@ -512,14 +533,30 @@ def sem_vinculo(busca: str | None = None, ctx: Contexto = Depends(_ver)) -> list
         return [dict(r) for r in cur.fetchall()]
 
 
+@router.get("/periodo-aberto")
+def periodo_aberto(ctx: Contexto = Depends(_editar)) -> dict:
+    """O ciclo de consumo em curso, ou nada.
+
+    🔑 **Existe para a tela de lancamento avisar ANTES**, e nao depois de a
+    pessoa montar o cupom inteiro e apertar salvar.
+
+    ⚠️ Mora aqui, e nao em `/consumo`, por causa da chave: aquele router pede
+    `consumo.periodos` ou `cmv.relatorios`, e quem lanca venda tem
+    `cmv.fechamento` ou `cmv.painel`. Buscado la, o aviso daria 403 justamente
+    para quem precisa dele. Aqui devolve so a existencia e as datas -- nenhum
+    valor de ninguem.
+    """
+    with get_cursor() as cur:
+        return {"aberto": ciclo.periodo_aberto(cur, unidade_atual(cur, ctx))}
+
+
 # ⚠️ **`/{id_venda}` vem DEPOIS de `/sem-vinculo`, e a ordem é o que faz as duas
 # funcionarem.** O FastAPI casa as rotas na ordem em que foram declaradas: com o
 # parâmetro na frente, "sem-vinculo" viraria um id e o pedido morreria em 422
 # antes de chegar à fila de de-para.
 @router.get("/por-pessoa")
 def por_pessoa(
-    inicio: date = Query(...),
-    fim: date = Query(...),
+    id_periodo: int | None = Query(default=None),
     id_pessoa: int | None = Query(default=None),
     detalhe: str = Query(default="sintetico", pattern="^(sintetico|analitico)$"),
     ctx: Contexto = Depends(_ver),
@@ -546,13 +583,26 @@ def por_pessoa(
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        periodo = None
+        if id_periodo is not None:
+            periodo = ciclo.por_id(cur, id_unidade, id_periodo)
+            if not periodo:
+                raise HTTPException(status_code=404, detail="Período não encontrado.")
         # ⚠️ A consulta mora no serviço porque a EXPORTAÇÃO usa a mesma: escrita
         # duas vezes, a tela e o arquivo entregue ao funcionário divergiriam
         # numa discussão sobre dinheiro.
-        linhas = consumo.apurar(cur, id_unidade, inicio, fim,
+        linhas = consumo.apurar(cur, id_unidade, periodo,
                                 [id_pessoa] if id_pessoa else None, detalhe)
         return {
-            "inicio": inicio, "fim": fim, "detalhe": detalhe,
+            # 🔑 **A tela recebe os ciclos junto com os dados.** Ela nao pode
+            # busca-los em `/consumo/periodos`: aquele router pede
+            # `consumo.periodos` ou `cmv.relatorios`, e este relatorio abre
+            # tambem para `cmv.painel` -- quem entrasse por essa chave veria a
+            # tela com o filtro vazio e nenhuma explicacao. Vindo daqui, as
+            # opcoes sao exatamente as que este endpoint sabe atender.
+            "periodo": periodo,
+            "periodos": ciclo.para_escolher(cur, id_unidade),
+            "detalhe": detalhe,
             "linhas": linhas,
             "total_cheio": round(sum(float(l["total_cheio"] or 0) for l in linhas), 2),
             "total": round(sum(float(l["total"] or 0) for l in linhas), 2),

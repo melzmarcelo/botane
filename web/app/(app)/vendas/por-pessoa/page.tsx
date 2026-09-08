@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { hoje, primeiroDiaDoMes } from "@/lib/datas";
 import { reais } from "@/lib/cadastros";
 import { Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
@@ -54,19 +53,144 @@ type LinhaAnalitica = {
   total: number;
 };
 
-type Resposta = {
+type Ciclo = {
+  id: number;
+  nome: string | null;
   inicio: string;
   fim: string;
-  detalhe: "sintetico" | "analitico";
-  linhas: (LinhaSintetica & LinhaAnalitica)[];
+  status: "ABERTO" | "FECHADO";
+};
+
+type Totais = {
+  periodo: Ciclo | null;
+  periodos: Ciclo[];
   total_cheio: number;
   total: number;
   desconto: number;
 };
 
+/**
+ * 🔑 **O ciclo se escolhe, as datas não.** O consumo se cobra por ciclo fechado,
+ * e o fechamento leva tudo que estava em aberto até a data final — inclusive
+ * consumo anterior ao início dele. Um par de datas aqui mostraria um conjunto
+ * diferente do que foi cobrado, e esta tela É o documento da cobrança.
+ */
+const EM_ABERTO = "aberto";
+
+function rotuloDoCiclo(c: Ciclo) {
+  const base = c.nome || `${dataBr(c.inicio)} a ${dataBr(c.fim)}`;
+  return c.status === "ABERTO" ? `${base} (ciclo aberto)` : base;
+}
+
+/**
+ * ⚠️ **União discriminada, nunca `LinhaSintetica & LinhaAnalitica`.** A
+ * interseção afirmava que toda linha tem os campos das DUAS formas, o que
+ * nenhuma resposta cumpre: a sintética não traz `quantidade`, a analítica não
+ * traz `cupons`. Com ela o TypeScript avalizava ler qualquer campo de qualquer
+ * linha, e o erro só aparecia no navegador, como `NaN` numa célula.
+ */
+type Resposta =
+  | (Totais & { detalhe: "sintetico"; linhas: LinhaSintetica[] })
+  | (Totais & { detalhe: "analitico"; linhas: LinhaAnalitica[] });
+
+/**
+ * 🔑 **Cada tabela recebe SÓ a forma que sabe desenhar.** Enquanto as duas
+ * moravam no mesmo `map`, escolhidas pelo filtro da tela, existia um instante em
+ * que o filtro já dizia "analítico" e as linhas na mão ainda eram as sintéticas
+ * — e a célula de quantidade saía `NaN`. Separadas, a forma errada nem
+ * compila.
+ */
+function TabelaSintetica({ linhas }: { linhas: LinhaSintetica[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Pessoa</th>
+            <th className="num">Cupons</th>
+            <th className="num">Itens</th>
+            <th className="num">Cheio</th>
+            <th className="num">Desconto</th>
+            <th className="num">A cobrar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.id_pessoa}>
+              <td>
+                <Link href={"/fornecedores/" + l.id_pessoa} className="link-registro">
+                  {l.pessoa}
+                </Link>
+                {l.cupom_base === "CUSTO" && (
+                  <>
+                    {" "}
+                    <Etiqueta cor="neutro">pelo custo</Etiqueta>
+                  </>
+                )}
+              </td>
+              <td className="num tabular-nums">{l.cupons}</td>
+              <td className="num tabular-nums">{l.itens}</td>
+              <td className="num tabular-nums text-suave">{reais(l.total_cheio)}</td>
+              <td className="num tabular-nums">{reais(l.desconto)}</td>
+              <td className="num font-semibold tabular-nums">{reais(l.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TabelaAnalitica({ linhas }: { linhas: LinhaAnalitica[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="tabela">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Pessoa</th>
+            <th>Produto</th>
+            <th className="num">Qtd</th>
+            <th className="num">Cheio un.</th>
+            <th className="num">Cobrado un.</th>
+            <th className="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l, n) => (
+            <tr key={l.id_venda + "-" + n}>
+              <td className="whitespace-nowrap">
+                <Link href={"/vendas/" + l.id_venda} className="link-registro">
+                  {dataBr(l.data)}
+                </Link>
+                {l.documento && (
+                  <span className="block text-[12.5px] text-suave">{l.documento}</span>
+                )}
+              </td>
+              <td>{l.pessoa}</td>
+              <td>
+                {l.produto ?? "—"}
+                {l.produto_codigo && (
+                  <span className="block text-[12.5px] text-suave">{l.produto_codigo}</span>
+                )}
+              </td>
+              <td className="num tabular-nums">{Number(l.quantidade)}</td>
+              <td className="num tabular-nums text-suave">{reais(l.unitario_cheio)}</td>
+              <td className="num tabular-nums">{reais(l.unitario)}</td>
+              <td className="num font-semibold tabular-nums">{reais(l.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PaginaConsumoPorPessoa() {
-  const [inicio, setInicio] = useState(primeiroDiaDoMes());
-  const [fim, setFim] = useState(hoje());
+  // ⚠️ **"Em aberto" é o padrão, e é uma escolha de verdade** — é o que a casa
+  // tem a receber e ainda não cobrou, a pergunta mais frequente desta tela, e o
+  // único recorte possível numa loja que nunca fechou um ciclo.
+  const [ciclo, setCiclo] = useState<string>(EM_ABERTO);
   const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
   const [detalhe, setDetalhe] = useState<"sintetico" | "analitico">("sintetico");
   const [dados, setDados] = useState<Resposta | null>(null);
@@ -75,19 +199,25 @@ export default function PaginaConsumoPorPessoa() {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const q = new URLSearchParams({ inicio, fim, detalhe });
+      const q = new URLSearchParams({ detalhe });
+      if (ciclo !== EM_ABERTO) q.set("id_periodo", ciclo);
       if (pessoa) q.set("id_pessoa", String(pessoa.id));
       setDados(await api.get<Resposta>("/vendas/por-pessoa?" + q.toString()));
     } finally {
       setCarregando(false);
     }
-  }, [inicio, fim, detalhe, pessoa]);
+  }, [ciclo, detalhe, pessoa]);
 
   useEffect(() => {
     carregar();
   }, [carregar]);
 
   const linhas = dados?.linhas ?? [];
+  // ⚠️ **O título também segue a RESPOSTA.** Ele contava "linha(s)" no
+  // instante em que a tela ainda mostrava as pessoas do carregamento anterior.
+  // O filtro só vale antes de a primeira resposta chegar, quando não há o que
+  // contradizer.
+  const visao = dados?.detalhe ?? detalhe;
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,8 +242,7 @@ export default function PaginaConsumoPorPessoa() {
           relatorio="consumo-pessoa"
           rotulo="Baixar"
           iniciais={{
-            inicio,
-            fim,
+            ciclo: [ciclo],
             pessoas: pessoa ? [pessoa.id] : [],
             detalhe: [detalhe],
           }}
@@ -121,25 +250,23 @@ export default function PaginaConsumoPorPessoa() {
       </div>
 
       <Cartao
-        titulo="Período"
+        titulo="Ciclo de consumo"
         descricao="Cupom cancelado não entra: não se cobra o que foi cancelado."
       >
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Campo rotulo="De">
-            <input
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Campo rotulo="Ciclo" dica="o que ainda não foi cobrado, se não escolher">
+            <select
               className="campo"
-              type="date"
-              value={inicio}
-              onChange={(e) => setInicio(e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Até">
-            <input
-              className="campo"
-              type="date"
-              value={fim}
-              onChange={(e) => setFim(e.target.value)}
-            />
+              value={ciclo}
+              onChange={(e) => setCiclo(e.target.value)}
+            >
+              <option value={EM_ABERTO}>Em aberto — ainda não cobrado</option>
+              {(dados?.periodos ?? []).map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {rotuloDoCiclo(c)}
+                </option>
+              ))}
+            </select>
           </Campo>
           <Campo rotulo="Pessoa" dica="em branco traz todas">
             <BuscaCadastro
@@ -186,88 +313,17 @@ export default function PaginaConsumoPorPessoa() {
 
       <Cartao
         titulo={
-          detalhe === "sintetico" ? linhas.length + " pessoa(s)" : linhas.length + " linha(s)"
+          visao === "sintetico" ? linhas.length + " pessoa(s)" : linhas.length + " linha(s)"
         }
       >
         {carregando ? (
           <p className="text-suave">carregando…</p>
-        ) : !linhas.length ? (
+        ) : !dados || !dados.linhas.length ? (
           <Vazio>Nenhum consumo com pessoa informada neste período.</Vazio>
+        ) : dados.detalhe === "sintetico" ? (
+          <TabelaSintetica linhas={dados.linhas} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="tabela">
-              <thead>
-                {detalhe === "sintetico" ? (
-                  <tr>
-                    <th>Pessoa</th>
-                    <th className="num">Cupons</th>
-                    <th className="num">Itens</th>
-                    <th className="num">Cheio</th>
-                    <th className="num">Desconto</th>
-                    <th className="num">A cobrar</th>
-                  </tr>
-                ) : (
-                  <tr>
-                    <th>Data</th>
-                    <th>Pessoa</th>
-                    <th>Produto</th>
-                    <th className="num">Qtd</th>
-                    <th className="num">Cheio un.</th>
-                    <th className="num">Cobrado un.</th>
-                    <th className="num">Total</th>
-                  </tr>
-                )}
-              </thead>
-              <tbody>
-                {linhas.map((l, n) =>
-                  detalhe === "sintetico" ? (
-                    <tr key={l.id_pessoa}>
-                      <td>
-                        <Link href={"/fornecedores/" + l.id_pessoa} className="link-registro">
-                          {l.pessoa}
-                        </Link>
-                        {l.cupom_base === "CUSTO" && (
-                          <>
-                            {" "}
-                            <Etiqueta cor="neutro">pelo custo</Etiqueta>
-                          </>
-                        )}
-                      </td>
-                      <td className="num tabular-nums">{l.cupons}</td>
-                      <td className="num tabular-nums">{l.itens}</td>
-                      <td className="num tabular-nums text-suave">{reais(l.total_cheio)}</td>
-                      <td className="num tabular-nums">{reais(l.desconto)}</td>
-                      <td className="num font-semibold tabular-nums">{reais(l.total)}</td>
-                    </tr>
-                  ) : (
-                    <tr key={l.id_venda + "-" + n}>
-                      <td className="whitespace-nowrap">
-                        <Link href={"/vendas/" + l.id_venda} className="link-registro">
-                          {dataBr(l.data)}
-                        </Link>
-                        {l.documento && (
-                          <span className="block text-[12.5px] text-suave">{l.documento}</span>
-                        )}
-                      </td>
-                      <td>{l.pessoa}</td>
-                      <td>
-                        {l.produto ?? "—"}
-                        {l.produto_codigo && (
-                          <span className="block text-[12.5px] text-suave">
-                            {l.produto_codigo}
-                          </span>
-                        )}
-                      </td>
-                      <td className="num tabular-nums">{Number(l.quantidade)}</td>
-                      <td className="num tabular-nums text-suave">{reais(l.unitario_cheio)}</td>
-                      <td className="num tabular-nums">{reais(l.unitario)}</td>
-                      <td className="num font-semibold tabular-nums">{reais(l.total)}</td>
-                    </tr>
-                  ),
-                )}
-              </tbody>
-            </table>
-          </div>
+          <TabelaAnalitica linhas={dados.linhas} />
         )}
       </Cartao>
     </div>

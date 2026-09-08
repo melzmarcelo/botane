@@ -38,6 +38,7 @@ from models.produtos import TIPOS
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import consumo_pessoa as consumo_motor
+from services import consumo_periodo as ciclo_motor
 from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
@@ -101,6 +102,23 @@ def _opcoes_detalhe(_cur, _id_unidade: int) -> list[dict]:
             {"valor": "analitico", "nome": "Analítico — item a item"}]
 
 
+def _opcoes_ciclo(cur, id_unidade: int) -> list[dict]:
+    """Os ciclos de consumo, mais "em aberto" na frente.
+
+    🔑 **"Em aberto" e uma opcao de verdade, nao a ausencia de escolha.** E
+    o que a casa tem a receber e ainda nao cobrou -- a pergunta mais frequente
+    de todas -- e e o unico recorte possivel numa loja que nunca abriu um ciclo.
+    Sem ela, o filtro ficaria vazio no primeiro dia e o relatorio, inalcancavel.
+    """
+    opcoes = [{"valor": "aberto", "nome": "Em aberto — ainda nao cobrado"}]
+    for c in ciclo_motor.para_escolher(cur, id_unidade):
+        rotulo = c["nome"] or f"{c['inicio'].strftime('%d/%m/%Y')} a {c['fim'].strftime('%d/%m/%Y')}"
+        if c["status"] == "ABERTO":
+            rotulo += " (ciclo aberto)"
+        opcoes.append({"valor": str(c["id"]), "nome": rotulo})
+    return opcoes
+
+
 def _opcoes_classes(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": c, "nome": f"Classe {c}"} for c in ("A", "B", "C")]
 
@@ -147,6 +165,14 @@ FILTROS: dict[str, dict] = {
     # os dois faria quem recebe separar de novo.
     "detalhe": {"tipo": "multipla", "rotulo": "Detalhe", "ajuda": "sintético",
                 "opcoes": _opcoes_detalhe},
+    # ⚠️ **Ciclo, nao intervalo de datas.** O consumo se cobra por ciclo
+    # fechado, e o fechamento leva tudo que estava em aberto ate a data final --
+    # inclusive consumo anterior ao inicio dele. Um par de datas aqui devolveria
+    # um conjunto diferente do que foi cobrado, e este arquivo E o documento da
+    # cobranca. Multipla como `detalhe`, e pelo mesmo motivo: e o vocabulario da
+    # janela, mas o relatorio usa so a PRIMEIRA.
+    "ciclo": {"tipo": "multipla", "rotulo": "Ciclo", "ajuda": "em aberto",
+              "opcoes": _opcoes_ciclo},
 }
 
 
@@ -838,6 +864,20 @@ def _memoria_produto(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _nome_do_ciclo(periodo: dict | None) -> str:
+    """Como o ciclo se chama no cabecalho do arquivo.
+
+    ⚠️ O arquivo entregue ao funcionario precisa DIZER de que ciclo ele fala.
+    Sem isso, dois arquivos de ciclos diferentes sao indistinguiveis depois de
+    salvos -- e a conversa vira "mas eu ja paguei esse".
+    """
+    if periodo is None:
+        return "em aberto"
+    if periodo["nome"]:
+        return periodo["nome"]
+    return _intervalo(periodo["inicio"], periodo["fim"])
+
+
 def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
     """O que cada pessoa consumiu e quanto teve de desconto — o documento da cobrança.
 
@@ -845,13 +885,21 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
     SQL aqui faria a tela mostrar um valor e o arquivo entregue ao funcionário
     mostrar outro, e a diferença apareceria numa discussão sobre dinheiro.
     """
-    inicio, fim = _periodo(f)
     pessoas = _lista(f.get("pessoas"))
     # ⚠️ Um documento por arquivo: sintético e analítico respondem perguntas
     # diferentes, e juntá-los faria quem recebe separar de novo.
     detalhe = (_lista(f.get("detalhe")) or ["sintetico"])[0]
+    # ⚠️ **"em aberto" e a ausencia de ciclo, e as duas viram o mesmo `None`**
+    # -- nao escolher nada e escolher "em aberto" precisam dar o MESMO arquivo,
+    # senao o padrao da janela responderia uma pergunta que ninguem fez.
+    escolha = (_lista(f.get("ciclo")) or ["aberto"])[0]
+    periodo = None
+    if escolha != "aberto":
+        periodo = ciclo_motor.por_id(cur, id_unidade, int(escolha))
+        if not periodo:
+            raise HTTPException(status_code=404, detail="Ciclo não encontrado.")
     linhas = consumo_motor.apurar(
-        cur, id_unidade, inicio, fim,
+        cur, id_unidade, periodo,
         [int(p) for p in pessoas] if pessoas else None, detalhe)
 
     if detalhe == "analitico":
@@ -869,7 +917,7 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
     total = sum(float(l["total"] or 0) for l in linhas)
     return Saida(
         linhas, colunas,
-        f"Consumo por pessoa — {detalhe}",
+        f"Consumo por pessoa — {_nome_do_ciclo(periodo)} — {detalhe}",
         [("Valor cheio", round(cheio, 2)),
          ("Desconto", round(cheio - total, 2)),
          ("A cobrar", round(total, 2))],
@@ -932,7 +980,7 @@ RELATORIOS: dict[str, Relatorio] = {
         "O que cada um consumiu, quanto custaria e quanto está sendo cobrado — "
         "o documento para cobrar o funcionário.",
         "cmv.relatorios", "vendas",
-        ("periodo", "pessoas", "detalhe"), _consumo_pessoa),
+        ("ciclo", "pessoas", "detalhe"), _consumo_pessoa),
     "precos": Relatorio(
         "Evolução de preço",
         "O que subiu, quanto pesou e com quem sai mais barato, com o peso por setor junto.",

@@ -10,6 +10,7 @@ produtos. Rodar contra uma instalação virgem passou a ser parte do contrato.
 """
 
 import sys
+from datetime import date, timedelta
 
 # Redirecionar a saída para arquivo troca o console (cp1252 aqui) por uma
 # codificação que não tem o sinal de menos tipográfico e outros. A suíte morria
@@ -84,6 +85,33 @@ def garantir_categorias(chamar, token, quantos: int = 2) -> list[dict]:
             chamar("POST", "/categorias", {"nome": padrao[i], "tipo": "INSUMO"}, token=token)
     st, categorias = chamar("GET", "/categorias", token=token)
     return categorias
+
+
+def garantir_ciclo_de_consumo(chamar, token) -> int | None:
+    """Um ciclo de consumo ABERTO, criando um se não houver.
+
+    🔑 **Venda com pessoa exige ciclo aberto** (08/09/2026). Toda suíte que
+    lança consumo precisa de um, e sem isto elas falham na primeira venda com
+    uma mensagem sobre ciclo — que não é o que aquelas suítes testam.
+
+    ⚠️ **As datas nascem DEPOIS do último ciclo existente.** Datas fixas
+    colidem com os ciclos reais da base de trabalho, e `abrir` devolve 409 por
+    sobreposição — a suíte inteira desaba em cascata acusando um código intacto.
+
+    Devolve o id do ciclo CRIADO, para quem chamou apagá-lo no fim; ou `None` se
+    já havia um aberto, que não é da suíte e não deve ser tocado.
+    """
+    st, lista = chamar("GET", "/consumo/periodos", token=token)
+    if (lista or {}).get("aberto"):
+        return None
+    ultimo = max((x["fim"] for x in (lista or {}).get("periodos") or []), default=None)
+    base = (date.fromisoformat(ultimo) + timedelta(days=1)) if ultimo else date.today()
+    st, novo = chamar("POST", "/consumo/periodos", {
+        "inicio": base.isoformat(),
+        "fim": (base + timedelta(days=29)).isoformat(),
+        "nome": "Ciclo da suite",
+    }, token=token)
+    return (novo or {}).get("id")
 
 
 def garantir_fornecedor(chamar, token, nome: str, cnpj: str) -> int:
