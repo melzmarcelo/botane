@@ -52,6 +52,12 @@ OPERACAO = [
     # compras
     "nota_itens", "notas_entrada", "codigos_externos", "sync_log",
     # vendas e apuração
+    # ⚠️ O ciclo de consumo entra JUNTO com as vendas, e não depois: `vendas`
+    # aponta para `consumo_periodos` pelo carimbo do fechamento
+    # (`id_consumo_periodo`), e `consumo_periodo_pessoas` aponta para as duas.
+    # Truncar as vendas sem elas deixaria recibo de cobrança de venda que não
+    # existe mais — e o Postgres nem chegaria lá, recusaria o comando.
+    "consumo_periodo_pessoas", "consumo_periodos",
     "venda_itens", "vendas", "cmv_movimentacao", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
     "kit_itens", "ficha_itens", "fichas_tecnicas",
@@ -143,6 +149,41 @@ _CARIMBO = re.compile(r" (?:[0-9A-F]{5,6}|(?=[0-9A-F]{4}$)[0-9A-F]*[A-F][0-9A-F]
 # conta não monta a contagem, e eles poluem o cartão "Papéis" de todo cadastro
 # de usuário.
 RESIDUO = ["setores", "locais_estoque", "categorias", "papeis"]
+
+
+# ---------------------------------------------------------------------------
+# Ligação que se DESFAZ em vez de sair
+# ---------------------------------------------------------------------------
+# 🔑 **`usuarios.id_pessoa` é o vínculo login↔pessoa** (migração 055, "fornecedor
+# virou pessoa"): quem trabalha na casa tem um cadastro de pessoa ligado ao
+# login, e é dele que sai o escopo de "Meu consumo". As pessoas moram em
+# `fornecedores`, que SAI no TRUNCATE — mas os usuários FICAM.
+#
+# ⚠️ **Isto NÃO destrava o TRUNCATE** — essa foi a primeira tentativa, e ela
+# falha: o Postgres recusa pela existência da chave estrangeira, não pelas
+# linhas (ver POR_DELETE logo abaixo, que é quem resolve). O serviço daqui é
+# outro, e também obrigatório: não deixar o login apontando para uma pessoa
+# que deixou de existir — e, sem isso, o próprio DELETE bateria na chave.
+#
+# ⚠️ **Nunca acrescente uma tabela aqui só para calar o guarda.** Desligar é
+# certo quando a linha que fica continua fazendo sentido sem o vínculo — é o
+# caso do login, que existe por si. Fosse um dado que só significa alguma coisa
+# ligado ao que saiu, o lugar dele é em OPERACAO.
+DESLIGAR = [("usuarios", "id_pessoa", "fornecedores")]
+
+# ⚠️ **Nem tudo que sai pode ser TRUNCADO.** O Postgres recusa truncar uma
+# tabela referenciada por outra fora do comando — e recusa pela EXISTÊNCIA da
+# chave estrangeira, não pelas linhas: zerar `usuarios.id_pessoa` antes não
+# ajuda em nada, o TRUNCATE de `fornecedores` continua barrado com a tabela
+# vazia do outro lado. (Custou uma rodada descobrir: a limpeza parou no
+# primeiro comando e nada foi apagado.)
+#
+# `CASCADE` resolveria e é exatamente o que NÃO se quer: ele levaria `usuarios`
+# junto, silenciosamente — a base terminaria sem ninguém para entrar nela.
+#
+# Então estas saem por DELETE depois do TRUNCATE, como as filiais. Mais lento,
+# e não importa: são centenas de linhas numa base de desenvolvimento.
+POR_DELETE = {"fornecedores"}
 
 
 def _quem_referencia(cur, tabela: str) -> list[tuple[str, str]]:
@@ -343,15 +384,23 @@ def referenciam(cur, alvos: list[str]) -> set[str]:
     """
     cur.execute(
         """
-        SELECT DISTINCT filha.relname AS tabela
+        SELECT DISTINCT filha.relname AS tabela, att.attname AS coluna
           FROM pg_constraint c
           JOIN pg_class filha ON filha.oid = c.conrelid
           JOIN pg_class mae ON mae.oid = c.confrelid
+          JOIN unnest(c.conkey) WITH ORDINALITY k(attnum, ord) ON true
+          JOIN pg_attribute att
+            ON att.attrelid = c.conrelid AND att.attnum = k.attnum
          WHERE c.contype = 'f' AND mae.relname = ANY(%s) AND filha.relname <> ALL(%s)
         """,
         (alvos, alvos),
     )
-    return {r["tabela"] for r in cur.fetchall()}
+    # ⚠️ **A dispensa é por COLUNA, não por tabela.** `usuarios` sai da lista
+    # por causa de `id_pessoa` e só dela: se amanhã o login ganhar outra chave
+    # para algo que é truncado, o guarda volta a apitar — que é o serviço dele.
+    dispensados = {(tab, col) for tab, col, _ in DESLIGAR}
+    return {r["tabela"] for r in cur.fetchall()
+            if (r["tabela"], r["coluna"]) not in dispensados}
 
 
 def main() -> int:
@@ -416,6 +465,20 @@ def main() -> int:
         if t not in alvos:
             print(f"  {t:24} {n:>7}")
 
+    # A ligação que se desfaz aparece na prévia como as outras: quem confirma
+    # precisa saber que os logins vão perder o vínculo com a pessoa — é a
+    # única coisa que muda numa tabela PRESERVADA, e ninguém adivinharia.
+    with get_cursor() as cur:
+        for tabela, coluna, destino in DESLIGAR:
+            if destino not in alvos:
+                continue
+            cur.execute(f'SELECT count(*) AS n FROM "{tabela}"'
+                        f' WHERE "{coluna}" IS NOT NULL')
+            n = cur.fetchone()["n"]
+            if n:
+                print(f"\nDESLIGA (a linha fica, o vínculo sai):"
+                      f"\n  {tabela}.{coluna} {n:>7}  -> {destino}")
+
     if limpar_apoio:
         print("\n  ! sem local de estoque, nenhum movimento entra até criarem o primeiro")
         if cliente_novo:
@@ -472,8 +535,27 @@ def main() -> int:
             return 1
 
     with get_cursor() as cur:
-        lista = ", ".join(f'"{t}"' for t in alvos)
+        # ⚠️ **Antes de tudo**: o vínculo do login com a pessoa some, porque a
+        # pessoa some. Deixar a coluna apontando para uma linha apagada não é
+        # opção, e o DELETE de `fornecedores` lá embaixo bateria nela.
+        for tabela, coluna, destino in DESLIGAR:
+            if destino in alvos:
+                cur.execute(
+                    f'UPDATE "{tabela}" SET "{coluna}" = NULL'
+                    f' WHERE "{coluna}" IS NOT NULL')
+
+        lista = ", ".join(f'"{t}"' for t in alvos if t not in POR_DELETE)
         cur.execute(f"TRUNCATE {lista} RESTART IDENTITY")
+
+        # ⚠️ **Depois do TRUNCATE**, pelo mesmo motivo das filiais: enquanto
+        # venda, nota ou produto apontar para a pessoa, o DELETE bate na chave
+        # estrangeira. Truncado o resto, ela fica solta.
+        for tabela in [x for x in alvos if x in POR_DELETE]:
+            cur.execute(f'DELETE FROM "{tabela}"')
+            # O `RESTART IDENTITY` do comando acima não alcança quem ficou de
+            # fora dele, e um DELETE nunca mexe em sequence. Sem isto a primeira
+            # pessoa da base limpa nasceria com id 985.
+            cur.execute(f'ALTER SEQUENCE IF EXISTS "{tabela}_id_seq" RESTART')
 
         # `RESTART IDENTITY` reinicia só as sequences que PERTENCEM às colunas
         # das tabelas truncadas. `seq_codigo_produto` é independente (é ela que
@@ -544,7 +626,15 @@ def main() -> int:
         print("Empresa e credenciais de integração foram PRESERVADAS — sem elas não")
         print("haveria o que importar.")
     print("A base está como uma instalação nova: cadastre os primeiros produtos e comece.")
-    print("Entre com o administrador de sempre — usuários e papéis foram preservados.")
+    # ⚠️ **A frase muda com o que aconteceu de verdade.** Ela era fixa e dizia
+    # "usuários e papéis foram preservados" mesmo depois de `--so-o-admin` ter
+    # apagado 82 deles — a última linha da tela contradizendo a limpeza que a
+    # própria tela acabou de fazer.
+    if so_o_admin:
+        print(f"Ficou SÓ o administrador ({ADMIN_EMAIL}); os demais logins saíram.")
+        print("Os papéis e as permissões continuam lá para a equipe nova.")
+    else:
+        print("Entre com o administrador de sempre — usuários e papéis foram preservados.")
     return 0
 
 
