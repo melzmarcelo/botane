@@ -108,3 +108,54 @@
   A folga acompanha o tamanho do relatório (meio centavo por linha), na tela e nos testes: com
   folga fixa, uma base real acusava "a conta não fecha" toda vez, e alarme que sempre toca
   ninguém escuta.
+
+- 🔑 **A folha de UM produto** (`GET /exportar/produto/{id}`, botão **Baixar** em
+  `/produtos/[id]`): cadastro, saldo por local, embalagens de compra, quem fornece e os
+  **últimos 50** movimentos. A tela junta tudo isso em blocos; quem precisava levar para fora —
+  conferir uma compra, discutir preço com o fornecedor, responder ao contador — não tinha como.
+  ⚠️ **O bloco de estoque exige `estoque.saldos`.** Saldo, custo médio e razão são dados de
+  ESTOQUE e não passam a ser de cadastro por estarem no arquivo de um produto — mesma regra do
+  custo na ficha.
+  ⚠️ **Os ÚLTIMOS movimentos, não todos**: o razão de um insumo movimentado tem milhares de
+  linhas, e quem abre a ficha de um produto quer o que aconteceu com ele agora. O razão inteiro
+  tem relatório próprio.
+  ⚠️ **Não há quadro principal**: são quatro assuntos do mesmo produto, e promover um deles a
+  "a tabela" faria os outros três parecerem apêndice. O bloco principal fica só com título e
+  resumo (`colunas=[]`), e cada quadro entra como anexo com o nome dele em cima.
+  ⚠️ **Quadro vazio não entra** — produto recém-cadastrado não tem saldo nem fornecedor, e três
+  tabelas vazias fazem o arquivo parecer defeituoso. Sem nenhum quadro, uma frase explica.
+  ⚠️ O botão fica **fora do `podeEditar`**: baixar é de quem CONSULTA.
+  ⚠️ **A ficha sai em RETRATO, e por isso `pdf_de` ganhou `orientacao`.** O corte automático é
+  por número de colunas, e está certo para relatório de tabela — lá quem manda é a largura. A
+  ficha é outra coisa: um documento com FORMA por convenção. Assim que a receita usava fator de
+  correção ela caía em paisagem, e cartão de receita em paisagem não é o papel que se prende no
+  armário da cozinha.
+  ⚠️ **A coluna "No estoque" só entra quando houve CONVERSÃO de unidade.** Ela existe para o
+  caso de a receita pedir 1 CX e o razão baixar 12 PCT; sem conversão é a cópia das duas
+  colunas anteriores — e era uma das que empurravam a ficha para paisagem.
+  ⚠️ **O custo da LINHA sai em centavos; o unitário, não.** A coluna vinha com "2,375" e
+  "1,287" no meio de valores de dois dígitos, e é uma coluna que alguém soma com o dedo. O
+  unitário é um PREÇO (R$ por KG) e fica com a precisão que tiver.
+  🔑 **E o total do resumo NÃO virou a soma das linhas arredondadas.** Somar a coluna impressa
+  dá um centavo a mais que "Custo da receita" — é o centavo que toda coluna arredondada carrega.
+  A escolha é deliberada: o resumo mostra o número **autorizado**, o mesmo da tela e do CMV.
+  Um relatório que discorda do sistema sobre o custo da receita é pior que um centavo de
+  diferença numa soma feita à mão. (⚠️ É o oposto da regra do rodapé dos relatórios de tabela,
+  onde o total FECHA com a coluna — lá o total é do próprio relatório; aqui ele é de fora.)
+  ⚠️ `components/filtro-multiplo.tsx` saiu de dentro de `/inventario/novo` quando a exportação
+  passou a precisar do mesmo controle; ganhou **busca dentro da lista** acima de 12 opções
+  (99 locais e 70 categorias numa base real).
+
+- Manuais: `docs/manual-da-equipe.md` (o que cada função faz no dia a dia) e
+  **`web/public/ajuda.html`** — o manual de referência: os treze processos e o caminho do dado,
+  de onde entra até virar número.
+  🔑 **A seção "De onde vem cada número" é o coração dele** (28/08/2026): segue UM quilo de
+  café da nota até a variância, com a aritmética real em cada passo — custo de aquisição com
+  frete rateado, custo médio ponderado (e por que a média simples erraria R$ 0,92/kg), ficha,
+  custo congelado no item de venda, CMV real pela fotografia do razão, e a variância fechando
+  **exatamente** com a perda apontada. Fecha com a tabela "cada número e sua origem" e com o
+  que ENFRAQUECE cada um (produto sem unidade, prato sem ficha, venda sem vínculo). Quem
+  confere um relatório sem saber a origem do valor acaba aceitando o que está lá. ⚠️ **Fonte única**: a tela `/ajuda` o exibe num quadro que
+  cresce até a altura do conteúdo, e o mesmo arquivo é o que se publica como artifact
+  (republicar sempre com a mesma URL). Reescrevê-lo em JSX criaria duas versões que divergem
+  no primeiro parágrafo novo — e aí o sistema explicaria duas coisas diferentes sobre si.

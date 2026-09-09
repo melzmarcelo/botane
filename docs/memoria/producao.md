@@ -1,7 +1,7 @@
-# Fichas técnicas e produção
+# Produção
 
-> Extraído do CLAUDE.md original (seções "O que já existe" e "Armadilhas já pagas").
-> Consultar antes de mexer nesta área do sistema.
+> Ficha técnica e produção.
+> Leia antes de mexer neste módulo.
 
 ## O que já existe
 
@@ -269,3 +269,9 @@
   ninguém ver. Sem conversão conhecida a ficha **avisa** e a produção **recusa**; 1:1 calado é
   o que não pode acontecer. A ficha devolve `qtd_estoque`/`conversao` por item, e a tela mostra
   "no estoque 12 PCT".
+
+- **Duas naturezas de produzido** (`produtos.modo_producao`, migração 021, 24/08/2026):
+  `PARA_ESTOQUE` (a massa de pizza: produz, guarda, sai depois) e `NA_HORA` (o café passado:
+  a venda produz e baixa no mesmo lançamento, e o saldo volta a zero). ⚠️ Sem o `NA_HORA` a
+  casa venderia mil cafés e o pó continuaria inteiro no razão — ninguém registra produção de
+  café a café. O par entrada/saída fica visível no razão de propósito.

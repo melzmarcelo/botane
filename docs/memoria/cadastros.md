@@ -1,7 +1,7 @@
-# Cadastros, produtos e fornecedores
+# Cadastros
 
-> Extraído do CLAUDE.md original (seções "O que já existe" e "Armadilhas já pagas").
-> Consultar antes de mexer nesta área do sistema.
+> Produtos, pessoas e as tabelas de apoio — o que todo o resto referencia.
+> Leia antes de mexer neste módulo.
 
 ## O que já existe
 

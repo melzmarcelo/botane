@@ -101,26 +101,37 @@ consumo) estavam commitadas e empurradas, mas ainda não implantadas.
   Integrações.
 
 
-## Memória detalhada — decisões, gotchas e "já paguei esse preço"
+## Os módulos, e a memória de cada um
 
-O histórico de decisões e armadilhas de cada área do sistema NÃO fica mais neste arquivo raiz
-(ele passava de 266 mil caracteres e parava de carregar por inteiro). Ficou em
-`docs/memoria/`, um arquivo por área. **Antes de mexer em uma área, leia o arquivo dela.**
+🔑 **O sistema é pensado por MÓDULO** — área de negócio, não camada. O mapa
+completo (rotas, serviços, telas, permissões e suítes de cada um) está em
+[`MODULOS.md`](MODULOS.md). ⚠️ Módulo é organização, não pasta: o código continua
+em `api/routers/`, `api/services/` e `web/app/(app)/`.
 
-- [`docs/memoria/estoque-e-cmv.md`](docs/memoria/estoque-e-cmv.md) — razão, saldos, ajustes, apuração de CMV
-- [`docs/memoria/vendas-e-pdv.md`](docs/memoria/vendas-e-pdv.md) — vendas e PDV
-- [`docs/memoria/fichas-e-producao.md`](docs/memoria/fichas-e-producao.md) — fichas técnicas e produção
-- [`docs/memoria/cadastros-e-produtos.md`](docs/memoria/cadastros-e-produtos.md) — produtos, fornecedores, categorias, UM
-- [`docs/memoria/exportacao-e-relatorios.md`](docs/memoria/exportacao-e-relatorios.md) — exportação (CSV/PDF) e relatórios
-- [`docs/memoria/usuarios-e-seguranca.md`](docs/memoria/usuarios-e-seguranca.md) — usuários, permissões, sessão, login
-- [`docs/memoria/notas-fiscais-e-omie.md`](docs/memoria/notas-fiscais-e-omie.md) — notas fiscais, XML, Omie
-- [`docs/memoria/padroes-de-ui.md`](docs/memoria/padroes-de-ui.md) — paginação, modais, avisos, componentes
-- [`docs/memoria/infra-e-deploy.md`](docs/memoria/infra-e-deploy.md) — deploy, migrações, e-mail/SMTP, App Platform
-- [`docs/memoria/geral.md`](docs/memoria/geral.md) — o que não caiu claramente em nenhuma área acima
+O histórico de decisões e armadilhas NÃO fica neste arquivo (ele passava de 266
+mil caracteres e parava de carregar por inteiro). Fica em `docs/memoria/`, **um
+arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
+
+| Módulo | Memória | O que cobre |
+|---|---|---|
+| Cadastros | [`cadastros.md`](docs/memoria/cadastros.md) | produtos, pessoas, tabelas de apoio |
+| Produção | [`producao.md`](docs/memoria/producao.md) | ficha técnica e produção |
+| Compras | [`compras.md`](docs/memoria/compras.md) | notas de entrada |
+| Custos | [`custos.md`](docs/memoria/custos.md) | tudo que decide quanto uma coisa custa |
+| Estoque | [`estoque.md`](docs/memoria/estoque.md) | saldos, movimentos, ajustes, inventário |
+| Vendas | [`vendas.md`](docs/memoria/vendas.md) | vendas, PDV e períodos de consumo |
+| Administrativo | [`administrativo.md`](docs/memoria/administrativo.md) | empresa, lojas, parâmetros, integrações, usuários |
+| CMV | [`cmv.md`](docs/memoria/cmv.md) | o painel do CMV |
+
+E o que atravessa todos, em [`docs/memoria/_transversais/`](docs/memoria/_transversais/):
+`padroes-de-ui.md`, `exportacao-e-relatorios.md`, `infra-e-deploy.md` e `geral.md`.
 
 ⚠️ **Esses arquivos não carregam sozinhos no início da sessão** (só o CLAUDE.md da raiz carrega).
-Se a tarefa tocar numa dessas áreas, abra o arquivo correspondente antes de editar código —
-é lá que estão os "já tentei assim e quebrou".
+Se a tarefa tocar num módulo, abra o arquivo dele antes de editar código — é lá que estão os
+"já tentei assim e quebrou".
+
+⚠️ **Decisão nova vai para a memória do módulo DONO da regra**, com ponteiro no outro quando
+o recurso cruza módulos (a colheita de EAN nasce em Compras e escreve em Cadastros).
 
 ## Stack e portas
 

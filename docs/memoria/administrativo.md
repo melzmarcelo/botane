@@ -1,7 +1,7 @@
-# Usuários, permissões e sessão
+# Administrativo
 
-> Extraído do CLAUDE.md original (seções "O que já existe" e "Armadilhas já pagas").
-> Consultar antes de mexer nesta área do sistema.
+> Empresa, lojas, parâmetros, integrações e usuários.
+> Leia antes de mexer neste módulo.
 
 ## O que já existe
 
@@ -253,3 +253,137 @@
 
 - **`localStorage` é do domínio, não da aba**: no teste de navegador, logar como outro
   usuário em qualquer página troca a sessão de todas — voltar como admin antes de seguir.
+
+- 🔑 **As notas de compra estão em `produtos/recebimentonfe`, NÃO em `produtos/notaentrada`**
+  (24/08/2026). O segundo é o lançamento manual de nota do Omie: na conta do cliente tinha
+  **uma** nota, de 2024, enquanto o recebimento de NF-e tinha **3.670**. Quem olhasse só o
+  primeiro concluiria que a casa não compra nada. A varredura usa `ListarRecebimentos` para os
+  cabeçalhos e `ConsultarRecebimento` (por `nIdReceb`) para os itens — a lista **não traz item
+  nenhum**, e o detalhe só é pedido para nota que ainda não existe aqui: pedir o de todas
+  custaria meia hora e a conta bloqueada. Mapeador: `recebimento_de_nfe` / `item_do_recebimento`.
+
+- 🔑 **A conferência de estoque com o Omie NUNCA funcionou até 27/08/2026 — e o modo simulado
+  dizia que sim.** `GET /omie/conferencia` sempre voltou "Tag [PAGINA] não faz parte da
+  estrutura"; cada recusa gastava cota. Três erros empilhados, e o segundo é o pior:
+  1. **`ListarPosEstoque` tem um dialeto SÓ DELE** (`DIALETO_POSICAO`): aceita `nPagina`,
+     **recusa** `nRegistrosPorPagina` e quer `nRegPorPagina`; responde `nTotPaginas`/
+     `nTotRegistros`. São **três** dialetos, não dois — e a lição não é o número: é que **o
+     dialeto é por CHAMADA, não por módulo**. Uma chamada com um registro só diz qual é.
+  2. **O mapeador lia `cCodigo` como `codigo_omie`.** `cCodigo` é o código da CASA registrado no
+     Omie ("104304"); `codigo_omie` guarda o id de lá (`nCodProd`, "7302593753"). Nunca casava —
+     e o sintoma seria uma **lista vazia**, que se lê como "está tudo certo". Mesma família do
+     erro que ligou REDBULL a LIMÃO TAITY: ler o identificador errado não dá erro em lugar nenhum.
+  3. **A comparação olhava só o custo médio.** Saldo diferente com custo igual é o caso mais
+     comum de todos — a entrada lançada de um lado só.
+  ⚠️ **E a fixture tinha sido escrita a partir da suposição errada** (`pagina`, `cCodigo`), então
+  o simulado confirmava a suposição de quem a escreveu. **Fixture que copia o que se imagina não
+  testa nada.** Agora ela copia a forma real, lida da conta do cliente.
+  ⚠️ A resposta virou **objeto**, não lista: `conferidos`, `sem_cadastro_aqui`, `divergentes` e
+  `truncado`. Lista sozinha não distingue "nenhuma divergência" de "nenhum produto comparado", e
+  a tela mostra o resumo ANTES da tabela por isso. Medido na conta real: **1.987 produtos em
+  ~17 s** (10 páginas de 200).
+
+- ⚠️ **O Omie tem DOIS dialetos de paginação** (`cliente.DIALETO_PADRAO` e `DIALETO_HUNGARO`).
+  Os módulos antigos falam `pagina`/`registros_por_pagina`; o recebimento exige
+  `nPagina`/`nRegistrosPorPagina` e recusa o outro com "Tag [PAGINA] não faz parte da
+  estrutura". Cada chamada recusada gasta cota — e cota gasta bloqueia a conta.
+
+- **A busca das notas pode rodar sozinha** (`services/omie/agenda.py`, migração 033,
+  26/08/2026): `MANUAL` (o padrão), `HORARIA` ou `DIARIA` numa hora escolhida, por loja, mais
+  uma janela em dias opcional (nulo = a janela adaptativa de sempre). Nota que chega na sexta e
+  ninguém busca até segunda é nota que não entrou no estoque — e o CMV do fim de semana sai com
+  compra a menos.
+  ⚠️ **O padrão é MANUAL e tem de continuar sendo.** Cada busca consome cota, e o Omie
+  **bloqueia a integração inteira** de quem consome demais: ligar é decisão de quem paga a
+  conta, não algo que uma migração liga sozinha. A tela avisa que "a cada hora" são 24 buscas
+  por dia.
+  ⚠️ **O relógio é `agenda_rodou_em`, não `ultima_sincronizacao`** — a segunda só avança quando
+  alguma nota chega, e usá-la como relógio faria o agendador tentar de novo a cada minuto numa
+  casa sem nota nova, que é a casa normal de domingo. Por isso ele avança **mesmo com erro**: o
+  erro fica em `agenda_ultimo_erro`, à vista na tela, e a próxima tentativa é no horário
+  seguinte. Repetir em cima de um bloqueio do Omie só o prolonga.
+  ⚠️ A DIÁRIA dispara na hora escolhida **e só uma vez no dia**: sem a segunda condição ela
+  rodaria a cada minuto durante os sessenta minutos daquela hora.
+  ⚠️ **`pg_try_advisory_xact_lock` antes de olhar o relógio**: duas instâncias da API (ou o
+  worker do `--reload` com um órfão) leriam a mesma linha vencida e gastariam cota em dobro.
+  ⚠️ O laço vive no `lifespan` e sobe SEMPRE — quem decide é a configuração. Se ele só subisse
+  havendo agenda, ligar exigiria reiniciar a API, e ninguém lembraria disso. A busca roda em
+  `asyncio.to_thread`: o importador é síncrono e leva dezenas de segundos; no laço de eventos
+  travaria a API inteira enquanto isso.
+
+- ⚠️ **A janela da busca do Omie é adaptativa** (`importador.janela`): sem parâmetro, vai
+  **desde a última sincronização com 7 dias de folga** — a folga existe porque nota emitida
+  antes e lançada no Omie depois cairia fora se a janela começasse onde a anterior parou, e
+  ninguém veria (o resultado seria "0 novas"). `desde=` faz a carga inicial do histórico;
+  `dias=` fixa. O controle do que já veio continua sendo a **chave da NF-e**, nunca um
+  marcador. `GET /omie/conferencia-notas` compara período a período e **nomeia** as notas que
+  faltam — "0 novas" sozinho não distingue "nada mudou" de "passou batido".
+
+- **`services/omie/`**: `cliente.py` (HTTP, paginação, back-off, modo simulado com fixtures),
+  `mapeadores.py` (**o único arquivo que muda quando a credencial real chegar** — cada campo
+  é lido por uma lista de nomes possíveis) e `importador.py` (de-para em cascata, rateio,
+  conversão, lançamento).
+
+- 🔑 **Nem toda rota do PDV responde um OBJETO — e isso derrubava o envio DEPOIS de gravar**
+  (30/08/2026). `impressoras/update` devolve a STRING `"Registry updated successfully!"`, como
+  o `delete` já fazia. O router fazia `resposta.get("id")` e levantava `AttributeError`:
+  **500 com corpo vazio**, a alteração já feita do outro lado, a pendência continuando aberta
+  e a tela só sabendo dizer que falhou. Clicar de novo repetia o ciclo.
+  ⚠️ A nota da string já existia para o `delete` e o cliente HTTP já a tolerava — quem supunha
+  o dicionário era o router, um lugar só, que a nota não alcançou.
+
+- ⚠️ **O teste de navegador põe a integração em `simulado` e devolve o modo no fim.** Depois de
+  o dono configurar a conta real, "Buscar no Omie" na suíte sincronizaria 3.670 notas de
+  verdade — e a conta bloqueia quem consome demais. Trocar só o MODO não toca na credencial.
+  O restauro é registrado em `aoTerminar` e roda no `finally` do roteiro: repor no fim do bloco
+  não bastou, porque a suíte estourou no meio uma vez e deixou a integração em `simulado` — a
+  busca do dono parou de trazer nota e nada explicava por quê. Mesma lição do
+  `preservar_credenciais`.
+
+- ⚠️ **Trabalhar na integração com a conta REAL configurada custa cota.** `POST
+  /omie/importar-catalogo` varre os 2.189 produtos do cliente a cada chamada, e o Omie bloqueia
+  quem consome demais. Antes de exercitar qualquer coisa do Omie: **conferir o modo** e pôr em
+  `simulado` (só o MODO — a credencial fica onde está). Para descobrir que campos uma conta
+  devolve de verdade, **uma** chamada com `registros_por_pagina: 1` responde tudo e não custa
+  quase nada; adivinhar nome de campo e varrer o catálogo para conferir é o caminho caro.
+  `preservar_credenciais()` repõe a linha inteira — credencial, modo e `ativa` —, então suíte
+  que o chama devolve o modo sozinha.
+
+- ⚠️ **`preservar_credenciais()` em `tests/comum.py`, registrado no `atexit`.** A suíte do Omie
+  grava uma credencial de mentira na MESMA linha onde mora a real, e a API não devolve a chave
+  em claro (é a regra que protege o segredo) — então perder a credencial do cliente é
+  definitivo. Repor no fim do roteiro não bastava: a suíte estourou no meio uma vez, e foi
+  assim que a chave real se perdeu. `atexit` repõe mesmo com traceback.
+
+### Armadilhas já pagas
+
+- 🔑 **O cadastro vem ANTES da nota** (`importador.sincronizar_completo`, migração 053,
+  03/09/2026, pedido do dono, espelhando o que o PDV já fazia). Produto criado no Omie hoje e
+  comprado hoje ficava sem vínculo, ia para a fila de pendências e esperava alguém lembrar de
+  clicar em "Importar catálogo" — um segundo botão que ninguém sabe que precisa apertar.
+  🔑 **A lógica mora no SERVIÇO, não no router, porque há DOIS chamadores.** A primeira versão
+  ficou só no endpoint, e o agendador chama `sincronizar` direto: a integração funcionaria pelo
+  botão e não pela madrugada, sem nada explicando. É a mesma lição do relógio do cardápio.
+  ⚠️ **Falhar no catálogo NÃO impede a busca de notas.** Nota não importada é compra faltando no
+  estoque e no CMV; cadastro não sincronizado é um item que fica na fila mais um dia.
+  ⚠️ **Aqui NÃO existe o "só criar, nunca alinhar" do PDV**, e a diferença é real: o `importar`
+  do cardápio sobrescreve campo, então rodá-lo a cada busca desfaria calada a correção de quem
+  arrumou a categoria de um prato à mão. O `_completar_produto` do Omie usa
+  `coalesce(coluna, valor)` — preenche só o que está nulo. Reimportar não desfaz nada.
+  ⚠️ **O catálogo custa ~115 s** contra a conta real (2.201 produtos, paginados), enquanto as
+  notas sozinhas levam 4 s. Medido, não estimado — a estimativa inicial era de 15 a 30 s e estava
+  errada por um fator de quatro. Por isso: a agenda faz o catálogo **uma vez por dia**
+  (`integracoes.catalogo_em`), `?catalogo=false` pula o passo, e a tela avisa que a busca demora.
+  ⚠️ **A agenda do Omie aceita frequência HORÁRIA** — sem a trava diária, a varredura de 2.201
+  produtos rodaria vinte e quatro vezes por dia para achar os dois que nasceram.
+  ⚠️ **O relógio é do AGENDADOR, não do botão**: quem clica está pedindo agora, não dispensando a
+  passada da madrugada. Mesma correção que o `cardapio_em` do PDV já precisou.
+  ⚠️ **A premissa de um teste caiu junto, e não se enfraqueceu o teste.** O bloco "sem produto,
+  sem lançamento" dependia de a nota chegar antes de o produto existir; com o catálogo na frente,
+  a fila esvazia. Aquela sincronização passou a usar `catalogo=false` (com o porquê escrito) e o
+  caminho novo ganhou bloco próprio, o `8b`.
+  ⚠️ **Achado à parte, não regressão:** um item de nota descrevendo café estava ligado a
+  `LARANJA PERA KG`. A causa é a conta REUSAR códigos — o item traz `codigo_fornecedor` PRD00004
+  e o catálogo atual diz que PRD00004 é laranja. O vínculo saiu do nível 1 da cascata
+  (`codigos_externos`), que já existia. Se a conta recicla códigos, cada reciclagem vira um
+  vínculo silencioso e errado numa nota antiga — vale uma investigação própria.

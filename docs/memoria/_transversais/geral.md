@@ -133,3 +133,93 @@
   exigem a mesma chave. Hoje a têm Administrador, Gerente e Contador; não a têm Cozinha,
   Conferente e Salão. ⚠️ **Quem quiser mudar isso mexe no PAPEL, não no código** — é a chave que
   decide, e ela é configurável na tela de Papéis.
+
+- **O que falta na primeira parte está em [`docs/o-que-falta.md`](docs/o-que-falta.md)** —
+  levantado em 25/08/2026 comparando o MAPEAMENTO item a item com o que existe. O maior item
+  é a **carga inicial das fichas**: com zero fichas não há CMV teórico, nem variância, nem
+  food cost. O documento também registra as três decisões em que a construção divergiu do
+  mapeamento e por quê (a venda passou a baixar estoque, `modo_producao`, `KIT`).
+
+- ⚠️ **Tabela nova que aponta para as tabelas limpas derruba `limpar_dados.py`** — e a
+  mensagem do Postgres passa longe de "atualize a lista do script". Aconteceu com
+  `produto_unidades` e com `cmv_movimentacao`: a limpeza estourava no meio e quem rodou achava
+  que tinha limpado. O script agora **confere antes** (`referenciam()`) e recusa nomeando o que
+  falta na lista.
+
+- 🔑 **`--filiais-de-teste` na limpeza** (01/09/2026): as suítes criam uma loja por rodada e
+  ninguém as apagava — `unidades` está em `PRESERVADAS`, e numa casa de verdade a loja fica.
+  Dezenove tinham se acumulado. Não é só sujeira de lista: **filial ATIVA muda a barra
+  superior**, porque o seletor de loja aparece e vira o primeiro `<select>` do documento.
+  ⚠️ **O critério é estar INATIVA, não o nome.** As suítes desativam a filial delas no
+  `atexit`, então "inativa" é exatamente a marca que elas deixam; casar por nome seria o
+  palpite que este projeto já removeu uma vez. A matriz nunca entra.
+  ⚠️ Roda **depois** do TRUNCATE: com movimento, venda ou nota apontando para a loja, a
+  exclusão bate na chave estrangeira.
+  ⚠️ Locais, setores e categorias com marca de suíte continuam saindo **na mão** —
+  `--tabelas-de-apoio` esvazia tudo, inclusive o que a casa usa.
+
+- **Tela inicial = painel do dono** (20/08/2026): `routers/inicio.py` entrega tudo numa
+  chamada só — painel que faz seis requisições pisca seis vezes. ⚠️ **Número verdadeiro ou
+  nenhum**: sem venda importada, `food_cost_pct` e `variancia` vão como `null` (não 0) e a
+  tela mostra "—" com o motivo; zero ali pareceria um resultado excelente. Dinheiro só sai
+  com `cmv.painel` — quem não tem recebe `dinheiro: null`, não um valor zerado. A cobertura
+  de ficha viaja junto porque é ela que diz o quanto dá para confiar na variância.
+
+- ⚠️ **Comparar a tela FILTRADA com a API inteira acusa de defeito o comportamento certo.**
+  A checagem do aviso "quanto ficou de fora por estar inativo" lia o texto com a busca de um
+  produto preenchida e o comparava com `/estoque/saldos-rede/inativos` **sem filtro**: a API
+  dizia 181 produtos, a tela dizia nada — e ela estava certa, porque o aviso obedece à busca,
+  que é exatamente o que ele tem de fazer. Ou se limpa o filtro antes de medir, ou se pergunta
+  à API pelo MESMO recorte. É a família do "teste que descreve o estado do dia", pela ponta do
+  recorte em vez da do tempo.
+
+- ⚠️ **Navegar com um parâmetro de URL que a tela não lê mede a tela errada.** A checagem do
+  saldo em trânsito abria `/estoque?id_produto=…` — o filtro daquela tela é ESTADO dela, não
+  query string, e o teste media a primeira página do cadastro inteiro. Digitar no campo é o
+  único caminho que existe de verdade.
+
+- **`tests/cenario_semana.py`**: a operação de uma semana com um usuário por papel (gerente,
+  conferente, cozinha, salão, contador) — quem pode o quê, e a conta fechando no fim. Com a
+  baixa da venda no lugar, a **variância = perdas + ajustes** exatamente, e o food cost sai em
+  30,6%. Foi ele que achou a falha acima. ⚠️ Mede **delta** da apuração e afirma só sobre os
+  produtos que ele mesmo mexeu: a base é compartilhada com as outras suítes.
+
+- ⚠️ **Foto de página inteira não pode derrubar a bateria.** `fullPage` estoura o
+  `protocolTimeout` do Chrome numa tela longa; aconteceu com o painel de CMV e voltou a acontecer
+  quando Integrações ganhou o segundo bloco de agenda — e levou junto as 280 checagens da rodada.
+  `foto()` agora cai para a foto da JANELA e avisa; o `protocolTimeout` subiu para 60 s.
+
+- ⚠️ **"A primeira `table.tabela` da página" media a tabela errada.** A checagem do custo inicial
+  do Omie perguntava se havia linhas com um seletor que casa com QUALQUER tabela da tela de
+  Integrações: ela dizia "há o que aplicar" quando a lista estava vazia. Casar por **id**
+  (`#custos-iniciais`). É a armadilha do "primeiro elemento que casa" outra vez.
+  ⚠️ E a afirmação virou uma **propriedade**, não o estado do dia: havendo o que aplicar, o
+  gravar é um botão separado; não havendo, a tela DIZ por que a lista está vazia. Exigir o botão
+  sempre acusava a tela de um defeito que era do dado — e passou a falhar no instante em que a
+  base foi limpa.
+
+- ⚠️ **Duas rodadas do `verificar.mjs` no mesmo arquivo de saída se atropelam.** As duas escrevem
+  em `scripts/_saida-navegador.txt` e disputam a mesma API local: o resultado lido era o da
+  rodada velha, com falhas que a nova já tinha corrigido. É a versão de dois processos da nota
+  "rodar a suíte de API junto com a de navegador inventa falha".
+
+- ⚠️ **Handle de elemento ENVELHECE, e `p.evaluate(fn, handle)` estoura o `protocolTimeout`.**
+  O laço `for (const b of await p.$$("button")) { await p.evaluate(el => el.innerText, b) }`
+  derrubou a rodada inteira num ponto sem defeito nenhum — a troca de loja recarrega a página
+  (`window.location.reload()`), então os handles colhidos antes já não existem. O texto continua
+  sendo o que identifica o botão; a procura é que tem de ser feita **de dentro do documento**,
+  num `p.evaluate` só. Mesma família da nota abaixo.
+
+- ⚠️ **Fixture com data fixa envelhece.** As notas simuladas nasceram em 16–20/08/2026 e uma
+  semana depois já caíam fora da janela automática da busca — o teste dizia que a importação
+  tinha parado. `cliente._aproximar_datas` traz as datas da fixture para a semana de hoje
+  mantendo o intervalo entre elas. Vale também para a demonstração: sistema que só mostra nota
+  do mês passado parece parado.
+
+- ⚠️ **Suíte de navegador que quebra no MEIO deixa rastro que derruba a próxima.** A limpeza de
+  notas roda no fim; uma quebra antes dela deixou uma nota manual órfã, e as rodadas seguintes
+  falharam num ponto sem relação nenhuma com a causa. Antes de caçar bug numa suíte que
+  começou a falhar sozinha, **procure a sobra da rodada anterior**.
+  ⚠️ O perfil do Chrome do `verificar.mjs` agora fica em `web/scripts/_chrome-perfil` — no
+  TEMP do C: (que vive no limite nesta máquina) o Chrome falha com erro de PROTOCOLO em pontos
+  diferentes a cada rodada, não com "disco cheio", e isso se lê como teste instável.

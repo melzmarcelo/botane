@@ -1,7 +1,7 @@
-# Vendas e PDV
+# Vendas
 
-> Extraído do CLAUDE.md original (seções "O que já existe" e "Armadilhas já pagas").
-> Consultar antes de mexer nesta área do sistema.
+> Vendas, PDV e os períodos de consumo.
+> Leia antes de mexer neste módulo.
 
 ## O que já existe
 

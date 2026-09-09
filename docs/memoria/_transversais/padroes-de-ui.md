@@ -71,3 +71,40 @@
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).
+
+- **Paginação é o PADRÃO de todo grid** (25/08/2026): `components/paginacao.tsx` —
+  `usePaginacao(nome, { padrao, filtros })` + `<Paginacao p={pag} rotulo="…" />`. O rodapé diz
+  "1–20 de 2.183", deixa escolher **20, 50 ou 100** e **lembra a escolha** (localStorage, por
+  lista: conferir estoque numa tela grande pede 100, o celular pede 20).
+  ⚠️ **O corte é do SERVIDOR** — trazer tudo e fatiar no navegador só troca a mentira de lugar.
+  ⚠️ **Trocar o filtro volta para a primeira página** (é o que `filtros:` faz): quem está na
+  página 7 e digita uma busca cairia numa tela vazia sem nada explicando.
+  ⚠️ A preferência é lida num **efeito**, não no estado inicial: o servidor renderiza a tela
+  antes de existir `localStorage`, e valores diferentes dos dois lados quebram a hidratação.
+  Aplicado em produtos, fornecedores, notas, saldos, razão, fichas, vendas, inventários,
+  produções, auditoria, usuários e movimentação do CMV. **Fora, de propósito**: tabelas de
+  apoio, lojas, papéis e tudo que é detalhe de UM registro (itens da nota, insumos da ficha) —
+  são poucos por natureza, e rodapé de página em lista de três linhas é ruído.
+  ⚠️ **A movimentação do CMV é a única que fatia no navegador**, porque o rodapé precisa somar
+  TODAS as linhas para a identidade fechar — o relatório vem inteiro de propósito.
+
+- ⚠️ **O total sai em consulta SEPARADA e só na primeira página** (`paginacao.pagina`). Medido
+  com 400.000 movimentos no razão: página de 100 sem total **4 ms**, com `count(*) OVER ()`
+  **388 ms** — a janela obriga o banco a materializar todas as linhas do filtro para depois
+  cortar em 100. Virar a página não muda o total, então a conta roda no `offset = 0` e mais
+  nada: 148 ms na primeira, **2 ms** nas seguintes. Quando o cabeçalho não vem, `api.listar`
+  devolve `total: null` e `usePaginacao.setTotal` **guarda o que já tinha** — tratar nulo como
+  zero apagaria o rodapé na página 2. Quem monta a consulta passa o SQL **sem LIMIT**: o total
+  usa o mesmo texto e os mesmos parâmetros, e uma cópia do filtro escrita à mão divergiria no
+  primeiro `WHERE` novo. As listas limitadas por natureza (fichas, inventários, usuários)
+  continuam com `com_total` e `count(*) OVER ()`.
+
+- ⚠️ **Nada de `window.prompt`/`confirm`**: é a caixa do NAVEGADOR — fonte de sistema, botão
+  em inglês, sem espaço para explicar o que a ação faz. O que não se desfaz pergunta pelo
+  `Confirmacao` de `components/ui.tsx`, e o número que a ação usa fica num campo **na linha**,
+  à vista antes do clique. Aplicado em: estornar movimento (razão e ajustes), estornar nota,
+  fechar contagem, fechar e reabrir mês, cancelar venda e produzir da agenda.
+  ⚠️ **Confirmação só onde mexe no razão ou fecha período.** Lançar a nota NÃO pergunta — a
+  tela inteira é a conferência (itens, custos e destinos à vista) e um diálogo no caminho
+  comum treina a clicar sem ler. Cancelar linha da agenda também não: é plano, não é razão.
+  Cada diálogo diz **o que a ação faz**, não só "tem certeza".
