@@ -1,6 +1,7 @@
 """Confere se um Botané no ar está de pé — sem escrever nada.
 
-    python verificar_deploy.py https://botane-xxxxx.ondigitalocean.app
+    python verificar_deploy.py https://sistema.botanedeliecafe.com.br
+    python verificar_deploy.py <endereco> --com-login   (pede a senha, num terminal)
 
 No App Platform a API mora em `<endereço>/api`, e é esse o padrão. Onde ela
 estiver noutro lugar — como na máquina local, em que a web é a 3100 e a API é a
@@ -14,7 +15,8 @@ produção destruiria dado do cliente. Esta aqui pergunta e não responde.
 
 O que ela cobra é o que quebra num primeiro deploy, na ordem em que quebra:
 
-1. a API responde e o banco respondeu junto (`/saude` faz um SELECT)
+1. a API responde, o banco respondeu junto (`/saude` faz um SELECT) e o
+   CÓDIGO no ar é o mesmo deste repositório (a `impressao`)
 2. as migrações rodaram (a base tem os papéis e as permissões de fábrica)
 3. a web serve, e serve o ESTÁTICO (o manual em `/ajuda.html`)
 4. o login funciona de ponta a ponta
@@ -24,6 +26,7 @@ O que ela cobra é o que quebra num primeiro deploy, na ordem em que quebra:
 """
 
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -101,6 +104,34 @@ def main() -> int:
     checar("/saude responde 200", st == 200, (st, corpo))
     checar("e diz a versão", isinstance(corpo, dict) and corpo.get("versao"), corpo)
 
+    # 🔑 **"Subiu o commit que eu publiquei?"** — a pergunta que a VERSÃO não
+    # responde, porque ela é texto fixo e não muda de um deploy para o outro.
+    # A `impressao` é o hash do próprio código: o mesmo cálculo roda aqui e lá,
+    # e os dois se comparam. Sem esta checagem, "a correção não funcionou" e "a
+    # correção não foi publicada" ficam indistinguíveis — e são coisas muito
+    # diferentes.
+    #
+    # ⚠️ Ela só vale rodada a partir do MESMO commit que se publicou. Rodar
+    # com o repositório noutro ponto acusa divergência que não existe, e a
+    # mensagem abaixo diz isso em vez de gritar.
+    if isinstance(corpo, dict) and corpo.get("impressao"):
+        local = None
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import impressao as _imp
+            local = _imp.CODIGO
+        except Exception as e:
+            print(f"     (não deu para calcular a impressão local: {type(e).__name__})")
+        if local:
+            igual = (local["impressao"] == corpo["impressao"]
+                     and local["arquivos"] == corpo.get("arquivos"))
+            checar(
+                "o código no ar é o mesmo deste repositório",
+                igual,
+                f"no ar {corpo['impressao']}/{corpo.get('arquivos')} · "
+                f"aqui {local['impressao']}/{local['arquivos']} — se divergiu, ou o "
+                f"deploy não foi feito, ou este repositório está noutro commit")
+
     print("\n2. as migrações rodaram no primeiro start")
     # Sem token não dá para ler papéis; o login abaixo prova o resto. O que dá
     # para ver sem autenticar é que a rota existe e pede autenticação — 401 é
@@ -128,6 +159,27 @@ def main() -> int:
            any(urllib.parse.urlparse(e).netloc == esperado for e in embutidos)
            if embutidos else False,
            embutidos or "(nenhum endereço encontrado nos pacotes)")
+
+    # 🔑 **Os tres primeiros passos nao pedem senha, e sao os que respondem
+    # "subiu o meu commit?".** Antes, o script morria num `EOFError` sem terminal
+    # -- depois de ja ter conferido tudo que importava -- e a resposta se perdia
+    # junto com o traceback. Agora ele diz o que deixou de fora e sai com o que
+    # apurou.
+    #
+    # ⚠️ **Sem `--com-login` ele NAO pede credencial de producao.** Digitar a
+    # senha do cliente e uma decisao de quem esta olhando, nao um efeito
+    # colateral de rodar uma verificacao.
+    if "--com-login" not in sys.argv or not sys.stdin.isatty():
+        print("\n4-7. login, papeis, X-Total e o link do e-mail: PULADOS")
+        if "--com-login" in sys.argv:
+            print("     (--com-login pedido, mas nao ha terminal para digitar)")
+        else:
+            print("     rode com --com-login, num terminal, para conferir tambem")
+        print()
+        print(f"{ok} passaram, {len(falhas)} falharam")
+        for f in falhas:
+            print(f"  - {f}")
+        return 1 if falhas else 0
 
     print("\n4. dá para entrar")
     email = input("  e-mail do administrador: ").strip()
