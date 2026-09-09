@@ -365,7 +365,7 @@ def _gravar_preco(cur, id_produto: int, preco: float, id_usuario: int,
 
 def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
              criar_ausentes: bool = True, id_unidade: int = 1,
-             alinhar: bool = True) -> dict:
+             alinhar: bool = True, precos_tambem: bool = False) -> dict:
     """Traz o cardápio e liga o que o CÓDIGO manda ligar.
 
     🔑 **`alinhar` separa as duas coisas que esta função faz** (01/09/2026,
@@ -380,6 +380,11 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     arrumou a categoria de um prato à mão — e era exatamente isso que "ser
     manual" protegia. Separar em duas o que era uma coisa só é o que deixa a
     sincronização automática existir sem reverter aquela decisão.
+
+    🔑 **`precos_tambem` é o terceiro estado, e existe porque o PREÇO é
+    diferente do resto** (09/09/2026). Ele muda no PDV — no caixa, hoje — e
+    esperar um clique aqui deixa a margem sendo calculada sobre o valor velho.
+    Ligado, a sincronização automática traz só o preço, e nada mais.
 
     ⚠️ **Duas portas, e nenhuma delas é palpite**: o código do PDV
     (`vinculo.por_codigo`, que olha o campo do produto e os apelidos) e o **EAN**,
@@ -405,15 +410,22 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     # PDV"*. Houve uma versão que parava de lê-lo quando `enviar_ao_pdv` estava
     # ligado, para evitar o ping-pong; o remédio era pior que a doença, porque o
     # valor alterado lá simplesmente se perdia.
-    # ⚠️ **O que evita o ping-pong é isto ser MANUAL.** Esta função só roda pelo
-    # botão "Importar cardápio"; a busca de vendas, que roda por agenda, chama a
-    # `reconciliar` e nunca esta. Então "ser dono do preço" quer dizer *o preço
-    # daqui é o que SAI* — e alinhar os dois é um clique de alguém, não um
-    # efeito colateral.
-    # ⚠️ Só no alinhamento: preço é UMA CHAMADA a mais (`tabelapreco/get`), e na
-    # sincronização automática ele nem seria gravado — pedir seria gastar
-    # requisição para jogar fora.
-    tabela = precos(cliente, filial) if alinhar else {}
+    # 🔑 **E desde 09/09/2026 ele vem TAMBÉM na busca automática** (pedido do
+    # dono: *"ao rodar a integração com o PDV … caso tenha alteração de preço no
+    # pdv, trazer para o botané"*). O preço é o único campo do alinhamento que
+    # muda sozinho na vida real — quem sobe o café de 8 para 9 sobe no PDV, hoje,
+    # e a margem daqui ficava calculada sobre o valor velho até alguém lembrar de
+    # clicar em "Importar cardápio". Categoria e setor são o contrário: mudam
+    # aqui, à mão, e continuam MANUAIS por isso.
+    # ⚠️ **O que evita o ping-pong deixou de ser "ser manual" e passou a ser o
+    # DONO do preço** (`enviar_ao_pdv`). Com o envio ligado, o preço daqui é o
+    # que sai, e puxar o de lá de hora em hora desfaria calado o valor que
+    # alguém acabou de digitar. Quem decide é `_preco_e_do_pdv` — uma função só,
+    # e não a mesma pergunta repetida em cada chamador.
+    # ⚠️ `precos_tambem` é um eixo SEPARADO de `alinhar` de propósito: preço é
+    # uma chamada a mais (`tabelapreco/get`), e sem os dois separados a única
+    # forma de trazer o preço seria ligar o alinhamento inteiro junto.
+    tabela = precos(cliente, filial) if (alinhar or precos_tambem) else {}
 
     resumo = {"itens": len(itens), "vinculados": 0, "ja_vinculados": 0,
               "criados": 0, "inativos": 0, "completados": 0,
@@ -533,6 +545,33 @@ def importar(cur, cliente: ClientePdv, id_usuario: int, filial: str = "",
     return resumo
 
 
+def _preco_e_do_pdv(cur, id_unidade: int) -> bool:
+    """O preço vem de lá, ou daqui? É `enviar_ao_pdv` quem responde.
+
+    🔑 **Ligado, o Botané é o DONO do preço** — a tela de Integrações diz isso
+    com todas as letras, e há uma fila que empurra os cadastros daqui para o
+    cardápio. Puxar o preço do PDV de hora em hora nesse caso desfaria, calado,
+    o valor que alguém acabou de digitar aqui: o ping-pong que a decisão de
+    30/08/2026 evitou tornando a importação manual.
+
+    🔑 **Desligado — que é o padrão, e a configuração real do cliente — o PDV é
+    o dono.** O preço é digitado no caixa, e trazê-lo sozinho é o que o dono
+    pediu em 09/09/2026. Não há o que desfazer: ninguém edita preço aqui.
+
+    ⚠️ **A pergunta mora AQUI e não em quem chama.** São dois caminhos até a
+    sincronização — o botão "Buscar no PDV" e o agendador — e uma regra copiada
+    nos dois diverge no primeiro ajuste, com a diferença aparecendo como "pelo
+    botão o preço vem, pela agenda não" sem ninguém saber qual está certo.
+    """
+    cur.execute(
+        """SELECT enviar_ao_pdv FROM integracoes
+            WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""",
+        (id_unidade,),
+    )
+    linha = cur.fetchone()
+    return not (linha or {}).get("enviar_ao_pdv")
+
+
 def cadastros_de_hoje(cur, id_unidade: int) -> bool:
     """A AGENDA já sincronizou os cadastros hoje nesta loja?
 
@@ -576,13 +615,30 @@ def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str
     ⚠️ **Quem marca o relógio do dia é o AGENDADOR, não esta função.** Ela roda
     pelos dois caminhos — o botão e a agenda —, e marcar aqui fazia o clique de
     alguém consumir a cota diária da busca automática. Ver `marcar_cardapio`.
+
+    🔑 **O PREÇO é a exceção, e entra aqui desde 09/09/2026** (pedido do dono).
+    Ele é o único campo do alinhamento que muda sozinho no outro lado: sobe no
+    caixa, hoje, e a margem daqui seguia calculada sobre o valor velho até
+    alguém clicar em "Importar cardápio". Categoria, setor e nome são o
+    contrário — mudam AQUI, à mão — e continuam manuais.
+
+    ⚠️ **E só quando o preço é do PDV.** Com `enviar_ao_pdv` ligado o dono é o
+    Botané, e trazer o de lá apagaria o daqui sem ninguém pedir. Ver
+    `_preco_e_do_pdv`.
     """
+    do_pdv = _preco_e_do_pdv(cur, id_unidade)
     r = importar(cur, cliente, id_usuario, filial, criar_ausentes=True,
-                 id_unidade=id_unidade, alinhar=False)
+                 id_unidade=id_unidade, alinhar=False, precos_tambem=do_pdv)
     return {"itens": r["itens"], "criados": r["criados"],
             # `completados` aqui só pode ser mudança de situação: é o único
             # campo que o modo desligado escreve.
-            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"]}
+            "situacao_mudou": r["completados"], "sem_vinculo": r["sem_vinculo"],
+            # ⚠️ Só o que MUDOU (`precos.gravar` devolve falso quando o valor é
+            # o mesmo): "629 preços" toda hora não é notícia, "3 preços" é.
+            "precos": r["precos"],
+            # O motivo de zero, quando é por regra e não por não ter mudado
+            # nada — senão a única leitura possível é "está quebrado".
+            "precos_do_pdv": do_pdv}
 
 
 def marcar_cardapio(cur, id_unidade: int) -> None:

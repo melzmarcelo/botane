@@ -388,6 +388,40 @@
   isto ser MANUAL**: esta função só roda pelo botão, e a busca de vendas — que roda por agenda
   — chama a `reconciliar`, nunca a importação. "Ser dono do preço" quer dizer *o preço daqui é
   o que SAI*; alinhar os dois é um clique de alguém.
+  ⚠️ **Isto mudou em 09/09/2026 — leia o item abaixo antes de confiar no parágrafo acima.**
+
+- 🔑 **O PREÇO passou a vir na busca automática de vendas** (09/09/2026, pedido do dono: *"ao
+  rodar a integração com o PDV, antes das vendas busca os novos produtos, pode rodar a
+  atualização de preço também?"*). Ele é o **único campo do alinhamento que muda sozinho do
+  outro lado**: sobe no caixa, hoje. Categoria, setor e nome são o contrário — mudam AQUI, à
+  mão — e por isso continuam manuais, exatamente como a decisão de 01/09/2026 estabeleceu.
+  Antes disto, a margem daqui seguia calculada sobre o valor velho até alguém lembrar de
+  clicar em "Importar cardápio", e nada denunciava a diferença fora da fila de exportação.
+
+  🔑 **O que evita o ping-pong deixou de ser "ser manual" e passou a ser o DONO do preço.**
+  `cardapio._preco_e_do_pdv` lê `enviar_ao_pdv`: **desligado** (o padrão, e a configuração real
+  do cliente) o dono é o PDV e o preço vem sozinho — não há o que desfazer, ninguém edita preço
+  aqui; **ligado**, o dono é o Botané, e puxar o de lá de hora em hora apagaria calado o valor
+  que alguém acabou de digitar, então a busca não toca em preço. A `smoke_pdv_legal` (seção
+  8g3) cobra os dois lados.
+
+  ⚠️ **A pergunta mora numa função só, e não em quem chama.** São dois caminhos até
+  `sincronizar_cadastros` — o botão "Buscar no PDV" e o agendador —, e a regra copiada nos dois
+  divergiria no primeiro ajuste, aparecendo como "pelo botão o preço vem, pela agenda não".
+
+  ⚠️ **`precos_tambem` é um eixo SEPARADO de `alinhar` em `cardapio.importar`.** Preço é uma
+  chamada a mais (`tabelapreco/get`); sem os dois separados, a única forma de trazer o preço
+  seria ligar o alinhamento inteiro junto — que é o que a decisão anterior proibia.
+
+  ⚠️ **Só o que MUDOU é contado e dito.** `precos.gravar` não grava valor repetido, e um "629
+  preços" a cada passada horária seria ruído que esconde o dia em que o número importa. A
+  resposta traz `precos` (quantos mudaram) e `precos_do_pdv` (se a regra permitia trazê-los) —
+  o segundo existe para que um zero por REGRA não se leia como "está quebrado".
+
+  ⚠️ **A tela conta a consequência**, nas duas caixas de Integrações: o interruptor "Enviar
+  informações ao PDV" agora diz de quem é o preço, e o bloco "Buscar vendas sozinho" diz o que
+  a busca faz além de trazer venda. Sem isso, quem liga o envio para mandar cadastros daqui
+  perderia, sem saber, a atualização de preço que vinha do caixa.
   ⚠️ **Venda de produto que só existe no PDV NÃO cria cadastro.** A importação de venda liga
   por id, código e, em último recurso, nome exato de produto ativo; não achando, o item fica
   **sem vínculo** (e o CMV teórico dele é zero) até alguém importar o cardápio. Cadastro não

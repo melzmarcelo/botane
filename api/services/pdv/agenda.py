@@ -120,6 +120,12 @@ def rodar_uma(cur, linha: dict) -> dict:
         # ⚠️ **Só criar e desativar**, nunca alinhar: rodar o alinhamento
         # sozinho desfaria calada a correção de quem arrumou a categoria de um
         # prato à mão, que é exatamente o que "ser manual" protegia.
+        # 🔑 **O PREÇO é a exceção, e vem junto desde 09/09/2026** (pedido do
+        # dono). Ele é o único campo que muda sozinho do outro lado — sobe no
+        # caixa, hoje — e sem isto a margem daqui seguia calculada sobre o valor
+        # velho até alguém clicar em "Importar cardápio". Quem decide se ele
+        # pode vir é `cardapio._preco_e_do_pdv`, não este trecho: com o envio ao
+        # PDV ligado o dono do preço é o Botané, e trazer o de lá o apagaria.
         # ⚠️ **Falhar aqui não impede a busca de vendas**, e a ordem é essa de
         # propósito: venda não importada é receita faltando no CMV; cadastro não
         # sincronizado é um item que fica na fila mais um dia.
@@ -154,7 +160,11 @@ def rodar_uma(cur, linha: dict) -> dict:
             """UPDATE integracoes
                   SET ultima_sincronizacao = now(), ultimo_status = 'OK', ultima_mensagem = %s
                 WHERE id = %s""",
-            (f"{gravado.get('importadas', 0)} venda(s) nova(s) ({r['janela']}) — agendada",
+            (f"{gravado.get('importadas', 0)} venda(s) nova(s) ({r['janela']}) — agendada"
+             # Só quando mudou: "0 preços" em toda passada horária é ruído, e
+             # ruído esconde o dia em que o número não é zero.
+             + (f", {resultado['cadastros']['precos']} preço(s) do PDV"
+                if (resultado.get("cadastros") or {}).get("precos") else ""),
              linha["id"]),
         )
     except ErroPdv as e:

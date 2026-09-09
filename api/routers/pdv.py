@@ -384,6 +384,12 @@ def sincronizar(
                        if cadastros.get("criados") else "")
                     + (f", {cadastros['situacao_mudou']} com a situação alterada"
                        if cadastros.get("situacao_mudou") else "")
+                    # 🔑 O preço vem junto desde 09/09/2026 (ver
+                    # `cardapio._preco_e_do_pdv`). Ele aparece na frase pela
+                    # mesma regra dos outros: só quando MUDOU alguma coisa —
+                    # `precos.gravar` não grava valor repetido.
+                    + (f", {cadastros['precos']} preço(s) atualizado(s) do PDV"
+                       if cadastros.get("precos") else "")
                     + (f". Cadastros não sincronizados: {cadastros['erro']}"
                        if cadastros.get("erro") else "")),
     }

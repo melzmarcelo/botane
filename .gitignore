@@ -51,3 +51,4 @@ _api.err
 # ⚠️ Ficam com ponto na frente de proposito: no D:, fora do que o deploy copia.
 web/.bateria*.txt
 api/.log-api.txt
+api/.log-api.err

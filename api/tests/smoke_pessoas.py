@@ -86,7 +86,13 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+# ATENCAO: a marca carrega uma LETRA de proposito. Ela so tinha digitos, e a
+# busca por pessoa procura tambem no CNPJ: com 793 fornecedores reais
+# importados do Omie, um marcador de seis digitos cai dentro do CNPJ de
+# alguem -- "662800" esta em 44376628000161, da GERUN TECNOLOGIA. A suite
+# falhava dizendo "a lista traz as duas: 3", e a terceira era um cadastro de
+# verdade. Com a letra na frente, nenhum documento pode casar.
+marca = "P" + str(time.time_ns())[-6:]
 criados: dict = {"pessoas": [], "usuarios": [], "produtos": []}
 # 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
 # ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa

@@ -842,6 +842,93 @@ if alvo_p and outra:
         _c.execute("UPDATE integracoes SET cardapio_em = NULL WHERE servico = 'PDV_LEGAL'")
 
 
+print("\n8g3. o PRECO vem junto da busca de vendas — e o dono dele decide")
+# 🔑 **Pedido do dono (09/09/2026):** *"ao rodar a integracao com o PDV, antes
+# das vendas busca os novos produtos, pode rodar a atualizacao de preco tambem?
+# caso tenha alteracao de preco no pdv, trazer para o botane"*.
+#
+# O preco e o UNICO campo do alinhamento que muda sozinho do outro lado: sobe no
+# caixa, hoje. Antes disto, a margem daqui seguia calculada sobre o valor velho
+# ate alguem lembrar de clicar em "Importar cardapio". Categoria, setor e nome
+# sao o contrario — mudam AQUI, a mao — e continuam manuais (ver 8g2).
+#
+# ⚠️ **E quem decide se ele pode vir e `enviar_ao_pdv`.** Com o envio ligado o
+# dono do preco e o Botane, e puxar o de la de hora em hora desfaria calado o
+# valor que alguem acabou de digitar. Esta secao cobra os DOIS lados da regra.
+from services import precos as _precos            # noqa: E402
+
+st_pp, achados_pp = chamar("GET", "/produtos?busca=PDV-10689993&incluir_inativos=true",
+                           token=token)
+alvo_pr = next((p for p in (achados_pp or [])
+                if str(p.get("codigo")) == "PDV-10689993"), None)
+
+
+def _envio(ligado):
+    with _cur_pdv() as _c:
+        _c.execute("UPDATE integracoes SET enviar_ao_pdv = %s WHERE servico = 'PDV_LEGAL'",
+                   (ligado,))
+
+
+def _preco_agora():
+    with _cur_pdv() as _c:
+        v = _precos.vigente(_c, alvo_pr["id"], 1)
+    return None if v is None else float(v)
+
+
+def _por_o_preco(valor):
+    with _cur_pdv() as _c:
+        _precos.gravar(_c, alvo_pr["id"], valor, 1, 1)
+
+
+if alvo_pr:
+    with _cur_pdv() as _c:
+        _c.execute("SELECT enviar_ao_pdv FROM integracoes WHERE servico = 'PDV_LEGAL'")
+        envio_original = bool((_c.fetchone() or {}).get("enviar_ao_pdv"))
+    do_pdv = _preco_agora()
+    checar("o item do cardapio tem preco para comparar", do_pdv is not None, do_pdv)
+
+if alvo_pr and do_pdv is not None:
+    # --- o PDV e o dono: a busca de vendas TRAZ o preco de la -----------------
+    _envio(False)
+    _por_o_preco(do_pdv + 7)
+    checar("o preco foi desviado, para a busca ter o que corrigir",
+           _preco_agora() == do_pdv + 7, _preco_agora())
+    st, rp = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    cad = (rp or {}).get("cadastros") or {}
+    checar("a busca declara que o preco e do PDV", cad.get("precos_do_pdv") is True, cad)
+    # 🔑 A afirmacao central: o valor do PDV voltou sozinho, sem ninguem clicar
+    # em "Importar cardapio".
+    checar("e o preco do PDV volta na busca de vendas", _preco_agora() == do_pdv,
+           (_preco_agora(), do_pdv))
+    # ⚠️ So o que MUDOU e contado: `precos.gravar` nao grava valor repetido, e
+    # "629 precos" a cada passada horaria seria ruido que esconde o dia em que o
+    # numero importa.
+    checar("e ele conta quantos precos mudaram", (cad.get("precos") or 0) >= 1, cad)
+
+    st, rp2 = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    cad2 = (rp2 or {}).get("cadastros") or {}
+    checar("na passada seguinte, sem mudanca, nao conta preco nenhum",
+           (cad2.get("precos") or 0) == 0, cad2)
+
+    # --- o Botane e o dono: a busca NAO mexe no preco -------------------------
+    # ⚠️ Este e o lado que protege contra o ping-pong. Sem ele, ligar o envio ao
+    # PDV faria a busca de vendas apagar, de hora em hora, o preco que a casa
+    # acabou de definir — e o efeito so apareceria no cupom.
+    _envio(True)
+    _por_o_preco(do_pdv + 7)
+    st, rp3 = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
+    cad3 = (rp3 or {}).get("cadastros") or {}
+    checar("com o envio ao PDV ligado, a busca declara que o preco NAO e de la",
+           cad3.get("precos_do_pdv") is False, cad3)
+    checar("e o preco definido aqui sobrevive a busca de vendas",
+           _preco_agora() == do_pdv + 7, (_preco_agora(), do_pdv + 7))
+    checar("sem gravar preco nenhum", (cad3.get("precos") or 0) == 0, cad3)
+
+    # A suite devolve a base ao estado de antes.
+    _por_o_preco(do_pdv)
+    _envio(envio_original)
+
+
 print("\n8h. reconciliar liga as vendas que estavam pendentes")
 st, r = chamar("POST", "/pdv/sincronizar?dias=1", token=token)
 st, r = chamar("POST", "/pdv/reconciliar", token=token)

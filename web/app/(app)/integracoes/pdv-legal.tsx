@@ -319,6 +319,24 @@ export default function PdvLegal() {
                   PDV nasce marcado. Nada é enviado sozinho: o envio é sempre disparado
                   por alguém.
                 </span>
+                {/* 🔑 **Este interruptor também decide de quem é o PREÇO**, e
+                    sem dizê-lo aqui a consequência fica invisível: quem liga o
+                    envio para mandar cadastros daqui perde, sem saber, a
+                    atualização automática de preço que vinha do caixa. */}
+                <span className="mt-2 block max-w-[70ch] text-[13px] leading-snug text-suave">
+                  {form.enviar_ao_pdv ? (
+                    <>
+                      Com isto ligado, <b>o preço daqui é o que vale</b>: a busca de vendas
+                      deixa de trazer o preço do PDV, para não apagar o que foi definido
+                      aqui. Para alinhar os dois, use <b>Importar cardápio</b>.
+                    </>
+                  ) : (
+                    <>
+                      Desligado, <b>o preço é o do PDV</b>: mudou no caixa, a busca de
+                      vendas traz a mudança para cá sozinha.
+                    </>
+                  )}
+                </span>
               </span>
             </label>
           </section>
@@ -332,6 +350,18 @@ export default function PdvLegal() {
             <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
               Sem agendamento, alguém precisa abrir esta tela e clicar em Buscar vendas todo
               dia. O que não for buscado não entra no CMV daquele período.
+            </p>
+            {/* ⚠️ O que a busca faz ALÉM de trazer venda precisa estar escrito:
+                produto novo e preço mudam o CMV, e descobrir isso pelo efeito
+                é descobrir tarde. */}
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+              Junto com as vendas ela traz o produto que nasceu no PDV, desativa o que foi
+              desligado lá e
+              {form.enviar_ao_pdv
+                ? " — como o preço daqui é o que vale — não mexe em preço."
+                : " atualiza o preço que mudou no caixa."}{" "}
+              Categoria, setor e nome continuam sendo alinhados só por{" "}
+              <b>Importar cardápio</b>.
             </p>
 
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
