@@ -4982,6 +4982,48 @@ try {
   checar("o total não muda ao virar a página", segunda.total === antes.total,
     [antes.total, segunda.total]);
 
+  // 🔑 **Entrar num registro e VOLTAR mantém o rodapé** (09/09/2026, relatado
+  // pelo dono: *"quando vou para a segunda ou terceira página adiante, ao entrar
+  // no produto e voltar para o grid, a parte de paginação some"*).
+  // A tela volta montada do ZERO: a página vem da URL (`?p=2`), mas o total não
+  // vem de lugar nenhum, e o servidor só o conta no `offset = 0`. O rodapé sumia
+  // inteiro — e com ele o caminho de volta para a página 1. A lista ficava presa
+  // naquela fatia, sem nada dizendo que existiam outras.
+  // ⚠️ Reproduz o caminho de QUEM USA: clica na linha, espera a ficha, volta
+  // pelo histórico. Chamar a URL direto pularia justamente o que quebrava.
+  const urlNaPagina2 = p.url();
+  checar("a página adiante fica na URL", /[?&]p=2\b/.test(urlNaPagina2), urlNaPagina2);
+  await p.evaluate(() => {
+    document.querySelector('tbody tr a[href^="/produtos/"]')?.click();
+  });
+  await p.waitForFunction(() => /\/produtos\/\d+/.test(location.pathname), { timeout: 15000 })
+    .catch(() => {});
+  await p.waitForFunction(
+    () => !/^\s*carregando/i.test(document.body.innerText), { timeout: 15000 }).catch(() => {});
+  const abriuFicha = /\/produtos\/\d+/.test(p.url());
+  checar("clicar na linha abre a ficha do produto", abriuFicha, p.url());
+
+  await p.goBack();
+  // ⚠️ Espera pelo CONTEÚDO, não por tempo fixo: o rodapé só aparece depois da
+  // resposta da lista, e um `setTimeout` que passe antes dela transforma o teste
+  // em moeda. Foi a lição das checagens "oferece baixar".
+  await p.waitForFunction(
+    () => /\d+–\d+ de [\d.]+/.test(document.body.innerText), { timeout: 15000 })
+    .catch(() => {});
+  const depoisDeVoltar = await lerPaginacao();
+  checar("voltar do produto traz o rodapé de volta", depoisDeVoltar.tem && depoisDeVoltar.total > 0,
+    depoisDeVoltar);
+  // 🔑 A afirmação central: o total foi RECUPERADO, não zerado. Sem o
+  // `com_total`, ele voltava 0 e o rodapé inteiro desaparecia.
+  checar("com o mesmo total de antes", depoisDeVoltar.total === antes.total,
+    [antes.total, depoisDeVoltar.total]);
+  // ⚠️ E na PÁGINA em que se estava — senão o total voltaria mas a posição não,
+  // que é metade do defeito.
+  checar("e na mesma página, não na primeira",
+    depoisDeVoltar.rodape === segunda.rodape, [segunda.rodape, depoisDeVoltar.rodape]);
+  checar("com o 'anterior' ligado, que é o caminho de volta",
+    !depoisDeVoltar.anteriorDesligada, depoisDeVoltar);
+
   // 20, 50 ou 100 — escolha de quem olha.
   await p.select('select[aria-label="Registros por página"]', "50");
   await new Promise((r) => setTimeout(r, 1600));

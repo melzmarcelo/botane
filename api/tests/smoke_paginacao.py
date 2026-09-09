@@ -117,6 +117,53 @@ checar("e voltar à primeira página traz o total de novo",
        total_de(cab3) == total, (total_de(cab3), total))
 
 
+print("2b. quem VOLTA direto para a pagina 3 consegue pedir o total")
+# 🔑 **Relatado pelo dono (09/09/2026):** *"quando vou para a segunda ou terceira
+# pagina adiante, ao entrar no produto e voltar para o grid, a parte de paginacao
+# some"*.
+#
+# A regra do passo 2 -- contar so no `offset = 0` -- pressupoe que a tela TEVE o
+# total em algum momento. Quem volta de um registro nao teve: a tela e montada do
+# zero, a pagina vem da URL (`?p=3`) e a primeira busca ja sai com `offset = 40`.
+# Sem cabecalho, o total ficava em 0 e o rodape sumia inteiro -- e com ele o
+# caminho de volta para a pagina 2.
+#
+# ⚠️ **Quem sabe que precisa e o CLIENTE.** O servidor nao tem como saber se
+# aquela tela ja viu o numero antes; por isso o pedido e explicito, e nao um
+# "conte sempre" que devolveria os 388 ms por virada de pagina.
+st, _, cab_sem = chamar("GET", "/produtos?limite=2&offset=2", token=token)
+checar("sem pedir, a pagina adiante segue sem o total",
+       total_de(cab_sem) is None, total_de(cab_sem))
+st, _, cab_com = chamar("GET", "/produtos?limite=2&offset=2&com_total=1", token=token)
+checar("pedindo, ela conta mesmo fora da primeira pagina",
+       total_de(cab_com) is not None, list(cab_com))
+# 🔑 O numero tem de ser o MESMO: e a mesma consulta, o mesmo filtro. Um total
+# diferente conforme a pagina seria pior que total nenhum.
+checar("e o numero e o mesmo da primeira pagina",
+       total_de(cab_com) == total, (total_de(cab_com), total))
+# ⚠️ O flag e do MIDDLEWARE, nao de cada rota: sao oito chamadas de
+# `paginacao.pagina` em cinco routers, e um parametro por endpoint seriam
+# dezesseis lugares para acertar -- com a lista NOVA nascendo sem ele. Esta
+# checagem existe para que a proxima lista paginada herde o conserto de graca.
+for caminho in ("/fornecedores", "/notas", "/estoque/saldos", "/estoque/movimentos",
+                "/transferencias"):
+    st_r, _, cab_r = chamar(f"GET", f"{caminho}?limite=2&offset=2&com_total=1", token=token)
+    if st_r != 200:
+        continue
+    checar(f"{caminho} tambem conta quando pedem", total_de(cab_r) is not None,
+           (st_r, list(cab_r)))
+# O `true` tambem vale: o front manda "1", mas um link escrito a mao dira `true`.
+st, _, cab_true = chamar("GET", "/produtos?limite=2&offset=2&com_total=true", token=token)
+checar("`com_total=true` vale tanto quanto `=1`", total_de(cab_true) is not None,
+       list(cab_true))
+# ⚠️ E o flag NAO vaza para a requisicao seguinte: o `ContextVar` e devolvido no
+# fim de cada uma. Sem isso, uma listagem herdaria o pedido da anterior e a
+# contagem cara voltaria a rodar em toda virada de pagina, sem ninguem ver.
+st, _, cab_depois = chamar("GET", "/produtos?limite=2&offset=2", token=token)
+checar("e o pedido nao vaza para a requisicao seguinte",
+       total_de(cab_depois) is None, total_de(cab_depois))
+
+
 print("3. o filtro entra na conta, não só na página")
 st, achados, cab_filtro = chamar("GET", f"/produtos?busca=Pag teste {marca}&limite=100",
                                 token=token)

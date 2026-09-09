@@ -19,10 +19,38 @@ Virar a página não muda o total — o filtro é o mesmo. Então a conta roda n
 custam os 4 ms da varredura por índice. Quando o cabeçalho não vem, a tela
 guarda o total que já tinha.
 
+🔑 **Só que "guardar o que já tinha" pressupõe ter tido** (09/09/2026, relatado
+pelo dono: *"quando vou para a segunda ou terceira página adiante, ao entrar no
+produto e voltar para o grid, a parte de paginação some"*). Ao voltar, a tela é
+montada do ZERO: a página vem da URL — `?p=3` —, mas o total não vem de lugar
+nenhum. A primeira busca já sai com `offset = 40`, o cabeçalho não vem por
+regra, o total fica em 0 e o rodapé some inteiro. Sem ele não há como voltar
+para a página 2 nem saber que existem mais: a lista fica presa naquela fatia.
+
+Por isso existe **`?com_total=1`**: quem não tem o total pede a contagem, mesmo
+fora da primeira página. É o cliente que sabe se precisa — o servidor não tem
+como saber se aquela tela já viu o número antes.
+
+⚠️ **O pedido chega por CONTEXTO, não por parâmetro de cada rota**, e isso é
+deliberado. São oito chamadas de `pagina()` em cinco routers, e cada uma
+precisaria de um `com_total: bool = False` na assinatura do endpoint mais um
+argumento aqui — dezesseis lugares para acertar, e a lista NOVA nasceria sem,
+com o mesmo defeito, sem nada avisando. É exatamente a armadilha da lista de
+campos da fusão. Aqui a regra é uma só, vale para toda rota paginada que existe
+e para as que vierem, e o front manda o flag de um lugar só (`p.parametros`).
+
 ⚠️ O cabeçalho precisa estar em `expose_headers` do CORS, senão o navegador o
 recebe e **não o entrega** à tela — que passa a achar que o total é o tamanho da
 página.
 """
+
+from contextvars import ContextVar
+
+
+# ⚠️ Escrito pelo middleware de `main.py` a cada requisição, e lido aqui. Um
+# `ContextVar` é por tarefa: duas requisições simultâneas não veem o valor uma da
+# outra, que é o que uma variável de módulo faria.
+pediram_o_total: ContextVar[bool] = ContextVar("pediram_o_total", default=False)
 
 
 def pagina(cur, sql: str, params: tuple | list, *, limite: int, offset: int,
@@ -37,7 +65,9 @@ def pagina(cur, sql: str, params: tuple | list, *, limite: int, offset: int,
     cur.execute(f"{sql}\nLIMIT %s OFFSET %s", (*params, limite, offset))
     linhas = [dict(r) for r in cur.fetchall()]
 
-    if resposta is not None and offset == 0:
+    # A contagem sai na primeira página de um filtro — ou quando a tela diz que
+    # não tem o número, que é o caso de quem voltou direto para a página 3.
+    if resposta is not None and (offset == 0 or pediram_o_total.get()):
         cur.execute(f"SELECT count(*) AS n FROM (\n{sql}\n) AS _do_filtro", params)
         resposta.headers["X-Total"] = str(cur.fetchone()["n"])
     return linhas

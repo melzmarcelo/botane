@@ -105,6 +105,21 @@ export function usePaginacao(
     if (n !== null && n !== undefined) guardarTotal(n);
   }, []);
 
+  // 🔑 **"Guardar o que já tinha" pressupõe TER TIDO** (09/09/2026, relatado
+  // pelo dono: *"quando vou para a segunda ou terceira página adiante, ao
+  // entrar no produto e voltar para o grid, a parte de paginação some"*).
+  // Ao voltar, a tela é montada do ZERO. A página vem da URL — `?p=3` —, mas o
+  // total não vem de lugar nenhum: a primeira busca já sai com `offset = 40`, e
+  // o servidor só conta no `offset = 0`. O total ficava em 0, o rodapé sumia
+  // inteiro, e com ele o caminho de volta para a página 2: a lista ficava presa
+  // naquela fatia, sem nada dizendo que existiam outras.
+  // ⚠️ **Quem sabe que precisa é o CLIENTE.** O servidor não tem como saber se
+  // aquela tela já viu o número antes — por isso o pedido é explícito.
+  // ⚠️ E ele sai de `parametros`, que TODA lista espalha na query. Uma linha
+  // aqui conserta as catorze, e a lista nova nasce consertada. Repetir a
+  // condição em cada tela seria repeti-la errado numa delas.
+  const precisaDoTotal = total === 0 && pagina > 0;
+
   // ⚠️ A preferencia e lida num efeito, nao no estado inicial: o servidor
   // renderiza esta tela antes de existir `localStorage`, e devolver valores
   // diferentes dos dois lados quebra a hidratacao. Ela so vale quando a URL NAO
@@ -166,7 +181,13 @@ export function usePaginacao(
     paginas,
     offset: pagina * porPagina,
     /** Os parâmetros que o servidor espera, prontos para a query. */
-    parametros: { limite: String(porPagina), offset: String(pagina * porPagina) },
+    parametros: {
+      limite: String(porPagina),
+      offset: String(pagina * porPagina),
+      // Só quando falta: a contagem custa a tabela do filtro inteira, e virar a
+      // página não pode pagá-la de novo a cada clique.
+      ...(precisaDoTotal ? { com_total: "1" } : {}),
+    },
     /** Volta ao começo — para quando o FILTRO muda e a página 5 deixa de existir. */
     aoFiltrar: () => setPagina(0),
   };

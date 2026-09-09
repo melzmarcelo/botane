@@ -99,6 +99,35 @@
   primeiro `WHERE` novo. As listas limitadas por natureza (fichas, inventários, usuários)
   continuam com `com_total` e `count(*) OVER ()`.
 
+- 🔑 **"Guardar o que já tinha" pressupõe TER TIDO** (09/09/2026, relatado pelo dono: *"quando
+  vou para a segunda ou terceira página adiante, ao entrar no produto e voltar para o grid, a
+  parte de paginação some"*). Quem volta de um registro não teve: a tela é montada do ZERO. A
+  página vem da URL (`?p=3`) — isso já funcionava —, mas o total não vem de lugar nenhum: a
+  primeira busca já sai com `offset = 40`, o cabeçalho não vem por regra, o total fica em 0 e o
+  rodapé se esconde inteiro. **E com ele some o caminho de volta para a página 2**: a lista fica
+  presa naquela fatia, sem nada dizendo que existem outras.
+
+  🔑 **A correção é `?com_total=1`**: quem não tem o total pede a contagem, mesmo fora da
+  primeira página. **Quem sabe que precisa é o CLIENTE** — o servidor não tem como saber se
+  aquela tela já viu o número antes —, e o custo só é pago quando falta, nunca a cada clique.
+
+  ⚠️ **No backend o flag é lido por MIDDLEWARE** (`main._marcar_pedido_de_total` → um
+  `ContextVar` que `paginacao.pagina` consulta), não por parâmetro de cada rota. São oito
+  chamadas de `pagina()` em cinco routers; um parâmetro por endpoint seriam dezesseis lugares
+  para acertar, e **a lista NOVA nasceria sem** — com o mesmo defeito e sem nada avisando. É a
+  armadilha da lista de campos que já comeu a `marca` e depois o `custo_referencia` na fusão.
+  O `ContextVar` é devolvido no `finally`: sem isso uma listagem herdaria o pedido da anterior e
+  a contagem cara voltaria a rodar em toda virada de página, sem ninguém ver.
+
+  ⚠️ **No front o pedido sai de `p.parametros`**, que TODA lista espalha na query — uma linha
+  conserta as catorze e a lista nova nasce consertada. Repetir a condição em cada tela seria
+  repeti-la errado numa delas.
+
+  ⚠️ **Isto não vale para o `fator_compra`.** Mudar o fator de conversão NÃO reescreve custo
+  nenhum, e não é defeito: todo custo guardado já é por unidade de estoque (razão, último preço
+  do fornecedor e `custo_referencia`), e o fator só converte a QUANTIDADE da próxima nota. Quem
+  mexe em custo gravado é a troca de UNIDADE (`troca_de_unidade`), porque aí o denominador muda.
+
 - ⚠️ **Nada de `window.prompt`/`confirm`**: é a caixa do NAVEGADOR — fonte de sistema, botão
   em inglês, sem espaço para explicar o que a ação faz. O que não se desfaz pergunta pelo
   `Confirmacao` de `components/ui.tsx`, e o número que a ação usa fica num campo **na linha**,

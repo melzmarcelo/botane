@@ -13,6 +13,7 @@ from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
 import arquivos
+import paginacao
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
 import impressao
@@ -191,6 +192,31 @@ app.add_middleware(
     # X-Total sustenta a paginação: sem expor, o navegador não o entrega à tela.
     expose_headers=["Content-Disposition", "X-Total"],
 )
+
+
+@app.middleware("http")
+async def _marcar_pedido_de_total(request, chamar_o_resto):
+    """`?com_total=1` faz a listagem contar mesmo fora da primeira página.
+
+    🔑 **Existe por causa do voltar** (09/09/2026, relatado pelo dono). Quem
+    estava na página 3, abriu um produto e voltou, tinha a página restaurada
+    pela URL mas o total NÃO: a tela é montada do zero, a primeira busca já sai
+    com `offset = 40`, e `X-Total` não vem fora do `offset = 0`. O rodapé sumia
+    inteiro, e com ele o caminho de volta para a página 2.
+
+    ⚠️ **Aqui, e não em cada rota, de propósito.** São oito chamadas de
+    `paginacao.pagina` em cinco routers; um parâmetro por endpoint seriam
+    dezesseis lugares para acertar, e a lista NOVA nasceria sem — com o mesmo
+    defeito e sem nada avisando. Ver `paginacao.py`.
+    """
+    marca = paginacao.pediram_o_total.set(
+        request.query_params.get("com_total") in ("1", "true"))
+    try:
+        return await chamar_o_resto(request)
+    finally:
+        # ⚠️ Sempre devolvido: o `ContextVar` é da tarefa, e o servidor
+        # reaproveita tarefas entre requisições.
+        paginacao.pediram_o_total.reset(marca)
 
 @app.get(arquivos.PREFIXO_URL + "/{nome}", tags=["infra"])
 def servir_arquivo(nome: str):
