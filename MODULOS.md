@@ -104,6 +104,13 @@ nunca uma conta de datas.
 
 ⚠️ **Consumo de pessoa exige ciclo ABERTO** (08/09/2026) — venda de balcão, não.
 
+🔑 **O PDV mora AQUI, e não em Integrações** (decidido em 09/09/2026). É a única
+integração que não fica com as outras, e a razão é o que ela alimenta: o Omie
+traz cadastro e nota, então pertence ao Administrativo; o PDV traz **venda**, que
+é este módulo. Quem for corrigir um cupom que entrou errado abre Vendas, não
+Integrações — e é por essa pergunta que o mapa se organiza, não pela natureza
+técnica de "ser uma integração".
+
 ## Administrativo
 
 Empresa, lojas, parâmetros, integrações e usuários.
