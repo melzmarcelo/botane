@@ -11,6 +11,7 @@ import BotaoExportar from "@/components/exportar";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
+import Voltar from "@/components/voltar";
 
 type Item = {
   id_insumo: number | null;
@@ -342,9 +343,9 @@ export default function EditorFicha() {
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link href="/fichas" className="link-voltar">
+          <Voltar href="/fichas">
             fichas técnicas
-          </Link>
+          </Voltar>
           <h1 className="mt-1 break-words text-[26px] font-bold tracking-tight sm:text-[30px]">
             {nova ? "Nova ficha" : ficha?.produto}
           </h1>

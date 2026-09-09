@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { fatiar, Paginacao, usePaginacao } from "@/components/paginacao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * A movimentação do período, produto a produto.
@@ -67,10 +68,14 @@ const qtd = (n: number | string) =>
 export default function Movimentacao({ inicio, fim }: { inicio: string; fim: string }) {
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState("");
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const pag = usePaginacao("movimentacao", { padrao: 50, filtros: [busca, inicio, fim] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     setDados(null);
     try {
       setDados(
@@ -79,7 +84,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [inicio, fim]);
+  }, [pag.pronto, inicio, fim]);
 
   useEffect(() => {
     void carregar();

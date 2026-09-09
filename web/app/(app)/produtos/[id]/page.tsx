@@ -25,6 +25,7 @@ import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
 import Vincular from "./vincular";
+import Voltar from "@/components/voltar";
 
 type VinculoFornecedor = {
   id_fornecedor: number;
@@ -303,9 +304,9 @@ export default function FormularioProduto() {
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link href="/produtos" className="link-voltar">
+          <Voltar href="/produtos">
             produtos
-          </Link>
+          </Voltar>
           <h1 className="mt-1 break-words text-[26px] font-bold tracking-tight sm:text-[30px]">
             {novo ? "Novo produto" : f.nome || "Produto"}
           </h1>

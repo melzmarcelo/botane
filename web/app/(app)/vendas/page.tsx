@@ -10,6 +10,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * A lista das vendas — só a lista.
@@ -33,14 +34,14 @@ export default function PaginaVendas() {
   const [lista, setLista] = useState<Venda[] | null>(null);
   const [pendencias, setPendencias] = useState<number>(0);
   const [erro, setErro] = useState("");
-  const [busca, setBusca] = useState("");
-  const [origem, setOrigem] = useState("");
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
+  const [origem, setOrigem] = useEstadoNaUrl<string>("origem", "");
   // 🔑 **O filtro de DIA** (pedido do dono, 03/09/2026). O servidor já aceitava
   // `inicio` e `fim` desde sempre; a tela nunca ofereceu, e conferir um dia
   // contra o PDV exigia rolar a lista até achar onde a data virava.
   // ⚠️ Um campo só, e não um par: a pergunta que se faz é "como foi o dia X",
   // e um intervalo pediria duas respostas para uma pergunta.
-  const [dia, setDia] = useState("");
+  const [dia, setDia] = useEstadoNaUrl<string>("dia", "");
   const [ocupado, setOcupado] = useState(false);
 
   // ⚠️ `filtros:` faz a busca voltar para a primeira página. Sem isso, quem
@@ -48,6 +49,10 @@ export default function PaginaVendas() {
   const pag = usePaginacao("vendas", { padrao: 50, filtros: [busca, origem, dia] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
@@ -68,7 +73,7 @@ export default function PaginaVendas() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.offset, pag.porPagina, busca, origem, dia]);
+  }, [pag.pronto, pag.offset, pag.porPagina, busca, origem, dia]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 350 : 0);

@@ -7,6 +7,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 type Ficha = {
   id: number;
@@ -37,12 +38,16 @@ export default function PaginaFichas() {
 
   const [lista, setLista] = useState<Ficha[] | null>(null);
   const [semFicha, setSemFicha] = useState<ProdutoResumo[]>([]);
-  const [busca, setBusca] = useState("");
-  const [status, setStatus] = useState("");
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
+  const [status, setStatus] = useEstadoNaUrl<string>("status", "");
   const [erro, setErro] = useState("");
   const pag = usePaginacao("fichas", { filtros: [busca, status] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (status) q.set("status", status);
@@ -60,7 +65,7 @@ export default function PaginaFichas() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, status, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, status, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);

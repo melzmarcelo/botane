@@ -12,6 +12,7 @@ import { fonteProdutos } from "@/lib/busca-cadastro";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /** Uma linha por PRODUTO somando os locais desta loja. */
 type SaldoAgrupado = {
@@ -99,12 +100,12 @@ export default function PaginaEstoque() {
   const [saldos, setSaldos] = useState<Saldo[] | null>(null);
   const [movimentos, setMovimentos] = useState<Movimento[] | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   // Texto filtra solto ("café" traz os cinco); a lupa FIXA um produto, para
   // quem quer o saldo — ou o razão — de um só.
   const [produtoSaldo, setProdutoSaldo] = useState<{ id: number; rotulo: string } | null>(null);
-  const [idLocal, setIdLocal] = useState("");
-  const [comSaldo, setComSaldo] = useState(true);
+  const [idLocal, setIdLocal] = useEstadoNaUrl<string>("local", "");
+  const [comSaldo, setComSaldo] = useEstadoNaUrl<boolean>("comSaldo", true);
   // 🔑 **A visão de EMPRESA.** Toda tela do sistema responde por uma loja, e
   // está certo — quem opera opera numa de cada vez. Mas quem responde pelas
   // duas precisava trocar de loja no seletor e somar de cabeça para saber
@@ -115,7 +116,7 @@ export default function PaginaEstoque() {
   // setor leva um pacote para o seu canto. "Onde está" e "quanto a loja tem"
   // são perguntas diferentes, e a de empresa é uma terceira. Duas caixinhas
   // que interagem fariam quatro combinações, duas delas sem sentido.
-  const [visao, setVisao] = useState<"prateleira" | "produto" | "empresa">("prateleira");
+  const [visao, setVisao] = useEstadoNaUrl<"prateleira" | "produto" | "empresa">("visao", "prateleira");
   const rede = visao === "empresa";
   const [saldosRede, setSaldosRede] = useState<SaldoRede[] | null>(null);
   const [saldosAgrupados, setAgrupados] = useState<SaldoAgrupado[] | null>(null);
@@ -123,7 +124,7 @@ export default function PaginaEstoque() {
   // lista não.** As duas regras estão certas — o painel responde ao CMV, a
   // lista mostra o que se opera —, mas os números não fechavam e nada dizia por
   // quê. Agora a tela diz quanto ficou de fora, e a caixinha inclui.
-  const [inativos, setInativos] = useState(false);
+  const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
   const [fora, setFora] = useState<{ produtos: number; valor: number } | null>(null);
   const [erro, setErro] = useState("");
   // O que mexe no razão pergunta antes: estorno não se desfaz, ele contrapõe.
@@ -150,10 +151,18 @@ export default function PaginaEstoque() {
   });
   const pagMov = usePaginacao("razao", {
     padrao: 100,
+    // ⚠️ **Prefixo porque esta TELA tem duas listas.** Sem ele, saldos e razao
+    // escreveriam `p`/`pp` na mesma URL e virar a pagina de um levaria o outro
+    // junto -- sem nada na tela ligando uma coisa a outra.
+    prefixoUrl: "mov",
     filtros: [movBusca, produtoMov?.id, movTipo, movLocal, movInicio, movFim, movProvisorio],
   });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pagSaldos.pronto) return;
     try {
       const q = new URLSearchParams(pagSaldos.parametros);
       if (produtoSaldo) q.set("id_produto", String(produtoSaldo.id));
@@ -197,13 +206,16 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, produtoSaldo, idLocal, comSaldo, visao, inativos,
+  }, [pagSaldos.pronto, busca, produtoSaldo, idLocal, comSaldo, visao, inativos,
       pagSaldos.offset, pagSaldos.porPagina]);
 
   const temFiltroMov = !!(movBusca || produtoMov || movTipo || movLocal || movInicio
     || movFim || movProvisorio);
 
   const carregarMovimentos = useCallback(async () => {
+    // ⚠️ Mesma espera dos saldos: buscar antes de a preferencia ser resolvida
+    // dispara a busca com o tamanho errado, e a resposta atrasada sobrescreve.
+    if (!pagMov.pronto) return;
     try {
       const q = new URLSearchParams(pagMov.parametros);
       if (produtoMov) q.set("id_produto", String(produtoMov.id));
@@ -220,7 +232,7 @@ export default function PaginaEstoque() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movBusca, produtoMov, movTipo, movLocal, movInicio, movFim, movProvisorio,
+  }, [pagMov.pronto, movBusca, produtoMov, movTipo, movLocal, movInicio, movFim, movProvisorio,
       pagMov.offset, pagMov.porPagina]);
 
   useEffect(() => {

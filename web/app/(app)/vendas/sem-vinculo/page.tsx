@@ -7,6 +7,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
+import Voltar from "@/components/voltar";
 
 /**
  * A fila de de-para: o que foi vendido e não achou produto no cadastro.
@@ -75,9 +76,9 @@ export default function PaginaSemVinculo() {
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Link href="/vendas" className="link-voltar">
+          <Voltar href="/vendas">
             vendas
-          </Link>
+          </Voltar>
           <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
             Itens vendidos sem produto
           </h1>

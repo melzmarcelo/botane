@@ -17,6 +17,7 @@ import {
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
 
@@ -94,7 +95,7 @@ export default function PaginaCadastros() {
    * senão quem estava na página 5 dos locais cairia numa tela vazia nas
    * unidades de medida.
    */
-  const [mostrarInativos, setMostrarInativos] = useState(false);
+  const [mostrarInativos, setMostrarInativos] = useEstadoNaUrl<boolean>("inativos", false);
   const pag = usePaginacao("cadastros", { filtros: [aba, mostrarInativos] });
   const [setores, setSetores] = useState<Setor[] | null>(null);
   const [locais, setLocais] = useState<Local[] | null>(null);
@@ -170,6 +171,10 @@ export default function PaginaCadastros() {
    * respondendo pelo histórico. Por isso a caixinha, e não um filtro escondido.
    */
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     try {
       const q = mostrarInativos ? "true" : "false";
       const [s, l, c, u] = await Promise.all([
@@ -185,7 +190,7 @@ export default function PaginaCadastros() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [mostrarInativos]);
+  }, [pag.pronto, mostrarInativos]);
 
   useEffect(() => {
     void carregar();

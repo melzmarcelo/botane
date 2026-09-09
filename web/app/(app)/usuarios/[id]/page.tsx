@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
 import FormularioUsuario, { Vinculo, arranjoMisto, lojasDosVinculos } from "../formulario";
+import Voltar from "@/components/voltar";
 
 type Usuario = {
   id: number;
@@ -56,9 +57,9 @@ export default function PaginaUsuario() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/usuarios" className="link-voltar">
+        <Voltar href="/usuarios">
           usuários
-        </Link>
+        </Voltar>
         <h1 className="mt-1 break-words text-[24px] font-bold tracking-tight sm:text-[30px]">
           {u.nome}
         </h1>

@@ -32,6 +32,10 @@ export default function PaginaAuditoria() {
   const pag = usePaginacao("auditoria", { padrao: 50 });
 
   useEffect(() => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     api
       .listar<Linha>(`/auditoria?${new URLSearchParams(pag.parametros)}`)
       .then((r) => {
@@ -40,7 +44,7 @@ export default function PaginaAuditoria() {
       })
       .catch((e) => setErro(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.offset, pag.porPagina]);
+  }, [pag.pronto, pag.offset, pag.porPagina]);
 
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!linhas) return <Carregando />;

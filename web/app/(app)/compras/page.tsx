@@ -10,6 +10,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { CORES, dataBr, Nota } from "./tipos";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * A lista das notas de entrada — só a lista.
@@ -42,7 +43,7 @@ export default function PaginaCompras() {
   const [notas, setNotas] = useState<Nota[] | null>(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [importados, setImportados] = useState<ResultadoXml[] | null>(null);
   const pag = usePaginacao("notas", { padrao: 50, filtros: [busca] });
   const entradaXml = useRef<HTMLInputElement>(null);
@@ -56,6 +57,10 @@ export default function PaginaCompras() {
    * vem no `X-Total`, a busca vai ao servidor e há como pedir mais.
    */
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
@@ -72,7 +77,7 @@ export default function PaginaCompras() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     // Digitar dispara busca no servidor: um respiro evita uma consulta por tecla.

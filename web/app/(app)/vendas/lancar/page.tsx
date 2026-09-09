@@ -11,6 +11,7 @@ import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fontePessoas, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { CANAIS, lerPlanilha } from "../tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * Lançar venda — à mão ou colando a planilha.
@@ -261,9 +262,9 @@ export default function PaginaLancarVenda() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/vendas" className="link-voltar">
+        <Voltar href="/vendas">
           vendas
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Lançar venda</h1>
         <p className="mt-2 max-w-[70ch] text-suave">
           À mão, para o acerto pontual; ou colando o fechamento do PDV. O custo da ficha é

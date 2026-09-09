@@ -9,6 +9,7 @@ import { Local, ProdutoResumo } from "@/lib/cadastros";
 import { Aviso, Carregando } from "@/components/ui";
 import NotaManual, { NotaParaEditar } from "../../nota-manual";
 import { NotaDetalhe } from "../../tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * Corrigir uma nota digitada, antes de ela virar estoque.
@@ -86,9 +87,9 @@ export default function PaginaCorrigirNota() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href={`/compras/${id}`} className="link-voltar">
+        <Voltar href={`/compras/${id}`}>
           NF
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Corrigir a nota {editando?.numero ?? ""}
         </h1>

@@ -9,6 +9,7 @@ import { Aviso } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import FormularioLoja, { corpoDaLoja, LOJA_VAZIA, LojaForm } from "../formulario";
+import Voltar from "@/components/voltar";
 
 /**
  * Abrir uma loja.
@@ -43,9 +44,9 @@ export default function NovaLoja() {
   return (
     <div className="mx-auto flex max-w-[860px] flex-col gap-6">
       <header>
-        <Link href="/lojas" className="link-voltar">
+        <Voltar href="/lojas">
           Lojas
-        </Link>
+        </Voltar>
         <h1 className="mt-2 text-[26px] font-bold tracking-tight sm:text-[30px]">Nova loja</h1>
         <p className="mt-1 max-w-[68ch] text-suave">
           Cada loja tem CNPJ, endereço e estoque próprios. Todo movimento nasce carimbado com

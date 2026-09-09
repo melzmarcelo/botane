@@ -8,6 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Local, ProdutoResumo } from "@/lib/cadastros";
 import { Aviso, Carregando } from "@/components/ui";
 import NotaManual from "../nota-manual";
+import Voltar from "@/components/voltar";
 
 /**
  * Digitar uma nota de entrada — a compra que não tem XML nenhum.
@@ -48,9 +49,9 @@ export default function PaginaNotaNova() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/compras" className="link-voltar">
+        <Voltar href="/compras">
           notas de entrada
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Digitar nota de entrada
         </h1>

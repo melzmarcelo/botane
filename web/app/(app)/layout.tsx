@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { EVENTO_EMPRESA } from "@/lib/eventos";
+import { Carregando } from "@/components/ui";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
 import BarraSuperior from "@/components/barra-superior";
@@ -337,7 +338,19 @@ function Casca({ children }: { children: React.ReactNode }) {
       <main className="min-w-0 px-4 py-6 pb-14 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
         <div className="mx-auto max-w-[1180px]">
           <ConviteInstalar />
-          {children}
+          {/* 🔑 **A fronteira de Suspense que o `useSearchParams` exige.**
+              As listas guardam filtro, página e "por página" na URL — é o que
+              faz o voltar do navegador restaurar tudo.
+              ⚠️ **Sem esta fronteira, o BUILD DE PRODUÇÃO quebra**, não o
+              desenvolvimento: em `next dev` as rotas são montadas sob demanda e
+              o hook não suspende, então tudo parece funcionar. É o próprio
+              manual do Next que avisa ("a static page that calls
+              useSearchParams from a Client Component must be wrapped in a
+              Suspense boundary, otherwise the build fails"). Aqui em cima ela
+              cobre as catorze listas de uma vez — e o custo, a página deixar de
+              ser pré-renderizada, é zero neste app: tudo já é cliente atrás do
+              login. */}
+          <Suspense fallback={<Carregando />}>{children}</Suspense>
         </div>
       </main>
       </div>

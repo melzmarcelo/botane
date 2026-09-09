@@ -7,6 +7,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * O que está no caminho entre as lojas.
@@ -51,7 +52,7 @@ export default function PaginaTransferencias() {
   // ⚠️ A loja vem da SESSÃO, não do localStorage cru: ele fica vazio até alguém
   // mexer no seletor, e aí a comparação seria contra zero.
   const { unidade: minhaLoja } = useSessao();
-  const [aba, setAba] = useState("EM_TRANSITO");
+  const [aba, setAba] = useEstadoNaUrl<string>("aba", "EM_TRANSITO");
   const [lista, setLista] = useState<Remessa[] | null>(null);
   const [erro, setErro] = useState("");
   // ⚠️ `filtros` volta para a primeira página ao trocar de aba: quem está na
@@ -60,6 +61,10 @@ export default function PaginaTransferencias() {
   const pag = usePaginacao("transferencias", { filtros: [aba] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     setLista(null);
     try {
       const l = await api.listar<Remessa>(
@@ -70,7 +75,7 @@ export default function PaginaTransferencias() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aba, pag.offset, pag.porPagina]);
+  }, [pag.pronto, aba, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     void carregar();

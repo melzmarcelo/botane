@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import FormularioFornecedor, { VAZIO } from "../formulario";
+import Voltar from "@/components/voltar";
 
 /**
  * Cadastrar fornecedor — página própria.
@@ -17,9 +18,9 @@ export default function PaginaNovoFornecedor() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/fornecedores" className="link-voltar">
+        <Voltar href="/fornecedores">
           pessoas
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Nova pessoa
         </h1>

@@ -15,6 +15,7 @@ import {
 } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
 
@@ -26,16 +27,20 @@ export default function PaginaProdutos() {
   const [lista, setLista] = useState<ProdutoResumo[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [contagem, setContagem] = useState<Contagem | null>(null);
-  const [busca, setBusca] = useState("");
-  const [tipo, setTipo] = useState("");
-  const [idCategoria, setIdCategoria] = useState("");
-  const [inativos, setInativos] = useState(false);
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
+  const [tipo, setTipo] = useEstadoNaUrl<string>("tipo", "");
+  const [idCategoria, setIdCategoria] = useEstadoNaUrl<string>("categoria", "");
+  const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
   const [erro, setErro] = useState("");
   const pag = usePaginacao("produtos", {
     filtros: [busca, tipo, idCategoria, inativos],
   });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     try {
       const q = new URLSearchParams(pag.parametros);
       if (busca.trim()) q.set("busca", busca.trim());
@@ -49,7 +54,7 @@ export default function PaginaProdutos() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, tipo, idCategoria, inativos, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, tipo, idCategoria, inativos, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     api.get<Categoria[]>("/categorias").then(setCategorias).catch(() => {});

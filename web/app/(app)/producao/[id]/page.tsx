@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Voltar from "@/components/voltar";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -158,9 +159,9 @@ export default function PaginaOrdemProducao() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/producao" className="link-voltar">
+        <Voltar href="/producao">
           produção
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           {linha.produto}
         </h1>

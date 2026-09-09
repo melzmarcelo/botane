@@ -8,6 +8,7 @@ import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { useSessao } from "@/lib/sessao";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * Exportação para o PDV — o que daqui ainda não está no cardápio de lá.
@@ -97,7 +98,7 @@ export default function PaginaExportacao() {
   const { eu } = useSessao();
   const [fila, setFila] = useState<Fila | null>(null);
   const [erroTela, setErroTela] = useState("");
-  const [aba, setAba] = useState<Aba>("pendentes");
+  const [aba, setAba] = useEstadoNaUrl<Aba>("aba", "pendentes");
   const [enviando, setEnviando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   // 🔑 **Sem seleção, o único botão da tela manda TUDO.** Com 119 pendentes,
@@ -119,6 +120,10 @@ export default function PaginaExportacao() {
   const pag = usePaginacao("exportacao-pdv", { filtros: [aba] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     setErroTela("");
     try {
       setFila(await api.get<Fila>("/pdv/envio/fila"));
@@ -127,7 +132,7 @@ export default function PaginaExportacao() {
       setFila(null);
       setErroTela(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, []);
+  }, [pag.pronto, ]);
 
   useEffect(() => {
     void carregar();

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { dataBr } from "../../vendas/tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * Um ciclo de consumo: o recibo por pessoa.
@@ -58,9 +59,9 @@ export default function PaginaPeriodoConsumo() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/consumo" className="link-voltar">
+        <Voltar href="/consumo">
           períodos de consumo
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           {periodo.nome || `${dataBr(periodo.inicio)} a ${dataBr(periodo.fim)}`}
         </h1>

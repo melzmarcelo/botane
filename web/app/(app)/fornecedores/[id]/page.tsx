@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { Fornecedor } from "@/lib/cadastros";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
 import FormularioFornecedor, { doFornecedor } from "../formulario";
+import Voltar from "@/components/voltar";
 
 /** Corrigir um fornecedor — a mesma forma da criação, para o olho reconhecer. */
 export default function PaginaFornecedor() {
@@ -44,9 +45,9 @@ export default function PaginaFornecedor() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/fornecedores" className="link-voltar">
+        <Voltar href="/fornecedores">
           pessoas
-        </Link>
+        </Voltar>
         <h1 className="mt-1 break-words text-[24px] font-bold tracking-tight sm:text-[30px]">
           {x.nome}
         </h1>

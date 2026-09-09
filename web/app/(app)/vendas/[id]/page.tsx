@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { CANAIS, dataBr, ORIGEM_CUSTO, ORIGENS, VendaDetalhe } from "../tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * Uma venda, inteira, numa página só.
@@ -73,9 +74,9 @@ export default function PaginaVenda() {
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Link href="/vendas" className="link-voltar">
+          <Voltar href="/vendas">
             vendas
-          </Link>
+          </Voltar>
           <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
             {venda.documento ?? `Venda #${venda.id}`}
           </h1>

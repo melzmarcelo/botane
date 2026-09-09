@@ -8,6 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Categoria, Local, Setor, TIPOS_PRODUTO } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import FiltroMultiplo from "@/components/filtro-multiplo";
+import Voltar from "@/components/voltar";
 
 /**
  * Montar uma contagem.
@@ -189,9 +190,9 @@ export default function PaginaNovaContagem() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/inventario" className="link-voltar">
+        <Voltar href="/inventario">
           ← Inventário
-        </Link>
+        </Voltar>
         <h1 className="mt-3 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Nova contagem
         </h1>

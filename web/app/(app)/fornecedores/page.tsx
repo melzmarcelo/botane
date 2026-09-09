@@ -8,6 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 /**
  * A lista dos fornecedores — só a lista.
@@ -24,12 +25,16 @@ export default function PaginaFornecedores() {
   const podeEditar = pode("cadastros.fornecedores");
 
   const [lista, setLista] = useState<Fornecedor[] | null>(null);
-  const [busca, setBusca] = useState("");
-  const [inativos, setInativos] = useState(false);
+  const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
+  const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
   const [erro, setErro] = useState("");
   const pag = usePaginacao("fornecedores", { filtros: [busca, inativos] });
 
   const carregar = useCallback(async () => {
+    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
+    // dispara a busca com o tamanho errado, e a resposta atrasada dela
+    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
+    if (!pag.pronto) return;
     const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (inativos) q.set("incluir_inativos", "true");
@@ -41,7 +46,7 @@ export default function PaginaFornecedores() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, inativos, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, inativos, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);

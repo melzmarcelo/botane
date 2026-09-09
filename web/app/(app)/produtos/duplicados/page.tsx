@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import Voltar from "@/components/voltar";
 
 /**
  * Os cadastros que têm exatamente o mesmo nome — o caso do ABACATE, em lote.
@@ -109,9 +110,9 @@ export default function Duplicados() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/produtos" className="link-voltar">
+        <Voltar href="/produtos">
           produtos
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
           Cadastros com o mesmo nome
         </h1>

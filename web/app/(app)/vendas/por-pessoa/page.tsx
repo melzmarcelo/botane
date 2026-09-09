@@ -9,6 +9,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import BotaoExportar from "@/components/exportar";
 import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
 import { dataBr } from "../tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * O que cada pessoa consumiu, e quanto deixou de pagar.
@@ -222,9 +223,9 @@ export default function PaginaConsumoPorPessoa() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/vendas" className="link-voltar">
+        <Voltar href="/vendas">
           vendas
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Consumo por pessoa
         </h1>

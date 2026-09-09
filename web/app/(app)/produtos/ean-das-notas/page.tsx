@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import Voltar from "@/components/voltar";
 
 /**
  * O código de barras que a NOTA já trouxe, e que o cadastro não tem.
@@ -109,9 +110,9 @@ export default function PaginaEanDasNotas() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/produtos" className="link-voltar">
+        <Voltar href="/produtos">
           produtos
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Código de barras das notas
         </h1>

@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { nomeTipo, reais, UnidadeMedida } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import Voltar from "@/components/voltar";
 
 /**
  * A contagem — tela própria, feita para o celular na mão de quem conta.
@@ -261,9 +262,9 @@ export default function PaginaContagem() {
   return (
     <div className="flex flex-col gap-5">
       <header>
-        <Link href="/inventario" className="link-voltar">
+        <Voltar href="/inventario">
           inventários
-        </Link>
+        </Voltar>
         {/* ⚠️ "Contagem" saiu do <h1> e virou o rótulo acima dele. O título
             agora é o NOME que a pessoa deu — e "Contagem · Contagem do Natal"
             seria a palavra duas vezes. Sem o rótulo, uma contagem chamada

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { trocarNaUrl as trocar } from "@/lib/estado-na-url";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * O rodapé de página das listas — o padrão da casa.
@@ -41,12 +43,60 @@ export type Paginacao = ReturnType<typeof usePaginacao>;
  */
 export function usePaginacao(
   nome: string,
-  opcoes: { padrao?: number; filtros?: unknown[] } = {},
+  opcoes: {
+    padrao?: number;
+    filtros?: unknown[];
+    /**
+     * ⚠️ **Obrigatorio quando a TELA tem duas listas.** As duas escreveriam
+     * `p` e `pp` na mesma URL e uma apagaria a outra -- virar a pagina dos
+     * saldos levaria o razao junto, e ninguem ligaria uma coisa a outra. Com o
+     * prefixo, a segunda lista usa `movp`/`movpp`. A primeira fica sem, para a
+     * URL do caso comum continuar legivel.
+     */
+    prefixoUrl?: string;
+  } = {},
 ) {
   const padrao = opcoes.padrao ?? POR_PAGINA_PADRAO;
-  const [porPagina, guardarPorPagina] = useState(padrao);
-  const [pagina, setPagina] = useState(0);
+  const pre = opcoes.prefixoUrl ?? "";
+  const router = useRouter();
+  const caminho = usePathname();
+  const naUrl = useSearchParams();
+
+  // 🔑 **A URL e a fonte da verdade da pagina e do tamanho** (09/09/2026,
+  // pedido do dono). Antes viviam so em estado de componente: abrir um registro
+  // e voltar remontava a tela do zero, e a lista reaparecia na primeira pagina,
+  // com 20 linhas, como se ninguem tivesse escolhido nada. Na URL, o voltar do
+  // navegador restaura tudo de graca -- e a tela filtrada vira um link que se
+  // manda para alguem.
+  const daUrl = (chave: string) => {
+    const n = Number(naUrl.get(chave));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const ppDaUrl = daUrl(`${pre}pp`);
+  const porPagina = (TAMANHOS as readonly number[]).includes(ppDaUrl ?? 0)
+    ? (ppDaUrl as number)
+    : padrao;
+  const pagina = Math.max(0, (daUrl(`${pre}p`) ?? 1) - 1);
   const [total, guardarTotal] = useState(0);
+
+  // ⚠️ **`pronto` existe por causa de uma CORRIDA de verdade, nao por zelo.**
+  // A preferencia guardada so pode ser lida num efeito (o servidor renderiza a
+  // tela antes de existir `localStorage`, e valores diferentes dos dois lados
+  // quebram a hidratacao). Sem esperar por ela, a tela dispara DUAS buscas --
+  // `limite=20` e depois `limite=100` -- e nenhuma cancela a outra: quando a de
+  // 20 chegava por ultimo, o seletor mostrava 100 e a lista trazia 20. Era esse
+  // o defeito relatado. Quem lista espera `pronto` antes de buscar.
+  const [pronto, setPronto] = useState(false);
+
+  // ⚠️ **A escrita e COMPARTILHADA com os filtros** (`lib/estado-na-url`), e
+  // monta a query a partir da URL de AGORA -- nao da que este render leu. Duas
+  // escritas no mesmo tick partindo da mesma foto antiga fariam a segunda
+  // apagar a primeira: trocar de pagina logo depois de digitar limparia a
+  // busca, sem nada explicando.
+  const trocarNaUrl = useCallback(
+    (mudancas: Record<string, string | null>) => trocar(router, caminho, mudancas),
+    [router, caminho],
+  );
 
   // ⚠️ Nulo quer dizer "o servidor não disse", não "zero". Ele não diz ao virar
   // a página, porque o total do mesmo filtro não mudou — e recontar custaria a
@@ -55,36 +105,58 @@ export function usePaginacao(
     if (n !== null && n !== undefined) guardarTotal(n);
   }, []);
 
-  // ⚠️ A preferência é lida num efeito, não no estado inicial: o servidor
+  // ⚠️ A preferencia e lida num efeito, nao no estado inicial: o servidor
   // renderiza esta tela antes de existir `localStorage`, e devolver valores
-  // diferentes dos dois lados quebra a hidratação. O custo é uma busca a mais
-  // no primeiro carregamento de quem escolheu um tamanho diferente do padrão.
+  // diferentes dos dois lados quebra a hidratacao. Ela so vale quando a URL NAO
+  // diz nada -- URL escrita a mao, ou um link que alguem mandou, manda mais que
+  // a preferencia guardada.
   useEffect(() => {
-    const guardado = Number(localStorage.getItem(chaveGuardada(nome)));
-    if ((TAMANHOS as readonly number[]).includes(guardado)) guardarPorPagina(guardado);
-  }, [nome]);
+    if (ppDaUrl === null) {
+      const guardado = Number(localStorage.getItem(chaveGuardada(nome)));
+      if ((TAMANHOS as readonly number[]).includes(guardado) && guardado !== padrao) {
+        trocarNaUrl({ [`${pre}pp`]: String(guardado), [`${pre}p`]: null });
+        return;   // o `pronto` vem no render seguinte, ja com o valor certo
+      }
+    }
+    setPronto(true);
+  }, [nome, pre, ppDaUrl, padrao, trocarNaUrl]);
 
-  // Comparado por VALOR: a lista de filtros é recriada a cada render, e
-  // compará-la por identidade zeraria a página em todo render — inclusive no
-  // que acontece logo depois de trocar de página.
+  const setPagina = useCallback(
+    (n: number) => trocarNaUrl({ [`${pre}p`]: n <= 0 ? null : String(n + 1) }),
+    [pre, trocarNaUrl],
+  );
+
+  // Comparado por VALOR: a lista de filtros e recriada a cada render, e
+  // compara-la por identidade zeraria a pagina em todo render -- inclusive no
+  // que acontece logo depois de trocar de pagina.
   const marcaDosFiltros = JSON.stringify(opcoes.filtros ?? []);
   useEffect(() => {
-    setPagina(0);
+    // ⚠️ So volta ao comeco quando o filtro muda DEPOIS de a tela estar de pe.
+    // Zerar na montagem apagaria a pagina que veio na URL -- que e justamente o
+    // que se esta restaurando ao voltar de um registro.
+    if (!pronto) return;
+    trocarNaUrl({ [`${pre}p`]: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marcaDosFiltros]);
 
   const setPorPagina = useCallback(
     (n: number) => {
-      guardarPorPagina(n);
-      // Trocar o tamanho volta para a primeira página: manter a página 7 de uma
-      // lista que agora tem 3 mostraria uma tela vazia sem explicação.
-      setPagina(0);
+      // Trocar o tamanho volta para a primeira pagina: manter a pagina 7 de uma
+      // lista que agora tem 3 mostraria uma tela vazia sem explicacao.
+      trocarNaUrl({ [`${pre}pp`]: n === padrao ? null : String(n), [`${pre}p`]: null });
       localStorage.setItem(chaveGuardada(nome), String(n));
     },
-    [nome],
+    [nome, pre, padrao, trocarNaUrl],
   );
 
   const paginas = Math.max(1, Math.ceil(total / porPagina));
   return {
+    /**
+     * ⚠️ Falso ate a preferencia guardada ser resolvida. Quem lista precisa
+     * esperar: buscar antes dispara a busca com o tamanho errado, e a resposta
+     * atrasada dela sobrescreve a certa.
+     */
+    pronto,
     pagina,
     setPagina,
     porPagina,

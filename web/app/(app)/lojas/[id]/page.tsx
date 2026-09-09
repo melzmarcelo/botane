@@ -9,6 +9,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import FormularioLoja, { corpoDaLoja, LOJA_VAZIA, LojaForm } from "../formulario";
+import Voltar from "@/components/voltar";
 
 /**
  * Uma loja: o cadastro dela e os parâmetros que mudam o comportamento do
@@ -207,9 +208,9 @@ export default function PaginaLoja() {
   return (
     <div className="mx-auto flex max-w-[860px] flex-col gap-6">
       <header>
-        <Link href="/lojas" className="link-voltar">
+        <Voltar href="/lojas">
           Lojas
-        </Link>
+        </Voltar>
         <h1 className="mt-2 flex flex-wrap items-baseline gap-x-3 text-[26px] font-bold tracking-tight sm:text-[30px]">
           {loja.apelido || loja.nome}
           {loja.matriz && <Etiqueta cor="erva">matriz</Etiqueta>}

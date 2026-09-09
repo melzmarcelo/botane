@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Voltar from "@/components/voltar";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -159,9 +160,9 @@ export default function PaginaRemessa() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/transferencias" className="link-voltar self-start">
+      <Voltar href="/transferencias" className="self-start">
         ← Remessas
-      </Link>
+      </Voltar>
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

@@ -19,6 +19,7 @@ import {
   Vazio,
 } from "@/components/ui";
 import { CORES, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
+import Voltar from "@/components/voltar";
 
 /**
  * Uma nota de entrada, inteira, numa página só.
@@ -179,9 +180,9 @@ export default function PaginaNota() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Link href="/compras" className="link-voltar">
+        <Voltar href="/compras">
           notas de entrada
-        </Link>
+        </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           NF {nota.numero ?? "—"}
         </h1>
