@@ -4769,6 +4769,36 @@ try {
     ["MANUAL", "HORARIA", "DIARIA"].every((f) => agendaPdv.opcoes.includes(f)),
     agendaPdv);
 
+  // 🔑 **A busca de vendas passou a trazer o PREÇO do PDV** (09/09/2026, pedido
+  // do dono), e o mesmo interruptor do envio decide de quem o preço é: ligado, o
+  // dono é o Botané e a busca não toca nele; desligado, o dono é o PDV e a
+  // mudança feita no caixa vem sozinha.
+  // ⚠️ **A frase é a única coisa que torna isso visível.** Sem ela, quem liga o
+  // envio para mandar cadastros daqui perde, sem saber, a atualização de preço
+  // que vinha do caixa — e descobre pelo efeito, no cupom.
+  // ⚠️ Afirma a PROPRIEDADE, não o estado do dia: qual frase aparece depende do
+  // que o servidor diz, e as duas são corretas. É a mesma correção da checagem
+  // acima e da do setor BAR.
+  const frasesPreco = await p.evaluate(() => ({
+    envio: document.querySelector("#envio-pdv")?.innerText ?? "",
+    agenda: document.querySelector("#agenda-pdv")?.innerText ?? "",
+  }));
+  const donoEhACasa = !!cfgEnvio?.enviar_ao_pdv;
+  checar("o interruptor do envio diz de quem é o preço",
+    donoEhACasa
+      ? /o preço daqui é o que vale/i.test(frasesPreco.envio)
+      : /o preço é o do PDV/i.test(frasesPreco.envio),
+    [donoEhACasa, frasesPreco.envio.slice(0, 300)]);
+  checar("e a busca automática diz o que faz com ele",
+    donoEhACasa
+      ? /não mexe em preço/i.test(frasesPreco.agenda)
+      : /atualiza o preço que mudou no caixa/i.test(frasesPreco.agenda),
+    [donoEhACasa, frasesPreco.agenda.slice(0, 300)]);
+  // ⚠️ E o que NÃO vem sozinho continua escrito, nos dois estados: categoria,
+  // setor e nome mudam AQUI, à mão, e alinhá-los segue sendo um clique.
+  checar("dizendo também que categoria e setor seguem manuais",
+    /Importar cardápio/i.test(frasesPreco.agenda), frasesPreco.agenda.slice(0, 300));
+
   await p.evaluate(() => {
     const sel = document.querySelector("#agenda-pdv select");
     if (!sel) return;

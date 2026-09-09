@@ -158,6 +158,18 @@ O que não pertence a um módulo e atravessa todos. Fica em
 `docs/memoria/<módulo>.md` **antes** de abrir o código, e rode as suítes daquele
 módulo depois. A bateria inteira só antes de promover.
 
+**Como rodar**, com a API de pé na 9200 e o web na 3100:
+
+| O quê | Comando |
+|---|---|
+| Uma suíte | `python tests/smoke_<nome>.py` (da pasta `api`) |
+| A bateria da API inteira | `python tests/rodar_tudo.py` (da pasta `api`) |
+| A bateria de navegador | `node scripts/verificar.mjs` (da pasta `web`) |
+
+⚠️ **Uma suíte de cada vez, nunca em paralelo** — elas escrevem na mesma base
+local, e duas ao mesmo tempo disputam saldo e código. A falha que isso produz
+não parece concorrência: parece um defeito de estoque.
+
 **Ao implementar algo novo:** o módulo diz onde a rota, o serviço e a tela devem
 nascer, e qual arquivo de memória recebe a decisão no fim. Toda decisão que
 custou caro vira entrada lá — é isso que impede o próximo de repetir.
