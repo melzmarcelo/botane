@@ -236,7 +236,7 @@ else:
     st, papeis = chamar("GET", "/papeis", token=token)
     id_conf = next(p["id"] for p in papeis if p["nome"].startswith("Conferente"))
     email = "smoke.conferente@botane.com.br"
-    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
     conf = next((u for u in usuarios if u["email"] == email), None)
     if conf:
         chamar("PUT", f"/usuarios/{conf['id']}",

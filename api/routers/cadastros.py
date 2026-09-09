@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import auditoria
 from database import get_cursor
 from models.cadastros import (
+    ApelidoUnidade,
     CategoriaCreate,
     CategoriaResponse,
     CategoriaUpdate,
@@ -27,6 +28,7 @@ from models.cadastros import (
     UnidadeMedidaUpdate,
 )
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
+from services import unidade_apelidos
 
 router = APIRouter(tags=["cadastros"])
 
@@ -449,3 +451,59 @@ def atualizar_um(sigla: str, body: UnidadeMedidaUpdate,
         auditoria.registrar(cur, ctx.id_usuario, "unidade_medida", sigla, "atualizar",
                             antes=dict(antes), depois=dados)
     return {"message": "Unidade atualizada"}
+
+
+# ================================================ o de-para das unidades de fora
+
+
+@router.get("/unidades-medida/apelidos")
+def listar_apelidos(ctx: Contexto = Depends(contexto_atual)) -> dict:
+    """O que já foi traduzido, e o que ainda está esperando alguém.
+
+    🔑 **Decisão do dono (09/09/2026):** *"conforme as unidades vão chegando
+    pelas notas podemos ir vinculando ou cadastrando"*. A alternativa era
+    importar de uma vez as 603 unidades do cadastro do Omie — global,
+    compartilhado, com `%`, `01` e `18x4x4` no meio.
+
+    ⚠️ **`pendentes` é uma CONSULTA, não uma tabela.** Mesma decisão da fila de
+    envio ao PDV: uma fila mantida à mão precisaria ser alimentada em todo lugar
+    que grava um item de nota, e o próximo lugar nasceria sem ela.
+
+    ⚠️ Só LEITURA exige apenas autenticação: a tela de Cadastros mostra o número
+    de pendentes para quem passa por ali, e esconder isso de quem não edita não
+    protege nada — o que edita tem a permissão nas rotas abaixo.
+    """
+    with get_cursor() as cur:
+        return {"pendentes": unidade_apelidos.pendentes(cur),
+                "apelidos": unidade_apelidos.listar(cur)}
+
+
+@router.post("/unidades-medida/apelidos")
+def vincular_apelido(
+    body: ApelidoUnidade,
+    ctx: Contexto = Depends(requer_permissao("cadastros.unidades_medida")),
+) -> dict:
+    """Diz que o texto que vem nas notas significa esta unidade daqui.
+
+    ⚠️ **Regravar é o caso comum**, não um erro: quem traduziu "PC" para UN e
+    percebeu que era PCT corrige aqui. A correção vale para a PRÓXIMA nota — o
+    razão é append-only, e quantidade já gravada se corrige por estorno.
+    """
+    with get_cursor() as cur:
+        r = unidade_apelidos.vincular(cur, body.apelido, body.sigla, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "unidade_medida", r["sigla"],
+                            "apelido_vincular", depois=r)
+    return r
+
+
+@router.delete("/unidades-medida/apelidos/{apelido}")
+def remover_apelido(
+    apelido: str,
+    ctx: Contexto = Depends(requer_permissao("cadastros.unidades_medida")),
+) -> dict:
+    """Desfaz a tradução — a unidade volta para a fila."""
+    with get_cursor() as cur:
+        r = unidade_apelidos.remover(cur, apelido)
+        auditoria.registrar(cur, ctx.id_usuario, "unidade_medida",
+                            unidade_apelidos.limpar(apelido), "apelido_remover")
+    return r

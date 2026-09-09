@@ -338,7 +338,7 @@ checar("período que ainda não terminou é recusado", st == 400, (st, r))
 st, papeis_todos = chamar("GET", "/papeis", token=token)
 id_conferente = next(p["id"] for p in papeis_todos if p["nome"].startswith("Conferente"))
 email_conf = "smoke.conferente@botane.com.br"
-st, usuarios_todos = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+st, usuarios_todos = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
 conf = next((u for u in usuarios_todos if u["email"] == email_conf), None)
 if conf:
     chamar("PUT", f"/usuarios/{conf['id']}",
@@ -418,7 +418,7 @@ checar("depois de reaberto, o conferente volta a lançar retroativo", st == 201,
 print("6. permissão")
 st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
 existente = next((u for u in usuarios if u["email"] == "smoke.cozinha@botane.com.br"), None)
 if existente:
     chamar("PUT", f"/usuarios/{existente['id']}",

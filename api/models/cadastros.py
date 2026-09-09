@@ -140,6 +140,19 @@ class UnidadeMedidaCreate(BaseModel):
     ativo: bool = True
 
 
+class ApelidoUnidade(BaseModel):
+    """O texto que vem de fora e a unidade que ele significa aqui.
+
+    ⚠️ O apelido aceita 20 caracteres, nao os 6 da sigla: o que vem na
+    nota nao respeita a largura do nosso campo -- o catalogo real trouxe
+    "1 UNID" e "BD 2,5". Aparar para 6 juntaria coisas diferentes num apelido
+    so, que e exatamente o que o de-para existe para evitar.
+    """
+
+    apelido: str = Field(min_length=1, max_length=20)
+    sigla: str = Field(min_length=1, max_length=6)
+
+
 class UnidadeMedidaUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=2, max_length=40)
     grandeza: str | None = None

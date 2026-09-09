@@ -122,7 +122,7 @@ checar("Cozinha tem fichas.editar", cozinha and "fichas.editar" in cozinha["perm
 
 # incluir inativos: a limpeza da rodada anterior desativa este usuário,
 # e sem isso a busca não o acha e o POST bate em 409
-st, r = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+st, r = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
 existente = next((u for u in r if u["email"] == TESTE_EMAIL), None) if st == 200 else None
 if existente:
     id_teste = existente["id"]

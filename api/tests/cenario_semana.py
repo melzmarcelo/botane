@@ -121,7 +121,7 @@ tokens = {}
 for papel, apelido in (("Gerente", "gerente"), ("Conferente / Estoque", "conferente"),
                        ("Cozinha", "cozinha"), ("Salão", "salao"), ("Contador", "contador")):
     email = f"semana.{apelido}@botane.com.br"
-    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=admin)
+    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=admin)
     existe = next((u for u in usuarios if u["email"] == email), None)
     corpo = {"nome": f"Semana {apelido}", "email": email, "senha": "semana12345",
              "ativo": True, "papeis": [{"id_papel": por_nome[papel]}]}

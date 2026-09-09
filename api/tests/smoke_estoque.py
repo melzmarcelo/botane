@@ -464,7 +464,7 @@ checar("fechada, a diferença aparece",
 print("9. permissão")
 st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
 existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
 if existente:
     chamar("PUT", f"/usuarios/{existente['id']}",

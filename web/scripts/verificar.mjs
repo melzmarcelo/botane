@@ -3905,6 +3905,45 @@ try {
   checar("entrar em Tabelas de apoio abre a PRIMEIRA aba (Setores)",
     abaInicial.setores && !abaInicial.locais, abaInicial);
 
+  // 🔑 **A fila das unidades que vieram de fora** (09/09/2026, decisão do dono:
+  // *"conforme as unidades vão chegando pelas notas podemos ir vinculando ou
+  // cadastrando"*). O que ela conserta é silencioso: item de nota com unidade
+  // desconhecida não parava o lançamento — a conversão não achava caminho e a
+  // quantidade entrava 1:1, e a diferença só aparecia no CMV do mês.
+  // ⚠️ Um apelido com a MARCA da rodada: um "PT" fixo apagaria, na limpeza, a
+  // tradução de verdade que o dono venha a criar.
+  const mUni = `ZW${Date.now().toString().slice(-5)}`;
+  await api("POST", "/unidades-medida/apelidos", { apelido: mUni, sigla: "UN" }, token);
+  aoTerminar.push(() => api("DELETE", `/unidades-medida/apelidos/${mUni}`, null, token));
+
+  await irPara(p, `${WEB}/cadastros?aba=unidades`);
+  await p.waitForFunction(
+    () => /unidades que vieram nas notas/i.test(document.body.innerText), { timeout: 15000 })
+    .catch(() => {});
+  const filaUm = await p.evaluate(() => ({
+    temCartao: /Unidades que vieram nas notas/i.test(document.body.innerText),
+    // ⚠️ A explicação vem ANTES da lista: sem ela, "BJ · 1 item" não diz a
+    // ninguém por que aquilo está ali nem o que acontece se ficar.
+    explica: /sem conversão/i.test(document.body.innerText),
+    // 🔑 A saída para a unidade que NÃO existe aqui é cadastrá-la, não traduzir
+    // para a mais parecida — que é como o custo para de fluir em silêncio.
+    mandaCadastrar: /traduzir para a mais parecida/i.test(document.body.innerText),
+    texto: document.body.innerText,
+  }));
+  checar("Tabelas de apoio mostra as unidades que vieram nas notas", filaUm.temCartao, filaUm.explica);
+  checar("explicando que sem tradução a nota entra sem conversão", filaUm.explica);
+  checar("e que a unidade que falta se CADASTRA, não se aproxima", filaUm.mandaCadastrar);
+  // 🔑 O que já foi traduzido fica à vista, com o desfazer: uma tradução errada
+  // ("PC" para UN quando era PCT) precisa de caminho de volta.
+  checar("a tradução já feita aparece com o que ela virou",
+    filaUm.texto.includes(mUni) && /vale como/i.test(filaUm.texto),
+    filaUm.texto.slice(0, 400));
+  // ⚠️ E a tela diz o que a tradução NÃO faz: o razão é append-only, e quem
+  // espera que ela conserte a nota de ontem vai procurar o número que não mudou.
+  checar("dizendo que ela vale para as PRÓXIMAS notas",
+    /pr[óo]ximas/i.test(filaUm.texto) && /estorno/i.test(filaUm.texto),
+    filaUm.texto.slice(0, 400));
+
   await irPara(p, `${WEB}/cadastros?aba=grupos-cmv`);
   await new Promise((r) => setTimeout(r, 1800));
   checar("a aba Grupos do CMV existe em Tabelas de apoio",

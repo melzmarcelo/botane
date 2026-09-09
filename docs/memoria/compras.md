@@ -69,3 +69,60 @@
   zero é o emitente dizendo "neste item não há frete". Tratar zero como ausente joga o item no
   rateio por valor e cobra dele um frete que a nota não pôs. Se **algum** item traz o campo, o
   rateio é do emitente e os outros recebem zero — senão o frete entraria duas vezes.
+
+- 🔑 **As unidades que vêm nas notas agora têm de-para** (09/09/2026, decisão do dono: *"conforme
+  as unidades vão chegando pelas notas podemos ir vinculando ou cadastrando"*).
+
+  ⚠️ **O silêncio que isto conserta.** Item de nota com unidade desconhecida **não parava** o
+  lançamento — e continua não parando, o que é certo: recusar a nota inteira por falta de uma
+  linha de cadastro seria pior. O que acontecia é que a conversão não achava caminho e a
+  quantidade entrava **1:1**. Dez BJ de um produto contado em KG viravam dez quilos no razão, e o
+  custo unitário saía dividido por dez. Nada avisava, e a diferença só aparecia no CMV do mês.
+
+  ⚠️ **Mas o 1:1 só morde quem NÃO tem embalagem cadastrada.** `PUT /produtos/{id}/unidades`
+  copia a unidade padrão para `um_compra`/`fator_compra`, e esse é o ÚLTIMO degrau de
+  `_fator_do_item` — que não olha a unidade da nota. Tendo embalagem, o fator dela responde para
+  qualquer texto. O caso real são os **607 produtos que vieram do Omie sem unidade nenhuma**,
+  porque o importador descarta a unidade que não existe aqui (deixá-la entrar rebentava a chave
+  estrangeira e derrubava a carga dos 2.198 por causa de um).
+  ⚠️ A primeira versão da suíte montou um produto COM embalagem e "provou" um defeito que não
+  existia naquele cenário — a conta já vinha certa sem de-para nenhum.
+
+  🔑 **Por que de-para e não importar as unidades do Omie.** O cadastro de lá tem **603
+  unidades** (`geral/unidade/ListarUnidades`, que só aceita `{"codigo": ""}` — as formas de
+  paginar ele recusa), e é uma tabela **global e compartilhada**: `%`, `01`, `1/4`, `12X4`,
+  `18x4x4`. Mesmo restrito às que os produtos da casa usam sobram **57 siglas para uns doze
+  conceitos** — `PC` (194 produtos), `UNID` (74), `UND`, `UN1`, `1 UNID`, `UM` e `1` são todas
+  "unidade"; `PT` (55), `PAC`, `PK` e `SC` são todas "pacote". Criá-las como unidades faria o
+  combo do cadastro oferecer sete coisas com o mesmo significado — e **unidade diferente não
+  converte**, então o custo pararia de fluir do jeito mais silencioso possível.
+
+  ⚠️ **Apelido não é unidade**: sem grandeza, sem fator, fora de todo combo. Quem tem grandeza e
+  fator continua sendo `unidades_medida`, e é lá que nasce a unidade que realmente falta (metro).
+  A tela diz isso com todas as letras — traduzir para "a mais parecida" é como o custo para de
+  fluir.
+
+  ⚠️ **A fila é uma CONSULTA, não uma tabela** (`unidade_apelidos.pendentes`): o que apareceu em
+  `nota_itens`, menos o que já é unidade, menos o que já foi traduzido. Mesma decisão da fila de
+  envio ao PDV — uma fila mantida à mão precisaria ser alimentada em todo lugar que grava um item
+  de nota, e o próximo lugar nasceria sem ela. Ela traz **exemplos** de produto junto: "BJ"
+  sozinho não diz nada, "BJ em CHAMPIGNON FATIADO" é bandeja.
+
+  ⚠️ **A tradução é resolvida UMA vez e usada nos três lugares** do cálculo (o fator do item, a
+  comparação com a unidade de estoque e a conversão por grandeza). Traduzir em um só faria a nota
+  casar a embalagem e errar a comparação. O texto CRU continua gravado em `nota_itens.um_nota` —
+  é o que o fornecedor mandou, e é por ele que a fila reconhece o caso.
+
+  ⚠️ **Vale para as PRÓXIMAS notas.** O razão é append-only: o que já entrou se corrige por
+  estorno, e a tela avisa. `calcular_nota` roda na criação, na correção e no vínculo do item —
+  **não no GET**.
+
+- ⚠️ **`GET /usuarios` traz 100 por padrão, e isso derrubou ONZE suítes** (09/09/2026). O usuário
+  de teste fica inativo entre as rodadas (`smoke_fundacao` o exclui no fim, e exclusão de usuário
+  é lógica); com a base acumulando **148 inativos** de rodadas anteriores e a ordem sendo
+  `ativo DESC, nome`, ele caiu para fora da primeira página. A busca não o achava, o POST batia em
+  409 "já existe", o login falhava — e onze suítes passaram a **comparar 401 com 403**, cada uma
+  acusando um defeito de permissão que não existia. As buscas de fixture passam `limite=500`.
+  🔑 **O sintoma aparecia longe da causa e crescia sozinho com o tempo**, que é o pior tipo: a
+  bateria passou 42/42 duas vezes seguidas hoje antes de começar a falhar, sem ninguém mexer em
+  permissão nenhuma.

@@ -17,6 +17,7 @@ import {
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
+import UnidadesDeFora from "./unidades-de-fora";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
@@ -871,6 +872,23 @@ export default function PaginaCadastros() {
 
             </>
           )}
+        </Cartao>
+      )}
+
+      {/* 🔑 **A fila das unidades que vieram de fora** (09/09/2026, decisão do
+          dono: *"conforme as unidades vão chegando pelas notas podemos ir
+          vinculando ou cadastrando"*). Fica NESTA aba, logo abaixo do cadastro:
+          quem resolve a fila resolve escolhendo uma unidade daqui, e metade dos
+          casos termina cadastrando a que faltava -- o formulário está acima, na
+          mesma tela.
+          ⚠️ Cartão separado, não uma seção dentro do outro: ele carrega os
+          próprios dados e se recarrega sozinho a cada vínculo. */}
+      {aba === "unidades" && ums && (
+        <Cartao
+          titulo="Unidades que vieram nas notas"
+          descricao="O que o fornecedor escreveu e o sistema ainda não sabe ler."
+        >
+          <UnidadesDeFora ums={ums} podeEditar={podeAba("unidades")} />
         </Cartao>
       )}
     </div>

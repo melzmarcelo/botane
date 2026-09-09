@@ -445,7 +445,7 @@ print("12. o PDF não é a porta lateral do custo")
 # regra do router de fichas viraria enfeite.
 st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next((p["id"] for p in papeis if p["nome"] == "Cozinha"), None)
-st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
 existente = next((u for u in usuarios if u["email"] == COZINHA[0]), None)
 if id_cozinha and existente:
     chamar("PUT", f"/usuarios/{existente['id']}",

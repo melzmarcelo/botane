@@ -22,6 +22,7 @@ from fastapi import HTTPException
 from services import estoque as motor
 from services import custos
 from services.custos import CASAS_CUSTO, dec
+from services import unidade_apelidos
 from services.omie import mapeadores
 from services.omie import vinculo
 from services.omie.cliente import DIALETO_HUNGARO, DIALETO_POSICAO, ClienteOmie, ErroOmie
@@ -277,8 +278,24 @@ def calcular_nota(cur, id_nota: int) -> dict:
         if item["id_produto"]:
             cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (item["id_produto"],))
             um_estoque = cur.fetchone()["um_estoque"]
+            # 🔑 **O de-para das unidades entra AQUI, num lugar só** (09/09/2026,
+            # decisão do dono: *"conforme as unidades vão chegando pelas notas
+            # podemos ir vinculando ou cadastrando"*). O fornecedor escreve
+            # "UNID", "CX." ou "PT", e sem tradução nada disso casa com o
+            # cadastro: a conversão não achava caminho e a quantidade entrava
+            # 1:1 — dez BJ de um produto contado em KG viravam dez quilos.
+            # ⚠️ **Resolvido uma vez e usado nos TRÊS lugares** abaixo (o fator
+            # do item, a comparação com a unidade de estoque e a conversão por
+            # grandeza). Traduzir em um só faria a nota casar a embalagem e
+            # errar a comparação, ou o contrário.
+            # ⚠️ **Sem tradução, fica como veio.** Unidade desconhecida segue o
+            # caminho de sempre — a nota não para por falta de uma linha de
+            # cadastro —, e aparece na fila de `unidade_apelidos.pendentes`.
+            # ⚠️ O texto CRU continua gravado em `nota_itens.um_nota`: ele é o
+            # que o fornecedor mandou, e é por ele que a fila reconhece o caso.
+            um = unidade_apelidos.resolver(cur, item["um_nota"]) or item["um_nota"]
             fator = _fator_do_item(cur, item["id_produto"], nota["id_fornecedor"],
-                                   item["codigo_fornecedor"], item["um_nota"],
+                                   item["codigo_fornecedor"], um,
                                    # 🔑 Sem este argumento o degrau da conversão
                                    # ditada na tela nunca é consultado, e o
                                    # pacote de 500 g fundido entra como 1 kg.
@@ -288,13 +305,13 @@ def calcular_nota(cur, id_nota: int) -> dict:
             # fator 1, então a conversão de grandeza diria que 4 CX = 4 UN e
             # engoliria a caixa de 12. O fator da embalagem vem primeiro.
             qtd_nota = dec(item["quantidade"])
-            if item["um_nota"] and um_estoque and item["um_nota"] == um_estoque:
+            if um and um_estoque and um == um_estoque:
                 convertida = qtd_nota
             elif fator and fator != 1:
                 convertida = qtd_nota * fator
             else:
                 direta, _como = custos.converter_para_estoque(
-                    cur, qtd_nota, item["id_produto"], item["um_nota"], um_estoque, ums)
+                    cur, qtd_nota, item["id_produto"], um, um_estoque, ums)
                 # Aqui a nota NÃO para: o item já está vinculado a um produto, e
                 # 1:1 com a unidade da nota à vista na tela é melhor que recusar
                 # o lançamento inteiro por falta de uma linha de cadastro.

@@ -150,13 +150,23 @@ def garantir_cozinha(chamar, token, email: str = "smoke.cozinha@botane.com.br",
     Várias suítes só REATIVAVAM o usuário quando ele já estava lá. Numa base
     recém-instalada ele não está, o login falhava com 401 e as checagens de
     permissão passavam a comparar 401 com 403 — testando outra coisa.
+
+    ⚠️ **`limite=500` não é zelo: sem ele a busca deixou de achar o usuário**
+    (09/09/2026). `GET /usuarios` traz 100 por padrão, ordenados por
+    `ativo DESC, nome` — e o usuário das suítes fica INATIVO entre as rodadas,
+    porque `smoke_fundacao` o exclui no fim (exclusão de usuário é lógica). Com
+    a base acumulando 148 inativos de rodadas anteriores, ele caiu para fora da
+    primeira página: a busca não o achava, o POST batia em 409 "já existe", o
+    login falhava, e **onze suítes passaram a comparar 401 com 403** — cada uma
+    acusando um defeito de permissão que não existia. O sintoma aparece longe da
+    causa e cresce sozinho com o tempo, que é o pior tipo.
     """
     st, papeis = chamar("GET", "/papeis", token=token)
     id_cozinha = next((p["id"] for p in (papeis or []) if p["nome"] == "Cozinha"), None)
     if not id_cozinha:
         return None
 
-    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true", token=token)
+    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
     existente = next((u for u in (usuarios or []) if u["email"] == email), None)
     if existente:
         chamar("PUT", f"/usuarios/{existente['id']}",
