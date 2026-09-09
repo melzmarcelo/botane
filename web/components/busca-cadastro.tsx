@@ -34,6 +34,8 @@ export default function BuscaCadastro({
   autoFocus = false,
   className = "",
   id,
+  aoEscolherVarios,
+  jaEscolhidos,
 }: {
   fonte: FonteBusca;
   selecionado: { id: number; rotulo: string } | null;
@@ -43,6 +45,15 @@ export default function BuscaCadastro({
   autoFocus?: boolean;
   className?: string;
   id?: string;
+  /**
+   * 🔑 **Quando existe, a janela ganha caixinhas e devolve VARIOS de uma vez.**
+   * E opcional de proposito: este componente serve a dezenas de telas em que
+   * escolher um e o certo, e ligar a caixinha em todas mudaria o significado do
+   * clique em lugares que nunca pediram isso.
+   */
+  aoEscolherVarios?: (itens: ItemBusca[]) => void;
+  /** Ids ja na lista de quem chamou — aparecem marcados e nao se somam de novo. */
+  jaEscolhidos?: number[];
 }) {
   const [texto, setTexto] = useState(selecionado?.rotulo ?? "");
   const [aberto, setAberto] = useState(false);
@@ -142,6 +153,17 @@ export default function BuscaCadastro({
             requestAnimationFrame(() => campo.current?.focus());
           }}
           aoEscolher={escolher}
+          aoEscolherVarios={
+            aoEscolherVarios
+              ? (itens) => {
+                  aoEscolherVarios(itens);
+                  setAberto(false);
+                  setTexto("");
+                  requestAnimationFrame(() => campo.current?.focus());
+                }
+              : undefined
+          }
+          jaEscolhidos={jaEscolhidos}
         />
       )}
     </>
@@ -166,11 +188,15 @@ function Janela({
   termoInicial,
   aoFechar,
   aoEscolher,
+  aoEscolherVarios,
+  jaEscolhidos = [],
 }: {
   fonte: FonteBusca;
   termoInicial: string;
   aoFechar: () => void;
   aoEscolher: (item: ItemBusca) => void;
+  aoEscolherVarios?: (itens: ItemBusca[]) => void;
+  jaEscolhidos?: number[];
 }) {
   const [termo, setTermo] = useState(termoInicial);
   const [itens, setItens] = useState<ItemBusca[] | null>(null);
@@ -178,6 +204,20 @@ function Janela({
   const [pagina, setPagina] = useState(1);
   const [erro, setErro] = useState("");
   const [marcado, setMarcado] = useState(0);
+  // ⚠️ **Sobrevive a troca do termo e a paginacao.** Quem marca tres, procura
+  // outra coisa e marca mais dois espera levar os cinco -- zerar a cada busca
+  // faria o trabalho sumir sem aviso, e a pessoa so notaria depois de confirmar.
+  const [checados, setChecados] = useState<Map<number, ItemBusca>>(new Map());
+  const multiplo = !!aoEscolherVarios;
+
+  function alternar(item: ItemBusca) {
+    setChecados((atual) => {
+      const proximo = new Map(atual);
+      if (proximo.has(item.id)) proximo.delete(item.id);
+      else proximo.set(item.id, item);
+      return proximo;
+    });
+  }
 
   useEffect(() => {
     let vivo = true;
@@ -210,14 +250,21 @@ function Janela({
       setMarcado((n) => Math.max(n - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      aoEscolher(itens[marcado]);
+      // ⚠️ No modo múltiplo o Enter MARCA, não escolhe: fechar a janela no
+      // primeiro Enter desfaria o que a caixinha existe para permitir.
+      if (multiplo) alternar(itens[marcado]);
+      else aoEscolher(itens[marcado]);
     }
   }
 
   return (
     <Modal
       titulo={fonte.titulo}
-      descricao="Digite parte do código ou do nome. ↑ ↓ para andar, Enter para escolher."
+      descricao={
+        multiplo
+          ? "Digite parte do código ou do nome e marque quantos quiser."
+          : "Digite parte do código ou do nome. ↑ ↓ para andar, Enter para escolher."
+      }
       aoFechar={aoFechar}
     >
       <input
@@ -243,16 +290,10 @@ function Janela({
           </Vazio>
         ) : (
           <ul className="divide-y divide-linha">
-            {itens.map((i, n) => (
-              <li key={i.id}>
-                <button
-                  type="button"
-                  className={`flex w-full items-baseline gap-3 px-2 py-2.5 text-left ${
-                    n === marcado ? "bg-erva-claro" : "hover:bg-superficie2"
-                  }`}
-                  onMouseEnter={() => setMarcado(n)}
-                  onClick={() => aoEscolher(i)}
-                >
+            {itens.map((i, n) => {
+              const jaEsta = jaEscolhidos.includes(i.id);
+              const corpo = (
+                <>
                   {i.codigo && (
                     <span className="mono shrink-0 text-[12.5px] text-suave">{i.codigo}</span>
                   )}
@@ -262,9 +303,45 @@ function Janela({
                       <span className="block text-[12.5px] text-suave">{i.detalhe}</span>
                     )}
                   </span>
-                </button>
-              </li>
-            ))}
+                  {jaEsta && <span className="shrink-0 text-[12.5px] text-suave">já na lista</span>}
+                </>
+              );
+              // ⚠️ **No modo multiplo a linha inteira e um `label`, nao um botao.**
+              // Botao dentro de linha com caixinha faz o clique no texto disparar
+              // a escolha imediata e fechar a janela -- que e o contrario do que
+              // a caixinha promete.
+              return (
+                <li key={i.id}>
+                  {multiplo ? (
+                    <label
+                      className={`flex w-full cursor-pointer items-baseline gap-3 px-2 py-2.5 ${
+                        jaEsta ? "opacity-55" : "hover:bg-superficie2"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="shrink-0"
+                        checked={jaEsta || checados.has(i.id)}
+                        disabled={jaEsta}
+                        onChange={() => alternar(i)}
+                      />
+                      {corpo}
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`flex w-full items-baseline gap-3 px-2 py-2.5 text-left ${
+                        n === marcado ? "bg-erva-claro" : "hover:bg-superficie2"
+                      }`}
+                      onMouseEnter={() => setMarcado(n)}
+                      onClick={() => aoEscolher(i)}
+                    >
+                      {corpo}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -280,6 +357,36 @@ function Janela({
           </button>
           <span className="text-[13px] text-suave">
             {itens.length} de {total}
+          </span>
+        </div>
+      )}
+
+      {multiplo && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-linha pt-3">
+          <button
+            type="button"
+            className="btn btn-primario"
+            disabled={!checados.size}
+            onClick={() => aoEscolherVarios!([...checados.values()])}
+          >
+            {checados.size
+              ? `Acrescentar ${checados.size}`
+              : "Marque os que quiser"}
+          </button>
+          {!!checados.size && (
+            <button
+              type="button"
+              className="btn btn-secundario"
+              onClick={() => setChecados(new Map())}
+            >
+              Limpar
+            </button>
+          )}
+          {/* ⚠️ O contador diz o TOTAL marcado, e nao "os desta pagina": quem
+              marcou em duas buscas diferentes precisa saber que leva os dois
+              grupos, senao confirma achando que perdeu os primeiros. */}
+          <span className="text-[13px] text-suave">
+            a marcação vale entre buscas
           </span>
         </div>
       )}

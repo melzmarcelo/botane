@@ -88,6 +88,21 @@ export function Etiqueta({ cor = "neutro", children }: { cor?: "neutro" | "erva"
  * Janela sobre a tela. Fecha no Esc e no clique fora — as duas saídas que todo
  * mundo tenta antes de procurar o X.
  */
+/**
+ * 🔑 **A pilha de janelas abertas — só a de cima responde ao Escape.**
+ *
+ * ⚠️ Cada `Modal` registrava o ouvinte no `document`, e `stopPropagation` NÃO
+ * impede outro ouvinte no MESMO nó (isso seria `stopImmediatePropagation`). Com
+ * duas janelas abertas — a busca por cima da Vincular, por exemplo — um Escape
+ * fechava as DUAS: a pessoa dispensava a busca e perdia junto a lista de
+ * cadastros que tinha montado. Passou a doer de verdade quando a busca ganhou
+ * seleção múltipla, porque aí há trabalho acumulado dentro dela para perder.
+ *
+ * A pilha é de módulo de propósito: é um fato do documento, não de uma árvore
+ * de componentes — as janelas não são pai e filha uma da outra.
+ */
+const _janelasAbertas: symbol[] = [];
+
 export function Modal({
   titulo,
   descricao,
@@ -109,8 +124,11 @@ export function Modal({
   largura?: string;
 }) {
   useEffect(() => {
+    const eu = Symbol("janela");
+    _janelasAbertas.push(eu);
     const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      // Só a janela do TOPO fecha. As de baixo ignoram e continuam abertas.
+      if (e.key === "Escape" && _janelasAbertas[_janelasAbertas.length - 1] === eu) {
         e.stopPropagation();
         aoFechar();
       }
@@ -121,6 +139,8 @@ export function Modal({
     const antes = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
+      const onde = _janelasAbertas.indexOf(eu);
+      if (onde >= 0) _janelasAbertas.splice(onde, 1);
       document.removeEventListener("keydown", tecla);
       document.body.style.overflow = antes;
     };

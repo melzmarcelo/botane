@@ -3916,6 +3916,55 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   const busca = await p.$('input[aria-label="Buscar produto"]');
   checar("e abre a busca do outro cadastro", !!busca);
+
+  // 🔑 **A janela NAO lista o proprio produto, e aceita marcar varios**
+  // (09/09/2026, pedido do dono). Vincular um cadastro a si mesmo nao existe:
+  // oferece-lo so serve para produzir a mensagem de erro depois do clique.
+  //
+  // ⚠️ **Sao DOIS `[role="dialog"]` aninhados** — a propria Vincular e a janela
+  // de busca por cima dela. A primeira versao desta checagem pegou o PRIMEIRO,
+  // digitou no campo da Vincular e clicou no "fechar" DELA: o bloco inteiro que
+  // vinha depois desabou, acusando de defeito uma tela intacta. Aqui e sempre o
+  // ULTIMO, e se fecha por Escape, que nao depende de achar botao nenhum.
+  const naJanela = await p.evaluate(async (marca) => {
+    const ultimo = () => [...document.querySelectorAll('[role="dialog"]')].pop();
+    const antes = document.querySelectorAll('[role="dialog"]').length;
+    [...document.querySelectorAll('button[aria-label="Buscar produto"]')].pop()?.click();
+    await new Promise((r) => setTimeout(r, 600));
+    const abriu = document.querySelectorAll('[role="dialog"]').length > antes;
+    const d = ultimo();
+    const campo = d?.querySelector("input.campo");
+    if (campo) {
+      const set = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, "value").set;
+      set.call(campo, marca);
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await new Promise((r) => setTimeout(r, 2200));
+    const dd = ultimo();
+    return {
+      abriu,
+      linhas: [...(dd?.querySelectorAll("li") ?? [])].map((li) => (li.textContent ?? "").trim()),
+      caixinhas: dd?.querySelectorAll('input[type="checkbox"]').length ?? 0,
+    };
+  }, mVinc);
+  checar("a janela de busca abre por cima da Vincular", naJanela.abriu, naJanela);
+  checar("oferecendo caixinha para marcar varios", naJanela.caixinhas > 0, naJanela);
+  // ⚠️ O produto ABERTO e o `vincA`; ele nao pode aparecer entre os candidatos.
+  checar("e NAO lista o proprio produto que se esta vinculando",
+    !naJanela.linhas.some((l) => l.includes(`BEB CERV HEINEKEN 350ML ${mVinc}`)),
+    naJanela.linhas.slice(0, 4));
+  checar("mas lista os demais cadastros",
+    naJanela.linhas.some((l) => l.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`)),
+    naJanela.linhas.slice(0, 4));
+  // Escape fecha SO a janela de busca; a Vincular continua aberta para o resto.
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 600));
+  const vincSegue = await p.evaluate(() =>
+    document.querySelectorAll('[role="dialog"]').length);
+  checar("e o Escape fecha so a busca, deixando a Vincular aberta",
+    vincSegue === 1, vincSegue);
+
   if (busca) {
     await busca.type(`CERVEJA HEINEKEN PILSEN ${mVinc}`);
     await p.keyboard.press("Tab");

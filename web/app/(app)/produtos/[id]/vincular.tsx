@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Etiqueta, Modal } from "@/components/ui";
@@ -94,7 +94,6 @@ type Previa = {
   escolhido: number;
 };
 
-const PRODUTOS = fonteProdutos();
 
 const DE_ONDE: Record<string, string> = {
   omie: "do cadastro do Omie",
@@ -130,6 +129,17 @@ export default function Vincular({
   // 🔑 Uma LISTA: o abacate do catálogo do Omie tem um cadastro por fornecedor,
   // e juntar um a um seria abrir esta janela cinco vezes.
   const [escolhidos, setEscolhidos] = useState<{ id: number; rotulo: string }[]>([]);
+  // 🔑 **A busca NAO lista o proprio produto** (09/09/2026, pedido do dono):
+  // ele nao pode ser vinculado a si mesmo, e oferece-lo so serve para produzir a
+  // mensagem de erro logo abaixo. Por isso a fonte nasce aqui dentro e nao no
+  // modulo -- ela precisa saber qual e o produto desta tela.
+  // ⚠️ A guarda de `acrescentar` FICA mesmo assim: a fonte filtra o que a
+  // janela mostra, e o campo de texto resolve por codigo exato sem passar por
+  // ela. Filtro de tela nao e regra.
+  const PRODUTOS = useMemo(
+    () => fonteProdutos((p) => p.id !== idProduto),
+    [idProduto],
+  );
   // ⚠️ LIGADO por padrão: sem a baixa, o resultado seria "comprou 15, vendeu 10,
   // saldo 15", e as 10 faltando apareceriam na primeira contagem como ajuste de
   // inventário — onde a diferença some sem nome.
@@ -155,6 +165,14 @@ export default function Vincular({
             // ⚠️ Guardado JUNTO da prévia, não por posição na lista: é ele que
             // volta ao servidor na hora de fundir, e casar por índice quebraria
             // em silêncio se a ordem mudasse.
+            //
+            // ⚠️ **E é ele que serve de `key` no React, nunca o `id_sai`.** O
+            // `id_sai` vem RESOLVIDO pelo servidor: quando a direção inverte,
+            // quem sai é o produto DESTA tela — e dois escolhidos que invertem
+            // devolvem o mesmo `id_sai`, com o React reclamando de chave
+            // repetida e podendo omitir um dos avisos. Justamente os avisos que
+            // existem para impedir a fusão errada. O `escolhido` é único por
+            // construção, porque `escolhidos` não aceita repetido.
             escolhido: e.id,
           })),
         ),
@@ -171,14 +189,21 @@ export default function Vincular({
 
   function acrescentar(item: ItemBusca | null) {
     if (!item) return;
-    if (item.id === idProduto) {
-      setErro("É o mesmo cadastro. Escolha outro.");
-      return;
-    }
-    setErro("");
-    setEscolhidos((a) => (a.some((x) => x.id === item.id)
-      ? a
-      : [...a, { id: item.id, rotulo: rotuloDe(item) }]));
+    acrescentarVarios([item]);
+  }
+
+  function acrescentarVarios(itens: ItemBusca[]) {
+    // ⚠️ A guarda contra o proprio cadastro vive AQUI, e nao so no filtro da
+    // busca: o campo de texto resolve por codigo exato sem abrir a janela.
+    const proprio = itens.some((i) => i.id === idProduto);
+    const bons = itens.filter((i) => i.id !== idProduto);
+    setErro(proprio && !bons.length ? "É o mesmo cadastro. Escolha outro." : "");
+    if (!bons.length) return;
+    setEscolhidos((a) => {
+      const tem = new Set(a.map((x) => x.id));
+      return [...a, ...bons.filter((i) => !tem.has(i.id))
+        .map((i) => ({ id: i.id, rotulo: rotuloDe(i) }))];
+    });
   }
 
   const principal = previas[0]?.fica ?? null;
@@ -286,7 +311,7 @@ export default function Vincular({
         <div>
           <Campo
             rotulo="Acrescentar cadastro"
-            dica="código ou nome — pode escolher vários, um de cada vez"
+            dica="código ou nome — na lupa dá para marcar vários de uma vez"
           >
             {/* ⚠️ **`key` para REMONTAR o campo a cada escolha.** Ele guarda o
                 texto digitado em estado próprio e só o sincroniza quando o
@@ -298,6 +323,8 @@ export default function Vincular({
               fonte={PRODUTOS}
               selecionado={null}
               aoEscolher={acrescentar}
+              aoEscolherVarios={acrescentarVarios}
+              jaEscolhidos={escolhidos.map((e) => e.id)}
             />
           </Campo>
         </div>
@@ -334,7 +361,7 @@ export default function Vincular({
                 fusão não acontece, e a pessoa precisa saber disso antes de ler o
                 resultado que não vai valer. */}
             {travados.map((p) => (
-              <Aviso key={`trava-${p.id_sai}`} tipo="erro">
+              <Aviso key={`trava-${p.escolhido}`} tipo="erro">
                 <b>{p.sai.nome}</b> não pode ser absorvido: {p.impedimentos.join("; ")}. Juntar
                 duas histórias de estoque exigiria reescrever o razão, que é append-only. Tire
                 este da lista — o código dele ainda pode apontar para cá pelo item da nota.
@@ -346,7 +373,7 @@ export default function Vincular({
                 sobrevivente seria outro e a pessoa confirmaria uma coisa
                 acontecendo outra. */}
             {divergentes.map((p) => (
-              <Aviso key={`inv-${p.id_sai}`} tipo="erro">
+              <Aviso key={`inv-${p.escolhido}`} tipo="erro">
                 <b>{p.sai.nome}</b> ficaria como o cadastro principal, e não este — porque{" "}
                 {p.motivo_da_direcao}. Tire-o da lista e refaça a partir dele.
               </Aviso>
@@ -375,7 +402,7 @@ export default function Vincular({
                 <p className="rotulo">Sai (vira inativo)</p>
                 <ul className="mt-1 flex flex-col gap-2">
                   {previas.map((p) => (
-                    <li key={p.id_sai}>
+                    <li key={p.escolhido}>
                       <p className="font-semibold">{p.sai.nome}</p>
                       <p className="text-[12.5px] text-suave">
                         <span className="mono">{p.sai.codigo}</span> · Omie{" "}
@@ -474,7 +501,7 @@ export default function Vincular({
                     Baixar do estoque o que foi vendido e nunca saiu da prateleira:
                     <span className="mt-1 block">
                       {comBaixa.map((p) => (
-                        <span key={p.id_sai} className="block text-suave">
+                        <span key={p.escolhido} className="block text-suave">
                           <b>{p.sai.nome}</b>: {p.baixa!.quantidade}
                           {p.baixa!.um ? ` ${p.baixa!.um}` : ""} · saldo{" "}
                           {p.baixa!.saldo_atual} → <b>{p.baixa!.saldo_depois}</b>
