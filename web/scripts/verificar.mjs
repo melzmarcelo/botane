@@ -4032,6 +4032,47 @@ try {
   checar("e o Escape fecha so a busca, deixando a Vincular aberta",
     vincSegue === 1, vincSegue);
 
+  // 🔑 **A janela PAGINA de verdade** (09/09/2026, pedido do dono). Era um
+  // "Mostrar mais" que pedia `limite = 25 x pagina` e trazia tudo desde o
+  // comeco: dava para ver todos os produtos so filtrando, porque percorrer a
+  // lista custava trazer a lista inteira.
+  const paginandoNaBusca = await p.evaluate(async () => {
+    const ultimo = () => [...document.querySelectorAll('[role="dialog"]')].pop();
+    [...document.querySelectorAll('button[aria-label="Buscar produto"]')].pop()?.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const d = ultimo();
+    const rodape = () => (d?.textContent ?? "");
+    const nomes = () => [...(d?.querySelectorAll("li") ?? [])]
+      .map((li) => (li.textContent ?? "").trim()).slice(0, 3);
+    const antes = { texto: rodape().match(/\d+–\d+ de/)?.[0] ?? null, nomes: nomes() };
+    const proxima = [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => b.getAttribute("aria-label") === "Próxima página");
+    proxima?.click();
+    await new Promise((r) => setTimeout(r, 1600));
+    const dd = ultimo();
+    const depois = {
+      texto: (dd?.textContent ?? "").match(/\d+–\d+ de/)?.[0] ?? null,
+      nomes: [...(dd?.querySelectorAll("li") ?? [])]
+        .map((li) => (li.textContent ?? "").trim()).slice(0, 3),
+    };
+    return { temProxima: !!proxima, antes, depois };
+  });
+  checar("a janela de busca tem navegacao de pagina", paginandoNaBusca.temProxima,
+    paginandoNaBusca);
+  // ⚠️ O rodape diz o INTERVALO ("1-25 de 3.183"), nao "quantos ja vieram":
+  // e a diferenca entre saber onde se esta e saber so o tamanho do balde.
+  checar("com o intervalo e o total a vista",
+    !!paginandoNaBusca.antes.texto, paginandoNaBusca.antes);
+  // 🔑 A prova de que e paginacao e nao "mostrar mais": a pagina 2 traz OUTROS
+  // registros, e nao os mesmos com mais embaixo.
+  checar("e a proxima pagina traz outros registros",
+    paginandoNaBusca.depois.nomes.length > 0
+      && JSON.stringify(paginandoNaBusca.depois.nomes)
+         !== JSON.stringify(paginandoNaBusca.antes.nomes),
+    paginandoNaBusca);
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 500));
+
   if (busca) {
     await busca.type(`CERVEJA HEINEKEN PILSEN ${mVinc}`);
     await p.keyboard.press("Tab");

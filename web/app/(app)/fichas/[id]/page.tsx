@@ -308,7 +308,7 @@ export default function EditorFicha() {
    */
   const fonteProduzidos = useMemo<FonteBusca>(
     () => ({
-      ...fonteProdutos(undefined, "tipo=PRODUZIDO"),
+      ...fonteProdutos("tipo=PRODUZIDO"),
       titulo: "Buscar produto produzido",
       singular: "produto",
     }),
@@ -316,7 +316,7 @@ export default function EditorFicha() {
   );
 
   const fonteInsumoOuPreparo = useMemo<FonteBusca>(() => {
-    const produtos = fonteProdutos((p) => p.controla_estoque);
+    const produtos = fonteProdutos("controla_estoque=true");
     return {
       titulo: "Buscar insumo ou preparo",
       placeholder: "código ou nome",

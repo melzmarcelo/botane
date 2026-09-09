@@ -134,7 +134,7 @@ const TIPOS_DA_MAO = ["ENTRADA_MANUAL", "SAIDA_CONSUMO_INTERNO", "SAIDA_PERDA",
                       "TRANSFERENCIA_SAIDA", "TRANSFERENCIA_ENTRADA", "AJUSTE_CUSTO"];
 
 // Ajuste mexe no razão: produto que não controla estoque não tem o que ajustar.
-const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+const PRODUTOS = fonteProdutos("controla_estoque=true");
 
 const VAZIO = {
   id_produto: "",

@@ -34,7 +34,14 @@ export default function PaginaProdutos() {
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [tipo, setTipo] = useEstadoNaUrl<string>("tipo", "");
   const [idCategoria, setIdCategoria] = useEstadoNaUrl<string>("categoria", "");
-  const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
+  // 🔑 **Ativacao em TRES estados** (09/09/2026, pedido do dono). A caixinha
+  // "mostrar inativos" so escolhia entre "os ativos" e "todos" -- nao havia como
+  // perguntar "o que foi desativado?", que e a pergunta de quem esta limpando o
+  // cadastro. Vazio = ativos, que e o padrao de sempre.
+  const [ativacao, setAtivacao] = useEstadoNaUrl<string>("ativacao", "");
+  // 🔑 **A situacao**: rascunho e o que ainda nao foi revisado, e "aprovado" e
+  // o vocabulario da casa para o produto ja revisado (`status = ATIVO`).
+  const [situacao, setSituacao] = useEstadoNaUrl<string>("situacao", "");
   const [erro, setErro] = useState("");
   // 🔑 **Selecao para alteracao multipla** (09/09/2026, pedido do dono).
   // ⚠️ Vive FORA da lista: virar a pagina nao pode perder o que ja foi
@@ -43,7 +50,7 @@ export default function PaginaProdutos() {
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
   const [alterando, setAlterando] = useState(false);
   const pag = usePaginacao("produtos", {
-    filtros: [busca, tipo, idCategoria, inativos],
+    filtros: [busca, tipo, idCategoria, ativacao, situacao],
   });
 
   const carregar = useCallback(async () => {
@@ -56,7 +63,13 @@ export default function PaginaProdutos() {
       if (busca.trim()) q.set("busca", busca.trim());
       if (tipo) q.set("tipo", tipo);
       if (idCategoria) q.set("id_categoria", idCategoria);
-      if (inativos) q.set("incluir_inativos", "true");
+      // ⚠️ "todos" NAO manda `ativo`: manda `incluir_inativos`, que e o que
+      // significa "nao recorte por ativacao". Mandar `ativo` vazio seria pedir
+      // um filtro sem valor, e o servidor trataria como ausente por acidente.
+      if (ativacao === "sim") q.set("ativo", "true");
+      else if (ativacao === "nao") q.set("ativo", "false");
+      else if (ativacao === "todos") q.set("incluir_inativos", "true");
+      if (situacao) q.set("status", situacao);
       const r = await api.listar<ProdutoResumo>(`/produtos?${q}`);
       setLista(r.itens);
       pag.setTotal(r.total);
@@ -64,7 +77,8 @@ export default function PaginaProdutos() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, tipo, idCategoria, inativos, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, tipo, idCategoria, ativacao, situacao,
+      pag.offset, pag.porPagina]);
 
   useEffect(() => {
     api.get<Categoria[]>("/categorias").then(setCategorias).catch(() => {});
@@ -198,14 +212,36 @@ export default function PaginaProdutos() {
               ))}
             </select>
           </label>
-          <label className="flex items-center gap-2 pb-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-erva"
-              checked={inativos}
-              onChange={(e) => setInativos(e.target.checked)}
-            />
-            <span className="text-[14px]">mostrar inativos</span>
+          <label className="sm:w-[150px]">
+            <span className="rotulo">Ativação</span>
+            <select
+              className="campo mt-1.5"
+              value={ativacao}
+              onChange={(e) => setAtivacao(e.target.value)}
+            >
+              {/* ⚠️ O vazio e "Ativo", e nao "Todos": a lista de produtos abre
+                  mostrando o que esta em uso, e inverter esse padrao poria 1.655
+                  cadastros desativados na frente de quem so quer trabalhar. */}
+              <option value="">Ativo</option>
+              <option value="nao">Inativo</option>
+              <option value="todos">Todos</option>
+            </select>
+          </label>
+          <label className="sm:w-[160px]">
+            <span className="rotulo">Situação</span>
+            <select
+              className="campo mt-1.5"
+              value={situacao}
+              onChange={(e) => setSituacao(e.target.value)}
+            >
+              <option value="">Todas</option>
+              <option value="ATIVO">Aprovado</option>
+              <option value="RASCUNHO">Rascunho</option>
+              {/* ⚠️ ARQUIVADO nao foi pedido, mas existe e e para onde vai o
+                  cadastro absorvido numa fusao: sem ele, "Todas" mostraria uma
+                  situacao que o filtro nao sabe nomear. */}
+              <option value="ARQUIVADO">Arquivado</option>
+            </select>
           </label>
         </div>
       </Cartao>

@@ -35,7 +35,7 @@ import Voltar from "@/components/voltar";
  */
 
 // Item de nota vira movimento de estoque: só produto que controla estoque.
-const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+const PRODUTOS = fonteProdutos("controla_estoque=true");
 
 export default function PaginaNota() {
   const { id } = useParams<{ id: string }>();

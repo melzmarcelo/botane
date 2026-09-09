@@ -196,6 +196,22 @@ def listar(
     # ficha todo produto cuja ficha ficou na página seguinte.
     sem_ficha: bool = False,
     incluir_inativos: bool = False,
+    # 🔑 **Ativacao em TRES estados** (09/09/2026, pedido do dono): so ativos,
+    # so inativos, ou todos. `incluir_inativos` sozinho nao dava o do meio -- ele
+    # so escolhia entre "os ativos" e "todos", e nao havia como perguntar "o que
+    # foi desativado?", que e a pergunta de quem esta limpando o cadastro.
+    #
+    # ⚠️ **`incluir_inativos` FICA**, e nao e redundancia: e o que as outras
+    # telas e a exportacao ja mandam. Tirar agora quebraria chamador que nao
+    # tem nada a ver com este pedido. Quando `ativo` vem, ele manda.
+    ativo: bool | None = None,
+    # 🔑 **Dois recortes que eram feitos no NAVEGADOR e agora sao do servidor.**
+    # A janela de busca filtrava a pagina depois de recebe-la, e isso quebrava
+    # duas coisas de uma vez: o total virava o tamanho da pagina (entao nunca
+    # havia segunda pagina) e uma pagina de 25 com um descartado mostrava 24.
+    # Recorte que o servidor sabe fazer nao se faz no cliente.
+    controla_estoque: bool | None = None,
+    excluir_id: int | None = None,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -219,11 +235,14 @@ def listar(
               FROM produtos p
               LEFT JOIN categorias c ON c.id = p.id_categoria
               LEFT JOIN setores s ON s.id = p.id_setor
-             WHERE (%s OR p.ativo)
+             WHERE (%s::boolean IS NULL OR p.ativo = %s)
+               AND (%s::boolean IS NOT NULL OR %s OR p.ativo)
                AND (%s::varchar IS NULL OR p.tipo = %s)
                AND (%s::int IS NULL OR p.id_categoria = %s)
                AND (%s::int IS NULL OR p.id_setor = %s)
                AND (%s::varchar IS NULL OR p.status = %s)
+               AND (%s::boolean IS NULL OR p.controla_estoque = %s)
+               AND (%s::int IS NULL OR p.id <> %s)
                AND (NOT %s OR NOT EXISTS
                     (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id))
                AND (%s::varchar IS NULL
@@ -236,8 +255,11 @@ def listar(
             # vem antes do WHERE. Parâmetro posicional é assim — a ordem do SQL
             # é a ordem da tupla.
             (id_unidade,
-             incluir_inativos, tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
-             status, status, sem_ficha, busca, busca, busca, busca),
+             ativo, ativo, ativo, incluir_inativos,
+             tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
+             status, status,
+             controla_estoque, controla_estoque, excluir_id, excluir_id,
+             sem_ficha, busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas

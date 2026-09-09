@@ -137,7 +137,7 @@ export default function Vincular({
   // janela mostra, e o campo de texto resolve por codigo exato sem passar por
   // ela. Filtro de tela nao e regra.
   const PRODUTOS = useMemo(
-    () => fonteProdutos((p) => p.id !== idProduto),
+    () => fonteProdutos(`excluir_id=${idProduto}`),
     [idProduto],
   );
   // ⚠️ LIGADO por padrão: sem a baixa, o resultado seria "comprou 15, vendeu 10,

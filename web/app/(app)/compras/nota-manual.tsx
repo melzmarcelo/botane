@@ -74,7 +74,7 @@ export type NotaParaEditar = {
 };
 
 // Só produto que controla estoque entra numa nota de entrada.
-const PRODUTOS = fonteProdutos((p) => p.controla_estoque);
+const PRODUTOS = fonteProdutos("controla_estoque=true");
 const FORNECEDORES = fonteFornecedores();
 
 export default function NotaManual({

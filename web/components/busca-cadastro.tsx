@@ -223,7 +223,10 @@ function Janela({
     let vivo = true;
     const t = setTimeout(async () => {
       try {
-        const r = await fonte.buscar(termo, POR_PAGINA * pagina);
+        // 🔑 **Uma pagina, com deslocamento** — nao "tudo desde o comeco
+        // com limite maior", que era o `POR_PAGINA * pagina` de antes: para
+        // chegar ao fim de 3.183 produtos ele buscaria os 3.183.
+        const r = await fonte.buscar(termo, POR_PAGINA, (pagina - 1) * POR_PAGINA);
         if (!vivo) return;
         setItens(r.itens);
         setTotal(r.total);
@@ -346,18 +349,42 @@ function Janela({
         )}
       </div>
 
-      {!!itens && itens.length < total && (
-        <div className="mt-3 flex items-center justify-center gap-3">
-          <button
-            type="button"
-            className="btn btn-secundario"
-            onClick={() => setPagina((n) => n + 1)}
-          >
-            Mostrar mais
-          </button>
+      {/* 🔑 **Paginacao de verdade** (09/09/2026, pedido do dono). Era um
+          "Mostrar mais" que sempre buscava desde o comeco: dava para ver todos
+          os produtos so filtrando, porque percorrer a lista custava trazer a
+          lista inteira. Agora cada pagina e uma pagina, e da para ANDAR.
+          ⚠️ O rodape aparece assim que existe mais de uma pagina — inclusive na
+          ultima, onde o "Mostrar mais" sumia e deixava quem estava no fim sem
+          caminho de volta. */}
+      {!!itens && total > POR_PAGINA && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-3">
           <span className="text-[13px] text-suave">
-            {itens.length} de {total}
+            {(pagina - 1) * POR_PAGINA + 1}–{Math.min(pagina * POR_PAGINA, total)} de{" "}
+            <b className="mono text-texto">{total.toLocaleString("pt-BR")}</b>
           </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="btn btn-secundario px-2.5 py-1"
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}
+              disabled={pagina <= 1}
+              aria-label="Página anterior"
+            >
+              ‹
+            </button>
+            <span className="mono min-w-[76px] text-center text-[13px] text-suave">
+              {pagina} de {Math.max(1, Math.ceil(total / POR_PAGINA))}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secundario px-2.5 py-1"
+              onClick={() => setPagina((n) => n + 1)}
+              disabled={pagina >= Math.ceil(total / POR_PAGINA)}
+              aria-label="Próxima página"
+            >
+              ›
+            </button>
+          </div>
         </div>
       )}
 

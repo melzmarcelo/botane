@@ -27,7 +27,18 @@ export type FonteBusca = {
   placeholder: string;
   /** Como chamar UMA linha desta fonte, para as frases da tela. */
   singular: string;
-  buscar: (termo: string, limite: number) => Promise<{ itens: ItemBusca[]; total: number }>;
+  /**
+   * 🔑 **`offset` existe para a janela PAGINAR de verdade** (09/09/2026,
+   * pedido do dono). Antes ela só sabia "mostrar mais": pedia
+   * `limite = 25 x pagina` e trazia tudo DESDE O COMEÇO de novo — para chegar
+   * ao fim de 3.183 produtos, buscaria os 3.183. Com o deslocamento, cada
+   * página é uma página.
+   */
+  buscar: (
+    termo: string,
+    limite: number,
+    offset?: number,
+  ) => Promise<{ itens: ItemBusca[]; total: number }>;
 };
 
 type ProdutoBruto = {
@@ -44,34 +55,37 @@ type ProdutoBruto = {
  * Produtos. `filtro` recorta o que faz sentido em cada tela — na ficha só entra
  * o que se consome, no ajuste só o que tem estoque.
  */
-export function fonteProdutos(
-  filtro?: (p: ProdutoBruto) => boolean,
-  extra = "",
-): FonteBusca {
+/**
+ * ⚠️ **O recorte vai no `extra`, que e query do SERVIDOR — nao ha filtro de
+ * cliente.** Havia um, e ele quebrava a paginacao de duas formas: o total
+ * passava a ser o tamanho da PAGINA (entao nunca existia segunda pagina) e uma
+ * pagina de 25 com um registro descartado mostrava 24. Recorte que o servidor
+ * sabe fazer nao se faz no navegador — `controla_estoque`, `tipo` e
+ * `excluir_id` sao parametros de `/produtos`.
+ */
+export function fonteProdutos(extra = ""): FonteBusca {
   return {
     titulo: "Buscar produto",
     placeholder: "código ou nome",
     singular: "produto",
-    async buscar(termo, limite) {
+    async buscar(termo, limite, offset = 0) {
       const q = new URLSearchParams({ limite: String(limite) });
+      if (offset) q.set("offset", String(offset));
       if (termo.trim()) q.set("busca", termo.trim());
       const { itens, total } = await api.listar<ProdutoBruto>(
         `/produtos?${q}${extra ? `&${extra}` : ""}`,
       );
-      // A janela pede sempre a primeira página, então o total vem. O `??` é a
-      // rede: sem cabeçalho, o que se sabe é o tamanho do que veio.
-      const filtrados = filtro ? itens.filter(filtro) : itens;
       return {
-        itens: filtrados.map((p) => ({
+        itens: itens.map((p) => ({
           id: p.id,
           codigo: p.codigo,
           nome: p.nome,
           detalhe: [p.um_estoque, p.categoria].filter(Boolean).join(" · ") || null,
           bruto: p as unknown as Record<string, unknown>,
         })),
-        // O total é o do servidor; filtrar no cliente só pode diminuir, e
-        // mostrar "12 de 300" quando 288 foram descartados aqui mentiria.
-        total: filtro ? filtrados.length : (total ?? itens.length),
+        // O total e o do SERVIDOR. O `??` e a rede: sem cabecalho, o que se
+        // sabe e o tamanho do que veio.
+        total: total ?? itens.length,
       };
     },
   };
@@ -90,11 +104,12 @@ export function fonteFornecedores(): FonteBusca {
     titulo: "Buscar fornecedor",
     placeholder: "nome, fantasia ou CNPJ",
     singular: "fornecedor",
-    async buscar(termo, limite) {
+    async buscar(termo, limite, offset = 0) {
       // 🔑 **Só quem VENDE para a casa** (04/09/2026). A tabela de pessoas passou
       // a guardar funcionário e sócio; sem este recorte, o seletor de fornecedor
       // da nota viraria uma lista de gente da casa.
       const q = new URLSearchParams({ limite: String(limite), so_fornecedores: "true" });
+      if (offset) q.set("offset", String(offset));
       if (termo.trim()) q.set("busca", termo.trim());
       const { itens, total } = await api.listar<FornecedorBruto>(`/fornecedores?${q}`);
       return {
@@ -128,8 +143,9 @@ export function fontePessoas(): FonteBusca {
     titulo: "Buscar pessoa",
     placeholder: "nome ou CNPJ",
     singular: "pessoa",
-    async buscar(termo, limite) {
+    async buscar(termo, limite, offset = 0) {
       const q = new URLSearchParams({ limite: String(limite) });
+      if (offset) q.set("offset", String(offset));
       if (termo.trim()) q.set("busca", termo.trim());
       const { itens, total } = await api.listar<FornecedorBruto>(`/fornecedores?${q}`);
       return {
@@ -175,7 +191,7 @@ export function fonteDaLista(
     titulo,
     placeholder,
     singular,
-    async buscar(termo, limite) {
+    async buscar(termo, limite, offset = 0) {
       const alvo = termo.trim().toLowerCase();
       const casam = itens.filter(
         (i) =>
@@ -183,7 +199,10 @@ export function fonteDaLista(
           i.nome.toLowerCase().includes(alvo) ||
           (i.codigo ?? "").toLowerCase().includes(alvo),
       );
-      return { itens: casam.slice(0, limite), total: casam.length };
+      // ⚠️ Esta fonte ja tem a lista INTEIRA na memoria (sao poucas por
+      // natureza), entao aqui o corte e mesmo no navegador -- e o `total`
+      // continua sendo o do filtro, nao o da pagina.
+      return { itens: casam.slice(offset, offset + limite), total: casam.length };
     },
   };
 }

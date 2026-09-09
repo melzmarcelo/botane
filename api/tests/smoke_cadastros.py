@@ -249,6 +249,77 @@ checar("filtro por tipo funciona", st == 200 and all(p["tipo"] == "INSUMO" for p
 st, c = chamar("GET", "/produtos/contagem", token=token)
 checar("contagem responde", st == 200 and c.get("total", 0) >= 2, c)
 
+print("7c. os filtros de ativacao e de situacao")
+marca_f = uuid.uuid4().hex[:6].upper()
+N_ATIVO = f"FILTRO ATIVO SMOKE {marca_f}"
+N_RASC = f"FILTRO RASCUNHO SMOKE {marca_f}"
+N_INAT = f"FILTRO INATIVO SMOKE {marca_f}"
+# 🔑 **Ativacao em TRES estados** (09/09/2026, pedido do dono): so ativos, so
+# inativos, ou todos. O `incluir_inativos` sozinho so escolhia entre "ativos" e
+# "todos" -- nao havia como perguntar "o que foi desativado?", que e a pergunta
+# de quem esta limpando o cadastro.
+_st, p_ativo = chamar("POST", "/produtos", {
+    "codigo": f"FA-{marca_f}", "nome": N_ATIVO,
+    "tipo": "INSUMO", "um_estoque": "UN", "status": "ATIVO"}, token=token)
+_st, p_rasc = chamar("POST", "/produtos", {
+    "codigo": f"FR-{marca_f}", "nome": N_RASC,
+    "tipo": "INSUMO", "status": "RASCUNHO"}, token=token)
+_st, p_inat = chamar("POST", "/produtos", {
+    "codigo": f"FI-{marca_f}", "nome": N_INAT,
+    "tipo": "INSUMO", "um_estoque": "UN", "status": "ATIVO"}, token=token)
+chamar("DELETE", f"/produtos/{p_inat['id']}", token=token)   # DELETE = desativa
+
+# ⚠️ **Procura pela MARCA da rodada, nao por "FILTRO".** A primeira versao
+# buscou "FILTRO" e trouxe dezenas de produtos reais do catalogo junto -- as
+# assercoes de "so o inativo" falhavam por causa deles, nao do filtro.
+# E os nomes voltam em MAIUSCULAS: o cadastro os normaliza.
+def _nomes(qs):
+    _st, r = chamar("GET", f"/produtos?busca={marca_f}&{qs}", token=token)
+    return {x["nome"] for x in (r or [])}
+
+
+so_ativos = _nomes("ativo=true")
+checar("ativo=true traz o ativo", N_ATIVO in so_ativos, so_ativos)
+checar("e NAO traz o inativo", N_INAT not in so_ativos, so_ativos)
+
+so_inativos = _nomes("ativo=false")
+# ⚠️ Este era o estado que NAO existia: sem ele, a unica forma de ver o que
+# foi desativado era pedir todos e conferir linha a linha.
+checar("ativo=false traz SO o inativo",
+       N_INAT in so_inativos
+       and N_ATIVO not in so_inativos, so_inativos)
+
+todos = _nomes("incluir_inativos=true")
+checar("sem `ativo`, incluir_inativos=true traz os dois",
+       N_ATIVO in todos
+       and N_INAT in todos, todos)
+
+padrao = _nomes("")
+checar("e o padrao continua so os ativos",
+       N_INAT not in padrao, padrao)
+
+# 🔑 A situacao: Aprovado (ATIVO) x Rascunho.
+aprovados = _nomes("status=ATIVO")
+checar("status=ATIVO traz o aprovado, nao o rascunho",
+       N_ATIVO in aprovados
+       and N_RASC not in aprovados, aprovados)
+rascunhos = _nomes("status=RASCUNHO")
+checar("status=RASCUNHO traz so o rascunho",
+       N_RASC in rascunhos
+       and N_ATIVO not in rascunhos, rascunhos)
+
+# ⚠️ Os dois filtros se combinam: e o caso de "o que esta desativado e ainda
+# era rascunho?", que e onde mora o lixo do cadastro.
+combinado = _nomes("ativo=false&status=ATIVO")
+checar("os dois filtros se somam",
+       N_INAT in combinado
+       and N_RASC not in combinado, combinado)
+
+for pid in (p_ativo.get("id"), p_rasc.get("id"), p_inat.get("id")):
+    if pid:
+        chamar("DELETE", f"/produtos/{pid}", token=token)
+
+
 print("7b. paginação e loja")
 # Página de 2 só prova alguma coisa se houver uma TERCEIRA linha: numa base
 # recém-limpa a suíte tinha criado exatamente 2 produtos, o total batia com o
