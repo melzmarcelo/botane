@@ -102,16 +102,42 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
     )
     p = dict(cur.fetchone() or {})
     conversoes = []
+    custo_zera = False
     # ⚠️ **O custo DIVIDE, as quantidades MULTIPLICAM.** O custo é por unidade:
     # se a caixa de 12 custava 60, a unidade custa 5. A quantidade é o inverso:
     # um mínimo de 2 caixas é um mínimo de 24 unidades. Trocar os dois sentidos
     # é o engano natural aqui, e daria 720 de custo por unidade.
     if p.get("custo_referencia") is not None:
+        antes_custo = dec(p["custo_referencia"])
+        depois_custo = antes_custo / fator
         conversoes.append({
             "campo": "custo_referencia",
-            "de": float(dec(p["custo_referencia"])),
-            "para": float(dec(p["custo_referencia"]) / fator),
+            "de": float(antes_custo),
+            "para": float(depois_custo),
         })
+        # 🔑 **"O custo vai ZERAR" é a pergunta que precisa ser feita antes**
+        # (09/09/2026, relatado pelo dono). Aconteceu com uma caixa de 1.000
+        # unidades a R$ 33,99: um fator de conversão invertido dividiu por mil, o
+        # custo virou R$ 0,03 — que a tela mostra com duas casas como 0,00 — e
+        # nada avisou. Corrigir o fator de volta NÃO desfaz, porque a conversão
+        # só roda quando a unidade muda, e `custo_referencia` não é editável por
+        # tela nenhuma. O valor some e não volta.
+        #
+        # ⚠️ **O corte é a QUEDA, não o valor final.** A primeira versão perguntou
+        # só quando o resultado ficava abaixo de meio centavo — e o caso real não
+        # passou: R$ 33,99 ÷ 1000 dá R$ 0,03, que não é "zero" para o computador
+        # e é exatamente "zerado" para quem olha. O que denuncia o engano é a
+        # ORDEM DE GRANDEZA: dividir o custo por cem ou mais quase nunca é o que
+        # alguém quis fazer de propósito.
+        #
+        # ⚠️ Uma conversão legítima e grande (KG para G divide por mil) também
+        # cai aqui e pede confirmação. É o preço certo a pagar: o Sim custa um
+        # clique, e o Não custa o custo do produto.
+        custo_zera = bool(
+            antes_custo > 0
+            and (depois_custo < Decimal("0.01")
+                 or antes_custo / depois_custo >= 100)
+        )
     for campo in ("estoque_minimo", "estoque_maximo"):
         if p.get(campo) is not None:
             conversoes.append({
@@ -131,6 +157,9 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
 
     return {
         "muda": True, "pode": True,
+        # Verdadeiro quando o custo desaparece aos olhos de quem olha. Quem
+        # chama tem de perguntar antes de gravar.
+        "custo_zera": custo_zera,
         "de": a, "para": n,
         "fator": float(fator), "origem_do_fator": origem,
         "conversoes": conversoes,
@@ -139,7 +168,7 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
     }
 
 
-def aplicar(cur, id_produto: int, plano: dict) -> None:
+def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) -> None:
     """Grava as conversões do plano. Só é chamado quando `pode` é verdadeiro.
 
     ⚠️ **Roda no MESMO cursor do UPDATE do produto.** Se a gravação da unidade
@@ -157,3 +186,20 @@ def aplicar(cur, id_produto: int, plano: dict) -> None:
             "UPDATE produto_unidades SET fator = fator * %s WHERE id_produto = %s",
             (fator, id_produto),
         )
+
+    # 🔑 **O que a conversão reescreveu fica GRAVADO.** O `PUT` do produto audita
+    # nome, tipo, status e unidades — o custo não estava na lista, então uma
+    # troca de unidade errada apagava o valor antigo sem deixar de onde
+    # recuperá-lo. Foi assim que R$ 33,99 viraram R$ 0,03 e não houve como
+    # voltar. Aqui fica o antes e o depois de cada campo.
+    import auditoria
+
+    auditoria.registrar(
+        cur, id_usuario, "produto", id_produto, "troca_de_unidade",
+        antes={c["campo"]: c["de"] for c in plano["conversoes"]},
+        depois={
+            **{c["campo"]: c["para"] for c in plano["conversoes"]},
+            "de": plano.get("de"), "para": plano.get("para"),
+            "fator": plano.get("fator"),
+        },
+    )

@@ -229,7 +229,12 @@ function Janela({
         const r = await fonte.buscar(termo, POR_PAGINA, (pagina - 1) * POR_PAGINA);
         if (!vivo) return;
         setItens(r.itens);
-        setTotal(r.total);
+        // ⚠️ **Nulo e "o servidor nao disse", nao "zero".** Ele so manda o total
+        // na PRIMEIRA pagina — recontar a cada clique custaria a tabela inteira.
+        // Trocar o nulo pelo tamanho do que veio devolvia 25 na pagina 2, e o
+        // rodape sumia justamente para quem estava navegando. Guarda o que ja
+        // tinha; o `|| r.itens.length` so vale no primeiro carregamento.
+        setTotal((antes) => r.total ?? (antes || r.itens.length));
         setMarcado(0);
         setErro("");
       } catch (e) {

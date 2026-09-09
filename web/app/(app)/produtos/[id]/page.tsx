@@ -16,7 +16,7 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import CodigosDoProduto, { CodigoExterno } from "./codigos";
@@ -140,6 +140,25 @@ export default function FormularioProduto() {
   const [codigos, setCodigos] = useState<CodigoExterno[]>([]);
   const [recarga, setRecarga] = useState(0);
 
+  /**
+   * 🔑 **A previa da troca de unidade, ao vivo** (09/09/2026, relato do dono:
+   * "conforme vou mexendo no fator de conversao o custo nao e ajustado em tempo
+   * real"). Trocar a unidade CONVERTE o custo no servidor — e o numero so
+   * aparecia depois de gravar, quando ja nao havia volta.
+   *
+   * ⚠️ Aconteceu com uma caixa de 1.000 unidades a R$ 33,99: um fator
+   * invertido dividiu por mil, o custo virou R$ 0,03 e nada avisou.
+   */
+  const [previaUnidade, setPreviaUnidade] = useState<{
+    muda: boolean;
+    pode: boolean;
+    motivo?: string;
+    custo_zera?: boolean;
+    resumo?: string;
+    conversoes?: { campo: string; de: number; para: number }[];
+  } | null>(null);
+  const [confirmandoCusto, setConfirmandoCusto] = useState(false);
+
   useEffect(() => {
     if (novo) return;
     api
@@ -170,6 +189,30 @@ export default function FormularioProduto() {
       .finally(() => setCarregando(false));
   }, [id, novo, recarga]);
 
+  // ⚠️ So depois de a tela ter carregado, e so quando a unidade REALMENTE
+  // mudou: pedir a previa a cada tecla do nome seria ruido no servidor.
+  useEffect(() => {
+    if (novo || carregando || !f.um_estoque) {
+      setPreviaUnidade(null);
+      return;
+    }
+    let valeu = true;
+    const q = new URLSearchParams({ um_estoque: f.um_estoque });
+    if (f.um_compra) q.set("um_compra", f.um_compra);
+    if (f.fator_compra) q.set("fator_compra", f.fator_compra.replace(",", "."));
+    const t = setTimeout(() => {
+      api
+        .get<typeof previaUnidade>(`/produtos/${id}/troca-de-unidade?${q}`)
+        .then((r) => valeu && setPreviaUnidade(r))
+        .catch(() => valeu && setPreviaUnidade(null));
+    }, 400);
+    return () => {
+      valeu = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, novo, carregando, f.um_estoque, f.um_compra, f.fator_compra]);
+
   async function salvarPrecoDaLoja(valor: number | null) {
     setSalvandoPreco(true);
     try {
@@ -199,8 +242,15 @@ export default function FormularioProduto() {
     });
   }
 
-  async function salvar(e: FormEvent) {
+  async function salvar(e: FormEvent, confirmado = false) {
     e.preventDefault();
+    // 🔑 **Pergunta ANTES de gravar quando o custo despenca.** O servidor
+    // tambem recusa sem confirmacao — esta janela existe para a pessoa ver os
+    // dois numeros e responder, nao para ser a unica guarda.
+    if (!confirmado && previaUnidade?.muda && previaUnidade.custo_zera) {
+      setConfirmandoCusto(true);
+      return;
+    }
     setSalvando(true);
     setErro("");
     const corpo = {
@@ -271,7 +321,19 @@ export default function FormularioProduto() {
           ao: () => router.push("/produtos/novo"),
         });
       } else {
-        await api.put(`/produtos/${id}`, { ...corpo, ativo: f.ativo });
+        await api.put(`/produtos/${id}`, {
+          ...corpo,
+          ativo: f.ativo,
+          confirmar_troca_de_unidade: confirmado,
+        });
+        // 🔑 **Reler o produto depois de salvar** (09/09/2026, relato do dono:
+        // "preciso dar F5 para mostrar o custo certo"). O servidor TRANSFORMA o
+        // que recebe: o nome vira maiuscula, e trocar a unidade de estoque
+        // CONVERTE o custo — 60,00/CX vira 5,00/UN. Sem reler, a tela seguia
+        // mostrando 60,00 exatamente no momento em que o numero acabara de
+        // mudar, e so o F5 revelava. O `recarga` refaz a busca da tela e dos
+        // cartoes que leem do servidor.
+        setRecarga((n) => n + 1);
         aviso.sucesso(`${f.nome.trim()} salvo.`, {
           texto: "voltar para a lista",
           ao: () => router.push("/produtos"),
@@ -397,6 +459,63 @@ export default function FormularioProduto() {
 
       {!podeEditar && <Aviso tipo="info">Você tem acesso de leitura a esta tela.</Aviso>}
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {/* 🔑 **O que a troca de unidade vai fazer, enquanto se digita.** Era
+          invisivel: o custo so mudava depois de gravar, e ai nao havia volta. */}
+      {previaUnidade?.muda && !previaUnidade.pode && (
+        <Aviso tipo="erro">{previaUnidade.motivo}</Aviso>
+      )}
+      {previaUnidade?.muda && previaUnidade.pode && (
+        <Aviso tipo={previaUnidade.custo_zera ? "erro" : "info"}>
+          <b>{previaUnidade.resumo}</b>
+          {(previaUnidade.conversoes ?? []).map((c) => (
+            <span key={c.campo} className="mt-1 block">
+              {c.campo === "custo_referencia"
+                ? "O custo passa de "
+                : `${c.campo === "estoque_minimo" ? "O mínimo" : "O máximo"} passa de `}
+              <b>{reais(c.de)}</b> para <b>{reais(c.para)}</b>
+              {c.campo !== "custo_referencia" && " (na nova unidade)"}
+            </span>
+          ))}
+          {previaUnidade.custo_zera && (
+            <span className="mt-1 block">
+              ⚠️ Isso deixa o custo <b>praticamente zerado</b>. Se o fator estiver
+              invertido, o valor se perde e não volta — o sistema vai perguntar
+              antes de gravar.
+            </span>
+          )}
+        </Aviso>
+      )}
+
+      {confirmandoCusto && (
+        <Confirmacao
+          titulo="O custo vai ficar zerado. Seguir assim?"
+          perigo
+          rotuloConfirmar="Sim, gravar"
+          ocupado={salvando}
+          aoConfirmar={() => {
+            setConfirmandoCusto(false);
+            // ⚠️ O `as` existe porque `salvar` espera um evento de formulario e
+            // aqui nao ha um: o que importa e o `preventDefault`, que o objeto
+            // abaixo cumpre.
+            void salvar({ preventDefault() {} } as React.FormEvent, true);
+          }}
+          aoCancelar={() => setConfirmandoCusto(false)}
+        >
+          {(previaUnidade?.conversoes ?? [])
+            .filter((c) => c.campo === "custo_referencia")
+            .map((c) => (
+              <p key={c.campo}>
+                O custo deste produto passa de <b>{reais(c.de)}</b> para{" "}
+                <b>{reais(c.para)}</b>. {previaUnidade?.resumo}
+              </p>
+            ))}
+          <p className="mt-2">
+            Se o fator de conversão estiver invertido, o custo se perde e não há
+            como desfazer pela tela.
+          </p>
+        </Confirmacao>
+      )}
 
       <Cartao titulo="Identificação">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -616,7 +735,14 @@ export default function FormularioProduto() {
           é dado de estoque e não vira dado de cadastro por estar nesta tela. */}
       {!novo && f.controla_estoque && pode("estoque.saldos") && (
         <Cartao titulo="Custo">
-          <CustoDoProduto idProduto={Number(id)} um={f.um_estoque || null} />
+          {/* ⚠️ `recarga` aqui NAO e enfeite: este cartao busca por conta
+              propria, e sem ele continuaria mostrando o custo de antes do
+              salvamento — que e justamente o que obrigava ao F5. */}
+          <CustoDoProduto
+            idProduto={Number(id)}
+            um={f.um_estoque || null}
+            recarga={recarga}
+          />
         </Cartao>
       )}
 

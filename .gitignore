@@ -46,3 +46,8 @@ api/_api.log
 # Log do uvicorn local (o processo segura o arquivo)
 _api.log
 _api.err
+
+# Rodadas da bateria e log da API deste turno — registro do dia, nao codigo.
+# ⚠️ Ficam com ponto na frente de proposito: no D:, fora do que o deploy copia.
+web/.bateria*.txt
+api/.log-api.txt

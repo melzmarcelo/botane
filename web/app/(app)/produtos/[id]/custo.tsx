@@ -63,7 +63,21 @@ const FONTES: Record<Linha["fonte"], { rotulo: string; cor: "erva" | "neutro" | 
   referencia: { rotulo: "referência", cor: "alerta" },
 };
 
-export default function CustoDoProduto({ idProduto, um }: { idProduto: number; um: string | null }) {
+export default function CustoDoProduto({
+  idProduto,
+  um,
+  recarga = 0,
+}: {
+  idProduto: number;
+  um: string | null;
+  /**
+   * ⚠️ **Muda quando a tela salva.** Este cartao busca sozinho, e o custo e
+   * um dos numeros que o SERVIDOR reescreve: trocar a unidade de estoque
+   * converte 60,00/CX em 5,00/UN. Sem isto ele seguiria mostrando o valor
+   * antigo depois do salvamento — e so o F5 revelava o certo.
+   */
+  recarga?: number;
+}) {
   const [c, setC] = useState<Custo | null>(null);
   const [erro, setErro] = useState("");
   const [aberto, setAberto] = useState(false);
@@ -74,7 +88,7 @@ export default function CustoDoProduto({ idProduto, um }: { idProduto: number; u
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao consultar o custo");
     }
-  }, [idProduto]);
+  }, [idProduto, recarga]);
 
   useEffect(() => {
     void carregar();

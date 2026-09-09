@@ -310,6 +310,33 @@ def alteracao_multipla(
             ctx.id_usuario, simular=body.simular)
 
 
+@router.get("/{id_produto}/troca-de-unidade")
+def previa_da_troca_de_unidade(
+        id_produto: int,
+        um_estoque: str,
+        um_compra: str | None = None,
+        fator_compra: float | None = None,
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O que a troca de unidade faria com o custo — ANTES de salvar.
+
+    🔑 **"Conforme vou mexendo no fator, o custo nao e ajustado em tempo real"**
+    (09/09/2026, relato do dono). A tela precisa dizer, enquanto a pessoa digita,
+    que 33,99 vai virar 0,03 — e nao depois, quando ja gravou e nao ha volta.
+
+    ⚠️ Le e nao escreve. E a MESMA funcao que o `PUT` usa para decidir
+    (`troca_de_unidade.avaliar`): duas implementacoes divergiriam, e a
+    divergencia apareceria como "a tela prometeu um numero e gravou outro".
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (id_produto,))
+        atual = cur.fetchone()
+        if not atual:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.")
+        return troca_de_unidade.avaliar(
+            cur, id_produto, atual["um_estoque"], um_estoque,
+            um_compra, fator_compra, motor_custos._carregar_ums(cur))
+
+
 @router.get("/ean-das-notas")
 def ean_das_notas_previa(
         ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
@@ -884,6 +911,21 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         if plano["muda"] and not plano["pode"]:
             raise HTTPException(status_code=400, detail=plano["motivo"])
 
+        # ⚠️ **Custo que some exige um SIM explicito.** Nao e aviso de tela: quem
+        # chama por outro caminho tambem tem de responder. Sem `confirmar`, a
+        # recusa vem com os DOIS numeros, para a resposta ser informada.
+        if plano.get("custo_zera") and not dados.pop("confirmar_troca_de_unidade", False):
+            c = next(x for x in plano["conversoes"] if x["campo"] == "custo_referencia")
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Trocar de {plano['de']} para {plano['para']} com fator "
+                        f"{plano['fator']:g} derruba o custo de R$ {c['de']:.2f} "
+                        f"para R$ {c['para']:.2f} — na pratica, zerado. "
+                        f"Se o fator estiver invertido, o custo se perde e nao "
+                        f"volta. Confirme se e isso mesmo."),
+            )
+        dados.pop("confirmar_troca_de_unidade", None)
+
         campos = {k: v for k, v in dados.items() if k in _EDITAVEIS}
         if campos:
             sets = ", ".join(f"{c} = %s" for c in campos)
@@ -893,7 +935,7 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         # ⚠️ **Depois do UPDATE da unidade, e no MESMO cursor.** Meio caminho
         # aqui seria um custo dividido por doze num produto que continuou em CX.
         if plano["muda"] and plano["pode"]:
-            troca_de_unidade.aplicar(cur, id_produto, plano)
+            troca_de_unidade.aplicar(cur, id_produto, plano, ctx.id_usuario)
 
         _gravar_preco(cur, id_produto, preco, ctx.id_usuario)
         if fornecedores is not None:

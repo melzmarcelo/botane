@@ -321,7 +321,12 @@ export default function EditorFicha() {
       titulo: "Buscar insumo ou preparo",
       placeholder: "código ou nome",
       singular: "insumo",
-      async buscar(termo, limite) {
+      // ⚠️ **Fonte COMPOSTA: preparos em memoria + produtos do servidor.** Ela
+      // ignorava o `offset` e repetia os preparos em TODA pagina — na pagina 2
+      // apareceriam de novo, empurrando os produtos e mentindo o total. Agora os
+      // preparos entram so na primeira pagina, e o deslocamento dos produtos
+      // desconta o espaco que eles ocuparam.
+      async buscar(termo, limite, offset = 0) {
         const alvo = termo.trim().toLowerCase();
         const preparos: ItemBusca[] = opcoesSubficha
           .filter((f) => !alvo || (f.produto ?? "").toLowerCase().includes(alvo))
@@ -331,8 +336,18 @@ export default function EditorFicha() {
             nome: f.produto,
             detalhe: `preparo com ficha · v${f.versao}`,
           }));
-        const r = await produtos.buscar(termo, limite);
-        return { itens: [...preparos, ...r.itens], total: r.total + preparos.length };
+        const naPrimeira = offset === 0 ? preparos : [];
+        const r = await produtos.buscar(
+          termo,
+          limite - naPrimeira.length,
+          Math.max(0, offset - preparos.length),
+        );
+        return {
+          itens: [...naPrimeira, ...r.itens],
+          // ⚠️ Nulo continua nulo: e "o servidor nao disse", e quem chama guarda
+          // o que ja tinha. Somar os preparos a um nulo daria o numero deles.
+          total: r.total === null ? null : r.total + preparos.length,
+        };
       },
     };
   }, [opcoesSubficha]);

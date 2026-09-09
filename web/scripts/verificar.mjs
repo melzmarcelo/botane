@@ -1340,8 +1340,17 @@ try {
     checar("a foto sobe pela rota da ficha",
       subiu.status === 200 && !!subiu.dados?.foto_url, subiu);
     await irPara(p, `${WEB}/fichas/${idFicha}`);
+    // ⚠️ **Espera a imagem CARREGAR, nao a tag aparecer.** A tag existe assim
+    // que o React desenha; o `naturalWidth` so passa de zero quando o arquivo
+    // chega. Esperando so o elemento, a checagem lia a largura no instante
+    // seguinte e reprovava por impaciencia — a mesma familia dos 1.200 ms fixos
+    // da busca de ajustes.
     await p.waitForFunction(
-      () => !!document.querySelector('img[alt^="Foto de"]'), { timeout: 12000 },
+      () => {
+        const i = document.querySelector('img[alt^="Foto de"]');
+        return !!i && (i.complete ? i.naturalWidth > 0 : false);
+      },
+      { timeout: 20000, polling: 250 },
     ).catch(() => {});
     const comFoto = await p.evaluate(() => {
       const img = document.querySelector('img[alt^="Foto de"]');
@@ -2977,6 +2986,38 @@ try {
   // depois de `/produtos/{id}/locais` responder, e dormir e afirmar é supor a
   // precondição.
   await p.waitForSelector("#locais-do-produto", { timeout: 15000 });
+
+  // 🔑 **Salvar RECARREGA a tela** (09/09/2026, relato do dono: "preciso dar
+  // F5 para mostrar o custo certo"). O servidor TRANSFORMA o que recebe — o
+  // nome vira maiuscula, e trocar a unidade de estoque converte o custo. Sem
+  // reler, a tela seguia mostrando o valor de antes no exato momento em que ele
+  // mudou.
+  // ⚠️ A prova usa o nome porque a transformacao e visivel e barata: digita-se
+  // minusculo, e o campo tem de mostrar MAIUSCULO sem ninguem recarregar nada.
+  const nomeMinusculo = `prod local ${mLoc} renomeado`;
+  await p.evaluate((novoNome) => {
+    const campo = document.querySelector('input[name="nome"], #nome')
+      ?? [...document.querySelectorAll("input")].find(
+        (i) => (i.value ?? "").length > 3 && i.type === "text");
+    if (campo) {
+      const set = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, "value").set;
+      set.call(campo, novoNome);
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }, nomeMinusculo);
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => /^Salvar$/.test(b.textContent?.trim() ?? ""))?.click();
+  });
+  // Espera o CONTEUDO: o campo mostrando o nome ja normalizado pelo servidor.
+  const releu = await p.waitForFunction(
+    (esperado) => [...document.querySelectorAll("input")]
+      .some((i) => (i.value ?? "").trim() === esperado),
+    { timeout: 15000, polling: 250 }, nomeMinusculo.toUpperCase(),
+  ).then(() => true).catch(() => false);
+  checar("salvar releu o produto do servidor, sem F5", releu, nomeMinusculo);
+
   const textoLoc = await textoVisivel(p);
   checar("a tela do produto diz em que prateleiras ele está",
     /Onde este produto fica/i.test(textoLoc), textoLoc.slice(0, 160));
@@ -4044,14 +4085,14 @@ try {
     const rodape = () => (d?.textContent ?? "");
     const nomes = () => [...(d?.querySelectorAll("li") ?? [])]
       .map((li) => (li.textContent ?? "").trim()).slice(0, 3);
-    const antes = { texto: rodape().match(/\d+–\d+ de/)?.[0] ?? null, nomes: nomes() };
+    const antes = { texto: rodape().match(/\d+–\d+ de [\d.]+/)?.[0] ?? null, nomes: nomes() };
     const proxima = [...(d?.querySelectorAll("button") ?? [])]
       .find((b) => b.getAttribute("aria-label") === "Próxima página");
     proxima?.click();
     await new Promise((r) => setTimeout(r, 1600));
     const dd = ultimo();
     const depois = {
-      texto: (dd?.textContent ?? "").match(/\d+–\d+ de/)?.[0] ?? null,
+      texto: (dd?.textContent ?? "").match(/\d+–\d+ de [\d.]+/)?.[0] ?? null,
       nomes: [...(dd?.querySelectorAll("li") ?? [])]
         .map((li) => (li.textContent ?? "").trim()).slice(0, 3),
     };
@@ -4070,6 +4111,19 @@ try {
       && JSON.stringify(paginandoNaBusca.depois.nomes)
          !== JSON.stringify(paginandoNaBusca.antes.nomes),
     paginandoNaBusca);
+  // ⚠️ **O rodape tem de CONTINUAR na pagina 2** — e esta checagem faltava.
+  // O servidor manda o `X-Total` so na primeira pagina (recontar a cada clique
+  // custaria a tabela inteira); a janela trocava o nulo pelo tamanho do que
+  // veio, entao na pagina 2 o total virava 25 e o rodape sumia, deixando quem
+  // navegava sem caminho de volta. A checagem anterior olhava so as linhas e
+  // passou verde com o defeito na tela.
+  checar("e o rodape CONTINUA na segunda pagina",
+    !!paginandoNaBusca.depois.texto, paginandoNaBusca.depois);
+  // E o total nao pode encolher ao virar a pagina: ele e o mesmo filtro.
+  checar("com o mesmo total da primeira",
+    (paginandoNaBusca.antes.texto ?? "").split(" de ")[1]
+      === (paginandoNaBusca.depois.texto ?? "").split(" de ")[1],
+    [paginandoNaBusca.antes.texto, paginandoNaBusca.depois.texto]);
   await p.keyboard.press("Escape");
   await new Promise((r) => setTimeout(r, 500));
 

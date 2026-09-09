@@ -38,7 +38,17 @@ export type FonteBusca = {
     termo: string,
     limite: number,
     offset?: number,
-  ) => Promise<{ itens: ItemBusca[]; total: number }>;
+  ) => Promise<{
+    itens: ItemBusca[];
+    /**
+     * ⚠️ **`null` quer dizer "o servidor nao disse", nao "zero".** O total sai
+     * numa consulta separada e SO na primeira pagina — virar a pagina nao muda
+     * o total, e recontar custaria a tabela inteira a cada clique. Quem chama
+     * guarda o que ja tinha; trocar o nulo por `itens.length` devolve o tamanho
+     * da PAGINA e faz o rodape sumir na pagina 2, que foi exatamente o defeito.
+     */
+    total: number | null;
+  }>;
 };
 
 type ProdutoBruto = {
@@ -83,9 +93,8 @@ export function fonteProdutos(extra = ""): FonteBusca {
           detalhe: [p.um_estoque, p.categoria].filter(Boolean).join(" · ") || null,
           bruto: p as unknown as Record<string, unknown>,
         })),
-        // O total e o do SERVIDOR. O `??` e a rede: sem cabecalho, o que se
-        // sabe e o tamanho do que veio.
-        total: total ?? itens.length,
+        // ⚠️ Cru, inclusive o nulo: quem chama e que sabe o que ja tinha.
+        total,
       };
     },
   };
@@ -120,7 +129,7 @@ export function fonteFornecedores(): FonteBusca {
           detalhe: [f.nome_fantasia ? f.nome : null, f.cidade].filter(Boolean).join(" · ") || null,
           bruto: f as unknown as Record<string, unknown>,
         })),
-        total: total ?? itens.length,
+        total,
       };
     },
   };
@@ -168,7 +177,7 @@ export function fontePessoas(): FonteBusca {
             bruto: f as unknown as Record<string, unknown>,
           };
         }),
-        total: total ?? itens.length,
+        total,
       };
     },
   };

@@ -161,10 +161,37 @@ checar("e o custo continua 90,00", perto(d["custo_referencia"], 90), d)
 print("\n4. converte por grandeza quando ela responde: KG -> G")
 farinha = criar("FARINHA", "KG")
 escrever_custo(farinha, 8)
+# 🔑 **Dividir o custo por cem ou mais PERGUNTA antes** (09/09/2026, relato do
+# dono). Aconteceu com uma caixa de 1.000 unidades a R$ 33,99: um fator
+# invertido dividiu por mil, o custo virou R$ 0,03 e nada avisou — e corrigir o
+# fator de volta nao desfaz, porque a conversao so roda quando a unidade muda.
+# ⚠️ KG -> G divide por mil e cai na mesma guarda, mesmo sendo legitimo. E o
+# preco certo: o Sim custa um clique, o Nao custa o custo do produto.
 st, r = chamar("PUT", f"/produtos/{farinha}", {"um_estoque": "G"}, token=token)
-checar("KG -> G é aceito sem precisar de fator", st == 200, (st, r))
+checar("KG -> G pede confirmacao, porque o custo despenca", st == 409, (st, r))
+checar("e a recusa mostra os DOIS numeros",
+       "8" in str(r.get("detail", "")) and "0.01" in str(r.get("detail", "")),
+       r.get("detail"))
+d = campos_de(farinha, ["um_estoque", "custo_referencia"])
+# ⚠️ Recusa e recusa: nada pode ter sido gravado pela metade.
+checar("a unidade NAO mudou sem o sim", d["um_estoque"] == "KG", d)
+checar("e o custo continua 8,00", perto(d["custo_referencia"], 8), d)
+
+st, r = chamar("PUT", f"/produtos/{farinha}",
+               {"um_estoque": "G", "confirmar_troca_de_unidade": True}, token=token)
+checar("com o sim explicito, a troca acontece", st == 200, (st, r))
 d = campos_de(farinha, ["um_estoque", "custo_referencia"])
 checar("o custo virou 0,008 por grama", perto(d["custo_referencia"], 0.008, 6), d)
+
+# 🔑 **O custo antigo fica AUDITADO.** Antes ele sumia sem deixar de onde
+# recuperar: o `PUT` audita nome, tipo e unidades, e o custo nao estava na lista.
+with get_cursor() as cur:
+    cur.execute("""SELECT antes FROM auditoria
+                    WHERE acao = 'troca_de_unidade' AND id_entidade = %s
+                    ORDER BY id DESC LIMIT 1""", (str(farinha),))
+    aud = cur.fetchone()
+checar("e o custo de antes ficou gravado na auditoria",
+       aud and perto((aud["antes"] or {}).get("custo_referencia"), 8), aud and aud["antes"])
 
 
 print("\n5. produto COM razão não troca de unidade — e o motivo é dito")

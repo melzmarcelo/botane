@@ -127,6 +127,15 @@ class ProdutoCreate(ProdutoBase):
 
 
 class ProdutoUpdate(ProdutoBase):
+    """
+    ⚠️ **`confirmar_troca_de_unidade` nao e um campo do produto** — e a
+    resposta a uma pergunta. Trocar a unidade CONVERTE o custo, e quando a
+    conversao o deixa abaixo de um centavo o servidor recusa e devolve os dois
+    numeros; reenviar com este campo em `true` e dizer "sim, e isso mesmo".
+    Ele e retirado antes do UPDATE.
+    """
+
+    confirmar_troca_de_unidade: bool = False
     nome: str | None = Field(default=None, min_length=2, max_length=160)
     codigo: str | None = Field(default=None, max_length=40)
     tipo: str | None = None
