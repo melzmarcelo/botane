@@ -840,6 +840,61 @@ try {
       (a) => a.textContent?.includes("Código de barras das notas")));
   checar("o caminho para a colheita de EAN esta na lista de produtos", temCaminhoEan);
 
+  // 🔑 **Alteracao multipla** (09/09/2026, pedido do dono): marcar varios e
+  // mudar tipo, categoria, setor ou a ativacao de uma vez. O catalogo tem 2.229
+  // produtos vindos do Omie sem categoria nem setor, e um a um sao quatro
+  // passos por produto -- ninguem faz duas mil vezes.
+  await p.goto(`${WEB}/produtos`, { waitUntil: "networkidle2" });
+  await p.waitForSelector('table tbody tr input[type="checkbox"]', { timeout: 30000 })
+    .catch(() => {});
+  const emLote = await p.evaluate(() => {
+    const caixas = [...document.querySelectorAll('table tbody tr input[type="checkbox"]')];
+    return { caixas: caixas.length, barraAntes: /marcado/i.test(document.body.innerText) };
+  });
+  checar("a lista de produtos tem caixinha por linha", emLote.caixas > 0, emLote);
+  // ⚠️ A barra so pode existir DEPOIS de marcar: uma barra de acao vazia
+  // ocupando espaco em toda visita ensina a ignorar aquela faixa da tela.
+  checar("e a barra de acao NAO aparece antes de marcar", !emLote.barraAntes, emLote);
+
+  const depoisDeMarcar = await p.evaluate(async () => {
+    const caixas = [...document.querySelectorAll('table tbody tr input[type="checkbox"]')];
+    caixas[0]?.click();
+    caixas[1]?.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const texto = document.body.innerText;
+    return {
+      diz: /2\s*produto\(s\) marcado/i.test(texto),
+      temBotao: [...document.querySelectorAll("button")]
+        .some((b) => /Alterar em lote/i.test(b.textContent ?? "")),
+    };
+  });
+  checar("marcar duas linhas faz a barra dizer 2", depoisDeMarcar.diz, depoisDeMarcar);
+  checar("com o botao de alterar em lote", depoisDeMarcar.temBotao, depoisDeMarcar);
+
+  const naJanelaLote = await p.evaluate(async () => {
+    [...document.querySelectorAll("button")]
+      .find((b) => /Alterar em lote/i.test(b.textContent ?? ""))?.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const d = [...document.querySelectorAll('[role="dialog"]')].pop();
+    const botao = [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => /Aplicar em/i.test(b.textContent ?? ""));
+    return {
+      abriu: !!d,
+      campos: d?.querySelectorAll("select").length ?? 0,
+      aplicarTravado: botao ? botao.disabled : "sem-botao",
+    };
+  });
+  checar("a janela da alteracao em lote abre", naJanelaLote.abriu, naJanelaLote);
+  // Tipo, categoria, setor e ativacao -- os quatro que o dono pediu.
+  checar("com os quatro campos", naJanelaLote.campos >= 4, naJanelaLote);
+  // ⚠️ **Nada se aplica sem escolher o que mudar.** Um botao ativo antes da
+  // previa convida a gravar em trezentos cadastros sem ver o numero.
+  checar("e o aplicar nasce travado, sem previa",
+    naJanelaLote.aplicarTravado === true, naJanelaLote);
+  await foto(p, "08d-alteracao-multipla");
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 500));
+
   await p.goto(`${WEB}/produtos/ean-das-notas`, { waitUntil: "networkidle2" });
   await p.waitForFunction(
     () => /C[oó]digo de barras das notas/i.test(document.body.innerText),
@@ -1881,11 +1936,21 @@ try {
   checar("o produto se escolhe por busca, não por combobox", !!campoBusca);
   await campoBusca.type(`Est tela ${m4}`);
   await p.keyboard.press("Tab");
-  await new Promise((r) => setTimeout(r, 1200));
+  // ⚠️ **Espera o CAMPO SER PREENCHIDO, não um relógio.** Eram 1.200 ms
+  // fixos, e estas três checagens falharam e passaram alternadamente ao longo
+  // do dia — lidas como instabilidade, quando o que variava era o tempo da
+  // busca (a base cresceu de 0 para 3.200 produtos numa mesma sessão). Foi
+  // conferido que a API responde certo: a busca exata devolve 1 registro em
+  // ~230 ms. É a mesma lição que este arquivo já carrega no bloco do CMV.
+  const alvoPreenchido = `Est tela ${m4}`.toUpperCase();
+  await p.waitForFunction(
+    (esperado) => (document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "")
+      .includes(esperado),
+    { timeout: 15000, polling: 200 }, alvoPreenchido).catch(() => {});
   const preencheu = await p.evaluate(
     () => document.querySelector('input[aria-label="Buscar produto"]')?.value ?? "");
   checar("um resultado só: o Tab preenche e segue",
-    preencheu.includes(`Est tela ${m4}`.toUpperCase()), preencheu);
+    preencheu.includes(alvoPreenchido), preencheu);
 
   // Mais de um resultado tem de abrir a janela de pesquisa, já filtrada.
   await p.evaluate(() => {
@@ -1899,7 +1964,9 @@ try {
     c.focus();
   });
   await p.keyboard.press("Tab");
-  await new Promise((r) => setTimeout(r, 1400));
+  // ⚠️ Mesma troca: espera a JANELA existir, nao 1.400 ms.
+  await p.waitForSelector('[role="dialog"]', { timeout: 15000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 400));
   const janela = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     return d ? { titulo: d.getAttribute("aria-label"), linhas: d.querySelectorAll("li").length }
@@ -4764,7 +4831,11 @@ try {
         rodape: t.match(/(\d+)–(\d+) de ([\d.]+)/)?.[0] ?? null,
         total: Number((t.match(/\d+–\d+ de ([\d.]+)/)?.[1] ?? "0").replace(/\./g, "")),
         linhas: document.querySelectorAll("tbody tr").length,
-        primeiro: document.querySelector("tbody tr td")?.textContent?.trim() ?? null,
+        // ⚠️ **A LINHA inteira, nao o primeiro `<td>`.** A lista de produtos
+        // ganhou uma caixinha de selecao como primeira celula, e ela nao tem
+        // texto: as duas paginas passaram a devolver "" e a checagem acusou a
+        // paginacao de nao virar, quando o que mudou foi a tabela.
+        primeiro: document.querySelector("tbody tr")?.textContent?.trim() || null,
         proximaLigada: !document.querySelector('button[aria-label="Próxima página"]')?.disabled,
         anteriorDesligada: !!document.querySelector('button[aria-label="Página anterior"]')
           ?.disabled,

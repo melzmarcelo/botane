@@ -338,3 +338,23 @@ class ColherEanRequest(BaseModel):
     """
 
     ids_produto: list[int]
+
+
+class AlteracaoMultiplaRequest(BaseModel):
+    """Mudar o mesmo campo em varios produtos.
+
+    ⚠️ **`simular` e o padrao VERDADEIRO.** Quem marcou 300 linhas nao tem como
+    conferir uma a uma depois; a previa vem antes por decisao, e um chamador que
+    esqueca o campo recebe a previa -- nao uma escrita em 300 cadastros.
+
+    ⚠️ Campo ausente = nao mexer. `None` e "deixe como esta", nao "limpe" --
+    limpar categoria em lote e uma acao diferente, e sem esta distincao um
+    formulario que nao preencheu tudo apagaria o que nao pediu.
+    """
+
+    ids: list[int]
+    simular: bool = True
+    tipo: str | None = None
+    id_categoria: int | None = None
+    id_setor: int | None = None
+    ativo: bool | None = None

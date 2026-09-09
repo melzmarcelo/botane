@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
+import AlteracaoMultipla from "./alteracao-multipla";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
@@ -12,6 +13,7 @@ import {
   TIPOS_PRODUTO,
   nomeTipo,
   reais,
+  Setor,
 } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
@@ -26,12 +28,20 @@ export default function PaginaProdutos() {
 
   const [lista, setLista] = useState<ProdutoResumo[] | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  // Os setores existem so para a alteracao em lote: a lista nao os mostra.
+  const [setores, setSetores] = useState<Setor[]>([]);
   const [contagem, setContagem] = useState<Contagem | null>(null);
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [tipo, setTipo] = useEstadoNaUrl<string>("tipo", "");
   const [idCategoria, setIdCategoria] = useEstadoNaUrl<string>("categoria", "");
   const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
   const [erro, setErro] = useState("");
+  // 🔑 **Selecao para alteracao multipla** (09/09/2026, pedido do dono).
+  // ⚠️ Vive FORA da lista: virar a pagina nao pode perder o que ja foi
+  // marcado -- quem esta arrumando a categoria de 2.229 produtos passa por
+  // varias paginas, e recomecar a cada uma tornaria o recurso inutil.
+  const [marcados, setMarcados] = useState<Set<number>>(new Set());
+  const [alterando, setAlterando] = useState(false);
   const pag = usePaginacao("produtos", {
     filtros: [busca, tipo, idCategoria, inativos],
   });
@@ -58,6 +68,7 @@ export default function PaginaProdutos() {
 
   useEffect(() => {
     api.get<Categoria[]>("/categorias").then(setCategorias).catch(() => {});
+    api.get<Setor[]>("/setores").then(setSetores).catch(() => {});
     api.get<Contagem>("/produtos/contagem").then(setContagem).catch(() => {});
   }, []);
 
@@ -101,6 +112,47 @@ export default function PaginaProdutos() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {/* 🔑 **A barra so existe quando ha marcado**, e diz o numero antes do
+          verbo. ⚠️ Ela conta a selecao INTEIRA, nao a pagina: quem marcou 40
+          numa pagina e 30 noutra precisa ver 70, senao aplica achando que sao 30. */}
+      {podeEditar && marcados.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded border border-linha bg-superficie2 px-4 py-3">
+          <span className="text-[14px]">
+            <b>{marcados.size}</b> produto(s) marcado(s)
+          </span>
+          <button
+            type="button"
+            className="btn btn-primario"
+            onClick={() => setAlterando(true)}
+          >
+            Alterar em lote
+          </button>
+          <button
+            type="button"
+            className="btn btn-secundario"
+            onClick={() => setMarcados(new Set())}
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
+
+      {alterando && (
+        <AlteracaoMultipla
+          ids={[...marcados]}
+          categorias={categorias}
+          setores={setores}
+          aoFechar={() => setAlterando(false)}
+          aoAplicar={() => {
+            // ⚠️ Limpa a selecao depois de aplicar: manter marcado o que ja
+            // mudou convida a aplicar duas vezes, e a segunda passada com outro
+            // campo escolhido mexeria em quem ninguem quis mexer de novo.
+            setMarcados(new Set());
+            void carregar();
+          }}
+        />
+      )}
 
       {contagem && contagem.rascunhos > 0 && (
         <Aviso tipo="info">
@@ -202,6 +254,26 @@ export default function PaginaProdutos() {
               <table className="tabela">
                 <thead>
                   <tr>
+                    {podeEditar && (
+                      <th className="w-8">
+                        {/* Marca ou desmarca a PAGINA, nao a lista inteira: o
+                            servidor so mandou estes, e prometer os 3.183 com um
+                            clique seria mentira. */}
+                        <input
+                          type="checkbox"
+                          aria-label="Marcar todos desta página"
+                          checked={!!lista.length && lista.every((x) => marcados.has(x.id))}
+                          onChange={(e) => {
+                            const proximo = new Set(marcados);
+                            for (const x of lista) {
+                              if (e.target.checked) proximo.add(x.id);
+                              else proximo.delete(x.id);
+                            }
+                            setMarcados(proximo);
+                          }}
+                        />
+                      </th>
+                    )}
                     <th>Código</th>
                     <th>Produto</th>
                     <th>Tipo</th>
@@ -214,6 +286,21 @@ export default function PaginaProdutos() {
                 <tbody>
                   {lista.map((p) => (
                     <tr key={p.id} className={p.ativo ? "" : "opacity-55"}>
+                      {podeEditar && (
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={`Marcar ${p.nome}`}
+                            checked={marcados.has(p.id)}
+                            onChange={() => {
+                              const proximo = new Set(marcados);
+                              if (proximo.has(p.id)) proximo.delete(p.id);
+                              else proximo.add(p.id);
+                              setMarcados(proximo);
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className="mono text-[13px]">{p.codigo}</td>
                       <td>
                         <Link href={`/produtos/${p.id}`} className="link-registro">

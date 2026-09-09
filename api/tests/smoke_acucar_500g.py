@@ -235,6 +235,64 @@ checar("sem a marca, 4 UN NAO viram 2 KG",
        item3.get("quantidade_convertida"))
 
 
+print("\n6. o CUSTO por unidade de estoque é o mesmo pelos dois caminhos")
+# 🔑 **A dúvida do dono (09/09/2026):** "1 un de 1kg tá 5,00 mas 1 un de
+# 0,5kg tá 2,50 — o custo é o mesmo, certo?" É, e esta seção é a prova.
+#
+# O custo gravado é sempre `líquido ÷ quantidade CONVERTIDA`, e a convertida
+# está em unidade de ESTOQUE. Então:
+#   2 pacotes de 0,5 kg a R$ 2,50  ->  1 KG por R$ 5,00  ->  5,00/KG
+#   1 KG por R$ 5,00              ->  1 KG por R$ 5,00  ->  5,00/KG
+#
+# ⚠️ **E isso só vale porque a conversão está DITA.** Sem o fator, os 2 UN
+# entrariam como 2 KG e o quilo sairia por 2,50 — metade do preço, calado. É a
+# seção 5 acima, vista pelo lado do dinheiro.
+with get_cursor() as cur:
+    cur.execute("""UPDATE codigos_externos SET fator_confirmado = true
+                    WHERE sistema = 'OMIE_PRODUTO' AND codigo = %s""", (f"AC5{marca}",))
+
+nota_a = _nota_com_codigo_omie(f"AP{marca}", f"AC5{marca}", 2, "UN", valor=2.50)
+st, na = chamar("GET", f"/notas/{nota_a}", token=token)
+ia = (na.get("itens") or [{}])[0]
+checar("2 UN de meio quilo viram 1 KG",
+       perto(ia.get("quantidade_convertida"), 1), ia.get("quantidade_convertida"))
+checar("e custam 5,00 por KG",
+       perto(ia.get("custo_aquisicao_unitario"), 5), ia.get("custo_aquisicao_unitario"))
+
+nota_b = _nota_com_codigo_omie(f"AQ{marca}", f"AC5{marca}", 1, "KG", valor=5.00)
+st, nb = chamar("GET", f"/notas/{nota_b}", token=token)
+ib = (nb.get("itens") or [{}])[0]
+checar("1 KG direto continua 1 KG",
+       perto(ib.get("quantidade_convertida"), 1), ib.get("quantidade_convertida"))
+# A resposta da pergunta, num numero so.
+checar("e custa os MESMOS 5,00 por KG — o caminho nao muda o custo",
+       perto(ia.get("custo_aquisicao_unitario"), ib.get("custo_aquisicao_unitario")),
+       (ia.get("custo_aquisicao_unitario"), ib.get("custo_aquisicao_unitario")))
+
+
+print("\n7. o cartao de CUSTO do produto abre — as tres fontes juntas")
+# 🔑 **Este endpoint nao tinha teste nenhum, e por isso o defeito viveu.**
+# O historico junta tres fontes com tipos DIFERENTES de data:
+# `data_movimento` e `custo_referencia_em` sao timestamptz (datetime com fuso) e
+# `ultima_compra` e date. O Python recusa comparar os dois, e a ordenacao
+# estourava um TypeError que chegava na tela como **500** — em todo produto com
+# movimento E ultimo preco de fornecedor. Eram 92 na base de trabalho.
+#
+# ⚠️ O cenario acima serve de proposito: o principal tem movimento (as notas
+# lancadas) e ganhou `produto_fornecedor` no lancamento. E exatamente a
+# combinacao que quebrava.
+st, ch = chamar("GET", f"/produtos/{principal}/custo", token=token)
+checar("o cartao de custo responde 200, nao 500", st == 200, (st, ch))
+checar("com o custo atual e de onde ele veio",
+       isinstance(ch, dict) and "atual" in ch and ch.get("origem"), ch)
+linhas_custo = (ch or {}).get("linhas") or []
+checar("e o historico traz linhas", len(linhas_custo) > 0, len(linhas_custo))
+# ⚠️ A ordem e o que quebrava: se as linhas voltam, ela funcionou.
+fontes = {l.get("fonte") for l in linhas_custo}
+checar("de mais de uma fonte — que e o caso que quebrava",
+       len(fontes) > 1, fontes)
+
+
 _limpar()
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

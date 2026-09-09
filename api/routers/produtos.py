@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.produtos import (
+    AlteracaoMultiplaRequest,
     ColherEanRequest,
     ConversaoDoCodigoRequest,
     FundirGrupoRequest,
@@ -31,6 +32,7 @@ from models.produtos import (
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import custos as motor_custos
+from services import alteracao_multipla as alteracao_multipla_motor
 from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo
 from services import troca_de_unidade
 
@@ -257,6 +259,33 @@ def contagem(ctx: Contexto = Depends(contexto_atual)) -> dict:
         "rascunhos": sum(l["rascunhos"] for l in linhas),
         "inativos": sum(l["inativos"] for l in linhas),
     }
+
+
+@router.post("/alteracao-multipla")
+def alteracao_multipla(
+        body: AlteracaoMultiplaRequest,
+        ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Muda tipo, categoria, setor ou a ativacao em varios produtos de uma vez.
+
+    🔑 **O pedido do dono (09/09/2026).** O catalogo tem 3.183 produtos e 2.229
+    vieram do Omie sem categoria nem setor: arrumar um a um sao quatro passos por
+    produto, e ninguem faz duas mil vezes -- o trabalho nao e feito, e o CMV por
+    grupo responde "sem categoria" no maior pedaco da lista.
+
+    ⚠️ **`simular=true` e o padrao.** A previa diz quantos MUDAM de verdade,
+    quantos ja estavam assim e quais o servidor recusa, antes de qualquer
+    escrita. Quem marcou 300 linhas nao confere uma a uma depois.
+
+    ⚠️ **A previa e a aplicacao sao a MESMA funcao.** Duas implementacoes
+    divergiriam no primeiro caso especial, e a divergencia apareceria como "a
+    previa prometeu 300 e mudou 280", sem ninguem saber qual estava certa.
+    """
+    with get_cursor() as cur:
+        return alteracao_multipla_motor.aplicar(
+            cur, body.ids,
+            {"tipo": body.tipo, "id_categoria": body.id_categoria,
+             "id_setor": body.id_setor, "ativo": body.ativo},
+            ctx.id_usuario, simular=body.simular)
 
 
 @router.get("/ean-das-notas")

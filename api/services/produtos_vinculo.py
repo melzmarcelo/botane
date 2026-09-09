@@ -315,8 +315,19 @@ def previa(cur, id_tela: int, id_escolhido: int) -> dict:
         "id_fica": id_fica,
         "id_sai": id_sai,
         "baixa": _baixa_pendente(cur, fica, sai),
-        "completa": [c for c in _COMPLETAVEIS
-                     if not fica.get(c) and sai.get(c)],
+        # O custo entra na lista do "Como fica" pelo mesmo motivo dos outros:
+        # quem confirma precisa ver o que o principal vai ganhar.
+        "completa": [
+            *(c for c in _COMPLETAVEIS if not fica.get(c) and sai.get(c)),
+            # ⚠️ A MESMA condicao da gravacao, incluindo a da unidade -- a
+            # previa que promete um custo que a fusao nao copia e pior que
+            # previa nenhuma.
+            *(["custo_referencia"]
+              if (not fica.get("custo_referencia") and sai.get("custo_referencia")
+                  and ((fica.get("um_estoque") or sai.get("um_estoque") or "").upper()
+                       == (sai.get("um_estoque") or "").upper()))
+              else []),
+        ],
     }
 
 
@@ -560,6 +571,31 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
                 f"UPDATE produtos SET {coluna} = %s WHERE id = %s", (sai[coluna], id_fica)
             )
             completados.append(coluna)
+
+    # 🔑 **O CUSTO DE REFERENCIA tambem atravessa** (09/09/2026, relatado pelo
+    # dono). O produto do PDV nasce sem custo e o do Omie tem o CMC de la; a
+    # direcao manda o do PDV ficar (e ele que tem venda), e o custo do outro era
+    # DESCARTADO -- o principal ficava sem custo nenhum, a ficha calculava com
+    # zero e o food cost saia bom demais, sem nada denunciando.
+    #
+    # ⚠️ **Nao entra em `_COMPLETAVEIS`, e a razao e a UNIDADE.** O custo e
+    # sempre POR unidade de estoque: copiar o numero quando as duas unidades
+    # diferem poe o preco do quilo no cadastro que conta em unidades. So se
+    # copia quando as duas falam a mesma coisa -- inclusive quando o que fica
+    # acabou de HERDAR a unidade do absorvido, no laco acima.
+    um_fica = fica.get("um_estoque") or sai.get("um_estoque")
+    if (not fica.get("custo_referencia") and sai.get("custo_referencia")
+            and (um_fica or "").upper() == (sai.get("um_estoque") or "").upper()):
+        cur.execute(
+            """UPDATE produtos
+                  SET custo_referencia = %s,
+                      custo_referencia_em = %s,
+                      custo_referencia_origem = %s
+                WHERE id = %s""",
+            (sai["custo_referencia"], sai.get("custo_referencia_em"),
+             sai.get("custo_referencia_origem"), id_fica),
+        )
+        completados.append("custo_referencia")
 
     # ----------------------------------------- apelidos e itens de venda mudam
     cur.execute(

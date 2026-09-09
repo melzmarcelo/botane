@@ -9,6 +9,7 @@ Dinheiro em `Decimal`, sempre. `float` em custo unitário de insumo vira
 diferença de centavos que reaparece multiplicada por mil no fim do mês.
 """
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 CASAS_CUSTO = Decimal("0.000001")
@@ -377,6 +378,34 @@ _ORIGEM_EM_PORTUGUES = {
 }
 
 
+def _ordenavel(quando):
+    """A chave de ordenacao de `quando` — que vem em TRES formatos diferentes.
+
+    🔑 **O historico de custo junta tres fontes e elas nao usam o mesmo tipo:**
+    `estoque_movimentos.data_movimento` e `produtos.custo_referencia_em` sao
+    `timestamptz` (viram `datetime` com fuso), e
+    `produto_fornecedor.ultima_compra` e `date`. O Python recusa comparar `date`
+    com `datetime` — e recusa comparar `datetime` com fuso e sem fuso. Ordenar a
+    lista crua estourava um `TypeError` que virava **500 no cartao de custo da
+    tela do produto**, em qualquer produto com movimento E ultimo preco de
+    fornecedor: 92 na base de trabalho.
+
+    ⚠️ O defeito era ANTIGO e ficou mais provavel: a fusao passou a levar o
+    `custo_referencia` (e o `custo_referencia_em` junto) para o principal, entao
+    a linha de referencia aparece onde antes nao aparecia.
+
+    ⚠️ **So a ORDEM usa isto.** O valor devolvido na resposta continua o
+    original — normalizar o que a tela mostra trocaria uma data por um instante,
+    e o historico passaria a exibir 00:00 onde so se sabia o dia.
+    """
+    if quando is None:
+        return None
+    if isinstance(quando, datetime):
+        # Sem fuso, para conviver com as datas puras convertidas abaixo.
+        return quando.replace(tzinfo=None)
+    return datetime(quando.year, quando.month, quando.day)
+
+
 def historico(cur, id_produto: int, id_unidade: int | None = None,
               limite: int = 60) -> dict:
     """O custo de agora e o que o mudou — na ordem em que aconteceu.
@@ -475,7 +504,8 @@ def historico(cur, id_produto: int, id_unidade: int | None = None,
     # ⚠️ Data nula vai para o FIM, não para o começo: `ultima_compra` pode estar
     # em branco num vínculo antigo, e `None` primeiro poria o registro mais
     # obscuro no topo do histórico.
-    linhas.sort(key=lambda x: (x["quando"] is not None, x["quando"]), reverse=True)
+    linhas.sort(key=lambda x: (x["quando"] is not None, _ordenavel(x["quando"])),
+                reverse=True)
 
     return {
         "atual": float(atual) if atual is not None else None,
