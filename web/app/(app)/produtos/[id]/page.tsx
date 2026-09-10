@@ -97,6 +97,27 @@ export default function FormularioProduto() {
   const variasLojas = (eu?.unidades.length ?? 0) > 1;
   const [precoLoja, setPrecoLoja] = useState("");
   const [precoCasa, setPrecoCasa] = useState<number | null>(null);
+  /**
+   * 🔑 **Com UMA loja só, o campo edita o preço que VALE** (09/09/2026,
+   * relatado pelo dono: *"no grid aparece o preço de venda, mas ao consultar o
+   * produto o preço está vazio; este produto veio do PDV"*).
+   *
+   * O preço tem dois donos possíveis: o da casa (`id_unidade` nulo) e o da
+   * loja. O que vem do PDV nasce **da loja**, de propósito — `tabelapreco` é
+   * por filial. O grid mostra o resolvido (loja primeiro); o formulário mostra
+   * só o da casa. E o bloco "Preço nesta loja" só aparece para quem tem mais de
+   * uma loja. Resultado com uma loja: o preço ficava **invisível e não
+   * editável** — 637 produtos do PDV na base de teste.
+   *
+   * ⚠️ **Nada muda com VÁRIAS lojas.** Lá a separação tem razão de ser: editar
+   * um produto numa filial não pode gravar o preço dela como o da casa. Aqui,
+   * "casa" e "loja" são a mesma coisa para quem olha.
+   *
+   * ⚠️ Grava de volta no MESMO dono de onde veio: preço que nasceu da loja
+   * continua na loja. Escrevê-lo na casa criaria uma segunda linha vigente e a
+   * loja continuaria mandando — o número editado não teria efeito nenhum.
+   */
+  const [precoEhDaLoja, setPrecoEhDaLoja] = useState(false);
   const [salvandoPreco, setSalvandoPreco] = useState(false);
   const enviaAoPdv = !!eu?.enviar_ao_pdv;
   const podeEditar = pode("cadastros.produtos");
@@ -176,18 +197,29 @@ export default function FormularioProduto() {
           ),
         } as Form);
         setVinculos((p.fornecedores as VinculoFornecedor[]) ?? []);
-        // ⚠️ O campo do formulário mostra o preço DA CASA, não o resolvido:
+        // ⚠️ Com VÁRIAS lojas o campo mostra o preço DA CASA, não o resolvido:
         // senão, editar um produto numa filial que cobra diferente gravaria o
-        // preço dela como se fosse o da casa.
+        // preço dela como se fosse o da casa. Com uma loja só, essa distinção
+        // não existe para quem olha — e esconder o preço da loja deixava o
+        // campo vazio num produto que o grid mostra com preço. Ver
+        // `precoEhDaLoja`.
         const casa = p.preco_casa as number | null;
-        setPrecoCasa(casa ?? null);
-        setF((atual) => ({ ...atual, preco_venda: casa === null || casa === undefined ? "" : String(casa) }));
         const daLoja = p.preco_loja as number | null;
+        setPrecoCasa(casa ?? null);
         setPrecoLoja(daLoja === null || daLoja === undefined ? "" : String(daLoja));
+        const umaLojaSo = (eu?.unidades.length ?? 0) <= 1;
+        const daLojaVale = umaLojaSo && daLoja !== null && daLoja !== undefined;
+        setPrecoEhDaLoja(daLojaVale);
+        const noCampo = daLojaVale ? daLoja : casa;
+        setF((atual) => ({
+          ...atual,
+          preco_venda: noCampo === null || noCampo === undefined ? "" : String(noCampo),
+        }));
       })
       .catch((e) => setErro(e.message))
       .finally(() => setCarregando(false));
-  }, [id, novo, recarga]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, novo, recarga, eu?.unidades.length]);
 
   // ⚠️ So depois de a tela ter carregado, e so quando a unidade REALMENTE
   // mudou: pedir a previa a cada tecla do nome seria ruido no servidor.
@@ -281,7 +313,11 @@ export default function FormularioProduto() {
       peso_bruto: num(f.peso_bruto),
       codigo_barras: texto(f.codigo_barras),
       observacao: texto(f.observacao),
-      preco_venda: num(f.preco_venda),
+      // ⚠️ Preço que veio da LOJA não sai no corpo do produto: ele é gravado
+      // logo abaixo, pela rota da loja. Mandá-lo aqui abriria uma linha
+      // vigente da CASA — e a da loja continuaria mandando, deixando o número
+      // editado sem efeito nenhum.
+      preco_venda: precoEhDaLoja ? undefined : num(f.preco_venda),
       fornecedores: vinculos.map((v) => ({
         id_fornecedor: v.id_fornecedor,
         codigo_no_fornecedor: v.codigo_no_fornecedor,
@@ -326,6 +362,22 @@ export default function FormularioProduto() {
           ativo: f.ativo,
           confirmar_troca_de_unidade: confirmado,
         });
+        // 🔑 **O preço que é DA LOJA é gravado pela rota da loja** — ver
+        // `precoEhDaLoja`. Com uma loja só o campo edita o preço que vale, e
+        // ele precisa voltar para o mesmo dono de onde veio: escrito na casa,
+        // abriria uma segunda linha vigente, a da loja continuaria mandando, e
+        // o número editado não teria efeito nenhum — com a tela dizendo que
+        // salvou.
+        // ⚠️ **Depois do PUT do produto, não antes.** Se a gravação do produto
+        // falhar (uma troca de unidade recusada, por exemplo), o preço não pode
+        // ter mudado sozinho.
+        // ⚠️ Campo vazio APAGA o preço da loja (a rota trata nulo como
+        // remoção), e aí o produto volta a valer o da casa — que é o que
+        // "apagar o preço" quer dizer nesta tela.
+        if (precoEhDaLoja) {
+          const valor = num(f.preco_venda);
+          await api.put(`/produtos/${id}/preco-loja`, { preco_venda: valor ?? null });
+        }
         // 🔑 **Reler o produto depois de salvar** (09/09/2026, relato do dono:
         // "preciso dar F5 para mostrar o custo certo"). O servidor TRANSFORMA o
         // que recebe: o nome vira maiuscula, e trocar a unidade de estoque

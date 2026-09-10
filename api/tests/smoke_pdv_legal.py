@@ -1363,6 +1363,81 @@ checar("e a pendencia continua ABERTA", ainda, ainda)
 chamar("DELETE", f"/setores/{id_sp}", token=token)
 
 
+print("\n8l2. com o envio DESLIGADO, nada entra na fila")
+# 🔑 **Pedido do dono (09/09/2026):** *"quando esta desmarcada a opcao de enviar
+# as informacoes para o PDV, nao gravar as informacoes de exportacao"*.
+#
+# O gatilho registrava toda mudanca de cadastro marcado, mesmo com o envio
+# desligado. Numa casa que nao manda cadastro ao PDV -- o padrao, e a
+# configuracao real do cliente -- isso e uma fila que so cresce, que ninguem
+# pode esvaziar (a rota de envio recusa com 409 quando o interruptor esta
+# desligado) e que nao descreve trabalho nenhum a fazer. Na base local eram
+# 1.067 pendencias abertas com o envio desligado.
+#
+# ⚠️ A trava fica no GATILHO, e e por isso que esta secao mexe direto no banco:
+# afirmar pela rota provaria que a rota checa, nao que o caminho de escrita
+# checa. O gatilho existe justamente para nenhum caminho conseguir esquecer.
+#
+# ⚠️ **Esta secao termina com o envio LIGADO, de proposito.** Quem devolve o
+# interruptor a casa e o `atexit` la de cima -- e as secoes 8m em diante leem a
+# fila de envio, que responde 409 com ele desligado. A primeira versao daqui
+# "restaurava" o valor no fim e derrubou DEZESSEIS checagens das secoes
+# seguintes, todas com a cara de defeito de fila. E a mesma armadilha que o
+# comentario do `atexit` ja descrevia, repetida por quem escreveu depois.
+
+
+def _pendencias_do_setor(id_setor):
+    with _cur_pdv() as _c:
+        _c.execute("""SELECT count(*) n FROM pdv_pendencias
+                       WHERE tipo = 'SETOR' AND id_registro = %s AND resolvido_em IS NULL""",
+                   (id_setor,))
+        return _c.fetchone()["n"]
+
+
+def _ligar_envio(ligado):
+    with _cur_pdv() as _c:
+        _c.execute("UPDATE integracoes SET enviar_ao_pdv = %s WHERE servico = 'PDV_LEGAL'",
+                   (ligado,))
+
+
+def _resolver(id_setor):
+    with _cur_pdv() as _c:
+        _c.execute("""UPDATE pdv_pendencias SET resolvido_em = now()
+                       WHERE tipo = 'SETOR' AND id_registro = %s AND resolvido_em IS NULL""",
+                   (id_setor,))
+
+
+_ligar_envio(False)
+st, s_d = chamar("POST", "/setores", {"nome": f"Pend desl {marca}",
+                                      "integrado_pdv": True}, token=token)
+id_sd = s_d.get("id")
+checar("o setor nasce marcado, com o envio desligado", st == 201, (st, s_d))
+# 🔑 A afirmacao central: marcado para integrar, mas o envio esta desligado --
+# entao nao ha exportacao, e nao ha o que registrar.
+checar("criar com o envio desligado NAO gera pendencia",
+       _pendencias_do_setor(id_sd) == 0, _pendencias_do_setor(id_sd))
+
+chamar("PUT", f"/setores/{id_sd}", {"nome": f"Pend desl {marca} v2"}, token=token)
+checar("nem alterar depois", _pendencias_do_setor(id_sd) == 0, _pendencias_do_setor(id_sd))
+
+# ⚠️ E o interruptor LIGADO volta a alimentar a fila -- senao a correcao teria
+# desligado o recurso, nao o ruido.
+_ligar_envio(True)
+chamar("PUT", f"/setores/{id_sd}", {"nome": f"Pend desl {marca} v3"}, token=token)
+checar("com o envio LIGADO, a mesma alteracao gera pendencia",
+       _pendencias_do_setor(id_sd) == 1, _pendencias_do_setor(id_sd))
+
+_resolver(id_sd)
+chamar("DELETE", f"/setores/{id_sd}", token=token)
+# Fica LIGADO: ver o aviso no alto desta secao. O `atexit` devolve o que a casa
+# tinha quando a suite comecou.
+_ligar_envio(True)
+with _cur_pdv() as _c:
+    _c.execute("SELECT enviar_ao_pdv FROM integracoes WHERE servico = 'PDV_LEGAL'")
+    checar("e o interruptor fica ligado para as secoes seguintes",
+           bool((_c.fetchone() or {}).get("enviar_ao_pdv")) is True, "")
+
+
 print("\n8m. o produto na fila de envio")
 # 🔑 **O que ja existe no cardapio entra como ADOTAR, nunca CRIAR.** Sao 630
 # produtos la; propor criar duplicaria o cardapio do cliente. O casamento e pelo

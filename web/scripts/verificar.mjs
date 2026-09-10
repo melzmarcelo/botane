@@ -5178,6 +5178,64 @@ try {
   await foto(p, "32-paginacao");
   for (const id of criadosPag) await api("DELETE", `/produtos/${id}`, null, token);
 
+  console.log("10b0. o preco que veio do PDV aparece na ficha do produto");
+  // 🔑 **Relatado pelo dono (09/09/2026):** *"no grid aparece o preço de venda,
+  // mas ao consultar o produto o preço de venda está vazio; este produto veio
+  // do PDV"* (PDV-10798484).
+  //
+  // O preço tem dois donos: o da CASA (`id_unidade` nulo) e o da LOJA. O que vem
+  // do PDV nasce da loja, de propósito — `tabelapreco` é por filial. O grid
+  // mostra o resolvido (loja primeiro); o formulário mostrava só o da casa, e o
+  // bloco "Preço nesta loja" só existe para quem tem MAIS DE UMA loja.
+  // Resultado com uma loja: o preço ficava invisível e não editável — 637
+  // produtos do PDV na base de teste.
+  {
+    const mPreco = Date.now().toString().slice(-5);
+    const { dados: pPreco } = await api("POST", "/produtos", {
+      nome: `Preco da loja ${mPreco}`, tipo: "REVENDA", um_estoque: "UN",
+    }, token);
+    aoTerminar.push(() => api("DELETE", `/produtos/${pPreco.id}`, null, token));
+    // ⚠️ Pela ROTA DA LOJA, que é como o preço do PDV entra: gravá-lo por
+    // `preco_venda` no corpo do produto criaria o preço da CASA, e o teste
+    // passaria sem exercitar o defeito.
+    await api("PUT", `/produtos/${pPreco.id}/preco-loja`, { preco_venda: 218 }, token);
+
+    const { dados: conferindo } = await api("GET", `/produtos/${pPreco.id}`, null, token);
+    checar("o servidor diz que o preço é da LOJA, não da casa",
+      conferindo.preco_loja === 218 && conferindo.preco_casa === null,
+      [conferindo.preco_casa, conferindo.preco_loja]);
+
+    await irPara(p, `${WEB}/produtos/${pPreco.id}`);
+    await p.waitForFunction(() => /Pre[çc]o de venda/i.test(document.body.innerText),
+      { timeout: 15000 }).catch(() => {});
+  // ⚠️ **Pelo RÓTULO do campo, não pelo primeiro `input[type=number]`.** A
+  // primeira versão subia do rótulo com `closest("div")` — que passa por cima
+  // do `<label>` e cai num contêiner do cartão inteiro —, e lia o `fator_compra`
+  // logo acima: a checagem falhou com "1" e acusou a tela de não mostrar o
+  // preço, que ela mostrava. `Campo` renderiza
+  // `<label><span class="rotulo">…</span><div><input/></div></label>`, então o
+  // caminho honesto é achar o LABEL cujo rótulo é esse e ler o input dele.
+    const noCampo = await p.evaluate(() => {
+      const campo = [...document.querySelectorAll("label")].find(
+        (l) => /^Pre[çc]o de venda$/i.test(
+          l.querySelector("span.rotulo")?.textContent?.trim() ?? ""));
+      return campo?.querySelector("input")?.value ?? null;
+    });
+    // 🔑 A afirmação central: o campo mostra o preço que VALE, não vazio.
+    checar("e a ficha do produto mostra esse preço no campo",
+      Number(noCampo) === 218, noCampo);
+
+    // ⚠️ E salvar mantém o preço na LOJA. Escrito na casa, abriria uma segunda
+    // linha vigente: a da loja continuaria mandando e o número editado não
+    // teria efeito nenhum — com a tela dizendo que salvou.
+    await api("PUT", `/produtos/${pPreco.id}/preco-loja`, { preco_venda: 199 }, token);
+    const { dados: depois } = await api("GET", `/produtos/${pPreco.id}`, null, token);
+    checar("mudar o preço da loja continua sem criar preço da casa",
+      depois.preco_loja === 199 && depois.preco_casa === null,
+      [depois.preco_casa, depois.preco_loja]);
+    checar("e o resolvido acompanha", depois.preco_venda === 199, depois.preco_venda);
+  }
+
   console.log("10b1. os produtos que a pessoa fornece");
   // 🔑 **Pedido do dono (09/09/2026):** *"no cadastro de pessoas, criar um grupo
   // dos produtos que a pessoa/fornecedor está vinculado"*. A ficha já dizia
