@@ -119,7 +119,18 @@ def produzir_linha(cur, id_agenda: int, id_usuario: int,
     menos, e o que vale é o que saiu do fogão. O plano fica registrado como
     era; a produção registra o que foi.
     """
-    cur.execute("SELECT * FROM producao_agenda WHERE id = %s", (id_agenda,))
+    # 🔑 **`FOR UPDATE`, e sem ele a guarda logo abaixo não guarda nada.** Dois
+    # pedidos simultâneos — um duplo clique basta — leem a linha PLANEJADA os
+    # dois, passam os dois pela conferência de status e produzem DUAS vezes. O
+    # razão é append-only: o conserto seria um estorno para cada movimento.
+    # É a mesma lição que `transferencias._remessa(travar=True)` já carrega
+    # escrita, e a mesma razão do `FOR UPDATE` no saldo dentro de `lancar`: a
+    # pergunta "isto ainda está planejado?" só vale se ninguém puder responder
+    # ao mesmo tempo.
+    # ⚠️ O `lancar` travar o SALDO não resolve isto. Ali o que se protege é o
+    # custo médio; aqui é a linha de ESTADO — por isso o defeito não produzia
+    # número absurdo, produzia dois lançamentos legítimos onde cabia um.
+    cur.execute("SELECT * FROM producao_agenda WHERE id = %s FOR UPDATE", (id_agenda,))
     linha = cur.fetchone()
     if not linha:
         raise HTTPException(status_code=404, detail="Linha da agenda não encontrada")
@@ -150,7 +161,12 @@ def produzir_linha(cur, id_agenda: int, id_usuario: int,
 
 
 def cancelar(cur, id_agenda: int, motivo: str | None = None) -> dict:
-    cur.execute("SELECT status, observacao FROM producao_agenda WHERE id = %s", (id_agenda,))
+    # ⚠️ Trava aqui também: sem ela, cancelar e produzir podem correr juntos e a
+    # linha acabaria CANCELADA com a produção já no razão — o pior dos dois
+    # mundos, porque some da agenda e fica no estoque.
+    cur.execute(
+        "SELECT status, observacao FROM producao_agenda WHERE id = %s FOR UPDATE",
+        (id_agenda,))
     linha = cur.fetchone()
     if not linha:
         raise HTTPException(status_code=404, detail="Linha da agenda não encontrada")

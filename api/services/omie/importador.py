@@ -514,7 +514,15 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
 def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                 pode_retroativo: bool = False) -> dict:
     """Transforma a nota em movimento de estoque. Só com tudo conciliado."""
-    cur.execute("SELECT * FROM notas_entrada WHERE id = %s", (id_nota,))
+    # 🔑 **`FOR UPDATE`, senão a guarda de "já lançada" não guarda.** Dois
+    # cliques no botão de lançar leem a nota ABERTA os dois, passam os dois pela
+    # conferência e lançam a mercadoria DUAS vezes no razão — que é append-only,
+    # então o conserto é um estorno por movimento, e no mês a compra entra em
+    # dobro no CMV. É a mesma lição de `transferencias._remessa(travar=True)`.
+    # ⚠️ De todos os fluxos com esta forma, este é o mais exposto: é o que mais
+    # gente usa, e o botão fica no fim de uma tela longa de conferência — onde o
+    # clique repetido é o gesto natural de quem não viu a página responder.
+    cur.execute("SELECT * FROM notas_entrada WHERE id = %s FOR UPDATE", (id_nota,))
     nota = cur.fetchone()
     if not nota:
         raise HTTPException(status_code=404, detail="Nota não encontrada")

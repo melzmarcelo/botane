@@ -494,8 +494,13 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
 def fechar(id_inventario: int, ctx: Contexto = Depends(requer_permissao("estoque.ajuste"))) -> dict:
     """Fecha e acerta o razão: cada diferença vira um movimento de ajuste."""
     with get_cursor() as cur:
+        # 🔑 **`FOR UPDATE`, senão "já fechado" não é guarda nenhuma.** Dois
+        # fechamentos simultâneos leem ABERTO os dois e cada diferença vira DOIS
+        # movimentos de ajuste no razão — que é append-only, e um ajuste de
+        # inventário duplicado é justamente o que ninguém percebe: ele tem cara
+        # de acerto legítimo. Mesma lição de `transferencias._remessa`.
         cur.execute(
-            "SELECT id_unidade, id_local, status FROM inventarios WHERE id = %s",
+            "SELECT id_unidade, id_local, status FROM inventarios WHERE id = %s FOR UPDATE",
             (id_inventario,),
         )
         inv = cur.fetchone()

@@ -88,6 +88,30 @@
   `Cannot read properties of null`, e a rodada INTEIRA morria ali — **um `checar` que falha
   custa uma linha; uma exceção custa as trezentas checagens seguintes.**
 
+- 🔑 **Guarda de status não guarda nada sem `FOR UPDATE`** (10/09/2026, achado na varredura do
+  módulo de Produção). Três fluxos liam a linha de estado, conferiam "isto ainda está aberto?" e
+  só então escreviam no razão — sem travar: `producao_agenda.produzir_linha`,
+  `importador.lancar_nota` e `inventario.fechar`. Dois pedidos simultâneos passavam os DOIS pela
+  conferência e lançavam em dobro.
+  🔑 **A lição já estava escrita no próprio repositório**, em `transferencias._remessa`: *"sem a
+  trava, dois recebimentos simultâneos passam os dois pela conferência de status e lançam o
+  dobro no razão"*. Ela só não tinha sido aplicada aos outros três. `consumo_periodo` também já
+  fazia certo — os dois certos e os três errados conviviam há meses.
+  ⚠️ **O `FOR UPDATE` do saldo, dentro de `lancar`, NÃO resolve isto.** Ali o que se protege é o
+  custo médio; aqui é a linha de ESTADO. Por isso o defeito não produzia número absurdo:
+  produzia **dois lançamentos legítimos** onde cabia um — e no caso da nota, a compra em dobro
+  no CMV do mês.
+  ⚠️ **De longe o mais exposto era o da nota**: é o que mais gente usa, e o botão fica no fim de
+  uma tela longa de conferência, onde clicar de novo é o gesto natural de quem não viu a página
+  responder.
+  ⚠️ **`smoke_concorrencia.py` prova com duas THREADS presas na mesma barreira**, não com duas
+  chamadas em sequência — sequencial a segunda sempre acha o status já mudado e passa mesmo sem
+  trava, e o teste diria "ok" para o defeito. E a afirmação é sobre o RAZÃO (`count` em
+  `estoque_movimentos` por origem), não sobre o código HTTP: "um 200 e um 409" seria fraco.
+  ⚠️ **A suíte foi conferida contra o defeito de volta**, tirando uma trava de propósito: sem
+  ela dá `[200, 200]` e **2 movimentos**. Teste de concorrência que nunca viu a corrida acontecer
+  não prova nada — é a mesma armadilha do bloco que rodou com o usuário errado e passou.
+
 - 🔑 **O mesmo em `locais_estoque` — e aqui NÃO se apaga** (10/09/2026). A matriz tinha **256
   locais ativos com 4 de verdade** (`CANTO DO BAR`, `CENTRAL REL` e parentes, das mesmas duas
   suítes). O estrago é maior que o dos setores: o seletor de local do produto oferece TODOS os
