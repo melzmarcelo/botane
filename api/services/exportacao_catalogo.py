@@ -600,10 +600,16 @@ def _saldos_rede(cur, id_unidade: int, f: dict) -> Saida:
     cur.execute(
         """SELECT p.codigo, p.nome AS produto, c.nome AS categoria, p.um_estoque,
                   sum(s.quantidade) AS quantidade,
-                  -- 🔑 Ponderado, nunca a média dos médios.
-                  CASE WHEN sum(s.quantidade) <> 0
-                       THEN round(sum(s.quantidade * s.custo_medio)
-                                  / sum(s.quantidade), 6) END AS custo_medio,
+                  -- 🔑 Ponderado, nunca a média dos médios — e com o MESMO
+                  -- recorte da cascata (`quantidade > 0 AND custo_medio > 0`),
+                  -- senão o arquivo discorda da ficha como a tela discordava.
+                  CASE WHEN sum(s.quantidade) FILTER (
+                            WHERE s.quantidade > 0 AND s.custo_medio > 0) > 0
+                       THEN round(sum(s.quantidade * s.custo_medio) FILTER (
+                                       WHERE s.quantidade > 0 AND s.custo_medio > 0)
+                                  / sum(s.quantidade) FILTER (
+                                       WHERE s.quantidade > 0 AND s.custo_medio > 0), 6)
+                       END AS custo_medio,
                   round(sum(s.quantidade * s.custo_medio), 2) AS valor,
                   p.estoque_minimo,
                   count(DISTINCT s.id_unidade) AS lojas

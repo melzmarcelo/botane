@@ -923,6 +923,11 @@ if id_filial and id_prod_f:
     # 🔑 **O custo medio da rede e PONDERADO, nunca a media dos medios.** A
     # matriz comprou a 40 e a filial a 52: a media simples daria 46, que nao e o
     # custo de nada. O certo e valor total / quantidade total.
+    # ⚠️ **`valor / quantidade` so vale porque AQUI as duas lojas estao
+    # positivas.** O custo medio pondera apenas prateleira com saldo e custo
+    # positivos — o mesmo recorte da cascata de `custos.custo_do_insumo` —,
+    # enquanto o `valor` soma TUDO, inclusive saldo negativo. Com um negativo no
+    # meio os dois se separam de proposito, e e o bloco 9f que cobra isso.
     if float(linha.get("quantidade", 0)):
         esperado = float(linha["valor"]) / float(linha["quantidade"])
         checar("e o custo medio e ponderado, nao a media dos medios",
@@ -1131,6 +1136,46 @@ if id_prod_f:
 if id_filial:
     chamar("PUT", f"/unidades/{id_filial}", {"ativo": False}, token=token)
 
+
+print("9f. a TELA e a FICHA dizem o mesmo custo do mesmo produto")
+# 🔑 **A cascata filtrava as prateleiras e a tela nao.** `custo_do_insumo` pondera
+# so `quantidade > 0 AND custo_medio > 0`; os saldos agrupados e a visao da rede
+# ponderavam TUDO, inclusive prateleira negativa — que e divida, nao mercadoria,
+# e cujo custo e provisorio. Medido: camara com 10 kg a 40 e bar com -2 kg a 52
+# davam **R$ 37,00 na tela e R$ 40,00 na ficha**, no mesmo instante. Quem
+# conferisse os dois nao teria como saber qual manda.
+# ⚠️ A afirmacao e a IGUALDADE entre os dois, nao um numero fixo: prender 40,00
+# faria o teste passar por coincidencia se um dos lados mudasse de regra.
+prod_pond = novo_produto(f"Est ponderado {marca}")
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": prod_pond, "quantidade": 10, "custo_unitario": 40,
+    "id_local": principal["id"]}, token=token)
+checar("a camara recebe 10 a 40,00", st == 201, r)
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": prod_pond, "quantidade": 1, "custo_unitario": 52,
+    "id_local": outro["id"]}, token=token)
+checar("o bar recebe 1 a 52,00", st == 201, r)
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": prod_pond, "quantidade": 3, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": outro["id"]}, token=token)
+checar("e o bar consome 3, ficando em -2", st == 201, r)
+
+with get_cursor() as _cur:
+    from services import custos as _custos  # noqa: E402
+    da_ficha, _origem = _custos.custo_do_insumo(_cur, prod_pond, 1)
+st, agrupado = chamar("GET", f"/estoque/saldos-agrupados?id_produto={prod_pond}", token=token)
+st, da_rede = chamar("GET", f"/estoque/saldos-rede?id_produto={prod_pond}", token=token)
+na_tela = float((agrupado or [{}])[0].get("custo_medio") or 0)
+na_rede = float((da_rede or [{}])[0].get("custo_medio") or 0)
+checar("a tela 'ver por produto' diz o mesmo custo que a ficha",
+       abs(na_tela - float(da_ficha)) < 0.000001, (na_tela, float(da_ficha)))
+checar("a visao da empresa tambem",
+       abs(na_rede - float(da_ficha)) < 0.000001, (na_rede, float(da_ficha)))
+# ⚠️ E o VALOR continua somando tudo: 10x40 - 2x52 = 296. Ele responde "quanto
+# vale o que esta aqui", e a divida do bar faz parte dessa conta — por isso
+# `valor` PODE nao ser `quantidade x custo_medio` na mesma linha.
+checar("mas o valor em estoque segue somando o negativo (296,00)",
+       perto((agrupado or [{}])[0].get("valor"), 296), (agrupado or [{}])[0].get("valor"))
 
 print("10. limpeza")
 for id_ficha in criados["fichas"]:

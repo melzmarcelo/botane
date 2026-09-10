@@ -122,9 +122,28 @@ def saldos_agrupados(
                    round(sum(s.quantidade * s.custo_medio), 2) AS valor,
                    -- Ponderado, nunca a media dos medios: o mesmo cafe pode
                    -- estar na camara e no bar com custos diferentes.
-                   CASE WHEN sum(s.quantidade) <> 0
-                        THEN round(sum(s.quantidade * s.custo_medio)
-                                   / sum(s.quantidade), 6) END AS custo_medio,
+                   -- 🔑 **O MESMO recorte da cascata de `custos.custo_do_insumo`**,
+                   -- e é isso que faz a tela e a ficha dizerem o mesmo número.
+                   -- Sem o filtro, a prateleira NEGATIVA puxava o ponderado:
+                   -- medido com 10 kg a 40 na câmara e −2 kg a 52 no bar, a
+                   -- tela dizia R$ 37,00 enquanto a ficha, o CMV e o custo
+                   -- congelado da venda usavam R$ 40,00 — o mesmo produto, no
+                   -- mesmo instante, com dois valores e nada dizendo qual manda.
+                   -- ⚠️ Saldo negativo é DÍVIDA, não mercadoria, e o custo dele
+                   -- é provisório: pesá-lo no médio seria deixar uma estimativa
+                   -- corrigir o que a casa realmente pagou.
+                   -- ⚠️ **O `valor` continua somando TUDO**, de propósito: ele
+                   -- responde "quanto vale o que está aqui", e o negativo faz
+                   -- parte dessa conta. Por isso `valor` pode não ser
+                   -- `quantidade × custo_medio` na mesma linha — são duas
+                   -- perguntas diferentes, e a de dinheiro é a do custo.
+                   CASE WHEN sum(s.quantidade) FILTER (
+                             WHERE s.quantidade > 0 AND s.custo_medio > 0) > 0
+                        THEN round(sum(s.quantidade * s.custo_medio) FILTER (
+                                        WHERE s.quantidade > 0 AND s.custo_medio > 0)
+                                   / sum(s.quantidade) FILTER (
+                                        WHERE s.quantidade > 0 AND s.custo_medio > 0), 6)
+                        END AS custo_medio,
                    (p.estoque_minimo IS NOT NULL
                     AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo
               FROM estoque_saldos s
@@ -227,9 +246,28 @@ def saldos_rede(
                    round(sum(s.quantidade * s.custo_medio), 2) AS valor,
                    -- 🔑 **Ponderado, nunca a média dos médios**: a matriz com
                    -- 10 kg a 40 e a filial com 1 kg a 52 dão 41,09 na rede.
-                   CASE WHEN sum(s.quantidade) <> 0
-                        THEN round(sum(s.quantidade * s.custo_medio)
-                                   / sum(s.quantidade), 6) END AS custo_medio,
+                   -- 🔑 **O MESMO recorte da cascata de `custos.custo_do_insumo`**,
+                   -- e é isso que faz a tela e a ficha dizerem o mesmo número.
+                   -- Sem o filtro, a prateleira NEGATIVA puxava o ponderado:
+                   -- medido com 10 kg a 40 na câmara e −2 kg a 52 no bar, a
+                   -- tela dizia R$ 37,00 enquanto a ficha, o CMV e o custo
+                   -- congelado da venda usavam R$ 40,00 — o mesmo produto, no
+                   -- mesmo instante, com dois valores e nada dizendo qual manda.
+                   -- ⚠️ Saldo negativo é DÍVIDA, não mercadoria, e o custo dele
+                   -- é provisório: pesá-lo no médio seria deixar uma estimativa
+                   -- corrigir o que a casa realmente pagou.
+                   -- ⚠️ **O `valor` continua somando TUDO**, de propósito: ele
+                   -- responde "quanto vale o que está aqui", e o negativo faz
+                   -- parte dessa conta. Por isso `valor` pode não ser
+                   -- `quantidade × custo_medio` na mesma linha — são duas
+                   -- perguntas diferentes, e a de dinheiro é a do custo.
+                   CASE WHEN sum(s.quantidade) FILTER (
+                             WHERE s.quantidade > 0 AND s.custo_medio > 0) > 0
+                        THEN round(sum(s.quantidade * s.custo_medio) FILTER (
+                                        WHERE s.quantidade > 0 AND s.custo_medio > 0)
+                                   / sum(s.quantidade) FILTER (
+                                        WHERE s.quantidade > 0 AND s.custo_medio > 0), 6)
+                        END AS custo_medio,
                    (p.estoque_minimo IS NOT NULL
                     AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo
               FROM estoque_saldos s

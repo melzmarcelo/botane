@@ -61,6 +61,24 @@
   ⚠️ **A suíte prova sem deixar rastro**: o `custo_referencia` vai direto no cadastro, nunca por
   uma entrada — mesma armadilha do teste de precedência acima, e aqui o rastro seria permanente.
 
+- 🔑 **A TELA e a FICHA diziam custos diferentes do mesmo produto** (10/09/2026, achado na
+  varredura do módulo). A cascata (`custo_do_insumo`) pondera só
+  `quantidade > 0 AND custo_medio > 0`; os saldos agrupados, a visão da rede e a posição
+  exportada ponderavam TUDO — inclusive prateleira negativa. Medido: câmara com 10 kg a R$ 40 e
+  bar com −2 kg a R$ 52 davam **R$ 37,00 na tela e R$ 40,00 na ficha**, no mesmo instante; com
+  o bar a custo zero, **R$ 50,00 contra R$ 40,00**.
+  🔑 **A tela adotou o recorte da cascata** (decisão do dono). Saldo negativo é DÍVIDA, não
+  mercadoria, e o custo dele é provisório: deixá-lo pesar no médio seria uma estimativa
+  corrigindo o que a casa realmente pagou.
+  ⚠️ **O `valor` continua somando TUDO**, de propósito — ele responde "quanto vale o que está
+  aqui", e o negativo faz parte dessa conta. Então `valor` PODE não ser
+  `quantidade × custo_medio` na mesma linha: são duas perguntas, e a de dinheiro é a do custo.
+  A checagem antiga de `smoke_estoque` afirmava a igualdade e continua valendo — mas só porque
+  naquele cenário as duas lojas estão positivas; o comentário agora diz isso.
+  ⚠️ **Eram QUATRO cópias do ponderado** (`custos.py`, dois lugares em `estoque.py`,
+  `exportacao_catalogo.py`). Foi assim que a divergência nasceu: a que decide dinheiro mudou e
+  as três que mostram não acompanharam.
+
 - ⚠️ **Cópia congelada acompanha a largura da ORIGEM.** `cmv_movimentacao.codigo` era
   `varchar(20)` contra `produtos.codigo varchar(40)`: **fechar o mês estourava com 500** assim
   que a base tinha um código real de 40 caracteres. Migração 026. É a terceira vez que largura
