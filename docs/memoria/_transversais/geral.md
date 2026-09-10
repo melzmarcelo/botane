@@ -88,6 +88,28 @@
   `Cannot read properties of null`, e a rodada INTEIRA morria ali — **um `checar` que falha
   custa uma linha; uma exceção custa as trezentas checagens seguintes.**
 
+- 🔑 **Suíte que cria tabela de APOIO tem de desativar o que criou** (10/09/2026). `setores`
+  não pagina no dia a dia porque se supõe curta — e a base local tinha **309**: 7 de verdade e
+  o resto criado por rodada de bateria. Quem engordou: `smoke_estoque` ("Confeitaria <marca>",
+  41 vivas), `smoke_relatorios` ("Bar rel" e "Confeitaria rel", 39 de cada) e a `verificar.mjs`
+  em rodadas que falhavam antes da renomeação. As três passaram a desativar; medido depois de
+  três baterias inteiras, os ATIVOS ficaram em 7.
+  ⚠️ **O sintoma não parece resíduo.** Com mais de cem linhas, a checagem da tabela de apoio
+  deixou de achar a PRÓPRIA linha (caiu para a segunda página) e acusou a tela de não oferecer
+  editar. Escolher "100 por página" foi a correção anterior, e ela some assim que a base cresce
+  mais um pouco — a de agora vira a página até achar.
+  ⚠️ **Desativar, não apagar**: é o que a API oferece, e o local que aponta para o setor
+  continua fazendo sentido sem ele. O que se apaga é resíduo VELHO, na mão e conferindo antes.
+  ⚠️ **Conferir o que depende antes de apagar setor.** As chaves são `ON DELETE SET NULL`
+  (produtos, locais) e `CASCADE` (`usuario_setores`): apagar nunca dá erro — dá SILÊNCIO, e um
+  produto de verdade perde a classificação sem nada avisando. Na limpeza de hoje foram dois
+  (dois chás do catálogo do Omie que estavam classificados em "BAR REL 602900", um setor de
+  teste) e eles ficaram sem setor.
+  ⚠️ **`limpar_dados.py --residuo-de-teste` NÃO serve para isto**: ele TRUNCA `setores`,
+  `locais_estoque`, `categorias` e `papeis` inteiras, levando junto os de verdade.
+  ⚠️ **`locais_estoque` tem o mesmo problema e continua aberto**: 119 locais ativos de resíduo
+  ("CANTO DA CONF <marca>" e parentes), criados pelas mesmas suítes e nunca desativados.
+
 ## Armadilhas já pagas
 
 - **`EmailStr` recusa domínio `.local`** (reservado). Por isso o admin é `@botane.com.br`.

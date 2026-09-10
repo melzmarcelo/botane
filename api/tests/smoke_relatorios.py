@@ -339,6 +339,14 @@ chamar("DELETE", f"/produtos/{acucar_rel}", token=token)
 print("9. limpeza")
 for p in list(produtos.values()) + [sem_setor.get("id"), insumo.get("id"), unico.get("id")]:
     chamar("DELETE", f"/produtos/{p}", token=token)
+# ⚠️ **Os SETORES do caso do açúcar também saem, e não saíam.** Cada rodada
+# deixava "Bar rel" e "Confeitaria rel" ATIVOS — 39 de cada na base local. Setor
+# é tabela de APOIO: ela não pagina no dia a dia porque se supõe curta, e uma
+# suíte que a engorda a cada rodada quebra a checagem da rodada seguinte por um
+# motivo que não tem nada a ver com o que se estava testando.
+for id_setor in (setor_bar, setor_conf):
+    if id_setor:
+        chamar("PUT", f"/setores/{id_setor}", {"ativo": False}, token=token)
 checar("limpeza concluída", True)
 
 print()

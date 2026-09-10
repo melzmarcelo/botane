@@ -1045,7 +1045,8 @@ try {
   const marcaEd = Date.now().toString().slice(-6);
   const APOIO = `Tela apoio ${marcaEd}`.toUpperCase();
   const APOIO_CORRIGIDO = `Tela corrigido ${marcaEd}`.toUpperCase();
-  await api("POST", "/setores", { nome: `Tela apoio ${marcaEd}` }, token);
+  const { dados: apoioCriado } = await api(
+    "POST", "/setores", { nome: `Tela apoio ${marcaEd}` }, token);
   await irPara(p, `${WEB}/cadastros?aba=setores`);
   // ⚠️ **A lista de apoio PAGINA, e o registro desta rodada cai fora da
   // primeira página.** "Poucos por natureza" era suposição: a base real tem
@@ -1139,9 +1140,13 @@ try {
   {
     const { dados: setoresAgora } = await api(
       "GET", "/setores?incluir_inativos=true", null, token);
-    // ⚠️ A limpeza também casa pelo nome GRAVADO — sem isso o setor de teste
-    // fica ATIVO e a base acumula um por rodada, que foi o que aconteceu.
-    const meu = (setoresAgora ?? []).find((x) => x.nome === APOIO_CORRIGIDO);
+    // ⚠️ **Pelo ID, não pelo nome.** Casar pelo nome GRAVADO já foi a correção
+    // anterior, e ela ainda deixava rastro: numa rodada que falhasse ANTES da
+    // renomeação, o setor continuava chamando "TELA APOIO …", não casava com
+    // `APOIO_CORRIGIDO` e ficava ativo para sempre — dois assim na base local.
+    // O id não depende de o teste ter chegado ao fim.
+    const meu = (setoresAgora ?? []).find(
+      (x) => x.id === apoioCriado?.id || x.nome === APOIO_CORRIGIDO);
     if (meu) await api("PUT", `/setores/${meu.id}`, { ativo: false }, token);
   }
 

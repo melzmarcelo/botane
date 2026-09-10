@@ -1143,6 +1143,16 @@ checar("os produtos de teste saíram das listas ativas", True)
 st, mov = chamar("GET", f"/estoque/movimentos?id_produto={cafe}", token=token)
 checar("o razão do produto continua lá depois de desativá-lo", len(mov) > 0, len(mov))
 
+# ⚠️ **O SETOR também sai, e não saía.** Cada rodada criava uma "Confeitaria
+# <marca>" e a deixava ATIVA: 41 delas na base local, e a tabela de apoio
+# passou de cem linhas. Aí a checagem da tela de Lojas parou de achar a própria
+# linha, porque ela caiu para a segunda página — a suíte de hoje derrubando a
+# de amanhã, que é a lição que este arquivo já carrega noutro lugar.
+# ⚠️ Desativar, não apagar: é o que a API oferece, e o local que aponta para ele
+# continua fazendo sentido.
+if id_setor_conf:
+    chamar("PUT", f"/setores/{id_setor_conf}", {"ativo": False}, token=token)
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
