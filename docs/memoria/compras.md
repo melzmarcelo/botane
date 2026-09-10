@@ -39,6 +39,46 @@
   nos itens (`vTotalDescontos` é a soma dos `vDesconto`). Migrações 024 e 025 consertam o que
   entrou antes; nota já lançada precisa de estorno + novo lançamento.
 
+- 🔑 **A NOTA declara a conversão, e o sistema jogava fora** (migração 062, 10/09/2026, pedido
+  do dono). A NF-e traz a unidade COMERCIAL (`uCom`/`qCom`) e a TRIBUTÁVEL (`uTrib`/`qTrib`):
+  numa caixa de 24 isso sai como `uCom=CX, qCom=1, uTrib=UN, qTrib=24`, e **`qTrib/qCom` É o
+  fator**, dito pelo fornecedor no documento fiscal. `nfe_xml` lia os dois campos apenas como
+  reserva um do outro, nunca para comparar.
+  🔑 **Sem isso, cadastro "CX = 12" fazia uma nota de CX de 24 entrar pela METADE, calada.**
+  `custos.fator_de_embalagem` casa só pela SIGLA (`upper(um) = upper(%s)`) — não há pergunta
+  sobre quantas vêm nesta caixa. E o estrago não para no saldo: o dinheiro da nota é o mesmo,
+  então o custo unitário sai pelo DOBRO e contamina custo médio, ficha e CMV.
+  ⚠️ **É conferência, NÃO decisão.** Quem manda no razão continua sendo o cadastro; a
+  divergência acende na linha e uma pessoa resolve. Deixar a nota mandar sozinha trocaria um
+  erro silencioso por outro — o fornecedor às vezes erra a unidade tributável.
+  ⚠️ **Tolerância de meio por cento na comparação**: `qTrib/qCom` é divisão e volta com dízima
+  ("12,000001"). Igualdade exata acusaria divergência em nota certa, e alarme que sempre toca
+  ninguém escuta.
+  ⚠️ **Nulo e 1 são coisas diferentes**: nulo é "a nota não declarou" (digitada, ou XML com
+  `uCom = uTrib`), 1 é "declarou que é um para um". Só o segundo pede conferência.
+  ⚠️ **A tela pergunta pela MESMA cascata do lançamento** (`fator_do_item_para_tela` delega a
+  `_fator_do_item`). Uma segunda versão da cascata na tela divergiria da de verdade no primeiro
+  degrau novo, e ela passaria a conferir uma coisa enquanto o razão faz outra.
+  ⚠️ **`atualizar_nota` APAGA e reinsere os itens**, e o campo novo ficou de fora dela na
+  primeira versão: nove checagens de `smoke_nota_atualizada` caíram com 500. São TRÊS INSERT de
+  `nota_itens` no importador — quem mexer na lista de colunas tem de achar os três.
+
+- 🔑 **A conversão se resolve DENTRO da nota** (`compras/[id]/conversao-do-item.tsx`, mesmo
+  pedido). Clicar no produto na linha abre a janela das unidades daquele produto, já com a
+  unidade da nota. Antes era preciso sair da conferência, abrir o produto, acrescentar a
+  unidade e voltar — e quem confere trinta linhas não ia.
+  🔑 **A janela PERGUNTA em vez de sobrescrever**, e é isso que a faz existir. Com a unidade já
+  cadastrada e um número diferente, os dois caminhos são legítimos e só quem conferiu a
+  mercadoria sabe qual é: *o fornecedor mudou de embalagem* (corrige o fator) ou *ele manda as
+  duas caixas* (não se mexe no fator — o certo é o de-para por CÓDIGO do fornecedor, que ganha
+  do fator de embalagem na cascata). Escolher sozinho seria o sistema apostar e errar calado.
+  ⚠️ **Corrigir o fator não reescreve nota já lançada** — o razão é append-only, e as compras
+  antigas seguem com o número antigo. A janela diz isso antes do botão; sem essa frase, quem
+  corrige acha que arrumou o passado.
+  ⚠️ O `PUT /produtos/{id}/unidades` substitui a tabela INTEIRA: manda-se a lista completa com
+  a linha nova no meio. Mandar só a que mudou apagaria as outras, e o palete de 480 sumiria
+  porque alguém mexeu no fardo.
+
 - 🔑 **O EAN do absorvido ficava VIVO num cadastro arquivado** (10/09/2026, relatado pelo dono:
   dois açúcares orgânicos fundidos, o bom sobrevive com local e prateleira, e a nota seguinte
   aparece amarrada ao OUTRO, *"sem local no cadastro"*).

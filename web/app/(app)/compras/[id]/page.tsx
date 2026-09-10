@@ -19,6 +19,7 @@ import {
   Vazio,
 } from "@/components/ui";
 import { CORES, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
+import ConversaoDoItem from "./conversao-do-item";
 import Voltar from "@/components/voltar";
 
 import { custo } from "@/lib/numeros";
@@ -46,6 +47,8 @@ export default function PaginaNota() {
   const [nota, setNota] = useState<NotaDetalhe | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
   const [erro, setErro] = useState("");
+  // O item cuja conversão está aberta na janela.
+  const [conversao, setConversao] = useState<ItemNota | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [confirmando, setConfirmando] = useState<"estornar" | null>(null);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
@@ -403,7 +406,26 @@ export default function PaginaNota() {
                     </td>
                     <td>
                       {i.id_produto ? (
-                        <span className="font-medium text-erva">{i.produto}</span>
+                        // 🔑 **Clicar no produto abre a conversão DESTE item**
+                        // (pedido do dono). Antes era preciso sair da
+                        // conferência, abrir o produto, acrescentar a unidade e
+                        // voltar — e quem confere trinta linhas não ia.
+                        // ⚠️ O aviso de divergência fica na MESMA célula: é
+                        // onde o olho está quando confere, e um alerta no topo
+                        // da tela não diz de qual linha ele fala.
+                        <button
+                          type="button"
+                          className="link-acao text-left font-medium text-erva"
+                          onClick={() => setConversao(i)}
+                          title="ver e ajustar a conversão deste item"
+                        >
+                          {i.produto}
+                          {i.fator_diverge && (
+                            <span className="mt-0.5 block">
+                              <Etiqueta cor="alerta">a nota diz outra conversão</Etiqueta>
+                            </span>
+                          )}
+                        </button>
                       ) : i.ignorado ? (
                         <Etiqueta>fora do estoque</Etiqueta>
                       ) : pode("compras.conciliar") ? (
@@ -558,6 +580,20 @@ export default function PaginaNota() {
             recalculado. Nada se apaga: os dois movimentos ficam à vista.
           </p>
         </Confirmacao>
+      )}
+
+      {conversao && conversao.id_produto && (
+        <ConversaoDoItem
+          idProduto={conversao.id_produto}
+          produto={conversao.produto ?? ""}
+          umEstoque={conversao.um_estoque}
+          umNota={conversao.um_nota}
+          fatorCadastro={conversao.fator_cadastro}
+          fatorDeclarado={conversao.fator_declarado}
+          podeEditar={pode("cadastros.produtos")}
+          aoFechar={() => setConversao(null)}
+          aoSalvar={() => void carregar()}
+        />
       )}
     </div>
   );

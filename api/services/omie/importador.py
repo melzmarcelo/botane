@@ -139,6 +139,18 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
     return None, None, None, "pendente"
 
 
+def fator_do_item_para_tela(cur, id_produto: int, id_fornecedor: int | None,
+                            codigo: str | None, um_nota: str | None = None,
+                            item_codigo_omie: str | None = None):
+    """O MESMO fator que o lançamento usaria, para a tela poder conferir antes.
+
+    ⚠️ **Delega, não repete.** Uma segunda versão da cascata aqui divergiria da
+    de verdade no primeiro degrau novo — e a tela passaria a dizer que confere
+    uma coisa enquanto o razão faz outra, que é pior do que não conferir.
+    """
+    return _fator_do_item(cur, id_produto, id_fornecedor, codigo, um_nota, item_codigo_omie)
+
+
 def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str | None,
                    um_nota: str | None = None, item_codigo_omie: str | None = None) -> Decimal:
     """Quantas unidades de estoque vêm em uma unidade da nota.
@@ -721,16 +733,19 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
                     valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
                     sugestao_score, frete_informado, outros_informado, ignorado,
-                    codigo_omie)
+                    codigo_omie, fator_declarado)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                       %s, %s)""",
+                       %s, %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
              item.get("valor_acrescimo") or 0,
              item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
              item.get("frete_informado"), item.get("outros_informado"),
-             bool(item.get("ignorado")), item.get("codigo_omie")),
+             bool(item.get("ignorado")), item.get("codigo_omie"),
+             # O que a NOTA declarou como conversão — guardado para conferir,
+             # nunca para decidir. Ver `062_fator_declarado_na_nota.sql`.
+             item.get("fator_declarado")),
         )
 
     calcular_nota(cur, id_nota)
@@ -907,16 +922,20 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
                     quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
                     valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
                     sugestao_score, frete_informado, outros_informado, ignorado,
-                    codigo_omie)
+                    codigo_omie, fator_declarado)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                       %s, %s)""",
+                       %s, %s, %s)""",
             (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
              item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
              item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
              item.get("valor_acrescimo") or 0,
              item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
              item.get("frete_informado"), item.get("outros_informado"),
-             ignorado, item.get("codigo_omie")),
+             ignorado, item.get("codigo_omie"),
+             # ⚠️ Reler a nota do Omie APAGA e reinsere os itens; sem este campo
+             # aqui, a conferência do fator sumia justamente na releitura — que
+             # é quando o fornecedor mandou algo diferente e ela mais serve.
+             item.get("fator_declarado")),
         )
 
     calcular_nota(cur, id_nota)

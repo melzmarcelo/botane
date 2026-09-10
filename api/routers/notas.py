@@ -521,7 +521,36 @@ def obter(id_nota: int,
                 WHERE i.id_nota = %s ORDER BY i.seq""",
             (id_nota,),
         )
-        nota["itens"] = [dict(r) for r in cur.fetchall()]
+        itens = [dict(r) for r in cur.fetchall()]
+
+        # 🔑 **A conferência do fator: o que a NOTA declarou contra o que o
+        # CADASTRO vai usar.** Sem isto, um cadastro que diz "CX = 12" fazia uma
+        # nota de CX de 24 entrar pela METADE, calada — e como o dinheiro da
+        # nota é o mesmo, o custo unitário saía pelo dobro e contaminava o custo
+        # médio, a ficha e o CMV. O número da nota não é palpite: vem de
+        # `qTrib/qCom`, que o emitente declara no documento fiscal.
+        # ⚠️ **Conferir, não decidir.** Quem manda no razão continua sendo o
+        # cadastro; a divergência sobe para a tela e uma pessoa resolve. Deixar
+        # a nota mandar sozinha trocaria um erro silencioso por outro — e o
+        # fornecedor às vezes erra a unidade tributável.
+        for item in itens:
+            item["fator_cadastro"] = None
+            item["fator_diverge"] = False
+            if item.get("id_produto") and not item.get("ignorado"):
+                usado = importador.fator_do_item_para_tela(
+                    cur, item["id_produto"], nota.get("id_fornecedor"),
+                    item.get("codigo_fornecedor"), item.get("um_nota"),
+                    item.get("codigo_omie"))
+                item["fator_cadastro"] = float(usado) if usado is not None else None
+                declarado = item.get("fator_declarado")
+                if declarado and usado is not None:
+                    # ⚠️ Tolerância de meio por cento: `qTrib/qCom` é uma divisão
+                    # e volta com dízima ("12,000001"). Comparar por igualdade
+                    # exata acusaria divergência em nota certa, e alarme que
+                    # sempre toca ninguém escuta.
+                    item["fator_diverge"] = abs(float(declarado) - float(usado)) > (
+                        float(usado) * 0.005)
+        nota["itens"] = itens
     return nota
 
 

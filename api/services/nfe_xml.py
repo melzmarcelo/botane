@@ -141,6 +141,25 @@ def _item(det, seq: int) -> dict:
     unitario = _num(_direto(prod, "vUnCom")) or _num(_direto(prod, "vUnTrib"))
     total = _num(_direto(prod, "vProd")) or (quantidade * unitario)
 
+    # 🔑 **O fator que a NOTA declara** — e ele estava sendo jogado fora. A NF-e
+    # traz a unidade COMERCIAL (`uCom`/`qCom`) e a TRIBUTÁVEL (`uTrib`/`qTrib`):
+    # numa caixa de 24 isso sai como `uCom=CX, qCom=1, uTrib=UN, qTrib=24`, e a
+    # razão `qTrib/qCom` É a conversão, dita pelo fornecedor no documento
+    # fiscal. Até aqui os dois campos serviam só de reserva um do outro.
+    # ⚠️ **Só quando as unidades DIFEREM.** Com `uCom = uTrib` a razão é 1 e não
+    # informa conversão nenhuma — gravá-la faria o sistema "conferir" contra um
+    # número que ninguém declarou.
+    # ⚠️ **Nulo é "a nota não disse"**, que é diferente de "disse 1". Quem lê
+    # isto precisa saber a diferença: um pede conferência, o outro não.
+    fator_declarado = None
+    u_com = (_direto(prod, "uCom") or "").strip().upper()
+    u_trib = (_direto(prod, "uTrib") or "").strip().upper()
+    q_com, q_trib = _num(_direto(prod, "qCom")), _num(_direto(prod, "qTrib"))
+    if u_com and u_trib and u_com != u_trib and q_com and q_trib:
+        razao = q_trib / q_com
+        if razao > 0:
+            fator_declarado = razao
+
     return {
         "seq": seq,
         "descricao_fornecedor": (_direto(prod, "xProd") or f"Item {seq}")[:200],
@@ -149,6 +168,9 @@ def _item(det, seq: int) -> dict:
         "ncm": _direto(prod, "NCM"),
         "quantidade": quantidade,
         "um_nota": _direto(prod, "uCom") or _direto(prod, "uTrib"),
+        # O que a nota declara como conversão, para CONFERIR com o cadastro.
+        "fator_declarado": fator_declarado,
+        "um_tributavel": u_trib or None,
         "valor_unitario": unitario,
         "valor_total": total,
         "valor_desconto": _num(_direto(prod, "vDesc")),

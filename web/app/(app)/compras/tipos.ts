@@ -45,6 +45,16 @@ export type ItemNota = {
   validade_nf: string | null;
   valor_desconto: number;
   valor_acrescimo: number;
+  /** O que a NOTA declarou como conversão (`qTrib/qCom` da NF-e). Nulo quando
+   *  ela não disse — nota digitada, ou XML com unidade tributável = comercial.
+   *  ⚠️ Nulo e 1 são coisas diferentes: um é "não declarou", o outro é "declarou
+   *  que é um para um". */
+  fator_declarado: number | null;
+  /** O fator que o lançamento vai usar de verdade — vem da mesma cascata do
+   *  servidor (`_fator_do_item`), não de uma conta refeita na tela. */
+  fator_cadastro: number | null;
+  /** Os dois discordam além da tolerância. É o que acende a etiqueta na linha. */
+  fator_diverge: boolean;
 };
 
 /** O cabeçalho inteiro: é dele que a visualização e a correção se enchem. */
