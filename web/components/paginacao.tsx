@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { trocarNaUrl as trocar } from "@/lib/estado-na-url";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * O rodapé de página das listas — o padrão da casa.
@@ -27,6 +27,14 @@ export const TAMANHOS = [20, 50, 100] as const;
 export const POR_PAGINA_PADRAO = 20;
 
 const chaveGuardada = (nome: string) => `botane:porPagina:${nome}`;
+
+/**
+ * A barra do topo (`sticky`, 56px) mais uma folga.
+ *
+ * ⚠️ Sem descontá-la, o título do bloco para DEBAIXO dela ao rolar — e o que a
+ * pessoa vê depois de virar a página é uma tabela começando do nada.
+ */
+const ALTURA_DA_BARRA = 72;
 
 export type Paginacao = ReturnType<typeof usePaginacao>;
 
@@ -201,42 +209,99 @@ export function fatiar<T>(itens: T[], p: { offset: number; porPagina: number }):
 export function Paginacao({
   p,
   rotulo = "registro(s)",
+  semTamanho = false,
 }: {
   p: Paginacao;
   /** O nome do que está sendo listado: "nota(s)", "produto(s)". */
   rotulo?: string;
+  /**
+   * Esconde o "por página" — a lista tem tamanho FIXO, decidido por quem a
+   * escreveu.
+   *
+   * 🔑 **Existe porque nem toda lista é uma tela** (09/09/2026, decisão do dono
+   * sobre os produtos da pessoa: *"coloca a paginação fixa em 10"*). Um cartão
+   * dentro de uma ficha tem espaço decidido pelo layout, não por quem olha —
+   * oferecer 100 ali empurraria o resto da página para fora da tela, e a
+   * escolha não teria por que ser lembrada.
+   *
+   * ⚠️ Continua sendo o MESMO componente: um segundo rodapé "simples" copiado
+   * ao lado divergiria do primeiro no próximo ajuste, e as duas listas
+   * andariam diferente sem ninguém decidir isso.
+   */
+  semTamanho?: boolean;
 }) {
   const { pagina, setPagina, porPagina, setPorPagina, total, paginas } = p;
   const primeiro = total === 0 ? 0 : pagina * porPagina + 1;
   const ultimo = Math.min((pagina + 1) * porPagina, total);
 
+  // 🔑 **Virar a página traz a lista de volta ao topo** (09/09/2026, pedido do
+  // dono). O botão fica no RODAPÉ: quem clica está no fim da lista, a página
+  // seguinte é desenhada acima dele, e o olho continua parado nas últimas
+  // linhas — dá a impressão de que nada aconteceu, e o começo da página nova
+  // simplesmente não é lido.
+  //
+  // ⚠️ **O topo é o do CARTÃO da lista, não o do documento.** Nem toda lista é
+  // uma tela inteira: a de produtos de uma pessoa é um cartão no meio de uma
+  // ficha, e rolar até o topo do documento levaria a própria lista para fora da
+  // vista. `.cartao` é o `<section>` que embrulha cada bloco do sistema — na
+  // tela cheia ele traz o título e os filtros junto, que é onde se quer estar.
+  //
+  // ⚠️ **A barra do topo é `sticky` e tem 56px.** Parar exatamente no topo do
+  // cartão esconderia o título dele atrás dela — foi o que a primeira versão
+  // fez, com `scrollIntoView`, que não aceita deslocamento. Por isso a conta é
+  // feita à mão, com folga.
+  //
+  // ⚠️ **Não rola na montagem.** A página pode vir da URL (voltar de um
+  // registro restaura `?p=3`), e um salto ao abrir a tela seria um movimento
+  // que ninguém pediu.
+  const raiz = useRef<HTMLDivElement>(null);
+  const paginaAnterior = useRef(pagina);
+  useEffect(() => {
+    if (paginaAnterior.current === pagina) return;
+    paginaAnterior.current = pagina;
+    const alvo = raiz.current?.closest(".cartao") ?? raiz.current?.parentElement;
+    if (!alvo) return;
+    // ⚠️ `prefers-reduced-motion` respeitado: rolagem animada é justamente o
+    // que incomoda quem marcou essa preferência no sistema.
+    const suave = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const destino = alvo.getBoundingClientRect().top + window.scrollY - ALTURA_DA_BARRA;
+    window.scrollTo({ top: Math.max(0, destino), behavior: suave ? "smooth" : "auto" });
+  }, [pagina]);
+
   // Uma página só e cabendo no menor tamanho: não há o que paginar, e um rodapé
   // de navegação numa lista de três linhas é ruído.
-  if (total <= TAMANHOS[0] && paginas <= 1) return null;
+  // ⚠️ Com tamanho FIXO, quem decide é só o número de páginas: `TAMANHOS[0]` é
+  // o menor tamanho OFERECIDO, e numa lista de 10 ele não quer dizer nada.
+  if (semTamanho ? paginas <= 1 : total <= TAMANHOS[0] && paginas <= 1) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-3">
+    <div
+      ref={raiz}
+      className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-3"
+    >
       <span className="text-[13px] text-suave">
         {primeiro}–{ultimo} de{" "}
         <b className="mono text-texto">{total.toLocaleString("pt-BR")}</b> {rotulo}
       </span>
 
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-2 whitespace-nowrap text-[13px] text-suave">
-          por página
-          <select
-            className="campo w-[76px] py-1"
-            aria-label="Registros por página"
-            value={porPagina}
-            onChange={(e) => setPorPagina(Number(e.target.value))}
-          >
-            {TAMANHOS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!semTamanho && (
+          <label className="flex items-center gap-2 whitespace-nowrap text-[13px] text-suave">
+            por página
+            <select
+              className="campo w-[76px] py-1"
+              aria-label="Registros por página"
+              value={porPagina}
+              onChange={(e) => setPorPagina(Number(e.target.value))}
+            >
+              {TAMANHOS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <div className="flex items-center gap-1.5">
           <button

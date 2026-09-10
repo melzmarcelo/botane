@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { Fornecedor } from "@/lib/cadastros";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
 import FormularioFornecedor, { doFornecedor } from "../formulario";
+import ProdutosDaPessoa from "./produtos-da-pessoa";
 import Voltar from "@/components/voltar";
 
 /** Corrigir um fornecedor — a mesma forma da criação, para o olho reconhecer. */
@@ -62,6 +63,15 @@ export default function PaginaFornecedor() {
         id={x.id}
         aoGravar={() => router.push("/fornecedores")}
       />
+
+      {/* 🔑 **O que esta pessoa fornece** (09/09/2026, pedido do dono). A etiqueta
+          lá em cima já dizia QUANTOS; o número sozinho não responde "o que a
+          gente compra deste aqui?", e descobrir exigia ir à lista de produtos e
+          filtrar um por um.
+          ⚠️ **Depois do formulário, não antes.** A ficha existe para editar a
+          pessoa; a lista é consulta. Pôr a tabela primeiro empurraria os campos
+          para baixo da dobra em quem tem doze produtos. */}
+      <ProdutosDaPessoa id={x.id} />
     </div>
   );
 }

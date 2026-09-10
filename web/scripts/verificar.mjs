@@ -1657,7 +1657,17 @@ try {
   const abriuFolha = alvoFolha && /\/producao\/\d+$/.test(p.url());
   checar("a linha da agenda abre a folha da produção", !!abriuFolha, [alvoFolha, p.url()]);
   if (abriuFolha) {
-    await new Promise((r) => setTimeout(r, 1600));
+    // ⚠️ **Espera pelo CONTEÚDO, não por tempo fixo.** Os 1.600 ms davam conta
+    // na máquina livre e não davam com a máquina ocupada: numa rodada com
+    // escrita concorrente no banco, as três checagens abaixo voltaram
+    // `{colunas:false, rende:false, falta:false}` — ou seja, a página ainda nem
+    // tinha renderizado a tabela, e o teste acusou a tela de não ter colunas
+    // que ela tem. É a mesma lição das checagens "oferece baixar".
+    await p.waitForFunction(
+      () => [...document.querySelectorAll("th")].some(
+        (t) => (t.textContent ?? "").trim() === "Por unidade"),
+      { timeout: 20000 },
+    ).catch(() => {});
     const folha = await p.evaluate(() => {
       const cab = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
       return {
@@ -5063,6 +5073,45 @@ try {
   checar("com o 'anterior' ligado, que é o caminho de volta",
     !depoisDeVoltar.anteriorDesligada, depoisDeVoltar);
 
+  // 🔑 **Virar a página traz a lista de volta ao topo** (09/09/2026, pedido do
+  // dono). O botão fica no RODAPÉ: quem clica está no fim da lista, a página
+  // seguinte é desenhada acima dele, e o olho continua parado nas últimas
+  // linhas — dá a impressão de que nada aconteceu.
+  // ⚠️ A checagem rola a página até o FIM antes de clicar: partindo do topo,
+  // "voltou ao topo" seria verdade sem o recurso existir.
+  await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await new Promise((r) => setTimeout(r, 300));
+  const rolagemAntes = await p.evaluate(() => window.scrollY);
+  await p.evaluate(() => document.querySelector('button[aria-label="Página anterior"]')?.click());
+  // ⚠️ **O que se afirma é o TOPO DO CARTÃO à vista, não `scrollY ≈ 0`.** A
+  // primeira versão desta checagem exigia voltar ao topo do DOCUMENTO e falhou
+  // com [968, 618] — o sistema tinha feito exatamente o certo (parar no topo do
+  // bloco da lista, abaixo da barra fixa de 56px), e a checagem é que estava
+  // medindo outra coisa. Rolar ao topo do documento seria errado no cartão
+  // dentro de uma ficha, que é justamente o caso que a decisão preservou.
+  // A rolagem é suave: esperar por ela CHEGAR, não por um tempo fixo.
+  await p.waitForFunction(() => {
+    const c = document.querySelector("table")?.closest(".cartao");
+    if (!c) return false;
+    const t = c.getBoundingClientRect().top;
+    return t > -8 && t < 140;
+  }, { timeout: 10000 }).catch(() => {});
+  const rolagem = await p.evaluate(() => {
+    const c = document.querySelector("table")?.closest(".cartao");
+    return { y: window.scrollY, topoDoCartao: c ? Math.round(c.getBoundingClientRect().top) : null };
+  });
+  checar("a página estava rolada até o fim antes de virar", rolagemAntes > 200, rolagemAntes);
+  checar("e virar a página sobe a tela", rolagem.y < rolagemAntes,
+    [rolagemAntes, rolagem.y]);
+  // 🔑 A afirmação central: o começo da lista fica à vista, logo abaixo da
+  // barra do topo — não escondido atrás dela, nem no meio da página.
+  checar("deixando o topo da lista à vista, abaixo da barra",
+    rolagem.topoDoCartao !== null && rolagem.topoDoCartao > -8 && rolagem.topoDoCartao < 140,
+    rolagem);
+  // Volta para a página 2, que é onde o resto deste bloco espera estar.
+  await p.evaluate(() => document.querySelector('button[aria-label="Próxima página"]')?.click());
+  await new Promise((r) => setTimeout(r, 1200));
+
   // 20, 50 ou 100 — escolha de quem olha.
   await p.select('select[aria-label="Registros por página"]', "50");
   await new Promise((r) => setTimeout(r, 1600));
@@ -5092,14 +5141,121 @@ try {
   // paginação por um problema que era do dado. Os produtos desta fase têm
   // marca própria, e o `-0` pega uma parte deles, não todos.
   await campoBuscaPag.type(`${marcaPag}-0`);
-  await new Promise((r) => setTimeout(r, 1800));
+  // ⚠️ **Espera o RESULTADO da busca, não 1.800 ms.** A digitação tem debounce
+  // de 300 ms e a resposta vem depois; numa rodada com a máquina ocupada o
+  // tempo fixo acabava antes, a lista ainda estava vazia e a checagem acusava a
+  // paginação de sumir — `{tem:false, linhas:0}`, que é a assinatura de "a
+  // página não terminou de carregar", não de um defeito. Mesma lição das
+  // checagens "oferece baixar" e da folha de produção.
+  await p.waitForFunction(
+    (marca) => [...document.querySelectorAll("tbody tr")].some(
+      (tr) => (tr.textContent ?? "").includes(marca)),
+    { timeout: 20000 },
+    `${marcaPag}-0`,
+  ).catch(() => {});
   const filtrado = await lerPaginacao();
+  // ⚠️ **O diagnóstico vai junto.** Esta checagem falhou duas rodadas seguidas
+  // com `{linhas:0}` e nada mais — e `linhas:0` sozinho não distingue "a busca
+  // não achou" de "a página ainda não carregou" de "o filtro ficou de outra
+  // rodada". Reproduzida isolada, ela passa; então o que falta é saber em que
+  // ESTADO a tela está quando ela falha aqui.
+  const diagFiltro = await p.evaluate(() => ({
+    url: location.pathname + location.search,
+    busca: document.querySelector(
+      'input[placeholder="nome, código ou código de barras"]')?.value ?? null,
+    // Os seletores de filtro que a tela ganhou em 09/09/2026: um deles preso
+    // num valor de um passo anterior esvaziaria a lista sem mais explicação.
+    selects: [...document.querySelectorAll("select")].map(
+      (x) => `${x.getAttribute("aria-label") ?? x.name ?? "?"}=${x.value}`),
+    vazio: /nenhum produto|nada encontrado/i.test(document.body.innerText),
+    primeiraLinha: document.querySelector("tbody tr")?.textContent?.trim()?.slice(0, 60) ?? null,
+  }));
   checar("filtrar volta para a primeira página",
-    filtrado.linhas > 0 && (filtrado.rodape === null || /^1–/.test(filtrado.rodape)), filtrado);
+    filtrado.linhas > 0 && (filtrado.rodape === null || /^1–/.test(filtrado.rodape)),
+    { ...filtrado, ...diagFiltro, termo: `${marcaPag}-0` });
   checar("e o total passa a ser o do filtro", filtrado.total < antes.total || !filtrado.tem,
     [antes.total, filtrado.total]);
   await foto(p, "32-paginacao");
   for (const id of criadosPag) await api("DELETE", `/produtos/${id}`, null, token);
+
+  console.log("10b1. os produtos que a pessoa fornece");
+  // 🔑 **Pedido do dono (09/09/2026):** *"no cadastro de pessoas, criar um grupo
+  // dos produtos que a pessoa/fornecedor está vinculado"*. A ficha já dizia
+  // QUANTOS; o número sozinho não responde "o que a gente compra deste aqui?".
+  // ⚠️ O vínculo NASCE do lançamento da nota — por isso a checagem procura uma
+  // pessoa que já tenha produtos, em vez de cadastrar um vínculo por fora.
+  {
+    const { dados: pessoas } = await api(
+      "GET", "/fornecedores?incluir_inativos=true&limite=1000", null, token);
+    // ⚠️ A de MAIS produtos, não a primeira: com três linhas o corte de dez não
+    // se observa, e a checagem passaria sem exercitar nada.
+    const comProdutos = (pessoas ?? [])
+      .filter((f) => (f.produtos ?? 0) > 0)
+      .sort((a, b) => (b.produtos ?? 0) - (a.produtos ?? 0))[0];
+    if (comProdutos) {
+      await irPara(p, `${WEB}/fornecedores/${comProdutos.id}`);
+      await p.waitForFunction(
+        () => /produtos desta pessoa/i.test(document.body.innerText), { timeout: 15000 })
+        .catch(() => {});
+      const cartao = await p.evaluate(() => {
+        const cab = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
+        return {
+          tem: /Produtos desta pessoa/i.test(document.body.innerText),
+          colunas: ["Produto", "Último preço", "Última compra"].every((c) => cab.includes(c)),
+          // 🔑 O preço é POR UNIDADE DE ESTOQUE, e dizê-lo é o que impede
+          // "R$ 2,50" de ser lido como o preço da caixa.
+          diz_a_unidade: /por unidade de estoque/i.test(document.body.innerText),
+          linhas: document.querySelectorAll("table tbody tr").length,
+          // A linha leva ao produto: a ficha da pessoa é o ponto de partida.
+          leva_ao_produto: [...document.querySelectorAll("a")].some(
+            (a) => /^\/produtos\/\d+$/.test(a.getAttribute("href") ?? "")),
+          // 🔑 **Dez por página, e o seletor NÃO aparece** (decisão do dono,
+          // 09/09/2026). O tamanho é do cartão, não de quem olha: um cartão
+          // dentro de uma ficha tem espaço decidido pelo layout, e oferecer 100
+          // ali empurraria o resto da página para fora da tela.
+          tem_seletor: !!document.querySelector('select[aria-label="Registros por página"]'),
+          rodape: (document.body.innerText.match(/\d+–\d+ de [\d.]+ produto/) ?? [null])[0],
+          // ⚠️ Só os ATIVOS: a etiqueta de inativo não pode aparecer aqui, e a
+          // descrição do cartão diz o recorte.
+          diz_ativos: /produto\(s\) ativo\(s\)/i.test(document.body.innerText),
+        };
+      });
+      checar("a ficha da pessoa lista os produtos dela", cartao.tem, cartao);
+      checar("com preço e data da última compra", cartao.colunas, cartao);
+      checar("dizendo que o preço é por unidade de estoque", cartao.diz_a_unidade, cartao);
+      checar("e cada linha leva ao produto", cartao.leva_ao_produto && cartao.linhas > 0,
+        cartao);
+      checar("a lista diz que traz só os ativos", cartao.diz_ativos, cartao);
+      // ⚠️ **Nunca mais que dez linhas**, tenha a pessoa doze ou cento e dois.
+      checar("e nunca passa de dez linhas por página", cartao.linhas <= 10, cartao);
+      // 🔑 A ausência do seletor é a afirmação: com ele, o tamanho voltaria a
+      // ser escolha de quem olha, que é o que esta decisão tirou.
+      checar("sem oferecer 'por página' — o tamanho é fixo", !cartao.tem_seletor, cartao);
+      if ((comProdutos.produtos ?? 0) > 10) {
+        // Passando de dez, o rodapé TEM de aparecer: sem ele a lista fica presa
+        // nas dez primeiras sem nada dizendo que existem outras.
+        checar("passando de dez, o rodapé de página aparece", !!cartao.rodape, cartao);
+      }
+    } else {
+      // ⚠️ Sem pessoa com vínculo na base, a checagem não vale: afirmaria sobre
+      // um estado que não existe. Diz isso em vez de passar por sorte.
+      checar("a ficha da pessoa lista os produtos dela", false,
+        "(nenhuma pessoa com produto vinculado na base)");
+    }
+
+    // ⚠️ **O vazio EXPLICA.** Ninguém cadastra este vínculo à mão — ele nasce da
+    // nota —, e "nenhum produto" sem essa frase parece campo que faltou.
+    const semProdutos = (pessoas ?? []).find((f) => !(f.produtos ?? 0));
+    if (semProdutos) {
+      await irPara(p, `${WEB}/fornecedores/${semProdutos.id}`);
+      await p.waitForFunction(
+        () => /produtos desta pessoa/i.test(document.body.innerText), { timeout: 15000 })
+        .catch(() => {});
+      checar("e quem não fornece nada vê o porquê, não um vazio mudo",
+        await p.evaluate(() => /vínculo se cria sozinho|nasce sozinho/i.test(
+          document.body.innerText)));
+    }
+  }
 
   console.log("10b2. cadastrar em pagina propria: fornecedor e usuario");
   // ⚠️ **Os dois formularios viviam na coluna da direita da lista.** O de

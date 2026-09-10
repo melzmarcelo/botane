@@ -76,6 +76,53 @@ def obter(id_fornecedor: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     return dict(f)
 
 
+@router.get("/{id_fornecedor}/produtos")
+def produtos_da_pessoa(id_fornecedor: int,
+                       ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
+    """O que esta pessoa fornece — e por quanto, da última vez.
+
+    🔑 **Pedido do dono (09/09/2026):** *"no cadastro de pessoas, criar um grupo
+    dos produtos que a pessoa/fornecedor está vinculado"*. A ficha dela já dizia
+    **quantos** (`12 produto(s)`), e o número sozinho não responde a pergunta
+    que se faz olhando para ela: *o que a gente compra deste aqui?*. Para
+    descobrir, era preciso ir à lista de produtos e filtrar um por um.
+
+    ⚠️ **`ultimo_preco` é POR UNIDADE DE ESTOQUE**, nunca por embalagem — é o
+    mesmo número que a cascata de custo lê como segundo degrau. Mostrá-lo ao
+    lado do fator da embalagem é o que deixa a conta conferível: caixa com 12,
+    R$ 2,50 a unidade, R$ 30,00 a caixa.
+
+    ⚠️ **Só os ATIVOS** (decisão do dono, 09/09/2026). A primeira versão
+    trazia o inativo marcado, com o argumento de que ele explica a nota antiga;
+    na base real isso encheu a lista de cadastro arquivado e afogou o que a
+    pessoa fornece HOJE, que é a pergunta da ficha. O vínculo com o arquivado
+    continua existindo e aparece na ficha do PRODUTO.
+
+    ⚠️ Só autenticação: é leitura de cadastro, e a ficha da pessoa já é visível
+    a quem chega nela. Quem edita passa pelas rotas de produto.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT 1 FROM fornecedores WHERE id = %s", (id_fornecedor,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Pessoa não encontrada")
+        cur.execute(
+            """SELECT p.id, p.codigo, p.nome, p.um_estoque, p.ativo, p.status,
+                      pf.codigo_no_fornecedor, pf.embalagem, pf.fator,
+                      pf.ultimo_preco, pf.ultima_compra, pf.preferencial
+                 FROM produto_fornecedor pf
+                 JOIN produtos p ON p.id = pf.id_produto
+                WHERE pf.id_fornecedor = %s AND p.ativo
+                -- O preferencial primeiro, depois quem foi comprado mais
+                -- recentemente: a pergunta de quem abre isto é "o que a gente
+                -- compra deste fornecedor HOJE", não a ordem alfabética.
+                ORDER BY pf.preferencial DESC,
+                         pf.ultima_compra DESC NULLS LAST,
+                         lower(p.nome)""",
+            (id_fornecedor,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
 @router.post("", status_code=201)
 def criar(body: FornecedorCreate,
           ctx: Contexto = Depends(requer_permissao("cadastros.fornecedores"))) -> dict:

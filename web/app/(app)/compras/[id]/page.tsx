@@ -150,6 +150,37 @@ export default function PaginaNota() {
     }
   }
 
+  /**
+   * 🔑 **Reler a nota no Omie** (09/09/2026, pedido do dono: *"quando tem
+   * ajuste em alguma nota no Omie precisamos trazer isto para o Botané … e
+   * também dentro da nota ter um botão para atualizar a nota"*).
+   *
+   * A sincronização compara o cabeçalho da lista, que é a chamada barata, e por
+   * isso enxerga o que mexe em valor ou data. Item trocado por outro do mesmo
+   * preço não muda cabeçalho nenhum — e é para esse caso que este botão existe.
+   *
+   * ⚠️ **A resposta DIZ se algo mudou.** "Nota atualizada" depois de uma
+   * releitura que não mudou nada faria a pessoa procurar a diferença que não
+   * existe: o servidor devolve `mudou`, e o aviso segue ele.
+   */
+  async function atualizarDoOmie() {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ message: string; mudou: boolean }>(
+        `/notas/${id}/atualizar-do-omie`, {});
+      // ⚠️ **`sucesso` nos dois casos, e nao um `info` inventado.** O aviso
+      // tem DOIS estados de proposito (ok e erro), e "nada mudou" e um
+      // resultado bem-sucedido -- quem clicou queria saber, e agora sabe. Quem
+      // distingue e a FRASE, que o servidor escreve.
+      aviso.sucesso(r.message);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível atualizar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function estornar() {
     setOcupado(true);
     try {
@@ -222,6 +253,22 @@ export default function PaginaNota() {
             <Link href={`/compras/${nota.id}/editar`} className="btn btn-secundario">
               Corrigir
             </Link>
+          )}
+          {/* 🔑 **Só a nota que VEIO do Omie**, e só antes de lançar. A digitada
+              se corrige ali ao lado; a do XML é o documento do fornecedor, e
+              não há de onde reler. Lançada, o razão já tem os movimentos: o
+              caminho é estornar primeiro, e o servidor recusa com essa frase.
+              ⚠️ Esconder o botão na nota lançada é melhor que mostrá-lo e
+              recusar — quem clica espera que aconteça. */}
+          {nota.origem === "OMIE" && !lancada && pode("compras.notas") && (
+            <button
+              className="btn btn-secundario"
+              onClick={atualizarDoOmie}
+              disabled={ocupado}
+              title="Relê esta nota no Omie e traz o que mudou lá"
+            >
+              Atualizar do Omie
+            </button>
           )}
           {lancada && pode("estoque.ajuste") && (
             <button

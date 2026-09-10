@@ -728,6 +728,201 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
     return id_nota, True
 
 
+# Os campos do CABEÇALHO que denunciam um ajuste lá. Todos vêm na LISTA, que é
+# a chamada barata: comparar por aqui evita pedir o detalhe de 3.670 notas para
+# descobrir que nenhuma mudou.
+# ⚠️ Valor é o que quase sempre muda, mas não é o único: corrigir a data de
+# entrada muda o mês em que a compra pesa no CMV.
+CAMPOS_DE_MUDANCA = ("valor_total", "valor_produtos", "valor_frete",
+                     "valor_outros", "data_entrada", "data_emissao",
+                     "numero", "serie")
+
+# ⚠️ **`valor_desconto` FICA DE FORA, e nao por descuido.** Ele nao vem dos
+# totais como os outros: o mapeador o calcula como "o desconto da nota MENOS a
+# soma dos descontos dos itens", porque somar os dois tiraria o mesmo dinheiro
+# duas vezes. Na LISTA nao ha itens, entao a subtracao devolve o valor cheio;
+# no DETALHE ela devolve o que sobra -- e os dois DISCORDAM por construcao.
+# Compara-lo faria toda nota com desconto por item parecer mudada em toda
+# passada, e a sincronizacao pediria o detalhe de cada uma delas para sempre:
+# exatamente a chamada cara que esta comparacao existe para evitar. Uma nota
+# real (5115, 23,81 de desconto) reproduzia isso a cada rodada.
+# ⚠️ **E nada se perde**: desconto que muda mexe no `valor_total`, que esta
+# na lista. Desconto que nao mexe no total nao e desconto.
+
+
+def _comparavel(v):
+    """O valor como ele deve ser COMPARADO, não como está guardado.
+
+    ⚠️ `Decimal("10.00")` e `10.0` são o mesmo dinheiro e comparam diferente; a
+    data vem como `date` de um lado e string do outro. Sem normalizar, toda nota
+    pareceria mudada e a sincronização pediria o detalhe de todas — que é
+    exatamente o custo que a comparação existe para evitar.
+    """
+    if v is None:
+        return None
+    if isinstance(v, (int, float, Decimal)):
+        return round(float(v), 2)
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()[:10]
+    return str(v).strip() or None
+
+
+def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
+    """A nota que já temos está diferente da que o Omie acabou de listar?
+
+    🔑 **Pedido do dono (09/09/2026):** *"quando tem ajuste em alguma nota no
+    Omie precisamos trazer isto para o Botané"*. Até aqui `_ja_temos` cortava a
+    nota conhecida antes de qualquer comparação — o ajuste feito lá **nunca**
+    chegava, e nada dizia que ele existia.
+
+    Devolve `None` quando não mudou (ou quando não temos a nota), e o registro
+    daqui — com `campos`, o que difere — quando mudou.
+
+    ⚠️ **Compara o CABEÇALHO da lista, não o detalhe.** Item que muda sem mexer
+    em valor nenhum passa despercebido por aqui; o botão da tela existe para
+    esse caso, e ele pede o detalhe sem perguntar.
+    """
+    if cabecalho.get("chave_nfe"):
+        onde, valor = "chave_nfe = %s", cabecalho["chave_nfe"]
+    elif cabecalho.get("id_omie"):
+        onde, valor = "id_omie = %s", cabecalho["id_omie"]
+    else:
+        return None
+    cur.execute(
+        f"""SELECT id, status, numero, serie, data_emissao, data_entrada,
+                   valor_produtos, valor_frete, valor_desconto, valor_outros, valor_total
+              FROM notas_entrada WHERE {onde}""",
+        (valor,),
+    )
+    aqui = cur.fetchone()
+    if not aqui:
+        return None
+    difere = {c: (_comparavel(aqui[c]), _comparavel(cabecalho.get(c)))
+              for c in CAMPOS_DE_MUDANCA
+              # ⚠️ Campo que a LISTA não traz não é campo que mudou: `None` de um
+              # lado contra um valor do outro diria "mudou" em toda nota.
+              if cabecalho.get(c) is not None
+              and _comparavel(aqui[c]) != _comparavel(cabecalho.get(c))}
+    if not difere:
+        return None
+    return {"id": aqui["id"], "status": aqui["status"], "campos": difere}
+
+
+def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> dict:
+    """Reescreve a nota com o que o Omie tem agora. Devolve o que mudou.
+
+    🔑 **Pedido do dono (09/09/2026).** O ajuste feito no Omie — valor corrigido,
+    item trocado, frete que apareceu depois — não tinha como chegar aqui: a nota
+    conhecida era pulada na sincronização, e não havia botão nenhum.
+
+    ⚠️ **Nota LANÇADA não se reescreve, e isso é recusa.** Os movimentos já estão
+    no razão, que é append-only: trocar a quantidade do item deixaria o cadastro
+    dizendo 10 e o estoque 12, a mesma prateleira com dois números. O caminho é
+    estornar, atualizar e lançar de novo — e a recusa diz isso.
+
+    🔑 **O VÍNCULO feito à mão sobrevive.** Quem conferiu a nota e escolheu o
+    produto de vinte linhas não pode perder o trabalho porque o fornecedor
+    corrigiu o frete. Os itens são reescritos, mas o produto e o "ignorado"
+    voltam pelo CÓDIGO do item — a mesma chave que a cascata usa. Item que
+    sumiu do Omie some daqui; item novo nasce sem vínculo, na fila de sempre.
+    ⚠️ **Pelo código, nunca pela POSIÇÃO.** Casar por `seq` faria uma linha
+    removida no meio deslocar todas as seguintes — cada item herdando o produto
+    do vizinho, calado. É a versão silenciosa do item órfão.
+    """
+    cur.execute(
+        """SELECT id, status, id_unidade, id_fornecedor, id_local
+             FROM notas_entrada WHERE id = %s""",
+        (id_nota,),
+    )
+    atual = cur.fetchone()
+    if not atual:
+        raise HTTPException(status_code=404, detail="Nota não encontrada")
+    if atual["status"] == "LANCADA":
+        raise HTTPException(
+            status_code=409,
+            detail=("Esta nota já foi lançada no estoque. Estorne o lançamento antes de "
+                    "atualizá-la — o razão não se reescreve, e mudar a nota agora deixaria "
+                    "o estoque e o documento com números diferentes."),
+        )
+
+    # O que a pessoa decidiu, guardado pelo código do item antes de reescrever.
+    cur.execute(
+        """SELECT codigo_omie, codigo_fornecedor, id_produto, ignorado
+             FROM nota_itens WHERE id_nota = %s""",
+        (id_nota,),
+    )
+    decidido = {}
+    for r in cur.fetchall():
+        chave = (r["codigo_omie"] or "").strip() or (r["codigo_fornecedor"] or "").strip()
+        if chave and (r["id_produto"] or r["ignorado"]):
+            decidido[chave] = (r["id_produto"], r["ignorado"])
+
+    antes = {}
+    cur.execute("""SELECT valor_total, valor_produtos, valor_frete, valor_desconto,
+                          valor_outros, data_entrada
+                     FROM notas_entrada WHERE id = %s""", (id_nota,))
+    antes = dict(cur.fetchone() or {})
+
+    cur.execute(
+        """UPDATE notas_entrada
+              SET numero = coalesce(%s, numero), serie = coalesce(%s, serie),
+                  data_emissao = coalesce(%s, data_emissao),
+                  data_entrada = coalesce(%s, data_entrada),
+                  valor_produtos = %s, valor_frete = %s, valor_desconto = %s,
+                  valor_outros = %s, valor_total = %s,
+                  bruto = coalesce(%s, bruto)
+            WHERE id = %s""",
+        (nota.get("numero"), nota.get("serie"), nota.get("data_emissao"),
+         nota.get("data_entrada"), nota.get("valor_produtos"), nota.get("valor_frete"),
+         nota.get("valor_desconto"), nota.get("valor_outros"), nota.get("valor_total"),
+         __import__("json").dumps(bruto, default=str) if bruto else None, id_nota),
+    )
+
+    cur.execute("DELETE FROM nota_itens WHERE id_nota = %s", (id_nota,))
+    reconhecidos = 0
+    for item in nota.get("itens", []):
+        chave = (item.get("codigo_omie") or "").strip() or (
+            item.get("codigo_fornecedor") or "").strip()
+        guardado = decidido.get(chave)
+        if guardado:
+            id_produto, ignorado = guardado
+            sugestao = score = None
+            reconhecidos += 1
+        else:
+            ignorado = bool(item.get("ignorado"))
+            id_produto, sugestao, score, _como = conciliar_item(
+                cur, item, atual["id_fornecedor"])
+        cur.execute(
+            """INSERT INTO nota_itens
+                   (id_nota, seq, descricao_fornecedor, codigo_fornecedor, codigo_barras, ncm,
+                    quantidade, um_nota, valor_unitario, valor_total, valor_desconto,
+                    valor_acrescimo, lote_nf, validade_nf, id_produto, sugestao_produto,
+                    sugestao_score, frete_informado, outros_informado, ignorado,
+                    codigo_omie)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s)""",
+            (id_nota, item["seq"], item["descricao_fornecedor"], item.get("codigo_fornecedor"),
+             item.get("codigo_barras"), item.get("ncm"), item["quantidade"], item.get("um_nota"),
+             item["valor_unitario"], item["valor_total"], item.get("valor_desconto") or 0,
+             item.get("valor_acrescimo") or 0,
+             item.get("lote_nf"), item.get("validade_nf"), id_produto, sugestao, score,
+             item.get("frete_informado"), item.get("outros_informado"),
+             ignorado, item.get("codigo_omie")),
+        )
+
+    calcular_nota(cur, id_nota)
+
+    cur.execute("SELECT valor_total FROM notas_entrada WHERE id = %s", (id_nota,))
+    depois = cur.fetchone()
+    return {
+        "id": id_nota,
+        "itens": len(nota.get("itens", [])),
+        "vinculos_preservados": reconhecidos,
+        "valor_antes": float(antes.get("valor_total") or 0),
+        "valor_depois": float(depois["valor_total"] or 0),
+    }
+
+
 # Folga sobre a última sincronização. Nota emitida antes e lançada no Omie
 # depois entraria fora da janela se ela começasse exatamente onde a anterior
 # parou — e ninguém perceberia, porque o resultado seria "0 novas".
@@ -814,6 +1009,10 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
     """
     inicio, motivo = janela(cur, id_unidade, desde, dias)
     novas, repetidas, paginas, antigas, falhas = 0, 0, 0, 0, 0
+    # 🔑 O que o ajuste no Omie produz aqui: as que foram reescritas e as que
+    # NÃO puderam ser, por já estarem no razão. As segundas importam mais — elas
+    # são a divergência que ninguém veria de outro jeito.
+    atualizadas, travadas = 0, []
     seguidas, truncou = 0, {}
 
     def parou_no_teto(trazidos, total):
@@ -836,7 +1035,39 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
                     fora += 1
                     continue
                 if _ja_temos(cur, id_unidade, cabecalho):
-                    repetidas += 1
+                    # 🔑 **A nota conhecida deixou de ser ignorada** (09/09/2026,
+                    # pedido do dono: *"quando tem ajuste em alguma nota no Omie
+                    # precisamos trazer isto para o Botané"*). Antes ela era
+                    # cortada aqui e o ajuste feito lá nunca chegava.
+                    # ⚠️ A comparação é com o cabeçalho da LISTA, que já veio:
+                    # não custa chamada nenhuma. Só quando ele difere é que o
+                    # detalhe caro é pedido.
+                    mudanca = mudou_no_omie(cur, id_unidade, cabecalho)
+                    if not mudanca:
+                        repetidas += 1
+                        continue
+                    if mudanca["status"] == "LANCADA":
+                        # ⚠️ **Não reescreve, e não cala.** Os movimentos já
+                        # estão no razão; o que se pode fazer é DIZER que a nota
+                        # mudou lá, para alguém decidir sobre o estorno.
+                        travadas.append({
+                            "id": mudanca["id"],
+                            "numero": cabecalho.get("numero"),
+                            "fornecedor": cabecalho.get("nome_emitente"),
+                            "campos": sorted(mudanca["campos"]),
+                        })
+                        repetidas += 1
+                        continue
+                    try:
+                        detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
+                                                 {"nIdReceb": int(cabecalho["id_omie"])})
+                    except (ErroOmie, TypeError, ValueError):
+                        falhas += 1
+                        repetidas += 1
+                        continue
+                    atualizar_nota(cur, mudanca["id"],
+                                   mapeadores.recebimento_de_nfe(detalhe), detalhe)
+                    atualizadas += 1
                     continue
                 try:
                     detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
@@ -864,6 +1095,12 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
         raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
 
     recado = f"{novas} nova(s), {repetidas} já existiam — {motivo}"
+    if atualizadas:
+        recado += f"; {atualizadas} atualizada(s) com o ajuste do Omie"
+    # ⚠️ A travada entra na frase mesmo sendo "nada aconteceu": é justamente o
+    # caso em que alguém precisa agir, e um silêncio aqui o esconderia.
+    if travadas:
+        recado += f"; {len(travadas)} mudaram no Omie mas já estão lançadas"
     if falhas:
         recado += f"; {falhas} nota(s) sem detalhe"
     _registrar(cur, MODULO_NOTAS, LISTA_NOTAS,
@@ -885,7 +1122,9 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
             _registrar(cur, "geral/clientes", "ListarClientes", "ERRO", 0,
                        "não deu para completar os fornecedores desta leva", cliente.modo)
 
-    return {"novas": novas, "repetidas": repetidas, "paginas": paginas, "modo": cliente.modo,
+    return {"novas": novas, "repetidas": repetidas, "atualizadas": atualizadas,
+            "travadas": travadas,
+            "paginas": paginas, "modo": cliente.modo,
             "desde": inicio, "janela": motivo, "fornecedores_completados": completados,
             "fora_da_janela": antigas, "sem_detalhe": falhas,
             # Só preenchido quando a varredura parou no teto de páginas: sem

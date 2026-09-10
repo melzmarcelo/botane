@@ -12,17 +12,43 @@ quando o campo vier com outro nome, é uma linha de mudança, não um refactor.
 
 import re
 from datetime import date, datetime
+from html import unescape
 from decimal import Decimal
 from typing import Any
 
 from services.custos import dec
 
 
+def _texto(valor):
+    """Desfaz o escape de HTML/XML que o Omie manda dentro do JSON.
+
+    🔑 **Relatado pelo dono (09/09/2026):** *"no Omie está assim o fornecedor,
+    F & C - COMERCIO DE PRODUTOS ALIMENTICIOS LTDA, mas no Botané está assim
+    F &AMP; C - …"*.
+
+    O Omie devolve JSON, mas com o texto **escapado como se fosse XML**: o `&`
+    da razão social chega `&amp;`, o apóstrofo chega `&apos;`. Guardado cru, ele
+    aparece na tela, na nota e no relatório — e o gatilho que põe o nome em
+    maiúsculas ainda escapava o disfarce, deixando `&AMP;`, que não se parece
+    com nada. Na conta real: 10 fornecedores, 8 nomes de fantasia e 10 produtos.
+
+    ⚠️ **Aqui, e não em cada campo.** Este é o ponto por onde TODO texto do Omie
+    passa; desescapar campo a campo deixaria de fora justamente o próximo campo
+    que alguém acrescentar — é a armadilha da lista de campos, a mesma que já
+    comeu a `marca` e depois o `custo_referencia` na fusão.
+
+    ⚠️ **Uma vez só.** `unescape` é aplicado no valor que chega, e não de novo
+    sobre o resultado: um nome que fosse legitimamente `&amp;amp;` vira `&amp;`,
+    que é o certo — desescapar duas vezes o transformaria em `&`.
+    """
+    return unescape(valor) if isinstance(valor, str) else valor
+
+
 def _pega(origem: dict, *nomes: str, padrao=None):
     for nome in nomes:
         if nome in origem and origem[nome] not in (None, ""):
-            return origem[nome]
-    return padrao
+            return _texto(origem[nome])
+    return _texto(padrao)
 
 
 def _data(valor) -> date | None:

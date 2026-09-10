@@ -689,6 +689,97 @@ def lancar(id_nota: int, body: LancarRequest,
     return r | {"message": f"{r['itens_lancados']} item(ns) lançado(s) no estoque"}
 
 
+@router.post("/{id_nota}/atualizar-do-omie")
+def atualizar_do_omie(id_nota: int,
+                      ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Traz para esta nota o que o Omie tem AGORA.
+
+    🔑 **Pedido do dono (09/09/2026):** *"quando tem ajuste em alguma nota no
+    Omie precisamos trazer isto para o Botané … e também dentro da nota ter um
+    botão para atualizar a nota"*.
+
+    A sincronização compara o CABEÇALHO da lista, que é a chamada barata, e por
+    isso enxerga o que mexe em valor ou data. Item trocado por outro do mesmo
+    preço não muda cabeçalho nenhum — e é para esse caso que este botão existe:
+    ele pede o detalhe sem perguntar se valia a pena.
+
+    ⚠️ **Nota LANÇADA é recusada** (409), com a frase dizendo que o caminho é
+    estornar antes: o razão é append-only, e reescrever a nota agora deixaria o
+    documento e o estoque com números diferentes.
+
+    ⚠️ **Só a nota que veio do Omie.** A digitada é da casa (e se edita pelo
+    `PUT`); a do XML é o documento do fornecedor, e não há de onde reler.
+    """
+    from services import segredos
+    from services.omie import mapeadores
+    from services.omie.cliente import ClienteOmie, ErroOmie
+
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            "SELECT id, id_omie, status, numero FROM notas_entrada WHERE id = %s",
+            (id_nota,),
+        )
+        nota = cur.fetchone()
+        if not nota:
+            raise HTTPException(status_code=404, detail="Nota não encontrada")
+        if not nota["id_omie"]:
+            raise HTTPException(
+                status_code=400,
+                detail=("Esta nota não veio do Omie — não há de onde reler. "
+                        "Nota digitada se corrige na própria tela; a do XML é o "
+                        "documento do fornecedor."),
+            )
+        if nota["status"] == "LANCADA":
+            raise HTTPException(
+                status_code=409,
+                detail=("Esta nota já foi lançada no estoque. Estorne o lançamento antes de "
+                        "atualizá-la — o razão não se reescreve, e mudar a nota agora deixaria "
+                        "o estoque e o documento com números diferentes."),
+            )
+
+        cur.execute(
+            """SELECT credenciais, modo FROM integracoes
+                WHERE id_unidade = %s AND servico = 'OMIE'""",
+            (id_unidade,),
+        )
+        linha = cur.fetchone()
+        if not linha:
+            raise HTTPException(status_code=400,
+                                detail="A integração com o Omie não está configurada.")
+        cred = segredos.decifrar(linha["credenciais"]) if linha["credenciais"] else {}
+        cliente = ClienteOmie(cred.get("app_key"), cred.get("app_secret"), linha["modo"])
+
+        try:
+            detalhe = cliente.chamar(importador.MODULO_NOTAS, importador.ITENS_DA_NOTA,
+                                     {"nIdReceb": int(nota["id_omie"])})
+        except ErroOmie as e:
+            raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"O identificador desta nota no Omie não é válido: {nota['id_omie']}")
+
+        r = importador.atualizar_nota(cur, id_nota, mapeadores.recebimento_de_nfe(detalhe),
+                                      detalhe)
+        auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "atualizar_do_omie",
+                            antes={"valor_total": r["valor_antes"]},
+                            depois={"valor_total": r["valor_depois"], "itens": r["itens"]},
+                            id_unidade=id_unidade)
+
+    # ⚠️ A frase DIZ se algo mudou. "Nota atualizada" depois de uma releitura que
+    # não mudou nada faria a pessoa procurar a diferença que não existe.
+    mudou = abs(r["valor_depois"] - r["valor_antes"]) >= 0.01
+    return r | {"mudou": mudou, "message": (
+        f"Nota atualizada: R$ {r['valor_antes']:.2f} → R$ {r['valor_depois']:.2f}"
+        f", {r['itens']} item(ns)"
+        + (f", {r['vinculos_preservados']} vínculo(s) preservado(s)"
+           if r["vinculos_preservados"] else "")
+        if mudou else
+        f"A nota no Omie está igual à daqui — nada mudou ({r['itens']} item(ns))."
+    )}
+
+
 @router.post("/{id_nota}/estornar")
 def estornar_nota(id_nota: int,
                   ctx: Contexto = Depends(requer_permissao("estoque.ajuste"))) -> dict:

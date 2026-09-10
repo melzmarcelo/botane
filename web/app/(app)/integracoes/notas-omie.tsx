@@ -20,7 +20,23 @@ import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
  * ambiguidade some quando a tela mostra o número da nota que falta.
  */
 
-type Resultado = { novas: number; repetidas: number; janela: string; modo: string };
+type Travada = {
+  id: number;
+  numero: string | null;
+  fornecedor: string | null;
+  campos: string[];
+};
+
+type Resultado = {
+  novas: number;
+  repetidas: number;
+  janela: string;
+  modo: string;
+  /** Notas que mudaram no Omie e foram reescritas aqui. */
+  atualizadas?: number;
+  /** As que mudaram lá mas já estão no razão — só alguém decide o estorno. */
+  travadas?: Travada[];
+};
 
 type Faltando = {
   chave_nfe: string | null;
@@ -50,12 +66,17 @@ export default function NotasOmie() {
   const [inicio, setInicio] = useState(mesPassado);
   const [fim, setFim] = useState(hoje);
   const [conf, setConf] = useState<Conferencia | null>(null);
+  // 🔑 **A nota que mudou no Omie e já está lançada aqui** (09/09/2026). Ela é
+  // a única coisa da busca que exige AÇÃO de alguém, e um contador na frase que
+  // some em seis segundos não bastaria: a lista fica na tela, nomeando cada uma.
+  const [travadas, setTravadas] = useState<Travada[]>([]);
 
   async function buscar(caminho: string, oQue: string) {
     setOcupado(oQue);
     try {
       const r = await api.post<Resultado & { message: string }>(caminho);
       aviso.sucesso(r.message);
+      setTravadas(r.travadas ?? []);
       // Depois de buscar, a conferência aberta na tela está velha.
       if (conf) await conferir();
     } catch (e) {
@@ -90,6 +111,32 @@ export default function NotasOmie() {
         </button>
       }
     >
+
+      {/* ⚠️ **O que MUDOU lá e já está no razão aqui.** A sincronização reescreve
+          sozinha a nota que ainda não foi lançada; a lançada ela não toca — os
+          movimentos já existem, e o razão é append-only. Mas calar seria pior:
+          esta é a divergência que ninguém veria de outro jeito, e o caminho
+          (estornar, atualizar, lançar de novo) é decisão de gente. */}
+      {!!travadas.length && (
+        <Aviso tipo="info">
+          <b>{travadas.length} nota(s) mudaram no Omie e já estão lançadas aqui.</b> A
+          atualização não as reescreve — o estoque já recebeu os movimentos. Para trazer o
+          ajuste, estorne o lançamento, atualize a nota e lance de novo.
+          <ul className="mt-2 flex flex-col gap-1">
+            {travadas.map((t) => (
+              <li key={t.id} className="text-[13px]">
+                <a className="link-registro" href={`/compras/${t.id}`}>
+                  NF {t.numero ?? t.id}
+                </a>
+                {t.fornecedor ? ` · ${t.fornecedor}` : ""}
+                {/* O campo que mudou é o que decide se vale o estorno: um
+                    centavo de frete não é a mesma notícia que o valor total. */}
+                <span className="text-suave"> · mudou: {t.campos.join(", ")}</span>
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
 
       {/* 🔑 **O cadastro vem ANTES da nota** (pedido do dono, 03/09/2026,
           espelhando o PDV): produto criado no Omie hoje e comprado hoje ficava
