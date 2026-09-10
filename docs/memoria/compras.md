@@ -39,6 +39,34 @@
   nos itens (`vTotalDescontos` é a soma dos `vDesconto`). Migrações 024 e 025 consertam o que
   entrou antes; nota já lançada precisa de estorno + novo lançamento.
 
+- 🔑 **O EAN do absorvido ficava VIVO num cadastro arquivado** (10/09/2026, relatado pelo dono:
+  dois açúcares orgânicos fundidos, o bom sobrevive com local e prateleira, e a nota seguinte
+  aparece amarrada ao OUTRO, *"sem local no cadastro"*).
+  🔑 **É o MESMO buraco do `codigo_omie`, na mesma função e a três linhas dele** — só que para
+  o `codigo_barras`, que ficou de fora quando aquele foi tapado. O laço de `fundir` só tratava
+  dois casos: código no absorvido e vazio no principal (move) ou os dois preenchidos **e a
+  coluna sendo `codigo_pdv`** (vira apelido). Com os dois EANs preenchidos, nada acontecia.
+  ⚠️ **Duas portas em série, e nenhuma sozinha bastava.** A cascata de conciliação filtra
+  `AND ativo`, então a nota com aquele EAN não achava ninguém e o item caía em pendente. Aí o
+  botão **"criar produto"** (`routers/notas.py`) fazia a busca por EAN **sem filtrar `ativo`** —
+  a única das quatro consultas de EAN do sistema que não filtrava — e amarrava a nota no
+  cadastro ARQUIVADO. Daí "o produto aparece, e sem local".
+  ⚠️ O EAN do absorvido vira **apelido** (`SISTEMA_EAN`), não some: ele é chave natural do
+  fabricante, e jogá-lo fora faria a mesma nota voltar a não casar — só que sem sobrar rastro.
+  A cascata do EAN passou a ser `vinculo.por_ean`: a coluna e depois os apelidos, a mesma forma
+  do `por_codigo_omie`.
+  ⚠️ **`estoque_saldos` também entrou em `_REAPONTAVEIS`** na mesma investigação: prateleira
+  declarada é ponteiro ("este produto mora aqui"), não fato, e ficava presa ao arquivado. Quem
+  tem saldo de verdade não chega lá — ter mercadoria exige movimento, e movimento já impede a
+  absorção.
+  ⚠️ **Diagnóstico que custou três hipóteses erradas.** A primeira foi a direção da fusão
+  (`direcao()` inverte sozinha quando só um lado tem história — real, reproduzido, mas não era
+  o caso); a segunda foi o nome (o sobrevivente adota o nome do lado do Omie, então a linha da
+  nota mostra o nome do absorvido — real, e é o que faz parecer que casou errado: **o código na
+  linha é que diz a verdade**); a terceira foi `id_local_padrao` vs. prateleira declarada, que
+  são campos diferentes. Só a quarta era esta. Vale registrar as três: cada uma continua sendo
+  uma armadilha de leitura da tela.
+
 ## Armadilhas já pagas
 
 - ⚠️ **E contagem somada da PÁGINA é a mesma mentira.** A tela de Compras somava `pendentes`

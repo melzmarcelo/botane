@@ -595,6 +595,57 @@ checar("mas o apelido responde, e é ele que evita o rascunho duplicado",
        (_pelo_apelido or {}).get("id_produto") == abacate, _pelo_apelido)
 
 print()
+print("7d. dois EANs: o do absorvido ficava VIVO num cadastro arquivado")
+# 🔑 **Relatado pelo dono, 10/09/2026** — o caso do açúcar orgânico: dois
+# cadastros fundidos, o bom sobrevive com local e prateleira, e a nota seguinte
+# aparece amarrada ao OUTRO, "sem local no cadastro".
+# É o MESMO buraco do código do Omie logo acima, na mesma função e a três
+# linhas dele — mas para o `codigo_barras`, que ficou de fora quando aquele foi
+# tapado: com os dois lados preenchidos, o laço não fazia nada e o absorvido
+# seguia arquivado carregando um EAN vivo. A cascata filtra `AND ativo`, então
+# a nota com aquele EAN não achava ninguém, caía em pendente, e o botão "criar
+# produto" — que NÃO filtrava `ativo` — amarrava a nota no cadastro arquivado.
+ean_fica, ean_sai = f"789{marca}0001"[:13], f"789{marca}0002"[:13]
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"EANF-{marca}", "nome": f"ACUCAR ORG BOM {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+    "codigo_barras": ean_fica,
+}, token=token)
+ean_principal = r.get("id")
+checar("o cadastro bom, com EAN próprio", st == 201, (st, r))
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"EANS-{marca}", "nome": f"ACUCAR ORG DO OMIE {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+    "codigo_barras": ean_sai,
+}, token=token)
+ean_absorvido = r.get("id")
+checar("e o duplicado, com OUTRO EAN", st == 201, (st, r))
+
+st, r = chamar("POST", f"/produtos/{ean_principal}/vincular",
+               {"id_sai": ean_absorvido}, token=token)
+checar("a fusão passa", st == 200, (st, r))
+
+st, arquivado = chamar("GET", f"/produtos/{ean_absorvido}", token=token)
+checar("o absorvido não fica mais com um EAN vivo",
+       arquivado.get("codigo_barras") is None, arquivado.get("codigo_barras"))
+st, principal = chamar("GET", f"/produtos/{ean_principal}", token=token)
+checar("e o principal mantém o EAN dele",
+       principal.get("codigo_barras") == ean_fica, principal.get("codigo_barras"))
+
+# 🔑 A afirmação que importa: a NOTA com o EAN do absorvido acha o principal.
+# ⚠️ Pela mesma porta que a conciliação usa (`vinculo.por_ean`), e não por uma
+# consulta escrita aqui — repetir a regra no teste faria ele passar mesmo com o
+# código errado, que é o oposto do que ele existe para fazer.
+sys.path.insert(0, ".")
+from database import get_cursor  # noqa: E402
+from services.omie import vinculo as _vinc  # noqa: E402
+with get_cursor() as _cur:
+    achou = _vinc.por_ean(_cur, ean_sai)
+checar("nota com o EAN do absorvido resolve para o PRINCIPAL",
+       achou == ean_principal, {"achou": achou, "principal": ean_principal})
+
+chamar("DELETE", f"/produtos/{ean_principal}", token=token)
+
 print("7c. a conversao do codigo de fora — o ACUCAR DE CONFEITEIRO")
 # 🔑 **O caso do ACUCAR DE CONFEITEIRO** (pedido do dono, 04/09/2026). O
 # fornecedor manda o pacote de 1 kg e o de 500 g como produtos DIFERENTES, com

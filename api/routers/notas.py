@@ -25,6 +25,7 @@ from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import nfe_xml
 from services.omie import importador
+from services.omie import vinculo as vinculo_omie
 
 router = APIRouter(prefix="/notas", tags=["Notas de entrada"])
 
@@ -608,10 +609,24 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
         # produto É aquele. Criar um segundo partiria o custo do mesmo insumo em
         # dois cadastros — e é o caso comum de quem importou o catálogo do Omie
         # e o de-para não casou pelo código do fornecedor.
+        # ⚠️ **`AND ativo`, como na cascata automática.** Sem ele este atalho
+        # amarrava a nota num cadastro ARQUIVADO — e arquivado é quase sempre o
+        # lado ABSORVIDO de uma fusão, que não tem local, não tem unidade e não
+        # devia receber compra nenhuma. `conciliar_item` filtra desde sempre; só
+        # este caminho não filtrava, e é justamente o que a pessoa usa quando a
+        # cascata NÃO casou — ou seja, exatamente no caso em que o cadastro certo
+        # é o outro. O sintoma na tela: "o produto aparece, e sem local".
+        # ⚠️ Pela mesma cascata da conciliação (`vinculo.por_ean`): a coluna e
+        # depois os apelidos. O apelido é o EAN que sobrou de uma fusão, e é
+        # justamente ele que faz a nota achar o cadastro PRINCIPAL em vez de
+        # recriar o duplicado.
         if item["codigo_barras"]:
-            cur.execute("SELECT id, nome, codigo FROM produtos WHERE codigo_barras = %s",
-                        (item["codigo_barras"],))
-            existente = cur.fetchone()
+            id_existente = vinculo_omie.por_ean(cur, item["codigo_barras"])
+            existente = None
+            if id_existente:
+                cur.execute("SELECT id, nome, codigo FROM produtos WHERE id = %s",
+                            (id_existente,))
+                existente = cur.fetchone()
             if existente:
                 r = importador.vincular_item(cur, id_item, existente["id"], body.fator,
                                              ctx.id_usuario, True)

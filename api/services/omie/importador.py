@@ -97,14 +97,15 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
         if achado:
             return achado, None, 100.0, "codigo_omie"
 
-    # 3. EAN — chave natural, não depende de quem digitou
+    # 3. EAN — chave natural, não depende de quem digitou.
+    # 🔑 **A coluna, e depois os APELIDOS** (`vinculo.por_ean`) — a mesma forma
+    # do código do Omie logo acima, e pela mesma razão: fundir dois cadastros
+    # com EANs diferentes deixava o do absorvido preso ao cadastro arquivado, e
+    # a nota seguinte com aquele código recriava o duplicado.
     if ean:
-        cur.execute(
-            "SELECT id FROM produtos WHERE codigo_barras = %s AND ativo", (ean,)
-        )
-        achado = cur.fetchone()
+        achado = vinculo.por_ean(cur, ean)
         if achado:
-            return achado["id"], None, 100.0, "ean"
+            return achado, None, 100.0, "ean"
 
     # 4. código no fornecedor — resolve hortifrúti e distribuidor sem EAN.
     # Só produto ativo, como no EAN: produto desativado guarda saldo e razão, mas

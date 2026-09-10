@@ -56,6 +56,15 @@ _IMPEDIMENTOS = (
 # descartada, porque a que fica já diz a mesma coisa.
 _REAPONTAVEIS = (
     ("nota_itens", "id_produto", None),
+    # 🔑 **As PRATELEIRAS declaradas.** `estoque_saldos` com quantidade zero é o
+    # cadastro dizendo "este produto mora aqui" — ponteiro, não fato. Ficava de
+    # fora das duas listas: nem impedia a absorção, nem mudava de dono, então as
+    # prateleiras do absorvido ficavam presas a um cadastro arquivado e o
+    # sobrevivente aparecia "sem local".
+    # ⚠️ Quem tem saldo DE VERDADE não chega aqui: ter mercadoria exige ter
+    # movimento, e movimento já é impedimento. Então toda linha que passa por
+    # esta regra é declaração, com quantidade zero.
+    ("estoque_saldos", "id_produto", "({a}.id_unidade, {a}.id_local)"),
     ("nota_itens", "sugestao_produto", None),
     ("produto_fornecedor", "id_produto", "{a}.id_fornecedor"),
     ("produto_unidades", "id_produto", "upper({a}.um)"),
@@ -560,6 +569,22 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
         cur.execute("UPDATE produtos SET codigo_omie = NULL WHERE id = %s", (id_sai,))
         vinculo_omie.gravar_apelido(cur, id_fica, sai["codigo_omie"], sai["nome"], id_usuario)
         movidos["apelido_omie"] = sai["codigo_omie"]
+
+    # 🔑 **O EAN dos DOIS lados era o mesmo buraco do Omie, e ficou aberto.**
+    # Com os dois preenchidos, o laço acima não fazia nada: o absorvido seguia
+    # ARQUIVADO carregando um código de barras VIVO. A nota seguinte que
+    # trouxesse aquele EAN não achava o principal (a cascata filtra `ativo`),
+    # caía em pendente, e quem clicasse em "criar produto" recriava o duplicado
+    # — o trabalho de juntar se desfazendo sozinho, que é exatamente o defeito
+    # que o apelido do Omie foi criado para fechar.
+    # ⚠️ Vira APELIDO em vez de sumir: o EAN é chave natural do fabricante, e
+    # jogá-lo fora faria a mesma nota voltar a não casar — só que sem nem
+    # sobrar o rastro de que aquele código já foi deste produto.
+    if sai["codigo_barras"] and fica["codigo_barras"]:
+        cur.execute("UPDATE produtos SET codigo_barras = NULL WHERE id = %s", (id_sai,))
+        vinculo_omie.gravar_apelido_ean(cur, id_fica, sai["codigo_barras"],
+                                        sai["nome"], id_usuario)
+        movidos["apelido_ean"] = sai["codigo_barras"]
 
     # -------------------------------------- o que estiver em branco no que fica
     completados = []

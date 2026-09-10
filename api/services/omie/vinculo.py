@@ -9,6 +9,10 @@ LIMÃO TAITY, e nenhum dos 78 vínculos criados assim estava certo):
    confirma um item pendente com "aprender".
 2. `SISTEMA_PRODUTO = "OMIE_PRODUTO"` — o identificador do produto **no Omie**
    (`nCodProd`), o mesmo que mora em `produtos.codigo_omie`.
+3. `SISTEMA_EAN = "EAN"` — o código de BARRAS que ficou órfão numa fusão. Não
+   vem de sistema nenhum: é do fabricante. Mora aqui porque `codigos_externos`
+   já é a tabela de "este código de fora também é este produto", e uma tabela
+   nova diria a mesma coisa noutro lugar.
 
 🔑 **O segundo nível nasceu de um defeito real, e é o mesmo caso do PDV.** A
 fusão de dois cadastros DESCARTAVA o `codigo_omie` do absorvido — enquanto o
@@ -27,6 +31,7 @@ produto da casa pode ser vários produtos lá.
 
 SISTEMA = "OMIE"
 SISTEMA_PRODUTO = "OMIE_PRODUTO"
+SISTEMA_EAN = "EAN"
 
 
 def por_codigo_omie(cur, codigo: str | None) -> int | None:
@@ -68,4 +73,46 @@ def gravar_apelido(cur, id_produto: int, codigo: str, descricao: str | None,
                    confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
         (SISTEMA_PRODUTO, str(codigo)[:60], id_produto, (descricao or "")[:200] or None,
          id_usuario),
+    )
+
+
+def por_ean(cur, ean: str | None) -> int | None:
+    """O produto deste código de barras — pela coluna, depois pelos apelidos.
+
+    🔑 **Mesma forma do `por_codigo_omie`, e pela mesma razão.** Fundir dois
+    cadastros que tinham EANs diferentes deixava o do absorvido preso a um
+    cadastro arquivado: a nota seguinte com aquele código não achava ninguém, o
+    item caía em pendente e quem clicasse em "criar produto" recriava o
+    duplicado que a fusão tinha acabado de eliminar.
+
+    ⚠️ A coluna só de produto ATIVO — amarrar nota nova num cadastro arquivado
+    o ressuscitaria na compra sem ninguém ter decidido. O apelido não filtra
+    `ativo` porque ele É a decisão de alguém: foi gravado apontando para o
+    principal.
+    """
+    if not ean:
+        return None
+    cur.execute("SELECT id FROM produtos WHERE codigo_barras = %s AND ativo", (str(ean),))
+    achado = cur.fetchone()
+    if achado:
+        return achado["id"]
+    cur.execute(
+        "SELECT id_produto FROM codigos_externos WHERE sistema = %s AND codigo = %s",
+        (SISTEMA_EAN, str(ean)),
+    )
+    achado = cur.fetchone()
+    return achado["id_produto"] if achado else None
+
+
+def gravar_apelido_ean(cur, id_produto: int, ean: str, descricao: str | None,
+                       id_usuario: int | None) -> None:
+    """Guarda que este código de barras também é este produto."""
+    cur.execute(
+        """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
+                                         origem_vinculo, confirmado_por)
+           VALUES (%s, %s, %s, %s, 'FUSAO', %s)
+           ON CONFLICT (sistema, codigo) DO UPDATE
+               SET id_produto = EXCLUDED.id_produto,
+                   confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
+        (SISTEMA_EAN, str(ean)[:60], id_produto, (descricao or "")[:200] or None, id_usuario),
     )
