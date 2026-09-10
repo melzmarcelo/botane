@@ -8,7 +8,8 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
+import { qtd } from "@/lib/numeros";
 import { CORES, dataBr, Nota } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
@@ -34,6 +35,21 @@ type ResultadoXml = {
   itens?: number;
   pendentes?: number;
   valor_total?: number;
+};
+
+/** O que a prévia dos arquivados devolve. */
+type Arquivados = {
+  itens: {
+    id: number; id_nota: number; numero: string | null; status: string;
+    fornecedor: string | null; descricao_fornecedor: string;
+    quantidade: number; um_nota: string | null;
+    codigo_arquivado: string; arquivado: string;
+    destino: { id: number; codigo: string; nome: string } | null;
+  }[];
+  /** Corrente que morre em arquivado: ninguém ativo herdou, e escolher seria adivinhar. */
+  sem_destino: unknown[];
+  notas: number;
+  produtos: number;
 };
 
 export default function PaginaCompras() {
@@ -73,6 +89,12 @@ export default function PaginaCompras() {
       setNotas(n.itens);
       pag.setTotal(n.total);
       setAPendentes(pendentes.length);
+      // 🔑 **Itens de nota ABERTA apontando para cadastro arquivado.** Depois
+      // de uma fusão eles ficam órfãos: lançar assim poria o estoque num
+      // cadastro morto, fora da ficha e fora do custo do sobrevivente. A
+      // prévia é do servidor, e nota já LANÇADA fica de fora — lá o razão já
+      // concorda com a nota, e mexer só na nota criaria a divergência.
+      api.get<Arquivados>("/notas/arquivados/previa").then(setArquivados).catch(() => {});
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -192,6 +214,8 @@ export default function PaginaCompras() {
   // continuando lá. É a mesma lição do `X-Total`: lista sem total é lista
   // mentirosa.
   const [aPendentes, setAPendentes] = useState(0);
+  const [arquivados, setArquivados] = useState<Arquivados | null>(null);
+  const [vendoArquivados, setVendoArquivados] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -231,6 +255,15 @@ export default function PaginaCompras() {
             {pode("integracao.omie") && (
               <button className="btn btn-secundario" onClick={sincronizar} disabled={ocupado}>
                 Buscar no Omie
+              </button>
+            )}
+            {(arquivados?.itens.length ?? 0) > 0 && (
+              <button
+                className="btn btn-secundario"
+                onClick={() => setVendoArquivados(true)}
+                title="Itens de nota aberta apontando para cadastro que foi fundido em outro"
+              >
+                {arquivados!.itens.length} item(ns) em cadastro arquivado
               </button>
             )}
             {aPendentes > 0 && (
@@ -356,6 +389,105 @@ export default function PaginaCompras() {
         )}
         <Paginacao p={pag} rotulo="nota(s)" />
       </Cartao>
+
+      {/* 🔑 **A prévia inteira antes do botão único** (pedido do dono). São
+          dezenas de linhas de uma vez, e aprovar uma a uma seria um dia de
+          trabalho — mas repontar às cegas é pior. A janela mostra de onde para
+          onde cada item vai, e o botão faz tudo o que está listado. */}
+      {vendoArquivados && arquivados && (
+        <Modal
+          titulo="Itens apontando para cadastro arquivado"
+          descricao={`${arquivados.itens.length} item(ns) em ${arquivados.notas} nota(s) ainda não lançada(s)`}
+          aoFechar={() => setVendoArquivados(false)}
+          largura="900px"
+          rodape={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-[13px] text-suave">
+                Nota já lançada fica de fora: lá o razão concorda com a nota.
+              </span>
+              <button
+                className="btn btn-secundario"
+                onClick={() => setVendoArquivados(false)}
+              >
+                Fechar
+              </button>
+              <button
+                className="btn btn-primario"
+                disabled={ocupado}
+                onClick={async () => {
+                  setOcupado(true);
+                  try {
+                    const r = await api.post<{ message: string }>(
+                      "/notas/arquivados/repontar", {});
+                    aviso.sucesso(r.message);
+                    setVendoArquivados(false);
+                    await carregar();
+                  } catch (e) {
+                    aviso.erro(e instanceof Error ? e.message : "Não foi possível repontar");
+                  } finally {
+                    setOcupado(false);
+                  }
+                }}
+              >
+                {ocupado ? "Repontando…" : `Repontar os ${arquivados.itens.length}`}
+              </button>
+            </div>
+          }
+        >
+          <Aviso tipo="info">
+            Estes itens apontam para um cadastro que foi <b>fundido em outro</b>. Lançar
+            assim poria o estoque no cadastro arquivado — fora da ficha e fora do custo do
+            que está em uso. Como as notas <b>ainda não foram lançadas</b>, nada entrou no
+            razão e dá para corrigir.
+          </Aviso>
+
+          {arquivados.sem_destino.length > 0 && (
+            <Aviso tipo="erro">
+              Outros <b>{arquivados.sem_destino.length}</b> item(ns) apontam para cadastro
+              arquivado que <b>ninguém ativo herdou</b> — não há para onde repontar sozinho.
+              Esses precisam de escolha na tela da nota.
+            </Aviso>
+          )}
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Nota</th>
+                  <th>Item</th>
+                  <th className="num">Qtd</th>
+                  <th>Aponta para (arquivado)</th>
+                  <th>Passa a apontar para</th>
+                </tr>
+              </thead>
+              <tbody>
+                {arquivados.itens.map((l) => (
+                  <tr key={l.id}>
+                    <td className="whitespace-nowrap">
+                      <Link href={`/compras/${l.id_nota}`} className="link-acao">
+                        NF {l.numero ?? "—"}
+                      </Link>
+                      <span className="block text-[12px] text-suave">
+                        {l.fornecedor ?? "—"}
+                      </span>
+                    </td>
+                    <td className="text-[13.5px]">{l.descricao_fornecedor}</td>
+                    <td className="num whitespace-nowrap">
+                      {qtd(l.quantidade)} {l.um_nota ?? ""}
+                    </td>
+                    <td className="text-[13.5px] text-suave">
+                      <span className="mono">{l.codigo_arquivado}</span> {l.arquivado}
+                    </td>
+                    <td className="text-[13.5px] font-medium text-erva">
+                      <span className="mono">{l.destino?.codigo}</span> {l.destino?.nome}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

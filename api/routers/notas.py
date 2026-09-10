@@ -26,6 +26,7 @@ from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import nfe_xml
 from services.omie import importador
 from services.omie import vinculo as vinculo_omie
+from services import produtos_vinculo
 
 router = APIRouter(prefix="/notas", tags=["Notas de entrada"])
 
@@ -822,6 +823,112 @@ def atualizar_do_omie(id_nota: int,
         if mudou else
         f"A nota no Omie está igual à daqui — nada mudou ({r['itens']} item(ns))."
     )}
+
+
+@router.get("/arquivados/previa")
+def previa_dos_arquivados(
+        ctx: Contexto = Depends(requer_permissao("compras.conciliar"))) -> dict:
+    """Itens de nota AINDA NÃO LANÇADA apontando para cadastro arquivado.
+
+    🔑 **Relatado pelo dono (10/09/2026).** Depois de uma fusão, as notas que já
+    apontavam para o cadastro absorvido continuam apontando para ele. Enquanto
+    a nota não foi lançada não há nada no razão, então dá para consertar — e é
+    preciso, porque lançar assim poria o estoque num cadastro morto, fora da
+    ficha e fora do custo do sobrevivente.
+
+    ⚠️ **Nota LANÇADA fica de fora, e não é omissão.** Lá o razão já tem
+    movimento sob o cadastro absorvido: a nota e o razão CONCORDAM, e repontar
+    só a nota faria o documento discordar do lançamento — que é append-only e
+    não teria como acompanhar. História de cadastro absorvido é normal.
+
+    ⚠️ **Só quem tem para onde ir.** `sobrevivente_de` segue a corrente até o
+    cadastro ATIVO (na base local, 360 dos 756 arquivados apontam para outro
+    arquivado). Corrente que morre em arquivado sai numa lista à parte: ali
+    ninguém herdou, e escolher por conta seria adivinhar.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT i.id, i.id_nota, n.numero, n.status, n.data_emissao,
+                      f.nome AS fornecedor, i.descricao_fornecedor, i.quantidade, i.um_nota,
+                      p.id AS id_arquivado, p.codigo AS codigo_arquivado, p.nome AS arquivado
+                 FROM nota_itens i
+                 JOIN notas_entrada n ON n.id = i.id_nota
+                 JOIN produtos p ON p.id = i.id_produto
+                 LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
+                WHERE NOT p.ativo AND n.status <> 'LANCADA' AND NOT i.ignorado
+                ORDER BY n.data_emissao DESC NULLS LAST, n.numero, i.seq""",
+        )
+        linhas = [dict(r) for r in cur.fetchall()]
+        com_destino, sem_destino = [], []
+        # ⚠️ Um `sobrevivente_de` por PRODUTO, não por linha: a mesma fusão
+        # costuma aparecer em dezenas de itens, e a corrente não muda no meio.
+        cache: dict[int, dict | None] = {}
+        for linha in linhas:
+            id_arq = linha["id_arquivado"]
+            if id_arq not in cache:
+                cache[id_arq] = produtos_vinculo.sobrevivente_de(cur, id_arq)
+            destino = cache[id_arq]
+            linha["destino"] = destino
+            (com_destino if destino else sem_destino).append(linha)
+    return {
+        "itens": com_destino,
+        "sem_destino": sem_destino,
+        "notas": len({l["id_nota"] for l in com_destino}),
+        "produtos": len({l["id_arquivado"] for l in com_destino}),
+    }
+
+
+@router.post("/arquivados/repontar")
+def repontar_arquivados(
+        ctx: Contexto = Depends(requer_permissao("compras.conciliar"))) -> dict:
+    """Reaponta de uma vez os itens da prévia para o cadastro sobrevivente.
+
+    ⚠️ **Recalcula a prévia AQUI em vez de receber a lista da tela.** Entre ver
+    e clicar, uma importação pode ter trazido item novo e outra pessoa pode ter
+    lançado uma daquelas notas — repontar o que a tela viu escreveria em nota
+    que já virou razão. Quem manda é o estado de agora.
+
+    ⚠️ **Não toca em nota LANÇADA nem em item sem destino**, pela mesma razão da
+    prévia: um seria discordar do razão, o outro seria adivinhar.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT i.id, i.id_produto, i.id_nota
+                 FROM nota_itens i
+                 JOIN notas_entrada n ON n.id = i.id_nota
+                 JOIN produtos p ON p.id = i.id_produto
+                WHERE NOT p.ativo AND n.status <> 'LANCADA' AND NOT i.ignorado
+                FOR UPDATE OF i""",
+        )
+        pendentes = [dict(r) for r in cur.fetchall()]
+        cache: dict[int, dict | None] = {}
+        mexidos, notas = 0, set()
+        for item in pendentes:
+            id_arq = item["id_produto"]
+            if id_arq not in cache:
+                cache[id_arq] = produtos_vinculo.sobrevivente_de(cur, id_arq)
+            destino = cache[id_arq]
+            if not destino:
+                continue
+            cur.execute("UPDATE nota_itens SET id_produto = %s WHERE id = %s",
+                        (destino["id"], item["id"]))
+            mexidos += 1
+            notas.add(item["id_nota"])
+        # ⚠️ **Recalcular as notas tocadas.** A conversão e o custo de aquisição
+        # saem do CADASTRO do produto, e o sobrevivente pode ter outro fator —
+        # deixar o número velho faria a nota mostrar uma conta que já não é a
+        # dela.
+        for id_nota in notas:
+            importador.calcular_nota(cur, id_nota)
+        if mexidos:
+            auditoria.registrar(cur, ctx.id_usuario, "nota", None, "repontar_arquivados",
+                                depois={"itens": mexidos, "notas": len(notas)})
+    return {
+        "itens": mexidos, "notas": len(notas),
+        "message": (f"{mexidos} item(ns) em {len(notas)} nota(s) passaram a apontar para o "
+                    "cadastro em uso." if mexidos else
+                    "Nada a repontar — nenhuma nota aberta aponta para cadastro arquivado."),
+    }
 
 
 @router.post("/{id_nota}/estornar")

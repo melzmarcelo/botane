@@ -82,6 +82,40 @@ _COMPLETAVEIS = (
 )
 
 
+def sobrevivente_de(cur, id_produto: int, profundidade: int = 12) -> dict | None:
+    """Para qual cadastro ATIVO este produto foi fundido — seguindo a corrente.
+
+    🔑 **A corrente existe de verdade**: medido na base local, 360 dos 756
+    arquivados apontam para outro ARQUIVADO. O ABACATE foi fundido no ABACATE
+    do outro fornecedor, que depois foi fundido no principal — parar no primeiro
+    salto devolveria um cadastro morto, que é o mesmo problema com outro nome.
+
+    ⚠️ **Devolve None quando a corrente termina em arquivado**, e isso é uma
+    resposta: quer dizer que ninguém ativo herdou este cadastro, e aí não há
+    para onde repontar sozinho — alguém precisa escolher.
+
+    ⚠️ O teto de profundidade não é medo de ciclo (o banco não impede um), é o
+    que garante que uma corrente circular não trave a requisição inteira.
+    """
+    visitados = {id_produto}
+    atual = id_produto
+    for _ in range(profundidade):
+        cur.execute(
+            """SELECT p.fundido_em, d.id, d.codigo, d.nome, d.ativo
+                 FROM produtos p LEFT JOIN produtos d ON d.id = p.fundido_em
+                WHERE p.id = %s""",
+            (atual,),
+        )
+        linha = cur.fetchone()
+        if not linha or not linha["fundido_em"] or linha["fundido_em"] in visitados:
+            return None
+        if linha["ativo"]:
+            return {"id": linha["id"], "codigo": linha["codigo"], "nome": linha["nome"]}
+        visitados.add(linha["fundido_em"])
+        atual = linha["fundido_em"]
+    return None
+
+
 def impedimentos(cur, id_produto: int) -> list[str]:
     """O que impede este cadastro de ser absorvido — em português."""
     achados = []
@@ -713,12 +747,16 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
 
     nota = (f"Fundido em {fica['codigo']} — {nome}. "
             "Era o mesmo produto com outro cadastro.")
+    # ⚠️ **`fundido_em` é o PONTEIRO; a frase continua para quem LÊ.** Os dois
+    # dizem a mesma coisa de propósito: a observação é o que aparece na tela do
+    # cadastro arquivado, e a coluna é o que o sistema consegue perguntar sem
+    # fazer regex em texto livre. Ver `063_fundido_em.sql`.
     cur.execute(
         """UPDATE produtos
-              SET ativo = false, status = 'ARQUIVADO',
+              SET ativo = false, status = 'ARQUIVADO', fundido_em = %s,
                   observacao = trim(both E'\\n' from coalesce(observacao, '') || E'\\n' || %s)
             WHERE id = %s""",
-        (nota, id_sai),
+        (id_fica, nota, id_sai),
     )
 
     return {

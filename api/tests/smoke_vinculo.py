@@ -595,6 +595,70 @@ checar("mas o apelido responde, e é ele que evita o rascunho duplicado",
        (_pelo_apelido or {}).get("id_produto") == abacate, _pelo_apelido)
 
 print()
+print("7e. nota apontando para cadastro ARQUIVADO: trava e conserto")
+# 🔑 **Relatado pelo dono, 10/09/2026.** Em produção sobraram notas CONCILIADAS
+# apontando para o cadastro absorvido de uma fusão. Enquanto a nota não foi
+# lançada não há nada no razão, então dá para consertar — e é preciso: lançar
+# assim poria o estoque num cadastro morto, fora da ficha e fora do custo do
+# sobrevivente. E nada impedia: `estoque.lancar` LIA a coluna `ativo` e nunca a
+# perguntava.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ARQV-{marca}", "nome": f"ACUCAR VIVO {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+}, token=token)
+vivo = r.get("id")
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"ARQM-{marca}", "nome": f"ACUCAR MORTO {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True,
+}, token=token)
+morto = r.get("id")
+st, fornecedores = chamar("GET", "/fornecedores?limite=1", token=token)
+st, locais_arq = chamar("GET", "/locais", token=token)
+local_arq = next((l for l in locais_arq if l.get("principal")), locais_arq[0])
+st, nota_arq = chamar("POST", "/notas", {
+    "id_fornecedor": (fornecedores or [{}])[0].get("id"), "numero": f"ARQ{marca}",
+    "serie": "1", "id_local": local_arq["id"],
+    "itens": [{"id_produto": morto, "quantidade": 4, "valor_unitario": 7}],
+}, token=token)
+id_nota_arq = (nota_arq or {}).get("id")
+checar("a nota de teste nasce apontando para o que vai ser absorvido",
+       st == 200 and id_nota_arq, (st, nota_arq))
+
+# O absorvido vira arquivado com o ponteiro, como a fusão faz.
+# ⚠️ `_cursor` e não `get_cursor`: este bloco corre ANTES do import de baixo, e
+# o alias do topo é o que existe aqui.
+with _cursor() as _cur:
+    _cur.execute("UPDATE produtos SET ativo=false, status='ARQUIVADO', fundido_em=%s "
+                 "WHERE id=%s", (vivo, morto))
+
+# ⚠️ **A trava é só para ENTRADA POR NOTA.** Saída, estorno, transferência e
+# ajuste de inventário de produto arquivado são legítimos — é assim que se
+# esvazia o saldo de um absorvido. Barrar tudo prenderia a remessa e a contagem.
+st, r = chamar("POST", f"/notas/{id_nota_arq}/lancar",
+               {"id_local": local_arq["id"]}, token=token)
+checar("lançar em cadastro arquivado é recusado", st == 400, (st, r))
+checar("e a recusa diz PARA ONDE ir",
+       f"ARQV-{marca}".upper() in str(r.get("detail", "")).upper(), r.get("detail"))
+
+st, previa_arq = chamar("GET", "/notas/arquivados/previa", token=token)
+meus = [l for l in (previa_arq.get("itens") or []) if l.get("id_nota") == id_nota_arq]
+checar("a prévia acha o item", len(meus) == 1, len(meus))
+checar("e diz para qual cadastro ele vai",
+       meus and (meus[0].get("destino") or {}).get("id") == vivo,
+       meus[0].get("destino") if meus else None)
+
+st, r = chamar("POST", "/notas/arquivados/repontar", None, token=token)
+checar("o repontar responde", st == 200, (st, r))
+st, det_arq = chamar("GET", f"/notas/{id_nota_arq}", token=token)
+checar("e o item passou a apontar para o cadastro em uso",
+       (det_arq.get("itens") or [{}])[0].get("id_produto") == vivo,
+       (det_arq.get("itens") or [{}])[0].get("id_produto"))
+st, r = chamar("POST", f"/notas/{id_nota_arq}/lancar",
+               {"id_local": local_arq["id"]}, token=token)
+checar("e agora a nota lança", st == 200, (st, r))
+
+chamar("DELETE", f"/produtos/{vivo}", token=token)
+
 print("7d. dois EANs: o do absorvido ficava VIVO num cadastro arquivado")
 # 🔑 **Relatado pelo dono, 10/09/2026** — o caso do açúcar orgânico: dois
 # cadastros fundidos, o bom sobrevive com local e prateleira, e a nota seguinte

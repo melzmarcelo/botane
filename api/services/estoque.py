@@ -234,6 +234,33 @@ def lancar(
             detail=f"{produto['nome']} não controla estoque — ligue isso no cadastro do produto.",
         )
 
+    # 🔑 **Entrada NOVA não ressuscita cadastro arquivado.** A coluna `ativo`
+    # era lida nesta consulta e nunca perguntada: a cascata de conciliação
+    # recusa CASAR nota nova com produto arquivado ("amarrar nota nova nele o
+    # ressuscitaria na compra sem ninguém ter decidido"), mas nada recusava
+    # LANÇAR quando o item já estava apontado de antes da fusão — e aí o
+    # estoque entrava no cadastro morto, fora da ficha e fora do custo do
+    # sobrevivente. A frase diz para onde ir, porque quem lança não tem como
+    # saber quem absorveu quem.
+    # ⚠️ **Só a entrada por NOTA, e a mira estreita é deliberada.** `ENTRADAS`
+    # tem seis tipos, e quase todos descrevem mercadoria que se MOVEU de
+    # verdade: receber uma transferência de produto arquivado, contar a mais
+    # num inventário, aceitar uma devolução — barrar isso deixaria a remessa
+    # presa e a contagem sem como fechar. Saída e estorno idem: é assim que se
+    # esvazia o saldo de um absorvido e que se desfaz um lançamento errado.
+    # O que não pode é a COMPRA nova entrar num cadastro que ninguém mais usa.
+    if tipo == "ENTRADA_NF" and not produto["ativo"]:
+        cur.execute("SELECT codigo, nome FROM produtos WHERE id = ("
+                    "SELECT fundido_em FROM produtos WHERE id = %s)", (id_produto,))
+        destino = cur.fetchone()
+        para_onde = (f" Este cadastro foi fundido em {destino['codigo']} — "
+                     f"{destino['nome']}; a entrada é lá." if destino else
+                     " Reative o cadastro ou aponte o item para o que está em uso.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"{produto['nome']} está arquivado e não recebe entrada.{para_onde}",
+        )
+
     par = _parametros(cur, id_unidade)
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)

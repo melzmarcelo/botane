@@ -39,6 +39,36 @@
   nos itens (`vTotalDescontos` é a soma dos `vDesconto`). Migrações 024 e 025 consertam o que
   entrou antes; nota já lançada precisa de estorno + novo lançamento.
 
+- 🔑 **Nota apontando para cadastro ARQUIVADO: trava, prévia e botão único** (migração 063,
+  10/09/2026, relatado pelo dono). Depois de uma fusão sobram notas apontando para o absorvido.
+  🔑 **A linha que parte o problema é o RAZÃO, e o dono confirmou de que lado o caso dele
+  estava**: as notas eram **CONCILIADAS**, não lançadas.
+  - **Nota já LANÇADA** → não se mexe. O razão tem movimento sob o absorvido, e a nota e o razão
+    CONCORDAM; repontar só a nota faria o documento discordar do lançamento, que é append-only e
+    não teria como acompanhar. História de cadastro absorvido é normal.
+  - **Nota ainda ABERTA** → reponta. Nada entrou no razão, e lançar assim poria o estoque num
+    cadastro morto, fora da ficha e fora do custo do sobrevivente.
+  🔑 **E nada impedia de lançar.** `estoque.lancar` **lia** a coluna `ativo` na consulta do
+  produto e **nunca a perguntava**. A cascata de conciliação recusa CASAR nota nova com produto
+  arquivado; nada recusava LANÇAR quando o item já estava apontado de antes da fusão.
+  ⚠️ **A trava é só `ENTRADA_NF`, e a mira estreita é deliberada.** `ENTRADAS` tem seis tipos e
+  quase todos descrevem mercadoria que se MOVEU: receber transferência, contar a mais no
+  inventário, aceitar devolução. Barrar isso prenderia a remessa e a contagem. Saída e estorno
+  idem — é assim que se esvazia o saldo de um absorvido. Um `AND ativo` genérico teria fechado a
+  única porta de saída daquele saldo.
+  ⚠️ **`fundido_em` existe porque o rastro era TEXTO.** A fusão escrevia "Fundido em ACU1-… — …"
+  na observação: serve para uma pessoa ler, não para o sistema decidir. A migração 063 cria a
+  coluna e a preenche a partir da própria frase (756 na base local), e `fundir` passa a gravá-la.
+  ⚠️ **A corrente é real: 360 dos 756 apontam para outro ARQUIVADO.** `sobrevivente_de` segue
+  até o ativo do fim — parar no primeiro salto devolveria um cadastro morto, o mesmo problema
+  com outro nome. Corrente que morre em arquivado devolve `None`, e isso é uma RESPOSTA: ninguém
+  herdou, e escolher por conta seria adivinhar. Esses saem numa lista à parte na prévia.
+  ⚠️ **O repontar recalcula a prévia no servidor em vez de receber a lista da tela.** Entre ver
+  e clicar, uma importação pode ter trazido item novo e outra pessoa pode ter lançado uma
+  daquelas notas — repontar o que a tela viu escreveria em nota que já virou razão.
+  ⚠️ **E recalcula as notas tocadas** (`calcular_nota`): a conversão e o custo de aquisição saem
+  do CADASTRO, e o sobrevivente pode ter outro fator.
+
 - 🔑 **A NOTA declara a conversão, e o sistema jogava fora** (migração 062, 10/09/2026, pedido
   do dono). A NF-e traz a unidade COMERCIAL (`uCom`/`qCom`) e a TRIBUTÁVEL (`uTrib`/`qTrib`):
   numa caixa de 24 isso sai como `uCom=CX, qCom=1, uTrib=UN, qTrib=24`, e **`qTrib/qCom` É o
