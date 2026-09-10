@@ -38,8 +38,12 @@ type LocalDoProduto = {
   setor: string | null;
   principal: boolean;
   quantidade: number;
-  custo_medio: number;
-  valor: number;
+  // ⚠️ **Nulos quando o servidor não manda.** `podeVerCusto` já escondia as
+  // colunas, mas o número vinha no corpo do mesmo jeito — a tela obedecia e a
+  // rota não. Agora quem corta é `estoque.saldos` no servidor, e o tipo diz
+  // isso: `custo()` e `reais()` desenham "—" para nulo sozinhos.
+  custo_medio: number | null;
+  valor: number | null;
   atualizado_em: string | null;
 };
 
@@ -167,7 +171,7 @@ export default function LocaisDoProduto({
     (t) => t.ativo && !escolhidas.some((l) => l.id_local === t.id),
   );
   const totalQtd = escolhidas.reduce((s, l) => s + Number(l.quantidade), 0);
-  const totalValor = escolhidas.reduce((s, l) => s + Number(l.valor), 0);
+  const totalValor = escolhidas.reduce((s, l) => s + Number(l.valor ?? 0), 0);
   // ⚠️ Na criação não há saldo nenhum, e uma coluna de zeros sugere que há.
   const mostraNumeros = !criando;
 
@@ -218,12 +222,12 @@ export default function LocaisDoProduto({
                   )}
                   {mostraNumeros && podeVerCusto && (
                     <td className="py-2 text-right tabular-nums">
-                      {custo(Number(l.custo_medio))}
+                      {custo(l.custo_medio)}
                     </td>
                   )}
                   {mostraNumeros && podeVerCusto && (
                     <td className="py-2 text-right tabular-nums">
-                      {reais(Number(l.valor))}
+                      {reais(l.valor)}
                     </td>
                   )}
                   <td className="py-2 text-right">

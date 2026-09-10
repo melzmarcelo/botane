@@ -212,8 +212,12 @@ class LocalDoProduto(BaseModel):
     setor: str | None = None
     principal: bool = False
     quantidade: float
-    custo_medio: float
-    valor: float
+    # ⚠️ **Nulos para quem não pode ver custo.** Estas duas são dinheiro e pedem
+    # `estoque.saldos`, a mesma chave da tela de Saldos; a quantidade fica,
+    # porque "onde o produto está" é pergunta de cadastro. Nulo e não zero: zero
+    # é uma afirmação sobre o valor, e a afirmação certa aqui é "não vejo".
+    custo_medio: float | None = None
+    valor: float | None = None
     atualizado_em: datetime | None = None
 
 

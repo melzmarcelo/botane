@@ -583,12 +583,22 @@ def _sem_zeros(v) -> str:
     return f"{Decimal(str(v)).normalize():f}"
 
 
-def _locais_do_produto(cur, id_produto: int, id_unidade: int) -> list[dict]:
+def _locais_do_produto(cur, id_produto: int, id_unidade: int,
+                       ve_custo: bool = True) -> list[dict]:
     """As prateleiras onde este produto mora nesta loja, com o que há em cada uma.
 
     Escrito UMA vez porque responde em dois lugares — no cadastro inteiro e no
     cartão que se recarrega depois de acrescentar ou tirar um local. Duas
     consultas divergiriam no primeiro campo novo.
+
+    🔑 **`ve_custo` decide se o DINHEIRO vai junto.** As prateleiras respondem
+    "onde está o produto", que é pergunta de cadastro; `custo_medio` e `valor`
+    respondem "quanto vale", que é pergunta de estoque e pede `estoque.saldos`
+    — a mesma chave que a tela de Saldos exige para mostrar esses dois números.
+    Sem o corte, qualquer pessoa logada lia o custo médio por prateleira pelo
+    cadastro do produto, que é a porta de trás da mesma informação.
+    ⚠️ A QUANTIDADE fica: ela é o que faz o cartão servir para quem organiza a
+    casa, e não é dinheiro.
     """
     cur.execute(
         """SELECT s.id_local, l.nome AS local, l.principal, se.nome AS setor,
@@ -601,14 +611,20 @@ def _locais_do_produto(cur, id_produto: int, id_unidade: int) -> list[dict]:
             ORDER BY l.principal DESC, lower(l.nome)""",
         (id_produto, id_unidade),
     )
-    return [dict(r) for r in cur.fetchall()]
+    linhas = [dict(r) for r in cur.fetchall()]
+    if not ve_custo:
+        for linha in linhas:
+            linha["custo_medio"] = None
+            linha["valor"] = None
+    return linhas
 
 
 @router.get("/{id_produto}/locais", response_model=list[LocalDoProduto])
 def listar_locais(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
-    """Onde este produto fica, com o saldo e o custo de AGORA."""
+    """Onde este produto fica, com o saldo e — para quem pode — o custo de AGORA."""
     with get_cursor() as cur:
-        return _locais_do_produto(cur, id_produto, unidade_atual(cur, ctx))
+        return _locais_do_produto(cur, id_produto, unidade_atual(cur, ctx),
+                                  ve_custo=ctx.pode("estoque.saldos"))
 
 
 @router.post("/{id_produto}/locais", status_code=201)
@@ -714,6 +730,25 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         produto = dict(p)
 
+        # 🔑 **O custo de referência NÃO sai para quem não pode ver custo.**
+        # `SELECT p.*` é cômodo e foi por onde ele vazou: `GET /produtos/{id}`
+        # devolvia `custo_referencia` a QUALQUER pessoa logada, enquanto
+        # `GET /produtos/{id}/custo` respondia 403 à mesma pessoa por não ter
+        # `estoque.saldos`. Medido com um usuário cuja única permissão era
+        # `producao.agenda`: R$ 2,759514 de um lado, 403 do outro — a mesma
+        # informação com duas respostas, e a de trás era a que abria.
+        # ⚠️ **A chave é a mesma do `/custo`**, de propósito: custo é dado de
+        # ESTOQUE e não vira dado de cadastro por estar nesta tela. Duas chaves
+        # para o mesmo número seriam duas políticas para a mesma coisa.
+        # ⚠️ Some do corpo em vez de virar 403: o resto do cadastro é legítimo
+        # para quem edita produto sem ver dinheiro, e negar a tela inteira por
+        # causa de três campos tiraria trabalho de quem tem direito a ele. É a
+        # mesma escolha do custo do KIT logo abaixo.
+        if not ctx.pode("estoque.saldos"):
+            for campo in ("custo_referencia", "custo_referencia_em",
+                          "custo_referencia_origem"):
+                produto[campo] = None
+
         # 🔑 Os DOIS lado a lado: o da casa e o desta loja. A tela precisa
         # dizer de quem é o número que está mostrando — "R$ 12,00" sem dono não
         # responde se a filial cobra isso ou se herdou da matriz.
@@ -766,7 +801,8 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         # açúcar está no central e em três cantos.
         # ⚠️ Sai da loja ATUAL: prateleira é da loja, e somar as duas aqui
         # mostraria dois "Estoque" sem dizer de quem é cada um.
-        produto["locais"] = _locais_do_produto(cur, id_produto, id_unidade)
+        produto["locais"] = _locais_do_produto(
+            cur, id_produto, id_unidade, ve_custo=ctx.pode("estoque.saldos"))
 
         cur.execute(
             """SELECT pf.id_fornecedor, f.nome AS fornecedor, pf.codigo_no_fornecedor,

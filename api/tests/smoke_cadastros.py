@@ -397,8 +397,63 @@ if st == 200:
     checar("cozinha NÃO cria fornecedor (403)", st == 403, st)
     st, r = chamar("POST", "/setores", {"nome": "Invadido"}, token=tk)
     checar("cozinha NÃO cria setor (403)", st == 403, st)
+
 else:
     print("  (usuário de cozinha ausente — rode tests/smoke_fundacao.py antes)")
+
+print("8b. o custo NÃO sai pelo cadastro para quem não pode vê-lo")
+# 🔑 `GET /produtos/{id}` fazia `SELECT p.*`, e `p.*` carrega
+# `custo_referencia`: a mesma pessoa levava 403 em `/produtos/{id}/custo` (que
+# pede `estoque.saldos`) e lia o número no detalhe do produto. Medido com um
+# usuário cuja única permissão era `producao.agenda`: R$ 2,759514 de um lado,
+# 403 do outro — a mesma informação com duas respostas, e a de trás abria.
+# ⚠️ **Usuário PRÓPRIO, e é por isso que ele existe.** A primeira versão usou o
+# de cozinha das suítes — que TEM `estoque.saldos` — e o bloco inteiro foi
+# pulado em silêncio: 63 checagens antes e 63 depois. Teste que não roda passa.
+marca_c = uuid.uuid4().hex[:6]
+st, papel_c = chamar("POST", "/papeis",
+                     {"nome": f"Sem custo {marca_c}", "permissoes": ["producao.agenda"]},
+                     token=token)
+email_c = f"semcusto{marca_c}@botane.com.br"
+st, user_c = chamar("POST", "/usuarios",
+                    {"nome": "Sem custo", "email": email_c, "senha": "semcusto12345",
+                     "papeis": [{"id_papel": papel_c.get("id")}]}, token=token)
+checar("usuário sem permissão de custo criado", st == 201, (st, user_c))
+st, r = chamar("POST", "/auth/login", {"email": email_c, "senha": "semcusto12345"})
+tk_c = (r or {}).get("access_token")
+st, meu = chamar("GET", "/auth/me", token=tk_c)
+checar("e ele realmente não tem estoque.saldos",
+       "estoque.saldos" not in (meu or {}).get("permissoes", []), meu.get("permissoes"))
+
+st, lista_c = chamar("GET", "/produtos?limite=1", token=tk_c)
+alvo_c = (lista_c or [{}])[0].get("id")
+st, det_c = chamar("GET", f"/produtos/{alvo_c}", token=tk_c)
+checar("ele lê o cadastro do produto", st == 200, st)
+checar("mas o custo de referência NÃO vem no corpo",
+       det_c.get("custo_referencia") is None, det_c.get("custo_referencia"))
+# ⚠️ E o custo POR PRATELEIRA idem: era a segunda porta da mesma informação, e
+# a tela já a escondia (`podeVerCusto`) enquanto a rota a mandava assim mesmo.
+dinheiro_c = [l for l in (det_c.get("locais") or [])
+              if l.get("custo_medio") is not None or l.get("valor") is not None]
+checar("nem o custo por prateleira", not dinheiro_c, dinheiro_c[:2])
+st, locais_c = chamar("GET", f"/produtos/{alvo_c}/locais", token=tk_c)
+comdin_c = [l for l in (locais_c or [])
+            if l.get("custo_medio") is not None or l.get("valor") is not None]
+checar("nem pela rota das prateleiras", not comdin_c, comdin_c[:2])
+# ⚠️ A QUANTIDADE fica: "onde o produto está" é pergunta de cadastro, não de
+# dinheiro — cortá-la tiraria o que faz o cartão servir a quem organiza a casa.
+checar("mas a quantidade continua vindo",
+       all("quantidade" in l for l in (locais_c or [])), (locais_c or [])[:1])
+st, c_c = chamar("GET", f"/produtos/{alvo_c}/custo", token=tk_c)
+checar("e a rota do custo segue recusando (403)", st == 403, st)
+
+# E o admin continua vendo tudo — a correção não pode ter fechado para quem pode.
+st, det_a = chamar("GET", f"/produtos/{alvo_c}", token=token)
+checar("quem TEM a permissão continua recebendo o custo",
+       "custo_referencia" in det_a, sorted(det_a)[:6])
+
+chamar("DELETE", f"/usuarios/{user_c.get('id')}", token=token)
+chamar("DELETE", f"/papeis/{papel_c.get('id')}", token=token)
 
 print("9. limpeza")
 # Categoria com produto apontando para ela é desativada, não excluída — por

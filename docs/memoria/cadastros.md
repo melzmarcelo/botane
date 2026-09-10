@@ -779,6 +779,28 @@
   que é como o gatilho grava) — e o "digitar grava sozinho" escreve nele, em vez de deixar
   contagem em produto de terceiro.
 
+- 🔑 **O custo vazava pelo cadastro, e a porta era o `SELECT p.*`** (10/09/2026, achado numa
+  varredura de permissões). `GET /produtos/{id}` devolvia `custo_referencia` a QUALQUER pessoa
+  logada, enquanto `GET /produtos/{id}/custo` respondia **403** à mesma pessoa por falta de
+  `estoque.saldos`. Medido com um usuário cuja única permissão era `producao.agenda`:
+  **R$ 2,759514 de um lado, 403 do outro** — a mesma informação com duas respostas, e a de trás
+  era a que abria.
+  🔑 **Havia uma SEGUNDA porta, pior**: `_locais_do_produto` devolve `custo_medio` e `valor` por
+  prateleira, e sai em `GET /produtos/{id}` e `GET /produtos/{id}/locais`, as duas só
+  autenticadas. A tela já escondia as colunas (`podeVerCusto`) — o servidor mandava o número
+  assim mesmo. Tela que esconde não protege: protege quem corta na rota.
+  ⚠️ **A chave é a mesma do `/custo`** (`estoque.saldos`), de propósito: custo é dado de ESTOQUE
+  e não vira dado de cadastro por estar nesta tela. Duas chaves para o mesmo número seriam duas
+  políticas para a mesma coisa.
+  ⚠️ **Some do corpo, não vira 403.** Quem edita produto sem ver dinheiro tem direito ao resto
+  do cadastro; negar a tela inteira por três campos tiraria trabalho de quem pode fazê-lo. É a
+  mesma escolha que o custo do KIT já fazia (`if not ctx.pode("fichas.custos")`). A QUANTIDADE
+  por prateleira também fica: "onde o produto está" é pergunta de cadastro.
+  ⚠️ **A primeira versão da checagem usou o usuário de cozinha das suítes — que TEM
+  `estoque.saldos`** — e o bloco inteiro foi pulado em silêncio: 63 checagens antes, 63 depois.
+  Teste que não roda passa. Agora ele cria papel e usuário próprios e AFIRMA que a permissão
+  falta antes de medir.
+
 ## Armadilhas já pagas
 
 - ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**
