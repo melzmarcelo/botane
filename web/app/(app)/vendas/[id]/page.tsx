@@ -11,6 +11,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import { CANAIS, dataBr, ORIGEM_CUSTO, ORIGENS, VendaDetalhe } from "../tipos";
 import Voltar from "@/components/voltar";
 
+import { custo } from "@/lib/numeros";
 /**
  * Uma venda, inteira, numa página só.
  *
@@ -269,7 +270,7 @@ export default function PaginaVenda() {
                   <td className="num tabular-nums">
                     {i.custo_ficha_unitario === null
                       ? "—"
-                      : reais(Number(i.custo_ficha_unitario))}
+                      : custo(Number(i.custo_ficha_unitario))}
                   </td>
                   <td className="text-[13px] text-suave">
                     {ORIGEM_CUSTO[i.origem_custo ?? ""] ?? i.origem_custo ?? "—"}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 
+import { qtd } from "@/lib/numeros";
 /**
  * Os lotes em estoque, **na ordem em que vão sair**.
  *
@@ -24,8 +25,6 @@ type Lote = {
   dias_restantes: number | null;
 };
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function LotesEmEstoque() {
   const [lotes, setLotes] = useState<Lote[] | null>(null);

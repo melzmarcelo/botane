@@ -9,6 +9,7 @@ import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
+import { custo } from "@/lib/numeros";
 type Ficha = {
   id: number;
   id_produto: number;
@@ -158,7 +159,7 @@ export default function PaginaFichas() {
                     </p>
                     {veCusto && (
                       <p className="mono mt-1 text-[13.5px]">
-                        {f.custo_por_porcao !== null ? reais(Number(f.custo_por_porcao)) : "—"}
+                        {f.custo_por_porcao !== null ? custo(Number(f.custo_por_porcao)) : "—"}
                         <span className="text-suave"> / porção</span>
                         {f.custo_completo === false && (
                           <span className="ml-2 text-alerta">custo incompleto</span>
@@ -203,7 +204,7 @@ export default function PaginaFichas() {
                       </td>
                       {veCusto && (
                         <td className="num">
-                          {f.custo_total !== null ? reais(Number(f.custo_total)) : "—"}
+                          {f.custo_total !== null ? custo(Number(f.custo_total)) : "—"}
                           {f.custo_completo === false && (
                             <span className="ml-1 text-alerta" title="há item sem preço">
                               *
@@ -213,7 +214,7 @@ export default function PaginaFichas() {
                       )}
                       {veCusto && (
                         <td className="num font-semibold">
-                          {f.custo_por_porcao !== null ? reais(Number(f.custo_por_porcao)) : "—"}
+                          {f.custo_por_porcao !== null ? custo(Number(f.custo_por_porcao)) : "—"}
                         </td>
                       )}
                     </tr>

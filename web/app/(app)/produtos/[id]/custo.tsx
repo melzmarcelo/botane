@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { reais } from "@/lib/cadastros";
+import { custo } from "@/lib/numeros";
 import { Aviso, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 
 /**
@@ -106,7 +106,7 @@ export default function CustoDoProduto({
             {/* ⚠️ **Sem custo é "—", nunca R$ 0,00.** Zero é uma afirmação:
                 diz que o produto não custa nada, e é justamente o número que
                 faz o food cost sair bom demais sem ninguém desconfiar. */}
-            {c.atual === null ? "—" : reais(c.atual)}
+            {c.atual === null ? "—" : custo(c.atual)}
           </p>
           <p className="mt-1.5 text-[13px] text-suave">
             {c.atual === null
@@ -182,14 +182,14 @@ export default function CustoDoProduto({
                           {l.fonte === "movimento" && l.custo_do_documento !== null && (
                             <span className="block text-[12.5px] text-suave">
                               {l.quantidade?.toLocaleString("pt-BR")} {um ?? ""} a{" "}
-                              {reais(l.custo_do_documento)}
-                              {l.anterior !== null && ` · antes ${reais(l.anterior)}`}
+                              {custo(l.custo_do_documento)}
+                              {l.anterior !== null && ` · antes ${custo(l.anterior)}`}
                               {l.saldo_apos !== null &&
                                 ` · saldo ${l.saldo_apos.toLocaleString("pt-BR")}`}
                             </span>
                           )}
                         </td>
-                        <td className="num mono">{reais(l.custo)}</td>
+                        <td className="num mono">{custo(l.custo)}</td>
                       </tr>
                     ))}
                   </tbody>

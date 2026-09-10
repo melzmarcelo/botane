@@ -13,6 +13,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
 
+import { custo } from "@/lib/numeros";
 type Item = {
   id_insumo: number | null;
   id_subficha: number | null;
@@ -622,7 +623,7 @@ export default function EditorFicha() {
                     {veCusto && (
                       <span className="mono pb-2 text-[14px]">
                         {item.custo_total !== null && item.custo_total !== undefined
-                          ? reais(Number(item.custo_total))
+                          ? custo(Number(item.custo_total))
                           : "—"}
                       </span>
                     )}
@@ -698,7 +699,7 @@ export default function EditorFicha() {
                 <p
                   className={`mono mt-1 text-[19px] ${c.destaque ? "font-bold text-erva" : ""}`}
                 >
-                  {c.valor !== null && c.valor !== undefined ? reais(Number(c.valor)) : "—"}
+                  {c.valor !== null && c.valor !== undefined ? custo(Number(c.valor)) : "—"}
                 </p>
               </div>
             ))}

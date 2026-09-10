@@ -100,6 +100,16 @@
   prato sem depender do corte; a suíte pergunta pelo id dela. Vale para todo relatório com
   `LIMIT`: quem quer olhar um item específico precisa de um caminho que não passe pelo ranking.
 
+- ⚠️ **O PDF e a planilha do MESMO relatório discordavam na terceira casa**
+  (`exportacao._numero_br`, 10/09/2026). O CSV imprime o `Decimal` como o banco o entrega, ou
+  seja, na escala da coluna; o PDF tinha teto de **três** casas. Um custo médio de 2,759514
+  saía "2,759514" na planilha e **"2,760"** no PDF — arredondado, e com uma casa fantasma no
+  fim. Quem conferisse os dois concluiria que um deles mente, que é o defeito que o relatório
+  exportado existe para não ter. O teto agora é seis, a escala do custo unitário no banco, e o
+  laço para na primeira casa que serve: dinheiro somável continua saindo em duas porque CABE
+  em duas. A régua e o porquê das três famílias estão em
+  [`padroes-de-ui.md`](padroes-de-ui.md).
+
 ## Armadilhas já pagas
 
 - ⚠️ **O rodapé do relatório soma as linhas ARREDONDADAS**, de propósito — o total tem de

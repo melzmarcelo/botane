@@ -7,6 +7,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 
+import { custo } from "@/lib/numeros";
 /**
  * O que esta pessoa fornece — e por quanto, da última vez.
  *
@@ -151,7 +152,7 @@ export default function ProdutosDaPessoa({ id }: { id: number }) {
                       "—"
                     ) : (
                       <>
-                        {reais(v.ultimo_preco)}
+                        {custo(v.ultimo_preco)}
                         <span className="block text-[12.5px] text-suave">
                           por {v.um_estoque ?? "un"}
                         </span>

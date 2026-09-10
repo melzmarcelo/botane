@@ -21,6 +21,7 @@ import {
 import { CORES, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
 import Voltar from "@/components/voltar";
 
+import { custo } from "@/lib/numeros";
 /**
  * Uma nota de entrada, inteira, numa página só.
  *
@@ -382,7 +383,7 @@ export default function PaginaNota() {
                         </span>
                       )}
                     </td>
-                    <td className="num mono">{reais(Number(i.valor_unitario))}</td>
+                    <td className="num mono">{custo(Number(i.valor_unitario))}</td>
                     <td className="num mono">
                       {reais(
                         Number(i.valor_total) ||
@@ -481,7 +482,7 @@ export default function PaginaNota() {
                       {i.custo_aquisicao_unitario ? (
                         <>
                           <span className="mono font-semibold">
-                            {reais(Number(i.custo_aquisicao_unitario))}
+                            {custo(Number(i.custo_aquisicao_unitario))}
                           </span>
                           {i.variacao_preco_pct !== null && (
                             <span

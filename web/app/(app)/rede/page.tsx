@@ -6,6 +6,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 
+import { pct } from "@/lib/numeros";
 /**
  * As lojas lado a lado — o painel de quem responde pelas duas.
  *
@@ -45,8 +46,6 @@ type Rede = {
   };
 };
 
-const pct = (v: number | null | undefined) =>
-  v === null || v === undefined ? "—" : `${v.toFixed(1).replace(".", ",")}%`;
 
 export default function PaginaRede() {
   const [dados, setDados] = useState<Rede | null>(null);

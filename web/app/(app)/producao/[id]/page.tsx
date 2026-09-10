@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
+import { custo, qtd } from "@/lib/numeros";
 import {
   Aviso,
   Carregando,
@@ -81,8 +82,6 @@ type Linha = {
   previsao: Previsao;
 };
 
-const qtd = (n: number | string | null) =>
-  n === null ? "—" : Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 4 });
 
 const dia = (d: string) => new Date(d + "T12:00").toLocaleDateString("pt-BR");
 
@@ -283,7 +282,7 @@ export default function PaginaOrdemProducao() {
                           <>
                             {reais(i.custo)}
                             <span className="block text-[12px] text-suave">
-                              {reais(i.custo_unitario ?? 0)} / {i.um_estoque}
+                              {custo(i.custo_unitario ?? 0)} / {i.um_estoque}
                             </span>
                           </>
                         )}
@@ -297,7 +296,7 @@ export default function PaginaOrdemProducao() {
                   <tr className="border-t-2 border-linha2 font-semibold">
                     <td colSpan={3}>Custo da produção</td>
                     <td className="num text-suave">
-                      {reais(p.custo_unitario)} / {p.um_estoque}
+                      {custo(p.custo_unitario)} / {p.um_estoque}
                     </td>
                     <td className="num">{reais(p.custo_total)}</td>
                   </tr>

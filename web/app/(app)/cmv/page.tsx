@@ -12,6 +12,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
 
+import { pct } from "@/lib/numeros";
 type Apuracao = {
   inicio: string;
   fim: string;
@@ -94,8 +95,6 @@ type Fechamento = {
   fechado_por: string | null;
 };
 
-const pct = (v: number | null | undefined, casas = 1) =>
-  v === null || v === undefined ? "—" : `${Number(v).toFixed(casas).replace(".", ",")}%`;
 
 export default function PaginaCmv() {
   const aviso = useAviso();

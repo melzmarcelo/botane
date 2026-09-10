@@ -1,6 +1,8 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef } from "react";
+
+import { mascaraMoeda } from "@/lib/numeros";
 
 export function Cartao({
   titulo,
@@ -238,5 +240,84 @@ export function Confirmacao({
         </button>
       </div>
     </Modal>
+  );
+}
+
+
+/** Campo de DINHEIRO, com máscara de verdade.
+ *
+ * 🔑 **`type="number"` não serve para preço.** Era o que estava no cadastro de
+ * produtos, e traz três defeitos que só aparecem com gente usando: no teclado
+ * pt-BR a vírgula não entra em parte dos navegadores (quem digitava "12,50"
+ * gravava 12), o campo aceita "1e5" e "1.2.3", e a setinha de incremento
+ * aparece em cima de um preço, onde ela não quer dizer nada.
+ *
+ * 🔑 **Os centavos entram primeiro, como em caixa de banco**: digitar "1250"
+ * mostra 12,50, e o valor cresce pela direita. É a única forma em que apagar um
+ * caractere faz o que se espera — com a vírgula solta no meio do texto, o
+ * cursor cai do lado errado dela e o número muda de ordem de grandeza sem
+ * ninguém entender por quê.
+ *
+ * ⚠️ **O "R$" fica FORA do campo, como prefixo.** Dentro do valor ele seria
+ * apagável, e apagá-lo não muda o valor — controle que aceita clique e não faz
+ * nada é pior que controle nenhum.
+ *
+ * ⚠️ `inputMode="decimal"` chama o teclado numérico do celular sem trazer as
+ * armadilhas do `type="number"`; a contagem e o cadastro acontecem com o
+ * telefone na mão.
+ */
+export function CampoMoeda({
+  valor,
+  aoMudar,
+  desabilitado = false,
+  placeholder,
+  className = "",
+}: {
+  valor: string;
+  aoMudar: (v: string) => void;
+  desabilitado?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+
+  // ⚠️ **O cursor mora no FIM — sempre, e não só depois de digitar.** O valor
+  // cresce pela direita, então é o único lugar onde ele faz sentido. Sem isso
+  // os dígitos se espalham pelo meio do número: medido, com "18,99" no campo e
+  // o cursor na posição 1, digitar "5" e depois "7" dava **1.578,99** — o 5 e o
+  // 7 separados pelos dígitos velhos, que não é o que ninguém quis escrever.
+  // Com o fim garantido dá 1.899,57, que é o número na ordem em que foi
+  // digitado.
+  // ⚠️ Vale no FOCO também, não só na mudança: quem clica no meio do texto
+  // espera continuar escrevendo o número, não emendar um algarismo lá dentro.
+  const paraOFim = (el: HTMLInputElement | null) => {
+    if (el) el.setSelectionRange(el.value.length, el.value.length);
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (el && document.activeElement === el) paraOFim(el);
+  }, [valor]);
+
+  return (
+    <div className="relative">
+      <span
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-suave"
+        aria-hidden="true"
+      >
+        R$
+      </span>
+      <input
+        ref={ref}
+        className={`campo mono pl-9 text-right ${className}`}
+        type="text"
+        inputMode="decimal"
+        disabled={desabilitado}
+        placeholder={placeholder}
+        value={valor}
+        onChange={(e) => aoMudar(mascaraMoeda(e.target.value))}
+        onFocus={(e) => paraOFim(e.currentTarget)}
+        onClick={(e) => paraOFim(e.currentTarget)}
+      />
+    </div>
   );
 }

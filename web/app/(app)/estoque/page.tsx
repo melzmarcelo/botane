@@ -14,6 +14,7 @@ import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
+import { custo, qtd } from "@/lib/numeros";
 /** Uma linha por PRODUTO somando os locais desta loja. */
 type SaldoAgrupado = {
   id_produto: number;
@@ -82,8 +83,6 @@ type Movimento = {
 };
 
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 type TipoMovimento = { tipo: string; rotulo: string };
 
@@ -499,7 +498,7 @@ export default function PaginaEstoque() {
                             {s.um_estoque ?? ""}
                           </td>
                           <td className="num">
-                            {s.custo_medio === null ? "—" : reais(Number(s.custo_medio))}
+                            {s.custo_medio === null ? "—" : custo(Number(s.custo_medio))}
                           </td>
                           <td className="num font-semibold">{reais(Number(s.valor))}</td>
                         </tr>
@@ -561,7 +560,7 @@ export default function PaginaEstoque() {
                           <td className="num">
                             {/* Traço quando a rede tem zero: com saldos que se
                                 anulam entre lojas, custo médio não existe. */}
-                            {s.custo_medio === null ? "—" : reais(Number(s.custo_medio))}
+                            {s.custo_medio === null ? "—" : custo(Number(s.custo_medio))}
                           </td>
                           <td className="num font-semibold">{reais(Number(s.valor))}</td>
                         </tr>
@@ -624,7 +623,7 @@ export default function PaginaEstoque() {
                             </div>
                           )}
                         </td>
-                        <td className="num">{reais(Number(s.custo_medio))}</td>
+                        <td className="num">{custo(Number(s.custo_medio))}</td>
                         <td className="num font-semibold">{reais(Number(s.valor))}</td>
                       </tr>
                     ))}
@@ -819,7 +818,7 @@ export default function PaginaEstoque() {
                         {Number(m.quantidade) > 0 ? "+" : ""}
                         {qtd(m.quantidade)}
                       </td>
-                      <td className="num">{reais(Number(m.custo_unitario))}</td>
+                      <td className="num">{custo(Number(m.custo_unitario))}</td>
                       <td className="num">{reais(Number(m.custo_total))}</td>
                       <td className="num text-suave">{qtd(m.saldo_apos)}</td>
                       <td className="text-right">

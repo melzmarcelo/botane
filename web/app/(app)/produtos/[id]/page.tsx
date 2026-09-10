@@ -16,7 +16,16 @@ import {
   UnidadeMedida,
 } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
-import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
+import {
+  Aviso,
+  Campo,
+  CampoMoeda,
+  Carregando,
+  Cartao,
+  Confirmacao,
+  Etiqueta,
+} from "@/components/ui";
+import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import CodigosDoProduto, { CodigoExterno } from "./codigos";
@@ -206,14 +215,14 @@ export default function FormularioProduto() {
         const casa = p.preco_casa as number | null;
         const daLoja = p.preco_loja as number | null;
         setPrecoCasa(casa ?? null);
-        setPrecoLoja(daLoja === null || daLoja === undefined ? "" : String(daLoja));
+        setPrecoLoja(numeroParaMoeda(daLoja));
         const umaLojaSo = (eu?.unidades.length ?? 0) <= 1;
         const daLojaVale = umaLojaSo && daLoja !== null && daLoja !== undefined;
         setPrecoEhDaLoja(daLojaVale);
         const noCampo = daLojaVale ? daLoja : casa;
         setF((atual) => ({
           ...atual,
-          preco_venda: noCampo === null || noCampo === undefined ? "" : String(noCampo),
+          preco_venda: numeroParaMoeda(noCampo),
         }));
       })
       .catch((e) => setErro(e.message))
@@ -251,7 +260,7 @@ export default function FormularioProduto() {
       const r = await api.put<{ message: string }>(`/produtos/${id}/preco-loja`, {
         preco_venda: valor,
       });
-      setPrecoLoja(valor === null ? "" : String(valor));
+      setPrecoLoja(numeroParaMoeda(valor));
       aviso.sucesso(r.message);
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível salvar o preço");
@@ -317,7 +326,7 @@ export default function FormularioProduto() {
       // logo abaixo, pela rota da loja. Mandá-lo aqui abriria uma linha
       // vigente da CASA — e a da loja continuaria mandando, deixando o número
       // editado sem efeito nenhum.
-      preco_venda: precoEhDaLoja ? undefined : num(f.preco_venda),
+      preco_venda: precoEhDaLoja ? undefined : moedaParaNumero(f.preco_venda),
       fornecedores: vinculos.map((v) => ({
         id_fornecedor: v.id_fornecedor,
         codigo_no_fornecedor: v.codigo_no_fornecedor,
@@ -375,7 +384,7 @@ export default function FormularioProduto() {
         // remoção), e aí o produto volta a valer o da casa — que é o que
         // "apagar o preço" quer dizer nesta tela.
         if (precoEhDaLoja) {
-          const valor = num(f.preco_venda);
+          const valor = moedaParaNumero(f.preco_venda);
           await api.put(`/produtos/${id}/preco-loja`, { preco_venda: valor ?? null });
         }
         // 🔑 **Reler o produto depois de salvar** (09/09/2026, relato do dono:
@@ -713,14 +722,10 @@ export default function FormularioProduto() {
             rotulo={variasLojas ? "Preço de venda da casa" : "Preço de venda"}
             dica="grava com data de vigência"
           >
-            <input
-              className="campo mono"
-              type="number"
-              step="0.01"
-              min="0"
-              disabled={!podeEditar}
-              value={f.preco_venda}
-              onChange={(e) => set("preco_venda", e.target.value)}
+            <CampoMoeda
+              valor={f.preco_venda}
+              aoMudar={(v) => set("preco_venda", v)}
+              desabilitado={!podeEditar}
             />
           </Campo>
         </div>
@@ -741,15 +746,11 @@ export default function FormularioProduto() {
         >
           <div className="flex flex-wrap items-end gap-3">
             <Campo rotulo="Preço" className="w-[180px]">
-              <input
-                className="campo mono"
-                type="number"
-                step="0.01"
-                min="0"
-                disabled={!podeEditar}
-                placeholder={precoCasa === null ? "" : String(precoCasa)}
-                value={precoLoja}
-                onChange={(e) => setPrecoLoja(e.target.value)}
+              <CampoMoeda
+                valor={precoLoja}
+                aoMudar={setPrecoLoja}
+                desabilitado={!podeEditar}
+                placeholder={numeroParaMoeda(precoCasa)}
               />
             </Campo>
             {podeEditar && (
@@ -758,7 +759,7 @@ export default function FormularioProduto() {
                   type="button"
                   className="btn btn-primario"
                   disabled={salvandoPreco}
-                  onClick={() => void salvarPrecoDaLoja(precoLoja.trim() === "" ? null : Number(precoLoja))}
+                  onClick={() => void salvarPrecoDaLoja(moedaParaNumero(precoLoja))}
                 >
                   {salvandoPreco ? "Salvando…" : "Salvar preço daqui"}
                 </button>

@@ -7,6 +7,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
+import { custo, qtd } from "@/lib/numeros";
 /**
  * A movimentação do período, produto a produto.
  *
@@ -62,8 +63,6 @@ type Resposta = {
   linhas: Linha[];
 };
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function Movimentacao({ inicio, fim }: { inicio: string; fim: string }) {
   const [dados, setDados] = useState<Resposta | null>(null);
@@ -243,7 +242,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
                     </span>
                   </td>
                   <td className="num mono text-[13px] text-suave">
-                    {reais(Number(l.custo_medio_final))}
+                    {custo(Number(l.custo_medio_final))}
                   </td>
                 </tr>
               ))}

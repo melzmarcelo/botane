@@ -8,6 +8,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao } from "@/components/ui";
 import VendasDoDia, { Dia } from "./vendas-do-dia";
 
+import { pct } from "@/lib/numeros";
 /**
  * A tela inicial: a casa inteira num olhar.
  *
@@ -114,7 +115,6 @@ function Indicador({
   );
 }
 
-const pct = (n: number) => `${n.toFixed(1).replace(".", ",")}%`;
 
 /**
  * "04/09" — a data da linha da agenda, curta.

@@ -12,6 +12,7 @@ import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 import AgendaProducao from "./agenda";
 
+import { custo } from "@/lib/numeros";
 type Ficha = {
   id: number;
   id_produto: number;
@@ -183,7 +184,7 @@ export default function PaginaProducao() {
                 <div>
                   <p className="rotulo">Custo por unidade</p>
                   <p className="mono mt-1 text-[19px] font-bold text-erva">
-                    {reais(Number(resultado.custo_unitario))}
+                    {custo(Number(resultado.custo_unitario))}
                   </p>
                 </div>
               </>
@@ -320,7 +321,7 @@ export default function PaginaProducao() {
                     </td>
                     {veCusto && <td className="num">{reais(Number(h.custo_total))}</td>}
                     {veCusto && (
-                      <td className="num font-semibold">{reais(Number(h.custo_unitario))}</td>
+                      <td className="num font-semibold">{custo(Number(h.custo_unitario))}</td>
                     )}
                     <td>
                       <Etiqueta>v{h.versao_ficha}</Etiqueta>

@@ -68,6 +68,54 @@
   componente: o aviso aparece em quase toda tela, e um balão diferente por página seria a
   primeira coisa a divergir.
 
+- 🔑 **O banco declara TRÊS famílias de número, e a tela mostrava tudo como uma**
+  (`lib/numeros.ts`, 10/09/2026, pedido do dono). Não é questão de gosto — está na escala
+  das colunas: **valor** somável é `numeric(18,2)` (`custo_total`, `valor_total`,
+  `preco_venda`), **custo unitário** é `numeric(18,6)` (`custo_unitario`, `custo_medio`,
+  `ultimo_preco`, `custo_referencia`, `custo_ficha_unitario`) e **quantidade** é
+  `numeric(18,4)`. O front achatava as três em duas casas.
+  🔑 **`custo()` não inventa casa: para de esconder a que existe.** Medido na base: **846
+  produtos** têm `custo_referencia` com dígito além da segunda casa e **128 saldos** têm
+  `custo_medio` assim. Um adesivo a R$ 0,169020 aparecia como **R$ 0,17** — 0,6% de erro que
+  reaparece multiplicado na ficha, exatamente o que `CASAS_CUSTO` existe para não deixar
+  acontecer. Quem custa R$ 20,00 continua "R$ 20,00": o mínimo é duas casas e o Intl apara o
+  zero à direita sozinho, então só quem tem fração aparece maior.
+  ⚠️ **Valor continua em DUAS, e essa é a metade que não muda.** Na mesma linha de Saldos
+  convivem "R$ 0,16902" (custo médio) e "-R$ 0,51" (valor em estoque) — famílias diferentes,
+  precisões diferentes, de propósito. Trocar a segunda por seis casas seria inventar centavo
+  que não existe numa conta que se soma.
+  ⚠️ **`qtd` estava definido OITO vezes** — três casas em cinco arquivos, quatro em três — e
+  `pct`, quatro. O mesmo saldo escrito de dois jeitos conforme a tela. Divergência assim não
+  se acha lendo o código: acha-se quando alguém confere duas telas e conclui que uma delas
+  mente. Agora `reais`, `custo`, `qtd`, `pct` e `inteiro` moram em `lib/numeros.ts`;
+  `lib/cadastros.ts` reexporta `reais` porque trinta e cinco telas já o pedem de lá.
+  ⚠️ A variação do relatório do dono continua local, e está certo: ela leva **sinal**
+  ("+3,2%" e "3,2%" dizem coisas diferentes) — só o "+" é dela, as casas vêm da casa.
+  ⚠️ Ponteiro: a mesma régua valia para o PDF, que truncava em três casas —
+  [`exportacao-e-relatorios.md`](exportacao-e-relatorios.md).
+
+- 🔑 **`type="number"` não serve para dinheiro** (`CampoMoeda` em `components/ui.tsx`,
+  10/09/2026, pedido do dono). Era o que o preço de venda do cadastro de produtos usava, e
+  traz três defeitos que só aparecem com gente digitando: no teclado pt-BR a vírgula não entra
+  em parte dos navegadores (quem digitava "12,50" gravava **12**), o campo aceita "1e5" e
+  "1.2.3", e a setinha de incremento aparece em cima de um preço, onde não quer dizer nada.
+  Agora os centavos entram primeiro, como em caixa de banco: "1234567" vira **12.345,67**.
+  ⚠️ **O cursor mora no FIM — na mudança E no foco.** Sem isso os dígitos se espalham pelo
+  meio do número: medido, com "18,99" no campo e o cursor na posição 1, digitar "5" e depois
+  "7" dava **1.578,99**, com o 5 e o 7 separados pelos dígitos velhos. O valor cresce pela
+  direita, então o fim é o único lugar onde o cursor faz sentido — e é o que faz "selecionar
+  tudo e digitar" substituir de verdade.
+  ⚠️ **O "R$" fica FORA do campo**, como prefixo: dentro do valor ele seria apagável, e
+  apagá-lo não muda nada — controle que aceita clique e não faz nada é pior que controle
+  nenhum.
+  ⚠️ **`Number()` cru não lê o que a máscara escreve.** "1.234,56" vira `NaN`, e o ponto de
+  milhar seria lido como decimal — quem salva usa `moedaParaNumero`, quem carrega usa
+  `numeroParaMoeda`. Havia três lugares assim na tela do produto (o corpo do produto, o preço
+  da loja e o botão "Salvar preço daqui").
+  ⚠️ **A bateria do navegador comparava `Number(campo) === 218`** e passou a acusar a tela de
+  não mostrar um preço que ela mostra. O campo é mascarado: a checagem certa é pelo texto,
+  `"218,00"` — é o que a pessoa vê, e é o formato que a máscara promete.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

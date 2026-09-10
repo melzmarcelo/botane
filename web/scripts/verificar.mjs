@@ -5264,8 +5264,12 @@ try {
       return campo?.querySelector("input")?.value ?? null;
     });
     // 🔑 A afirmação central: o campo mostra o preço que VALE, não vazio.
+    // ⚠️ **O campo é MASCARADO** (`CampoMoeda`), então o que se lê é "218,00" e
+    // não "218": `Number("218,00")` é NaN, e a checagem acusava a tela de não
+    // mostrar um preço que ela mostrava. Comparar pelo texto formatado é o
+    // certo aqui — é o que a pessoa vê, e é o formato que a máscara promete.
     checar("e a ficha do produto mostra esse preço no campo",
-      Number(noCampo) === 218, noCampo);
+      noCampo === "218,00", noCampo);
 
     // ⚠️ E salvar mantém o preço na LOJA. Escrito na casa, abriria uma segunda
     // linha vigente: a da loja continuaria mandando e o número editado não

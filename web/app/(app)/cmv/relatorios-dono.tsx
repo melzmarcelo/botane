@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
+import { pct as pctDaCasa } from "@/lib/numeros";
 /**
  * Os dois relatórios que o dono usa para decidir.
  *
@@ -57,8 +58,9 @@ type Compra = {
   variacao_pct: number | null;
 };
 
-const pct = (n: number) =>
-  `${n > 0 ? "+" : ""}${n.toFixed(1).replace(".", ",")}%`;
+// ⚠️ Variação leva SINAL, e o sinal faz parte da leitura: "+3,2%" e "3,2%"
+// dizem coisas diferentes. Só o "+" é daqui — as casas vêm da casa.
+const pct = (n: number) => `${n > 0 ? "+" : ""}${pctDaCasa(n)}`;
 const dataBr = (d: string) => new Date(d + "T00:00").toLocaleDateString("pt-BR");
 
 export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: string }) {

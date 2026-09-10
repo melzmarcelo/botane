@@ -207,8 +207,17 @@ def _numero_br(v) -> str:
     if isinstance(v, int) and not isinstance(v, bool):
         return ("-" if v < 0 else "") + milhar(str(abs(v)))
     d = Decimal(str(v))
-    # Dinheiro tem duas casas; quantidade pode ter três (0,125 KG de fermento).
-    casas = 2 if d == d.quantize(Decimal("0.01")) else 3
+    # 🔑 **Duas casas, e mais só quando o número TEM mais** — até seis, que é a
+    # escala do custo unitário no banco (`numeric(18,6)`).
+    # ⚠️ O teto era TRÊS, e com isso o PDF discordava da planilha do mesmo
+    # relatório: um custo médio de 2,759514 saía "2,759514" no CSV (que imprime
+    # o `Decimal` como o banco o entrega) e **"2,760"** no PDF — arredondado, e
+    # com uma casa fantasma no fim. Quem conferisse os dois concluiria que um
+    # deles mente, que é exatamente o que o relatório exportado existe para não
+    # ter. Dinheiro somável continua em duas: ele CABE em duas, e o laço para.
+    casas = 2
+    while casas < 6 and d != d.quantize(Decimal(1).scaleb(-casas)):
+        casas += 1
     inteiro, _, frac = f"{abs(d):.{casas}f}".partition(".")
     return ("-" if d < 0 else "") + milhar(inteiro) + "," + frac
 

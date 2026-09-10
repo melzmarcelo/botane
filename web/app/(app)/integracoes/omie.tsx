@@ -9,6 +9,7 @@ import { reais } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import NotasOmie from "./notas-omie";
 
+import { custo } from "@/lib/numeros";
 /**
  * Tudo o que o Botané troca com o Omie: credencial, notas, catálogo, custo
  * inicial e a conferência de estoque.
@@ -668,7 +669,7 @@ export default function Omie() {
                       >
                         {Number(c.diferenca_saldo)}
                       </td>
-                      <td className="num tabular-nums">{reais(Number(c.custo_medio_botane))}</td>
+                      <td className="num tabular-nums">{custo(Number(c.custo_medio_botane))}</td>
                       <td className="num tabular-nums text-suave">{reais(Number(c.cmc_omie))}</td>
                       <td
                         className={`num tabular-nums ${

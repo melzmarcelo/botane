@@ -11,6 +11,7 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 
+import { qtd } from "@/lib/numeros";
 /**
  * A agenda de produção — o PLANO, que é diferente do que já aconteceu.
  *
@@ -67,8 +68,6 @@ type Resposta = {
   sugestoes: Sugestao[];
 };
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 const dia = (d: string) => new Date(d + "T12:00").toLocaleDateString("pt-BR");
 

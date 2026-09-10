@@ -9,6 +9,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteFornecedores, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { Campo, Cartao } from "@/components/ui";
 
+import { custo } from "@/lib/numeros";
 /**
  * Digitar a nota inteira na mão — o caminho de quem comprou no mercado, no
  * açougue da esquina ou no hortifrúti que só dá cupom.
@@ -520,7 +521,7 @@ export default function NotaManual({
                   <td className="num mono text-suave">
                     {previsto ? (
                       <>
-                        {reais(previsto.unitario)}
+                        {custo(previsto.unitario)}
                         {unidadeDeEstoque(linha) && (
                           <span className="block text-[11px]">
                             por {unidadeDeEstoque(linha)}

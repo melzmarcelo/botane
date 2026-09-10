@@ -11,6 +11,7 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
+import { custo, qtd } from "@/lib/numeros";
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
  *
@@ -153,8 +154,6 @@ const VAZIO = {
   validade: "",
 };
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function PaginaAjustes() {
   const router = useRouter();
@@ -387,8 +386,8 @@ export default function PaginaAjustes() {
         });
         const l = r.linhas?.[0];
         aviso.sucesso(
-          `Custo corrigido de ${reais(Number(l?.custo_anterior))} para ` +
-            `${reais(Number(l?.custo_novo))} — ${reais(r.diferenca_total)} de diferença no estoque.`,
+          `Custo corrigido de ${custo(Number(l?.custo_anterior))} para ` +
+            `${custo(Number(l?.custo_novo))} — ${reais(r.diferenca_total)} de diferença no estoque.`,
         );
       } else if (tipo === "entrada") {
         const r = await api.post<{ custo_medio: number }>("/estoque/entradas", {
@@ -398,7 +397,7 @@ export default function PaginaAjustes() {
           lote: f.lote || null,
           validade: f.validade || null,
         });
-        aviso.sucesso(`Entrada lançada. Novo custo médio: ${reais(Number(r.custo_medio))}`);
+        aviso.sucesso(`Entrada lançada. Novo custo médio: ${custo(Number(r.custo_medio))}`);
       } else if (tipo === "transferencia") {
         const r = await api.post<{ message: string; em_transito?: boolean; remessa?: number }>(
           "/estoque/transferencias", {
@@ -431,7 +430,7 @@ export default function PaginaAjustes() {
         // A frase de qual lote saiu vem pronta do servidor: escrevê-la de novo
         // aqui seria a segunda versão da mesma regra.
         aviso.sucesso(
-          `${r.message ?? "Saída lançada"} — ${reais(Number(r.custo_unitario))} por unidade.` +
+          `${r.message ?? "Saída lançada"} — ${custo(Number(r.custo_unitario))} por unidade.` +
             (r.custo_provisorio ? " Custo provisório: não havia saldo suficiente." : ""),
         );
       }
@@ -726,7 +725,7 @@ export default function PaginaAjustes() {
                 {qtd(previaSaldo.saldo_novo)} — <b>{previaSaldo.movimento}</b> de{" "}
                 {qtd(Math.abs(previaSaldo.diferenca))} {previaSaldo.um}, que valem{" "}
                 <b>{reais(Math.abs(previaSaldo.valor))}</b> pelo custo médio de{" "}
-                {reais(previaSaldo.custo_medio)}.{" "}
+                {custo(previaSaldo.custo_medio)}.{" "}
                 {/* ⚠️ Aqui o sinal NÃO se inverte, ao contrário do ajuste de
                     custo: falta baixa o estoque final, e o CMV é
                     `inicial + compras − final` — menos estoque, CMV maior. */}
@@ -744,8 +743,8 @@ export default function PaginaAjustes() {
             <div className="mt-4">
               <Aviso tipo="info">
                 <b>{previaCusto.produto}</b>: {qtd(previaCusto.saldo)} {previaCusto.um} a{" "}
-                {reais(previaCusto.custo_atual)} valem {reais(previaCusto.valor_atual)}. A{" "}
-                {reais(previaCusto.custo_novo)} passam a valer{" "}
+                {custo(previaCusto.custo_atual)} valem {reais(previaCusto.valor_atual)}. A{" "}
+                {custo(previaCusto.custo_novo)} passam a valer{" "}
                 {reais(previaCusto.valor_novo)} —{" "}
                 <b>
                   {previaCusto.diferenca >= 0 ? "+" : ""}

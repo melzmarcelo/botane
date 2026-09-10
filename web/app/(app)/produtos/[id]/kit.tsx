@@ -8,6 +8,7 @@ import { Aviso, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
+import { custo } from "@/lib/numeros";
 /**
  * A composição do combo.
  *
@@ -226,7 +227,7 @@ export default function ComposicaoKit({
                     </td>
                     {podeVerCusto && (
                       <td className="num mono text-suave">
-                        {d?.custo_unitario != null ? reais(d.custo_unitario) : "—"}
+                        {d?.custo_unitario != null ? custo(d.custo_unitario) : "—"}
                       </td>
                     )}
                     {podeVerCusto && (

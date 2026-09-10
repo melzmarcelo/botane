@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Local, reais } from "@/lib/cadastros";
 import { Aviso, Cartao, Carregando, Etiqueta, Vazio } from "@/components/ui";
 
+import { custo, qtd } from "@/lib/numeros";
 /**
  * Onde este produto fica — e o que há em cada prateleira AGORA.
  *
@@ -42,8 +43,6 @@ type LocalDoProduto = {
   atualizado_em: string | null;
 };
 
-const qtd = (v: number) =>
-  Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 });
 
 export default function LocaisDoProduto({
   idProduto,
@@ -219,7 +218,7 @@ export default function LocaisDoProduto({
                   )}
                   {mostraNumeros && podeVerCusto && (
                     <td className="py-2 text-right tabular-nums">
-                      {reais(Number(l.custo_medio))}
+                      {custo(Number(l.custo_medio))}
                     </td>
                   )}
                   {mostraNumeros && podeVerCusto && (

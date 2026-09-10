@@ -11,6 +11,7 @@ import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
 
+import { qtd } from "@/lib/numeros";
 /**
  * A contagem — tela própria, feita para o celular na mão de quem conta.
  *
@@ -90,8 +91,6 @@ type Inventario = {
 const chaveDe = (i: { id_produto: number; id_local: number | null }) =>
   `${i.id_produto}:${i.id_local ?? 0}`;
 
-const qtd = (n: number | string) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 export default function PaginaContagem() {
   const { id } = useParams<{ id: string }>();

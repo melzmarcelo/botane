@@ -130,10 +130,12 @@ export const GRANDEZAS = ["MASSA", "VOLUME", "UNIDADE"];
 export const nomeTipo = (t: string) =>
   TIPOS_PRODUTO.find((x) => x.valor === t)?.nome ?? t.toLowerCase();
 
-export const reais = (v: number | null | undefined) =>
-  v === null || v === undefined
-    ? "—"
-    : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// ⚠️ **A implementação mora em `lib/numeros.ts`**, junto das outras três
+// famílias de número (custo unitário, quantidade, percentual) — separá-las
+// seria voltar a ter duas versões da mesma regra. Reexportado aqui porque
+// trinta e cinco telas já pedem `reais` deste arquivo; código novo importa de
+// `@/lib/numeros`.
+export { reais } from "./numeros";
 
 export function mascaraCnpj(valor: string) {
   const d = valor.replace(/\D/g, "").slice(0, 14);
