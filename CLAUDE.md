@@ -48,9 +48,15 @@ um app no DigitalOcean App Platform.
 que o branch e o ar andam separados, e é normal o segundo ficar para trás sem que nada
 avise — conferir sempre com `curl https://sistema.botanedeliecafe.com.br/api/saude`, que
 devolve a versão e a última migração aplicada.
-⚠️ Em 08/09/2026 o ar estava em **1.1.13 / migração 054** enquanto `producao` já tinha
-1.1.14 / migração 057: as três entregas de setembro (pessoas, cupom cheio, período de
-consumo) estavam commitadas e empurradas, mas ainda não implantadas.
+⚠️ Já aconteceu de a defasagem passar despercebida: em 08/09/2026 o ar estava em
+**1.1.13 / migração 054** enquanto `producao` já tinha 1.1.14 / 057 — as três entregas de
+setembro (pessoas, cupom cheio, período de consumo) estavam commitadas e empurradas, mas
+não implantadas. Em 10/09/2026 o ar foi para **1.1.15 / migração 061**, alinhado com
+`producao`. O id do app, para o `doctl`, sai do cabeçalho `x-do-app-origin` de qualquer
+resposta: `0daa9b68-87b6-4d47-8433-77c32e4b9d20`.
+⚠️ **`api/verificar_deploy.py` compara a `impressao` do ar com os arquivos DESTE repositório** —
+é o que prova que o deploy carregou o commit certo, e não só que o app subiu. As checagens 4 a 7
+pedem `--com-login` e senha digitada, então ficam fora de uma rodada automática.
 
 ### Preparado para o dia do deploy
 - **`.do/app.yaml`** — o app inteiro no DigitalOcean App Platform: web em `/`, API em `/api` e
