@@ -1152,6 +1152,14 @@ checar("o razão do produto continua lá depois de desativá-lo", len(mov) > 0, 
 # continua fazendo sentido.
 if id_setor_conf:
     chamar("PUT", f"/setores/{id_setor_conf}", {"ativo": False}, token=token)
+# ⚠️ **E os LOCAIS, pelo mesmo motivo e com um agravante.** A matriz chegou a
+# 256 locais ativos com 4 de verdade, e o seletor de local do produto oferece
+# TODOS os da loja — foi exatamente esse o defeito que a tela já pagou uma vez
+# ("o seletor oferecia 93 locais"). Aqui não se APAGA: o razão aponta para
+# estes locais e é append-only, então o `DELETE` da API é uma desativação.
+for id_local_teste in (id_central, id_conf, id_canto_bar):
+    if id_local_teste:
+        chamar("DELETE", f"/locais/{id_local_teste}", token=token)
 
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")

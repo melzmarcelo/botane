@@ -88,6 +88,22 @@
   `Cannot read properties of null`, e a rodada INTEIRA morria ali — **um `checar` que falha
   custa uma linha; uma exceção custa as trezentas checagens seguintes.**
 
+- 🔑 **O mesmo em `locais_estoque` — e aqui NÃO se apaga** (10/09/2026). A matriz tinha **256
+  locais ativos com 4 de verdade** (`CANTO DO BAR`, `CENTRAL REL` e parentes, das mesmas duas
+  suítes). O estrago é maior que o dos setores: o seletor de local do produto oferece TODOS os
+  da loja, que é o defeito que a tela já pagou uma vez ("o seletor oferecia 93 locais").
+  🔑 **Nenhum dos 252 podia ser apagado, e o banco é quem diz**: todas as chaves para
+  `locais_estoque` são `NO ACTION` (`estoque_movimentos`, `estoque_saldos`, `estoque_lotes`,
+  inventários, notas, produções, transferências e `produtos.id_local_padrao`), e os 252 eram
+  referenciados pelo razão — 719 lançamentos. A saída é DESATIVAR, que é o que o próprio
+  `DELETE /locais/{id}` da API faz: some das telas, o razão fica inteiro.
+  ⚠️ **É o contrário do que valeu para os setores**, e a diferença está nas chaves: lá são
+  `SET NULL`/`CASCADE` e apagar passa em silêncio; aqui são `NO ACTION` e o banco recusa. Ler a
+  regra de exclusão antes de escolher entre apagar e desativar é o que separa os dois casos.
+  ⚠️ **`ESTOQUE` aparece 201 vezes e NÃO é resíduo de local**: é o primeiro local que nasce com
+  cada loja, e o que acumulou foram as **unidades** (202 na base, 1 ativa). Como local é
+  escopado por loja, essas 201 não sujam a lista da matriz — o resíduo de verdade era só o dela.
+
 - 🔑 **Suíte que cria tabela de APOIO tem de desativar o que criou** (10/09/2026). `setores`
   não pagina no dia a dia porque se supõe curta — e a base local tinha **309**: 7 de verdade e
   o resto criado por rodada de bateria. Quem engordou: `smoke_estoque` ("Confeitaria <marca>",

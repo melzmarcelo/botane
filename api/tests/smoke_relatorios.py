@@ -347,6 +347,11 @@ for p in list(produtos.values()) + [sem_setor.get("id"), insumo.get("id"), unico
 for id_setor in (setor_bar, setor_conf):
     if id_setor:
         chamar("PUT", f"/setores/{id_setor}", {"ativo": False}, token=token)
+# ⚠️ Os LOCAIS idem — e aqui não se apaga: o razão aponta para eles e é
+# append-only, então o `DELETE` da API é uma desativação.
+for id_local in (local_bar, local_conf, local_central):
+    if id_local:
+        chamar("DELETE", f"/locais/{id_local}", token=token)
 checar("limpeza concluída", True)
 
 print()
