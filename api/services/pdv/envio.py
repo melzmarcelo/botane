@@ -320,6 +320,81 @@ def _pendencias_abertas(cur) -> dict[tuple[str, int], dict]:
     return {(r["tipo"], r["id_registro"]): dict(r) for r in cur.fetchall()}
 
 
+def marcar_categorias_do_cardapio(cur, cliente, filial, id_usuario: int | None,
+                                  simular: bool = True) -> dict:
+    """Marca para integrar as categorias que JÁ EXISTEM no cardápio do PDV.
+
+    🔑 **Pedido do dono (09/09/2026).** O produto carrega o grupo pelo
+    `codGrupoExterno`, e o PDV só resolve isso se a categoria daqui já tiver
+    sido adotada lá. Sem nenhuma categoria marcada, **todo** produto marcado
+    aparece como "atualizar" e trava: na conta real eram 636 produtos parados
+    por 30 categorias que ninguém tinha marcado.
+
+    Marcar uma a uma são trinta idas ao cadastro, e a escolha não é de gosto —
+    é uma pergunta com resposta certa: *esta categoria existe no cardápio?*
+    Quem sabe responder é o PDV, e é por isso que esta função pergunta a ele.
+
+    ⚠️ **NÃO marca o que não existe lá.** Dezesseis categorias da casa vieram
+    das famílias do Omie — BEBIDAS, HORTIFRÚTI, LIMPEZA, DESCARTÁVEIS — e são de
+    COMPRA: não têm o que fazer num cardápio. Marcá-las poria cada uma na fila
+    propondo CRIAR um grupo que ninguém quer no PDV do cliente.
+
+    ⚠️ **Prévia antes, sempre** (`simular=True`), como a fusão, a colheita de
+    EAN e a alteração múltipla. Quem vai marcar trinta cadastros de uma vez não
+    confere um a um depois.
+
+    ⚠️ **Marcar não envia, e não basta.** Ela é o passo 1: o produto só resolve
+    o grupo quando o `codRefExterna` estiver gravado LÁ, e isso acontece no
+    envio. Depois de marcar, as categorias aparecem na fila como ADOTAR (as que
+    existem lá sem dono), ATUALIZAR (as que já são nossas) ou CRIAR — e o CRIAR
+    faz nascer grupo no cardápio do cliente, então merece ser conferido.
+    """
+    la = _o_que_existe_la(cliente, filial)
+    conhecidos = {str(g.get("nome", "")).strip().upper()
+                  for g in la[CATEGORIA]["por_nome"].values()}
+    conhecidos |= {str(g.get("nome", "")).strip().upper()
+                   for g in la[CATEGORIA]["por_ref"].values()}
+    # `por_nome` é indexado pelo nome; o valor pode não repetir o campo.
+    conhecidos |= {str(n).strip().upper() for n in la[CATEGORIA]["por_nome"]}
+    conhecidos.discard("")
+
+    cur.execute("SELECT id, nome, integrado_pdv FROM categorias ORDER BY nome")
+    marcam, ja_marcadas, sem_par = [], [], []
+    for r in cur.fetchall():
+        linha = {"id": r["id"], "nome": r["nome"]}
+        if (r["nome"] or "").strip().upper() not in conhecidos:
+            # A frase diz POR QUE ela fica de fora: "não marcada" sem motivo
+            # parece esquecimento, e alguém a marcaria à mão desfazendo isto.
+            sem_par.append({**linha, "motivo": "não existe como grupo no cardápio do PDV"})
+        elif r["integrado_pdv"]:
+            ja_marcadas.append(linha)
+        else:
+            marcam.append(linha)
+
+    if not simular and marcam:
+        import auditoria
+
+        alvos = [x["id"] for x in marcam]
+        cur.execute("UPDATE categorias SET integrado_pdv = true WHERE id = ANY(%s)", (alvos,))
+        # ⚠️ Um registro por CATEGORIA, não um pelo lote: quem for entender daqui
+        # a seis meses por que esta categoria passou a integrar procura por ela.
+        for x in marcam:
+            auditoria.registrar(cur, id_usuario, "categoria", x["id"],
+                                "marcar_integrado_pdv", depois={"integrado_pdv": True})
+
+    verbo = "seriam marcadas" if simular else "marcadas"
+    partes = [f"{len(marcam)} {verbo}"]
+    if ja_marcadas:
+        partes.append(f"{len(ja_marcadas)} já estava(m)")
+    if sem_par:
+        partes.append(f"{len(sem_par)} sem grupo no PDV")
+    return {
+        "marcam": marcam, "ja_marcadas": ja_marcadas, "sem_par": sem_par,
+        "aplicado": not simular,
+        "message": ", ".join(partes) + ".",
+    }
+
+
 def fila(cur, id_unidade: int, cliente=None, filial: int | None = None
          ) -> dict[str, list[dict]]:
     """As três abas da tela, numa consulta só.

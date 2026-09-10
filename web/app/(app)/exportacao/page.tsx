@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import MarcarCategorias from "./marcar-categorias";
 import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
@@ -172,6 +173,25 @@ export default function PaginaExportacao() {
           O envio ao PDV está desligado. Ligue em <b>Integrações ▸ PDV Legal</b>, em
           &ldquo;Enviar informações ao PDV&rdquo;.
         </Aviso>
+
+        {/* 🔑 **O botão aparece MESMO com o envio desligado** (09/09/2026), e é
+            aqui que ele mais serve: marcar categoria não manda nada para lugar
+            nenhum, e é o passo que destrava os produtos. Escondê-lo obrigaria a
+            ligar o envio antes de a fila estar sã — o contrário do que se quer.
+            ⚠️ A frase explica POR QUE ele está nesta tela apagada; um botão
+            solto embaixo de um aviso de "desligado" parece engano. */}
+        <Cartao
+          titulo="Antes de ligar: as categorias"
+          descricao="O produto só sai daqui quando a categoria dele já existe no cardápio do PDV."
+        >
+          <p className="mb-3 max-w-[75ch] text-[13px] leading-snug text-suave">
+            Sem categoria marcada, <b>todo</b> produto fica travado na fila — o PDV precisa do
+            grupo para aceitar o item. Isto pergunta ao cardápio quais das suas categorias já
+            existem lá e marca só essas; as de compra (hortifrúti, limpeza, descartáveis) ficam
+            de fora.
+          </p>
+          <MarcarCategorias />
+        </Cartao>
       </div>
     );
   }
@@ -217,19 +237,25 @@ export default function PaginaExportacao() {
             Nada sai sozinho — o envio é sempre disparado por alguém.
           </p>
         </div>
-        {!!pendentes.length && (
-          <button
-            className="btn btn-primario"
-            disabled={enviando}
-            onClick={() => (desativacoes ? setConfirmando(true) : void enviar(selecionados))}
-          >
-            {enviando
-              ? "Enviando…"
-              : selecionados.length
-                ? `Enviar ${selecionados.length} selecionado(s)`
-                : `Enviar ${pendentes.length} pendente(s)`}
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ⚠️ **Ao lado do Enviar, não escondido numa aba.** É a primeira coisa
+              a fazer quando a fila está cheia de produto travado, e quem chega
+              aqui pela primeira vez não sabe que ela existe. */}
+          <MarcarCategorias aoAplicar={() => void carregar()} />
+          {!!pendentes.length && (
+            <button
+              className="btn btn-primario"
+              disabled={enviando}
+              onClick={() => (desativacoes ? setConfirmando(true) : void enviar(selecionados))}
+            >
+              {enviando
+                ? "Enviando…"
+                : selecionados.length
+                  ? `Enviar ${selecionados.length} selecionado(s)`
+                  : `Enviar ${pendentes.length} pendente(s)`}
+            </button>
+          )}
+        </div>
       </header>
 
       {erroTela && <Aviso tipo="erro">{erroTela}</Aviso>}

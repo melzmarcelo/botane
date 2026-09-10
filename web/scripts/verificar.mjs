@@ -2624,6 +2624,42 @@ try {
   // O texto tem de vir da tela de integrações, não da última do laço.
   await p.goto(`${WEB}/integracoes`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));
+
+  // 🔑 **A tela virou ABAS** (09/09/2026, pedido do dono: *"cria uma aba e
+  // coloca as coisas do Omie, outra para o PDV Legal, outra para o e-mail e
+  // demais"*). Eram dez cartões empilhados em 751 linhas, e quem vinha
+  // configurar o e-mail rolava por credencial, notas, catálogo, custo inicial e
+  // conferência de estoque.
+  const abasInt = await p.evaluate(() => ({
+    nomes: [...document.querySelectorAll("nav button")].map((b) => b.textContent?.trim()),
+    // ⚠️ Sem `?aba=`, abre a PRIMEIRA — e a primeira tem de ser uma que a
+    // pessoa pode ver, senão ela cai numa aba vazia sem entender por quê.
+    url: location.search,
+    // A frase do que a aba faz vem antes do conteúdo: "Omie" e "PDV Legal" são
+    // nomes de fornecedor, não dizem o que cada um traz para cá.
+    explica: /notas de compra|cat[áa]logo de produtos/i.test(document.body.innerText),
+  }));
+  checar("Integrações tem uma aba por integração",
+    ["Omie", "PDV Legal", "E-mail"].every((n) => abasInt.nomes.includes(n)), abasInt.nomes);
+  checar("e abre na primeira sem precisar de ?aba=", abasInt.url === "", abasInt.url);
+  checar("dizendo o que a aba traz, não só o nome do fornecedor", abasInt.explica, abasInt);
+
+  // 🔑 **A aba vive na URL**: é o que permite o menu apontar direto, o voltar do
+  // navegador funcionar e a tela virar um link que se manda para alguém.
+  await irPara(p, `${WEB}/integracoes?aba=email`);
+  await p.waitForFunction(() => /SMTP|servidor de e-mail|e-mail/i.test(
+    document.body.innerText), { timeout: 15000 }).catch(() => {});
+  const naEmail = await p.evaluate(() => ({
+    // O bloco do Omie NÃO pode estar na tela do e-mail: se estiver, as abas
+    // são enfeite e a tela continua sendo a pilha de antes.
+    temOmie: /app_key|Credenciais do Omie/i.test(document.body.innerText),
+    temEmail: /SMTP|servidor de e-mail/i.test(document.body.innerText),
+  }));
+  checar("a aba do e-mail abre pela URL", naEmail.temEmail, naEmail);
+  checar("e não carrega junto o bloco do Omie", !naEmail.temOmie, naEmail);
+
+  await p.goto(`${WEB}/integracoes`, { waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
   const textoInt = await p.evaluate(() => document.body.innerText);
   checar("a tela avisa que está em modo simulado", /modo simulado/i.test(textoInt),
     textoInt.slice(0, 120));
@@ -4462,7 +4498,13 @@ try {
   // dono). O duplicado não é erro de quem cadastra: ele nasce das duas
   // importações. O teste entra por onde a pessoa entra — um link que existe mas
   // não está no caminho de ninguém é o mesmo que não existir.
-  await irPara(p, `${WEB}/integracoes`);
+  // ⚠️ **A ABA vai na URL** (09/09/2026): a tela virou abas, e o cartão dos
+  // duplicados mora em "Outros" — ele não é do Omie nem do PDV, nasce das duas.
+  // Sem o `?aba=`, a checagem cairia na primeira aba e acusaria a tela de não
+  // ter um cartão que ela tem, noutra aba.
+  await irPara(p, `${WEB}/integracoes?aba=outros`);
+  await p.waitForFunction(() => /mesmo nome/i.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
   const portaDup = await p.evaluate(() => {
     const cartao = [...document.querySelectorAll("section.cartao")]
       .find((c) => (c.querySelector("h2")?.textContent ?? "").includes("mesmo nome"));
@@ -4568,7 +4610,7 @@ try {
   // ⚠️ **Só a autenticação existe, e a tela tem de DIZER isso.** O catálogo de
   // endpoints da Tablet Cloud não é público; um cartão com um botão de testar e
   // mais nada parece um pedaço faltando, e alguém abriria chamado por isso.
-  await irPara(p, `${WEB}/integracoes`);
+  await irPara(p, `${WEB}/integracoes?aba=pdv`);
   await new Promise((r) => setTimeout(r, 2000));
   const pdv = await p.evaluate(() => {
     const texto = document.body.innerText;
@@ -4778,7 +4820,7 @@ try {
   }, token);
   aoTerminar.push(reporPdv);
 
-  await irPara(p, `${WEB}/integracoes`);
+  await irPara(p, `${WEB}/integracoes?aba=pdv`);
   // ⚠️ **Esperar o BLOCO, não o relógio.** `pdv-legal.tsx` devolve
   // `<Carregando/>` enquanto `/pdv/config` não responde, então o `#agenda-pdv`
   // não existe no DOM — e a checagem acusava a tela de não ter a agenda. O

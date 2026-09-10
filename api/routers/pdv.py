@@ -491,6 +491,61 @@ def _envio_ligado(cur, id_unidade: int) -> None:
         )
 
 
+class MarcarCategorias(BaseModel):
+    """⚠️ `simular` VERDADEIRO por padrão: quem esquecer o campo recebe a
+    prévia, nunca uma escrita em trinta cadastros."""
+
+    simular: bool = True
+
+
+@router.post("/envio/marcar-categorias")
+def marcar_categorias(
+    body: MarcarCategorias | None = None,
+    ctx: Contexto = Depends(requer_permissao("cadastros.categorias", "admin.integracoes")),
+) -> dict:
+    """Marca para integrar as categorias que JÁ EXISTEM no cardápio do PDV.
+
+    🔑 **Pedido do dono (09/09/2026).** Sem nenhuma categoria marcada, todo
+    produto marcado trava na fila: o PDV só resolve o grupo do produto se a
+    categoria daqui tiver sido adotada lá. Na conta real eram 636 produtos
+    parados por 30 categorias que ninguém tinha marcado — e marcá-las uma a uma
+    são trinta idas ao cadastro para responder sempre a mesma pergunta.
+
+    ⚠️ **NÃO exige o envio ligado, ao contrário da fila.** Este é o passo de
+    PREPARAR: marcar não manda nada para lugar nenhum. Exigir o interruptor
+    aqui obrigaria a ligá-lo antes de a fila estar sã — que é exatamente o que
+    o dono não queria fazer.
+
+    ⚠️ **Precisa da credencial**, porque quem responde "esta categoria existe no
+    cardápio?" é o PDV. Sem ela não há como distinguir a categoria de venda da
+    categoria de compra, e marcar as duas poria as de compra na fila propondo
+    criar grupo que ninguém quer no cardápio do cliente.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        try:
+            cliente = _cliente(cur, id_unidade)
+            filial = _filial(cur, id_unidade)
+        except HTTPException:
+            raise
+        try:
+            r = envio.marcar_categorias_do_cardapio(
+                cur, cliente, filial, ctx.id_usuario,
+                simular=(body.simular if body else True))
+        except ErroPdv as e:
+            # ⚠️ Falhar a leitura NÃO pode virar "então marque tudo": sem saber o
+            # que existe lá, marcar é escolher errado em silêncio.
+            raise HTTPException(
+                status_code=502,
+                detail=(f"Não deu para ler o cardápio do PDV para saber quais categorias "
+                        f"já existem lá: {e.mensagem}"))
+        if r["aplicado"] and r["marcam"]:
+            auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO,
+                                "marcar_categorias",
+                                depois={"marcadas": len(r["marcam"])}, id_unidade=id_unidade)
+    return r
+
+
 @router.get("/envio/fila")
 def envio_fila(ctx: Contexto = Depends(requer_permissao("integracao.pdv",
                                                         "admin.integracoes"))) -> dict:

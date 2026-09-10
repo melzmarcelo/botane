@@ -1438,6 +1438,66 @@ with _cur_pdv() as _c:
            bool((_c.fetchone() or {}).get("enviar_ao_pdv")) is True, "")
 
 
+print("\n8l3. marcar de uma vez as categorias que ja existem no cardapio")
+# 🔑 **Pedido do dono (09/09/2026).** O produto carrega o grupo pelo
+# `codGrupoExterno`, e o PDV so o resolve se a categoria daqui tiver sido
+# adotada la. Sem nenhuma categoria marcada, TODO produto marcado aparece como
+# "atualizar" e trava: na conta real eram 636 produtos parados por 30
+# categorias que ninguem tinha marcado.
+#
+# ⚠️ **A previa vem antes**, como na fusao, na colheita de EAN e na alteracao
+# multipla: quem vai marcar trinta cadastros de uma vez nao confere um a um.
+st, prev = chamar("POST", "/pdv/envio/marcar-categorias", {}, token=token)
+checar("a previa responde", st == 200, (st, prev))
+checar("e diz que NAO aplicou", prev.get("aplicado") is False, prev)
+checar("separando as que ja estavam marcadas",
+       isinstance(prev.get("ja_marcadas"), list), list(prev or {}))
+
+# 🔑 **A afirmacao central: a categoria que NAO existe no cardapio fica de
+# fora.** Dezesseis categorias da casa vieram das familias do Omie -- BEBIDAS,
+# HORTIFRUTI, LIMPEZA -- e sao de COMPRA. Marca-las poria cada uma na fila
+# propondo CRIAR um grupo que ninguem quer no PDV do cliente.
+NOME_CAT_FORA = f"CAT SO DAQUI {marca}"
+st, c_fora = chamar("POST", "/categorias", {"nome": NOME_CAT_FORA, "tipo": "INSUMO"},
+                    token=token)
+id_cfora = (c_fora or {}).get("id")
+st, prev2 = chamar("POST", "/pdv/envio/marcar-categorias", {}, token=token)
+fora = {c["nome"] for c in (prev2.get("sem_par") or [])}
+checar("a categoria que so existe aqui fica de fora",
+       NOME_CAT_FORA.upper() in {n.upper() for n in fora}, sorted(fora)[:5])
+checar("e a linha dela DIZ por que",
+       any("cardapio" in (c.get("motivo") or "").lower().replace("á", "a")
+           for c in (prev2.get("sem_par") or [])), (prev2.get("sem_par") or [])[:2])
+checar("e ela nao entra na lista de marcar",
+       id_cfora not in {c["id"] for c in (prev2.get("marcam") or [])},
+       [c["nome"] for c in (prev2.get("marcam") or [])][:5])
+
+# ⚠️ Sem `simular`, o padrao e a PREVIA: um chamador que esqueca o campo recebe
+# a conta, nunca uma escrita em trinta cadastros.
+with _cur_pdv() as _c:
+    _c.execute("SELECT count(*) n FROM categorias WHERE integrado_pdv")
+    antes_marcadas = _c.fetchone()["n"]
+chamar("POST", "/pdv/envio/marcar-categorias", {}, token=token)
+with _cur_pdv() as _c:
+    _c.execute("SELECT count(*) n FROM categorias WHERE integrado_pdv")
+    checar("a previa nao marca nada", _c.fetchone()["n"] == antes_marcadas, antes_marcadas)
+
+st, ap = chamar("POST", "/pdv/envio/marcar-categorias", {"simular": False}, token=token)
+checar("aplicar responde", st == 200 and ap.get("aplicado") is True, (st, ap))
+st, prev3 = chamar("POST", "/pdv/envio/marcar-categorias", {}, token=token)
+# 🔑 Rodar de novo nao tem o que fazer: as que existiam la ja estao marcadas.
+checar("rodar de novo nao marca nada", not (prev3.get("marcam") or []), prev3.get("message"))
+checar("e a categoria so daqui CONTINUA de fora",
+       NOME_CAT_FORA.upper() in {c["nome"].upper() for c in (prev3.get("sem_par") or [])},
+       (prev3.get("message")))
+
+st, r = chamar("POST", "/pdv/envio/marcar-categorias", {})
+checar("sem autenticacao e barrado", st in (401, 403), st)
+
+if id_cfora:
+    chamar("DELETE", f"/categorias/{id_cfora}", token=token)
+
+
 print("\n8m. o produto na fila de envio")
 # 🔑 **O que ja existe no cardapio entra como ADOTAR, nunca CRIAR.** Sao 630
 # produtos la; propor criar duplicaria o cardapio do cliente. O casamento e pelo
