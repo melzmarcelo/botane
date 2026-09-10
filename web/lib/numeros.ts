@@ -47,16 +47,42 @@ export const custo = (v: number | string | null | undefined) =>
         maximumFractionDigits: 6,
       });
 
-/** Quantidade: até quatro casas, como no banco, sem zero à toa.
+/** Quantas casas a LOJA quer ver na quantidade (`parametros.casas_decimais_qtd`).
+ *
+ * 🔑 **Era ajuste morto**: existia no banco desde a migração 001, a tela de
+ * Lojas o oferecia e ninguém o lia — mexer ali não mudava nada. Agora chega
+ * pelo `/auth/me` e a sessão o define ANTES de qualquer tela pintar.
+ *
+ * ⚠️ **Variável de módulo, e é seguro por causa de duas coisas do próprio
+ * sistema**: o layout de `(app)` segura toda tela enquanto o `/auth/me` não
+ * responde, e trocar de loja no seletor recarrega a página inteira, de
+ * propósito. Não há, portanto, tela pintada com o valor velho — nem no
+ * servidor, que não renderiza nada de dentro de `(app)` antes da sessão.
+ * Um contexto de React exigiria trocar `qtd(x)` por `fmt.qtd(x)` em dez
+ * arquivos para resolver um problema que estas duas garantias já resolvem.
+ *
+ * ⚠️ O padrão é 3, o mesmo do banco. */
+let casasQtd = 3;
+
+export function definirCasasQtd(n: number | null | undefined) {
+  if (typeof n === "number" && n >= 0 && n <= 6) casasQtd = n;
+}
+
+/** Quantidade, nas casas que a loja pediu (até 4, que é a escala do banco).
  *
  * ⚠️ Mínimo ZERO de propósito: saldo de 132 unidades é "132", não "132,0000".
- * Quem tem fração mostra a fração. */
+ * Quem tem fração mostra a fração.
+ * ⚠️ **A loja pode pedir 0, e aí a EXIBIÇÃO arredonda** — 0,5 KG aparece como
+ * "1". É o que o ajuste quer dizer ("0 a 6", na tela de Lojas), e vale só para
+ * a tela: o que está gravado no razão não muda uma casa.
+ * ⚠️ Pedir 5 ou 6 não inventa dígito: `quantidade` é `numeric(18,4)`, então o
+ * teto real continua sendo quatro. */
 export const qtd = (n: number | string | null | undefined) =>
   n === null || n === undefined || n === ""
     ? "—"
     : Number(n).toLocaleString("pt-BR", {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 4,
+        maximumFractionDigits: Math.min(casasQtd, 4),
       });
 
 /** Percentual. Uma casa é o padrão da casa (food cost, margem, variação). */

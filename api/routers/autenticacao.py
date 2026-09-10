@@ -234,12 +234,26 @@ def me(ctx: Contexto = Depends(contexto_atual)):
 
         # A loja ATUAL decide: o envio ao PDV é configurado por loja, e quem
         # troca de loja no seletor tem de ver a marca da loja em que está.
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT enviar_ao_pdv FROM integracoes
                 WHERE servico = 'PDV_LEGAL' AND id_unidade = %s""",
-            (unidade_atual(cur, ctx),),
+            (id_unidade,),
         )
         linha_pdv = cur.fetchone()
+
+        # 🔑 **`casas_decimais_qtd` era campo MORTO**: estava no banco desde a
+        # migração 001, o modelo o aceitava e a tela de Lojas o oferecia para
+        # editar — e ninguém o lia. Quem mexesse ali não via efeito nenhum.
+        # Ajuste que não faz nada é pior que ajuste inexistente: ensina que a
+        # tela mente. Sai pela mesma porta do `enviar_ao_pdv` — é da loja ATUAL.
+        # ⚠️ Loja sem linha em `parametros` NÃO é erro: a linha nasce na
+        # primeira visita à tela de parâmetros. Sem linha, vale o padrão.
+        cur.execute(
+            "SELECT casas_decimais_qtd FROM parametros WHERE id_unidade = %s",
+            (id_unidade,),
+        )
+        linha_par = cur.fetchone()
 
     return {
         "id": ctx.id_usuario,
@@ -255,6 +269,7 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         "setores": setores,
         "todos_setores": ctx.todos_setores,
         "enviar_ao_pdv": bool(linha_pdv["enviar_ao_pdv"]) if linha_pdv else False,
+        "casas_decimais_qtd": int(linha_par["casas_decimais_qtd"]) if linha_par else 3,
     }
 
 

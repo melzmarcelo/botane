@@ -94,6 +94,16 @@ checar("admin tem todas as permissões", len(me.get("permissoes", [])) >= 30, le
 checar("admin é papel Administrador", "Administrador" in me.get("papeis", []))
 checar("enxerga a loja inicial", len(me.get("unidades", [])) >= 1)
 checar("todas_unidades = true", me.get("todas_unidades") is True)
+# 🔑 **A preferência de casas decimais viaja no /me**, e é o que faz
+# `parametros.casas_decimais_qtd` deixar de ser campo morto: ele existia no
+# banco desde a migração 001 e a tela de Lojas o oferecia, mas ninguém o lia.
+# ⚠️ A checagem é do CONTRATO — o campo vem, é inteiro e está na faixa que a
+# tela promete ("0 a 6"). Que ele mude o número na tela é a bateria do navegador
+# que mede; aqui se garante que ele CHEGA, que é onde ele sumia.
+checar("/me traz as casas decimais da loja",
+       isinstance(me.get("casas_decimais_qtd"), int), me.get("casas_decimais_qtd"))
+checar("e dentro da faixa que a tela oferece",
+       0 <= me.get("casas_decimais_qtd", -1) <= 6, me.get("casas_decimais_qtd"))
 
 st, r = chamar("GET", "/auth/me")
 checar("sem token devolve 401", st == 401, st)

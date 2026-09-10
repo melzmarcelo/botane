@@ -143,6 +143,31 @@
   da causa. Índice de lista muda quando a tela muda; rótulo, não. Mesma lição que o campo de
   preço já tinha ensinado neste arquivo.
 
+- 🔑 **`casas_decimais_qtd` era ajuste MORTO, e agora `qtd()` o lê** (10/09/2026, pedido do
+  dono). Ele existia em `parametros` desde a migração 001, o modelo da API o aceitava e a tela
+  de Lojas o oferecia para editar — e **ninguém o lia**. Quem mexesse ali não via número nenhum
+  mudar. Ajuste que não faz nada é pior que ajuste inexistente: ensina que a tela mente.
+  🔑 **Viaja no `/auth/me`, pela mesma porta e pela mesma razão do `enviar_ao_pdv`**: é ajuste
+  da loja ATUAL, toda tela precisa dele, e o `/me` já é carregado uma vez. Rota própria custaria
+  uma requisição por tela para um número que não muda.
+  ⚠️ **`qtd()` guarda o valor numa variável de MÓDULO, e isso é seguro por duas garantias que
+  já existiam**: o layout de `(app)` segura toda tela enquanto o `/auth/me` não responde
+  (`if (carregando)`), e trocar de loja no seletor recarrega a página inteira, de propósito.
+  Não há tela pintada com o valor velho — nem no servidor, que não renderiza nada de dentro de
+  `(app)` antes da sessão. Um contexto de React obrigaria a trocar `qtd(x)` por `fmt.qtd(x)` em
+  dez arquivos para resolver o que essas duas garantias já resolvem.
+  ⚠️ **A ordem no `ProvedorSessao` importa**: `definirCasasQtd` antes do `setEu`, porque é o
+  `setCarregando(false)` que libera a pintura — definir depois faria a primeira tela sair com o
+  padrão e o número mudar sozinho na frente de quem olha.
+  ⚠️ **Zero é escolha legítima e arredonda só a EXIBIÇÃO** — 2,1875 KG aparece como "2", e o
+  razão continua com 2,1875 gravado. A tela de Lojas escreve "0 a 6"; é isso que isso quer
+  dizer. E pedir 5 ou 6 não inventa dígito: `quantidade` é `numeric(18,4)`, então o teto real
+  continua sendo quatro.
+  ⚠️ **A checagem MEDE a tela, não a gravação.** Gravar o parâmetro sempre funcionou — era a
+  leitura que não existia, e uma checagem de "salvou?" teria passado durante os meses em que o
+  campo esteve morto. A bateria do navegador troca o ajuste para 4, 2 e 0 e lê a mesma linha de
+  saldo; `smoke_fundacao` garante que o campo CHEGA no `/me`.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

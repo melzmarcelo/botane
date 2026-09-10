@@ -59,6 +59,12 @@ class MeResponse(BaseModel):
     # `/pdv/config`. Vem por aqui porque `/auth/me` é o que toda tela já
     # carrega uma vez, e assim o campo não custa uma requisição por tela.
     enviar_ao_pdv: bool = False
+    # 🔑 **Quantas casas a loja quer ver na QUANTIDADE** (`parametros`, 0 a 6).
+    # Vem pela mesma porta e pela mesma razão do `enviar_ao_pdv`: é ajuste da
+    # loja ATUAL, toda tela precisa dele e `/auth/me` já é carregado uma vez.
+    # ⚠️ O padrão é 3, o mesmo do banco — divergir aqui faria a tela mostrar uma
+    # coisa antes da resposta e outra depois.
+    casas_decimais_qtd: int = 3
 
 
 class PerfilUpdate(BaseModel):

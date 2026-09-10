@@ -5038,6 +5038,50 @@ try {
   await api("PUT", "/unidades/1/parametros",
     { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
 
+  console.log("10a2. as casas decimais da quantidade, que a loja escolhe");
+  // 🔑 **Era ajuste MORTO.** `parametros.casas_decimais_qtd` existe desde a
+  // migração 001, a tela de Lojas sempre o ofereceu para editar — e nada o
+  // lia: mexer ali não mudava número nenhum na tela. Ajuste que não faz nada é
+  // pior que ajuste inexistente, porque ensina que a tela mente.
+  // ⚠️ A checagem tem de MEDIR a tela, não conferir que o campo foi gravado —
+  // gravar sempre funcionou; era a leitura que não existia.
+  const marcaCasas = String(Date.now()).slice(-6);
+  const { dados: prodCasas } = await api("POST", "/produtos",
+    { nome: `Casas tela ${marcaCasas}`, tipo: "INSUMO", um_estoque: "KG" }, token);
+  await api("POST", "/estoque/entradas",
+    { id_produto: prodCasas.id, quantidade: 2.1875, custo_unitario: 10 }, token);
+  const { dados: parAntes } = await api("GET", "/unidades/1/parametros", null, token);
+
+  const qtdNaTela = async (casas) => {
+    await api("PUT", "/unidades/1/parametros",
+      { ...parAntes, casas_decimais_qtd: casas }, token);
+    // ⚠️ **Tem de RECARREGAR**: a preferência viaja no `/auth/me`, que a sessão
+    // busca uma vez. É a mesma razão de o seletor de loja recarregar a página.
+    await p.goto(`${WEB}/estoque?busca=Casas%20tela%20${marcaCasas}`,
+      { waitUntil: "networkidle2" });
+    await p.reload({ waitUntil: "networkidle2" });
+    await new Promise((r) => setTimeout(r, 1500));
+    return p.evaluate(() => {
+      const tr = document.querySelector("table tbody tr");
+      return tr ? [...tr.querySelectorAll("td")][2]?.innerText.trim() ?? "" : "";
+    });
+  };
+
+  const comQuatro = await qtdNaTela(4);
+  checar("com 4 casas a loja vê 2,1875", comQuatro.startsWith("2,1875"), comQuatro);
+  const comDuas = await qtdNaTela(2);
+  checar("com 2 casas a MESMA quantidade vira 2,19", comDuas.startsWith("2,19"), comDuas);
+  // ⚠️ Zero é uma escolha legítima ("0 a 6" está escrito na tela), e arredonda
+  // só a EXIBIÇÃO: o razão continua com 2,1875 gravado.
+  const comZero = await qtdNaTela(0);
+  checar("com 0 casas arredonda para 2", comZero.startsWith("2 "), comZero);
+  const { dados: saldoCru } = await api(
+    "GET", `/estoque/saldos?id_produto=${prodCasas.id}`, null, token);
+  checar("e o que está GRAVADO não mudou uma casa",
+    Math.abs(Number(saldoCru?.[0]?.quantidade ?? 0) - 2.1875) < 0.00001, saldoCru?.[0]);
+  await api("PUT", "/unidades/1/parametros", parAntes, token);
+  await api("DELETE", `/produtos/${prodCasas.id}`, null, token);
+
   console.log("10b. paginação: o padrão das listas");
   // O rodapé de página é o mesmo em todo grid. Aqui se prova o CONTRATO dele:
   // diz quantos existem, anda, deixa escolher o tamanho e lembra a escolha.

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Eu, limparSessao, temSessao, unidadeAtual } from "./api";
+import { definirCasasQtd } from "./numeros";
 
 type Estado = {
   eu: Eu | null;
@@ -45,7 +46,13 @@ export function ProvedorSessao({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      setEu(await api.get<Eu>("/auth/me"));
+      const resposta = await api.get<Eu>("/auth/me");
+      // ⚠️ **Antes do `setEu`, e essa ordem importa.** É o `setCarregando(false)`
+      // logo abaixo que libera o layout de `(app)` a pintar as telas; definir a
+      // preferência depois faria a primeira pintura sair com o padrão e a loja
+      // que pediu outra coisa veria o número mudar sozinho.
+      definirCasasQtd(resposta.casas_decimais_qtd);
+      setEu(resposta);
     } catch {
       limparSessao();
       setEu(null);

@@ -72,6 +72,9 @@ export type Eu = {
    * é o que toda tela já carrega uma vez.
    */
   enviar_ao_pdv: boolean;
+  /** Quantas casas a loja ATUAL quer ver na quantidade (0 a 6, padrão 3).
+   *  Quem o aplica é `definirCasasQtd`, chamado pela sessão. */
+  casas_decimais_qtd: number;
 };
 
 export class ErroApi extends Error {
