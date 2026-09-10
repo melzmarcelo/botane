@@ -400,6 +400,10 @@
   `_saldo_de(exigir=False)` trata a ausência de linha como zero.
   ⚠️ O ajuste de CUSTO continua recusando saldo zero, e não por política: `(novo − atual) × 0`
   é zero. Não há valor a corrigir.
+  ⚠️ **Provisório não quer dizer ZERO** — e por um tempo quis. `_ultimo_medio_conhecido` só
+  consultava o próprio razão, então produto sem nota nenhuma saía a R$ 0,00 mesmo com custo de
+  referência no cadastro. Hoje o helper termina na cascata de `custos.custo_do_insumo`. A regra
+  é do módulo Custos: [`custos.md`](custos.md).
 
 - 🔑 **A tela de Ajustes tem SEIS tipos, e eles se dividem em dois grupos.** Entrada, Saída,
   Perda e Transferência dizem **o que se MOVEU**. Ajuste de estoque e Ajuste de custo declaram

@@ -261,6 +261,57 @@ if do_razao:
         lojas_na_resposta = cur.fetchone()["n"]
     checar("o razão responde por UMA loja, a atual", lojas_na_resposta == 1, lojas_na_resposta)
 
+print("4d. saída provisória sai pelo custo que o sistema JÁ CONHECE")
+# 🔑 **O razão não pode ser o único a não saber o custo.** O último médio
+# conhecido só olhava para dentro do próprio razão: produto que nunca recebeu
+# nota saía por ZERO, mesmo com o custo de referência do Omie gravado no
+# cadastro. E é o caso mais comum da casa — catálogo importado, custo trazido
+# junto, PDV vendendo antes de a primeira nota chegar. O sintoma era duas
+# respostas para a mesma venda: o cupom mostrava R$ 2,76 (o item de venda
+# congela pela cascata de `custos.custo_do_insumo`) e Saldos e movimentos
+# mostrava R$ 0,00 para o mesmo produto.
+# ⚠️ **O custo de referência entra DIRETO no cadastro, sem movimento.** Provar
+# isto com uma entrada deixaria saldo no produto — e o razão é append-only: o
+# rastro ficaria e a rodada seguinte mediria outra coisa.
+so_referencia = novo_produto(f"Est só referência {marca}")
+with get_cursor() as _cur:
+    _cur.execute(
+        "UPDATE produtos SET custo_referencia = 2.759514, "
+        "custo_referencia_origem = 'smoke', custo_referencia_em = now() WHERE id = %s",
+        (so_referencia,))
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": so_referencia, "quantidade": 2, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": principal["id"],
+}, token=token)
+checar("saída sem saldo nenhum é aceita", st == 201, r)
+checar("e NÃO sai a zero: usa o custo de referência",
+       perto(r.get("custo_unitario"), 2.759514), r.get("custo_unitario"))
+st, razao_ref = chamar(
+    "GET", f"/estoque/movimentos?id_produto={so_referencia}", token=token)
+mov_ref = next((m for m in (razao_ref or []) if m["id"] == r.get("id")), None)
+checar("e o razão guarda a conta inteira (2 × 2,759514 = 5,52)",
+       mov_ref and perto(mov_ref["custo_total"], 5.52), mov_ref)
+# ⚠️ Segue PROVISÓRIA: referência é a melhor estimativa disponível, não o que a
+# casa pagou. É o alerta de custo provisório que aponta o que rever quando a
+# nota entrar.
+checar("e continua marcada como provisória", r.get("custo_provisorio") is True, r)
+st, saldos_ref = chamar(
+    "GET", f"/estoque/saldos?id_produto={so_referencia}", token=token)
+linha_ref = next((x for x in (saldos_ref or []) if x["id_local"] == principal["id"]), None)
+checar("e a tela de saldos passa a mostrar o custo, não um traço",
+       linha_ref and perto(linha_ref["custo_medio"], 2.759514), linha_ref)
+
+# ⚠️ **Zero continua possível — e aí é verdade.** Sem médio, sem preço de
+# fornecedor e sem referência, ninguém sabe quanto custa: o que não pode é zero
+# por o razão olhar só para si mesmo com o número a uma consulta de distância.
+sem_custo_algum = novo_produto(f"Est sem custo algum {marca}")
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": sem_custo_algum, "quantidade": 1, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": principal["id"],
+}, token=token)
+checar("produto sem custo em lugar nenhum ainda sai a zero",
+       st == 201 and perto(r.get("custo_unitario"), 0), r)
+
 print("4c. movimento no futuro não existe")
 # ⚠️ A trava do período fechado olha para trás; para a frente não olhava
 # ninguém. Uma venda datada com o dia de UTC — às 22h de Brasília, já é o dia

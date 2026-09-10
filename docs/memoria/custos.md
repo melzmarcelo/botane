@@ -37,6 +37,30 @@
   `custo_referencia` direto. **Teste que deixa rastro derruba a próxima; aqui o rastro seria
   permanente.**
 
+- 🔑 **A saída provisória saía por ZERO enquanto o cupom da mesma venda mostrava o custo**
+  (`estoque._ultimo_medio_conhecido`, 10/09/2026, relatado pelo dono). O "último médio
+  conhecido" só olhava para dentro do próprio razão — `estoque_saldos.custo_medio` e o
+  `custo_medio_apos` do último movimento. Produto que nunca recebeu nota não tinha nem um nem
+  outro, então a baixa saía a R$ 0,00, e o saldo (negativo) ficava com médio zero: a tela
+  Saldos e movimentos mostrava R$ 0,00 para o produto que a tela do produto mostrava a R$ 2,76.
+  🔑 **Duas respostas para a MESMA venda.** O item de venda congela o custo pela cascata de
+  `custo_do_insumo` (`origem_custo = 'referencia'`), então o cupom estava certo o tempo todo —
+  quem estava sozinho era o razão. Agora o último degrau do helper é a própria cascata:
+  fornecedor e referência entram, e a regra continua existindo num lugar só.
+  ⚠️ **É o caso mais comum da casa, não uma borda**: catálogo importado do Omie, custo inicial
+  trazido junto pelo botão de Integrações, PDV vendendo antes de a primeira nota chegar. Medido na base local:
+  92 movimentos provisórios a zero.
+  ⚠️ **A saída continua PROVISÓRIA.** Preço de fornecedor e referência são a melhor estimativa
+  disponível, não o que a casa pagou; é o filtro "só custo provisório" que aponta o que rever
+  quando a nota entrar.
+  ⚠️ **Zero segue possível — e aí é verdade**: ninguém sabe quanto custa. O que não podia era
+  zero por o razão olhar só para si mesmo com o número a uma consulta de distância.
+  ⚠️ **As linhas já gravadas ficam a zero.** O razão é append-only e correção é estorno; o
+  conserto natural é a primeira entrada do produto, que sobre saldo negativo grava o médio
+  novo. Ponteiro em [`estoque.md`](estoque.md).
+  ⚠️ **A suíte prova sem deixar rastro**: o `custo_referencia` vai direto no cadastro, nunca por
+  uma entrada — mesma armadilha do teste de precedência acima, e aqui o rastro seria permanente.
+
 - ⚠️ **Cópia congelada acompanha a largura da ORIGEM.** `cmv_movimentacao.codigo` era
   `varchar(20)` contra `produtos.codigo varchar(40)`: **fechar o mês estourava com 500** assim
   que a base tinha um código real de 40 caracteres. Migração 026. É a terceira vez que largura

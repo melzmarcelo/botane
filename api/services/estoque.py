@@ -10,8 +10,10 @@ Duas coisas que o leitor de amanhã precisa saber:
    lançada hoje com data de ontem entra depois no razão — a data serve ao
    relatório, a sequência serve ao custo. Recalcular por data exigiria refazer
    a série inteira a cada correção, e o CMV de ontem mudaria sozinho.
-2. **Saída sem saldo é permitida** (a cozinha usa antes de a nota chegar), usa o
-   último médio conhecido e fica marcada como `custo_provisorio`.
+2. **Saída sem saldo é permitida** (a cozinha usa antes de a nota chegar), sai
+   pelo melhor custo que o sistema conhece — o último médio do razão e, quando
+   nem isso existe, a cascata de `custos.custo_do_insumo` — e fica marcada como
+   `custo_provisorio`.
 """
 
 from datetime import datetime
@@ -19,7 +21,7 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 
-from services.custos import CASAS_CUSTO, dec
+from services.custos import CASAS_CUSTO, custo_do_insumo, dec
 
 ENTRADAS = {
     "ENTRADA_NF", "ENTRADA_MANUAL", "ENTRADA_PRODUCAO", "ENTRADA_DEVOLUCAO",
@@ -135,7 +137,27 @@ def _travar_saldo(cur, id_unidade: int, id_local: int, id_produto: int) -> dict:
 
 
 def _ultimo_medio_conhecido(cur, id_produto: int, id_unidade: int) -> Decimal:
-    """Para saída sem saldo: o médio de outro local, ou o último do razão."""
+    """Para saída sem saldo: o médio de outro local, o último do razão — e,
+    se o razão nunca soube, a MESMA cascata que todo o resto do sistema usa.
+
+    🔑 **O razão não pode ser o único a não saber o custo.** Os dois primeiros
+    degraus abaixo só olhavam para dentro do próprio razão, então um produto que nunca recebeu
+    nota saía por ZERO. E é o caso mais comum da casa: catálogo importado do
+    Omie, custo de referência trazido junto, PDV vendendo antes de a primeira
+    nota chegar. O cupom mostrava R$ 2,76 (o item de venda congela o custo pela
+    cascata de `custos.custo_do_insumo`) enquanto o mesmo produto saía do
+    estoque a R$ 0,00 — duas respostas para a mesma pergunta, na mesma venda.
+    Quem conferisse Saldos e movimentos veria o custo sumir.
+
+    ⚠️ **Zero continua sendo possível, e aí é verdade**: ninguém sabe quanto
+    custa. O que não pode é zero por o razão estar olhando só para si mesmo,
+    com o número guardado a uma consulta de distância.
+
+    ⚠️ **A saída segue PROVISÓRIA de qualquer forma** — quem chama marca
+    `custo_provisorio`. Preço de fornecedor e referência são a melhor estimativa
+    disponível, não o que a casa pagou; quando a nota entrar, o médio vira o de
+    verdade e o alerta de custo provisório é o que aponta as saídas a rever.
+    """
     cur.execute(
         """SELECT custo_medio FROM estoque_saldos
             WHERE id_produto = %s AND id_unidade = %s AND custo_medio > 0
@@ -152,7 +174,13 @@ def _ultimo_medio_conhecido(cur, id_produto: int, id_unidade: int) -> Decimal:
         (id_produto,),
     )
     linha = cur.fetchone()
-    return dec(linha["custo_medio_apos"]) if linha else Decimal(0)
+    if linha:
+        return dec(linha["custo_medio_apos"])
+    # Os degraus que faltavam: último preço do fornecedor e custo de referência.
+    # A cascata inteira mora em `custos.custo_do_insumo` — repetir as duas
+    # consultas aqui criaria a segunda versão da mesma regra.
+    valor, _origem = custo_do_insumo(cur, id_produto, id_unidade)
+    return valor if valor is not None else Decimal(0)
 
 
 def lancar(
