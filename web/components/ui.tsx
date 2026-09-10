@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef } from "react";
 
-import { mascaraMoeda } from "@/lib/numeros";
+import { mascaraMoeda, numeroParaCusto, textoParaNumero } from "@/lib/numeros";
 
 export function Cartao({
   titulo,
@@ -317,6 +317,71 @@ export function CampoMoeda({
         onChange={(e) => aoMudar(mascaraMoeda(e.target.value))}
         onFocus={(e) => paraOFim(e.currentTarget)}
         onClick={(e) => paraOFim(e.currentTarget)}
+      />
+    </div>
+  );
+}
+
+
+/** Campo de CUSTO UNITÁRIO — mesmo desenho do `CampoMoeda`, outra régua.
+ *
+ * 🔑 **A máscara de centavos NÃO serve aqui, e essa é a decisão.** Ela fixa
+ * duas casas, e estes campos gravam em `numeric(18,6)`: `ajustes.custo_novo`,
+ * o custo da entrada e o valor unitário da nota manual. Mascará-los a duas
+ * truncaria o custo na digitação — o mesmo defeito que a varredura das casas
+ * decimais acabou de tirar da exibição, reintroduzido pela porta da frente.
+ * E o modelo de centavos-primeiro seria impraticável com seis: digitar
+ * R$ 12,50 exigiria teclar "12500000".
+ *
+ * Então aqui a digitação é LIVRE (vírgula ou ponto, como a pessoa tem o
+ * costume) e o texto só é normalizado ao SAIR do campo — enquanto se digita,
+ * ninguém mexe no que está escrito.
+ *
+ * ⚠️ **O "R$" fica fora, igual ao `CampoMoeda`**: os dois são dinheiro e
+ * precisam se parecer. O que muda é a precisão, não a aparência.
+ */
+export function CampoCusto({
+  valor,
+  aoMudar,
+  aoSair,
+  desabilitado = false,
+  placeholder,
+  obrigatorio = false,
+  className = "",
+}: {
+  valor: string;
+  aoMudar: (v: string) => void;
+  /** Corre DEPOIS da normalização — é onde a tela de ajustes pede a prévia. */
+  aoSair?: () => void;
+  desabilitado?: boolean;
+  placeholder?: string;
+  obrigatorio?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className="relative">
+      <span
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-suave"
+        aria-hidden="true"
+      >
+        R$
+      </span>
+      <input
+        className={`campo mono pl-9 text-right ${className}`}
+        type="text"
+        inputMode="decimal"
+        disabled={desabilitado}
+        placeholder={placeholder}
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value.replace(/[^\d.,]/g, ""))}
+        // ⚠️ Normaliza só no BLUR. Fazê-lo a cada tecla apagaria a vírgula que
+        // a pessoa acabou de digitar antes de ela escrever os centavos.
+        required={obrigatorio}
+        onBlur={(e) => {
+          const n = textoParaNumero(e.target.value);
+          aoMudar(n === null ? "" : numeroParaCusto(n));
+          aoSair?.();
+        }}
       />
     </div>
   );

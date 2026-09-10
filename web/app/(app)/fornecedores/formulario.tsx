@@ -5,8 +5,9 @@ import { FormEvent, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Fornecedor, mascaraCnpj } from "@/lib/cadastros";
-import { Aviso, Campo, Cartao } from "@/components/ui";
+import { Aviso, Campo, CampoMoeda, Cartao } from "@/components/ui";
 
+import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
 /**
  * O cadastro do fornecedor — a mesma forma para criar e para corrigir.
  *
@@ -71,7 +72,7 @@ export function doFornecedor(x: Fornecedor): Form {
     uf: x.uf ?? "",
     prazo_entrega_dias: x.prazo_entrega_dias?.toString() ?? "",
     dias_entrega: x.dias_entrega ?? "",
-    pedido_minimo: x.pedido_minimo?.toString() ?? "",
+    pedido_minimo: numeroParaMoeda(x.pedido_minimo),
     observacao: x.observacao ?? "",
     // ⚠️ `?? true`: cadastro antigo não tem o campo, e ele É fornecedor.
     fornecedor: x.fornecedor ?? true,
@@ -111,7 +112,7 @@ export default function FormularioFornecedor({
       uf: texto(f.uf),
       prazo_entrega_dias: num(f.prazo_entrega_dias),
       dias_entrega: texto(f.dias_entrega),
-      pedido_minimo: num(f.pedido_minimo),
+      pedido_minimo: moedaParaNumero(f.pedido_minimo),
       observacao: texto(f.observacao),
       fornecedor: f.fornecedor,
       cupom_base: f.cupom_base,
@@ -241,13 +242,9 @@ export default function FormularioFornecedor({
             />
           </Campo>
           <Campo rotulo="Pedido mínimo (R$)">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.01"
-              min="0"
-              value={f.pedido_minimo}
-              onChange={(e) => setF({ ...f, pedido_minimo: e.target.value })}
+            <CampoMoeda
+              valor={f.pedido_minimo}
+              aoMudar={(v) => setF({ ...f, pedido_minimo: v })}
             />
           </Campo>
         </div>

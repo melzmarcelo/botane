@@ -1053,10 +1053,26 @@ try {
   // acusava a tela de não oferecer editar numa linha que ela nem mostrava.
   // Aumentar a página é o que uma pessoa faria — e é o que o rodapé oferece.
   await p.select('select[aria-label="Registros por página"]', "100").catch(() => {});
-  await p.waitForFunction(
-    (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
-    APOIO,
-  ).catch(() => {});
+  // ⚠️ **Cem por página deixou de bastar, e virar a página é o que uma pessoa
+  // faria.** A base local tem 113 setores ATIVOS — as suítes da API criam
+  // setores ("BAR REL 029200" e parentes) e não os desativam —, e um nome que
+  // começa com T cai na página 2. A checagem acusava a tela de não oferecer
+  // editar numa linha que ela nem mostrava: defeito do TESTE, e o segundo
+  // desta mesma checagem pelo mesmo motivo. Escolher o tamanho da página foi a
+  // correção anterior; ela some assim que a base cresce mais um pouco. Procurar
+  // ATÉ ACHAR não depende de quantos setores a base tem hoje.
+  for (let volta = 0; volta < 12; volta++) {
+    const achou = await p.evaluate((nome) => document.body.innerText.includes(nome), APOIO);
+    if (achou) break;
+    const virou = await p.evaluate(() => {
+      const b = document.querySelector('button[aria-label="Próxima página"]');
+      if (!b || b.disabled) return false;
+      b.click();
+      return true;
+    });
+    if (!virou) break;
+    await new Promise((r) => setTimeout(r, 700));
+  }
   const abriuEdicao = await p.evaluate((nome) => {
     const li = [...document.querySelectorAll("main ul > li")]
       .find((x) => x.innerText.includes(nome));
@@ -2032,9 +2048,20 @@ try {
     depoisDaJanela.fechou && depoisDaJanela.campo === "Buscar produto", depoisDaJanela);
 
   // Entrada pela tela: 10 kg a R$ 20,00.
+  // ⚠️ **A quantidade e o custo são de TIPOS diferentes agora**, e por isso
+  // cada um se acha do seu jeito: o custo unitário grava em `numeric(18,6)` e
+  // virou `CampoCusto` (texto com máscara), então `input[type=number]` só
+  // devolve a quantidade — `numEstoque[1]` era `undefined` e a bateria morria
+  // aqui, longe da causa. Achar pelo RÓTULO é a mesma lição do campo de preço
+  // lá embaixo: índice de lista muda quando a tela muda, rótulo não.
   const numEstoque = await p.$$("input[type=number]");
   await numEstoque[0].type("10");
-  await numEstoque[1].type("20");
+  const campoCustoEntrada = await p.evaluateHandle(() => {
+    const l = [...document.querySelectorAll("label")].find(
+      (x) => /custo unit[áa]rio/i.test(x.querySelector("span.rotulo")?.textContent ?? ""));
+    return l?.querySelector("input");
+  });
+  await campoCustoEntrada.asElement().type("20");
   await p.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find(
       (x) => x.textContent === "Lançar entrada");
@@ -2159,13 +2186,13 @@ try {
     await p.keyboard.press("Tab");
     await new Promise((r) => setTimeout(r, 1600));
   }
-  const valorCarregado = await p.evaluate(() => {
-    const nums = [...document.querySelectorAll('input[type="number"]')]
-      .map((c) => c.value).filter(Boolean);
-    return nums;
-  });
+  // ⚠️ **O preço é MASCARADO** (`CampoMoeda`): o campo mostra "37,50" e é de
+  // texto, então nem `input[type=number]` o encontra nem `Number()` o lê.
+  // Compara-se o texto, que é o que a pessoa vê.
+  const valorCarregado = await p.evaluate(() =>
+    [...document.querySelectorAll("main input")].map((c) => c.value).filter(Boolean));
   checar("escolher o produto carrega o preco de venda sozinho",
-    valorCarregado.some((v) => Math.abs(Number(v) - 37.5) < 0.01), valorCarregado);
+    valorCarregado.includes("37,50"), valorCarregado);
 
   // 🔑 **A pessoa se escolhe pela JANELA, nao por combobox** (mesmo relato).
   // Uma lista de 800 nomes num select nao se percorre, e a politica de cupom —
@@ -2214,9 +2241,9 @@ try {
   // preco CHEIO: pusesse o descontado ali, o envio levaria o valor ja
   // descontado e o servidor descontaria de novo — 20% viraria 36%, calado.
   const cheioNoCampoCupom = await p.evaluate(() =>
-    [...document.querySelectorAll('input[type="number"]')].map((c) => c.value));
+    [...document.querySelectorAll("main input")].map((c) => c.value));
   checar("e o campo editavel continua com o preco CHEIO",
-    cheioNoCampoCupom.some((v) => Math.abs(Number(v) - 37.5) < 0.01), cheioNoCampoCupom);
+    cheioNoCampoCupom.includes("37,50"), cheioNoCampoCupom);
   // 🔑 **Os tres numeros do rodape**: 2 x 37,50 = 75,00 cheio, 15,00 de desconto
   // e 60,00 a pagar. ⚠️ Afirmar so a PALAVRA "desconto" passaria pelo aviso do
   // cabecalho, que ja diz "20% de desconto" — a checagem passaria com o rodape

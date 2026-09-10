@@ -7,11 +7,11 @@ import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
-import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, CampoCusto, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
-import { custo, qtd } from "@/lib/numeros";
+import { custo, qtd, textoParaNumero } from "@/lib/numeros";
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
  *
@@ -248,7 +248,7 @@ export default function PaginaAjustes() {
         linhas: [
           {
             id_produto: Number(f.id_produto),
-            custo_novo: Number(f.custo_novo.replace(",", ".")),
+            custo_novo: textoParaNumero(f.custo_novo) ?? 0,
             id_local: f.id_local ? Number(f.id_local) : null,
           },
         ],
@@ -379,7 +379,7 @@ export default function PaginaAjustes() {
           linhas: [
             {
               id_produto: base.id_produto,
-              custo_novo: Number(f.custo_novo.replace(",", ".")),
+              custo_novo: textoParaNumero(f.custo_novo) ?? 0,
               id_local: base.id_local,
             },
           ],
@@ -392,7 +392,7 @@ export default function PaginaAjustes() {
       } else if (tipo === "entrada") {
         const r = await api.post<{ custo_medio: number }>("/estoque/entradas", {
           ...base,
-          custo_unitario: Number(f.custo_unitario.replace(",", ".")),
+          custo_unitario: textoParaNumero(f.custo_unitario) ?? 0,
           documento: f.documento || null,
           lote: f.lote || null,
           validade: f.validade || null,
@@ -570,31 +570,26 @@ export default function PaginaAjustes() {
             )}
             {tipo === "custo" && (
               <Campo rotulo="Custo médio certo (R$)">
-                <input
-                  className="campo mono"
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  required
-                  value={f.custo_novo}
-                  onChange={(e) => setF({ ...f, custo_novo: e.target.value })}
+                {/* ⚠️ **`CampoCusto`, não `CampoMoeda`**: isto grava em
+                    `numeric(18,6)`, e a máscara de centavos fixaria duas casas
+                    — truncando o custo na digitação. */}
+                <CampoCusto
+                  valor={f.custo_novo}
+                  aoMudar={(v) => setF({ ...f, custo_novo: v })}
+                  obrigatorio
                   // A prévia é pedida ao SERVIDOR quando o campo perde o foco.
                   // Refazer a conta aqui criaria a segunda versão da mesma
                   // regra, e as duas divergiriam no primeiro caso de borda.
-                  onBlur={() => void conferirCusto()}
+                  aoSair={() => void conferirCusto()}
                 />
               </Campo>
             )}
             {tipo === "entrada" && (
               <Campo rotulo="Custo unitário (R$)">
-                <input
-                  className="campo mono"
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  required
-                  value={f.custo_unitario}
-                  onChange={(e) => setF({ ...f, custo_unitario: e.target.value })}
+                <CampoCusto
+                  valor={f.custo_unitario}
+                  aoMudar={(v) => setF({ ...f, custo_unitario: v })}
+                  obrigatorio
                 />
               </Campo>
             )}

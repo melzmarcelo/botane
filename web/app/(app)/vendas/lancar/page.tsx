@@ -7,12 +7,13 @@ import { api } from "@/lib/api";
 import { hoje } from "@/lib/datas";
 import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, CampoMoeda, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fontePessoas, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 import { CANAIS, lerPlanilha } from "../tipos";
 import Voltar from "@/components/voltar";
 
+import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
 /**
  * Lançar venda — à mão ou colando a planilha.
  *
@@ -113,7 +114,7 @@ export default function PaginaLancarVenda() {
     (s, i) =>
       s +
       (Number(i.quantidade.replace(",", ".")) || 0) *
-        (Number(i.valor_unitario.replace(",", ".")) || 0),
+        (moedaParaNumero(i.valor_unitario) ?? 0),
     0,
   );
   const prontos = itens.filter((i) => i.id_produto && Number(i.quantidade.replace(",", ".")) > 0);
@@ -131,7 +132,7 @@ export default function PaginaLancarVenda() {
     prontos.map((i) => ({
       id_produto: Number(i.id_produto),
       quantidade: Number(i.quantidade.replace(",", ".")) || 0,
-      valor_unitario: Number(i.valor_unitario.replace(",", ".")) || 0,
+      valor_unitario: moedaParaNumero(i.valor_unitario) ?? 0,
     })),
   );
   useEffect(() => {
@@ -222,7 +223,7 @@ export default function PaginaLancarVenda() {
             itens: prontos.map((i) => ({
               id_produto: Number(i.id_produto),
               quantidade: Number(i.quantidade.replace(",", ".")),
-              valor_unitario: Number(i.valor_unitario.replace(",", ".")) || 0,
+              valor_unitario: moedaParaNumero(i.valor_unitario) ?? 0,
             })),
           },
         ],
@@ -449,7 +450,7 @@ export default function PaginaLancarVenda() {
                               id_produto: item ? String(item.id) : "",
                               rotulo: item ? rotuloDe(item) : "",
                               ...(preco > 0 && !itens[n].valor_unitario.trim()
-                                ? { valor_unitario: String(preco) }
+                                ? { valor_unitario: numeroParaMoeda(preco) }
                                 : {}),
                             });
                           }}
@@ -466,13 +467,9 @@ export default function PaginaLancarVenda() {
                         />
                       </td>
                       <td>
-                        <input
-                          className="campo mono"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={i.valor_unitario}
-                          onChange={(e) => trocar(n, { valor_unitario: e.target.value })}
+                        <CampoMoeda
+                          valor={i.valor_unitario}
+                          aoMudar={(v) => trocar(n, { valor_unitario: v })}
                         />
                       </td>
                       {mudaAlgo && (
@@ -498,7 +495,7 @@ export default function PaginaLancarVenda() {
                             ? (Number(i.quantidade.replace(",", ".")) || 0) *
                                 (ajustada(n)!.valor_unitario ?? 0)
                             : (Number(i.quantidade.replace(",", ".")) || 0) *
-                                (Number(i.valor_unitario.replace(",", ".")) || 0),
+                                (moedaParaNumero(i.valor_unitario) ?? 0),
                         )}
                       </td>
                       <td className="text-right">

@@ -7,9 +7,14 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Fornecedor, Local, ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteFornecedores, fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
-import { Campo, Cartao } from "@/components/ui";
+import { Campo, CampoCusto, CampoMoeda, Cartao } from "@/components/ui";
 
 import { custo } from "@/lib/numeros";
+import {
+  numeroParaCusto,
+  numeroParaMoeda,
+  textoParaNumero,
+} from "@/lib/numeros";
 /**
  * Digitar a nota inteira na mão — o caminho de quem comprou no mercado, no
  * açougue da esquina ou no hortifrúti que só dá cupom.
@@ -48,7 +53,11 @@ const LINHA: Linha = {
   validade: "",
 };
 
-const numero = (texto: string) => Number((texto || "0").replace(",", ".")) || 0;
+// ⚠️ **Lê vírgula, ponto e MILHAR.** Era `Number(t.replace(",", "."))`, que
+// devolve NaN para "1.234,56" — e o `|| 0` transformava isso num zero calado,
+// com o total da nota fechando errado sem nada acusando. Agora os campos de
+// dinheiro são mascarados e o milhar aparece de verdade.
+const numero = (texto: string) => textoParaNumero(texto) ?? 0;
 
 /** A nota que está sendo corrigida, quando for o caso. */
 export type NotaParaEditar = {
@@ -108,9 +117,9 @@ export default function NotaManual({
   const [dataEmissao, setDataEmissao] = useState(
     () => editando?.data_emissao?.slice(0, 10) ?? hoje(),
   );
-  const [frete, setFrete] = useState(texto(editando?.valor_frete));
-  const [desconto, setDesconto] = useState(texto(editando?.valor_desconto));
-  const [outros, setOutros] = useState(texto(editando?.valor_outros));
+  const [frete, setFrete] = useState(numeroParaMoeda(editando?.valor_frete));
+  const [desconto, setDesconto] = useState(numeroParaMoeda(editando?.valor_desconto));
+  const [outros, setOutros] = useState(numeroParaMoeda(editando?.valor_outros));
   const [idLocal, setIdLocal] = useState(texto(editando?.id_local));
   const [rotuloFornecedor, setRotuloFornecedor] = useState("");
   const [linhas, setLinhas] = useState<Linha[]>(
@@ -121,9 +130,9 @@ export default function NotaManual({
           id_produto: texto(i.id_produto),
           descricao: i.descricao_fornecedor ?? "",
           quantidade: String(Number(i.quantidade)),
-          valor_unitario: String(Number(i.valor_unitario)),
-          desconto: Number(i.valor_desconto) ? String(Number(i.valor_desconto)) : "",
-          acrescimo: Number(i.valor_acrescimo) ? String(Number(i.valor_acrescimo)) : "",
+          valor_unitario: numeroParaCusto(i.valor_unitario),
+          desconto: Number(i.valor_desconto) ? numeroParaMoeda(i.valor_desconto) : "",
+          acrescimo: Number(i.valor_acrescimo) ? numeroParaMoeda(i.valor_acrescimo) : "",
           lote: i.lote_nf ?? "",
           validade: i.validade_nf?.slice(0, 10) ?? "",
         }))
@@ -487,27 +496,21 @@ export default function NotaManual({
                     </select>
                   </td>
                   <td>
-                    <input
-                      className="campo mono text-right"
-                      inputMode="decimal"
-                      value={linha.valor_unitario}
-                      onChange={(e) => mudar(i, "valor_unitario", e.target.value)}
+                    <CampoCusto
+                      valor={linha.valor_unitario}
+                      aoMudar={(v) => mudar(i, "valor_unitario", v)}
                     />
                   </td>
                   <td>
-                    <input
-                      className="campo mono text-right"
-                      inputMode="decimal"
-                      value={linha.desconto}
-                      onChange={(e) => mudar(i, "desconto", e.target.value)}
+                    <CampoMoeda
+                      valor={linha.desconto}
+                      aoMudar={(v) => mudar(i, "desconto", v)}
                     />
                   </td>
                   <td>
-                    <input
-                      className="campo mono text-right"
-                      inputMode="decimal"
-                      value={linha.acrescimo}
-                      onChange={(e) => mudar(i, "acrescimo", e.target.value)}
+                    <CampoMoeda
+                      valor={linha.acrescimo}
+                      aoMudar={(v) => mudar(i, "acrescimo", v)}
                     />
                   </td>
                   {/* O que a linha custa de fato — a conferência contra o papel
@@ -567,28 +570,13 @@ export default function NotaManual({
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo rotulo="Frete (R$)">
-          <input
-            className="campo mono text-right"
-            inputMode="decimal"
-            value={frete}
-            onChange={(e) => setFrete(e.target.value)}
-          />
+          <CampoMoeda valor={frete} aoMudar={setFrete} />
         </Campo>
         <Campo rotulo="Desconto (R$)">
-          <input
-            className="campo mono text-right"
-            inputMode="decimal"
-            value={desconto}
-            onChange={(e) => setDesconto(e.target.value)}
-          />
+          <CampoMoeda valor={desconto} aoMudar={setDesconto} />
         </Campo>
         <Campo rotulo="IPI / ST / outros (R$)">
-          <input
-            className="campo mono text-right"
-            inputMode="decimal"
-            value={outros}
-            onChange={(e) => setOutros(e.target.value)}
-          />
+          <CampoMoeda valor={outros} aoMudar={setOutros} />
         </Campo>
         {/* Reserva, não regra: cada produto entra no local do CADASTRO dele.
             Este vale para o produto que ainda não tem um definido — congelado e

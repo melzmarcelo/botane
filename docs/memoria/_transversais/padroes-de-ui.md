@@ -116,6 +116,33 @@
   não mostrar um preço que ela mostra. O campo é mascarado: a checagem certa é pelo texto,
   `"218,00"` — é o que a pessoa vê, e é o formato que a máscara promete.
 
+- 🔑 **Todo campo de dinheiro do sistema virou campo de dinheiro — em DUAS famílias**
+  (10/09/2026, pedido do dono). Aplicar o `CampoMoeda` em tudo teria sido um erro: três dos
+  campos gravam em `numeric(18,6)` (`ajustes.custo_novo`, o custo unitário da entrada e o
+  valor unitário da nota manual), e a máscara de centavos fixa DUAS casas — truncaria o custo
+  na digitação, reintroduzindo pela porta da frente o defeito que a varredura acabou de tirar
+  da exibição. E o modelo centavos-primeiro é impraticável com seis: R$ 12,50 exigiria teclar
+  "12500000".
+  Então são dois componentes com o mesmo desenho e réguas diferentes: **`CampoMoeda`**
+  (mascarado, duas casas) em `fornecedores.pedido_minimo`, `vendas/lancar.valor_unitario`,
+  desconto e acréscimo da linha da nota e frete/desconto/outros da nota; **`CampoCusto`**
+  (digitação livre, normaliza no blur, até seis casas) nos três de custo unitário.
+  ⚠️ **A escala da coluna é quem decide, não o rótulo.** `nota_itens.valor_unitario` é 6 e
+  `venda_itens.valor_unitario` é 2 — mesmo nome, famílias diferentes. Conferir no schema antes
+  de escolher o componente.
+  ⚠️ **`CampoCusto` normaliza no BLUR, nunca a cada tecla**: normalizar enquanto se digita
+  apagaria a vírgula recém-digitada antes de virem os centavos. E ele leva `aoSair`, porque a
+  tela de ajustes pede a prévia ao servidor quando o campo perde o foco.
+  ⚠️ **`numero()` da nota manual era `Number(t.replace(",", "."))`** e devolve `NaN` para
+  "1.234,56" — com o `|| 0` na frente, isso virava um zero CALADO e o total da nota fechava
+  errado sem nada acusando. Agora ele delega a `textoParaNumero`, que decide o ponto pelo
+  contexto: havendo vírgula, o ponto só pode ser milhar; não havendo, é decimal (quem digita
+  "1.5" quer 1,5).
+  ⚠️ **A bateria do navegador achava campos por ÍNDICE** (`input[type=number]`), e trocar o
+  tipo do campo fez `numEstoque[1]` virar `undefined` — a suíte morreu com `TypeError`, longe
+  da causa. Índice de lista muda quando a tela muda; rótulo, não. Mesma lição que o campo de
+  preço já tinha ensinado neste arquivo.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

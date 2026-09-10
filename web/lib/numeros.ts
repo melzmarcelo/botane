@@ -116,3 +116,34 @@ export function numeroParaMoeda(v: number | string | null | undefined): string {
     maximumFractionDigits: 2,
   });
 }
+
+/** Texto digitado à mão vira número — vírgula OU ponto, com ou sem milhar.
+ *
+ * ⚠️ **"1.234" é ambíguo e a regra decide pelo contexto**: havendo vírgula no
+ * texto, o ponto só pode ser milhar ("1.234,56" → 1234.56); não havendo, o
+ * ponto é decimal, porque é o que sai de quem digita rápido no teclado
+ * numérico ("1.5" → 1.5). Tratar sempre como milhar transformaria 1,5 kg de
+ * fermento em 15; sempre como decimal quebraria todo valor acima de mil.
+ */
+export function textoParaNumero(texto: string): number | null {
+  const t = texto.trim();
+  if (!t) return null;
+  const limpo = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t;
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Custo unitário para o campo: até seis casas, sem zero à toa.
+ *
+ * ⚠️ **Não força duas casas como `numeroParaMoeda`.** Aqui um custo de 2,5 fica
+ * "2,5": o campo é de digitação, e completar com zeros o que a pessoa ainda
+ * está escrevendo faz o cursor brigar com ela. Quem EXIBE custo usa `custo()`,
+ * que tem o mínimo de duas porque ali é leitura. */
+export function numeroParaCusto(v: number | string | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "";
+  return Number(v).toLocaleString("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+    useGrouping: false,
+  });
+}
