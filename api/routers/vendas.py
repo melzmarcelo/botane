@@ -529,23 +529,47 @@ def previa_sem_baixa(ctx: Contexto = Depends(_ver)) -> dict:
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # 🔑 **A conta é AGREGADA por produto: vendido menos o que já saiu.**
+        # A primeira versão perguntava, por VENDA, se existia movimento com
+        # `origem_id = venda.id` — e errava feio. A baixa que a FUSÃO faz
+        # (`produtos_vinculo`, "o que foi vendido e nunca saiu") é **um
+        # movimento agregado** com `origem_tipo = 'VINCULO'`, cobrindo todas as
+        # vendas do cadastro absorvido de uma vez. Nenhuma delas casa por
+        # `origem_id`, então a prévia as dava como pendentes.
+        # ⚠️ **Medido, e por pouco não foi ao ar:** a água mineral tinha 138
+        # vendidas e 138 já fora do estoque (128 pela fusão, 10 por venda), e a
+        # prévia anunciava 128 faltando. O botão teria baixado em DOBRO.
+        # ⚠️ Movimento ESTORNADO não conta como saída: a contrapartida devolveu
+        # a mercadoria, e a venda voltou a dever baixa.
         cur.execute(
-            """SELECT p.id AS id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+            """WITH vendido AS (
+                 SELECT vi.id_produto, sum(vi.quantidade) AS qtd,
+                        count(*) AS itens, min(v.data) AS desde, max(v.data) AS ate
+                   FROM venda_itens vi
+                   JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+                  WHERE v.id_unidade = %s AND vi.id_produto IS NOT NULL
+                  GROUP BY vi.id_produto
+               ), saiu AS (
+                 SELECT m.id_produto, sum(abs(m.quantidade)) AS qtd
+                   FROM estoque_movimentos m
+                  WHERE m.id_unidade = %s AND m.tipo = 'SAIDA_VENDA'
+                    AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                     WHERE e.id_estorno_de = m.id)
+                  GROUP BY m.id_produto
+               )
+               SELECT p.id AS id_produto, p.codigo, p.nome AS produto, p.um_estoque,
                       p.id_local_padrao, l.nome AS local_destino,
-                      count(*) AS itens, sum(vi.quantidade) AS quantidade,
-                      min(v.data) AS desde, max(v.data) AS ate,
-                      coalesce(sum(vi.quantidade * vi.custo_ficha_unitario), 0) AS custo
-                 FROM venda_itens vi
-                 JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
-                 JOIN produtos p ON p.id = vi.id_produto AND p.controla_estoque AND p.ativo
+                      vd.itens, vd.desde, vd.ate,
+                      vd.qtd AS vendido, coalesce(sa.qtd, 0) AS ja_saiu,
+                      vd.qtd - coalesce(sa.qtd, 0) AS quantidade
+                 FROM vendido vd
+                 JOIN produtos p ON p.id = vd.id_produto
+                                AND p.controla_estoque AND p.ativo
+                 LEFT JOIN saiu sa ON sa.id_produto = vd.id_produto
                  LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
-                WHERE v.id_unidade = %s
-                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
-                                   WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id
-                                     AND m.id_produto = vi.id_produto)
-                GROUP BY p.id, p.codigo, p.nome, p.um_estoque, p.id_local_padrao, l.nome
-                ORDER BY sum(vi.quantidade) DESC""",
-            (id_unidade,),
+                WHERE vd.qtd - coalesce(sa.qtd, 0) > 0.0001
+                ORDER BY vd.qtd - coalesce(sa.qtd, 0) DESC""",
+            (id_unidade, id_unidade),
         )
         linhas = [dict(r) for r in cur.fetchall()]
 
@@ -608,21 +632,63 @@ def baixar_sem_baixa(id_produto: int | None = None,
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # 🔑 **Quanto falta é AGREGADO; de QUAIS vendas sai é cronológico.** O
+        # quanto vem da mesma conta da prévia (vendido − já saiu), porque a
+        # baixa que a fusão faz é um movimento único cobrindo várias vendas e
+        # não casa por `origem_id`. O de quais vendas sai é a ordem do tempo: as
+        # mais ANTIGAS primeiro, até cobrir o que falta.
+        # ⚠️ **Assim a data de cada saída continua sendo a da venda que a
+        # originou** — o razão é o extrato do que aconteceu, e um lançamento
+        # somado hoje diria que a casa consumiu tudo hoje.
         cur.execute(
-            """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
-                      v.documento, p.id_local_padrao
-                 FROM venda_itens vi
-                 JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
-                 JOIN produtos p ON p.id = vi.id_produto AND p.controla_estoque AND p.ativo
-                WHERE v.id_unidade = %s
-                  AND (%s::int IS NULL OR vi.id_produto = %s)
-                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
-                                   WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id
-                                     AND m.id_produto = vi.id_produto)
-                ORDER BY v.data, v.id""",
-            (id_unidade, id_produto, id_produto),
+            """WITH vendido AS (
+                 SELECT vi.id_produto, sum(vi.quantidade) AS qtd
+                   FROM venda_itens vi
+                   JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+                  WHERE v.id_unidade = %s AND vi.id_produto IS NOT NULL
+                  GROUP BY vi.id_produto
+               ), saiu AS (
+                 SELECT m.id_produto, sum(abs(m.quantidade)) AS qtd
+                   FROM estoque_movimentos m
+                  WHERE m.id_unidade = %s AND m.tipo = 'SAIDA_VENDA'
+                    AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                     WHERE e.id_estorno_de = m.id)
+                  GROUP BY m.id_produto
+               )
+               SELECT vd.id_produto, vd.qtd - coalesce(sa.qtd, 0) AS falta,
+                      p.id_local_padrao
+                 FROM vendido vd
+                 JOIN produtos p ON p.id = vd.id_produto
+                                AND p.controla_estoque AND p.ativo
+                 LEFT JOIN saiu sa ON sa.id_produto = vd.id_produto
+                WHERE vd.qtd - coalesce(sa.qtd, 0) > 0.0001
+                  AND (%s::int IS NULL OR vd.id_produto = %s)""",
+            (id_unidade, id_unidade, id_produto, id_produto),
         )
-        pendentes = [dict(r) for r in cur.fetchall()]
+        faltas = {r["id_produto"]: [float(r["falta"]), r["id_local_padrao"]]
+                  for r in cur.fetchall()}
+        pendentes = []
+        if faltas:
+            cur.execute(
+                """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
+                          v.documento
+                     FROM venda_itens vi
+                     JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+                    WHERE v.id_unidade = %s AND vi.id_produto = ANY(%s)
+                    ORDER BY v.data, v.id""",
+                (id_unidade, list(faltas)),
+            )
+            for item in cur.fetchall():
+                restante, local = faltas[item["id_produto"]]
+                if restante <= 0.0001:
+                    continue
+                # ⚠️ A última venda pode entrar PARCIAL: o que falta raramente
+                # cai exatamente no fim de uma venda. Baixar a venda inteira
+                # tiraria mais do que se deve.
+                qtd = min(float(item["quantidade"]), restante)
+                faltas[item["id_produto"]][0] = restante - qtd
+                pendentes.append({**dict(item), "quantidade": qtd,
+                                  "id_local_padrao": local})
         cur.execute("SELECT id FROM locais_estoque WHERE id_unidade = %s AND ativo "
                     "ORDER BY principal DESC, id LIMIT 1", (id_unidade,))
         reserva = (cur.fetchone() or {}).get("id")

@@ -346,6 +346,43 @@ st, previa2 = chamar("GET", "/vendas/sem-baixa/previa", token=token)
 checar("e a previa nao acha mais esta venda",
        not any(l["id_produto"] == id_sb for l in (previa2.get("itens") or [])),
        previa2.get("produtos"))
+
+# 🔑 **A baixa AGREGADA da fusao tambem conta, e a primeira versao nao contava.**
+# `produtos_vinculo` lanca UM movimento com `origem_tipo = 'VINCULO'` cobrindo
+# todas as vendas do cadastro absorvido de uma vez. Perguntar, por venda, se
+# existe movimento com `origem_id = venda.id` da NENHUM — e a previa anunciava
+# como pendente o que ja tinha saido.
+# ⚠️ Medido numa base real e por pouco nao foi ao ar: 138 vendidas, 138 ja fora
+# do estoque (128 pela fusao, 10 por venda), e a previa dizia 128 faltando. O
+# botao teria baixado em DOBRO — e o razao e append-only.
+st, p_ag = chamar("POST", "/produtos", {
+    "nome": f"Baixa agregada {marca_sb}", "tipo": "REVENDA", "um_estoque": "UN",
+    "id_local_padrao": principal["id"]}, token=token)
+id_ag = (p_ag or {}).get("id")
+chamar("POST", "/estoque/entradas", {
+    "id_produto": id_ag, "quantidade": 30, "custo_unitario": 2,
+    "id_local": principal["id"]}, token=token)
+with _cur_vendas() as _c:
+    _c.execute("""INSERT INTO vendas (id_unidade, data, origem, documento, valor_total, cancelada)
+                  VALUES (1, %s, 'PDV_LEGAL', %s, 40, false) RETURNING id""",
+               (ontem, f"AG{marca_sb}"))
+    id_venda_ag = _c.fetchone()["id"]
+    _c.execute("""INSERT INTO venda_itens (id_venda, id_produto, quantidade,
+                                           valor_unitario, valor_total)
+                  VALUES (%s, %s, 4, 10, 40)""", (id_venda_ag, id_ag))
+# A baixa sai como a FUSAO faria: um movimento agregado, origem VINCULO.
+chamar("POST", "/estoque/saidas", {
+    "id_produto": id_ag, "quantidade": 4, "tipo": "SAIDA_VENDA",
+    "id_local": principal["id"]}, token=token)
+with _cur_vendas() as _c:
+    _c.execute("""UPDATE estoque_movimentos SET origem_tipo='VINCULO', origem_id=%s
+                   WHERE id_produto=%s AND tipo='SAIDA_VENDA'""", (id_ag, id_ag))
+
+st, previa3 = chamar("GET", "/vendas/sem-baixa/previa", token=token)
+linha_ag = next((l for l in (previa3.get("itens") or []) if l["id_produto"] == id_ag), None)
+checar("venda ja baixada EM BLOCO nao aparece como pendente",
+       linha_ag is None, linha_ag)
+chamar("DELETE", f"/produtos/{id_ag}", token=token)
 chamar("DELETE", f"/produtos/{id_sb}", token=token)
 
 

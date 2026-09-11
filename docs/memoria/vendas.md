@@ -727,6 +727,22 @@
   acusando de quebrado um código intacto. Custou uma investigação: um ciclo de um dia só,
   criado à mão na base, derrubou sete checagens de `smoke_consumo_periodo`.
 
+- 🔑 **A conta do "vendido e não saiu" é AGREGADA por produto, nunca por venda** (11/09/2026).
+  A primeira versão da prévia perguntava, por VENDA, se existia movimento com
+  `origem_id = venda.id`. Errado: a baixa que a FUSÃO faz (`produtos_vinculo`, "o que foi
+  vendido e nunca saiu") é **um movimento único** com `origem_tipo = 'VINCULO'`, cobrindo todas
+  as vendas do cadastro absorvido de uma vez — nenhuma delas casa por `origem_id`.
+  ⚠️ **Medido, e por pouco não foi ao ar**: a água mineral tinha **138 vendidas e 138 já fora
+  do estoque** (128 pela fusão, 10 por venda), e a prévia anunciava **128 faltando**. O botão
+  teria baixado em DOBRO — e o razão é append-only, então o conserto seria um estorno por
+  movimento.
+  🔑 **O quanto é agregado; de QUAIS vendas sai é cronológico.** O que falta vem de
+  `vendido − já saiu`; as saídas são lançadas das vendas mais ANTIGAS para as mais novas até
+  cobrir a diferença, e assim cada uma continua levando a data da venda que a originou. A
+  última pode entrar PARCIAL — o que falta raramente cai no fim exato de uma venda.
+  ⚠️ Movimento ESTORNADO não conta como saída: a contrapartida devolveu a mercadoria, e a venda
+  voltou a dever baixa.
+
 - 🔑 **A reconciliação do PDV reapontava a venda e NÃO baixava o estoque** (11/09/2026, achado
   na varredura). Item de venda que entra sem produto não baixa — e está certo, não há de onde
   tirar. Quando alguém faz o vínculo, `cardapio.reconciliar` reaponta o item e recalcula o custo
