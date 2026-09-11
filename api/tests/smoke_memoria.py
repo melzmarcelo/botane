@@ -120,6 +120,24 @@ checar("as compras por documento somam a linha Compras, com a remessa junto",
        perto(soma_notas + remessa, a["compras"]), (soma_notas, remessa, a["compras"]))
 checar("e a conciliação TERMINA exatamente na linha Compras",
        perto(concilia[-1]["valor"], a["compras"]), (concilia[-1], a["compras"]))
+# 🔑 **Somar a corrente de verdade, e não reler a última linha.** A checagem
+# acima é tautológica: a última linha é calculada à parte (`compras + remessa`),
+# então ela bate com a apuração mesmo que as linhas do meio não levem até lá — e
+# era o caso. Quem confere o relatório soma a COLUNA na calculadora; foi assim
+# que apareceu que a entrada manual de tipo fora do CMV era abatida duas vezes e
+# a corrente terminava R$ 1.440,00 abaixo do próprio total.
+# ⚠️ A linha "(=)" no meio é um subtotal, não uma parcela: ela REINICIA a soma.
+soma_corrente = Decimal(0)
+for linha in concilia:
+    valor = Decimal(str(linha["valor"]))
+    if linha["linha"].startswith("(="):
+        if "Compras" not in linha["linha"]:
+            soma_corrente = valor          # subtotal: a corrente recomeça dele
+        continue
+    soma_corrente += valor
+checar("e as linhas do meio realmente SOMAM até ela",
+       perto(soma_corrente, concilia[-1]["valor"]),
+       (soma_corrente, concilia[-1]["valor"]))
 # 🔑 É a linha que evita a discussão: a soma das notas fiscais NÃO é a linha
 # Compras, e o primeiro item da conciliação é justamente aquela soma.
 checar("a conciliação começa pela soma dos totais das notas",

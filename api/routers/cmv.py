@@ -359,12 +359,22 @@ def listar_periodos(
 
 @router.get("/fechamentos", response_model=list[FechamentoResponse])
 def listar_fechamentos(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> list[dict]:
+    """O histórico de fechamentos **da loja atual**.
+
+    ⚠️ **O filtro por loja faltava, e a lista misturava a rede inteira.** Medido
+    com um usuário preso à loja 1: pedir a apuração da filial devolvia 403, mas
+    esta lista trazia o fechamento dela — e a resposta não carrega de que loja é
+    cada linha, então não havia como notar. Quem confere o histórico via o CMV
+    de outra casa como se fosse o seu.
+    """
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
             """SELECT f.*, u.nome AS fechado_por_nome FROM cmv_fechamentos f
                  LEFT JOIN usuarios u ON u.id = f.fechado_por
-                 JOIN unidades un ON un.id = f.id_unidade
-                ORDER BY f.fim DESC, f.competencia DESC LIMIT 60"""
+                WHERE f.id_unidade = %s
+                ORDER BY f.fim DESC, f.competencia DESC LIMIT 60""",
+            (id_unidade,),
         )
         linhas = []
         for r in cur.fetchall():
@@ -497,11 +507,25 @@ def fechar(body: FechamentoRequest,
 @router.post("/fechamentos/{id_fechamento}/reabrir")
 def reabrir(id_fechamento: int,
             ctx: Contexto = Depends(requer_permissao("cmv.reabrir"))) -> dict:
-    """Reabrir é exceção e fica registrado — é o que dá sentido ao fechamento."""
+    """Reabrir é exceção e fica registrado — é o que dá sentido ao fechamento.
+
+    ⚠️ **Só o fechamento da loja atual, e é uma trava de segurança.** A consulta
+    era por `id` puro: um usuário de uma loja reabria o período de outra
+    passando o número, e **isso destrava lançamento retroativo numa casa que ele
+    nem enxerga** — o contrário exato do que o fechamento existe para fazer.
+    Medido: a apuração da filial devolvia 403 para esse mesmo usuário, enquanto
+    esta rota devolvia 200 e deixava o período REABERTO.
+
+    ⚠️ **404 e não 403**: responder "sem acesso" confirmaria que aquele número
+    existe. Quem pode reabrir de outra loja troca de loja no seletor — é o mesmo
+    caminho de todo o resto do módulo.
+    """
     with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
         cur.execute(
-            "SELECT competencia, inicio, fim, ciclo, status FROM cmv_fechamentos WHERE id = %s",
-            (id_fechamento,)
+            """SELECT competencia, inicio, fim, ciclo, status FROM cmv_fechamentos
+                WHERE id = %s AND id_unidade = %s""",
+            (id_fechamento, id_unidade),
         )
         f = cur.fetchone()
         if not f:
@@ -516,5 +540,6 @@ def reabrir(id_fechamento: int,
         )
         auditoria.registrar(cur, ctx.id_usuario, "cmv", id_fechamento, "reabrir",
                             antes={"ciclo": f.get("ciclo"), "inicio": str(f["inicio"]),
-                                   "fim": str(f["fim"])})
+                                   "fim": str(f["fim"])},
+                            id_unidade=id_unidade)
     return {"message": "Período reaberto — lançamentos retroativos voltam a ser aceitos"}

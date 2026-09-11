@@ -259,15 +259,50 @@ def movimentacao_congelada(cur, id_fechamento: int) -> list[dict]:
 
 def _soma_movimentos(cur, id_unidade: int, inicio: date, fim: date, tipos,
                     fora: list[str] | None = None) -> Decimal:
+    """Quanto estes tipos de movimento somaram no período — **líquido de estorno**.
+
+    🔑 **Sem descontar o estorno, a nota cancelada vira custo de comida.** Medido:
+    lançar uma nota de R$ 400 e estorná-la no mesmo dia deixava o CMV real
+    R$ 400 maior. O motivo é que os dois lados da correção caem em lugares
+    diferentes da conta: a entrada é `ENTRADA_NF` e soma em `compras`, e o
+    estorno dela é um `ESTORNO_SAIDA` — que não é compra, não é perda, não é
+    consumo e não é ajuste, e portanto não entrava em conta nenhuma. A mercadoria
+    saía do estoque final e a compra ficava, que é exatamente a forma de
+    `inicial + compras − final` acusar consumo que não houve. E é o erro mais
+    fácil de cometer na vida real: lançar a nota errada e estornar é a rotina da
+    conferência.
+
+    ⚠️ **O desconto vale pelo tipo do movimento ORIGINAL, não pelo do estorno.**
+    `ESTORNO_SAIDA` também desfaz transferência e produção, que nunca foram
+    compra — descontar todos eles de `compras` trocaria um erro por outro. Quem
+    diz de que o estorno é filho é o `id_estorno_de`.
+
+    ⚠️ **O acerto entra no período do ESTORNO, e está certo assim.** Estorno no
+    mesmo mês anula a compra; estorno no mês seguinte entra como compra negativa
+    e anula a saída que o estoque acusou naquele mês. Nos dois casos o par
+    fecha em zero, sem reescrever um período já fechado.
+    """
+    p = {"u": id_unidade, "tipos": list(tipos), "inicio": inicio,
+         "limite": fim + timedelta(days=1), "fora": fora or None}
     cur.execute(
-        """SELECT coalesce(sum(abs(m.custo_total)), 0) AS valor
-             FROM estoque_movimentos m
-             JOIN produtos pr ON pr.id = m.id_produto
-            WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
-              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
-              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
-        {"u": id_unidade, "tipos": list(tipos), "inicio": inicio,
-         "limite": fim + timedelta(days=1), "fora": fora or None},
+        """WITH direto AS (
+               SELECT coalesce(sum(abs(m.custo_total)), 0) AS valor
+                 FROM estoque_movimentos m
+                 JOIN produtos pr ON pr.id = m.id_produto
+                WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
+                  AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+           ), desfeito AS (
+               SELECT coalesce(sum(abs(e.custo_total)), 0) AS valor
+                 FROM estoque_movimentos e
+                 JOIN estoque_movimentos o ON o.id = e.id_estorno_de
+                 JOIN produtos pr ON pr.id = e.id_produto
+                WHERE e.id_unidade = %(u)s AND o.tipo = ANY(%(tipos)s)
+                  AND e.data_movimento >= %(inicio)s AND e.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+           )
+           SELECT (SELECT valor FROM direto) - (SELECT valor FROM desfeito) AS valor""",
+        p,
     )
     return dec(cur.fetchone()["valor"])
 
@@ -329,12 +364,20 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
 
     perdas = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_PERDA",), fora)
     consumo = _soma_movimentos(cur, id_unidade, inicio, fim, ("SAIDA_CONSUMO_INTERNO",), fora)
+    # ⚠️ **O estorno do ajuste entra aqui junto, e com o sinal dele.** Mesmo furo
+    # das compras: sem isso, contagem corrigida por engano e desfeita em seguida
+    # continuava aparecendo como ajuste no painel. A conta de sinal já resolve o
+    # encontro — o estorno de um ajuste de entrada é uma saída, e os dois se
+    # anulam sozinhos. Quem diz que o movimento desfaz um ajuste é o
+    # `id_estorno_de`, não o tipo dele (`ESTORNO_SAIDA` desfaz qualquer entrada).
     cur.execute(
         """SELECT coalesce(sum(m.custo_total
                                * CASE WHEN m.quantidade > 0 THEN 1 ELSE -1 END), 0) AS valor
              FROM estoque_movimentos m
              JOIN produtos pr ON pr.id = m.id_produto
-            WHERE m.id_unidade = %(u)s AND m.tipo LIKE 'AJUSTE_INVENTARIO%%'
+             LEFT JOIN estoque_movimentos o ON o.id = m.id_estorno_de
+            WHERE m.id_unidade = %(u)s
+              AND (m.tipo LIKE 'AJUSTE_INVENTARIO%%' OR o.tipo LIKE 'AJUSTE_INVENTARIO%%')
               AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
               AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
         {"u": id_unidade, "inicio": inicio, "limite": fim + timedelta(days=1),

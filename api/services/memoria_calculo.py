@@ -131,22 +131,47 @@ def compras_por_nota(cur, id_unidade: int, inicio: date, fim: date,
     ⚠️ **Entrada manual não tem nota**, e aparece agrupada como tal — omiti-la
     faria a soma das linhas não fechar com a linha "Compras".
     """
+    # ⚠️ **O estorno entra descontado e NA NOTA DE ORIGEM.** A apuração desconta
+    # a compra desfeita; sem o mesmo desconto aqui, a soma das linhas deixava de
+    # fechar com a linha "Compras" — que é a única propriedade que dá sentido a
+    # este relatório. E a linha certa para o abatimento é a da própria nota:
+    # quem procura "os R$ 400 da NF 123" quer ver que ela entrou e foi desfeita,
+    # não uma linha "sem nota" com valor negativo no fim da lista. Por isso o
+    # movimento de estorno herda o documento e o tipo do ORIGINAL, achado pelo
+    # `id_estorno_de` — ele próprio é `ESTORNO_SAIDA` e não aponta para nota
+    # nenhuma.
+    # ⚠️ `itens` conta só as entradas (o estorno entra com 0): ele não é um item
+    # a mais da nota, é o desfazimento de um que já está contado.
     cur.execute(
-        """SELECT n.id AS id_nota, n.numero, n.serie, n.data_emissao, n.data_entrada,
+        """WITH mov AS (
+               SELECT m.id_produto, m.tipo, m.origem_tipo, m.origem_id,
+                      abs(m.custo_total) AS valor, 1 AS itens
+                 FROM estoque_movimentos m
+                 JOIN produtos pr ON pr.id = m.id_produto
+                WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
+                  AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+               UNION ALL
+               SELECT e.id_produto, o.tipo, o.origem_tipo, o.origem_id,
+                      -abs(e.custo_total), 0
+                 FROM estoque_movimentos e
+                 JOIN estoque_movimentos o ON o.id = e.id_estorno_de
+                 JOIN produtos pr ON pr.id = e.id_produto
+                WHERE e.id_unidade = %(u)s AND o.tipo = ANY(%(tipos)s)
+                  AND e.data_movimento >= %(inicio)s AND e.data_movimento < %(limite)s
+                  AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
+           )
+           SELECT n.id AS id_nota, n.numero, n.serie, n.data_emissao, n.data_entrada,
                   n.valor_total AS valor_da_nota, n.valor_frete, n.valor_outros,
                   n.origem AS origem_da_nota,
                   coalesce(f.nome, n.nome_emitente) AS fornecedor,
                   m.tipo,
-                  count(*) AS itens,
-                  sum(abs(m.custo_total)) AS valor_no_razao
-             FROM estoque_movimentos m
-             JOIN produtos pr ON pr.id = m.id_produto
+                  sum(m.itens) AS itens,
+                  sum(m.valor) AS valor_no_razao
+             FROM mov m
              LEFT JOIN notas_entrada n
                     ON n.id = m.origem_id AND m.origem_tipo = 'NOTA'
              LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
-            WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
-              AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
-              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
             GROUP BY n.id, n.numero, n.serie, n.data_emissao, n.data_entrada,
                      n.valor_total, n.valor_frete, n.valor_outros, n.origem,
                      f.nome, n.nome_emitente, m.tipo
@@ -208,16 +233,21 @@ def conciliacao_compras(cur, id_unidade: int, inicio: date, fim: date,
     no_razao_tudo = dec(cur.fetchone()["valor"])
 
     # 3. Quanto disso é de produto que a casa tirou do CMV.
+    # ⚠️ **Só `ENTRADA_NF`, porque é dela que o passo 2 partiu.** A consulta
+    # abatia os dois tipos de compra, e a entrada manual de tipo excluído saía
+    # da conta DUAS vezes: aqui, e de novo no passo seguinte, que já a filtra.
+    # A corrente terminava R$ 1.440,00 abaixo da linha “Compras” — e ninguém via,
+    # porque a última linha é calculada à parte, não somada. Medido em 11/09/2026.
     excluido = Decimal(0)
     if fora:
         cur.execute(
             """SELECT coalesce(sum(abs(m.custo_total)), 0) AS valor
                  FROM estoque_movimentos m
                  JOIN produtos pr ON pr.id = m.id_produto
-                WHERE m.id_unidade = %(u)s AND m.tipo = ANY(%(tipos)s)
+                WHERE m.id_unidade = %(u)s AND m.tipo = 'ENTRADA_NF'
                   AND m.data_movimento >= %(inicio)s AND m.data_movimento < %(limite)s
                   AND pr.tipo = ANY(%(fora)s)""",
-            {**base, "tipos": list(TIPOS_COMPRA), "fora": fora},
+            {**base, "fora": fora},
         )
         excluido = dec(cur.fetchone()["valor"])
 
@@ -232,6 +262,22 @@ def conciliacao_compras(cur, id_unidade: int, inicio: date, fim: date,
         {**base, "fora": fora or None},
     )
     manual = dec(cur.fetchone()["valor"])
+
+    # 5. O que foi lançado e desfeito dentro do período — a nota errada,
+    #    estornada. A apuração desconta (senão a compra cancelada vira custo de
+    #    comida), e o contador precisa ver essa parcela nomeada: ela é a
+    #    diferença entre a soma das notas lançadas e o que de fato pesou.
+    cur.execute(
+        """SELECT coalesce(sum(abs(e.custo_total)), 0) AS valor
+             FROM estoque_movimentos e
+             JOIN estoque_movimentos o ON o.id = e.id_estorno_de
+             JOIN produtos pr ON pr.id = e.id_produto
+            WHERE e.id_unidade = %(u)s AND o.tipo = ANY(%(tipos)s)
+              AND e.data_movimento >= %(inicio)s AND e.data_movimento < %(limite)s
+              AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))""",
+        {**base, "tipos": list(TIPOS_COMPRA), "fora": fora or None},
+    )
+    estornado = dec(cur.fetchone()["valor"])
 
     remessa = motor._transferencia_entre_lojas(cur, id_unidade, inicio, fim, fora)
     compras = motor._soma_movimentos(cur, id_unidade, inicio, fim, TIPOS_COMPRA, fora)
@@ -255,6 +301,8 @@ def conciliacao_compras(cur, id_unidade: int, inicio: date, fim: date,
         {"linha": "(−) Compras de tipo fora do CMV (limpeza, embalagem, utensílio)",
          "valor": cent(-excluido)},
         {"linha": "(+) Entradas digitadas sem nota", "valor": cent(manual)},
+        {"linha": "(−) Entradas lançadas e estornadas dentro do período",
+         "valor": cent(-estornado)},
         {"linha": "(+) Remessa recebida de outra loja, menos a enviada",
          "valor": cent(remessa)},
         {"linha": "(=) Linha “Compras” da apuração", "valor": cent(compras + remessa)},

@@ -199,3 +199,40 @@
   ⚠️ **Medido na base recém-criada**: com os grupos de volta, `compras` caiu 900 e `cmv_real`
   **não se moveu** (12850,61519 antes e depois). É a confirmação do desenho documentado — grupo
   fora do CMV sai das três pontas, e a contribuição dele se anula por completo.
+
+- 🔑 **Compra estornada virava custo de comida — e a conta tem QUATRO donos.**
+  `_soma_movimentos` somava `ENTRADA_NF`/`ENTRADA_MANUAL`; o estorno de uma entrada é gravado
+  como `ESTORNO_SAIDA`, que não é compra, nem perda, nem consumo, nem ajuste — e não entrava em
+  conta nenhuma. A mercadoria saía do estoque final e a compra ficava: `inicial + compras −
+  final` acusava consumo que não houve. Medido em 11/09/2026: nota de R$ 400 lançada e
+  estornada no mesmo dia deixava o CMV real R$ 400 maior. **É o erro mais fácil de cometer na
+  casa** — lançar a nota errada e estornar é a rotina da conferência.
+  ⚠️ **O desconto vale pelo tipo do movimento ORIGINAL** (`id_estorno_de`), nunca pelo do
+  estorno: `ESTORNO_SAIDA` também desfaz transferência e produção, que nunca foram compra.
+  ⚠️ **O acerto entra no período do ESTORNO, e está certo assim.** No mesmo mês anula a compra;
+  no mês seguinte entra como compra negativa e anula a saída que o estoque acusou. Nos dois o
+  par fecha em zero, sem reescrever período já fechado.
+  ⚠️ **A mesma conta existe em quatro lugares, e a bateria provou.** Consertar só a apuração
+  quebrou 5 checagens: `relatorios.cmv_por_grupo` (de onde `cmv_grupos.valores` também sai) e
+  `memoria_calculo.compras_por_nota` precisam do mesmo desconto, senão a soma dos grupos e a
+  soma por documento deixam de fechar com a linha “Compras”. No relatório por documento o
+  estorno é atribuído à **nota de origem**, não a uma linha “sem nota” negativa no fim.
+  O ajuste de inventário estornado tem o mesmo furo e foi fechado junto. `AJUSTE_CUSTO` ficou de
+  fora: mexe quantidade zero e o caminho de estorno dele não foi exercitado.
+
+- ⚠️ **A conciliação de compras não somava até o próprio total, e o teste não via.** A última
+  linha é calculada à parte (`compras + remessa`), então a checagem "termina exatamente na linha
+  Compras" era tautológica — batia mesmo com as linhas do meio não levando até lá. E não
+  levavam: `(−) Compras de tipo fora do CMV` abatia `ENTRADA_NF` **e** `ENTRADA_MANUAL`, e a
+  linha seguinte (`entradas digitadas sem nota`) já filtrava os excluídos — a manual de tipo
+  fora do CMV saía duas vezes. Medido: R$ 1.440,00 a menos. Quem confere soma a COLUNA na
+  calculadora, que é o que a checagem nova faz.
+
+- 🔑 **O fechamento não tinha dono.** `listar_fechamentos` não filtrava `id_unidade` (havia até
+  um `JOIN unidades` sem servir a nada) e `reabrir` consultava por `id` puro. Medido em
+  11/09/2026 com usuário preso à loja 1: a apuração da filial devolvia 403 para ele, a lista
+  trazia o fechamento dela — e a resposta não diz de que loja é cada linha, então o histórico
+  de outra casa aparecia como o seu — e `reabrir` devolvia 200, **destravando lançamento
+  retroativo numa loja que ele não enxerga**, o contrário exato do que o fechamento existe para
+  fazer. Agora as duas passam por `unidade_atual`, e reabrir de fora devolve **404** e não 403:
+  403 confirmaria que aquele número existe.

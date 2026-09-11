@@ -92,12 +92,25 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
              WHERE id_unidade = %s AND data_movimento < %s
              ORDER BY id_produto, id_local, id DESC
         ),
+        -- ⚠️ **Líquida de estorno, como na apuração.** Compra lançada e
+        -- estornada deixava o grupo com custo que não houve — e, por tabela, a
+        -- soma dos grupos parava de fechar com o CMV do período assim que a
+        -- apuração passou a descontar. O tipo que manda é o do movimento
+        -- ORIGINAL (`id_estorno_de`): `ESTORNO_SAIDA` também desfaz
+        -- transferência e produção, que nunca foram compra.
         compras AS (
-            SELECT id_produto, id_local, sum(abs(custo_total)) AS valor
-              FROM estoque_movimentos
-             WHERE id_unidade = %s AND tipo = ANY(%s)
-               AND data_movimento >= %s AND data_movimento < %s
-             GROUP BY 1, 2
+            SELECT id_produto, id_local, sum(valor) AS valor FROM (
+                SELECT m.id_produto, m.id_local, abs(m.custo_total) AS valor
+                  FROM estoque_movimentos m
+                 WHERE m.id_unidade = %s AND m.tipo = ANY(%s)
+                   AND m.data_movimento >= %s AND m.data_movimento < %s
+                UNION ALL
+                SELECT e.id_produto, e.id_local, -abs(e.custo_total)
+                  FROM estoque_movimentos e
+                  JOIN estoque_movimentos o ON o.id = e.id_estorno_de
+                 WHERE e.id_unidade = %s AND o.tipo = ANY(%s)
+                   AND e.data_movimento >= %s AND e.data_movimento < %s
+            ) _compras GROUP BY 1, 2
         ),
         -- 🔑 **A remessa entre lojas conta como compra aqui também.** A
         -- apuração passou a somá-la (entrada) e subtraí-la (saída) — sem a
@@ -172,6 +185,7 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
          ORDER BY 5 DESC
         """,
         (id_unidade, inicio, id_unidade, fim + timedelta(days=1),
+         id_unidade, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
          id_unidade, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
          id_unidade, inicio, fim + timedelta(days=1),
          id_unidade, inicio, fim + timedelta(days=1), rotulo),

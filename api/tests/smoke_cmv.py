@@ -30,12 +30,15 @@ ok = 0
 falhas: list[str] = []
 
 
-def chamar(metodo, caminho, corpo=None, token=None):
+def chamar(metodo, caminho, corpo=None, token=None, unidade=None):
     caminho = urllib.parse.quote(caminho, safe="/?=&")
     req = urllib.request.Request(BASE + caminho, method=metodo)
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
+    # O seletor de loja da tela, que é como o resto do sistema escolhe a unidade.
+    if unidade:
+        req.add_header("X-Unidade", str(unidade))
     dados = json.dumps(corpo, default=str).encode() if corpo is not None else None
     try:
         with urllib.request.urlopen(req, dados, timeout=30) as r:
@@ -415,6 +418,82 @@ st, r = chamar("POST", "/estoque/entradas", {
 }, token=tk_conf)
 checar("depois de reaberto, o conferente volta a lançar retroativo", st == 201, (st, r))
 
+print("5b. nota estornada NÃO vira custo de comida")
+# 🔑 **Medido em 11/09/2026, e era o erro mais fácil de cometer na casa.**
+# Lançar a entrada errada e estorná-la é a rotina da conferência. A entrada soma
+# em `compras`; o estorno dela é um `ESTORNO_SAIDA`, que não é compra, nem perda,
+# nem consumo, nem ajuste — não entrava em conta nenhuma. A mercadoria saía do
+# estoque final e a compra ficava: `inicial + compras − final` acusava R$ 400,00
+# de consumo que não houve.
+# ⚠️ A afirmação é sobre o DELTA, não sobre o valor absoluto: a base é
+# compartilhada e a loja já tem movimento de outras suítes.
+so_hoje = f"inicio={hoje}&fim={hoje}"
+st, antes_do_estorno = chamar("GET", f"/cmv/apuracao?{so_hoje}", token=token)
+enganado = novo_produto(f"Cmv estorno {marca}")
+st, entrada = chamar("POST", "/estoque/entradas", {
+    "id_produto": enganado, "quantidade": 20, "custo_unitario": 20,
+    "id_local": local["id"], "documento": f"NF ERRADA {marca}",
+}, token=token)
+checar("entrada de 400,00 lançada por engano", st == 201, (st, entrada))
+st, meio = chamar("GET", f"/cmv/apuracao?{so_hoje}", token=token)
+checar("e ela soma 400,00 nas compras do dia",
+       perto(meio["compras"] - antes_do_estorno["compras"], 400),
+       meio["compras"] - antes_do_estorno["compras"])
+
+st, r = chamar("POST", f"/estoque/movimentos/{entrada['id']}/estornar",
+               {"motivo": f"Nota errada {marca}"}, token=token)
+checar("o estorno foi aceito", st == 201, (st, r))
+st, depois_do_estorno = chamar("GET", f"/cmv/apuracao?{so_hoje}", token=token)
+delta_compras = depois_do_estorno["compras"] - antes_do_estorno["compras"]
+delta_cmv = depois_do_estorno["cmv_real"] - antes_do_estorno["cmv_real"]
+checar("depois do estorno, as compras do dia voltam ao que eram",
+       perto(delta_compras, 0), delta_compras)
+checar("e o CMV REAL do dia não se move — nada foi consumido",
+       perto(delta_cmv, 0), delta_cmv)
+# ⚠️ O razão FICA: os dois movimentos continuam lá, é append-only. O que muda é
+# a conta, não o histórico.
+st, movs = chamar("GET", f"/estoque/movimentos?id_produto={enganado}&limite=50", token=token)
+linhas = movs.get("itens", movs) if isinstance(movs, dict) else movs
+checar("e os dois movimentos continuam no razão", len(linhas) >= 2, len(linhas))
+
+
+print("5c. o fechamento tem dono: uma loja não mexe no período da outra")
+# 🔑 **Medido em 11/09/2026 com um usuário preso a uma loja.** A apuração da
+# filial devolvia 403 para ele, mas a LISTA de fechamentos vinha sem filtro de
+# unidade — e a resposta não diz de que loja é cada linha, então o histórico de
+# outra casa aparecia como o seu. Pior: `reabrir` consultava por `id` puro e
+# devolvia 200, **destravando lançamento retroativo numa loja que ele não
+# enxerga** — o contrário exato do que o fechamento existe para fazer.
+st, filial = chamar("POST", "/unidades", {
+    "nome": f"Filial fechamento {marca}", "cnpj": None, "ativo": True}, token=token)
+id_filial = (filial or {}).get("id")
+checar("filial de teste criada", st in (200, 201) and bool(id_filial), (st, filial))
+
+# Um período ANTIGO, para não trombar com o que as outras suítes lançam hoje.
+antigo = (inicio_mes - timedelta(days=40)).replace(day=1)
+st, fech_filial = chamar("POST", "/cmv/fechamentos", {"competencia": str(antigo)},
+                         token=token, unidade=id_filial)
+checar("a filial fecha o período dela", st == 201, (st, fech_filial))
+id_da_filial = (fech_filial or {}).get("id")
+
+if id_da_filial:
+    st, lista = chamar("GET", "/cmv/fechamentos", token=token, unidade=1)
+    ids = [f["id"] for f in lista]
+    checar("o fechamento da filial NÃO aparece na lista da loja 1",
+           id_da_filial not in ids, ids)
+    st, r = chamar("POST", f"/cmv/fechamentos/{id_da_filial}/reabrir", token=token, unidade=1)
+    checar("e a loja 1 não consegue reabri-lo (404)", st == 404, (st, r))
+
+    # A outra metade da afirmação: da PRÓPRIA loja continua funcionando. Sem
+    # isto, a trava poderia ter quebrado o recurso inteiro e o teste passaria.
+    st, lista = chamar("GET", "/cmv/fechamentos", token=token, unidade=id_filial)
+    checar("da própria filial, ele aparece", id_da_filial in [f["id"] for f in lista],
+           [f["id"] for f in lista])
+    st, r = chamar("POST", f"/cmv/fechamentos/{id_da_filial}/reabrir",
+                   token=token, unidade=id_filial)
+    checar("e ela reabre o próprio período", st == 200, (st, r))
+
+
 print("6. permissão")
 st, papeis = chamar("GET", "/papeis", token=token)
 id_cozinha = next(p["id"] for p in papeis if p["nome"] == "Cozinha")
@@ -448,8 +527,11 @@ for v in vendas:
         chamar("DELETE", f"/vendas/{v['id']}", token=token)
 chamar("DELETE", f"/fichas/{nova['id']}", token=token)
 chamar("DELETE", f"/fichas/{ficha}", token=token)
-for p in (insumo, prato):
+for p in (insumo, prato, enganado):
     chamar("DELETE", f"/produtos/{p}", token=token)
+# A filial do 5c sai da lista ativa; o fechamento dela já ficou REABERTO.
+if id_filial:
+    chamar("PUT", f"/unidades/{id_filial}", {"ativo": False}, token=token)
 st, r = chamar("POST", f"/cmv/fechamentos/{id_fech}/reabrir", token=token)
 checar("limpeza concluída", True)
 

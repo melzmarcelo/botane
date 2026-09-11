@@ -12,7 +12,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
 
-import { pct } from "@/lib/numeros";
+import { pct, qtd } from "@/lib/numeros";
 type Apuracao = {
   inicio: string;
   fim: string;
@@ -481,9 +481,7 @@ export default function PaginaCmv() {
                             <span className="mono ml-2 text-[12px] text-suave">{l.codigo}</span>
                           </td>
                           <td className="num text-suave">
-                            {Number(l.quantidade).toLocaleString("pt-BR", {
-                              maximumFractionDigits: 2,
-                            })}
+                            {qtd(l.quantidade)}
                           </td>
                           <td className="num font-semibold">{reais(l.valor)}</td>
                           <td className="num">{pct(l.participacao_pct)}</td>
@@ -536,9 +534,7 @@ export default function PaginaCmv() {
                             )}
                           </td>
                           <td className="num text-suave">
-                            {Number(l.quantidade).toLocaleString("pt-BR", {
-                              maximumFractionDigits: 2,
-                            })}
+                            {qtd(l.quantidade)}
                           </td>
                           <td className="num">{reais(l.receita)}</td>
                           <td className="num">{reais(l.custo)}</td>
