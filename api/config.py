@@ -27,6 +27,15 @@ JWT_SECRET = os.getenv("JWT_SECRET", JWT_SECRET_PADRAO)
 # com `secrets.token_urlsafe(48)`. Isto só barra o que é curto demais para
 # assinar qualquer coisa.
 JWT_SECRET_MINIMO = 24
+# 🔑 **O segredo ANTERIOR, só para a troca.** O `JWT_SECRET` deriva a chave que
+# cifra as credenciais de integração (`services/segredos.py`): trocá-lo deixava
+# Omie, PDV e a senha de SMTP ilegíveis, para serem redigitados à mão. Com esta
+# variável definida, o start regrava cada credencial com a chave nova e a casa
+# não perde nada.
+# ⚠️ **É temporária, e o start diz isso.** Ela existe durante UM deploy; deixada
+# para trás, mantém um segredo aposentado vivo na configuração do ambiente —
+# que é metade do motivo de estar sendo trocado.
+JWT_SECRET_ANTERIOR = os.getenv("JWT_SECRET_ANTERIOR", "")
 # Token curto de propósito: quem some da equipe perde acesso rápido.
 JWT_EXPIRY_MIN = int(os.getenv("JWT_EXPIRY_MIN", "60"))
 REFRESH_EXPIRY_DIAS = int(os.getenv("REFRESH_EXPIRY_DIAS", "30"))

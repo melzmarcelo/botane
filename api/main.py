@@ -14,6 +14,7 @@ from pydantic_core import PydanticCustomError
 
 import arquivos
 import paginacao
+from services import segredos
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
 import impressao
@@ -26,6 +27,7 @@ from config import (
     CORS_ORIGINS,
     DEBUG,
     JWT_SECRET,
+    JWT_SECRET_ANTERIOR,
     JWT_SECRET_MINIMO,
     JWT_SECRET_PADRAO,
     PORT,
@@ -119,6 +121,40 @@ def conferir_segredo() -> None:
         )
 
 
+def rotacionar_segredos() -> None:
+    """Regrava as credenciais guardadas quando o `JWT_SECRET` acabou de mudar.
+
+    🔑 **É o que faz a troca do segredo não custar as integrações.** O
+    `JWT_SECRET` deriva a chave que cifra `integracoes.credenciais`: trocá-lo
+    deixava Omie, PDV e a senha de SMTP ilegíveis — e uma troca que custa
+    redigitar tudo é uma troca que não se faz, o que deixa o segredo fraco no
+    lugar. Definindo `JWT_SECRET_ANTERIOR` junto com o novo por um deploy, cada
+    linha é aberta com a chave velha e regravada com a nova.
+
+    ⚠️ **A sessão NÃO é preservada, de propósito.** Todo mundo entra de novo:
+    aceitar o token antigo manteria o segredo aposentado valendo, que é
+    exatamente o que a troca veio encerrar. É o único custo, e dura um login.
+
+    ⚠️ **Roda depois das migrações e é idempotente**: o segundo start não acha
+    nada para fazer, porque o primeiro já deixou tudo na chave de hoje.
+    """
+    if not JWT_SECRET_ANTERIOR:
+        return
+    with get_cursor() as cur:
+        regravadas, perdidas = segredos.regravar_com_a_chave_atual(cur)
+    if regravadas:
+        print(f"[botane] {regravadas} credencial(is) regravada(s) com o JWT_SECRET novo")
+    if perdidas:
+        # Nem a chave de hoje nem a anterior abrem: outro ambiente, um terceiro
+        # segredo, ou dado corrompido. Fica como está — a tela de integrações
+        # denuncia, e apagar destruiria a única pista.
+        print(f"[botane] ATENÇÃO: {perdidas} credencial(is) não abriram com nenhuma "
+              "das duas chaves — redigite em Integrações")
+    if not perdidas:
+        print("[botane] troca de JWT_SECRET concluída — remova JWT_SECRET_ANTERIOR "
+              "do ambiente no próximo deploy")
+
+
 def garantir_admin() -> None:
     """Primeiro acesso: sem nenhum usuário, cria o administrador do .env.
 
@@ -196,6 +232,7 @@ async def lifespan(app: FastAPI):
     init_pool()
     run_migrations()
     garantir_admin()
+    rotacionar_segredos()
 
     # ⚠️ **Os agendadores sobem SEMPRE; quem decide é a configuração.** O padrão
     # de `agenda_frequencia` é MANUAL, então numa casa que não ligou nada estes

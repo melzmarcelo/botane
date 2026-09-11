@@ -413,3 +413,25 @@
   e o catálogo atual diz que PRD00004 é laranja. O vínculo saiu do nível 1 da cascata
   (`codigos_externos`), que já existia. Se a conta recicla códigos, cada reciclagem vira um
   vínculo silencioso e errado numa nota antiga — vale uma investigação própria.
+
+- 🔑 **Trocar o `JWT_SECRET` deixou de custar as integrações.** Ele assina a sessão E deriva,
+  por SHA-256, a chave Fernet que cifra `integracoes.credenciais` — uma tabela, uma coluna,
+  guardando Omie, PDV e a senha de SMTP. Até 11/09/2026 trocá-lo tornava tudo isso ilegível, e
+  o `deploy.md` dizia em duas linhas que o valor "não se troca depois".
+  ⚠️ **Uma troca que custa redigitar tudo é uma troca que não se faz** — e aí o segredo fraco
+  fica. Foi o que aconteceu: a trava do segredo parou o start em produção
+  (`JWT_SECRET curto demais (16 caracteres)`), a DO manteve o contêiner anterior no ar, e a
+  pergunta do dono foi justamente se dava para trocar sem perder o configurado.
+  ⚠️ **O caminho é `JWT_SECRET_ANTERIOR`, e ela é de UM deploy.** Definida junto com o segredo
+  novo, `rotacionar_segredos()` (no start, depois das migrações) abre cada linha com a chave
+  velha e a regrava com a nova. Removida no deploy seguinte — deixá-la mantém um segredo
+  aposentado vivo no ambiente, que é metade do motivo de estar sendo trocado. Por isso
+  `decifrar` tenta a chave anterior **depois** da atual, nunca antes.
+  ⚠️ **A sessão não é preservada, de propósito**: todo mundo entra de novo. Aceitar o token
+  antigo manteria o segredo aposentado valendo, que é o que a troca veio encerrar.
+  ⚠️ **Linha que nenhuma das duas chaves abre é contada e deixada em paz** (outro ambiente, um
+  terceiro segredo, dado corrompido): regravar seria escrever lixo por cima de lixo e apagar
+  destruiria a única pista. `ilegivel()` continua denunciando na tela.
+  Roteiro em `docs/deploy.md` seção 6b; regressão em `api/tests/smoke_rotacao_segredo.py`.
+  ⚠️ A suíte mede as perdidas por **delta**: a base local tem credenciais reais cifradas com o
+  segredo DESTE ambiente, que caem na contagem sem que nada esteja errado.

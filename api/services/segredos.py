@@ -14,11 +14,30 @@ import json
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from config import JWT_SECRET
+from config import JWT_SECRET, JWT_SECRET_ANTERIOR
+
+
+def _chave_de(segredo: str) -> bytes:
+    return base64.urlsafe_b64encode(hashlib.sha256(segredo.encode()).digest())
 
 
 def _chave() -> bytes:
-    return base64.urlsafe_b64encode(hashlib.sha256(JWT_SECRET.encode()).digest())
+    return _chave_de(JWT_SECRET)
+
+
+def _chave_anterior() -> bytes | None:
+    """A chave do segredo aposentado, enquanto a troca não terminou.
+
+    🔑 **Existe para a troca do `JWT_SECRET` não custar as credenciais.** Sem
+    ela, trocar o segredo deixava Omie, PDV e a senha de SMTP ilegíveis, e a
+    casa tinha de redigitar tudo — o que, na prática, faz a troca ser adiada
+    para sempre e o segredo fraco ficar.
+
+    ⚠️ Nula quando a variável não está definida, que é o estado normal: a
+    leitura com a chave anterior é a exceção de um deploy, não um caminho
+    permanente.
+    """
+    return _chave_de(JWT_SECRET_ANTERIOR) if JWT_SECRET_ANTERIOR else None
 
 
 def cifrar(dados: dict) -> bytes:
@@ -31,6 +50,16 @@ def decifrar(bruto: bytes | memoryview | None) -> dict:
     try:
         return json.loads(Fernet(_chave()).decrypt(bytes(bruto)))
     except (InvalidToken, ValueError):
+        # ⚠️ **A chave anterior é tentada DEPOIS, nunca antes.** Terminada a
+        # regravação, nenhuma linha precisa dela — e uma ordem invertida faria
+        # o sistema preferir o segredo aposentado enquanto a variável
+        # estivesse esquecida no ambiente.
+        anterior = _chave_anterior()
+        if anterior is not None:
+            try:
+                return json.loads(Fernet(anterior).decrypt(bytes(bruto)))
+            except (InvalidToken, ValueError):
+                pass
         # Segredo trocado ou dado corrompido: melhor tratar como "sem credencial"
         # do que derrubar a tela inteira.
         #
@@ -56,11 +85,15 @@ def ilegivel(bruto: bytes | memoryview | None) -> bool:
     """
     if not bruto:
         return False
-    try:
-        Fernet(_chave()).decrypt(bytes(bruto))
-        return False
-    except (InvalidToken, ValueError):
-        return True
+    for chave in (_chave(), _chave_anterior()):
+        if chave is None:
+            continue
+        try:
+            Fernet(chave).decrypt(bytes(bruto))
+            return False
+        except (InvalidToken, ValueError):
+            continue
+    return True
 
 
 def mascarar(valor: str | None) -> str | None:
@@ -68,3 +101,47 @@ def mascarar(valor: str | None) -> str | None:
     if not valor:
         return None
     return "•" * max(0, len(valor) - 4) + valor[-4:] if len(valor) > 4 else "••••"
+
+
+def regravar_com_a_chave_atual(cur) -> tuple[int, int]:
+    """Recifra com a chave de hoje o que só abre com a anterior. (regravadas, ilegíveis)
+
+    🔑 **É o que torna a troca do `JWT_SECRET` uma operação sem perda.** O
+    segredo deriva a chave do Fernet, então trocá-lo tornava ilegível toda
+    credencial guardada: Omie, PDV e a senha de SMTP teriam de ser redigitadas.
+    Com `JWT_SECRET_ANTERIOR` definido por um deploy, cada linha é aberta com a
+    chave velha e regravada com a nova.
+
+    ⚠️ **Só toca no que a chave ATUAL não abre.** Rodar duas vezes não faz nada
+    na segunda: a primeira já deixou tudo legível pela chave de hoje — e é isso
+    que permite a variável ficar esquecida no ambiente por um tempo sem
+    estragar nada.
+
+    ⚠️ **Linha que nenhuma das duas abre é contada e deixada em paz.** Pode ser
+    de um terceiro segredo, de outro ambiente ou dado corrompido; regravá-la
+    seria escrever lixo cifrado por cima de lixo, e apagá-la destruiria a única
+    pista do que aconteceu. `ilegivel()` continua denunciando na tela.
+    """
+    anterior = _chave_anterior()
+    if anterior is None:
+        return (0, 0)
+
+    cur.execute("SELECT id, credenciais FROM integracoes WHERE credenciais IS NOT NULL")
+    linhas = [(r["id"], bytes(r["credenciais"])) for r in cur.fetchall()]
+
+    regravadas = perdidas = 0
+    for id_linha, bruto in linhas:
+        try:
+            Fernet(_chave()).decrypt(bruto)
+            continue                      # já está na chave de hoje
+        except (InvalidToken, ValueError):
+            pass
+        try:
+            dados = json.loads(Fernet(anterior).decrypt(bruto))
+        except (InvalidToken, ValueError):
+            perdidas += 1
+            continue
+        cur.execute("UPDATE integracoes SET credenciais = %s WHERE id = %s",
+                    (cifrar(dados), id_linha))
+        regravadas += 1
+    return (regravadas, perdidas)

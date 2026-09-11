@@ -16,11 +16,14 @@ na 3100). As três podem morar em máquinas diferentes.
 | Onde hospedar | Define o resto do roteiro |
 | **Postgres gerenciado ou no próprio servidor** | Gerenciado já vem com backup e restauração. Vale o custo: o razão é a memória de todo o custo da casa |
 | Domínio | Um para a web, outro para a API (ou a API atrás de `/api` no mesmo) |
-| Quem guarda o `JWT_SECRET` | Ele não se troca depois — ver abaixo |
+| Quem guarda o `JWT_SECRET` | Trocar depois dá trabalho — ver 6b |
 
-⚠️ **O `JWT_SECRET` é o ponto sem retorno.** Dele sai a chave que cifra as credenciais do Omie
-e do SMTP guardadas no banco. Trocá-lo invalida todas, e elas não voltam em claro nem para o
-administrador — a única saída é redigitar. Gere uma vez, guarde junto com as senhas.
+⚠️ **O `JWT_SECRET` carrega duas coisas.** Ele assina a sessão e dele sai a chave que cifra as
+credenciais do Omie, do PDV e do SMTP guardadas no banco. Gere uma vez, com folga, e guarde
+junto com as senhas.
+⚠️ **Trocá-lo é possível, mas é um procedimento** — não é só editar a variável: sem
+`JWT_SECRET_ANTERIOR`, toda credencial guardada vira ilegível e tem de ser redigitada. O
+roteiro está na seção 6b.
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
@@ -296,11 +299,49 @@ base COM dado, antes de ir.
 
 ---
 
+## 6b. Trocar o `JWT_SECRET` sem perder as integrações
+
+🔑 **Aconteceu em 11/09/2026 e é o motivo desta seção existir.** A trava do segredo parou o
+start em produção — `JWT_SECRET curto demais (16 caracteres; o mínimo é 24)` —, o contêiner
+anterior seguiu no ar e o deploy novo não entrou. Trocar o segredo era necessário, e até então
+custava redigitar Omie, PDV e a senha de SMTP: o `JWT_SECRET` deriva, por SHA-256, a chave
+Fernet que cifra `integracoes.credenciais`.
+
+⚠️ **Uma troca que custa caro é uma troca que não se faz** — e aí o segredo fraco fica. Por isso
+o start passou a saber fazer a mudança sozinho.
+
+**O procedimento, em um deploy:**
+
+1. Gere o segredo novo **fora do sistema**, num terminal seu:
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+2. No painel, no componente **api**, deixe as duas variáveis ao mesmo tempo:
+   - `JWT_SECRET` = o novo
+   - `JWT_SECRET_ANTERIOR` = o que está lá hoje, **copiado antes de sobrescrever**
+3. Salvar dispara o deploy. No start, `rotacionar_segredos()` abre cada credencial com a chave
+   velha e a regrava com a nova. O log diz quantas:
+   `[botane] N credencial(is) regravada(s) com o JWT_SECRET novo`
+4. **No deploy seguinte, remova `JWT_SECRET_ANTERIOR`.** Deixá-la mantém um segredo aposentado
+   vivo na configuração do ambiente, que é metade do motivo de estar sendo trocado.
+
+**O que se perde de qualquer jeito:** a sessão. Todo mundo entra de novo — os tokens estavam
+assinados com o segredo velho. Aceitá-los por um tempo manteria o segredo aposentado valendo,
+que é exatamente o que a troca veio encerrar.
+
+⚠️ **Se o log disser `ATENÇÃO: N credencial(is) não abriram com nenhuma das duas chaves`**, é
+porque aquelas linhas foram cifradas com um terceiro segredo (outro ambiente, um restore de
+outra base) ou estão corrompidas. Elas **não são tocadas** — regravar seria escrever lixo por
+cima de lixo, e apagar destruiria a única pista. A tela de Integrações denuncia cada uma, e o
+caminho é redigitar só essas.
+
+⚠️ **Rodar de novo não faz nada.** A regravação só toca no que a chave atual não abre, então um
+segundo deploy com as duas variáveis é inofensivo. Coberto por `api/tests/smoke_rotacao_segredo.py`.
+
 ## 7. O que não fazer
 
 - Commitar em `producao` — ela só recebe merge de `main`
 - Levar o `.env` de um ambiente para o outro
-- Trocar o `JWT_SECRET` de um sistema que já tem credencial guardada
+- Trocar o `JWT_SECRET` sem definir `JWT_SECRET_ANTERIOR` no mesmo deploy (seção 6b)
+- Deixar `JWT_SECRET_ANTERIOR` no ambiente depois que a troca terminou
 - Rodar `api/limpar_dados.py` apontando para o banco online (ele **recusa** host que não seja
   local — mas não conte com isso como única proteção)
 - Promover sem a bateria de testes ter passado na base local
