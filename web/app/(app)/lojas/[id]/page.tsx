@@ -69,16 +69,6 @@ const INTERRUPTORES: { campo: string; nome: string; explica: string }[] = [
     explica: "Câmara fria, estoque seco, bar — sem local o inventário não fecha.",
   },
   {
-    campo: "bloquear_saida_vencido",
-    nome: "Bloquear saída de item vencido",
-    explica: "Desligado por padrão: travar em pleno serviço é pior que avisar.",
-  },
-  {
-    campo: "criar_produto_da_nota",
-    nome: "Criar produto novo a partir da nota",
-    explica: "Item sem vínculo vira produto rascunho — que não entra no estoque até ser revisado.",
-  },
-  {
     // 🔑 Desligado por padrão = custo GERAL (migração 064, pedido do dono).
     // A frase é escrita pelo lado LIGADO, como todos os outros interruptores
     // desta lista — e o lado ligado aqui é o comportamento antigo.

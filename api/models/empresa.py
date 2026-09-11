@@ -92,9 +92,19 @@ class ParametrosUpdate(BaseModel):
     exigir_local_movimento: bool | None = None
     casas_decimais_qtd: int | None = Field(default=None, ge=0, le=6)
     alerta_validade_dias: int | None = Field(default=None, ge=0, le=365)
-    bloquear_saida_vencido: bool | None = None
     alerta_variacao_preco_pct: float | None = Field(default=None, ge=0, le=999)
-    criar_produto_da_nota: bool | None = None
+    # 🔑 **`bloquear_saida_vencido` e `criar_produto_da_nota` saíram daqui**
+    # (11/09/2026, decisão do dono: "tira os dois da tela"). Estavam na tela de
+    # Lojas desde o começo e **ninguém os lia** — zero referências em serviço ou
+    # rota. Configuração que não muda nada é pior que configuração ausente: a
+    # casa desliga o bloqueio de vencido, continua vendendo vencido, e conclui
+    # que o sistema está quebrado.
+    # ⚠️ **As COLUNAS ficam no banco**, com os padrões delas. Apagar coluna é
+    # irreversível e não é o que foi pedido; e no dia em que a regra for
+    # implementada de verdade, o campo volta para cá e para a tela junto com
+    # ela — que é a ordem certa.
+    # ⚠️ Saindo do modelo, saem também do `_CAMPOS_PARAM` — a API deixa de
+    # aceitá-los no PUT e de devolvê-los no GET. É isso que fecha a promessa.
     # 🔑 **Como o custo médio é apurado** (migração 064, pedido do dono).
     # `false` — o padrão — dá UM custo por produto na loja: a mesma mercadoria
     # não vale uma coisa na despensa e outra no bar, e prateleira nova já nasce

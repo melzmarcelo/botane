@@ -105,6 +105,23 @@ checar("/me traz as casas decimais da loja",
 checar("e dentro da faixa que a tela oferece",
        0 <= me.get("casas_decimais_qtd", -1) <= 6, me.get("casas_decimais_qtd"))
 
+# 🔑 **A tela de Lojas não oferece configuração que ninguém lê** (11/09/2026,
+# decisão do dono: "tira os dois da tela"). `bloquear_saida_vencido` e
+# `criar_produto_da_nota` estavam lá desde o começo e nenhum serviço os
+# consultava — a casa desligaria o bloqueio de vencido, continuaria vendendo
+# vencido, e concluiria que o sistema está quebrado.
+# ⚠️ **A COLUNA continua no banco**, com o padrão dela: apagar coluna é
+# irreversível, e no dia em que a regra existir de verdade o campo volta para o
+# modelo e para a tela JUNTO com ela. O que a checagem afirma é que a API não os
+# OFERECE — é isso que fecha a promessa.
+st, par = chamar("GET", "/unidades/1/parametros", token=token)
+checar("os parâmetros da loja respondem", st == 200, par)
+mortos = [c for c in ("bloquear_saida_vencido", "criar_produto_da_nota") if c in (par or {})]
+checar("e não oferecem interruptor que ninguém lê", not mortos, mortos)
+st, r = chamar("PUT", "/unidades/1/parametros", {"bloquear_saida_vencido": True},
+               token=token)
+checar("mudar um deles não é aceito", st == 400, (st, r))
+
 st, r = chamar("GET", "/auth/me")
 checar("sem token devolve 401", st == 401, st)
 st, r = chamar("GET", "/auth/me", token="lixo")
