@@ -658,10 +658,27 @@ def acrescentar_local(id_produto: int, body: LocalDoProdutoRequest, resposta: Re
         if not local:
             raise HTTPException(status_code=400,
                                 detail="Local não encontrado nesta loja, ou inativo.")
+        # 🔑 **A prateleira nova NASCE sabendo o custo** quando ele é da loja
+        # (migração 064). Criar a linha zerada fazia o cadastro mostrar o produto
+        # valendo R$ 0,00 naquele local — que é exatamente o "tem custo em um
+        # local e nos outros não" que o dono relatou, e agora aconteceria no
+        # gesto de preparar a casa. A quantidade continua zero e nada entra no
+        # razão: não há mercadoria nem valor, só o custo que a loja já conhece.
         cur.execute(
-            """INSERT INTO estoque_saldos (id_unidade, id_local, id_produto)
-               VALUES (%s, %s, %s) ON CONFLICT DO NOTHING""",
-            (id_unidade, body.id_local, id_produto))
+            """INSERT INTO estoque_saldos (id_unidade, id_local, id_produto, custo_medio)
+               VALUES (%s, %s, %s,
+                       CASE WHEN coalesce((SELECT custo_por_local FROM parametros
+                                            WHERE id_unidade = %s), false)
+                            THEN 0
+                            ELSE coalesce((
+                                SELECT round(sum(s.quantidade * s.custo_medio)
+                                             / sum(s.quantidade), 6)
+                                  FROM estoque_saldos s
+                                 WHERE s.id_unidade = %s AND s.id_produto = %s
+                                   AND s.quantidade > 0 AND s.custo_medio > 0), 0)
+                       END)
+               ON CONFLICT DO NOTHING""",
+            (id_unidade, body.id_local, id_produto, id_unidade, id_unidade, id_produto))
         criou = cur.rowcount
         if criou:
             auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto,

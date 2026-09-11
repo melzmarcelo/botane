@@ -256,8 +256,15 @@ checar("e conta o que criou e o que completou",
        "criados" in r and "completados" in r, r)
 # Incluindo inativos: o smoke_cadastros usa o mesmo CNPJ e o desativa na
 # limpeza. O que se prova aqui é o preenchimento, não a situação do cadastro.
-st, fornecedores = chamar("GET", "/fornecedores?incluir_inativos=true", token=token)
-vindo = next((f for f in fornecedores if (f.get("cnpj") or "").endswith("000195")), None)
+# ⚠️ **Pelo CNPJ, não caçando na lista.** A listagem devolve uma PÁGINA (200), e
+# assim que a base passou de 244 fornecedores o desta conferência saiu dela — a
+# checagem acusou "o fornecedor não ficou completo" num fornecedor que estava
+# completo. Mesma armadilha do ABC e da margem por prato: lista cortada não
+# responde "existe?".
+st, fornecedores = chamar(
+    "GET", "/fornecedores?incluir_inativos=true&busca=12345678000195", token=token)
+vindo = next((f for f in (fornecedores or [])
+              if (f.get("cnpj") or "").endswith("000195")), None)
 checar("o fornecedor da nota ficou completo",
        vindo and vindo.get("cidade") and vindo.get("codigo_omie"), vindo)
 

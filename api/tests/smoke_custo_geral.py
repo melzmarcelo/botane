@@ -93,6 +93,7 @@ def modo(por_local: bool):
 
 
 despensa = garantir_local(chamar, token)
+id_camara = None   # criado no 3c; declarado aqui para a limpeza sempre alcançá-lo
 st, bar = chamar("POST", "/locais", {"nome": f"Bar custo {marca}", "tipo": "BAR"},
                  token=token)
 checar("segundo local criado", st in (200, 201), (st, bar))
@@ -170,6 +171,26 @@ try:
     checar("o que o razão soma é o que o estoque vale",
            perto(r["registrado"], r["vale"], 0.01), (r["registrado"], r["vale"]))
 
+    print("3c. prateleira DECLARADA à mão já nasce sabendo o custo")
+    # 🔑 **É o caso que o dono relatou na produção.** "Este produto também mora
+    # no bar" criava a linha de saldo zerada — e zerada quer dizer custo R$ 0,00
+    # naquele local, que é exatamente o "tem custo em um local e nos outros não".
+    # O gesto de PREPARAR a casa reintroduzia o defeito que o custo geral veio
+    # acabar.
+    # ⚠️ A quantidade continua zero e nada entra no razão: não há mercadoria nem
+    # valor, só o custo que a loja já conhece.
+    st, terceiro = chamar("POST", "/locais", {"nome": f"Camara custo {marca}",
+                                              "tipo": "RESFRIADO"}, token=token)
+    id_camara = (terceiro or {}).get("id")  # noqa: F841 — a limpeza usa
+    st, r = chamar("POST", f"/produtos/{idp}/locais", {"id_local": id_camara}, token=token)
+    checar("o local foi acrescentado ao produto", st in (200, 201), (st, r))
+    c = custos_do(idp)
+    nova = [v for k, v in c.items() if "Camara custo" in k or "CAMARA CUSTO" in k.upper()]
+    checar("a prateleira nova existe com saldo zero",
+           len(nova) == 1 and nova[0][0] == 0, c)
+    checar("e já traz o custo da loja, não zero",
+           len(nova) == 1 and perto(nova[0][1], esperado, 0.0001), (nova, esperado))
+
     print("4. a chave POR LOCAL devolve o comportamento antigo")
     modo(True)
     st, p2 = chamar("POST", "/produtos", {"nome": f"PorLocal {marca}", "tipo": "INSUMO",
@@ -237,8 +258,9 @@ finally:
     # ⚠️ SEMPRE, mesmo com falha no meio: a base é compartilhada e uma suíte que
     # deixasse a loja em "por local" mudaria o custo que as outras medem.
     modo(False)
-    if id_bar:
-        chamar("DELETE", f"/locais/{id_bar}", token=token)
+    for local_de_teste in (id_bar, id_camara):
+        if local_de_teste:
+            chamar("DELETE", f"/locais/{local_de_teste}", token=token)
 
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
