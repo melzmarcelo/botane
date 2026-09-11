@@ -191,6 +191,34 @@ try:
     checar("e já traz o custo da loja, não zero",
            len(nova) == 1 and perto(nova[0][1], esperado, 0.0001), (nova, esperado))
 
+    print("3d. produto ESGOTADO num local e sem custo no outro entra na prévia")
+    # 🔑 **Relatado pelo dono na produção (11/09/2026):** "retorna que não tem
+    # nada para unificar, mas o produto água com gás está em dois locais, e um
+    # deles tem custo e outro não". O motivo: a prateleira que SABIA o custo
+    # estava ZERADA, e o alvo da unificação exigia saldo positivo para ponderar —
+    # então o produto inteiro saía da lista e a prévia dizia "nada a unificar"
+    # olhando para o caso que ela existe para resolver.
+    # ⚠️ `_travar_custo_da_loja` já caía no maior custo conhecido nesse caso. Eram
+    # duas implementações da MESMA regra, e só uma tinha o degrau de reserva.
+    st, agua = chamar("POST", "/produtos", {"nome": f"Agua gas {marca}",
+                                            "tipo": "REVENDA", "um_estoque": "UN"}, token=token)
+    id_agua = agua["id"]
+    chamar("POST", "/estoque/entradas", {"id_produto": id_agua, "quantidade": 10,
+           "custo_unitario": 3.5, "id_local": despensa["id"]}, token=token)
+    chamar("POST", "/estoque/saidas", {"id_produto": id_agua, "quantidade": 10,
+           "tipo": "SAIDA_CONSUMO_INTERNO", "id_local": despensa["id"]}, token=token)
+    modo(True)   # o mundo de antes: a prateleira nova nascia zerada
+    chamar("POST", f"/produtos/{id_agua}/locais", {"id_local": id_bar}, token=token)
+    modo(False)
+    c = custos_do(id_agua)
+    checar("o cenário é o relatado: um local sabe o custo, o outro não",
+           sorted(v[1] for v in c.values()) == [0.0, 3.5], c)
+    st, previa = chamar("GET", "/ajustes/custo-geral/previa", token=token)
+    achou = [l for l in previa["linhas"] if l["id_produto"] == id_agua]
+    checar("a prévia enxerga o produto esgotado", len(achou) == 1, previa["produtos"])
+    checar("e o alvo é o custo conhecido, não zero",
+           achou and perto(achou[0]["custo_novo"], 3.5, 0.0001), achou)
+
     print("4. a chave POR LOCAL devolve o comportamento antigo")
     modo(True)
     st, p2 = chamar("POST", "/produtos", {"nome": f"PorLocal {marca}", "tipo": "INSUMO",
@@ -251,7 +279,7 @@ try:
            vazio["reavaliadas"] == 0 and vazio["preenchidas"] == 0, vazio)
 
     print("8. limpeza")
-    for pid in (idp, idp2):
+    for pid in (idp, idp2, id_agua):
         chamar("DELETE", f"/produtos/{pid}", token=token)
     checar("produtos de teste saíram da lista ativa", True)
 finally:

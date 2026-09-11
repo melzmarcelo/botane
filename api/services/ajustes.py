@@ -447,26 +447,40 @@ def _divergentes(cur, id_unidade: int) -> list[dict]:
     valorada não há o que unificar: zerar todas seria trocar "não sei" por "é de
     graça", que é pior porque cala o aviso.
     """
+    # ⚠️ **O degrau de reserva existe e a primeira versão daqui não o tinha** —
+    # relatado pelo dono, reproduzido em 11/09/2026: a água com gás estava em dois
+    # locais, um com custo e outro sem, e a prévia dizia "nada a unificar". O
+    # motivo: a despensa SABIA o custo (R$ 3,50) mas estava ZERADA, e o alvo
+    # exigia prateleira com saldo positivo — então o produto inteiro saía da
+    # lista. `_travar_custo_da_loja` já caía no maior custo conhecido nesse caso;
+    # aqui não caía, e duas implementações da mesma regra discordavam.
+    # ⚠️ Produto de que ninguém sabe o custo continua de fora: sem nenhum custo
+    # conhecido não há o que unificar, e zerar todas as prateleiras trocaria
+    # "não sei" por "é de graça", que cala o aviso.
     cur.execute(
         """WITH alvo AS (
                SELECT id_produto,
-                      sum(quantidade) FILTER (WHERE quantidade > 0 AND custo_medio > 0) AS q,
-                      sum(quantidade * custo_medio)
-                          FILTER (WHERE quantidade > 0 AND custo_medio > 0) AS v
+                      CASE WHEN sum(quantidade)
+                                FILTER (WHERE quantidade > 0 AND custo_medio > 0) > 0
+                           THEN round(sum(quantidade * custo_medio)
+                                      FILTER (WHERE quantidade > 0 AND custo_medio > 0)
+                                      / sum(quantidade)
+                                      FILTER (WHERE quantidade > 0 AND custo_medio > 0), 6)
+                           ELSE max(custo_medio) FILTER (WHERE custo_medio > 0)
+                      END AS custo_novo
                  FROM estoque_saldos
                 WHERE id_unidade = %(u)s
                 GROUP BY id_produto
-                HAVING sum(quantidade) FILTER (WHERE quantidade > 0 AND custo_medio > 0) > 0
            )
            SELECT s.id_produto, s.id_local, s.quantidade, s.custo_medio,
-                  p.codigo, p.nome AS produto, l.nome AS local,
-                  round(a.v / a.q, 6) AS custo_novo
+                  p.codigo, p.nome AS produto, l.nome AS local, a.custo_novo
              FROM estoque_saldos s
              JOIN alvo a ON a.id_produto = s.id_produto
              JOIN produtos p ON p.id = s.id_produto
              JOIN locais_estoque l ON l.id = s.id_local
             WHERE s.id_unidade = %(u)s
-              AND s.custo_medio IS DISTINCT FROM round(a.v / a.q, 6)
+              AND a.custo_novo IS NOT NULL
+              AND s.custo_medio IS DISTINCT FROM a.custo_novo
             ORDER BY lower(p.nome), l.nome""",
         {"u": id_unidade},
     )
