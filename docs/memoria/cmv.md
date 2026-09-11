@@ -181,3 +181,21 @@
   dois dentro da janela — foi por isso que passou anos despercebido, com o mês sendo o único
   período possível. A tela nomeia a causa; o conserto está em `docs/o-que-falta.md`.
   ⚠️ Toda suíte que confere essa identidade tem de **garantir o ritmo MENSAL** antes, não supô-lo.
+
+- 🔑 **A semente que sumia era a limpeza, e ela só repunha UMA das três.** A armadilha acima
+  nomeia o sintoma ("a semente da 029 sumiu numa limpeza"); a causa estava em
+  `limpar_dados.py`, que reaplicava só a `005_cadastros_iniciais.sql`. Os grupos do CMV nascem
+  na **029** (material de limpeza e embalagem) e na **037** (utensílios, com
+  `considerar_no_cmv = false`) — e migração aplicada não roda de novo, por checksum. Logo toda
+  base criada com `--cliente-novo` ficava **sem grupo nenhum**: `tipos_fora_do_cmv` devolvia
+  `[]` e utensílio entrava no CMV real como se fosse comida.
+  ⚠️ **O raciocínio já estava escrito no próprio arquivo**, para a 005 — "o seed NÃO volta
+  sozinho" — só não tinha sido aplicado às outras duas. `_SEED` virou `_SEEDS` (tupla) e
+  `semear()` percorre as três.
+  ⚠️ **Só `UTENSILIO` sai por padrão.** O grupo de limpeza nasce com `considerar_no_cmv = true`
+  de propósito: é escolha da casa, configurável na tela. Grupo que existe mas não exclui
+  ninguém não muda conta nenhuma — por isso a regressão em `smoke_grupos_cmv.py` afirma sobre o
+  EFEITO (`tipos_fora_do_cmv`), não sobre a existência das linhas.
+  ⚠️ **Medido na base recém-criada**: com os grupos de volta, `compras` caiu 900 e `cmv_real`
+  **não se moveu** (12850,61519 antes e depois). É a confirmação do desenho documentado — grupo
+  fora do CMV sai das três pontas, e a contribuição dele se anula por completo.

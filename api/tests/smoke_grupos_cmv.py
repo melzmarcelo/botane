@@ -98,6 +98,36 @@ def limpar():
 atexit.register(limpar)
 
 
+print("0. a base do PRIMEIRO DIA tem os grupos do CMV")
+# 🔑 **`limpar_dados.py --cliente-novo` reaplicava so a migracao 005.** Os
+# grupos do CMV nascem na 029 (material de limpeza e embalagem) e na 037
+# (utensilios, com `considerar_no_cmv = false`), e migracao aplicada nao roda de
+# novo — entao uma base "cliente novo" ficava SEM grupo nenhum,
+# `tipos_fora_do_cmv` devolvia lista vazia e os utensilios entravam no CMV real.
+# ⚠️ O raciocinio ja estava escrito no proprio limpar_dados, para a 005: "o seed
+# NAO volta sozinho". Faltava aplica-lo as outras duas.
+# ⚠️ A afirmacao e sobre o EFEITO (`tipos_fora_do_cmv`), nao sobre a existencia
+# das linhas: grupo que existe mas nao exclui ninguem nao muda conta nenhuma.
+sys.path.insert(0, ".")
+from database import get_cursor as _cur_grupos  # noqa: E402
+from services import cmv as _motor_cmv  # noqa: E402
+
+import limpar_dados as _limpeza  # noqa: E402
+checar("o seed do primeiro dia sao TRES migracoes, nao uma",
+       len(_limpeza._SEEDS) >= 3, _limpeza._SEEDS)
+with _cur_grupos() as _c:
+    _fora = _motor_cmv.tipos_fora_do_cmv(_c)
+# ⚠️ Utensilio e o unico que sai por padrao: o de limpeza nasce com
+# `considerar_no_cmv = true` de proposito, e a casa decide se o tira.
+checar("utensilio sai do CMV real por padrao", "UTENSILIO" in _fora, _fora)
+with _cur_grupos() as _c:
+    _c.execute("SELECT nome, considerar_no_cmv FROM cmv_grupos ORDER BY ordem")
+    _grupos_base = {r["nome"].lower(): r["considerar_no_cmv"] for r in _c.fetchall()}
+checar("o grupo de material de limpeza existe",
+       any("limpeza" in n for n in _grupos_base), sorted(_grupos_base))
+checar("e ele CONTA no CMV, como a casa recebe",
+       all(v for n, v in _grupos_base.items() if "limpeza" in n), _grupos_base)
+
 print("1. o tipo novo existe e aceita produto")
 st, r = chamar("POST", "/produtos", {
     "codigo": f"LIMP{marca}", "nome": f"Detergente {marca}",

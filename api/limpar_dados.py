@@ -302,7 +302,24 @@ def residuo_completo(cur, ignorar: set[str]) -> dict[str, list[dict]]:
 #
 # ⚠️ Ele já se protege sozinho (`WHERE NOT EXISTS`): reaplicá-lo numa tabela que
 # tem linha não duplica nada.
-_SEED = "005_cadastros_iniciais.sql"
+# ⚠️ **São TRÊS, e a lista custou um CMV errado para aparecer.** A 005 traz
+# setores, locais e categorias; os GRUPOS do CMV nascem na 029 (material de
+# limpeza e embalagem) e na 037 (utensílios, com `considerar_no_cmv = false`).
+# Sem eles, `tipos_fora_do_cmv` devolve lista vazia e **detergente e taça entram
+# no CMV real** — o food cost sai pior que a realidade e nada na tela diz por
+# quê. Medido numa base recém-"cliente novo": 40,00 de compra de material de
+# limpeza dentro da apuração.
+# ⚠️ O raciocínio é o mesmo da 005, e é por isso que ele vale para as três:
+# migração aplicada não roda de novo, então truncar o que ela semeou deixa a
+# casa sem aquilo para sempre. Quem pede "base do primeiro dia" quer o primeiro
+# dia inteiro, não um pedaço dele.
+# ⚠️ As três já se protegem sozinhas (`WHERE NOT EXISTS`, `IF NOT EXISTS`,
+# `ON CONFLICT DO NOTHING`): reaplicá-las numa tabela que tem linha não duplica.
+_SEEDS = (
+    "005_cadastros_iniciais.sql",
+    "029_grupos_do_cmv.sql",
+    "037_tipo_utensilio.sql",
+)
 
 # ⚠️ **O que NÃO sai nem com `--cliente-novo`, e é decisão, não esquecimento:**
 # `empresa` (nome, CNPJ e a logo da casa) e `integracoes` (as credenciais do
@@ -313,8 +330,9 @@ _SEED = "005_cadastros_iniciais.sql"
 
 def semear(cur) -> int:
     """Reaplica o seed do primeiro dia. Devolve quantas linhas de apoio nasceram."""
-    with open(os.path.join(SCRIPTS_DIR, _SEED), encoding="utf-8") as f:
-        cur.execute(f.read())
+    for arquivo in _SEEDS:
+        with open(os.path.join(SCRIPTS_DIR, arquivo), encoding="utf-8") as f:
+            cur.execute(f.read())
     total = 0
     for t in ("setores", "locais_estoque", "categorias"):
         cur.execute(f'SELECT count(*) AS n FROM "{t}"')
