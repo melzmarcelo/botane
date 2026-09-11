@@ -5822,6 +5822,17 @@ try {
   if (temSomarLojas) {
     const rotuloLocal = () => p.evaluate(() => [...document.querySelectorAll("main .rotulo")]
       .some((x) => (x.textContent ?? "").trim() === "Local"));
+    // ⚠️ **Escolhe a prateleira ANTES de medir.** A tela abre em "por produto"
+    // desde 11/09/2026 (pedido do dono), e aí o filtro de prateleira ja nao
+    // esta la — `localAntes` vinha falso e a checagem acusava um defeito que
+    // nao existia. O que se afirma e a TRANSICAO: com prateleira ha filtro de
+    // local, na visao de empresa nao ha.
+    await p.select("#visao-saldos", "prateleira");
+    await p.waitForFunction(
+      () => [...document.querySelectorAll("main .rotulo")]
+        .some((x) => (x.textContent ?? "").trim() === "Local"),
+      { timeout: 10000 },
+    ).catch(() => {});
     const localAntes = await rotuloLocal();
     await p.select("#visao-saldos", "empresa");
     // ⚠️ **Esperar pela frase explicativa nao espera nada**: ela aparece no

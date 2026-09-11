@@ -31,6 +31,11 @@ class SaldoDoLocal(BaseModel):
     setor: str | None = None
     quantidade: float
     valor: float
+    # Parte deste saldo já está no carro, a caminho de outra loja. Continua
+    # contando aqui de propósito — é o que mantém o valor com dono enquanto a
+    # mercadoria viaja —, mas sem dizer, quem despacha de novo manda o que já
+    # saiu.
+    em_transito: float = 0
 
 
 class SaldoAgrupadoResponse(BaseModel):
@@ -49,7 +54,12 @@ class SaldoAgrupadoResponse(BaseModel):
     quantidade: float
     valor: float
     # Ponderado, nunca a média dos médios — o mesmo da visão de empresa.
+    # ⚠️ Sem prateleira com saldo, vale o maior custo CONHECIDO: produto
+    # esgotado tem custo, e mostrar traço joga fora o que o sistema sabe. Nulo
+    # só quando ninguém sabe mesmo.
     custo_medio: float | None = None
+    # A soma do que está em trânsito em todas as prateleiras deste produto.
+    em_transito: float = 0
     estoque_minimo: float | None = None
     abaixo_do_minimo: bool = False
     # Onde ele está, com o setor de cada prateleira quando ela tem um.

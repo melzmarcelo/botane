@@ -219,6 +219,29 @@ try:
     checar("e o alvo é o custo conhecido, não zero",
            achou and perto(achou[0]["custo_novo"], 3.5, 0.0001), achou)
 
+    print("3e. a tela mostra o custo do produto ESGOTADO, em vez de um traço")
+    # 🔑 **Pedido do dono (11/09/2026):** "quando unificado, lista o custo na
+    # coluna Custo Médio, pois deve ser o mesmo". A coluna vinha do ponderado das
+    # prateleiras com saldo POSITIVO — produto esgotado caía no `—` embora o
+    # sistema soubesse quanto ele custa. É a mesma família do custo zero que este
+    # projeto perseguiu o dia inteiro: o número estava a uma consulta de
+    # distância.
+    # ⚠️ **O VALOR não usa essa reserva**: zero unidades valem zero, e é o valor
+    # que soma o patrimônio. Custo e valor respondem perguntas diferentes.
+    def agrupado_de(id_produto):
+        st_, r_ = chamar("GET", f"/estoque/saldos-agrupados?id_produto={id_produto}"
+                                "&apenas_com_saldo=false", token=token)
+        itens = r_ if isinstance(r_, list) else (r_ or {}).get("itens") or []
+        return itens[0] if itens else None
+
+    linha = agrupado_de(id_agua)
+    checar("o produto esgotado aparece na visão por produto", linha is not None)
+    checar("com o custo conhecido na coluna, não um traço",
+           linha and perto(linha["custo_medio"], 3.5, 0.0001),
+           linha and linha["custo_medio"])
+    checar("e valendo zero, porque não há unidade nenhuma",
+           linha and perto(linha["valor"], 0, 0.01), linha and linha["valor"])
+
     print("4. a chave POR LOCAL devolve o comportamento antigo")
     modo(True)
     st, p2 = chamar("POST", "/produtos", {"nome": f"PorLocal {marca}", "tipo": "INSUMO",

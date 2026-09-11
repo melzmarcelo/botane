@@ -25,8 +25,10 @@ type SaldoAgrupado = {
   valor: number;
   custo_medio: number | null;
   abaixo_do_minimo: boolean;
+  /** A soma do que está em trânsito em todas as prateleiras deste produto. */
+  em_transito?: number;
   por_local: { id_local: number; local: string; setor: string | null;
-               quantidade: number; valor: number }[];
+               quantidade: number; valor: number; em_transito?: number }[];
 };
 
 /** Uma linha da visão de EMPRESA: o produto somando as lojas. */
@@ -115,7 +117,12 @@ export default function PaginaEstoque() {
   // setor leva um pacote para o seu canto. "Onde está" e "quanto a loja tem"
   // são perguntas diferentes, e a de empresa é uma terceira. Duas caixinhas
   // que interagem fariam quatro combinações, duas delas sem sentido.
-  const [visao, setVisao] = useEstadoNaUrl<"prateleira" | "produto" | "empresa">("visao", "prateleira");
+  // 🔑 **"Por produto" é o padrão** (pedido do dono, 11/09/2026). A pergunta do
+  // dia a dia é "quanto tenho de café?", não "quanto tem em cada prateleira" — e
+  // com o custo único da loja a visão por prateleira repete o mesmo custo em
+  // várias linhas, que é ruído. Onde o produto está continua na coluna "Onde
+  // está", e a visão por prateleira segue a um clique.
+  const [visao, setVisao] = useEstadoNaUrl<"prateleira" | "produto" | "empresa">("visao", "produto");
   const rede = visao === "empresa";
   const [saldosRede, setSaldosRede] = useState<SaldoRede[] | null>(null);
   const [saldosAgrupados, setAgrupados] = useState<SaldoAgrupado[] | null>(null);
@@ -490,12 +497,26 @@ export default function PaginaEstoque() {
                                 {l.local}
                                 {l.setor ? ` · ${l.setor}` : ""} — {qtd(l.quantidade)}{" "}
                                 {s.um_estoque ?? ""}
+                                {/* 🔑 **Parte deste saldo já está no carro.** O
+                                    aviso só existia na visão por prateleira, e
+                                    esta virou o padrão — sem ele aqui, quem
+                                    despacha de novo manda o que já saiu. */}
+                                {Number(l.em_transito) > 0 && (
+                                  <span className="ml-1 text-alerta">
+                                    ({qtd(Number(l.em_transito))} em trânsito)
+                                  </span>
+                                )}
                               </span>
                             ))}
                           </td>
                           <td className={`num ${Number(s.quantidade) < 0 ? "text-erro" : ""}`}>
                             <span className="font-semibold">{qtd(s.quantidade)}</span>{" "}
                             {s.um_estoque ?? ""}
+                            {Number(s.em_transito) > 0 && (
+                              <div className="text-[12px] text-alerta">
+                                {qtd(Number(s.em_transito))} em trânsito
+                              </div>
+                            )}
                           </td>
                           <td className="num">
                             {s.custo_medio === null ? "—" : custo(Number(s.custo_medio))}

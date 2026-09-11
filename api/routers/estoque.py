@@ -143,6 +143,22 @@ def saldos_agrupados(
                                         WHERE s.quantidade > 0 AND s.custo_medio > 0)
                                    / sum(s.quantidade) FILTER (
                                         WHERE s.quantidade > 0 AND s.custo_medio > 0), 6)
+                        -- 🔑 **Sem prateleira valorada, vale o custo CONHECIDO**
+                        -- (pedido do dono, 11/09/2026: "quando unificado, lista
+                        -- o custo na coluna Custo Médio, pois deve ser o mesmo").
+                        -- Produto esgotado devolvia `—` embora o sistema soubesse
+                        -- quanto ele custa, que é a mesma família de defeito do
+                        -- custo zero. Com o custo único da loja as prateleiras
+                        -- concordam, então o `max` É o custo; com custo por local
+                        -- ele é o mais alto dos conhecidos, que é a estimativa
+                        -- prudente.
+                        -- ⚠️ **É o mesmo degrau de `_travar_custo_da_loja` e da
+                        -- prévia da unificação** — três lugares, uma regra só. Foi
+                        -- a falta dele na prévia que fez a água com gás não
+                        -- aparecer para unificar.
+                        -- ⚠️ O `valor` NÃO usa esta reserva: zero unidades valem
+                        -- zero, e é ele que soma o patrimônio.
+                        ELSE max(s.custo_medio) FILTER (WHERE s.custo_medio > 0)
                         END AS custo_medio,
                    (p.estoque_minimo IS NOT NULL
                     AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo
@@ -187,8 +203,25 @@ def saldos_agrupados(
                     "id_local": r["id_local"], "local": r["local"], "setor": r["setor"],
                     "quantidade": float(r["quantidade"]), "valor": float(r["valor"] or 0),
                 })
+            # 🔑 **O trânsito vem para cá também** (11/09/2026). Ele só existia na
+            # visão por prateleira; quando "por produto" virou o PADRÃO da tela
+            # (pedido do dono), o aviso "3 KG em trânsito" desapareceu da
+            # primeira coisa que a casa abre — e é ele que impede a segunda
+            # remessa do dia despachar o que já saiu. A bateria do navegador
+            # pegou.
+            # ⚠️ Uma consulta para a PÁGINA, casada em memória — a mesma escolha
+            # do `em_transito` por prateleira, e pela mesma razão: são poucas
+            # remessas abertas contra 200 linhas.
+            transito = transito_servico.em_transito_por_local(cur, id_unidade)
             for linha in linhas:
-                linha["por_local"] = por_produto.get(linha["id_produto"], [])
+                locais = por_produto.get(linha["id_produto"], [])
+                if transito:
+                    for local in locais:
+                        local["em_transito"] = transito.get(
+                            (linha["id_produto"], local["id_local"]), 0)
+                linha["por_local"] = locais
+                # O total do produto, que é o que a coluna de quantidade mostra.
+                linha["em_transito"] = sum(l.get("em_transito") or 0 for l in locais)
     return linhas
 
 
@@ -267,6 +300,22 @@ def saldos_rede(
                                         WHERE s.quantidade > 0 AND s.custo_medio > 0)
                                    / sum(s.quantidade) FILTER (
                                         WHERE s.quantidade > 0 AND s.custo_medio > 0), 6)
+                        -- 🔑 **Sem prateleira valorada, vale o custo CONHECIDO**
+                        -- (pedido do dono, 11/09/2026: "quando unificado, lista
+                        -- o custo na coluna Custo Médio, pois deve ser o mesmo").
+                        -- Produto esgotado devolvia `—` embora o sistema soubesse
+                        -- quanto ele custa, que é a mesma família de defeito do
+                        -- custo zero. Com o custo único da loja as prateleiras
+                        -- concordam, então o `max` É o custo; com custo por local
+                        -- ele é o mais alto dos conhecidos, que é a estimativa
+                        -- prudente.
+                        -- ⚠️ **É o mesmo degrau de `_travar_custo_da_loja` e da
+                        -- prévia da unificação** — três lugares, uma regra só. Foi
+                        -- a falta dele na prévia que fez a água com gás não
+                        -- aparecer para unificar.
+                        -- ⚠️ O `valor` NÃO usa esta reserva: zero unidades valem
+                        -- zero, e é ele que soma o patrimônio.
+                        ELSE max(s.custo_medio) FILTER (WHERE s.custo_medio > 0)
                         END AS custo_medio,
                    (p.estoque_minimo IS NOT NULL
                     AND sum(s.quantidade) < p.estoque_minimo) AS abaixo_do_minimo

@@ -979,10 +979,21 @@ if id_filial and id_prod_f:
     z = (zerados or [{}])[0]
     checar("e a quantidade e zero mesmo", abs(float(z.get("quantidade", 1))) < 0.0001,
            z.get("quantidade"))
-    # ⚠️ **Nulo, nunca zero.** "Nao custa nada" e "nao ha nada para custar" se
-    # leem igual na tela, e so o primeiro e um custo. A tela mostra traco.
-    checar("e o custo medio vem NULO, nao zero", z.get("custo_medio") is None,
+    # ⚠️ **NUNCA zero — e essa parte nao mudou.** "Nao custa nada" e "nao ha nada
+    # para custar" se leem igual na tela, e so o primeiro e um custo.
+    # 🔑 **Mas nulo tambem nao, desde 11/09/2026** (pedido do dono: "quando
+    # unificado, lista o custo na coluna Custo Medio, pois deve ser o mesmo").
+    # Ha uma terceira resposta, melhor que as duas: o custo CONHECIDO. O produto
+    # esgotou, o sistema sabe que ele custa R$ 10,00, e engolir esse numero e a
+    # mesma familia de defeito do custo zero — o dado estava a uma consulta de
+    # distancia. O traco fica para quem ninguem sabe mesmo.
+    # ⚠️ O VALOR continua zero: zero unidades valem zero. Custo e valor
+    # respondem perguntas diferentes, e e o valor que soma o patrimonio.
+    checar("e o custo medio vem pelo que se SABE, nunca zero",
+           z.get("custo_medio") is not None and abs(float(z["custo_medio"]) - 10) < 0.0001,
            z.get("custo_medio"))
+    checar("mas o valor e zero — nao ha unidade nenhuma",
+           abs(float(z.get("valor") or 0)) < 0.01, z.get("valor"))
 
     # 🔑 **O painel da rede e a lista consolidada NAO fechavam, e nada dizia por
     # que.** O painel soma `estoque_saldos` inteiro (e esta certo: tirar o
