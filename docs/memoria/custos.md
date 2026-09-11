@@ -173,3 +173,54 @@
   ⚠️ **Custo nulo continua NULO, não vira zero** — é justamente a afirmação falsa que se está
   corrigindo. Sobraram 213 produtos vendidos sem custo porque não têm ficha; a cada ficha nova,
   rodar o custo inicial de novo os alcança.
+
+- 🔑 **O custo médio passou a ser da LOJA, não da prateleira** (migração 064, 11/09/2026, pedido
+  do dono: "hoje temos produto com custo em um local, porém em outros locais não tem. gostaria
+  que neste primeiro momento o custo fosse geral"). `estoque_saldos` tem uma linha por
+  `(unidade, local, produto)`, cada uma com o seu `custo_medio` — e o efeito prático era a saída
+  pela prateleira que nunca recebeu nota sair **de graça**, o mesmo defeito de custo zero que
+  este projeto já perseguiu por três caminhos diferentes.
+  ⚠️ **`parametros.custo_por_local` é a chave, e nasce FALSA** — o padrão é geral, o que muda o
+  comportamento de quem já está rodando. É o pedido. Ligar volta ao médio por prateleira, que
+  faz sentido para quem compra o mesmo item por preços diferentes em depósitos diferentes.
+  ⚠️ **A QUANTIDADE continua sempre da prateleira**, e a conferência de saldo insuficiente
+  também: não se tira da despensa o que está no bar. Só o custo é que é da loja.
+  ⚠️ **A base do médio é o ponderado das prateleiras POSITIVAS com custo** (`_travar_custo_da_loja`),
+  o mesmo recorte da cascata. E a trava pega todas as linhas do produto em ordem de `id_local`,
+  ANTES de qualquer escrita: travar a do movimento primeiro e as outras depois deixa duas
+  requisições se cruzarem em ordens diferentes, que é a receita do impasse.
+
+- 🔑 **A entrada REDISTRIBUI valor entre as prateleiras, e os DOIS lados têm de virar movimento.**
+  Duas versões da propagação estiveram erradas, e a bateria mediu as duas:
+  1. **`UPDATE` calado nas outras prateleiras.** `estoque_saldos` é a fotografia de HOJE, mas
+     quem responde pelo passado — estoque inicial e final do CMV, movimentação por produto,
+     valor numa data — é o `saldo_apos`/`custo_medio_apos` do último movimento daquela
+     prateleira. Os dois passaram a discordar em **R$ 273,20** e a soma dos grupos deixou de
+     fechar com o CMV do período.
+  2. **Lançar só nas OUTRAS.** A prateleira que RECEBEU a mercadoria também é reavaliada: 10
+     unidades entrando a R$ 30 numa loja cujo médio vira R$ 24,76 valem R$ 247,62, não R$ 300.
+     A identidade `inicial + entradas − saídas = final` abria exatamente no que a vizinha tinha
+     ganhado.
+  ⚠️ **A soma dos ajustes de uma entrada é ZERO** — valor não nasceu nem morreu, só mudou de
+  lugar. É essa soma que denuncia o lado que falta, e é ela que `smoke_custo_geral` afirma.
+  ⚠️ **Saída não gera ajuste nenhum** (ela não mexe no médio), e prateleira com saldo zero
+  também não: zero vezes qualquer coisa é zero, a fotografia continua batendo, e ela só recebe
+  o `UPDATE` — que é o que faz o local que ainda não viu o produto já nascer sabendo o custo.
+
+- 🔑 **Unificar o que já estava cadastrado é LANÇAMENTO, não conserto de dado**
+  (`/ajustes/custo-geral/previa` e `/ajustes/custo-geral`, prévia e botão único). Cada
+  prateleira com saldo vira um `AJUSTE_CUSTO` (migração 039) num lote com observação; um
+  `UPDATE` calado mudaria o CMV do período sem nada explicando de onde veio, e o painel tem uma
+  linha própria justamente para essa pergunta. Medido na base local: 10 prateleiras,
+  R$ 240,00 de efeito no estoque e a linha "ajuste de custo" do CMV andando −240,00 (o inverso,
+  como documentado: estoque mais caro, CMV menor).
+  ⚠️ **Prateleira com saldo ZERO vai por `UPDATE` mesmo** — não há valor a reavaliar, e um
+  movimento de diferença zero só sujaria o razão. A prévia conta as duas separadamente: juntar
+  faria a pessoa aprovar uma reavaliação achando que estava preenchendo campo vazio.
+  ⚠️ **No modo geral, `_ajustar_um` propaga** para as outras prateleiras, uma linha para cada —
+  senão a tela que existe para corrigir custo reintroduziria a divergência que o custo geral veio
+  acabar. Por isso a unificação chama o ajuste uma vez por PRODUTO, não por prateleira: chamá-lo
+  prateleira a prateleira somaria o efeito em dobro.
+  ⚠️ `smoke_estoque` 9f liga `custo_por_local` porque o cenário dele EXIGE prateleiras
+  discordando — no modo geral esse cenário não pode existir — e desliga logo depois: a base é
+  compartilhada.

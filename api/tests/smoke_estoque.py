@@ -1146,6 +1146,14 @@ print("9f. a TELA e a FICHA dizem o mesmo custo do mesmo produto")
 # conferisse os dois nao teria como saber qual manda.
 # ⚠️ A afirmacao e a IGUALDADE entre os dois, nao um numero fixo: prender 40,00
 # faria o teste passar por coincidencia se um dos lados mudasse de regra.
+# ⚠️ **Este bloco exige o custo POR LOCAL, e por isso liga a chave** (migracao
+# 064). No modo geral — que virou o padrao — o bar nao PODE estar a 52 enquanto a
+# camara esta a 40: a entrada numa prateleira poe o mesmo custo na outra, e o
+# cenario de duas prateleiras discordando deixa de existir. O que se prova aqui
+# continua valendo onde ele ainda existe: o ponderado ignora a prateleira
+# negativa, e o `valor` nao.
+chamar("PUT", "/unidades/1/parametros", {"custo_por_local": True}, token=token)
+
 prod_pond = novo_produto(f"Est ponderado {marca}")
 st, r = chamar("POST", "/estoque/entradas", {
     "id_produto": prod_pond, "quantidade": 10, "custo_unitario": 40,
@@ -1176,6 +1184,9 @@ checar("a visao da empresa tambem",
 # `valor` PODE nao ser `quantidade x custo_medio` na mesma linha.
 checar("mas o valor em estoque segue somando o negativo (296,00)",
        perto((agrupado or [{}])[0].get("valor"), 296), (agrupado or [{}])[0].get("valor"))
+# ⚠️ A loja volta ao padrao IMEDIATAMENTE: a base e compartilhada, e uma suite
+# que deixasse "por local" ligado mudaria o custo que as outras medem.
+chamar("PUT", "/unidades/1/parametros", {"custo_por_local": False}, token=token)
 
 print("10. limpeza")
 for id_ficha in criados["fichas"]:

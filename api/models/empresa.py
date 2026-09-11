@@ -95,6 +95,15 @@ class ParametrosUpdate(BaseModel):
     bloquear_saida_vencido: bool | None = None
     alerta_variacao_preco_pct: float | None = Field(default=None, ge=0, le=999)
     criar_produto_da_nota: bool | None = None
+    # 🔑 **Como o custo médio é apurado** (migração 064, pedido do dono).
+    # `false` — o padrão — dá UM custo por produto na loja: a mesma mercadoria
+    # não vale uma coisa na despensa e outra no bar, e prateleira nova já nasce
+    # sabendo quanto custa. `true` volta ao médio por local, que faz sentido
+    # para quem compra o mesmo item por preços diferentes em depósitos
+    # diferentes.
+    # ⚠️ Ligar a chave não reavalia nada: ela vale dali para a frente. O que já
+    # está no estoque se unifica pelo botão em Estoque → Ajustes.
+    custo_por_local: bool | None = None
 
 
 class ParametrosResponse(ParametrosUpdate):

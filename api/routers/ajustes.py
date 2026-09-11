@@ -132,6 +132,48 @@ def lote_de_custo(
     }
 
 
+@router.get("/custo-geral/previa")
+def previa_do_custo_geral(
+    ctx: Contexto = Depends(requer_permissao("estoque.custo")),
+) -> dict:
+    """O que a unificação do custo faria — sem fazer.
+
+    🔑 **Prévia antes do botão, como todo lote de custo aqui.** Reavaliar
+    estoque entra no razão e só sai por estorno; com centenas de prateleiras,
+    descobrir o efeito depois é tarde.
+    """
+    with get_cursor() as cur:
+        return servico.previa_custo_geral(cur, unidade_atual(cur, ctx))
+
+
+@router.post("/custo-geral", status_code=201)
+def unificar_custo_geral(
+    ctx: Contexto = Depends(requer_permissao("estoque.custo")),
+) -> dict:
+    """Põe todas as prateleiras no custo único da loja, num lote só.
+
+    ⚠️ **Sem corpo de propósito.** Não há o que escolher: o custo alvo é o
+    ponderado das prateleiras que têm saldo e custo, e deixar a tela mandar um
+    número abriria caminho para reavaliar o estoque inteiro com um valor
+    digitado — que é outra operação, e já existe em `/ajustes/custo`.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = servico.unificar_custo_geral(
+            cur, id_unidade=id_unidade, id_usuario=ctx.id_usuario,
+            pode_retroativo=ctx.pode("estoque.retroativo"),
+        )
+        if r["id_lote"]:
+            auditoria.registrar(
+                cur, ctx.id_usuario, "ajuste_lote", r["id_lote"], "custo_unificado",
+                depois={"reavaliadas": r["reavaliadas"],
+                        "preenchidas": r["preenchidas"],
+                        "efeito_no_estoque": r["efeito_no_estoque"]},
+                id_unidade=id_unidade,
+            )
+    return r
+
+
 @router.get("/lotes")
 def lotes(
     natureza: str | None = Query(None, pattern="^(ESTOQUE|CUSTO)$"),

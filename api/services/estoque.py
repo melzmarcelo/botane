@@ -60,7 +60,7 @@ ROTULOS = {
 def _parametros(cur, id_unidade: int) -> dict:
     cur.execute(
         """SELECT permitir_saldo_negativo, exigir_motivo_perda, exigir_local_movimento,
-                  bloquear_retroativo
+                  bloquear_retroativo, custo_por_local
              FROM parametros WHERE id_unidade = %s""",
         (id_unidade,),
     )
@@ -70,6 +70,10 @@ def _parametros(cur, id_unidade: int) -> dict:
         "exigir_motivo_perda": True,
         "exigir_local_movimento": True,
         "bloquear_retroativo": True,
+        # ⚠️ O padrão do dicionário tem de ser o MESMO da coluna (migração 064),
+        # senão uma loja sem linha de parâmetros se comporta diferente de uma
+        # com a linha recém-criada — e a diferença apareceria como custo.
+        "custo_por_local": False,
     }
 
 
@@ -134,6 +138,50 @@ def _travar_saldo(cur, id_unidade: int, id_local: int, id_produto: int) -> dict:
         (id_unidade, id_local, id_produto),
     )
     return dict(cur.fetchone())
+
+
+def _travar_custo_da_loja(cur, id_unidade: int, id_produto: int) -> tuple[Decimal, Decimal]:
+    """Trava TODAS as prateleiras do produto e devolve (quantidade, médio) da loja.
+
+    🔑 **É a base do custo médio quando ele é geral** (migração 064). O médio
+    móvel precisa de um saldo e um valor anteriores; com o custo da loja, esses
+    dois são a soma das prateleiras, não os da prateleira em que a mercadoria
+    está entrando.
+
+    ⚠️ **A trava vem ANTES e pega tudo, em ordem de `id_local`.** Travar a linha
+    do movimento primeiro e as outras depois deixaria duas requisições do mesmo
+    produto se cruzarem em ordens diferentes — que é a receita do impasse. Com a
+    ordem fixa, a segunda espera a primeira e nenhuma trava a outra.
+
+    ⚠️ **Só prateleira POSITIVA e com custo entra na base**, que é o mesmo
+    recorte da cascata (`custos.custo_do_insumo`) e o que a tela adotou: saldo
+    negativo é dívida, não mercadoria, e o custo dele é provisório — deixá-lo
+    pesar no médio seria uma estimativa corrigindo o que a casa pagou de fato.
+
+    ⚠️ **Devolve o ponderado mesmo que as prateleiras discordem.** Enquanto os
+    produtos antigos não forem unificados pelo botão, elas discordam — e é
+    melhor que a primeira entrada já as reconcilie do que esperar.
+    """
+    cur.execute(
+        """SELECT quantidade, custo_medio FROM estoque_saldos
+            WHERE id_unidade = %s AND id_produto = %s
+            ORDER BY id_local
+            FOR UPDATE""",
+        (id_unidade, id_produto),
+    )
+    linhas = cur.fetchall()
+    quantidade = valor = Decimal(0)
+    for l in linhas:
+        q, c = dec(l["quantidade"]), dec(l["custo_medio"])
+        if q > 0 and c > 0:
+            quantidade += q
+            valor += q * c
+    if quantidade > 0:
+        return quantidade, (valor / quantidade).quantize(CASAS_CUSTO)
+    # Nenhuma prateleira valorada: fica o maior custo conhecido, que é melhor
+    # que zero e é o que `_ultimo_medio_conhecido` também faria.
+    conhecidos = [dec(l["custo_medio"]) for l in linhas if dec(l["custo_medio"]) > 0]
+    return Decimal(0), (max(conhecidos) if conhecidos else Decimal(0))
 
 
 def _ultimo_medio_conhecido(cur, id_produto: int, id_unidade: int) -> Decimal:
@@ -287,21 +335,38 @@ def lancar(
     saldo_atual, medio_atual = dec(saldo["quantidade"]), dec(saldo["custo_medio"])
     provisorio = False
 
+    # 🔑 **Quem entra na conta do médio: a loja ou a prateleira** (migração 064).
+    # No modo geral — o padrão — o médio móvel é calculado sobre o saldo somado
+    # de todas as prateleiras e gravado em todas elas: o mesmo açúcar não custa
+    # uma coisa na despensa e outra no bar. No modo por local, nada muda.
+    #
+    # ⚠️ **A QUANTIDADE continua sendo sempre da prateleira**, nos dois modos:
+    # o razão registra de onde a mercadoria saiu, e `saldo_apos` é o que aquele
+    # local passou a ter. Só o custo é que é da loja.
+    geral = not par.get("custo_por_local", False)
+    if geral:
+        base_qtd, base_medio = _travar_custo_da_loja(cur, id_unidade, id_produto)
+    else:
+        base_qtd, base_medio = saldo_atual, medio_atual
+
     if tipo in ENTRADAS:
-        unitario = dec(custo_unitario) if custo_unitario is not None else medio_atual
+        unitario = dec(custo_unitario) if custo_unitario is not None else base_medio
         saldo_novo = saldo_atual + qtd
-        if saldo_novo > 0:
-            valor = (saldo_atual * medio_atual) + (qtd * unitario)
-            medio_novo = (valor / saldo_novo).quantize(CASAS_CUSTO)
+        base_nova = base_qtd + qtd
+        if base_nova > 0:
+            valor = (base_qtd * base_medio) + (qtd * unitario)
+            medio_novo = (valor / base_nova).quantize(CASAS_CUSTO)
         else:
             medio_novo = unitario
         sinal = qtd
     else:
-        if saldo_atual <= 0 and medio_atual == 0:
+        if base_qtd <= 0 and base_medio == 0:
             unitario = _ultimo_medio_conhecido(cur, id_produto, id_unidade)
             provisorio = True
         else:
-            unitario = medio_atual
+            unitario = base_medio
+        # ⚠️ A conferência de saldo insuficiente é da PRATELEIRA, sempre: não se
+        # tira da despensa o que está no bar. É o custo que é geral, não o saldo.
         if qtd > saldo_atual:
             if not par["permitir_saldo_negativo"]:
                 raise HTTPException(
@@ -313,8 +378,14 @@ def lancar(
                 )
             provisorio = True
         saldo_novo = saldo_atual - qtd
-        # A saída não mexe no médio — só o esvazia quando zera de fato.
-        medio_novo = medio_atual if saldo_novo > 0 else (medio_atual or unitario)
+        # A saída não mexe no médio — só o esvazia quando zera de fato. No modo
+        # geral quem decide "zerou" é a LOJA: esvaziar o bar não pode apagar o
+        # custo do que continua na despensa.
+        base_nova = base_qtd - qtd
+        if geral:
+            medio_novo = base_medio if base_nova > 0 else (base_medio or unitario)
+        else:
+            medio_novo = medio_atual if saldo_novo > 0 else (medio_atual or unitario)
         sinal = -qtd
 
     # O razão guarda dinheiro em centavos — é o que se soma numa nota. Mas quem
@@ -344,6 +415,71 @@ def lancar(
             WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
         (saldo_novo, medio_novo, id_unidade, id_local, id_produto),
     )
+    if geral:
+        # 🔑 **A entrada REDISTRIBUI valor entre as prateleiras, e os dois lados
+        # precisam aparecer no razão.** Duas versões disto estiveram erradas
+        # antes desta, e a bateria mediu as duas:
+        #
+        # 1. propagar por `UPDATE` calado — `estoque_saldos` é a fotografia de
+        #    HOJE, mas quem responde pelo passado (estoque inicial e final do
+        #    CMV, movimentação por produto, valor numa data) é o
+        #    `saldo_apos`/`custo_medio_apos` do último movimento da prateleira.
+        #    Os dois passaram a discordar em R$ 273,20 e a soma dos grupos
+        #    deixou de fechar com o CMV do período.
+        # 2. lançar só nas OUTRAS prateleiras — a que recebeu a mercadoria também
+        #    é reavaliada: 10 unidades entrando a R$ 30 numa loja cujo médio vira
+        #    R$ 24,76 valem R$ 247,62, não R$ 300. Faltava exatamente o outro
+        #    lado, e a identidade `inicial + entradas − saídas = final` abria no
+        #    mesmo valor que a prateleira vizinha tinha ganhado.
+        #
+        # ⚠️ **A soma destes ajustes é ZERO, e é o que prova que estão certos**:
+        # a entrada não criou nem destruiu valor, só o espalhou pela loja. Cada
+        # linha diz quanto AQUELA prateleira passou a valer.
+        #
+        # ⚠️ **Saída não gera ajuste nenhum**: ela não mexe no médio, então
+        # `medio_novo` é o de antes e nenhuma diferença aparece. As linhas só
+        # surgem quando uma entrada muda o médio — uma por prateleira com saldo,
+        # por nota.
+        #
+        # ⚠️ **Quantidade zero não gera linha**: não há valor a reavaliar (zero
+        # vezes qualquer coisa é zero) e a fotografia continua batendo. Ela só
+        # recebe o `UPDATE` — e é isso que faz o local que ainda não viu o
+        # produto já nascer sabendo o custo dele, que é o caso que o dono
+        # relatou.
+        cur.execute(
+            """SELECT id_local, quantidade, custo_medio FROM estoque_saldos
+                WHERE id_unidade = %s AND id_produto = %s
+                ORDER BY id_local""",
+            (id_unidade, id_produto),
+        )
+        for prateleira in cur.fetchall():
+            dela = prateleira["id_local"] == id_local
+            # A prateleira do movimento já foi atualizada logo acima; para as
+            # outras, o valor registrado é o que elas valiam antes.
+            q = saldo_novo if dela else dec(prateleira["quantidade"])
+            registrado = ((saldo_atual * medio_atual) + (sinal * unitario) if dela
+                          else q * dec(prateleira["custo_medio"]))
+            diferenca = ((q * medio_novo) - registrado).quantize(Decimal("0.01"))
+            if q != 0 and diferenca != 0:
+                cur.execute(
+                    """INSERT INTO estoque_movimentos
+                           (id_unidade, id_local, id_produto, data_movimento, tipo,
+                            quantidade, custo_unitario, custo_total, saldo_apos,
+                            custo_medio_apos, origem_tipo, origem_id, observacao,
+                            id_usuario)
+                       VALUES (%s, %s, %s, coalesce(%s, now()), %s, 0, %s, %s, %s, %s,
+                               'CUSTO_GERAL', %s, %s, %s)""",
+                    (id_unidade, prateleira["id_local"], id_produto, data_movimento,
+                     AJUSTE_CUSTO, medio_novo, diferenca, q, medio_novo,
+                     movimento["id"],
+                     "Reavaliação pelo custo único da loja", id_usuario),
+                )
+            if not dela:
+                cur.execute(
+                    """UPDATE estoque_saldos SET custo_medio = %s, atualizado_em = now()
+                        WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+                    (medio_novo, id_unidade, prateleira["id_local"], id_produto),
+                )
 
     lotes_movidos = []
     if produto["controla_lote"]:

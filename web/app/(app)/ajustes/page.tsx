@@ -12,6 +12,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
 import { custo, qtd, textoParaNumero } from "@/lib/numeros";
+import CustoGeral from "./custo-geral";
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
  *
@@ -753,6 +754,11 @@ export default function PaginaAjustes() {
           )}
         </Cartao>
       )}
+
+      {/* 🔑 Mora na aba de custo porque é a mesma operação: reavaliar o que já
+          está em estoque. Só que em lote, e com o custo alvo decidido pelo
+          sistema — ver `custo-geral.tsx`. */}
+      {tipo === "custo" && pode("estoque.custo") && <CustoGeral aoLancar={() => void carregarRecentes()} />}
 
       <Cartao
         titulo="Últimos ajustes"

@@ -78,6 +78,16 @@ const INTERRUPTORES: { campo: string; nome: string; explica: string }[] = [
     nome: "Criar produto novo a partir da nota",
     explica: "Item sem vínculo vira produto rascunho — que não entra no estoque até ser revisado.",
   },
+  {
+    // 🔑 Desligado por padrão = custo GERAL (migração 064, pedido do dono).
+    // A frase é escrita pelo lado LIGADO, como todos os outros interruptores
+    // desta lista — e o lado ligado aqui é o comportamento antigo.
+    campo: "custo_por_local",
+    nome: "Custo médio separado por local",
+    explica:
+      "Desligado, o produto tem um custo só na loja e prateleira nova já nasce sabendo dele. " +
+      "Ligue se a mesma mercadoria custa coisas diferentes em depósitos diferentes.",
+  },
 ];
 
 // ⚠️ `dia_fechamento_cmv` saiu daqui: virou parte do bloco de ritmo do

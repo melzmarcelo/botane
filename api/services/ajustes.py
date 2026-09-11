@@ -347,6 +347,50 @@ def _ajustar_um(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
         (novo_arred, id_unidade, local, id_produto),
     )
 
+    # 🔑 **No modo geral (migração 064) o ajuste é da LOJA, não da prateleira.**
+    # Corrigir só o local escolhido deixaria as outras prateleiras discordando
+    # até a próxima entrada reconciliá-las — que é exatamente a divergência que
+    # o custo geral veio acabar, reintroduzida pela tela que existe para
+    # corrigir custo.
+    # ⚠️ **Cada prateleira com saldo ganha o PRÓPRIO movimento**, com a diferença
+    # dela: o valor reavaliado é `quantidade × (novo − velho)` e essa quantidade
+    # é de cada uma. Um movimento só, no local escolhido, com a diferença da
+    # loja inteira, faria `valor = quantidade × custo_medio` deixar de fechar
+    # naquela linha.
+    # ⚠️ Prateleira com saldo zero vai por `UPDATE`: não há valor a reavaliar, e
+    # um movimento de diferença zero só sujaria o razão.
+    diferenca_total = diferenca
+    if not estoque._parametros(cur, id_unidade).get("custo_por_local", False):
+        cur.execute(
+            """SELECT id_local, quantidade, custo_medio FROM estoque_saldos
+                WHERE id_unidade = %s AND id_produto = %s AND id_local <> %s
+                  AND custo_medio IS DISTINCT FROM %s
+                ORDER BY id_local
+                FOR UPDATE""",
+            (id_unidade, id_produto, local, novo_arred),
+        )
+        for outra in cur.fetchall():
+            q, c = dec(outra["quantidade"]), dec(outra["custo_medio"])
+            if q != 0:
+                d = ((q * novo_arred) - (q * c)).quantize(Decimal("0.01"))
+                cur.execute(
+                    """INSERT INTO estoque_movimentos
+                           (id_unidade, id_local, id_produto, tipo, quantidade,
+                            custo_unitario, custo_total, saldo_apos, custo_medio_apos,
+                            origem_tipo, origem_id, documento, observacao, id_usuario)
+                       VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s,
+                               'AJUSTE_LOTE', %s, %s, %s, %s)""",
+                    (id_unidade, outra["id_local"], id_produto, AJUSTE_CUSTO, novo_arred,
+                     d, q, novo_arred, id_lote, documento,
+                     "Custo único da loja", id_usuario),
+                )
+                diferenca_total += d
+            cur.execute(
+                """UPDATE estoque_saldos SET custo_medio = %s, atualizado_em = now()
+                    WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+                (novo_arred, id_unidade, outra["id_local"], id_produto),
+            )
+
     return {
         "id_movimento": id_movimento,
         "id_produto": id_produto,
@@ -354,7 +398,9 @@ def _ajustar_um(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
         "saldo": float(saldo),
         "custo_anterior": float(atual),
         "custo_novo": float(novo_arred),
-        "diferenca": float(diferenca),
+        # ⚠️ A diferença é a da LOJA quando o custo é geral — é ela que bate com
+        # o que o estoque passou a valer, e é ela que o painel vai mostrar.
+        "diferenca": float(diferenca_total),
     }
 
 
@@ -383,3 +429,152 @@ def listar_lotes(cur, id_unidade: int, natureza: str | None = None,
         {**dict(r), "valor": float(r["valor"]), "linhas": int(r["linhas"])}
         for r in cur.fetchall()
     ]
+
+
+# ------------------------------------------- unificar o custo por loja (064)
+
+
+def _divergentes(cur, id_unidade: int) -> list[dict]:
+    """Produtos cujas prateleiras discordam do custo — e qual seria o custo único.
+
+    🔑 **O alvo é o ponderado das prateleiras POSITIVAS com custo**, o mesmo
+    recorte da cascata (`custos.custo_do_insumo`) e o que a tela adotou. Saldo
+    negativo é dívida, não mercadoria, e prateleira com custo zero é justamente
+    a que não sabe — deixar qualquer um dos dois pesar puxaria o custo da casa
+    para baixo com um número que ninguém pagou.
+
+    ⚠️ **Produto de que NINGUÉM sabe o custo fica de fora.** Sem uma prateleira
+    valorada não há o que unificar: zerar todas seria trocar "não sei" por "é de
+    graça", que é pior porque cala o aviso.
+    """
+    cur.execute(
+        """WITH alvo AS (
+               SELECT id_produto,
+                      sum(quantidade) FILTER (WHERE quantidade > 0 AND custo_medio > 0) AS q,
+                      sum(quantidade * custo_medio)
+                          FILTER (WHERE quantidade > 0 AND custo_medio > 0) AS v
+                 FROM estoque_saldos
+                WHERE id_unidade = %(u)s
+                GROUP BY id_produto
+                HAVING sum(quantidade) FILTER (WHERE quantidade > 0 AND custo_medio > 0) > 0
+           )
+           SELECT s.id_produto, s.id_local, s.quantidade, s.custo_medio,
+                  p.codigo, p.nome AS produto, l.nome AS local,
+                  round(a.v / a.q, 6) AS custo_novo
+             FROM estoque_saldos s
+             JOIN alvo a ON a.id_produto = s.id_produto
+             JOIN produtos p ON p.id = s.id_produto
+             JOIN locais_estoque l ON l.id = s.id_local
+            WHERE s.id_unidade = %(u)s
+              AND s.custo_medio IS DISTINCT FROM round(a.v / a.q, 6)
+            ORDER BY lower(p.nome), l.nome""",
+        {"u": id_unidade},
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def previa_custo_geral(cur, id_unidade: int) -> dict:
+    """O que a unificação faria, sem fazer. Prévia antes do botão.
+
+    ⚠️ **Duas listas, e a diferença entre elas é o que importa.** Prateleira com
+    saldo reavalia estoque: muda quanto a casa tem em mercadoria e portanto o
+    CMV do período, e por isso vira `AJUSTE_CUSTO` no razão. Prateleira com
+    saldo ZERO não muda valor nenhum — só passa a saber o custo para a próxima
+    saída. Misturar as duas num número só faria a pessoa aprovar uma reavaliação
+    achando que estava só preenchendo campo vazio.
+    """
+    linhas = _divergentes(cur, id_unidade)
+    com_saldo = [l for l in linhas if dec(l["quantidade"]) != 0]
+    sem_saldo = [l for l in linhas if dec(l["quantidade"]) == 0]
+
+    for l in linhas:
+        atual, novo = dec(l["custo_medio"]), dec(l["custo_novo"])
+        l["quantidade"] = float(dec(l["quantidade"]))
+        l["custo_medio"] = float(atual)
+        l["custo_novo"] = float(novo)
+        l["diferenca"] = float(
+            ((dec(str(l["quantidade"])) * novo) - (dec(str(l["quantidade"])) * atual))
+            .quantize(Decimal("0.01"))
+        )
+
+    return {
+        "produtos": len({l["id_produto"] for l in linhas}),
+        "prateleiras_reavaliadas": len(com_saldo),
+        "prateleiras_so_preenchidas": len(sem_saldo),
+        # O efeito no ESTOQUE. No CMV ele entra com o sinal trocado (estoque
+        # mais caro, CMV menor) — é o que a linha "ajuste de custo" do painel
+        # mostra, e a tela diz isso ao lado.
+        "efeito_no_estoque": round(sum(l["diferenca"] for l in com_saldo), 2),
+        "linhas": linhas,
+    }
+
+
+def unificar_custo_geral(cur, *, id_unidade: int, id_usuario: int | None = None,
+                         pode_retroativo: bool = False) -> dict:
+    """Põe todas as prateleiras no mesmo custo, num lote só.
+
+    🔑 **Pedido do dono (11/09/2026)**: "gostaria que neste primeiro momento o
+    custo fosse geral, inclusive ajustar isto já nos produtos cadastrados". A
+    migração 064 muda o comportamento dali para a frente; o que já está no
+    estoque precisa deste botão.
+
+    ⚠️ **Reavaliar estoque é LANÇAMENTO, não conserto de dado.** Cada prateleira
+    com saldo vira um `AJUSTE_CUSTO` (migração 039) dentro de um lote com
+    observação — o mesmo caminho da conferência de custo feita à mão. Um
+    `UPDATE` calado mudaria o CMV do período sem nada explicando de onde veio, e
+    o painel tem uma linha própria justamente para essa pergunta.
+
+    ⚠️ **Prateleira com saldo zero é o caso oposto e vai por `UPDATE` mesmo.**
+    Não há valor a reavaliar (zero vezes qualquer coisa é zero), e gravar um
+    movimento de diferença zero encheria o razão de linhas que não dizem nada.
+    """
+    previa = previa_custo_geral(cur, id_unidade)
+    com_saldo = [l for l in previa["linhas"] if l["quantidade"] != 0]
+    sem_saldo = [l for l in previa["linhas"] if l["quantidade"] == 0]
+
+    resultado = {"id_lote": None, "reavaliadas": 0, "preenchidas": 0,
+                 "efeito_no_estoque": 0.0}
+
+    if com_saldo:
+        id_lote = _lote(cur, id_unidade=id_unidade, natureza="CUSTO",
+                        observacao="Unificação do custo médio por loja (parâmetro "
+                                   "“custo geral”)",
+                        documento=None, id_usuario=id_usuario)
+        # ⚠️ **Uma chamada por PRODUTO, não por prateleira.** No modo geral
+        # `_ajustar_um` já propaga para as outras prateleiras do produto, com um
+        # movimento para cada uma; chamá-lo prateleira a prateleira lançaria o
+        # mesmo ajuste várias vezes e somaria o efeito em dobro no relatório.
+        primeira_de_cada: dict[int, dict] = {}
+        for linha in com_saldo:
+            primeira_de_cada.setdefault(linha["id_produto"], linha)
+
+        feitos = []
+        for linha in primeira_de_cada.values():
+            feitos.append(_ajustar_um(
+                cur, id_unidade=id_unidade, id_produto=linha["id_produto"],
+                id_local=linha["id_local"], custo_novo=linha["custo_novo"],
+                observacao="Custo unificado entre as prateleiras", documento=None,
+                id_usuario=id_usuario, id_lote=id_lote, pode_retroativo=pode_retroativo,
+            ))
+        resultado["id_lote"] = id_lote
+        resultado["reavaliadas"] = len(com_saldo)
+        resultado["efeito_no_estoque"] = round(sum(f["diferenca"] for f in feitos), 2)
+
+    # ⚠️ Depois da propagação, a maioria destas já foi preenchida pelo próprio
+    # ajuste — o `UPDATE` aqui alcança as que sobraram (produto cujas
+    # prateleiras divergentes têm todas saldo zero) e é inofensivo nas demais.
+    for linha in sem_saldo:
+        cur.execute(
+            """UPDATE estoque_saldos SET custo_medio = %s, atualizado_em = now()
+                WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+            (linha["custo_novo"], id_unidade, linha["id_local"], linha["id_produto"]),
+        )
+    resultado["preenchidas"] = len(sem_saldo)
+
+    resultado["message"] = (
+        f"{resultado['reavaliadas']} prateleira(s) reavaliada(s) e "
+        f"{resultado['preenchidas']} preenchida(s) com o custo da loja."
+        if (resultado["reavaliadas"] or resultado["preenchidas"])
+        else "Nada a unificar: todas as prateleiras já estão com o mesmo custo."
+    )
+    return resultado
