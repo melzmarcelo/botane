@@ -168,6 +168,30 @@
   campo esteve morto. A bateria do navegador troca o ajuste para 4, 2 e 0 e lê a mesma linha de
   saldo; `smoke_fundacao` garante que o campo CHEGA no `/me`.
 
+- 🔑 **Espera de teste por um dado que PODE já estar na tela não é espera** (11/09/2026, achado
+  ao devolver a bateria ao verde depois de recomeçar a base). A checagem "filtrar volta para a
+  primeira página" esperava por uma LINHA contendo a marca dos produtos daquela fase. Com
+  milhares de produtos na base eles nunca caíam na página 2, então a condição só ficava
+  verdadeira DEPOIS de o filtro valer — e a espera funcionava por acidente. Numa base
+  recém-limpa, com menos de cem produtos, eles **já estão** na página 2: a condição nasce
+  verdadeira, o `waitForFunction` volta na hora, e a medição lê a tela ainda NÃO filtrada —
+  rodapé "51–94 de 94", total inalterado. A checagem acusava a paginação de um defeito que era
+  da espera.
+  🔑 **A espera certa é pelo EFEITO**: a URL carregando `busca=`, e depois todas as linhas
+  batendo com o termo. O que se espera tem de ser algo que só existe DEPOIS do que se está
+  medindo.
+  ⚠️ **Custou quatro reproduções manuais que passaram** — página 2, com 50 por página, saindo e
+  voltando de outra tela, e até com o perfil de Chrome da própria bateria. Todas certas, porque
+  todas criavam a situação do zero. Quem resolveu foi instrumentar a bateria no ponto exato da
+  falha: o diagnóstico mostrou `url=?pp=50&busca=…` e 10 linhas — ou seja, o produto funcionava
+  e o acréscimo de 2,5 s da instrumentação já fazia a checagem passar.
+  ⚠️ **A segunda falha da mesma rodada era a mesma família**: o guarda `produtos > 10` usava a
+  contagem da LISTA de pessoas, que inclui produto inativo, enquanto o cartão pinta só os
+  ATIVOS. Numa base grande os dois números nunca se separavam; numa limpa, a pessoa aparece com
+  doze e o cartão mostra sete, e a checagem cobrava um rodapé que não tinha o que paginar.
+  ⚠️ **Base grande esconde defeito de teste.** Os dois passaram meses verdes porque o volume
+  garantia por acaso o que a condição deveria garantir por construção.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

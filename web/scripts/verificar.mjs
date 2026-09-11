@@ -5265,8 +5265,25 @@ try {
   // paginação de sumir — `{tem:false, linhas:0}`, que é a assinatura de "a
   // página não terminou de carregar", não de um defeito. Mesma lição das
   // checagens "oferece baixar" e da folha de produção.
+  // ⚠️ **Esperar por uma LINHA com a marca nao servia, e o defeito so apareceu
+  // numa base pequena.** A lista ordena por nome; com milhares de produtos, os
+  // "Pag tela ..." desta fase nunca caiam na pagina 2, entao a condicao so
+  // ficava verdadeira DEPOIS de filtrar. Numa base recem-limpa, com menos de
+  // cem produtos, eles ja estao na pagina 2 — a condicao nasce verdadeira, o
+  // `waitForFunction` volta na hora, e a medicao le a tela AINDA NAO filtrada:
+  // rodape "51-94 de 94", total inalterado. A checagem acusava a paginacao de
+  // um defeito que era da espera.
+  // 🔑 A espera certa e pelo EFEITO do filtro, nao por um dado que pode ja
+  // estar na tela: a URL carregando `busca=` e o pedido tendo voltado.
   await p.waitForFunction(
-    (marca) => [...document.querySelectorAll("tbody tr")].some(
+    (marca) => location.search.includes(`busca=${marca}`),
+    { timeout: 20000 },
+    encodeURIComponent(`${marcaPag}-0`),
+  ).catch(() => {});
+  // E um respiro para a resposta do servidor pintar a lista: a URL muda quando
+  // o debounce escreve, e o pedido sai depois dela.
+  await p.waitForFunction(
+    (marca) => [...document.querySelectorAll("tbody tr")].every(
       (tr) => (tr.textContent ?? "").includes(marca)),
     { timeout: 20000 },
     `${marcaPag}-0`,
@@ -5411,7 +5428,15 @@ try {
       // 🔑 A ausência do seletor é a afirmação: com ele, o tamanho voltaria a
       // ser escolha de quem olha, que é o que esta decisão tirou.
       checar("sem oferecer 'por página' — o tamanho é fixo", !cartao.tem_seletor, cartao);
-      if ((comProdutos.produtos ?? 0) > 10) {
+      // ⚠️ **A contagem da LISTA de pessoas inclui produto inativo; o cartao so
+      // mostra os ATIVOS.** Numa base grande isso nunca separava os dois
+      // numeros; numa recem-limpa a pessoa aparece com doze e o cartao pinta
+      // sete, e a checagem cobrava um rodape que nao tinha o que paginar.
+      // A pergunta certa e a mesma que o cartao faz: quantos ATIVOS ela tem.
+      const { dados: ativosDaPessoa } = await api(
+        "GET", `/fornecedores/${comProdutos.id}/produtos`, null, token);
+      const quantosAtivos = (ativosDaPessoa ?? []).filter((x) => x.ativo !== false).length;
+      if (quantosAtivos > 10) {
         // Passando de dez, o rodapé TEM de aparecer: sem ele a lista fica presa
         // nas dez primeiras sem nada dizendo que existem outras.
         checar("passando de dez, o rodapé de página aparece", !!cartao.rodape, cartao);
