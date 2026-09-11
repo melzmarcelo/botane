@@ -727,6 +727,30 @@
   acusando de quebrado um código intacto. Custou uma investigação: um ciclo de um dia só,
   criado à mão na base, derrubou sete checagens de `smoke_consumo_periodo`.
 
+- 🔑 **A reconciliação do PDV reapontava a venda e NÃO baixava o estoque** (11/09/2026, achado
+  na varredura). Item de venda que entra sem produto não baixa — e está certo, não há de onde
+  tirar. Quando alguém faz o vínculo, `cardapio.reconciliar` reaponta o item e recalcula o custo
+  congelado, mas a saída que ficou para trás nunca acontecia.
+  🔑 **O `fundir` já fechava esse mesmo buraco**, e a justificativa estava escrita lá desde
+  sempre: *"comprou 15, vendeu 10, e o saldo dizendo 15. Na primeira contagem faltariam 10,
+  aparecendo como ajuste de inventário — que é onde a diferença some sem nome."* A mesma
+  situação, dois caminhos, e só um resolvia.
+  ⚠️ **O sintoma NÃO aparece nos números da tela.** O saldo fica apenas negativo, não "negativo
+  e mais 128 que nem chegaram a sair" — foi assim que 128 unidades de um produto real passaram
+  dez dias despercebidas. Dá para ver o dia da virada: as vendas importadas até 09/09 07:25 não
+  baixaram; as de 10/09 em diante, todas.
+  ⚠️ **Uma saída por VENDA, com a DATA da venda.** O razão é o extrato do que aconteceu: um
+  lançamento somado no dia de hoje diria que a casa consumiu tudo hoje, e o CMV de cada dia
+  ficaria errado nos dois sentidos. `pode_retroativo` vem da permissão de quem clica, e mês
+  fechado é recusado — uma recusa não derruba as outras.
+  ⚠️ **A prévia mostra o saldo DEPOIS**, porque quase toda baixa destas deixa negativo. E
+  resolve a RESERVA do local como o lançamento vai fazer: sem isso a coluna dizia "—" para todo
+  produto sem local padrão, e quem confirma não via para onde a mercadoria saía.
+  ⚠️ **`id_produto` no `baixar` existe por causa da SUÍTE.** A tela usa o botão único, como
+  pedido; sem o filtro, cada rodada do teste baixava o estoque da casa inteira e os cenários que
+  medem a identidade da movimentação acusavam — a armadilha que a memória de estoque já registra
+  sobre saldo negativo.
+
 ## Armadilhas já pagas
 
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de

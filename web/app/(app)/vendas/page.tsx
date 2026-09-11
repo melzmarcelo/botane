@@ -8,7 +8,8 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
+import { qtd } from "@/lib/numeros";
 import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
@@ -25,6 +26,18 @@ import { useEstadoNaUrl } from "@/lib/estado-na-url";
  * resolva na lista: o que alguém quer saber (quais itens, quanto custou, se
  * baixou estoque) só cabe na página dela.
  */
+/** O que a prévia das vendas sem baixa devolve. */
+type SemBaixa = {
+  itens: {
+    id_produto: number; codigo: string; produto: string; um_estoque: string | null;
+    itens: number; quantidade: number; desde: string; ate: string;
+    local_destino: string | null; destino_por_reserva?: boolean;
+    saldo_hoje: number; saldo_depois: number;
+  }[];
+  produtos: number;
+  unidades: number;
+};
+
 export default function PaginaVendas() {
   const aviso = useAviso();
   const router = useRouter();
@@ -34,6 +47,13 @@ export default function PaginaVendas() {
   const [lista, setLista] = useState<Venda[] | null>(null);
   const [pendencias, setPendencias] = useState<number>(0);
   const [erro, setErro] = useState("");
+  // 🔑 **Vendas que nunca saíram do estoque.** Item que entrou sem produto não
+  // baixa — e está certo, não há de onde tirar. Mas quando alguém faz o
+  // vínculo, a reconciliação reaponta o item e recalcula o custo sem lançar a
+  // saída que ficou para trás. O buraco só apareceria na contagem, como
+  // "ajuste de inventário", que é onde a diferença some sem nome.
+  const [semBaixa, setSemBaixa] = useState<SemBaixa | null>(null);
+  const [vendoSemBaixa, setVendoSemBaixa] = useState(false);
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [origem, setOrigem] = useEstadoNaUrl<string>("origem", "");
   // 🔑 **O filtro de DIA** (pedido do dono, 03/09/2026). O servidor já aceitava
@@ -69,6 +89,8 @@ export default function PaginaVendas() {
       setLista(v.itens);
       pag.setTotal(v.total);
       setPendencias(p.length);
+      // A prévia é do servidor e não depende da página aberta — como a fila.
+      api.get<SemBaixa>("/vendas/sem-baixa/previa").then(setSemBaixa).catch(() => {});
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
@@ -166,6 +188,15 @@ export default function PaginaVendas() {
           {pode("integracao.pdv") && (
             <button className="btn btn-secundario" onClick={buscarNoPdv} disabled={ocupado}>
               {ocupado ? "Buscando…" : "Buscar no PDV"}
+            </button>
+          )}
+          {(semBaixa?.itens.length ?? 0) > 0 && pode("estoque.saidas") && (
+            <button
+              className="btn btn-secundario"
+              onClick={() => setVendoSemBaixa(true)}
+              title="Vendas cujo produto controla estoque e que nunca saíram do razão"
+            >
+              {qtd(semBaixa!.unidades)} unidade(s) vendidas sem baixa
             </button>
           )}
           {pendencias > 0 && pode("integracao.pdv") && (
@@ -273,6 +304,105 @@ export default function PaginaVendas() {
         )}
         <Paginacao p={pag} rotulo="venda(s)" />
       </Cartao>
+
+      {/* 🔑 **A prévia inteira antes do botão.** Cada linha vira movimento no
+          razão, que é append-only: o que sair daqui não se apaga, só se estorna.
+          Por isso a tabela mostra o saldo de hoje E o de depois — quase toda
+          baixa destas deixa o saldo negativo, e quem confirma precisa ver isso
+          antes, não descobrir na contagem. */}
+      {vendoSemBaixa && semBaixa && (
+        <Modal
+          titulo="Vendas que nunca saíram do estoque"
+          descricao={`${semBaixa.produtos} produto(s), ${qtd(semBaixa.unidades)} unidade(s)`}
+          aoFechar={() => setVendoSemBaixa(false)}
+          largura="960px"
+          rodape={
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-[13px] text-suave">
+                Cada saída leva a data da venda que a originou.
+              </span>
+              <button className="btn btn-secundario" onClick={() => setVendoSemBaixa(false)}>
+                Fechar
+              </button>
+              <button
+                className="btn btn-primario"
+                disabled={ocupado}
+                onClick={async () => {
+                  setOcupado(true);
+                  try {
+                    const r = await api.post<{ message: string; recusados: unknown[] }>(
+                      "/vendas/sem-baixa/baixar", {});
+                    if (r.recusados?.length) aviso.erro(r.message);
+                    else aviso.sucesso(r.message);
+                    setVendoSemBaixa(false);
+                    await carregar();
+                  } catch (e) {
+                    aviso.erro(e instanceof Error ? e.message : "Não foi possível baixar");
+                  } finally {
+                    setOcupado(false);
+                  }
+                }}
+              >
+                {ocupado ? "Baixando…" : "Baixar todas"}
+              </button>
+            </div>
+          }
+        >
+          <Aviso tipo="erro">
+            Estas vendas têm produto que <b>controla estoque</b> e nunca geraram saída no
+            razão — o item entrou sem produto, alguém fez o vínculo depois, e a baixa ficou
+            para trás. Enquanto ficarem assim, o saldo mostra mercadoria que já foi vendida,
+            e a diferença só aparece na contagem como <b>ajuste de inventário</b>.
+          </Aviso>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th className="num">Vendido</th>
+                  <th>Período</th>
+                  <th>Sai de</th>
+                  <th className="num">Saldo hoje</th>
+                  <th className="num">Saldo depois</th>
+                </tr>
+              </thead>
+              <tbody>
+                {semBaixa.itens.map((l) => (
+                  <tr key={l.id_produto}>
+                    <td className="text-[13.5px]">
+                      <span className="mono text-suave">{l.codigo}</span> {l.produto}
+                    </td>
+                    <td className="num whitespace-nowrap">
+                      {qtd(l.quantidade)} {l.um_estoque ?? ""}
+                      <span className="block text-[12px] text-suave">{l.itens} item(ns)</span>
+                    </td>
+                    <td className="whitespace-nowrap text-[13px] text-suave">
+                      {dataBr(l.desde)} a {dataBr(l.ate)}
+                    </td>
+                    <td className="text-[13px]">
+                      {l.local_destino ?? "—"}
+                      {l.destino_por_reserva && (
+                        <span className="block text-[11.5px] text-suave">
+                          o produto não tem local padrão
+                        </span>
+                      )}
+                    </td>
+                    <td className="num tabular-nums">{qtd(l.saldo_hoje)}</td>
+                    <td
+                      className={`num tabular-nums ${
+                        l.saldo_depois < 0 ? "text-erro" : ""
+                      }`}
+                    >
+                      {qtd(l.saldo_depois)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

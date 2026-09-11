@@ -504,6 +504,159 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
                           if movimentos else "")}
 
 
+@router.get("/sem-baixa/previa")
+def previa_sem_baixa(ctx: Contexto = Depends(_ver)) -> dict:
+    """Vendas de produto que controla estoque e que NUNCA saíram do razão.
+
+    🔑 **O buraco que a reconciliação do PDV deixava** (10/09/2026, achado na
+    varredura). Item de venda que entra sem produto — o código do cardápio ainda
+    não estava vinculado — não baixa estoque, e está certo: não há de onde tirar.
+    Quando alguém faz a ligação, `cardapio.reconciliar` reaponta o item e
+    recalcula o custo congelado, mas **não lança a saída que nunca aconteceu**.
+
+    🔑 **A fusão já fechava esse mesmo buraco** (`produtos_vinculo._baixa_pendente`),
+    com a justificativa escrita lá: *"comprou 15, vendeu 10, e o saldo dizendo
+    15. Na primeira contagem faltariam 10, aparecendo como ajuste de inventário —
+    que é onde a diferença some sem nome."* A mesma situação, dois caminhos, e só
+    um resolvia.
+
+    ⚠️ **O sintoma não aparece nos números da tela.** O saldo fica apenas
+    negativo, não "negativo e mais 128 que nem chegaram a sair" — foi assim que
+    128 unidades de um produto real passaram despercebidas por dez dias.
+
+    ⚠️ **Venda CANCELADA fica de fora**: ela não consumiu nada, e baixar por ela
+    inventaria um consumo que não houve.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT p.id AS id_produto, p.codigo, p.nome AS produto, p.um_estoque,
+                      p.id_local_padrao, l.nome AS local_destino,
+                      count(*) AS itens, sum(vi.quantidade) AS quantidade,
+                      min(v.data) AS desde, max(v.data) AS ate,
+                      coalesce(sum(vi.quantidade * vi.custo_ficha_unitario), 0) AS custo
+                 FROM venda_itens vi
+                 JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+                 JOIN produtos p ON p.id = vi.id_produto AND p.controla_estoque AND p.ativo
+                 LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
+                WHERE v.id_unidade = %s
+                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
+                                   WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id
+                                     AND m.id_produto = vi.id_produto)
+                GROUP BY p.id, p.codigo, p.nome, p.um_estoque, p.id_local_padrao, l.nome
+                ORDER BY sum(vi.quantidade) DESC""",
+            (id_unidade,),
+        )
+        linhas = [dict(r) for r in cur.fetchall()]
+
+        # ⚠️ **A prévia resolve a RESERVA do local, como o lançamento vai fazer.**
+        # Sem isso a coluna dizia "—" para todo produto sem `id_local_padrao` —
+        # que é a maioria — e quem confirma não via para onde a mercadoria ia
+        # sair. Prévia que esconde o destino não é prévia.
+        cur.execute("SELECT id, nome FROM locais_estoque WHERE id_unidade = %s AND ativo "
+                    "ORDER BY principal DESC, id LIMIT 1", (id_unidade,))
+        reserva = cur.fetchone()
+        for linha in linhas:
+            if not linha["local_destino"] and reserva:
+                linha["local_destino"] = reserva["nome"]
+                linha["destino_por_reserva"] = True
+
+        # ⚠️ **O saldo DEPOIS entra na prévia.** Quase toda baixa destas vai
+        # deixar o saldo negativo — o razão aceita e a saída sai por custo
+        # provisório —, mas quem confirma precisa ver antes, não descobrir na
+        # contagem. Mesma escolha da prévia da fusão.
+        for linha in linhas:
+            cur.execute(
+                """SELECT coalesce(sum(quantidade), 0) AS saldo FROM estoque_saldos
+                    WHERE id_produto = %s AND id_unidade = %s""",
+                (linha["id_produto"], id_unidade))
+            saldo = float(cur.fetchone()["saldo"] or 0)
+            linha["saldo_hoje"] = saldo
+            linha["saldo_depois"] = saldo - float(linha["quantidade"])
+    return {
+        "itens": linhas,
+        "produtos": len(linhas),
+        "unidades": float(sum(float(l["quantidade"]) for l in linhas)),
+    }
+
+
+@router.post("/sem-baixa/baixar")
+def baixar_sem_baixa(id_produto: int | None = None,
+                     ctx: Contexto = Depends(requer_permissao("estoque.saidas"))) -> dict:
+    """Lança as saídas que faltaram, uma por venda.
+
+    ⚠️ **Uma saída por VENDA, não uma somada por produto.** O razão é o extrato
+    do que aconteceu: um lançamento de 128 no dia de hoje diria que a casa
+    consumiu 128 hoje, e o CMV de cada dia ficaria errado nos dois sentidos.
+    Cada saída leva a data e o documento da venda que a originou.
+
+    ⚠️ **`pode_retroativo` vem da permissão de quem clica.** Venda de mês FECHADO
+    não pode virar movimento: o relatório daquele mês já foi ao contador, e o
+    razão não se reescreve. A trava de período recusa, e está certo — quem
+    precisar acertar mês fechado faz pelo inventário.
+
+    ⚠️ **Recalcula a lista no servidor**, como o repontar das notas: entre ver a
+    prévia e clicar, uma importação pode ter trazido venda nova.
+
+    ⚠️ **`id_produto` limita a UM produto.** A tela não usa — o botão é único,
+    como pedido —, mas existe por duas razões: dá para acertar um item de cada
+    vez quando o acervo é grande, e é o que permite a suíte provar o ciclo sem
+    baixar a base inteira. Sem ele, cada rodada do teste mexia no estoque de
+    todos os produtos da casa, e os cenários que medem a identidade da
+    movimentação acusavam a diferença — que é a armadilha que a memória de
+    estoque já registra sobre saldo negativo.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
+                      v.documento, p.id_local_padrao
+                 FROM venda_itens vi
+                 JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+                 JOIN produtos p ON p.id = vi.id_produto AND p.controla_estoque AND p.ativo
+                WHERE v.id_unidade = %s
+                  AND (%s::int IS NULL OR vi.id_produto = %s)
+                  AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
+                                   WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id
+                                     AND m.id_produto = vi.id_produto)
+                ORDER BY v.data, v.id""",
+            (id_unidade, id_produto, id_produto),
+        )
+        pendentes = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT id FROM locais_estoque WHERE id_unidade = %s AND ativo "
+                    "ORDER BY principal DESC, id LIMIT 1", (id_unidade,))
+        reserva = (cur.fetchone() or {}).get("id")
+        baixados, recusados = 0, []
+        for item in pendentes:
+            try:
+                motor_estoque.lancar(
+                    cur, id_unidade=id_unidade,
+                    id_local=item["id_local_padrao"] or reserva,
+                    id_produto=item["id_produto"], tipo="SAIDA_VENDA",
+                    quantidade=item["quantidade"], data_movimento=item["data"],
+                    origem_tipo="VENDA", origem_id=item["id_venda"],
+                    documento=item["documento"], id_usuario=ctx.id_usuario,
+                    observacao="Baixa da venda que ficou para trás do vínculo",
+                    pode_retroativo=ctx.pode("estoque.retroativo"),
+                )
+                baixados += 1
+            except HTTPException as e:
+                # ⚠️ Uma recusa não derruba as outras: mês fechado costuma pegar
+                # só as vendas mais antigas, e parar tudo por causa delas
+                # deixaria o resto do buraco aberto.
+                recusados.append({"id_venda": item["id_venda"], "motivo": e.detail})
+        if baixados:
+            auditoria.registrar(cur, ctx.id_usuario, "vendas", None, "baixar_sem_baixa",
+                                depois={"baixados": baixados, "recusados": len(recusados)},
+                                id_unidade=id_unidade)
+    return {
+        "baixados": baixados, "recusados": recusados,
+        "message": (f"{baixados} venda(s) baixada(s) do estoque"
+                    + (f" — {len(recusados)} recusada(s), veja o motivo." if recusados else "")
+                    if baixados else "Nada a baixar: toda venda já saiu do estoque."),
+    }
+
+
 @router.get("/sem-vinculo")
 def sem_vinculo(busca: str | None = None, ctx: Contexto = Depends(_ver)) -> list[dict]:
     """Itens vendidos que não achamos no cadastro — a fila de de-para do PDV.

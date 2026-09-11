@@ -710,4 +710,35 @@ def reconciliar(cur, id_unidade: int) -> dict:
             com_custo += 1
 
     return {"vinculados": vinculados, "com_custo": com_custo,
-            "sem_custo": vinculados - com_custo}
+            "sem_custo": vinculados - com_custo,
+            # 🔑 **Quantas dessas vendas ainda não saíram do estoque.** Reapontar
+            # o item e recalcular o custo era só metade: a saída que nunca
+            # aconteceu continuava sem acontecer, e o buraco só aparecia na
+            # contagem, como "ajuste de inventário" — onde a diferença some sem
+            # nome. Medido numa base real: 128 unidades de um produto passaram
+            # dez dias assim, e nada na tela dizia.
+            # ⚠️ **Conta, mas NÃO lança aqui.** A baixa mexe no razão, que é
+            # append-only, e pode deixar saldo negativo — quem confirma precisa
+            # ver a lista antes. Quem lança é `POST /vendas/sem-baixa/baixar`,
+            # depois da prévia. Este número é o que faz a tela oferecer o
+            # caminho em vez de esperar alguém desconfiar.
+            "sem_baixa": _vendas_sem_baixa(cur, id_unidade)}
+
+
+def _vendas_sem_baixa(cur, id_unidade: int) -> int:
+    """Quantos itens de venda têm produto que controla estoque e nenhuma saída.
+
+    ⚠️ Venda CANCELADA fica de fora: ela não consumiu nada.
+    """
+    cur.execute(
+        """SELECT count(*) AS n
+             FROM venda_itens vi
+             JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
+             JOIN produtos p ON p.id = vi.id_produto AND p.controla_estoque AND p.ativo
+            WHERE v.id_unidade = %s
+              AND NOT EXISTS (SELECT 1 FROM estoque_movimentos m
+                               WHERE m.origem_tipo = 'VENDA' AND m.origem_id = v.id
+                                 AND m.id_produto = vi.id_produto)""",
+        (id_unidade,),
+    )
+    return cur.fetchone()["n"]

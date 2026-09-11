@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 
 sys.path.insert(0, "tests")
 sys.path.insert(0, ".")
@@ -267,6 +267,87 @@ checar("cancelar de novo é recusado", st == 400, st)
 
 st, r = chamar("GET", "/vendas/99999999", token=token)
 checar("venda inexistente é 404", st == 404, st)
+
+print("\n6b. a venda que ficou para tras do vinculo, e a baixa que faltava")
+# 🔑 **O buraco que a reconciliacao do PDV deixava** (10/09/2026, achado na
+# varredura). Item de venda que entra SEM produto nao baixa estoque, e esta
+# certo: nao ha de onde tirar. Quando alguem faz o vinculo,
+# `cardapio.reconciliar` reaponta o item e recalcula o custo congelado — mas nao
+# lanca a saida que ficou para tras. O `fundir` ja fechava esse mesmo buraco,
+# com a justificativa escrita la: "comprou 15, vendeu 10, e o saldo dizendo 15;
+# na primeira contagem faltariam 10, aparecendo como ajuste de inventario —
+# onde a diferenca some sem nome". Medido numa base real: 128 unidades de um
+# produto passaram dez dias assim.
+# ⚠️ O sintoma NAO aparece nos numeros da tela: o saldo fica apenas negativo,
+# nao "negativo e mais 128 que nem chegaram a sair".
+sys.path.insert(0, ".")
+from database import get_cursor as _cur_vendas  # noqa: E402
+
+marca_sb = str(int(time.time()))[-6:]
+st, p_sb = chamar("POST", "/produtos", {
+    "nome": f"Sem baixa {marca_sb}", "tipo": "REVENDA", "um_estoque": "UN",
+    "id_local_padrao": principal["id"]}, token=token)
+id_sb = (p_sb or {}).get("id")
+chamar("POST", "/estoque/entradas", {
+    "id_produto": id_sb, "quantidade": 20, "custo_unitario": 3,
+    "id_local": principal["id"]}, token=token)
+
+# A venda entra DIRETO, sem passar pelo lancamento: e o que ela simula e a venda
+# que o PDV importou ANTES de o codigo estar vinculado.
+ontem = (date.today() - timedelta(days=1)).isoformat()
+with _cur_vendas() as _c:
+    _c.execute("""INSERT INTO vendas (id_unidade, data, origem, documento, valor_total, cancelada)
+                  VALUES (1, %s, 'PDV_LEGAL', %s, 50, false) RETURNING id""",
+               (ontem, f"SB{marca_sb}"))
+    id_venda_sb = _c.fetchone()["id"]
+    _c.execute("""INSERT INTO venda_itens (id_venda, id_produto, quantidade,
+                                           valor_unitario, valor_total)
+                  VALUES (%s, %s, 5, 10, 50)""", (id_venda_sb, id_sb))
+
+st, previa_sb = chamar("GET", "/vendas/sem-baixa/previa", token=token)
+checar("a previa responde", st == 200, st)
+meu_sb = next((l for l in (previa_sb.get("itens") or []) if l["id_produto"] == id_sb), None)
+checar("e acha a venda que nunca saiu do estoque", meu_sb is not None, previa_sb.get("produtos"))
+checar("com a quantidade certa",
+       bool(meu_sb) and abs(float(meu_sb["quantidade"]) - 5) < 0.01, meu_sb)
+# ⚠️ O saldo DEPOIS entra na previa: quase toda baixa destas deixa negativo, e
+# quem confirma precisa ver antes, nao descobrir na contagem.
+checar("e dizendo como o saldo fica (20 -> 15)",
+       bool(meu_sb) and abs(float(meu_sb["saldo_hoje"]) - 20) < 0.01
+       and abs(float(meu_sb["saldo_depois"]) - 15) < 0.01, meu_sb)
+# ⚠️ A previa resolve a RESERVA do local, como o lancamento vai fazer — sem isso
+# a coluna dizia "—" e quem confirma nao via para onde a mercadoria ia sair.
+checar("e dizendo de qual prateleira sai", bool(meu_sb and meu_sb.get("local_destino")), meu_sb)
+
+# ⚠️ **Limitado ao produto DESTE teste.** O botao da tela e global, mas chamar
+# o endpoint global aqui baixaria o estoque de toda a casa a cada rodada — e a
+# memoria de estoque ja registra o que isso faz: saldo negativo abre a
+# identidade da movimentacao, e os cenarios que medem a casa inteira acusam.
+st, r_sb = chamar("POST", f"/vendas/sem-baixa/baixar?id_produto={id_sb}", None, token=token)
+checar("o baixar responde", st == 200, (st, r_sb))
+with _cur_vendas() as _c:
+    _c.execute("""SELECT tipo, quantidade, custo_unitario, data_movimento::date AS d, documento
+                    FROM estoque_movimentos
+                   WHERE origem_tipo='VENDA' AND origem_id=%s""", (id_venda_sb,))
+    movs_sb = [dict(x) for x in _c.fetchall()]
+checar("e a saida foi lancada", len(movs_sb) == 1, movs_sb)
+# 🔑 **A data e a da VENDA, nao a de hoje.** O razao e o extrato do que
+# aconteceu: lancar tudo hoje diria que a casa consumiu tudo hoje, e o CMV de
+# cada dia ficaria errado nos dois sentidos.
+checar("com a DATA da venda, nao a de hoje",
+       bool(movs_sb) and str(movs_sb[0]["d"]) == ontem,
+       (movs_sb[0]["d"] if movs_sb else None, ontem))
+checar("e com o documento do cupom",
+       bool(movs_sb) and movs_sb[0]["documento"] == f"SB{marca_sb}", movs_sb)
+checar("pelo custo do estoque (3,00)",
+       bool(movs_sb) and abs(float(movs_sb[0]["custo_unitario"]) - 3) < 0.01, movs_sb)
+
+st, previa2 = chamar("GET", "/vendas/sem-baixa/previa", token=token)
+checar("e a previa nao acha mais esta venda",
+       not any(l["id_produto"] == id_sb for l in (previa2.get("itens") or [])),
+       previa2.get("produtos"))
+chamar("DELETE", f"/produtos/{id_sb}", token=token)
+
 
 print("\n7. a ficha em RASCUNHO custeia a venda, e a origem diz isso")
 # 🔑 **Pedido do dono (02/09/2026):** o prato com ficha ainda nao homologada
