@@ -25,6 +25,9 @@ from config import (
     ADMIN_SENHA_PADRAO,
     CORS_ORIGINS,
     DEBUG,
+    JWT_SECRET,
+    JWT_SECRET_MINIMO,
+    JWT_SECRET_PADRAO,
     PORT,
     SENHA_MINIMA,
 )
@@ -68,6 +71,52 @@ from seguranca import hash_senha
 # COMPILADO; este diz o que está NO AR, que é a pergunta que se faz quando algo
 # não bate. É a mesma razão da `impressao`.
 VERSAO = "1.1.18"
+
+
+def conferir_segredo() -> None:
+    """Recusa subir com o `JWT_SECRET` de desenvolvimento. Em TODO start.
+
+    🔑 **Ele carrega duas coisas, e nenhuma é pequena.** Assina a sessão
+    (`seguranca.token`), então quem conhece o valor **forja um token para
+    qualquer usuário** — inclusive administrador, sem senha, sem login e sem
+    deixar tentativa registrada. E deriva a chave que cifra as credenciais de
+    integração (`services.segredos`), então com ele conhecido a cifra do Omie,
+    do PDV e do SMTP deixa de proteger.
+
+    🔑 **O precedente é da casa.** O primeiro deploy real subiu com o e-mail e a
+    senha padrão do administrador porque as variáveis não tinham sido definidas
+    no painel — e nada avisou: a linha "administrador criado" saiu igual à de
+    sempre. A trava do admin nasceu daí. Esta é a mesma lição aplicada ao
+    segredo que protege tudo o mais.
+
+    ⚠️ **Roda em TODO start, e essa é a diferença para `garantir_admin`.**
+    Aquela sai cedo quando já existe usuário (`if cur.fetchone()["n"]: return`),
+    porque a senha do admin só é decidida na criação. O segredo não: ele pode
+    ser esquecido numa migração de ambiente, num app novo, num restore — e o
+    risco não é só do primeiro dia.
+
+    ⚠️ **Parar o start é o único aviso que ninguém deixa passar.** Um log de
+    alerta seria lido no dia em que alguém fosse procurar outra coisa.
+
+    ⚠️ Com `DEBUG` ligado não há trava: o desenvolvimento precisa subir sem
+    `.env`, e é para isso que o padrão existe.
+    """
+    if DEBUG:
+        return
+    if JWT_SECRET == JWT_SECRET_PADRAO:
+        raise RuntimeError(
+            "JWT_SECRET está com o valor de desenvolvimento. Ele assina a sessão "
+            "e cifra as credenciais de integração: com este valor, qualquer um "
+            "que conheça o código entra como administrador. Defina JWT_SECRET "
+            "nas variáveis do ambiente — o roteiro gera um com "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`."
+        )
+    if len(JWT_SECRET) < JWT_SECRET_MINIMO:
+        raise RuntimeError(
+            f"JWT_SECRET curto demais ({len(JWT_SECRET)} caracteres; o mínimo é "
+            f"{JWT_SECRET_MINIMO}). Ele assina a sessão e cifra as credenciais — "
+            "gere um com `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`."
+        )
 
 
 def garantir_admin() -> None:
@@ -141,6 +190,9 @@ def garantir_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ⚠️ **ANTES de tudo**: sem segredo válido nada mais importa, e falhar aqui
+    # é mais barato que falhar depois de rodar migração.
+    conferir_segredo()
     init_pool()
     run_migrations()
     garantir_admin()

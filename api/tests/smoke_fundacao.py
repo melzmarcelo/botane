@@ -252,6 +252,53 @@ checar("com DEBUG desligado, o start recusa a senha padrão",
 checar("e a recusa diz onde a senha está publicada",
        "True" in _prova.stdout, _prova.stdout[:120])
 
+print("0c. o SEGREDO de desenvolvimento tambem nao sobe para producao")
+# 🔑 `JWT_SECRET` tinha padrao embutido em `config.py` e NADA o conferia. Ele
+# assina a sessao — quem conhece o valor forja token para qualquer usuario,
+# inclusive administrador, sem senha e sem deixar tentativa registrada — e
+# deriva a chave que cifra as credenciais do Omie, do PDV e do SMTP.
+# ⚠️ **Roda em TODO start, e essa e a diferenca para `garantir_admin`.** Aquela
+# sai cedo quando ja existe usuario, porque a senha do admin so e decidida na
+# criacao. O segredo pode ser esquecido numa migracao de ambiente, num app novo,
+# num restore — e o risco nao e so do primeiro dia.
+_seg = subprocess.run(
+    [sys.executable, "-c", """
+import sys
+sys.path.insert(0, ".")
+import main, config
+
+def tenta(valor, debug):
+    main.DEBUG = debug
+    main.JWT_SECRET = valor
+    try:
+        main.conferir_segredo()
+        return "SUBIU"
+    except RuntimeError as e:
+        return "RECUSOU:" + ("forja" if "administrador" in str(e) else "curto")
+
+print(tenta(config.JWT_SECRET_PADRAO, False))
+print(tenta("curto", False))
+print(tenta("x" * 60, False))
+print(tenta(config.JWT_SECRET_PADRAO, True))
+"""],
+    capture_output=True, text=True, cwd=".",
+)
+_linhas = (_seg.stdout or "").strip().splitlines()
+checar("com DEBUG desligado, o start recusa o segredo padrao",
+       len(_linhas) > 0 and _linhas[0].startswith("RECUSOU"), (_seg.stdout[:140], _seg.stderr[:140]))
+# ⚠️ A frase tem de dizer o que esta em jogo: "defina a variavel" nao explica
+# por que alguem largaria tudo para fazer isso agora.
+checar("e a recusa diz que da para entrar como administrador",
+       len(_linhas) > 0 and "forja" in _linhas[0], _linhas[:1])
+checar("segredo curto demais tambem e recusado",
+       len(_linhas) > 1 and _linhas[1].startswith("RECUSOU"), _linhas[1:2])
+checar("e um segredo de verdade passa",
+       len(_linhas) > 2 and _linhas[2] == "SUBIU", _linhas[2:3])
+# ⚠️ Com DEBUG ligado nao ha trava: o desenvolvimento precisa subir sem `.env`,
+# e e para isso que o padrao existe.
+checar("com DEBUG ligado o padrao continua servindo ao desenvolvimento",
+       len(_linhas) > 3 and _linhas[3] == "SUBIU", _linhas[3:4])
+
 print("8. limpeza")
 if id_teste:
     st, r = chamar("DELETE", f"/usuarios/{id_teste}", token=token)

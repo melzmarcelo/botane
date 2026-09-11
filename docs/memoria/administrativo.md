@@ -175,6 +175,32 @@
   não oferecer o botão numa linha que ela nem mostrava. Mesma correção da lista de apoio:
   aumentar a página para 100 antes de procurar, que é o que uma pessoa faria.
 
+- 🔑 **`JWT_SECRET` tinha padrão embutido e NADA o conferia** (11/09/2026, achado na varredura
+  do módulo). `config.py` fazia `os.getenv("JWT_SECRET", "troque-este-valor-no-env")`, e nenhuma
+  linha do sistema validava o valor.
+  🔑 **Ele carrega duas coisas, e nenhuma é pequena.** Assina a sessão (`seguranca.token`),
+  então quem conhece o valor **forja um token para qualquer usuário** — inclusive administrador,
+  sem senha, sem login e sem deixar tentativa registrada. E deriva a chave que cifra as
+  credenciais de integração (`services.segredos`), então com ele conhecido a cifra do Omie, do
+  PDV e do SMTP deixa de proteger.
+  🔑 **O precedente é da casa**: o primeiro deploy real subiu com o e-mail e a senha padrão do
+  administrador porque as variáveis não foram definidas no painel — e nada avisou. A trava do
+  admin nasceu daí; esta é a mesma lição aplicada ao segredo que protege todo o resto.
+  ⚠️ **Roda em TODO start, e essa é a diferença para `garantir_admin`.** Aquela sai cedo quando
+  já existe usuário (`if cur.fetchone()["n"]: return`), porque a senha do admin só é decidida na
+  criação. O segredo pode ser esquecido numa migração de ambiente, num app novo, num restore —
+  o risco não é só do primeiro dia.
+  ⚠️ **Antes do `init_pool` e da migração**: sem segredo válido nada mais importa, e falhar
+  cedo é mais barato que falhar depois de reescrever dado.
+  ⚠️ **A frase diz o que está em jogo**, não "defina a variável": quem lê precisa entender por
+  que largaria tudo para fazer isso agora. E traz o comando que gera um.
+  ⚠️ **Com `DEBUG` ligado não há trava** — o desenvolvimento precisa subir sem `.env`, e é para
+  isso que o padrão existe. Há também um mínimo de 24 caracteres, defensivo: o roteiro de deploy
+  manda gerar 48 bytes.
+  ⚠️ **Trocar o segredo depois torna ILEGÍVEIS as credenciais guardadas** (a chave Fernet deriva
+  dele). O sistema já sabe distinguir isso de "não configurado" — `segredos.ilegivel()` —, então
+  a tela diz o que houve em vez de mandar redigitar achando que foi erro de digitação.
+
 ## Armadilhas já pagas
 
 - 🔑 **A sessão caía no meio do uso, e a causa era o refresh ROTATIVO sem trava no cliente.**

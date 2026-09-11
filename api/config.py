@@ -18,7 +18,15 @@ DB_SSLMODE = os.getenv("DB_SSLMODE", "prefer")
 SCRIPTS_DIR = os.path.join(BASE_DIR, "db_scripts")
 
 # --- sessão ---
-JWT_SECRET = os.getenv("JWT_SECRET", "troque-este-valor-no-env")
+# ⚠️ **O padrão está aqui para o desenvolvimento funcionar sem `.env`, e só.**
+# Fora dele, `conferir_segredo()` recusa o start — ver `main.py`. O nome da
+# constante existe para a trava poder comparar sem repetir a string.
+JWT_SECRET_PADRAO = "troque-este-valor-no-env"
+JWT_SECRET = os.getenv("JWT_SECRET", JWT_SECRET_PADRAO)
+# Mínimo defensivo, não recomendação: o roteiro de deploy manda gerar 48 bytes
+# com `secrets.token_urlsafe(48)`. Isto só barra o que é curto demais para
+# assinar qualquer coisa.
+JWT_SECRET_MINIMO = 24
 # Token curto de propósito: quem some da equipe perde acesso rápido.
 JWT_EXPIRY_MIN = int(os.getenv("JWT_EXPIRY_MIN", "60"))
 REFRESH_EXPIRY_DIAS = int(os.getenv("REFRESH_EXPIRY_DIAS", "30"))
