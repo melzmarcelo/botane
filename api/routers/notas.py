@@ -524,6 +524,31 @@ def obter(id_nota: int,
         )
         itens = [dict(r) for r in cur.fetchall()]
 
+        # 🔑 **O limite de variação vem da LOJA, e era campo morto.**
+        # `parametros.alerta_variacao_preco_pct` existia no banco (padrão 15),
+        # a tela de Lojas o oferecia — *"avisar se o preço subir (%)"* — e nada
+        # o lia: quem conferia nota via o aviso a partir de **10%**, um número
+        # cravado no TSX. Os dois nem concordavam no padrão. Pôr 5% na tela de
+        # Lojas não mudava nada, que é o pior tipo de ajuste: ensina que a tela
+        # mente.
+        # ⚠️ **Quem DECIDE é o servidor** (`variacao_acima`), não a tela. A
+        # regra num lugar só é o que impede a lista e o detalhe de divergirem
+        # no dia em que alguém acrescentar uma condição — é a mesma escolha do
+        # `fator_diverge` logo acima.
+        cur.execute("SELECT alerta_variacao_preco_pct FROM parametros WHERE id_unidade = %s",
+                    (nota.get("id_unidade"),))
+        linha_par = cur.fetchone()
+        # ⚠️ Loja sem linha em `parametros` não é erro: a linha nasce na
+        # primeira visita à tela. Sem ela vale o padrão do banco, 15.
+        limite = float(linha_par["alerta_variacao_preco_pct"]) if linha_par else 15.0
+        nota["alerta_variacao_pct"] = limite
+        for item in itens:
+            v = item.get("variacao_preco_pct")
+            # ⚠️ Só a alta dispara. Preço que CAIU também é variação, e é boa
+            # notícia — avisar sobre ela treinaria a ignorar o aviso.
+            # ⚠️ Limite ZERO desliga, como o `alerta_validade_dias` do lado.
+            item["variacao_acima"] = bool(limite and v is not None and float(v) > limite)
+
         # 🔑 **A conferência do fator: o que a NOTA declarou contra o que o
         # CADASTRO vai usar.** Sem isto, um cadastro que diz "CX = 12" fazia uma
         # nota de CX de 24 entrar pela METADE, calada — e como o dinheiro da

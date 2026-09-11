@@ -22,7 +22,7 @@ import { CORES, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
 import ConversaoDoItem from "./conversao-do-item";
 import Voltar from "@/components/voltar";
 
-import { custo } from "@/lib/numeros";
+import { custo, pct } from "@/lib/numeros";
 /**
  * Uma nota de entrada, inteira, numa página só.
  *
@@ -507,10 +507,21 @@ export default function PaginaNota() {
                             {custo(Number(i.custo_aquisicao_unitario))}
                           </span>
                           {i.variacao_preco_pct !== null && (
+                            // ⚠️ **Quem decide é o SERVIDOR** (`variacao_acima`).
+                            // Aqui havia `> 10` cravado, enquanto a loja
+                            // configurava o limite na tela de Lojas e nada o
+                            // lia — os dois nem concordavam no padrão, que no
+                            // banco é 15. Refazer a comparação aqui seria a
+                            // segunda versão da mesma regra.
                             <span
                               className={`block text-[12px] ${
-                                Number(i.variacao_preco_pct) > 10 ? "text-erro" : "text-suave"
+                                i.variacao_acima ? "text-erro" : "text-suave"
                               }`}
+                              title={
+                                nota.alerta_variacao_pct
+                                  ? `esta loja avisa acima de ${pct(nota.alerta_variacao_pct)}`
+                                  : undefined
+                              }
                             >
                               {Number(i.variacao_preco_pct) > 0 ? "+" : ""}
                               {Number(i.variacao_preco_pct).toFixed(1).replace(".", ",")}% vs. última compra

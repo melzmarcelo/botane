@@ -377,6 +377,28 @@
   saldo (`FOR UPDATE`), calcula o médio e grava a fotografia (`saldo_apos`,
   `custo_medio_apos`). Router nenhum monta INSERT em `estoque_movimentos`.
 
+- 🔑 **Três interruptores da tela de Lojas não faziam NADA** (10/09/2026, achado varrendo todos
+  os parâmetros um a um). Depois do `casas_decimais_qtd`, procurei onde cada coluna de
+  `parametros` é lida. Três só existiam em `models/empresa.py`:
+  `bloquear_saida_vencido`, `criar_produto_da_nota` e `alerta_variacao_preco_pct`.
+  🔑 **O do preço foi implementado** (mesmo dia): o cálculo da variação já existia
+  (`nota_itens.variacao_preco_pct`, à vista na nota), mas o limite que a loja configurava era
+  ignorado — a tela acendia a partir de **10%, cravado no TSX**, enquanto o padrão do banco é
+  **15**. Os dois nem concordavam. Pôr 5% na tela de Lojas não mudava coisa alguma.
+  ⚠️ **Quem DECIDE é o servidor** (`variacao_acima` no item), não a tela. Refazer a comparação
+  no TSX seria a segunda versão da mesma regra — e foi exatamente assim que o 10 e o 15
+  passaram a discordar. A resposta leva também `alerta_variacao_pct`, para a tela poder dizer
+  qual é o limite desta loja.
+  ⚠️ **Só a ALTA dispara**: preço que caiu também é variação, e é boa notícia — avisar sobre
+  ela treinaria a ignorar o aviso. E **zero DESLIGA**, como no `alerta_validade_dias` ao lado,
+  não "avise sempre", que seria a leitura literal de "acima de zero".
+  ⚠️ **Os outros dois continuam mortos e a tela continua os oferecendo**: "Bloquear saída de
+  item vencido" e "Criar produto novo a partir da nota". Quem liga o primeiro pode estar
+  confiando numa trava que não existe.
+  ⚠️ Os que FUNCIONAM, para contraste: `permitir_saldo_negativo` (`estoque.py:306`),
+  `alerta_validade_dias`, `exigir_motivo_perda`, `exigir_local_movimento`,
+  `bloquear_retroativo`, `ciclo_fechamento` e `casas_decimais_qtd`.
+
 ## Armadilhas já pagas
 
 - 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto

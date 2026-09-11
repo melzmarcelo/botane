@@ -55,6 +55,9 @@ export type ItemNota = {
   fator_cadastro: number | null;
   /** Os dois discordam além da tolerância. É o que acende a etiqueta na linha. */
   fator_diverge: boolean;
+  /** O preço subiu acima do limite que ESTA loja configurou. Quem decide é o
+   *  servidor: o limite vive em `parametros.alerta_variacao_preco_pct`. */
+  variacao_acima: boolean;
 };
 
 /** O cabeçalho inteiro: é dele que a visualização e a correção se enchem. */
@@ -72,6 +75,8 @@ export type NotaDetalhe = Omit<Nota, "itens"> & {
   id_local: number | null;
   lancada_em: string | null;
   tem_xml: boolean;
+  /** O limite de alta que esta loja configurou, em %. Zero desliga o aviso. */
+  alerta_variacao_pct: number;
 };
 
 export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {

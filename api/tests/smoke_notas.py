@@ -234,6 +234,56 @@ checar("a segunda nota do mesmo fornecedor entra sem pendência",
        segunda.get("pendentes") == 0, segunda)
 chamar("DELETE", f"/notas/{segunda.get('id')}", token=token)
 
+print("5z. o limite do aviso de alta vem da LOJA, e era campo morto")
+# 🔑 `parametros.alerta_variacao_preco_pct` existia no banco (padrao 15) e a
+# tela de Lojas o oferecia — "avisar se o preco subir (%)" —, mas NADA o lia:
+# a tela acendia o aviso a partir de 10, um numero cravado no TSX. Os dois nem
+# concordavam no padrao. Por 5% na tela de Lojas nao mudava coisa alguma.
+# ⚠️ Quem DECIDE e o servidor (`variacao_acima`); a tela so pinta. Refazer a
+# comparacao la seria a segunda versao da mesma regra, e elas divergiriam no
+# primeiro criterio novo — foi assim que o 10 e o 15 passaram a discordar.
+marca_v = str(int(time.time()))[-6:]
+# ⚠️ O fornecedor é buscado AQUI: a variável global só nasce no bloco 6, mais
+# abaixo, e usá-la aqui quebra com NameError longe da causa.
+st, _forns = chamar("GET", "/fornecedores?limite=1", token=token)
+fornecedor_v = (_forns or [{}])[0]
+st, p_var = chamar("POST", "/produtos", {
+    "nome": f"Variacao {marca_v}", "tipo": "INSUMO", "um_estoque": "KG"}, token=token)
+id_var = (p_var or {}).get("id")
+st, n1 = chamar("POST", "/notas", {
+    "id_fornecedor": fornecedor_v.get("id"), "numero": f"VA{marca_v}", "serie": "1",
+    "id_local": local["id"],
+    "itens": [{"id_produto": id_var, "quantidade": 5, "valor_unitario": 10}]}, token=token)
+chamar("POST", f"/notas/{n1['id']}/lancar", {"id_local": local["id"]}, token=token)
+st, n2 = chamar("POST", "/notas", {
+    "id_fornecedor": fornecedor_v.get("id"), "numero": f"VB{marca_v}", "serie": "1",
+    "id_local": local["id"],
+    "itens": [{"id_produto": id_var, "quantidade": 5, "valor_unitario": 11.20}]}, token=token)
+checar("a segunda compra do mesmo insumo entra", st == 200, (st, n2))
+
+st, par_antes = chamar("GET", "/unidades/1/parametros", token=token)
+
+def com_limite(limite):
+    chamar("PUT", "/unidades/1/parametros",
+           {**par_antes, "alerta_variacao_preco_pct": limite}, token=token)
+    st, d = chamar("GET", f"/notas/{n2['id']}", token=token)
+    return d, (d.get("itens") or [{}])[0]
+
+d15, i15 = com_limite(15)
+checar("a alta de 12% NAO acende com a loja avisando acima de 15%",
+       i15.get("variacao_acima") is False, i15.get("variacao_preco_pct"))
+checar("e a resposta diz qual e o limite da loja",
+       abs(float(d15.get("alerta_variacao_pct") or 0) - 15) < 0.01, d15.get("alerta_variacao_pct"))
+d10, i10 = com_limite(10)
+checar("a MESMA alta acende quando a loja baixa o limite para 10%",
+       i10.get("variacao_acima") is True, i10.get("variacao_preco_pct"))
+# ⚠️ Zero DESLIGA, como no `alerta_validade_dias` do lado — e nao quer dizer
+# "avise sempre", que seria a leitura literal de "acima de zero".
+d0, i0 = com_limite(0)
+checar("e limite ZERO desliga o aviso", i0.get("variacao_acima") is False, i0)
+chamar("PUT", "/unidades/1/parametros", par_antes, token=token)
+chamar("DELETE", f"/produtos/{id_var}", token=token)
+
 print("6. a nota digitada na mão")
 st, fornecedores = chamar("GET", "/fornecedores", token=token)
 fornecedor = fornecedores[0]
