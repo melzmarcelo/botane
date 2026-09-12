@@ -5936,12 +5936,28 @@ try {
     { timeout: 8000 },
   ).catch(() => {});
   await clicarPorTexto("^Receber$");
+  // ⚠️ **`/recebida/i` no corpo da pagina nasce VERDADEIRO.** A tela ja traz o
+  // rotulo "Recebida" (a data, vazia enquanto em transito) e a frase "no
+  // instante em que esta remessa for recebida" — entao esta espera voltava na
+  // hora, antes de o POST terminar, e a checagem seguinte (o saldo da filial
+  // pela API) corria contra a gravacao. Passava quando o servidor era mais
+  // rapido que o proximo `fetch`; com a API recem-subida, nao passava.
+  // 🔑 A espera certa e pelo EFEITO que so existe depois de receber: o botao
+  // sai da tela e o servidor passa a dizer RECEBIDA. Mesma licao das esperas de
+  // paginacao (11/09) — esperar por um dado que ja pode estar la nao e esperar.
   await p.waitForFunction(
-    () => /recebida/i.test(document.body.innerText), { timeout: 10000 },
+    () => ![...document.querySelectorAll("button")]
+      .some((b) => /Receber no estoque/i.test(b.innerText)),
+    { timeout: 10000 },
   ).catch(() => {});
-  const depoisDeReceber = await p.evaluate(() => document.body.innerText);
-  checar("receber deixa a remessa recebida", /recebida/i.test(depoisDeReceber),
-    depoisDeReceber.slice(0, 140));
+  let statusRemessa = null;
+  for (let i = 0; i < 20; i++) {
+    statusRemessa = (await api("GET", `/transferencias/${remessaR.id}`, null, token))
+      .dados?.status ?? null;
+    if (statusRemessa === "RECEBIDA") break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  checar("receber deixa a remessa recebida", statusRemessa === "RECEBIDA", statusRemessa);
   await foto(p, "40-remessa");
 
   // E o razao andou nas DUAS lojas: a filial ganhou o que a matriz perdeu.
