@@ -15,6 +15,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * — e a tela filtrada vira um link que se manda para alguém.
  */
 
+/** A última escrita que este módulo pediu ao router, e de onde ela partiu.
+ *
+ * `partida` é a URL que havia quando a escrita foi montada; `destino`, a que ela
+ * produziu. Enquanto o navegador não sair de uma para a outra, a escrita está
+ * **em voo** — e é `destino` que descreve o estado, não a barra de endereço.
+ */
+let emVoo: { caminho: string; partida: string; destino: string; em: number } | null = null;
+
+/** Quanto tempo um rascunho em voo continua valendo (ms).
+ *
+ * ⚠️ **Existe por causa do VOLTAR do navegador.** O par partida/destino
+ * identifica o voo com precisão, menos num caso: voltar logo depois de uma
+ * escrita devolve a URL exatamente à `partida`, que é indistinguível de "a
+ * escrita ainda não aterrissou". Aí o rascunho reaplicaria a mudança que a
+ * pessoa acabou de desfazer. Dois segundos cobrem com folga a ida ao servidor
+ * de um `replace` (milissegundos em produção, mais no `next dev`) e são menos
+ * do que qualquer pessoa leva para ler a tela e decidir voltar.
+ */
+const VALIDADE_DO_VOO = 2000;
+
 /**
  * ⚠️ **A query se monta a partir da URL DE AGORA, não da que o render leu.**
  *
@@ -24,21 +44,48 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * mesma foto antiga e a segunda apaga a primeira — trocar o tipo logo depois de
  * digitar limparia a busca, sem nada explicando.
  *
- * `window.location.search` é o estado real no instante da escrita.
+ * 🔑 **E `window.location.search` também mente, por um tempo** (12/09/2026,
+ * achado ao investigar a checagem "filtrar volta para a primeira página"). O
+ * `router.replace` do App Router é navegação suave: ele vai ao servidor buscar
+ * a árvore e só então a barra de endereço muda. Entre pedir e aterrissar — dez
+ * milissegundos em produção, bem mais no `next dev` — a URL ainda é a antiga, e
+ * quem ler dali monta a query em cima de um estado que já foi trocado.
+ *
+ * **O caso medido**: na página 2, digitar no filtro. O reset de página escreve
+ * `p: null` na hora; a busca escreve 300 ms depois e lê a URL — que ainda dizia
+ * `p=2`, porque o reset não tinha aterrissado. Resultado: `?p=2&busca=...`,
+ * página 2 de um resultado de uma página só, **lista vazia**. Digitando devagar
+ * passava (o reset aterrissava entre as teclas); colando, nunca.
+ *
+ * 🔑 **Então a base é o DESTINO do que ainda está em voo**, e a barra de
+ * endereço só quando não há voo — ou quando ele já não é de confiança (outra
+ * tela, o voltar do navegador, tempo demais). Uma escrita só continua não
+ * enxergando a outra pelo `window`, mas passa a enxergá-la aqui.
  */
 export function trocarNaUrl(
   router: { replace: (url: string, o?: { scroll?: boolean }) => void },
   caminho: string,
   mudancas: Record<string, string | null>,
 ) {
-  const q = new URLSearchParams(
-    typeof window === "undefined" ? "" : window.location.search,
-  );
+  const agora = typeof window === "undefined" ? "" : window.location.search;
+  // O rascunho vale enquanto a URL for uma das duas pontas do voo anterior: a
+  // partida (não aterrissou) ou o destino (aterrissou, e aí dá no mesmo).
+  // Qualquer outra coisa foi mudança de fora, e manda mais que o rascunho.
+  const valido =
+    emVoo !== null &&
+    emVoo.caminho === caminho &&
+    Date.now() - emVoo.em < VALIDADE_DO_VOO &&
+    (agora === emVoo.partida || agora === emVoo.destino);
+  const base = valido ? (emVoo as NonNullable<typeof emVoo>).destino : agora;
+
+  const q = new URLSearchParams(base);
   for (const [k, v] of Object.entries(mudancas)) {
     if (v === null || v === "") q.delete(k);
     else q.set(k, v);
   }
   const texto = q.toString();
+  const destino = texto ? `?${texto}` : "";
+  emVoo = { caminho, partida: agora, destino, em: Date.now() };
   // ⚠️ `replace`, não `push`: cada tecla digitada virando uma entrada no
   // histórico faria o voltar do navegador desfazer a busca letra por letra
   // antes de sair da tela.

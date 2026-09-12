@@ -116,6 +116,30 @@
   fechar aos olhos de quem multiplicar a mão. É o preço da leitura limpa, e foi decidido
   sabendo disso.
 
+- 🔑 **`window.location` MENTE por um tempo, e duas escritas na URL se apagavam**
+  (`lib/estado-na-url.ts`, 12/09/2026, achado ao investigar a checagem "filtrar volta para a
+  primeira página"). `router.replace` do App Router é navegação suave: vai ao servidor buscar
+  a árvore e só então a barra de endereço muda. Entre pedir e aterrissar — dezenas de
+  milissegundos em produção, bem mais no `next dev` — `window.location.search` ainda é a URL
+  ANTIGA, e quem montar a query a partir dali escreve em cima de um estado já trocado.
+  🔑 **O caso medido, e ele é do usuário**: na página 2 de qualquer lista, digitar no filtro.
+  O reset de página (`usePaginacao`) escreve `p: null` na hora; a busca (`useEstadoNaUrl`)
+  escreve 300 ms depois e lê a URL — que ainda dizia `p=2`. Resultado `?p=2&busca=...`:
+  página 2 de um resultado de uma página só, **lista vazia, sem nada explicando**.
+  ⚠️ **Digitando devagar passava; colando, nunca** — por isso as quatro reproduções manuais
+  de 11/09 deram certo e a checagem foi julgada "espera errada". A bateria digita instantâneo,
+  que é o mesmo que colar um código na busca: o caso mais real que existe.
+  🔑 **A correção é de raiz: a base da próxima escrita é o DESTINO do que ainda está em voo**,
+  não a barra de endereço. O módulo guarda `{partida, destino}` da última escrita que pediu;
+  enquanto a URL for uma das duas pontas, é o destino que descreve o estado. Qualquer outra
+  coisa (outra tela, o voltar do navegador, tempo demais) descarta o rascunho.
+  ⚠️ **O voltar do navegador é o único caso ambíguo**: ele devolve a URL exatamente à
+  `partida`, que é indistinguível de "ainda não aterrissou", e o rascunho reaplicaria o que a
+  pessoa acabou de desfazer. Daí o prazo de validade de 2 s — folgado para um `replace`,
+  curto para qualquer pessoa ler a tela e decidir voltar.
+  ⚠️ Vale para as catorze listas, não só Produtos: a escrita é a mesma para todas. E não
+  resolve só o par busca/página — resolve a CLASSE, que é o próximo par de escritores.
+
 - 🔑 **`type="number"` não serve para dinheiro** (`CampoMoeda` em `components/ui.tsx`,
   10/09/2026, pedido do dono). Era o que o preço de venda do cadastro de produtos usava, e
   traz três defeitos que só aparecem com gente digitando: no teclado pt-BR a vírgula não entra
