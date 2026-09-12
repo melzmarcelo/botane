@@ -964,18 +964,17 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         if plano["muda"] and not plano["pode"]:
             raise HTTPException(status_code=400, detail=plano["motivo"])
 
-        # ⚠️ **Custo que some exige um SIM explicito.** Nao e aviso de tela: quem
-        # chama por outro caminho tambem tem de responder. Sem `confirmar`, a
-        # recusa vem com os DOIS numeros, para a resposta ser informada.
-        if plano.get("custo_zera") and not dados.pop("confirmar_troca_de_unidade", False):
-            c = next(x for x in plano["conversoes"] if x["campo"] == "custo_referencia")
+        # ⚠️ **Custo que da um SALTO exige um sim explicito.** Nao e aviso de
+        # tela: quem chama por outro caminho tambem tem de responder. Sem
+        # `confirmar`, a recusa vem com os DOIS numeros, para a resposta ser
+        # informada.
+        # ⚠️ **Nos dois sentidos** (12/09/2026, pedido do dono): o custo que
+        # multiplica por mil e o mesmo fator invertido visto do outro lado, e e
+        # tao irreversivel quanto o que zera. A frase de cada caso mora no
+        # service, junto da regra que decide perguntar.
+        if plano.get("custo_salto") and not dados.pop("confirmar_troca_de_unidade", False):
             raise HTTPException(
-                status_code=409,
-                detail=(f"Trocar de {plano['de']} para {plano['para']} com fator "
-                        f"{plano['fator']:g} derruba o custo de R$ {c['de']:.2f} "
-                        f"para R$ {c['para']:.2f} — na pratica, zerado. "
-                        f"Se o fator estiver invertido, o custo se perde e nao "
-                        f"volta. Confirme se e isso mesmo."),
+                status_code=409, detail=troca_de_unidade.frase_do_salto(plano),
             )
         dados.pop("confirmar_troca_de_unidade", None)
 

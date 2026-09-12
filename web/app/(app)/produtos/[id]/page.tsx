@@ -178,12 +178,17 @@ export default function FormularioProduto() {
    *
    * ⚠️ Aconteceu com uma caixa de 1.000 unidades a R$ 33,99: um fator
    * invertido dividiu por mil, o custo virou R$ 0,03 e nada avisou.
+   * ⚠️ **E o mesmo engano ao contrario multiplica** (12/09/2026, pedido do
+   * dono): o custo que dispara nao some da vista como o zero, mas contamina
+   * toda ficha que usa o insumo. `custo_salto` diz de que lado foi.
    */
   const [previaUnidade, setPreviaUnidade] = useState<{
     muda: boolean;
     pode: boolean;
     motivo?: string;
-    custo_zera?: boolean;
+    /** "zera", "dispara" ou nulo — o custo dando um salto de ordem de grandeza
+     *  num dos dois sentidos. Os dois pedem confirmação. */
+    custo_salto?: "zera" | "dispara" | null;
     resumo?: string;
     conversoes?: { campo: string; de: number; para: number }[];
   } | null>(null);
@@ -285,10 +290,11 @@ export default function FormularioProduto() {
 
   async function salvar(e: FormEvent, confirmado = false) {
     e.preventDefault();
-    // 🔑 **Pergunta ANTES de gravar quando o custo despenca.** O servidor
-    // tambem recusa sem confirmacao — esta janela existe para a pessoa ver os
-    // dois numeros e responder, nao para ser a unica guarda.
-    if (!confirmado && previaUnidade?.muda && previaUnidade.custo_zera) {
+    // 🔑 **Pergunta ANTES de gravar quando o custo da um salto** — para
+    // qualquer um dos dois lados. O servidor tambem recusa sem confirmacao:
+    // esta janela existe para a pessoa ver os dois numeros e responder, nao
+    // para ser a unica guarda.
+    if (!confirmado && previaUnidade?.muda && previaUnidade.custo_salto) {
       setConfirmandoCusto(true);
       return;
     }
@@ -527,7 +533,7 @@ export default function FormularioProduto() {
         <Aviso tipo="erro">{previaUnidade.motivo}</Aviso>
       )}
       {previaUnidade?.muda && previaUnidade.pode && (
-        <Aviso tipo={previaUnidade.custo_zera ? "erro" : "info"}>
+        <Aviso tipo={previaUnidade.custo_salto ? "erro" : "info"}>
           <b>{previaUnidade.resumo}</b>
           {(previaUnidade.conversoes ?? []).map((c) => (
             <span key={c.campo} className="mt-1 block">
@@ -538,11 +544,21 @@ export default function FormularioProduto() {
               {c.campo !== "custo_referencia" && " (na nova unidade)"}
             </span>
           ))}
-          {previaUnidade.custo_zera && (
+          {previaUnidade.custo_salto && (
             <span className="mt-1 block">
-              ⚠️ Isso deixa o custo <b>praticamente zerado</b>. Se o fator estiver
-              invertido, o valor se perde e não volta — o sistema vai perguntar
-              antes de gravar.
+              ⚠️ Isso{" "}
+              {previaUnidade.custo_salto === "dispara" ? (
+                <>
+                  <b>multiplica o custo</b> de vez. Se o fator estiver invertido, esse
+                  número passa a valer em toda ficha que usa este insumo
+                </>
+              ) : (
+                <>
+                  deixa o custo <b>praticamente zerado</b>. Se o fator estiver
+                  invertido, o valor se perde e não volta
+                </>
+              )}{" "}
+              — o sistema vai perguntar antes de gravar.
             </span>
           )}
         </Aviso>
@@ -550,7 +566,11 @@ export default function FormularioProduto() {
 
       {confirmandoCusto && (
         <Confirmacao
-          titulo="O custo vai ficar zerado. Seguir assim?"
+          titulo={
+            previaUnidade?.custo_salto === "dispara"
+              ? "O custo vai multiplicar. Seguir assim?"
+              : "O custo vai ficar zerado. Seguir assim?"
+          }
           perigo
           rotuloConfirmar="Sim, gravar"
           ocupado={salvando}
@@ -572,8 +592,11 @@ export default function FormularioProduto() {
               </p>
             ))}
           <p className="mt-2">
-            Se o fator de conversão estiver invertido, o custo se perde e não há
-            como desfazer pela tela.
+            {previaUnidade?.custo_salto === "dispara"
+              ? `Se o fator de conversão estiver invertido, esse custo contamina toda
+                 ficha que usa este insumo, e não há como desfazer pela tela.`
+              : `Se o fator de conversão estiver invertido, o custo se perde e não há
+                 como desfazer pela tela.`}
           </p>
         </Confirmacao>
       )}

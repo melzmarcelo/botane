@@ -169,9 +169,11 @@ escrever_custo(farinha, 8)
 # preco certo: o Sim custa um clique, o Nao custa o custo do produto.
 st, r = chamar("PUT", f"/produtos/{farinha}", {"um_estoque": "G"}, token=token)
 checar("KG -> G pede confirmacao, porque o custo despenca", st == 409, (st, r))
-checar("e a recusa mostra os DOIS numeros",
-       "8" in str(r.get("detail", "")) and "0.01" in str(r.get("detail", "")),
-       r.get("detail"))
+# ⚠️ Em pt-BR: a frase chega inteira na tela, e "R$ 8.00" era o unico
+# lugar do sistema que escrevia dinheiro com ponto.
+checar("e a recusa mostra os DOIS numeros, em reais daqui",
+       "R$ 8,00" in str(r.get("detail", ""))
+       and "R$ 0,01" in str(r.get("detail", "")), r.get("detail"))
 d = campos_de(farinha, ["um_estoque", "custo_referencia"])
 # ⚠️ Recusa e recusa: nada pode ter sido gravado pela metade.
 checar("a unidade NAO mudou sem o sim", d["um_estoque"] == "KG", d)
@@ -220,6 +222,88 @@ print("\n6. PUT que não mexe na unidade continua passando")
 st, r = chamar("PUT", f"/produtos/{farinha}", {"nome": f"FARINHA RENOMEADA {marca}"},
                token=token)
 checar("salvar só o nome não pede fator nenhum", st == 200, (st, r))
+
+
+print("\n7. o caso do KG comprado em PCT: a relacao lida ao CONTRARIO")
+# 🔑 **O caso do dono (12/09/2026):** "no estoque o produto esta em KG e a compra
+# em PCT, as vezes da uma mensagem que a conversao nao aceita e nao e permitido
+# salvar". O cadastro dizia 1 PCT = 5 KG; trocar o estoque para PCT so precisa
+# do mesmo numero de tras para frente (1 KG = 0,2 PCT) — e levava recusa.
+cafe = criar("CAFE EM GRAO", "KG", um_compra="PCT", fator_compra=5,
+             estoque_minimo=10)
+escrever_custo(cafe, 40)
+st, r = chamar("GET", f"/produtos/{cafe}/troca-de-unidade?um_estoque=PCT", token=token)
+checar("a previa aceita a troca KG -> PCT", st == 200 and r.get("pode") is True, (st, r))
+checar("com o fator invertido: 1 KG = 0,2 PCT", perto(r.get("fator"), 0.2), r.get("fator"))
+checar("e o resumo diz de onde saiu o numero",
+       "ao contr" in (r.get("origem_do_fator") or ""), r.get("origem_do_fator"))
+
+st, r = chamar("PUT", f"/produtos/{cafe}", {"um_estoque": "PCT"}, token=token)
+checar("e o PUT grava", st == 200, (st, r))
+d = campos_de(cafe, ["um_estoque", "custo_referencia", "estoque_minimo", "fator_compra"])
+checar("o estoque virou PCT", d["um_estoque"] == "PCT", d)
+# 40,00 por KG num pacote de 5 KG: o pacote custa 200,00.
+checar("o custo MULTIPLICOU: 40,00/KG -> 200,00/PCT", perto(d["custo_referencia"], 200), d)
+checar("e o minimo foi junto: 10 KG -> 2 PCT", perto(d["estoque_minimo"], 2), d)
+# ⚠️ A unidade de compra virou a de estoque: o fator dela so pode ser 1. Ficando
+# em 5, a PROXIMA troca leria "1 PCT = 5 <qualquer coisa>" como verdade.
+checar("e o fator de compra voltou para 1", perto(d["fator_compra"], 1), d)
+
+print("\n8. a embalagem cadastrada responde igual, sem unidade de compra")
+# ⚠️ A frase da recusa sempre mandou "cadastre a embalagem do produto" — e
+# `produto_unidades` nao era consultado aqui. Quem seguia a instrucao levava a
+# mesma recusa.
+saco = criar("ACUCAR A GRANEL", "KG")
+escrever_custo(saco, 6)
+st, r = chamar("PUT", f"/produtos/{saco}/unidades",
+               {"itens": [{"um": "FD", "fator": 25, "padrao": True}]}, token=token)
+checar("o fardo de 25 KG e cadastrado", st in (200, 201), (st, r))
+st, r = chamar("PUT", f"/produtos/{saco}", {"um_estoque": "FD"}, token=token)
+checar("KG -> FD passa pela embalagem", st == 200, (st, r))
+d = campos_de(saco, ["um_estoque", "custo_referencia"])
+checar("o estoque virou FD", d["um_estoque"] == "FD", d)
+checar("e o custo virou 150,00 por fardo", perto(d["custo_referencia"], 150), d)
+with get_cursor() as cur:
+    cur.execute("SELECT um, fator FROM produto_unidades WHERE id_produto = %s", (saco,))
+    emb = [dict(x) for x in cur.fetchall()]
+checar("e a propria embalagem passou a valer 1",
+       any(e["um"] == "FD" and perto(e["fator"], 1) for e in emb), emb)
+
+
+print("\n9. e a pergunta vale no sentido CONTRARIO: o custo que dispara")
+# 🔑 **Pedido do dono (12/09/2026):** a confirmacao existia so para o custo que
+# ZERA. Multiplicar por mil e o MESMO fator invertido visto do outro lado, e e
+# tao irreversivel quanto — a conversao so roda quando a unidade muda, e
+# `custo_referencia` nao tem tela de edicao.
+# ⚠️ A farinha ficou em G a 0,008 no item 4. Voltando para KG, o custo refaz o
+# caminho: x1000.
+st, r = chamar("PUT", f"/produtos/{farinha}", {"um_estoque": "KG"}, token=token)
+checar("G -> KG pede confirmacao, porque o custo multiplica", st == 409, (st, r))
+checar("e a recusa diz que MULTIPLICA, nao que zera",
+       "multiplica" in (r.get("detail") or "").lower(), r.get("detail"))
+checar("mostrando os dois numeros",
+       "R$ 0,01" in str(r.get("detail", ""))
+       and "R$ 8,00" in str(r.get("detail", "")), r.get("detail"))
+d = campos_de(farinha, ["um_estoque", "custo_referencia"])
+checar("a unidade NAO mudou sem o sim", d["um_estoque"] == "G", d)
+
+st, r = chamar("GET", f"/produtos/{farinha}/troca-de-unidade?um_estoque=KG", token=token)
+checar("e a previa avisa a tela pelo mesmo campo",
+       r.get("custo_salto") == "dispara", r.get("custo_salto"))
+
+st, r = chamar("PUT", f"/produtos/{farinha}",
+               {"um_estoque": "KG", "confirmar_troca_de_unidade": True}, token=token)
+checar("com o sim explicito, a troca acontece", st == 200, (st, r))
+d = campos_de(farinha, ["um_estoque", "custo_referencia"])
+checar("e o custo voltou a 8,00 por quilo", perto(d["custo_referencia"], 8), d)
+
+# ⚠️ **Uma troca comum nao pode passar a perguntar.** A guarda nova mede ordem
+# de grandeza: 1 CX = 12 UN multiplica o custo por doze e tem de gravar direto.
+comum = criar("ITEM DE CAIXA COMUM", "CX")
+escrever_custo(comum, 60)
+st, r = chamar("PUT", f"/produtos/{comum}",
+               {"um_estoque": "UN", "um_compra": "CX", "fator_compra": 12}, token=token)
+checar("trocar CX por UN de 12 continua gravando sem perguntar", st == 200, (st, r))
 
 
 for pid in criados:

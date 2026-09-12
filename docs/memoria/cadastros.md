@@ -829,6 +829,57 @@
   quem sabe o tamanho da caixa é o cadastro do PRODUTO. Dúzia continua convertendo: o fator
   12 é que separa "unidade de medida" de "nome de embalagem".
 
+- 🔑 **Trocar a unidade de estoque CONVERTE o que depende dela**
+  (`services/troca_de_unidade.py`, 08/09/2026, pedido do dono: *"o custo está em CX, mas
+  alteramos para o estoque em UN e a unidade de compra CX — deve fazer a alteração. E caso
+  haja alteração e não for possível fazer a conversão, apresentar uma mensagem de
+  validação"*). A unidade de estoque é o **denominador de tudo**: custo de referência,
+  mínimo, máximo e os fatores de `produto_unidades` são todos *por unidade de estoque*.
+  ⚠️ **O custo DIVIDE e as quantidades MULTIPLICAM** — a caixa de 12 a R$ 60 dá unidade a
+  R$ 5, e um mínimo de 2 CX vira 24 UN. Trocar os dois sentidos daria R$ 720 por unidade.
+  ⚠️ **Quem já tem razão não troca**: `estoque_movimentos` é append-only, e converter só o
+  cadastro faria saldo e histórico falarem unidades diferentes.
+  ⚠️ Dividir o custo por cem ou mais **pergunta antes** (409): foi assim que uma caixa de
+  1.000 unidades a R$ 33,99 virou R$ 0,03 com um fator invertido, e não voltou.
+  🔑 **E multiplicar por cem ou mais pergunta igual** (12/09/2026, pedido do dono). É o MESMO
+  fator invertido visto do outro lado, e tão irreversível quanto — a conversão só roda quando
+  a unidade muda, e `custo_referencia` não tem tela de edição. O custo que dispara não some da
+  vista como o zero: ele contamina toda ficha que usa o insumo e aparece no CMV do mês, longe
+  da causa. ⚠️ **A direção subiu de importância** quando a troca passou a aceitar a relação
+  lida ao contrário: antes, multiplicar o custo por mil exigia uma conversão de grandeza
+  (G→KG); agora basta um fator de embalagem errado, que é o número que mais tem palpite no
+  cadastro. ⚠️ `custo_zera` (booleano) virou **`custo_salto`** — `"zera"`, `"dispara"` ou
+  nulo —, a frase de cada caso mora no service (`frase_do_salto`, junto da regra que decide
+  perguntar, senão o dia em que a régua mudar a frase fala da antiga) e a tela troca título,
+  aviso e texto conforme o sentido. ⚠️ O corte é o mesmo cem nos dois lados: régua diferente
+  por sentido seria uma decisão a mais para defender sem nenhum caso que a peça. 1 CX = 12 UN
+  continua gravando sem perguntar.
+
+- 🔑 **A relação entre duas unidades vale nas DUAS direções — e lia-se só numa**
+  (12/09/2026, relato do dono: *"no estoque o produto está em KG e a compra em PCT, às vezes
+  dá uma mensagem que a conversão não aceita e não é permitido salvar"*). `_fator` perguntava
+  se a unidade de compra era a **antiga**; com o estoque em KG e a compra em PCT, a pessoa que
+  quisesse estocar em PCT levava recusa — enquanto o cadastro ali do lado já dizia que 1 PCT =
+  5 KG, que é a mesma coisa que 1 KG = 0,2 PCT. Agora a segunda fonte é
+  `custos.fator_de_embalagem(produto, unidade NOVA)`, **invertida**.
+  ⚠️ **E a frase da recusa mandava fazer o que não funcionava**: "cadastre a embalagem do
+  produto", sendo que `produto_unidades` não era consultado ali. Quem seguia a instrução
+  levava a mesma recusa e não tinha como saber por quê. Hoje é consultado — é o mesmo
+  `fator_de_embalagem` da nota e da ficha —, então a frase virou verdade.
+  ⚠️ **O número vem do BANCO, nunca do formulário.** `fator_compra` quer dizer "quantas
+  unidades de estoque cabem em uma de compra", e a unidade de estoque do formulário é a NOVA:
+  com as duas iguais o campo vale 1 e não diria nada. Quem responde é o cadastro de antes.
+  ⚠️ **A unidade de compra que vira a de estoque tem fator 1**, e `aplicar` passou a
+  normalizá-lo. Sem isso ficava "1 PCT = 5 PCT" gravado: hoje não muda conta nenhuma (a
+  conversão para de comparar quando as siglas são iguais), mas é o número que a PRÓXIMA troca
+  leria como verdade.
+  ⚠️ **Fator 1 é o padrão da coluna, e o sistema acredita nele.** Medido na base local: os 25
+  produtos em KG comprando PCT estão todos com `fator_compra = 1` (são sobras das suítes, mas
+  a forma é a mesma que chega do catálogo, onde 1 é o que se grava quando ninguém informou).
+  A troca passa a ser aceita dizendo "1 KG = 1 PCT" — que é o que o cadastro afirma. Quem
+  quiser o número certo corrige o fator ANTES de trocar; a prévia da tela mostra o resultado
+  enquanto se digita, e é ela que denuncia o 1 que ninguém escolheu.
+
 - ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
   grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
   `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes
