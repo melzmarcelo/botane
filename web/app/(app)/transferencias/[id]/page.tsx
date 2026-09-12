@@ -9,6 +9,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
+import { qtd } from "@/lib/numeros";
 
 /**
  * Uma remessa: o que foi despachado, e a conferência de quem recebe.
@@ -61,9 +62,6 @@ const quando = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit",
   });
-
-const numero = (n: number) =>
-  n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 4 });
 
 export default function PaginaRemessa() {
   const { id } = useParams<{ id: string }>();
@@ -249,7 +247,7 @@ export default function PaginaRemessa() {
                         <div className="text-suave mono text-[12px]">{item.codigo}</div>
                       </td>
                       <td className="mono text-right">
-                        {numero(item.qtd_enviada)} {item.um_estoque}
+                        {qtd(item.qtd_enviada)} {item.um_estoque}
                       </td>
                       <td className="text-right">
                         {podeReceber ? (
@@ -259,7 +257,7 @@ export default function PaginaRemessa() {
                             min="0"
                             className="campo campo-toque text-right"
                             aria-label={`Quantidade recebida de ${item.nome}`}
-                            placeholder={numero(item.qtd_enviada)}
+                            placeholder={qtd(item.qtd_enviada)}
                             value={conferido[item.id] ?? ""}
                             onChange={(e) =>
                               setConferido({ ...conferido, [item.id]: e.target.value })
@@ -269,19 +267,19 @@ export default function PaginaRemessa() {
                           <span className="mono">
                             {item.qtd_recebida === null
                               ? "—"
-                              : `${numero(item.qtd_recebida)} ${item.um_estoque ?? ""}`}
+                              : `${qtd(item.qtd_recebida)} ${item.um_estoque ?? ""}`}
                           </span>
                         )}
                       </td>
                       <td className="mono text-right">
                         {aberta
                           ? falta > 0
-                            ? `−${numero(falta)}`
+                            ? `−${qtd(falta)}`
                             : falta < 0
-                              ? `+${numero(-falta)}`
+                              ? `+${qtd(-falta)}`
                               : "—"
                           : item.id_movimento_perda
-                            ? `−${numero(item.qtd_enviada - (item.qtd_recebida ?? 0))}`
+                            ? `−${qtd(item.qtd_enviada - (item.qtd_recebida ?? 0))}`
                             : "—"}
                       </td>
                       {!aberta && (

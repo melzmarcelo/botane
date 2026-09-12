@@ -13,7 +13,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
 
-import { custo } from "@/lib/numeros";
+import { custo, qtd } from "@/lib/numeros";
 type Item = {
   id_insumo: number | null;
   id_subficha: number | null;
@@ -652,7 +652,7 @@ export default function EditorFicha() {
                     <span>
                       no estoque{" "}
                       <b className="mono text-tinta">
-                        {item.qtd_estoque.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}{" "}
+                        {qtd(item.qtd_estoque)}{" "}
                         {item.um_estoque}
                       </b>
                     </span>

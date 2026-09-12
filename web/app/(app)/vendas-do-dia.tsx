@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
+import { inteiro } from "@/lib/numeros";
 
 /**
  * O movimento de um dia, com setas para andar entre os dias que TÊM venda.
@@ -78,9 +79,6 @@ function diaDaSemana(iso: string) {
   const [ano, mes, dia] = iso.split("-").map(Number);
   return SEMANA[new Date(ano, mes - 1, dia).getDay()];
 }
-
-const inteiro = (n: number) =>
-  Number(n).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 
 export default function VendasDoDia({ inicial }: { inicial: Dia }) {
   const [dia, setDia] = useState<Dia>(inicial);

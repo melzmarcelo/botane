@@ -1,7 +1,7 @@
 /** Como o sistema MOSTRA número — um lugar só.
  *
- * 🔑 **O banco declara TRÊS famílias, e a tela mostrava tudo como se fosse
- * uma.** Não é questão de gosto: está na escala das colunas.
+ * 🔑 **O banco declara TRÊS famílias de número**, e a escala de cada coluna diz
+ * quanta precisão existe para ser guardada:
  *
  * | família          | coluna                                   | escala |
  * |------------------|------------------------------------------|--------|
@@ -9,15 +9,18 @@
  * | custo unitário   | `custo_unitario`, `custo_medio`, `ultimo_preco`, `custo_referencia`, `custo_ficha_unitario` | `numeric(18,6)` |
  * | quantidade       | `quantidade`                              | `numeric(18,4)` |
  *
- * Valor é dinheiro que se SOMA numa nota — duas casas, e a terceira não existe.
- * Custo unitário é o que se MULTIPLICA por mil pratos, e é onde meio centavo
- * vira erro de verdade: `services/custos.py` guarda seis casas de propósito
- * (`CASAS_CUSTO`), e mostrá-lo com duas joga fora o que ele foi feito para ter.
+ * A escala da coluna manda no que se GRAVA; a tela é outra conversa.
  *
- * ⚠️ **`custo()` não INVENTA casa: ele para de esconder a que existe.** Quem
- * custa R$ 20,00 continua "R$ 20,00" — o mínimo é duas e o Intl apara o zero à
- * direita sozinho. Só quem tem fração aparece maior, que é exatamente quando o
- * número precisa ser lido inteiro.
+ * ⚠️ **Dinheiro aparece com DUAS casas, seja valor ou custo unitário** (pedido
+ * do dono, 12/09/2026). As seis casas continuam inteiras onde importam — no
+ * banco, na conta do servidor e no campo de digitação (`numeroParaCusto`) —,
+ * mas a tela mostrava "R$ 0,169020" no meio de uma lista de preços e o número
+ * ficava mais difícil de ler do que de entender. Quem precisa do dígito fino
+ * tem a memória de cálculo e a exportação, não a linha da tabela.
+ *
+ * ⚠️ **Arredondar é da EXIBIÇÃO, e só dela.** `custo()` nunca toca no que é
+ * enviado ao servidor: quem salva usa `moedaParaNumero`/`textoParaNumero`, e o
+ * campo de custo continua aceitando e devolvendo as seis casas.
  *
  * ⚠️ **Um número por família, não um por tela.** `qtd` estava definido oito
  * vezes, com três casas em cinco arquivos e quatro em três — o mesmo saldo
@@ -32,20 +35,18 @@ export const reais = (v: number | string | null | undefined) =>
     ? "—"
     : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** Custo de UMA unidade: até seis casas, como no banco.
+/** Custo de UMA unidade: duas casas na tela, como todo dinheiro daqui.
  *
- * ⚠️ O mínimo de duas é o que impede "R$ 2,8" de aparecer onde se espera
- * dinheiro; o máximo de seis é o que impede R$ 0,169020 de virar R$ 0,17 —
- * 0,6% de erro que reaparece multiplicado na ficha. */
-export const custo = (v: number | string | null | undefined) =>
-  v === null || v === undefined || v === ""
-    ? "—"
-    : Number(v).toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 6,
-      });
+ * 🔑 **Mesma régua de `reais()`, nome próprio de propósito.** As duas famílias
+ * continuam separadas no código porque são separadas no banco — `custo_medio` é
+ * `numeric(18,6)` e `valor_total` é `numeric(18,2)`. Guardar a distinção numa
+ * função com nome deixa a régua da exibição em UM lugar: se um dia a tela
+ * quiser o dígito fino de volta, muda aqui e vale nas trinta e poucas telas.
+ *
+ * ⚠️ **R$ 0,169020 vira "R$ 0,17" na tela, e isso é aceito.** O número cheio
+ * não se perde: ele é o que o servidor multiplica na ficha e o que sai na
+ * memória de cálculo e na exportação. */
+export const custo = (v: number | string | null | undefined) => reais(v);
 
 /** Quantas casas a LOJA quer ver na quantidade (`parametros.casas_decimais_qtd`).
  *

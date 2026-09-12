@@ -89,10 +89,32 @@
   se acha lendo o código: acha-se quando alguém confere duas telas e conclui que uma delas
   mente. Agora `reais`, `custo`, `qtd`, `pct` e `inteiro` moram em `lib/numeros.ts`;
   `lib/cadastros.ts` reexporta `reais` porque trinta e cinco telas já o pedem de lá.
+  ⚠️ **Quatro telas ficaram para trás naquela varredura, e foram fechadas em 12/09/2026**:
+  Produção (duas quantidades com três casas fixas), a ficha (a quantidade que a receita tira
+  do estoque, quatro casas), a remessa de transferência (um `numero` local, quatro casas) e o
+  Vendas do dia (uma cópia de `inteiro`). As três primeiras **ignoravam o `casas_decimais_qtd`
+  da loja** — mexer no ajuste não mudava nada nelas, que é o mesmo defeito que o ajuste tinha
+  antes de ser ligado. ⚠️ Sobra uma, de propósito: o `fc` da ficha
+  (`qtd_bruta / qtd_liquida`, `toFixed(3)`) é FATOR, não quantidade — não tem unidade e não é
+  o que a loja configura.
   ⚠️ A variação do relatório do dono continua local, e está certo: ela leva **sinal**
   ("+3,2%" e "3,2%" dizem coisas diferentes) — só o "+" é dela, as casas vêm da casa.
   ⚠️ Ponteiro: a mesma régua valia para o PDF, que truncava em três casas —
   [`exportacao-e-relatorios.md`](exportacao-e-relatorios.md).
+  🔑 **E dois dias depois a TELA voltou para duas casas** (12/09/2026, pedido do dono):
+  `custo()` passou a ser `reais()` e todo dinheiro aparece com duas casas em toda tela —
+  Saldos, Fichas, Produção, CMV, Compras, Ajustes, Produto > Custo, as trinta e poucas. O
+  que se viu com as seis ligadas foi que a precisão aparecia onde ninguém a estava
+  procurando: "R$ 0,169020" numa coluna de preços cansa a leitura de uma lista inteira para
+  servir a uma conferência que se faz uma vez. ⚠️ **A precisão não sumiu, mudou de lugar**:
+  o banco, a conta do servidor, o campo `CampoCusto` (que continua com seis, porque ele
+  GRAVA) e a exportação — CSV e PDF seguem na escala da coluna, e é lá que se confere
+  dígito. ⚠️ **O nome `custo()` ficou de propósito**, mesmo idêntico a `reais()`: é o que
+  mantém a régua da exibição num lugar só. Trocar as chamadas por `reais()` espalharia a
+  decisão por trinta arquivos e tornaria a volta atrás impossível de fazer sem varredura.
+  ⚠️ **O efeito colateral aceito**: uma linha de "10 × R$ 0,17 = R$ 1,69" passa a não
+  fechar aos olhos de quem multiplicar a mão. É o preço da leitura limpa, e foi decidido
+  sabendo disso.
 
 - 🔑 **`type="number"` não serve para dinheiro** (`CampoMoeda` em `components/ui.tsx`,
   10/09/2026, pedido do dono). Era o que o preço de venda do cadastro de produtos usava, e

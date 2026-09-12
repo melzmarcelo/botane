@@ -12,7 +12,7 @@ import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 import AgendaProducao from "./agenda";
 
-import { custo } from "@/lib/numeros";
+import { custo, qtd } from "@/lib/numeros";
 type Ficha = {
   id: number;
   id_produto: number;
@@ -196,9 +196,7 @@ export default function PaginaProducao() {
                   <li key={i} className="flex justify-between gap-4 border-b border-linha py-1">
                     <span>{c.nome}</span>
                     <span className="mono">
-                      {Number(c.quantidade).toLocaleString("pt-BR", {
-                        maximumFractionDigits: 3,
-                      })}
+                      {qtd(c.quantidade)}
                       {veCusto && ` · ${reais(Number(c.custo))}`}
                     </span>
                   </li>
@@ -314,11 +312,7 @@ export default function PaginaProducao() {
                     </td>
                     <td className="font-semibold">{h.produto}</td>
                     <td className="text-suave">{h.local}</td>
-                    <td className="num">
-                      {Number(h.quantidade).toLocaleString("pt-BR", {
-                        maximumFractionDigits: 3,
-                      })}
-                    </td>
+                    <td className="num">{qtd(h.quantidade)}</td>
                     {veCusto && <td className="num">{reais(Number(h.custo_total))}</td>}
                     {veCusto && (
                       <td className="num font-semibold">{custo(Number(h.custo_unitario))}</td>
