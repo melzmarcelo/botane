@@ -22,11 +22,17 @@ import { Aviso, Confirmacao } from "@/components/ui";
  * cópia nasce em rascunho e que a ficha atual do destino continua valendo. Sem
  * isso a pessoa descobre o efeito pela lista de fichas, depois.
  *
- * ⚠️ **A busca NÃO é filtrada por tipo, e isso é de propósito.** Filtrar por
- * `tipo=PRODUZIDO` esconderia os kits, que também têm ficha — e o comentário da
- * própria tela da ficha conta como esse recorte já fez "o prato que se queria
- * virar invisível", com o `<select>` sem ter como dizer por quê. Aqui o produto
- * aparece e a tela EXPLICA quando ele não serve.
+ * ⚠️ **A busca lista só PRODUZIDOS** (decisão do dono, 12/09/2026). A primeira
+ * versão não filtrava, para não repetir o caso em que um recorte fez "o prato que
+ * se queria virar invisível" — o tipo `KIT` também aceita ficha, e filtrar o
+ * esconde. Medido na base ao decidir: **zero kits** cadastrados e as 46 fichas
+ * todas em produzidos, então o que o filtro esconde hoje é nada, e o que ele tira
+ * da frente são 600 insumos, revendas e utensílios que nunca serão destino de uma
+ * receita. É também o mesmo recorte que a tela de CRIAR a ficha já usa
+ * (`fonteProduzidos`), o que faz as duas buscas responderem igual.
+ * ⚠️ **No dia em que existir kit com ficha**, o filtro é uma string: tirar o
+ * `tipo=PRODUZIDO` devolve o comportamento anterior. E a guarda abaixo continua
+ * valendo, porque o servidor aceita os dois tipos.
  *
  * ⚠️ **Produto EXISTENTE.** Cadastrar o produto aqui pediria tipo, unidade,
  * categoria e setor — um cadastro inteiro dentro de uma janela de cópia. Quem
@@ -50,7 +56,14 @@ export default function DuplicarFicha({
   const [copiando, setCopiando] = useState(false);
 
   const fonte = useMemo<FonteBusca>(
-    () => ({ ...fonteProdutos(), titulo: "Buscar o produto de destino", singular: "produto" }),
+    () => ({
+      // ⚠️ O recorte vai como query do SERVIDOR (`extra`), nunca como peneira no
+      // navegador: filtrar depois cortaria a página trazida e a busca diria
+      // "nenhum resultado" para um prato que existe na página seguinte.
+      ...fonteProdutos("tipo=PRODUZIDO"),
+      titulo: "Buscar o produto de destino",
+      singular: "produto produzido",
+    }),
     [],
   );
 
@@ -132,7 +145,8 @@ export default function DuplicarFicha({
               }}
             />
             <p className="mt-1.5 text-[13px] text-suave">
-              Produto <b>produzido ou kit</b>, já cadastrado. Copiando de {produtoAtual}.
+              A lista traz os produtos <b>produzidos</b>, que são os que têm receita. Copiando
+              de {produtoAtual}.
             </p>
           </div>
           {destino && !serve && (

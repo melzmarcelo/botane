@@ -77,10 +77,16 @@
   PRODUTO por trás da sub-ficha e recusa com essa frase.
   ⚠️ **O destino também vira produção própria**, como em `criar`: sem isso o bolo novo teria
   receita e não apareceria na agenda de produção.
-  ⚠️ **A busca do destino NÃO filtra por tipo**, de propósito — `tipo=PRODUZIDO` esconderia os
-  kits, e a própria tela da ficha carrega o comentário de quando um recorte assim fez "o prato
-  que se queria virar invisível". O produto aparece, e a tela explica quando ele não serve
-  (produzido ou kit); o servidor recusa com a mesma frase de quem cria ficha do zero.
+  ⚠️ **A busca do destino lista só PRODUZIDOS** (decisão do dono no mesmo dia, depois de a
+  primeira versão não filtrar). O receio era repetir o caso em que um recorte fez "o prato que
+  se queria virar invisível", já que `KIT` também aceita ficha. Medido antes de decidir: **zero
+  kits** na base e as 46 fichas todas em produzidos — o filtro não esconde nada e tira da frente
+  600 insumos, revendas e utensílios que nunca serão destino de receita. É o mesmo recorte da
+  tela de CRIAR a ficha (`fonteProduzidos`), então as duas buscas respondem igual.
+  ⚠️ O recorte vai como query do SERVIDOR (`tipo=PRODUZIDO` no `extra`), nunca como peneira no
+  navegador: filtrar depois cortaria a página trazida e a busca diria "nenhum resultado" para um
+  prato que existe na página seguinte. E a guarda de tela continua valendo, porque o servidor
+  aceita os dois tipos — no dia em que houver kit com ficha, tirar a string devolve o anterior.
   ⚠️ **O botão aparece em rascunho também**, ao contrário de "criar nova versão": copiar não
   muda esta ficha, e a base de uma receita nova costuma estar na que ainda se está escrevendo.
   ⚠️ **Produto de destino EXISTENTE.** Cadastrá-lo na janela pediria tipo, unidade, categoria

@@ -1550,6 +1550,56 @@ try {
         && (origemApi?.itens ?? []).length === (origemAntes?.itens ?? []).length,
       [origemAntes?.status, origemApi?.status]);
     await foto(p, "17b-duplicar-ficha");
+
+    // 🔑 **A busca do destino lista so PRODUZIDOS** (decisao do dono, 12/09/2026).
+    // Sem esta checagem a decisao volta atras no primeiro refactor da tela — e o
+    // sintoma seria uma lista com 600 insumos onde se procura um prato.
+    // ⚠️ Vai DEPOIS da copia e fecha a janela no fim: nada do roteiro seguinte
+    // depende deste passo, entao um tropeco aqui nao contamina o resto.
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => /Duplicar receita/i.test(b.textContent ?? ""))?.click());
+    await p.waitForSelector('[role="dialog"]', { timeout: 8000 }).catch(() => {});
+    const buscaFiltrada = await p.$(
+      '[role="dialog"] input[aria-label="Buscar o produto de destino"]');
+    if (buscaFiltrada) {
+      // `Tela farinha` e INSUMO: com o filtro, a busca nao o resolve.
+      await buscaFiltrada.click();
+      await buscaFiltrada.type(`Tela farinha ${marca}`);
+      await p.keyboard.press("Tab");
+      await new Promise((r) => setTimeout(r, 1500));
+      const oQueVeio = await p.evaluate(() => {
+        const janelas = [...document.querySelectorAll('[role="dialog"]')];
+        const lupa = janelas[janelas.length - 1];
+        return {
+          janelas: janelas.length,
+          // 🔑 **O campo GUARDA o texto digitado quando nada resolve.** A
+          // primeira versao desta checagem olhava o valor do campo e falhava com
+          // o filtro FUNCIONANDO: o `BuscaCadastro` so reescreve o texto quando
+          // alguem e escolhido. O que prova o recorte e a janela da lupa dizendo
+          // que nao achou — e a lista vazia dentro dela.
+          naoAchou: /Nenhum produto produzido/i.test(lupa?.innerText ?? ""),
+          achados: [...(lupa?.querySelectorAll("ul li") ?? [])].length,
+        };
+      });
+      checar("a busca do destino nao oferece insumo, so produzido",
+        oQueVeio.naoAchou && oQueVeio.achados === 0, oQueVeio);
+    }
+    // Fecha o que estiver aberto, da janela de dentro para fora.
+    for (let i = 0; i < 3; i++) {
+      const fechou = await p.evaluate(() => {
+        const janelas = [...document.querySelectorAll('[role="dialog"]')];
+        const ultima = janelas[janelas.length - 1];
+        const x = ultima?.querySelector('[aria-label="fechar"]');
+        if (x) { x.click(); return true; }
+        const cancelar = [...(ultima?.querySelectorAll("button") ?? [])]
+          .find((b) => /Cancelar/i.test(b.textContent ?? ""));
+        if (cancelar) { cancelar.click(); return true; }
+        return false;
+      });
+      if (!fechou) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
     await api("DELETE", `/fichas/${idCopia}`, null, token);
     await api("DELETE", `/produtos/${bananaTela.id}`, null, token);
     await irPara(p, `${WEB}/fichas/${idFicha}`);
