@@ -943,9 +943,13 @@
   `produzir` rateando em `Decimal` (centavos de sobra nas primeiras, como o rateio de
   parcelas), soma dos percentuais fechando 100, cartão na tela da ficha e bateria. **É
   migração nova, logo ponto de não retorno** — validar em base COM dado antes de promover.
-  ⏸️ **Adiado esperando um dado do mundo, não do código**: com que frequência ela separa as
-  partes. Toda semana, o recurso se paga; receita ocasional, a ficha com fração resolve e a
-  complexidade não se justifica. O dono foi confirmar com a cliente.
+  ✅ **DECIDIDO em 13/09/2026: controla-se com produto novo** — o caminho medido acima, sem
+  código nenhum. CLARA e GEMA viram produtos, cada um com a ficha que consome a fração do ovo
+  correspondente ao peso aproveitável dela. O desmembramento com rendimento múltiplo fica
+  **fora do escopo**; se um dia voltar, o desenho está no parágrafo acima.
+  ⚠️ **O que isso passa a exigir da casa**: lançar as duas produções juntas e na proporção —
+  quebrou 10 ovos e lançou só a clara, ficam 3,33 ovos no sistema que não existem na geladeira.
+  Nada no sistema obriga, e é a única fragilidade conhecida do arranjo.
 
 - 🔑 **Cadastro ABSORVIDO numa fusão não volta a ativo por acidente** (13/09/2026, relato do
   dono: *"os produtos que foram vinculados e desativados, acredito que eles não poderiam ser
