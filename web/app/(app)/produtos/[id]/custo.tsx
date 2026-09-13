@@ -42,6 +42,21 @@ type Custo = {
   atual: number | null;
   origem: string;
   origem_texto: string;
+  /** 🔑 **O que a FICHA prevê, quando ninguém mais sabe** (13/09/2026, pedido do
+   *  dono: "caso a ficha não tenha sido produzida, a ficha está sem custo, levar
+   *  este custo provisório para a tela do cadastro de produto"). Vem só quando o
+   *  apurado é nulo — dois números para a mesma pergunta é pior que um. */
+  provisorio: {
+    custo: number;
+    id_ficha: number;
+    versao: number;
+    status: string;
+    rendimento_qtd: number;
+    rendimento_um: string | null;
+    custo_total: number;
+    itens_sem_custo: number;
+    completo: boolean;
+  } | null;
   linhas: Linha[];
 };
 
@@ -106,12 +121,18 @@ export default function CustoDoProduto({
             {/* ⚠️ **Sem custo é "—", nunca R$ 0,00.** Zero é uma afirmação:
                 diz que o produto não custa nada, e é justamente o número que
                 faz o food cost sair bom demais sem ninguém desconfiar. */}
-            {c.atual === null ? "—" : custo(c.atual)}
+            {c.atual !== null
+              ? custo(c.atual)
+              : c.provisorio
+                ? custo(c.provisorio.custo)
+                : "—"}
           </p>
           <p className="mt-1.5 text-[13px] text-suave">
-            {c.atual === null
-              ? "Ninguém sabe quanto custa: não há entrada no estoque, preço de fornecedor nem referência."
-              : c.origem_texto}
+            {c.atual !== null
+              ? c.origem_texto
+              : c.provisorio
+                ? `o que a ficha v${c.provisorio.versao} prevê — ainda não foi produzido`
+                : "Ninguém sabe quanto custa: não há entrada no estoque, preço de fornecedor nem referência."}
           </p>
         </div>
         <button type="button" className="btn btn-secundario" onClick={() => setAberto(true)}>
@@ -123,6 +144,31 @@ export default function CustoDoProduto({
           do razão é o que a casa pagou, com frete dentro; o preço do fornecedor
           é o que ela negociou; a referência é o que outro sistema acha. Sem o
           aviso, os três aparecem com a mesma cara de número apurado. */}
+      {/* 🔑 **O provisório da ficha, com a etiqueta grudada nele.** Produto
+          produzido só ganha custo médio quando uma produção entra no razão; antes
+          disso a cascata responde "ninguém sabe" enquanto a receita, ali do lado,
+          sabe somar os ingredientes. ⚠️ O aviso é o que impede o número de virar
+          apurado aos olhos de quem olha: o custo de verdade é o que SAIU do
+          estoque, e ingrediente mais caro no dia faz o lote custar mais. */}
+      {c.atual === null && c.provisorio && (
+        <div className="mt-3">
+          <Aviso tipo={c.provisorio.completo ? "info" : "erro"}>
+            Custo <b>provisório</b>, calculado pela ficha v{c.provisorio.versao}
+            {c.provisorio.status === "RASCUNHO" && " (em rascunho)"}:{" "}
+            {custo(c.provisorio.custo_total)} de ingredientes para{" "}
+            {c.provisorio.rendimento_qtd} {c.provisorio.rendimento_um ?? "un"}. O custo de
+            verdade nasce na primeira produção — é o que saiu do estoque no dia, não o que a
+            receita prevê.
+            {!c.provisorio.completo && (
+              <span className="mt-1 block">
+                ⚠️ {c.provisorio.itens_sem_custo} item(ns) da ficha estão{" "}
+                <b>sem preço conhecido</b>, então este número está por baixo.
+              </span>
+            )}
+          </Aviso>
+        </div>
+      )}
+
       {c.origem === "referencia" && (
         <div className="mt-3">
           <Aviso tipo="info">

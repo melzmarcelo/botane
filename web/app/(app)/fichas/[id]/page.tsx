@@ -8,7 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, UnidadeMedida, reais } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
@@ -121,6 +121,18 @@ export default function EditorFicha() {
   const [previaFoto, setPrevia] = useState<string | null>(null);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
   const [carregando, setCarregando] = useState(!nova);
+  /**
+   * 🔑 **Rascunho se EXCLUI** (13/09/2026, pedido do dono). Arquivar existe para
+   * não quebrar o passado — ficha publicada apurou custo e o histórico aponta para
+   * ela. Rascunho não tem passado nenhum, e uma lista cheia de tentativas
+   * arquivadas é ruído que ninguém pode limpar.
+   *
+   * ⚠️ **O servidor é quem decide**, e faz as duas coisas no mesmo `DELETE`: em
+   * rascunho exclui, em homologada arquiva, e recusa quando o dado trava (usada
+   * como sub-ficha, produção registrada). A tela só oferece o botão onde ele faz
+   * sentido — mas não é ela a guarda.
+   */
+  const [excluindo, setExcluindo] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -388,6 +400,17 @@ export default function EditorFicha() {
     }
   }
 
+  async function excluirRascunho() {
+    setExcluindo(false);
+    try {
+      const r = await api.delete<{ message: string }>(`/fichas/${id}`);
+      aviso.sucesso(r.message);
+      router.push("/fichas");
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível excluir");
+    }
+  }
+
   const opcoesSubficha = useMemo(
     () => fichas.filter((f) => String(f.id) !== id && f.status !== "ARQUIVADA"),
     [fichas, id],
@@ -510,6 +533,18 @@ export default function EditorFicha() {
           {/* ⚠️ **Aparece em rascunho TAMBÉM**, ao contrário de "nova versão":
               copiar não muda esta ficha, e a base de uma receita nova costuma
               estar justamente na que ainda se está escrevendo. */}
+          {/* ⚠️ Só em RASCUNHO: em ficha publicada o mesmo endpoint arquiva, e
+              oferecer "excluir" ali faria a tela prometer o que o servidor não
+              faz. */}
+          {!nova && podeEditar && ficha?.status === "RASCUNHO" && (
+            <button
+              type="button"
+              className="btn btn-secundario"
+              onClick={() => setExcluindo(true)}
+            >
+              Excluir rascunho
+            </button>
+          )}
           {!nova && podeEditar && ficha && (
             <DuplicarFicha
               idFicha={ficha.id}
@@ -533,6 +568,25 @@ export default function EditorFicha() {
           )}
         </div>
       </header>
+
+      {excluindo && (
+        <Confirmacao
+          titulo="Excluir este rascunho?"
+          perigo
+          rotuloConfirmar="Sim, excluir"
+          aoConfirmar={excluirRascunho}
+          aoCancelar={() => setExcluindo(false)}
+        >
+          <p>
+            A receita e os destinos dela somem, e <b>não há como desfazer</b>. Rascunho nunca
+            foi homologado nem produziu nada, então nenhum custo apurado depende dele.
+          </p>
+          <p className="mt-2">
+            Se este rascunho for usado como <b>sub-ficha</b> em outra receita, o servidor recusa
+            e diz onde está o vínculo.
+          </p>
+        </Confirmacao>
+      )}
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {travada && (
@@ -680,22 +734,22 @@ export default function EditorFicha() {
         </div>
       </Cartao>
 
+      {/* 🔑 **O "Adicionar linha" fica NO FIM da lista** (13/09/2026, pedido do
+          dono: "o botão sempre fica no topo, mas pode colocar no fim dos itens,
+          fica a usabilidade melhor"). Ele era a `acao` do cartão, e `acao` mora no
+          cabeçalho: quem acabou de preencher a última linha estava no rodapé da
+          lista e tinha de subir a tela para pedir a próxima — numa receita de doze
+          ingredientes, doze vezes. Agora a mão continua onde o olho está.
+          ⚠️ O cartão fica SEM `acao`, e é por isso que este comentário existe: a
+          tentação é devolver o botão para lá por simetria com os outros cartões. */}
       <Cartao
         titulo="Ingredientes"
         descricao="A quantidade bruta é a que sai do estoque — é ela que custa. A líquida é o que sobra depois de limpar."
-        acao={
-          editavel ? (
-            <button
-              type="button"
-              className="btn btn-secundario"
-              onClick={() => setItens((l) => [...l, { ...ITEM_VAZIO }])}
-            >
-              Adicionar linha
-            </button>
-          ) : undefined
-        }
       >
-        <div className="flex flex-col gap-3">
+        {/* ⚠️ O `id` existe para a bateria achar as LINHAS sem depender de classe:
+            o resumo de custo logo abaixo também é `rounded`, e a checagem da ordem
+            do botão media contra ele. Mesmo padrão de `#locais-do-produto`. */}
+        <div id="itens-da-ficha" className="flex flex-col gap-3">
           {itens.map((item, i) => {
             const alvo = item.id_subficha ? `sub:${item.id_subficha}` : item.id_insumo ? `ins:${item.id_insumo}` : "";
             const fc =
@@ -886,6 +940,18 @@ export default function EditorFicha() {
             );
           })}
         </div>
+
+        {editavel && (
+          <div className="mt-3">
+            <button
+              type="button"
+              className="btn btn-secundario"
+              onClick={() => setItens((l) => [...l, { ...ITEM_VAZIO }])}
+            >
+              Adicionar linha
+            </button>
+          </div>
+        )}
 
         {veCusto && ficha && (
           <div className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-3">

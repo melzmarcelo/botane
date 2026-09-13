@@ -574,8 +574,36 @@ def duplicar(id_ficha: int, body: FichaDuplicar,
 @router.delete("/{id_ficha}")
 def arquivar(id_ficha: int,
              ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
-    """Arquiva. Ficha usada por outra não some, senão o custo dela quebraria."""
+    """Arquiva — ou EXCLUI de verdade, quando a ficha nunca saiu do rascunho.
+
+    🔑 **Pedido do dono (13/09/2026):** *"caso a ficha esteja como rascunho,
+    permitir que ela seja excluída"*. Arquivar existe para não quebrar o passado:
+    ficha publicada apurou custo, e o histórico aponta para ela. Rascunho não tem
+    passado nenhum — nunca foi homologado, nunca produziu, nunca entrou em CMV —,
+    e uma lista cheia de tentativas arquivadas é ruído que ninguém pode limpar.
+
+    ⚠️ **A distinção é o STATUS, não a vontade de quem clica.** Homologada e
+    arquivada continuam só sendo arquivadas, e o mesmo endpoint faz as duas coisas
+    porque a tela pergunta a mesma coisa ("tirar isto daqui") — quem decide o que
+    é possível é o dado.
+
+    ⚠️ **Três coisas travam a exclusão, e as três têm razão de banco:**
+      1. usada como SUB-FICHA em outra: a FK é `RESTRICT` e o custo da outra
+         quebraria (é a mesma recusa de sempre, agora valendo para os dois casos);
+      2. com PRODUÇÃO registrada: a FK de `producoes` é `NO ACTION`, e um rascunho
+         com produção não deveria existir — se existir, o erro claro é melhor que
+         o do banco;
+      3. a FOTO sai primeiro: `fichas_tecnicas` não é dona do arquivo, e apagar a
+         linha deixaria a imagem órfã em `arquivos`.
+    `ficha_itens` e `ficha_locais` somem por CASCADE — são partes da receita, não
+    registros com vida própria.
+    """
     with get_cursor() as cur:
+        cur.execute("SELECT status, foto_url FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        f = cur.fetchone()
+        if not f:
+            raise HTTPException(status_code=404, detail="Ficha não encontrada")
+
         cur.execute(
             "SELECT count(*) AS n FROM ficha_itens WHERE id_subficha = %s", (id_ficha,)
         )
@@ -584,13 +612,32 @@ def arquivar(id_ficha: int,
                 status_code=409,
                 detail="Esta ficha é usada como sub-ficha em outra. Remova o vínculo antes.",
             )
-        cur.execute(
-            """UPDATE fichas_tecnicas SET status = 'ARQUIVADA', vigente_ate = current_date
-                WHERE id = %s""",
-            (id_ficha,),
-        )
-        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "arquivar")
-    return {"message": "Ficha arquivada"}
+
+        if f["status"] != "RASCUNHO":
+            cur.execute(
+                """UPDATE fichas_tecnicas SET status = 'ARQUIVADA', vigente_ate = current_date
+                    WHERE id = %s""",
+                (id_ficha,),
+            )
+            auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "arquivar")
+            return {"message": "Ficha arquivada"}
+
+        cur.execute("SELECT count(*) AS n FROM producoes WHERE id_ficha = %s", (id_ficha,))
+        if cur.fetchone()["n"]:
+            raise HTTPException(
+                status_code=409,
+                detail=("Esta ficha já tem produção registrada e por isso não se exclui — "
+                        "o histórico aponta para ela. Ela pode ser arquivada."),
+            )
+
+        # A foto antes da linha: o arquivo tem dono próprio em `arquivos`.
+        arquivos.remover(f["foto_url"], cur)
+        cur.execute("DELETE FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        # ⚠️ A auditoria vai ANTES do fim da transação e guarda o que sumiu — é o
+        # único lugar onde ainda existe registro de que esta ficha existiu.
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "excluir",
+                            antes={"status": "RASCUNHO"})
+    return {"message": "Rascunho excluído"}
 
 
 @router.post("/{id_ficha}/foto")

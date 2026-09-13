@@ -574,6 +574,62 @@ def _ordenavel(quando):
     return datetime(quando.year, quando.month, quando.day)
 
 
+def custo_provisorio_da_ficha(cur, id_produto: int, id_unidade: int | None = None) -> dict | None:
+    """O custo TEÓRICO da ficha deste produto — o que ele vai custar ao ser feito.
+
+    🔑 **Pedido do dono (13/09/2026):** *"caso a ficha não tenha sido produzida, a
+    ficha está sem custo, levar este custo provisório para a tela do cadastro de
+    produto"*. Produto produzido só ganha custo médio quando uma produção entra no
+    razão: antes disso a cascata inteira responde "ninguém sabe quanto custa" —
+    enquanto a receita, ali do lado, sabe somar os ingredientes.
+
+    ⚠️ **É PROVISÓRIO e a resposta diz isso.** O custo de verdade é o que saiu do
+    estoque na produção: ingrediente mais caro no dia faz o lote custar mais. Este
+    é o que a ficha prevê com os preços de hoje — bom para conferir e para precificar
+    antes de produzir, e nunca a mesma coisa que o apurado.
+
+    ⚠️ **Incompleto vem MARCADO, não escondido.** Ficha com item sem preço soma só
+    parte da receita: devolver esse número sem `completo: false` seria um custo
+    barato demais com cara de apurado — exatamente o que faz o food cost sair bom
+    sem ninguém desconfiar.
+
+    ⚠️ **Não entra na cascata de `custo_do_insumo`**, de propósito: ali o número
+    alimenta ficha de terceiros, CMV e margem, e um teórico entrando calado mudaria
+    todos eles de uma vez. Aqui é para a TELA do produto, que é o que foi pedido.
+
+    ⚠️ Prefere a ficha VIGENTE; sem ela, a mais recente — que é o rascunho de quem
+    está montando a receita agora, e é justamente quem ainda não produziu nada.
+    """
+    cur.execute(
+        """SELECT id, versao, status, rendimento_qtd, rendimento_um
+             FROM fichas_tecnicas
+            WHERE id_produto = %s AND status <> 'ARQUIVADA'
+            ORDER BY (status = 'HOMOLOGADA') DESC, versao DESC
+            LIMIT 1""",
+        (id_produto,),
+    )
+    ficha = cur.fetchone()
+    if not ficha:
+        return None
+    calculo = custo_da_ficha(cur, ficha["id"], id_unidade=id_unidade)
+    rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
+    total = dec(calculo["custo_total"])
+    if total <= 0:
+        return None
+    return {
+        "custo": float((total / rendimento).quantize(CASAS_CUSTO)),
+        "id_ficha": ficha["id"],
+        "versao": ficha["versao"],
+        "status": ficha["status"],
+        "rendimento_qtd": float(rendimento),
+        "rendimento_um": ficha["rendimento_um"],
+        "custo_total": float(total),
+        # O que falta para o número ser inteiro. Zero é o caso bom.
+        "itens_sem_custo": calculo["itens_sem_custo"],
+        "completo": bool(calculo["completo"]),
+    }
+
+
 def historico(cur, id_produto: int, id_unidade: int | None = None,
               limite: int = 60) -> dict:
     """O custo de agora e o que o mudou — na ordem em que aconteceu.
@@ -679,5 +735,10 @@ def historico(cur, id_produto: int, id_unidade: int | None = None,
         "atual": float(atual) if atual is not None else None,
         "origem": origem,
         "origem_texto": _ORIGEM_EM_PORTUGUES.get(origem, origem),
+        # 🔑 **O que a FICHA prevê, quando ninguém mais sabe** (13/09/2026, pedido
+        # do dono). Só quando a cascata não respondeu: com custo apurado, oferecer
+        # um teórico ao lado seria dar dois números para a mesma pergunta.
+        "provisorio": (custo_provisorio_da_ficha(cur, id_produto, id_unidade)
+                       if atual is None else None),
         "linhas": linhas,
     }

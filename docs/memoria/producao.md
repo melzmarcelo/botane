@@ -5,6 +5,40 @@
 
 ## O que já existe
 
+- 🔑 **Rascunho se EXCLUI; publicada se arquiva** (`DELETE /fichas/{id}`, 13/09/2026, pedido do
+  dono: *"caso a ficha esteja como rascunho, permitir que ela seja excluída"*). Arquivar existe
+  para não quebrar o passado — ficha publicada apurou custo e o histórico aponta para ela.
+  Rascunho não tem passado nenhum (nunca homologou, nunca produziu, nunca entrou em CMV), e uma
+  lista cheia de tentativas arquivadas é ruído que ninguém pode limpar.
+  ⚠️ **O mesmo endpoint faz as duas coisas**, e quem decide é o STATUS — não a vontade de quem
+  clica. A tela só oferece "Excluir rascunho" onde ele funciona, mas a guarda é do servidor.
+  ⚠️ **Três travas, e as três têm razão de banco**: usada como sub-ficha (a FK de
+  `ficha_itens.id_subficha` é `RESTRICT`, e o custo da outra quebraria); com produção registrada
+  (`producoes.id_ficha` é `NO ACTION`); e a FOTO sai primeiro, porque `fichas_tecnicas` não é
+  dona do arquivo e apagar a linha deixaria a imagem órfã em `arquivos`. `ficha_itens` e
+  `ficha_locais` somem por CASCADE — são partes da receita, não registros com vida própria.
+  ⚠️ A auditoria grava o `excluir` antes do fim da transação: é o único lugar onde resta
+  registro de que aquela ficha existiu.
+
+- 🔑 **O custo que a ficha PREVÊ aparece na tela do produto** (`custos.custo_provisorio_da_ficha`,
+  13/09/2026, pedido do dono: *"caso a ficha não tenha sido produzida, a ficha está sem custo,
+  levar este custo provisório para a tela do cadastro de produto"*). Produto produzido só ganha
+  custo médio quando uma produção entra no razão: antes disso a cascata inteira responde
+  "ninguém sabe quanto custa" — enquanto a receita, ali do lado, sabe somar os ingredientes.
+  ⚠️ **NÃO entra na cascata de `custo_do_insumo`**, de propósito: ali o número alimenta ficha de
+  terceiros, CMV e margem, e um teórico entrando calado mudaria todos de uma vez. É para a TELA,
+  que foi o que o pedido disse.
+  ⚠️ **Só quando o apurado é NULO.** Com custo de verdade, oferecer um teórico ao lado seria dar
+  dois números para a mesma pergunta.
+  ⚠️ **Incompleto vem MARCADO, não escondido**: ficha com item sem preço soma parte da receita, e
+  o aviso diz quantos faltam. Sem isso seria um custo barato demais com cara de apurado —
+  exatamente o que faz o food cost sair bom sem ninguém desconfiar.
+  ⚠️ Prefere a ficha VIGENTE; sem ela, a mais recente — que é o rascunho de quem está montando a
+  receita agora, e é justamente quem ainda não produziu nada. Arquivada não responde: a suíte
+  tropeçou nisso primeiro (o teste reusava um produto cuja única ficha havia sido arquivada) e
+  acusou o recurso por um comportamento que está certo.
+
+
 - 🔑 **A mesma ficha com PROCESSOS diferentes: a prateleira decide o rendimento**
   (`ficha_locais` + `produtos.id_local_venda`, migração 066, 12/09/2026, pedido do dono:
   *"a mesma ficha pode ter processos diferentes. Vamos fazer a massa de pizza e estocar para

@@ -1365,6 +1365,35 @@ try {
         .some((i) => /fator de coc/i.test(i.getAttribute("aria-label") ?? "")));
     checar("cada ingrediente tem o campo de coccao", temCoccao);
 
+    // 🔑 **"Adicionar linha" DEPOIS da lista** (13/09/2026, pedido do dono: "o
+    // botao sempre fica no topo, mas pode colocar no fim dos itens, fica a
+    // usabilidade melhor"). Ele era a `acao` do cartao, e `acao` mora no
+    // cabecalho: quem acabou de preencher a ultima linha tinha de subir a tela
+    // para pedir a proxima — numa receita de doze ingredientes, doze vezes.
+    // ⚠️ A checagem e de ORDEM no documento, nao de existencia: o botao continuaria
+    // existindo se alguem o devolvesse ao cabecalho por simetria com os outros
+    // cartoes, e e exatamente isso que ela impede.
+    const ondeEstaOBotao = await p.evaluate(() => {
+      const cartao = [...document.querySelectorAll("section.cartao")]
+        .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Ingredientes");
+      const botao = [...(cartao?.querySelectorAll("button") ?? [])]
+        .find((b) => /Adicionar linha/i.test(b.textContent ?? ""));
+      // ⚠️ Pelo `id`, nao por classe: o resumo de custo abaixo do botao tambem e
+      // `rounded`, e a primeira versao desta checagem media contra ELE — dizendo
+      // que o botao estava antes das linhas quando ele estava depois.
+      const linhas = [...document.querySelectorAll("#itens-da-ficha > div")];
+      const ultima = linhas[linhas.length - 1];
+      if (!botao || !ultima) return { achou: false, linhas: linhas.length };
+      return {
+        achou: true,
+        linhas: linhas.length,
+        // 4 = DOCUMENT_POSITION_FOLLOWING: o botao vem depois da ultima linha.
+        depoisDaUltima: !!(ultima.compareDocumentPosition(botao) & 4),
+      };
+    });
+    checar("o botao de adicionar linha fica DEPOIS dos itens",
+      ondeEstaOBotao.achou && ondeEstaOBotao.depoisDaUltima, ondeEstaOBotao);
+
     // Volta o rendimento para o que a fase montou: o resto do roteiro conta com
     // ele, e este bloco nao grava nada de proposito.
     await irPara(p, `${WEB}/fichas/${idFicha}`);
@@ -1702,6 +1731,77 @@ try {
       textoCozinha.match(/.{0,30}R\$.{0,20}/)?.[0]);
     await foto(p, "17-ficha-cozinha");
     await entrar(p, ADMIN);
+
+    // 🔑 **Rascunho se EXCLUI, e o custo que a ficha PREVE aparece no produto**
+    // (13/09/2026, dois pedidos do dono). Cenario proprio: a ficha desta fase ja
+    // foi usada por meia duzia de checagens, e excluir a dela levaria as fotos e o
+    // custo embora.
+    const { dados: prodRasc } = await api("POST", "/produtos", {
+      nome: `Tela rascunho ${marca}`, tipo: "PRODUZIDO", um_estoque: "KG",
+      producao_propria: true,
+    }, token);
+    aoTerminar.push(() => api("DELETE", `/produtos/${prodRasc.id}`, null, token));
+    const { dados: fichaRasc } = await api("POST", "/fichas", {
+      id_produto: prodRasc.id, rendimento_qtd: 10, rendimento_um: "KG", porcoes: 1,
+      itens: [{ id_insumo: insumo.id, qtd_bruta: 2, um: "KG" }],
+    }, token);
+
+    // ⚠️ O produto NUNCA foi produzido: a cascata nao sabe o custo, e a ficha sabe.
+    await irPara(p, `${WEB}/produtos/${prodRasc.id}`);
+    await p.waitForFunction(
+      () => /provis[óo]rio/i.test(document.body.innerText), { timeout: 15000 },
+    ).catch(() => {});
+    const custoProv = await p.evaluate(() => {
+      const cartao = [...document.querySelectorAll("section.cartao")]
+        .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+      const texto = cartao?.innerText ?? "";
+      return {
+        temCartao: !!cartao,
+        // 2 KG de insumo a 8,00 = 16,00 para 10 KG: 1,60 por KG.
+        mostraONumero: /1,60/.test(texto),
+        // ⚠️ O rotulo e o que impede o teorico de virar apurado aos olhos de quem
+        // olha: sem ele, o numero tem a mesma cara do custo medio do razao.
+        dizQueEProvisorio: /provis[óo]rio/i.test(texto),
+        dizDeOndeVeio: /ficha v\d/i.test(texto),
+        avisaQueNascePelaProducao: /primeira produ|nasce na/i.test(texto),
+      };
+    });
+    checar("o produto sem produção mostra o custo que a ficha prevê",
+      custoProv.temCartao && custoProv.mostraONumero, custoProv);
+    checar("com a etiqueta de PROVISÓRIO e de qual ficha veio",
+      custoProv.dizQueEProvisorio && custoProv.dizDeOndeVeio, custoProv);
+    checar("e dizendo que o custo de verdade nasce na produção",
+      custoProv.avisaQueNascePelaProducao, custoProv);
+
+    // O rascunho se exclui — e a tela pergunta antes.
+    await irPara(p, `${WEB}/fichas/${fichaRasc.id}`);
+    await new Promise((r) => setTimeout(r, 1300));
+    const temExcluir = await p.evaluate(() => [...document.querySelectorAll("button")]
+      .some((b) => /Excluir rascunho/i.test(b.textContent ?? "")));
+    checar("a ficha em rascunho oferece excluir", temExcluir);
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => /Excluir rascunho/i.test(b.textContent ?? ""))?.click());
+    await p.waitForSelector('[role="dialog"]', { timeout: 8000 }).catch(() => {});
+    const janelaExcluir = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      return {
+        abriu: !!d,
+        // ⚠️ "Nao ha como desfazer" tem de estar escrito: excluir e o unico botao
+        // desta tela que nao tem volta.
+        avisaSemVolta: /n[ãa]o h[áa] como desfazer/i.test(d?.innerText ?? ""),
+      };
+    });
+    checar("perguntando antes, e dizendo que não há volta",
+      janelaExcluir.abriu && janelaExcluir.avisaSemVolta, janelaExcluir);
+    await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')]
+      .find((b) => /Sim, excluir/i.test(b.textContent ?? ""))?.click());
+    await p.waitForFunction(() => /\/fichas$/.test(location.pathname), { timeout: 12000 })
+      .catch(() => {});
+    const { status: depoisDeExcluir } = await api(
+      "GET", `/fichas/${fichaRasc.id}`, null, token);
+    checar("e a ficha some de verdade do servidor", depoisDeExcluir === 404,
+      depoisDeExcluir);
+    await foto(p, "17d-rascunho-e-provisorio");
 
     await api("DELETE", `/fichas/${idFicha}`, null, token);
   }
