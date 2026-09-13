@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { custo } from "@/lib/numeros";
+import { custo, qtd } from "@/lib/numeros";
 import { Aviso, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 
 /**
@@ -48,6 +48,14 @@ type Custo = {
    *  apurado é nulo — dois números para a mesma pergunta é pior que um. */
   provisorio: {
     custo: number;
+    /** 🔑 **O que lidera é a PORÇÃO** (13/09/2026, correção do dono): o prato sai
+     *  em fatia, não em quilo, e é a fatia que se precifica. */
+    custo_por_porcao: number;
+    /** O que casa com o ESTOQUE, que se move na unidade de estoque. Fica à vista
+     *  junto: trocar um pelo outro sem dizer faria a tela discordar do razão. */
+    custo_por_unidade: number;
+    porcoes: number;
+    porcao_qtd: number | null;
     id_ficha: number;
     versao: number;
     status: string;
@@ -116,7 +124,11 @@ export default function CustoDoProduto({
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="rotulo">Custo de {um || "uma unidade"}</p>
+          <p className="rotulo">
+            {c.atual === null && c.provisorio && c.provisorio.porcoes > 1
+              ? "Custo de uma porção"
+              : `Custo de ${um || "uma unidade"}`}
+          </p>
           <p className="mono mt-1 text-[26px] font-bold leading-none">
             {/* ⚠️ **Sem custo é "—", nunca R$ 0,00.** Zero é uma afirmação:
                 diz que o produto não custa nada, e é justamente o número que
@@ -132,6 +144,9 @@ export default function CustoDoProduto({
               ? c.origem_texto
               : c.provisorio
                 ? `o que a ficha v${c.provisorio.versao} prevê — ainda não foi produzido`
+                    + (c.provisorio.porcoes > 1
+                        ? ` (${qtd(c.provisorio.porcoes)} porções)`
+                        : "")
                 : "Ninguém sabe quanto custa: não há entrada no estoque, preço de fornecedor nem referência."}
           </p>
         </div>
@@ -156,9 +171,16 @@ export default function CustoDoProduto({
             Custo <b>provisório</b>, calculado pela ficha v{c.provisorio.versao}
             {c.provisorio.status === "RASCUNHO" && " (em rascunho)"}:{" "}
             {custo(c.provisorio.custo_total)} de ingredientes para{" "}
-            {c.provisorio.rendimento_qtd} {c.provisorio.rendimento_um ?? "un"}. O custo de
-            verdade nasce na primeira produção — é o que saiu do estoque no dia, não o que a
-            receita prevê.
+            {qtd(c.provisorio.rendimento_qtd)} {c.provisorio.rendimento_um ?? "un"}
+            {c.provisorio.porcoes > 1 && (
+              <>
+                {" "}em {qtd(c.provisorio.porcoes)} porções — dá{" "}
+                <b>{custo(c.provisorio.custo_por_unidade)}</b> por{" "}
+                {c.provisorio.rendimento_um ?? "unidade"}, que é o que casa com o estoque
+              </>
+            )}
+            . O custo de verdade nasce na primeira produção — é o que saiu do estoque no dia,
+            não o que a receita prevê.
             {!c.provisorio.completo && (
               <span className="mt-1 block">
                 ⚠️ {c.provisorio.itens_sem_custo} item(ns) da ficha estão{" "}

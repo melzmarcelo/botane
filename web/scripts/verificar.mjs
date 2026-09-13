@@ -1742,7 +1742,10 @@ try {
     }, token);
     aoTerminar.push(() => api("DELETE", `/produtos/${prodRasc.id}`, null, token));
     const { dados: fichaRasc } = await api("POST", "/fichas", {
-      id_produto: prodRasc.id, rendimento_qtd: 10, rendimento_um: "KG", porcoes: 1,
+      // 🔑 **Com PORCOES**, para a tela ter o que escolher: 2 KG de insumo a 8,00
+      // dao 16,00; rende 10 KG em 8 porcoes. A porcao custa 2,00 e o quilo, 1,60 —
+      // e o pedido do dono (13/09/2026) e que quem lidera seja a PORCAO.
+      id_produto: prodRasc.id, rendimento_qtd: 10, rendimento_um: "KG", porcoes: 8,
       itens: [{ id_insumo: insumo.id, qtd_bruta: 2, um: "KG" }],
     }, token);
 
@@ -1757,8 +1760,13 @@ try {
       const texto = cartao?.innerText ?? "";
       return {
         temCartao: !!cartao,
-        // 2 KG de insumo a 8,00 = 16,00 para 10 KG: 1,60 por KG.
-        mostraONumero: /1,60/.test(texto),
+        // 16,00 em 8 porcoes = 2,00 a porcao. E o numero que lidera.
+        mostraAPorcao: /2,00/.test(texto),
+        dizQueEPorcao: /Custo de uma por[çc][ãa]o/i.test(texto),
+        // ⚠️ E o por UNIDADE continua a vista: e ele que casa com o estoque, que
+        // se move em KG. Sumir com ele faria a tela discordar do razao sem nada
+        // explicando.
+        mostraOQuilo: /1,60/.test(texto),
         // ⚠️ O rotulo e o que impede o teorico de virar apurado aos olhos de quem
         // olha: sem ele, o numero tem a mesma cara do custo medio do razao.
         dizQueEProvisorio: /provis[óo]rio/i.test(texto),
@@ -1767,7 +1775,11 @@ try {
       };
     });
     checar("o produto sem produção mostra o custo que a ficha prevê",
-      custoProv.temCartao && custoProv.mostraONumero, custoProv);
+      custoProv.temCartao && custoProv.mostraAPorcao, custoProv);
+    checar("liderando pela PORÇÃO, com o rótulo dizendo isso",
+      custoProv.dizQueEPorcao, custoProv);
+    checar("e com o custo por unidade de estoque à vista junto",
+      custoProv.mostraOQuilo, custoProv);
     checar("com a etiqueta de PROVISÓRIO e de qual ficha veio",
       custoProv.dizQueEProvisorio && custoProv.dizDeOndeVeio, custoProv);
     checar("e dizendo que o custo de verdade nasce na produção",

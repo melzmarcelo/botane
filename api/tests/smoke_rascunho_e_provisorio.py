@@ -80,10 +80,10 @@ def novo(nome, tipo, um, **extra):
     return r.get("id")
 
 
-def ficha_de(id_produto, itens, rendimento=10):
+def ficha_de(id_produto, itens, rendimento=10, porcoes=1):
     _st, f = chamar("POST", "/fichas", {
         "id_produto": id_produto, "rendimento_qtd": rendimento, "rendimento_um": "KG",
-        "porcoes": 1, "itens": itens,
+        "porcoes": porcoes, "itens": itens,
     }, token)
     if f.get("id"):
         fichas.append(f["id"])
@@ -142,20 +142,46 @@ print("\n4. o custo que a ficha PREVE, antes de produzir")
 # falhou acusando o recurso, quando "ficha arquivada nao responde por custo" e
 # exatamente o comportamento certo.
 pao = novo("Rasc pao", "PRODUZIDO", "KG", producao_propria=True)
-ficha_de(pao, [{"id_insumo": farinha, "qtd_bruta": 6, "um": "KG"}])
-# 6 KG de farinha a 4,00 = 24,00 para 10 KG de pao: 2,40 por KG.
+# 6 KG de farinha a 4,00 = 24,00; rende 10 KG em 8 porcoes.
+ficha_de(pao, [{"id_insumo": farinha, "qtd_bruta": 6, "um": "KG"}], porcoes=8)
 st, c = chamar("GET", f"/produtos/{pao}/custo", token=token)
 checar("a tela do produto responde", st == 200, st)
-# ⚠️ O bolo nunca foi produzido: a cascata inteira nao sabe o custo.
+# ⚠️ O pao nunca foi produzido: a cascata inteira nao sabe o custo.
 checar("o custo apurado e NULO — nada foi produzido", c.get("atual") is None, c.get("atual"))
 prov = c.get("provisorio") or {}
 checar("mas vem o provisorio da ficha", bool(prov), c)
-checar("com 2,40 por KG (24,00 de ingredientes para 10 KG)",
-       perto(prov.get("custo"), 2.4, 0.001), prov)
+# 🔑 **Correcao do dono (13/09/2026):** "o custo do produto de ficha tecnica
+# deveria ser o custo da PORCAO, e nao do kg/un rendida". 24,00 / 8 = 3,00.
+checar("o numero que lidera e o da PORCAO: 3,00",
+       perto(prov.get("custo"), 3.0, 0.001)
+       and perto(prov.get("custo_por_porcao"), 3.0, 0.001), prov)
+# ⚠️ E o por UNIDADE continua na resposta: e ele que casa com o estoque, que se
+# move em KG. 24,00 / 10 = 2,40.
+checar("e o por unidade de estoque vem junto: 2,40",
+       perto(prov.get("custo_por_unidade"), 2.4, 0.001), prov)
+checar("com as porcoes a vista, para a tela poder explicar",
+       perto(prov.get("porcoes"), 8), prov)
 checar("dizendo de qual ficha e versao veio",
        prov.get("id_ficha") is not None and prov.get("versao") is not None, prov)
 checar("e que a receita esta completa", prov.get("completo") is True
        and prov.get("itens_sem_custo") == 0, prov)
+
+# ⚠️ Ficha de porcao UNICA devolve os dois iguais: nao ha o que escolher nem o
+# que explicar, e e o caso da maioria das receitas.
+bisnaga = novo("Rasc bisnaga", "PRODUZIDO", "KG", producao_propria=True)
+ficha_de(bisnaga, [{"id_insumo": farinha, "qtd_bruta": 5, "um": "KG"}], porcoes=1)
+st, cb = chamar("GET", f"/produtos/{bisnaga}/custo", token=token)
+provb = cb.get("provisorio") or {}
+# 🔑 **`porcoes = 1` quer dizer "a receita inteira e UMA porcao"**, e nao "a
+# porcao e uma unidade de estoque": 20,00 o lote contra 2,00 o quilo. Por isso o
+# numero que lidera volta a ser o por unidade quando nao ha divisao de verdade —
+# liderar com o do lote embaixo de um rotulo de unidade seria pior que o defeito
+# que esta correcao veio consertar.
+checar("com uma porcao so, quem lidera e o por UNIDADE (2,00)",
+       perto(provb.get("custo"), 2.0, 0.001)
+       and perto(provb.get("custo_por_unidade"), 2.0, 0.001), provb)
+checar("e o do lote continua na resposta, sem liderar (20,00)",
+       perto(provb.get("custo_por_porcao"), 20.0, 0.001), provb)
 
 print("\n5. ficha incompleta vem MARCADA, nao escondida")
 # Item sem preco nenhum: o provisorio soma so parte da receita.

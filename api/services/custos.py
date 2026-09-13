@@ -601,7 +601,7 @@ def custo_provisorio_da_ficha(cur, id_produto: int, id_unidade: int | None = Non
     está montando a receita agora, e é justamente quem ainda não produziu nada.
     """
     cur.execute(
-        """SELECT id, versao, status, rendimento_qtd, rendimento_um
+        """SELECT id, versao, status, rendimento_qtd, rendimento_um, porcoes, porcao_qtd
              FROM fichas_tecnicas
             WHERE id_produto = %s AND status <> 'ARQUIVADA'
             ORDER BY (status = 'HOMOLOGADA') DESC, versao DESC
@@ -616,8 +616,31 @@ def custo_provisorio_da_ficha(cur, id_produto: int, id_unidade: int | None = Non
     total = dec(calculo["custo_total"])
     if total <= 0:
         return None
+    porcoes = dec(ficha["porcoes"]) or Decimal(1)
+    por_unidade = (total / rendimento).quantize(CASAS_CUSTO)
+    por_porcao = (total / porcoes).quantize(CASAS_CUSTO)
     return {
-        "custo": float((total / rendimento).quantize(CASAS_CUSTO)),
+        # 🔑 **O número que lidera é o da PORÇÃO** (13/09/2026, correção do dono:
+        # *"o custo do produto de ficha técnica deveria ser o custo da porção, e
+        # não o custo do kg/un rendida"*). É o que a casa usa para precificar: o
+        # prato sai em fatia, não em quilo, e "R$ 2,40 por KG" não responde
+        # "quanto custa a fatia que eu vendo".
+        # ⚠️ **O por UNIDADE continua na resposta, e a tela o mostra junto**: ele é
+        # o que casa com o estoque, que se move na unidade de estoque. Trocar um
+        # pelo outro sem dizer faria o número da tela discordar do razão sem nada
+        # explicando.
+        # ⚠️ **`porcoes = 1` NÃO quer dizer "a porção é uma unidade": quer dizer
+        # que a receita inteira é uma porção só.** Numa ficha que rende 10 KG em
+        # uma porção, o "custo da porção" é o do LOTE — R$ 20,00 contra R$ 2,00 o
+        # quilo. Liderar com ele mostraria o custo do lote embaixo de um rótulo de
+        # unidade, que é pior que o número que esta correção veio consertar. Então
+        # a porção só lidera quando ela EXISTE como divisão: mais de uma.
+        # (Foi a suíte que pegou isto, com a bisnaga de 5 KG.)
+        "custo": float(por_porcao if porcoes > 1 else por_unidade),
+        "custo_por_porcao": float(por_porcao),
+        "custo_por_unidade": float(por_unidade),
+        "porcoes": float(porcoes),
+        "porcao_qtd": float(dec(ficha["porcao_qtd"])) if ficha["porcao_qtd"] else None,
         "id_ficha": ficha["id"],
         "versao": ficha["versao"],
         "status": ficha["status"],

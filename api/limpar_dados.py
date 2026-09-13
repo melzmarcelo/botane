@@ -60,7 +60,11 @@ OPERACAO = [
     "consumo_periodo_pessoas", "consumo_periodos",
     "venda_itens", "vendas", "cmv_movimentacao", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
-    "kit_itens", "ficha_itens", "fichas_tecnicas",
+    # ⚠️ `ficha_locais` (migração 066) entra AQUI, junto dos itens: ela aponta
+    # para `fichas_tecnicas` e para `locais_estoque`, e sem ela nesta lista a
+    # guarda do próprio script recusa a limpeza — que foi como ela apareceu. Toda
+    # tabela nova pendurada na operação precisa passar por aqui no mesmo dia.
+    "kit_itens", "ficha_locais", "ficha_itens", "fichas_tecnicas",
     "produto_precos", "produto_fornecedor", "produto_unidades", "produtos", "fornecedores",
     # o que já mandamos ao PDV — e o que estava esperando ir
     # ⚠️ **A fila do PDV é DERIVADA, e por isso aguenta perder o histórico**: ela
