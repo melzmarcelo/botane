@@ -804,6 +804,68 @@ linhas = {l["codigo"]: l for l in (prev.get("codigos_externos") or [])}
 checar("com o lado que fica vazio, o código do absorvido vira o PRINCIPAL",
        linhas.get(f"OM3{marca}", {}).get("origem") == "principal", linhas)
 
+print("\n9. cadastro ABSORVIDO nao volta a ativo por acidente")
+# 🔑 **Relato do dono (13/09/2026):** *"os produtos que foram vinculados e
+# desativados, acredito que eles nao poderiam ser ativados novamente, ou pelo
+# menos um aviso"*. O absorvido foi desativado porque OUTRO assumiu o lugar dele:
+# os codigos viraram apelido do sobrevivente, e e la que nota e PDV continuam
+# caindo. Reativado, ele volta as buscas como um segundo cadastro do mesmo
+# produto — alguem o escolhe numa ficha e a historia daquele item passa a morar
+# em dois lugares.
+st, fica = chamar("POST", "/produtos", {
+    "codigo": f"REAT-F-{marca}", "nome": f"REATIVAR FICA {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True}, token=token)
+o_que_fica = fica.get("id")
+st, sai = chamar("POST", "/produtos", {
+    "codigo": f"REAT-S-{marca}", "nome": f"REATIVAR SAI {marca}",
+    "tipo": "INSUMO", "um_estoque": "KG", "controla_estoque": True}, token=token)
+o_que_sai = sai.get("id")
+st, r = chamar("POST", f"/produtos/{o_que_fica}/vincular", {"id_sai": o_que_sai},
+               token=token)
+checar("os dois cadastros se fundem", st == 200, (st, r))
+
+st, d = chamar("GET", f"/produtos/{o_que_sai}", token=token)
+checar("o absorvido fica inativo", d.get("ativo") is False, d.get("ativo"))
+# ⚠️ O ponteiro tem de chegar a TELA: sem ele ela so descobre o problema pelo 409,
+# depois de a pessoa ter tentado.
+checar("e a tela recebe quem o absorveu, com nome e codigo",
+       d.get("fundido_em") == o_que_fica
+       and marca in (d.get("fundido_em_nome") or "")
+       and d.get("fundido_em_codigo") == f"REAT-F-{marca}",
+       {k: d.get(k) for k in ("fundido_em", "fundido_em_nome", "fundido_em_codigo")})
+
+st, r = chamar("PUT", f"/produtos/{o_que_sai}", {"ativo": True}, token=token)
+checar("reativar o absorvido e RECUSADO (409)", st == 409, (st, r))
+checar("e a recusa nomeia quem ficou, com codigo",
+       f"REAT-F-{marca}" in (r.get("detail") or ""), r.get("detail"))
+st, d = chamar("GET", f"/produtos/{o_que_sai}", token=token)
+checar("o cadastro continua inativo — recusa e recusa", d.get("ativo") is False,
+       d.get("ativo"))
+
+# ⚠️ **E 409 com confirmacao, nao proibicao.** Fusao errada acontece e nao ha
+# desfazer: proibir de vez deixaria o cadastro morto para sempre.
+st, r = chamar("PUT", f"/produtos/{o_que_sai}",
+               {"ativo": True, "confirmar_reativacao": True}, token=token)
+checar("com o sim explicito, a reativacao acontece", st == 200, (st, r))
+st, d = chamar("GET", f"/produtos/{o_que_sai}", token=token)
+checar("e o cadastro volta a ativo", d.get("ativo") is True, d.get("ativo"))
+
+# ⚠️ Em LOTE nao ha janela de confirmacao: quem marcou 300 linhas nao confere uma
+# a uma. A recusa e seca, e nomeada.
+chamar("PUT", f"/produtos/{o_que_sai}", {"ativo": False}, token=token)
+st, lote = chamar("POST", "/produtos/alteracao-multipla", {
+    "ids": [o_que_sai], "ativo": True, "simular": True}, token=token)
+checar("a alteracao em lote responde", st == 200, (st, lote))
+recusados = lote.get("recusados") or []
+checar("e RECUSA reativar o absorvido em lote",
+       len(recusados) == 1 and recusados[0].get("id") == o_que_sai, lote)
+checar("dizendo que ele foi absorvido, e por quem",
+       "absorvido" in (recusados[0].get("motivo") or "")
+       and marca in (recusados[0].get("motivo") or ""), recusados)
+
+for _p in (o_que_fica, o_que_sai):
+    chamar("DELETE", f"/produtos/{_p}", token=token)
+
 for _p in (abacate, terceiro, sem_codigo):
     chamar("DELETE", f"/produtos/{_p}", token=token)
 

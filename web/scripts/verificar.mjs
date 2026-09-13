@@ -1399,75 +1399,78 @@ try {
     await irPara(p, `${WEB}/fichas/${idFicha}`);
     await new Promise((r) => setTimeout(r, 1200));
 
-    // 🔑 **Os DESTINOS da receita** (migracao 066, pedido do dono: "a mesma ficha
-    // pode ter processos diferentes — a massa que fica como insumo e a que vai
-    // para a vitrine"). O rendimento por prateleira DIVIDE o consumo, entao a
-    // checagem vai ate a conta: gravar o destino e ver a producao mudar.
+    // 🔑 **Os destinos moram no CABECALHO, numa tabela** (13/09/2026, pedido do
+    // dono: "o rendimento e os destinos estao em grupos separados; podem ficar
+    // juntos, onde o destino e o local padrao do produto, e cada local novo
+    // adiciona uma linha igual ao padrao").
+    // ⚠️ O que se afirma e o comportamento pedido: a linha nova NASCE IGUAL ao
+    // padrao. Conferir que o botao existe nao diz nada sobre isso.
     const { dados: vitrineTela } = await api("POST", "/locais",
       { nome: `Vitrine tela ${marca}` }, token);
     aoTerminar.push(() => api("DELETE", `/locais/${vitrineTela.id}`, null, token));
     await irPara(p, `${WEB}/fichas/${idFicha}`);
     await p.waitForFunction(
-      () => /Destinos e rendimento/i.test(document.body.innerText), { timeout: 15000 },
+      () => !!document.querySelector('input[aria-label="Rendimento da receita"]'),
+      { timeout: 15000 },
     ).catch(() => {});
-    const cartaoDestinos = await p.evaluate(() => {
-      const c = [...document.querySelectorAll("section.cartao")]
-        .find((x) => /Destinos e rendimento/i.test(x.querySelector("h2")?.textContent ?? ""));
+    const tabelaRend = await p.evaluate(() => {
+      const cartao = [...document.querySelectorAll("section.cartao")]
+        .find((c) => /O que esta ficha produz/i.test(c.querySelector("h2")?.textContent ?? ""));
+      const texto = cartao?.innerText ?? "";
       return {
-        existe: !!c,
-        // ⚠️ O cartao tem de DIZER que sem destino vale o rendimento da ficha:
-        // um cartao vazio sem explicacao parece recurso quebrado.
-        explicaVazio: /vale o da ficha|rende/i.test(c?.innerText ?? ""),
-        // E tem de avisar que o rendimento divide o consumo — quem nao souber vai
-        // achar que gastou um lote quando gastou um e um quarto.
-        avisaDivide: /divide o consumo/i.test(c?.innerText ?? ""),
-        botao: [...(c?.querySelectorAll("button") ?? [])]
-          .some((b) => /\+ destino/i.test(b.textContent ?? "")),
+        noCabecalho: !!cartao?.querySelector('input[aria-label="Rendimento da receita"]'),
+        // A primeira linha e a prateleira PADRAO, e a tela diz isso.
+        dizPadrao: /padr[ãa]o/i.test(texto),
+        avisaDivide: /divide o consumo/i.test(texto),
+        botao: [...(cartao?.querySelectorAll("button") ?? [])]
+          .some((b) => /\+ prateleira/i.test(b.textContent ?? "")),
       };
     });
-    checar("a ficha tem o cartao de destinos e rendimento", cartaoDestinos.existe,
-      cartaoDestinos);
-    checar("dizendo o que vale sem destino, e que o rendimento divide o consumo",
-      cartaoDestinos.explicaVazio && cartaoDestinos.avisaDivide, cartaoDestinos);
-    checar("com o caminho para acrescentar um", cartaoDestinos.botao, cartaoDestinos);
+    checar("o rendimento e os destinos ficam no MESMO cartão do cabeçalho",
+      tabelaRend.noCabecalho && tabelaRend.dizPadrao, tabelaRend);
+    checar("com o caminho para acrescentar uma prateleira, e o aviso do consumo",
+      tabelaRend.botao && tabelaRend.avisaDivide, tabelaRend);
 
-    // Acrescenta o destino da vitrine rendendo METADE do que a ficha rende.
+    // 🔑 A linha nova NASCE IGUAL ao padrao — e o coracao do pedido.
+    const rendPadrao = await p.evaluate(() =>
+      document.querySelector('input[aria-label="Rendimento da receita"]')?.value ?? "");
     await p.evaluate(() => [...document.querySelectorAll("button")]
-      .find((b) => /\+ destino/i.test(b.textContent ?? ""))?.click());
+      .find((b) => /\+ prateleira/i.test(b.textContent ?? ""))?.click());
     await new Promise((r) => setTimeout(r, 500));
-    const seletorDestino = await p.$('select[aria-label="prateleira do destino 1"]');
-    checar("a linha do destino pede a prateleira", !!seletorDestino);
-    if (seletorDestino) {
-      await seletorDestino.select(String(vitrineTela.id));
-      const campoRend = await p.$('input[aria-label="rendimento do destino 1"]');
-      await campoRend.click();
-      await p.keyboard.down("Control");
-      await p.keyboard.press("KeyA");
-      await p.keyboard.up("Control");
-      await campoRend.type("1");
-      await p.evaluate(() => [...document.querySelectorAll("button")]
-        .find((b) => /Gravar destinos/i.test(b.textContent ?? ""))?.click());
-      await p.waitForFunction(
-        () => /destino\(s\) gravado|gravado/i.test(document.body.innerText), { timeout: 10000 },
-      ).catch(() => {});
-      const { dados: fichaComDestino } = await api("GET", `/fichas/${idFicha}`, null, token);
-      checar("o destino grava com o rendimento da prateleira",
-        (fichaComDestino?.locais ?? []).some(
-          (l) => l.id_local === vitrineTela.id && Math.abs(Number(l.rendimento_qtd) - 1) < 0.01),
-        fichaComDestino?.locais);
-      // ⚠️ **A CONTA nao se afirma aqui.** A primeira versao deste bloco pedia
-      // `/producao-agenda/necessario`, que exige ficha HOMOLOGADA — e a ficha
-      // desta fase esta em rascunho de proposito, porque as checagens seguintes a
-      // editam. A resposta vinha 400 e a checagem falhava com `[null,null,null]`,
-      // acusando um recurso que funciona. Quem prova a conta (1,25 lote na
-      // vitrine contra 1 na camara) e a suite `smoke_rendimento_por_local`, sobre
-      // um cenario proprio e homologado. Aqui o que se afirma e a TELA: o destino
-      // aparece, grava e volta do servidor.
-      await foto(p, "17c-destinos-da-ficha");
-      // Tira o destino: o resto do roteiro produz este bolo e conta com o
-      // rendimento da ficha.
-      await api("PUT", `/fichas/${idFicha}/locais`, { itens: [] }, token);
-    }
+    const nascida = await p.evaluate(() => ({
+      rendimento:
+        document.querySelector('input[aria-label="rendimento do destino 1"]')?.value ?? null,
+      porcoes: document.querySelector('input[aria-label="porções do destino 1"]')?.value ?? null,
+      temSeletor: !!document.querySelector('select[aria-label="prateleira do destino 1"]'),
+    }));
+    checar("a prateleira nova nasce com o rendimento do padrão",
+      nascida.temSeletor && nascida.rendimento === rendPadrao, { rendPadrao, ...nascida });
+
+    // Escolhe a vitrine, muda o rendimento e salva JUNTO com a ficha.
+    const selDestino = await p.$('select[aria-label="prateleira do destino 1"]');
+    await selDestino.select(String(vitrineTela.id));
+    const campoRendDestino = await p.$('input[aria-label="rendimento do destino 1"]');
+    await campoRendDestino.click();
+    await p.keyboard.down("Control");
+    await p.keyboard.press("KeyA");
+    await p.keyboard.up("Control");
+    await campoRendDestino.type("1");
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => /^Salvar$/i.test(b.textContent?.trim() ?? ""))?.click());
+    await p.waitForFunction(
+      () => /Ficha salva/i.test(document.body.innerText), { timeout: 12000 },
+    ).catch(() => {});
+    const { dados: fichaComDestino } = await api("GET", `/fichas/${idFicha}`, null, token);
+    // ⚠️ Salvar a ficha grava os destinos na MESMA acao: era um cartao com botao
+    // proprio, e uma mudanca so exigia salvar duas vezes.
+    checar("salvar a ficha grava os destinos junto",
+      (fichaComDestino?.locais ?? []).some(
+        (l) => l.id_local === vitrineTela.id && Math.abs(Number(l.rendimento_qtd) - 1) < 0.01),
+      fichaComDestino?.locais);
+    await foto(p, "17c-rendimento-por-destino");
+    // Tira o destino: o resto do roteiro produz este bolo e conta com o
+    // rendimento da ficha.
+    await api("PUT", `/fichas/${idFicha}/locais`, { itens: [] }, token);
 
     // A prateleira de destino ao PROGRAMAR — a agenda guardava o campo desde o
     // comeco e a tela nunca o mandava.
@@ -1731,6 +1734,85 @@ try {
       textoCozinha.match(/.{0,30}R\$.{0,20}/)?.[0]);
     await foto(p, "17-ficha-cozinha");
     await entrar(p, ADMIN);
+
+    // 🔑 **A lista mostra UMA linha por produto, e a ficha tem seletor de versao**
+    // (13/09/2026, relato do dono: "quando sai uma nova versao, parece que ha dois
+    // produtos na lista, onde poderia ter somente uma linha, e dentro da ficha
+    // poderia ter uma selecao de versao").
+    // ⚠️ Cenario proprio: a ficha desta fase e usada por meia duzia de checagens,
+    // e criar versao nela mudaria o que elas medem.
+    const { dados: prodVer } = await api("POST", "/produtos", {
+      nome: `Tela versoes ${marca}`, tipo: "PRODUZIDO", um_estoque: "KG",
+      producao_propria: true,
+    }, token);
+    aoTerminar.push(() => api("DELETE", `/produtos/${prodVer.id}`, null, token));
+    const { dados: fVer1 } = await api("POST", "/fichas", {
+      id_produto: prodVer.id, rendimento_qtd: 1, rendimento_um: "KG", porcoes: 1,
+      itens: [{ id_insumo: insumo.id, qtd_bruta: 1, um: "KG" }],
+    }, token);
+    await api("POST", `/fichas/${fVer1.id}/nova-versao`, null, token);
+
+    // ⚠️ **Filtrando pela busca, nao procurando na pagina 1.** A base tem 74
+    // fichas e a lista pagina de 20 em 20: o produto desta rodada cai na pagina
+    // quatro, e a checagem media uma lista onde ele nunca estaria.
+    await irPara(p, `${WEB}/fichas?busca=Tela versoes ${marca}`);
+    await p.waitForFunction(
+      (nome) => document.body.innerText.includes(nome),
+      { timeout: 15000 }, `Tela versoes ${marca}`.toUpperCase(),
+    ).catch(() => {});
+    const naLista = await p.evaluate((nome) => {
+      const linhas = [...document.querySelectorAll("table.tabela tbody tr")]
+        .map((tr) => tr.innerText)
+        .filter((t) => t.toUpperCase().includes(nome));
+      return { quantas: linhas.length, texto: linhas[0] ?? "" };
+    }, `Tela versoes ${marca}`.toUpperCase());
+    // ⚠️ O que se afirma e o numero de LINHAS: a ficha tem duas versoes, e antes
+    // disso o produto aparecia duas vezes como se fossem dois pratos.
+    checar("o produto com duas versões aparece UMA vez na lista",
+      naLista.quantas === 1, naLista);
+    checar("com a versão e quantas existem", /v2/.test(naLista.texto)
+      && /de 2/.test(naLista.texto), naLista);
+
+    // Dentro da ficha: o seletor de versao.
+    await irPara(p, `${WEB}/fichas/${fVer1.id}`);
+    await new Promise((r) => setTimeout(r, 1500));
+    const seletorVersao = await p.$('select[aria-label="Versão da ficha"]');
+    checar("a ficha oferece escolher a versão", !!seletorVersao);
+    if (seletorVersao) {
+      const opcoes = await p.evaluate(() =>
+        [...document.querySelectorAll('select[aria-label="Versão da ficha"] option')]
+          .map((o) => o.textContent?.trim() ?? ""));
+      checar("com as duas versões e a situação de cada uma",
+        opcoes.length === 2 && opcoes.every((o) => /^v\d+ · \w+/.test(o)), opcoes);
+    }
+
+    // O cabecalho: o produto sozinho na primeira linha.
+    // ⚠️ A afirmacao e de LARGURA, nao de existencia: o campo continuaria na tela
+    // se alguem o devolvesse para a grade dos numeros, espremido entre eles.
+    const larguras = await p.evaluate(() => {
+      const cartao = [...document.querySelectorAll("section.cartao")]
+        .find((c) => /O que esta ficha produz/i.test(c.querySelector("h2")?.textContent ?? ""));
+      // ⚠️ O `Campo` e um `<label>` com `<span class="rotulo">` DIRETO. A primeira
+      // versao procurava "label, div" e casava com a GRADE inteira — que contem as
+      // duas linhas, e por isso nunca estava "acima" do rendimento. Medir o
+      // elemento errado acusou o cabecalho de nao ter mudado quando ele mudou.
+      const produto = [...(cartao?.querySelectorAll("label") ?? [])]
+        .find((x) => (x.querySelector(":scope > span.rotulo")?.textContent ?? "")
+          .trim() === "Produto");
+      const rendimento = [...(cartao?.querySelectorAll("input[aria-label]") ?? [])]
+        .find((i) => i.getAttribute("aria-label") === "Rendimento da receita");
+      if (!produto || !rendimento) return null;
+      return {
+        produto: Math.round(produto.getBoundingClientRect().width),
+        rendimento: Math.round(rendimento.getBoundingClientRect().width),
+        // Primeira linha: o produto comeca ACIMA do rendimento.
+        acima: produto.getBoundingClientRect().bottom
+               <= rendimento.getBoundingClientRect().top + 2,
+      };
+    });
+    checar("o produto ocupa a primeira linha do cabeçalho, sozinho",
+      !!larguras && larguras.acima && larguras.produto > larguras.rendimento, larguras);
+    await foto(p, "17e-lista-e-versoes");
 
     // 🔑 **Rascunho se EXCLUI, e o custo que a ficha PREVE aparece no produto**
     // (13/09/2026, dois pedidos do dono). Cenario proprio: a ficha desta fase ja

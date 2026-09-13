@@ -111,6 +111,11 @@ class FichaResumo(BaseModel):
     rendimento_um: str | None = None
     porcoes: float
     itens: int = 0
+    # 🔑 **Quantas versões este produto tem** (13/09/2026, relato do dono: *"quando
+    # sai uma nova versão, parece que há dois produtos na lista"*). Só vem
+    # preenchido na listagem AGRUPADA — fora dela cada linha já é uma versão, e o
+    # número seria a mesma informação dita duas vezes.
+    versoes: int = 1
     atualizada_em: datetime | None = None
     # A foto do prato pronto. Na LISTA ela vale como miniatura: um cardápio de
     # 464 pratos se percorre pelo olho, não lendo 464 nomes.
@@ -126,6 +131,12 @@ class FichaResponse(BaseModel):
     id_produto: int
     produto: str
     codigo: str
+    # 🔑 **A prateleira padrão do PRODUTO** (13/09/2026). Ela encabeça a tabela de
+    # rendimentos da ficha: o rendimento da própria ficha é o daquele destino, e os
+    # de `ficha_locais` são os outros. Sem o nome aqui, a tela diria "padrão" sem
+    # dizer de que prateleira.
+    id_local_padrao: int | None = None
+    local_padrao: str | None = None
     versao: int
     status: str
     rendimento_qtd: float

@@ -734,11 +734,15 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
-            """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao
+            """SELECT p.*, c.nome AS categoria, s.nome AS setor, l.nome AS local_padrao,
+                      -- Quem absorveu este cadastro, com nome e código: uma tela que
+                      -- diz "foi fundido" sem dizer EM QUE manda procurar.
+                      f.nome AS fundido_em_nome, f.codigo AS fundido_em_codigo
                  FROM produtos p
                  LEFT JOIN categorias c ON c.id = p.id_categoria
                  LEFT JOIN setores s ON s.id = p.id_setor
                  LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
+                 LEFT JOIN produtos f ON f.id = p.fundido_em
                 WHERE p.id = %s""",
             (id_produto,),
         )
@@ -923,7 +927,7 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
             # no "antes", um PUT que só muda o preço pareceria estar deixando o
             # produto ativo sem unidade — e levava 400 sem ter mexido nisso.
             "SELECT codigo, nome, tipo, status, producao_propria, um_estoque, "
-            "       um_compra, fator_compra "
+            "       um_compra, fator_compra, ativo, fundido_em "
             "  FROM produtos WHERE id = %s",
             (id_produto,),
         )
@@ -943,6 +947,36 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
             outro = cur.fetchone()
             if outro:
                 raise HTTPException(status_code=409, detail=f"O código já é de {outro['nome']}")
+
+        # 🔑 **Cadastro ABSORVIDO numa fusão não se reativa por acidente**
+        # (13/09/2026, relato do dono: *"os produtos que foram vinculados e
+        # desativados, acredito que eles não poderiam ser ativados novamente, ou
+        # pelo menos um aviso"*). Ele foi desativado porque outro assumiu o lugar
+        # dele: os códigos viraram apelido do sobrevivente, e é lá que as notas e o
+        # PDV continuam caindo. Reativado, ele volta às buscas como um segundo
+        # cadastro do mesmo produto — alguém o escolhe numa ficha, e a partir dali
+        # a história daquele item mora em dois lugares.
+        #
+        # ⚠️ **É 409 com confirmação, não proibição.** Fusão errada acontece, e não
+        # existe desfazer: proibir de vez deixaria o cadastro morto para sempre e
+        # obrigaria a criar outro, que é exatamente o problema que a fusão veio
+        # resolver. O `confirmar_reativacao` é a mesma forma do
+        # `confirmar_troca_de_unidade`: quem chama por fora também tem de responder.
+        if (dados.get("ativo") is True and not antes["ativo"] and antes["fundido_em"]
+                and not dados.pop("confirmar_reativacao", False)):
+            cur.execute("SELECT codigo, nome FROM produtos WHERE id = %s",
+                        (antes["fundido_em"],))
+            vivo = cur.fetchone() or {}
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Este cadastro foi absorvido por {vivo.get('codigo', '?')} — "
+                        f"{vivo.get('nome', 'outro produto')} numa fusão, e por isso está "
+                        f"desativado. Os códigos dele já respondem por aquele, então "
+                        f"reativá-lo cria um segundo cadastro do mesmo produto: as notas "
+                        f"continuam caindo no outro e este fica parado a zero. Confirme se "
+                        f"é isso mesmo."),
+            )
+        dados.pop("confirmar_reativacao", None)
 
         # 🔑 **Trocar a unidade de estoque converte o que depende dela**
         # (08/09/2026, pedido do dono): custo de referencia, minimo, maximo e os

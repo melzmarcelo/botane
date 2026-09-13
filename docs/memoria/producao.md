@@ -5,6 +5,52 @@
 
 ## O que já existe
 
+- 🔑 **O rendimento É a tabela de destinos, e ela mora no cabeçalho** (13/09/2026, pedido do
+  dono: *"o rendimento e destinos estão em um grupo separado; podemos colocar junto com o
+  cabeçalho, onde o destino é o local padrão do produto, e assim gerados os seus rendimentos.
+  Caso eu adicione um novo local, adicionar uma nova linha com um cadastro igual ao padrão"*).
+  🔑 **A primeira linha É a ficha.** `rendimento_qtd`, `porcoes` e `porcao_qtd` continuam sendo
+  colunas de `fichas_tecnicas` e continuam valendo para toda prateleira sem linha própria — o
+  que mudou é o que a tela diz que eles são. Nenhum dado se moveu e nenhuma ficha existente
+  mudou de comportamento.
+  ⚠️ **Prateleira nova nasce IGUAL ao padrão**, que é o pedido ao pé da letra: ajusta-se o que
+  difere (o forno muda o rendimento, não a receita). Nascer vazia obrigaria a redigitar três
+  números para mudar um.
+  ⚠️ **A linha do padrão não se remove nem troca de prateleira** — ela é o rendimento da
+  receita, e sem ela produzir para um destino sem linha ficaria sem resposta. E a prateleira
+  padrão sai da lista das outras linhas: oferecê-la de novo seria duas verdades para o mesmo
+  destino.
+  ⚠️ **Salvar a ficha grava os destinos junto** (`PUT /fichas/{id}` e depois
+  `PUT /fichas/{id}/locais`, nessa ordem — se a ficha recusar, os destinos não podem ter mudado
+  sozinhos). O cartão anterior tinha botão próprio, e uma mudança só exigia salvar duas vezes.
+  ⚠️ **Em ficha NOVA só existe a linha do padrão**: destino aponta para uma ficha gravada.
+  ⚠️ **A armadilha desta refatoração, e ela custou três checagens**: a sugestão "a soma dos
+  ingredientes dá X · usar" morava DENTRO do campo Rendimento e sumiu junto com ele. A bateria
+  pegou — as três checagens do recurso caindo de uma vez, que é a assinatura de "sumiu junto",
+  não de "quebrou". Ela voltou ao pé da tabela. Refatorar tela é isso: o que está pendurado no
+  que sai vai junto, calado.
+
+- 🔑 **A lista de fichas mostra UMA linha por produto** (13/09/2026, relato do dono: *"quando
+  sai uma nova versão, parece que há dois produtos na lista"*). A ficha é versionada e a lista
+  mostrava uma linha por versão — o mesmo prato duas vezes, sem nada dizendo que eram o mesmo.
+  A linha que aparece é a que VALE: homologada vigente; sem ela, a maior versão — a mesma
+  escolha que a produção faz, e outra aqui faria a lista mostrar uma versão e a produção
+  consumir outra.
+  ⚠️ **`agrupar` é OPT-IN, e tem de ser**: a tela da ficha carrega a MESMA lista para oferecer
+  sub-ficha e para o duplicar saber quantas versões o destino tem. Agrupar por padrão esconderia
+  versões de quem precisa justamente delas.
+  ⚠️ **`count(*) OVER (PARTITION BY id_produto)` vem ANTES do `DISTINCT ON`** — no Postgres a
+  janela é calculada depois do WHERE e antes do DISTINCT, então o contador de versões sobrevive
+  à escolha da linha. E o total da paginação é recalculado por fora: o `count(*) OVER ()` de
+  dentro contaria VERSÕES, e o rodapé diria "22 fichas" numa lista de 14 produtos.
+  🔑 **Dentro da ficha, um seletor de versão** — sem ele as versões antigas perderiam a porta de
+  entrada quando a lista passou a mostrar uma linha. Só aparece com mais de uma: seletor de um
+  item é controle que não controla nada.
+  ⚠️ E o cabeçalho ganhou o produto sozinho na primeira linha: ele dividia a grade com
+  rendimento e porções, e o campo do tamanho da porção apertou os quatro — o nome do prato
+  ficava do tamanho de um campo numérico.
+
+
 - 🔑 **Rascunho se EXCLUI; publicada se arquiva** (`DELETE /fichas/{id}`, 13/09/2026, pedido do
   dono: *"caso a ficha esteja como rascunho, permitir que ela seja excluída"*). Arquivar existe
   para não quebrar o passado — ficha publicada apurou custo e o histórico aponta para ela.

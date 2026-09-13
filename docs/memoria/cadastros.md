@@ -947,6 +947,20 @@
   partes. Toda semana, o recurso se paga; receita ocasional, a ficha com fração resolve e a
   complexidade não se justifica. O dono foi confirmar com a cliente.
 
+- 🔑 **Cadastro ABSORVIDO numa fusão não volta a ativo por acidente** (13/09/2026, relato do
+  dono: *"os produtos que foram vinculados e desativados, acredito que eles não poderiam ser
+  ativados novamente, ou pelo menos um aviso"*). Ele foi desativado porque outro assumiu o lugar
+  dele: os códigos viraram apelido do sobrevivente, e é lá que nota e PDV continuam caindo.
+  Reativado, ele volta às buscas como um segundo cadastro do mesmo produto — alguém o escolhe
+  numa ficha, e a história daquele item passa a morar em dois lugares.
+  ⚠️ **É 409 com confirmação, não proibição.** Fusão errada acontece e não há desfazer: proibir
+  de vez deixaria o cadastro morto para sempre e obrigaria a criar outro — que é o problema que a
+  fusão veio resolver. Mesma forma do `confirmar_troca_de_unidade`.
+  ⚠️ **Em LOTE é recusa seca**, nomeada na prévia: quem marcou 300 linhas não confere uma a uma,
+  e a janela de confirmação não existe ali. Quem tem razão para reativar faz pelo cadastro.
+  ⚠️ **A tela avisa ANTES**: `fundido_em` (com nome e código de quem absorveu) passou a vir no
+  `GET /produtos/{id}`. Sem isso a tela só descobriria pelo 409, depois de a pessoa tentar.
+
 - ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
   grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
   `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes

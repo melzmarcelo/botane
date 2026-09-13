@@ -13,7 +13,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
 import DuplicarFicha from "./duplicar";
-import DestinosDaFicha from "./destinos";
+import RendimentosPorDestino, { LinhaDestino } from "./rendimentos";
 
 import { custo, qtd } from "@/lib/numeros";
 type Item = {
@@ -46,6 +46,17 @@ type Ficha = {
   porcoes: number;
   /** Quanto vale uma porção, na unidade do rendimento. Nulo = ninguém informou. */
   porcao_qtd: number | null;
+  /** A prateleira padrão do PRODUTO: encabeça a tabela de rendimentos. */
+  id_local_padrao: number | null;
+  local_padrao: string | null;
+  locais?: {
+    id_local: number;
+    local: string;
+    rendimento_qtd: number;
+    porcoes: number | null;
+    porcao_qtd: number | null;
+    observacao: string | null;
+  }[];
   tempo_preparo_min: number | null;
   modo_preparo: string | null;
   alergenos: string | null;
@@ -133,6 +144,14 @@ export default function EditorFicha() {
    * sentido — mas não é ela a guarda.
    */
   const [excluindo, setExcluindo] = useState(false);
+  /**
+   * 🔑 **As prateleiras com rendimento próprio** (13/09/2026, pedido do dono:
+   * *"o destino é o local padrão do produto, e assim gerados os seus
+   * rendimentos; caso eu adicione um novo local, adicionar uma nova linha"*).
+   * ⚠️ Vivem no estado da PÁGINA porque salvam junto com ela: o cartão anterior
+   * tinha botão próprio, e uma mudança só exigia salvar duas vezes.
+   */
+  const [destinos, setDestinos] = useState<LinhaDestino[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -163,6 +182,16 @@ export default function EditorFicha() {
       alergenos: f.alergenos ?? "",
       observacao: f.observacao ?? "",
     });
+    setDestinos(
+      (f.locais ?? []).map((d) => ({
+        id_local: d.id_local,
+        rendimento_qtd: String(d.rendimento_qtd ?? ""),
+        porcoes: d.porcoes === null || d.porcoes === undefined ? "" : String(d.porcoes),
+        porcao_qtd:
+          d.porcao_qtd === null || d.porcao_qtd === undefined ? "" : String(d.porcao_qtd),
+        observacao: d.observacao ?? "",
+      })),
+    );
     setItens(
       f.itens.map((i) => ({
         id_insumo: (i.id_insumo as number) ?? null,
@@ -376,6 +405,24 @@ export default function EditorFicha() {
         });
       } else {
         await api.put(`/fichas/${id}`, corpo);
+        // 🔑 **Os destinos vão na MESMA ação de salvar** (13/09/2026, pedido do
+        // dono). Eles eram um cartão com botão próprio; juntos no cabeçalho,
+        // salvar duas vezes para uma mudança só seria atrito puro.
+        // ⚠️ **Depois do PUT da ficha, nunca antes**: se a ficha recusar (uma
+        // homologada, por exemplo), os destinos não podem ter mudado sozinhos.
+        // ⚠️ Linha sem prateleira ou sem rendimento não vai: é linha que a pessoa
+        // abriu e não preencheu, e mandá-la faria o servidor recusar o lote todo.
+        await api.put(`/fichas/${id}/locais`, {
+          itens: destinos
+            .filter((d) => d.id_local && num(d.rendimento_qtd))
+            .map((d) => ({
+              id_local: Number(d.id_local),
+              rendimento_qtd: num(d.rendimento_qtd),
+              porcoes: num(d.porcoes),
+              porcao_qtd: num(d.porcao_qtd),
+              observacao: texto(d.observacao),
+            })),
+        });
         await carregar();
         aviso.sucesso("Ficha salva.");
       }
@@ -410,6 +457,21 @@ export default function EditorFicha() {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível excluir");
     }
   }
+
+  /** As versões DESTE produto, para o seletor do cabeçalho.
+   *
+   * ⚠️ Sai da mesma lista que já está carregada (`fichas`), sem pedido novo: ela
+   * vem completa de propósito — é dela que saem as sub-fichas e o duplicar.
+   * ⚠️ Ordem decrescente: a versão nova é a que se procura. */
+  const versoesDoProduto = useMemo(
+    () =>
+      ficha
+        ? fichas
+            .filter((f) => f.id_produto === ficha.id_produto)
+            .sort((a, b) => b.versao - a.versao)
+        : [],
+    [fichas, ficha],
+  );
 
   const opcoesSubficha = useMemo(
     () => fichas.filter((f) => String(f.id) !== id && f.status !== "ARQUIVADA"),
@@ -492,7 +554,28 @@ export default function EditorFicha() {
           </h1>
           {ficha && (
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <Etiqueta>v{ficha.versao}</Etiqueta>
+              {/* 🔑 **Todas as versões, num seletor** (13/09/2026, pedido do dono:
+                  *"dentro da ficha, poderia ter uma seleção de versão para
+                  visualizar todas"*). A lista passou a mostrar uma linha por
+                  produto — sem isto, as versões antigas deixariam de ter porta.
+                  ⚠️ Só aparece quando existe mais de uma: um seletor de um item é
+                  um controle que não controla nada. */}
+              {versoesDoProduto.length > 1 ? (
+                <select
+                  className="campo w-auto py-1 text-[13px]"
+                  aria-label="Versão da ficha"
+                  value={ficha.id}
+                  onChange={(e) => router.push(`/fichas/${e.target.value}`)}
+                >
+                  {versoesDoProduto.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      v{v.versao} · {v.status.toLowerCase()}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Etiqueta>v{ficha.versao}</Etiqueta>
+              )}
               <Etiqueta cor={ficha.status === "HOMOLOGADA" ? "erva" : "alerta"}>
                 {ficha.status.toLowerCase()}
               </Etiqueta>
@@ -599,7 +682,16 @@ export default function EditorFicha() {
       {!podeEditar && <Aviso tipo="info">Você tem acesso de leitura às fichas.</Aviso>}
 
       <Cartao titulo="O que esta ficha produz">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 🔑 **O produto ocupa a PRIMEIRA linha sozinho** (13/09/2026, pedido do
+            dono: *"no cabeçalho poderia ter uma linha com o produto, e na segunda
+            com as demais informações"*). Ele dividia a grade com rendimento e
+            porções, e o campo do tamanho da porção (de ontem) apertou os quatro
+            numa linha só — o nome do prato, que é o que identifica a ficha,
+            ficava do tamanho de um campo numérico.
+            ⚠️ São dois blocos, não uma grade de quatro com `col-span`: o produto é
+            busca (largura variável) e os outros três são números curtos. Uma
+            grade só faria a busca encolher junto com eles no meio do caminho. */}
+        <div className="grid gap-4">
           {/* ⚠️ **BUSCA, não `<select>`.** A lista vinha de
               `/produtos?tipo=PRODUZIDO` e o endpoint pagina: eram os 200
               primeiros em ordem alfabética. Enquanto a casa tinha dezenas de
@@ -609,7 +701,23 @@ export default function EditorFicha() {
               não estava lá, e o formulário recusava salvar sem explicar.
               Produto NÃO é "poucos por natureza": é exatamente o caso para que
               `BuscaCadastro` existe. */}
-          <Campo rotulo="Produto" className="lg:col-span-2">
+          <Campo rotulo="Unidade do rendimento" dica="em que a receita rende">
+            <select
+              className="campo"
+              disabled={!editavel}
+              aria-label="Unidade do rendimento"
+              value={cabecalho.rendimento_um}
+              onChange={(e) => setCabecalho({ ...cabecalho, rendimento_um: e.target.value })}
+            >
+              <option value="">un.</option>
+              {ums.map((u) => (
+                <option key={u.sigla} value={u.sigla}>
+                  {u.sigla}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo rotulo="Produto">
             {nova ? (
               <BuscaCadastro
                 fonte={fonteProduzidos}
@@ -626,112 +734,78 @@ export default function EditorFicha() {
               <input className="campo" value={ficha?.produto ?? ""} disabled />
             )}
           </Campo>
-          <Campo rotulo="Rendimento" dica="quanto sai da receita inteira">
-            <div className="flex gap-2">
-              <input
-                className="campo mono"
-                type="number"
-                step="0.001"
-                min="0.001"
-                disabled={!editavel}
-                aria-label="Rendimento da receita"
-                value={cabecalho.rendimento_qtd}
-                onChange={(e) => mudarRendimento(e.target.value)}
-              />
-              <select
-                className="campo w-[110px]"
-                disabled={!editavel}
-                value={cabecalho.rendimento_um}
-                onChange={(e) => setCabecalho({ ...cabecalho, rendimento_um: e.target.value })}
-              >
-                <option value="">un.</option>
-                {ums.map((u) => (
-                  <option key={u.sigla} value={u.sigla}>
-                    {u.sigla}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* 🔑 **De onde vem o rendimento**: da soma dos ingredientes, quando
-                eles sabem dizer. Fica ao lado do campo, com o número à vista e um
-                clique para usar — nunca escrito sozinho. */}
-            {sugestao && sugestao.qtd > 0 && (
-              <p className="mt-1.5 text-[12.5px] leading-snug text-suave">
-                A soma dos ingredientes dá{" "}
-                <b className="mono text-tinta">
-                  {qtd(sugestao.qtd)} {sugestao.um}
-                </b>
-                {editavel && (
-                  <>
-                    {" · "}
-                    <button
-                      type="button"
-                      className="link-acao"
-                      onClick={() =>
-                        mudarRendimento(String(sugestao.qtd).replace(",", "."))
-                      }
-                    >
-                      usar
-                    </button>
-                  </>
-                )}
-                {sugestao.assumiu_densidade && (
-                  <span className="block">
-                    considerando <b>1 ML = 1 G</b> nos líquidos.
-                  </span>
-                )}
-                {sugestao.itens_fora.length > 0 && (
-                  <span className="block text-alerta">
-                    fora da conta:{" "}
-                    {sugestao.itens_fora.map((x) => `${x.nome} (${x.um ?? "—"})`).join(", ")} —
-                    cadastre o peso de uma unidade no produto para ele entrar.
-                  </span>
-                )}
-              </p>
-            )}
-          </Campo>
-          <Campo rotulo="Porções" dica="divide o custo total">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.01"
-              min="0.01"
-              disabled={!editavel}
-              aria-label="Porções da receita"
-              value={cabecalho.porcoes}
-              onChange={(e) => mudarPorcoes(e.target.value)}
-            />
-          </Campo>
-          {/* 🔑 **A conta nos dois sentidos** (pedido do dono, 12/09/2026): com o
-              tamanho da porção, informar o rendimento dá as porções — e informar
-              as porções dá o tamanho. Um é o outro de cabeça para baixo.
-              ⚠️ Vazio mostra o valor DERIVADO como sugestão do campo, sem gravar:
-              nulo quer dizer "ninguém informou". */}
-          <Campo
-            rotulo="Cada porção tem"
-            dica={`na unidade do rendimento${cabecalho.rendimento_um ? ` (${cabecalho.rendimento_um})` : ""}`}
-          >
-            <input
-              className="campo mono"
-              type="number"
-              step="0.0001"
-              min="0.0001"
-              disabled={!editavel}
-              aria-label="Tamanho da porção"
-              value={cabecalho.porcao_qtd}
-              placeholder={
-                num(cabecalho.rendimento_qtd) && num(cabecalho.porcoes)
-                  ? String(
-                      Math.round(
-                        (num(cabecalho.rendimento_qtd)! / num(cabecalho.porcoes)!) * 10000,
-                      ) / 10000,
-                    ).replace(".", ",")
-                  : ""
-              }
-              onChange={(e) => mudarPorcao(e.target.value)}
-            />
-          </Campo>
         </div>
+
+        {/* 🔑 **O rendimento virou uma TABELA de destinos** (13/09/2026, pedido do
+            dono). Rendimento, porções e tamanho da porção eram três campos soltos
+            aqui, e os destinos com rendimento próprio moravam num cartão separado
+            lá embaixo — duas telas para a mesma pergunta ("quanto rende, e onde").
+            Agora a primeira linha é a prateleira padrão do produto (que são os
+            campos da própria ficha, valendo para toda prateleira sem linha) e cada
+            destino novo entra como mais uma linha, já preenchida igual ao padrão.
+            ⚠️ Os três campos continuam existindo no cabeçalho da ficha e no banco:
+            o que mudou é o que a tela diz que eles são. Nenhuma ficha existente
+            muda de comportamento. */}
+        <RendimentosPorDestino
+          idFicha={nova ? null : Number(id)}
+          idLocalPadrao={ficha?.id_local_padrao ?? null}
+          localPadrao={ficha?.local_padrao ?? null}
+          um={cabecalho.rendimento_um || null}
+          editavel={editavel}
+          padrao={{
+            rendimento_qtd: cabecalho.rendimento_qtd,
+            porcoes: cabecalho.porcoes,
+            porcao_qtd: cabecalho.porcao_qtd,
+          }}
+          aoMudarPadrao={(campo, valor) => {
+            // As três contas continuam valendo: mexer num recalcula o outro.
+            if (campo === "rendimento_qtd") mudarRendimento(valor);
+            else if (campo === "porcoes") mudarPorcoes(valor);
+            else mudarPorcao(valor);
+          }}
+          extras={destinos}
+          aoMudarExtras={setDestinos}
+        />
+
+        {/* 🔑 **De onde vem o rendimento**: da soma dos ingredientes, quando eles
+            sabem dizer. Fica ao pé da TABELA e aplica no padrão, que é a linha da
+            própria ficha — nunca escrito sozinho.
+            ⚠️ **Ele morava dentro do campo Rendimento e foi embora junto com ele**
+            quando os três campos viraram tabela: a bateria pegou, com as três
+            checagens do recurso caindo de uma vez. Refatorar tela é isto — o que
+            estava pendurado no que saiu some sem avisar. */}
+        {sugestao && sugestao.qtd > 0 && (
+          <p className="mt-3 text-[12.5px] leading-snug text-suave">
+            A soma dos ingredientes dá{" "}
+            <b className="mono text-tinta">
+              {qtd(sugestao.qtd)} {sugestao.um}
+            </b>
+            {editavel && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="link-acao"
+                  onClick={() => mudarRendimento(String(sugestao.qtd).replace(",", "."))}
+                >
+                  usar
+                </button>
+              </>
+            )}
+            {sugestao.assumiu_densidade && (
+              <span className="block">
+                considerando <b>1 ML = 1 G</b> nos líquidos.
+              </span>
+            )}
+            {sugestao.itens_fora.length > 0 && (
+              <span className="block text-alerta">
+                fora da conta:{" "}
+                {sugestao.itens_fora.map((x) => `${x.nome} (${x.um ?? "—"})`).join(", ")} —
+                cadastre o peso de uma unidade no produto para ele entrar.
+              </span>
+            )}
+          </p>
+        )}
       </Cartao>
 
       {/* 🔑 **O "Adicionar linha" fica NO FIM da lista** (13/09/2026, pedido do
@@ -984,21 +1058,6 @@ export default function EditorFicha() {
           </div>
         )}
       </Cartao>
-
-      {/* 🔑 **Os destinos da receita** (migração 066, pedido do dono). Só em
-          ficha que já existe: o destino aponta para uma prateleira e precisa do
-          id da ficha para ser gravado — numa ficha nova não há onde pendurá-lo.
-          ⚠️ Fica DEPOIS dos ingredientes: o rendimento por destino só faz sentido
-          quando já se sabe o que a receita leva. */}
-      {!nova && ficha && (
-        <DestinosDaFicha
-          idFicha={ficha.id}
-          rendimentoDaFicha={Number(ficha.rendimento_qtd ?? 1)}
-          um={ficha.rendimento_um}
-          editavel={editavel}
-          aoGravar={() => void carregar()}
-        />
-      )}
 
       <Cartao titulo="Preparo">
         <div className="flex flex-col gap-4">

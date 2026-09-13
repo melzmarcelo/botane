@@ -442,6 +442,38 @@ st, r5 = chamar("POST", f"/fichas/{ficha_bebida}/duplicar", {"id_produto": 99999
 checar("e produto de destino inexistente e 404", st == 404, (st, r5))
 
 
+print("7c. a lista agrupa por PRODUTO — uma linha, nao uma por versao")
+# 🔑 **Relato do dono (13/09/2026):** *"quando sai uma nova versao, parece que ha
+# dois produtos na lista de fichas tecnicas, onde poderia ter somente uma linha,
+# e dentro da ficha poderia ter uma selecao de versao"*. A ficha e versionada e a
+# lista mostrava uma linha por versao — o mesmo prato duas vezes.
+st, sem_agrupar = chamar("GET", f"/fichas?id_produto={banana}", token=token)
+checar("sem agrupar, a lista traz uma linha por versao",
+       len(sem_agrupar) == 2, [(f.get("versao"), f.get("status")) for f in sem_agrupar])
+st, agrupada = chamar("GET", f"/fichas?id_produto={banana}&agrupar=true", token=token)
+checar("agrupada, traz UMA linha", len(agrupada) == 1,
+       [(f.get("versao"), f.get("status")) for f in agrupada])
+# ⚠️ A linha que aparece e a que VALE: homologada vigente; sem ela, a maior
+# versao. Outra escolha faria a lista mostrar uma versao e a producao consumir
+# outra.
+checar("com a maior versao, que e a que vale aqui",
+       agrupada[0].get("versao") == 2, agrupada[0].get("versao"))
+checar("e dizendo quantas versoes existem", agrupada[0].get("versoes") == 2,
+       agrupada[0].get("versoes"))
+# ⚠️ Fora do agrupamento o campo nao afirma nada: cada linha JA e uma versao.
+checar("sem agrupar, o contador nao inventa numero",
+       all(f.get("versoes") == 1 for f in sem_agrupar),
+       [f.get("versoes") for f in sem_agrupar])
+
+# A ficha HOMOLOGADA ganha a linha, mesmo com rascunho mais novo por cima.
+st, r = chamar("POST", f"/fichas/{copia}/homologar", token=token)
+if st == 200:
+    st, agrupada2 = chamar("GET", f"/fichas?id_produto={banana}&agrupar=true", token=token)
+    checar("homologando, e a homologada que representa o produto",
+           len(agrupada2) == 1 and agrupada2[0].get("status") == "HOMOLOGADA",
+           [(f.get("versao"), f.get("status")) for f in agrupada2])
+
+
 print("8. limpeza")
 for id_ficha in reversed(criados["fichas"]):
     # ⚠️ A foto sai ANTES: arquivar a ficha não apaga o arquivo (nem deveria —

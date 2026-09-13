@@ -85,28 +85,79 @@ def listar(
     busca: str | None = Query(default=None, max_length=80),
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    # 🔑 **Uma linha por PRODUTO** (13/09/2026, relato do dono: *"quando sai uma
+    # nova versão, parece que há dois produtos na lista de fichas técnicas, onde
+    # poderia ter somente uma linha"*). A ficha é versionada e a lista mostrava
+    # uma linha por versão — o mesmo bolo duas vezes, e nada dizendo que eram o
+    # mesmo prato.
+    # ⚠️ **É OPT-IN, e tem de ser**: a tela da ficha carrega esta mesma lista para
+    # oferecer sub-ficha e para o duplicar saber quantas versões o destino tem.
+    # Agrupar por padrão esconderia versões de quem precisa justamente delas.
+    agrupar: bool = False,
     resposta: Response = None,
     ctx: Contexto = Depends(_ver),
 ) -> list[dict]:
     ve_custo = ctx.pode("fichas.custos")
     with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT f.id, f.id_produto, p.nome AS produto, p.codigo, f.versao, f.status,
-                   f.rendimento_qtd, f.rendimento_um, f.porcoes, f.criado_em AS atualizada_em,
-                   f.foto_url,
-                   (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
-                   count(*) OVER () AS _total
-              FROM fichas_tecnicas f
-              JOIN produtos p ON p.id = f.id_produto
-             WHERE (%s::int IS NULL OR f.id_produto = %s)
-               AND (%s::varchar IS NULL OR f.status = %s)
-               AND (%s::varchar IS NULL OR lower(p.nome) LIKE lower('%%' || %s || '%%'))
-             ORDER BY lower(p.nome), f.versao DESC
-             LIMIT %s OFFSET %s
-            """,
-            (id_produto, id_produto, status, status, busca, busca, limite, offset),
-        )
+        # 🔑 **Agrupada, a lista traz UMA linha por produto** — a versão que vale.
+        # ⚠️ **Qual delas vale**: a homologada vigente; sem ela, a maior versão. É a
+        # mesma ordem que a produção usa para escolher a ficha, e usar outra aqui
+        # faria a lista mostrar uma versão e a produção consumir outra.
+        # ⚠️ **`count(*) OVER (PARTITION BY ...)` vem ANTES do `DISTINCT ON`** — no
+        # Postgres a janela é calculada depois do WHERE e antes do DISTINCT, então
+        # o número de versões conta as que passaram no filtro e sobrevive à
+        # escolha da linha. Contar depois daria sempre 1.
+        # ⚠️ **O total da paginação é recalculado por fora**: o `count(*) OVER ()`
+        # de dentro contaria VERSÕES, e o rodapé diria "22 fichas" numa lista de
+        # 14 produtos.
+        if agrupar:
+            cur.execute(
+                """
+                WITH filtradas AS (
+                  SELECT f.id, f.id_produto, p.nome AS produto, p.codigo, f.versao, f.status,
+                         f.rendimento_qtd, f.rendimento_um, f.porcoes,
+                         f.criado_em AS atualizada_em, f.foto_url, f.vigente_ate,
+                         (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
+                         count(*) OVER (PARTITION BY f.id_produto) AS versoes
+                    FROM fichas_tecnicas f
+                    JOIN produtos p ON p.id = f.id_produto
+                   WHERE (%(idp)s::int IS NULL OR f.id_produto = %(idp)s)
+                     AND (%(st)s::varchar IS NULL OR f.status = %(st)s)
+                     AND (%(b)s::varchar IS NULL
+                          OR lower(p.nome) LIKE lower('%%' || %(b)s || '%%'))
+                ), escolhidas AS (
+                  SELECT DISTINCT ON (id_produto) *
+                    FROM filtradas
+                   ORDER BY id_produto,
+                            (status = 'HOMOLOGADA' AND vigente_ate IS NULL) DESC,
+                            versao DESC
+                )
+                SELECT *, count(*) OVER () AS _total
+                  FROM escolhidas
+                 ORDER BY lower(produto)
+                 LIMIT %(lim)s OFFSET %(off)s
+                """,
+                {"idp": id_produto, "st": status, "b": busca, "lim": limite, "off": offset},
+            )
+        else:
+            cur.execute(
+                """
+                SELECT f.id, f.id_produto, p.nome AS produto, p.codigo, f.versao, f.status,
+                       f.rendimento_qtd, f.rendimento_um, f.porcoes,
+                       f.criado_em AS atualizada_em, f.foto_url,
+                       (SELECT count(*) FROM ficha_itens i WHERE i.id_ficha = f.id) AS itens,
+                       1 AS versoes,
+                       count(*) OVER () AS _total
+                  FROM fichas_tecnicas f
+                  JOIN produtos p ON p.id = f.id_produto
+                 WHERE (%s::int IS NULL OR f.id_produto = %s)
+                   AND (%s::varchar IS NULL OR f.status = %s)
+                   AND (%s::varchar IS NULL OR lower(p.nome) LIKE lower('%%' || %s || '%%'))
+                 ORDER BY lower(p.nome), f.versao DESC
+                 LIMIT %s OFFSET %s
+                """,
+                (id_produto, id_produto, status, status, busca, busca, limite, offset),
+            )
         fichas = [dict(r) for r in cur.fetchall()]
         com_total(fichas, resposta, offset)
 
@@ -126,10 +177,12 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
     ve_custo = ctx.pode("fichas.custos")
     with get_cursor() as cur:
         cur.execute(
-            """SELECT f.*, p.nome AS produto, p.codigo, u.nome AS homologada_por_nome
+            """SELECT f.*, p.nome AS produto, p.codigo, u.nome AS homologada_por_nome,
+                      p.id_local_padrao, l.nome AS local_padrao
                  FROM fichas_tecnicas f
                  JOIN produtos p ON p.id = f.id_produto
                  LEFT JOIN usuarios u ON u.id = f.homologada_por
+                 LEFT JOIN locais_estoque l ON l.id = p.id_local_padrao
                 WHERE f.id = %s""",
             (id_ficha,),
         )
@@ -197,6 +250,9 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         # pior possivel: grava certo e volta nulo. Custou uma suite inteira
         # acusando o INSERT, que estava correto.
         "porcao_qtd": _num(ficha["porcao_qtd"]),
+        # A prateleira padrão do produto encabeça a tabela de rendimentos.
+        "id_local_padrao": ficha["id_local_padrao"],
+        "local_padrao": ficha["local_padrao"],
         "locais": locais,
         "tempo_preparo_min": ficha["tempo_preparo_min"],
         "modo_preparo": ficha["modo_preparo"],

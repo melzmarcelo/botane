@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, ErroApi } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
@@ -194,6 +194,18 @@ export default function FormularioProduto() {
     conversoes?: { campo: string; de: number; para: number }[];
   } | null>(null);
   const [confirmandoCusto, setConfirmandoCusto] = useState(false);
+  /**
+   * 🔑 **Quem absorveu este cadastro numa fusão** (13/09/2026, relato do dono:
+   * *"os produtos que foram vinculados e desativados, acredito que eles não
+   * poderiam ser ativados novamente, ou pelo menos um aviso"*).
+   *
+   * ⚠️ **Fica FORA do formulário** porque é leitura, não edição: entrar em `f`
+   * faria a tela mandá-lo de volta no PUT, e ponteiro de fusão não se digita.
+   */
+  const [absorvidoPor, setAbsorvidoPor] = useState<{ nome: string; codigo: string } | null>(
+    null,
+  );
+  const [confirmandoReativacao, setConfirmandoReativacao] = useState("");
 
   useEffect(() => {
     if (novo) return;
@@ -212,6 +224,14 @@ export default function FormularioProduto() {
           ),
         } as Form);
         setVinculos((p.fornecedores as VinculoFornecedor[]) ?? []);
+        setAbsorvidoPor(
+          p.fundido_em
+            ? {
+                nome: String(p.fundido_em_nome ?? "outro cadastro"),
+                codigo: String(p.fundido_em_codigo ?? "?"),
+              }
+            : null,
+        );
         // ⚠️ Com VÁRIAS lojas o campo mostra o preço DA CASA, não o resolvido:
         // senão, editar um produto numa filial que cobra diferente gravaria o
         // preço dela como se fosse o da casa. Com uma loja só, essa distinção
@@ -289,7 +309,7 @@ export default function FormularioProduto() {
     });
   }
 
-  async function salvar(e: FormEvent, confirmado = false) {
+  async function salvar(e: FormEvent, confirmado = false, reativacaoOk = false) {
     e.preventDefault();
     // 🔑 **Pergunta ANTES de gravar quando o custo da um salto** — para
     // qualquer um dos dois lados. O servidor tambem recusa sem confirmacao:
@@ -337,6 +357,9 @@ export default function FormularioProduto() {
       // vigente da CASA — e a da loja continuaria mandando, deixando o número
       // editado sem efeito nenhum.
       preco_venda: precoEhDaLoja ? undefined : moedaParaNumero(f.preco_venda),
+      // ⚠️ Só vai quando a pessoa respondeu à janela: mandar sempre `true`
+      // transformaria a guarda do servidor em decoração.
+      ...(reativacaoOk ? { confirmar_reativacao: true } : {}),
       fornecedores: vinculos.map((v) => ({
         id_fornecedor: v.id_fornecedor,
         codigo_no_fornecedor: v.codigo_no_fornecedor,
@@ -411,7 +434,18 @@ export default function FormularioProduto() {
         });
       }
     } catch (err) {
-      aviso.erro(err instanceof Error ? err.message : "Não foi possível salvar");
+      const recado = err instanceof Error ? err.message : "";
+      // 🔑 **O 409 da reativação vira PERGUNTA, não erro vermelho** (13/09/2026).
+      // O servidor recusa reativar um cadastro absorvido numa fusão e explica o
+      // efeito; quem tem razão para insistir responde na janela, e a tela reenvia
+      // com a confirmação. ⚠️ O texto exibido é o DO SERVIDOR: ele nomeia o
+      // sobrevivente com código, e reescrevê-lo aqui daria duas versões da mesma
+      // recusa para manter em dia.
+      if (err instanceof ErroApi && err.status === 409 && /absorvido/i.test(recado)) {
+        setConfirmandoReativacao(recado);
+      } else {
+        aviso.erro(recado || "Não foi possível salvar");
+      }
     } finally {
       setSalvando(false);
     }
@@ -566,6 +600,40 @@ export default function FormularioProduto() {
             </span>
           )}
         </Aviso>
+      )}
+
+      {/* 🔑 **Cadastro absorvido numa fusão diz isso na cara** (13/09/2026). Sem
+          este aviso, a tela de um produto desativado nao explica POR QUE ele
+          esta assim — e quem so ve "inativo" reativa achando que corrige um
+          engano. ⚠️ Mostra o CÓDIGO junto do nome: e por ele que se acha o
+          sobrevivente na busca. */}
+      {absorvidoPor && (
+        <Aviso tipo="erro">
+          Este cadastro foi <b>absorvido numa fusão</b> por {absorvidoPor.codigo} —{" "}
+          {absorvidoPor.nome}, e por isso está desativado. Os códigos dele já respondem por
+          aquele: as notas e o PDV continuam caindo lá. Reativar aqui cria um segundo cadastro
+          do mesmo produto.
+        </Aviso>
+      )}
+
+      {confirmandoReativacao && (
+        <Confirmacao
+          titulo="Reativar um cadastro que foi absorvido?"
+          perigo
+          rotuloConfirmar="Sim, reativar"
+          ocupado={salvando}
+          aoConfirmar={() => {
+            setConfirmandoReativacao("");
+            void salvar({ preventDefault() {} } as React.FormEvent, true, true);
+          }}
+          aoCancelar={() => setConfirmandoReativacao("")}
+        >
+          <p>{confirmandoReativacao}</p>
+          <p className="mt-2">
+            Se a fusão foi um engano, reativar é o caminho — mas confira antes se o que você
+            procura não está no cadastro que ficou.
+          </p>
+        </Confirmacao>
       )}
 
       {confirmandoCusto && (

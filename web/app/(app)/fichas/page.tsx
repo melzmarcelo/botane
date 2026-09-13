@@ -16,6 +16,8 @@ type Ficha = {
   produto: string;
   codigo: string;
   versao: number;
+  /** Quantas versões este produto tem. A lista mostra UMA linha por produto. */
+  versoes: number;
   status: string;
   rendimento_qtd: number;
   rendimento_um: string | null;
@@ -52,6 +54,14 @@ export default function PaginaFichas() {
     const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (status) q.set("status", status);
+    // 🔑 **Uma linha por PRODUTO** (13/09/2026, relato do dono: *"quando sai uma
+    // nova versão, parece que há dois produtos na lista"*). A ficha é versionada e
+    // esta lista mostrava uma linha por versão — o mesmo bolo duas vezes.
+    // ⚠️ A linha que aparece é a que VALE: homologada vigente; sem ela, a maior
+    // versão. É a mesma escolha que a produção faz, e outra aqui faria a lista
+    // mostrar uma versão e a produção consumir outra.
+    // ⚠️ As demais não somem: a ficha tem um seletor de versão dentro dela.
+    q.set("agrupar", "true");
     try {
       const fichas = await api.listar<Ficha>(`/fichas?${q}`);
       setLista(fichas.itens);
@@ -154,8 +164,10 @@ export default function PaginaFichas() {
                       <Etiqueta cor={CORES[f.status]}>{f.status.toLowerCase()}</Etiqueta>
                     </div>
                     <p className="mt-1 text-[13px] text-suave">
-                      v{f.versao} · {f.itens} item(ns) · rende {Number(f.rendimento_qtd)}{" "}
-                      {f.rendimento_um ?? ""} em {Number(f.porcoes)} porção(ões)
+                      v{f.versao}
+                      {f.versoes > 1 && ` de ${f.versoes}`} · {f.itens} item(ns) · rende{" "}
+                      {Number(f.rendimento_qtd)} {f.rendimento_um ?? ""} em{" "}
+                      {Number(f.porcoes)} porção(ões)
                     </p>
                     {veCusto && (
                       <p className="mono mt-1 text-[13.5px]">
@@ -193,7 +205,16 @@ export default function PaginaFichas() {
                         </Link>
                         <span className="mono ml-2 text-[12px] text-suave">{f.codigo}</span>
                       </td>
-                      <td className="mono">v{f.versao}</td>
+                      <td className="mono">
+                        v{f.versao}
+                        {/* ⚠️ **"de 3" em vez de uma linha por versão.** O número
+                            diz que há histórico sem repetir o produto na lista —
+                            quem quiser ver as outras abre a ficha, que tem o
+                            seletor. */}
+                        {f.versoes > 1 && (
+                          <span className="text-suave"> de {f.versoes}</span>
+                        )}
+                      </td>
                       <td>
                         <Etiqueta cor={CORES[f.status]}>{f.status.toLowerCase()}</Etiqueta>
                       </td>

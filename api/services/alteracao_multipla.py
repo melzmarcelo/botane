@@ -36,6 +36,19 @@ def _recusa(produto: dict, mudancas: dict) -> str | None:
     if produto["producao_propria"] and tipo not in ("PRODUZIDO", "KIT"):
         return (f"é de produção própria e {tipo} não aceita isso — "
                 "desmarque a produção própria antes")
+    # 🔑 **Cadastro ABSORVIDO numa fusão não volta em lote** (13/09/2026, relato do
+    # dono: *"os produtos que foram vinculados e desativados, acredito que eles não
+    # poderiam ser ativados novamente, ou pelo menos um aviso"*). Ele foi desativado
+    # porque outro cadastro assumiu o lugar dele: os códigos viraram apelido do
+    # sobrevivente e o saldo foi junto. Reativado, ele reaparece nas buscas como um
+    # segundo cadastro do mesmo produto — e a próxima nota, que continua caindo no
+    # sobrevivente, deixa este parado a zero enquanto alguém o escolhe numa ficha.
+    # ⚠️ **Em lote é recusa SECA, sem confirmação possível**: quem marcou 300 linhas
+    # não confere uma a uma, e a janela de confirmação individual não existe aqui.
+    # Quem tem razão para reativar faz pelo cadastro do produto, um a um.
+    if mudancas.get("ativo") is True and not produto["ativo"] and produto.get("fundido_em"):
+        return (f"foi absorvido por {produto.get('sobrevivente') or 'outro cadastro'} "
+                "numa fusão — reative pelo cadastro dele, que explica o efeito")
     return None
 
 
@@ -55,11 +68,15 @@ def aplicar(cur, ids: list[int], mudancas: dict, id_usuario: int | None,
 
     cur.execute(
         """SELECT p.id, p.codigo, p.nome, p.tipo, p.id_categoria, p.id_setor,
-                  p.ativo, p.producao_propria,
-                  c.nome AS categoria, s.nome AS setor
+                  p.ativo, p.producao_propria, p.fundido_em,
+                  c.nome AS categoria, s.nome AS setor,
+                  -- Quem assumiu o lugar deste, para a recusa poder nomeá-lo: uma
+                  -- recusa que não diz para onde o cadastro foi manda procurar.
+                  f.nome AS sobrevivente
              FROM produtos p
              LEFT JOIN categorias c ON c.id = p.id_categoria
              LEFT JOIN setores s ON s.id = p.id_setor
+             LEFT JOIN produtos f ON f.id = p.fundido_em
             WHERE p.id = ANY(%s)
             ORDER BY p.nome""",
         (ids,),

@@ -141,6 +141,11 @@ class ProdutoUpdate(ProdutoBase):
     """
 
     confirmar_troca_de_unidade: bool = False
+    # 🔑 **A resposta a "este cadastro foi absorvido numa fusão"** (migração 063 +
+    # 13/09/2026). Reativar um absorvido cria um segundo cadastro do mesmo produto;
+    # o servidor recusa com 409 e reenviar com isto em `true` é dizer "sim, é isso
+    # mesmo". Retirado antes do UPDATE, como o de cima.
+    confirmar_reativacao: bool = False
     nome: str | None = Field(default=None, min_length=2, max_length=160)
     codigo: str | None = Field(default=None, max_length=40)
     tipo: str | None = None
@@ -316,6 +321,13 @@ class ProdutoResponse(BaseModel):
     status: str
     observacao: str | None = None
     ativo: bool
+    # 🔑 **Quem absorveu este cadastro numa fusão** (migração 063). Chega à tela
+    # para ela poder avisar ANTES — reativar um absorvido cria um segundo cadastro
+    # do mesmo produto, e sem este ponteiro a tela só descobre isso pelo 409 do
+    # servidor, depois de a pessoa ter tentado.
+    fundido_em: int | None = None
+    fundido_em_nome: str | None = None
+    fundido_em_codigo: str | None = None
     criado_em: datetime | None = None
     preco_venda: float | None = None
     preco_desde: date | None = None
