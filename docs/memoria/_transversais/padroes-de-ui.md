@@ -116,6 +116,14 @@
   fechar aos olhos de quem multiplicar a mão. É o preço da leitura limpa, e foi decidido
   sabendo disso.
 
+- 🔑 **Campo de equivalência pergunta do lado que a pessoa PENSA** (cartão de unidades do
+  produto, 12/09/2026). Uma coluna "Quantos UN" com `0,02` embaixo não diz que 0,02 é o
+  inverso de 50; a linha inteira — `1 UN = [50] G` — diz, com as duas siglas à vista. Quem
+  digita um fator invertido não erra por desatenção: erra porque a pergunta estava do lado
+  contrário do que a cozinha sabe. ⚠️ A regra de quando virar é da grandeza das unidades, não
+  do rótulo — a decisão e o caso do ovo estão em
+  [`cadastros.md`](../cadastros.md).
+
 - 🔑 **`window.location` MENTE por um tempo, e duas escritas na URL se apagavam**
   (`lib/estado-na-url.ts`, 12/09/2026, achado ao investigar a checagem "filtrar volta para a
   primeira página"). `router.replace` do App Router é navegação suave: vai ao servidor buscar

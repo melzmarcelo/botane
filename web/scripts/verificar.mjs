@@ -3218,6 +3218,86 @@ try {
 
   await api("DELETE", `/locais/${localB.id}`, null, token);
 
+  // 🔑 **A linha de PESO pergunta ao contrario** (12/09/2026, caso da cliente:
+  // ela compra a duzia de ovos, estoca em UN e usa 50 G de ovo na receita).
+  // `produto_unidades.fator` sempre quis dizer "quantas unidades de ESTOQUE
+  // cabem em uma desta" — para o grama isso da 0,02, e ninguem sabe quantos
+  // ovos cabem num grama: a cozinha sabe que o ovo pesa 50 g. A tela pergunta
+  // "1 UN = [50] G" e grava o inverso.
+  // ⚠️ **Cenario proprio, em UN.** O `prodLoc` acima estoca em KG, e KG com G e
+  // a MESMA grandeza: ali a pergunta nao vira, e a checagem passaria sem
+  // exercitar nada.
+  // ⚠️ **E a checagem vai ate a FICHA.** Conferir so o fator seria testar a tela
+  // contra ela mesma; o que importa e que 50 G virem 1 UN no consumo.
+  const mOvo = `${Date.now()}`.slice(-6);
+  const { dados: ovoTela } = await api("POST", "/produtos", {
+    codigo: `TOVO-${mOvo}`, nome: `Ovo tela ${mOvo}`, tipo: "INSUMO",
+    um_estoque: "UN", controla_estoque: true,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${ovoTela.id}`, null, token));
+  await irPara(p, `${WEB}/produtos/${ovoTela.id}`);
+  await p.waitForFunction(() => /Unidades de compra/.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 700));
+  const cabecalhoEquiv = await p.evaluate(() =>
+    [...document.querySelectorAll("section.cartao thead th")].map((t) => t.textContent));
+  checar("a coluna da equivalencia mostra a relacao, nao um numero solto",
+    cabecalhoEquiv.includes("Equivalência"), cabecalhoEquiv);
+
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => (b.textContent ?? "").trim() === "+ unidade")?.click());
+  await new Promise((r) => setTimeout(r, 400));
+  const selsOvo = await p.$$("section.cartao tbody select");
+  await selsOvo[selsOvo.length - 1].select("G");
+  await new Promise((r) => setTimeout(r, 400));
+  const rotulosOvo = await p.evaluate(() =>
+    [...document.querySelectorAll("section.cartao tbody input[aria-label]")]
+      .map((i) => i.getAttribute("aria-label")));
+  checar("escolhida a unidade de peso, a pergunta vira para 1 UN = ? G",
+    rotulosOvo.some((r) => /^quantos G em 1 UN$/.test(r ?? "")), rotulosOvo);
+
+  const campoPeso = await p.$('section.cartao tbody input[aria-label="quantos G em 1 UN"]');
+  await campoPeso.type("50");
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => /Gravar unidades/.test(b.textContent ?? ""))?.click());
+  await p.waitForFunction(
+    () => /gravada/i.test(document.body.innerText), { timeout: 10000 },
+  ).catch(() => {});
+  const { dados: unidadesOvo } = await api(
+    "GET", `/produtos/${ovoTela.id}/unidades`, null, token);
+  const linhaG = (unidadesOvo ?? []).find((x) => x.um === "G");
+  checar("e o banco recebe o INVERSO: 1 UN = 50 G grava fator 0,02",
+    !!linhaG && Math.abs(Number(linhaG.fator) - 0.02) < 1e-9, unidadesOvo);
+
+  // A volta: a tela nao pode devolver 0,02 a quem digitou 50.
+  await irPara(p, `${WEB}/produtos/${ovoTela.id}`);
+  await new Promise((r) => setTimeout(r, 1300));
+  const devolta = await p.evaluate(() =>
+    [...document.querySelectorAll("section.cartao tbody input[aria-label]")]
+      .map((i) => `${i.getAttribute("aria-label")}=${i.value}`));
+  checar("recarregando, a tela mostra 50 de novo", 
+    devolta.some((r) => /^quantos G em 1 UN=50$/.test(r)), devolta);
+
+  // O que a tela gravou e o que a ficha usa.
+  const { dados: massaOvo } = await api("POST", "/produtos", {
+    codigo: `TMAS-${mOvo}`, nome: `Massa tela ${mOvo}`, tipo: "PRODUZIDO",
+    um_estoque: "KG", controla_estoque: true, producao_propria: true,
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${massaOvo.id}`, null, token));
+  const { dados: fichaOvo } = await api("POST", "/fichas", {
+    id_produto: massaOvo.id, rendimento_qtd: 1, rendimento_um: "KG", porcoes: 1,
+    itens: [{ id_insumo: ovoTela.id, qtd_bruta: 50, um: "G" }],
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/fichas/${fichaOvo.id}`, null, token));
+  const { dados: detalheOvo } = await api("GET", `/fichas/${fichaOvo.id}`, null, token);
+  const itemOvo = (detalheOvo?.itens ?? [])[0];
+  checar("e 50 G de ovo viram 1 UN na ficha, pelo que a tela gravou",
+    !!itemOvo && Math.abs(Number(itemOvo.qtd_estoque) - 1) < 1e-6
+      && itemOvo.conversao === "embalagem",
+    itemOvo && { qtd_estoque: itemOvo.qtd_estoque, conversao: itemOvo.conversao,
+                 aviso: itemOvo.aviso });
+  await foto(p, "37b-equivalencia-de-peso");
+
   // ⚠️ **Este bloco NAVEGA para outro produto, entao vem DEPOIS das checagens
   // de prateleira.** Posto antes, ele levava a tela embora e as tres checagens
   // seguintes mediam a pagina errada — a falha apareceu como "tirar a

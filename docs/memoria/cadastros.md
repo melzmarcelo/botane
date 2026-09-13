@@ -880,6 +880,37 @@
   quiser o número certo corrige o fator ANTES de trocar; a prévia da tela mostra o resultado
   enquanto se digita, e é ela que denuncia o 1 que ninguém escolheu.
 
+- 🔑 **O ovo comprado na dúzia, contado por unidade e usado em GRAMAS**
+  (12/09/2026, caso da cliente trazido pelo dono: *"ela compra a dúzia de ovos, e entra no
+  estoque em unidade. Mas em determinadas receitas ela usa, por exemplo, 50 GR de ovo"*).
+  🔑 **O sistema já resolvia, e o lugar é `produto_unidades`**: com `DZ = 12` e `G` valendo
+  1/50, a nota entra em dúzia, a contagem pode ser em dúzia ou unidade, e a ficha aceita 50 G
+  — medido ponta a ponta: 50 G viram **1 UN** pela conversão `embalagem`, e a produção baixa
+  um ovo do razão. Nenhuma regra nova no motor: é o `fator_de_embalagem` de sempre.
+  ⚠️ **O que estava errado era o LADO DA PERGUNTA.** A coluna dizia "Quantos UN" e esperava
+  `0,02`. Ninguém sabe quantos ovos cabem num grama; a cozinha sabe que **o ovo pesa 50 g**.
+  Quem lesse o cabeçalho e digitasse `50` passaria a consumir cinquenta ovos por grama de
+  receita, calado — o mesmo fator invertido que custou o custo de um produto em 09/09. Agora
+  a linha mostra a relação inteira, `1 UN = [50] G`, e a tela grava o inverso.
+  ⚠️ **Vira só quando a unidade da linha é de peso/volume E o estoque é contado em unidades.**
+  Estoque em KG com linha em UN já perguntava certo ("1 UN = 0,05 KG"); embalagem contra
+  embalagem (CX, FD, DZ) também — "1 CX = 12 UN" é como se fala. A regra olha a grandeza das
+  duas siglas, não a sigla.
+  ⚠️ **A volta é o detalhe que mais deu trabalho**: `fator` é `numeric(18,6)`, então 1/55
+  grava 0,018182 e o inverso disso dá 55,0005 — devolver isso a quem digitou 55 seria mostrar
+  um número que ela não escreveu. O laço para na primeira casa que reproduz o fator gravado
+  (a mesma regra do relatório exportado), então 50, 55 e 350 ML voltam inteiros.
+  ⚠️ **Trocar a unidade da linha ESVAZIA o número** quando o lado da pergunta vira: 12 UN por
+  caixa não diz nada sobre o peso de um ovo, e converter seria inventar.
+  ⚠️ Consequência para a cliente, que vale dizer a ela: receita em grama consome **fração de
+  unidade** (30 g de ovo = 0,6 UN). Está certo para o custo, é estranho para quem abre a
+  geladeira, e o inventário acerta na contagem.
+  ⚠️ **`produtos.peso_liquido` continua campo MORTO** — o importador do Omie o preenche e
+  nenhum cálculo o lê. Foi considerado como ponte automática de peso e recusado por ora:
+  ligá-lo mudaria o custo de ficha de 2.183 produtos importados que ninguém revisou, sem
+  ninguém ter pedido. Se um dia for ligado, precisa de confirmação por produto — o precedente
+  é o `fator_confirmado` dos códigos de fora.
+
 - ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
   grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
   `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes
