@@ -1370,6 +1370,91 @@ try {
     await irPara(p, `${WEB}/fichas/${idFicha}`);
     await new Promise((r) => setTimeout(r, 1200));
 
+    // 🔑 **Os DESTINOS da receita** (migracao 066, pedido do dono: "a mesma ficha
+    // pode ter processos diferentes — a massa que fica como insumo e a que vai
+    // para a vitrine"). O rendimento por prateleira DIVIDE o consumo, entao a
+    // checagem vai ate a conta: gravar o destino e ver a producao mudar.
+    const { dados: vitrineTela } = await api("POST", "/locais",
+      { nome: `Vitrine tela ${marca}` }, token);
+    aoTerminar.push(() => api("DELETE", `/locais/${vitrineTela.id}`, null, token));
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await p.waitForFunction(
+      () => /Destinos e rendimento/i.test(document.body.innerText), { timeout: 15000 },
+    ).catch(() => {});
+    const cartaoDestinos = await p.evaluate(() => {
+      const c = [...document.querySelectorAll("section.cartao")]
+        .find((x) => /Destinos e rendimento/i.test(x.querySelector("h2")?.textContent ?? ""));
+      return {
+        existe: !!c,
+        // ⚠️ O cartao tem de DIZER que sem destino vale o rendimento da ficha:
+        // um cartao vazio sem explicacao parece recurso quebrado.
+        explicaVazio: /vale o da ficha|rende/i.test(c?.innerText ?? ""),
+        // E tem de avisar que o rendimento divide o consumo — quem nao souber vai
+        // achar que gastou um lote quando gastou um e um quarto.
+        avisaDivide: /divide o consumo/i.test(c?.innerText ?? ""),
+        botao: [...(c?.querySelectorAll("button") ?? [])]
+          .some((b) => /\+ destino/i.test(b.textContent ?? "")),
+      };
+    });
+    checar("a ficha tem o cartao de destinos e rendimento", cartaoDestinos.existe,
+      cartaoDestinos);
+    checar("dizendo o que vale sem destino, e que o rendimento divide o consumo",
+      cartaoDestinos.explicaVazio && cartaoDestinos.avisaDivide, cartaoDestinos);
+    checar("com o caminho para acrescentar um", cartaoDestinos.botao, cartaoDestinos);
+
+    // Acrescenta o destino da vitrine rendendo METADE do que a ficha rende.
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => /\+ destino/i.test(b.textContent ?? ""))?.click());
+    await new Promise((r) => setTimeout(r, 500));
+    const seletorDestino = await p.$('select[aria-label="prateleira do destino 1"]');
+    checar("a linha do destino pede a prateleira", !!seletorDestino);
+    if (seletorDestino) {
+      await seletorDestino.select(String(vitrineTela.id));
+      const campoRend = await p.$('input[aria-label="rendimento do destino 1"]');
+      await campoRend.click();
+      await p.keyboard.down("Control");
+      await p.keyboard.press("KeyA");
+      await p.keyboard.up("Control");
+      await campoRend.type("1");
+      await p.evaluate(() => [...document.querySelectorAll("button")]
+        .find((b) => /Gravar destinos/i.test(b.textContent ?? ""))?.click());
+      await p.waitForFunction(
+        () => /destino\(s\) gravado|gravado/i.test(document.body.innerText), { timeout: 10000 },
+      ).catch(() => {});
+      const { dados: fichaComDestino } = await api("GET", `/fichas/${idFicha}`, null, token);
+      checar("o destino grava com o rendimento da prateleira",
+        (fichaComDestino?.locais ?? []).some(
+          (l) => l.id_local === vitrineTela.id && Math.abs(Number(l.rendimento_qtd) - 1) < 0.01),
+        fichaComDestino?.locais);
+      // ⚠️ **A CONTA nao se afirma aqui.** A primeira versao deste bloco pedia
+      // `/producao-agenda/necessario`, que exige ficha HOMOLOGADA — e a ficha
+      // desta fase esta em rascunho de proposito, porque as checagens seguintes a
+      // editam. A resposta vinha 400 e a checagem falhava com `[null,null,null]`,
+      // acusando um recurso que funciona. Quem prova a conta (1,25 lote na
+      // vitrine contra 1 na camara) e a suite `smoke_rendimento_por_local`, sobre
+      // um cenario proprio e homologado. Aqui o que se afirma e a TELA: o destino
+      // aparece, grava e volta do servidor.
+      await foto(p, "17c-destinos-da-ficha");
+      // Tira o destino: o resto do roteiro produz este bolo e conta com o
+      // rendimento da ficha.
+      await api("PUT", `/fichas/${idFicha}/locais`, { itens: [] }, token);
+    }
+
+    // A prateleira de destino ao PROGRAMAR — a agenda guardava o campo desde o
+    // comeco e a tela nunca o mandava.
+    await irPara(p, `${WEB}/producao`);
+    await new Promise((r) => setTimeout(r, 1400));
+    const temPrateleira = await p.evaluate(() =>
+      !!document.querySelector('select[aria-label="Prateleira de destino"]'));
+    checar("a agenda pergunta para qual prateleira produzir", temPrateleira);
+
+    // ⚠️ **VOLTA para a ficha.** As checagens seguintes (imprimir, foto do prato)
+    // sao desta tela, e este bloco tinha saido dela para ver a agenda: quatro
+    // checagens boas falharam de uma vez com "abriu: false", apontando para
+    // recursos que estao no lugar. Quem navega, devolve a tela onde a achou.
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await new Promise((r) => setTimeout(r, 1300));
+
     // A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha —
     // não na frente do monitor. Sem o papel, a receita fica presa numa tela
     // que ninguém leva para perto do fogão.

@@ -41,7 +41,7 @@ router = APIRouter(prefix="/produtos", tags=["produtos"])
 _EDITAVEIS = (
     "codigo", "nome", "nome_curto", "tipo", "id_categoria", "id_setor",
     "producao_propria", "controla_estoque", "um_estoque", "um_compra", "fator_compra",
-    "id_local_padrao", "modo_producao",
+    "id_local_padrao", "id_local_venda", "modo_producao",
     "perecivel", "validade_dias", "controla_lote", "controla_validade",
     "estoque_minimo", "estoque_maximo", "ncm", "codigo_barras", "codigo_omie",
     "codigo_pdv",

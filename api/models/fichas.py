@@ -50,6 +50,31 @@ class FichaUpdate(BaseModel):
     itens: list[ItemFicha] | None = None
 
 
+class LocalDaFicha(BaseModel):
+    """Quanto a receita rende quando produzida PARA esta prateleira.
+
+    🔑 **Pedido do dono (12/09/2026):** a massa de pizza que fica como insumo e a
+    que vai para a vitrine saem da mesma receita — mas a da vitrine vai ao forno,
+    e o rendimento muda.
+
+    ⚠️ `porcoes` e `porcao_qtd` são opcionais: o que sempre muda é o rendimento,
+    e obrigar o porcionamento faria pedir um número que ninguém tem.
+    """
+
+    id_local: int
+    rendimento_qtd: float = Field(gt=0)
+    porcoes: float | None = Field(default=None, gt=0)
+    porcao_qtd: float | None = Field(default=None, gt=0)
+    observacao: str | None = Field(default=None, max_length=160)
+
+
+class LocaisDaFichaRequest(BaseModel):
+    """Substitui a tabela inteira de destinos — o mesmo contrato das embalagens
+    do produto (`PUT /produtos/{id}/unidades`), para as duas telas se parecerem."""
+
+    itens: list[LocalDaFicha] = Field(default_factory=list)
+
+
 class RendimentoSugerido(BaseModel):
     """Os itens de uma receita, para o servidor somar o que ela rende.
 
@@ -107,6 +132,8 @@ class FichaResponse(BaseModel):
     rendimento_um: str | None = None
     porcoes: float
     porcao_qtd: float | None = None
+    # Os destinos com rendimento próprio. Lista vazia = a ficha vale para todos.
+    locais: list[dict] = []
     tempo_preparo_min: int | None = None
     modo_preparo: str | None = None
     alergenos: str | None = None

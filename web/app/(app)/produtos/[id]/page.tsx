@@ -60,6 +60,7 @@ type Form = {
   um_compra: string;
   fator_compra: string;
   id_local_padrao: string;
+  id_local_venda: string;
   perecivel: boolean;
   validade_dias: string;
   controla_lote: boolean;
@@ -82,7 +83,7 @@ type Form = {
 const VAZIO: Form = {
   codigo: "", nome: "", nome_curto: "", tipo: "INSUMO", id_categoria: "", id_setor: "",
   producao_propria: false, modo_producao: "PARA_ESTOQUE", controla_estoque: true, um_estoque: "", um_compra: "",
-  fator_compra: "1", id_local_padrao: "", perecivel: false, validade_dias: "", controla_lote: false,
+  fator_compra: "1", id_local_padrao: "", id_local_venda: "", perecivel: false, validade_dias: "", controla_lote: false,
   integrado_pdv: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   cest: "", marca: "", peso_liquido: "", peso_bruto: "",
@@ -314,6 +315,9 @@ export default function FormularioProduto() {
       um_compra: texto(f.um_compra),
       fator_compra: num(f.fator_compra) ?? 1,
       id_local_padrao: num(f.id_local_padrao),
+      // ⚠️ Vazio vai como NULO: "não escolhi" é diferente de "o local zero", e é
+      // o nulo que faz a venda continuar no local de estoque.
+      id_local_venda: num(f.id_local_venda),
       perecivel: f.perecivel,
       validade_dias: num(f.validade_dias),
       controla_lote: f.controla_lote,
@@ -852,10 +856,34 @@ export default function FormularioProduto() {
             <select
               className="campo"
               disabled={!podeEditar}
+              aria-label="Local de estoque"
               value={f.id_local_padrao}
               onChange={(e) => set("id_local_padrao", e.target.value)}
             >
               <option value="">— o local da nota —</option>
+              {locais.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nome}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          {/* 🔑 **De onde a VENDA baixa** (migração 066, pedido do dono: "podemos
+              criar no produto mais de um local, qual seria o local de estoque que
+              o PDV consome"). O campo acima fazia TRÊS papéis — a venda, o
+              fallback do consumo de insumo e o destino da produção —, e pôr a
+              vitrine nele fazia a receita da pizza comer a massa da vitrine.
+              ⚠️ Vazio é o normal, e é o padrão: sem escolha, a venda continua
+              saindo do local de estoque, como sempre saiu. */}
+          <Campo rotulo="Local da venda" dica="de onde o PDV baixa">
+            <select
+              className="campo"
+              disabled={!podeEditar}
+              aria-label="Local da venda"
+              value={f.id_local_venda}
+              onChange={(e) => set("id_local_venda", e.target.value)}
+            >
+              <option value="">— o local de estoque —</option>
               {locais.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.nome}

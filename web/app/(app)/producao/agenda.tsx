@@ -89,7 +89,9 @@ export default function AgendaProducao({
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
-  const [f, setF] = useState({ id_produto: "", quantidade: "", data: amanha(), rotulo: "" });
+  const [f, setF] = useState({
+    id_produto: "", quantidade: "", data: amanha(), rotulo: "", id_local: "",
+  });
   // Quanto vai sair de fato de cada linha. Começa no planejado — o caso comum
   // é produzir o que se planejou, e quem digitar por cima está corrigindo.
   const [saida, setSaida] = useState<Record<number, string>>({});
@@ -133,9 +135,16 @@ export default function AgendaProducao({
         id_produto: Number(f.id_produto),
         quantidade: Number(f.quantidade.replace(",", ".")),
         data_prevista: f.data,
+        // 🔑 **Para QUAL prateleira** (migração 066, pedido do dono: "ao programar
+        // a produção seleciona qual local será produzido"). A agenda já guardava
+        // `id_local` desde o começo e a tela nunca o mandava: caía sempre no local
+        // padrão do produto — e com rendimento por destino isso passaria a
+        // escolher o rendimento errado, calado.
+        // ⚠️ Vazio segue mandando nulo, e o servidor usa o padrão do produto.
+        id_local: f.id_local ? Number(f.id_local) : null,
       });
       aviso.sucesso(r.message);
-      setF({ id_produto: "", quantidade: "", data: f.data, rotulo: "" });
+      setF({ id_produto: "", quantidade: "", data: f.data, rotulo: "", id_local: f.id_local });
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível agendar");
@@ -285,6 +294,24 @@ export default function AgendaProducao({
               value={f.data}
               onChange={(e) => setF({ ...f, data: e.target.value })}
             />
+          </Campo>
+          {/* 🔑 **Para qual prateleira** — e é ela que decide o rendimento quando
+              a ficha tem destinos: a massa que vai para a vitrine passa pelo forno
+              e não rende o mesmo que a que vai para a câmara. */}
+          <Campo rotulo="Para qual prateleira" dica="vazio = a do produto">
+            <select
+              className="campo"
+              aria-label="Prateleira de destino"
+              value={f.id_local}
+              onChange={(e) => setF({ ...f, id_local: e.target.value })}
+            >
+              <option value="">— a do produto —</option>
+              {locais.filter((l) => l.ativo).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.nome}
+                </option>
+              ))}
+            </select>
           </Campo>
           <div className="flex items-end">
             <button className="btn btn-primario" type="submit" disabled={ocupado}>

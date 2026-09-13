@@ -21,8 +21,9 @@ import auditoria
 from database import get_cursor
 from paginacao import com_total
 from models.fichas import (FichaCreate, FichaDuplicar, FichaResponse, FichaResumo,
-                           FichaUpdate, ItemFicha, RendimentoSugerido)
-from seguranca import Contexto, requer_permissao
+                           FichaUpdate, ItemFicha, LocaisDaFichaRequest,
+                           RendimentoSugerido)
+from seguranca import Contexto, requer_permissao, unidade_atual
 from services import custos
 
 router = APIRouter(prefix="/fichas", tags=["fichas técnicas"])
@@ -136,6 +137,19 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         if not f:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
         ficha = dict(f)
+        # Os destinos com rendimento próprio (migração 066). Lista vazia é o caso
+        # de quase toda ficha: sem linha, vale o rendimento dela.
+        cur.execute(
+            """SELECT fl.id_local, l.nome AS local, fl.rendimento_qtd, fl.porcoes,
+                      fl.porcao_qtd, fl.observacao
+                 FROM ficha_locais fl
+                 JOIN locais_estoque l ON l.id = fl.id_local
+                WHERE fl.id_ficha = %s ORDER BY l.nome""",
+            (id_ficha,),
+        )
+        locais = [{**dict(r), "rendimento_qtd": _num(r["rendimento_qtd"]),
+                   "porcoes": _num(r["porcoes"]), "porcao_qtd": _num(r["porcao_qtd"])}
+                  for r in cur.fetchall()]
         calculo = custos.custo_da_ficha(cur, id_ficha)
 
     itens = []
@@ -183,6 +197,7 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         # pior possivel: grava certo e volta nulo. Custou uma suite inteira
         # acusando o INSERT, que estava correto.
         "porcao_qtd": _num(ficha["porcao_qtd"]),
+        "locais": locais,
         "tempo_preparo_min": ficha["tempo_preparo_min"],
         "modo_preparo": ficha["modo_preparo"],
         "alergenos": ficha["alergenos"],
@@ -358,7 +373,79 @@ def _copiar_ficha(cur, f, id_produto: int, id_usuario: int | None) -> tuple[int,
              FROM ficha_itens WHERE id_ficha = %s""",
         (nova, f["id"]),
     )
+    # ⚠️ **Os destinos vêm junto** (migração 066). A versão nova é a mesma receita
+    # com um ajuste, e os rendimentos por prateleira são parte dela: nascer sem
+    # eles faria a produção para a vitrine voltar ao rendimento da câmara, calada.
+    cur.execute(
+        """INSERT INTO ficha_locais (id_ficha, id_local, rendimento_qtd, porcoes,
+                                     porcao_qtd, observacao)
+           SELECT %s, id_local, rendimento_qtd, porcoes, porcao_qtd, observacao
+             FROM ficha_locais WHERE id_ficha = %s""",
+        (nova, f["id"]),
+    )
     return nova, versao
+
+
+@router.put("/{id_ficha}/locais")
+def gravar_locais(id_ficha: int, body: LocaisDaFichaRequest,
+                  ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    """Os destinos desta receita, com o rendimento de cada um.
+
+    🔑 **Pedido do dono (12/09/2026):** *"dentro da ficha técnica podemos ter os
+    locais e informar rendimentos e porções por local, e ao programar a produção
+    seleciona qual local será produzido"*. A massa que vai à vitrine passa pelo
+    forno: o mesmo lote de ingredientes não rende o mesmo tanto.
+
+    ⚠️ **Substitui a tabela inteira**, como `PUT /produtos/{id}/unidades` — as duas
+    telas fazem a mesma coisa e é melhor que se pareçam.
+
+    ⚠️ **Ficha homologada NÃO é editável**, e isto é receita: o rendimento divide
+    o consumo, então mexer nele numa ficha publicada mudaria o custo já apurado.
+    É a mesma trava dos itens.
+
+    ⚠️ **O local tem de ser desta loja e estar ativo** — rendimento apontando para
+    prateleira de outra unidade seria um número que nunca valeria para ninguém.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT status FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        f = cur.fetchone()
+        if not f:
+            raise HTTPException(status_code=404, detail="Ficha não encontrada")
+        _travar_se_homologada(f["status"])
+
+        id_unidade = unidade_atual(cur, ctx)
+        vistos: set[int] = set()
+        for item in body.itens:
+            if item.id_local in vistos:
+                raise HTTPException(
+                    status_code=400,
+                    detail="A mesma prateleira aparece duas vezes — some num destino só.",
+                )
+            vistos.add(item.id_local)
+            cur.execute(
+                """SELECT nome FROM locais_estoque
+                    WHERE id = %s AND id_unidade = %s AND ativo""",
+                (item.id_local, id_unidade),
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Prateleira não encontrada nesta loja, ou inativa.",
+                )
+
+        cur.execute("DELETE FROM ficha_locais WHERE id_ficha = %s", (id_ficha,))
+        for item in body.itens:
+            cur.execute(
+                """INSERT INTO ficha_locais (id_ficha, id_local, rendimento_qtd, porcoes,
+                                             porcao_qtd, observacao)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (id_ficha, item.id_local, item.rendimento_qtd, item.porcoes,
+                 item.porcao_qtd, item.observacao),
+            )
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "locais",
+                            depois={"destinos": len(body.itens)})
+    return {"message": (f"{len(body.itens)} destino(s) gravado(s)" if body.itens
+                        else "Destinos removidos — vale o rendimento da ficha")}
 
 
 @router.post("/rendimento-sugerido")

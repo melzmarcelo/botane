@@ -13,6 +13,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
 import DuplicarFicha from "./duplicar";
+import DestinosDaFicha from "./destinos";
 
 import { custo, qtd } from "@/lib/numeros";
 type Item = {
@@ -917,6 +918,21 @@ export default function EditorFicha() {
           </div>
         )}
       </Cartao>
+
+      {/* 🔑 **Os destinos da receita** (migração 066, pedido do dono). Só em
+          ficha que já existe: o destino aponta para uma prateleira e precisa do
+          id da ficha para ser gravado — numa ficha nova não há onde pendurá-lo.
+          ⚠️ Fica DEPOIS dos ingredientes: o rendimento por destino só faz sentido
+          quando já se sabe o que a receita leva. */}
+      {!nova && ficha && (
+        <DestinosDaFicha
+          idFicha={ficha.id}
+          rendimentoDaFicha={Number(ficha.rendimento_qtd ?? 1)}
+          um={ficha.rendimento_um}
+          editavel={editavel}
+          aoGravar={() => void carregar()}
+        />
+      )}
 
       <Cartao titulo="Preparo">
         <div className="flex flex-col gap-4">

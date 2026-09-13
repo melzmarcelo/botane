@@ -397,8 +397,18 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                 # append-only e não teria como desfazer.
                 if id_produto and not venda.cancelada:
                     cur.execute(
-                        """SELECT controla_estoque, id_local_padrao FROM produtos
-                            WHERE id = %s""",
+                        # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
+                        # ele existe** (migração 066, pedido do dono). A mesma
+                        # massa de pizza pode estar na câmara como insumo e na
+                        # vitrine para vender: a venda tem de tirar da VITRINE, e
+                        # o consumo da receita da pizza, da câmara.
+                        # ⚠️ `id_local_padrao` continua respondendo por quem não
+                        # configurou nada — que é o caso de todos os produtos de
+                        # hoje. O `coalesce` é o que faz esta mudança não mexer em
+                        # nenhum deles.
+                        """SELECT controla_estoque,
+                                  coalesce(id_local_venda, id_local_padrao) AS id_local_padrao
+                             FROM produtos WHERE id = %s""",
                         (id_produto,),
                     )
                     p_venda = cur.fetchone() or {}

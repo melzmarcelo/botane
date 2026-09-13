@@ -715,6 +715,38 @@ def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_or
             "id_unidade_origem": unidade_origem, "id_unidade_destino": unidade_destino}
 
 
+def rendimento_do_local(cur, id_ficha: int, id_local: int | None,
+                        rendimento_da_ficha) -> tuple[Decimal, bool]:
+    """O rendimento que vale ao produzir PARA este local. `(rendimento, e_do_local)`.
+
+    🔑 **Pedido do dono (12/09/2026):** *"a mesma ficha pode ter processos
+    diferentes — a massa de pizza estocada como insumo e a que vai para a
+    vitrine"*. A da vitrine vai ao forno, então o mesmo lote de ingredientes não
+    rende o mesmo tanto.
+
+    ⚠️ **É OVERRIDE, não substituição.** Sem linha em `ficha_locais`, vale o
+    rendimento da ficha — que é o caso de todas as fichas de hoje. É isso que faz
+    esta mudança não mexer em nenhuma produção existente.
+
+    ⚠️ **E ele DIVIDE o consumo** (`lotes = quantidade ÷ rendimento`): produzir
+    10 para um local onde a receita rende 8 consome 1,25 receitas, e para um onde
+    rende 10 consome uma. Por isso quem chama devolve na resposta qual rendimento
+    usou — a tela precisa dizer, senão a pessoa produz achando que gastou outro
+    tanto.
+    """
+    padrao = dec(rendimento_da_ficha) or Decimal(1)
+    if id_local is None:
+        return padrao, False
+    cur.execute(
+        "SELECT rendimento_qtd FROM ficha_locais WHERE id_ficha = %s AND id_local = %s",
+        (id_ficha, id_local),
+    )
+    linha = cur.fetchone()
+    if linha and dec(linha["rendimento_qtd"]) > 0:
+        return dec(linha["rendimento_qtd"]), True
+    return padrao, False
+
+
 def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
                       id_local: int | None = None) -> dict:
     """O que uma produção VAI precisar, sem produzir nada.
@@ -742,13 +774,20 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         raise HTTPException(status_code=400, detail="Este produto não tem ficha homologada.")
 
     qtd = dec(quantidade)
-    rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
-    lotes = qtd / rendimento
-    ums = custos._carregar_ums(cur)
+    # ⚠️ **O local se resolve ANTES do rendimento, e a ordem importa.** Na
+    # primeira versão desta mudança o rendimento era lido com `id_local` ainda
+    # nulo e o local só era resolvido três linhas abaixo: a prévia usava o
+    # rendimento da ficha e a produção usava o do local, para o mesmo pedido.
     # O local de reserva se resolve como na PRODUÇÃO. Sem isto, o saldo era
     # procurado num local nulo, nada casava e a folha dizia que faltava tudo.
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
+    # O rendimento pode ser DO LOCAL: a massa que vai ao forno para a vitrine não
+    # rende o mesmo que a que vai crua para a câmara.
+    rendimento, rend_do_local = rendimento_do_local(
+        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
+    lotes = qtd / rendimento
+    ums = custos._carregar_ums(cur)
 
     cur.execute(
         """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, fi.observacao,
@@ -833,6 +872,10 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         "um_estoque": ficha["um_estoque"],
         "quantidade": float(qtd), "rendimento_qtd": float(rendimento),
         "rendimento_um": ficha["rendimento_um"], "lotes": float(lotes),
+        # ⚠️ **Quem produz tem de saber QUAL rendimento valeu.** Ele divide o
+        # consumo: sem isto a pessoa produz 10 achando que gastou um lote e gastou
+        # 1,25 — e a diferença só aparece na contagem.
+        "rendimento_do_local": rend_do_local,
         "itens": linhas, "itens_faltando": faltam,
         "custo_total": float(custo_total),
         "custo_unitario": float(custo_total / qtd) if qtd else 0.0,
@@ -914,7 +957,10 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         id_local = local_padrao(cur, id_unidade)
 
     qtd = dec(quantidade)
-    rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
+    # ⚠️ O rendimento sai de `ficha_locais` quando o destino tem linha lá — e o
+    # `id_local` já foi resolvido acima, então aqui ele nunca é nulo.
+    rendimento, rend_do_local = rendimento_do_local(
+        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
     # Quantas vezes a receita inteira foi feita.
     lotes = qtd / rendimento
 
@@ -1030,6 +1076,9 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         "id": id_producao,
         "versao_ficha": ficha["versao"],
         "quantidade": float(qtd),
+        # Qual rendimento dividiu o consumo — o da ficha ou o desta prateleira.
+        "rendimento_qtd": float(rendimento),
+        "rendimento_do_local": rend_do_local,
         "custo_total": float(custo_consumido),
         "custo_unitario": float(unitario),
         "consumos": consumos,

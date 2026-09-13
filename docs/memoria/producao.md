@@ -5,6 +5,43 @@
 
 ## O que já existe
 
+- 🔑 **A mesma ficha com PROCESSOS diferentes: a prateleira decide o rendimento**
+  (`ficha_locais` + `produtos.id_local_venda`, migração 066, 12/09/2026, pedido do dono:
+  *"a mesma ficha pode ter processos diferentes. Vamos fazer a massa de pizza e estocar para
+  servir como insumo para pizza, mas podemos ter produção de massa de pizza que vai para a
+  vitrine"*). E o rendimento muda de verdade — a da vitrine vai ao forno e perde água.
+  🔑 **O que o dono desenhou, e é o desenho certo**: no produto, mais de um local e a marca de
+  qual o PDV consome; na ficha, os locais com rendimento próprio; ao programar, escolher o
+  local. As três peças encaixaram no que já existia — `estoque_saldos` já é "onde o produto
+  mora", e a agenda já guardava `id_local`.
+  🔑 **`id_local_padrao` fazia TRÊS papéis, e essa era a raiz do problema**: (1) de onde a
+  VENDA baixa, (2) o fallback de onde os INSUMOS saem (`_de_onde_sai`), (3) o destino padrão da
+  produção. Com uma coluna só, pôr a Vitrine como "o local do produto" fazia a receita da pizza
+  **comer a massa da vitrine**. `id_local_venda` separa o papel 1 — nulo mantém tudo como era.
+  ⚠️ **`ficha_locais` é OVERRIDE, não substituição.** Sem linha, vale o rendimento da ficha, que
+  é o caso de todas as fichas de hoje: é isso que faz a migração não mexer em nenhuma produção
+  existente. Índice único em (ficha, local) — dois rendimentos para o mesmo destino seria a
+  receita com duas verdades.
+  ⚠️ **O rendimento DIVIDE o consumo** (`lotes = quantidade ÷ rendimento`): produzir 10 para um
+  destino que rende 8 consome 1,25 receitas. É o objetivo do pedido, e é por isso que `prever` e
+  `produzir` devolvem **`rendimento_do_local`** e a tela de produção mostra o número vigente com
+  "nesta prateleira" — a linha mostrava o da ficha e iria mentir.
+  ⚠️ **A ordem que quase me pegou**: na prévia, o `id_local` era resolvido TRÊS linhas depois de
+  o rendimento ser lido. A prévia usava o rendimento da ficha e a produção o do local, para o
+  mesmo pedido. O local se resolve ANTES.
+  ⚠️ **Ficha homologada não troca de destino**, pela mesma razão dos itens: o rendimento divide o
+  consumo, e mexer nele numa ficha publicada mudaria custo já apurado.
+  ⚠️ **A cópia leva os destinos** (`_copiar_ficha`): nascer sem eles faria a produção para a
+  vitrine voltar ao rendimento da câmara, calada. Quinto lugar onde um campo de ficha precisa
+  entrar, junto com modelo, INSERT, `obter` e a tela.
+  ⚠️ **A agenda guardava `id_local` desde o começo e a tela nunca o mandava** — caía sempre no
+  local padrão do produto. Com rendimento por destino isso passaria a escolher o rendimento
+  errado, em silêncio. Agora a agenda pergunta a prateleira; vazio segue no padrão do produto.
+  ⚠️ Suíte própria: `smoke_rendimento_por_local.py` (23 checagens) — a prévia e a produção
+  concordando no número, os dois papéis de local separados, a cópia levando os destinos e as
+  três recusas.
+
+
 - 🔑 **De onde vem o RENDIMENTO: da soma dos ingredientes** (`custos.rendimento_sugerido` +
   `POST /fichas/rendimento-sugerido`, 12/09/2026, pedido do dono: *"tem como ser gerado
   automaticamente? o sistema que a cliente utiliza soma todos os ingredientes e gera isto"*).

@@ -50,6 +50,11 @@ class ProdutoBase(BaseModel):
     # Onde este produto entra quando chega numa nota. O congelado e o seco vêm
     # na mesma folha: um local por NOTA obrigaria a lançar duas vezes.
     id_local_padrao: int | None = None
+    # 🔑 **De onde a VENDA baixa** (migração 066, pedido do dono). Nulo = usa o
+    # `id_local_padrao`, que continua sendo o destino da produção e o fallback do
+    # consumo de insumo. Separar os papéis é o que permite a mesma massa estar na
+    # câmara como insumo e na vitrine para vender.
+    id_local_venda: int | None = None
     # PARA_ESTOQUE: produz, guarda, sai depois (a massa de pizza).
     # NA_HORA: a venda produz e baixa junto (o café passado).
     modo_producao: str = "PARA_ESTOQUE"
@@ -141,6 +146,8 @@ class ProdutoUpdate(ProdutoBase):
     tipo: str | None = None
     fator_compra: float | None = Field(default=None, gt=0)
     id_local_padrao: int | None = None
+    # De onde a VENDA baixa, como em `ProdutoBase`.
+    id_local_venda: int | None = None
     modo_producao: str | None = None
     producao_propria: bool | None = None
     controla_estoque: bool | None = None
@@ -261,6 +268,8 @@ class ProdutoResponse(BaseModel):
     um_compra: str | None = None
     fator_compra: float
     id_local_padrao: int | None = None
+    # De onde a VENDA baixa, como em `ProdutoBase`.
+    id_local_venda: int | None = None
     local_padrao: str | None = None
     modo_producao: str = "PARA_ESTOQUE"
     perecivel: bool

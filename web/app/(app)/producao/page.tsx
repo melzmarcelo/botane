@@ -61,6 +61,43 @@ export default function PaginaProducao() {
   const [salvando, setSalvando] = useState(false);
   const pag = usePaginacao("producoes");
 
+  /**
+   * 🔑 **Qual rendimento vale para ESTA prateleira** (migração 066, pedido do
+   * dono). A ficha pode ter destinos com rendimento próprio, e o rendimento
+   * DIVIDE o consumo: sem dizer qual está valendo, a pessoa produz 10 achando que
+   * gastou uma receita e gastou uma e um quarto.
+   *
+   * ⚠️ **Vem do servidor, da mesma conta que a produção roda** (`/producao-agenda/
+   * necessario`). Calcular aqui seria uma segunda régua para o mesmo número.
+   * ⚠️ Silencioso quando falha: produto sem ficha homologada responde 400, e a
+   * linha simplesmente volta a mostrar o rendimento da ficha.
+   */
+  const [vigente, setVigente] = useState<
+    { rendimento_qtd: number; rendimento_do_local: boolean } | null
+  >(null);
+
+  useEffect(() => {
+    if (!f.id_produto || !f.id_local) {
+      setVigente(null);
+      return;
+    }
+    let valeu = true;
+    const t = setTimeout(() => {
+      const quanto = Number((f.quantidade || "1").replace(",", ".")) || 1;
+      api
+        .get<typeof vigente>(
+          `/producao-agenda/necessario?id_produto=${f.id_produto}` +
+            `&quantidade=${quanto}&id_local=${f.id_local}`,
+        )
+        .then((r) => valeu && setVigente(r))
+        .catch(() => valeu && setVigente(null));
+    }, 400);
+    return () => {
+      valeu = false;
+      clearTimeout(t);
+    };
+  }, [f.id_produto, f.id_local, f.quantidade]);
+
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
     // dispara a busca com o tamanho errado, e a resposta atrasada dela
@@ -234,8 +271,19 @@ export default function PaginaProducao() {
                 />
                 {escolhida && (
                   <span className="mt-1 block text-[12.5px] text-suave">
-                    A receita rende {Number(escolhida.rendimento_qtd)}{" "}
-                    {escolhida.rendimento_um ?? "un"} — quantidade diferente é proporcional.
+                    {/* 🔑 **O rendimento VIGENTE, não o da ficha** (migração 066).
+                        Com destinos cadastrados, a mesma receita rende diferente
+                        por prateleira — e era esta linha que iria mentir: ela
+                        mostrava o da ficha enquanto a produção usava o do local.
+                        O número vem do servidor, da MESMA conta que a produção
+                        roda. */}
+                    A receita rende{" "}
+                    {qtd(vigente?.rendimento_qtd ?? escolhida.rendimento_qtd)}{" "}
+                    {escolhida.rendimento_um ?? "un"}
+                    {vigente?.rendimento_do_local && (
+                      <b className="text-tinta"> nesta prateleira</b>
+                    )}{" "}
+                    — quantidade diferente é proporcional.
                   </span>
                 )}
               </Campo>
