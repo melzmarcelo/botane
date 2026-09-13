@@ -12,6 +12,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
+import DuplicarFicha from "./duplicar";
 
 import { custo, qtd } from "@/lib/numeros";
 type Item = {
@@ -42,6 +43,8 @@ type Ficha = {
   rendimento_qtd: number;
   rendimento_um: string | null;
   porcoes: number;
+  /** Quanto vale uma porção, na unidade do rendimento. Nulo = ninguém informou. */
+  porcao_qtd: number | null;
   tempo_preparo_min: number | null;
   modo_preparo: string | null;
   alergenos: string | null;
@@ -80,12 +83,34 @@ export default function EditorFicha() {
   const [idProduto, setIdProduto] = useState("");
   const [rotuloProduto, setRotuloProduto] = useState("");
   const [cabecalho, setCabecalho] = useState({
-    rendimento_qtd: "1", rendimento_um: "", porcoes: "1", tempo_preparo_min: "",
+    rendimento_qtd: "1", rendimento_um: "", porcoes: "1", porcao_qtd: "",
+    tempo_preparo_min: "",
     modo_preparo: "", alergenos: "", observacao: "",
   });
   const [itens, setItens] = useState<Item[]>([{ ...ITEM_VAZIO }]);
   const [fichas, setFichas] = useState<FichaListada[]>([]);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+  /**
+   * 🔑 **A soma dos ingredientes, como SUGESTÃO** (12/09/2026, pedido do dono:
+   * *"de onde vem o rendimento? tem como ser gerado automaticamente? o sistema
+   * que a cliente usa soma todos os ingredientes"*).
+   *
+   * ⚠️ **Sugestão, nunca escrita sozinha.** `rendimento_qtd` DIVIDE o consumo na
+   * produção (`lotes = quantidade ÷ rendimento`): recalcular ao salvar mudaria o
+   * custo unitário de tudo que a ficha produz, calado. E há receita em que a soma
+   * não é o rendimento — massa que descansa, calda que reduz de propósito. Quem
+   * decide é quem lê; o botão "usar" é de um clique.
+   *
+   * ⚠️ **A conta vem do SERVIDOR** (`POST /fichas/rendimento-sugerido`): converter
+   * G/ML/UN aqui seria uma segunda régua de conversão, e ela divergiria da do
+   * motor de custos no primeiro ajuste.
+   */
+  const [sugestao, setSugestao] = useState<{
+    qtd: number;
+    um: string;
+    itens_fora: { nome: string; um: string | null }[];
+    assumiu_densidade: boolean;
+  } | null>(null);
   const seletorFoto = useRef<HTMLInputElement>(null);
   // 🔑 **Na tela de CRIAR a ficha ainda não tem id, e a foto não teria para
   // onde ir.** A primeira versão simplesmente escondia o cartão ali — e quem
@@ -118,6 +143,8 @@ export default function EditorFicha() {
       rendimento_qtd: String(f.rendimento_qtd ?? 1),
       rendimento_um: f.rendimento_um ?? "",
       porcoes: String(f.porcoes ?? 1),
+      porcao_qtd: f.porcao_qtd === null || f.porcao_qtd === undefined
+        ? "" : String(f.porcao_qtd),
       tempo_preparo_min: f.tempo_preparo_min?.toString() ?? "",
       modo_preparo: f.modo_preparo ?? "",
       alergenos: f.alergenos ?? "",
@@ -215,6 +242,77 @@ export default function EditorFicha() {
         ordem,
       }));
 
+  // ⚠️ **Debounce, e só com o que já dá para somar.** A pessoa digita "2", "25",
+  // "250" no mesmo campo: pedir a cada tecla seria três pedidos e duas respostas
+  // fora de ordem. E sem item nenhum não há soma — o cartão não mostra nada em
+  // vez de mostrar zero, que pareceria uma afirmação.
+  useEffect(() => {
+    if (!editavel) return;
+    const corpo = corpoItens();
+    if (!corpo.length) {
+      setSugestao(null);
+      return;
+    }
+    let valeu = true;
+    const t = setTimeout(() => {
+      api
+        .post<typeof sugestao>("/fichas/rendimento-sugerido", {
+          itens: corpo,
+          um: texto(cabecalho.rendimento_um),
+        })
+        .then((r) => valeu && setSugestao(r))
+        .catch(() => valeu && setSugestao(null));
+    }, 600);
+    return () => {
+      valeu = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editavel, JSON.stringify(itens), cabecalho.rendimento_um]);
+
+  /** Porções e tamanho da porção são o MESMO dado visto de dois lados.
+   *
+   * 🔑 **Pedido do dono:** *"hoje temos somente a quantidade de porções, mas
+   * podemos ter ao contrário: informar os gramas/kg/un e ele calcular quantas
+   * porções rende"*.
+   *
+   * ⚠️ **Mexer num recalcula o OUTRO, e só na digitação.** Fazer isso num efeito
+   * sobre os três campos criaria ida e volta: porções mexe no tamanho, que mexe
+   * nas porções. Aqui cada mão escreve uma vez.
+   * ⚠️ **Trocar o rendimento mantém o TAMANHO e refaz as porções** — quando o
+   * tamanho foi informado. É o que a cozinha fixa: mais massa não muda a fatia,
+   * muda quantas fatias saem.
+   */
+  function mudarRendimento(valor: string) {
+    setCabecalho((c) => {
+      const tamanho = num(c.porcao_qtd);
+      const rend = num(valor);
+      if (!tamanho || !rend) return { ...c, rendimento_qtd: valor };
+      const porcoes = Math.round((rend / tamanho) * 100) / 100;
+      return { ...c, rendimento_qtd: valor, porcoes: porcoes > 0 ? String(porcoes) : c.porcoes };
+    });
+  }
+
+  function mudarPorcoes(valor: string) {
+    setCabecalho((c) => {
+      const rend = num(c.rendimento_qtd);
+      const porcoes = num(valor);
+      if (!rend || !porcoes) return { ...c, porcoes: valor };
+      const tamanho = Math.round((rend / porcoes) * 10000) / 10000;
+      return { ...c, porcoes: valor, porcao_qtd: tamanho > 0 ? String(tamanho) : "" };
+    });
+  }
+
+  function mudarPorcao(valor: string) {
+    setCabecalho((c) => {
+      const rend = num(c.rendimento_qtd);
+      const tamanho = num(valor);
+      if (!rend || !tamanho) return { ...c, porcao_qtd: valor };
+      const porcoes = Math.round((rend / tamanho) * 100) / 100;
+      return { ...c, porcao_qtd: valor, porcoes: porcoes > 0 ? String(porcoes) : c.porcoes };
+    });
+  }
+
   async function salvar(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
@@ -223,6 +321,9 @@ export default function EditorFicha() {
       rendimento_qtd: num(cabecalho.rendimento_qtd) ?? 1,
       rendimento_um: texto(cabecalho.rendimento_um),
       porcoes: num(cabecalho.porcoes) ?? 1,
+      // ⚠️ Vazio vai como NULO, não como 1: "ninguém informou o tamanho" é
+      // diferente de "a porção vale uma unidade".
+      porcao_qtd: num(cabecalho.porcao_qtd),
       tempo_preparo_min: num(cabecalho.tempo_preparo_min),
       modo_preparo: texto(cabecalho.modo_preparo),
       alergenos: texto(cabecalho.alergenos),
@@ -405,6 +506,16 @@ export default function EditorFicha() {
               Criar nova versão
             </button>
           )}
+          {/* ⚠️ **Aparece em rascunho TAMBÉM**, ao contrário de "nova versão":
+              copiar não muda esta ficha, e a base de uma receita nova costuma
+              estar justamente na que ainda se está escrevendo. */}
+          {!nova && podeEditar && ficha && (
+            <DuplicarFicha
+              idFicha={ficha.id}
+              produtoAtual={ficha.produto}
+              fichasDoSistema={fichas}
+            />
+          )}
           {!nova && podeHomologar && ficha?.status === "RASCUNHO" && (
             <button
               type="button"
@@ -468,8 +579,9 @@ export default function EditorFicha() {
                 step="0.001"
                 min="0.001"
                 disabled={!editavel}
+                aria-label="Rendimento da receita"
                 value={cabecalho.rendimento_qtd}
-                onChange={(e) => setCabecalho({ ...cabecalho, rendimento_qtd: e.target.value })}
+                onChange={(e) => mudarRendimento(e.target.value)}
               />
               <select
                 className="campo w-[110px]"
@@ -485,6 +597,43 @@ export default function EditorFicha() {
                 ))}
               </select>
             </div>
+            {/* 🔑 **De onde vem o rendimento**: da soma dos ingredientes, quando
+                eles sabem dizer. Fica ao lado do campo, com o número à vista e um
+                clique para usar — nunca escrito sozinho. */}
+            {sugestao && sugestao.qtd > 0 && (
+              <p className="mt-1.5 text-[12.5px] leading-snug text-suave">
+                A soma dos ingredientes dá{" "}
+                <b className="mono text-tinta">
+                  {qtd(sugestao.qtd)} {sugestao.um}
+                </b>
+                {editavel && (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      className="link-acao"
+                      onClick={() =>
+                        mudarRendimento(String(sugestao.qtd).replace(",", "."))
+                      }
+                    >
+                      usar
+                    </button>
+                  </>
+                )}
+                {sugestao.assumiu_densidade && (
+                  <span className="block">
+                    considerando <b>1 ML = 1 G</b> nos líquidos.
+                  </span>
+                )}
+                {sugestao.itens_fora.length > 0 && (
+                  <span className="block text-alerta">
+                    fora da conta:{" "}
+                    {sugestao.itens_fora.map((x) => `${x.nome} (${x.um ?? "—"})`).join(", ")} —
+                    cadastre o peso de uma unidade no produto para ele entrar.
+                  </span>
+                )}
+              </p>
+            )}
           </Campo>
           <Campo rotulo="Porções" dica="divide o custo total">
             <input
@@ -493,8 +642,38 @@ export default function EditorFicha() {
               step="0.01"
               min="0.01"
               disabled={!editavel}
+              aria-label="Porções da receita"
               value={cabecalho.porcoes}
-              onChange={(e) => setCabecalho({ ...cabecalho, porcoes: e.target.value })}
+              onChange={(e) => mudarPorcoes(e.target.value)}
+            />
+          </Campo>
+          {/* 🔑 **A conta nos dois sentidos** (pedido do dono, 12/09/2026): com o
+              tamanho da porção, informar o rendimento dá as porções — e informar
+              as porções dá o tamanho. Um é o outro de cabeça para baixo.
+              ⚠️ Vazio mostra o valor DERIVADO como sugestão do campo, sem gravar:
+              nulo quer dizer "ninguém informou". */}
+          <Campo
+            rotulo="Cada porção tem"
+            dica={`na unidade do rendimento${cabecalho.rendimento_um ? ` (${cabecalho.rendimento_um})` : ""}`}
+          >
+            <input
+              className="campo mono"
+              type="number"
+              step="0.0001"
+              min="0.0001"
+              disabled={!editavel}
+              aria-label="Tamanho da porção"
+              value={cabecalho.porcao_qtd}
+              placeholder={
+                num(cabecalho.rendimento_qtd) && num(cabecalho.porcoes)
+                  ? String(
+                      Math.round(
+                        (num(cabecalho.rendimento_qtd)! / num(cabecalho.porcoes)!) * 10000,
+                      ) / 10000,
+                    ).replace(".", ",")
+                  : ""
+              }
+              onChange={(e) => mudarPorcao(e.target.value)}
             />
           </Campo>
         </div>
@@ -575,6 +754,7 @@ export default function EditorFicha() {
                       step="0.0001"
                       min="0"
                       disabled={!editavel}
+                      aria-label={`Quantidade bruta do item ${i + 1}`}
                       value={item.qtd_bruta}
                       onChange={(e) =>
                         setItens((l) =>
@@ -591,6 +771,7 @@ export default function EditorFicha() {
                       step="0.0001"
                       min="0"
                       disabled={!editavel}
+                      aria-label={`Quantidade líquida do item ${i + 1}`}
                       value={item.qtd_liquida}
                       onChange={(e) =>
                         setItens((l) =>
@@ -664,6 +845,30 @@ export default function EditorFicha() {
                     <span className="text-alerta">a sub-ficha tem item sem preço</span>
                   )}
                   {item.aviso && <span className="text-erro">{item.aviso}</span>}
+                  {/* 🔑 **O fator de cocção finalmente tem onde ser digitado.** A
+                      coluna existe desde a migração 006 com "muda rendimento, não
+                      custo" escrito nela, e a tela nunca a ofereceu: ficava 1 em
+                      toda ficha. Bolo perde água no forno (0,88), arroz ganha
+                      (2,5) — sem isso a soma dos ingredientes dá o rendimento
+                      CRU. ⚠️ Não entra no custo, como a coluna sempre disse: o
+                      custo é do que saiu do estoque. */}
+                  <label className="flex items-center gap-1.5">
+                    <span>cocção</span>
+                    <input
+                      className="campo mono w-[76px] py-1 text-right text-[13px]"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      disabled={!editavel}
+                      aria-label={`fator de cocção de ${item.nome || "item"}`}
+                      value={item.fator_coccao}
+                      onChange={(e) =>
+                        setItens((l) =>
+                          l.map((x, j) => (j === i ? { ...x, fator_coccao: e.target.value } : x)),
+                        )
+                      }
+                    />
+                  </label>
                   <input
                     className="campo ml-auto max-w-[280px] py-1 text-[13px]"
                     placeholder="observação da linha"

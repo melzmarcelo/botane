@@ -359,6 +359,89 @@ checar("recusa item com insumo e sub-ficha juntos", st == 400, st)
 st, r = chamar("DELETE", f"/fichas/{ficha_base}", token=token)
 checar("recusa arquivar ficha usada como sub-ficha", st == 409, (st, r))
 
+print("7b. duplicar a receita para OUTRO produto")
+# 🔑 **Pedido do dono (12/09/2026):** "tenho Bolo de Morango e Bolo de Banana, a
+# base da receita e a mesma, gostaria de duplicar e ajustar". Sem isto a segunda
+# receita era redigitada item por item — e e ai que uma entra com 200 G de
+# farinha e a outra com 250, sem ninguem ter decidido nada.
+st, origem = chamar("GET", f"/fichas/{ficha_bebida}", token=token)
+itens_origem = origem.get("itens", [])
+banana = novo_produto(f"Ficha bolo banana {marca}", "PRODUZIDO", "UN")
+st, r = chamar("POST", f"/fichas/{ficha_bebida}/duplicar", {"id_produto": banana}, token=token)
+checar("duplica para um produto sem ficha", st == 201, (st, r))
+copia = r.get("id")
+if copia:
+    criados["fichas"].append(copia)
+checar("e a mensagem diz para onde foi e que e rascunho",
+       "rascunho" in (r.get("message") or "").lower(), r.get("message"))
+
+st, nova_f = chamar("GET", f"/fichas/{copia}", token=token)
+checar("a copia e do produto de DESTINO", nova_f.get("id_produto") == banana,
+       nova_f.get("id_produto"))
+checar("nasce em rascunho, na versao 1", nova_f.get("status") == "RASCUNHO"
+       and nova_f.get("versao") == 1, (nova_f.get("status"), nova_f.get("versao")))
+# ⚠️ O que importa nao e "tem itens": e ter os MESMOS, com as mesmas
+# quantidades. Uma copia que perde o fator de correcao ou a unidade de um item
+# muda o custo sem ninguem ver.
+def assinatura(itens):
+    # ⚠️ Zero no lugar do nulo: item de sub-ficha tem `id_insumo` nulo, e ordenar
+    # tupla com None contra int estoura antes de comparar coisa nenhuma.
+    return sorted((i.get("id_insumo") or 0, i.get("id_subficha") or 0,
+                   float(i.get("qtd_bruta") or 0), i.get("um") or "",
+                   float(i.get("fator_correcao") or 1)) for i in itens)
+checar("com os MESMOS itens, quantidades, unidades e fatores",
+       assinatura(nova_f.get("itens", [])) == assinatura(itens_origem),
+       (assinatura(nova_f.get("itens", [])), assinatura(itens_origem)))
+checar("e com o mesmo rendimento e porcoes",
+       float(nova_f.get("rendimento_qtd") or 0) == float(origem.get("rendimento_qtd") or 0)
+       and float(nova_f.get("porcoes") or 0) == float(origem.get("porcoes") or 0),
+       (nova_f.get("rendimento_qtd"), nova_f.get("porcoes")))
+# Produto com ficha e de producao propria — a mesma coerencia que `criar` mantem,
+# senao o bolo novo teria receita e nao apareceria na agenda de producao.
+st, prod_banana = chamar("GET", f"/produtos/{banana}", token=token)
+checar("e o destino passou a ser de producao propria",
+       prod_banana.get("producao_propria") is True, prod_banana.get("producao_propria"))
+
+# ⚠️ A ORIGEM nao se mexe: duplicar nao e mover.
+st, ainda = chamar("GET", f"/fichas/{ficha_bebida}", token=token)
+checar("a ficha de origem continua intacta",
+       assinatura(ainda.get("itens", [])) == assinatura(itens_origem), ainda.get("itens"))
+
+# Duplicar para um produto que JA tem ficha: entra como versao seguinte.
+st, r2 = chamar("POST", f"/fichas/{ficha_bebida}/duplicar", {"id_produto": banana}, token=token)
+checar("duplicar de novo entra como versao 2", st == 201, (st, r2))
+if r2.get("id"):
+    criados["fichas"].append(r2["id"])
+st, dupla = chamar("GET", f"/fichas/{r2.get('id')}", token=token)
+checar("a segunda copia e a v2", dupla.get("versao") == 2, dupla.get("versao"))
+checar("e a mensagem avisa que a ficha atual continua valendo",
+       "continua valendo" in (r2.get("message") or ""), r2.get("message"))
+
+# ⚠️ **Ficha e de produzido ou kit** — a mesma regra de quem cria do zero.
+insumo_qualquer = novo_produto(f"Ficha insumo destino {marca}", "INSUMO", "KG")
+st, r3 = chamar("POST", f"/fichas/{ficha_bebida}/duplicar",
+                {"id_produto": insumo_qualquer}, token=token)
+checar("recusa duplicar para INSUMO", st == 400, (st, r3))
+checar("dizendo que ficha e de produzido ou kit",
+       "produzido" in (r3.get("detail") or "").lower(), r3.get("detail"))
+
+# 🔑 **A receita nao pode virar ingrediente de si mesma.** A ficha da bebida usa
+# `ficha_base` como sub-ficha; duplicar a bebida PARA o produto da base faria a
+# copia dizer que a base leva base. Nao e ciclo de estrutura (sao duas fichas
+# diferentes), entao a guarda tem de olhar o produto por tras da sub-ficha.
+st, base_f = chamar("GET", f"/fichas/{ficha_base}", token=token)
+st, r4 = chamar("POST", f"/fichas/{ficha_bebida}/duplicar",
+                {"id_produto": base_f.get("id_produto")}, token=token)
+checar("recusa duplicar para um produto que a receita usa como ingrediente",
+       st == 400, (st, r4))
+checar("dizendo que a receita se usaria a si mesma",
+       "si mesma" in (r4.get("detail") or "").lower(), r4.get("detail"))
+
+st, r5 = chamar("POST", f"/fichas/{ficha_bebida}/duplicar", {"id_produto": 99999999},
+                token=token)
+checar("e produto de destino inexistente e 404", st == 404, (st, r5))
+
+
 print("8. limpeza")
 for id_ficha in reversed(criados["fichas"]):
     # ⚠️ A foto sai ANTES: arquivar a ficha não apaga o arquivo (nem deveria —

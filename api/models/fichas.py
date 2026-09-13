@@ -24,6 +24,12 @@ class FichaCreate(BaseModel):
     rendimento_qtd: float = Field(default=1, gt=0)
     rendimento_um: str | None = Field(default=None, max_length=6)
     porcoes: float = Field(default=1, gt=0)
+    # 🔑 **Quanto vale UMA porção**, na unidade do rendimento (migração 065,
+    # pedido do dono 12/09/2026). Com ele a conta vai nos dois sentidos: o
+    # rendimento dividido pelo tamanho dá as porções, e dividido pelas porções dá
+    # o tamanho. ⚠️ Nulo é resposta: "ninguém informou", e a tela deriva sem
+    # gravar palpite.
+    porcao_qtd: float | None = Field(default=None, gt=0)
     tempo_preparo_min: int | None = Field(default=None, ge=0, le=6000)
     modo_preparo: str | None = None
     alergenos: str | None = None
@@ -35,11 +41,38 @@ class FichaUpdate(BaseModel):
     rendimento_qtd: float | None = Field(default=None, gt=0)
     rendimento_um: str | None = None
     porcoes: float | None = Field(default=None, gt=0)
+    # O tamanho da porção, como em `FichaCreate`.
+    porcao_qtd: float | None = Field(default=None, gt=0)
     tempo_preparo_min: int | None = Field(default=None, ge=0, le=6000)
     modo_preparo: str | None = None
     alergenos: str | None = None
     observacao: str | None = None
     itens: list[ItemFicha] | None = None
+
+
+class RendimentoSugerido(BaseModel):
+    """Os itens de uma receita, para o servidor somar o que ela rende.
+
+    ⚠️ **Vai a receita inteira, não o id da ficha**: a tela pede o número enquanto
+    a pessoa monta os itens, e numa ficha nova não há nada gravado. `um` é a
+    unidade em que a resposta deve sair — a do rendimento da ficha, quando ela é
+    de peso ou volume.
+    """
+
+    itens: list[ItemFicha] = Field(default_factory=list)
+    um: str | None = Field(default=None, max_length=6)
+
+
+class FichaDuplicar(BaseModel):
+    """Para qual produto a receita vai ser copiada.
+
+    ⚠️ **Produto EXISTENTE, escolhido na tela.** Criar o produto aqui exigiria
+    tipo, unidade de estoque, categoria e setor — um cadastro inteiro dentro de
+    uma janela de cópia. Quem duplica já tem o bolo de banana cadastrado; quem
+    não tem, cadastra em Produtos, que é onde essas perguntas moram.
+    """
+
+    id_produto: int
 
 
 class FichaResumo(BaseModel):
@@ -73,6 +106,7 @@ class FichaResponse(BaseModel):
     rendimento_qtd: float
     rendimento_um: str | None = None
     porcoes: float
+    porcao_qtd: float | None = None
     tempo_preparo_min: int | None = None
     modo_preparo: str | None = None
     alergenos: str | None = None

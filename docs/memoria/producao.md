@@ -5,6 +5,93 @@
 
 ## O que já existe
 
+- 🔑 **De onde vem o RENDIMENTO: da soma dos ingredientes** (`custos.rendimento_sugerido` +
+  `POST /fichas/rendimento-sugerido`, 12/09/2026, pedido do dono: *"tem como ser gerado
+  automaticamente? o sistema que a cliente utiliza soma todos os ingredientes e gera isto"*).
+  A fórmula é a da área: **Σ (líquido convertido para massa × fator de cocção)**.
+  ⚠️ **SUGESTÃO, nunca escrita sozinha — e isso é o ponto.** `rendimento_qtd` DIVIDE o consumo
+  na produção (`lotes = quantidade ÷ rendimento`): recalcular ao salvar mudaria o custo
+  unitário de tudo que a ficha produz, calado, e o CMV do mês com ele. Fora que há receita em
+  que a soma não é o rendimento — massa que descansa, calda que reduz de propósito. A tela
+  mostra o número com um "usar" de um clique; quem decide é quem lê.
+  ⚠️ **A rota recebe os ITENS, não um id de ficha**: a tela precisa do número enquanto a
+  receita está sendo montada, e em ficha nova não há nada gravado. Sem estado, serve aos dois
+  casos com uma rota só.
+  ⚠️ **Três coisas que a soma precisa saber**, e cada uma tem checagem na suíte:
+  (1) **ML entra por densidade 1** e a resposta DIZ que assumiu — acerta em água e leite
+  (1,03), erraria feio em óleo (0,92) e mel (1,42);
+  (2) **UN entra pelo peso cadastrado no produto**, em dois passos — quanto o item vale na
+  unidade de estoque, e quanto pesa UMA unidade de estoque (a equivalência de peso, lida ao
+  contrário). ⚠️ A primeira versão chamou `fator_de_embalagem(produto, um)` direto, que
+  responde "quantas unidades de estoque cabem em 1 UN" — para o próprio `um_estoque` não
+  existe linha nenhuma, e o ovo ficava fora da soma com o peso cadastrado ali do lado;
+  (3) **o que soma é o LÍQUIDO**: 1 kg de cenoura com casca vira 800 g na panela — o bruto é o
+  que sai do estoque e custa.
+  ⚠️ **Quem não sabe dizer o peso fica de FORA e é NOMEADO** na resposta. Somar "3 UN" como
+  3 G seria dizer que três ovos pesam três gramas; rendimento que ignora metade da receita em
+  silêncio é pior que rendimento nenhum. A tela lista quem ficou fora e diz o caminho
+  (cadastrar o peso de uma unidade no produto).
+  🔑 **O `fator_coccao` finalmente entra numa conta.** Está no banco desde a migração 006 com
+  `-- muda rendimento, não custo` escrito na coluna, era exportado no relatório e **nenhuma
+  tela o oferecia**: ficava 1 em toda ficha. Agora tem campo por item e vale na soma — e
+  continua fora do custo, como a coluna sempre disse: o custo é do que saiu do estoque, não do
+  que sobrou na assadeira.
+
+- 🔑 **O tamanho da porção, e a conta nos DOIS sentidos** (`fichas_tecnicas.porcao_qtd`,
+  migração 065, 12/09/2026, pedido do dono: *"hoje temos somente a quantidade de porções, mas
+  podemos ter ao contrário: informar os gramas/kg/un e ele calcular quantas porções rende"*).
+  Faltava exatamente esse dado: `porcoes` é contagem pura, e de contagem não se deduz tamanho.
+  ⚠️ **Na unidade do RENDIMENTO**, não numa própria: porção em G numa ficha que rende em L é
+  conta que ninguém fecha, e `rendimento_um` já está gravado ao lado.
+  ⚠️ **Nulo é resposta** ("ninguém informou") e é o padrão. A tela mostra o valor derivado
+  (`rendimento ÷ porcoes`) como sugestão do campo, sem gravar palpite.
+  ⚠️ **Não mexe em `porcoes`**, que continua sendo o que divide o custo: derivá-la em consulta
+  mudaria o custo por porção de toda ficha existente no instante em que alguém informasse um
+  tamanho.
+  ⚠️ **Na tela, mexer num recalcula o outro — na digitação, não num efeito.** Efeito sobre os
+  três campos criaria ida e volta (porções mexe no tamanho, que mexe nas porções). E trocar o
+  rendimento mantém o TAMANHO e refaz as porções: é o que a cozinha fixa — mais massa não muda
+  a fatia, muda quantas fatias saem.
+  ⚠️ **A armadilha que custou uma suíte inteira acusando o INSERT certo**: `obter` monta a
+  resposta **campo por campo**. `SELECT f.*` trazia a coluna nova, o INSERT gravava o valor, e
+  a leitura o deixava de fora — sintoma "grava certo e volta nulo". Campo novo em ficha entra
+  em quatro lugares: modelo de entrada, INSERT do `criar`, `_copiar_ficha` e **o dicionário do
+  `obter`**.
+
+
+- 🔑 **Duplicar a receita para OUTRO produto** (`POST /fichas/{id}/duplicar`, 12/09/2026,
+  pedido do dono: *"tenho Bolo de Morango e Bolo de Banana, a base da receita é a mesma, então
+  gostaria de duplicar e ajustar, retirando o que não vai e adicionando o que precisa"*). Sem
+  isto a segunda receita era redigitada item por item — e é aí que uma entra com 200 G de
+  farinha e a outra com 250, sem ninguém ter decidido nada.
+  🔑 **A cópia já existia: era `nova-versao`.** Ela copia cabeçalho, itens e o ARQUIVO da foto
+  desde 01/09; a única coisa que faltava era o produto de destino. Então o código virou um
+  `_copiar_ficha(cur, f, id_produto, id_usuario)` que as duas rotas chamam — escrever a
+  segunda cópia à mão seria garantir que um dia uma delas esquecesse o fator de correção.
+  ⚠️ **Nasce em RASCUNHO, e o destino pode já ter ficha**: a cópia entra como a versão
+  seguinte e a vigente continua valendo até alguém homologar a nova. É a mesma regra de
+  `nova-versao`, e a janela DIZ isso antes de confirmar, com a versão que vai sair.
+  ⚠️ **A guarda que `descendentes_da_ficha` não pega**: se a receita copiada usa uma sub-ficha
+  **do produto de destino**, a cópia nasceria dizendo que o bolo leva bolo. Não é ciclo de
+  estrutura (são duas fichas diferentes, e o detector não acusa nada), então a checagem olha o
+  PRODUTO por trás da sub-ficha e recusa com essa frase.
+  ⚠️ **O destino também vira produção própria**, como em `criar`: sem isso o bolo novo teria
+  receita e não apareceria na agenda de produção.
+  ⚠️ **A busca do destino NÃO filtra por tipo**, de propósito — `tipo=PRODUZIDO` esconderia os
+  kits, e a própria tela da ficha carrega o comentário de quando um recorte assim fez "o prato
+  que se queria virar invisível". O produto aparece, e a tela explica quando ele não serve
+  (produzido ou kit); o servidor recusa com a mesma frase de quem cria ficha do zero.
+  ⚠️ **O botão aparece em rascunho também**, ao contrário de "criar nova versão": copiar não
+  muda esta ficha, e a base de uma receita nova costuma estar na que ainda se está escrevendo.
+  ⚠️ **Produto de destino EXISTENTE.** Cadastrá-lo na janela pediria tipo, unidade, categoria
+  e setor — um cadastro inteiro dentro de uma janela de cópia. Quem duplica já tem o bolo de
+  banana cadastrado; quem não tem, cadastra em Produtos, que é onde essas perguntas moram.
+  ⚠️ A suíte de fichas foi de 55 para 71 checagens: a cópia item a item (mesmas quantidades,
+  unidades e fatores), a origem intacta, a segunda cópia caindo na v2, as duas recusas e o
+  404. E a bateria do navegador dirige a janela até a ficha nova, com o ingrediente à vista —
+  confirmar que o botão existe não diz que a receita veio junto.
+
+
 - 🔑 **A ficha técnica ganhou FOTO do prato pronto** (01/09/2026, pedido do dono). A coluna
   `fichas_tecnicas.foto_url` **existe desde a etapa 3 e nunca tinha sido usada** — não houve
   migração. A ficha é seguida por quem está de pé na cozinha, e *"está pronto?"* é uma pergunta

@@ -187,6 +187,174 @@ def converter_para_estoque(cur, qtd: Decimal, id_produto: int, um: str | None,
     return None, "desconhecida"
 
 
+# ⚠️ **A densidade 1 é uma SUPOSIÇÃO, e ela fica à vista.** Somar 500 ML de leite
+# com 300 G de farinha exige tratar mililitro como grama — é o que a cozinha faz
+# e o que todo sistema de ficha técnica faz, e erra pouco em leite (1,03) e em
+# água (1,00). Erraria feio em óleo (0,92) e em mel (1,42). Por isso a resposta
+# diz quando a suposição foi usada, e a tela conta isso a quem lê o número.
+DENSIDADE_ASSUMIDA = Decimal(1)
+
+
+def _em_gramas(qtd: Decimal, um: str | None, ums: dict) -> tuple[Decimal | None, bool]:
+    """Quanto isto pesa, em gramas. Devolve `(gramas, assumiu_densidade)`.
+
+    MASSA converte de verdade. VOLUME converte para ML e vira grama na razão de
+    1:1 — com a marca, porque quem lê o rendimento precisa saber que houve
+    suposição. Qualquer outra grandeza (UNIDADE, e é o caso do ovo) devolve
+    `None`: quem sabe quanto pesa uma unidade é o cadastro do produto, não esta
+    função.
+    """
+    u = ums.get(um or "")
+    if not u:
+        return None, False
+    if u["grandeza"] == "MASSA":
+        convertido = converter(qtd, um, "G", ums)
+        return (dec(convertido), False) if convertido is not None else (None, False)
+    if u["grandeza"] == "VOLUME":
+        convertido = converter(qtd, um, "ML", ums)
+        if convertido is None:
+            return None, False
+        return dec(convertido) * DENSIDADE_ASSUMIDA, True
+    return None, False
+
+
+def _peso_de_uma(cur, id_produto: int, ums: dict) -> tuple[Decimal | None, bool]:
+    """Quanto pesa UMA unidade de estoque deste produto, em gramas.
+
+    🔑 **A equivalência de peso do cadastro, lida ao contrário.** A linha do ovo
+    diz "1 G = 0,02 UN"; o que a soma precisa é o inverso — 1 UN = 50 G. É a mesma
+    leitura de trás para frente que a troca de unidade faz, e pela mesma razão: o
+    número está gravado, só está apontando para o outro lado.
+
+    ⚠️ **Serve a produto contado em UNIDADE**, que é onde a receita em gramas não
+    fecha sozinha. Produto já estocado em peso não passa por aqui — `_em_gramas`
+    resolve antes.
+    """
+    cur.execute(
+        """SELECT um, fator FROM produto_unidades
+            WHERE id_produto = %s AND fator > 0 ORDER BY padrao DESC, id""",
+        (id_produto,),
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT um_compra, fator_compra FROM produtos WHERE id = %s", (id_produto,))
+    p = cur.fetchone()
+    if p and p["um_compra"] and dec(p["fator_compra"]) > 0:
+        linhas.append({"um": p["um_compra"], "fator": p["fator_compra"]})
+
+    for linha in linhas:
+        # `fator` = quantas unidades de estoque cabem em uma desta. Invertido, é
+        # quanto UMA unidade de estoque vale naquela unidade.
+        gramas, assumiu = _em_gramas(Decimal(1) / dec(linha["fator"]), linha["um"], ums)
+        if gramas is not None and gramas > 0:
+            return gramas, assumiu
+    return None, False
+
+
+def rendimento_sugerido(cur, itens: list[dict], um_alvo: str | None = None) -> dict:
+    """Quanto esta receita rende, somando os ingredientes.
+
+    🔑 **Pedido do dono (12/09/2026):** *"o sistema que a cliente utiliza soma
+    todos os ingredientes e gera isto automaticamente"*. A fórmula é a da área:
+    **Σ (líquido convertido para massa × fator de cocção)**.
+
+    ⚠️ **O que soma é o LÍQUIDO, não o bruto.** Um quilo de cenoura com casca vira
+    800 g na panela: o bruto é o que sai do estoque (e é ele que custa), o líquido
+    é o que entra no prato. Sem `qtd_liquida` informada, o bruto é o melhor
+    palpite — e é o que a ficha já faz no resto das contas.
+
+    🔑 **O fator de cocção finalmente ENTRA numa conta.** Ele está no banco desde
+    a migração 006, com o comentário "muda rendimento, não custo" escrito na
+    coluna, e até hoje não era lido por ninguém: bolo perde água no forno e arroz
+    ganha, e sem isso a soma dá o rendimento CRU — 10 a 15% acima do real num
+    bolo. ⚠️ **E não toca no custo, como a coluna sempre disse**: o custo é do que
+    saiu do estoque, não do que sobrou na assadeira.
+
+    ⚠️ **O que não converte fica de FORA e aparece na resposta.** Três ovos numa
+    receita em gramas só entram na soma se o produto disser quanto pesa um ovo
+    (a equivalência de peso do cadastro). Sem isso, somar 3 seria dizer que três
+    ovos pesam três gramas. A tela mostra quem ficou fora, porque um rendimento
+    sugerido que ignora metade da receita em silêncio é pior que nenhum.
+
+    ⚠️ **Sub-ficha entra pelo RENDIMENTO dela**, que é o peso do que ela produz —
+    não pela soma dos ingredientes dela outra vez.
+    """
+    ums = _carregar_ums(cur)
+    total = Decimal(0)
+    assumiu = False
+    fora: list[dict] = []
+
+    for item in itens:
+        bruta = dec(item.get("qtd_bruta"))
+        liquida = dec(item.get("qtd_liquida")) if item.get("qtd_liquida") else None
+        usada = liquida if liquida and liquida > 0 else bruta
+        if usada <= 0:
+            continue
+        coccao = dec(item.get("fator_coccao")) or Decimal(1)
+        um = item.get("um")
+        id_insumo, id_subficha = item.get("id_insumo"), item.get("id_subficha")
+
+        gramas, com_densidade = _em_gramas(usada, um, ums)
+
+        # 🔑 **A unidade do item não é de peso nem de volume** (UN, CX, DZ): quem
+        # sabe quanto pesa uma delas é o cadastro do produto. Dois passos, e os
+        # dois usam o conversor central:
+        #   1. quanto isto vale na unidade de ESTOQUE do produto (3 DZ = 36 UN);
+        #   2. quanto pesa UMA unidade de estoque (1 UN = 50 G).
+        # ⚠️ A primeira versão tentou `fator_de_embalagem(produto, um)` direto, o
+        # que responde "quantas unidades de estoque cabem em 1 UN" — para o
+        # próprio um_estoque não existe linha nenhuma, e o ovo ficava fora da
+        # soma com a equivalência de peso cadastrada ali do lado.
+        if gramas is None and id_insumo:
+            cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (id_insumo,))
+            um_estoque = (cur.fetchone() or {}).get("um_estoque")
+            no_estoque, _como = converter_para_estoque(
+                cur, usada, id_insumo, um, um_estoque, ums)
+            if no_estoque is not None:
+                peso, com_densidade = _peso_de_uma(cur, id_insumo, ums)
+                if peso:
+                    gramas = no_estoque * peso
+
+        if gramas is None:
+            nome = None
+            if id_insumo:
+                cur.execute("SELECT nome FROM produtos WHERE id = %s", (id_insumo,))
+                nome = (cur.fetchone() or {}).get("nome")
+            elif id_subficha:
+                cur.execute(
+                    """SELECT p.nome FROM fichas_tecnicas f
+                         JOIN produtos p ON p.id = f.id_produto WHERE f.id = %s""",
+                    (id_subficha,))
+                nome = (cur.fetchone() or {}).get("nome")
+            fora.append({"nome": nome or "item sem nome", "um": um})
+            continue
+
+        assumiu = assumiu or com_densidade
+        total += gramas * coccao
+
+    # A resposta vai na unidade que a ficha usa, quando ela é de peso ou volume.
+    # ⚠️ Em ficha que rende em UNIDADE (bolo, pão) não há conversão possível — o
+    # peso vai em gramas e quem lê decide o que fazer com ele.
+    qtd, um_saida = total, "G"
+    if um_alvo:
+        u = ums.get(um_alvo)
+        if u and u["grandeza"] == "MASSA":
+            convertido = converter(total, "G", um_alvo, ums)
+            if convertido is not None:
+                qtd, um_saida = dec(convertido), um_alvo
+        elif u and u["grandeza"] == "VOLUME":
+            convertido = converter(total / DENSIDADE_ASSUMIDA, "ML", um_alvo, ums)
+            if convertido is not None:
+                qtd, um_saida = dec(convertido), um_alvo
+                assumiu = True
+
+    return {
+        "qtd": float(qtd.quantize(Decimal("0.0001"))) if qtd else 0.0,
+        "um": um_saida,
+        "itens_fora": fora,
+        "assumiu_densidade": assumiu,
+    }
+
+
 def _carregar_ums(cur) -> dict:
     cur.execute("SELECT sigla, grandeza, fator_base FROM unidades_medida")
     return {r["sigla"]: dict(r) for r in cur.fetchall()}

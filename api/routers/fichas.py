@@ -20,7 +20,8 @@ import arquivos
 import auditoria
 from database import get_cursor
 from paginacao import com_total
-from models.fichas import FichaCreate, FichaResponse, FichaResumo, FichaUpdate, ItemFicha
+from models.fichas import (FichaCreate, FichaDuplicar, FichaResponse, FichaResumo,
+                           FichaUpdate, ItemFicha, RendimentoSugerido)
 from seguranca import Contexto, requer_permissao
 from services import custos
 
@@ -177,6 +178,11 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         "rendimento_qtd": _num(ficha["rendimento_qtd"]),
         "rendimento_um": ficha["rendimento_um"],
         "porcoes": _num(ficha["porcoes"]),
+        # ⚠️ **A resposta e montada campo por campo.** `SELECT f.*` traz a coluna
+        # nova, mas quem nao entra nesta lista nao sai na API — e o sintoma e o
+        # pior possivel: grava certo e volta nulo. Custou uma suite inteira
+        # acusando o INSERT, que estava correto.
+        "porcao_qtd": _num(ficha["porcao_qtd"]),
         "tempo_preparo_min": ficha["tempo_preparo_min"],
         "modo_preparo": ficha["modo_preparo"],
         "alergenos": ficha["alergenos"],
@@ -224,12 +230,12 @@ def criar(body: FichaCreate, ctx: Contexto = Depends(requer_permissao("fichas.ed
 
         cur.execute(
             """INSERT INTO fichas_tecnicas (id_produto, versao, rendimento_qtd, rendimento_um,
-                                            porcoes, tempo_preparo_min, modo_preparo, alergenos,
-                                            observacao, criado_por)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                            porcoes, porcao_qtd, tempo_preparo_min, modo_preparo,
+                                            alergenos, observacao, criado_por)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (body.id_produto, versao, body.rendimento_qtd, body.rendimento_um, body.porcoes,
-             body.tempo_preparo_min, body.modo_preparo, body.alergenos, body.observacao,
-             ctx.id_usuario),
+             body.porcao_qtd, body.tempo_preparo_min, body.modo_preparo, body.alergenos,
+             body.observacao, ctx.id_usuario),
         )
         nova = cur.fetchone()["id"]
         _gravar_itens(cur, nova, body.itens)
@@ -252,8 +258,8 @@ def atualizar(id_ficha: int, body: FichaUpdate,
     itens = dados.pop("itens", None)
     with get_cursor() as cur:
         cur.execute(
-            """SELECT status, rendimento_qtd, rendimento_um, porcoes FROM fichas_tecnicas
-                WHERE id = %s""",
+            """SELECT status, rendimento_qtd, rendimento_um, porcoes, porcao_qtd
+                 FROM fichas_tecnicas WHERE id = %s""",
             (id_ficha,),
         )
         antes = cur.fetchone()
@@ -309,6 +315,80 @@ def homologar(id_ficha: int,
     return {"message": "Ficha homologada"}
 
 
+def _copiar_ficha(cur, f, id_produto: int, id_usuario: int | None) -> tuple[int, int]:
+    """Copia cabeçalho, foto e itens para uma ficha NOVA do produto indicado.
+
+    🔑 **Uma cópia só, para dois usos.** `nova-versao` copia para o MESMO produto
+    e `duplicar` para outro — o resto é idêntico, e escrever duas vezes seria
+    garantir que um dia uma delas esquecesse a foto ou o fator de correção.
+    Devolve `(id, versao)`.
+    """
+    cur.execute(
+        "SELECT coalesce(max(versao), 0) + 1 AS proxima FROM fichas_tecnicas WHERE id_produto = %s",
+        (id_produto,),
+    )
+    versao = cur.fetchone()["proxima"]
+    cur.execute(
+        """INSERT INTO fichas_tecnicas (id_produto, versao, rendimento_qtd, rendimento_um,
+                                        porcoes, porcao_qtd, tempo_preparo_min, modo_preparo,
+                                        alergenos, observacao, criado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (id_produto, versao, f["rendimento_qtd"], f["rendimento_um"], f["porcoes"],
+         f["porcao_qtd"], f["tempo_preparo_min"], f["modo_preparo"], f["alergenos"],
+         f["observacao"], id_usuario),
+    )
+    nova = cur.fetchone()["id"]
+    # 🔑 **A foto vem junto, e o ARQUIVO é copiado — não a URL.** A versão nova
+    # quase sempre é a mesma receita com um ajuste, e o prato continua o mesmo:
+    # nascer sem foto obrigaria a fotografar de novo a cada versão.
+    # ⚠️ Copiar só a URL deixaria as duas apontando para o mesmo arquivo, cujo
+    # dono é a versão VELHA — e trocar a foto de lá apagaria a daqui, sem
+    # ninguém ter tocado nesta ficha. Na DUPLICAÇÃO isso vale em dobro: o bolo
+    # de banana começa com a foto do de morango, e trocá-la não pode mexer no
+    # prato do outro.
+    nova_foto = arquivos.copiar(f["foto_url"], f"ficha-{nova}", cur)
+    if nova_foto:
+        cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s",
+                    (nova_foto, nova))
+    cur.execute(
+        """INSERT INTO ficha_itens (id_ficha, id_insumo, id_subficha, qtd_bruta, qtd_liquida,
+                                    um, fator_correcao, fator_coccao, observacao, ordem)
+           SELECT %s, id_insumo, id_subficha, qtd_bruta, qtd_liquida, um, fator_correcao,
+                  fator_coccao, observacao, ordem
+             FROM ficha_itens WHERE id_ficha = %s""",
+        (nova, f["id"]),
+    )
+    return nova, versao
+
+
+@router.post("/rendimento-sugerido")
+def previa_do_rendimento(
+        body: RendimentoSugerido,
+        ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    """Quanto esta receita rende, somando os ingredientes — ANTES de gravar.
+
+    🔑 **Pedido do dono (12/09/2026):** *"de onde vem o rendimento da receita? tem
+    como ser gerada automaticamente? o sistema que a cliente utiliza soma todos os
+    ingredientes e gera isto automaticamente"*.
+
+    ⚠️ **Recebe os ITENS, não um id de ficha**, de propósito: a tela precisa do
+    número enquanto a pessoa monta a receita, e numa ficha nova não há nada
+    gravado para consultar. Sem estado, serve aos dois casos com uma rota só.
+
+    ⚠️ **A conta NÃO é escrita aqui.** Ela mora em `custos.rendimento_sugerido`,
+    junto do conversor de unidades — a regra de conversão do sistema é uma só, e
+    uma segunda cópia num router divergiria dela no primeiro ajuste.
+
+    ⚠️ **Nada é gravado, e é isso que faz o recurso ser seguro**: `rendimento_qtd`
+    DIVIDE o consumo na produção (`lotes = quantidade ÷ rendimento`), então
+    recalcular sozinho mudaria o custo unitário de tudo que a ficha produz, calado.
+    A tela sugere; quem decide é quem lê.
+    """
+    with get_cursor() as cur:
+        return custos.rendimento_sugerido(
+            cur, [i.model_dump() for i in body.itens], body.um)
+
+
 @router.post("/{id_ficha}/nova-versao", status_code=201)
 def nova_versao(id_ficha: int,
                 ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
@@ -318,43 +398,90 @@ def nova_versao(id_ficha: int,
         f = cur.fetchone()
         if not f:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
-
-        cur.execute(
-            "SELECT coalesce(max(versao), 0) + 1 AS proxima FROM fichas_tecnicas WHERE id_produto = %s",
-            (f["id_produto"],),
-        )
-        versao = cur.fetchone()["proxima"]
-        cur.execute(
-            """INSERT INTO fichas_tecnicas (id_produto, versao, rendimento_qtd, rendimento_um,
-                                            porcoes, tempo_preparo_min, modo_preparo, alergenos,
-                                            observacao, criado_por)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (f["id_produto"], versao, f["rendimento_qtd"], f["rendimento_um"], f["porcoes"],
-             f["tempo_preparo_min"], f["modo_preparo"], f["alergenos"], f["observacao"],
-             ctx.id_usuario),
-        )
-        nova = cur.fetchone()["id"]
-        # 🔑 **A foto vem junto, e o ARQUIVO é copiado — não a URL.** A versão
-        # nova quase sempre é a mesma receita com um ajuste, e o prato continua
-        # o mesmo: nascer sem foto obrigaria a fotografar de novo a cada
-        # versão. ⚠️ Copiar só a URL deixaria as duas apontando para o mesmo
-        # arquivo, cujo dono é a versão VELHA — e trocar a foto de lá apagaria
-        # a daqui, sem ninguém ter tocado nesta ficha.
-        nova_foto = arquivos.copiar(f["foto_url"], f"ficha-{nova}", cur)
-        if nova_foto:
-            cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s",
-                        (nova_foto, nova))
-        cur.execute(
-            """INSERT INTO ficha_itens (id_ficha, id_insumo, id_subficha, qtd_bruta, qtd_liquida,
-                                        um, fator_correcao, fator_coccao, observacao, ordem)
-               SELECT %s, id_insumo, id_subficha, qtd_bruta, qtd_liquida, um, fator_correcao,
-                      fator_coccao, observacao, ordem
-                 FROM ficha_itens WHERE id_ficha = %s""",
-            (nova, id_ficha),
-        )
+        nova, versao = _copiar_ficha(cur, f, f["id_produto"], ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "ficha", nova, "nova_versao",
                             antes={"copiada_de": id_ficha}, depois={"versao": versao})
     return {"id": nova, "versao": versao, "message": f"Versão {versao} criada em rascunho"}
+
+
+@router.post("/{id_ficha}/duplicar", status_code=201)
+def duplicar(id_ficha: int, body: FichaDuplicar,
+             ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    """A mesma receita, para OUTRO produto — e depois se ajusta o que difere.
+
+    🔑 **Pedido do dono (12/09/2026):** *"tenho Bolo de Morango e Bolo de Banana,
+    a base da receita é a mesma, então gostaria de duplicar e ajustar, retirando
+    o que não vai e adicionando o que precisa"*. Sem isto a segunda receita era
+    redigitada item por item — e é aí que uma entra com 200 G de farinha e a
+    outra com 250, sem ninguém ter decidido nada.
+
+    ⚠️ **Nasce em RASCUNHO, sempre.** Cópia é ponto de partida, não receita
+    aprovada: homologar continua sendo um ato separado.
+    ⚠️ **O destino pode já ter ficha.** A cópia entra como a versão seguinte, em
+    rascunho, e a vigente continua valendo até alguém homologar a nova — mesma
+    regra de `nova-versao`, e não há por que inventar outra aqui.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        f = cur.fetchone()
+        if not f:
+            raise HTTPException(status_code=404, detail="Ficha não encontrada")
+
+        cur.execute("SELECT nome, tipo, producao_propria FROM produtos WHERE id = %s",
+                    (body.id_produto,))
+        destino = cur.fetchone()
+        if not destino:
+            raise HTTPException(status_code=404, detail="Produto de destino não encontrado")
+        # A MESMA regra de quem cria ficha do zero: ficha é de produzido ou kit.
+        if destino["tipo"] not in ("PRODUZIDO", "KIT"):
+            raise HTTPException(
+                status_code=400,
+                detail="Ficha técnica é de produto produzido ou kit. Ajuste o tipo do produto.",
+            )
+
+        # ⚠️ **A receita não pode virar ingrediente de si mesma.** Se a ficha
+        # copiada usa uma sub-ficha DO PRODUTO DE DESTINO, a cópia nasceria
+        # dizendo que o bolo leva bolo. Não é ciclo de estrutura — as duas fichas
+        # são objetos diferentes, e `descendentes_da_ficha` não acusaria nada —,
+        # então a checagem tem de ser esta, olhando o produto por trás da
+        # sub-ficha.
+        cur.execute(
+            """SELECT p.nome
+                 FROM ficha_itens fi
+                 JOIN fichas_tecnicas sf ON sf.id = fi.id_subficha
+                 JOIN produtos p ON p.id = sf.id_produto
+                WHERE fi.id_ficha = %s AND sf.id_produto = %s
+                LIMIT 1""",
+            (id_ficha, body.id_produto),
+        )
+        propria = cur.fetchone()
+        if propria:
+            raise HTTPException(
+                status_code=400,
+                detail=(f"Esta receita usa {propria['nome']} como ingrediente. Duplicá-la "
+                        f"para {destino['nome']} criaria uma receita que se usa a si mesma."),
+            )
+
+        cur.execute("SELECT count(*) AS n FROM fichas_tecnicas WHERE id_produto = %s",
+                    (body.id_produto,))
+        tinha = cur.fetchone()["n"]
+        nova, versao = _copiar_ficha(cur, f, body.id_produto, ctx.id_usuario)
+
+        # Produto com ficha é produto de produção própria — a mesma coerência que
+        # `criar` mantém. Sem isto o bolo novo teria receita e não apareceria na
+        # agenda de produção.
+        if not destino["producao_propria"]:
+            cur.execute("UPDATE produtos SET producao_propria = true WHERE id = %s",
+                        (body.id_produto,))
+
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", nova, "duplicar",
+                            antes={"copiada_de": id_ficha},
+                            depois={"produto": destino["nome"], "versao": versao})
+    fim = (f" A ficha que {destino['nome']} já tinha continua valendo até você homologar esta."
+           if tinha else "")
+    return {"id": nova, "versao": versao,
+            "message": (f"Receita copiada para {destino['nome']} — versão {versao}, "
+                        f"em rascunho.{fim}")}
 
 
 @router.delete("/{id_ficha}")

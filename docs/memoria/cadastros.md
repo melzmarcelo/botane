@@ -911,6 +911,42 @@
   ninguém ter pedido. Se um dia for ligado, precisa de confirmação por produto — o precedente
   é o `fator_confirmado` dos códigos de fora.
 
+- ⏸️ **A CLARA e a GEMA do mesmo ovo — analisado em 12/09/2026, decisão adiada**
+  (pergunta do dono: *"em algumas fichas uso somente a clara, em outras somente a gema, como
+  faço os cadastros?"*). Fica registrado porque a próxima pessoa vai fazer as mesmas três
+  perguntas.
+  🔑 **`fichas_tecnicas` tem UMA saída** (`id_produto` + `rendimento_qtd/um`): não há
+  subproduto nem co-produto em lugar nenhum do sistema. E "quebrar o ovo" é, por natureza,
+  uma produção com duas saídas — é isso que define as opções.
+  ⚠️ **A armadilha é de ESTOQUE, não de custo.** Lançar 3 ovos na ficha do prato com clara e
+  outros 3 na do prato com gema baixa **6 ovos** onde se quebraram 3. O custo fica plausível e
+  o razão mente; a mentira só aparece na contagem do mês, como "ajuste de inventário".
+  🔑 **Se a outra parte vai pro lixo, não precisa de produto novo**: o par
+  `qtd_bruta`/`qtd_liquida` do item da ficha já é isso — bruta em ovos inteiros (o que sai do
+  estoque), líquida na parte que vai ao prato. O custo fica com o prato que gastou o ovo, e o
+  fator de correção aparece na tela.
+  🔑 **Se as duas partes são usadas, o que funciona HOJE é uma ficha por parte consumindo a
+  FRAÇÃO do ovo** correspondente ao peso aproveitável dela. Medido: entrada de 30 ovos a
+  R$ 1,00; ficha da clara rende 300 G consumindo 6,6667 UN, ficha da gema rende 150 G
+  consumindo 3,3333 UN. Saldo do ovo 30 → 20 (baixou 10 exatos), clara e gema a
+  R$ 0,022222/g, R$ 6,67 + R$ 3,33 = os R$ 10,00 dos dez ovos. Nada inventado, nada perdido.
+  Sobra de gema que se joga fora tem caminho próprio: **saída de perda**, que leva o
+  desperdício para o CMV como perda em vez de escondê-lo no custo de um prato.
+  ⚠️ **Duas fraquezas reais desse arranjo.** (1) Nada obriga a lançar as duas produções
+  juntas: quebrou 10 e lançou só a clara, ficam 3,33 ovos no sistema que não existem na
+  geladeira. (2) **A ficha mente para quem a lê** — diz "consome 6,6667 ovos" para render
+  300 g de clara, quando a cozinha quebra 10. O razão está certo; o documento que a cozinheira
+  usa como receita, não. Essa é a pior parte.
+  ⏸️ **O que resolveria: ficha de desmembramento com rendimento múltiplo.** Uma ficha declara
+  "consome 10 UN de ovo, rende 300 G de clara e 150 G de gema" com o rateio do custo
+  declarado; uma produção gera N entradas no razão. Custo: tabela nova (`ficha_rendimentos`),
+  `produzir` rateando em `Decimal` (centavos de sobra nas primeiras, como o rateio de
+  parcelas), soma dos percentuais fechando 100, cartão na tela da ficha e bateria. **É
+  migração nova, logo ponto de não retorno** — validar em base COM dado antes de promover.
+  ⏸️ **Adiado esperando um dado do mundo, não do código**: com que frequência ela separa as
+  partes. Toda semana, o recurso se paga; receita ocasional, a ficha com fração resolve e a
+  complexidade não se justifica. O dono foi confirmar com a cliente.
+
 - ⚠️ **`produto_fornecedor.ultimo_preco` é POR UNIDADE DE ESTOQUE**, não pela embalagem: quem
   grava é o lançamento da nota (o `custo_aquisicao_unitario`, com frete dentro), e
   `custo_do_insumo` lê **sem dividir por fator** — dividir de novo aplicaria a caixa duas vezes

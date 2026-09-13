@@ -1185,8 +1185,13 @@ try {
   await p.$$eval("input[type=number]", (els) => {
     els[0].value = "";
   });
-  // Ordem dos campos numéricos: 0 rendimento, 1 porções, 2 bruta, 3 líquida, 4 tempo.
-  const numeros = await p.$$("input[type=number]");
+  // 🔑 **Os campos se acham pelo NOME, não pela posição.** Esta linha era
+  // "ordem dos campos numéricos: 0 rendimento, 1 porções, 2 bruta…", e a ordem
+  // mudou no dia em que a tela ganhou o tamanho da porção entre os dois — o
+  // "500" da farinha teria ido para o campo errado, e a falha apareceria três
+  // checagens adiante, num custo que não fecha. `aria-label` já era o padrão da
+  // suíte para busca e para o seletor de páginas; agora vale para estes também.
+  const campoNum = async (rotulo) => p.$(`input[aria-label="${rotulo}"]`);
   // clickCount:3 não seleciona o conteúdo de input[type=number] no Chrome —
   // sem o ctrl+A o valor novo entra colado no que já estava (1 + 8 = 18).
   const trocar = async (campo, valor) => {
@@ -1196,8 +1201,8 @@ try {
     await p.keyboard.up("Control");
     await campo.type(valor);
   };
-  await trocar(numeros[0], "2");
-  await trocar(numeros[1], "8");
+  await trocar(await campoNum("Rendimento da receita"), "2");
+  await trocar(await campoNum("Porções da receita"), "8");
   // linha 1: 500 g de farinha. O item da ficha também virou busca: insumos do
   // servidor e preparos com ficha na mesma lista.
   const buscaItem = await p.$('input[aria-label="Buscar insumo ou preparo"]');
@@ -1210,7 +1215,7 @@ try {
   checar("e o Tab preenche a linha",
        itemEscolhido.includes(`Tela farinha ${marca}`.toUpperCase()),
     itemEscolhido);
-  await numeros[2].type("500");
+  await (await campoNum("Quantidade bruta do item 1")).type("500");
 
   // 🔑 **A foto tem de estar aqui, na tela de CRIAR.** A primeira versão só a
   // oferecia depois de a ficha existir — e quem cadastra o prato está com a
@@ -1296,6 +1301,74 @@ try {
     const textoFicha = await p.evaluate(() => document.body.innerText);
     checar("a tela mostra o custo por porção", /0,50/.test(textoFicha),
       textoFicha.slice(0, 60));
+
+    // 🔑 **De onde vem o rendimento** (12/09/2026, pedido do dono: "tem como ser
+    // gerado automaticamente? o sistema que a cliente usa soma todos os
+    // ingredientes"). A soma vem do servidor e entra como SUGESTAO — nunca
+    // escrita sozinha, porque `rendimento_qtd` divide o consumo na producao.
+    // ⚠️ Este bloco NAO salva: a aritmetica da tela e o que se afirma aqui, e a
+    // persistencia tem suite propria (`smoke_rendimento.py`). Salvar mudaria o
+    // rendimento da ficha e as checagens seguintes medem outra coisa.
+    await p.waitForFunction(
+      () => /soma dos ingredientes/i.test(document.body.innerText), { timeout: 15000 },
+    ).catch(() => {});
+    const somaNaTela = await p.evaluate(() => {
+      const texto = document.body.innerText;
+      return {
+        aparece: /soma dos ingredientes/i.test(texto),
+        // O numero da soma, como a tela o escreve.
+        trecho: texto.match(/soma dos ingredientes d[áa][^\n]*/i)?.[0] ?? "",
+        temUsar: [...document.querySelectorAll("button")]
+          .some((b) => (b.textContent ?? "").trim() === "usar"),
+      };
+    });
+    checar("a tela diz de onde vem o rendimento: a soma dos ingredientes",
+      somaNaTela.aparece, somaNaTela);
+    checar("com o numero a vista e um clique para usar",
+      /\d/.test(somaNaTela.trecho) && somaNaTela.temUsar, somaNaTela);
+
+    // Clicar em "usar" escreve a soma no campo — e o campo e o do rendimento.
+    const valorDe = (rotulo) => p.evaluate(
+      (r) => document.querySelector(`input[aria-label="${r}"]`)?.value ?? "", rotulo);
+    const rendAntes = await valorDe("Rendimento da receita");
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => (b.textContent ?? "").trim() === "usar")?.click());
+    await new Promise((r) => setTimeout(r, 600));
+    const rendDepois = await valorDe("Rendimento da receita");
+    checar("usar a sugestao escreve no campo do rendimento",
+      rendDepois !== rendAntes && Number(rendDepois) > 0, [rendAntes, rendDepois]);
+
+    // 🔑 **A conta nos dois sentidos.** Informar o tamanho da porcao tem de
+    // recalcular quantas porcoes rendem — e o inverso tambem.
+    const campoTamanho = await campoNum("Tamanho da porção");
+    checar("o cabecalho tem o campo do tamanho da porcao", !!campoTamanho);
+    await campoTamanho.click();
+    await p.keyboard.down("Control");
+    await p.keyboard.press("KeyA");
+    await p.keyboard.up("Control");
+    await campoTamanho.type("0.5");
+    await new Promise((r) => setTimeout(r, 500));
+    const depoisDoTamanho = {
+      rendimento: Number(await valorDe("Rendimento da receita")),
+      porcoes: Number(await valorDe("Porções da receita")),
+    };
+    // rendimento / 0,5 = porcoes. A conta e da tela, e e isso que se afirma.
+    checar("informar o tamanho da porcao recalcula as porcoes",
+      Math.abs(depoisDoTamanho.porcoes - depoisDoTamanho.rendimento / 0.5) < 0.02,
+      depoisDoTamanho);
+
+    // 🔑 **O fator de coccao ganhou onde ser digitado.** A coluna existe desde a
+    // migracao 006 com "muda rendimento, nao custo" escrito nela, e nenhuma tela
+    // a oferecia: ficava 1 em toda ficha.
+    const temCoccao = await p.evaluate(() =>
+      [...document.querySelectorAll("input[aria-label]")]
+        .some((i) => /fator de coc/i.test(i.getAttribute("aria-label") ?? "")));
+    checar("cada ingrediente tem o campo de coccao", temCoccao);
+
+    // Volta o rendimento para o que a fase montou: o resto do roteiro conta com
+    // ele, e este bloco nao grava nada de proposito.
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await new Promise((r) => setTimeout(r, 1200));
 
     // A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha —
     // não na frente do monitor. Sem o papel, a receita fica presa numa tela
@@ -1390,6 +1463,97 @@ try {
     checar("e a tela passa a mostrá-la", comFoto.tem && comFoto.carregou, comFoto);
     checar("com a saída para tirá-la", comFoto.oferece, comFoto);
     await api("DELETE", `/fichas/${idFicha}/foto`, null, token);
+
+    // 🔑 **Duplicar a receita para OUTRO produto** (12/09/2026, pedido do dono:
+    // "tenho Bolo de Morango e Bolo de Banana, a base da receita e a mesma").
+    // Sem isto a segunda receita era redigitada item por item — e e ai que uma
+    // entra com 200 G de farinha e a outra com 250.
+    // ⚠️ A checagem termina na FICHA NOVA, com os itens a vista: confirmar que o
+    // botao existe nao diz que a copia carregou a receita.
+    const { dados: bananaTela } = await api("POST", "/produtos",
+      { nome: `Tela bolo banana ${marca}`, tipo: "PRODUZIDO", um_estoque: "UN" }, token);
+    // ⚠️ O estado da ORIGEM fica guardado ANTES: o que se afirma e que duplicar
+    // nao a toca, e nao em que status ela esta — esta fase a deixa em rascunho,
+    // e cravar "homologada" aqui foi um engano da primeira versao desta
+    // checagem, que acusou o recurso por uma suposicao do teste.
+    const { dados: origemAntes } = await api("GET", `/fichas/${idFicha}`, null, token);
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await new Promise((r) => setTimeout(r, 1300));
+    const temDuplicar = await p.evaluate(() => [...document.querySelectorAll("button")]
+      .some((b) => /Duplicar receita/i.test(b.textContent ?? "")));
+    checar("a ficha oferece duplicar a receita", temDuplicar);
+    await p.evaluate(() => [...document.querySelectorAll("button")]
+      .find((b) => /Duplicar receita/i.test(b.textContent ?? ""))?.click());
+    await p.waitForSelector('[role="dialog"]', { timeout: 8000 });
+    const janelaDup = await p.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]');
+      return {
+        titulo: d?.querySelector("h2")?.textContent ?? "",
+        // ⚠️ A janela tem de DIZER o que vai junto e que nasce rascunho: quem
+        // confirma sem saber descobre o efeito pela lista de fichas, depois.
+        dizOqueCopia: /ingredientes/i.test(d?.innerText ?? "")
+          && /rascunho/i.test(d?.innerText ?? ""),
+      };
+    });
+    checar("a janela explica o que a copia leva, e que nasce em rascunho",
+      janelaDup.dizOqueCopia, janelaDup);
+
+    // ⚠️ **O BuscaCadastro se dirige DIGITANDO e apertando Tab** — nao por botao.
+    // E o foco nasce no botao de confirmar (autoFocus da Confirmacao), entao o
+    // campo precisa do clique antes.
+    const campoDestino = await p.$('[role="dialog"] input[aria-label="Buscar o produto de destino"]');
+    checar("com a busca do produto de destino", !!campoDestino);
+    await campoDestino.click();
+    await campoDestino.type(`Tela bolo banana ${marca}`);
+    await p.keyboard.press("Tab");
+    await new Promise((r) => setTimeout(r, 1500));
+    await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button')]
+      .find((b) => /Copiar receita/i.test(b.textContent ?? ""))?.click());
+    // A tela vai para a COPIA: o passo seguinte e sempre ajustar a receita nova.
+    await p.waitForFunction(
+      (de) => /\/fichas\/\d+$/.test(location.pathname) && !location.pathname.endsWith(`/${de}`),
+      { timeout: 15000 }, String(idFicha),
+    ).catch(() => {});
+    // 🔑 **O nome do ingrediente mora num `<input>`, e `innerText` nao ve valor
+    // de campo.** Na tela editavel cada item e um `BuscaCadastro` — um input com
+    // o nome do insumo no `value`. A checagem da cozinha, tres linhas abaixo,
+    // acha "TELA FARINHA" no texto porque AQUELA tela e so leitura; esta, nao.
+    // Custou duas rodadas: a espera nascia falsa, estourava 15 s e a medicao
+    // caia na casca da pagina (menu + nome do prato), acusando a copia de nao
+    // trazer a receita — que ela trouxe, como o servidor confirma logo abaixo.
+    await p.waitForFunction(
+      () => [...document.querySelectorAll("input")]
+        .some((i) => /TELA FARINHA/i.test(i.value)),
+      { timeout: 15000 },
+    ).catch(() => {});
+    const idCopia = p.url().match(/fichas\/(\d+)/)?.[1];
+    checar("copiar leva para a ficha nova", !!idCopia && idCopia !== String(idFicha),
+      [idCopia, idFicha]);
+    const naCopia = await p.evaluate(() => document.body.innerText);
+    checar("que e do produto de destino",
+      new RegExp(`Tela bolo banana ${marca}`, "i").test(naCopia),
+      naCopia.slice(0, 120));
+    checar("nasce em rascunho", /rascunho/i.test(naCopia), naCopia.slice(0, 160));
+    // 🔑 O que importa: a receita veio junto. Mesmo insumo, mesma quantidade.
+    const camposDaCopia = await p.evaluate(() =>
+      [...document.querySelectorAll("input")].map((i) => i.value).filter(Boolean));
+    checar("com o ingrediente da receita original a vista",
+      camposDaCopia.some((v) => /TELA FARINHA/i.test(v)), camposDaCopia.slice(0, 12));
+    const { dados: copiaApi } = await api("GET", `/fichas/${idCopia}`, null, token);
+    const { dados: origemApi } = await api("GET", `/fichas/${idFicha}`, null, token);
+    checar("e com os mesmos itens da origem no servidor",
+      (copiaApi?.itens ?? []).length === (origemApi?.itens ?? []).length
+        && (copiaApi?.itens ?? []).length > 0,
+      [(copiaApi?.itens ?? []).length, (origemApi?.itens ?? []).length]);
+    checar("sem mexer na ficha de origem — mesmo status e mesmos itens",
+      origemApi?.status === origemAntes?.status
+        && (origemApi?.itens ?? []).length === (origemAntes?.itens ?? []).length,
+      [origemAntes?.status, origemApi?.status]);
+    await foto(p, "17b-duplicar-ficha");
+    await api("DELETE", `/fichas/${idCopia}`, null, token);
+    await api("DELETE", `/produtos/${bananaTela.id}`, null, token);
+    await irPara(p, `${WEB}/fichas/${idFicha}`);
+    await new Promise((r) => setTimeout(r, 900));
 
     // A cozinha vê a receita e não vê dinheiro — na tela, não só na API.
     await p.evaluate(() => localStorage.clear());
