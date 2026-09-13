@@ -483,11 +483,78 @@ reescreve sozinho.
 mercadoria do estoque de verdade — seguir uma versão não aprovada baixaria o
 insumo errado.
 
+### Quanto a receita rende, e onde
+
+No cartão **O que esta ficha produz** há uma tabela. A primeira linha é a
+prateleira **padrão** do produto, e os números dela valem em qualquer lugar:
+
+| Onde é produzido | Rende | Porções | Cada porção |
+|---|---|---|---|
+| CÂMARA · padrão | 10 KG | 8 | 1,25 KG |
+| VITRINE | 8 KG | 20 | 0,40 KG |
+
+- **Rende** é quanto sai da receita inteira. **Ele divide o consumo**: pedir 10
+  para uma prateleira que rende 8 gasta uma receita e um quarto de ingredientes.
+- **Porções** e **cada porção** são o mesmo dado visto dos dois lados — digite um
+  e o outro se ajusta sozinho.
+- **"+ prateleira"** acrescenta uma linha **já preenchida igual ao padrão**. Use
+  quando o processo muda o rendimento: a massa que vai ao forno para a vitrine
+  perde água e não rende o mesmo que a crua.
+
+⚠️ Ao **programar a produção** você escolhe a prateleira, e a tela diz qual
+rendimento está valendo — com "nesta prateleira" quando é o de um destino.
+
+### O sistema soma os ingredientes para você
+
+Abaixo da tabela aparece **"A soma dos ingredientes dá 1,85 KG · usar"**. Um
+clique põe o número no rendimento. Ele nunca é escrito sozinho: há receita em que
+a soma não é o rendimento — massa que descansa, calda que reduz de propósito.
+
+A conta usa o **líquido** de cada item e o **fator de cocção** (o campo *cocção*
+na linha do ingrediente): bolo perde água no forno (0,88), arroz ganha (2,5).
+
+⚠️ **Ingrediente em unidade só entra na soma se o produto disser quanto pesa
+um.** Três ovos não pesam três gramas. Faltando isso, a tela lista quem ficou de
+fora e diz o caminho — é o cadastro do produto que responde (veja *O peso de uma
+unidade*).
+
+⚠️ Líquido em mililitro entra como grama (1 ML = 1 G), e a tela avisa quando
+usou essa conta. Vale para água e leite; erraria em óleo e mel.
+
+### Copiar uma receita para outro prato
+
+Botão **Duplicar receita**. Escolha o produto de destino e a receita inteira vai
+junto: ingredientes com quantidades e fatores, rendimento, porções, modo de
+preparo, alérgenos e a foto.
+
+A cópia **nasce em rascunho** — é ponto de partida, não receita aprovada. Se o
+destino já tiver ficha, a janela diz em que versão a cópia entra e avisa que a
+atual continua valendo até alguém homologar a nova.
+
+*Bolo de morango e bolo de banana têm a mesma base: duplique e troque a fruta,
+em vez de redigitar doze linhas.*
+
+### A lista mostra um prato por linha
+
+Um produto com três versões aparece **uma vez** na lista, com "v3 de 3" — a linha
+que aparece é a que vale (a homologada; sem ela, a mais nova). Para ver as
+outras, abra a ficha: no alto há um **seletor de versão**.
+
+### Apagar um rascunho
+
+Ficha **em rascunho** tem o botão **Excluir rascunho**: ela some e não há como
+desfazer. Rascunho nunca foi homologado nem produziu nada, então nenhum custo
+apurado depende dele.
+
+Ficha **publicada não se apaga — se arquiva**, e continua consultável. E o
+sistema recusa apagar um rascunho que outra receita usa como sub-ficha, dizendo
+onde está o vínculo.
+
 ### Produção
 
-Menu **Estoque → Produção**. Escolha o prato e quanto vai produzir: o sistema
-baixa os ingredientes pela ficha e dá entrada no produzido. Não precisa apontar
-ingrediente por ingrediente.
+Menu **Estoque → Produção**. Escolha o prato, quanto vai produzir e **a
+prateleira**: o sistema baixa os ingredientes pela ficha e dá entrada no
+produzido. Não precisa apontar ingrediente por ingrediente.
 
 ### Apontar o que consumiu fora da ficha
 
@@ -679,6 +746,47 @@ Para mudar, mexa no **papel**, não em cada pessoa.
 
 ---
 
+### O cadastro do produto: unidade, peso e prateleiras
+
+**A unidade de estoque é o denominador de tudo** — saldo, custo, mínimo e
+máximo são todos *por* ela. No cartão **Unidades de compra**, cada linha diz uma
+equivalência, e a tela pergunta do lado que a cozinha sabe:
+
+```
+DZ     1 DZ = [12] UN        ← a dúzia que se compra
+G      1 UN = [50] G         ← o peso de um ovo
+```
+
+- A linha de **embalagem** (caixa, dúzia, fardo) faz a nota entrar convertida:
+  comprou 2 DZ, o estoque recebe 24 UN.
+- A linha de **peso** é o que permite a receita pedir **50 G de ovo** quando o
+  estoque conta em unidade. Sem ela, o item fica fora da conta de rendimento e
+  sem custo na ficha.
+
+⚠️ **Trocar a unidade de estoque converte o custo junto** (a caixa de 12 que
+custava R$ 60 vira R$ 5 a unidade). Quando a conta derruba ou multiplica o custo
+por cem ou mais, o sistema **pergunta antes** e mostra os dois números — é onde
+um fator invertido se revela. Produto que já tem movimento no razão não troca de
+unidade: o histórico está gravado na antiga.
+
+**Local de estoque × local da venda.** O primeiro é onde a mercadoria entra e de
+onde as receitas puxam. O segundo — vazio na maioria dos casos — é de onde o
+**PDV baixa**. Eles se separam quando a mesma coisa mora em dois lugares: a massa
+de pizza fica na câmara como insumo e na vitrine para vender.
+
+**O custo antes da primeira produção.** Produto que ainda não foi produzido não
+tem custo médio, e a tela mostra o que a **ficha prevê**, com etiqueta de
+*provisório* e de qual versão veio. O custo de verdade nasce na primeira
+produção: é o que saiu do estoque naquele dia.
+
+⚠️ Se a ficha tiver item sem preço, o aviso fica vermelho e diz quantos faltam —
+o número está por baixo.
+
+⚠️ **Cadastro absorvido numa fusão não volta a ativo por acidente.** Ele foi
+desativado porque outro assumiu o lugar dele, e os códigos dele já respondem por
+aquele. A tela avisa por quem ele foi absorvido, e reativar exige confirmação.
+Em alteração em lote, é recusado sem pergunta.
+
 ### Pessoas: quem a casa conhece
 
 Menu **Cadastros → Pessoas**. É o mesmo lugar onde os fornecedores sempre
@@ -810,6 +918,34 @@ Se você precisa ver, peça ao administrador.
 **Contei errado e já fechei o inventário.**
 Abra outro inventário e conte de novo: o ajuste novo corrige o saldo, e os dois
 ficam no histórico. Não existe "desfazer" silencioso.
+
+**Compro a dúzia de ovos, conto por unidade e a receita pede 50 g.**
+
+No cadastro do ovo, duas linhas em *Unidades de compra*: `1 DZ = 12 UN` e
+`1 UN = 50 G`. A nota entra convertida, a contagem aceita dúzia ou unidade, e a
+ficha pode pedir 50 G — o sistema baixa um ovo.
+
+⚠️ Receita em grama consome **fração de unidade**: 30 g de ovo baixam 0,6 UN. Está
+certo para o custo e é estranho para quem abre a geladeira; o inventário acerta
+na contagem.
+
+**Uso só a clara numa receita e só a gema em outra.**
+
+Cadastre **CLARA** e **GEMA** como produtos, cada um com a ficha que consome a
+fração do ovo correspondente ao peso dela. Um ovo de 50 g dá 30 g de clara e
+15 g de gema, então a clara leva dois terços e a gema um terço:
+
+```
+ficha da CLARA: rende 300 G, consome 6,6667 UN de ovo
+ficha da GEMA:  rende 150 G, consome 3,3333 UN de ovo
+                                     ─────────
+             produzindo as duas:     10 ovos, que é o que se quebrou
+```
+
+⚠️ **Lance as duas produções juntas.** Quebrou dez ovos e lançou só a clara?
+Ficam 3,33 ovos no sistema que não existem na geladeira. E gema que vai fora é
+**perda**, com motivo — assim o desperdício aparece como perda, e não escondido
+no custo de um prato.
 
 **Trabalho em duas lojas.**
 O seletor de loja fica no alto do menu. Trocar de loja recarrega a tela: tudo o
