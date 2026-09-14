@@ -117,6 +117,14 @@ const MENU: {
     grupo: "Reservas",
     itens: [
       {
+        // 🔑 A agenda vem PRIMEIRO: e a tela que a recepcao abre todo dia. Salao
+        // e Configuracoes se visitam no comeco e quase nunca mais.
+        href: "/reservas/agenda",
+        nome: "Agenda do dia",
+        chave: ["reservas.ver", "reservas.editar"],
+        soComReservas: true,
+      },
+      {
         href: "/reservas/salao",
         nome: "Salão",
         // ⚠️ `reservas.ver` basta para OLHAR o salão — quem atende o telefone

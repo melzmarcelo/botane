@@ -460,18 +460,32 @@ export default function EditorFicha() {
 
   /** As versões DESTE produto, para o seletor do cabeçalho.
    *
-   * ⚠️ Sai da mesma lista que já está carregada (`fichas`), sem pedido novo: ela
-   * vem completa de propósito — é dela que saem as sub-fichas e o duplicar.
+   * 🔑 **Vem do SERVIDOR, filtrada por produto — e a primeira versão não vinha.**
+   * Ela saía de `fichas`, a lista geral já carregada na tela, "porque vem
+   * completa de propósito". Só que `GET /fichas` tem **limite de 200**: passando
+   * disso, a outra versão do mesmo produto simplesmente não está na lista, e o
+   * seletor **some sozinho** — sem erro, sem aviso, e sem porta para as versões
+   * antigas. Foi medido: a base local cruzou 239 fichas e a checagem da bateria
+   * caiu do nada, parecendo instabilidade.
+   * ⚠️ É a mesma família do "lista sem total é lista mentirosa" que Compras já
+   * pagou: toda lista que pode crescer precisa ser perguntada com o filtro, não
+   * filtrada depois.
    * ⚠️ Ordem decrescente: a versão nova é a que se procura. */
-  const versoesDoProduto = useMemo(
-    () =>
-      ficha
-        ? fichas
-            .filter((f) => f.id_produto === ficha.id_produto)
-            .sort((a, b) => b.versao - a.versao)
-        : [],
-    [fichas, ficha],
-  );
+  const [versoesDoProduto, setVersoesDoProduto] = useState<FichaListada[]>([]);
+  useEffect(() => {
+    if (!ficha?.id_produto) {
+      setVersoesDoProduto([]);
+      return;
+    }
+    let vivo = true;
+    api
+      .get<FichaListada[]>(`/fichas?id_produto=${ficha.id_produto}&limite=200`)
+      .then((vs) => vivo && setVersoesDoProduto([...vs].sort((a, b) => b.versao - a.versao)))
+      .catch(() => vivo && setVersoesDoProduto([]));
+    return () => {
+      vivo = false;
+    };
+  }, [ficha?.id_produto]);
 
   const opcoesSubficha = useMemo(
     () => fichas.filter((f) => String(f.id) !== id && f.status !== "ARQUIVADA"),

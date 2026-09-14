@@ -51,6 +51,13 @@ export default function PaginaNota() {
   const [conversao, setConversao] = useState<ItemNota | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [confirmando, setConfirmando] = useState<"estornar" | null>(null);
+  /** O item cujo produto vai ser SUBSTITUIDO por um cadastro novo.
+   *
+   * ⚠️ **Nunca `window.confirm`** — e menos ainda neste arquivo, que ja
+   * usava `Confirmacao` para o estorno tres telas abaixo. A caixa do
+   * navegador tem fonte de sistema, botao em ingles e nenhum lugar para
+   * explicar o que a acao faz. */
+  const [substituindo, setSubstituindo] = useState<ItemNota | null>(null);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
   const [rotuloEscolhido, setRotuloEscolhido] = useState<Record<number, string>>({});
   /** Linhas já vinculadas que estão sendo TROCADAS — a mesma busca do pendente,
@@ -100,15 +107,11 @@ export default function PaginaNota() {
     // ⚠️ **Sobre item JÁ vinculado, confirma antes.** Sem a pergunta, um clique
     // distraído criaria um segundo cadastro para um insumo que já tem o seu — e
     // custo médio partido em dois é dos estragos mais caros de desfazer.
-    if (
-      item.id_produto &&
-      !window.confirm(
-        `Esta linha está vinculada a ${item.produto}. Criar um produto novo a partir ` +
-          "da descrição da nota e colocá-lo no lugar?",
-      )
-    ) {
+    if (item.id_produto && !substituindo) {
+      setSubstituindo(item);
       return;
     }
+    setSubstituindo(null);
     setOcupado(true);
     try {
       const r = await api.post<{ message: string }>(
@@ -652,6 +655,31 @@ export default function PaginaNota() {
           <p className="mt-3 text-[13.5px] text-suave">
             Cada entrada ganha uma contrapartida no razão e o custo médio volta a ser
             recalculado. Nada se apaga: os dois movimentos ficam à vista.
+          </p>
+        </Confirmacao>
+      )}
+
+      {substituindo && (
+        <Confirmacao
+          titulo="Criar um produto novo para esta linha?"
+          rotuloConfirmar="Criar e substituir"
+          perigo
+          ocupado={ocupado}
+          aoCancelar={() => setSubstituindo(null)}
+          aoConfirmar={() => void criarProduto(substituindo)}
+        >
+          <p>
+            A linha está vinculada a <b>{substituindo.produto}</b>. O produto novo nasce da
+            descrição da nota — <b>{substituindo.descricao_fornecedor}</b> — e entra no lugar
+            dele nesta nota.
+          </p>
+          {/* ⚠️ O estrago que esta pergunta evita: um cadastro a mais para um
+              insumo que já tem o seu parte o custo médio em dois, e desfazer
+              isso depois é dos trabalhos mais caros do sistema. */}
+          <p className="mt-3 text-[13.5px] text-suave">
+            Se o insumo já existir com outro nome, prefira <b>não é este produto</b> e
+            escolha o cadastro certo — dois cadastros para o mesmo insumo partem o custo
+            médio em dois.
           </p>
         </Confirmacao>
       )}

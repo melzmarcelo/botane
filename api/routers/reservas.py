@@ -8,21 +8,27 @@ rotas recusam** — as três coisas, e não só a primeira.
 é conforto; o que impede uma loja sem o módulo de ganhar configuração de reserva
 é a recusa aqui. É a regra da casa desde sempre: nada de checagem só na tela.
 
-Construído até aqui: a **configuração** (janela de funcionamento e permanência) e
-o **salão** (salões, mesas, lugares e a junta entre mesas vizinhas). A regra de
-disponibilidade, que consome as duas, e a reserva em si vêm depois — o estudo
-está em `docs/reservas-esboco.md`.
+Construído até aqui: a **configuração** (janela de funcionamento e permanência),
+o **salão** (salões, mesas e a junta entre vizinhas), a **regra de
+disponibilidade** — que consome as duas e mora em `services/reservas_agenda.py`,
+num lugar só — e a **reserva** pelo balcão, com o ciclo de status, o remarcar e
+os bloqueios do dia. Falta a reserva pelo site do cliente; o estudo está em
+`docs/reservas-esboco.md`.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auditoria
 from database import get_cursor
 from models.reservas import (
-    ConfiguracaoReservas, MesaCreate, MesasEmLote, MesaUpdate, SalaoCreate, SalaoUpdate,
+    BloqueioCreate, ConfiguracaoReservas, MesaCreate, MesasEmLote, MesaUpdate,
+    MudarStatus, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reservas as servico
+from services import reservas_agenda as agenda
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 
@@ -212,6 +218,177 @@ def criar_mesa(body: MesaCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
     return {"id": id_mesa, "message": f"Mesa {body.nome} criada"}
 
 
+# ---------------------------------------------------------------- a agenda
+#
+# 🔑 **A regra de disponibilidade mora em `services/reservas_agenda.py`, num
+# lugar só.** É a peça que tudo o mais consome — a agenda do balcão hoje, o site
+# do cliente depois — e a única do módulo que não se refaz. Duas versões dela
+# divergiriam no primeiro degrau novo, e a tela passaria a conferir uma coisa
+# enquanto a gravação faz outra.
+
+
+@router.get("/disponibilidade")
+def ver_disponibilidade(
+    data: date,
+    pessoas: int = Query(ge=1, le=99),
+    ignorar: int | None = None,
+    ctx: Contexto = Depends(requer_permissao("reservas.ver")),
+) -> dict:
+    """Que horários aceitam um grupo deste tamanho neste dia.
+
+    ⚠️ **`pessoas` é obrigatório porque "esgotado" DEPENDE do tamanho do
+    grupo.** No mesmo sábado às 12h pode não haver mesa para 6 e haver para 2 —
+    uma lista de horários sem saber quantos são não responde nada.
+    """
+    with get_cursor() as cur:
+        return agenda.disponibilidade(cur, _unidade(cur, ctx), data, pessoas, ignorar)
+
+
+@router.get("/agenda")
+def ver_agenda(data: date,
+               ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
+    """O dia inteiro, como a recepção olha."""
+    with get_cursor() as cur:
+        return agenda.agenda(cur, _unidade(cur, ctx), data)
+
+
+@router.post("", status_code=201)
+def criar_reserva(body: ReservaCreate,
+                  ctx: Contexto = Depends(requer_permissao("reservas.editar"))) -> dict:
+    """Marca a reserva — conferindo e gravando na MESMA transação.
+
+    🔑 **É o caso que define a arquitetura.** Duas pessoas pedindo o mesmo
+    horário ao mesmo tempo: conferir e depois gravar é onde o overbooking nasce.
+    A trava é por (loja, dia), dentro de `agenda.criar`.
+
+    ⚠️ **A regra de confirmação da loja é lida AQUI e passada ao serviço**, em
+    vez de o serviço consultá-la: assim quem chama pelo site e quem chama pelo
+    balcão passam pelo mesmo caminho, e o balcão não herda a espera por
+    aprovação — quem marca falando com a casa já foi aceito pela casa.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cur.execute("SELECT confirmacao FROM reserva_config WHERE id_unidade = %s",
+                    (id_unidade,))
+        linha = cur.fetchone()
+        if linha:
+            body.confirmacao_da_loja = linha["confirmacao"]
+        r = agenda.criar(cur, id_unidade, body, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "reserva", r["id"], "criar",
+                            depois={"data": str(body.data), "hora": str(body.hora),
+                                    "pessoas": body.pessoas, "nome": body.nome,
+                                    "mesas": r["mesas"]})
+    return r | {
+        "message": (f"Reserva de {body.nome} às {body.hora:%H:%M} — mesa "
+                    f"{'+'.join(r['mesas'])}."
+                    + (" Aguardando confirmação da casa." if r["status"] == "PENDENTE"
+                       else "")),
+    }
+
+
+@router.put("/{id_reserva}")
+def remarcar_reserva(id_reserva: int, body: ReservaRemarcar,
+                     ctx: Contexto = Depends(requer_permissao("reservas.editar"))) -> dict:
+    """Passa a reserva para outro dia, outra hora ou outro tamanho de grupo.
+
+    ⚠️ **Realoca a mesa, na mesma transação e com os dias travados.** O horário
+    novo pode não caber na mesa antiga, e a mesa antiga pode já servir a outra
+    pessoa no horário novo — quem decide é a mesma regra da criação.
+
+    ⚠️ **Falhando, a reserva fica como estava** e a mensagem diz isso: uma
+    remarcação recusada que deixasse a reserva sem mesa seria pior que a recusa.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = agenda.remarcar(cur, id_unidade, id_reserva, body)
+        auditoria.registrar(cur, ctx.id_usuario, "reserva", id_reserva, "remarcar",
+                            antes=r["antes"], depois=r["depois"] | {"mesas": r["mesas"]})
+    de, para = r["antes"], r["depois"]
+    mudou_dia = de["data"] != para["data"]
+    return r | {
+        "message": ("Remarcada para "
+                    + (f"{para['data'][8:10]}/{para['data'][5:7]} às " if mudou_dia else "")
+                    + f"{para['hora']}"
+                    + (f", {para['pessoas']} pessoa(s)"
+                       if de["pessoas"] != para["pessoas"] else "")
+                    + f" — mesa {'+'.join(r['mesas'])}."),
+    }
+
+
+@router.put("/{id_reserva}/status")
+def mudar_status_reserva(id_reserva: int, body: MudarStatus,
+                         ctx: Contexto = Depends(
+                             requer_permissao("reservas.editar"))) -> dict:
+    """Confirma, marca chegada, encerra, cancela ou registra que não veio."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = agenda.mudar_status(cur, id_unidade, id_reserva, body.status)
+        auditoria.registrar(cur, ctx.id_usuario, "reserva", id_reserva, "status",
+                            antes={"status": r["de"]}, depois={"status": r["para"]})
+    return r | {"message": f"Reserva marcada como {body.status.lower()}"}
+
+
+@router.get("/bloqueios")
+def listar_bloqueios(ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> list[dict]:
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT id, de, ate, motivo FROM reserva_bloqueios
+                WHERE id_unidade = %s AND ate >= current_date - 30 ORDER BY de""",
+            (_unidade(cur, ctx),),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.post("/bloqueios", status_code=201)
+def criar_bloqueio(body: BloqueioCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """Feriado, evento fechado, manutenção.
+
+    ⚠️ **É diferente de fechar o dia da semana.** O horário vale toda semana; o
+    bloqueio vale uma vez. Resolver o Natal desmarcando a quarta-feira faria a
+    casa fechar todas as quartas do ano.
+
+    ⚠️ **Não cancela o que já estava marcado**, de propósito: a casa precisa
+    ligar para cada um, e apagar as reservas tiraria dela a lista de para quem
+    ligar. A resposta diz quantas existem no período.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cur.execute(
+            """INSERT INTO reserva_bloqueios (id_unidade, de, ate, motivo)
+               VALUES (%s, %s, %s, %s) RETURNING id""",
+            (id_unidade, body.de, body.ate, body.motivo.strip()),
+        )
+        id_bloqueio = cur.fetchone()["id"]
+        cur.execute(
+            """SELECT count(*) AS n FROM reservas
+                WHERE id_unidade = %s AND data BETWEEN %s AND %s AND status = ANY(%s)""",
+            (id_unidade, body.de, body.ate, list(agenda.VIVOS)),
+        )
+        afetadas = cur.fetchone()["n"]
+        auditoria.registrar(cur, ctx.id_usuario, "reserva_bloqueio", id_bloqueio, "criar",
+                            depois={"de": str(body.de), "ate": str(body.ate),
+                                    "motivo": body.motivo, "reservas_no_periodo": afetadas})
+    return {
+        "id": id_bloqueio,
+        "reservas_no_periodo": afetadas,
+        "message": ("Bloqueio criado."
+                    + (f" ⚠️ Há {afetadas} reserva(s) já marcada(s) nesse período — elas "
+                       "continuam na agenda para a casa poder avisar cada uma."
+                       if afetadas else "")),
+    }
+
+
+@router.delete("/bloqueios/{id_bloqueio}")
+def remover_bloqueio(id_bloqueio: int, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        _exige(cur, "reserva_bloqueios", id_bloqueio, id_unidade, "Bloqueio não encontrado")
+        cur.execute("DELETE FROM reserva_bloqueios WHERE id = %s AND id_unidade = %s",
+                    (id_bloqueio, id_unidade))
+        auditoria.registrar(cur, ctx.id_usuario, "reserva_bloqueio", id_bloqueio, "remover")
+    return {"message": "Bloqueio removido"}
+
+
 @router.post("/mesas/em-lote", status_code=201)
 def criar_mesas_em_lote(body: MesasEmLote, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
     """Cria N mesas iguais de uma vez, numerando a partir do primeiro nome livre.
@@ -333,16 +510,36 @@ def atualizar_mesa(id_mesa: int, body: MesaUpdate,
 def excluir_mesa(id_mesa: int, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
     """Apaga a mesa — enquanto ninguém tiver sentado nela.
 
-    ⚠️ **Quem vai barrar isto é o BANCO, não uma lista escrita à mão.** Quando
-    `reserva_mesas` nascer, a chave estrangeira dela recusa apagar mesa que já
-    hospedou reserva, e esta rota passa a devolver o erro sem ninguém ter de se
-    lembrar de acrescentar a regra aqui. É a mesma escolha de `_quem_referencia`
-    em `limpar_dados.py`: perguntar ao Postgres em vez de manter uma lista que
-    envelhece.
+    🔑 **Quem GARANTE é o banco; quem EXPLICA é esta rota.** O `ON DELETE
+    RESTRICT` de `reserva_mesas` (migração 070) recusa apagar mesa que já
+    hospedou reserva — e essa era a promessa feita na 069. Só que a recusa do
+    Postgres chega como **500 com texto de banco**: a bateria do navegador
+    quebrou inteira num `Internal Server Error` ao tentar limpar o salão.
+    ⚠️ **Perguntar antes não substitui a chave estrangeira, e nem tenta**: a
+    trava continua sendo do banco (é ela que não envelhece quando alguém criar
+    outra tabela apontando para `mesas`). O que a pergunta acrescenta é a frase
+    em português, exatamente como `_recusar_nome_repetido` faz com o índice
+    único.
     """
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
         _exige(cur, "mesas", id_mesa, id_unidade, "Mesa não encontrada")
+        cur.execute(
+            """SELECT count(*) AS n, min(r.data) AS primeira, max(r.data) AS ultima
+                 FROM reserva_mesas rm JOIN reservas r ON r.id = rm.id_reserva
+                WHERE rm.id_mesa = %s""",
+            (id_mesa,),
+        )
+        historia = cur.fetchone()
+        if historia["n"]:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Esta mesa já recebeu {historia['n']} reserva(s), de "
+                        f"{historia['primeira']:%d/%m/%Y} a {historia['ultima']:%d/%m/%Y}. "
+                        "Apagá-la levaria junto a resposta para onde aquelas pessoas "
+                        "sentaram — desative a mesa: ela sai da disponibilidade e o "
+                        "histórico fica."),
+            )
         # A junta é simétrica: soltar a vizinha ANTES evita deixá-la apontando
         # para o vazio (o `ON DELETE SET NULL` faria isso, mas depois — e o
         # `salao()` já teria devolvido a resposta velha nesta transação).

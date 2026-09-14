@@ -1,6 +1,6 @@
 """Modelos do módulo de Reservas — por enquanto, só a configuração da loja."""
 
-from datetime import time
+from datetime import date, time
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -47,6 +47,69 @@ class FaixaPermanencia(BaseModel):
     def _faixa_coerente(self):
         if self.de >= self.ate:
             raise ValueError(f'A faixa "{self.nome}" termina antes de começar.')
+        return self
+
+
+class ReservaCreate(BaseModel):
+    """Uma reserva nova. O balcão preenche isto; o site, o mesmo com origem SITE."""
+    data: date
+    hora: time
+    pessoas: int = Field(ge=1, le=99)
+    # 🔑 Nome e telefone são DA RESERVA. Quem liga não tem cadastro, e exigir um
+    # transformaria uma ligação de trinta segundos num cadastro completo — a
+    # recepção deixaria de usar o sistema. `id_pessoa` liga à agenda quando a
+    # casa quiser histórico.
+    nome: str = Field(min_length=2, max_length=120)
+    telefone: str | None = Field(default=None, max_length=30)
+    id_pessoa: int | None = None
+    origem: Literal["BALCAO", "SITE"] = "BALCAO"
+    objetivo: str | None = Field(default=None, max_length=40)
+    observacao_cliente: str | None = Field(default=None, max_length=2000)
+    observacao_interna: str | None = Field(default=None, max_length=2000)
+    # ⚠️ **Só o SITE herda a regra de confirmação da loja.** Quem marca no balcão
+    # está falando com a casa: a reserva já nasce confirmada, porque a própria
+    # casa acabou de aceitá-la. Pôr o balcão para esperar aprovação criaria uma
+    # fila de reservas que a recepção teria de aprovar para si mesma.
+    confirmacao_da_loja: Literal["AUTOMATICA", "MANUAL"] = "AUTOMATICA"
+
+    def status_inicial(self) -> str:
+        if self.origem == "SITE" and self.confirmacao_da_loja == "MANUAL":
+            return "PENDENTE"
+        return "CONFIRMADA"
+
+
+class ReservaRemarcar(BaseModel):
+    """Mudar dia, hora ou tamanho do grupo — o que vier, fica; o resto não muda.
+
+    🔑 **É a ligação mais comum depois de marcar.** Sem isto, a recepção teria de
+    cancelar e recriar, perdendo o histórico da reserva.
+    ⚠️ Os três são opcionais de propósito: quem só adia meia hora não precisa
+    repetir a data nem o número de pessoas.
+    """
+    data: date | None = None
+    hora: time | None = None
+    pessoas: int | None = Field(default=None, ge=1, le=99)
+
+    @model_validator(mode="after")
+    def _algo_mudou(self):
+        if self.data is None and self.hora is None and self.pessoas is None:
+            raise ValueError("Diga o que muda: dia, hora ou número de pessoas.")
+        return self
+
+
+class MudarStatus(BaseModel):
+    status: Literal["CONFIRMADA", "CHEGOU", "ENCERRADA", "CANCELADA", "NAO_COMPARECEU"]
+
+
+class BloqueioCreate(BaseModel):
+    de: date
+    ate: date
+    motivo: str = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _periodo(self):
+        if self.de > self.ate:
+            raise ValueError("O bloqueio termina antes de começar.")
         return self
 
 

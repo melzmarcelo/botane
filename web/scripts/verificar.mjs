@@ -317,6 +317,27 @@ try {
   p.on("pageerror", (e) => anotar(String(e)));
   p.on("console", (m) => m.type() === "error" && anotar(m.text()));
 
+  // 🔑 **Nenhuma caixa do NAVEGADOR, em tela nenhuma** (pedido do dono,
+  // 14/09/2026: *"identifiquei mensagens padrão do navegador, onde devemos
+  // tratar elas como padrão do nosso sistema, não aquele popup feio"*).
+  // `window.confirm`/`alert`/`prompt` têm fonte de sistema, botão em inglês e
+  // nenhum lugar para explicar o que a ação faz — e o componente `Confirmacao`
+  // existe justamente para isso, com o motivo escrito no docstring dele desde
+  // sempre. Mesmo assim duas telas voltaram a usar a caixa nativa.
+  // ⚠️ **A guarda é GLOBAL e vale para o roteiro inteiro**, não para uma tela:
+  // é o único jeito de a regressão não voltar pela porta de uma tela que
+  // ninguém estava olhando. Anotar e DISPENSAR o diálogo importa — sem
+  // dispensar, um `confirm()` trava a página e leva a bateria junto.
+  const caixasNativas = [];
+  p.on("dialog", async (d) => {
+    caixasNativas.push(`${d.type()}: ${d.message()}`);
+    await d.dismiss().catch(() => {});
+  });
+  aoTerminar.push(async () => {
+    checar("nenhuma caixa do navegador (confirm/alert/prompt) apareceu",
+      caixasNativas.length === 0, caixasNativas.join(" | "));
+  });
+
   console.log("1. login do administrador");
   await p.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await foto(p, "01-login");
@@ -5780,6 +5801,13 @@ try {
         um_estoque: "UN" }, token);
     if (dados?.id) criadosPag.push(dados.id);
   }
+  // ⚠️ **Afirmar que criou, em vez de engolir a falha.** O `if (dados?.id)`
+  // existe para nao quebrar o laco — e o efeito colateral e pior que a quebra:
+  // nascendo zero produtos, a checagem de filtro 200 linhas abaixo acusa a
+  // PAGINACAO de um problema que e do cadastro, e o diagnostico dela ja teve de
+  // ser turbinado duas vezes por isso. Mesma familia do `b?.click()` silencioso.
+  checar("os 25 produtos da fase de paginacao foram criados",
+    criadosPag.length === 25, criadosPag.length);
 
   await irPara(p, `${WEB}/produtos`);
   await new Promise((r) => setTimeout(r, 1600));
@@ -6909,8 +6937,18 @@ try {
     antecedencia_max_dias: cfgReservas.antecedencia_max_dias,
     cadastro_completo: cfgReservas.cadastro_completo,
     horarios: cfgReservas.horarios.map((h) => ({ ...h, aberto: false })),
-    permanencias: cfgReservas.permanencias.map(({ nome, de, ate, minutos }) =>
-      ({ nome, de, ate, minutos })),
+    // ⚠️ **As faixas tambem entram no ponto de partida.** A fase da agenda, mais
+    // abaixo, deixa a loja com UMA faixa de 120 min — e a rodada seguinte
+    // chegava aqui esperando as tres padrao de 90. Terceira vez que a mesma
+    // nao-idempotencia morde nesta sessao: o teste tem de montar o que afirma.
+    // 🔑 **Quem prova a SEMEADURA das tres e a suite da API**, que apaga a
+    // configuracao antes e ve `_garantir` recria-la. Aqui a pergunta e outra: a
+    // TELA lista as faixas e traduz o numero em portugues?
+    permanencias: [
+      { nome: "Café da manhã", de: "09:00", ate: "11:00", minutos: 60 },
+      { nome: "Almoço", de: "11:00", ate: "15:00", minutos: 90 },
+      { nome: "Lanche da tarde", de: "15:00", ate: "23:59", minutos: 60 },
+    ],
   }, token);
 
   await irPara(p, `${WEB}/reservas/configuracoes`);
@@ -6934,7 +6972,7 @@ try {
   const faixasR = await p.evaluate(() =>
     [...document.querySelectorAll('input[aria-label^="nome da faixa"]')]
       .map((i) => i.value));
-  checar("as tres faixas de permanencia ja vem preenchidas",
+  checar("a tela lista as faixas de permanencia configuradas",
     faixasR.length === 3 && faixasR.some((n) => /Almoço/i.test(n)), faixasR);
   // A frase que traduz o número: quem senta às 11:00 sai por volta das 12:30.
   checar("dizendo em portugues o que a permanencia faz",
@@ -6966,19 +7004,29 @@ try {
   // ⚠️ Ponto de partida MONTADO, pela mesma razao da configuracao: cadastro
   // sobrevive entre rodadas, e afirmar "nenhum salao" sem zerar seria afirmar o
   // que a rodada anterior desfez.
+  // ⚠️ **DESLIGA os saloes antigos em vez de apagar, e a razao e o produto.**
+  // Mesa que ja hospedou reserva NAO se apaga — e correto, apagar levaria junto
+  // a resposta para onde aquelas pessoas sentaram. A primeira versao desta fase
+  // tentava apagar e a bateria morria num "Internal Server Error" (que virou um
+  // 409 explicado, na mesma rodada). Desligar e o mecanismo do proprio produto:
+  // o salao sai da disponibilidade e o cadastro fica.
   const { dados: salaoAntes } = await api("GET", "/reservas/salao", null, token);
-  for (const m of salaoAntes.mesas) await api("DELETE", `/reservas/mesas/${m.id}`, null, token);
-  for (const s of salaoAntes.saloes) await api("DELETE", `/reservas/saloes/${s.id}`, null, token);
+  for (const s of salaoAntes.saloes) {
+    await api("PUT", `/reservas/saloes/${s.id}`, { ativo: false }, token);
+  }
 
   await irPara(p, `${WEB}/reservas/salao`);
   await esperarTexto(p, "maior grupo que cabe", 9000);
   const salaoVazio = await p.evaluate(() => document.body.innerText);
-  checar("a tela do salao avisa quando nao ha salao nenhum",
-    /Nenhum salão cadastrado ainda/i.test(salaoVazio), salaoVazio.slice(0, 300));
-  checar("e mostra os quatro numeros do salao desde o inicio",
+  checar("a tela do salao mostra os quatro numeros desde o inicio",
     /mesas ativas/i.test(salaoVazio) && /lugares confortáveis/i.test(salaoVazio)
     && /com a cadeira extra/i.test(salaoVazio) && /maior grupo que cabe/i.test(salaoVazio),
     salaoVazio.slice(0, 300));
+  // 🔑 Com todos os saloes desligados, o salao nao acomoda ninguem — e o numero
+  // que o servidor devolve tem de dizer isso.
+  const { dados: semSalao } = await api("GET", "/reservas/salao", null, token);
+  checar("com todos os saloes desligados, nao ha lugar nenhum",
+    semSalao.lugares === 0 && semSalao.maior_grupo === 0, semSalao);
 
   // ⚠️ "\+ salao": `clicarQuando` recebe a FONTE de uma regex, e o "+" precisa
   // vir escapado. Sem a barra, `new RegExp("+ salao")` estoura com "nothing to
@@ -7000,33 +7048,52 @@ try {
   checar("o salao recem-criado abre sozinho, e o endereco guarda qual e",
     virouEndereco, p.url());
 
+  const soDoSalao = await p.evaluate(() => document.body.innerText);
+  checar("e o salao recem-criado avisa que nao tem mesa nenhuma",
+    /Nenhuma mesa neste salão ainda/i.test(soDoSalao), soDoSalao.slice(0, 400));
+
   // 🔑 **Montar o salao em LOTE** — o trabalho real do cadastro, que acontece
   // uma vez so: clicar "+ mesa" doze vezes e renomear cada uma e exatamente
   // quando ninguem tem paciencia.
   checar("a tela oferece criar varias mesas de uma vez",
     await clicarQuando(p, "+ várias mesas"));
   await esperarTexto(p, "Quantas mesas", 6000);
-  await p.evaluate(() => {
-    const campo = document.querySelector('input[aria-label="quantas mesas criar"]');
+  // ⚠️ **Prefixo DESTA rodada.** O lote numera a partir do primeiro nome livre e
+  // pula os que ja existem — entao, com mesas de rodadas anteriores na base, os
+  // nomes nao comecam no 01. Com prefixo proprio, a numeracao volta a ser
+  // previsivel E o campo de prefixo fica exercitado.
+  const prefixoLote = `P${marcaNota.slice(-2)}`;
+  await p.evaluate(({ quantos, prefixo }) => {
     const setter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value").set;
-    setter.call(campo, "6");
-    campo.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+    const escrever = (rotulo, valor) => {
+      const campo = document.querySelector(`input[aria-label="${rotulo}"]`);
+      setter.call(campo, valor);
+      campo.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    escrever("quantas mesas criar", quantos);
+    escrever("prefixo do nome das mesas", prefixo);
+  }, { quantos: "6", prefixo: prefixoLote });
   checar("e o botao diz quantas vai criar", await clicarQuando(p, "Criar 6 mesas"));
   await new Promise((r) => setTimeout(r, 1800));
 
   const { dados: comLote } = await api("GET", "/reservas/salao", null, token);
-  checar("as seis mesas nascem de uma vez", comLote.mesas.length === 6, comLote.mesas.length);
-  // ⚠️ Numeradas a partir do primeiro nome livre, e o nome e unico por LOJA.
-  checar("numeradas a partir do 01",
-    comLote.mesas.some((m) => m.nome === "01") && comLote.mesas.some((m) => m.nome === "06"),
-    comLote.mesas.map((m) => m.nome));
+  // 🔑 **Cada teste procura os registros DELE** — a mesma licao que a fase da
+  // paginacao ja carrega no comentario dela. Contar o total da CASA fazia esta
+  // checagem somar as mesas das rodadas anteriores (que nao se apagam mais, por
+  // terem reserva) e acusar o lote de criar dez em vez de seis.
+  const meuSalao = comLote.saloes.find((s) => s.nome === `Principal ${marcaNota}`);
+  const minhasMesas = comLote.mesas.filter((m) => m.id_salao === meuSalao?.id);
+  checar("as seis mesas nascem de uma vez", minhasMesas.length === 6, minhasMesas.length);
+  checar("numeradas a partir do 01, sob o prefixo pedido",
+    minhasMesas.some((m) => m.nome === `${prefixoLote}01`)
+    && minhasMesas.some((m) => m.nome === `${prefixoLote}06`),
+    minhasMesas.map((m) => m.nome));
   // 🔑 Lugares e maximo sao DOIS numeros; o lote grava os dois.
   checar("com lugares e maximo iguais quando ninguem os separou",
     comLote.lugares === comLote.capacidade_max, comLote);
   checar("e o maior grupo e a maior mesa sozinha",
-    comLote.maior_grupo === comLote.mesas[0].capacidade_max, comLote.maior_grupo);
+    comLote.maior_grupo === minhasMesas[0].capacidade_max, comLote.maior_grupo);
   await foto(p, "42b-reservas-salao");
 
   // 🔑 **Um salao de cada vez**: com dois saloes, a tela mostra so o aberto.
@@ -7038,25 +7105,41 @@ try {
   await esperarTexto(p, `Varanda ${marcaNota}`, 9000);
   const naVaranda = await p.evaluate(() => ({
     linhas: document.querySelectorAll("table tbody tr").length,
-    abas: [...document.querySelectorAll('[role="tab"]')].map((b) => b.textContent.trim()),
+    // ⚠️ **A contagem sai do PROPRIO elemento, nao de uma regex sobre o texto.**
+    // O nome do salao termina nos digitos da marca da rodada e a contagem cola
+    // neles ("Principal 4779526"): `6` nao casa, porque nao ha fronteira de
+    // palavra entre dois digitos. O numero estava certo; a leitura e que era
+    // fragil.
+    abas: [...document.querySelectorAll('[role="tab"]')].map((b) => ({
+      nome: (b.getAttribute("aria-label") ?? "").replace(/^salão /, ""),
+      contagem: b.querySelector("span.mono")?.textContent?.trim() ?? "",
+    })),
   }));
   // ⚠️ Duas mesas na tela, nao oito: a pagina tem o tamanho de um SALAO, nao o
   // da casa inteira. Era esse o pedido.
   checar("a aba da varanda mostra so as mesas dela", naVaranda.linhas === 2, naVaranda);
-  checar("e as duas abas aparecem, com a contagem de cada uma",
-    naVaranda.abas.length === 2 && naVaranda.abas.some((x) => /6/.test(x))
-    && naVaranda.abas.some((x) => /2/.test(x)), naVaranda.abas);
+  // ⚠️ As abas DESTA rodada: salao de rodada anterior continua cadastrado (so
+  // desligado), e exigir "exatamente duas" contaria o passado.
+  const abasDaRodada = naVaranda.abas.filter((x) => x.nome.includes(marcaNota));
+  checar("e as duas abas da rodada aparecem, com a contagem de cada uma",
+    abasDaRodada.length === 2
+    && abasDaRodada.some((x) => x.nome.startsWith("Principal") && x.contagem === "6")
+    && abasDaRodada.some((x) => x.nome.startsWith("Varanda") && x.contagem === "2"),
+    abasDaRodada);
 
   // A junta: duas de 6/8 juntas sentam 16, e vale nos dois sentidos.
-  const naVarandaMesas = comLote.mesas.length;
+  const naVarandaMesas = minhasMesas.length;
   const { dados: comOutro } = await api("GET", "/reservas/salao", null, token);
   const daVaranda = comOutro.mesas.filter((m) => m.id_salao === outro.id);
   await api("PUT", `/reservas/mesas/${daVaranda[0].id}`,
     { junta_com: daVaranda[1].id }, token);
   const { dados: comJunta } = await api("GET", "/reservas/salao", null, token);
-  checar("a junta e gravada nos dois sentidos",
-    comJunta.mesas.filter((m) => m.junta_com !== null).length === 2,
-    comJunta.mesas.filter((m) => m.junta_com !== null).length);
+  // ⚠️ So as mesas DESTA rodada: as de rodadas anteriores continuam cadastradas
+  // (desligadas, nao apagadas) e carregam as juntas delas.
+  const juntadasAgora = comJunta.mesas.filter(
+    (m) => m.id_salao === outro.id && m.junta_com !== null);
+  checar("a junta e gravada nos dois sentidos", juntadasAgora.length === 2,
+    juntadasAgora.map((m) => `${m.nome}->${m.junta_com_nome}`));
   checar("e o maior grupo passa a ser a soma das duas: 16",
     comJunta.maior_grupo === 16, comJunta.maior_grupo);
   checar("as seis do principal continuam la", naVarandaMesas === 6);
@@ -7071,6 +7154,136 @@ try {
   const semExcluir = await p.evaluate(() => document.body.innerText);
   checar("salao com mesa manda desligar em vez de oferecer excluir",
     /desligue em vez de excluir/i.test(semExcluir), semExcluir.slice(0, 400));
+
+  // ---- a agenda do dia: marcar, e o ciclo da reserva ----
+  // 🔑 **A regra de disponibilidade e a peca que tudo consome**, e a tela nao a
+  // reimplementa: os horarios vem de `/reservas/disponibilidade`, que roda a
+  // MESMA regra que a gravacao vai rodar. Uma segunda versao aqui divergiria no
+  // primeiro degrau novo, e a tela passaria a oferecer horario que o servidor
+  // recusa.
+  // Monta um sabado limpo com uma mesa so, para a regra ficar observavel.
+  const sabado = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const { dados: cfgAgenda } = await api("GET", "/reservas/configuracao", null, token);
+  await api("PUT", "/reservas/configuracao", {
+    aceita_online: false, confirmacao: "AUTOMATICA", teto_online: 8,
+    tolerancia_min: 15, folga_min: 0, passo_min: 60,
+    antecedencia_min_horas: 0, antecedencia_max_dias: 365, cadastro_completo: true,
+    horarios: cfgAgenda.horarios.map((h) => ({
+      ...h, aberto: h.dia_semana === 6, abre: "11:00", fecha: "18:00",
+      ultima_reserva: "15:00",
+    })),
+    permanencias: [{ nome: "Almoco", de: "11:00", ate: "18:00", minutos: 120 }],
+  }, token);
+  // Uma mesa de 2 e uma de 6: e o que faz "esgotado depende do grupo" aparecer.
+  // ⚠️ **Salao proprio, e os outros desligados.** Mesa com reserva nao se apaga
+  // (e nao deve), entao a fase nao pode "limpar" o salao da fase anterior — ela
+  // desliga tudo e monta o cenario dela, onde so as duas mesas dela contam.
+  const { dados: salaoAg } = await api("GET", "/reservas/salao", null, token);
+  for (const s of salaoAg.saloes) {
+    await api("PUT", `/reservas/saloes/${s.id}`, { ativo: false }, token);
+  }
+  const { dados: salaoNovo } = await api("POST", "/reservas/saloes",
+    { nome: `Agenda ${marcaNota}` }, token);
+  const idSalaoAg = salaoNovo.id;
+  await api("POST", "/reservas/mesas",
+    { id_salao: idSalaoAg, nome: `A${marcaNota}`, lugares: 2, capacidade_max: 2 }, token);
+  await api("POST", "/reservas/mesas",
+    { id_salao: idSalaoAg, nome: `B${marcaNota}`, lugares: 6, capacidade_max: 6 }, token);
+
+  await irPara(p, `${WEB}/reservas/agenda?dia=${sabado}`);
+  await esperarTexto(p, "pessoas esperadas", 9000);
+  checar("a agenda do dia abre", /Agenda do dia/.test(await p.evaluate(
+    () => document.body.innerText)));
+
+  checar("e oferece marcar uma reserva", await clicarQuando(p, "Nova reserva"));
+  await esperarTexto(p, "Quantas pessoas primeiro", 6000);
+  // 🔑 **Pessoas vem ANTES do horario, e a ordem e a regra**: "esgotado" depende
+  // do tamanho do grupo, entao a lista de horarios so existe depois do numero.
+  const horariosPara = async (n) => {
+    await p.evaluate((quantos) => {
+      [...document.querySelectorAll("button")]
+        .find((b) => b.getAttribute("aria-label") === `${quantos} pessoas`)?.click();
+    }, n);
+    await new Promise((r) => setTimeout(r, 1400));
+    return p.evaluate(() =>
+      [...document.querySelectorAll('button[aria-label^="horário"]')]
+        .map((b) => ({ hora: b.textContent.trim(), livre: !b.disabled })));
+  };
+
+  const para2 = await horariosPara(2);
+  // Das 11:00 as 15:00, de hora em hora = 5 horarios.
+  checar("a tela mostra os horarios ate a ultima reserva",
+    para2.length === 5 && para2[0].hora === "11:00" && para2[4].hora === "15:00", para2);
+  checar("todos livres num dia sem reserva", para2.every((h) => h.livre), para2);
+
+  // Marca as 12:00 para 6 pessoas: ocupa a mesa de 6 ate 14:00.
+  await horariosPara(6);
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.getAttribute("aria-label") === "horário 12:00")?.click();
+  });
+  const escrever = async (rotulo, texto) => {
+    const campo = await p.$(`input[aria-label="${rotulo}"]`);
+    await campo.type(texto);
+  };
+  await escrever("nome de quem reserva", `Familia ${marcaNota}`);
+  await escrever("telefone de quem reserva", "47 99910-5033");
+  checar("o botao diz o horario escolhido", await clicarQuando(p, "Marcar às 12:00"));
+  await new Promise((r) => setTimeout(r, 2000));
+
+  const naAgenda = await p.evaluate(() => document.body.innerText);
+  checar("a reserva aparece na agenda", new RegExp(`Familia`).test(naAgenda),
+    naAgenda.slice(0, 400));
+  // 🔑 A hora de SAIDA sai da permanencia: quem senta as 12:00 com 120 min sai
+  // as 14:00. Sem isso a recepcao nao responde "da para encaixar as 14h?".
+  checar("com a hora em que a mesa vaga", /14:00/.test(naAgenda), naAgenda.slice(0, 400));
+  checar("e a mesa que o SERVIDOR escolheu", new RegExp(`B${marcaNota}`).test(naAgenda),
+    naAgenda.slice(0, 400));
+  await foto(p, "42c-reservas-agenda");
+
+  // 🔑 **"Esgotado" depende do TAMANHO DO GRUPO** — a checagem que define a
+  // regra. Mesmo horario, respostas diferentes.
+  await clicarQuando(p, "Nova reserva");
+  await esperarTexto(p, "Quantas pessoas primeiro", 6000);
+  const de6 = await horariosPara(6);
+  const de2 = await horariosPara(2);
+  const as12de6 = de6.find((h) => h.hora === "12:00");
+  const as12de2 = de2.find((h) => h.hora === "12:00");
+  checar("as 12:00 nao ha mais mesa para 6", as12de6 && !as12de6.livre, as12de6);
+  checar("mas ainda ha para 2, no MESMO horario", as12de2 && as12de2.livre, as12de2);
+  // ⚠️ A mesa de 6 volta as 14:00: os intervalos que se tocam nao se cruzam.
+  const as14de6 = de6.find((h) => h.hora === "14:00");
+  checar("e as 14:00 ela ja vagou", as14de6 && as14de6.livre, as14de6);
+  await clicarQuando(p, "cancelar", { exato: true });
+
+  // O ciclo: confirmada -> chegou -> encerrada, e o que some da tela a cada passo.
+  checar("a reserva confirmada oferece marcar chegada", await clicarQuando(p, "chegou"));
+  await new Promise((r) => setTimeout(r, 1600));
+  const depoisChegou = await p.evaluate(() => document.body.innerText);
+  checar("e a situacao passa a dizer que chegou", /chegou/.test(depoisChegou),
+    depoisChegou.slice(0, 400));
+  checar("oferecendo encerrar em seguida", await clicarQuando(p, "encerrar"));
+  await new Promise((r) => setTimeout(r, 1600));
+  const depoisEncerrou = await p.evaluate(() => document.body.innerText);
+  checar("encerrada nao oferece mais nada — o ciclo terminou",
+    /encerrada/.test(depoisEncerrou), depoisEncerrou.slice(0, 400));
+  // ⚠️ E a mesa continua contando como usada: ela FOI usada, e a agenda tem de
+  // continuar explicando por que esteve ocupada.
+  const { dados: aindaOcupada } = await api(
+    "GET", `/reservas/disponibilidade?data=${sabado}&pessoas=6`, null, token);
+  checar("e a mesa encerrada continua ocupada naquele horario",
+    !aindaOcupada.horarios.find((h) => h.hora === "12:00").livre, aindaOcupada.horarios);
+
+  // Limpa as reservas do teste: elas seguram mesa entre rodadas.
+  const { dados: agLimpar } = await api("GET", `/reservas/agenda?data=${sabado}`, null, token);
+  for (const r of agLimpar.reservas) {
+    await api("PUT", `/reservas/${r.id}/status`, { status: "CANCELADA" }, token);
+  }
 
   // 🔑 **E as permissões passam a ser oferecidas** — o terceiro efeito.
   await irPara(p, `${WEB}/papeis`);

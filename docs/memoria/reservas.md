@@ -240,6 +240,69 @@ esperado por algo que não provava o que ele achava**:
   passou em duas rodadas e caiu na terceira, sem ninguém tocar na tela. Virou
   `waitForSelector`.
 
+## A regra de disponibilidade e a reserva (migrações 070, 14/09/2026)
+
+🔑 **É o coração do módulo, e onde a maioria dos sistemas de reserva erra.** Mora em
+`services/reservas_agenda.py`, num lugar só: a tela consulta a MESMA regra que a gravação
+aplica. O protótipo já a implementava em JavaScript e serviu de especificação executável.
+
+A regra: as candidatas são as mesas **ativas de salões ativos**; uma mesa está presa se
+alguma reserva viva cruza `[hora, hora + permanência + folga)`; cabe se houver mesa livre
+com `capacidade_max >= N` — **a menor que serve** — ou uma junta com as duas livres.
+
+- ⚠️ **"Esgotado" depende do TAMANHO DO GRUPO.** Às 12h pode não haver mesa para 6 e haver
+  para 2. Por isso a tela pergunta as pessoas **antes** do horário: a ordem é a regra, não
+  preferência de layout.
+- ⚠️ **Contar lugares livres não serve.** Seis lugares livres numa mesa de 2 e numa de 4 não
+  sentam um grupo de 5. A regra aloca MESA.
+- 🔑 **Mesa inteira ganha da JUNTA, e isso é produto.** Juntar mesas é trabalho físico e
+  fragmenta o salão: só se faz quando não há mesa que sirva. ⚠️ A primeira versão da suíte
+  esperava a junta com a mesa de 6 ainda livre e **acusou de defeito o comportamento certo**.
+- 🔑 **A menor mesa que serve, não a primeira que couber.** Pôr um casal na mesa de 8 é o que
+  faz o grupo de 8 não caber meia hora depois — e a recusa apareceria como "esgotado" sem
+  nada no salão estar cheio.
+- ⚠️ **Reserva PENDENTE segura a mesa.** Só `CANCELADA` e `NAO_COMPARECEU` soltam.
+  `ENCERRADA` continua segurando: a mesa FOI usada, e a agenda tem de continuar explicando
+  por que esteve ocupada.
+- ⚠️ **Verificação e gravação na MESMA transação**, com `pg_advisory_xact_lock` por
+  (loja, dia). É o caso que define a arquitetura — conferir e depois gravar é onde o
+  overbooking nasce. Precedente da casa: `SELECT … FOR UPDATE` no razão, o lote de reembolso
+  do outro sistema.
+- ⚠️ **O teto e a antecedência valem para o SITE, não para o balcão.** Quem liga fala com
+  uma pessoa, e essa pessoa pode aceitar um grupo maior sabendo que vai juntar mesas na mão.
+- ⚠️ **`reserva_bloqueios` é diferente de fechar o dia da semana**: o horário vale toda
+  semana, o bloqueio vale uma vez. Resolver o Natal desmarcando a quarta fecharia todas as
+  quartas do ano. E o bloqueio **não cancela o que já estava marcado** — a casa precisa da
+  lista para ligar para cada um; a resposta diz quantas são.
+
+### Remarcar
+
+🔑 **É a ligação mais comum depois de marcar** (*"dá para passar para as 13h?"*). Sem ela, a
+recepção cancelaria e recriaria, perdendo o histórico.
+
+- ⚠️ **A reserva não pode disputar mesa CONSIGO MESMA**: passar das 12h para as 12h30
+  esbarraria na própria permanência, e o sistema diria "não há mesa" apontando para a mesa
+  que ela mesma ocupa. É para isso que `disponibilidade` tem o `ignorar`, e o remarcar é o
+  único chamador dele.
+- ⚠️ **Mudando de dia, os DOIS dias são travados — do menor para o maior.** Sem a ordem
+  fixa, remarcar sábado→domingo e domingo→sábado ao mesmo tempo daria impasse: cada um
+  seguraria o dia que o outro espera.
+- ⚠️ **Falhando, a reserva fica COMO ESTAVA.** Uma remarcação recusada que deixasse a
+  reserva sem mesa seria pior que a recusa.
+- ⚠️ **Só o que ainda não sentou se remarca.** `CHEGOU` quer dizer que as pessoas estão na
+  mesa; mudar o horário delas não descreve nada que aconteça no salão.
+
+### O 500 que virou 409, e a promessa que se fechou
+
+🔑 A migração 069 prometia que apagar mesa com reserva seria barrado "pelo BANCO, quando
+`reserva_mesas` nascer". Nasceu com `ON DELETE RESTRICT` e barrou — **com um 500 e texto de
+Postgres**, que derrubou a bateria do navegador inteira num "Internal Server Error".
+⚠️ **Quem GARANTE é o banco; quem EXPLICA é a rota.** A pergunta antes não substitui a chave
+estrangeira (é ela que não envelhece quando outra tabela apontar para `mesas`) — acrescenta
+a frase em português, como `_recusar_nome_repetido` faz com o índice único.
+⚠️ E a suíte afirmava só `st >= 400`, o que **deixou o 500 passar**. Virou `st == 409` com a
+mensagem.
+
 ## O que vem a seguir
 
 Pela ordem do esboço, e nenhum deles começou:

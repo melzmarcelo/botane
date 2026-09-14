@@ -138,20 +138,23 @@ ficha. A diferença entre os dois é a variância, que é o número que interess
 ## Reservas
 
 - **Rotas:** `reservas.py`
-- **Serviços:** `reservas.py`
-- **Telas:** `reservas/configuracoes/`, `reservas/salao/`
+- **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade)
+- **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`
 
 🔑 **É o primeiro módulo LIGADO POR LOJA** (`parametros.reservas_ligado`,
 migração 068). Desligado, ele não existe: sem grupo no menu, com as rotas
 recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
 
-⚠️ Construído até aqui: a **configuração** (horário de funcionamento — três horas
-por dia: abre, fecha e última reserva — e permanência por faixa) e o **salão**
-(salões, mesas, lugares e a junta entre mesas vizinhas). A regra de
-disponibilidade e a reserva em si vêm a seguir; o protótipo em
-`apresentacao/reservas-prototipo.html` já implementa a regra inteira e serve de
-especificação executável.
+⚠️ Construído até aqui: a **configuração** (três horas por dia — abre, fecha e
+última reserva — e permanência por faixa), o **salão** (salões, mesas e a junta
+entre vizinhas), a **regra de disponibilidade** e a **reserva pelo balcão**, com
+ciclo de status, remarcar e bloqueios. Falta a reserva pelo site do cliente.
+
+🔑 **A regra de disponibilidade mora em UM lugar** (`reservas_agenda.py`): a tela
+consulta a mesma que a gravação aplica. "Esgotado" depende do TAMANHO DO GRUPO, a
+alocação é por MESA (não por soma de lugares), mesa inteira ganha da junta, e a
+verificação e a gravação acontecem na mesma transação com trava por (loja, dia).
 
 🔑 **`lugares` (o confortável) e `capacidade_max` (com a cadeira extra) são dois
 números**: a alocação usa o máximo, os relatórios usam os lugares. E `maior_grupo`
