@@ -104,6 +104,9 @@ depois, sem mexer no resto.
 
 ## O modelo de dados, em cinco tabelas
 
+> ⚠️ **Revisto em 14/09/2026** — ver a seção final. O salão entrou entre a loja e a
+> mesa, e o horário virou tabela própria. O que está aqui é o primeiro corte do dia 13.
+
 ```
 reserva_config      (id_unidade)   ← liga o módulo e guarda as regras da loja
   ligado, abertura, fechamento, dias_fechados,
@@ -183,3 +186,128 @@ salão já estiver cadastrado de verdade.
    é outro módulo, não um detalhe deste.
 5. **Qual o horário de funcionamento e os dias fechados?** É o primeiro
    cadastro, e sem ele a disponibilidade não responde nada.
+
+---
+
+# Revisão de 14/09/2026 — o que o protótipo mudou
+
+Depois de ver o site que a casa usa hoje (`botanedeliecafe.leadsfood.app`) e de montar um
+protótipo navegável, três coisas do modelo acima ficaram erradas. O protótipo está em
+[`apresentacao/reservas-prototipo.html`](../apresentacao/reservas-prototipo.html) — arquivo
+local autocontido, publicado também como artifact (**republicar sempre na mesma URL**).
+
+## Como o site de hoje se comporta
+
+Lido da página real, em 13/09/2026:
+
+- **Formulário de um passo só**: Dia da reserva, Horário, Pessoas, Objetivo da reserva,
+  "Precisa de algo especial?" (0/2000) e CONTINUAR. Sem escolha de mesa pelo cliente.
+- As regras vêm **impressas acima dos campos**: Ter-Sex 09h30–17h00, Sáb 9h–17h00,
+  tolerância de 15 minutos, e **acima de 8 pessoas → WhatsApp 47 99910-5033**.
+- Badge "Fechado no momento" quando fora do horário.
+- O LeadsFood é um **hub**, não só reserva: cardápio, catálogos, fidelidade, selos. Foi daí
+  que veio o pedido do dono — *"a reservas pode ter este mesmo estilo, onde dentro do sistema
+  podemos criar catálogos, podemos importar o catálogo ou criar dentro do sistema mesmo"*.
+
+⚠️ **O horário impresso já mostra que são DUAS horas diferentes**: "até 17h00" é a última
+reserva, não o fechamento da loja — a casa fica aberta depois disso. A diferença entre as
+duas é exatamente a permanência.
+
+## A porta de entrada é o telefone
+
+🔑 **Pedido do dono (13/09/2026):** *"pelo que vi é um cadastro simples, a partir do número de
+telefone; caso tenha o número cadastrado, segue para a reserva; caso não tenha, faz o cadastro
+com Nome, Data de nascimento, Gênero e Cidade. E segue para o agendamento."*
+
+Isso resolve a decisão 1 acima de um jeito melhor do que o esboço propunha: não há login nem
+senha. O telefone **é** a identidade, e é o campo pelo qual a casa já procura alguém.
+`fornecedores` (a tabela de pessoas) já tem telefone e whatsapp; faltam `data_nascimento`,
+`genero` e `cidade`, e a marca de origem (balcão / site).
+
+⚠️ **Data de nascimento é dado pessoal.** Serve para o aniversário — e só vale guardar se a
+casa for usar de verdade. Pedir por pedir é coletar risco sem troco. O protótipo tem um ajuste
+"só o nome" justamente para a casa ver como fica sem.
+
+## O modelo revisto
+
+O que muda em relação às cinco tabelas do dia 13:
+
+```
+reserva_config      (id_unidade)
+  ligado, aceita_online, folga_min, passo_min, tolerancia_min,
+  antecedencia_min_horas, antecedencia_max_dias, teto_online
+
+reserva_horarios    (id_unidade, dia_semana 0-6, aberto,
+                     abre, fecha, ultima_reserva)          ← NOVA
+reserva_permanencias(id_unidade, nome, de, ate, minutos)   ← NOVA
+
+saloes              (id_unidade, nome, ativo)              ← NOVA
+mesas               (id_unidade, id_salao, nome, lugares, capacidade_max,
+                     junta_com, ativo, pos_x, pos_y)
+reservas            (…como antes…)
+reserva_mesas       (id_reserva, id_mesa)
+bloqueios           (id_unidade, de, ate, motivo)
+```
+
+**1. `reserva_horarios` é tabela, não campo.** O esboço tinha `abertura`/`fechamento` na
+config e `dias_fechados` como lista. Mas sábado abre 9h e fecha 18h30, e terça a sexta abrem
+9h30 e fecham 18h — são horários **por dia da semana**, e cada dia carrega as três horas
+(abre, fecha, última reserva). `dias_fechados` vira o `aberto` de cada linha; `bloqueios`
+continua existindo para o que é pontual (feriado, evento, manutenção).
+
+**2. `saloes` entra entre a loja e a mesa.** Salão principal, Varanda, Mezanino. Desligar o
+salão tira as mesas dele da disponibilidade sem apagar cadastro nenhum — é a Varanda no
+inverno. ⚠️ **Salão com mesa não se remove, desliga**: apagar levaria junto a resposta para
+"onde aquela reserva de agosto sentou".
+
+**3. `permanencia_min` vira faixa.** Um número só para o dia inteiro erra nas duas pontas:
+café da manhã não segura a mesa como um almoço. Três faixas já resolvem esta casa (café 60,
+almoço 90, tarde 60). É o que o próprio esboço já recomendava ("duas permanências é o mínimo
+útil") — só que agora com hora de início e fim, porque é a hora da reserva que escolhe a faixa.
+
+**4. Lugares e máximo são dois números.** `lugares` é o confortável; `capacidade_max` é com a
+cadeira extra. A alocação usa o máximo, o relatório usa os lugares. Um campo só obriga a
+escolher entre mentir para o cliente e recusar mesa que caberia.
+
+**5. `junta_com` no lugar de `mesa_grupos`.** Para o caso real desta casa — a mesa vizinha que
+encosta — um vínculo entre duas mesas basta, e é o que a recepção entende. ⚠️ **A junta vale
+nos dois sentidos**: gravar de um lado só deixa a alocação achando um par que a outra mesa não
+conhece. Se um dia aparecer "juntar três", aí sim `mesa_grupos` volta.
+
+## A regra de disponibilidade, escrita
+
+O protótipo implementa a regra inteira, e ela cabe em poucas linhas — o valor está em que ela
+mora em **um lugar só** (no servidor, no sistema de verdade):
+
+1. As mesas candidatas são as **ativas de salões ativos**.
+2. Uma mesa está presa no horário `H` se existe reserva `R` **não cancelada e não
+   não-comparecida** cujo intervalo `[R.hora, R.hora + permanência(R.hora) + folga)` cruza
+   `[H, H + permanência(H) + folga)`.
+3. Cabe o grupo de `P` pessoas se houver mesa livre com `capacidade_max >= P` — **a menor que
+   serve** — ou um par `junta_com` com as duas livres e a soma dos máximos `>= P`.
+
+⚠️ **"Esgotado" depende do tamanho do grupo.** No protótipo, sábado às 12:00 não tem mesa para
+6 e tem para 2. Por isso lotação não é um número só, e por isso a lista de horários precisa ser
+calculada **depois** de o cliente dizer quantas pessoas são.
+
+⚠️ **Contar lugares livres não serve.** Quatro lugares livres em duas mesas de dois não sentam
+um grupo de quatro. A regra tem de alocar mesa, não somar cadeira.
+
+## Duas regras novas que o protótipo revelou
+
+⚠️ **Reserva `PENDENTE` já segura a mesa.** Se não segurasse, a casa aprovaria no dia seguinte
+e descobriria que não cabe. Pendente é reserva; só `CANCELADA` e `NAO_COMPARECEU` soltam.
+
+⚠️ **O teto do site tem de caber no salão.** Se `teto_online` passar do que a maior mesa (ou
+junta) acomoda, quem pedir mais que isso não acha horário nenhum e não descobre por quê. A
+tela de configuração precisa avisar — o protótipo já avisa.
+
+## O que o protótipo deixa pronto para a conversa
+
+O ajuste **"depois de reservar: confirma na hora × fica aguardando a casa"** existe para
+resolver a pergunta 3 das cinco abertas. É a única que muda o fluxo do cliente inteiro, e o
+site de hoje não deixa ver de fora qual é.
+
+Continuam sem resposta: quantas mesas de verdade (o protótipo chutou 12 em 2 salões), se a
+casa aceita reserva por telefone hoje e precisa importar o que existe, e se cobra sinal para
+grupo grande.

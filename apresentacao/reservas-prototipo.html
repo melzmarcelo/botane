@@ -1,0 +1,1155 @@
+<title>Reservas Botané</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ---------------------------------------------------------------- tokens
+     A paleta sai da casa: o creme do papel, o verde do logo, a tinta quase
+     preta esverdeada. As cores de STATUS sao semanticas e vivem fora do verde
+     da marca — senao "confirmada" e "a marca" viram a mesma informacao. */
+  :root {
+    --papel: #F7F3EC;
+    --superficie: #FFFFFF;
+    --superficie-2: #FBF8F2;
+    --tinta: #1B241F;
+    --tinta-suave: #5E6862;
+    --linha: #E4DCCE;
+    --erva: #2F5D4E;
+    --erva-clara: #E7EFEA;
+    --ocre: #A97516;
+    --ocre-claro: #FBF1DC;
+    --agua: #2B6E8F;
+    --agua-clara: #E4F0F5;
+    --barro: #9A3B2E;
+    --barro-claro: #F8E7E3;
+    --cinza: #6B6A64;
+    --sombra: 0 1px 2px rgba(27, 36, 31, .06), 0 8px 24px rgba(27, 36, 31, .07);
+    --raio: 14px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --papel: #101613;
+      --superficie: #18211C;
+      --superficie-2: #1E2823;
+      --tinta: #ECE5D8;
+      --tinta-suave: #9AA69F;
+      --linha: #2C3831;
+      --erva: #7FBBA4;
+      --erva-clara: #1D2E27;
+      --ocre: #D9A441;
+      --ocre-claro: #2B2416;
+      --agua: #76B6D2;
+      --agua-clara: #16262D;
+      --barro: #D98170;
+      --barro-claro: #2C1B18;
+      --cinza: #8C8B84;
+      --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --papel: #101613;
+    --superficie: #18211C;
+    --superficie-2: #1E2823;
+    --tinta: #ECE5D8;
+    --tinta-suave: #9AA69F;
+    --linha: #2C3831;
+    --erva: #7FBBA4;
+    --erva-clara: #1D2E27;
+    --ocre: #D9A441;
+    --ocre-claro: #2B2416;
+    --agua: #76B6D2;
+    --agua-clara: #16262D;
+    --barro: #D98170;
+    --barro-claro: #2C1B18;
+    --cinza: #8C8B84;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font: 400 16px/1.55 Karla, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .envelope { max-width: 1240px; margin: 0 auto; padding: 28px 16px 64px; }
+
+  .selo { font: 500 11.5px/1 DM Mono, ui-monospace, monospace; letter-spacing: .14em;
+          text-transform: uppercase; color: var(--erva);
+          border: 1px solid var(--linha); background: var(--erva-clara);
+          padding: 6px 10px; border-radius: 999px; display: inline-block; }
+  h1 { font: 300 clamp(30px, 5vw, 44px)/1.05 Fraunces, Georgia, serif;
+       margin: 10px 0 6px; letter-spacing: -.01em; text-wrap: balance; }
+  .linhafina { color: var(--tinta-suave); max-width: 68ch; margin: 0; }
+
+  .bancada { display: grid; gap: 28px; margin-top: 28px;
+             grid-template-columns: minmax(0, 400px) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 980px) { .bancada { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ----------------------------------------------------------- o telefone */
+  .fone { background: var(--superficie); border: 1px solid var(--linha);
+          border-radius: 28px; box-shadow: var(--sombra); overflow: hidden;
+          position: sticky; top: 20px; }
+  @media (max-width: 980px) { .fone { position: static; } }
+  .fone-barra { display: flex; align-items: center; justify-content: space-between;
+                gap: 10px; padding: 10px 18px; font: 500 11.5px/1 DM Mono, monospace;
+                color: var(--tinta-suave); border-bottom: 1px solid var(--linha);
+                background: var(--superficie-2); }
+  .tela { min-height: 540px; }
+
+  .capa { position: relative; height: 128px;
+          background:
+            radial-gradient(120% 90% at 30% 20%, #D8C9A8 0%, transparent 60%),
+            radial-gradient(110% 90% at 80% 30%, #B7C3A6 0%, transparent 55%),
+            linear-gradient(160deg, #6D7A5C, #3C4A3E); }
+  .marca { position: absolute; left: 50%; bottom: -34px; transform: translateX(-50%);
+           width: 92px; height: 92px; border-radius: 50%; background: var(--erva);
+           display: grid; place-content: center; text-align: center; color: #F3EFE4;
+           border: 3px solid var(--superficie); }
+  .marca b { display: block; font: 300 21px/1 Fraunces, Georgia, serif; }
+  .marca span { font: 400 8px/1.4 DM Mono, monospace; letter-spacing: .18em;
+                text-transform: uppercase; opacity: .8; }
+  .estado { position: absolute; right: 10px; top: 10px; border-radius: 999px;
+            padding: 5px 10px; font: 500 11px/1 Karla, sans-serif;
+            background: rgba(20,26,22,.72); color: #F1EDE2; }
+
+  .corpo { padding: 46px 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .corpo h2 { font: 400 22px/1.2 Fraunces, Georgia, serif; margin: 0; text-align: center; }
+  .sub { margin: 0; text-align: center; color: var(--tinta-suave); font-size: 14px; }
+  .rot { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+
+  .itens { display: flex; flex-direction: column; gap: 9px; }
+  .item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+          background: var(--superficie-2); border: 1px solid var(--linha);
+          border-radius: var(--raio); padding: 13px 14px; font: 500 15px/1.2 Karla, sans-serif;
+          color: var(--tinta); cursor: pointer; }
+  .item:hover { border-color: var(--erva); }
+  .item .ic { width: 26px; text-align: center; font-size: 17px; }
+  .item small { display: block; font-weight: 400; font-size: 12.5px;
+                color: var(--tinta-suave); margin-top: 2px; }
+  .item.destaque { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
+  .item.destaque small { color: rgba(244,240,229,.75); }
+
+  .regras { background: var(--ocre-claro); border: 1px solid var(--linha);
+            border-radius: var(--raio); padding: 12px 14px; font-size: 13px;
+            display: flex; flex-direction: column; gap: 6px; }
+  .regras .l { display: flex; gap: 8px; }
+
+  label.campo { display: block; font-size: 13px; color: var(--tinta-suave); }
+  input[type="text"], input[type="tel"], input[type="date"], input[type="time"],
+  input[type="number"], select, textarea {
+    width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+    background: var(--superficie); border: 1px solid var(--linha);
+    border-radius: 10px; padding: 10px 11px;
+  }
+  input[type="time"], input[type="number"] { font-family: DM Mono, monospace; font-size: 14px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible,
+  button:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .acao { width: 100%; border: 0; border-radius: 999px; padding: 13px 16px;
+          background: var(--erva); color: #F4F0E5; cursor: pointer;
+          font: 700 14px/1 Karla, sans-serif; letter-spacing: .04em;
+          text-transform: uppercase; }
+  .acao[disabled] { background: var(--linha); color: var(--tinta-suave); cursor: not-allowed; }
+  .acao.fantasma { background: transparent; color: var(--tinta-suave);
+                   border: 1px solid var(--linha); text-transform: none;
+                   letter-spacing: 0; font-weight: 500; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { border: 1px solid var(--linha); background: var(--superficie);
+          border-radius: 999px; padding: 8px 12px; cursor: pointer;
+          font: 500 13.5px/1 Karla, sans-serif; color: var(--tinta); }
+  .chip[aria-pressed="true"] { background: var(--erva); border-color: var(--erva);
+                               color: #F4F0E5; }
+  .horas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .hora { border: 1px solid var(--linha); background: var(--superficie);
+          border-radius: 10px; padding: 10px 4px; cursor: pointer;
+          font: 500 14px/1 DM Mono, monospace; color: var(--tinta); }
+  .hora[aria-pressed="true"] { background: var(--erva); border-color: var(--erva);
+                               color: #F4F0E5; }
+  .hora[disabled] { color: var(--tinta-suave); background: var(--superficie-2);
+                    cursor: not-allowed; text-decoration: line-through; }
+
+  .resumo { border: 1px solid var(--linha); border-radius: var(--raio);
+            background: var(--superficie-2); padding: 14px; }
+  .resumo dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; }
+  .resumo dt { font-size: 12.5px; color: var(--tinta-suave); }
+  .resumo dd { margin: 0; font-weight: 500; text-align: right;
+               font-variant-numeric: tabular-nums; }
+  .codigo { font: 500 13px/1 DM Mono, monospace; letter-spacing: .1em; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+          padding: 5px 11px; font: 500 12px/1 Karla, sans-serif;
+          border: 1px solid transparent; white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+                  background: currentColor; }
+  .p-conf { background: var(--erva-clara); color: var(--erva); }
+  .p-agu  { background: var(--ocre-claro); color: var(--ocre); }
+  .p-cheg { background: var(--agua-clara); color: var(--agua); }
+  .p-canc { background: var(--barro-claro); color: var(--barro); }
+  .p-nao  { background: var(--superficie-2); color: var(--cinza); }
+
+  .voltar { background: none; border: 0; color: var(--tinta-suave); cursor: pointer;
+            font: 500 13px/1 Karla, sans-serif; padding: 0; align-self: flex-start; }
+
+  /* ------------------------------------------------------ janela do sistema */
+  .sistema { background: var(--superficie); border: 1px solid var(--linha);
+             border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+  .sistema-barra { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+                   background: var(--superficie-2); border-bottom: 1px solid var(--linha);
+                   font: 500 11.5px/1 DM Mono, monospace; color: var(--tinta-suave); }
+  .abas { display: flex; flex-wrap: wrap; gap: 2px; padding: 10px 12px 0;
+          border-bottom: 1px solid var(--linha); }
+  .aba { border: 0; background: none; cursor: pointer; padding: 9px 13px;
+         border-radius: 9px 9px 0 0; color: var(--tinta-suave);
+         font: 500 14px/1 Karla, sans-serif; border-bottom: 2px solid transparent;
+         margin-bottom: -1px; }
+  .aba[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--erva);
+                               background: var(--superficie-2); }
+  .painel-aba { padding: 18px 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .painel-aba h3 { font: 400 19px/1.2 Fraunces, Georgia, serif; margin: 0; }
+  .painel-aba .dica { margin: -8px 0 0; color: var(--tinta-suave); font-size: 14px;
+                      max-width: 70ch; }
+
+  .rolagem { overflow-x: auto; }
+  table.dados { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.dados th { text-align: left; font: 500 11px/1.3 DM Mono, monospace;
+                   letter-spacing: .1em; text-transform: uppercase;
+                   color: var(--tinta-suave); padding: 0 10px 8px 0;
+                   white-space: nowrap; }
+  table.dados td { padding: 7px 10px 7px 0; border-top: 1px solid var(--linha);
+                   vertical-align: middle; }
+  table.dados tfoot td { border-top: 2px solid var(--linha); font-weight: 700;
+                         font-variant-numeric: tabular-nums; }
+  table.dados td.n { font-family: DM Mono, monospace; font-variant-numeric: tabular-nums; }
+  table.dados input[type="number"] { width: 78px; padding: 6px 8px; }
+  table.dados input[type="time"] { width: 108px; padding: 6px 8px; }
+  table.dados input[type="text"] { padding: 6px 8px; min-width: 140px; }
+  table.dados select { padding: 6px 8px; width: auto; min-width: 130px; font-size: 14px; }
+  tr.apagada td { color: var(--tinta-suave); }
+
+  .remover { border: 0; background: none; cursor: pointer; color: var(--barro);
+             font: 500 13px/1 Karla, sans-serif; padding: 4px; }
+  .juntar { font: 500 12px/1 DM Mono, monospace; color: var(--tinta-suave); }
+
+  .tiras { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); }
+  .tira { border: 1px solid var(--linha); border-radius: 11px; padding: 11px 13px;
+          background: var(--superficie-2); }
+  .tira b { display: block; font: 500 24px/1.1 DM Mono, monospace;
+            font-variant-numeric: tabular-nums; }
+  .tira span { font-size: 12.5px; color: var(--tinta-suave); }
+
+  .grade { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .cx { display: flex; flex-direction: column; gap: 5px; font-size: 13px;
+        color: var(--tinta-suave); }
+  .cx b { font-weight: 500; color: var(--tinta); font-size: 14px; }
+  .cx small { font-size: 12.5px; }
+
+  .aviso { border-left: 3px solid var(--ocre); background: var(--ocre-claro);
+           padding: 11px 13px; border-radius: 0 10px 10px 0; font-size: 14px; }
+  .aviso.grave { border-left-color: var(--barro); background: var(--barro-claro); }
+
+  .notas { margin-top: 24px; display: grid; gap: 20px;
+           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .bloco { background: var(--superficie); border: 1px solid var(--linha);
+           border-radius: var(--raio); padding: 18px; }
+  .bloco h3 { font: 500 11.5px/1 DM Mono, monospace; letter-spacing: .16em;
+              text-transform: uppercase; color: var(--tinta-suave); margin: 0 0 12px; }
+  .nota { border-top: 1px solid var(--linha); padding-top: 12px; margin-top: 12px; }
+  .nota:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .nota b { display: block; margin-bottom: 3px; }
+  .nota p { margin: 0; color: var(--tinta-suave); font-size: 14px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tela > *, .painel-aba > * { animation: entra .18s ease-out; }
+    @keyframes entra { from { opacity: .45; transform: translateY(3px); } }
+  }
+</style>
+
+<div class="envelope">
+  <header>
+    <span class="selo">protótipo navegável</span>
+    <h1>Reservas Botané</h1>
+    <p class="linhafina">
+      À esquerda, o que o cliente veria em <b>reservas.botanedeliecafe.com.br</b>. À direita,
+      o controle dentro de <b>sistema.botanedeliecafe.com.br</b>: horário de funcionamento,
+      permanência, salões e mesas. <b>O que você muda à direita acontece à esquerda na hora</b> —
+      mude o horário de sábado, apague uma mesa, e veja o telefone responder.
+    </p>
+  </header>
+
+  <div class="bancada">
+    <div class="fone">
+      <div class="fone-barra">
+        <span id="rotulo-tela">início</span>
+        <span>reservas.botanedeliecafe.com.br</span>
+      </div>
+      <div class="tela" id="tela"></div>
+    </div>
+
+    <div class="sistema">
+      <div class="sistema-barra">
+        <span>sistema.botanedeliecafe.com.br</span>
+        <span style="margin-left:auto">Botané · Joinville</span>
+      </div>
+      <div class="abas" role="tablist" id="abas"></div>
+      <div class="painel-aba" id="painel" role="tabpanel"></div>
+    </div>
+  </div>
+
+  <div class="notas">
+    <section class="bloco">
+      <h3>O que este protótipo já assume</h3>
+      <div class="nota">
+        <b>A porta de entrada é o telefone</b>
+        <p>Conhecido segue direto; novo faz o cadastro curto e segue. Um campo a menos que
+          login e senha, e é o dado pelo qual a casa já procura alguém.</p>
+      </div>
+      <div class="nota">
+        <b>O cliente reserva lugar, a casa escolhe a mesa</b>
+        <p>Ele vê "12:00 disponível"; a alocação é da recepção. O protótipo já aloca por
+          baixo para saber se cabe — mas não mostra a mesa para o cliente.</p>
+      </div>
+      <div class="nota">
+        <b>Salão → mesa → lugares</b>
+        <p>A mesa pertence a um salão, e desligar o salão tira as mesas dele da conta sem
+          apagar cadastro nenhum. É como a Varanda no inverno some e volta.</p>
+      </div>
+      <div class="nota">
+        <b>A janela de reserva é menor que o horário da loja</b>
+        <p>Abre 09:30, fecha 18:00, última reserva 17:00. São três campos diferentes — e é
+          assim que o site de hoje se comporta.</p>
+      </div>
+      <div class="nota">
+        <b>Reserva aguardando já segura a mesa</b>
+        <p>Se não segurasse, a casa aprovaria no dia seguinte e descobriria que não cabe.
+          Veja a Rita, das 12:30, ocupando a 12 mesmo sem confirmação.</p>
+      </div>
+    </section>
+
+    <section class="bloco">
+      <h3>O que ainda falta decidir</h3>
+      <div class="aviso">
+        <b>Quem confirma a reserva?</b> É a única pergunta que muda o fluxo inteiro do
+        cliente. Experimente as duas na aba <b>Regras</b>: o passo final troca de
+        "Mesa reservada" para "Pedido enviado".
+      </div>
+      <div class="nota" style="margin-top:14px">
+        <b>Duas pessoas pedindo o mesmo horário ao mesmo tempo</b>
+        <p>Não é tela, é banco: conferir e gravar na mesma transação, com trava por
+          (loja, dia). É onde o overbooking nasce.</p>
+      </div>
+      <div class="nota">
+        <b>Permanência por faixa é o mínimo útil</b>
+        <p>Café da manhã não ocupa a mesa o mesmo tanto que almoço. Um número só para o dia
+          inteiro erra nas duas pontas.</p>
+      </div>
+      <div class="nota">
+        <b>Data de nascimento pede cuidado</b>
+        <p>Serve para o aniversário — e é dado pessoal. Guardar só se a casa for usar de
+          verdade; pedir por pedir é coletar risco sem troco.</p>
+      </div>
+      <div class="nota">
+        <b>Mesa fora do salão retangular</b>
+        <p>Este protótipo não desenha o mapa. Posição (x, y) já está prevista no cadastro,
+          mas o desenho é o que menos resolve no começo.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  "use strict";
+
+  /* =================================================================== dados
+     Tudo o que a casa configuraria de verdade. As telas da direita editam
+     estes objetos, e as duas colunas se repintam a partir deles. */
+
+  const cfg = {
+    dias: [
+      { nome: "Domingo", aberto: false, abre: "09:00", fecha: "18:00", ultima: "16:00" },
+      { nome: "Segunda", aberto: false, abre: "09:30", fecha: "18:00", ultima: "17:00" },
+      { nome: "Terça",   aberto: true,  abre: "09:30", fecha: "18:00", ultima: "17:00" },
+      { nome: "Quarta",  aberto: true,  abre: "09:30", fecha: "18:00", ultima: "17:00" },
+      { nome: "Quinta",  aberto: true,  abre: "09:30", fecha: "18:00", ultima: "17:00" },
+      { nome: "Sexta",   aberto: true,  abre: "09:30", fecha: "18:00", ultima: "17:00" },
+      { nome: "Sábado",  aberto: true,  abre: "09:00", fecha: "18:30", ultima: "17:00" },
+    ],
+    // Quanto tempo a mesa fica ocupada — muda com a hora do dia.
+    faixas: [
+      { nome: "Café da manhã",   de: "09:00", ate: "11:00", min: 60 },
+      { nome: "Almoço",          de: "11:00", ate: "15:00", min: 90 },
+      { nome: "Lanche da tarde", de: "15:00", ate: "23:59", min: 60 },
+    ],
+    folga: 15,        // minutos para limpar e arrumar a mesa entre reservas
+    passo: 30,        // de quanto em quanto tempo os horários são oferecidos
+    tolerancia: 15,   // atraso aceito antes de a mesa voltar a ficar livre
+    antecedenciaMin: 2,    // horas
+    antecedenciaMax: 30,   // dias
+    tetoOnline: 8,
+    confirma: "auto",      // auto | aprova
+    cadastro: "completo",  // completo | minimo
+    esgotado: "mostra",    // mostra | esconde
+  };
+
+  const saloes = [
+    { id: 1, nome: "Salão principal", ativo: true },
+    { id: 2, nome: "Varanda", ativo: true },
+    { id: 3, nome: "Mezanino", ativo: false },
+  ];
+
+  // `max` é a capacidade apertada (com a cadeira extra); `junta` é a mesa vizinha
+  // que encosta nela. Juntar é requisito desde o começo — por isso não é um
+  // cadastro de "mesa 7+8", é um vínculo entre duas mesas.
+  const mesas = [
+    { nome: "01", salao: 1, lugares: 2, max: 3, junta: "02", ativo: true },
+    { nome: "02", salao: 1, lugares: 2, max: 3, junta: "01", ativo: true },
+    { nome: "03", salao: 1, lugares: 2, max: 2, junta: "",   ativo: true },
+    { nome: "04", salao: 1, lugares: 2, max: 3, junta: "",   ativo: true },
+    { nome: "05", salao: 1, lugares: 4, max: 5, junta: "",   ativo: true },
+    { nome: "06", salao: 1, lugares: 4, max: 5, junta: "",   ativo: true },
+    { nome: "07", salao: 1, lugares: 4, max: 6, junta: "08", ativo: true },
+    { nome: "08", salao: 1, lugares: 4, max: 6, junta: "07", ativo: true },
+    { nome: "09", salao: 2, lugares: 2, max: 2, junta: "",   ativo: true },
+    { nome: "10", salao: 2, lugares: 2, max: 2, junta: "",   ativo: true },
+    { nome: "11", salao: 2, lugares: 4, max: 4, junta: "",   ativo: true },
+    { nome: "12", salao: 2, lugares: 6, max: 8, junta: "",   ativo: true },
+    { nome: "13", salao: 3, lugares: 6, max: 8, junta: "",   ativo: true },
+    { nome: "14", salao: 3, lugares: 6, max: 8, junta: "",   ativo: true },
+  ];
+
+  const HOJE = new Date(2026, 8, 13);          // domingo, 13/09/2026
+  const dATE = (n) => { const d = new Date(HOJE); d.setDate(d.getDate() + n); return d; };
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+  // A agenda que a recepção veria: terça (o próximo dia aberto) e o sábado cheio.
+  const DIA_AGENDA = iso(dATE(2));   // terça, 15
+  const DIA_CHEIO = iso(dATE(6));    // sábado, 19
+
+  const reservas = [
+    { data: DIA_AGENDA, hora: "11:30", nome: "Ana Duarte", tel: "47 99812-4410",
+      pessoas: 2, mesas: ["04"], status: "chegou" },
+    { data: DIA_AGENDA, hora: "12:00", nome: "Marcelo Melz", obs: "aniversário",
+      pessoas: 4, mesas: ["07", "08"], status: "confirmada" },
+    { data: DIA_AGENDA, hora: "12:30", nome: "Rita Camargo",
+      pessoas: 6, mesas: ["12"], status: "aguardando" },
+    { data: DIA_AGENDA, hora: "13:00", nome: "Paulo Reis",
+      pessoas: 2, mesas: ["02"], status: "cancelada" },
+    { data: DIA_AGENDA, hora: "13:30", nome: "Helena Braz",
+      pessoas: 3, mesas: ["05"], status: "nao_veio" },
+
+    { data: DIA_CHEIO, hora: "11:30", nome: "Grupo Tereza", pessoas: 6,
+      mesas: ["12"], status: "confirmada" },
+    { data: DIA_CHEIO, hora: "12:00", nome: "Família Nunes", pessoas: 8,
+      mesas: ["07", "08"], status: "confirmada" },
+    { data: DIA_CHEIO, hora: "12:00", nome: "Clara Bento", pessoas: 4,
+      mesas: ["05"], status: "confirmada" },
+    { data: DIA_CHEIO, hora: "12:30", nome: "Sérgio Lima", pessoas: 4,
+      mesas: ["06"], status: "confirmada" },
+    { data: DIA_CHEIO, hora: "12:30", nome: "Dani Pires", pessoas: 2,
+      mesas: ["03"], status: "confirmada" },
+    { data: DIA_CHEIO, hora: "13:00", nome: "Ivo Castro", pessoas: 2,
+      mesas: ["01"], status: "confirmada" },
+  ];
+
+  const ROTULO_STATUS = {
+    aguardando: ["aguardando", "p-agu"], confirmada: ["confirmada", "p-conf"],
+    chegou: ["chegou", "p-cheg"], cancelada: ["cancelada", "p-canc"],
+    nao_veio: ["não veio", "p-nao"], encerrada: ["encerrada", "p-nao"],
+  };
+
+  /* ============================================================ a regra viva
+     Esta é a peça que o esboço chama de "coração do módulo": dado dia, hora e
+     número de pessoas, cabe? Aqui ela mora em UM lugar só, e as duas colunas
+     perguntam a ela. No sistema de verdade ela mora no servidor, pelo mesmo
+     motivo. */
+
+  const emMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  const emHora = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" +
+                        String(m % 60).padStart(2, "0");
+
+  function permanencia(m) {
+    const f = cfg.faixas.find((x) => m >= emMin(x.de) && m < emMin(x.ate));
+    return f ? f.min : 90;
+  }
+
+  const salaoDe = (m) => saloes.find((s) => s.id === m.salao);
+  const mesasAtivas = () => mesas.filter((m) => m.ativo && salaoDe(m) && salaoDe(m).ativo);
+  const lugaresTotais = () => mesasAtivas().reduce((s, m) => s + m.lugares, 0);
+
+  function maiorGrupo() {
+    const vivas = mesasAtivas();
+    let maior = 0;
+    for (const m of vivas) {
+      maior = Math.max(maior, m.max);
+      const p = vivas.find((x) => x.nome === m.junta);
+      if (p) maior = Math.max(maior, m.max + p.max);
+    }
+    return maior;
+  }
+
+  /** Mesas presas naquele instante — reserva cancelada ou não-comparecida solta. */
+  function presas(data, horaM) {
+    const fimNovo = horaM + permanencia(horaM) + cfg.folga;
+    const set = new Set();
+    for (const r of reservas) {
+      if (r.data !== data || r.status === "cancelada" || r.status === "nao_veio") continue;
+      const ini = emMin(r.hora);
+      const fim = ini + permanencia(ini) + cfg.folga;
+      if (ini < fimNovo && horaM < fim) r.mesas.forEach((n) => set.add(n));
+    }
+    return set;
+  }
+
+  /** Devolve a alocação que atende o grupo, ou null. Menor mesa que serve primeiro. */
+  function alocar(data, horaM, pessoas) {
+    const ocupadas = presas(data, horaM);
+    const livres = mesasAtivas().filter((m) => !ocupadas.has(m.nome));
+    const sozinha = livres.filter((m) => m.max >= pessoas).sort((a, b) => a.max - b.max)[0];
+    if (sozinha) return [sozinha.nome];
+    for (const m of livres) {
+      const p = livres.find((x) => x.nome === m.junta);
+      if (p && m.max + p.max >= pessoas) return [m.nome, p.nome].sort();
+    }
+    return null;
+  }
+
+  function diasAbertos(quantos) {
+    const out = [];
+    for (let i = 0; i < cfg.antecedenciaMax && out.length < quantos; i++) {
+      const d = dATE(i);
+      if (cfg.dias[d.getDay()].aberto) out.push(d);
+    }
+    return out;
+  }
+
+  function horarios(d) {
+    const c = cfg.dias[d.getDay()];
+    const out = [];
+    for (let m = emMin(c.abre); m <= emMin(c.ultima); m += cfg.passo) out.push(emHora(m));
+    return out;
+  }
+
+  /* ============================================================ estado da UI */
+
+  const conhecidos = {
+    "47999105033": { nome: "Marcelo", ultima: "12/08 · 4 pessoas · almoço" },
+    "47998124410": { nome: "Ana", ultima: "29/08 · 2 pessoas · café da manhã" },
+  };
+
+  const st = {
+    tela: "hub", aba: "agenda",
+    telefone: "", pessoa: null,
+    dia: null, hora: "", pessoas: 2, objetivo: "Almoço", especial: "", codigo: "",
+  };
+
+  const so = (v) => String(v).replace(/\D/g, "");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  function mascara(v) {
+    const d = so(v).slice(0, 11);
+    if (d.length <= 2) return d;
+    if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+    return `(${d.slice(0, 2)}) ${d.slice(2, 3)} ${d.slice(3, 7)}-${d.slice(7)}`;
+  }
+  const rotuloDia = (d) => `${CURTO[d.getDay()]}, ${d.getDate()}`;
+  const porExtenso = (d) =>
+    `${cfg.dias[d.getDay()].nome.toLowerCase()}, ${d.getDate()} de setembro`;
+
+  function diaEscolhido() {
+    const abertos = diasAbertos(5);
+    if (!abertos.length) return null;
+    return abertos.find((d) => iso(d) === st.dia) || abertos[0];
+  }
+
+  /* ======================================================= telas do telefone */
+
+  function hub() {
+    const hoje = cfg.dias[HOJE.getDay()];
+    const prox = diasAbertos(1)[0];
+    return `
+      <div class="capa">
+        <span class="estado">${hoje.aberto ? "Aberto agora" :
+          `Fechado hoje · abre ${prox ? CURTO[prox.getDay()] + " " + cfg.dias[prox.getDay()].abre : "em breve"}`}</span>
+        <div class="marca"><b>Botané</b><span>comida de raiz</span></div>
+      </div>
+      <div class="corpo">
+        <h2>Botané Deli e Café</h2>
+        <p class="sub">${cfg.dias.filter((d) => d.aberto).map((d) => d.nome).join(" · ")}</p>
+        <div class="itens">
+          <button class="item destaque" data-ir="telefone">
+            <span class="ic">🗓️</span>
+            <span>Reservar uma mesa<small>leva menos de um minuto</small></span></button>
+          <button class="item" data-ir="catalogo">
+            <span class="ic">📖</span>
+            <span>Cardápio<small>montado dentro do sistema</small></span></button>
+          <button class="item" data-ir="catalogo">
+            <span class="ic">🎁</span>
+            <span>Catálogo de encomendas<small>PDF de fora, aberto aqui dentro</small></span></button>
+          <button class="item" data-ir="catalogo">
+            <span class="ic">🧺</span>
+            <span>Cestas Botané<small>campanha de dezembro</small></span></button>
+          <button class="item" data-ir="minhas">
+            <span class="ic">📋</span>
+            <span>Minhas reservas<small>ver, remarcar ou cancelar</small></span></button>
+        </div>
+      </div>`;
+  }
+
+  function catalogo() {
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="hub">‹ voltar</button>
+        <h2>Cardápio</h2>
+        <p class="sub">A casa edita e publica sem depender de ninguém.</p>
+        <div class="itens">
+          <div class="item"><span class="ic">☕</span><span>Café coado da casa<small>grão do sítio · R$ 9,00</small></span></div>
+          <div class="item"><span class="ic">🥐</span><span>Croissant de fermentação natural<small>R$ 16,00</small></span></div>
+          <div class="item"><span class="ic">🥗</span><span>Prato do dia<small>terça a sábado · R$ 48,00</small></span></div>
+          <div class="item"><span class="ic">🍰</span><span>Torta da vitrine<small>fatia · R$ 22,00</small></span></div>
+        </div>
+        <div class="regras"><div class="l"><span>ℹ️</span><span>Um catálogo pode ser
+          <b>montado item a item</b> (puxando do cadastro de produtos) ou ser um
+          <b>PDF importado</b>. O hub trata os dois igual.</span></div></div>
+        <button class="acao" data-ir="telefone">Reservar uma mesa</button>
+      </div>`;
+  }
+
+  function telefone() {
+    const pronto = so(st.telefone).length >= 10;
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="hub">‹ voltar</button>
+        <h2>Reservar uma mesa</h2>
+        <p class="sub">Comece pelo telefone: se você já veio aqui, o resto já está com a gente.</p>
+        <label class="campo" for="tel"><span class="rot">Seu telefone com DDD</span>
+          <input id="tel" type="tel" inputmode="numeric" autocomplete="tel"
+                 placeholder="(47) 9 9999-9999" value="${esc(st.telefone)}"></label>
+        <p style="margin:0;font-size:12.5px;color:var(--tinta-suave)">
+          É por ele que a casa avisa sobre a sua reserva. Nada de senha.</p>
+        <button class="acao" id="btn-tel" ${pronto ? "" : "disabled"}>Continuar</button>
+        <div class="regras">
+          <div class="l"><span>👉</span><span>Tolerância de <b>${cfg.tolerancia} minutos</b>
+            a partir do horário reservado.</span></div>
+          <div class="l"><span>👉</span><span>Acima de <b>${cfg.tetoOnline} pessoas</b>, fale
+            no WhatsApp <b>47 99910-5033</b>.</span></div>
+        </div>
+        <p style="margin:0;font-size:12px;color:var(--tinta-suave);text-align:center">
+          Para testar: <b>47 99910-5033</b> já tem cadastro.</p>
+      </div>`;
+  }
+
+  function boasVindas() {
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="telefone">‹ usar outro telefone</button>
+        <h2>Que bom te ver, ${esc(st.pessoa.nome)}!</h2>
+        <p class="sub">Achamos seu cadastro pelo telefone ${mascara(st.telefone)}.</p>
+        <div class="resumo"><dl>
+          <dt>Última visita</dt><dd>${st.pessoa.ultima}</dd>
+          <dt>Selos de fidelidade</dt><dd>7 de 10</dd>
+        </dl></div>
+        <button class="acao" data-ir="agenda">Escolher dia e horário</button>
+        <button class="acao fantasma" data-ir="cadastro">Não sou eu — fazer outro cadastro</button>
+      </div>`;
+  }
+
+  function cadastro() {
+    const completo = cfg.cadastro === "completo";
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="telefone">‹ voltar</button>
+        <h2>Seu primeiro cadastro</h2>
+        <p class="sub">Só o necessário — depois disso, o telefone já te reconhece.</p>
+        <label class="campo" for="nome"><span class="rot">Nome</span>
+          <input id="nome" type="text" placeholder="Como você quer ser chamado"></label>
+        ${completo ? `
+        <label class="campo" for="nasc"><span class="rot">Data de nascimento</span>
+          <input id="nasc" type="date"></label>
+        <label class="campo" for="gen"><span class="rot">Gênero</span>
+          <select id="gen"><option>Prefiro não dizer</option><option>Feminino</option>
+            <option>Masculino</option><option>Outro</option></select></label>
+        <label class="campo" for="cid"><span class="rot">Cidade</span>
+          <select id="cid"><option>Joinville</option><option>Jaraguá do Sul</option>
+            <option>Blumenau</option><option>Outra</option></select></label>` : ""}
+        <button class="acao" data-ir="agenda">Criar cadastro e seguir</button>
+        <p style="margin:0;font-size:12.5px;color:var(--tinta-suave)">
+          ${completo
+            ? "A data de nascimento serve para a casa lembrar do seu aniversário."
+            : "Neste ajuste o site pede só o nome — o resto a casa preenche depois."}</p>
+      </div>`;
+  }
+
+  function agenda() {
+    const abertos = diasAbertos(5);
+    const d = diaEscolhido();
+    if (!d) {
+      return `<div class="corpo"><button class="voltar" data-ir="telefone">‹ voltar</button>
+        <h2>Sem dias abertos</h2>
+        <p class="sub">Nenhum dia da semana está marcado como aberto na aba Horários.</p></div>`;
+    }
+    const data = iso(d);
+
+    const lista = horarios(d).map((h) => {
+      const cabe = alocar(data, emMin(h), st.pessoas);
+      return { h, cabe };
+    });
+    const visiveis = cfg.esgotado === "mostra" ? lista : lista.filter((x) => x.cabe);
+    const nenhum = !lista.some((x) => x.cabe);
+
+    const grupos = [];
+    for (let n = 1; n <= cfg.tetoOnline; n++) grupos.push(n);
+
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="telefone">‹ voltar</button>
+        <h2>Quando você vem?</h2>
+
+        <div><span class="rot">Pessoas</span>
+          <div class="chips">${grupos.map((n) => `<button class="chip" data-pessoas="${n}"
+            aria-pressed="${st.pessoas === n}">${n}</button>`).join("")}</div>
+          <p style="margin:6px 0 0;font-size:12.5px;color:var(--tinta-suave)">
+            Mais de ${cfg.tetoOnline}? Fale no WhatsApp <b>47 99910-5033</b>.</p></div>
+
+        <div><span class="rot">Dia</span>
+          <div class="chips">${abertos.map((x) => `<button class="chip" data-dia="${iso(x)}"
+            aria-pressed="${iso(x) === data}">${rotuloDia(x)}</button>`).join("")}</div></div>
+
+        <div><span class="rot">Horário</span>
+          ${nenhum ? `<div class="regras"><div class="l"><span>🙁</span><span>
+              Não temos mesa para <b>${st.pessoas} pessoas</b> em ${porExtenso(d)}.
+              Tente outro dia — ou fale no WhatsApp que a casa dá um jeito.</span></div></div>`
+            : `<div class="horas">${visiveis.map((x) => `<button class="hora"
+                 data-hora="${x.h}" ${x.cabe ? "" : "disabled"}
+                 aria-pressed="${st.hora === x.h}">${x.h}</button>`).join("")}</div>`}
+          <p style="margin:6px 0 0;font-size:12.5px;color:var(--tinta-suave)">
+            Última reserva às ${cfg.dias[d.getDay()].ultima} — a casa fica aberta até
+            ${cfg.dias[d.getDay()].fecha}.</p></div>
+
+        <label class="campo" for="obj"><span class="rot">Objetivo da reserva</span>
+          <select id="obj">${["Almoço", "Café da manhã", "Lanche da tarde",
+            "Encontro de trabalho", "Comemoração"].map((o) =>
+            `<option ${st.objetivo === o ? "selected" : ""}>${o}</option>`).join("")}</select></label>
+        <label class="campo" for="esp"><span class="rot">Precisa de algo especial? (opcional)</span>
+          <textarea id="esp" maxlength="2000"
+            placeholder="Aniversário, cadeirinha, restrição alimentar…">${esc(st.especial)}</textarea></label>
+
+        <button class="acao" id="btn-agenda" ${st.hora ? "" : "disabled"}>
+          ${st.hora ? `Reservar ${CURTO[d.getDay()]} às ${st.hora}` : "Escolha um horário"}</button>
+      </div>`;
+  }
+
+  function pronto() {
+    const auto = cfg.confirma === "auto";
+    const d = diaEscolhido();
+    return `
+      <div class="corpo">
+        <h2 style="margin-top:6px">${auto ? "Mesa reservada!" : "Pedido enviado!"}</h2>
+        <p class="sub">${auto
+          ? "Está confirmada. Você recebe um lembrete na véspera."
+          : "A casa confirma em até 2 horas e avisa você — neste mesmo telefone."}</p>
+        <div style="text-align:center"><span class="pill ${auto ? "p-conf" : "p-agu"}">
+          ${auto ? "confirmada" : "aguardando a casa"}</span></div>
+        <div class="resumo"><dl>
+          <dt>Dia</dt><dd>${d ? porExtenso(d) : "—"}</dd>
+          <dt>Horário</dt><dd>${st.hora}</dd>
+          <dt>Pessoas</dt><dd>${st.pessoas}</dd>
+          <dt>Sai da mesa por volta de</dt><dd>${emHora(emMin(st.hora || "12:00") +
+            permanencia(emMin(st.hora || "12:00")))}</dd>
+          <dt>Objetivo</dt><dd>${esc(st.objetivo)}</dd>
+          <dt>Em nome de</dt><dd>${st.pessoa ? esc(st.pessoa.nome) : "você"}</dd>
+          <dt>Código</dt><dd class="codigo">${st.codigo}</dd>
+        </dl></div>
+        <div class="regras"><div class="l"><span>👉</span><span>Guardamos a mesa por
+          <b>${cfg.tolerancia} minutos</b>. Atrasou mais? Avise pelo WhatsApp.</span></div></div>
+        <button class="acao fantasma" data-ir="minhas">Ver minhas reservas</button>
+        <button class="acao fantasma" data-ir="hub">Voltar ao início</button>
+      </div>`;
+  }
+
+  function minhas() {
+    const auto = cfg.confirma === "auto";
+    const d = diaEscolhido();
+    const nova = st.hora ? `<tr><td class="n">${st.hora}</td>
+      <td>${d ? rotuloDia(d) : "—"}</td><td class="n">${st.pessoas}</td>
+      <td><span class="pill ${auto ? "p-conf" : "p-agu"}">${auto ? "confirmada" : "aguardando"}</span></td></tr>` : "";
+    return `
+      <div class="corpo">
+        <button class="voltar" data-ir="hub">‹ voltar</button>
+        <h2>Minhas reservas</h2>
+        <p class="sub">Tudo pelo telefone ${st.telefone ? mascara(st.telefone) : "que você usou"}.</p>
+        <div class="rolagem"><table class="dados">
+          <thead><tr><th>Hora</th><th>Dia</th><th>Pess.</th><th>Situação</th></tr></thead>
+          <tbody>${nova}
+            <tr><td class="n">12:00</td><td>12/08</td><td class="n">4</td><td><span class="pill p-nao">não compareceu</span></td></tr>
+            <tr><td class="n">10:30</td><td>29/07</td><td class="n">2</td><td><span class="pill p-conf">atendida</span></td></tr>
+          </tbody></table></div>
+        ${st.hora ? `<button class="acao fantasma" id="btn-cancelar">Cancelar a próxima reserva</button>` : ""}
+        <div class="regras"><div class="l"><span>ℹ️</span><span>Cancelar com antecedência
+          libera a mesa para outra pessoa — e mantém seu histórico limpo.</span></div></div>
+      </div>`;
+  }
+
+  const TELAS = { hub, catalogo, telefone, boasVindas, cadastro, agenda, pronto, minhas };
+  const ROTULOS = { hub: "início", catalogo: "catálogo", telefone: "reserva · 1 de 3",
+    boasVindas: "reserva · 2 de 3", cadastro: "reserva · 2 de 3",
+    agenda: "reserva · 3 de 3", pronto: "pronto", minhas: "minhas reservas" };
+
+  /* ======================================================= abas do sistema */
+
+  const ABAS = [
+    ["agenda", "Agenda do dia"], ["horarios", "Horários"],
+    ["saloes", "Salões"], ["mesas", "Mesas"], ["regras", "Regras da reserva"],
+  ];
+
+  function abaAgenda() {
+    const d = dATE(2);
+    const doDia = reservas.filter((r) => r.data === DIA_AGENDA)
+      .sort((a, b) => emMin(a.hora) - emMin(b.hora));
+    const vivas = doDia.filter((r) => r.status !== "cancelada" && r.status !== "nao_veio");
+    const pessoas = vivas.reduce((s, r) => s + r.pessoas, 0);
+    return `
+      <h3>${porExtenso(d)}</h3>
+      <p class="dica">A tela que a recepção olha o tempo todo. As mesas saem da alocação —
+        e uma reserva <b>aguardando</b> já segura a mesa dela.</p>
+      <div class="tiras">
+        <div class="tira"><b>${vivas.length}</b><span>reservas ativas</span></div>
+        <div class="tira"><b>${pessoas}</b><span>pessoas esperadas</span></div>
+        <div class="tira"><b>${lugaresTotais()}</b><span>lugares no salão</span></div>
+        <div class="tira"><b>${maiorGrupo()}</b><span>maior grupo que cabe</span></div>
+      </div>
+      <div class="rolagem"><table class="dados">
+        <thead><tr><th>Hora</th><th>Sai</th><th>Quem</th><th>Pess.</th><th>Mesa</th>
+          <th>Situação</th></tr></thead>
+        <tbody>${doDia.map((r) => {
+          const [txt, cor] = ROTULO_STATUS[r.status];
+          const solta = r.status === "cancelada" || r.status === "nao_veio";
+          return `<tr class="${solta ? "apagada" : ""}">
+            <td class="n">${r.hora}</td>
+            <td class="n">${solta ? "—" : emHora(emMin(r.hora) + permanencia(emMin(r.hora)))}</td>
+            <td>${esc(r.nome)}${r.tel ? `<br><small style="color:var(--tinta-suave)">${r.tel}</small>`
+              : r.obs ? `<br><small style="color:var(--tinta-suave)">${esc(r.obs)}</small>` : ""}</td>
+            <td class="n">${r.pessoas}</td>
+            <td class="n">${solta ? "—" : r.mesas.join("+")}</td>
+            <td><span class="pill ${cor}">${txt}</span></td></tr>`;
+        }).join("")}</tbody></table></div>`;
+  }
+
+  function abaHorarios() {
+    return `
+      <h3>Horário de funcionamento</h3>
+      <p class="dica">Três horas por dia, não uma: <b>abre</b> e <b>fecha</b> são a loja;
+        <b>última reserva</b> é até quando o site aceita marcar. Hoje a casa fecha às 18h e
+        a última reserva é 17h — a diferença é justamente a permanência.</p>
+      <div class="rolagem"><table class="dados">
+        <thead><tr><th>Dia</th><th>Aberto</th><th>Abre</th><th>Fecha</th>
+          <th>Última reserva</th></tr></thead>
+        <tbody>${cfg.dias.map((d, i) => `
+          <tr class="${d.aberto ? "" : "apagada"}">
+            <td>${d.nome}</td>
+            <td><input type="checkbox" data-dia-aberto="${i}" ${d.aberto ? "checked" : ""}
+                  aria-label="${d.nome} aberto"></td>
+            <td><input type="time" value="${d.abre}" data-dia-campo="abre" data-i="${i}"
+                  aria-label="${d.nome} abre"></td>
+            <td><input type="time" value="${d.fecha}" data-dia-campo="fecha" data-i="${i}"
+                  aria-label="${d.nome} fecha"></td>
+            <td><input type="time" value="${d.ultima}" data-dia-campo="ultima" data-i="${i}"
+                  aria-label="${d.nome} última reserva"></td></tr>`).join("")}
+        </tbody></table></div>
+
+      <h3 style="margin-top:6px">Tempo de permanência</h3>
+      <p class="dica">Quanto tempo a mesa fica ocupada. Um número só para o dia inteiro erra
+        nas duas pontas: café da manhã não segura a mesa como um almoço. É este valor que
+        decide quando a mesa volta a aparecer como livre.</p>
+      <div class="rolagem"><table class="dados">
+        <thead><tr><th>Faixa</th><th>Das</th><th>Até</th><th>Permanência</th>
+          <th>Exemplo</th></tr></thead>
+        <tbody>${cfg.faixas.map((f, i) => `
+          <tr><td>${f.nome}</td>
+            <td><input type="time" value="${f.de}" data-faixa="de" data-i="${i}"
+                  aria-label="${f.nome} começa"></td>
+            <td><input type="time" value="${f.ate}" data-faixa="ate" data-i="${i}"
+                  aria-label="${f.nome} termina"></td>
+            <td><input type="number" min="15" step="15" value="${f.min}" data-faixa="min"
+                  data-i="${i}" aria-label="${f.nome} permanência"> min</td>
+            <td class="n">${f.de} → ${emHora(emMin(f.de) + f.min)}</td></tr>`).join("")}
+        </tbody></table></div>
+
+      <div class="grade">
+        <label class="cx"><b>Folga entre reservas</b>
+          <input type="number" min="0" step="5" value="${cfg.folga}" data-cfg="folga"
+            aria-label="folga entre reservas">
+          <small>Tempo de limpar e arrumar a mesa. Soma-se à permanência.</small></label>
+        <label class="cx"><b>De quanto em quanto tempo</b>
+          <input type="number" min="15" step="15" value="${cfg.passo}" data-cfg="passo"
+            aria-label="passo dos horários">
+          <small>O intervalo dos horários oferecidos ao cliente.</small></label>
+        <label class="cx"><b>Antecedência mínima</b>
+          <input type="number" min="0" value="${cfg.antecedenciaMin}" data-cfg="antecedenciaMin"
+            aria-label="antecedência mínima em horas">
+          <small>Horas. Abaixo disso, só por telefone.</small></label>
+        <label class="cx"><b>Antecedência máxima</b>
+          <input type="number" min="1" value="${cfg.antecedenciaMax}" data-cfg="antecedenciaMax"
+            aria-label="antecedência máxima em dias">
+          <small>Dias. Até onde a agenda se abre.</small></label>
+      </div>`;
+  }
+
+  function abaSaloes() {
+    return `
+      <h3>Salões</h3>
+      <p class="dica">A mesa pertence a um salão. Desligar o salão tira as mesas dele da conta
+        sem apagar cadastro nenhum — é a Varanda no inverno, o Mezanino que só abre no fim de
+        semana. Desligue o <b>Salão principal</b> e olhe o telefone.</p>
+      <div class="rolagem"><table class="dados">
+        <thead><tr><th>Salão</th><th>Ativo</th><th>Mesas</th><th>Lugares</th><th></th></tr></thead>
+        <tbody>${saloes.map((s, i) => {
+          const suas = mesas.filter((m) => m.salao === s.id);
+          const lug = suas.filter((m) => m.ativo).reduce((a, m) => a + m.lugares, 0);
+          return `<tr class="${s.ativo ? "" : "apagada"}">
+            <td><input type="text" value="${esc(s.nome)}" data-salao-nome="${i}"
+                  aria-label="nome do salão ${i + 1}"></td>
+            <td><input type="checkbox" data-salao-ativo="${i}" ${s.ativo ? "checked" : ""}
+                  aria-label="salão ${esc(s.nome)} ativo"></td>
+            <td class="n">${suas.filter((m) => m.ativo).length}</td>
+            <td class="n">${lug}</td>
+            <td>${suas.length ? `<span class="juntar">tem mesas</span>`
+              : `<button class="remover" data-salao-remover="${i}">remover</button>`}</td></tr>`;
+        }).join("")}</tbody>
+        <tfoot><tr><td>Total ativo</td><td></td>
+          <td class="n">${mesasAtivas().length}</td>
+          <td class="n">${lugaresTotais()}</td><td></td></tr></tfoot>
+      </table></div>
+      <div><button class="chip" data-novo-salao="1">+ salão</button></div>
+      <div class="aviso">Salão com mesa não se remove — desligue. Apagar o salão levaria junto
+        a resposta para "onde essa reserva de agosto sentou".</div>`;
+  }
+
+  function abaMesas() {
+    const nomes = mesasAtivas().map((m) => m.nome);
+    return `
+      <h3>Mesas e lugares</h3>
+      <p class="dica"><b>Lugares</b> é o confortável; <b>máximo</b> é com a cadeira extra —
+        a alocação usa o máximo, os relatórios usam os lugares. <b>Junta com</b> é a mesa
+        vizinha que encosta: é assim que um grupo de 8 senta em duas mesas de 4, sem ninguém
+        cadastrar uma "mesa 7+8".</p>
+      <div class="rolagem"><table class="dados">
+        <thead><tr><th>Mesa</th><th>Salão</th><th>Lugares</th><th>Máximo</th>
+          <th>Junta com</th><th>Ativa</th><th></th></tr></thead>
+        <tbody>${mesas.map((m, i) => `
+          <tr class="${m.ativo && salaoDe(m) && salaoDe(m).ativo ? "" : "apagada"}">
+            <td><input type="text" value="${esc(m.nome)}" data-mesa="nome" data-i="${i}"
+                  style="min-width:70px" aria-label="nome da mesa ${i + 1}"></td>
+            <td><select data-mesa="salao" data-i="${i}" aria-label="salão da mesa ${esc(m.nome)}">
+              ${saloes.map((s) => `<option value="${s.id}" ${s.id === m.salao ? "selected" : ""}>
+                ${esc(s.nome)}</option>`).join("")}</select></td>
+            <td><input type="number" min="1" max="20" value="${m.lugares}" data-mesa="lugares"
+                  data-i="${i}" aria-label="lugares da mesa ${esc(m.nome)}"></td>
+            <td><input type="number" min="1" max="24" value="${m.max}" data-mesa="max"
+                  data-i="${i}" aria-label="máximo da mesa ${esc(m.nome)}"></td>
+            <td><select data-mesa="junta" data-i="${i}" aria-label="mesa que junta com ${esc(m.nome)}">
+              <option value="">—</option>
+              ${nomes.filter((n) => n !== m.nome).map((n) =>
+                `<option ${n === m.junta ? "selected" : ""}>${n}</option>`).join("")}</select></td>
+            <td><input type="checkbox" data-mesa="ativo" data-i="${i}" ${m.ativo ? "checked" : ""}
+                  aria-label="mesa ${esc(m.nome)} ativa"></td>
+            <td><button class="remover" data-mesa-remover="${i}"
+                  aria-label="remover mesa ${esc(m.nome)}">remover</button></td></tr>`).join("")}
+        </tbody>
+        <tfoot><tr><td>${mesasAtivas().length} mesas ativas</td><td></td>
+          <td class="n">${lugaresTotais()}</td>
+          <td class="n">${mesasAtivas().reduce((s, m) => s + m.max, 0)}</td>
+          <td colspan="3"></td></tr></tfoot>
+      </table></div>
+      <div><button class="chip" data-nova-mesa="1">+ mesa</button></div>
+      <div class="aviso">A junta vale nos dois sentidos, e só serve se as duas estiverem
+        livres no mesmo horário — por isso a 07 e a 08 somem juntas do sábado ao meio-dia.</div>`;
+  }
+
+  function abaRegras() {
+    const maior = maiorGrupo();
+    const excede = cfg.tetoOnline > maior;
+    return `
+      <h3>Regras da reserva online</h3>
+      <p class="dica">O que o site pode prometer sozinho. Tudo aqui é por loja — outra unidade
+        com reservas ligadas tem a sua própria configuração.</p>
+      <div class="grade">
+        <label class="cx"><b>Depois de reservar</b>
+          <select data-cfg="confirma" aria-label="o que acontece depois de reservar">
+            <option value="auto" ${cfg.confirma === "auto" ? "selected" : ""}>confirma na hora</option>
+            <option value="aprova" ${cfg.confirma === "aprova" ? "selected" : ""}>fica aguardando a casa</option>
+          </select><small>Muda o fluxo inteiro do cliente. É a pergunta aberta do esboço.</small></label>
+        <label class="cx"><b>Grupo máximo pelo site</b>
+          <input type="number" min="1" max="30" value="${cfg.tetoOnline}" data-cfg="tetoOnline"
+            aria-label="grupo máximo pelo site">
+          <small>Acima disso, o site manda falar no WhatsApp.</small></label>
+        <label class="cx"><b>Tolerância de atraso</b>
+          <input type="number" min="0" step="5" value="${cfg.tolerancia}" data-cfg="tolerancia"
+            aria-label="tolerância de atraso">
+          <small>Minutos. Depois disso a mesa volta a ficar livre.</small></label>
+        <label class="cx"><b>Cadastro de quem é novo</b>
+          <select data-cfg="cadastro" aria-label="o que o cadastro pede">
+            <option value="completo" ${cfg.cadastro === "completo" ? "selected" : ""}>nome, nascimento, gênero, cidade</option>
+            <option value="minimo" ${cfg.cadastro === "minimo" ? "selected" : ""}>só o nome</option>
+          </select><small>Quanto o site pede antes de deixar reservar.</small></label>
+        <label class="cx"><b>Horário sem vaga</b>
+          <select data-cfg="esgotado" aria-label="como mostrar horário sem vaga">
+            <option value="mostra" ${cfg.esgotado === "mostra" ? "selected" : ""}>aparece riscado</option>
+            <option value="esconde" ${cfg.esgotado === "esconde" ? "selected" : ""}>some da lista</option>
+          </select><small>Riscado ensina o cliente a tentar outro dia.</small></label>
+      </div>
+      ${excede ? `<div class="aviso grave"><b>O teto não cabe no salão.</b> O site aceita
+        grupos de até ${cfg.tetoOnline}, mas a maior mesa (ou junta) acomoda ${maior}.
+        Quem pedir mais que ${maior} não vai achar horário nenhum e não vai saber por quê.</div>`
+        : `<div class="aviso">Teto de ${cfg.tetoOnline} contra uma junta que acomoda
+          ${maior}: o site nunca promete o que o salão não tem.</div>`}
+      <div class="aviso">A disponibilidade que você vê no telefone <b>não é enfeite</b>: ela
+        aloca mesa de verdade a cada horário, respeitando permanência, folga e juntas. Escolha
+        6 pessoas no sábado e compare 12:00 com 14:00.</div>`;
+  }
+
+  const PAINEIS = { agenda: abaAgenda, horarios: abaHorarios, saloes: abaSaloes,
+                    mesas: abaMesas, regras: abaRegras };
+
+  /* ================================================================= pintura */
+
+  const elTela = document.getElementById("tela");
+  const elRotulo = document.getElementById("rotulo-tela");
+  const elAbas = document.getElementById("abas");
+  const elPainel = document.getElementById("painel");
+
+  function pintar() {
+    if (st.pessoas > cfg.tetoOnline) st.pessoas = cfg.tetoOnline;
+
+    elTela.innerHTML = TELAS[st.tela]();
+    elRotulo.textContent = ROTULOS[st.tela] ?? "";
+
+    elAbas.innerHTML = ABAS.map(([id, nome]) => `<button class="aba" role="tab"
+      data-aba="${id}" aria-selected="${st.aba === id}">${nome}</button>`).join("");
+    elPainel.innerHTML = PAINEIS[st.aba]();
+
+    const tel = document.getElementById("tel");
+    if (tel) {
+      tel.addEventListener("input", () => {
+        const n = so(tel.value).length;
+        st.telefone = mascara(tel.value);
+        tel.value = st.telefone;
+        const b = document.getElementById("btn-tel");
+        if (b) b.disabled = n < 10;
+      });
+      tel.focus({ preventScroll: true });
+    }
+    const btnTel = document.getElementById("btn-tel");
+    if (btnTel) btnTel.addEventListener("click", () => {
+      st.pessoa = conhecidos[so(st.telefone)] ?? null;
+      st.tela = st.pessoa ? "boasVindas" : "cadastro";
+      pintar();
+    });
+
+    // ⚠️ O texto livre grava sem repintar — repintar a cada tecla apagaria o foco.
+    const esp = document.getElementById("esp");
+    if (esp) esp.addEventListener("input", () => { st.especial = esp.value; });
+    const obj = document.getElementById("obj");
+    if (obj) obj.addEventListener("change", () => { st.objetivo = obj.value; });
+
+    const btnAgenda = document.getElementById("btn-agenda");
+    if (btnAgenda) btnAgenda.addEventListener("click", () => {
+      st.codigo = "BTN-" + Math.floor(1000 + Math.random() * 8999);
+      st.tela = "pronto";
+      pintar();
+    });
+    const btnCancelar = document.getElementById("btn-cancelar");
+    if (btnCancelar) btnCancelar.addEventListener("click", () => {
+      st.hora = ""; st.codigo = ""; pintar();
+    });
+  }
+
+  /* ---------------------------------------------------------------- eventos */
+
+  elTela.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-ir], [data-hora], [data-dia], [data-pessoas]");
+    if (!a) return;
+    if (a.dataset.ir) { st.tela = a.dataset.ir; return pintar(); }
+    if (a.dataset.hora) { st.hora = a.dataset.hora; return pintar(); }
+    if (a.dataset.dia) { st.dia = a.dataset.dia; st.hora = ""; return pintar(); }
+    if (a.dataset.pessoas) { st.pessoas = Number(a.dataset.pessoas); st.hora = ""; return pintar(); }
+  });
+
+  elAbas.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-aba]");
+    if (a) { st.aba = a.dataset.aba; pintar(); }
+  });
+
+  // Um `change` só para tudo o que a casa configura: o campo de texto e o número
+  // só avisam ao sair, então a repintura não rouba o cursor de ninguém.
+  elPainel.addEventListener("change", (e) => {
+    const t = e.target;
+    const i = Number(t.dataset.i);
+
+    if (t.dataset.cfg) {
+      const v = t.type === "number" ? Number(t.value) : t.value;
+      cfg[t.dataset.cfg] = v;
+    } else if (t.dataset.diaAberto !== undefined) {
+      cfg.dias[Number(t.dataset.diaAberto)].aberto = t.checked;
+      st.dia = null; st.hora = "";
+    } else if (t.dataset.diaCampo) {
+      cfg.dias[i][t.dataset.diaCampo] = t.value;
+      st.hora = "";
+    } else if (t.dataset.faixa) {
+      const c = t.dataset.faixa;
+      cfg.faixas[i][c] = c === "min" ? Number(t.value) : t.value;
+    } else if (t.dataset.salaoNome !== undefined) {
+      saloes[Number(t.dataset.salaoNome)].nome = t.value.trim() || "Sem nome";
+    } else if (t.dataset.salaoAtivo !== undefined) {
+      saloes[Number(t.dataset.salaoAtivo)].ativo = t.checked;
+    } else if (t.dataset.mesa) {
+      const c = t.dataset.mesa;
+      if (c === "ativo") mesas[i].ativo = t.checked;
+      else if (c === "lugares" || c === "max" || c === "salao") mesas[i][c] = Number(t.value);
+      else if (c === "junta") {
+        // A junta vale nos dois sentidos: gravar de um lado só deixaria a
+        // alocação achando um par que a outra mesa não conhece.
+        const antes = mesas[i].junta;
+        const par = mesas.find((x) => x.nome === antes);
+        if (par) par.junta = "";
+        mesas[i].junta = t.value;
+        const novo = mesas.find((x) => x.nome === t.value);
+        if (novo) novo.junta = mesas[i].nome;
+      } else mesas[i][c] = t.value.trim() || mesas[i].nome;
+      if (mesas[i].max < mesas[i].lugares) mesas[i].max = mesas[i].lugares;
+    } else return;
+
+    pintar();
+  });
+
+  elPainel.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-mesa-remover], [data-salao-remover], [data-nova-mesa], [data-novo-salao]");
+    if (!a) return;
+    if (a.dataset.mesaRemover !== undefined) {
+      const m = mesas[Number(a.dataset.mesaRemover)];
+      const par = mesas.find((x) => x.nome === m.junta);
+      if (par) par.junta = "";
+      mesas.splice(Number(a.dataset.mesaRemover), 1);
+    } else if (a.dataset.salaoRemover !== undefined) {
+      saloes.splice(Number(a.dataset.salaoRemover), 1);
+    } else if (a.dataset.novaMesa) {
+      const n = String(mesas.length + 1).padStart(2, "0");
+      mesas.push({ nome: n, salao: saloes[0] ? saloes[0].id : 1, lugares: 2, max: 2,
+                   junta: "", ativo: true });
+    } else if (a.dataset.novoSalao) {
+      saloes.push({ id: Math.max(0, ...saloes.map((s) => s.id)) + 1,
+                    nome: "Novo salão", ativo: true });
+    }
+    pintar();
+  });
+
+  pintar();
+</script>
