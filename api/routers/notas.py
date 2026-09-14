@@ -510,6 +510,12 @@ def obter(id_nota: int,
 
         cur.execute(
             """SELECT i.*, p.nome AS produto, p.um_estoque, p.codigo AS codigo_produto,
+                      -- 🔑 O pré-cadastro feito a partir da nota nasce RASCUNHO,
+                      -- e a linha precisa DIZER isso: quem confere é quem sabe a
+                      -- unidade e o fator, e é ali que ele está olhando. O
+                      -- alerta "completar cadastro" do início continua sendo a
+                      -- rede — mas ele avisa a casa, não esta nota.
+                      p.status AS produto_status,
                       s.nome AS sugestao_nome,
                       -- Para onde ESTE item vai: o local do produto, ou o da
                       -- nota como reserva. A tela mostra antes de lançar, senão
@@ -583,14 +589,69 @@ def obter(id_nota: int,
 # ---------------------------------------------------------------- ciclo da nota
 
 
+def _item_de_nota_aberta(cur, id_item: int) -> dict:
+    """O item, com o estado da nota — e a recusa quando a nota já virou razão.
+
+    ⚠️ **Nota LANÇADA não se reponta**, e é a mesma disciplina de `arquivados/
+    repontar`: os movimentos estão em `estoque_movimentos`, que é append-only.
+    Mudar só a linha da nota faria o documento discordar do lançamento, e o
+    razão não teria como acompanhar. O caminho é estornar e lançar de novo.
+    """
+    cur.execute(
+        """SELECT i.id, i.id_produto, i.id_nota, i.descricao_fornecedor,
+                  i.codigo_fornecedor, i.codigo_barras, i.ncm, i.um_nota,
+                  n.status, n.id_fornecedor,
+                  p.nome AS produto_atual, p.codigo AS codigo_atual
+             FROM nota_itens i
+             JOIN notas_entrada n ON n.id = i.id_nota
+             LEFT JOIN produtos p ON p.id = i.id_produto
+            WHERE i.id = %s""",
+        (id_item,),
+    )
+    item = cur.fetchone()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    if item["status"] == "LANCADA":
+        raise HTTPException(
+            status_code=409,
+            detail=("Esta nota já foi lançada: a mercadoria está no razão, que não se "
+                    "reescreve. Para trocar o produto, estorne a nota e lance de novo."),
+        )
+    if item["status"] == "CANCELADA":
+        raise HTTPException(status_code=409, detail="Esta nota está cancelada.")
+    return item
+
+
 @router.post("/itens/{id_item}/vincular")
 def vincular(id_item: int, body: VincularRequest,
              ctx: Contexto = Depends(requer_permissao("compras.conciliar"))) -> dict:
+    """Diz de que produto é esta linha da nota — inclusive para TROCAR o que está lá.
+
+    🔑 **Pedido do dono (14/09/2026):** *"gostaria de ter uma opção para alterar
+    o produto na nota na hora do recebimento, isto já deixaria tudo certo os
+    produtos e estoque na nossa base"*. O caso real: o ABACATE de um fornecedor
+    e o MORANGO de outro têm o mesmo código no Omie, e a nota do segundo chegava
+    **casada** no primeiro. Item casado não tinha como ser trocado na tela — só
+    o pendente — e conciliar assim levava a mercadoria errada para o razão.
+
+    ⚠️ **Trocar CORRIGE o de-para em vez de duplicá-lo**: com "aprender", a linha
+    de `codigos_externos` daquele fornecedor passa a apontar para o produto novo.
+    Desde a migração 067 isso já não pisa no vínculo do outro fornecedor.
+    """
     with get_cursor() as cur:
+        item = _item_de_nota_aberta(cur, id_item)
+        trocou = bool(item["id_produto"]) and item["id_produto"] != body.id_produto
         r = importador.vincular_item(cur, id_item, body.id_produto, body.fator,
                                      ctx.id_usuario, body.aprender)
-        auditoria.registrar(cur, ctx.id_usuario, "nota_item", id_item, "vincular",
-                            depois={"id_produto": body.id_produto, "aprender": body.aprender})
+        auditoria.registrar(
+            cur, ctx.id_usuario, "nota_item", id_item, "trocar_produto" if trocou else "vincular",
+            antes={"id_produto": item["id_produto"], "produto": item["produto_atual"]},
+            depois={"id_produto": body.id_produto, "aprender": body.aprender},
+        )
+    if trocou:
+        return r | {"message": (f"Item trocado de {item['produto_atual']} para o produto "
+                                "escolhido" + (" — e o código deste fornecedor passou a "
+                                               "apontar para ele" if body.aprender else ""))}
     return r | {"message": "Item vinculado"
                 + (" — as próximas notas deste fornecedor entram sozinhas" if body.aprender else "")}
 
@@ -601,6 +662,11 @@ class ProdutoDoItem(BaseModel):
     tipo: str = "INSUMO"
     um_estoque: str | None = Field(default=None, max_length=6)
     fator: float | None = Field(default=None, gt=0)
+    # ⚠️ **Criar sobre item JÁ vinculado exige dizer que é de propósito.** É o
+    # caso do produto que chegou casado no errado e que nem existe no cadastro —
+    # mas, sem a marca, um clique distraído criaria um segundo cadastro para um
+    # insumo que já tem o seu, partindo o custo médio em dois.
+    substituir: bool = False
 
 
 @router.post("/itens/{id_item}/criar-produto")
@@ -621,20 +687,20 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
     """
     body = body or ProdutoDoItem()
     with get_cursor() as cur:
-        cur.execute(
-            """SELECT i.id, i.descricao_fornecedor, i.codigo_fornecedor, i.codigo_barras,
-                      i.ncm, i.um_nota, i.id_produto, i.id_nota, n.id_fornecedor
-                 FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
-                WHERE i.id = %s""",
-            (id_item,),
-        )
-        item = cur.fetchone()
-        if not item:
-            raise HTTPException(status_code=404, detail="Item não encontrado")
-        if item["id_produto"]:
+        item = _item_de_nota_aberta(cur, id_item)
+        # 🔑 **Pré-cadastro sobre item já vinculado, quando é de propósito**
+        # (pedido do dono, 14/09/2026: *"caso o produto não seja encontrado,
+        # podemos realizar um pré-cadastro nesta nota e apontamos que este
+        # precisa ser completado"*). O caso é o MORANGO que chegou casado no
+        # ABACATE por colisão de código e que ainda não existe aqui: sem esta
+        # porta, era preciso primeiro vinculá-lo a um produto qualquer para
+        # depois poder criá-lo.
+        if item["id_produto"] and not body.substituir:
             raise HTTPException(
-                status_code=400,
-                detail="Este item já está vinculado a um produto.",
+                status_code=409,
+                detail=(f"Este item já está vinculado a {item['produto_atual']} "
+                        f"({item['codigo_atual']}). Se o produto certo é outro e ainda não "
+                        "existe no cadastro, confirme a substituição."),
             )
 
         # A unidade da nota serve de ponto de partida, mas só se for uma sigla
@@ -727,8 +793,9 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
         "id_produto": id_produto,
         "codigo": codigo,
         "nome": nome,
-        "message": (f"{nome} criado como rascunho ({codigo}) e vinculado. "
-                    "Complete a unidade e o fator no cadastro antes de ativar."),
+        "message": (f"{nome} criado como rascunho ({codigo}) e vinculado"
+                    + (f", no lugar de {item['produto_atual']}" if item["id_produto"] else "")
+                    + ". Complete a unidade e o fator no cadastro antes de ativar."),
     }
 
 

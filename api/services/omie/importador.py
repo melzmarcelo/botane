@@ -73,11 +73,27 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
     codigo = item.get("codigo_fornecedor")
     ean = item.get("codigo_barras")
 
-    # 1. vínculo que alguém já confirmou
+    # 1. vínculo que alguém já confirmou — PARA ESTE FORNECEDOR.
+    # 🔑 **O código da linha da nota (`cCodigo`) é o código do produto NO
+    # FORNECEDOR, e só é único dentro dele** (caso real de 14/09/2026: o ABACATE
+    # de um fornecedor e o MORANGO de outro, os dois com código 1). Perguntar só
+    # pelo código casava o MORANGO com o ABACATE, e a nota conciliada assim
+    # levava a mercadoria errada para o razão. A migração 067 pôs o fornecedor
+    # na chave; aqui ele entra na pergunta.
+    #
+    # ⚠️ **Sem recorrer à linha de fornecedor NULO quando se sabe quem é.**
+    # Aceitar o nulo como reserva traria de volta exatamente a colisão que isto
+    # conserta — seria o mesmo código global com outro nome. Não achando, a
+    # cascata segue para os degraus 2 a 5, todos eles seguros (id do Omie, EAN,
+    # `produto_fornecedor` já filtrado por fornecedor) e, no fim, para PENDENTE.
+    # ⚠️ **E cair em pendente é a troca certa**: pendente aparece na conferência,
+    # casamento errado não aparece em lugar nenhum até o CMV do mês.
     if codigo:
         cur.execute(
-            "SELECT id_produto FROM codigos_externos WHERE sistema = %s AND codigo = %s",
-            (SISTEMA, codigo),
+            """SELECT id_produto FROM codigos_externos
+                WHERE sistema = %s AND codigo = %s
+                  AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+            (SISTEMA, codigo, id_fornecedor),
         )
         achado = cur.fetchone()
         if achado:
@@ -178,11 +194,17 @@ def _fator_do_item(cur, id_produto: int, id_fornecedor: int | None, codigo: str 
     # encobrir o `fator_compra` do produto: o azeite de 5 L entrou certo na
     # primeira nota e virou 1 L na segunda, sem nada mudar no cadastro.
     # Quem quer dizer "um por um" não precisa dizer nada: 1 já é o resultado.
+    # ⚠️ **E aqui o fornecedor entra pela MESMA razão da conciliação** (migração
+    # 067): sem ele, a caixa de 12 que um fornecedor manda no código 1 decidia a
+    # conversão do produto que OUTRO fornecedor manda no código 1. O produto até
+    # podia estar certo — a quantidade não estava, e o custo unitário saía
+    # dividido pelo fator do estranho.
     if codigo:
         cur.execute(
             """SELECT fator, fator_confirmado FROM codigos_externos
-                WHERE sistema = %s AND codigo = %s""",
-            (SISTEMA, codigo),
+                WHERE sistema = %s AND codigo = %s
+                  AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+            (SISTEMA, codigo, id_fornecedor),
         )
         linha = cur.fetchone()
         # 🔑 **`fator_confirmado` faz o 1 valer** (migração 054). O caso do
@@ -367,9 +389,22 @@ def calcular_nota(cur, id_nota: int) -> dict:
 
 def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None,
                   id_usuario: int | None = None, aprender: bool = True) -> dict:
-    """Liga o item ao produto e **ensina o sistema**: da próxima vez entra sozinho."""
+    """Liga o item ao produto e **ensina o sistema**: da próxima vez entra sozinho.
+
+    🔑 **Serve também para TROCAR o produto de um item já vinculado** (pedido do
+    dono, 14/09/2026: *"gostaria de ter uma opção para alterar o produto na nota
+    na hora do recebimento, isto já deixaria tudo certo os produtos e estoque na
+    nossa base"*). O caso é a nota que chegou casada no produto ERRADO — e
+    consertar antes de lançar é justamente o que impede o erro de virar razão.
+
+    ⚠️ **Só enquanto a nota está aberta.** Depois de lançada, os movimentos já
+    estão no razão, que é append-only: repontar só a linha da nota faria o
+    documento discordar do lançamento. Aí o caminho é estornar. Quem barra é o
+    router, que conhece o status.
+    """
     cur.execute(
-        """SELECT ni.id_nota, ni.codigo_fornecedor, ni.descricao_fornecedor, n.id_fornecedor
+        """SELECT ni.id_nota, ni.id_produto, ni.codigo_fornecedor, ni.descricao_fornecedor,
+                  n.id_fornecedor
              FROM nota_itens ni JOIN notas_entrada n ON n.id = ni.id_nota
             WHERE ni.id = %s""",
         (id_item,),
@@ -377,6 +412,7 @@ def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None
     item = cur.fetchone()
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
+    anterior = item["id_produto"]
 
     cur.execute(
         "UPDATE nota_itens SET id_produto = %s, ignorado = false WHERE id = %s",
@@ -384,17 +420,22 @@ def vincular_item(cur, id_item: int, id_produto: int, fator: float | None = None
     )
 
     if aprender and item["codigo_fornecedor"]:
+        # ⚠️ **O conflito é por (sistema, código, FORNECEDOR)** desde a migração
+        # 067. Com a chave antiga, corrigir o MORANGO do fornecedor B
+        # SOBRESCREVIA o ABACATE do fornecedor A, que tinha o mesmo código 1 —
+        # a correção de um quebrava o outro, e o vai-e-vem não terminava.
         cur.execute(
             """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
                                              fator, id_fornecedor, origem_vinculo, confirmado_por)
                VALUES (%s, %s, %s, %s, %s, %s, 'MANUAL', %s)
-               ON CONFLICT (sistema, codigo) DO UPDATE
+               ON CONFLICT (sistema, codigo, coalesce(id_fornecedor, 0)) DO UPDATE
                    SET id_produto = EXCLUDED.id_produto, fator = EXCLUDED.fator,
+                       descricao_externa = EXCLUDED.descricao_externa,
                        confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
             (SISTEMA, item["codigo_fornecedor"], id_produto, item["descricao_fornecedor"],
              fator or 1, item["id_fornecedor"], id_usuario),
         )
-    return calcular_nota(cur, item["id_nota"])
+    return calcular_nota(cur, item["id_nota"]) | {"id_produto_anterior": anterior}
 
 
 def vincular_fornecedores(cur, id_unidade: int) -> dict:

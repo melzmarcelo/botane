@@ -137,6 +137,74 @@
   são campos diferentes. Só a quarta era esta. Vale registrar as três: cada uma continua sendo
   uma armadilha de leitura da tela.
 
+- 🔑 **O mesmo código em dois fornecedores eram dois produtos, e o sistema só via um**
+  (migração 067, 14/09/2026, relatado pelo dono). *"No Omie temos produto ABACATE com o código 1,
+  aí vem uma nota de outro fornecedor com o produto MORANGO, com o código 1 também. Por ter o
+  mesmo código, este produto acaba vinculando com o ABACATE."*
+
+  🔑 **A causa era NOSSA, não do Omie.** `codigos_externos` tinha `PRIMARY KEY (sistema, codigo)`
+  e o degrau 1 de `conciliar_item` perguntava só pelo código. Mas o `cCodigo` que vem na linha da
+  nota é o código do produto **no fornecedor** — só é único dentro dele. ⚠️ **A coluna
+  `id_fornecedor` já existia nessa tabela e já era gravada** por `vincular_item` desde sempre: o
+  dado que separava os dois casos estava guardado e era ignorado. Note que o degrau 4
+  (`produto_fornecedor`) sempre filtrou por fornecedor — o degrau 1 ganhava antes e errava.
+
+  ⚠️ **E a correção manual PIORAVA o quadro, que é o que fazia disto uma armadilha e não só um
+  defeito.** O `ON CONFLICT (sistema, codigo) DO UPDATE` de `vincular_item` fazia corrigir o
+  MORANGO **sobrescrever** o vínculo do ABACATE do outro fornecedor. A próxima nota dele entrava
+  como MORANGO, alguém corrigia, e o MORANGO quebrava de volta — um vai-e-vem em que cada rodada
+  é mercadoria errada num razão que é append-only, ou seja, cada uma vira estorno.
+
+  ⚠️ **O mesmo buraco estava na cascata do FATOR** (`_fator_do_item`), três degraus adiante e na
+  mesma tabela: a caixa de 12 que um fornecedor manda no código 1 decidia a conversão do produto
+  que OUTRO manda no código 1. O produto até podia estar certo; a quantidade não estava, e o
+  custo unitário saía dividido pelo fator do estranho.
+
+  ⚠️ **`coalesce(id_fornecedor, 0)` na chave, e não coluna NOT NULL**: `id_fornecedor` é chave
+  estrangeira e 0 não é fornecedor nenhum. O nulo segue querendo dizer "código global de
+  verdade" — é o caso de `OMIE_PRODUTO` (o id do Omie), `EAN` (do fabricante) e `PDV_LEGAL`, que
+  continuam valendo uma vez só. ⚠️ Os **quatro** `ON CONFLICT (sistema, codigo)` do sistema
+  tiveram de citar a mesma expressão do índice novo, senão o Postgres recusa o upsert: dois em
+  `omie/vinculo.py`, um em `pdv/vinculo.py` e o de `vincular_item`.
+
+  ⚠️ **Não há o que deduplicar na migração**: a chave antiga era MAIS restritiva, então só existe
+  uma linha por (sistema, código) e toda linha de hoje cabe na chave nova. A 067 só afrouxa.
+
+  ⚠️ **O efeito em base COM dado**: item que antes casava sozinho pelo código de outro fornecedor
+  passa a cair em PENDENTE. É a troca certa, e foi escolha — pendente aparece na conferência,
+  casamento errado não aparece em lugar nenhum até o CMV do mês. **Sem recorrer à linha de
+  fornecedor nulo** quando se sabe quem é: aceitá-la como reserva traria de volta a mesma colisão
+  com outro nome.
+
+- 🔑 **Trocar o produto de um item JÁ vinculado, na conferência** (mesmo pedido, 14/09/2026:
+  *"uma opção para alterar o produto na nota na hora do recebimento, isto já deixaria tudo certo
+  os produtos e estoque na nossa base"*). Até aqui só item **pendente** aceitava escolha de
+  produto; item casado só abria a janela da conversão. Quando a nota chega casada no produto
+  ERRADO, não havia o que fazer antes de lançar — e lançar é o que torna o erro caro.
+  - O botão na linha é **"não é este produto"**, e abre a mesma busca do pendente sob o nome do
+    produto atual ("hoje está em X — escolha o certo").
+  - Com **"aprender"**, a troca **corrige** o de-para daquele fornecedor em vez de duplicá-lo;
+    sem ele, a troca vale só para esta nota — é o caso do item que veio errado uma vez sem o
+    código ter mudado de dono.
+  - ⚠️ **Nota LANÇADA não se reponta** (`_item_de_nota_aberta`, 409): os movimentos estão no
+    razão, que é append-only, e mudar só a linha da nota faria o documento discordar do
+    lançamento. O caminho é estornar — a mensagem diz isso. Mesma disciplina de
+    `arquivados/repontar`.
+
+- 🔑 **Pré-cadastro sobre item já vinculado, quando é de propósito** (mesmo pedido: *"caso o
+  produto não seja encontrado, podemos realizar um pré-cadastro nesta nota e apontamos que este
+  precisa ser completado"*). `criar-produto` já criava o produto **RASCUNHO** com `origem='NOTA'`
+  desde antes; o que faltava era a porta para o item que chegou **casado no errado** e cujo
+  produto certo ainda não existe — sem ela, era preciso primeiro vinculá-lo a um produto qualquer
+  para depois poder criá-lo.
+  ⚠️ **Exige `substituir: true`, e a tela pergunta antes.** Sem a marca, um clique distraído
+  criaria um segundo cadastro para um insumo que já tem o seu — e custo médio partido em dois é
+  dos estragos mais caros de desfazer. A recusa virou **409** (era 400): conflito de estado, não
+  pedido malformado — e `smoke_omie` afirmava o 400.
+  ⚠️ **O rascunho se anuncia NA LINHA da nota** (`produto_status` no GET, etiqueta na célula). O
+  alerta "completar cadastro" do início já existia, mas ele avisa a casa, não esta nota — e quem
+  sabe a unidade e o fator é justamente quem está com a nota na mão.
+
 ## Armadilhas já pagas
 
 - ⚠️ **E contagem somada da PÁGINA é a mesma mentira.** A tela de Compras somava `pendentes`

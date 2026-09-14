@@ -53,6 +53,11 @@ export default function PaginaNota() {
   const [confirmando, setConfirmando] = useState<"estornar" | null>(null);
   const [escolha, setEscolha] = useState<Record<number, string>>({});
   const [rotuloEscolhido, setRotuloEscolhido] = useState<Record<number, string>>({});
+  /** Linhas já vinculadas que estão sendo TROCADAS — a mesma busca do pendente,
+   *  aberta sob o nome do produto atual. Existe porque a nota pode chegar casada
+   *  no produto errado (códigos que colidem entre fornecedores), e trocar antes
+   *  de lançar é o que impede o erro de virar razão. */
+  const [trocando, setTrocando] = useState<Record<number, boolean>>({});
 
   const carregar = useCallback(async () => {
     try {
@@ -82,6 +87,7 @@ export default function PaginaNota() {
       });
       aviso.sucesso(r.message);
       setEscolha({ ...escolha, [item.id]: "" });
+      setTrocando((t) => ({ ...t, [item.id]: false }));
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível vincular");
@@ -91,13 +97,26 @@ export default function PaginaNota() {
   }
 
   async function criarProduto(item: ItemNota) {
+    // ⚠️ **Sobre item JÁ vinculado, confirma antes.** Sem a pergunta, um clique
+    // distraído criaria um segundo cadastro para um insumo que já tem o seu — e
+    // custo médio partido em dois é dos estragos mais caros de desfazer.
+    if (
+      item.id_produto &&
+      !window.confirm(
+        `Esta linha está vinculada a ${item.produto}. Criar um produto novo a partir ` +
+          "da descrição da nota e colocá-lo no lugar?",
+      )
+    ) {
+      return;
+    }
     setOcupado(true);
     try {
       const r = await api.post<{ message: string }>(
         `/notas/itens/${item.id}/criar-produto`,
-        {},
+        { substituir: !!item.id_produto },
       );
       aviso.sucesso(r.message);
+      setTrocando((t) => ({ ...t, [item.id]: false }));
       await carregar();
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível criar o produto");
@@ -405,7 +424,7 @@ export default function PaginaNota() {
                       {reais(Number(i.valor_frete_rateado))}
                     </td>
                     <td>
-                      {i.id_produto ? (
+                      {i.id_produto && !trocando[i.id] ? (
                         // 🔑 **Clicar no produto abre a conversão DESTE item**
                         // (pedido do dono). Antes era preciso sair da
                         // conferência, abrir o produto, acrescentar a unidade e
@@ -413,23 +432,56 @@ export default function PaginaNota() {
                         // ⚠️ O aviso de divergência fica na MESMA célula: é
                         // onde o olho está quando confere, e um alerta no topo
                         // da tela não diz de qual linha ele fala.
-                        <button
-                          type="button"
-                          className="link-acao text-left font-medium text-erva"
-                          onClick={() => setConversao(i)}
-                          title="ver e ajustar a conversão deste item"
-                        >
-                          {i.produto}
-                          {i.fator_diverge && (
-                            <span className="mt-0.5 block">
-                              <Etiqueta cor="alerta">a nota diz outra conversão</Etiqueta>
-                            </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            type="button"
+                            className="link-acao text-left font-medium text-erva"
+                            onClick={() => setConversao(i)}
+                            title="ver e ajustar a conversão deste item"
+                          >
+                            {i.produto}
+                            {i.fator_diverge && (
+                              <span className="mt-0.5 block">
+                                <Etiqueta cor="alerta">a nota diz outra conversão</Etiqueta>
+                              </span>
+                            )}
+                          </button>
+                          {/* 🔑 **O pré-cadastro se anuncia na LINHA.** Produto
+                              criado a partir da nota entra rascunho: falta
+                              unidade e fator, e quem sabe os dois é quem está
+                              conferindo — não adianta só o alerta do início. */}
+                          {i.produto_status === "RASCUNHO" && (
+                            <Etiqueta cor="alerta">rascunho — completar cadastro</Etiqueta>
                           )}
-                        </button>
-                      ) : i.ignorado ? (
+                          {/* 🔑 **Trocar o produto da linha** (pedido do dono,
+                              14/09/2026). A nota pode chegar CASADA no produto
+                              errado — o mesmo código significando coisas
+                              diferentes em fornecedores diferentes — e só dava
+                              para escolher produto em item pendente. Trocar
+                              antes de lançar é o que impede o erro de virar
+                              razão, que é append-only. */}
+                          {pode("compras.conciliar") && nota.status !== "LANCADA" && (
+                            <button
+                              type="button"
+                              className="link-acao text-[12.5px]"
+                              onClick={() =>
+                                setTrocando((t) => ({ ...t, [i.id]: true }))
+                              }
+                            >
+                              não é este produto
+                            </button>
+                          )}
+                        </div>
+                      ) : i.ignorado && !trocando[i.id] ? (
                         <Etiqueta>fora do estoque</Etiqueta>
                       ) : pode("compras.conciliar") ? (
                         <div className="flex flex-col gap-1.5">
+                          {trocando[i.id] && i.produto && (
+                            <span className="text-[12px] text-suave">
+                              hoje está em <b className="font-medium">{i.produto}</b> — escolha
+                              o certo
+                            </span>
+                          )}
                           <BuscaCadastro
                             fonte={PRODUTOS}
                             selecionado={
@@ -459,7 +511,7 @@ export default function PaginaNota() {
                               onClick={() => void vincular(i)}
                               disabled={!escolha[i.id]}
                             >
-                              vincular
+                              {trocando[i.id] ? "trocar" : "vincular"}
                             </button>
                             {/* O insumo ainda não existe no cadastro: criar daqui
                                 poupa sair da tela, cadastrar e voltar. */}
@@ -477,6 +529,17 @@ export default function PaginaNota() {
                             >
                               não controla estoque
                             </button>
+                            {trocando[i.id] && (
+                              <button
+                                className="link-acao"
+                                onClick={() => {
+                                  setTrocando((t) => ({ ...t, [i.id]: false }));
+                                  setEscolha({ ...escolha, [i.id]: "" });
+                                }}
+                              >
+                                cancelar
+                              </button>
+                            )}
                           </span>
                         </div>
                       ) : (

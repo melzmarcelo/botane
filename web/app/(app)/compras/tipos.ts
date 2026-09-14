@@ -35,6 +35,10 @@ export type ItemNota = {
   variacao_preco_pct: number | null;
   id_produto: number | null;
   produto: string | null;
+  /** O status do CADASTRO ligado a esta linha. `RASCUNHO` é o pré-cadastro
+   *  feito a partir da própria nota: entra no estoque, mas ainda não tem
+   *  unidade nem fator conferidos — e quem confere a nota é quem sabe os dois. */
+  produto_status: string | null;
   um_estoque: string | null;
   local_destino: string | null;
   sugestao_produto: number | null;

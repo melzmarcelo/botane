@@ -3313,6 +3313,54 @@ try {
   checar("o botão de lançar fica desabilitado", lancarDesabilitado === true, lancarDesabilitado);
   await foto(p, "29b-xml-importado");
 
+  // 🔑 **O pré-cadastro e a TROCA de produto, na própria conferência**
+  // (pedido do dono, 14/09/2026). O item do azeite está pendente, que é o estado
+  // exato em que a casa se vê quando o código do fornecedor não casa com nada —
+  // e é daqui que saem os dois caminhos: criar o que falta, ou trocar o que veio
+  // errado. O caso que puxou isto foi o ABACATE de um fornecedor e o MORANGO de
+  // outro dividindo o mesmo código no Omie.
+  const clicarLinha = async (texto) =>
+    p.evaluate((t) => {
+      const b = [...document.querySelectorAll("button")].find(
+        (x) => (x.textContent ?? "").trim().toLowerCase() === t);
+      if (b) b.click();
+      return !!b;
+    }, texto);
+  const temLinhaBotao = async (texto) =>
+    p.evaluate((t) => [...document.querySelectorAll("button")]
+      .some((x) => (x.textContent ?? "").trim() === t), texto);
+
+  checar("o item pendente oferece criar o produto pela própria nota",
+    await temLinhaBotao("criar produto"));
+  await clicarLinha("criar produto");
+  await esperarTexto(p, "completar cadastro", 9000);
+  const textoRascunho = await p.evaluate(() => document.body.innerText);
+  // ⚠️ **O pré-cadastro tem de se anunciar NA LINHA.** Ele nasce rascunho — sem
+  // unidade e sem fator conferidos — e quem sabe os dois é justamente quem está
+  // com a nota na mão. O alerta do início avisa a casa, não esta nota.
+  checar("o produto criado pela nota se anuncia rascunho na linha",
+    /rascunho — completar cadastro/i.test(textoRascunho), textoRascunho.slice(0, 400));
+  checar("e a nota deixa de ter item sem produto",
+    !/sem produto vinculado/i.test(textoRascunho), textoRascunho.slice(0, 300));
+
+  // A troca: até aqui, item já casado só abria a janela da conversão, e não
+  // havia como dizer "não é este produto" antes de a nota virar razão.
+  checar("item já vinculado oferece trocar o produto",
+    await temLinhaBotao("não é este produto"));
+  await clicarLinha("não é este produto");
+  await esperarTexto(p, "hoje está em", 6000);
+  const textoTroca = await p.evaluate(() => document.body.innerText);
+  checar("trocar abre a busca dizendo em que produto a linha está hoje",
+    /hoje está em/i.test(textoTroca), textoTroca.slice(0, 400));
+  checar("com a saída de trocar e a de desistir",
+    (await temLinhaBotao("trocar")) && (await temLinhaBotao("cancelar")));
+  await foto(p, "29c-trocar-produto");
+  // ⚠️ Desiste: a nota segue para as checagens seguintes do jeito que estava.
+  await clicarLinha("cancelar");
+  await new Promise((r) => setTimeout(r, 400));
+  checar("desistir devolve a linha ao produto que já estava lá",
+    !(await temLinhaBotao("trocar")) && (await temLinhaBotao("não é este produto")));
+
   // O mesmo arquivo de novo: a chave da NF-e é que impede a duplicação. Volta
   // para a lista, que é onde mora a porta do XML.
   await irPara(p, `${WEB}/compras`);
@@ -5298,7 +5346,15 @@ try {
     b?.click();
   });
   let custosTexto = "";
-  for (let tentativa = 0; tentativa < 30; tentativa++) {
+  // ⚠️ **A espera é longa porque a varredura é longa, e foi MEDIDA** (14/09/2026):
+  // `custos-iniciais/previa` leva ~15s com a máquina livre e passou de **50s**
+  // com a bateria rodando junto — são 30 páginas do `ListarPosEstoque` mais uma
+  // volta de `custo_do_insumo` por produto (3.520 na base local). O orçamento de
+  // 30s deixava a checagem falhar por contenção e acusar a TELA de um defeito
+  // que era de relógio: `textoVisivel` voltava só o cabeçalho, e as duas
+  // checagens seguintes caíam junto porque leem o mesmo corpo.
+  // 🔑 Se voltar a estourar, o problema passou a ser o ENDPOINT, não este número.
+  for (let tentativa = 0; tentativa < 75; tentativa++) {
     await new Promise((r) => setTimeout(r, 1000));
     custosTexto = await textoVisivel(p);
     if (/receberiam custo de refer[êe]ncia|Falha ao consultar/i.test(custosTexto)) break;

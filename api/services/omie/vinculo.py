@@ -27,6 +27,14 @@ produto" recriava o duplicado. O trabalho de juntar se desfazia sozinho.
 ⚠️ **`produtos.codigo_omie` continua sendo o principal** — único, visível, e o
 que a cascata pergunta primeiro. Estes são os apelidos, e existem porque um
 produto da casa pode ser vários produtos lá.
+
+⚠️ **Só o primeiro espaço é POR FORNECEDOR** (migração 067). `OMIE` guarda o
+código do produto no fornecedor, que só é único dentro dele — o ABACATE de um e
+o MORANGO de outro podem ser os dois "1". Já `OMIE_PRODUTO` (o id do Omie) e
+`EAN` (o código do fabricante) são globais de verdade e continuam valendo uma
+vez só: as duas funções abaixo gravam com `id_fornecedor` nulo, e é por isso que
+perguntam sem ele. O `coalesce(id_fornecedor, 0)` no `ON CONFLICT` só nomeia o
+índice novo; para estas linhas ele é sempre 0, e o efeito é o de sempre.
 """
 
 SISTEMA = "OMIE"
@@ -68,7 +76,7 @@ def gravar_apelido(cur, id_produto: int, codigo: str, descricao: str | None,
         """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
                                          origem_vinculo, confirmado_por)
            VALUES (%s, %s, %s, %s, 'FUSAO', %s)
-           ON CONFLICT (sistema, codigo) DO UPDATE
+           ON CONFLICT (sistema, codigo, coalesce(id_fornecedor, 0)) DO UPDATE
                SET id_produto = EXCLUDED.id_produto,
                    confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
         (SISTEMA_PRODUTO, str(codigo)[:60], id_produto, (descricao or "")[:200] or None,
@@ -111,7 +119,7 @@ def gravar_apelido_ean(cur, id_produto: int, ean: str, descricao: str | None,
         """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
                                          origem_vinculo, confirmado_por)
            VALUES (%s, %s, %s, %s, 'FUSAO', %s)
-           ON CONFLICT (sistema, codigo) DO UPDATE
+           ON CONFLICT (sistema, codigo, coalesce(id_fornecedor, 0)) DO UPDATE
                SET id_produto = EXCLUDED.id_produto,
                    confirmado_por = EXCLUDED.confirmado_por, confirmado_em = now()""",
         (SISTEMA_EAN, str(ean)[:60], id_produto, (descricao or "")[:200] or None, id_usuario),

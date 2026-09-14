@@ -234,8 +234,15 @@ if alvo_item:
     checar("o de-para do código do fornecedor nasce junto",
            any(v["codigo"] == alvo_item["codigo_fornecedor"] for v in vinculos),
            alvo_item["codigo_fornecedor"])
+    # ⚠️ **409, não 400, desde 14/09/2026**: a recusa deixou de ser definitiva.
+    # Criar sobre item já vinculado passou a ser possível com `substituir`, para
+    # o caso do produto que chegou casado no errado por colisão de código entre
+    # fornecedores e que ainda não existe no cadastro. Sem a marca continua
+    # recusado — senão um clique distraído partiria o custo médio em dois
+    # cadastros. Conflito de estado é 409; 400 dizia "o pedido está malformado",
+    # que nunca foi o caso. Ver `smoke_codigo_por_fornecedor.py`.
     st, r2 = chamar("POST", f"/notas/itens/{alvo_item['id']}/criar-produto", {}, token=token)
-    checar("e criar de novo no mesmo item é recusado", st == 400, st)
+    checar("e criar de novo no mesmo item é recusado sem confirmação", st == 409, st)
     # Desfaz o que esta fase criou. Quando o produto foi REAPROVEITADO não há o
     # que apagar — mas fica no cadastro dele o código do fornecedor, e é por ele
     # que a cascata resolve. Sem tirar, a próxima rodada acha o item já

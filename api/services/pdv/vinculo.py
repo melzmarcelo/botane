@@ -92,7 +92,7 @@ def gravar(cur, id_produto: int, codigo: str, descricao: str | None = None,
         """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
                                          origem_vinculo, confirmado_por)
            VALUES (%s, %s, %s, %s, 'APELIDO', %s)
-           ON CONFLICT (sistema, codigo) DO UPDATE
+           ON CONFLICT (sistema, codigo, coalesce(id_fornecedor, 0)) DO UPDATE
                SET id_produto = EXCLUDED.id_produto,
                    descricao_externa = EXCLUDED.descricao_externa""",
         (SISTEMA, codigo, id_produto, descricao, id_usuario),
