@@ -273,6 +273,59 @@ st, r = ritmo(dia_fechamento_cmv=29)
 checar("dia acima de 28 é recusado (fevereiro não tem)", st == 422, st)
 
 
+print("\n7b. as PALAVRAS do periodo vem do servidor")
+# 🔑 **Relatado pelo dono (14/09/2026):** *"nas telas quando trata de periodo,
+# sempre cita mes, mas caso o periodo for semanal, a descricao esta errada — o
+# CMV nao e o mes que conta, e sim o periodo."*
+#
+# 🔑 **O NUMERO ja vinha certo**: o painel calcula por `periodo_do_dia`, que
+# respeita o ciclo. Era o texto ao redor dele que dizia "mes" sempre — o CMV
+# "do mes" numa loja que fecha toda semana.
+#
+# ⚠️ **As palavras vem do SERVIDOR, e isso e o precedente que a propria tela de
+# CMV ja tinha escrito**: *"o nome do periodo vem do servidor. Ele e o unico que
+# sabe se '01/08' e o mes de agosto ou a semana que comecou nele; remontar a
+# frase aqui daria duas versoes da mesma verdade."*
+ritmo(ciclo_fechamento="MENSAL", dia_fechamento_cmv=1)
+_st, p = chamar("GET", "/inicio", token=token)
+termos = (p.get("periodo") or {}).get("termos") or {}
+checar("no ritmo mensal o painel fala em MES",
+       termos.get("do") == "do mês" and termos.get("o") == "o mês", termos)
+
+ritmo(ciclo_fechamento="SEMANAL", fechamento_dia_semana=7)
+_st, p = chamar("GET", "/inicio", token=token)
+termos = (p.get("periodo") or {}).get("termos") or {}
+# ⚠️ **As quatro formas existem porque o portugues precisa das quatro.** "Semana"
+# e feminina e as preposicoes contraem: mandar so o substantivo obrigaria a tela
+# a montar "do" + "a" = "da", que e exatamente a segunda versao da verdade que o
+# comentario acima recusa.
+checar("no ritmo semanal ele fala em SEMANA, no feminino",
+       termos.get("o") == "a semana" and termos.get("do") == "da semana", termos)
+checar("com as contracoes certas em deste/neste",
+       termos.get("deste") == "desta semana" and termos.get("neste") == "nesta semana",
+       termos)
+checar("e o ciclo viaja junto, para a tela poder decidir o resto",
+       (p.get("periodo") or {}).get("ciclo") == "SEMANAL", p.get("periodo"))
+# 🔑 O rotulo do cabecalho ja era certo antes desta correcao — e continua.
+checar("o rotulo do periodo continua dizendo de onde ate onde",
+       "semana de" in ((p.get("periodo") or {}).get("rotulo") or ""),
+       (p.get("periodo") or {}).get("rotulo"))
+
+# O painel do CMV responde pela mesma regra: e a tela em que o dono reparou.
+_st, c = chamar("GET", "/cmv/apuracao", token=token)
+checar("o painel do CMV tambem manda as palavras",
+       (c.get("termos") or {}).get("do") == "da semana", c.get("termos"))
+checar("e o ciclo dele bate", c.get("ciclo") == "SEMANAL", c.get("ciclo"))
+
+ritmo(ciclo_fechamento="DIARIO")
+_st, p = chamar("GET", "/inicio", token=token)
+termos = (p.get("periodo") or {}).get("termos") or {}
+checar("e no ritmo diario, em DIA", termos.get("do") == "do dia"
+       and termos.get("neste") == "neste dia", termos)
+
+restaurar()
+
+
 print("\n8. limpeza")
 for id_f in fechados:
     st, r = chamar("POST", f"/cmv/fechamentos/{id_f}/reabrir", token=token)

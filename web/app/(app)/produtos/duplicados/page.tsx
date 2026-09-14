@@ -193,7 +193,7 @@ export default function Duplicados() {
                 // ⚠️ Dois com história não se juntam: unir dois razões exigiria
                 // reescrever movimento, e o custo médio resultante seria invenção.
                 <Aviso tipo="info">
-                  Mais de um destes já tem história (movimento no razão, mês fechado, inventário
+                  Mais de um destes já tem história (movimento no razão, período fechado, inventário
                   ou produção). Junte pela tela de cada produto o que der, ou deixe como está —
                   unir dois históricos de estoque não é possível.
                 </Aviso>

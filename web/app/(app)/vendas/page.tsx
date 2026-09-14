@@ -166,7 +166,7 @@ export default function PaginaVendas() {
           <p className="mt-1 max-w-[66ch] text-suave">
             As vendas alimentam o CMV teórico: quantidade vendida × custo da ficha na data. O
             custo é <b>congelado</b> na importação — corrigir uma receita amanhã não reescreve o
-            mês passado.
+            que já passou.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

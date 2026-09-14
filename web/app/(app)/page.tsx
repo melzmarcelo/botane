@@ -33,7 +33,18 @@ type Alerta = {
 };
 
 type Painel = {
-  periodo: { inicio: string; fim: string; rotulo: string };
+  /** 🔑 **As palavras vêm do SERVIDOR.** Ele é o único que sabe se o
+   *  fechamento desta loja é diário, semanal ou mensal — e o português precisa
+   *  das quatro formas, porque "semana" é feminina e as preposições contraem
+   *  (do/da, deste/desta, neste/nesta). Remontar a frase aqui daria duas
+   *  versões da mesma verdade, que é o que a tela de CMV já recusava. */
+  periodo: {
+    inicio: string;
+    fim: string;
+    rotulo: string;
+    ciclo: string;
+    termos: { o: string; do: string; deste: string; neste: string };
+  };
   operacao: {
     produtos: number;
     fichas: number;
@@ -141,6 +152,11 @@ export default function Inicio() {
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!p) return <Carregando />;
 
+  /** "o mês" no começo da frase vira "O mês".
+   *  ⚠️ Só a primeira letra: `toUpperCase()` no texto inteiro gritaria, e
+   *  `text-transform: capitalize` no CSS maiusculizaria "Semana" E "De". */
+  const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
   const d = p.dinheiro;
   const o = p.operacao;
   const primeiroNome = (eu?.nome ?? "").split(" ")[0];
@@ -154,7 +170,7 @@ export default function Inicio() {
           {primeiroNome ? `Olá, ${primeiroNome}` : "Bom dia"}
         </h1>
         <p className="mt-1 max-w-[62ch] text-suave">
-          O mês corrente, do jeito que está agora.
+          {maiuscula(p.periodo.termos.o)} corrente, do jeito que está agora.
         </p>
       </header>
 
@@ -257,7 +273,7 @@ export default function Inicio() {
           <Indicador
             rotulo="Custo do que saiu"
             valor={reais(d.cmv_mes)}
-            nota="O CMV do mês: estoque inicial + compras − o que sobrou."
+            nota={`O CMV ${p.periodo.termos.do}: estoque inicial + compras − o que sobrou.`}
             href="/cmv"
           />
           <Indicador
@@ -265,7 +281,7 @@ export default function Inicio() {
             valor={d.food_cost_pct === null ? "—" : pct(d.food_cost_pct)}
             nota={
               d.food_cost_pct === null
-                ? "Sem vendas importadas no mês — sem receita não há percentual."
+                ? `Sem vendas importadas ${p.periodo.termos.neste} — sem receita não há percentual.`
                 : `Sobre ${reais(d.receita_mes)} de receita em ${d.vendas} venda(s).`
             }
             tom={d.food_cost_pct !== null && d.food_cost_pct > 40 ? "alerta" : "normal"}
@@ -278,11 +294,11 @@ export default function Inicio() {
             href="/estoque"
           />
           <Indicador
-            rotulo="Perdas do mês"
+            rotulo={`Perdas ${p.periodo.termos.do}`}
             valor={reais(d.perdas_mes)}
             nota={
               d.cmv_mes > 0
-                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo do mês.`
+                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo ${p.periodo.termos.do}.`
                 : "Quebra, validade e cortesia apontadas."
             }
             tom={d.perdas_mes > 0 ? "alerta" : "normal"}
@@ -294,7 +310,7 @@ export default function Inicio() {
       {!!p.alertas.length && (
         <Cartao
           titulo="Precisa da sua atenção"
-          descricao="O que muda o número deste mês se ficar sem resposta."
+          descricao={`O que muda o número ${p.periodo.termos.deste} se ficar sem resposta.`}
         >
           <ul className="flex flex-col gap-px bg-linha">
             {p.alertas.slice(0, 5).map((a) => (
@@ -352,8 +368,8 @@ export default function Inicio() {
             titulo="Onde o custo pesa"
             descricao={
               p.pesos.length
-                ? "A participação de cada setor no custo do mês."
-                : "Ainda não há custo apurado neste mês."
+                ? `A participação de cada setor no custo ${p.periodo.termos.do}.`
+                : `Ainda não há custo apurado ${p.periodo.termos.neste}.`
             }
           >
             {!p.pesos.length ? (
@@ -379,7 +395,7 @@ export default function Inicio() {
               </ul>
             )}
             <p className="mt-4 text-[13px] text-suave">
-              Compras do mês: <b className="mono">{reais(d.compras_mes)}</b>
+              Compras {p.periodo.termos.do}: <b className="mono">{reais(d.compras_mes)}</b>
             </p>
           </Cartao>
         )}

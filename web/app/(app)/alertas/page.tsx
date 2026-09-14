@@ -83,7 +83,7 @@ export default function PaginaAlertas() {
         </h1>
         <p className="mt-1 max-w-[64ch] text-suave">
           O sistema sabe o que está para acabar, o que vence esta semana e o que ficou parado
-          esperando alguém. Esta tela junta tudo — para você não descobrir no fim do mês.
+          esperando alguém. Esta tela junta tudo — para você não descobrir tarde demais.
         </p>
       </header>
 

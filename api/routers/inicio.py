@@ -256,6 +256,10 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
                 "fim": fim,
                 "rotulo": periodos.rotulo(inicio, fim_do_ciclo, ciclo["ciclo"]),
                 "ciclo": ciclo["ciclo"],
+                # 🔑 As palavras com que a TELA se refere a este periodo. O
+                # numero ja vinha certo daqui; era o texto ao redor dele que
+                # dizia "mes" mesmo num fechamento semanal.
+                "termos": periodos.termos(ciclo["ciclo"]),
             },
             "operacao": operacao,
             "alertas": alertas_motor.levantar(cur, id_unidade),

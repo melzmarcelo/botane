@@ -114,6 +114,41 @@ def periodos_ate_hoje(ciclo: str, quantos: int, *, dia_semana: int = 7,
     return lista
 
 
+# 🔑 **Como falar DESTE período nas frases da tela** (14/09/2026, relatado pelo
+# dono: *"nas telas quando trata de período, sempre cita mês, mas caso o período
+# for semanal, a descrição está errada — o CMV não é o mês que conta, e sim o
+# período"*).
+#
+# 🔑 **As palavras vêm do SERVIDOR, e isso não é capricho: é o precedente que a
+# própria tela de CMV já tinha escrito** — *"o nome do período vem do servidor.
+# Ele é o único que sabe se '01/08' é o mês de agosto ou a semana que começou
+# nele; remontar a frase aqui daria duas versões da mesma verdade"*. O número já
+# vinha certo (o painel calcula por `periodo_do_dia`); era só o texto ao redor
+# que dizia "mês" sempre.
+#
+# ⚠️ **São QUATRO formas porque o português precisa das quatro.** "Mês" e "dia"
+# são masculinos e "semana" é feminina, e as preposições contraem: do/da,
+# deste/desta, neste/nesta. Mandar só o substantivo obrigaria a tela a montar a
+# contração — que é exatamente a segunda versão da verdade que o comentário
+# acima recusa.
+_TERMOS = {
+    DIARIO: {"o": "o dia", "do": "do dia", "deste": "deste dia", "neste": "neste dia"},
+    SEMANAL: {"o": "a semana", "do": "da semana", "deste": "desta semana",
+              "neste": "nesta semana"},
+    MENSAL: {"o": "o mês", "do": "do mês", "deste": "deste mês", "neste": "neste mês"},
+}
+
+
+def termos(ciclo: str | None) -> dict[str, str]:
+    """As palavras com que a tela se refere ao período desta loja.
+
+    ⚠️ Ciclo desconhecido cai em MENSAL, que é o padrão do banco — e não em
+    "período", que seria correto e ilegível: *"o CMV do período"* é o tipo de
+    frase que soa a software e não a gente.
+    """
+    return _TERMOS.get(ciclo or MENSAL, _TERMOS[MENSAL])
+
+
 def rotulo(inicio: date, fim: date, ciclo: str = MENSAL) -> str:
     """Como o período se chama na tela.
 

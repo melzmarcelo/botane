@@ -34,6 +34,11 @@ type Apuracao = {
   fechado: boolean;
   ciclo: string;
   rotulo: string | null;
+  /** 🔑 As palavras com que a tela se refere ao período desta loja — mês,
+   *  semana ou dia, já com a preposição contraída. Vêm do servidor pelo mesmo
+   *  motivo do `rotulo`: ele é o único que sabe qual é o ciclo, e remontar a
+   *  frase aqui daria duas versões da mesma verdade. */
+  termos?: { o: string; do: string; deste: string; neste: string };
   grupos?: {
     nome: string;
     cmv: number;
@@ -454,7 +459,7 @@ export default function PaginaCmv() {
           {aba === "abc" && (
             <Cartao
               titulo="Onde o dinheiro foi parar"
-              descricao="Classe A = os 80% do valor consumido. É neles que negociar preço muda o mês."
+              descricao={`Classe A = os 80% do valor consumido. É neles que negociar preço muda ${a?.termos?.o ?? "o período"}.`}
             >
               {!abc ? (
                 <Carregando />

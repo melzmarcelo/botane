@@ -4070,6 +4070,20 @@ try {
       situacao: /período (aberto|fechado)/i.test(texto),
       fecha: /a conta fecha/i.test(texto),
       naoFecha: /A conta não fecha/i.test(texto),
+      // ⚠️ **O diagnóstico vai junto, e isto custou uma investigação inteira.**
+      // A versão anterior reprovava com `{fecha:false}` e mais nada — sem o
+      // valor, sem o período e sem os quatro números. Reproduzida depois, com a
+      // máquina livre, a identidade fechava com diferença ZERO: era um
+      // lançamento retroativo que uma fase anterior deixou e outra desfez.
+      // 🔑 Esta checagem é sensível ao que as outras fases deixam na base (ver
+      // a nota do ritmo MENSAL no começo do arquivo). Quando ela cair de novo,
+      // o que importa é saber DE QUANTO e EM QUE janela — senão a investigação
+      // recomeça do zero, como recomeçou desta vez.
+      quanto: (texto.match(/A conta não fecha por ([^(]+)/i) || [])[1]?.trim() ?? null,
+      janela: (texto.match(/\d{2}\/\d{2}\/\d{4}\s*(a|–|-)\s*\d{2}\/\d{2}\/\d{4}/) || [])[0]
+        ?? null,
+      totais: [...document.querySelectorAll("tfoot td, tfoot th")]
+        .map((c) => c.textContent?.trim()).filter(Boolean).slice(0, 6),
     };
   });
   checar("a movimentação mostra inicial, entradas, saídas e final", mov.colunas, mov);
@@ -5734,6 +5748,60 @@ try {
 
   await api("PUT", "/unidades/1/parametros",
     { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+
+  console.log("10a3. o periodo se chama pelo nome, nao 'mes' sempre");
+  // 🔑 **Relatado pelo dono (14/09/2026):** *"nas telas quando trata de periodo,
+  // sempre cita mes, mas caso o periodo for semanal, a descricao esta errada —
+  // o CMV nao e o mes que conta, e sim o periodo."*
+  // 🔑 **O NUMERO ja vinha certo** (o painel calcula por `periodo_do_dia`, que
+  // respeita o ciclo). Era o texto ao redor dele que dizia "mes" sempre: o CMV
+  // "do mes" numa casa que fecha toda semana.
+  // ⚠️ A checagem tem de MEDIR A TELA, nao conferir que o parametro gravou —
+  // gravar sempre funcionou; era a frase que nao acompanhava.
+  const { dados: euPeriodo } = await api("GET", "/auth/me", null, token);
+  const lojaAtual = euPeriodo.unidades[0].id;
+  const ritmo = async (ciclo, extra = {}) =>
+    api("PUT", `/unidades/${lojaAtual}/parametros`,
+      { ciclo_fechamento: ciclo, ...extra }, token);
+
+  // ⚠️ Devolve a loja ao ritmo de fabrica aconteca o que acontecer: a base e
+  // compartilhada, e deixa-la em SEMANAL faria a apuracao de outras fases abrir
+  // noutro periodo e acusar diferenca sem nada ter quebrado. Mesma licao do
+  // `atexit` da suite de ciclos.
+  aoTerminar.push(async () => {
+    await ritmo("MENSAL", { dia_fechamento_cmv: 1 });
+  });
+
+  await ritmo("MENSAL", { dia_fechamento_cmv: 1 });
+  await irPara(p, `${WEB}/`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await esperarTexto(p, "Custo do que saiu", 9000);
+  const textoMensal = await p.evaluate(() => document.body.innerText);
+  checar("no ritmo mensal a tela inicial fala em MES",
+    /CMV do mês/i.test(textoMensal) && /Perdas do mês/i.test(textoMensal), textoMensal.slice(0, 600));
+
+  await ritmo("SEMANAL", { fechamento_dia_semana: 7 });
+  await irPara(p, `${WEB}/`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await esperarTexto(p, "Custo do que saiu", 9000);
+  const textoSemanal = await p.evaluate(() => document.body.innerText);
+  // 🔑 A checagem que o dono pediu: a MESMA tela, com a casa fechando toda
+  // semana, nao pode continuar dizendo "mes".
+  checar("no ritmo semanal ela passa a falar em SEMANA",
+    /CMV da semana/i.test(textoSemanal) && /Perdas da semana/i.test(textoSemanal),
+    textoSemanal.slice(0, 600));
+  checar("e nao sobra nenhum 'do mês' na tela",
+    !/do mês/i.test(textoSemanal), (textoSemanal.match(/.{0,40}do mês.{0,40}/i) || [])[0]);
+  // ⚠️ As contracoes: "desta semana" e "nesta semana", no feminino. Montar isso
+  // na tela daria duas versoes da mesma verdade — por isso vem do servidor.
+  checar("com as contracoes no feminino",
+    /desta semana|nesta semana/i.test(textoSemanal), textoSemanal.slice(0, 600));
+  // E o rotulo do cabecalho, que ja estava certo antes, continua.
+  checar("e o cabecalho diz de onde ate onde",
+    /semana de/i.test(textoSemanal), textoSemanal.slice(0, 200));
+  await foto(p, "43-periodo-semanal");
+
+  await ritmo("MENSAL", { dia_fechamento_cmv: 1 });
 
   console.log("10a2. as casas decimais da quantidade, que a loja escolhe");
   // 🔑 **Era ajuste MORTO.** `parametros.casas_decimais_qtd` existe desde a

@@ -85,6 +85,7 @@ def apuracao(
     resposta["fechado"] = fechado
     resposta["ciclo"] = c["ciclo"]
     resposta["rotulo"] = periodos.rotulo(inicio, fim, c["ciclo"])
+    resposta["termos"] = periodos.termos(c["ciclo"])
     resposta["grupos"] = grupos
     resposta["tipos_fora_do_cmv"] = list(r.get("tipos_fora_do_cmv") or [])
     return resposta

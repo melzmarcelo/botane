@@ -116,6 +116,15 @@ class ApuracaoResponse(BaseModel):
     # diz "agosto" enquanto o fechamento congela a semana mente sobre si mesma.
     ciclo: str = "MENSAL"
     rotulo: str | None = None
+    # 🔑 **As palavras com que a TELA se refere a este período** — "do mês",
+    # "da semana", "do dia", já com a preposição contraída (14/09/2026, relatado
+    # pelo dono: *"caso o período for semanal, a descrição está errada"*). O
+    # número já vinha certo daqui; era o texto ao redor dele que dizia "mês"
+    # sempre.
+    # ⚠️ **E o campo precisa estar AQUI**, não só no serviço: o `response_model`
+    # recorta o que não está no modelo, e ele sairia da apuração calado — que é
+    # exatamente a armadilha escrita algumas linhas acima, no `ajuste_custo`.
+    termos: dict[str, str] | None = None
     # Os grupos que a casa montou por tipo de produto — quanto do CMV é
     # material de limpeza, embalagem, o que ela tiver separado. Grupo marcado
     # como fora do CMV traz `considerar_no_cmv: false` e o valor dele NÃO está

@@ -246,6 +246,31 @@
   ⚠️ **Base grande esconde defeito de teste.** Os dois passaram meses verdes porque o volume
   garantia por acaso o que a condição deveria garantir por construção.
 
+- 🔑 **O período não é sempre "o mês", e o texto das telas dizia que era** (14/09/2026,
+  relatado pelo dono: *"nas telas quando trata de período, sempre cita mês, mas caso o
+  período for semanal, a descrição está errada — o CMV não é o mês que conta, e sim o
+  período"*).
+  🔑 **O NÚMERO já vinha certo**: o painel calcula por `periodos.periodo_do_dia`, que
+  respeita o `ciclo_fechamento` da loja. Era só o texto ao redor dele — "o CMV do mês",
+  "Perdas do mês", "o número deste mês" — que dizia mês numa casa que fecha toda semana.
+  🔑 **As palavras passaram a vir do SERVIDOR** (`periodos.termos`), e isso não foi escolha
+  nova: é o precedente que a própria tela de CMV já tinha escrito no comentário do
+  fechamento — *"o nome do período vem do servidor. Ele é o único que sabe se '01/08' é o
+  mês de agosto ou a semana que começou nele; remontar a frase aqui daria duas versões da
+  mesma verdade."*
+  ⚠️ **São QUATRO formas porque o português precisa das quatro**: "mês" e "dia" são
+  masculinos, "semana" é feminina, e as preposições contraem (do/da, deste/desta,
+  neste/nesta). Mandar só o substantivo obrigaria a tela a montar a contração — que é
+  exatamente a segunda versão da verdade que o comentário acima recusa.
+  ⚠️ **O `response_model` cortou o campo de novo.** `ApuracaoResponse` recorta o que não
+  está nela, e `termos` sairia do serviço sem chegar à tela — calado. O aviso disso já
+  estava escrito no mesmo arquivo, quatro linhas acima, no `ajuste_custo`. **Segunda vez
+  nesta sessão** que a armadilha pega (a primeira foi `reservas_ligado` em `MeResponse`).
+  ⚠️ **Três frases ficaram NEUTRAS em vez de seguirem o ciclo**, e ficaram melhores:
+  "descobrir tarde demais" (alertas), "período fechado" (duplicados) e "não reescreve o que
+  já passou" (vendas). Nem toda frase precisa do ciclo — algumas só precisavam parar de
+  falar em mês.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).
