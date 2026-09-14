@@ -313,7 +313,7 @@ export default function PdvLegal() {
                 <span className="block text-[14.5px] font-semibold">
                   Enviar informações ao PDV
                 </span>
-                <span className="mt-0.5 block max-w-[70ch] text-[13px] leading-snug text-suave">
+                <span className="mt-0.5 block max-w-[70ch] text-[13px] leading-snug prosa text-suave">
                   Libera o envio de cadastros daqui para o cardápio do PDV. Entram só os
                   produtos marcados como <b>Integrado com PDV</b> — quem já tem código do
                   PDV nasce marcado. Nada é enviado sozinho: o envio é sempre disparado
@@ -323,7 +323,7 @@ export default function PdvLegal() {
                     sem dizê-lo aqui a consequência fica invisível: quem liga o
                     envio para mandar cadastros daqui perde, sem saber, a
                     atualização automática de preço que vinha do caixa. */}
-                <span className="mt-2 block max-w-[70ch] text-[13px] leading-snug text-suave">
+                <span className="mt-2 block max-w-[70ch] text-[13px] leading-snug prosa text-suave">
                   {form.enviar_ao_pdv ? (
                     <>
                       Com isto ligado, <b>o preço daqui é o que vale</b>: a busca de vendas
@@ -347,14 +347,14 @@ export default function PdvLegal() {
               o que foi vendido. */}
           <section id="agenda-pdv" className="rounded border border-linha bg-fundo p-4">
             <p className="rotulo">Buscar vendas sozinho</p>
-            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug prosa text-suave">
               Sem agendamento, alguém precisa abrir esta tela e clicar em Buscar vendas todo
               dia. O que não for buscado não entra no CMV daquele período.
             </p>
             {/* ⚠️ O que a busca faz ALÉM de trazer venda precisa estar escrito:
                 produto novo e preço mudam o CMV, e descobrir isso pelo efeito
                 é descobrir tarde. */}
-            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug prosa text-suave">
               Junto com as vendas ela traz o produto que nasceu no PDV, desativa o que foi
               desligado lá e
               {form.enviar_ao_pdv

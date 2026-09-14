@@ -70,7 +70,7 @@ export default function PaginaFornecedores() {
         <div>
           <p className="rotulo">Cadastros</p>
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Pessoas</h1>
-          <p className="mt-1 max-w-[62ch] text-suave">
+          <p className="mt-1 max-w-[62ch] prosa text-suave">
             Quem a casa conhece: de quem ela compra, quem trabalha nela, quem consome dela. O
             <b> CNPJ</b> é o que liga a nota fiscal que vem do Omie ao fornecedor certo — sem
             ele, a conciliação vira trabalho manual.

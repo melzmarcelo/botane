@@ -255,7 +255,7 @@ export default function PaginaNota() {
             <Etiqueta cor="erva">lançada em {dataBr(nota.lancada_em)}</Etiqueta>
           )}
         </div>
-        <p className="mt-2 max-w-[70ch] text-suave">
+        <p className="mt-2 max-w-[70ch] prosa text-suave">
           {nota.fornecedor ?? nota.nome_emitente ?? "sem fornecedor"}
           {nota.cnpj_emitente && ` · ${nota.cnpj_emitente}`}
         </p>
@@ -633,7 +633,7 @@ export default function PaginaNota() {
           <span className="mono text-[22px] font-bold">{reais(Number(nota.valor_total))}</span>
         </div>
 
-        <p className="mt-4 max-w-[80ch] text-[13.5px] leading-snug text-suave">
+        <p className="mt-4 max-w-[80ch] text-[13.5px] leading-snug prosa text-suave">
           O <b>custo un.</b> da coluna dos itens já traz o frete rateado e a conversão da
           embalagem: é ele que vira custo médio no estoque, não o valor unitário da nota.
         </p>

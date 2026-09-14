@@ -93,7 +93,7 @@ export default function PaginaCorrigirNota() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Corrigir a nota {editando?.numero ?? ""}
         </h1>
-        <p className="mt-2 max-w-[70ch] text-suave">
+        <p className="mt-2 max-w-[70ch] prosa text-suave">
           Ela ainda não virou estoque: dá para mexer em tudo antes de lançar.
         </p>
       </header>

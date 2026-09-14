@@ -91,7 +91,7 @@ export default function PaginaFichas() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Fichas técnicas
           </h1>
-          <p className="mt-1 max-w-[64ch] text-suave">
+          <p className="mt-1 max-w-[64ch] prosa text-suave">
             A receita de cada prato e o que ela custa por porção. Um preparo pode entrar em
             outro — o molho tem ficha própria e o custo dele desce sozinho para os pratos que
             o usam.

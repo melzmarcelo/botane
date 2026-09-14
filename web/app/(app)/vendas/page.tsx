@@ -163,7 +163,7 @@ export default function PaginaVendas() {
         <div>
           <p className="rotulo">CMV</p>
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Vendas</h1>
-          <p className="mt-1 max-w-[66ch] text-suave">
+          <p className="mt-1 max-w-[66ch] prosa text-suave">
             As vendas alimentam o CMV teórico: quantidade vendida × custo da ficha na data. O
             custo é <b>congelado</b> na importação — corrigir uma receita amanhã não reescreve o
             que já passou.

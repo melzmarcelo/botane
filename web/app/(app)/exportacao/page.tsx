@@ -184,7 +184,7 @@ export default function PaginaExportacao() {
           titulo="Antes de ligar: as categorias"
           descricao="O produto só sai daqui quando a categoria dele já existe no cardápio do PDV."
         >
-          <p className="mb-3 max-w-[75ch] text-[13px] leading-snug text-suave">
+          <p className="mb-3 max-w-[75ch] text-[13px] leading-snug prosa text-suave">
             Sem categoria marcada, <b>todo</b> produto fica travado na fila — o PDV precisa do
             grupo para aceitar o item. Isto pergunta ao cardápio quais das suas categorias já
             existem lá e marca só essas; as de compra (hortifrúti, limpeza, descartáveis) ficam
@@ -232,7 +232,7 @@ export default function PaginaExportacao() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Exportação para o PDV
           </h1>
-          <p className="mt-1 max-w-[68ch] text-suave">
+          <p className="mt-1 max-w-[68ch] prosa text-suave">
             O que está marcado como integrado aqui e ainda não chegou ao cardápio do PDV.
             Nada sai sozinho — o envio é sempre disparado por alguém.
           </p>
@@ -410,7 +410,7 @@ export default function PaginaExportacao() {
                               {estadoIntegrado(i).rotulo}
                             </Etiqueta>
                             {!!estadoIntegrado(i).explica && (
-                              <span className="mt-0.5 block max-w-[52ch] text-[12.5px] leading-snug text-suave">
+                              <span className="mt-0.5 block max-w-[52ch] text-[12.5px] leading-snug prosa text-suave">
                                 {estadoIntegrado(i).explica}
                               </span>
                             )}

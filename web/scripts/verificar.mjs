@@ -4587,6 +4587,77 @@ try {
   checar("não há rolagem horizontal no celular",
     larguraCorpo.scroll <= larguraCorpo.janela + 1, JSON.stringify(larguraCorpo));
 
+  // 🔑 **As telas do dia a dia a um toque** (14/09/2026). Antes, trocar de tela
+  // no celular eram cinco gestos: ☰, esperar, achar o grupo, abrir, tocar. Menu
+  // que exige abrir gaveta e menu que nao se usa — e o efeito nao e reclamacao,
+  // e a pessoa parar de conferir o estoque no salao.
+  // ⚠️ **Espera a barra EXISTIR, e a razao e o proprio componente.** `pode()`
+  // devolve `false` ate a sessao chegar do `/auth/me`, entao so sobra o
+  // "Inicio" — e com menos de dois destinos a barra nao se desenha, de
+  // proposito (barra de um item so nao e navegacao). Medir antes disso lia
+  // `{existe:false}` e acusava o produto de um estado que era meu relogio.
+  // Quinta vez nesta sessao que esperar pela coisa errada acusa a coisa errada.
+  await c.waitForSelector("#barra-navegacao a", { timeout: 9000 }).catch(() => null);
+  // ⚠️ **O nome desta variavel e `barraDia` porque `barra` ja existia** — e
+  // renomear com um replace CEGO trocou tambem dentro das strings: a bateria
+  // passou a procurar `#barraDia-navegacao`, que nunca existiu. Quatro
+  // checagens falharam por duas rodadas acusando um componente que estava
+  // certo, e a sonda isolada achava a barra na hora. Renomear identificador nao
+  // e substituir texto.
+  const barraDia = await c.evaluate(() => {
+    const nav = document.querySelector("#barra-navegacao");
+    if (!nav) return { existe: false };
+    const itens = [...nav.querySelectorAll("a")];
+    const rodape = document.querySelector("#barra-inferior");
+    return {
+      existe: true,
+      quantos: itens.length,
+      nomes: itens.map((a) => a.textContent?.trim()),
+      // ⚠️ 44px e o que a WCAG 2.5.5 recomenda para o dedo; 24 e so o minimo
+      // absoluto da 2.5.8, e barra de navegacao nao e lugar de morar no minimo.
+      menorAlvo: Math.min(...itens.map((a) => a.getBoundingClientRect().height)),
+      // ⚠️ A navegacao fica ACIMA do rodape da versao, que continua existindo:
+      // ele e o que separa "a correcao nao funcionou" de "nao foi publicada".
+      acimaDoRodape: rodape
+        ? nav.getBoundingClientRect().bottom <= rodape.getBoundingClientRect().top + 1
+        : null,
+      // 🔑 E o conteudo nao pode nascer embaixo dela.
+      folgaDoMain: parseFloat(getComputedStyle(document.querySelector("main")).paddingBottom),
+    };
+  });
+  checar("o celular ganha a barra das telas do dia a dia", barraDia.existe, barraDia);
+  checar("com pelo menos tres destinos", (barraDia.quantos ?? 0) >= 3, barraDia);
+  checar("e alvos de toque de 44px ou mais", (barraDia.menorAlvo ?? 0) >= 44, barraDia);
+  // ⚠️ **`=== true`, e nao `!== false`.** Com a barra ausente o campo nunca era
+  // calculado, e `undefined !== false` e verdadeiro: esta checagem passava
+  // exatamente nas rodadas em que as de cima falhavam. Terceira vacuidade que
+  // esta fase produziu — todas do mesmo feitio, afirmar sobre o que nao foi
+  // medido.
+  checar("ela fica acima do rodape da versao, que continua la",
+    barraDia.acimaDoRodape === true, barraDia);
+  checar("e o conteudo tem folga para nao nascer embaixo dela",
+    (barraDia.folgaDoMain ?? 0) >= 96, barraDia);
+  await c.screenshot({ path: `${FOTOS}/m2b-barra-navegacao.png` });
+
+  // ⚠️ E no computador ela NAO aparece: a lateral ja resolve, e duas navegacoes
+  // na mesma tela seriam duas respostas para "onde eu clico".
+  // ⚠️ **Leva a pagina de desktop de volta para DENTRO do app antes de medir.**
+  // A fase anterior e a do PWA, que a deixa na tela de sem-conexao — fora do
+  // layout, onde barra nenhuma existe. Medir ali dava "ausente" e acusava o
+  // componente de nao renderizar, quando o que faltava era a precondicao.
+  await irPara(p, `${WEB}/`);
+  await p.waitForSelector("#barra-inferior", { timeout: 9000 }).catch(() => null);
+  const noComputador = await p.evaluate(() => {
+    const nav = document.querySelector("#barra-navegacao");
+    return nav ? getComputedStyle(nav).display : "ausente";
+  });
+  // ⚠️ **Exige "none", e nao aceita "ausente".** Aceitar os dois fazia a
+  // checagem passar exatamente no estado em que as de cima falhavam — a barra
+  // fora do DOM. Checagem que passa pelo mesmo motivo que outra falha nao
+  // afirma nada.
+  checar("e no computador ela existe no DOM, mas escondida",
+    noComputador === "none", noComputador);
+
   const gavetaEscondida = await c.evaluate(() => {
     const a = document.querySelector("aside");
     return a ? a.getBoundingClientRect().right <= 1 : false;
@@ -5748,6 +5819,71 @@ try {
 
   await api("PUT", "/unidades/1/parametros",
     { ciclo_fechamento: "MENSAL", dia_fechamento_cmv: 1, fechamento_dia_semana: 7 }, token);
+
+  console.log("10a4. as normas de UX que a paleta e os controles tem de cumprir");
+  // 🔑 **Pedido do dono (14/09/2026):** *"mais compatibilidade com as normas de
+  // UX… letras amigaveis e bonitas… tanto para computador quanto para celular."*
+  // O estudo em `docs/ux-estudo.md` mediu a paleta contra a WCAG 2.1 e achou
+  // tres coisas fora da norma. Isto aqui e a guarda para elas nao voltarem —
+  // norma sem teste volta na primeira vez que alguem ajustar uma cor "so um
+  // pouquinho".
+  await irPara(p, `${WEB}/produtos`);
+  await new Promise((r) => setTimeout(r, 1400));
+  const normas = await p.evaluate(() => {
+    // Contraste do WCAG 2.1, calculado sobre o que o NAVEGADOR realmente pinta
+    // — nao sobre o token, que pode estar sendo sobreposto por outra regra.
+    const luz = (cor) => {
+      const [r, g, b] = cor.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map((x) => {
+        const v = x / 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const razao = (a, b) => {
+      const [x, y] = [luz(a), luz(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const de = (el, prop) => getComputedStyle(el)[prop];
+    const campo = document.querySelector(".campo");
+    // ⚠️ **O primeiro VISÍVEL, não o primeiro do DOM.** A versão anterior
+    // pegava `.link-acao` sem olhar se ele estava renderizado e media altura
+    // ZERO — reprovando o alvo de toque por um elemento que ninguém vê. Medir
+    // o que está escondido é o mesmo erro de esperar pelo texto errado: a
+    // resposta vem, e não é sobre o que se perguntou.
+    const acao = [...document.querySelectorAll(".link-acao, .btn")]
+      .find((el) => el.getBoundingClientRect().height > 0) ?? null;
+    const etiqueta = [...document.querySelectorAll("span")]
+      .find((s) => /rascunho/i.test(s.textContent ?? ""));
+    const fundo = de(document.querySelector(".cartao") ?? document.body, "backgroundColor");
+    return {
+      // ⚠️ 16px: abaixo disso o Safari do iPhone da zoom ao focar o campo.
+      campoPx: campo ? parseFloat(de(campo, "fontSize")) : null,
+      // ⚠️ WCAG 2.5.8 pede 24x24 como MINIMO absoluto; 2.5.5 recomenda 44.
+      acaoAltura: acao ? Math.round(acao.getBoundingClientRect().height) : null,
+      // ⚠️ WCAG 1.4.11: 3,0 para a fronteira de um elemento de interface.
+      bordaCampo: campo ? razao(de(campo, "borderTopColor"), fundo).toFixed(2) : null,
+      // ⚠️ WCAG 1.4.3: 4,5 para texto de corpo — e a etiqueta tem 11px.
+      etiquetaTexto: etiqueta ? razao(de(etiqueta, "color"), fundo).toFixed(2) : null,
+      // A familia do dado denso: a celula deixou de ser serifada.
+      celula: de(document.querySelector("tbody td") ?? document.body, "fontFamily"),
+      // E a prosa continua serifada, que e a voz da casa.
+      prosa: de(document.querySelector(".prosa") ?? document.body, "fontFamily"),
+    };
+  });
+  checar("o campo tem 16px — abaixo disso o iPhone da zoom ao focar",
+    normas.campoPx >= 16, normas);
+  checar("o alvo de toque passa dos 24px que a norma pede como minimo",
+    normas.acaoAltura >= 28, normas);
+  checar("a borda do campo passa dos 3,0 da WCAG 1.4.11",
+    Number(normas.bordaCampo) >= 3, normas);
+  checar("e a etiqueta de 11px passa dos 4,5 da WCAG 1.4.3",
+    normas.etiquetaTexto === null || Number(normas.etiquetaTexto) >= 4.5, normas);
+  // 🔑 A divisao que o estudo propos: sem-serifa no dado, serifada na prosa.
+  checar("a celula da tabela esta na familia de LEITURA, nao na serifada",
+    /Inter/i.test(normas.celula) && !/Newsreader/i.test(normas.celula), normas.celula);
+  checar("e a prosa continua serifada — a voz da casa",
+    /Newsreader/i.test(normas.prosa), normas.prosa);
+  await foto(p, "44-normas-ux");
 
   console.log("10a3. o periodo se chama pelo nome, nao 'mes' sempre");
   // 🔑 **Relatado pelo dono (14/09/2026):** *"nas telas quando trata de periodo,

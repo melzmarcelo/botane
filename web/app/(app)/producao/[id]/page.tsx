@@ -175,7 +175,7 @@ export default function PaginaOrdemProducao() {
           )}
           {linha.origem === "ALERTA" && <Etiqueta>veio do alerta</Etiqueta>}
         </div>
-        <p className="mt-2 max-w-[70ch] text-suave">
+        <p className="mt-2 max-w-[70ch] prosa text-suave">
           A receita rende <b className="mono">{qtd(p.rendimento_qtd)}</b>{" "}
           {p.rendimento_um ?? p.um_estoque} por vez — para{" "}
           <b className="mono">{qtd(agora)}</b> {p.um_estoque} ela é feita{" "}

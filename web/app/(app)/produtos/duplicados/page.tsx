@@ -116,7 +116,7 @@ export default function Duplicados() {
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
           Cadastros com o mesmo nome
         </h1>
-        <p className="mt-1 max-w-[70ch] text-suave">
+        <p className="mt-1 max-w-[70ch] prosa text-suave">
           O catálogo do Omie cria um cadastro por código — e o mesmo abacate aparece uma vez
           para cada fornecedor que já o vendeu. Aqui eles ficam lado a lado para você juntar de
           uma vez.

@@ -23,7 +23,10 @@ export function Cartao({
         <header className="flex items-start justify-between gap-4 border-b border-linha px-5 py-4">
           <div>
             {titulo && <h2 className="text-[17px] font-bold tracking-tight">{titulo}</h2>}
-            {descricao && <p className="mt-1 text-[14px] text-suave">{descricao}</p>}
+            {/* 🔑 A descrição do cartão é PROSA: ela explica, não se varre. Fica na
+                serifada, que é a voz da casa — o resto da tela virou sem-serifa
+                para o dado denso. Um lugar só, e todos os cartões seguem. */}
+            {descricao && <p className="prosa mt-1 text-[14px] text-suave">{descricao}</p>}
           </div>
           {acao}
         </header>

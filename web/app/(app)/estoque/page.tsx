@@ -300,7 +300,7 @@ export default function PaginaEstoque() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Saldos e movimentos
           </h1>
-          <p className="mt-1 max-w-[64ch] text-suave">
+          <p className="mt-1 max-w-[64ch] prosa text-suave">
             Cada entrada recalcula o custo médio do insumo; cada saída baixa por esse custo.
             Nada aqui é apagado — correção entra como estorno.
           </p>

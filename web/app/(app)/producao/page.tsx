@@ -175,7 +175,7 @@ export default function PaginaProducao() {
       <header>
         <p className="rotulo">Estoque</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produção</h1>
-        <p className="mt-1 max-w-[66ch] text-suave">
+        <p className="mt-1 max-w-[66ch] prosa text-suave">
           Produzir baixa os ingredientes da ficha homologada e devolve o produto pronto ao
           estoque. O custo é o que <b>realmente saiu</b> hoje — se o insumo subiu, o prato
           produzido hoje custa mais.

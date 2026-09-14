@@ -230,7 +230,7 @@ export default function PaginaLoja() {
           {loja.matriz && <Etiqueta cor="erva">matriz</Etiqueta>}
           {!loja.ativo && <Etiqueta cor="alerta">inativa</Etiqueta>}
         </h1>
-        <p className="mt-1 max-w-[68ch] text-suave">
+        <p className="mt-1 max-w-[68ch] prosa text-suave">
           O cadastro desta loja e os parâmetros que mudam como o sistema se comporta nela.
           As integrações são configuradas em <Link href="/integracoes">Integrações</Link>, com
           a loja escolhida no seletor do topo.

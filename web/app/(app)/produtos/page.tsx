@@ -92,13 +92,34 @@ export default function PaginaProdutos() {
     return () => clearTimeout(t);
   }, [carregar, busca]);
 
+  /** Colunas que só existem quando há o que mostrar.
+   *
+   * 🔑 **Coluna vazia não custa largura.** Nesta base, categoria, setor,
+   * unidade e preço vinham em branco em quase toda linha — cinco colunas de
+   * travessão comendo 40% da tela para não dizer nada.
+   * ⚠️ **A regra é do DADO, não uma decisão fixa**: some só quando está vazia
+   * em TODA a página e volta sozinha assim que existir um valor. Arrancá-las de
+   * vez seria otimizar para o resíduo da importação do Omie, que é passageiro.
+   * ⚠️ **Por PÁGINA, e não pela base inteira**, porque é a página que ocupa a
+   * tela — e perguntar à base custaria uma consulta a mais para decidir
+   * largura de coluna. */
+  const nas = (campo: (p: ProdutoResumo) => unknown) =>
+    (lista ?? []).some((p) => {
+      const v = campo(p);
+      return v !== null && v !== undefined && v !== "";
+    });
+  const temCategoria = nas((p) => p.categoria);
+  const temSetor = nas((p) => p.setor);
+  const temUnidade = nas((p) => p.um_estoque);
+  const temPreco = nas((p) => p.preco_venda);
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="rotulo">Cadastros</p>
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produtos</h1>
-          <p className="mt-1 max-w-[62ch] text-suave">
+          <p className="mt-1 max-w-[62ch] prosa text-suave">
             Tudo o que entra e sai da casa: insumo, revenda, o que a cozinha produz e a
             embalagem. É daqui que a ficha técnica e o estoque vão puxar.
           </p>
@@ -313,10 +334,20 @@ export default function PaginaProdutos() {
                     <th>Código</th>
                     <th>Produto</th>
                     <th>Tipo</th>
-                    <th>Categoria</th>
-                    <th>Setor</th>
-                    <th>Un.</th>
-                    <th className="num">Preço</th>
+                    {/* 🔑 **Coluna vazia não custa largura** (14/09/2026). Nesta
+                        base, categoria, setor, unidade e preço vinham em branco
+                        em quase toda linha — cinco colunas de travessão comendo
+                        40% da tela para não dizer nada.
+                        ⚠️ **E a regra é do DADO, não uma decisão fixa**: a coluna
+                        some só quando está vazia em TODA a página, e volta
+                        sozinha assim que existir um valor. Arrancá-la de vez
+                        seria otimizar para o resíduo da importação do Omie, que
+                        é passageiro; a casa que preenche o cadastro continua
+                        vendo tudo. */}
+                    {temCategoria && <th>Categoria</th>}
+                    {temSetor && <th>Setor</th>}
+                    {temUnidade && <th>Un.</th>}
+                    {temPreco && <th className="num">Preço</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -349,10 +380,14 @@ export default function PaginaProdutos() {
                         </span>
                       </td>
                       <td>{nomeTipo(p.tipo)}</td>
-                      <td className="text-suave">{p.categoria ?? "—"}</td>
-                      <td className="text-suave">{p.setor ?? "—"}</td>
-                      <td className="mono">{p.um_estoque ?? "—"}</td>
-                      <td className="num">{p.preco_venda ? reais(Number(p.preco_venda)) : "—"}</td>
+                      {temCategoria && <td className="text-suave">{p.categoria ?? "—"}</td>}
+                      {temSetor && <td className="text-suave">{p.setor ?? "—"}</td>}
+                      {temUnidade && <td className="mono">{p.um_estoque ?? "—"}</td>}
+                      {temPreco && (
+                        <td className="num">
+                          {p.preco_venda ? reais(Number(p.preco_venda)) : "—"}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

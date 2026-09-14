@@ -271,6 +271,69 @@
   já passou" (vendas). Nem toda frase precisa do ciclo — algumas só precisavam parar de
   falar em mês.
 
+- 🔑 **O layout passou por uma revisão medida contra a norma** (14/09/2026, pedido do dono:
+  *"mais amigável e mais compatibilidade com as normas de UX… letras amigáveis e bonitas…
+  a funcionalidade mais simples no dia a dia, tanto para computador quanto para celular"*).
+  O estudo está em [`docs/ux-estudo.md`](../../ux-estudo.md), com o protótipo do antes e
+  depois em `apresentacao/ux-prototipo.html`.
+
+  🔑 **A tipografia se dividiu por FUNÇÃO.** `Newsreader` era o padrão do `body` e com isso
+  carregava as CÉLULAS das tabelas: vinte linhas de nome de produto em serifada, negrito e
+  sublinhado — e os nomes chegam do Omie em CAIXA ALTA, que é uma quarta ênfase. Agora o
+  corpo é `Inter` e a serifada virou **opt-in** (`.prosa`), aplicada aos 52 parágrafos que
+  explicam cada tela e à descrição de todo cartão. ⚠️ Título, campo e botão **já eram**
+  Bricolage — o estudo tinha simplificado isso, e só ao aplicar ficou claro.
+
+  🔑 **Três cores estavam fora da norma, e a primeira correção também estava.** `alerta`
+  dava 4,06 (e pinta a etiqueta "rascunho", de 11px — a cor mais fraca no texto menor),
+  `latao` 4,44, e a borda dos campos **1,69** contra os 3,0 da WCAG 1.4.11.
+  ⚠️ **A borda foi corrigida DUAS vezes**: `#9aa78e` ainda dava 2,48, e quem avisou foi a
+  guarda da bateria, não o olho. A cor final (`#748069`) dá 4,09 sobre o cartão e 3,25
+  sobre o papel — os dois fundos em que um campo aparece.
+  🔑 **E isso revelou que uma cor fazia dois trabalhos opostos**: `linha2` pintava a borda
+  dos controles E o sublinhado do nome do registro. A borda precisa de contraste; o
+  sublinhado aparece vinte vezes seguidas e precisa sumir de tão presente. Nasceu
+  `--color-sublinhado`.
+
+  🔑 **`.campo` foi para 16px em toda a casa.** A regra já estava escrita no próprio CSS, no
+  `.campo-toque` — *"abaixo disso o Safari do iPhone dá zoom ao focar"* —, mas era opt-in e
+  estava aplicada praticamente só na contagem de inventário. Nota, produto, ficha e reserva
+  saltavam no celular do mesmo jeito.
+
+  🔑 **Coluna vazia não custa largura — e a regra é do DADO.** Na lista de produtos,
+  categoria, setor, unidade e preço vinham em branco em quase toda linha: cinco colunas de
+  travessão comendo 40% da tela. Agora a coluna some quando está vazia em TODA a página e
+  **volta sozinha** quando houver valor. ⚠️ Arrancá-las de vez seria otimizar para o resíduo
+  da importação do Omie, que é passageiro.
+
+  🔑 **No celular, as telas do dia a dia a um toque** (`components/barra-navegacao.tsx`).
+  Trocar de tela eram cinco gestos (☰, esperar, achar o grupo, abrir, tocar) — e o efeito
+  disso não é reclamação, é a pessoa parar de conferir o estoque no salão. ⚠️ Ela fica
+  ACIMA do rodapé da versão, que continua existindo: aquele número é o que separa *"a
+  correção não funcionou"* de *"a correção não foi publicada"*. ⚠️ E a folga do `main` subiu
+  para `pb-28` no celular — com duas barras fixas, o último botão do formulário nasceria
+  embaixo da navegação, e o defeito só apareceria no telefone.
+
+  ### ⚠️ Quatro checagens que eu escrevi afirmando sem medir
+
+  Vale mais que o defeito, porque é o padrão: **a fase nova produziu quatro checagens que
+  não mediam o que diziam medir** — e o produto estava certo nas quatro.
+
+  - **Renomear identificador não é substituir texto.** `barra` colidia com outra variável e
+    o replace CEGO trocou também dentro das strings: a bateria passou a procurar
+    `#barraDia-navegacao`, que nunca existiu. Quatro checagens falharam por duas rodadas
+    acusando um componente correto, enquanto uma sonda isolada achava a barra na hora.
+  - **`!== false` não é `=== true`.** Com a barra ausente o campo nunca era calculado, e
+    `undefined !== false` é verdadeiro: a checagem passava exatamente nas rodadas em que as
+    outras falhavam.
+  - **Aceitar `"ausente"` é aceitar o estado da falha.** A checagem do computador dava por
+    boa a mesma ausência que reprovava no celular.
+  - **Medir elemento invisível dá zero.** A sonda pegava o primeiro `.link-acao` do DOM sem
+    olhar se estava renderizado, e reprovava o alvo de toque por altura zero.
+
+  E a precondição: medir a barra numa página que a fase anterior tinha deixado **fora do
+  app** (a tela de sem-conexão do PWA) dava "ausente" e acusava o componente.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

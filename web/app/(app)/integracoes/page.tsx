@@ -73,7 +73,7 @@ export default function PaginaIntegracoes() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Integrações</h1>
-        <p className="mt-1 max-w-[66ch] text-suave">
+        <p className="mt-1 max-w-[66ch] prosa text-suave">
           O que o Botané troca com o mundo lá fora. Nada aqui é pré-requisito — o sistema opera
           inteiro sem nenhuma delas.
         </p>
@@ -97,7 +97,7 @@ export default function PaginaIntegracoes() {
 
       {/* A frase do que a aba faz vem ANTES do conteúdo: "Omie" e "PDV Legal"
           são nomes de fornecedor, não dizem o que cada um traz para cá. */}
-      {atual && <p className="-mt-3 max-w-[70ch] text-[14px] text-suave">{atual.explica}</p>}
+      {atual && <p className="-mt-3 max-w-[70ch] text-[14px] prosa text-suave">{atual.explica}</p>}
 
       {aba === "omie" && <Omie />}
       {aba === "pdv" && <PdvLegal />}

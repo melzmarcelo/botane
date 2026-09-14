@@ -105,7 +105,7 @@ export default function PaginaEmpresa() {
         <div>
           <p className="rotulo">Administração</p>
           <h1 className="mt-1 text-[30px] font-bold tracking-tight">Empresa</h1>
-          <p className="mt-1 max-w-[62ch] text-suave">
+          <p className="mt-1 max-w-[62ch] prosa text-suave">
             Os dados daqui aparecem nos relatórios, nos PDFs e nas integrações. Preencher uma
             vez basta.
           </p>

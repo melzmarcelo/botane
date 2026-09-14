@@ -111,7 +111,7 @@ export default function UnidadesDeFora({
 
       {/* 🔑 A explicação vem ANTES da lista: sem ela, "BJ · 1 item" não diz a
           ninguém por que aquilo está ali nem o que acontece se ficar. */}
-      <p className="max-w-[75ch] text-[13px] leading-snug text-suave">
+      <p className="max-w-[75ch] text-[13px] leading-snug prosa text-suave">
         O fornecedor escreve a unidade do jeito dele — <b>UNID</b>, <b>CX.</b>, <b>PT</b> — e o
         que não casa com o cadastro daqui entra na nota <b>sem conversão</b>: a quantidade é
         usada como está. Diga o que cada uma significa e a próxima nota entra convertida.
@@ -181,7 +181,7 @@ export default function UnidadesDeFora({
               resolve por tradução: ela se cadastra acima, e aí aparece no
               seletor. Dizer isso evita a tradução forçada para "a mais
               parecida", que é como o custo para de fluir. */}
-          <p className="mt-3 max-w-[70ch] text-[13px] text-suave">
+          <p className="mt-3 max-w-[70ch] text-[13px] prosa text-suave">
             Não achou a unidade certa na lista? Cadastre-a em <b>Unidades de medida</b>, acima —
             traduzir para a mais parecida faz a conta sair errada em silêncio.
           </p>
@@ -214,7 +214,7 @@ export default function UnidadesDeFora({
             ))}
           </div>
           {/* 🔑 O que já entrou NÃO se corrige por aqui: o razão é append-only. */}
-          <p className="mt-2 max-w-[70ch] text-[13px] text-suave">
+          <p className="mt-2 max-w-[70ch] text-[13px] prosa text-suave">
             A tradução vale para as <b>próximas</b> notas. O que já foi lançado se corrige por
             estorno — o razão não se reescreve.
           </p>

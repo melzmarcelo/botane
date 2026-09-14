@@ -114,7 +114,14 @@ function Indicador({
     <>
       <p className="rotulo">{rotulo}</p>
       <p className={`mono mt-1.5 text-[26px] font-bold leading-none ${cor}`}>{valor}</p>
-      <p className="mt-2 text-[13px] leading-snug text-suave">{nota}</p>
+      {/* ⚠️ **A nota some no celular, e só nele.** Ela é o que faz cada cartão
+          crescer — quatro notas de duas linhas são meia tela de telefone. No
+          computador ela fica: lá sobra espaço e ela ensina o que o número
+          significa. ⚠️ Fica no DOM, escondida por CSS, para o leitor de tela
+          continuar lendo a explicação junto do número. */}
+      <p className="prosa sr-only mt-2 text-[13px] leading-snug text-suave sm:not-sr-only">
+        {nota}
+      </p>
     </>
   );
   return href ? (
@@ -169,7 +176,7 @@ export default function Inicio() {
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
           {primeiroNome ? `Olá, ${primeiroNome}` : "Bom dia"}
         </h1>
-        <p className="mt-1 max-w-[62ch] text-suave">
+        <p className="mt-1 max-w-[62ch] prosa text-suave">
           {maiuscula(p.periodo.termos.o)} corrente, do jeito que está agora.
         </p>
       </header>
@@ -268,8 +275,14 @@ export default function Inicio() {
         </Cartao>
       )}
 
+      {/* 🔑 **Grade 2x2 desde o celular** (14/09/2026). O `sm:grid-cols-2` só
+          dividia a partir de 640px: no telefone os quatro viravam uma coluna,
+          cada um com a nota explicativa, e a tela inicial ficava com 2.795px de
+          altura — o food cost só aparecia depois de rolar três telas. Não havia
+          "o dia num relance", que é justamente o que se abre a tela inicial
+          para ver. */}
       {d && (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <Indicador
             rotulo="Custo do que saiu"
             valor={reais(d.cmv_mes)}

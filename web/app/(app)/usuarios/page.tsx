@@ -109,7 +109,7 @@ export default function PaginaUsuarios() {
         <div>
           <p className="rotulo">Administração</p>
           <h1 className="mt-1 text-[30px] font-bold tracking-tight">Usuários</h1>
-          <p className="mt-1 max-w-[62ch] text-suave">
+          <p className="mt-1 max-w-[62ch] prosa text-suave">
             Cada pessoa da casa com o seu login. O papel decide o que ela vê — e quem confere é
             o servidor, não a tela.
           </p>

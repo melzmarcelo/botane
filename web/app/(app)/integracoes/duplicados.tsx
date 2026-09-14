@@ -30,7 +30,7 @@ export default function Duplicados() {
         </Link>
       }
     >
-      <p className="max-w-[70ch] text-[14px] text-suave">
+      <p className="max-w-[70ch] text-[14px] prosa text-suave">
         O catálogo do Omie cria um cadastro por código, então o mesmo abacate aparece uma vez
         para cada fornecedor que já o vendeu — e o cardápio do PDV traz o dele. A tela põe os
         repetidos lado a lado, com os códigos à vista, e junta o grupo num clique.{" "}

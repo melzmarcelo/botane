@@ -238,7 +238,7 @@ export default function PaginaCadastros() {
         {/* O título não diz o que tem dentro, e "tabelas de apoio" não é o nome
             de nada que alguém procura: quem precisa do local de estoque procura
             "local de estoque". Por isso a lista vem escrita aqui. */}
-        <p className="mt-1 max-w-[68ch] text-suave">
+        <p className="mt-1 max-w-[68ch] prosa text-suave">
           <b className="font-semibold text-tinta">
             Setores, locais de estoque, categorias e unidades de medida
           </b>{" "}
@@ -268,7 +268,7 @@ export default function PaginaCadastros() {
       </nav>
 
       <div className="-mt-3 flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-[70ch] text-[14px] text-suave">{atual.explica}</p>
+        <p className="max-w-[70ch] text-[14px] prosa text-suave">{atual.explica}</p>
         {/* Mesma caixinha de Produtos, no mesmo lugar do olho: quem procura um
             cadastro antigo sabe onde ligá-la. */}
         <label className="flex shrink-0 items-center gap-2 text-[14px] text-suave">

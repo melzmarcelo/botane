@@ -340,7 +340,7 @@ export default function Omie() {
               deixaria de identificar qual é qual no dia em que a ordem mudasse. */}
           <section id="agenda-omie" className="rounded border border-linha bg-fundo p-4">
             <p className="rotulo">Buscar notas sozinho</p>
-            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug text-suave">
+            <p className="mt-1 max-w-[70ch] text-[13px] leading-snug prosa text-suave">
               Nota que chega na sexta e ninguém busca até segunda é nota que não entrou no
               estoque — e o CMV do fim de semana sai com compra a menos. Com o agendamento, o
               sistema procura sozinho.

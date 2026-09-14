@@ -305,7 +305,7 @@ export default function PaginaRemessa() {
       {podeReceber && (
         <Cartao>
           <h2 className="text-[17px] font-semibold">Conferir e receber</h2>
-          <p className="mt-1 max-w-[72ch] text-suave">
+          <p className="mt-1 max-w-[72ch] prosa text-suave">
             Deixe o campo em branco no que chegou completo. O que vier a menos é lançado como{" "}
             <strong>perda em {r.loja_origem}</strong> — a mercadoria saiu da prateleira de lá do
             mesmo jeito, e deixá-la no saldo faria a falta reaparecer na contagem seguinte sem nome.
@@ -362,7 +362,7 @@ export default function PaginaRemessa() {
       {podeCancelar && (
         <Cartao>
           <h2 className="text-[17px] font-semibold">Cancelar a remessa</h2>
-          <p className="mt-1 max-w-[72ch] text-suave">
+          <p className="mt-1 max-w-[72ch] prosa text-suave">
             A mercadoria volta a ser só de {r.loja_origem} — que é onde ela nunca deixou de contar.{" "}
             <strong>Nada é estornado</strong>, porque nada foi lançado.
           </p>

@@ -54,7 +54,7 @@ export default function PaginaAuditoria() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Auditoria</h1>
-        <p className="mt-1 max-w-[64ch] text-suave">
+        <p className="mt-1 max-w-[64ch] prosa text-suave">
           Quem mudou o quê, quando, e o valor antes e depois. Senha e credencial nunca entram
           aqui — o registro é filtrado antes de gravar.
         </p>

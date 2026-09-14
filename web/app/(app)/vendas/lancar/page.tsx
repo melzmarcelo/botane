@@ -267,7 +267,7 @@ export default function PaginaLancarVenda() {
           vendas
         </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Lançar venda</h1>
-        <p className="mt-2 max-w-[70ch] text-suave">
+        <p className="mt-2 max-w-[70ch] prosa text-suave">
           À mão, para o acerto pontual; ou colando o fechamento do PDV. O custo da ficha é
           congelado agora — e o que controla estoque <b>baixa da prateleira</b> no mesmo
           lançamento.

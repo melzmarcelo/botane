@@ -48,7 +48,7 @@ export default function NovaLoja() {
           Lojas
         </Voltar>
         <h1 className="mt-2 text-[26px] font-bold tracking-tight sm:text-[30px]">Nova loja</h1>
-        <p className="mt-1 max-w-[68ch] text-suave">
+        <p className="mt-1 max-w-[68ch] prosa text-suave">
           Cada loja tem CNPJ, endereço e estoque próprios. Todo movimento nasce carimbado com
           ela — razão, nota, venda, inventário e fechamento.
         </p>

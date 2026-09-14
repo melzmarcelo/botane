@@ -82,7 +82,7 @@ export default function PaginaSemVinculo() {
           <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
             Itens vendidos sem produto
           </h1>
-          <p className="mt-2 max-w-[70ch] text-suave">
+          <p className="mt-2 max-w-[70ch] prosa text-suave">
             A receita destes itens entra no CMV; o custo, não. Enquanto estiverem aqui, a
             variância do período sai maior do que é — e nada no painel diz por quê.
           </p>

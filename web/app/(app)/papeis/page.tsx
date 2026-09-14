@@ -108,7 +108,7 @@ export default function PaginaPapeis() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Papéis e permissões</h1>
-        <p className="mt-1 max-w-[64ch] text-suave">
+        <p className="mt-1 max-w-[64ch] prosa text-suave">
           Os papéis de fábrica vêm prontos e não são editáveis — copie um e ajuste a cópia.
           Ver custo é permissão à parte de ver a ficha.
         </p>

@@ -477,7 +477,7 @@ export default function PaginaAjustes() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Ajustes de estoque
         </h1>
-        <p className="mt-1 max-w-[68ch] text-suave">
+        <p className="mt-1 max-w-[68ch] prosa text-suave">
           O lançamento feito à mão, para o que não nasce de um documento. Nota de entrada,
           produção, contagem e venda têm caminho próprio — e nada aqui é apagado: correção
           entra como estorno.

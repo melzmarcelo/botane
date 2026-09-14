@@ -11,6 +11,7 @@ import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
 import BarraSuperior from "@/components/barra-superior";
 import BarraInferior from "@/components/barra-inferior";
+import BarraNavegacao from "@/components/barra-navegacao";
 
 /** O menu é montado pelas permissões de quem entrou. */
 /** `chave` pode ser uma lista: a tela de Ajustes serve a quatro permissões e
@@ -373,8 +374,12 @@ function Casca({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ⚠️ `pb-14`: o rodapé é FIXO, então ele não empurra nada — sem a folga,
-          o último botão de um formulário fica atrás dele. */}
-      <main className="min-w-0 px-4 py-6 pb-14 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
+          o último botão de um formulário fica atrás dele.
+          ⚠️ **No celular a folga é MAIOR** (`pb-28`): lá são duas barras fixas,
+          a de navegação sobre a da versão. Sem isto o último botão do
+          formulário nasce embaixo da navegação — e o defeito só apareceria no
+          telefone, que é onde ninguém testa primeiro. */}
+      <main className="min-w-0 px-4 py-6 pb-28 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
         <div className="mx-auto max-w-[1180px]">
           <ConviteInstalar />
           {/* 🔑 **A fronteira de Suspense que o `useSearchParams` exige.**
@@ -394,6 +399,9 @@ function Casca({ children }: { children: React.ReactNode }) {
       </main>
       </div>
 
+      {/* 🔑 **No celular, as telas do dia a dia a um toque** (14/09/2026). A
+          gaveta continua existindo — ela só deixa de ser o único caminho. */}
+      <BarraNavegacao />
       <BarraInferior />
     </div>
   );

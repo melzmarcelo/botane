@@ -24,7 +24,7 @@ export default function PaginaNovoFornecedor() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Nova pessoa
         </h1>
-        <p className="mt-2 max-w-[70ch] text-suave">
+        <p className="mt-2 max-w-[70ch] prosa text-suave">
           Quem a casa conhece: de quem ela compra, quem trabalha nela, quem consome dela. Para
           um <b>fornecedor</b>, o CNPJ é o que liga a nota fiscal que vem do Omie ao cadastro
           certo — sem ele, a conciliação vira trabalho manual.

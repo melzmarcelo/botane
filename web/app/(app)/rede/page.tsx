@@ -79,7 +79,7 @@ export default function PaginaRede() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Visão da rede
         </h1>
-        <p className="mt-1 max-w-[68ch] text-suave">
+        <p className="mt-1 max-w-[68ch] prosa text-suave">
           As lojas lado a lado, no período corrente de cada uma. Os números são os mesmos do
           painel de cada loja — esta tela não recalcula nada por conta própria.
         </p>
@@ -171,7 +171,7 @@ export default function PaginaRede() {
               {/* 🔑 A explicação fica na tela porque a conta NÃO é a média dos
                   percentuais acima, e quem confere com a calculadora vai achar
                   outro número se não souber disso. */}
-              <p className="mt-1 max-w-[62ch] text-[12.5px] leading-snug text-suave">
+              <p className="mt-1 max-w-[62ch] text-[12.5px] leading-snug prosa text-suave">
                 Calculado sobre o CMV e a receita somados — não é a média dos percentuais das
                 lojas. Média daria o mesmo peso à loja que vendeu muito e à que vendeu pouco.
               </p>

@@ -204,7 +204,7 @@ export default function PaginaCmv() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Quanto custou o que você vendeu
           </h1>
-          <p className="mt-1 max-w-[64ch] text-suave">
+          <p className="mt-1 max-w-[64ch] prosa text-suave">
             O real vem do estoque; o teórico, das fichas técnicas com as vendas do período. A
             diferença entre os dois é o número que vale olhar todo dia.
           </p>

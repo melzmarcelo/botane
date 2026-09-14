@@ -81,7 +81,7 @@ export default function PaginaAlertas() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           O que precisa de atenção
         </h1>
-        <p className="mt-1 max-w-[64ch] text-suave">
+        <p className="mt-1 max-w-[64ch] prosa text-suave">
           O sistema sabe o que está para acabar, o que vence esta semana e o que ficou parado
           esperando alguém. Esta tela junta tudo — para você não descobrir tarde demais.
         </p>
