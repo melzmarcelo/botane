@@ -196,17 +196,26 @@ async function irPara(pagina, url) {
  * acusar o clique que nao houve. Foi assim que as tres checagens do custo
  * inicial cairam, com a tela ainda em branco e o botao inexistente.
  */
-async function clicarQuando(pagina, expressao, limite = 15000) {
+/* ⚠️ **Casa por TEXTO PURO, não por regex — e isso foi escolha, não simplismo.**
+ * A primeira versão recebia a fonte de uma `RegExp`, e o rótulo dos botões desta
+ * tela começa com "+". Escapá-lo custou duas tentativas: a barra se perdia no
+ * caminho até o arquivo, `"\+ salão"` virava `"+ salão"` em JS e
+ * `new RegExp("+ …")` estourava com "nothing to repeat" — derrubando a bateria
+ * INTEIRA, não só a checagem. Botão se identifica pelo que está escrito nele;
+ * regex aqui só acrescentava uma linguagem a mais para errar.
+ * `exato` existe para "criar", que é prefixo de "Criar 6 mesas". */
+async function clicarQuando(pagina, texto, { exato = false, limite = 15000 } = {}) {
   const ate = Date.now() + limite;
   while (Date.now() < ate) {
-    const clicou = await pagina.evaluate((fonte) => {
-      const re = new RegExp(fonte, "i");
-      const b = [...document.querySelectorAll("button")].find((x) =>
-        re.test(x.textContent ?? ""));
+    const clicou = await pagina.evaluate(({ alvo, exigirIgual }) => {
+      const b = [...document.querySelectorAll("button")].find((x) => {
+        const t = (x.textContent ?? "").trim().toLowerCase();
+        return exigirIgual ? t === alvo : t.includes(alvo);
+      });
       if (!b || b.disabled) return false;
       b.click();
       return true;
-    }, expressao);
+    }, { alvo: texto.trim().toLowerCase(), exigirIgual: exato });
     if (clicou) return true;
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -1801,8 +1810,15 @@ try {
 
     // Dentro da ficha: o seletor de versao.
     await irPara(p, `${WEB}/fichas/${fVer1.id}`);
-    await new Promise((r) => setTimeout(r, 1500));
-    const seletorVersao = await p.$('select[aria-label="Versão da ficha"]');
+    // ⚠️ **Espera o SELETOR, não um relógio.** A ficha carrega por XHR depois do
+    // `networkidle2`, e um `setTimeout` de 1,5 s reprovava a checagem por
+    // impaciência sob carga — passou em duas rodadas seguidas e caiu na
+    // terceira, sem ninguém tocar na tela. Mesma lição do custo inicial: se o
+    // seletor de fato não existir, isto ainda falha, só que nove segundos
+    // depois em vez de um e meio.
+    const seletorVersao = await p
+      .waitForSelector('select[aria-label="Versão da ficha"]', { timeout: 9000 })
+      .catch(() => null);
     checar("a ficha oferece escolher a versão", !!seletorVersao);
     if (seletorVersao) {
       const opcoes = await p.evaluate(() =>
@@ -6942,6 +6958,119 @@ try {
   const depoisR = await p.evaluate(() => document.body.innerText);
   checar("marcar o sabado e salvar tira o aviso de casa fechada",
     !/Nenhum dia da semana está aberto/i.test(depoisR), depoisR.slice(0, 300));
+
+  // ---- o salao: saloes, mesas e lugares ----
+  // 🔑 **Pedido do dono:** *"ter o cadastro de saloes, cadastro de mesas,
+  // lugares por mesas"* e, depois de ver a tela, *"poderia ser separado por
+  // salao"*. A tela mostra UM salao por vez, em abas, e a aba mora no endereco.
+  // ⚠️ Ponto de partida MONTADO, pela mesma razao da configuracao: cadastro
+  // sobrevive entre rodadas, e afirmar "nenhum salao" sem zerar seria afirmar o
+  // que a rodada anterior desfez.
+  const { dados: salaoAntes } = await api("GET", "/reservas/salao", null, token);
+  for (const m of salaoAntes.mesas) await api("DELETE", `/reservas/mesas/${m.id}`, null, token);
+  for (const s of salaoAntes.saloes) await api("DELETE", `/reservas/saloes/${s.id}`, null, token);
+
+  await irPara(p, `${WEB}/reservas/salao`);
+  await esperarTexto(p, "maior grupo que cabe", 9000);
+  const salaoVazio = await p.evaluate(() => document.body.innerText);
+  checar("a tela do salao avisa quando nao ha salao nenhum",
+    /Nenhum salão cadastrado ainda/i.test(salaoVazio), salaoVazio.slice(0, 300));
+  checar("e mostra os quatro numeros do salao desde o inicio",
+    /mesas ativas/i.test(salaoVazio) && /lugares confortáveis/i.test(salaoVazio)
+    && /com a cadeira extra/i.test(salaoVazio) && /maior grupo que cabe/i.test(salaoVazio),
+    salaoVazio.slice(0, 300));
+
+  // ⚠️ "\+ salao": `clicarQuando` recebe a FONTE de uma regex, e o "+" precisa
+  // vir escapado. Sem a barra, `new RegExp("+ salao")` estoura com "nothing to
+  // repeat" — e derruba a bateria inteira, nao so a checagem.
+  checar("da para abrir o formulario de salao novo", await clicarQuando(p, "+ salão"));
+  await p.type('input[aria-label="nome do novo salão"]', `Principal ${marcaNota}`);
+  checar("e criar o salao", await clicarQuando(p, "criar", { exato: true }));
+
+  // 🔑 **A aba escolhida mora no ENDERECO**: recarregar cai no mesmo salao.
+  // ⚠️ **Espera o ENDERECO, nao o texto** — e a razao e sutil: `esperarTexto`
+  // inclui o VALOR DOS CAMPOS, e "Principal …" tinha acabado de ser digitado no
+  // input do salao novo. A espera casava no mesmo instante com o que a propria
+  // bateria tinha escrito, e o endereco era lido antes de a ida ao servidor
+  // voltar. O texto estava certo e mesmo assim nao provava nada.
+  const virouEndereco = await p
+    .waitForFunction(() => /[?&]salao=\d+/.test(location.search), { timeout: 9000 })
+    .then(() => true)
+    .catch(() => false);
+  checar("o salao recem-criado abre sozinho, e o endereco guarda qual e",
+    virouEndereco, p.url());
+
+  // 🔑 **Montar o salao em LOTE** — o trabalho real do cadastro, que acontece
+  // uma vez so: clicar "+ mesa" doze vezes e renomear cada uma e exatamente
+  // quando ninguem tem paciencia.
+  checar("a tela oferece criar varias mesas de uma vez",
+    await clicarQuando(p, "+ várias mesas"));
+  await esperarTexto(p, "Quantas mesas", 6000);
+  await p.evaluate(() => {
+    const campo = document.querySelector('input[aria-label="quantas mesas criar"]');
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    setter.call(campo, "6");
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  checar("e o botao diz quantas vai criar", await clicarQuando(p, "Criar 6 mesas"));
+  await new Promise((r) => setTimeout(r, 1800));
+
+  const { dados: comLote } = await api("GET", "/reservas/salao", null, token);
+  checar("as seis mesas nascem de uma vez", comLote.mesas.length === 6, comLote.mesas.length);
+  // ⚠️ Numeradas a partir do primeiro nome livre, e o nome e unico por LOJA.
+  checar("numeradas a partir do 01",
+    comLote.mesas.some((m) => m.nome === "01") && comLote.mesas.some((m) => m.nome === "06"),
+    comLote.mesas.map((m) => m.nome));
+  // 🔑 Lugares e maximo sao DOIS numeros; o lote grava os dois.
+  checar("com lugares e maximo iguais quando ninguem os separou",
+    comLote.lugares === comLote.capacidade_max, comLote);
+  checar("e o maior grupo e a maior mesa sozinha",
+    comLote.maior_grupo === comLote.mesas[0].capacidade_max, comLote.maior_grupo);
+  await foto(p, "42b-reservas-salao");
+
+  // 🔑 **Um salao de cada vez**: com dois saloes, a tela mostra so o aberto.
+  const { dados: outro } = await api("POST", "/reservas/saloes",
+    { nome: `Varanda ${marcaNota}`, ordem: 1 }, token);
+  await api("POST", "/reservas/mesas/em-lote",
+    { id_salao: outro.id, quantidade: 2, lugares: 6, capacidade_max: 8, prefixo: "V" }, token);
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  await esperarTexto(p, `Varanda ${marcaNota}`, 9000);
+  const naVaranda = await p.evaluate(() => ({
+    linhas: document.querySelectorAll("table tbody tr").length,
+    abas: [...document.querySelectorAll('[role="tab"]')].map((b) => b.textContent.trim()),
+  }));
+  // ⚠️ Duas mesas na tela, nao oito: a pagina tem o tamanho de um SALAO, nao o
+  // da casa inteira. Era esse o pedido.
+  checar("a aba da varanda mostra so as mesas dela", naVaranda.linhas === 2, naVaranda);
+  checar("e as duas abas aparecem, com a contagem de cada uma",
+    naVaranda.abas.length === 2 && naVaranda.abas.some((x) => /6/.test(x))
+    && naVaranda.abas.some((x) => /2/.test(x)), naVaranda.abas);
+
+  // A junta: duas de 6/8 juntas sentam 16, e vale nos dois sentidos.
+  const naVarandaMesas = comLote.mesas.length;
+  const { dados: comOutro } = await api("GET", "/reservas/salao", null, token);
+  const daVaranda = comOutro.mesas.filter((m) => m.id_salao === outro.id);
+  await api("PUT", `/reservas/mesas/${daVaranda[0].id}`,
+    { junta_com: daVaranda[1].id }, token);
+  const { dados: comJunta } = await api("GET", "/reservas/salao", null, token);
+  checar("a junta e gravada nos dois sentidos",
+    comJunta.mesas.filter((m) => m.junta_com !== null).length === 2,
+    comJunta.mesas.filter((m) => m.junta_com !== null).length);
+  checar("e o maior grupo passa a ser a soma das duas: 16",
+    comJunta.maior_grupo === 16, comJunta.maior_grupo);
+  checar("as seis do principal continuam la", naVarandaMesas === 6);
+
+  // 🔑 **O teto do site tem de caber no salao** — uma das duas descobertas do
+  // prototipo. O numero viaja com a configuracao, que e onde o teto se edita.
+  const { dados: cfgComSalao } = await api("GET", "/reservas/configuracao", null, token);
+  checar("a configuracao sabe o maior grupo que o salao acomoda",
+    cfgComSalao.maior_grupo === 16, cfgComSalao.maior_grupo);
+
+  // ⚠️ Salao COM mesa nao se exclui: o caminho e desligar.
+  const semExcluir = await p.evaluate(() => document.body.innerText);
+  checar("salao com mesa manda desligar em vez de oferecer excluir",
+    /desligue em vez de excluir/i.test(semExcluir), semExcluir.slice(0, 400));
 
   // 🔑 **E as permissões passam a ser oferecidas** — o terceiro efeito.
   await irPara(p, `${WEB}/papeis`);

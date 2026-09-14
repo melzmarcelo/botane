@@ -139,18 +139,24 @@ ficha. A diferença entre os dois é a variância, que é o número que interess
 
 - **Rotas:** `reservas.py`
 - **Serviços:** `reservas.py`
-- **Telas:** `reservas/configuracoes/`
+- **Telas:** `reservas/configuracoes/`, `reservas/salao/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`
 
 🔑 **É o primeiro módulo LIGADO POR LOJA** (`parametros.reservas_ligado`,
 migração 068). Desligado, ele não existe: sem grupo no menu, com as rotas
 recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
 
-⚠️ Só a configuração está construída — horário de funcionamento (três horas por
-dia: abre, fecha e última reserva) e permanência por faixa. Salões, mesas, a
-regra de disponibilidade e a reserva em si vêm a seguir; o protótipo em
+⚠️ Construído até aqui: a **configuração** (horário de funcionamento — três horas
+por dia: abre, fecha e última reserva — e permanência por faixa) e o **salão**
+(salões, mesas, lugares e a junta entre mesas vizinhas). A regra de
+disponibilidade e a reserva em si vêm a seguir; o protótipo em
 `apresentacao/reservas-prototipo.html` já implementa a regra inteira e serve de
 especificação executável.
+
+🔑 **`lugares` (o confortável) e `capacidade_max` (com a cadeira extra) são dois
+números**: a alocação usa o máximo, os relatórios usam os lugares. E `maior_grupo`
+existe para ser comparado com `teto_online` — teto maior que a maior junta é uma
+promessa que o salão não cumpre.
 
 ---
 

@@ -50,6 +50,81 @@ class FaixaPermanencia(BaseModel):
         return self
 
 
+class SalaoCreate(BaseModel):
+    nome: str = Field(min_length=1, max_length=60)
+    ativo: bool = True
+    ordem: int = Field(default=0, ge=0, le=999)
+
+
+class SalaoUpdate(BaseModel):
+    nome: str | None = Field(default=None, min_length=1, max_length=60)
+    ativo: bool | None = None
+    ordem: int | None = Field(default=None, ge=0, le=999)
+
+
+class MesaCreate(BaseModel):
+    id_salao: int
+    nome: str = Field(min_length=1, max_length=20)
+    # ⚠️ **Dois números, e o máximo nunca é menor que o confortável.** `lugares`
+    # é quem senta bem; `capacidade_max` é com a cadeira extra, e é o que a
+    # alocação usa.
+    lugares: int = Field(default=2, ge=1, le=40)
+    capacidade_max: int | None = Field(default=None, ge=1, le=60)
+    ativo: bool = True
+
+    @model_validator(mode="after")
+    def _capacidade(self):
+        # Não informado, o máximo é o confortável: quem não tem cadeira extra
+        # não precisa dizer nada.
+        if self.capacidade_max is None:
+            self.capacidade_max = self.lugares
+        if self.capacidade_max < self.lugares:
+            raise ValueError(
+                "A capacidade máxima não pode ser menor que os lugares — seria dizer "
+                "que a cadeira extra tira lugar.")
+        return self
+
+
+class MesasEmLote(BaseModel):
+    """Montar um salão inteiro de uma vez.
+
+    🔑 **Pedido do dono (14/09/2026)**, depois de ver a tela: montar um salão de
+    doze mesas era clicar "+ mesa" doze vezes e renomear cada uma. O trabalho
+    real do cadastro é esse, e ele acontece uma vez, no dia em que a casa entra
+    no sistema — justamente quando ninguém tem paciência.
+    """
+    id_salao: int
+    quantidade: int = Field(ge=1, le=50)
+    lugares: int = Field(default=2, ge=1, le=40)
+    capacidade_max: int | None = Field(default=None, ge=1, le=60)
+    # Prefixo opcional para separar salões na numeração: "V" dá V01, V02…
+    # ⚠️ O nome é único por LOJA, não por salão — sem prefixo, a segunda varanda
+    # continua a numeração da casa em vez de recomeçar do 01.
+    prefixo: str = Field(default="", max_length=6)
+
+    @model_validator(mode="after")
+    def _capacidade(self):
+        if self.capacidade_max is None:
+            self.capacidade_max = self.lugares
+        if self.capacidade_max < self.lugares:
+            raise ValueError("A capacidade máxima não pode ser menor que os lugares.")
+        return self
+
+
+class MesaUpdate(BaseModel):
+    id_salao: int | None = None
+    nome: str | None = Field(default=None, min_length=1, max_length=20)
+    lugares: int | None = Field(default=None, ge=1, le=40)
+    capacidade_max: int | None = Field(default=None, ge=1, le=60)
+    ativo: bool | None = None
+    # 🔑 A mesa vizinha que encosta nesta. `null` desfaz a junta — nos DOIS
+    # lados, e quem grava é `services/reservas.casar_junta`.
+    # ⚠️ **"Não mandou" e "mandou nulo" são coisas diferentes aqui**, e o router
+    # separa as duas por `model_fields_set`. Sem isso, qualquer PUT que não
+    # falasse da junta a desfaria — trocar o nome da mesa 07 soltaria a 08.
+    junta_com: int | None = None
+
+
 class ConfiguracaoReservas(BaseModel):
     """A tela inteira num corpo só — ela grava tudo de uma vez."""
     aceita_online: bool = False

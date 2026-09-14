@@ -133,13 +133,118 @@ que vamos criando."*
   apontarão para pessoas e mesas, que saem no TRUNCATE, e o guarda do script vai
   apitar no dia em que a tabela nascer.
 
+## Salões e mesas (migração 069, 14/09/2026)
+
+🔑 **Pedido do dono:** *"para controle interno, ter o cadastro de salões, cadastro de
+mesas, lugares por mesas."*
+
+- 🔑 **O salão entra ENTRE a loja e a mesa**, e não é hierarquia decorativa: desligar o
+  salão tira as mesas dele da disponibilidade sem apagar cadastro nenhum — é a Varanda no
+  inverno, o Mezanino que só abre no fim de semana. Sem ele, a casa teria de desligar mesa
+  por mesa e lembrar de religar todas.
+  ⚠️ **`_mesas_vivas` exige as DUAS condições** (mesa ativa E salão ativo). Olhar só
+  `mesas.ativo` faria o salão desligado continuar recebendo reserva, e ninguém entenderia.
+
+- 🔑 **`lugares` e `capacidade_max` são dois números.** Lugares é o confortável; máximo é
+  com a cadeira extra. A **alocação usa o máximo**, o relatório de ocupação usa os lugares.
+  Um campo só obrigaria a escolher entre mentir para o cliente e recusar mesa que caberia.
+  ⚠️ A coerência é verificada entre o valor NOVO e o que FICA, não entre dois novos: quem
+  manda só `lugares` num PUT é comparado ao máximo já gravado. Sem isso dava para subir os
+  lugares acima do máximo antigo e o banco só reclamaria no `UPDATE` seguinte.
+
+- 🔑 **`junta_com` é RELAÇÃO, não atributo**, e é assim que um grupo de 8 senta em duas
+  mesas de 4 sem ninguém cadastrar uma "mesa 7+8" que não existe no salão.
+  ⚠️ **Vale nos dois sentidos, e quem garante é `casar_junta`.** Gravar de um lado só
+  deixaria a alocação achando um par que a outra mesa não conhece — a 07 diria "encosto na
+  08" e a 08 diria "não encosto em ninguém", e qual vale dependeria de por onde a consulta
+  entrou.
+  ⚠️ **Desfaz a junta anterior dos DOIS lados antes de criar a nova**, senão trocar o par
+  da 07 da 08 para a 09 deixaria um triângulo que nenhuma das três descreve.
+  ⚠️ **"Não mandou" e "mandou nulo" são coisas diferentes** — o router separa por
+  `model_fields_set`. Sem isso, renomear a mesa 07 soltaria a 08 sem ninguém pedir.
+  ⚠️ Mesas de salões DIFERENTES podem encostar (a da porta da varanda com a do canto do
+  principal): a lista de candidatas exclui só a própria mesa.
+
+- 🔑 **`maior_grupo` existe para comparar com `teto_online`**, e viaja nas duas respostas
+  (salão e configuração). Se o teto do site passar do que a maior mesa — ou junta —
+  acomoda, **quem pedir mais não acha horário nenhum e não sabe por quê**: a tela de
+  disponibilidade não tem como explicar que o problema é o cadastro. Foi uma das duas
+  descobertas do protótipo.
+
+- ⚠️ **Chave composta `(id, id_unidade)` em `saloes`**, com a `mesas` se pendurando nela.
+  Sem isso nada impediria uma mesa da loja A de apontar para um salão da loja B, e o erro
+  só apareceria no dia em que a filial mostrasse uma mesa que não é dela.
+
+- ⚠️ **Salão com mesa NÃO se exclui** (409, com a mensagem mandando desligar): o
+  `ON DELETE CASCADE` da chave composta levaria as mesas junto, e com elas a resposta para
+  "onde aquela reserva de agosto sentou".
+
+- ⚠️ **Mesa se exclui enquanto ninguém sentou nela — e quem vai barrar é o BANCO.** Quando
+  `reserva_mesas` nascer, a chave estrangeira dela recusa apagar mesa que já hospedou
+  reserva, e a rota passa a devolver o erro sem ninguém ter de lembrar de acrescentar a
+  regra. Mesma escolha de `_quem_referencia` em `limpar_dados.py`: perguntar ao Postgres em
+  vez de manter uma lista que envelhece.
+  ⚠️ Apagar solta a vizinha ANTES do `DELETE`: o `ON DELETE SET NULL` faria isso, mas
+  depois — e a resposta desta transação já teria saído com o valor velho.
+
+- ⚠️ **Cada recurso com o seu endereço, e não um PUT que reescreve tudo** (ao contrário da
+  configuração). Ali as faixas não são apontadas por ninguém; aqui a mesa vai ser, e apagar
+  e reinserir a cada gravação trocaria o `id` da mesma mesa física — a reserva de sábado
+  passaria a apontar para outra.
+
+- ⚠️ **`pos_x`/`pos_y` já existem e o mapa NÃO entra agora.** A recepção precisa saber *se
+  cabe às 20h*, e isso a regra de disponibilidade responde sem desenho nenhum. As colunas
+  ficam para não precisar de migração no dia.
+
+## A usabilidade do cadastro (mesmo dia, depois de ver a tela)
+
+🔑 **Pedido do dono:** *"daria para melhorar a usabilidade do cadastro do salão,
+principalmente no cadastro de mesas que pode se tornar bem extenso. Poderia ser separado
+por salão."*
+
+- 🔑 **Um salão de cada vez, em abas.** A primeira versão empilhava um cartão por salão: a
+  página crescia com o total de mesas da CASA. Agora ela tem o tamanho de um salão.
+  ⚠️ A aba mora no ENDEREÇO (`useEstadoNaUrl`, sem atraso — aba é clique, não digitação),
+  então recarregar, voltar e guardar o link caem no mesmo salão. Endereço apontando para
+  salão que já não existe cai no primeiro, em vez de numa tela vazia sem explicação.
+- 🔑 **A edição do salão foi para DENTRO da aba dele.** Antes havia uma tabela de salões no
+  topo e os cartões embaixo — duas respostas para "onde eu mexo neste salão".
+- ⚠️ **O seletor de junta continua oferecendo mesas de OUTROS salões** (a da porta da
+  varanda encosta na do canto do principal), mas o nome do salão viaja junto na opção:
+  "03" sozinho não diz de onde é.
+- 🔑 **`POST /reservas/mesas/em-lote`** monta o salão de uma vez. É o trabalho real do
+  cadastro, e acontece uma vez só — no dia em que a casa entra no sistema, que é
+  exatamente quando ninguém tem paciência para clicar "+ mesa" doze vezes.
+  ⚠️ **Pula os nomes já usados em vez de recusar o lote**: o nome é único por LOJA, e "já
+  existe a 03" seria resposta inútil para quem só quis mais dez mesas. A busca do nome
+  livre tem teto — sem ele, um prefixo que colidisse com tudo faria o laço rodar para
+  sempre segurando a transação, e o sintoma seria a tela pendurada, não um erro.
+
+### Três armadilhas de TESTE que esta fatia pagou
+
+Nenhuma era defeito de produto, e as três são da mesma família — **o teste afirmando ter
+esperado por algo que não provava o que ele achava**:
+
+- ⚠️ **`clicarQuando` recebia a fonte de uma RegExp, e o rótulo dos botões começa com
+  "+".** Escapar aquilo custou duas tentativas (a barra se perdia no caminho até o
+  arquivo), e `new RegExp("+ salão")` estourava com "nothing to repeat" — derrubando a
+  bateria INTEIRA, não só a checagem. Agora casa por **texto puro**: botão se identifica
+  pelo que está escrito nele, e regex ali só acrescentava uma linguagem a mais para errar.
+- ⚠️ **`esperarTexto` inclui o VALOR DOS CAMPOS.** A fase esperava por "Principal …" logo
+  depois de DIGITAR esse texto no input do salão novo: a espera casava no mesmo instante
+  com o que a própria bateria tinha escrito, e o endereço era lido antes de a ida ao
+  servidor voltar. O texto estava certo e mesmo assim não provava nada. Agora espera o
+  ENDEREÇO. ⚠️ É a mesma propriedade que, do lado oposto, fez uma checagem procurar em
+  `innerText` o nome de uma faixa que morava num `<input>`.
+- ⚠️ **Espera fixa de 1,5 s numa tela que carrega por XHR** (o seletor de versão da ficha):
+  passou em duas rodadas e caiu na terceira, sem ninguém tocar na tela. Virou
+  `waitForSelector`.
+
 ## O que vem a seguir
 
 Pela ordem do esboço, e nenhum deles começou:
 
-1. **Salões e mesas** — cadastro com lugares, capacidade máxima e a mesa que
-   junta. ⚠️ `lugares` (o confortável) e `capacidade_max` (com a cadeira extra)
-   são dois números: a alocação usa o máximo, o relatório usa os lugares.
+1. ~~Salões e mesas~~ — **feito** na migração 069, acima.
 2. **A regra de disponibilidade no servidor**, com teste próprio. É a peça que
    tudo o mais consome e a única que não pode ser refeita depois. O protótipo já
    a implementa inteira em JavaScript — serve de especificação executável.

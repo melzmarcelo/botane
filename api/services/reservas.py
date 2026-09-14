@@ -1,8 +1,10 @@
-"""Reservas — a configuração da loja: janela de funcionamento e permanência.
+"""Reservas — a configuração da loja e o salão: horários, permanência e mesas.
 
 O módulo inteiro é ligado por `parametros.reservas_ligado`, uma loja de cada
-vez. Este arquivo cuida da **primeira tela**: quando a casa abre, até quando
-aceita marcar, e quanto tempo cada refeição segura a mesa.
+vez. Este arquivo cuida das duas telas que descrevem a casa: **quando** ela
+atende (janela de funcionamento e permanência) e **onde** as pessoas sentam
+(salões, mesas e lugares). A regra de disponibilidade, que consome as duas, vem
+a seguir.
 
 🔑 **Por que a permanência é o coração de uma tela de configuração.** Ela não
 descreve a casa, ela DECIDE disponibilidade: é o que diz quando a mesa das 12h
@@ -16,6 +18,8 @@ aparecem no salão.
 o `Date.getDay()` do JavaScript. Duas convenções de dia da semana no mesmo
 sistema não dão erro em lugar nenhum: só marcam no dia errado.
 """
+
+from fastapi import HTTPException
 
 from database import get_cursor  # noqa: F401  (re-exportado para quem importa daqui)
 
@@ -107,6 +111,117 @@ def _hm(valor) -> str | None:
     return valor.strftime("%H:%M") if valor is not None else None
 
 
+# ---------------------------------------------------------------- o salão
+
+
+def _mesas_vivas(cur, id_unidade: int) -> list[dict]:
+    """As mesas que contam: ativas, em salão ativo.
+
+    ⚠️ **As duas condições, e não só a da mesa.** Desligar o salão é o jeito de
+    tirar a Varanda do inverno sem mexer em mesa por mesa — se a consulta
+    olhasse só `mesas.ativo`, o salão desligado continuaria recebendo reserva e
+    ninguém entenderia por quê.
+    """
+    cur.execute(
+        """SELECT m.id, m.nome, m.lugares, m.capacidade_max, m.junta_com
+             FROM mesas m JOIN saloes s ON s.id = m.id_salao
+            WHERE m.id_unidade = %s AND m.ativo AND s.ativo
+            ORDER BY s.ordem, s.nome, m.nome""",
+        (id_unidade,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def maior_grupo(cur, id_unidade: int) -> int:
+    """Quantas pessoas a maior mesa — ou a maior junta — acomoda.
+
+    🔑 **É o número que diz se o teto do site cabe no salão.** Se
+    `reserva_config.teto_online` passar dele, quem pedir mais não vai achar
+    horário nenhum e **não vai saber por quê**: a tela de disponibilidade não
+    tem como explicar que o problema é o cadastro. Foi uma das duas descobertas
+    do protótipo, e por isso o servidor devolve este número às duas telas que
+    mexem nos termos do problema.
+
+    ⚠️ Usa `capacidade_max`, não `lugares`: é o que a alocação vai usar.
+    """
+    vivas = _mesas_vivas(cur, id_unidade)
+    por_id = {m["id"]: m for m in vivas}
+    maior = 0
+    for m in vivas:
+        maior = max(maior, m["capacidade_max"])
+        par = por_id.get(m["junta_com"])
+        if par:
+            maior = max(maior, m["capacidade_max"] + par["capacidade_max"])
+    return maior
+
+
+def salao(cur, id_unidade: int) -> dict:
+    """Os salões desta loja, com as mesas de cada um e os totais."""
+    cur.execute(
+        "SELECT id, nome, ativo, ordem FROM saloes WHERE id_unidade = %s ORDER BY ordem, nome",
+        (id_unidade,),
+    )
+    saloes = [dict(r) for r in cur.fetchall()]
+
+    cur.execute(
+        """SELECT m.id, m.id_salao, m.nome, m.lugares, m.capacidade_max, m.ativo,
+                  m.junta_com, j.nome AS junta_com_nome
+             FROM mesas m LEFT JOIN mesas j ON j.id = m.junta_com
+            WHERE m.id_unidade = %s ORDER BY m.nome""",
+        (id_unidade,),
+    )
+    mesas = [dict(r) for r in cur.fetchall()]
+
+    ativos = {s["id"] for s in saloes if s["ativo"]}
+    for s in saloes:
+        suas = [m for m in mesas if m["id_salao"] == s["id"]]
+        s["mesas"] = len([m for m in suas if m["ativo"]])
+        s["lugares"] = sum(m["lugares"] for m in suas if m["ativo"])
+
+    vivas = [m for m in mesas if m["ativo"] and m["id_salao"] in ativos]
+    return {
+        "saloes": saloes,
+        "mesas": mesas,
+        "mesas_ativas": len(vivas),
+        "lugares": sum(m["lugares"] for m in vivas),
+        "capacidade_max": sum(m["capacidade_max"] for m in vivas),
+        "maior_grupo": maior_grupo(cur, id_unidade),
+    }
+
+
+def casar_junta(cur, id_unidade: int, id_mesa: int, id_par: int | None) -> None:
+    """Grava a junta **nos dois sentidos**, desfazendo a anterior.
+
+    🔑 **Juntar mesa é relação, não atributo.** Gravar só de um lado deixaria a
+    alocação achando um par que a outra mesa não conhece: a 07 diria "encosto na
+    08" e a 08 diria "não encosto em ninguém", e qual das duas vale dependeria de
+    por onde a consulta entrou.
+
+    ⚠️ **Desfaz a junta ANTERIOR dos dois lados antes de criar a nova**, senão
+    trocar o par da 07 da 08 para a 09 deixaria a 08 apontando para a 07 e a 07
+    para a 09 — um triângulo que nenhuma das três descreve.
+    """
+    cur.execute(
+        "SELECT junta_com FROM mesas WHERE id = %s AND id_unidade = %s",
+        (id_mesa, id_unidade),
+    )
+    atual = cur.fetchone()
+    if atual is None:
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+
+    # Solta quem estava preso: o par antigo desta mesa, e o par antigo do novo.
+    for solta in (atual["junta_com"], id_par):
+        if solta:
+            cur.execute(
+                "UPDATE mesas SET junta_com = NULL WHERE junta_com = %s OR id = %s",
+                (solta, solta),
+            )
+    cur.execute("UPDATE mesas SET junta_com = NULL WHERE junta_com = %s", (id_mesa,))
+    cur.execute("UPDATE mesas SET junta_com = %s WHERE id = %s", (id_par, id_mesa))
+    if id_par:
+        cur.execute("UPDATE mesas SET junta_com = %s WHERE id = %s", (id_mesa, id_par))
+
+
 def obter(cur, id_unidade: int) -> dict:
     """A configuração inteira desta loja, pronta para a tela."""
     _garantir(cur, id_unidade)
@@ -152,6 +267,12 @@ def obter(cur, id_unidade: int) -> dict:
         # servidor. Sem nenhum dia aberto a agenda não responde nada, e a tela
         # tem de DIZER isso em vez de parecer pronta.
         "dias_abertos": sum(1 for h in horarios if h["aberto"]),
+        # 🔑 **O maior grupo que o salão acomoda vem JUNTO com o teto do site**,
+        # porque os dois só fazem sentido comparados: teto maior que isto é uma
+        # promessa que o salão não cumpre, e quem pedir mais não acha horário
+        # nenhum sem saber por quê. A tela de configuração é onde o teto se
+        # edita, então é onde o aviso precisa aparecer.
+        "maior_grupo": maior_grupo(cur, id_unidade),
     }
 
 

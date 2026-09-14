@@ -117,6 +117,15 @@ const MENU: {
     grupo: "Reservas",
     itens: [
       {
+        href: "/reservas/salao",
+        nome: "Salão",
+        // ⚠️ `reservas.ver` basta para OLHAR o salão — quem atende o telefone
+        // precisa saber quantos lugares existem. Editar exige `configurar`, e
+        // quem decide é o servidor; a tela só esconde os controles.
+        chave: ["reservas.ver", "reservas.configurar"],
+        soComReservas: true,
+      },
+      {
         href: "/reservas/configuracoes",
         nome: "Configurações",
         chave: "reservas.configurar",
