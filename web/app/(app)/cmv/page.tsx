@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { nomeTipo, reais } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import CabecalhoTela from "@/components/cabecalho-tela";
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
 
@@ -198,88 +199,88 @@ export default function PaginaCmv() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="rotulo">CMV</p>
-          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
-            Quanto custou o que você vendeu
-          </h1>
-          <p className="mt-1 max-w-[64ch] prosa text-suave">
+      <CabecalhoTela
+        caminho="CMV"
+        titulo={<>Quanto custou o que você vendeu</>}
+        explica={
+          <>
             O real vem do estoque; o teórico, das fichas técnicas com as vendas do período. A
             diferença entre os dois é o número que vale olhar todo dia.
-          </p>
-        </div>
-        <div className="nao-imprimir flex flex-wrap items-end gap-2">
-          <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
-          {/* 🔑 **A memória de cálculo** (pedido da contabilidade, 02/09/2026).
-              O arquivo do contador dizia o RESULTADO em dez linhas; este abre
-              cada uma nos documentos que a compõem — o estoque inicial e o
-              final item a item, as compras por nota, e a conciliação que
-              explica por que a soma das notas não é a linha "Compras".
-              ⚠️ Fica ao LADO do outro, não no lugar dele: um é o resumo que se
-              lê, o outro é o anexo que se confere. Quem quer um raramente quer
-              o outro no mesmo momento. */}
-          <BotaoExportar
-            relatorio="memoria-cmv"
-            rotulo="Memória de cálculo"
-            iniciais={{ inicio, fim }}
-            formatoPadrao="pdf"
-          />
-          {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
-              os cartões e os gráficos. O PDF da janela é a tabela do relatório
-              — são duas coisas, e quem quer uma raramente quer a outra. */}
-          <button className="btn btn-secundario" onClick={() => window.print()}>
-            Imprimir a tela
-          </button>
-          {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
-              que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
-              engano entra — um dia a mais e a apuração deixa de bater com o
-              fechamento. As datas continuam ali para o recorte fora do ritmo. */}
-          {ciclo && ciclo.periodos.length > 0 && (
-            <label>
-              <span className="rotulo">Período</span>
-              <select
-                className="campo mt-1.5"
-                value={
-                  ciclo.periodos.find((p) => p.inicio === inicio && p.fim === fim)?.inicio ?? ""
-                }
-                onChange={(e) => {
-                  const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
-                  if (!p) return;
-                  setInicio(p.inicio);
-                  setFim(p.fim > hoje() ? hoje() : p.fim);
-                }}
-              >
-                <option value="">outro recorte</option>
-                {ciclo.periodos.map((p) => (
-                  <option key={p.inicio} value={p.inicio}>
-                    {p.rotulo}
-                    {p.corrente ? " (em curso)" : p.status === "FECHADO" ? " · fechado" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label>
-            <span className="rotulo">De</span>
-            <input
-              className="campo mt-1.5"
-              type="date"
-              value={inicio}
-              onChange={(e) => setInicio(e.target.value)}
-            />
-          </label>
-          <label>
-            <span className="rotulo">Até</span>
-            <input
-              className="campo mt-1.5"
-              type="date"
-              value={fim}
-              onChange={(e) => setFim(e.target.value)}
-            />
-          </label>
-        </div>
-      </header>
+          </>
+        }
+        acoes={
+          <div className="nao-imprimir flex flex-wrap items-end gap-2">
+                    <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
+                    {/* 🔑 **A memória de cálculo** (pedido da contabilidade, 02/09/2026).
+                        O arquivo do contador dizia o RESULTADO em dez linhas; este abre
+                        cada uma nos documentos que a compõem — o estoque inicial e o
+                        final item a item, as compras por nota, e a conciliação que
+                        explica por que a soma das notas não é a linha "Compras".
+                        ⚠️ Fica ao LADO do outro, não no lugar dele: um é o resumo que se
+                        lê, o outro é o anexo que se confere. Quem quer um raramente quer
+                        o outro no mesmo momento. */}
+                    <BotaoExportar
+                      relatorio="memoria-cmv"
+                      rotulo="Memória de cálculo"
+                      iniciais={{ inicio, fim }}
+                      formatoPadrao="pdf"
+                    />
+                    {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
+                        os cartões e os gráficos. O PDF da janela é a tabela do relatório
+                        — são duas coisas, e quem quer uma raramente quer a outra. */}
+                    <button className="btn btn-secundario" onClick={() => window.print()}>
+                      Imprimir a tela
+                    </button>
+                    {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
+                        que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
+                        engano entra — um dia a mais e a apuração deixa de bater com o
+                        fechamento. As datas continuam ali para o recorte fora do ritmo. */}
+                    {ciclo && ciclo.periodos.length > 0 && (
+                      <label>
+                        <span className="rotulo">Período</span>
+                        <select
+                          className="campo mt-1.5"
+                          value={
+                            ciclo.periodos.find((p) => p.inicio === inicio && p.fim === fim)?.inicio ?? ""
+                          }
+                          onChange={(e) => {
+                            const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
+                            if (!p) return;
+                            setInicio(p.inicio);
+                            setFim(p.fim > hoje() ? hoje() : p.fim);
+                          }}
+                        >
+                          <option value="">outro recorte</option>
+                          {ciclo.periodos.map((p) => (
+                            <option key={p.inicio} value={p.inicio}>
+                              {p.rotulo}
+                              {p.corrente ? " (em curso)" : p.status === "FECHADO" ? " · fechado" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <label>
+                      <span className="rotulo">De</span>
+                      <input
+                        className="campo mt-1.5"
+                        type="date"
+                        value={inicio}
+                        onChange={(e) => setInicio(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span className="rotulo">Até</span>
+                      <input
+                        className="campo mt-1.5"
+                        type="date"
+                        value={fim}
+                        onChange={(e) => setFim(e.target.value)}
+                      />
+                    </label>
+                  </div>
+        }
+      />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

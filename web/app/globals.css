@@ -81,6 +81,25 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   font-size: 1.03em;
 }
 
+/* 🔑 **O título de tela, num lugar só** (14/09/2026).
+   Ele não existia: as 55 telas escreviam a classe na mão, e o resultado eram
+   **oito variações** do mesmo `<h1>` — `text-[26px]`, `text-[24px]`,
+   `text-[30px]`, com e sem `leading-tight`, com e sem `break-words`. E três
+   telas referenciavam `.titulo`, que **nunca foi definida**: elas renderizavam
+   por acidente, caindo no estilo base do `h1`.
+   ⚠️ O tamanho é o da maioria (26px, 30px a partir de `sm`), para a mudança
+   não redesenhar tela nenhuma — o ganho aqui é ter UMA definição, não uma nova. */
+.titulo {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 640px) {
+  .titulo { font-size: 30px; }
+}
+
 /* ---- peças reaproveitadas em todas as telas ---- */
 .rotulo {
   font-family: var(--font-mono);

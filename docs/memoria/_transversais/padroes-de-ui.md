@@ -334,6 +334,36 @@
   E a precondição: medir a barra numa página que a fase anterior tinha deixado **fora do
   app** (a tela de sem-conexão do PWA) dava "ausente" e acusava o componente.
 
+- 🔑 **O cabeçalho de tela virou componente, e o título ganhou definição**
+  (`components/cabecalho-tela.tsx`, 14/09/2026).
+  🔑 **Ele nasceu porque não existia**: as 55 telas repetiam a marcação na mão, e o
+  resultado eram **oito classes diferentes para o mesmo `<h1>`** — `text-[26px]`,
+  `text-[24px]`, `text-[30px]`, com e sem `leading-tight`, com e sem `break-words`. Não é
+  desleixo: é o que sempre acontece quando a mesma peça é copiada em vez de compartilhada.
+  ⚠️ **E `.titulo` era referenciada por três telas sem nunca ter sido definida** — elas
+  renderizavam por acidente, caindo no estilo base do `h1`. O mesmo problema visto do outro
+  lado: sem definição única, metade inventa a sua e a outra metade aponta para o vazio.
+  Agora ela existe, com o tamanho da maioria, para a mudança não redesenhar tela nenhuma.
+  ⚠️ **A frase explicativa só se esconde no CELULAR**, e num nó de DOM só: renderizar duas
+  versões e esconder uma por breakpoint faria o leitor de tela ler a frase duas vezes.
+  ⚠️ **Convertidas 4 das 55**, e de propósito: as demais têm variações que pedem olho, e
+  afrouxar a regex sobre 55 arquivos é como edição mecânica dá errado.
+
+- 🔑 **O convite de instalar o app empurrava a página inteira 78px, TARDE** (14/09/2026).
+  Ele vinha no topo do `main` e aparece quando o navegador dispara `beforeinstallprompt` —
+  ou seja, depois de a página já estar sendo lida. Quem estava prestes a clicar numa linha
+  clicava noutra.
+  🔑 **Quem expôs foi a bateria, e por um caminho torto**: a checagem da rolagem ao virar de
+  página começou a falhar depois de o cabeçalho encolher. A conclusão fácil — *"encurtei a
+  página, a conta desregulou"* — estava errada. A sonda mostrou um elemento de 78px
+  nascendo acima da lista DEPOIS de a rolagem ter sido calculada. ⚠️ E mostrou números
+  diferentes a cada rodada (-8 numa, 169 noutra): **valor instável na mesma falha é a pista
+  de que a causa é temporização, não cálculo.**
+  ⚠️ **A correção foi no convite, não na tolerância do teste.** Ele foi para DEPOIS do
+  conteúdo, onde não há nada abaixo para empurrar — e nenhuma linha de teste mudou, que é o
+  sinal de que a correção acertou o lugar. Afrouxar a tolerância teria deixado a checagem
+  verde e o defeito esperando para morder alguém no celular.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

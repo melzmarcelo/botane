@@ -10,6 +10,7 @@ import { Local, ProdutoResumo, reais } from "@/lib/cadastros";
 import { FiltroCadastro } from "@/components/busca-cadastro";
 import { fonteProdutos } from "@/lib/busca-cadastro";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -294,18 +295,17 @@ export default function PaginaEstoque() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="rotulo">Estoque</p>
-          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
-            Saldos e movimentos
-          </h1>
-          <p className="mt-1 max-w-[64ch] prosa text-suave">
+      <CabecalhoTela
+        caminho="Estoque"
+        titulo={<>Saldos e movimentos</>}
+        explica={
+          <>
             Cada entrada recalcula o custo médio do insumo; cada saída baixa por esse custo.
             Nada aqui é apagado — correção entra como estorno.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </>
+        }
+        acoes={
+          <div className="flex flex-wrap gap-2">
           {/* Lançar tem tela própria: aqui se CONSULTA. Os quatro botões de
               entrada, saída, perda e transferência viraram Estoque ▸ Ajustes. */}
           {podeAjustar && (
@@ -333,7 +333,8 @@ export default function PaginaEstoque() {
             <BotaoExportar relatorio="movimentos" iniciais={semeaduraDoRazao} />
           )}
         </div>
-      </header>
+        }
+      />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

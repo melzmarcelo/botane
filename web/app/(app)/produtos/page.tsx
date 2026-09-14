@@ -17,6 +17,7 @@ import {
 } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import CabecalhoTela from "@/components/cabecalho-tela";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 type Contagem = { total: number; por_tipo: Record<string, number>; rascunhos: number; inativos: number };
@@ -115,16 +116,17 @@ export default function PaginaProdutos() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="rotulo">Cadastros</p>
-          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produtos</h1>
-          <p className="mt-1 max-w-[62ch] prosa text-suave">
+      <CabecalhoTela
+        caminho="Cadastros"
+        titulo={<>Produtos</>}
+        explica={
+          <>
             Tudo o que entra e sai da casa: insumo, revenda, o que a cozinha produz e a
             embalagem. É daqui que a ficha técnica e o estoque vão puxar.
-          </p>
-        </div>
-        <div className="flex gap-2">
+          </>
+        }
+        acoes={
+          <div className="flex gap-2">
           {/* ⚠️ Este botão despejava os 3.226 produtos, sempre — não havia
               recorte nenhum. Agora a janela pergunta tipo, categoria, setor e
               situação antes de gerar. */}
@@ -144,7 +146,8 @@ export default function PaginaProdutos() {
             </Link>
           )}
         </div>
-      </header>
+        }
+      />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 

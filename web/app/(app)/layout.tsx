@@ -381,7 +381,6 @@ function Casca({ children }: { children: React.ReactNode }) {
           telefone, que é onde ninguém testa primeiro. */}
       <main className="min-w-0 px-4 py-6 pb-28 sm:px-6 lg:px-10 lg:py-9 lg:pb-14">
         <div className="mx-auto max-w-[1180px]">
-          <ConviteInstalar />
           {/* 🔑 **A fronteira de Suspense que o `useSearchParams` exige.**
               As listas guardam filtro, página e "por página" na URL — é o que
               faz o voltar do navegador restaurar tudo.
@@ -395,6 +394,18 @@ function Casca({ children }: { children: React.ReactNode }) {
               ser pré-renderizada, é zero neste app: tudo já é cliente atrás do
               login. */}
           <Suspense fallback={<Carregando />}>{children}</Suspense>
+
+          {/* 🔑 **Depois do conteúdo, e não antes** (14/09/2026). Ele vinha no
+              topo e aparecia TARDE — o `beforeinstallprompt` é disparado pelo
+              navegador quando ele quer —, empurrando a página inteira 78px para
+              baixo depois que ela já estava sendo lida. Quem estava prestes a
+              clicar numa linha clicava noutra.
+              ⚠️ Foi a bateria que expôs: a rolagem que posiciona a lista ao virar
+              de página era calculada ANTES do convite chegar, e o topo do cartão
+              parava fora da vista. O defeito era do convite, não da rolagem.
+              ⚠️ Aqui embaixo ele continua aparecendo sozinho e sem deslocar nada:
+              não há conteúdo depois dele para empurrar. */}
+          <ConviteInstalar />
         </div>
       </main>
       </div>

@@ -9,6 +9,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
+import CabecalhoTela from "@/components/cabecalho-tela";
 import { qtd } from "@/lib/numeros";
 import { CANAIS, dataBr, horaBr, ORIGENS, Venda } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -159,58 +160,60 @@ export default function PaginaVendas() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="rotulo">CMV</p>
-          <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Vendas</h1>
-          <p className="mt-1 max-w-[66ch] prosa text-suave">
+      <CabecalhoTela
+        caminho="CMV"
+        titulo={<>Vendas</>}
+        explica={
+          <>
             As vendas alimentam o CMV teórico: quantidade vendida × custo da ficha na data. O
             custo é <b>congelado</b> na importação — corrigir uma receita amanhã não reescreve o
             que já passou.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {podeLancar && (
-            <Link href="/vendas/lancar" className="btn btn-primario">
-              Lançar
-            </Link>
-          )}
-          {/* 🔑 **O caminho para a cobrança do funcionário** (04/09/2026). O
-              relatório vive aqui pelo mesmo motivo que a busca do PDV: quem
-              quer saber o que fulano consumiu abre Vendas, não Exportar. */}
-          <Link href="/vendas/por-pessoa" className="btn btn-secundario">
-            Consumo por pessoa
-          </Link>
-          {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
-              tela do assunto: quem abre Vendas para ver as vendas não vai
-              lembrar que ela mora em Integrações — e venda não buscada é receita
-              faltando no CMV, sem nada denunciando. */}
-          {pode("integracao.pdv") && (
-            <button className="btn btn-secundario" onClick={buscarNoPdv} disabled={ocupado}>
-              {ocupado ? "Buscando…" : "Buscar no PDV"}
-            </button>
-          )}
-          {(semBaixa?.itens.length ?? 0) > 0 && pode("estoque.saidas") && (
-            <button
-              className="btn btn-secundario"
-              onClick={() => setVendoSemBaixa(true)}
-              title="Vendas cujo produto controla estoque e que nunca saíram do razão"
-            >
-              {qtd(semBaixa!.unidades)} unidade(s) vendidas sem baixa
-            </button>
-          )}
-          {pendencias > 0 && pode("integracao.pdv") && (
-            <button
-              className="btn btn-secundario"
-              onClick={reconciliar}
-              disabled={ocupado}
-              title="Procura de novo o produto dos itens pendentes"
-            >
-              Reconciliar {pendencias} pendente(s)
-            </button>
-          )}
-        </div>
-      </header>
+          </>
+        }
+        acoes={
+          <div className="flex flex-wrap items-center gap-2">
+                    {podeLancar && (
+                      <Link href="/vendas/lancar" className="btn btn-primario">
+                        Lançar
+                      </Link>
+                    )}
+                    {/* 🔑 **O caminho para a cobrança do funcionário** (04/09/2026). O
+                        relatório vive aqui pelo mesmo motivo que a busca do PDV: quem
+                        quer saber o que fulano consumiu abre Vendas, não Exportar. */}
+                    <Link href="/vendas/por-pessoa" className="btn btn-secundario">
+                      Consumo por pessoa
+                    </Link>
+                    {/* ⚠️ O gêmeo do "Buscar no Omie" de Compras. A busca precisa estar na
+                        tela do assunto: quem abre Vendas para ver as vendas não vai
+                        lembrar que ela mora em Integrações — e venda não buscada é receita
+                        faltando no CMV, sem nada denunciando. */}
+                    {pode("integracao.pdv") && (
+                      <button className="btn btn-secundario" onClick={buscarNoPdv} disabled={ocupado}>
+                        {ocupado ? "Buscando…" : "Buscar no PDV"}
+                      </button>
+                    )}
+                    {(semBaixa?.itens.length ?? 0) > 0 && pode("estoque.saidas") && (
+                      <button
+                        className="btn btn-secundario"
+                        onClick={() => setVendoSemBaixa(true)}
+                        title="Vendas cujo produto controla estoque e que nunca saíram do razão"
+                      >
+                        {qtd(semBaixa!.unidades)} unidade(s) vendidas sem baixa
+                      </button>
+                    )}
+                    {pendencias > 0 && pode("integracao.pdv") && (
+                      <button
+                        className="btn btn-secundario"
+                        onClick={reconciliar}
+                        disabled={ocupado}
+                        title="Procura de novo o produto dos itens pendentes"
+                      >
+                        Reconciliar {pendencias} pendente(s)
+                      </button>
+                    )}
+                  </div>
+        }
+      />
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
