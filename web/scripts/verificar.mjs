@@ -7261,6 +7261,42 @@ try {
   checar("e as 14:00 ela ja vagou", as14de6 && as14de6.livre, as14de6);
   await clicarQuando(p, "cancelar", { exato: true });
 
+  // 🔑 **REMARCAR pela tela** — a ligacao mais comum depois de marcar.
+  // ⚠️ O que prova a regra: a reserva das 12:00 ocupa a mesa ate 14:00, e mesmo
+  // assim as 13:00 aparece LIVRE para ela — porque o `ignorar` tira a propria
+  // reserva da conta. Sem ele, a tela diria "sem mesa" apontando para a mesa que
+  // a propria reserva ocupa.
+  checar("a reserva confirmada oferece remarcar", await clicarQuando(p, "remarcar"));
+  // ⚠️ **Espera os HORARIOS, nao o titulo do cartao.** O titulo aparece no mesmo
+  // instante do clique; os horarios so depois de a disponibilidade voltar do
+  // servidor. Esperar pelo titulo lia a lista ainda vazia — e a falha dizia
+  // "as 13:00 nao esta livre" quando a resposta nem tinha chegado. Quarta vez
+  // nesta sessao que esperar pela coisa errada acusa a coisa errada.
+  await p.waitForSelector('button[aria-label^="horário"]', { timeout: 9000 })
+    .catch(() => null);
+  const noRemarcar = await p.evaluate(() => ({
+    texto: document.body.innerText,
+    horarios: [...document.querySelectorAll('button[aria-label^="horário"]')]
+      .map((b) => ({ hora: b.textContent.trim(), livre: !b.disabled })),
+  }));
+  checar("a janela diz como a reserva esta hoje",
+    /Hoje: 12:00, 6 pessoas/.test(noRemarcar.texto), noRemarcar.texto.slice(0, 400));
+  const as13 = noRemarcar.horarios.find((h) => h.hora === "13:00");
+  checar("e as 13:00 aparece livre PARA ELA — o ignorar tira ela da conta",
+    as13 && as13.livre, noRemarcar.horarios);
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.getAttribute("aria-label") === "horário 13:00")?.click();
+  });
+  checar("e o botao fica disponivel depois de escolher", await clicarQuando(p, "Remarcar"));
+  await new Promise((r) => setTimeout(r, 1800));
+  const depoisRemarcar = await p.evaluate(() => document.body.innerText);
+  checar("a agenda mostra a reserva no horario novo",
+    /13:00/.test(depoisRemarcar), depoisRemarcar.slice(0, 500));
+  // ⚠️ A hora de saida acompanha: 13:00 + 120 min de permanencia = 15:00.
+  checar("e a hora de saida acompanha", /15:00/.test(depoisRemarcar),
+    depoisRemarcar.slice(0, 500));
+
   // O ciclo: confirmada -> chegou -> encerrada, e o que some da tela a cada passo.
   checar("a reserva confirmada oferece marcar chegada", await clicarQuando(p, "chegou"));
   await new Promise((r) => setTimeout(r, 1600));
