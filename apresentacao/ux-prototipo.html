@@ -1,0 +1,574 @@
+<title>Layout Botané</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ---------------------------------------------------------------- tokens
+     São os tokens REAIS do sistema (`web/app/globals.css`), copiados sem
+     mudança — é isso que faz o "antes" ser o antes de verdade. O "depois" só
+     redefine o que o estudo propõe mudar, e cada mudança está anotada. */
+  :root {
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #d8ded0;
+    --linha2: #bfc8b6;
+    --erva: #2c6a4a;
+    --erva-claro: #e3efe7;
+    --latao: #9a6e24;
+    --alerta: #a9711a;
+    --erro: #95332a;
+    --erro-claro: #f7e7e4;
+    --alerta-claro: #f6ecd9;
+
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    /* A família que o estudo propõe para o dado denso. */
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+
+    color-scheme: light;
+  }
+
+  /* 🔑 O interruptor: `[data-modo="depois"]` redefine SÓ o que o estudo propõe.
+     Tudo o que não está aqui é igual nos dois lados — de propósito. */
+  [data-modo="depois"] {
+    /* 1. Conformidade: as três cores que não passavam. */
+    --alerta: #8a5d12;   /* era #a9711a — 4,06 sobre superfície, abaixo de 4,5 */
+    --latao: #7d5a1c;    /* era #9a6e24 — 4,44 */
+    --linha2: #9aa78e;   /* era #bfc8b6 — 1,69 como borda, norma pede 3,0 */
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font: 400 16px/1.55 var(--corpo);
+    -webkit-font-smoothing: antialiased;
+  }
+  .envelope { max-width: 1240px; margin: 0 auto; padding: 26px 16px 64px; }
+
+  h1 { font: 700 clamp(28px, 4.5vw, 40px)/1.1 var(--display); margin: 8px 0 6px;
+       letter-spacing: -0.015em; text-wrap: balance; }
+  .selo { display: inline-block; font: 500 11px/1 var(--mono); letter-spacing: .14em;
+          text-transform: uppercase; color: var(--erva); background: var(--erva-claro);
+          border: 1px solid var(--linha2); padding: 6px 10px; border-radius: 999px; }
+  .linhafina { color: var(--suave); max-width: 68ch; margin: 0; }
+
+  /* --------------------------------------------------------------- controle */
+  .barra { position: sticky; top: 0; z-index: 20; margin: 22px 0 18px;
+           background: var(--superficie); border: 1px solid var(--linha2);
+           border-radius: 14px; padding: 12px 16px;
+           box-shadow: 0 1px 2px rgba(20,32,26,.05), 0 10px 30px rgba(20,32,26,.06);
+           display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .barra b { font: 600 14px/1 var(--display); }
+  .alternar { display: inline-flex; border: 1px solid var(--linha2);
+              border-radius: 999px; overflow: hidden; }
+  .alternar button { border: 0; background: var(--superficie); cursor: pointer;
+                     font: 600 13px/1 var(--display); padding: 9px 16px; color: var(--suave); }
+  .alternar button[aria-pressed="true"] { background: var(--erva); color: #f4f7f2; }
+  .marca-modo { font: 500 12.5px/1.4 var(--mono); color: var(--suave); }
+
+  /* ----------------------------------------------------------------- telas */
+  .grade { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr) 380px;
+           align-items: start; }
+  @media (max-width: 1020px) { .grade { grid-template-columns: minmax(0, 1fr); } }
+
+  .quadro { background: var(--superficie); border: 1px solid var(--linha2);
+            border-radius: 14px; overflow: hidden;
+            box-shadow: 0 1px 2px rgba(20,32,26,.05), 0 10px 30px rgba(20,32,26,.06); }
+  .quadro-topo { display: flex; align-items: center; justify-content: space-between;
+                 gap: 10px; padding: 9px 14px; background: var(--superficie2);
+                 border-bottom: 1px solid var(--linha2);
+                 font: 500 11.5px/1 var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; color: var(--suave); }
+
+  /* ---- a tela de produtos, como ela é hoje ---- */
+  .tela { padding: 18px; }
+  .caminho { font: 500 10.5px/1 var(--mono); letter-spacing: .14em;
+             text-transform: uppercase; color: var(--suave); }
+  .tela h2 { font: 700 27px/1.15 var(--display); margin: 8px 0 4px; }
+  .explica { color: var(--suave); font-size: 14.5px; margin: 0; max-width: 62ch; }
+
+  .cabeca { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start;
+            justify-content: space-between; }
+  [data-modo="depois"] .cabeca { align-items: center; }
+  /* 🔑 No "depois" a frase explicativa recolhe: ela ensina na primeira semana e
+     estorva na terceira. O botão "o que é isto?" a traz de volta. */
+  [data-modo="depois"] .explica { display: none; }
+  [data-modo="depois"] .explica.aberta { display: block; }
+  .ensina { display: none; }
+  [data-modo="depois"] .ensina { display: inline-block; border: 0; background: none;
+    cursor: pointer; font: 500 12.5px/1 var(--display); color: var(--erva);
+    text-decoration: underline; padding: 2px 0; margin-top: 4px; }
+
+  .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { font: 600 13.5px/1 var(--display); padding: 9px 14px; border-radius: 9px;
+         border: 1px solid var(--linha2); background: var(--superficie);
+         color: var(--tinta); cursor: pointer; }
+  .btn-primario { background: var(--erva); border-color: var(--erva); color: #f4f7f2; }
+
+  .aviso { margin: 14px 0; padding: 10px 13px; border-radius: 12px;
+           background: var(--alerta-claro); border: 1px solid var(--linha2);
+           color: var(--tinta); font-size: 14px; }
+
+  /* ---- a tabela: é aqui que mora a diferença ---- */
+  .tabela { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  .tabela th { text-align: left; font: 500 10.5px/1 var(--mono); letter-spacing: .1em;
+               text-transform: uppercase; color: var(--suave);
+               padding: 0 10px 9px 0; white-space: nowrap; }
+  .tabela td { padding: 10px 10px 10px 0; border-top: 1px solid var(--linha);
+               vertical-align: top; font-size: 14.5px; }
+  .tabela td.n { font-family: var(--mono); font-variant-numeric: tabular-nums;
+                 text-align: right; }
+  .cod { font-family: var(--mono); font-size: 12.5px; color: var(--suave); }
+
+  /* O NOME do produto — três ênfases hoje, uma no depois. */
+  .nome { color: var(--tinta); font-weight: 600; text-decoration: underline;
+          text-underline-offset: 2px; cursor: pointer; }
+  [data-modo="depois"] .nome {
+    font-family: var(--leitura);
+    font-weight: 500;
+    color: var(--erva);
+    text-decoration: none;
+  }
+  [data-modo="depois"] .nome:hover { text-decoration: underline; }
+  [data-modo="depois"] .tabela td { font-family: var(--leitura); font-size: 14px; }
+  [data-modo="depois"] .tabela tbody tr { cursor: pointer; }
+  [data-modo="depois"] .tabela tbody tr:hover { background: var(--erva-claro); }
+
+  .etiqueta { display: inline-block; font: 400 11px/1 var(--mono);
+              border: 1px solid var(--linha2); border-radius: 999px;
+              padding: 3px 8px; color: var(--alerta); margin-left: 6px;
+              white-space: nowrap; }
+
+  /* As colunas que quase sempre são travessão. */
+  [data-modo="depois"] .some { display: none; }
+  .detalhe { display: none; }
+  [data-modo="depois"] .detalhe { display: block; font-family: var(--leitura);
+    font-size: 12.5px; color: var(--suave); margin-top: 3px; }
+
+  .rodape { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+            align-items: center; margin-top: 14px; font-size: 13px; color: var(--suave); }
+
+  /* ------------------------------------------------------------- o celular */
+  .fone { width: 340px; margin: 0 auto; border: 1px solid var(--linha2);
+          border-radius: 26px; overflow: hidden; background: var(--superficie); }
+  .fone-topo { display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+               border-bottom: 1px solid var(--linha); }
+  .fone-topo b { font: 700 14px/1 var(--display); }
+  .fone-corpo { padding: 14px; background: var(--papel); max-height: 620px;
+                overflow-y: auto; }
+  .cartao { background: var(--superficie); border: 1px solid var(--linha);
+            border-radius: 14px; padding: 13px; margin-bottom: 11px; }
+  .rotulo { font: 500 10px/1 var(--mono); letter-spacing: .13em;
+            text-transform: uppercase; color: var(--suave); }
+  .numerao { font: 500 25px/1.1 var(--mono); display: block; margin-top: 5px; }
+  .numerao.ruim { color: var(--erro); }
+  .cartao p { margin: 5px 0 0; font-size: 13px; color: var(--suave); }
+
+  /* 🔑 O "depois" do celular: os quatro números do dia numa grade 2x2, e as
+     listas longas recolhidas. Hoje são sete cartões empilhados — 2.795px. */
+  .quatro { display: none; }
+  [data-modo="depois"] .quatro { display: grid; grid-template-columns: 1fr 1fr;
+    gap: 9px; margin-bottom: 11px; }
+  [data-modo="depois"] .quatro .cartao { margin: 0; }
+  [data-modo="depois"] .empilhado { display: none; }
+
+  .acordeao { background: var(--superficie); border: 1px solid var(--linha);
+              border-radius: 14px; margin-bottom: 11px; }
+  .acordeao summary { cursor: pointer; padding: 13px; font: 600 14.5px/1.2 var(--display); }
+  .acordeao[open] summary { border-bottom: 1px solid var(--linha); }
+  .acordeao .dentro { padding: 4px 13px 13px; }
+  .linha-lista { display: flex; justify-content: space-between; gap: 10px;
+                 padding: 8px 0; border-top: 1px solid var(--linha); font-size: 14px; }
+  .linha-lista:first-child { border-top: 0; }
+  .linha-lista a { color: var(--tinta); text-decoration: underline;
+                   text-underline-offset: 2px; }
+  [data-modo="depois"] .linha-lista { font-family: var(--leitura); }
+  [data-modo="depois"] .linha-lista a { color: var(--erva); text-decoration: none; }
+
+  /* A barra inferior, só no depois. */
+  .barra-baixo { display: none; }
+  [data-modo="depois"] .barra-baixo { display: grid; grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--linha2); background: var(--superficie); }
+  .barra-baixo span { text-align: center; padding: 10px 4px 12px;
+                      font: 500 10.5px/1.3 var(--leitura); color: var(--suave); }
+  .barra-baixo span.ativo { color: var(--erva); }
+  .barra-baixo i { display: block; font-size: 17px; font-style: normal; margin-bottom: 2px; }
+
+  /* --------------------------------------------------------------- notas */
+  .notas { margin-top: 26px; display: grid; gap: 18px;
+           grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+  .bloco { background: var(--superficie); border: 1px solid var(--linha2);
+           border-radius: 14px; padding: 17px; }
+  .bloco h3 { font: 500 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+              color: var(--suave); margin: 0 0 13px; }
+  .nota { border-top: 1px solid var(--linha); padding-top: 11px; margin-top: 11px; }
+  .nota:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .nota b { display: block; margin-bottom: 3px; font-family: var(--display); font-weight: 600; }
+  .nota p { margin: 0; color: var(--suave); font-size: 14px; }
+
+  table.medida { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.medida th { text-align: left; font: 500 10.5px/1 var(--mono);
+                    letter-spacing: .1em; text-transform: uppercase;
+                    color: var(--suave); padding: 0 8px 8px 0; }
+  table.medida td { padding: 6px 8px 6px 0; border-top: 1px solid var(--linha);
+                    font-variant-numeric: tabular-nums; }
+  table.medida td.r { text-align: right; font-family: var(--mono); }
+  .ruim { color: var(--erro); font-weight: 600; }
+  .bom { color: var(--erva); }
+
+  .rolagem { overflow-x: auto; }
+  :focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+</style>
+
+<div class="envelope">
+  <header>
+    <span class="selo">estudo de layout</span>
+    <h1>O mesmo sistema, com as letras e o espaço acertados</h1>
+    <p class="linhafina">
+      As duas telas mais abertas do Botané, com um interruptor entre o desenho de <b>hoje</b>
+      e o <b>proposto</b>. Os tokens são os reais de <code>globals.css</code> — o "antes" é o
+      antes de verdade, e o "depois" muda só o que o estudo lista. Alterne e compare.
+    </p>
+  </header>
+
+  <div class="barra">
+    <b>Ver:</b>
+    <span class="alternar" role="group" aria-label="alternar entre hoje e o proposto">
+      <button id="btn-hoje" aria-pressed="true">Hoje</button>
+      <button id="btn-depois" aria-pressed="false">Proposto</button>
+    </span>
+    <span class="marca-modo" id="oque">
+      Mostrando o sistema como ele é hoje.
+    </span>
+  </div>
+
+  <div class="grade">
+    <!-- ======================================================= computador -->
+    <section class="quadro">
+      <div class="quadro-topo">
+        <span>computador · 1440px</span><span>Cadastros → Produtos</span>
+      </div>
+      <div class="tela">
+        <div class="cabeca">
+          <div>
+            <span class="caminho">Cadastros</span>
+            <h2>Produtos</h2>
+            <p class="explica" id="explica">
+              Tudo o que entra e sai da casa: insumo, revenda, o que a cozinha produz e a
+              embalagem. É daqui que a ficha técnica e o estoque vão puxar.
+            </p>
+            <button class="ensina" id="ensina">o que é esta tela?</button>
+          </div>
+          <div class="acoes">
+            <button class="btn">Baixar</button>
+            <button class="btn">Código de barras</button>
+            <button class="btn btn-primario">Novo produto</button>
+          </div>
+        </div>
+
+        <div class="aviso">
+          <b>2.235 produtos em rascunho</b> — eles não entram no estoque enquanto não
+          tiverem unidade e fator de conversão.
+        </div>
+
+        <div class="rolagem">
+          <table class="tabela">
+            <thead>
+              <tr>
+                <th style="width:120px">Código</th>
+                <th>Produto</th>
+                <th class="some">Tipo</th>
+                <th class="some">Categoria</th>
+                <th class="some">Setor</th>
+                <th class="some">Un.</th>
+                <th class="some" style="text-align:right">Preço</th>
+                <th style="text-align:right" id="th-preco" hidden>Preço</th>
+              </tr>
+            </thead>
+            <tbody id="linhas"></tbody>
+          </table>
+        </div>
+
+        <div class="rodape">
+          <span>1–20 de <b>2.452</b> produtos</span>
+          <span>por página 20 · 1 de 123</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================== celular -->
+    <section class="quadro">
+      <div class="quadro-topo"><span>celular · 390px</span><span>Início</span></div>
+      <div class="fone">
+        <div class="fone-topo">
+          <span>☰</span><b>Botané Deli e Café</b>
+        </div>
+        <div class="fone-corpo">
+          <!-- O proposto: os quatro números do dia, de uma vez -->
+          <div class="quatro">
+            <div class="cartao">
+              <span class="rotulo">Vendas do dia</span>
+              <b class="numerao">6.674</b>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Food cost</span>
+              <b class="numerao ruim">126,7%</b>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">CMV do mês</span>
+              <b class="numerao">14.666</b>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Perdas</span>
+              <b class="numerao ruim">4.353</b>
+            </div>
+          </div>
+
+          <!-- Hoje: sete cartões, um número em cada -->
+          <div class="empilhado">
+            <div class="cartao">
+              <span class="rotulo">Vendas do dia</span>
+              <b class="numerao">R$ 6.674,50</b>
+              <p>89 vendas · ticket médio R$ 74,99</p>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Custo do que saiu</span>
+              <b class="numerao">R$ 14.666,77</b>
+              <p>O CMV do mês: estoque inicial + compras − o que sobrou.</p>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Food cost</span>
+              <b class="numerao ruim">126,7%</b>
+              <p>Sobre R$ 11.580,50 de receita em 166 vendas.</p>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Parado na prateleira</span>
+              <b class="numerao">R$ 131.606,17</b>
+              <p>Quanto dinheiro está em estoque neste momento.</p>
+            </div>
+            <div class="cartao">
+              <span class="rotulo">Perdas do mês</span>
+              <b class="numerao ruim">R$ 4.353,00</b>
+              <p>29,7% do custo do mês.</p>
+            </div>
+          </div>
+
+          <details class="acordeao" open>
+            <summary>Precisa da sua atenção</summary>
+            <div class="dentro">
+              <div class="linha-lista"><a href="#">Produto com saldo negativo</a><b>11</b></div>
+              <div class="linha-lista"><a href="#">Lote vencido no estoque</a><b>11</b></div>
+              <div class="linha-lista"><a href="#">Produto em rascunho</a><b>2.235</b></div>
+              <div class="linha-lista"><a href="#">Nota conciliada, não lançada</a><b>110</b></div>
+            </div>
+          </details>
+
+          <details class="acordeao">
+            <summary>A casa hoje</summary>
+            <div class="dentro">
+              <div class="linha-lista"><a href="#">Insumos e produtos</a><b>2.458</b></div>
+              <div class="linha-lista"><a href="#">Fichas técnicas prontas</a><b>135</b></div>
+              <div class="linha-lista"><a href="#">Notas esperando conferência</a><b>113</b></div>
+            </div>
+          </details>
+        </div>
+        <nav class="barra-baixo">
+          <span class="ativo"><i>◈</i>Início</span>
+          <span><i>▤</i>Estoque</span>
+          <span><i>❏</i>Compras</span>
+          <span><i>☷</i>Reservas</span>
+        </nav>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============================================================== notas -->
+  <div class="notas">
+    <section class="bloco">
+      <h3>O que a medição encontrou</h3>
+      <p class="linhafina" style="font-size:14px;margin:0 0 12px">
+        Contraste calculado pelo WCAG 2.1 sobre a superfície dos cartões. A norma pede
+        <b>4,5</b> para texto de corpo.
+      </p>
+      <div class="rolagem">
+        <table class="medida">
+          <thead><tr><th>Cor</th><th>Onde</th><th style="text-align:right">Razão</th></tr></thead>
+          <tbody>
+            <tr><td>tinta</td><td>texto principal</td><td class="r bom">16,44</td></tr>
+            <tr><td>erva</td><td>links e ações</td><td class="r bom">6,30</td></tr>
+            <tr><td>erro</td><td>perdas</td><td class="r bom">7,39</td></tr>
+            <tr><td>suave</td><td>texto secundário</td><td class="r">5,44</td></tr>
+            <tr><td>latao</td><td>destaques</td><td class="r ruim">4,44</td></tr>
+            <tr><td>alerta</td><td>etiqueta "rascunho", 11px</td><td class="r ruim">4,06</td></tr>
+            <tr><td>linha2</td><td>borda de campo (pede 3,0)</td><td class="r ruim">1,69</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="nota" style="margin-top:14px">
+        <b>No iPhone, focar um campo dá zoom</b>
+        <p>
+          <code>.campo</code> tem 15px; abaixo de 16px o Safari amplia a página ao focar.
+          ⚠️ A regra já está escrita no próprio CSS da casa, em <code>.campo-toque</code> —
+          só que aplicada praticamente só na contagem de inventário.
+        </p>
+      </div>
+      <div class="nota">
+        <b>Os alvos de toque estão no limite exato</b>
+        <p>
+          Os links de ação medem 24,5px. A norma pede 24 como mínimo absoluto e recomenda 44.
+          Na conferência de nota eles aparecem três lado a lado, na mesma linha.
+        </p>
+      </div>
+    </section>
+
+    <section class="bloco">
+      <h3>O que muda no “proposto”</h3>
+      <div class="nota">
+        <b>Uma ênfase por texto, não três</b>
+        <p>
+          Hoje o nome do produto é serifada + negrito + sublinhado, em vinte linhas seguidas.
+          No proposto ele fica em sem-serifa, na cor das ações, e a <b>linha inteira</b> vira
+          clicável — o sublinhado volta no hover.
+        </p>
+      </div>
+      <div class="nota">
+        <b>Coluna que é quase sempre “—” sai da tabela</b>
+        <p>
+          Tipo, categoria, setor e unidade ocupavam 40% da largura para mostrar travessões.
+          Viram detalhe da linha, em letra menor, e só quando têm valor.
+        </p>
+      </div>
+      <div class="nota">
+        <b>A serifada continua — onde ela é boa</b>
+        <p>
+          Título e frases explicativas seguem em Newsreader: é a voz da casa. O que muda é a
+          tabela, o campo e o menu. É a divisão que jornal faz há um século.
+        </p>
+      </div>
+      <div class="nota">
+        <b>No celular, o dia cabe numa tela</b>
+        <p>
+          Sete cartões empilhados (2.795px de rolagem) viram quatro números em grade, e as
+          listas longas recolhem. A barra inferior põe as quatro telas do dia a dia a um
+          toque — menu que exige abrir gaveta é menu que não se usa.
+        </p>
+      </div>
+    </section>
+
+    <section class="bloco">
+      <h3>O que NÃO muda</h3>
+      <div class="nota">
+        <b>A paleta de papel e erva</b>
+        <p>É a identidade da casa, e foi escolhida com motivo. Só duas cores escurecem —
+          o suficiente para passarem na norma, mantendo a mesma família.</p>
+      </div>
+      <div class="nota">
+        <b>Os números em monoespaçada</b>
+        <p>É o que faz uma coluna de preços ser conferível. Fica exatamente como está.</p>
+      </div>
+      <div class="nota">
+        <b>O sublinhado nos links</b>
+        <p>Parece ruído, mas é acessibilidade: a norma proíbe distinguir link só por cor. A
+          proposta não é tirá-lo — é reduzir quantas coisas são link numa tabela.</p>
+      </div>
+      <div class="nota">
+        <b>O raio de 14px e a sombra dupla</b>
+        <p>Já foram uma decisão registrada, com a razão escrita: “sombra única e escura é o
+          que faz uma tela parecer de 2012”. Continua verdade.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  "use strict";
+
+  // As 20 linhas da lista real, copiadas da foto da bateria — nomes de verdade
+  // são o que mostra o problema (eles são longos, e é isso que quebra a linha).
+  const PRODUTOS = [
+    ["ATS1244", "(ZNX7040) BARRA DIVISORIA INOX P/GN 1/2 30,4CM", "Insumo", "", "", "", ""],
+    ["PA 9000/28", "//CACAROLA REDONDA BRANCA ALUMINIO C/TAMPA 6,8L", "Insumo", "", "", "", ""],
+    ["PA 300/18 MA", "//FRIGIDEIRA ALUMINIO MARROM C/CABO SOFT TOUCH 18 CM", "Insumo", "", "", "", ""],
+    ["04318220V", "BATEDEIRA DE MÃO ELÉTRICA 7 VELOCIDADES 220V", "Insumo", "", "", "UN", ""],
+    ["Azul / Listras", "10 PANOS DE PRATO LISTRADO 100% ALGODAO COZINHA", "Insumo", "", "", "", ""],
+    ["PRD000030", "1004 - NAVEIA BARISTA 1L X 12", "Insumo", "Bebidas", "", "CX", ""],
+    ["2136CFV", "12 GARRAFAS 350ML CHA CAPIM LIMAO COM FRUTAS VERMELHAS", "Insumo", "Bebidas", "", "CX", ""],
+    ["2105CHP", "12 GARRAFAS 350ML CHA DE HIBISCO COM PESSEGO", "Insumo", "Bebidas", "", "CX", ""],
+    ["2099CML", "12 GARRAFAS 350ML CHA MATE COM LIMAO", "Insumo", "Bebidas", "", "CX", ""],
+    ["5179", "14 LONA PRETA 4X100 1MT", "Insumo", "", "", "", ""],
+    ["S116709", "30 CABIDES PRETO AVE", "Insumo", "", "", "", ""],
+    ["7898670860191", "355ML INDIA PALE ALE (IPA) - DEAR PAULA", "Revenda", "Cervejas", "Bar", "UN", "18,90"],
+    ["7898670860948", "355ML PILSEN - STANNIS PILSNER", "Revenda", "Cervejas", "Bar", "UN", "16,50"],
+    ["7898670860078", "500ML WHITE ROSE - WEIZENBIER", "Revenda", "Cervejas", "Bar", "UN", "22,00"],
+    ["055.095.050-4", "5102 - ABRACADEIRA INSULOK T- 50R 4,6X200MM", "Insumo", "", "", "", ""],
+    ["43179", "5102 - CONEXAO RETA DE ENTRADA DAGUA C/ ORING", "Insumo", "", "", "", ""],
+    ["57387.", "5102 - GRAXA FBS-190 GS/ALIMENTICIA", "Insumo", "", "", "KG", ""],
+    ["C22142.4892", "5102 - METASIL ROSA-DESENGRAXANTE JATO PLUS", "Insumo", "", "", "", ""],
+    ["ACU1-500", "AÇÚCAR ORGÂNICO DEMERARA 500G", "Insumo", "Mercearia", "Confeitaria", "KG", "12,40"],
+    ["CAF-1KG", "CAFÉ EM GRÃOS TORRA MÉDIA 1KG", "Insumo", "Mercearia", "Cozinha", "KG", "58,00"],
+  ];
+
+  const corpo = document.getElementById("linhas");
+
+  function pintarLinhas() {
+    corpo.innerHTML = PRODUTOS.map(([cod, nome, tipo, cat, setor, un, preco]) => {
+      const rascunho = !un || !preco;
+      // No "depois", o que era coluna vira detalhe da linha — e só aparece
+      // quando tem valor, que é o ponto.
+      const detalhe = [tipo, cat, setor, un].filter(Boolean).join(" · ");
+      return `<tr>
+        <td class="cod">${cod}</td>
+        <td>
+          <span class="nome">${nome}</span>${rascunho ? '<span class="etiqueta">rascunho</span>' : ""}
+          <span class="detalhe">${detalhe}${preco ? ` · R$ ${preco}` : ""}</span>
+        </td>
+        <td class="some">${tipo || "—"}</td>
+        <td class="some">${cat || "—"}</td>
+        <td class="some">${setor || "—"}</td>
+        <td class="some">${un || "—"}</td>
+        <td class="some n">${preco || "—"}</td>
+      </tr>`;
+    }).join("");
+  }
+  pintarLinhas();
+
+  const raiz = document.documentElement;
+  const oque = document.getElementById("oque");
+  const botoes = {
+    hoje: document.getElementById("btn-hoje"),
+    depois: document.getElementById("btn-depois"),
+  };
+  const FRASES = {
+    hoje: "Mostrando o sistema como ele é hoje — tokens reais de globals.css.",
+    depois: "Mostrando o proposto: cores na norma, sem-serifa no dado denso, "
+      + "colunas vazias fora da tabela e o celular em grade.",
+  };
+
+  function trocar(modo) {
+    if (modo === "depois") raiz.setAttribute("data-modo", "depois");
+    else raiz.removeAttribute("data-modo");
+    botoes.hoje.setAttribute("aria-pressed", String(modo === "hoje"));
+    botoes.depois.setAttribute("aria-pressed", String(modo === "depois"));
+    oque.textContent = FRASES[modo];
+  }
+  botoes.hoje.addEventListener("click", () => trocar("hoje"));
+  botoes.depois.addEventListener("click", () => trocar("depois"));
+
+  // A frase explicativa recolhida: no "depois" ela volta com um clique.
+  const ensina = document.getElementById("ensina");
+  const explica = document.getElementById("explica");
+  ensina.addEventListener("click", () => {
+    explica.classList.toggle("aberta");
+    ensina.textContent = explica.classList.contains("aberta")
+      ? "esconder" : "o que é esta tela?";
+  });
+
+  trocar("hoje");
+</script>
