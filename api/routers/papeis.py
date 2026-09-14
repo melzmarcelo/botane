@@ -6,16 +6,38 @@ import auditoria
 from database import get_cursor
 from models.acesso import PapelCreate, PapelResponse, PapelUpdate, PermissaoResponse
 from seguranca import Contexto, contexto_atual, requer_permissao
+from services import reservas
 
 router = APIRouter(tags=["papéis"])
 
 
 @router.get("/permissoes", response_model=list[PermissaoResponse])
 def listar_permissoes(ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
-    """Catálogo de chaves. Só autenticação: a tela de papéis e a de usuários usam."""
+    """Catálogo de chaves. Só autenticação: a tela de papéis e a de usuários usam.
+
+    🔑 **Módulo desligado não oferece permissão** (pedido do dono, 14/09/2026:
+    *"caso tenha habilitado, disponibilizar nas permissões dos usuários os itens
+    de Reserva"*). Uma casa que não faz reserva não tem por que ver três chaves
+    que não levam a tela nenhuma — e a lista de permissões é longa o bastante
+    para que cada linha inútil custe atenção de quem monta um papel.
+
+    ⚠️ **A pergunta é "alguma loja", não "a loja atual".** Papel é global — não
+    tem loja —, então filtrar pela loja do seletor faria o catálogo mudar
+    conforme a loja escolhida, e um papel montado numa loja pareceria quebrado
+    na outra.
+
+    ⚠️ **Esconder do catálogo NÃO revoga nada.** Quem já tem a chave continua
+    com ela, e as rotas de Reservas continuam exigindo a permissão — o que
+    recusa uma loja sem o módulo é a trava do próprio router. Desligar o módulo
+    é tirar da vitrine, não confiscar: religar devolve a lista como estava, sem
+    ninguém ter de refazer papel.
+    """
     with get_cursor() as cur:
         cur.execute("SELECT chave, modulo, descricao, ordem FROM permissoes ORDER BY ordem, chave")
-        return [dict(r) for r in cur.fetchall()]
+        todas = [dict(r) for r in cur.fetchall()]
+        if reservas.ligado_em_alguma_loja(cur):
+            return todas
+        return [p for p in todas if not p["chave"].startswith("reservas.")]
 
 
 @router.get("/papeis", response_model=list[PapelResponse])

@@ -114,6 +114,12 @@ class ParametrosUpdate(BaseModel):
     # ⚠️ Ligar a chave não reavalia nada: ela vale dali para a frente. O que já
     # está no estoque se unifica pelo botão em Estoque → Ajustes.
     custo_por_local: bool | None = None
+    # 🔑 **O interruptor do módulo de Reservas** (migração 068, pedido do dono).
+    # Uma loja de cada vez: liga o grupo no menu, libera as telas e faz as
+    # chaves `reservas.*` aparecerem no catálogo de permissões.
+    # ⚠️ Estar neste modelo é o que o põe em `_CAMPOS_PARAM`, e é por isso que
+    # o GET e o PUT dos parâmetros já o conhecem sem uma linha a mais.
+    reservas_ligado: bool | None = None
 
 
 class ParametrosResponse(ParametrosUpdate):

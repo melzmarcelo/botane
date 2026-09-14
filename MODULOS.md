@@ -135,6 +135,25 @@ ficha. A diferença entre os dois é a variância, que é o número que interess
 
 ---
 
+## Reservas
+
+- **Rotas:** `reservas.py`
+- **Serviços:** `reservas.py`
+- **Telas:** `reservas/configuracoes/`
+- **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`
+
+🔑 **É o primeiro módulo LIGADO POR LOJA** (`parametros.reservas_ligado`,
+migração 068). Desligado, ele não existe: sem grupo no menu, com as rotas
+recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
+
+⚠️ Só a configuração está construída — horário de funcionamento (três horas por
+dia: abre, fecha e última reserva) e permanência por faixa. Salões, mesas, a
+regra de disponibilidade e a reserva em si vêm a seguir; o protótipo em
+`apresentacao/reservas-prototipo.html` já implementa a regra inteira e serve de
+especificação executável.
+
+---
+
 ## Transversal
 
 O que não pertence a um módulo e atravessa todos. Fica em

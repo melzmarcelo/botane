@@ -78,6 +78,20 @@ const INTERRUPTORES: { campo: string; nome: string; explica: string }[] = [
       "Desligado, o produto tem um custo só na loja e prateleira nova já nasce sabendo dele. " +
       "Ligue se a mesma mercadoria custa coisas diferentes em depósitos diferentes.",
   },
+  {
+    // 🔑 **O módulo de Reservas, uma loja de cada vez** (migração 068, pedido
+    // do dono). Este interruptor faz TRÊS coisas de uma vez, e é por isso que
+    // ele pode existir: abre o grupo Reservas no menu, libera as telas (o
+    // servidor recusa a loja desligada, não só a tela) e faz as chaves
+    // `reservas.*` aparecerem no catálogo de permissões.
+    // ⚠️ Desligar não confisca permissão de ninguém nem apaga configuração:
+    // religar devolve tudo como estava.
+    campo: "reservas_ligado",
+    nome: "Reservas de mesa",
+    explica:
+      "Liga a agenda de reservas nesta loja: o menu, as telas e as permissões de Reserva. " +
+      "Depois de ligar, comece pelas Configurações — a casa nasce fechada em todos os dias.",
+  },
 ];
 
 // ⚠️ `dia_fechamento_cmv` saiu daqui: virou parte do bloco de ritmo do

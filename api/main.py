@@ -56,6 +56,7 @@ from routers import (
     papeis,
     pdv,
     producao_agenda,
+    reservas,
     produtos,
     transferencias,
     usuarios,
@@ -354,6 +355,7 @@ app.include_router(inicio.router)
 app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
+app.include_router(reservas.router)
 
 
 @app.get("/saude", tags=["infra"])

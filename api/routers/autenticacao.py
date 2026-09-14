@@ -249,8 +249,11 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         # tela mente. Sai pela mesma porta do `enviar_ao_pdv` — é da loja ATUAL.
         # ⚠️ Loja sem linha em `parametros` NÃO é erro: a linha nasce na
         # primeira visita à tela de parâmetros. Sem linha, vale o padrão.
+        # 🔑 **`reservas_ligado` sai pela MESMA porta, e pela mesma razão**: é
+        # da loja ATUAL, e quem troca de loja no seletor tem de ver o menu da
+        # loja em que está. Uma casa pode aceitar reserva e a outra não.
         cur.execute(
-            "SELECT casas_decimais_qtd FROM parametros WHERE id_unidade = %s",
+            "SELECT casas_decimais_qtd, reservas_ligado FROM parametros WHERE id_unidade = %s",
             (id_unidade,),
         )
         linha_par = cur.fetchone()
@@ -270,6 +273,7 @@ def me(ctx: Contexto = Depends(contexto_atual)):
         "todos_setores": ctx.todos_setores,
         "enviar_ao_pdv": bool(linha_pdv["enviar_ao_pdv"]) if linha_pdv else False,
         "casas_decimais_qtd": int(linha_par["casas_decimais_qtd"]) if linha_par else 3,
+        "reservas_ligado": bool(linha_par["reservas_ligado"]) if linha_par else False,
     }
 
 

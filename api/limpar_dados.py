@@ -349,6 +349,14 @@ PRESERVADAS = [
     "setores", "categorias", "unidades_medida", "perda_motivos",
     "usuarios", "papeis", "permissoes", "papel_permissoes", "usuario_papeis",
     "usuario_setores", "integracoes", "schema_migrations",
+    # ⚠️ **A configuração de Reservas fica, como `parametros`** (migração 068).
+    # Horário de funcionamento e permanência descrevem a CASA, não a operação —
+    # limpar a base de teste não faz o sábado deixar de existir, e quem zerasse
+    # teria de redigitar a semana inteira sem motivo.
+    # 🔑 **Mas as RESERVAS em si, quando existirem, vão para OPERACAO** — elas
+    # apontam para pessoas e mesas, que saem no TRUNCATE, e o guarda deste
+    # script vai apitar no dia em que a tabela nascer. Que é o serviço dele.
+    "reserva_config", "reserva_horarios", "reserva_permanencias",
 ]
 
 

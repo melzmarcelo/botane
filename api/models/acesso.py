@@ -65,6 +65,14 @@ class MeResponse(BaseModel):
     # ⚠️ O padrão é 3, o mesmo do banco — divergir aqui faria a tela mostrar uma
     # coisa antes da resposta e outra depois.
     casas_decimais_qtd: int = 3
+    # 🔑 **A loja ATUAL tem o módulo de Reservas** (migração 068). É o que abre
+    # o grupo Reservas no menu, e vem pela mesma porta dos dois acima: é da loja
+    # do seletor, e uma casa pode aceitar reserva enquanto a outra não.
+    # ⚠️ **Campo que falta AQUI some da resposta, mesmo estando no dict** — o
+    # `response_model` recorta o que não está no modelo. Foi assim que este
+    # campo voltou nulo na primeira tentativa, e é a mesma armadilha que o
+    # `porcao_qtd` da ficha já tinha pago.
+    reservas_ligado: bool = False
 
 
 class PerfilUpdate(BaseModel):

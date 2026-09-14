@@ -75,6 +75,10 @@ export type Eu = {
   /** Quantas casas a loja ATUAL quer ver na quantidade (0 a 6, padrão 3).
    *  Quem o aplica é `definirCasasQtd`, chamado pela sessão. */
   casas_decimais_qtd: number;
+  /** A loja ATUAL tem o módulo de Reservas ligado. Decide o grupo no menu.
+   *  ⚠️ É da loja atual, como o `enviar_ao_pdv`: uma casa pode aceitar reserva
+   *  e a outra não, e quem troca no seletor tem de ver o menu de onde está. */
+  reservas_ligado: boolean;
 };
 
 export class ErroApi extends Error {

@@ -27,6 +27,10 @@ const MENU: {
         Início repetido — e item de menu que leva a uma tela redundante ensina
         a ignorar o menu. */
     soComVariasLojas?: boolean;
+    /** 🔑 Só entra com o módulo de Reservas ligado NESTA loja
+        (`parametros.reservas_ligado`). Casa que não faz reserva não tem por que
+        ver um grupo inteiro que não leva a lugar nenhum. */
+    soComReservas?: boolean;
   }[];
 }[] = [
   {
@@ -100,6 +104,23 @@ const MENU: {
         href: "/consumo",
         nome: "Períodos de consumo",
         chave: ["consumo.periodos", "cmv.relatorios"],
+      },
+    ],
+  },
+  {
+    // 🔑 **O grupo inteiro só existe com o módulo ligado** nesta loja
+    // (migração 068). Não é só esconder item: uma casa que não faz reserva não
+    // ganha um grupo a mais no menu para nunca abrir.
+    // ⚠️ O `soComReservas` vai em CADA item, não no grupo: o filtro do menu é
+    // por item, e grupo que fica sem item some sozinho — é assim que
+    // Transferências já desaparece na casa de uma loja só.
+    grupo: "Reservas",
+    itens: [
+      {
+        href: "/reservas/configuracoes",
+        nome: "Configurações",
+        chave: "reservas.configurar",
+        soComReservas: true,
       },
     ],
   },
@@ -273,8 +294,9 @@ function Casca({ children }: { children: React.ReactNode }) {
 
   const navegacao = (
     <MenuLateral
-            enviaAoPdv={!!eu?.enviar_ao_pdv}
+      enviaAoPdv={!!eu?.enviar_ao_pdv}
       variasLojas={(eu?.unidades.length ?? 0) > 1}
+      temReservas={!!eu?.reservas_ligado}
       caminho={caminho}
       pode={pode}
       abertos={abertos}
@@ -376,6 +398,7 @@ function MenuLateral({
   pode,
   enviaAoPdv,
   variasLojas,
+  temReservas,
   abertos,
   alternarGrupo,
   aoNavegar,
@@ -386,6 +409,7 @@ function MenuLateral({
   enviaAoPdv: boolean;
   /** A casa tem mais de uma loja que esta pessoa enxerga. */
   variasLojas: boolean;
+  temReservas: boolean;
   abertos: Record<string, boolean>;
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
@@ -408,7 +432,8 @@ function MenuLateral({
           (i) =>
             (!i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave))) &&
             (!i.soComEnvioAoPdv || enviaAoPdv) &&
-            (!i.soComVariasLojas || variasLojas),
+            (!i.soComVariasLojas || variasLojas) &&
+            (!i.soComReservas || temReservas),
         );
         if (!itens.length) return null;
         const temAtivo = itens.some((i) => i.href === caminho);

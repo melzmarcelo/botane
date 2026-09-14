@@ -187,6 +187,32 @@ async function irPara(pagina, url) {
  * cadastro virou campo de busca, "o nome do insumo aparece na tela" passou a
  * ser falso pelo `innerText` e verdadeiro para quem olha o monitor.
  */
+/** Espera o botao aparecer e clica nele, devolvendo se conseguiu.
+ *
+ * ⚠️ **`b?.click()` no-opera em SILENCIO** quando a tela ainda nao renderizou —
+ * e o `?.` foi posto justamente para nao derrubar a bateria. O efeito colateral
+ * e pior que a queda: nada e clicado, a espera seguinte gasta o orcamento
+ * inteiro por um texto que nunca vai vir, e a falha acusa o texto em vez de
+ * acusar o clique que nao houve. Foi assim que as tres checagens do custo
+ * inicial cairam, com a tela ainda em branco e o botao inexistente.
+ */
+async function clicarQuando(pagina, expressao, limite = 15000) {
+  const ate = Date.now() + limite;
+  while (Date.now() < ate) {
+    const clicou = await pagina.evaluate((fonte) => {
+      const re = new RegExp(fonte, "i");
+      const b = [...document.querySelectorAll("button")].find((x) =>
+        re.test(x.textContent ?? ""));
+      if (!b || b.disabled) return false;
+      b.click();
+      return true;
+    }, expressao);
+    if (clicou) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
 async function textoVisivel(pagina) {
   return pagina.evaluate(() => {
     const campos = [...document.querySelectorAll("input, textarea")]
@@ -5340,11 +5366,11 @@ try {
   // entra na conta valendo ZERO e o food cost sai bom demais, calado.
   // ⚠️ A tela tem de DIZER que e referencia e nao movimento — quem clica sem
   // isso espera ver o estoque encher, e nada no saldo vai mudar.
-  await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find(
-      (x) => /Trazer o custo inicial/i.test(x.textContent ?? ""));
-    b?.click();
-  });
+  const clicouCusto = await clicarQuando(p, "Trazer o custo inicial");
+  // 🔑 **Afirmar o CLIQUE separa as duas causas.** Sem esta linha, "a previa nao
+  // respondeu" tanto pode ser o endpoint lento quanto o botao que nunca foi
+  // clicado — e as tres checagens seguintes caem juntas dizendo a coisa errada.
+  checar("o botao de trazer o custo inicial esta na tela", clicouCusto);
   let custosTexto = "";
   // ⚠️ **A espera é longa porque a varredura é longa, e foi MEDIDA** (14/09/2026):
   // `custos-iniciais/previa` leva ~15s com a máquina livre e passou de **50s**
@@ -6798,6 +6824,145 @@ try {
   // anterior chamava `DELETE /empresa/logo` dizendo "a real é a que o cliente
   // subir": só que a real já estava lá, e sumia da barra e do cabeçalho de todo
   // PDF. Mesma lição do `preservar_credenciais` e do modo do PDV.
+  console.log("12. o modulo de Reservas, ligado por loja");
+  // 🔑 **Pedido do dono (14/09/2026):** o módulo inteiro é ligado por parâmetro
+  // da loja, e ligar tem de mudar TRÊS coisas — o menu, a tela e a oferta das
+  // permissões. Aqui se prova o lado de fora; o de dentro (a recusa do
+  // servidor) está em `smoke_reservas_config.py`.
+  const { dados: eu } = await api("GET", "/auth/me", null, token);
+  const lojaR = eu.unidades[0].id;
+  const ligarReservas = async (valor) =>
+    api("PUT", `/unidades/${lojaR}/parametros`, { reservas_ligado: valor }, token);
+
+  // ⚠️ Devolve a loja ao estado de partida aconteça o que acontecer: uma casa
+  // que não faz reserva não pode terminar a bateria com o módulo ligado.
+  await ligarReservas(false);
+  aoTerminar.push(async () => {
+    await ligarReservas(false);
+  });
+
+  await entrar(p, ADMIN);
+  // ⚠️ **A tela inicial e `/`, nao `/inicio`** — a segunda responde 404. A
+  // primeira versao desta fase apontava para ela, e o efeito foi pior que uma
+  // falha: a checagem do lado DESLIGADO passou por VACUIDADE, porque um 404 nao
+  // tem menu nenhum para conter o grupo.
+  // ⚠️ **E pelo DOM, nao pelo `innerText`**, como a fase 2 ja fazia: com os
+  // grupos recolhidos o `display: none` tira os itens do texto visivel, e a
+  // pergunta aqui e "o menu OFERECE esta tela?".
+  await irPara(p, `${WEB}/`);
+  await new Promise((r) => setTimeout(r, 900));
+  const grupoNoMenu = async () =>
+    p.evaluate(() => !!document.querySelector("aside a[href='/reservas/configuracoes']"));
+  checar("desligado, o menu nao tem o grupo Reservas", !(await grupoNoMenu()));
+  // A prova de que a checagem acima nao e vazia: o menu esta LA, com os outros.
+  const outrosGrupos = await p.evaluate(() =>
+    [...document.querySelectorAll("aside a")].length);
+  checar("e o menu existe, com as outras telas", outrosGrupos > 5, outrosGrupos);
+
+  // ⚠️ A tela também não abre pelo endereço direto: quem recusa é o servidor.
+  await irPara(p, `${WEB}/reservas/configuracoes`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const recusa = await p.evaluate(() => document.body.innerText);
+  checar("e a tela recusa pelo endereco direto, dizendo onde se liga",
+    /n[ãa]o est[áa] ligado|Lojas/i.test(recusa), recusa.slice(0, 200));
+
+  await ligarReservas(true);
+  // O menu vem do `/auth/me`, que a sessão carrega uma vez — recarregar é o que
+  // a pessoa faria depois de ligar o parâmetro noutra aba.
+  await irPara(p, `${WEB}/`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  checar("ligado, o grupo Reservas aparece no menu", await grupoNoMenu());
+
+  // ⚠️ **Ponto de partida MONTADO, e a razao e a propria feature.** A
+  // configuracao SOBREVIVE — de proposito —, entao a rodada seguinte encontra o
+  // sabado que esta fase abriu na anterior. Sem zerar antes, o clique mais
+  // abaixo DESMARCA em vez de marcar, e as duas checagens caem invertidas: a
+  // primeira nao acha o aviso (havia dia aberto) e a segunda acha (nao ha mais).
+  // Foi exatamente assim que elas cairam — e e a mesma licao que
+  // `smoke_reservas_config.py` ja tinha pago na secao 4.
+  const { dados: cfgReservas } = await api("GET", "/reservas/configuracao", null, token);
+  await api("PUT", "/reservas/configuracao", {
+    aceita_online: cfgReservas.aceita_online,
+    confirmacao: cfgReservas.confirmacao,
+    teto_online: cfgReservas.teto_online,
+    tolerancia_min: cfgReservas.tolerancia_min,
+    folga_min: cfgReservas.folga_min,
+    passo_min: cfgReservas.passo_min,
+    antecedencia_min_horas: cfgReservas.antecedencia_min_horas,
+    antecedencia_max_dias: cfgReservas.antecedencia_max_dias,
+    cadastro_completo: cfgReservas.cadastro_completo,
+    horarios: cfgReservas.horarios.map((h) => ({ ...h, aberto: false })),
+    permanencias: cfgReservas.permanencias.map(({ nome, de, ate, minutos }) =>
+      ({ nome, de, ate, minutos })),
+  }, token);
+
+  await irPara(p, `${WEB}/reservas/configuracoes`);
+  await esperarTexto(p, "Horário de funcionamento", 9000);
+  const telaR = await p.evaluate(() => ({
+    texto: document.body.innerText,
+    // A semana inteira, e começando na segunda: o servidor manda em ISO
+    // (1 = segunda … 7 = domingo), e a tela não reordena nada.
+    primeiroDia: document.querySelectorAll("table tbody tr td:first-child")[0]?.innerText ?? "",
+    linhas: document.querySelectorAll("table")[0]?.querySelectorAll("tbody tr").length ?? 0,
+  }));
+  checar("a tela de configuracoes abre com a semana inteira", telaR.linhas === 7, telaR.linhas);
+  checar("comecando na segunda-feira", /Segunda/i.test(telaR.primeiroDia), telaR.primeiroDia);
+  // 🔑 A casa nasce fechada em todos os dias de propósito — e a tela tem de
+  // DIZER isso, senão parece pronta.
+  checar("e avisa que nenhum dia esta aberto ainda",
+    /Nenhum dia da semana está aberto/i.test(telaR.texto), telaR.texto.slice(0, 300));
+  // ⚠️ **O nome da faixa mora no `value` de um `<input>`, e `innerText` nao ve
+  // valor de campo.** A primeira versao procurava "Almoço" no texto da pagina e
+  // nao achava o que estava a vista na tela.
+  const faixasR = await p.evaluate(() =>
+    [...document.querySelectorAll('input[aria-label^="nome da faixa"]')]
+      .map((i) => i.value));
+  checar("as tres faixas de permanencia ja vem preenchidas",
+    faixasR.length === 3 && faixasR.some((n) => /Almoço/i.test(n)), faixasR);
+  // A frase que traduz o número: quem senta às 11:00 sai por volta das 12:30.
+  checar("dizendo em portugues o que a permanencia faz",
+    /11:00 → 12:30/.test(telaR.texto), telaR.texto.slice(0, 600));
+  await foto(p, "42-reservas-configuracoes");
+
+  // Abre o sábado e salva: é a prova de que a tela grava de verdade.
+  await p.evaluate(() => {
+    const linhas = [...document.querySelectorAll("table tbody tr")];
+    const sabado = linhas.find((l) => /Sábado/i.test(l.innerText));
+    sabado?.querySelector('input[type="checkbox"]')?.click();
+  });
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find(
+      (x) => (x.textContent ?? "").trim() === "Salvar");
+    b?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1600));
+  await p.reload({ waitUntil: "networkidle2" });
+  await esperarTexto(p, "Horário de funcionamento", 9000);
+  const depoisR = await p.evaluate(() => document.body.innerText);
+  checar("marcar o sabado e salvar tira o aviso de casa fechada",
+    !/Nenhum dia da semana está aberto/i.test(depoisR), depoisR.slice(0, 300));
+
+  // 🔑 **E as permissões passam a ser oferecidas** — o terceiro efeito.
+  await irPara(p, `${WEB}/papeis`);
+  await new Promise((r) => setTimeout(r, 1400));
+  const comPerm = await p.evaluate(() => document.body.innerText);
+  checar("ligado, o catalogo de permissoes oferece as chaves de Reserva",
+    /Ver a agenda e as reservas do dia/i.test(comPerm), comPerm.slice(0, 200));
+
+  await ligarReservas(false);
+  await irPara(p, `${WEB}/papeis`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1400));
+  const semPerm = await p.evaluate(() => document.body.innerText);
+  // ⚠️ Esconder do catálogo NÃO revoga nada de quem já tem — é tirar da
+  // vitrine. O que recusa uma loja desligada é a trava do próprio router.
+  checar("e desligar tira as chaves da vitrine de novo",
+    !/Ver a agenda e as reservas do dia/i.test(semPerm), semPerm.slice(0, 200));
+  await irPara(p, `${WEB}/`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await new Promise((r) => setTimeout(r, 1200));
+  checar("junto com o grupo no menu", !(await grupoNoMenu()));
 } finally {
   // O que precisa voltar ao lugar mesmo se o roteiro estourar no meio.
   for (const desfazer of aoTerminar) {
