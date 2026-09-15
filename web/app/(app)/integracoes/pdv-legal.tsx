@@ -468,7 +468,7 @@ export default function PdvLegal() {
 
           <div className="flex flex-wrap gap-2">
             {podeConfigurar && (
-              <button className="btn btn-primario" type="submit" disabled={ocupado}>
+              <button className="btn btn-primario" type="submit" aria-busy={ocupado} disabled={ocupado}>
                 Salvar
               </button>
             )}
@@ -476,7 +476,7 @@ export default function PdvLegal() {
               className="btn btn-secundario"
               type="button"
               onClick={testar}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               Testar conexão
             </button>
@@ -486,7 +486,7 @@ export default function PdvLegal() {
                   className="btn btn-secundario"
                   type="button"
                   onClick={sincronizar}
-                  disabled={ocupado}
+                  aria-busy={ocupado} disabled={ocupado}
                   title="Traz os cupons do PDV e grava como venda"
                 >
                   Buscar vendas
@@ -499,7 +499,7 @@ export default function PdvLegal() {
                   className="btn btn-secundario"
                   type="button"
                   onClick={importarCardapio}
-                  disabled={ocupado}
+                  aria-busy={ocupado} disabled={ocupado}
                   title="Traz os itens do cardápio e liga aos pratos daqui"
                 >
                   Importar cardápio

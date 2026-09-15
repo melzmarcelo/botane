@@ -92,7 +92,7 @@ export default function CustoGeral({ aoLancar }: { aoLancar: () => void }) {
         </button>
         {previa && !nada && (
           <button type="button" className="btn btn-primario" onClick={() => setConfirmando(true)}
-                  disabled={lancando}>
+                  aria-busy={lancando} disabled={lancando}>
             Unificar {previa.produtos} produto(s)
           </button>
         )}

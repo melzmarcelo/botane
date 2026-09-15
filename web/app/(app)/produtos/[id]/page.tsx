@@ -146,6 +146,15 @@ export default function FormularioProduto() {
   const [carregando, setCarregando] = useState(!novo);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  /**
+   * 🔑 **O erro do CAMPO, no campo** (15/09/2026, protótipo aprovado).
+   * O nome era validado pelo `required` do navegador, e isso significa o balão
+   * CINZA DO CHROME — a mesma caixa que o resto do sistema já parou de usar
+   * (ver `Confirmacao`): fonte de sistema, texto que ninguém escolheu, e some
+   * sozinha ao clicar em qualquer lugar. Agora a regra é nossa, a frase é
+   * nossa, e ela fica onde o olho já está: embaixo do campo.
+   */
+  const [erroNome, setErroNome] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -319,6 +328,18 @@ export default function FormularioProduto() {
       setConfirmandoCusto(true);
       return;
     }
+    // ⚠️ **Antes de qualquer coisa, e ANTES de marcar "salvando".** Marcar o
+    // trabalho e desistir em seguida deixaria o botão piscando sem motivo.
+    const nome = f.nome.trim();
+    if (nome.length < 2) {
+      setErroNome(
+        nome ? "O nome precisa de pelo menos duas letras." : "O produto precisa de um nome.",
+      );
+      // O foco vai para o campo: quem errou tem de poder corrigir sem procurar.
+      document.getElementById("campo-nome")?.focus();
+      return;
+    }
+    setErroNome(null);
     setSalvando(true);
     setErro("");
     const corpo = {
@@ -468,7 +489,10 @@ export default function FormularioProduto() {
   const mostraFator = !!f.um_compra && f.um_compra !== f.um_estoque;
 
   return (
-    <form onSubmit={salvar} className="flex flex-col gap-6">
+    // ⚠️ `noValidate`: a validação nativa roda ANTES do `onSubmit` e mostra o
+    // balão do navegador — a caixa cinza que esta casa já baniu do resto do
+    // sistema. Quem valida aqui somos nós; o servidor continua sendo a guarda.
+    <form onSubmit={salvar} noValidate className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <Voltar href="/produtos">
@@ -541,7 +565,7 @@ export default function FormularioProduto() {
                 Revisar e ativar
               </button>
             )}
-            <button className="btn btn-primario" type="submit" disabled={salvando}>
+            <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
               {salvando ? "Salvando…" : novo ? "Criar produto" : "Salvar"}
             </button>
             </>
@@ -680,14 +704,24 @@ export default function FormularioProduto() {
               produto é escrito por cinco caminhos diferentes. A classe existe
               para quem digita ver, na hora, o que vai ficar salvo — em vez de
               descobrir depois que "Café latte" virou outra coisa. */}
-          <Campo rotulo="Nome" className="sm:col-span-2" dica="fica em MAIÚSCULAS">
+          <Campo
+            rotulo="Nome"
+            className="sm:col-span-2"
+            dica="fica em MAIÚSCULAS"
+            erro={erroNome}
+          >
             <input
+              id="campo-nome"
               className="campo uppercase"
-              required
-              minLength={2}
               disabled={!podeEditar}
               value={f.nome}
-              onChange={(e) => set("nome", e.target.value)}
+              onChange={(e) => {
+                set("nome", e.target.value);
+                // Corrigir tem de dar retorno na hora: erro que só some no
+                // próximo clique em "salvar" deixa a pessoa sem saber se
+                // acertou.
+                if (erroNome && e.target.value.trim().length >= 2) setErroNome(null);
+              }}
             />
           </Campo>
           <Campo rotulo="Código" dica={novo ? "em branco, o sistema gera" : undefined}>
@@ -853,7 +887,7 @@ export default function FormularioProduto() {
                 <button
                   type="button"
                   className="btn btn-primario"
-                  disabled={salvandoPreco}
+                  aria-busy={salvandoPreco} disabled={salvandoPreco}
                   onClick={() => void salvarPrecoDaLoja(moedaParaNumero(precoLoja))}
                 >
                   {salvandoPreco ? "Salvando…" : "Salvar preço daqui"}
@@ -863,7 +897,7 @@ export default function FormularioProduto() {
                 <button
                   type="button"
                   className="link-acao-erro"
-                  disabled={salvandoPreco}
+                  aria-busy={salvandoPreco} disabled={salvandoPreco}
                   onClick={() => void salvarPrecoDaLoja(null)}
                 >
                   usar o preço da casa
@@ -1224,7 +1258,7 @@ export default function FormularioProduto() {
             {vinculos.map((v, i) => (
               <li key={i} className="grid gap-3 rounded border border-linha p-3 sm:grid-cols-5">
                 <label className="sm:col-span-2">
-                  <span className="rotulo">Fornecedor</span>
+                  <span className="rotulo-campo">Fornecedor</span>
                   <div className="mt-1.5">
                     <BuscaCadastro
                       fonte={FORNECEDORES}
@@ -1257,7 +1291,7 @@ export default function FormularioProduto() {
                   </div>
                 </label>
                 <label>
-                  <span className="rotulo">Código deles</span>
+                  <span className="rotulo-campo">Código deles</span>
                   <input
                     className="campo mono mt-1.5"
                     disabled={!podeEditar}
@@ -1272,7 +1306,7 @@ export default function FormularioProduto() {
                   />
                 </label>
                 <label>
-                  <span className="rotulo">Embalagem</span>
+                  <span className="rotulo-campo">Embalagem</span>
                   <input
                     className="campo mt-1.5"
                     placeholder="cx 12 un"
@@ -1379,7 +1413,7 @@ export default function FormularioProduto() {
           <Link href="/produtos" className="btn btn-secundario">
             Voltar
           </Link>
-          <button className="btn btn-primario" type="submit" disabled={salvando}>
+          <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
             {salvando ? "Salvando…" : novo ? "Criar produto" : "Salvar"}
           </button>
         </div>

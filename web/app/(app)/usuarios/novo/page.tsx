@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import FormularioUsuario, { VAZIO } from "../formulario";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Cadastrar usuário — página própria.
@@ -21,10 +22,10 @@ export default function PaginaNovoUsuario() {
           usuários
         </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Novo usuário</h1>
-        <p className="mt-2 max-w-[70ch] prosa text-suave">
+        <ExplicaTela>
           Cada pessoa da casa com o seu login. A senha que você põe aqui é provisória —{" "}
           <b>a pessoa troca no primeiro acesso</b>, e a definitiva ninguém mais vê.
-        </p>
+        </ExplicaTela>
       </header>
 
       <FormularioUsuario inicial={VAZIO} aoGravar={() => router.push("/usuarios")} />

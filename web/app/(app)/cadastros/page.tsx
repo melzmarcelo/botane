@@ -19,6 +19,7 @@ import { Paginacao, fatiar, usePaginacao } from "@/components/paginacao";
 import GruposCmv from "./grupos-cmv";
 import UnidadesDeFora from "./unidades-de-fora";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import ExplicaTela from "@/components/explica-tela";
 
 type Aba = "setores" | "locais" | "categorias" | "unidades" | "grupos-cmv";
 
@@ -237,14 +238,19 @@ export default function PaginaCadastros() {
         </h1>
         {/* O título não diz o que tem dentro, e "tabelas de apoio" não é o nome
             de nada que alguém procura: quem precisa do local de estoque procura
-            "local de estoque". Por isso a lista vem escrita aqui. */}
-        <p className="mt-1 max-w-[68ch] prosa text-suave">
+            "local de estoque".
+            ⚠️ **Quem nomeia o conteúdo agora são as ABAS, logo abaixo** — e é
+            por isso que esconder esta frase atrás do "saber mais" (15/09/2026)
+            não recria o problema que ela resolvia: "Setores", "Locais de
+            estoque", "Categorias" e "Unidades de medida" continuam escritos na
+            tela, um por aba. O que ficou recolhido foi a lição, não a lista. */}
+        <ExplicaTela>
           <b className="font-semibold text-tinta">
             Setores, locais de estoque, categorias e unidades de medida
           </b>{" "}
           — as quatro listas que o cadastro de produto usa. Mexer aqui muda como o estoque e o
           CMV vão se organizar depois: vale acertar antes de cadastrar o primeiro insumo.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -308,7 +314,7 @@ export default function PaginaCadastros() {
                   }}
                 >
                   <label className="min-w-0 flex-1">
-                    <span className="rotulo">{editandoAqui ? "Corrigir setor" : "Novo setor"}</span>
+                    <span className="rotulo-campo">{editandoAqui ? "Corrigir setor" : "Novo setor"}</span>
                     {/* ⚠️ `uppercase` é só CSS: quem normaliza é o BANCO
                         (gatilho da migração 050). A classe existe para quem
                         digita ver o que vai ser gravado, e não descobrir
@@ -428,7 +434,7 @@ export default function PaginaCadastros() {
                   }}
                 >
                   <label className="min-w-0 flex-1">
-                    <span className="rotulo">{editandoAqui ? "Corrigir local" : "Novo local"}</span>
+                    <span className="rotulo-campo">{editandoAqui ? "Corrigir local" : "Novo local"}</span>
                     <input
                       className="campo mt-1.5 uppercase"
                       required
@@ -438,7 +444,7 @@ export default function PaginaCadastros() {
                     />
                   </label>
                   <label className="sm:w-[180px]">
-                    <span className="rotulo">Tipo</span>
+                    <span className="rotulo-campo">Tipo</span>
                     <select
                       className="campo mt-1.5"
                       value={novoLocal.tipo}
@@ -455,7 +461,7 @@ export default function PaginaCadastros() {
                       o padrão: o Estoque Central não pertence a setor nenhum,
                       ele serve a todos. */}
                   <label className="sm:w-[190px]">
-                    <span className="rotulo">Setor</span>
+                    <span className="rotulo-campo">Setor</span>
                     <select
                       id="setor-do-local"
                       className="campo mt-1.5"

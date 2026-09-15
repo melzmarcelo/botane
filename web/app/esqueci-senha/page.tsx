@@ -64,7 +64,7 @@ export default function EsqueciSenha() {
             )}
             <form onSubmit={pedir} className="mt-6 flex flex-col gap-4">
               <label className="flex flex-col gap-1.5">
-                <span className="rotulo">E-mail</span>
+                <span className="rotulo-campo">E-mail</span>
                 <input
                   className="campo"
                   type="email"
@@ -75,7 +75,7 @@ export default function EsqueciSenha() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </label>
-              <button className="btn btn-primario" type="submit" disabled={enviando}>
+              <button className="btn btn-primario" type="submit" aria-busy={enviando} disabled={enviando}>
                 {enviando ? "Enviando…" : "Enviar o link"}
               </button>
               <a className="link-acao self-center" href="/login">

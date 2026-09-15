@@ -9,6 +9,7 @@ import { Categoria, Local, Setor, TIPOS_PRODUTO } from "@/lib/cadastros";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import FiltroMultiplo from "@/components/filtro-multiplo";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Montar uma contagem.
@@ -196,11 +197,11 @@ export default function PaginaNovaContagem() {
         <h1 className="mt-3 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Nova contagem
         </h1>
-        <p className="mt-1 max-w-[66ch] prosa text-suave">
+        <ExplicaTela>
           Escolha o que entra na contagem. Cada filtro é opcional — em branco quer dizer todos —
           e eles se somam: setor <b>cozinha</b> com tipo <b>insumo</b> traz os insumos da
           cozinha.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

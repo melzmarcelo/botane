@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import ExplicaTela from "@/components/explica-tela";
 
 
 type Inventario = {
@@ -64,10 +65,10 @@ export default function PaginaInventario() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Inventário
           </h1>
-          <p className="mt-1 max-w-[66ch] prosa text-suave">
+          <ExplicaTela>
             Contar o que existe e acertar o razão pela diferença. A contagem não mexe em nada
             até você fechar — e o acerto entra como movimento, com nome e rastro.
-          </p>
+          </ExplicaTela>
         </div>
         {/* ⚠️ Montar a contagem é outra permissão. Quem só conta não vê o botão —
             e o servidor barra de qualquer jeito: aqui é dica de interface. */}

@@ -9,6 +9,8 @@ import { Aviso, Carregando, Cartao } from "@/components/ui";
 import VendasDoDia, { Dia } from "./vendas-do-dia";
 
 import { pct } from "@/lib/numeros";
+import ExplicaTela from "@/components/explica-tela";
+
 /**
  * A tela inicial: a casa inteira num olhar.
  *
@@ -176,9 +178,9 @@ export default function Inicio() {
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
           {primeiroNome ? `Olá, ${primeiroNome}` : "Bom dia"}
         </h1>
-        <p className="mt-1 max-w-[62ch] prosa text-suave">
+        <ExplicaTela>
           {maiuscula(p.periodo.termos.o)} corrente, do jeito que está agora.
-        </p>
+        </ExplicaTela>
       </header>
 
       {semMovimento && (

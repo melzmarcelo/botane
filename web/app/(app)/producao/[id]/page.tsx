@@ -187,7 +187,7 @@ export default function PaginaOrdemProducao() {
         <Cartao titulo="Quanto produzir">
           <div className="flex flex-wrap items-end gap-3">
             <label>
-              <span className="rotulo">Quantidade</span>
+              <span className="rotulo-campo">Quantidade</span>
               <input
                 className="campo campo-toque mono mt-1.5 w-[140px] text-right"
                 inputMode="decimal"
@@ -203,7 +203,7 @@ export default function PaginaOrdemProducao() {
             <button
               className="btn btn-primario ml-auto"
               onClick={() => setConfirmando(true)}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               Produzir
             </button>

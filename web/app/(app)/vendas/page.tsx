@@ -188,7 +188,7 @@ export default function PaginaVendas() {
                         lembrar que ela mora em Integrações — e venda não buscada é receita
                         faltando no CMV, sem nada denunciando. */}
                     {pode("integracao.pdv") && (
-                      <button className="btn btn-secundario" onClick={buscarNoPdv} disabled={ocupado}>
+                      <button className="btn btn-secundario" onClick={buscarNoPdv} aria-busy={ocupado} disabled={ocupado}>
                         {ocupado ? "Buscando…" : "Buscar no PDV"}
                       </button>
                     )}
@@ -205,7 +205,7 @@ export default function PaginaVendas() {
                       <button
                         className="btn btn-secundario"
                         onClick={reconciliar}
-                        disabled={ocupado}
+                        aria-busy={ocupado} disabled={ocupado}
                         title="Procura de novo o produto dos itens pendentes"
                       >
                         Reconciliar {pendencias} pendente(s)
@@ -329,7 +329,7 @@ export default function PaginaVendas() {
               </button>
               <button
                 className="btn btn-primario"
-                disabled={ocupado}
+                aria-busy={ocupado} disabled={ocupado}
                 onClick={async () => {
                   setOcupado(true);
                   try {

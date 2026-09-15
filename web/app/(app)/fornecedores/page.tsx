@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A lista dos fornecedores — só a lista.
@@ -70,11 +71,11 @@ export default function PaginaFornecedores() {
         <div>
           <p className="rotulo">Cadastros</p>
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Pessoas</h1>
-          <p className="mt-1 max-w-[62ch] prosa text-suave">
+          <ExplicaTela>
             Quem a casa conhece: de quem ela compra, quem trabalha nela, quem consome dela. O
             <b> CNPJ</b> é o que liga a nota fiscal que vem do Omie ao fornecedor certo — sem
             ele, a conciliação vira trabalho manual.
-          </p>
+          </ExplicaTela>
         </div>
         {podeEditar && (
           <Link href="/fornecedores/novo" className="btn btn-primario">
@@ -88,7 +89,7 @@ export default function PaginaFornecedores() {
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">
-            <span className="rotulo">Buscar</span>
+            <span className="rotulo-campo">Buscar</span>
             <input
               className="campo mt-1.5"
               placeholder="nome ou CNPJ"

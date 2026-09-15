@@ -8,6 +8,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O que está no caminho entre as lojas.
@@ -88,11 +89,11 @@ export default function PaginaTransferencias() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Remessas entre lojas
         </h1>
-        <p className="mt-1 max-w-[74ch] prosa text-suave">
+        <ExplicaTela>
           O que saiu de uma loja e ainda não foi conferido na outra. Enquanto está em trânsito, a
           quantidade <strong>continua no estoque de quem mandou</strong> — é o que mantém o valor
           com dono no caminho. O razão só se mexe no recebimento, nas duas lojas ao mesmo tempo.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

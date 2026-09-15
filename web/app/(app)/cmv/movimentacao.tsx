@@ -171,7 +171,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <label className="min-w-0 flex-1 sm:max-w-[320px]">
-          <span className="rotulo">Achar produto</span>
+          <span className="rotulo-campo">Achar produto</span>
           <input
             className="campo mt-1.5"
             placeholder="produto ou código"

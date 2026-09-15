@@ -166,7 +166,7 @@ export default function UnidadesDeFora({
                   <td>
                     <button
                       type="button"
-                      className="btn btn-secundario px-2.5 py-1"
+                      className="btn btn-secundario btn-pequeno"
                       disabled={!podeEditar || !escolha[p.apelido] || ocupado === p.apelido}
                       onClick={() => void vincular(p.apelido)}
                     >
@@ -204,7 +204,7 @@ export default function UnidadesDeFora({
                   <button
                     type="button"
                     className="text-[12.5px] text-suave underline"
-                    disabled={ocupado === a.apelido}
+                    aria-busy={ocupado === a.apelido} disabled={ocupado === a.apelido}
                     onClick={() => void remover(a.apelido)}
                   >
                     desfazer

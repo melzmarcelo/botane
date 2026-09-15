@@ -350,7 +350,7 @@ export default function PaginaRemessa() {
             <button
               type="button"
               className="btn btn-primario"
-              disabled={salvando}
+              aria-busy={salvando} disabled={salvando}
               onClick={() => setConfirmar("receber")}
             >
               Receber no estoque
@@ -369,7 +369,7 @@ export default function PaginaRemessa() {
           <button
             type="button"
             className="btn mt-4"
-            disabled={salvando}
+            aria-busy={salvando} disabled={salvando}
             onClick={() => setConfirmar("cancelar")}
           >
             Cancelar remessa

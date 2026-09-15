@@ -659,7 +659,7 @@ export default function EditorFicha() {
             </button>
           )}
           {editavel && (
-            <button className="btn btn-primario" type="submit" disabled={salvando}>
+            <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
               {salvando ? "Salvando…" : nova ? "Criar ficha" : "Salvar"}
             </button>
           )}
@@ -890,7 +890,7 @@ export default function EditorFicha() {
                     </div>
                   </div>
                   <label>
-                    <span className="rotulo">Bruta</span>
+                    <span className="rotulo-campo">Bruta</span>
                     <input
                       className="campo mono mt-1.5"
                       type="number"
@@ -907,7 +907,7 @@ export default function EditorFicha() {
                     />
                   </label>
                   <label>
-                    <span className="rotulo">Líquida</span>
+                    <span className="rotulo-campo">Líquida</span>
                     <input
                       className="campo mono mt-1.5"
                       type="number"
@@ -924,7 +924,7 @@ export default function EditorFicha() {
                     />
                   </label>
                   <label>
-                    <span className="rotulo">Unidade</span>
+                    <span className="rotulo-campo">Unidade</span>
                     <select
                       className="campo mt-1.5"
                       disabled={!editavel}
@@ -1165,7 +1165,7 @@ export default function EditorFicha() {
               <button
                 type="button"
                 className="btn btn-secundario"
-                disabled={enviandoFoto}
+                aria-busy={enviandoFoto} disabled={enviandoFoto}
                 onClick={() => seletorFoto.current?.click()}
               >
                 {enviandoFoto
@@ -1216,7 +1216,7 @@ export default function EditorFicha() {
           <Link href="/fichas" className="btn btn-secundario">
             Voltar
           </Link>
-          <button className="btn btn-primario" type="submit" disabled={salvando}>
+          <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
             {salvando ? "Salvando…" : nova ? "Criar ficha" : "Salvar"}
           </button>
         </div>

@@ -74,7 +74,7 @@ export default function MarcarCategorias({ aoAplicar }: { aoAplicar?: () => void
       <button
         type="button"
         className="btn btn-secundario"
-        disabled={ocupado}
+        aria-busy={ocupado} disabled={ocupado}
         onClick={() => void conferir()}
         title="Pergunta ao PDV quais categorias já existem no cardápio"
       >
@@ -97,7 +97,7 @@ export default function MarcarCategorias({ aoAplicar }: { aoAplicar?: () => void
                 <button
                   type="button"
                   className="btn btn-primario"
-                  disabled={ocupado || !previa.marcam.length}
+                  aria-busy={ocupado} disabled={ocupado || !previa.marcam.length}
                   onClick={() => void aplicar()}
                 >
                   {ocupado ? "Marcando…" : `Marcar ${previa.marcam.length}`}

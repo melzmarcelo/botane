@@ -292,7 +292,7 @@ export default function Vincular({
           <button
             className="btn btn-primario"
             type="button"
-            disabled={ocupado || !podeFundir}
+            aria-busy={ocupado} disabled={ocupado || !podeFundir}
             onClick={fundir}
           >
             {ocupado

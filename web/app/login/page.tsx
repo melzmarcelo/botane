@@ -48,7 +48,7 @@ export default function Login() {
 
         <form onSubmit={entrar} className="mt-8 flex flex-col gap-4">
           <label className="block">
-            <span className="rotulo">E-mail</span>
+            <span className="rotulo-campo">E-mail</span>
             <input
               className="campo mt-1.5"
               type="email"
@@ -60,7 +60,7 @@ export default function Login() {
             />
           </label>
           <label className="block">
-            <span className="rotulo">Senha</span>
+            <span className="rotulo-campo">Senha</span>
             <input
               className="campo mt-1.5"
               type="password"
@@ -97,7 +97,7 @@ export default function Login() {
 
           {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
-          <button className="btn btn-primario mt-1" type="submit" disabled={enviando}>
+          <button className="btn btn-primario mt-1" type="submit" aria-busy={enviando} disabled={enviando}>
             {enviando ? "Entrando…" : "Entrar"}
           </button>
         </form>

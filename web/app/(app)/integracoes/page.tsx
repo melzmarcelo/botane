@@ -6,6 +6,7 @@ import Omie from "./omie";
 import PdvLegal from "./pdv-legal";
 import EmailSmtp from "./email-smtp";
 import Duplicados from "./duplicados";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O que o Botané troca com o mundo lá fora, uma integração por aba.
@@ -73,10 +74,10 @@ export default function PaginaIntegracoes() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Integrações</h1>
-        <p className="mt-1 max-w-[66ch] prosa text-suave">
+        <ExplicaTela>
           O que o Botané troca com o mundo lá fora. Nada aqui é pré-requisito — o sistema opera
           inteiro sem nenhuma delas.
-        </p>
+        </ExplicaTela>
       </header>
 
       <nav className="flex flex-wrap gap-1 border-b border-linha">

@@ -339,7 +339,7 @@ export default function FormularioFornecedor({
       </Cartao>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primario" type="submit" disabled={salvando}>
+        <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
           {salvando ? "Salvando…" : id ? "Salvar" : "Criar pessoa"}
         </button>
         <Link href="/fornecedores" className="btn btn-secundario">

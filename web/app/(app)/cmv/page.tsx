@@ -237,7 +237,7 @@ export default function PaginaCmv() {
                         fechamento. As datas continuam ali para o recorte fora do ritmo. */}
                     {ciclo && ciclo.periodos.length > 0 && (
                       <label>
-                        <span className="rotulo">Período</span>
+                        <span className="rotulo-campo">Período</span>
                         <select
                           className="campo mt-1.5"
                           value={
@@ -261,7 +261,7 @@ export default function PaginaCmv() {
                       </label>
                     )}
                     <label>
-                      <span className="rotulo">De</span>
+                      <span className="rotulo-campo">De</span>
                       <input
                         className="campo mt-1.5"
                         type="date"
@@ -270,7 +270,7 @@ export default function PaginaCmv() {
                       />
                     </label>
                     <label>
-                      <span className="rotulo">Até</span>
+                      <span className="rotulo-campo">Até</span>
                       <input
                         className="campo mt-1.5"
                         type="date"
@@ -368,7 +368,7 @@ export default function PaginaCmv() {
                 <button
                   className="btn btn-secundario"
                   onClick={() => setConfirmando({ tipo: "fechar" })}
-                  disabled={ocupado}
+                  aria-busy={ocupado} disabled={ocupado}
                 >
                   Fechar {a.rotulo ? `— ${a.rotulo}` : "o período"}
                 </button>

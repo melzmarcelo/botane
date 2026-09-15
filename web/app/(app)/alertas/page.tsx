@@ -7,6 +7,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { reais } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import ExplicaTela from "@/components/explica-tela";
 
 type Alerta = {
   chave: string;
@@ -81,10 +82,10 @@ export default function PaginaAlertas() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           O que precisa de atenção
         </h1>
-        <p className="mt-1 max-w-[64ch] prosa text-suave">
+        <ExplicaTela>
           O sistema sabe o que está para acabar, o que vence esta semana e o que ficou parado
           esperando alguém. Esta tela junta tudo — para você não descobrir tarde demais.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

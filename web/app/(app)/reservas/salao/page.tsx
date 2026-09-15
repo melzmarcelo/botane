@@ -7,6 +7,7 @@ import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O salão da casa: salões, mesas e quantos lugares cada uma tem.
@@ -126,9 +127,9 @@ export default function SalaoDaCasa() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="titulo">Salão</h1>
-        <p className="text-[14px] text-suave">
+        <ExplicaTela>
           Onde as pessoas sentam. É daqui que a disponibilidade vai dizer se cabe.
-        </p>
+        </ExplicaTela>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -180,7 +181,7 @@ export default function SalaoDaCasa() {
               />
               <button
                 className="btn btn-secundario"
-                disabled={ocupado || !novoSalao.trim()}
+                aria-busy={ocupado} disabled={ocupado || !novoSalao.trim()}
                 onClick={() =>
                   void agir(async () => {
                     const r = await api.post<{ id: number; message: string }>(
@@ -226,14 +227,14 @@ export default function SalaoDaCasa() {
               <div className="flex flex-wrap gap-2">
                 <button
                   className="btn btn-secundario"
-                  disabled={ocupado}
+                  aria-busy={ocupado} disabled={ocupado}
                   onClick={() => setLote((v) => !v)}
                 >
                   + várias mesas
                 </button>
                 <button
                   className="btn btn-secundario"
-                  disabled={ocupado}
+                  aria-busy={ocupado} disabled={ocupado}
                   onClick={() =>
                     void agir(() =>
                       api.post("/reservas/mesas/em-lote", {
@@ -546,7 +547,7 @@ function FormularioDeLote({
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           className="btn btn-primario"
-          disabled={ocupado || quantidade < 1 || maximo < lugares}
+          aria-busy={ocupado} disabled={ocupado || quantidade < 1 || maximo < lugares}
           onClick={() =>
             aoCriar({
               id_salao: idSalao,

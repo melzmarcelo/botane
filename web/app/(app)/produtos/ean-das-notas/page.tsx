@@ -7,6 +7,7 @@ import { useSessao } from "@/lib/sessao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O código de barras que a NOTA já trouxe, e que o cadastro não tem.
@@ -116,10 +117,10 @@ export default function PaginaEanDasNotas() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Código de barras das notas
         </h1>
-        <p className="mt-1 text-suave">
+        <ExplicaTela>
           O EAN que o fornecedor declarou na nota fiscal, para os produtos que não
           têm nenhum cadastrado.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -221,7 +222,7 @@ export default function PaginaEanDasNotas() {
                     <button
                       type="button"
                       className="btn btn-primario"
-                      disabled={gravando || escolhidos.size === 0}
+                      aria-busy={gravando} disabled={gravando || escolhidos.size === 0}
                       onClick={() => void aplicar()}
                     >
                       {gravando

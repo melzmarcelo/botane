@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A primeira tela do módulo de Reservas: quando a casa abre, até quando aceita
@@ -179,12 +180,12 @@ export default function ConfiguracoesDeReservas() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titulo">Configurações de reservas</h1>
-          <p className="text-[14px] text-suave">
+          <ExplicaTela>
             Vale para esta loja. Outra loja com reservas tem a configuração dela.
-          </p>
+          </ExplicaTela>
         </div>
         {!somenteLeitura && (
-          <button className="btn btn-primario" onClick={() => void salvar()} disabled={ocupado}>
+          <button className="btn btn-primario" onClick={() => void salvar()} aria-busy={ocupado} disabled={ocupado}>
             {ocupado ? "Salvando…" : "Salvar"}
           </button>
         )}

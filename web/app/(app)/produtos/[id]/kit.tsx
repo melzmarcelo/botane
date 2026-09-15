@@ -133,7 +133,7 @@ export default function ComposicaoKit({
             type="button"
             className="btn btn-primario"
             onClick={salvar}
-            disabled={salvando}
+            aria-busy={salvando} disabled={salvando}
           >
             {salvando ? "Gravando…" : "Gravar composição"}
           </button>

@@ -265,7 +265,7 @@ export default function PaginaNota() {
             <button
               className="btn btn-primario"
               onClick={lancar}
-              disabled={ocupado || !!pendentes.length}
+              aria-busy={ocupado} disabled={ocupado || !!pendentes.length}
               title={pendentes.length ? "Há item sem produto vinculado" : undefined}
             >
               Lançar no estoque
@@ -290,7 +290,7 @@ export default function PaginaNota() {
             <button
               className="btn btn-secundario"
               onClick={atualizarDoOmie}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
               title="Relê esta nota no Omie e traz o que mudou lá"
             >
               Atualizar do Omie
@@ -300,7 +300,7 @@ export default function PaginaNota() {
             <button
               className="btn btn-secundario"
               onClick={() => setConfirmando("estornar")}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               Estornar
             </button>

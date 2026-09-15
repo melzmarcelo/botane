@@ -235,7 +235,7 @@ export default function LocaisDoProduto({
                       <button
                         type="button"
                         className="link-acao link-acao-erro"
-                        disabled={salvando}
+                        aria-busy={salvando} disabled={salvando}
                         aria-label={`tirar ${l.local}`}
                         onClick={() => void tirar(l.id_local, l.local)}
                       >
@@ -270,7 +270,7 @@ export default function LocaisDoProduto({
       {podeEditar && (
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <label className="min-w-[220px] flex-1">
-            <span className="rotulo">Acrescentar um local</span>
+            <span className="rotulo-campo">Acrescentar um local</span>
             <select
               id="local-a-acrescentar"
               className="campo"

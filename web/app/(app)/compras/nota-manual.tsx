@@ -341,7 +341,7 @@ export default function NotaManual({
       }
       acao={
         <div className="flex items-center gap-2">
-          <button className="btn btn-primario" onClick={gravar} disabled={ocupado}>
+          <button className="btn btn-primario" onClick={gravar} aria-busy={ocupado} disabled={ocupado}>
             {ocupado ? "Gravando…" : editando ? "Gravar correção" : "Gravar nota"}
           </button>
           <button className="link-acao link-acao-erro" onClick={aoFechar}>

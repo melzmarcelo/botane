@@ -86,7 +86,7 @@ export default function TrocarSenha() {
           </Campo>
 
 
-          <button className="btn btn-primario" type="submit" disabled={enviando}>
+          <button className="btn btn-primario" type="submit" aria-busy={enviando} disabled={enviando}>
             {enviando ? "Trocando…" : "Trocar senha"}
           </button>
         </form>

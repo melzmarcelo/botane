@@ -10,6 +10,7 @@ import BotaoExportar from "@/components/exportar";
 import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
 import { dataBr } from "../tipos";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O que cada pessoa consumiu, e quanto deixou de pagar.
@@ -229,9 +230,9 @@ export default function PaginaConsumoPorPessoa() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Consumo por pessoa
         </h1>
-        <p className="mt-1 text-suave">
+        <ExplicaTela>
           O que cada um consumiu no período, quanto custaria e quanto está sendo cobrado.
-        </p>
+        </ExplicaTela>
       </header>
 
       {/* ⚠️ **O arquivo nasce dos MESMOS filtros da tela.** Semear o botão com o

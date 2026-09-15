@@ -202,7 +202,7 @@ export default function PaginaProdutos() {
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="min-w-0 flex-1 sm:min-w-[220px]">
-            <span className="rotulo">Buscar</span>
+            <span className="rotulo-campo">Buscar</span>
             <input
               className="campo mt-1.5"
               placeholder="nome, código ou código de barras"
@@ -211,7 +211,7 @@ export default function PaginaProdutos() {
             />
           </label>
           <label className="sm:w-[170px]">
-            <span className="rotulo">Tipo</span>
+            <span className="rotulo-campo">Tipo</span>
             <select className="campo mt-1.5" value={tipo} onChange={(e) => setTipo(e.target.value)}>
               <option value="">Todos</option>
               {TIPOS_PRODUTO.map((t) => (
@@ -222,7 +222,7 @@ export default function PaginaProdutos() {
             </select>
           </label>
           <label className="sm:w-[220px]">
-            <span className="rotulo">Categoria</span>
+            <span className="rotulo-campo">Categoria</span>
             <select
               className="campo mt-1.5"
               value={idCategoria}
@@ -237,7 +237,7 @@ export default function PaginaProdutos() {
             </select>
           </label>
           <label className="sm:w-[150px]">
-            <span className="rotulo">Ativação</span>
+            <span className="rotulo-campo">Ativação</span>
             <select
               className="campo mt-1.5"
               value={ativacao}
@@ -252,7 +252,7 @@ export default function PaginaProdutos() {
             </select>
           </label>
           <label className="sm:w-[160px]">
-            <span className="rotulo">Situação</span>
+            <span className="rotulo-campo">Situação</span>
             <select
               className="campo mt-1.5"
               value={situacao}

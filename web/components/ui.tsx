@@ -1,6 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useRef } from "react";
+import { cloneElement, isValidElement, ReactNode, useEffect, useId, useRef } from "react";
+import type { ReactElement } from "react";
 
 import { mascaraMoeda, numeroParaCusto, textoParaNumero } from "@/lib/numeros";
 
@@ -36,22 +37,79 @@ export function Cartao({
   );
 }
 
+/**
+ * Um campo de formulário: a pergunta, o controle, a ajuda e — quando for o
+ * caso — o erro.
+ *
+ * 🔑 **O rótulo deixou de ser `.rotulo`** (15/09/2026, protótipo aprovado pelo
+ * dono). Ele usava a mesma classe do olho de seção e do cabeçalho de tabela —
+ * 10,5px, monoespaçada, MAIÚSCULAS, cinza —, e num formulário isso lê como
+ * etiqueta de arquivo, não como a pergunta que o campo faz.
+ *
+ * 🔑 **E o erro passou a ter onde morar.** Antes ele saía no balão do canto,
+ * longe do campo que o causou e sumindo em 6 segundos: quem digitava "doze"
+ * lia "quantidade inválida" do outro lado da tela e voltava a procurar qual dos
+ * quatro campos era. O balão continua — para o que é da TELA ("produto criado",
+ * "falha ao carregar"), que é o trabalho dele.
+ *
+ * ⚠️ **O `aria-invalid` e o `aria-describedby` são postos NO CONTROLE, por
+ * clonagem.** Deixar isso a cargo de cada tela significaria o campo ficar
+ * vermelho sem o leitor de tela saber — a cor e o anúncio discordando, que é a
+ * pior forma de acessibilidade: a que parece pronta.
+ */
 export function Campo({
   rotulo,
   dica,
+  erro,
+  opcional,
   className = "",
   children,
 }: {
   rotulo: string;
   dica?: string;
+  /** A frase que diz o que fazer. Não "valor inválido": o que fazer. */
+  erro?: string | null;
+  /** Marca o que NÃO é obrigatório — quase tudo aqui é, e marcar o obrigatório
+      seria marcar a tela inteira. */
+  opcional?: boolean;
   className?: string;
   children: ReactNode;
 }) {
+  const base = useId();
+  const idDica = dica ? `${base}-dica` : undefined;
+  const idErro = erro ? `${base}-erro` : undefined;
+  const descrito = [idErro, idDica].filter(Boolean).join(" ") || undefined;
+
+  // ⚠️ Só clona ELEMENTO. `children` pode ser um fragmento com dois controles
+  // (data e hora, lado a lado), e aí quem descreve é a tela.
+  const controle = isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        "aria-invalid": erro ? true : undefined,
+        "aria-describedby": descrito,
+      })
+    : children;
+
   return (
     <label className={`block ${className}`}>
-      <span className="rotulo">{rotulo}</span>
-      <div className="mt-1.5">{children}</div>
-      {dica && <span className="mt-1 block text-[12.5px] text-suave">{dica}</span>}
+      <span className="rotulo-campo">
+        {rotulo}
+        {opcional && <span className="rotulo-opcional">opcional</span>}
+      </span>
+      <div className="mt-1.5">{controle}</div>
+      {erro && (
+        <span className="erro-campo" id={idErro}>
+          <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor"
+               strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M9 2.5 16 15H2zM9 7.5v3.2M9 12.8v.01" />
+          </svg>
+          <span>{erro}</span>
+        </span>
+      )}
+      {dica && (
+        <span className="dica-campo" id={idDica}>
+          {dica}
+        </span>
+      )}
     </label>
   );
 }
@@ -245,7 +303,7 @@ export function Confirmacao({
           className="btn btn-primario"
           style={perigo ? { background: "var(--color-erro)" } : undefined}
           onClick={aoConfirmar}
-          disabled={ocupado}
+          aria-busy={ocupado} disabled={ocupado}
           autoFocus
         >
           {ocupado ? "…" : rotuloConfirmar}

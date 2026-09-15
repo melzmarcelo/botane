@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import ExplicaTela from "@/components/explica-tela";
 
 type Permissao = { chave: string; modulo: string; descricao: string; ordem: number };
 type Papel = {
@@ -108,10 +109,10 @@ export default function PaginaPapeis() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Papéis e permissões</h1>
-        <p className="mt-1 max-w-[64ch] prosa text-suave">
+        <ExplicaTela>
           Os papéis de fábrica vêm prontos e não são editáveis — copie um e ajuste a cópia.
           Ver custo é permissão à parte de ver a ficha.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

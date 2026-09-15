@@ -7,6 +7,7 @@ import { useSessao } from "@/lib/sessao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Os cadastros que têm exatamente o mesmo nome — o caso do ABACATE, em lote.
@@ -116,11 +117,11 @@ export default function Duplicados() {
         <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
           Cadastros com o mesmo nome
         </h1>
-        <p className="mt-1 max-w-[70ch] prosa text-suave">
+        <ExplicaTela>
           O catálogo do Omie cria um cadastro por código — e o mesmo abacate aparece uma vez
           para cada fornecedor que já o vendeu. Aqui eles ficam lado a lado para você juntar de
           uma vez.
-        </p>
+        </ExplicaTela>
       </header>
 
       {/* 🔑 O aviso vem ANTES da lista, e não depois: quem lê a lista primeiro
@@ -181,7 +182,7 @@ export default function Duplicados() {
                   <button
                     type="button"
                     className="btn btn-secundario"
-                    disabled={ocupado}
+                    aria-busy={ocupado} disabled={ocupado}
                     onClick={() => setConfirmando(g)}
                   >
                     Juntar os {g.quantos}

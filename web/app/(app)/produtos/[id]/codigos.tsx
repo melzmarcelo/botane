@@ -173,7 +173,7 @@ export default function CodigosDoProduto({
                         // é uma AFIRMAÇÃO, e é ela que faz a cascata passar a
                         // respeitar o valor. Desabilitar "sem mudança" tiraria
                         // justamente o caso do pacote de 1 kg.
-                        disabled={salvando === k}
+                        aria-busy={salvando === k} disabled={salvando === k}
                         onClick={() => void gravar(c)}
                       >
                         {salvando === k ? "…" : "Gravar"}

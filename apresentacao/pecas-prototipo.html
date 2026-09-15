@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peças da tela</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  /* As cores e as fontes são as REAIS do sistema (web/app/globals.css). */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #d8ded0;
+    --linha2: #748069;
+    --erva: #2c6a4a;
+    --erva-claro: #e3efe7;
+    --latao: #7d5a1c;
+    --alerta: #8a5d12;
+    --alerta-claro: #f6ecd9;
+    --erro: #95332a;
+    --erro-claro: #f7e7e4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font-family: var(--leitura); font-size: 16px; -webkit-font-smoothing: antialiased;
+  }
+  .folha { max-width: 1120px; margin: 0 auto; padding: 0 20px; padding-block: 40px 96px; }
+  h1, h2, h3 { font-family: var(--display); }
+  .rotulo-secao {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--suave); margin: 0;
+  }
+  .titulo { font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -.02em; margin: 6px 0 0; }
+  @media (max-width: 640px) { .titulo { font-size: 26px; } }
+  .prosa { font-family: var(--corpo); font-size: 1.03em; line-height: 1.55; color: var(--suave); max-width: 66ch; }
+  .prosa strong { color: var(--tinta); font-weight: 500; }
+
+  /* ---------- interruptor hoje / proposto ---------- */
+  .comandos {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 24px;
+    position: sticky; top: 0; z-index: 20; padding-block: 12px;
+    background: linear-gradient(var(--papel) 72%, transparent);
+  }
+  .segmentado {
+    display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--superficie2); border: 1px solid var(--linha); border-radius: 12px;
+  }
+  .segmentado button {
+    border: 0; background: transparent; color: var(--suave); cursor: pointer;
+    font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    padding: 8px 16px; border-radius: 9px; min-height: 36px;
+  }
+  .segmentado button[aria-pressed="true"] {
+    background: var(--superficie); color: var(--erva);
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 1px 1px rgba(20,32,26,.06);
+  }
+  .dica-topo { font-size: 13px; color: var(--suave); }
+
+  /* ---------- estrutura ---------- */
+  .secao { margin-top: 44px; }
+  .secao > h2 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4px; }
+  .cartao {
+    background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px;
+    padding: 22px; margin-top: 16px;
+    box-shadow: 0 1px 2px rgba(20,32,26,.04), 0 10px 28px -18px rgba(20,32,26,.22);
+  }
+  .grade2 { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+  .linha-pecas { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .nota {
+    font-family: var(--corpo); font-size: 14.5px; line-height: 1.5; color: var(--suave);
+    margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--linha);
+  }
+  .nota b { color: var(--tinta); font-weight: 500; }
+  /* ⚠️ ESCONDER pelo modo, em vez de MOSTRAR: `.so-hoje { display:none }` tem a
+     mesma especificidade de `.peca-btn { display:inline-flex }`, que vem depois
+     no arquivo e vencia — os dois "excluir" apareciam juntos. Escondendo a
+     partir do `body[data-modo]` a regra ganha por especificidade, e a peça
+     visível guarda o `display` natural dela (flex no botão, block no texto). */
+  body[data-modo="hoje"] .so-proposto { display: none; }
+  body[data-modo="proposto"] .so-hoje { display: none; }
+
+  /* =========================================================
+     AS PEÇAS — a mesma marcação nos dois modos; o que muda é o CSS
+     ========================================================= */
+
+  /* ---- rótulo do campo ---- */
+  .peca-rotulo { display: block; }
+  [data-modo="hoje"] .peca-rotulo {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--suave); font-weight: 400;
+  }
+  [data-modo="proposto"] .peca-rotulo {
+    font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    letter-spacing: -.005em; color: var(--tinta); text-transform: none;
+  }
+  .peca-opcional {
+    font-family: var(--leitura); font-size: 12px; font-weight: 400; color: var(--suave);
+    text-transform: none; letter-spacing: 0; margin-left: 6px;
+  }
+  [data-modo="hoje"] .peca-opcional { display: none; }
+
+  /* ---- campo ---- */
+  .peca-campo {
+    width: 100%; border: 1px solid var(--linha2); border-radius: 9px;
+    background: var(--superficie); padding: 9px 11px; font-size: 16px;
+    color: var(--tinta); font-family: var(--display); margin-top: 6px;
+  }
+  [data-modo="proposto"] .peca-campo { padding: 11px 12px; border-radius: 10px; }
+  .peca-campo:focus { outline: 2px solid var(--erva); outline-offset: 1px; border-color: var(--erva); }
+  .peca-campo:disabled { background: var(--superficie2); color: var(--suave); }
+  .peca-campo[aria-invalid="true"] { border-color: var(--erro); }
+  [data-modo="proposto"] .peca-campo[aria-invalid="true"] {
+    border-width: 1.5px; background: color-mix(in srgb, var(--erro-claro) 45%, var(--superficie));
+  }
+  .peca-dica { display: block; margin-top: 5px; font-size: 12.5px; color: var(--suave); }
+  [data-modo="proposto"] .peca-dica { font-size: 13px; }
+
+  /* ---- o erro DO CAMPO: só existe no proposto ---- */
+  .peca-erro {
+    display: none; align-items: flex-start; gap: 6px; margin-top: 6px;
+    font-size: 13px; font-weight: 500; color: var(--erro);
+  }
+  [data-modo="proposto"] .campo-com-erro .peca-erro { display: flex; }
+  .peca-erro svg { flex: 0 0 15px; margin-top: 1px; }
+
+  /* ---- prefixo (R$) e número ---- */
+  .com-prefixo { display: flex; align-items: stretch; margin-top: 6px; }
+  .com-prefixo .prefixo {
+    display: grid; place-items: center; padding: 0 11px;
+    border: 1px solid var(--linha2); border-right: 0; border-radius: 9px 0 0 9px;
+    background: var(--superficie2); font-family: var(--mono); font-size: 13px; color: var(--suave);
+  }
+  .com-prefixo .peca-campo { margin-top: 0; border-radius: 0 9px 9px 0; text-align: right; font-family: var(--mono); }
+  [data-modo="proposto"] .com-prefixo .prefixo { border-radius: 10px 0 0 10px; }
+  [data-modo="proposto"] .com-prefixo .peca-campo { border-radius: 0 10px 10px 0; }
+
+  /* ---- botões ---- */
+  .peca-btn {
+    font-family: var(--display); font-weight: 600; font-size: 14px;
+    border-radius: 9px; padding: 8px 16px; border: 1px solid transparent;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+  }
+  [data-modo="proposto"] .peca-btn { padding: 11px 18px; border-radius: 10px; min-height: 44px; font-size: 14.5px; }
+  .btn-primario { background: var(--erva); color: #fff; }
+  .btn-primario:hover { background: #24563c; }
+  .btn-secundario { background: var(--superficie); border-color: var(--linha2); color: var(--tinta); }
+  .btn-secundario:hover { border-color: var(--erva); color: var(--erva); }
+  /* ⚠️ No proposto o terciário e o de perigo passam a EXISTIR: hoje "excluir"
+     é um link de texto vermelho, com a mesma forma de "ver detalhes". */
+  .btn-terciario { background: transparent; color: var(--erva); border-color: transparent; }
+  .btn-terciario:hover { background: var(--erva-claro); }
+  .btn-perigo { background: var(--superficie); border-color: var(--erro); color: var(--erro); }
+  .btn-perigo:hover { background: var(--erro-claro); }
+  .peca-btn:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+  .btn-perigo:focus-visible { outline-color: var(--erro); }
+  /* Hoje: opacidade. Proposto: cor própria, que continua legível. */
+  [data-modo="hoje"] .peca-btn:disabled { opacity: .55; cursor: not-allowed; }
+  [data-modo="proposto"] .peca-btn:disabled {
+    cursor: not-allowed; background: var(--superficie2);
+    border-color: var(--linha); color: var(--suave);
+  }
+  .btn-pequeno { font-size: 13px; padding: 6px 12px; }
+  [data-modo="proposto"] .btn-pequeno { min-height: 36px; padding: 8px 14px; }
+  .girando { animation: girar .8s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .girando { animation: none; } }
+
+  /* ---- interruptor, caixa e opções ---- */
+  .interruptor { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14.5px; }
+  .interruptor .trilho {
+    width: 42px; height: 24px; border-radius: 999px; background: var(--linha2);
+    position: relative; transition: background-color .18s ease; flex: 0 0 auto;
+  }
+  .interruptor .trilho::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 999px; background: #fff; transition: transform .18s ease;
+    box-shadow: 0 1px 2px rgba(20,32,26,.35);
+  }
+  .interruptor input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .interruptor input:checked + .trilho { background: var(--erva); }
+  .interruptor input:checked + .trilho::after { transform: translateX(18px); }
+  .interruptor input:focus-visible + .trilho { outline: 2px solid var(--erva); outline-offset: 2px; }
+
+  .opcoes { display: inline-flex; gap: 3px; padding: 3px; background: var(--superficie2);
+            border: 1px solid var(--linha); border-radius: 10px; }
+  .opcoes button {
+    border: 0; background: transparent; color: var(--suave); cursor: pointer;
+    font-family: var(--display); font-size: 13.5px; font-weight: 600; padding: 7px 14px; border-radius: 8px;
+  }
+  [data-modo="proposto"] .opcoes button { min-height: 36px; }
+  .opcoes button[aria-pressed="true"] { background: var(--superficie); color: var(--erva); box-shadow: 0 1px 2px rgba(20,32,26,.10); }
+
+  /* ---- avisos ---- */
+  .aviso { border-radius: 12px; border: 1px solid; padding: 10px 14px; font-size: 14px; line-height: 1.45; margin: 0; }
+  .aviso-ok { border-color: color-mix(in srgb, var(--erva) 30%, transparent); background: var(--erva-claro); color: var(--erva); }
+  .aviso-erro { border-color: color-mix(in srgb, var(--erro) 30%, transparent); background: var(--erro-claro); color: var(--erro); }
+  .aviso-info { border-color: color-mix(in srgb, var(--alerta) 28%, transparent); background: var(--alerta-claro); color: var(--alerta); }
+
+  /* ---- o aviso flutuante (o de hoje) ---- */
+  #flutuante {
+    position: fixed; right: 16px; bottom: 16px; z-index: 40; max-width: min(380px, calc(100vw - 32px));
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  #flutuante .aviso { box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 16px 34px -20px rgba(20,32,26,.5); }
+
+  /* ---- tabelinha de medidas ---- */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 9px 12px; background: var(--superficie2);
+       font-family: var(--display); font-size: 12px; letter-spacing: .02em; }
+  td { padding: 9px 12px; border-top: 1px solid var(--linha); }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .passa { color: var(--erva); font-weight: 600; }
+  .falha { color: var(--erro); font-weight: 600; }
+  .rolo { overflow-x: auto; }
+
+  .legenda { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+             text-transform: uppercase; color: var(--suave); margin: 0 0 10px; }
+</style>
+</head>
+<body data-modo="proposto">
+
+<div class="folha">
+  <p class="rotulo-secao">Botané · protótipo · 15/09/2026</p>
+  <h1 class="titulo">Peças da tela</h1>
+  <p class="prosa" style="margin-top:12px">
+    Os botões, os campos e os textos que aparecem em <strong>todas as 55 telas</strong>. O
+    sistema já tem as peças; o que falta é o que ainda não existe — <strong>o erro no próprio
+    campo</strong>, o botão que diz que está trabalhando, o botão de risco com cara de risco —
+    e um acerto no que existe: o rótulo em maiúsculas de 10,5px, que lê como legenda e não como
+    pergunta. Troque o interruptor para comparar a mesma marcação nos dois desenhos.
+  </p>
+
+  <div class="comandos">
+    <div class="segmentado" role="group" aria-label="Versão das peças">
+      <button id="btn-hoje" aria-pressed="false">Hoje</button>
+      <button id="btn-proposto" aria-pressed="true">Proposto</button>
+    </div>
+    <span class="dica-topo">Os controles funcionam: digite, salve, erre de propósito.</span>
+  </div>
+
+  <!-- ============ 1. FORMULÁRIO MONTADO ============ -->
+  <section class="secao">
+    <h2>Um formulário de verdade</h2>
+    <p class="prosa">O cadastro de produto, com as peças montadas. É aqui que a diferença
+      aparece — as peças soltas mais abaixo são só o catálogo.</p>
+
+    <div class="cartao">
+      <form id="form" novalidate>
+        <div class="grade2">
+          <div>
+            <label class="peca-rotulo" for="f-nome">Nome do produto</label>
+            <input class="peca-campo" id="f-nome" value="Abacate" autocomplete="off">
+            <span class="peca-dica">Como a cozinha chama. É o nome que aparece na ficha.</span>
+          </div>
+
+          <div id="campo-qtd">
+            <label class="peca-rotulo" for="f-qtd">Estoque mínimo</label>
+            <input class="peca-campo" id="f-qtd" value="12" inputmode="decimal"
+                   aria-describedby="erro-qtd dica-qtd" autocomplete="off">
+            <span class="peca-erro" id="erro-qtd">
+              <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                <path d="M9 2.5 16 15H2zM9 7.5v3.2M9 12.8v.01"/>
+              </svg>
+              <span>Quantidade não aceita letra. Escreva só o número — <b>12</b> ou <b>12,5</b>.</span>
+            </span>
+            <span class="peca-dica" id="dica-qtd">Abaixo disso a tela inicial avisa.</span>
+          </div>
+
+          <div>
+            <label class="peca-rotulo" for="f-preco">Preço de venda
+              <span class="peca-opcional">opcional</span>
+            </label>
+            <div class="com-prefixo">
+              <span class="prefixo">R$</span>
+              <input class="peca-campo" id="f-preco" value="0,00" inputmode="decimal" autocomplete="off">
+            </div>
+            <span class="peca-dica">Fica fora do campo: dentro, dava para apagar o “R$”.</span>
+          </div>
+
+          <div>
+            <label class="peca-rotulo" for="f-un">Unidade de estoque</label>
+            <select class="peca-campo" id="f-un">
+              <option>KG — quilo</option>
+              <option>UN — unidade</option>
+              <option>L — litro</option>
+            </select>
+            <span class="peca-dica">É a unidade em que a receita vai puxar.</span>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+          <label class="interruptor">
+            <input type="checkbox" checked>
+            <span class="trilho"></span>
+            <span>Controla estoque</span>
+          </label>
+          <label class="interruptor">
+            <input type="checkbox">
+            <span class="trilho"></span>
+            <span>Enviar ao PDV</span>
+          </label>
+        </div>
+
+        <div class="linha-pecas" style="margin-top:22px">
+          <button class="peca-btn btn-primario" id="salvar" type="submit">
+            <span class="rotulo-salvar">Criar produto</span>
+          </button>
+          <button class="peca-btn btn-secundario" type="button" id="limpar">Cancelar</button>
+          <span style="flex:1 1 40px"></span>
+          <button class="peca-btn btn-perigo so-proposto" type="button">Excluir</button>
+          <button class="peca-btn btn-terciario so-hoje" type="button" style="color:var(--erro)">excluir</button>
+        </div>
+      </form>
+
+      <p class="nota so-hoje">
+        <b>Hoje:</b> o erro de um campo não tem onde morar — ele sai no balão do canto, longe
+        do campo que o causou, e some sozinho em 6 segundos. Quem digitou “doze” lê “quantidade
+        inválida” do outro lado da tela e volta a procurar qual dos quatro campos era.
+      </p>
+      <p class="nota so-proposto">
+        <b>Proposto:</b> o erro fica <b>no campo</b>, com a borda marcada, o
+        <code>aria-invalid</code> que o leitor de tela anuncia e uma frase que diz o que fazer —
+        não “valor inválido”. O balão do canto continua existindo para o que é da TELA
+        (“produto criado”, “falha ao carregar”), que é o trabalho dele.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 2. BOTÕES ============ -->
+  <section class="secao">
+    <h2>Botões</h2>
+    <p class="prosa">Hoje existem dois: primário e secundário. O sistema precisa de quatro —
+      e de um estado que ninguém escreveu ainda, o de estar trabalhando.</p>
+
+    <div class="cartao">
+      <p class="legenda">hierarquia</p>
+      <div class="linha-pecas">
+        <button class="peca-btn btn-primario">Lançar nota</button>
+        <button class="peca-btn btn-secundario">Baixar</button>
+        <button class="peca-btn btn-terciario">Ver movimentos</button>
+        <button class="peca-btn btn-perigo so-proposto">Estornar</button>
+        <span class="so-hoje" style="font-family:var(--corpo);color:var(--suave);font-size:14px">
+          (terciário e perigo não existem hoje — “estornar” é um link de texto)
+        </span>
+      </div>
+
+      <p class="legenda" style="margin-top:22px">estados</p>
+      <div class="linha-pecas">
+        <button class="peca-btn btn-primario" id="trabalhando">Salvar</button>
+        <button class="peca-btn btn-primario" id="desabilitado" disabled>Sem permissão</button>
+        <button class="peca-btn btn-secundario" disabled>Nada a enviar</button>
+        <button class="peca-btn btn-secundario btn-pequeno">compacto</button>
+      </div>
+      <p class="nota">
+        <b>Desabilitado é o detalhe que mais dói.</b> Hoje ele é <code>opacity: .55</code> — o
+        branco sobre verde cai para <b>2,6:1</b> de contraste e some para quem enxerga pouco.
+        No proposto ele ganha cor própria (fundo <code>superficie2</code>, texto
+        <code>suave</code>): continua claramente inativo e continua legível.
+        <span class="so-proposto"> E o botão que trabalha <b>mostra que está trabalhando</b> —
+        clique em “Salvar”: ele troca o rótulo, gira, e <b>trava o clique repetido</b>, que é a
+        causa de nota lançada duas vezes.</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 3. CAMPOS ============ -->
+  <section class="secao">
+    <h2>Campos</h2>
+    <div class="cartao">
+      <div class="grade2">
+        <div>
+          <p class="legenda">normal, foco e ajuda</p>
+          <label class="peca-rotulo" for="c1">Fornecedor</label>
+          <input class="peca-campo" id="c1" placeholder="nome, CNPJ ou apelido" autocomplete="off">
+          <span class="peca-dica">O CNPJ é o que liga a nota do Omie ao cadastro certo.</span>
+        </div>
+        <div>
+          <p class="legenda">desabilitado, e por quê</p>
+          <label class="peca-rotulo" for="c2">Custo médio</label>
+          <input class="peca-campo" id="c2" value="R$ 12,4830" disabled>
+          <span class="peca-dica">Calculado pelo estoque a cada entrada — não se digita.</span>
+        </div>
+        <div class="campo-com-erro">
+          <p class="legenda">com erro</p>
+          <label class="peca-rotulo" for="c3">Data da nota</label>
+          <input class="peca-campo" id="c3" value="31/02/2026" aria-invalid="true" aria-describedby="e3">
+          <span class="peca-erro" id="e3">
+            <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M9 2.5 16 15H2zM9 7.5v3.2M9 12.8v.01"/>
+            </svg>
+            <span>Fevereiro de 2026 termina no dia 28.</span>
+          </span>
+          <span class="peca-dica so-hoje">↑ hoje esta linha não existe: o erro vai para o balão do canto.</span>
+        </div>
+        <div>
+          <p class="legenda">escolha curta</p>
+          <span class="peca-rotulo" style="margin-bottom:6px">Ritmo do fechamento</span>
+          <div class="opcoes" role="group" aria-label="Ritmo do fechamento">
+            <button aria-pressed="false">Dia</button>
+            <button aria-pressed="false">Semana</button>
+            <button aria-pressed="true">Mês</button>
+          </div>
+          <span class="peca-dica">Três opções cabem à vista. Acima de cinco, vira lista.</span>
+        </div>
+      </div>
+
+      <p class="nota">
+        <b>O rótulo é a mudança mais visível.</b> Hoje ele é a classe <code>.rotulo</code> —
+        10,5px, monoespaçada, MAIÚSCULAS, cinza —, a mesma tinta do cabeçalho de tabela e da
+        legenda de cartão: ele lê como etiqueta de arquivo, não como a pergunta que o campo
+        faz. No proposto vira 13,5px em caixa normal, na cor do texto. <b>Mais legível, e com
+        uma hierarquia a menos para o olho resolver.</b>
+        <span class="so-proposto"> E o que é opcional <b>diz que é opcional</b>: marcar o
+        obrigatório com asterisco seria marcar quase tudo.</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 4. TEXTOS ============ -->
+  <section class="secao">
+    <h2>Os textos, em ordem</h2>
+    <p class="prosa">Cinco pesos de texto numa tela, cada um com um trabalho. Quando dois se
+      parecem, o olho para para decidir qual é qual.</p>
+    <div class="cartao">
+      <p class="rotulo-secao">Cadastros</p>
+      <h3 class="titulo" style="font-size:26px;margin-top:4px">Produtos</h3>
+      <button class="peca-btn btn-secundario btn-pequeno" id="saber" style="margin-top:10px">saber mais</button>
+      <p class="prosa" id="explica" hidden style="margin-top:10px">
+        Tudo o que entra e sai da casa: insumo, revenda, o que a cozinha produz e a embalagem.
+        É daqui que a ficha técnica e o estoque vão puxar.
+      </p>
+      <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
+        <p class="aviso aviso-ok">Produto <b>Abacate</b> criado. <u>Cadastrar outro</u></p>
+        <p class="aviso aviso-info">O envio ao PDV está desligado nesta loja.</p>
+        <p class="aviso aviso-erro">Falha ao carregar os saldos. Tente de novo em instantes.</p>
+      </div>
+      <p class="nota">
+        <b>Título</b> diz onde você está · <b>saber mais</b> guarda a lição, que ensina na
+        primeira semana e estorva na terceira · <b>rótulo</b> é a pergunta do campo ·
+        <b>dica</b> responde antes de a pessoa errar · <b>erro</b> só aparece depois, e diz o
+        que fazer. O balão fica para o que é da tela inteira.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 5. MEDIDAS ============ -->
+  <section class="secao">
+    <h2>O que a norma mede</h2>
+    <p class="prosa">Calculado nesta página, ao vivo, sobre o que o navegador está pintando
+      agora — o mesmo cálculo que a bateria faz a cada rodada.</p>
+    <div class="cartao">
+      <div class="rolo">
+        <table>
+          <thead>
+            <tr><th>Peça</th><th>O que a norma pede</th><th style="text-align:right">Hoje</th><th style="text-align:right">Proposto</th></tr>
+          </thead>
+          <tbody id="medidas"></tbody>
+        </table>
+      </div>
+      <p class="nota">
+        WCAG 2.1: <b>1.4.3</b> pede 4,5:1 para texto de corpo; <b>1.4.11</b>, 3:1 para a borda
+        de um controle; <b>2.5.5</b> recomenda 44×44 para o alvo do dedo e <b>2.5.8</b> exige
+        24×24 como mínimo absoluto. O alvo de 36px de hoje passa no mínimo e fica longe do
+        recomendado — no telefone, é a diferença entre tocar e errar.
+      </p>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>O que eu preciso de você</h2>
+    <div class="grade2" style="margin-top:14px">
+      <div class="cartao" style="margin-top:0">
+        <h3 style="margin:0 0 6px;font-size:17px">O rótulo em caixa normal</h3>
+        <p class="prosa">É a decisão de verdade: muda a cara de <b>todos</b> os formulários do
+          sistema. O resto são acertos que qualquer um aprovaria.</p>
+      </div>
+      <div class="cartao" style="margin-top:0">
+        <h3 style="margin:0 0 6px;font-size:17px">Botões maiores</h3>
+        <p class="prosa">De 36px para 44px de altura — o que a WCAG 2.5.5 recomenda para o dedo.
+          Ganha o toque, perde-se um pouco de densidade nas telas com muitos botões: o painel
+          do CMV tem cinco lado a lado.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="flutuante" aria-live="polite"></div>
+
+<script>
+const corpo = document.body;
+const $ = (s) => document.querySelector(s);
+
+/* ---------- hoje / proposto ---------- */
+function modo(m) {
+  corpo.dataset.modo = m;
+  $("#btn-hoje").setAttribute("aria-pressed", String(m === "hoje"));
+  $("#btn-proposto").setAttribute("aria-pressed", String(m === "proposto"));
+  medir();
+}
+$("#btn-hoje").addEventListener("click", () => modo("hoje"));
+$("#btn-proposto").addEventListener("click", () => modo("proposto"));
+
+/* ---------- o balão do canto ---------- */
+function flutuar(tipo, html, segundos) {
+  const p = document.createElement("p");
+  p.className = "aviso aviso-" + tipo;
+  p.innerHTML = html;
+  $("#flutuante").appendChild(p);
+  setTimeout(() => p.remove(), (segundos || 6) * 1000);
+}
+
+/* ---------- o formulário ---------- */
+const qtd = $("#f-qtd");
+const campoQtd = $("#campo-qtd");
+
+function validarQtd() {
+  const valor = qtd.value.trim().replace(",", ".");
+  const ruim = valor !== "" && isNaN(Number(valor));
+  campoQtd.classList.toggle("campo-com-erro", ruim);
+  qtd.setAttribute("aria-invalid", String(ruim));
+  return !ruim;
+}
+qtd.addEventListener("blur", validarQtd);
+qtd.addEventListener("input", () => {
+  // Uma vez marcado, o erro some assim que o valor fica bom — corrigir tem de
+  // dar retorno imediato, senão a pessoa não sabe se acertou.
+  if (campoQtd.classList.contains("campo-com-erro")) validarQtd();
+});
+
+const salvar = $("#salvar");
+$("#form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!validarQtd()) {
+    // 🔑 É AQUI que os dois desenhos se separam: hoje o erro sai longe do campo.
+    if (corpo.dataset.modo === "hoje") {
+      flutuar("erro", "Quantidade inválida.");
+    } else {
+      qtd.focus();
+    }
+    return;
+  }
+  trabalhar(salvar, "Criando…", () =>
+    flutuar("ok", "Produto <b>" + ($("#f-nome").value || "sem nome") + "</b> criado. <u>Cadastrar outro</u>"));
+});
+
+/* ---------- o botão que trabalha ---------- */
+const GIRO =
+  '<svg class="girando" width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 2.2a6.8 6.8 0 1 0 6.8 6.8" /></svg>';
+
+function trabalhar(botao, rotulo, aoTerminar) {
+  const antes = botao.innerHTML;
+  botao.disabled = true;
+  botao.setAttribute("aria-busy", "true");
+  // ⚠️ No modo "hoje" ele só troca o texto: o giro e o aria-busy são da proposta.
+  botao.innerHTML = corpo.dataset.modo === "proposto" ? GIRO + "<span>" + rotulo + "</span>" : rotulo;
+  setTimeout(() => {
+    botao.disabled = false;
+    botao.removeAttribute("aria-busy");
+    botao.innerHTML = antes;
+    if (aoTerminar) aoTerminar();
+  }, 1600);
+}
+$("#trabalhando").addEventListener("click", (e) => trabalhar(e.currentTarget, "Salvando…"));
+$("#limpar").addEventListener("click", () => {
+  $("#f-nome").value = "";
+  qtd.value = "";
+  validarQtd();
+  $("#f-nome").focus();
+});
+
+/* ---------- o grupo de opções ---------- */
+document.querySelectorAll(".opcoes").forEach((g) =>
+  g.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  }));
+
+/* ---------- o saber mais ---------- */
+$("#saber").addEventListener("click", (e) => {
+  const p = $("#explica");
+  p.hidden = !p.hidden;
+  e.currentTarget.textContent = p.hidden ? "saber mais" : "ocultar";
+});
+
+/* ---------- as medidas, ao vivo ---------- */
+function luz(cor) {
+  const [r, g, b] = cor.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => {
+    const v = x / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function razao(a, b) {
+  const [x, y] = [luz(a), luz(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/** Mede as duas versões de verdade: troca o modo, lê, e devolve. */
+function medir() {
+  const guardado = corpo.dataset.modo;
+  const ler = () => {
+    const rotulo = getComputedStyle($(".peca-rotulo"));
+    const campo = $("#c1");
+    const est = getComputedStyle(campo);
+    const fundo = getComputedStyle($(".cartao")).backgroundColor;
+    const btn = $("#trabalhando").getBoundingClientRect();
+    // ⚠️ Um alvo FIXO, e não "o primeiro desabilitado que aparecer": medindo o
+    // que calha de estar na tela, o número mudava entre uma leitura e outra —
+    // ora o primário, ora o secundário. O primário é o pior caso (branco sobre
+    // verde, apagado por opacidade), e é ele que interessa.
+    const desab = $("#desabilitado");
+    const ed = getComputedStyle(desab);
+    return {
+      rotuloPx: parseFloat(rotulo.fontSize),
+      rotuloContraste: razao(rotulo.color, fundo),
+      borda: razao(est.borderTopColor, fundo),
+      alvo: btn.height,
+      // A opacidade do desabilitado entra na conta: é ela que apaga o texto.
+      desabilitado: razao(ed.color, ed.backgroundColor === "rgba(0, 0, 0, 0)" ? fundo : ed.backgroundColor)
+        * (parseFloat(ed.opacity) || 1),
+    };
+  };
+  corpo.dataset.modo = "hoje";
+  const hoje = ler();
+  corpo.dataset.modo = "proposto";
+  const prop = ler();
+  corpo.dataset.modo = guardado;
+
+  const cel = (v, minimo, sufixo) => {
+    const ok = v >= minimo;
+    const txt = (sufixo === "px" ? Math.round(v) : v.toFixed(2)) + (sufixo === "px" ? "px" : ":1");
+    return '<td class="n ' + (ok ? "passa" : "falha") + '">' + txt + (ok ? " ✓" : " ✗") + "</td>";
+  };
+  $("#medidas").innerHTML = [
+    ["Rótulo do campo", "4,5:1 de contraste (1.4.3)", cel(hoje.rotuloContraste, 4.5), cel(prop.rotuloContraste, 4.5)],
+    ["Tamanho do rótulo", "quanto maior, mais legível", '<td class="n">' + Math.round(hoje.rotuloPx) + "px</td>", '<td class="n">' + Math.round(prop.rotuloPx) + "px</td>"],
+    ["Borda do campo", "3:1 de contraste (1.4.11)", cel(hoje.borda, 3), cel(prop.borda, 3)],
+    ["Altura do botão", "44px recomendados (2.5.5)", cel(hoje.alvo, 44, "px"), cel(prop.alvo, 44, "px")],
+    ["Botão desabilitado", "continuar legível (4,5:1)", cel(hoje.desabilitado, 4.5), cel(prop.desabilitado, 4.5)],
+  ].map((l) => "<tr><td><b>" + l[0] + "</b></td><td>" + l[1] + "</td>" + l[2] + l[3] + "</tr>").join("");
+}
+
+medir();
+</script>
+</body>
+</html>

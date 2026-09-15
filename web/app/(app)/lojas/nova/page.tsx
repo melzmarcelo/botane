@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import FormularioLoja, { corpoDaLoja, LOJA_VAZIA, LojaForm } from "../formulario";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Abrir uma loja.
@@ -48,10 +49,10 @@ export default function NovaLoja() {
           Lojas
         </Voltar>
         <h1 className="mt-2 text-[26px] font-bold tracking-tight sm:text-[30px]">Nova loja</h1>
-        <p className="mt-1 max-w-[68ch] prosa text-suave">
+        <ExplicaTela>
           Cada loja tem CNPJ, endereço e estoque próprios. Todo movimento nasce carimbado com
           ela — razão, nota, venda, inventário e fechamento.
-        </p>
+        </ExplicaTela>
       </header>
 
       {!podeEditar ? (

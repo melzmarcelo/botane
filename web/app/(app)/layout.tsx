@@ -196,7 +196,13 @@ function Casca({ children }: { children: React.ReactNode }) {
         aoAbrirMenu={() => setAberto(true)}
       />
 
-      <div className="lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+      {/* ⚠️ **276px, e nao 240** (15/09/2026, relatado pelo dono: *"alguns itens
+          cortaram a descricao"*). Com o icone e o alfinete, a coluna de 240
+          deixava ~169px para o texto — e "Saldos e movimentos", "Exportacao
+          para o PDV" e "Papeis e permissoes" nao cabiam. Nome de tela cortado
+          obriga a pessoa a adivinhar o destino, que e o contrario do que um
+          menu faz. */}
+      <div className="lg:grid lg:grid-cols-[276px_minmax(0,1fr)]">
       {aberto && (
         <div
           className="fixed inset-0 z-40 bg-tinta/35 lg:hidden"
@@ -208,7 +214,7 @@ function Casca({ children }: { children: React.ReactNode }) {
       {/* ⚠️ `top-14` e `h-[calc(100vh-3.5rem)]`: a barra do topo tem 56px, e sem
           descontá-los o menu ficava com o próprio topo escondido atrás dela. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[268px] flex-col overflow-y-auto border-r border-linha bg-superficie transition-transform duration-200 lg:sticky lg:top-14 lg:z-auto lg:h-[calc(100vh-3.5rem)] lg:w-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[292px] flex-col overflow-y-auto border-r border-linha bg-superficie transition-transform duration-200 lg:sticky lg:top-14 lg:z-auto lg:h-[calc(100vh-3.5rem)] lg:w-auto lg:translate-x-0 ${
           aberto ? "translate-x-0" : "-translate-x-full"
         }`}
       >

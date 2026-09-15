@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
 import EscolherHorario from "../escolher-horario";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A agenda do dia — a tela que a recepção olha o tempo todo.
@@ -149,9 +150,9 @@ export default function AgendaDoDia() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titulo">Agenda do dia</h1>
-          <p className="text-[14px] text-suave">
+          <ExplicaTela>
             Quem vem, quando, e em que mesa. A casa decide a mesa — o cliente reserva lugar.
-          </p>
+          </ExplicaTela>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <Campo rotulo="Dia">
@@ -313,7 +314,7 @@ export default function AgendaDoDia() {
                             {(r.status === "PENDENTE" || r.status === "CONFIRMADA") && (
                               <button
                                 className="link-acao"
-                                disabled={ocupado}
+                                aria-busy={ocupado} disabled={ocupado}
                                 onClick={() => setRemarcando(r)}
                               >
                                 remarcar
@@ -323,7 +324,7 @@ export default function AgendaDoDia() {
                               <button
                                 key={a.para}
                                 className={`link-acao ${a.perigo ? "link-acao-erro" : ""}`}
-                                disabled={ocupado}
+                                aria-busy={ocupado} disabled={ocupado}
                                 onClick={() => void mudar(r, a.para, a.rotulo)}
                               >
                                 {a.rotulo}
@@ -450,7 +451,7 @@ function NovaReserva({
         <div className="flex flex-wrap items-center gap-3">
           <button
             className="btn btn-primario"
-            disabled={ocupado || !hora || nome.trim().length < 2}
+            aria-busy={ocupado} disabled={ocupado || !hora || nome.trim().length < 2}
             onClick={() => void marcar()}
           >
             {hora ? `Marcar às ${hora}` : "Escolha um horário"}
@@ -565,7 +566,7 @@ function Remarcar({
         <div className="flex flex-wrap items-center gap-3">
           <button
             className="btn btn-primario"
-            disabled={ocupado || !hora || !mudou}
+            aria-busy={ocupado} disabled={ocupado || !hora || !mudou}
             onClick={() => void remarcar()}
           >
             {!hora

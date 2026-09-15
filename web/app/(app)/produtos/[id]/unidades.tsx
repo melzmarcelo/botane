@@ -198,7 +198,7 @@ export default function UnidadesDeCompra({
       }
       acao={
         podeEditar && (
-          <button type="button" className="btn btn-primario" onClick={salvar} disabled={salvando}>
+          <button type="button" className="btn btn-primario" onClick={salvar} aria-busy={salvando} disabled={salvando}>
             {salvando ? "Gravando…" : "Gravar unidades"}
           </button>
         )

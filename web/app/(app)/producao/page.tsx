@@ -13,6 +13,8 @@ import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 import AgendaProducao from "./agenda";
 
 import { custo, qtd } from "@/lib/numeros";
+import ExplicaTela from "@/components/explica-tela";
+
 type Ficha = {
   id: number;
   id_produto: number;
@@ -175,11 +177,11 @@ export default function PaginaProducao() {
       <header>
         <p className="rotulo">Estoque</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Produção</h1>
-        <p className="mt-1 max-w-[66ch] prosa text-suave">
+        <ExplicaTela>
           Produzir baixa os ingredientes da ficha homologada e devolve o produto pronto ao
           estoque. O custo é o que <b>realmente saiu</b> hoje — se o insumo subiu, o prato
           produzido hoje custa mais.
-        </p>
+        </ExplicaTela>
       </header>
 
       {/* Planejar e registrar são momentos diferentes: um é a véspera, o outro
@@ -319,7 +321,7 @@ export default function PaginaProducao() {
                 />
               </Campo>
               <div className="flex items-end">
-                <button className="btn btn-primario" type="submit" disabled={salvando}>
+                <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
                   {salvando ? "Produzindo…" : "Produzir"}
                 </button>
               </div>

@@ -282,7 +282,7 @@ export default function PaginaContagem() {
             }}
           >
             <label className="min-w-0 flex-1">
-              <span className="rotulo">Nome da contagem</span>
+              <span className="rotulo-campo">Nome da contagem</span>
               <input
                 className="campo mt-1.5"
                 autoFocus
@@ -415,7 +415,7 @@ export default function PaginaContagem() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="min-w-0 flex-1">
-          <span className="rotulo">Achar produto</span>
+          <span className="rotulo-campo">Achar produto</span>
           <input
             className="campo campo-toque mt-1.5"
             placeholder="produto ou código"
@@ -481,7 +481,7 @@ export default function PaginaContagem() {
           <button
             className="btn btn-primario mt-4"
             onClick={() => setConfirmando(true)}
-            disabled={fechando || !inv.contados}
+            aria-busy={fechando} disabled={fechando || !inv.contados}
           >
             {fechando ? "Fechando…" : "Fechar e acertar o estoque"}
           </button>
@@ -590,7 +590,7 @@ function LinhaContagem({
           </div>
         )}
         <label className="w-[118px] shrink-0">
-          <span className="rotulo">Contei</span>
+          <span className="rotulo-campo">Contei</span>
           <input
             ref={campo}
             // `campo-toque`: 16px e alvo grande. Abaixo de 16px o Safari do
@@ -611,7 +611,7 @@ function LinhaContagem({
           />
         </label>
         <label className="w-[92px] shrink-0">
-          <span className="rotulo">Unidade</span>
+          <span className="rotulo-campo">Unidade</span>
           <select
             className="campo campo-toque mt-1.5"
             disabled={!aberto}

@@ -8,6 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Vazio } from "@/components/ui";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A fila de de-para: o que foi vendido e não achou produto no cadastro.
@@ -82,13 +83,13 @@ export default function PaginaSemVinculo() {
           <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
             Itens vendidos sem produto
           </h1>
-          <p className="mt-2 max-w-[70ch] prosa text-suave">
+          <ExplicaTela>
             A receita destes itens entra no CMV; o custo, não. Enquanto estiverem aqui, a
             variância do período sai maior do que é — e nada no painel diz por quê.
-          </p>
+          </ExplicaTela>
         </div>
         {pode("integracao.pdv") && (
-          <button className="btn btn-secundario" onClick={reconciliar} disabled={ocupado}>
+          <button className="btn btn-secundario" onClick={reconciliar} aria-busy={ocupado} disabled={ocupado}>
             {ocupado ? "Reconciliando…" : "Reconciliar"}
           </button>
         )}

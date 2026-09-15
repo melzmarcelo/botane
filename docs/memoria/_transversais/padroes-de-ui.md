@@ -344,10 +344,40 @@
   renderizavam por acidente, caindo no estilo base do `h1`. O mesmo problema visto do outro
   lado: sem definição única, metade inventa a sua e a outra metade aponta para o vazio.
   Agora ela existe, com o tamanho da maioria, para a mudança não redesenhar tela nenhuma.
-  ⚠️ **A frase explicativa só se esconde no CELULAR**, e num nó de DOM só: renderizar duas
-  versões e esconder uma por breakpoint faria o leitor de tela ler a frase duas vezes.
+  ⚠️ **A frase explicativa é num nó de DOM só**: renderizar duas versões e esconder uma por
+  breakpoint faria o leitor de tela ler a frase duas vezes.
   ⚠️ **Convertidas 4 das 55**, e de propósito: as demais têm variações que pedem olho, e
   afrouxar a regex sobre 55 arquivos é como edição mecânica dá errado.
+  🔑 **Em 15/09/2026 o dono relatou que "em algumas telas o cabecalho falhou, por exemplo no
+  painel do CMV" — e eram DOIS defeitos no mesmo lugar.**
+  ⚠️ **O primeiro: a coluna do título era `min-w-0 flex-1`, e isso a deixa encolher até o
+  nada.** O bloco de ações do CMV tem cinco controles (dois campos de data, o seletor de
+  período e dois botões); o flex cedeu tudo para eles e o `<h1>` ficou com **2px de largura
+  por 1.613px de altura** — uma letra por linha — em vez de a linha quebrar em duas. Com um
+  piso (`min-w-[15rem]`) as ações descem para a própria linha quando não cabem ao lado, que
+  era o comportamento esperado desde sempre. ⚠️ A bateria mede isso no CMV de propósito: é a
+  tela com o maior bloco de ações do sistema, então é a que quebra primeiro.
+  🔑 **E no mesmo dia ela foi para TODAS as telas** (*"colocar este saber mais em todas as
+  telas que tenham o texto"*): a disciplina virou `components/explica-tela.tsx`, e as **35
+  telas que montam o cabeçalho na mão** passaram a usá-la — se o controle só existisse nas 4
+  que usam `CabecalhoTela`, a mesma frase apareceria de dois jeitos conforme a rota.
+  ⚠️ **Cinco telas ficaram de fora, e é a parte que exige juízo:** a linha cinza abaixo do
+  título que mostra o **e-mail do usuário**, o **período da conta**, a **origem da venda**, as
+  **lojas de origem e destino** da remessa e o **nome de quem consome** tem exatamente a mesma
+  cara da frase explicativa — e esconder o ASSUNTO da tela atrás de "saber mais" teria sido a
+  leitura mecânica do pedido. A bateria guarda uma delas (`/consumo/{id}`), porque a próxima
+  varredura mecânica vai encontrá-las de novo.
+  ⚠️ **O `/cadastros` era o caso duvidoso** — a frase dele lista o que a tela tem dentro
+  ("Setores, locais de estoque, categorias e unidades de medida"), e existia justamente porque
+  "tabelas de apoio" não é o nome de nada que alguém procura. Ela foi recolhida assim mesmo
+  porque **as ABAS logo abaixo nomeiam as quatro listas**: o que ficou escondido foi a lição,
+  não a lista.
+  ⚠️ **O segundo: a frase explicativa só se escondia no celular.** No computador ela custava
+  duas linhas em toda tela, todo dia, para dizer o que quem trabalha na casa já sabe — e o
+  estudo de layout já havia proposto recolhê-la (*"ela ensina na primeira semana e estorva na
+  terceira"*). Agora vem fechada nos dois tamanhos, atrás de um **"saber mais"** que o mesmo
+  controle fecha de volta ("ocultar"): botão que só sabe abrir deixa a tela no estado de que
+  se estava saindo.
 
 - 🔑 **O convite de instalar o app empurrava a página inteira 78px, TARDE** (14/09/2026).
   Ele vinha no topo do `main` e aparece quando o navegador dispara `beforeinstallprompt` —
@@ -405,8 +435,68 @@
   nível. ⚠️ E a barra do celular trocou os glifos de texto (◈ ▤ ❏ ☷) pelos mesmos ícones do
   menu — o Estoque da barra não parecia o Estoque da lateral, que é justamente a associação
   que a barra existe para criar.
+  ⚠️ **E a bateria passou a rodar SEM cache de navegador** — descoberto ao mudar a largura da
+  lateral. O perfil do Chrome é reaproveitado entre rodadas e, em desenvolvimento, o Next serve
+  a folha de estilo sempre na MESMA URL enquanto o conteúdo dela muda: a rodada carregava o CSS
+  da rodada anterior. Sem a classe nova, a grade virou UMA coluna, o menu (sticky, 100vh) passou
+  a cobrir o conteúdo, e o clique no "Criar produto" — nas coordenadas certas — caiu no item
+  "Painel de CMV". **A bateria acusou o cadastro de produto, que estava intacto.** 🔑 A lição
+  tem a forma das outras desta lista: *CSS velho não falha, ele mente* — e o sintoma aparece
+  a três telas de distância da causa. ⚠️ A mesma ilusão passou pela minha própria medição: a
+  primeira conferência de "nenhum nome cortado" deu verde porque a lateral estava com 1440px
+  de largura, e não com 276.
+  ⚠️ **E a lateral foi de 240px para 276** (relatado no mesmo dia: *"alguns itens cortaram a
+  descrição"*). O ícone e o alfinete comem largura: sobravam ~169px para o texto, e "Saldos e
+  movimentos", "Exportação para o PDV" e "Papéis e permissões" não cabiam. **Nome de tela
+  cortado obriga a pessoa a adivinhar o destino, que é o contrário do que um menu faz** — e a
+  bateria agora abre todos os grupos e compara `scrollWidth` com `clientWidth` de cada nome,
+  porque essa conta muda sozinha quando alguém acrescenta um ícone ou uma tela de nome longo.
   Protótipo aprovado antes de qualquer código: [`apresentacao/menu-prototipo.html`](../../../apresentacao/menu-prototipo.html)
   (os dois menus lado a lado, com contador de cliques).
+
+- 🔑 **As peças de formulário foram redesenhadas** (15/09/2026, protótipo aprovado pelo dono:
+  [`apresentacao/pecas-prototipo.html`](../../../apresentacao/pecas-prototipo.html) — os dois
+  desenhos sobre a MESMA marcação, com as medidas da norma calculadas ao vivo na página).
+  🔑 **O erro do campo passou a EXISTIR.** Ele não tinha onde morar: saía no balão flutuante do
+  canto — longe do campo que o causou, sumindo em 6 segundos —, e quem digitava "doze" lia
+  "quantidade inválida" do outro lado da tela e voltava a procurar qual dos quatro campos era.
+  Agora `Campo` recebe `erro` e põe `aria-invalid` + `aria-describedby` **no controle, por
+  clonagem**. ⚠️ Deixar essa ligação a cargo de cada tela seria deixar a cor e o anúncio livres
+  para discordar — a pior forma de acessibilidade é a que parece pronta.
+  ⚠️ **O balão do canto continua, e continua certo**: ele é para o que é da TELA ("produto
+  criado", "falha ao carregar"). O que mudou foi parar de usá-lo para o que é de um campo.
+  🔑 **O rótulo saiu do `.rotulo`.** Ele era a mesma classe do olho de seção, do `<th>` e da
+  legenda de cartão — 10,5px, mono, MAIÚSCULAS, cinza —, e num formulário isso lê como etiqueta
+  de arquivo, não como a pergunta que o campo faz. Virou `.rotulo-campo` (13,5px, caixa normal,
+  cor do texto) em **39 lugares**. ⚠️ `.rotulo` continua certo onde nasceu; o que mudou foi
+  parar de pedir a ele um trabalho que não era dele. ⚠️ **A bateria tinha 23 sondas que achavam
+  campo por `span.rotulo`** — todas passaram a aceitar as duas classes, porque a pergunta delas
+  sempre foi "existe um campo chamado X?", não "de que classe ele é".
+  🔑 **O botão desabilitado era `opacity: .55`, e esse era o pior número da paleta**: branco
+  sobre verde a **2,65:1**. O botão não ficava inativo, ficava ilegível — quem enxerga pouco não
+  conseguia ler o que não podia fazer. Com cor própria (fundo `superficie2`, texto `suave`) dá
+  **4,82:1** e continua obviamente inerte.
+  🔑 **O botão que trabalha agora DIZ que trabalha** — `aria-busy` em **88 botões** que já se
+  desabilitavam, e um giro desenhado em CSS no `::before`. ⚠️ **Pelo atributo, não por uma
+  classe**: `aria-busy` já é o que o leitor de tela anuncia, e uma classe a mais para dizer a
+  mesma coisa é uma chance a mais de as duas discordarem. ⚠️ A varredura só marcou os nomes que
+  significam trabalho (`ocupado`, `salvando`, `enviando`…) — `somenteLeitura` e `bloqueado`
+  desabilitam por PERMISSÃO, e botão parado não é botão ocupado.
+  🔑 **Quatro variantes de botão, e não duas**: `terciario` e `perigo` nasceram porque
+  "estornar" e "excluir" eram LINKS DE TEXTO, com a mesma forma de "ver detalhes". ⚠️ O de
+  perigo não é vermelho cheio: botão sólido vermelho atrai o clique justamente onde ele não
+  deve ser atraído.
+  ⚠️ **`.btn` teve de ir para `@layer components`** ao ganhar `display: inline-flex` (o gap
+  entre o giro e o texto) — CSS sem camada vence a utilitária do Tailwind, e um `w-full` ou um
+  `hidden` sobre um botão deixaria de valer. Efeito colateral bom: os cinco botões que
+  escreviam `px-2.5 py-1` à mão viraram `.btn-pequeno`, que é a peça que faltava.
+  ⚠️ **O `required` do navegador foi embora do cadastro de produto** (`noValidate` no `<form>`):
+  ele mostra o balão cinza do Chrome — a mesma caixa que a casa já baniu do resto do sistema.
+  A regra passou a ser nossa, a frase é nossa, e ela aparece embaixo do campo, com o foco indo
+  para lá. O servidor continua sendo a guarda de verdade.
+  ⚠️ **O interruptor (switch) do protótipo NÃO foi implementado, de propósito.** Ele promete
+  efeito IMEDIATO, e todo booleano destas telas só vale depois do "Salvar" — um interruptor que
+  não liga nada até alguém salvar é um controle que mente. A caixa de marcar está certa aqui.
 
 ## Armadilhas já pagas
 

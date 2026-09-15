@@ -307,6 +307,16 @@ const aoTerminar = [];
 
 try {
   const p = await navegador.newPage();
+  // ⚠️ **Sem cache do navegador, e isto NAO e zelo excessivo** (15/09/2026).
+  // O perfil do Chrome e reaproveitado entre rodadas, e em desenvolvimento o
+  // Next serve a folha de estilo sempre na MESMA URL enquanto o conteudo dela
+  // muda. Resultado: a rodada carregava o CSS da rodada anterior. Quando a
+  // lateral foi de 240px para 276, a classe nova nao estava na folha em cache,
+  // a grade virou UMA coluna, o menu (sticky, 100vh) passou a cobrir o
+  // conteudo, e o clique no "Criar produto" — nas coordenadas certas — caiu no
+  // item "Painel de CMV" do menu. A bateria acusou o cadastro de produto, que
+  // estava intacto: **CSS velho nao falha, ele MENTE.**
+  await p.setCacheEnabled(false);
   // O 403 da fase 3 é o comportamento esperado (servidor barrando a Cozinha);
   // só interessa erro fora disso.
   let coletando = true;
@@ -358,6 +368,7 @@ try {
 
   // E com a caixinha marcada, o contrário — que é o que a pessoa pediu.
   const p2 = await navegador.newPage();
+  await p2.setCacheEnabled(false);
   await p2.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await p2.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   await p2.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
@@ -619,7 +630,14 @@ try {
   await p.goto(`${WEB}/produtos/novo`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));
   const nomeProduto = `Teste tela ${Date.now().toString().slice(-5)}`;
-  await p.type('input[required]', nomeProduto);
+  // ⚠️ **Pelo id do campo, e nao por `input[required]`.** O `required` saiu do
+  // formulario em 15/09/2026: ele traz a validacao NATIVA junto, ou seja, o
+  // balao cinza do Chrome — a mesma caixa que esta casa baniu do resto do
+  // sistema. A sonda apontava para um atributo que existia por tabela, nao
+  // para o campo que ela queria; quando o atributo saiu, a rodada morreu aqui,
+  // a tres fases de distancia de qualquer defeito.
+  await p.waitForSelector("#campo-nome", { timeout: 20000 });
+  await p.type("#campo-nome", nomeProduto);
 
   // ⚠️ Tipo novo tem de CHEGAR à tela. `TIPOS` (api/models/produtos.py) e
   // `TIPOS_PRODUTO` (web/lib/cadastros.ts) são listas separadas: mexer só numa
@@ -665,7 +683,7 @@ try {
   // só existe na tela de DESTINO** — aqui, o rótulo "NCM".
   await p
     .waitForFunction(
-      () => [...document.querySelectorAll("span.rotulo")].some(
+      () => [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].some(
         (r) => r.textContent?.trim() === "NCM"),
       { timeout: 20000 })
     .catch(() => {});
@@ -675,7 +693,7 @@ try {
   // digitar: o dado só entrava pela importação do Omie. Campo que o servidor
   // aceita e a tela não oferece é campo morto — e some sem ninguém notar.
   const fiscais = await p.evaluate(() => {
-    const rotulos = [...document.querySelectorAll("span.rotulo")].map((r) =>
+    const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((r) =>
       r.textContent?.trim() ?? "");
     return {
       ean: rotulos.some((r) => /EAN\/GTIN/i.test(r)),
@@ -795,7 +813,7 @@ try {
   await p.reload({ waitUntil: "networkidle2" });
   await p
     .waitForFunction(
-      () => [...document.querySelectorAll("span.rotulo")].some(
+      () => [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].some(
         (r) => r.textContent?.trim() === "NCM"),
       { timeout: 20000 })
     .catch(() => {});
@@ -806,7 +824,7 @@ try {
   await p.reload({ waitUntil: "networkidle2" });
   await p
     .waitForFunction(
-      () => [...document.querySelectorAll("span.rotulo")].some(
+      () => [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].some(
         (r) => r.textContent?.trim() === "NCM"),
       { timeout: 20000 })
     .catch(() => {});
@@ -1882,7 +1900,7 @@ try {
       // duas linhas, e por isso nunca estava "acima" do rendimento. Medir o
       // elemento errado acusou o cabecalho de nao ter mudado quando ele mudou.
       const produto = [...(cartao?.querySelectorAll("label") ?? [])]
-        .find((x) => (x.querySelector(":scope > span.rotulo")?.textContent ?? "")
+        .find((x) => (x.querySelector(":scope > span.rotulo, :scope > span.rotulo-campo")?.textContent ?? "")
           .trim() === "Produto");
       const rendimento = [...(cartao?.querySelectorAll("input[aria-label]") ?? [])]
         .find((i) => i.getAttribute("aria-label") === "Rendimento da receita");
@@ -2033,7 +2051,7 @@ try {
       (a) => a.textContent?.trim() === "Nova contagem"),
     // ⚠️ O rodapé de paginação TAMBÉM tem um select ("Registros por página"):
     // procurar "algum select" acusaria o formulário que já não existe.
-    semFormulario: ![...document.querySelectorAll("span.rotulo")]
+    semFormulario: ![...document.querySelectorAll("span.rotulo, span.rotulo-campo")]
       .some((r) => r.textContent?.trim() === "Local"),
   }));
   checar("a lista tem o botão de nova contagem", listaInv.temBotao, listaInv);
@@ -2042,7 +2060,7 @@ try {
   await irPara(p, `${WEB}/inventario/novo`);
   await new Promise((r) => setTimeout(r, 1800));
   const noNovo = await p.evaluate(() => {
-    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) =>
+    const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) =>
       x.textContent?.trim());
     // ⚠️ **Pelo RÓTULO, nunca pela posição.** Era "a última caixinha da
     // página" — e o cartão "Quem vai contar" passou a ter caixinhas depois
@@ -2099,7 +2117,7 @@ try {
     () => !!document.querySelector('input[inputmode="decimal"]'), { timeout: 20000 },
   ).catch(() => {});
   const telaContagem = await p.evaluate(() => {
-    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
     const campo = document.querySelector('input[inputmode="decimal"]');
     return {
       achar: rotulos.includes("Achar produto"),
@@ -2290,7 +2308,7 @@ try {
   // não a caixa do navegador. `window.prompt` trava o Chrome do teste e, no uso
   // real, é fonte de sistema com botão em inglês.
   const semPrompt = await p.evaluate(() => {
-    const campos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    const campos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
     return { temCampoQtd: campos.includes("produz"), usaPrompt: false };
   });
   const linhaAgendada = await p.evaluate(() => {
@@ -2335,7 +2353,7 @@ try {
     await irPara(p, `${WEB}/inventario/${invCega.id}`);
     await new Promise((r) => setTimeout(r, 1500));
     const cega = await p.evaluate(() => {
-      const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+      const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
       return {
         avisa: /Contagem cega/i.test(document.body.innerText),
         temSistema: rotulos.includes("Sistema"),
@@ -2366,7 +2384,7 @@ try {
   });
   await new Promise((r) => setTimeout(r, 1200));
   const filtrosRazao = await p.evaluate(() => {
-    const rotulos = [...document.querySelectorAll("span.rotulo")].map((x) => x.textContent);
+    const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((x) => x.textContent);
     return { rotulos, temData: !!document.querySelector('input[type="date"]') };
   });
   checar("o razão tem filtro de período",
@@ -2518,7 +2536,7 @@ try {
   });
   await new Promise((r) => setTimeout(r, 700));
   const formSaldo = await p.evaluate(() =>
-    [...document.querySelectorAll(".rotulo")].map((r) => r.textContent?.trim() ?? ""));
+    [...document.querySelectorAll(".rotulo, .rotulo-campo")].map((r) => r.textContent?.trim() ?? ""));
   checar("no ajuste de estoque pede a quantidade que REALMENTE tem",
     formSaldo.some((r) => /realmente tem/i.test(r)), formSaldo);
 
@@ -2532,7 +2550,7 @@ try {
   });
   await new Promise((r) => setTimeout(r, 700));
   const formCusto = await p.evaluate(() => ({
-    rotulos: [...document.querySelectorAll("span.rotulo, .rotulo")]
+    rotulos: [...document.querySelectorAll("span.rotulo, .rotulo, .rotulo-campo")]
       .map((r) => r.textContent?.trim() ?? ""),
     texto: document.body.innerText,
   }));
@@ -2648,7 +2666,7 @@ try {
   await numEstoque[0].type("10");
   const campoCustoEntrada = await p.evaluateHandle(() => {
     const l = [...document.querySelectorAll("label")].find(
-      (x) => /custo unit[áa]rio/i.test(x.querySelector("span.rotulo")?.textContent ?? ""));
+      (x) => /custo unit[áa]rio/i.test(x.querySelector("span.rotulo, span.rotulo-campo")?.textContent ?? ""));
     return l?.querySelector("input");
   });
   await campoCustoEntrada.asElement().type("20");
@@ -3904,7 +3922,16 @@ try {
 
   // A volta: a tela nao pode devolver 0,02 a quem digitou 50.
   await irPara(p, `${WEB}/produtos/${ovoTela.id}`);
-  await new Promise((r) => setTimeout(r, 1300));
+  // ⚠️ **Espera a LINHA da unidade existir, nao 1.300 ms.** O tempo fixo
+  // bastava ate a bateria passar a rodar sem cache do navegador (15/09/2026):
+  // com a folha e a rota compiladas do zero, a tabela chega depois, e a sonda
+  // lia uma lista vazia e acusava a tela de perder o que tinha acabado de
+  // gravar. A afirmacao continua sendo sobre o VALOR; o que mudou foi esperar
+  // pela coisa certa.
+  await p.waitForFunction(
+    () => document.querySelectorAll("section.cartao tbody input[aria-label]").length > 0,
+    { timeout: 20000, polling: 250 },
+  ).catch(() => {});
   const devolta = await p.evaluate(() =>
     [...document.querySelectorAll("section.cartao tbody input[aria-label]")]
       .map((i) => `${i.getAttribute("aria-label")}=${i.value}`));
@@ -4270,7 +4297,7 @@ try {
   await new Promise((r) => setTimeout(r, 2400));
   const janelaExp = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
-    const rotulos = [...(d?.querySelectorAll("span.rotulo") ?? [])].map((x) =>
+    const rotulos = [...(d?.querySelectorAll("span.rotulo, span.rotulo-campo") ?? [])].map((x) =>
       x.textContent?.trim());
     return {
       abriu: !!d,
@@ -4345,7 +4372,7 @@ try {
   const janelaInv = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     return {
-      rotulos: [...(d?.querySelectorAll("span.rotulo") ?? [])].map((x) => x.textContent?.trim()),
+      rotulos: [...(d?.querySelectorAll("span.rotulo, span.rotulo-campo") ?? [])].map((x) => x.textContent?.trim()),
       // Uma data só: o período tem duas caixas de data, este tem uma.
       datas: (d?.querySelectorAll('input[type="date"]') ?? []).length,
     };
@@ -4602,6 +4629,7 @@ try {
 
   console.log("10. celular (390 x 844)");
   const c = await navegador.newPage();
+  await c.setCacheEnabled(false);
   await c.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await c.goto(`${WEB}/login`, { waitUntil: "networkidle2" });
   await c.screenshot({ path: `${FOTOS}/m1-login.png`, fullPage: true });
@@ -5444,7 +5472,7 @@ try {
   await new Promise((r) => setTimeout(r, 2000));
   const pdv = await p.evaluate(() => {
     const texto = document.body.innerText;
-    const rotulos = [...document.querySelectorAll("span.rotulo")].map((r) =>
+    const rotulos = [...document.querySelectorAll("span.rotulo, span.rotulo-campo")].map((r) =>
       r.textContent?.trim() ?? "");
     const senhas = [...document.querySelectorAll('input[type="password"]')].length;
     return {
@@ -5622,7 +5650,7 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   checar("uma vez por dia pergunta a hora",
     await p.evaluate(() =>
-      [...document.querySelectorAll("#agenda-omie span.rotulo")].some((r) =>
+      [...document.querySelectorAll("#agenda-omie span.rotulo, #agenda-omie span.rotulo-campo")].some((r) =>
         /A que hora/i.test(r.textContent ?? ""))));
   // 🔑 A diária é "uma vez por dia, A PARTIR dessa hora" — antes era "nessa
   // hora, se alguém estiver acordado", e o dia inteiro passava em branco quando
@@ -5749,7 +5777,7 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   checar("uma vez por dia pergunta a hora",
     await p.evaluate(() =>
-      [...document.querySelectorAll("#agenda-pdv span.rotulo")].some((r) =>
+      [...document.querySelectorAll("#agenda-pdv span.rotulo, #agenda-pdv span.rotulo-campo")].some((r) =>
         /A que hora/i.test(r.textContent ?? ""))));
   await foto(p, "31-agenda-pdv");
   await reporPdv();
@@ -5913,6 +5941,113 @@ try {
   checar("e a prosa continua serifada — a voz da casa",
     /Newsreader/i.test(normas.prosa), normas.prosa);
   await foto(p, "44-normas-ux");
+
+  // 🔑 **O cabecalho nao pode ESMAGAR o titulo** (15/09/2026, relatado pelo
+  // dono: *"em algumas telas o cabecalho falhou, por exemplo no painel do
+  // CMV"*). A coluna do titulo era `min-w-0 flex-1` e o bloco de acoes do CMV
+  // tem cinco controles: o flex cedeu tudo para eles e o `<h1>` ficou com
+  // **2px de largura por 1.613 de altura** — uma letra por linha — em vez de a
+  // linha quebrar em duas. ⚠️ A medida aqui e do CMV de proposito: e a tela com
+  // o maior bloco de acoes do sistema, entao e ela que quebra primeiro.
+  await irPara(p, `${WEB}/cmv`);
+  await p.waitForSelector("main header h1", { timeout: 20000 });
+  await new Promise((r) => setTimeout(r, 1200));
+  const cabecalho = await p.evaluate(() => {
+    const h = document.querySelector("main header");
+    const t = h.querySelector("h1");
+    const b = h.querySelector("button[aria-expanded]");
+    const prosa = h.querySelector("#explica-tela");
+    return {
+      larguraTitulo: Math.round(t.getBoundingClientRect().width),
+      alturaTitulo: Math.round(t.getBoundingClientRect().height),
+      janela: window.innerWidth,
+      rotulo: b?.innerText?.trim() ?? null,
+      // A frase existe no DOM (o `aria-controls` aponta para ela), mas nao ocupa
+      // a tela: e um no so, escondido pelo `hidden`.
+      prosaNoDom: !!prosa,
+      prosaVisivel: prosa ? prosa.offsetParent !== null : null,
+    };
+  });
+  checar("o titulo da tela ocupa a largura que tem, em vez de ser esmagado",
+    cabecalho.larguraTitulo > 400, cabecalho);
+  checar("e cabe em uma ou duas linhas, nao em uma letra por linha",
+    cabecalho.alturaTitulo <= 90, cabecalho);
+  // 🔑 **A explicacao vem RECOLHIDA** — o estudo de layout ja dizia que ela
+  // ensina na primeira semana e estorva na terceira. Na primeira versao ela so
+  // se escondia no celular; no computador custava duas linhas em toda tela.
+  checar("a explicacao da tela vem atras de um 'saber mais'",
+    cabecalho.rotulo === "saber mais", cabecalho);
+  checar("e ela nao ocupa a tela enquanto ninguem pede",
+    cabecalho.prosaNoDom === true && cabecalho.prosaVisivel === false, cabecalho);
+  await p.evaluate(() =>
+    document.querySelector("main header button[aria-expanded]")?.click());
+  await new Promise((r) => setTimeout(r, 300));
+  const cabecalhoAberto = await p.evaluate(() => {
+    const b = document.querySelector("main header button[aria-expanded]");
+    const prosa = document.querySelector("#explica-tela");
+    return {
+      expandido: b?.getAttribute("aria-expanded"),
+      rotulo: b?.innerText?.trim(),
+      visivel: prosa ? prosa.offsetParent !== null : false,
+      texto: (prosa?.innerText ?? "").slice(0, 40),
+    };
+  });
+  checar("um clique mostra a explicacao",
+    cabecalhoAberto.visivel === true && cabecalhoAberto.expandido === "true", cabecalhoAberto);
+  // ⚠️ E o mesmo controle esconde de novo: um botao que so sabe abrir deixa a
+  // tela com a frase para sempre, que e o estado de que se estava saindo.
+  checar("e o mesmo controle esconde de volta", cabecalhoAberto.rotulo === "ocultar",
+    cabecalhoAberto);
+  await p.evaluate(() =>
+    document.querySelector("main header button[aria-expanded]")?.click());
+  await new Promise((r) => setTimeout(r, 250));
+
+  // 🔑 **E o mesmo "saber mais" nas telas que montam o cabecalho a MAO**
+  // (15/09/2026, pedido do dono: *"colocar este saber mais em todas as telas
+  // que tenham o texto"*). Sao 35, contra as 4 que usam `CabecalhoTela` — se o
+  // controle so existisse nestas quatro, a mesma tela diria a frase de dois
+  // jeitos conforme a rota.
+  // ⚠️ **O que se mede e a PROSA ESCONDIDA, nao o botao existir.** Um botao que
+  // aparece com a frase ainda a vista teria passado a checagem sem entregar
+  // nada — que e o que se estava consertando.
+  const semSaberMais = [];
+  for (const rota of ["/fichas", "/producao", "/usuarios", "/alertas", "/compras"]) {
+    await irPara(p, WEB + rota);
+    await p.waitForSelector("h1", { timeout: 15000 }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 700));
+    const tela = await p.evaluate(() => {
+      const b = document.querySelector('button[aria-controls="explica-tela"]');
+      const prosa = document.querySelector("#explica-tela");
+      return { botao: b?.innerText?.trim() ?? null,
+               escondida: prosa ? prosa.offsetParent === null : null };
+    });
+    if (tela.botao !== "saber mais" || tela.escondida !== true) semSaberMais.push(rota + " " + JSON.stringify(tela));
+  }
+  checar("as telas de cabecalho a mao tambem recolhem a explicacao",
+    semSaberMais.length === 0, semSaberMais);
+
+  // ⚠️ **E o dado NAO virou explicacao.** A linha cinza abaixo do titulo que
+  // mostra o e-mail do usuario, o periodo da conta ou a origem da venda tem a
+  // mesma cara da frase explicativa — e esconder o ASSUNTO da tela atras de
+  // "saber mais" teria sido a leitura mecanica desta tarefa. Cinco telas
+  // ficaram de fora de proposito; esta e a guarda de uma delas.
+  await irPara(p, `${WEB}/consumo`);
+  await p.waitForSelector("h1", { timeout: 15000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 900));
+  const primeiroPeriodo = await p.evaluate(() => {
+    const l = [...document.querySelectorAll("a")].find((a) => /\/consumo\/\d+$/.test(a.getAttribute("href") ?? ""));
+    if (l) l.click();
+    return !!l;
+  });
+  if (primeiroPeriodo) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const doPeriodo = await p.evaluate(() => ({
+      temBotao: !!document.querySelector('button[aria-controls="explica-tela"]'),
+      texto: document.querySelector("main")?.innerText?.slice(0, 200) ?? "",
+    }));
+    checar("o dado do cabecalho continua a vista, e nao virou 'saber mais'",
+      doPeriodo.temBotao === false && /\d{2}\/\d{2}\/\d{4}/.test(doPeriodo.texto), doPeriodo);
+  }
 
   console.log("10a3. o periodo se chama pelo nome, nao 'mes' sempre");
   // 🔑 **Relatado pelo dono (14/09/2026):** *"nas telas quando trata de periodo,
@@ -6273,8 +6408,22 @@ try {
       [conferindo.preco_casa, conferindo.preco_loja]);
 
     await irPara(p, `${WEB}/produtos/${pPreco.id}`);
-    await p.waitForFunction(() => /Pre[çc]o de venda/i.test(document.body.innerText),
-      { timeout: 15000 }).catch(() => {});
+    // ⚠️ **Espera o CAMPO ESTAR PREENCHIDO, e nao o rotulo aparecer.** O rotulo
+    // faz parte do formulario e ja esta na tela antes de a resposta do produto
+    // chegar: a sonda lia o campo vazio e acusava a tela de nao mostrar um
+    // preco que ela mostraria meio segundo depois. Falhou uma vez, num perfil
+    // de navegador recem-criado — ou seja, na rodada em que a rota compilou do
+    // zero. E a mesma licao ja escrita duas vezes neste arquivo: esperar pela
+    // coisa CERTA, que aqui e o valor, nao o cenario ao redor dele.
+    await p.waitForFunction(() => {
+      const campo = [...document.querySelectorAll("label")].find(
+        // ⚠️ O rotulo MUDA com o numero de lojas ("Preco de venda da casa"
+        // quando ha mais de uma) — e a base local guarda filial de rodada
+        // anterior. Aceitar as duas formas e o que impede esta sonda de acusar
+        // a tela por causa do estado da base.
+        (l) => /^Pre[çc]o de venda( da casa)?$/i.test(l.querySelector("span.rotulo, span.rotulo-campo")?.textContent?.trim() ?? ""));
+      return !!campo?.querySelector("input")?.value;
+    }, { timeout: 20000, polling: 250 }).catch(() => {});
   // ⚠️ **Pelo RÓTULO do campo, não pelo primeiro `input[type=number]`.** A
   // primeira versão subia do rótulo com `closest("div")` — que passa por cima
   // do `<label>` e cai num contêiner do cartão inteiro —, e lia o `fator_compra`
@@ -6284,8 +6433,8 @@ try {
   // caminho honesto é achar o LABEL cujo rótulo é esse e ler o input dele.
     const noCampo = await p.evaluate(() => {
       const campo = [...document.querySelectorAll("label")].find(
-        (l) => /^Pre[çc]o de venda$/i.test(
-          l.querySelector("span.rotulo")?.textContent?.trim() ?? ""));
+        (l) => /^Pre[çc]o de venda( da casa)?$/i.test(
+          l.querySelector("span.rotulo, span.rotulo-campo")?.textContent?.trim() ?? ""));
       return campo?.querySelector("input")?.value ?? null;
     });
     // 🔑 A afirmação central: o campo mostra o preço que VALE, não vazio.
@@ -6692,6 +6841,25 @@ try {
     menuNovo.grupoCompras === false, menuNovo);
   checar("e a tela dela continua alcancavel", menuNovo.linkCompras >= 1, menuNovo);
 
+  // 🔑 **Nenhum nome de tela pode ser cortado** (15/09/2026, relatado pelo dono:
+  // *"aumentar um pouco o menu pois alguns itens cortaram a descricao"*). Com o
+  // icone e o alfinete, a coluna de 240px deixava ~169px para o texto, e
+  // "Saldos e movimentos", "Exportacao para o PDV" e "Papeis e permissoes" nao
+  // cabiam. ⚠️ Nome cortado obriga a pessoa a ADIVINHAR o destino, que e o
+  // contrario do que um menu faz.
+  await p.evaluate(() =>
+    document.querySelectorAll("aside .menu-grupo").forEach((b) => b.click()));
+  await new Promise((r) => setTimeout(r, 400));
+  const cortados = await p.evaluate(() =>
+    [...document.querySelectorAll("aside .menu-item span:last-child")]
+      .filter((s) => s.scrollWidth > s.clientWidth + 1)
+      .map((s) => `${s.textContent} (${s.scrollWidth}>${s.clientWidth})`));
+  checar("nenhum nome de tela e cortado no menu", cortados.length === 0, cortados);
+  // ⚠️ Devolve os grupos ao estado recolhido: quem desvia, devolve.
+  await p.evaluate(() =>
+    document.querySelectorAll("aside .menu-grupo[aria-expanded='true']").forEach((b) => b.click()));
+  await new Promise((r) => setTimeout(r, 300));
+
   // ---- a busca (Ctrl+K) ----
   await p.keyboard.down("Control");
   await p.keyboard.press("KeyK");
@@ -6826,6 +6994,92 @@ try {
     JSON.parse(localStorage.getItem("botane.atalhos") ?? "[]"));
   checar("e o mesmo alfinete tira", !aoTirar.includes("/inventario"), aoTirar);
   await foto(p, "36c-menu-novo");
+
+  // 🔑 **As peças de formulário, redesenhadas** (15/09/2026, protótipo aprovado
+  // pelo dono: `apresentacao/pecas-prototipo.html`). Três coisas que a norma
+  // mede e uma que ela não mede, mas que era o pior defeito da tela.
+  await irPara(p, `${WEB}/produtos/novo`);
+  await p.waitForSelector("#campo-nome", { timeout: 20000 });
+  await new Promise((r) => setTimeout(r, 900));
+  const pecas = await p.evaluate(() => {
+    const luz = (cor) => {
+      const [r, g, b] = cor.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => {
+        const v = x / 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const razao = (a, b) => {
+      const [x, y] = [luz(a), luz(b)].sort((m, n) => n - m);
+      return (x + 0.05) / (y + 0.05);
+    };
+    const fundo = getComputedStyle(document.querySelector(".cartao") ?? document.body).backgroundColor;
+    const rot = document.querySelector(".rotulo-campo");
+    const er = getComputedStyle(rot);
+    const botao = [...document.querySelectorAll("button.btn")]
+      .find((b) => b.getBoundingClientRect().height > 0);
+    return {
+      // O rótulo saiu da mono de 10,5px em MAIÚSCULAS.
+      rotuloPx: parseFloat(er.fontSize),
+      rotuloCaixa: er.textTransform,
+      rotuloContraste: razao(er.color, fundo),
+      quantos: document.querySelectorAll(".rotulo-campo").length,
+      // 44px é o que a WCAG 2.5.5 recomenda para o dedo.
+      alturaBotao: botao ? Math.round(botao.getBoundingClientRect().height) : null,
+      raioCampo: getComputedStyle(document.querySelector(".campo")).borderRadius,
+    };
+  });
+  checar("o rotulo do campo cresceu e saiu das MAIUSCULAS",
+    pecas.rotuloPx >= 13 && pecas.rotuloCaixa === "none", pecas);
+  checar("e passa folgado no contraste de texto de corpo",
+    Number(pecas.rotuloContraste) >= 4.5, pecas);
+  checar("a tela usa a peca nova, e nao o rotulo de secao", pecas.quantos >= 5, pecas);
+  checar("o botao chega aos 44px que a norma recomenda para o dedo",
+    (pecas.alturaBotao ?? 0) >= 44, pecas);
+
+  // 🔑 **O erro do campo, NO campo.** Antes o nome era validado pelo `required`
+  // do navegador — ou seja, pela caixa cinza do Chrome, a mesma que esta casa
+  // baniu do resto do sistema — e o erro de servidor saía no balão do canto,
+  // longe do campo e sumindo em 6 segundos.
+  // ⚠️ A guarda global de `dialog` desta bateria derruba a rodada se um balão
+  // do navegador aparecer aqui: é o que prova que a validação é NOSSA.
+  await p.evaluate(() => {
+    const c = document.querySelector("#campo-nome");
+    if (c) { c.value = ""; }
+  });
+  await p.click('button[type="submit"]');
+  await new Promise((r) => setTimeout(r, 600));
+  const comErro = await p.evaluate(() => {
+    const campo = document.querySelector("#campo-nome");
+    const erro = document.querySelector(".erro-campo");
+    return {
+      invalido: campo?.getAttribute("aria-invalid"),
+      // O `aria-describedby` é o que faz o leitor de tela LER a frase do erro.
+      descrito: campo?.getAttribute("aria-describedby") ?? "",
+      mensagem: erro?.innerText?.trim() ?? null,
+      // Quem errou tem de poder corrigir sem procurar o campo.
+      focado: document.activeElement === campo,
+      rota: location.pathname,
+    };
+  });
+  checar("submeter sem nome NAO cria produto nenhum", comErro.rota === "/produtos/novo", comErro);
+  checar("o campo fica marcado como invalido", comErro.invalido === "true", comErro);
+  checar("com a frase dizendo o que fazer, embaixo dele",
+    /precisa de um nome/i.test(comErro.mensagem ?? ""), comErro);
+  checar("ligada ao campo pelo aria-describedby, e com o foco nele",
+    comErro.descrito.includes("-erro") && comErro.focado === true, comErro);
+
+  // ⚠️ E corrigir apaga o erro NA HORA: erro que só some no próximo "salvar"
+  // deixa a pessoa sem saber se acertou.
+  await p.type("#campo-nome", "ab");
+  await new Promise((r) => setTimeout(r, 400));
+  const corrigido = await p.evaluate(() => ({
+    invalido: document.querySelector("#campo-nome")?.getAttribute("aria-invalid"),
+    temErro: !!document.querySelector(".erro-campo"),
+  }));
+  checar("e corrigir apaga o erro na hora",
+    corrigido.invalido === null && corrigido.temErro === false, corrigido);
+  await foto(p, "44b-pecas-do-formulario");
   console.log("10e. remessa entre lojas: em transito e recebimento");
   // 🔑 **A remessa em transito continua contando no estoque de quem mandou** — e
   // esta tela existe para esse "continua contando" nao virar armadilha. O que se
@@ -6931,7 +7185,7 @@ try {
     && opcoesVisao.includes("empresa"), opcoesVisao);
   const temSomarLojas = opcoesVisao.includes("empresa");
   if (temSomarLojas) {
-    const rotuloLocal = () => p.evaluate(() => [...document.querySelectorAll("main .rotulo")]
+    const rotuloLocal = () => p.evaluate(() => [...document.querySelectorAll("main .rotulo, main .rotulo-campo")]
       .some((x) => (x.textContent ?? "").trim() === "Local"));
     // ⚠️ **Escolhe a prateleira ANTES de medir.** A tela abre em "por produto"
     // desde 11/09/2026 (pedido do dono), e aí o filtro de prateleira ja nao
@@ -6940,7 +7194,7 @@ try {
     // local, na visao de empresa nao ha.
     await p.select("#visao-saldos", "prateleira");
     await p.waitForFunction(
-      () => [...document.querySelectorAll("main .rotulo")]
+      () => [...document.querySelectorAll("main .rotulo, main .rotulo-campo")]
         .some((x) => (x.textContent ?? "").trim() === "Local"),
       { timeout: 10000 },
     ).catch(() => {});

@@ -92,7 +92,7 @@ function Formulario() {
             )}
             <form onSubmit={redefinir} className="mt-6 flex flex-col gap-4">
               <label className="flex flex-col gap-1.5">
-                <span className="rotulo">Senha nova</span>
+                <span className="rotulo-campo">Senha nova</span>
                 <input
                   className="campo"
                   type="password"
@@ -105,7 +105,7 @@ function Formulario() {
                 />
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="rotulo">Repita a senha</span>
+                <span className="rotulo-campo">Repita a senha</span>
                 <input
                   className="campo"
                   type="password"
@@ -116,7 +116,7 @@ function Formulario() {
                   onChange={(e) => setRepetida(e.target.value)}
                 />
               </label>
-              <button className="btn btn-primario" type="submit" disabled={enviando}>
+              <button className="btn btn-primario" type="submit" aria-busy={enviando} disabled={enviando}>
                 {enviando ? "Salvando…" : "Salvar a senha"}
               </button>
               <p className="text-[13px] leading-relaxed text-suave">

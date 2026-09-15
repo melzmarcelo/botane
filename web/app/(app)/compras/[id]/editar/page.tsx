@@ -10,6 +10,7 @@ import { Aviso, Carregando } from "@/components/ui";
 import NotaManual, { NotaParaEditar } from "../../nota-manual";
 import { NotaDetalhe } from "../../tipos";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Corrigir uma nota digitada, antes de ela virar estoque.
@@ -93,9 +94,9 @@ export default function PaginaCorrigirNota() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Corrigir a nota {editando?.numero ?? ""}
         </h1>
-        <p className="mt-2 max-w-[70ch] prosa text-suave">
+        <ExplicaTela>
           Ela ainda não virou estoque: dá para mexer em tudo antes de lançar.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro ? (

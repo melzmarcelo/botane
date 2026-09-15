@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { useSessao } from "@/lib/sessao";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Exportação para o PDV — o que daqui ainda não está no cardápio de lá.
@@ -232,10 +233,10 @@ export default function PaginaExportacao() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Exportação para o PDV
           </h1>
-          <p className="mt-1 max-w-[68ch] prosa text-suave">
+          <ExplicaTela>
             O que está marcado como integrado aqui e ainda não chegou ao cardápio do PDV.
             Nada sai sozinho — o envio é sempre disparado por alguém.
-          </p>
+          </ExplicaTela>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* ⚠️ **Ao lado do Enviar, não escondido numa aba.** É a primeira coisa
@@ -245,7 +246,7 @@ export default function PaginaExportacao() {
           {!!pendentes.length && (
             <button
               className="btn btn-primario"
-              disabled={enviando}
+              aria-busy={enviando} disabled={enviando}
               onClick={() => (desativacoes ? setConfirmando(true) : void enviar(selecionados))}
             >
               {enviando

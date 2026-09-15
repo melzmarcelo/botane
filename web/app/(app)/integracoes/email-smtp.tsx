@@ -108,10 +108,10 @@ export default function EmailSmtp() {
       descricao="Usado hoje pela recuperação de senha."
       acao={
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-secundario" onClick={testar} disabled={ocupado}>
+          <button className="btn btn-secundario" onClick={testar} aria-busy={ocupado} disabled={ocupado}>
             Enviar teste para mim
           </button>
-          <button className="btn btn-primario" onClick={salvar} disabled={ocupado}>
+          <button className="btn btn-primario" onClick={salvar} aria-busy={ocupado} disabled={ocupado}>
             Salvar
           </button>
         </div>

@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { avisarEmpresaMudou } from "@/lib/eventos";
 import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
+import ExplicaTela from "@/components/explica-tela";
 
 type Empresa = Record<string, string | null>;
 
@@ -105,13 +106,13 @@ export default function PaginaEmpresa() {
         <div>
           <p className="rotulo">Administração</p>
           <h1 className="mt-1 text-[30px] font-bold tracking-tight">Empresa</h1>
-          <p className="mt-1 max-w-[62ch] prosa text-suave">
+          <ExplicaTela>
             Os dados daqui aparecem nos relatórios, nos PDFs e nas integrações. Preencher uma
             vez basta.
-          </p>
+          </ExplicaTela>
         </div>
         {podeEditar && (
-          <button className="btn btn-primario" type="submit" disabled={salvando}>
+          <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
             {salvando ? "Salvando…" : "Salvar"}
           </button>
         )}
@@ -269,7 +270,7 @@ export default function PaginaEmpresa() {
                 <button
                   type="button"
                   className="btn btn-secundario"
-                  disabled={enviandoLogo}
+                  aria-busy={enviandoLogo} disabled={enviandoLogo}
                   onClick={() => seletor.current?.click()}
                 >
                   {enviandoLogo ? "Enviando…" : t("logo_url") ? "Trocar imagem" : "Enviar imagem"}
@@ -301,7 +302,7 @@ export default function PaginaEmpresa() {
 
       {podeEditar && (
         <div className="flex justify-end">
-          <button className="btn btn-primario" type="submit" disabled={salvando}>
+          <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
             {salvando ? "Salvando…" : "Salvar"}
           </button>
         </div>

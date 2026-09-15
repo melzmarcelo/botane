@@ -301,7 +301,7 @@ export default function FormularioLoja({
 
       {podeEditar && (
         <div className="flex justify-end">
-          <button className="btn btn-primario" disabled={ocupado}>
+          <button className="btn btn-primario" aria-busy={ocupado} disabled={ocupado}>
             {ocupado ? "Salvando…" : rotuloSalvar}
           </button>
         </div>

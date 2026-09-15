@@ -588,7 +588,7 @@ export default function FormularioUsuario({
       </Cartao>
 
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primario" type="submit" disabled={salvando}>
+        <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
           {salvando ? "Salvando…" : id ? "Salvar" : "Criar usuário"}
         </button>
         <Link href="/usuarios" className="btn btn-secundario">

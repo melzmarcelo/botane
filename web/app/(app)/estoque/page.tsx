@@ -375,7 +375,7 @@ export default function PaginaEstoque() {
                   produto, e um seletor que não corta nada é promessa falsa. */}
               {visao === "prateleira" && (
                 <label className="sm:w-[200px]">
-                  <span className="rotulo">Local</span>
+                  <span className="rotulo-campo">Local</span>
                   <select
                     className="campo mt-1.5"
                     value={idLocal}
@@ -407,7 +407,7 @@ export default function PaginaEstoque() {
                   ⚠️ A de EMPRESA só aparece com mais de uma loja: numa casa só
                   ela é a do meio com uma coluna a mais. */}
               <label className="sm:w-[210px]">
-                <span className="rotulo">Ver por</span>
+                <span className="rotulo-campo">Ver por</span>
                 <select
                   id="visao-saldos"
                   className="campo mt-1.5"
@@ -678,7 +678,7 @@ export default function PaginaEstoque() {
               </div>
             </div>
             <label className="sm:w-[168px]">
-              <span className="rotulo">De</span>
+              <span className="rotulo-campo">De</span>
               <input
                 className="campo mt-1.5"
                 type="date"
@@ -687,7 +687,7 @@ export default function PaginaEstoque() {
               />
             </label>
             <label className="sm:w-[168px]">
-              <span className="rotulo">Até</span>
+              <span className="rotulo-campo">Até</span>
               <input
                 className="campo mt-1.5"
                 type="date"
@@ -696,7 +696,7 @@ export default function PaginaEstoque() {
               />
             </label>
             <label className="sm:w-[200px]">
-              <span className="rotulo">Movimento</span>
+              <span className="rotulo-campo">Movimento</span>
               <select
                 className="campo mt-1.5"
                 value={movTipo}
@@ -711,7 +711,7 @@ export default function PaginaEstoque() {
               </select>
             </label>
             <label className="sm:w-[170px]">
-              <span className="rotulo">Local</span>
+              <span className="rotulo-campo">Local</span>
               <select
                 className="campo mt-1.5"
                 value={movLocal}

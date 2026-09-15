@@ -206,7 +206,7 @@ export default function ConversaoDoItem({
                 <button
                   type="button"
                   className="btn btn-primario"
-                  disabled={salvando}
+                  aria-busy={salvando} disabled={salvando}
                   onClick={() => void gravar(true)}
                 >
                   O fornecedor mudou de embalagem — corrigir para {fator || "…"}
@@ -214,7 +214,7 @@ export default function ConversaoDoItem({
                 <button
                   type="button"
                   className="btn btn-secundario"
-                  disabled={salvando}
+                  aria-busy={salvando} disabled={salvando}
                   onClick={aoFechar}
                 >
                   Ele manda as duas — não mexer
@@ -233,7 +233,7 @@ export default function ConversaoDoItem({
               <button
                 type="button"
                 className="btn btn-primario"
-                disabled={salvando || !fator}
+                aria-busy={salvando} disabled={salvando || !fator}
                 onClick={() => void gravar(false)}
               >
                 {salvando ? "Gravando…" : `Acrescentar ${sigla} ao produto`}

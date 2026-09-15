@@ -304,6 +304,47 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   }
   .menu-divisor { height: 1px; background: var(--color-linha); margin: 10px 6px; }
 
+  /* ---- o rótulo, a dica e o erro de um campo ----
+     🔑 **O rótulo saiu do `.rotulo`** (15/09/2026, protótipo aprovado). Ele era
+     a MESMA classe do olho de seção, do cabeçalho de tabela e da legenda de
+     cartão: 10,5px, monoespaçada, MAIÚSCULAS, cinza. Num formulário isso lê
+     como etiqueta de arquivo, não como a pergunta que o campo faz — e era o
+     texto mais repetido do sistema na menor tipografia dele.
+     ⚠️ `.rotulo` continua existindo e continua certo onde ele nasceu (o olho
+     "CADASTROS" acima do título, o `<th>`, a legenda). O que mudou foi parar de
+     pedir a ele um trabalho que não era o dele. */
+  .rotulo-campo {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--color-tinta);
+  }
+  /* 🔑 **"opcional", e não asterisco no obrigatório.** Quase todo campo desta
+     casa é obrigatório: marcar o obrigatório seria marcar a tela inteira, e o
+     que se quer saber é justamente o contrário. */
+  .rotulo-opcional {
+    font-family: var(--font-leitura);
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--color-suave);
+    margin-left: 6px;
+  }
+  /* A dica responde ANTES de a pessoa errar; o erro só aparece depois. */
+  .dica-campo { display: block; margin-top: 5px; font-size: 13px; color: var(--color-suave); }
+  .erro-campo {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-erro);
+  }
+  .erro-campo svg { flex: 0 0 15px; margin-top: 1px; }
+
   /* ---- a busca de telas (Ctrl+K) ----
      ⚠️ **O estado marcado vive no CSS, não em variante do Tailwind.** A opção é
      escolhida pelo teclado, e quem muda é `aria-selected` — que é também o que
@@ -443,9 +484,11 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 .campo {
   width: 100%;
   border: 1px solid var(--color-linha2);
-  border-radius: 9px;
+  /* 10px, como o botão: o formulário é uma fileira de caixas, e duas famílias
+     de canto na mesma fileira é o tipo de detalhe que se sente sem se notar. */
+  border-radius: 10px;
   background: var(--color-superficie);
-  padding: 9px 11px;
+  padding: 11px 12px;
   font-size: 16px;
   color: var(--color-tinta);
   font-family: var(--font-display);
@@ -468,6 +511,20 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   outline-offset: 1px;
   border-color: var(--color-erva);
 }
+/* 🔑 **O campo ERRADO passa a ter cara de errado** (15/09/2026, protótipo
+   aprovado). Antes, o erro de um campo não tinha onde morar: saía no balão
+   flutuante do canto — longe do campo que o causou, some em 6 segundos — e
+   quem digitou "doze" lia "quantidade inválida" do outro lado da tela e voltava
+   a procurar qual dos quatro campos era.
+   ⚠️ **Pelo `aria-invalid`, não por uma classe.** O atributo é o que o leitor
+   de tela anuncia; pintar por classe deixaria a cor e o anúncio livres para
+   discordar — e discordariam no primeiro campo que alguém esquecesse. */
+.campo[aria-invalid="true"] {
+  border-color: var(--color-erro);
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--color-erro-claro) 45%, var(--color-superficie));
+}
+.campo[aria-invalid="true"]:focus { outline-color: var(--color-erro); }
 .campo:disabled { background: var(--color-superficie2); color: var(--color-suave); }
 /* 🔑 **4px de raio é canto vivo disfarçado.** A tela é feita de caixas — cartão,
    aviso, etiqueta, botão, campo —, e num raio tão curto todas elas leem como
@@ -512,27 +569,102 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   background: var(--color-erro-claro);
   color: var(--color-erro);
 }
-.btn {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 14px;
-  /* ⚠️ Acompanha o cartão. Botão de canto vivo dentro de cartão redondo são
-     duas linguagens na mesma tela, e a mais dura é a que se nota. */
-  border-radius: 9px;
-  padding: 8px 16px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+/* ---- os botões ----
+   🔑 **Quatro variantes, e não duas** (15/09/2026, protótipo aprovado pelo dono:
+   `apresentacao/pecas-prototipo.html`). Existiam `primario` e `secundario`; o
+   que faltava era o que a tela mais faz fora deles — "estornar", "excluir",
+   "ver movimentos" eram LINKS DE TEXTO, com a mesma forma de qualquer outro
+   link da página. Ação destrutiva escrita como link é ação destrutiva sem aviso.
+
+   ⚠️ **Passaram para `@layer components` porque agora definem `display`** — CSS
+   sem camada vence a utilitária do Tailwind, e um `hidden` ou um `w-full` sobre
+   um botão deixaria de valer. É a mesma nota do `.menu-item` e do `.link-acao`. */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    /* 🔑 **44px de altura, contra os 35 de antes.** É o que a WCAG 2.5.5
+       recomenda para o dedo — o mínimo absoluto da 2.5.8 são 24, e mínimo
+       absoluto não é lugar de morar. Quem paga por isso é a densidade das telas
+       com muitos botões (o painel do CMV tem cinco lado a lado), e por isso
+       existe `.btn-pequeno`. */
+    font-size: 14.5px;
+    min-height: 44px;
+    padding: 11px 18px;
+    /* ⚠️ Acompanha o cartão. Botão de canto vivo dentro de cartão redondo são
+       duas linguagens na mesma tela, e a mais dura é a que se nota. */
+    border-radius: 10px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  /* Para linha de tabela e barra de filtro, onde 44px empurram o resto da tela
+     para baixo. ⚠️ Continua acima dos 24×24 que a norma exige como mínimo. */
+  .btn-pequeno { min-height: 36px; padding: 8px 14px; font-size: 13px; }
+
+  .btn-primario { background: var(--color-erva); color: #fff; }
+  .btn-primario:hover { background: #24563c; }
+  .btn-secundario {
+    background: var(--color-superficie);
+    border-color: var(--color-linha2);
+    color: var(--color-tinta);
+  }
+  .btn-secundario:hover { border-color: var(--color-erva); color: var(--color-erva); }
+  /* O terciário é ação de verdade sem peso visual: "ver movimentos", "voltar
+     para a lista". Ele tem ÁREA e responde ao ponteiro — é o que o separa de um
+     link solto no meio do texto. */
+  .btn-terciario { background: transparent; border-color: transparent; color: var(--color-erva); }
+  .btn-terciario:hover { background: var(--color-erva-claro); }
+  /* 🔑 **O de risco tem cara de risco, e mesmo assim não é vermelho cheio.**
+     Botão sólido vermelho atrai o clique justamente onde ele não deve ser
+     atraído; a borda e a tinta bastam para dizer "aqui se apaga alguma coisa". */
+  .btn-perigo {
+    background: var(--color-superficie);
+    border-color: var(--color-erro);
+    color: var(--color-erro);
+  }
+  .btn-perigo:hover { background: var(--color-erro-claro); }
+
+  /* 🔑 **Desabilitado ganhou COR PRÓPRIA, no lugar de opacidade** — e este era
+     o pior número da paleta. `opacity: .55` sobre o primário levava o branco
+     sobre verde a **2,65:1** de contraste: o botão não ficava inativo, ficava
+     ilegível, e quem enxerga pouco não conseguia ler o que não podia fazer.
+     Assim dá 4,82:1 e continua obviamente inerte.
+     ⚠️ `.btn:disabled` tem especificidade maior que `.btn-primario`, então vence
+     as variantes esteja onde estiver no arquivo. */
+  .btn:disabled {
+    cursor: not-allowed;
+    background: var(--color-superficie2);
+    border-color: var(--color-linha);
+    color: var(--color-suave);
+  }
+
+  /* 🔑 **O botão que está trabalhando DIZ que está trabalhando.** Ele só
+     trocava o texto ("Salvando…"), e num clique que demora dois segundos a
+     pessoa clica de novo — é assim que nasce nota lançada duas vezes.
+     ⚠️ **Feito com `aria-busy`, não com uma classe**: o atributo já é o que o
+     leitor de tela anuncia, e uma classe a mais para dizer a mesma coisa é uma
+     chance a mais de as duas discordarem. Quem marca `aria-busy` marca
+     `disabled` junto — é o `disabled` que trava o segundo clique. */
+  .btn[aria-busy="true"]::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: girando 0.75s linear infinite;
+  }
+  @keyframes girando { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .btn[aria-busy="true"]::before { animation: none; }
+  }
 }
-.btn-primario { background: var(--color-erva); color: #fff; }
-.btn-primario:hover { background: #24563c; }
-.btn-secundario {
-  background: var(--color-superficie);
-  border-color: var(--color-linha2);
-  color: var(--color-tinta);
-}
-.btn-secundario:hover { border-color: var(--color-erva); color: var(--color-erva); }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .tabela { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .tabela th {
   text-align: left;
@@ -558,3 +690,4 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   .tabela th { background: #f2f2f2; }
   a[href]::after { content: ""; }
 }
+

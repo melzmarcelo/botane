@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import ExplicaTela from "@/components/explica-tela";
 
 type Linha = {
   id: number;
@@ -54,10 +55,10 @@ export default function PaginaAuditoria() {
       <header>
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Auditoria</h1>
-        <p className="mt-1 max-w-[64ch] prosa text-suave">
+        <ExplicaTela>
           Quem mudou o quê, quando, e o valor antes e depois. Senha e credencial nunca entram
           aqui — o registro é filtrado antes de gravar.
-        </p>
+        </ExplicaTela>
       </header>
 
       <Cartao>

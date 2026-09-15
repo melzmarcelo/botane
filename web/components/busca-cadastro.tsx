@@ -130,7 +130,7 @@ export default function BuscaCadastro({
         />
         <button
           type="button"
-          className="btn btn-secundario shrink-0 px-2.5"
+          className="btn btn-secundario btn-pequeno shrink-0"
           disabled={disabled}
           onClick={() => setAberto(true)}
           aria-label={fonte.titulo}
@@ -370,7 +370,7 @@ function Janela({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="btn btn-secundario px-2.5 py-1"
+              className="btn btn-secundario btn-pequeno"
               onClick={() => setPagina((n) => Math.max(1, n - 1))}
               disabled={pagina <= 1}
               aria-label="Página anterior"
@@ -382,7 +382,7 @@ function Janela({
             </span>
             <button
               type="button"
-              className="btn btn-secundario px-2.5 py-1"
+              className="btn btn-secundario btn-pequeno"
               onClick={() => setPagina((n) => n + 1)}
               disabled={pagina >= Math.ceil(total / POR_PAGINA)}
               aria-label="Próxima página"
@@ -486,7 +486,7 @@ export function FiltroCadastro({
         />
         <button
           type="button"
-          className="btn btn-secundario shrink-0 px-2.5"
+          className="btn btn-secundario btn-pequeno shrink-0"
           onClick={() => setAberto(true)}
           aria-label={fonte.titulo}
           title={fonte.titulo}

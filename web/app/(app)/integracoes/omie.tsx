@@ -446,11 +446,11 @@ export default function Omie() {
 
           <div className="flex flex-wrap gap-2">
             {podeConfigurar && (
-              <button className="btn btn-primario" type="submit" disabled={ocupado}>
+              <button className="btn btn-primario" type="submit" aria-busy={ocupado} disabled={ocupado}>
                 Salvar
               </button>
             )}
-            <button className="btn btn-secundario" type="button" onClick={testar} disabled={ocupado}>
+            <button className="btn btn-secundario" type="button" onClick={testar} aria-busy={ocupado} disabled={ocupado}>
               Testar conexão
             </button>
           </div>
@@ -470,7 +470,7 @@ export default function Omie() {
           <div className="flex flex-wrap gap-2">
             <button
               className="btn btn-secundario"
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
               onClick={() =>
                 acao(
                   "/omie/importar-catalogo",
@@ -482,7 +482,7 @@ export default function Omie() {
             </button>
             <button
               className="btn btn-secundario"
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
               onClick={() =>
                 acao(
                   "/omie/importar-fornecedores",
@@ -495,7 +495,7 @@ export default function Omie() {
             </button>
             <button
               className="btn btn-secundario"
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
               onClick={() =>
                 acao(
                   "/omie/importar-fornecedores?apenas_completar=true",
@@ -506,13 +506,13 @@ export default function Omie() {
             >
               Só completar os que já existem
             </button>
-            <button className="btn btn-secundario" onClick={conferir} disabled={ocupado}>
+            <button className="btn btn-secundario" onClick={conferir} aria-busy={ocupado} disabled={ocupado}>
               Conferir estoque com o Omie
             </button>
             <button
               className="btn btn-secundario"
               onClick={verCustos}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
               title="Traz o custo médio do Omie para os produtos que aqui não têm custo nenhum"
             >
               Trazer o custo inicial
@@ -598,7 +598,7 @@ export default function Omie() {
               )}
               {!custos.aplicado && (
                 <div className="mt-4">
-                  <button className="btn btn-primario" onClick={aplicarCustos} disabled={ocupado}>
+                  <button className="btn btn-primario" onClick={aplicarCustos} aria-busy={ocupado} disabled={ocupado}>
                     {ocupado ? "Aplicando…" : `Aplicar em ${custos.produtos} produto(s)`}
                   </button>
                 </div>

@@ -10,6 +10,8 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 import { custo } from "@/lib/numeros";
+import ExplicaTela from "@/components/explica-tela";
+
 type Ficha = {
   id: number;
   id_produto: number;
@@ -91,11 +93,11 @@ export default function PaginaFichas() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Fichas técnicas
           </h1>
-          <p className="mt-1 max-w-[64ch] prosa text-suave">
+          <ExplicaTela>
             A receita de cada prato e o que ela custa por porção. Um preparo pode entrar em
             outro — o molho tem ficha própria e o custo dele desce sozinho para os pratos que
             o usam.
-          </p>
+          </ExplicaTela>
         </div>
         {podeEditar && (
           <Link href="/fichas/nova" className="btn btn-primario">
@@ -117,7 +119,7 @@ export default function PaginaFichas() {
       <Cartao>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="min-w-0 flex-1">
-            <span className="rotulo">Buscar</span>
+            <span className="rotulo-campo">Buscar</span>
             <input
               className="campo mt-1.5"
               placeholder="nome do produto"
@@ -126,7 +128,7 @@ export default function PaginaFichas() {
             />
           </label>
           <label className="sm:w-[200px]">
-            <span className="rotulo">Situação</span>
+            <span className="rotulo-campo">Situação</span>
             <select
               className="campo mt-1.5"
               value={status}

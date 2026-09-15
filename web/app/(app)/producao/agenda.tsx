@@ -229,7 +229,7 @@ export default function AgendaProducao({
             <button
               className="btn btn-primario"
               onClick={() => void agendarSugestoes()}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               Pôr todas na agenda de amanhã
             </button>
@@ -314,7 +314,7 @@ export default function AgendaProducao({
             </select>
           </Campo>
           <div className="flex items-end">
-            <button className="btn btn-primario" type="submit" disabled={ocupado}>
+            <button className="btn btn-primario" type="submit" aria-busy={ocupado} disabled={ocupado}>
               {ocupado ? "Agendando…" : "Pôr na agenda"}
             </button>
           </div>
@@ -388,7 +388,7 @@ export default function AgendaProducao({
                             <button
                               className="btn btn-secundario"
                               onClick={() => setConfirmando(l)}
-                              disabled={ocupado}
+                              aria-busy={ocupado} disabled={ocupado}
                             >
                               Produzir
                             </button>
@@ -397,7 +397,7 @@ export default function AgendaProducao({
                         <button
                           className="link-acao link-acao-erro"
                           onClick={() => void cancelar(l)}
-                          disabled={ocupado}
+                          aria-busy={ocupado} disabled={ocupado}
                         >
                           cancelar
                         </button>

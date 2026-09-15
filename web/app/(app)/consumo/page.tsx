@@ -9,6 +9,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { dataBr } from "../vendas/tipos";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Períodos de consumo — o ciclo que se abre, acumula e se fecha no pagamento.
@@ -153,9 +154,9 @@ export default function PaginaConsumoPeriodos() {
           <h1 className="text-[24px] font-bold tracking-tight sm:text-[30px]">
             Períodos de consumo
           </h1>
-          <p className="mt-1 text-suave">
+          <ExplicaTela>
             O ciclo que acumula o consumo do pessoal e se fecha no pagamento.
-          </p>
+          </ExplicaTela>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/vendas/por-pessoa" className="btn btn-secundario">
@@ -170,7 +171,7 @@ export default function PaginaConsumoPeriodos() {
             <button
               className="btn btn-primario"
               onClick={() => setConfirmando(true)}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               Fechar período
             </button>
@@ -196,7 +197,7 @@ export default function PaginaConsumoPeriodos() {
               </Campo>
             </div>
             <div className="flex gap-2">
-              <button className="btn btn-primario" type="submit" disabled={ocupado}>
+              <button className="btn btn-primario" type="submit" aria-busy={ocupado} disabled={ocupado}>
                 {ocupado ? "Abrindo…" : "Abrir"}
               </button>
               <button type="button" className="btn btn-secundario"
@@ -236,7 +237,7 @@ export default function PaginaConsumoPeriodos() {
             )}
           </Aviso>
           <div className="mt-4 flex gap-2">
-            <button className="btn btn-primario" onClick={fechar} disabled={ocupado}>
+            <button className="btn btn-primario" onClick={fechar} aria-busy={ocupado} disabled={ocupado}>
               {ocupado ? "Fechando…" : "Fechar e cobrar"}
             </button>
             <button className="btn btn-secundario" onClick={() => setConfirmando(false)}>
@@ -384,7 +385,7 @@ export default function PaginaConsumoPeriodos() {
                         <button
                           className="link-acao"
                           onClick={() => reabrir(p.id)}
-                          disabled={ocupado}
+                          aria-busy={ocupado} disabled={ocupado}
                           title="Desfaz o fechamento e devolve os cupons para em aberto"
                         >
                           reabrir

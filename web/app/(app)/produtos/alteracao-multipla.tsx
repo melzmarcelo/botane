@@ -130,7 +130,7 @@ export default function AlteracaoMultipla({
             <button
               type="button"
               className="btn btn-primario"
-              disabled={ocupado || !previa || !previa.mudam.length}
+              aria-busy={ocupado} disabled={ocupado || !previa || !previa.mudam.length}
               onClick={() => void aplicar()}
             >
               {ocupado

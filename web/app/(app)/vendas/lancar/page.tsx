@@ -14,6 +14,8 @@ import { CANAIS, lerPlanilha } from "../tipos";
 import Voltar from "@/components/voltar";
 
 import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
+import ExplicaTela from "@/components/explica-tela";
+
 /**
  * Lançar venda — à mão ou colando a planilha.
  *
@@ -267,11 +269,11 @@ export default function PaginaLancarVenda() {
           vendas
         </Voltar>
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">Lançar venda</h1>
-        <p className="mt-2 max-w-[70ch] prosa text-suave">
+        <ExplicaTela>
           À mão, para o acerto pontual; ou colando o fechamento do PDV. O custo da ficha é
           congelado agora — e o que controla estoque <b>baixa da prateleira</b> no mesmo
           lançamento.
-        </p>
+        </ExplicaTela>
       </header>
 
       <div className="flex gap-2">
@@ -551,7 +553,7 @@ export default function PaginaLancarVenda() {
               <button
                 className="btn btn-primario"
                 type="submit"
-                disabled={ocupado || !prontos.length || faltaCiclo}
+                aria-busy={ocupado} disabled={ocupado || !prontos.length || faltaCiclo}
               >
                 {ocupado ? "Lançando…" : `Lançar ${prontos.length || ""} item(ns)`}
               </button>
@@ -632,7 +634,7 @@ export default function PaginaLancarVenda() {
               <button
                 className="btn btn-primario"
                 type="submit"
-                disabled={ocupado || !previa.linhas.length || faltaCiclo}
+                aria-busy={ocupado} disabled={ocupado || !previa.linhas.length || faltaCiclo}
               >
                 {ocupado ? "Importando…" : "Importar"}
               </button>

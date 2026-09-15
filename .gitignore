@@ -32,7 +32,9 @@ web/scripts/_saida-navegador.txt
 # Perfil do Chrome do verificar.mjs — volume, nao codigo. Fica no D: de
 # proposito: no TEMP do C: o Chrome falha com erro de PROTOCOLO, nao com
 # "disco cheio", e parece instabilidade do teste.
-web/scripts/_chrome-perfil/
+# ⚠️ Com asterisco: as sondas avulsas criam perfis irmãos (`_chrome-perfil3`),
+# e um deles quase entrou num commit com 300 arquivos de dentro do Chrome.
+web/scripts/_chrome-perfil*/
 web/tsconfig.tsbuildinfo
 
 # Dump da base local antes de uma limpeza — volume, nao codigo, e fica no D:

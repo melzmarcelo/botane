@@ -13,6 +13,8 @@ import { fonteProdutos, ItemBusca } from "@/lib/busca-cadastro";
 
 import { custo, qtd, textoParaNumero } from "@/lib/numeros";
 import CustoGeral from "./custo-geral";
+import ExplicaTela from "@/components/explica-tela";
+
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
  *
@@ -477,11 +479,11 @@ export default function PaginaAjustes() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Ajustes de estoque
         </h1>
-        <p className="mt-1 max-w-[68ch] prosa text-suave">
+        <ExplicaTela>
           O lançamento feito à mão, para o que não nasce de um documento. Nota de entrada,
           produção, contagem e venda têm caminho próprio — e nada aqui é apagado: correção
           entra como estorno.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -700,7 +702,7 @@ export default function PaginaAjustes() {
               />
             </Campo>
             <div className="flex items-end">
-              <button className="btn btn-primario" type="submit" disabled={salvando}>
+              <button className="btn btn-primario" type="submit" aria-busy={salvando} disabled={salvando}>
                 {salvando ? "Lançando…" : `Lançar ${atual.nome.toLowerCase()}`}
               </button>
             </div>

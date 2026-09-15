@@ -12,6 +12,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/
 import { qtd } from "@/lib/numeros";
 import { CORES, dataBr, Nota } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A lista das notas de entrada — só a lista.
@@ -225,12 +226,12 @@ export default function PaginaCompras() {
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
             Notas de entrada
           </h1>
-          <p className="mt-1 max-w-[66ch] prosa text-suave">
+          <ExplicaTela>
             A nota entra por onde for mais fácil — o XML que o fornecedor mandou, a digitação do
             cupom do mercado ou o Omie — e vira estoque avaliado do mesmo jeito. O que decide o
             custo não é o valor unitário da nota: é ele menos desconto, mais frete rateado,
             dividido pelo que realmente entra na prateleira.
-          </p>
+          </ExplicaTela>
         </div>
         {pode("compras.notas") && (
           <div className="flex flex-wrap items-center gap-2">
@@ -245,7 +246,7 @@ export default function PaginaCompras() {
             <button
               className="btn btn-primario"
               onClick={() => entradaXml.current?.click()}
-              disabled={ocupado}
+              aria-busy={ocupado} disabled={ocupado}
             >
               {ocupado ? "Lendo…" : "Importar XML"}
             </button>
@@ -253,7 +254,7 @@ export default function PaginaCompras() {
               Digitar nota
             </Link>
             {pode("integracao.omie") && (
-              <button className="btn btn-secundario" onClick={sincronizar} disabled={ocupado}>
+              <button className="btn btn-secundario" onClick={sincronizar} aria-busy={ocupado} disabled={ocupado}>
                 Buscar no Omie
               </button>
             )}
@@ -270,7 +271,7 @@ export default function PaginaCompras() {
               <button
                 className="btn btn-secundario"
                 onClick={reconciliar}
-                disabled={ocupado}
+                aria-busy={ocupado} disabled={ocupado}
                 title="Procura de novo o produto dos itens pendentes"
               >
                 Reconciliar {aPendentes} pendente(s)
@@ -280,7 +281,7 @@ export default function PaginaCompras() {
               <button
                 className="btn btn-secundario"
                 onClick={vincularFornecedores}
-                disabled={ocupado}
+                aria-busy={ocupado} disabled={ocupado}
                 title="Amarra produto e fornecedor pelo que as notas já mostraram"
               >
                 Vincular fornecedores
@@ -413,7 +414,7 @@ export default function PaginaCompras() {
               </button>
               <button
                 className="btn btn-primario"
-                disabled={ocupado}
+                aria-busy={ocupado} disabled={ocupado}
                 onClick={async () => {
                   setOcupado(true);
                   try {

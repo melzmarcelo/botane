@@ -8,6 +8,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { Vinculo, lojasDosVinculos } from "./formulario";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * A lista de quem tem acesso — só a lista.
@@ -109,10 +110,10 @@ export default function PaginaUsuarios() {
         <div>
           <p className="rotulo">Administração</p>
           <h1 className="mt-1 text-[30px] font-bold tracking-tight">Usuários</h1>
-          <p className="mt-1 max-w-[62ch] prosa text-suave">
+          <ExplicaTela>
             Cada pessoa da casa com o seu login. O papel decide o que ela vê — e quem confere é
             o servidor, não a tela.
-          </p>
+          </ExplicaTela>
         </div>
         <Link href="/usuarios/novo" className="btn btn-primario">
           Novo usuário

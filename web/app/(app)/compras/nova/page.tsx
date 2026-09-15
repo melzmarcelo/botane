@@ -9,6 +9,7 @@ import { Local, ProdutoResumo } from "@/lib/cadastros";
 import { Aviso, Carregando } from "@/components/ui";
 import NotaManual from "../nota-manual";
 import Voltar from "@/components/voltar";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * Digitar uma nota de entrada — a compra que não tem XML nenhum.
@@ -55,10 +56,10 @@ export default function PaginaNotaNova() {
         <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
           Digitar nota de entrada
         </h1>
-        <p className="mt-2 max-w-[70ch] prosa text-suave">
+        <ExplicaTela>
           Para a compra que não tem XML: mercado, feira, açougue. Depois de gravar, a nota abre
           para conferência — ela só vira estoque quando for lançada.
-        </p>
+        </ExplicaTela>
       </header>
 
       {!pronto ? (

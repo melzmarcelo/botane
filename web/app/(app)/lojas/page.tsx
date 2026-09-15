@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * As lojas da casa — só a lista.
@@ -50,10 +51,10 @@ export default function PaginaLojas() {
         <div className="min-w-0">
           <p className="rotulo">Administração</p>
           <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Lojas</h1>
-          <p className="mt-1 max-w-[68ch] prosa text-suave">
+          <ExplicaTela>
             Cada loja tem CNPJ, endereço, estoque e integrações próprios. Todo movimento nasce
             carimbado com ela — razão, nota, venda, inventário e fechamento.
-          </p>
+          </ExplicaTela>
         </div>
         {podeEditar && (
           <Link href="/lojas/nova" className="btn btn-primario">

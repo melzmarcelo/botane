@@ -305,7 +305,7 @@ export function Paginacao({
 
         <div className="flex items-center gap-1.5">
           <button
-            className="btn btn-secundario px-2.5 py-1"
+            className="btn btn-secundario btn-pequeno"
             onClick={() => setPagina(pagina - 1)}
             disabled={pagina === 0}
             aria-label="Página anterior"
@@ -316,7 +316,7 @@ export function Paginacao({
             {pagina + 1} de {paginas}
           </span>
           <button
-            className="btn btn-secundario px-2.5 py-1"
+            className="btn btn-secundario btn-pequeno"
             onClick={() => setPagina(pagina + 1)}
             disabled={pagina + 1 >= paginas}
             aria-label="Próxima página"

@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 
 import { pct } from "@/lib/numeros";
+import ExplicaTela from "@/components/explica-tela";
+
 /**
  * As lojas lado a lado — o painel de quem responde pelas duas.
  *
@@ -79,10 +81,10 @@ export default function PaginaRede() {
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Visão da rede
         </h1>
-        <p className="mt-1 max-w-[68ch] prosa text-suave">
+        <ExplicaTela>
           As lojas lado a lado, no período corrente de cada uma. Os números são os mesmos do
           painel de cada loja — esta tela não recalcula nada por conta própria.
-        </p>
+        </ExplicaTela>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}

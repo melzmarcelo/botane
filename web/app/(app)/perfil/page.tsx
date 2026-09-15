@@ -7,6 +7,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Campo, Cartao, Etiqueta } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
+import ExplicaTela from "@/components/explica-tela";
 
 /**
  * O próprio cadastro de quem entrou.
@@ -51,10 +52,10 @@ export default function PaginaPerfil() {
       <header>
         <p className="rotulo">Sua conta</p>
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Perfil</h1>
-        <p className="mt-1 text-suave">
+        <ExplicaTela>
           Seus dados de cadastro. Para trocar a senha, use{" "}
           <Link href="/trocar-senha">Alterar senha</Link>.
-        </p>
+        </ExplicaTela>
       </header>
 
       <Cartao>
@@ -106,7 +107,7 @@ export default function PaginaPerfil() {
           </div>
 
           <div className="flex justify-end">
-            <button className="btn btn-primario" disabled={salvando}>
+            <button className="btn btn-primario" aria-busy={salvando} disabled={salvando}>
               {salvando ? "Salvando…" : "Salvar"}
             </button>
           </div>
