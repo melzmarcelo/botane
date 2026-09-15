@@ -24,6 +24,32 @@
   ⚠️ **CMC zero é PULADO.** Zero não é um custo: é o Omie dizendo que não sabe, e gravá-lo faria
   a ficha calcular com um número inventado — pior que calcular sem, porque o aviso de
   "sem_custo" some.
+  🔑 **O CMC vem na unidade de LÁ, e é CONVERTIDO antes de gravar** (migração 071, 15/09/2026,
+  relatado pelo dono: *"o custo também ficou estranho"*). O `ListarPosEstoque` manda o número e
+  **não manda a unidade**. Enquanto a unidade de lá e a daqui coincidem — o caso de quem nasceu
+  da importação e ficou como veio — não há o que fazer, e era essa a suposição calada da versão
+  anterior. Basta alguém corrigir a unidade aqui para o CMC passar a ser gravado como se fosse
+  por quilo: a **MANTEIGA SEM SAL ficou a R$ 315,00/KG**, que é o preço do bloco de 5 kg — cinco
+  vezes o custo real, alimentando toda ficha que a usa, o CMV teórico e a margem, sem nada
+  denunciando.
+  A unidade do Omie passou a ser guardada em **`produtos.um_omie`** (escrita pelo importador de
+  catálogo, nos dois caminhos — criação e produto que já existia), e a conversão é a **mesma da
+  nota** (`custos.converter_para_estoque`): embalagem do produto primeiro, grandeza depois. E é
+  uma **divisão** — R$ 315,00 o pacote ÷ 5 kg no pacote = R$ 63,00 o quilo.
+  ⚠️ **Sem caminho de conversão, a linha é RECUSADA** e o motivo vai na resposta e na tela
+  (`sem_conversao`). Melhor um custo que falta do que um que mente: custo errado não se anuncia,
+  ele só sai na margem meses depois. A fila dos recusados fica no MESMO cartão da prévia — dizer
+  só "1.900 aplicados de 2.198 conferidos" cala justamente o que dá para consertar.
+  ⚠️ **`um_omie` nasce NULA e nula quer dizer "não sei"** — todo cadastro anterior à migração.
+  Preenchê-la com `um_estoque` seria afirmar que ninguém nunca mexeu na unidade, que é exatamente
+  a suposição que criou o defeito. Para esses, a saída é a AUDITORIA: `_trocaram_a_unidade` lista
+  quem já teve `um_estoque` alterado (pela ação `troca_de_unidade` ou por um `atualizar` em que o
+  antes e o depois diferem). Quem está nessa lista e não tem `um_omie` fica de fora da carga, com
+  a frase mandando reimportar o catálogo; quem não está segue como sempre seguiu.
+  ⚠️ **A prévia mostra as DUAS colunas** — o CMC cru com a unidade de lá e o custo convertido com
+  a daqui. A diferença entre elas é a única coisa que denuncia uma embalagem errada antes de o
+  número virar margem.
+
   ⚠️ **`custo_referencia_origem` existe para daqui a seis meses**: sem ela ninguém sabe se
   aquele número foi importado ou digitado, e é essa diferença que decide se ele pode ser
   sobrescrito sem perguntar.

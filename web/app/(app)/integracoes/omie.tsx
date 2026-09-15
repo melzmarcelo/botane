@@ -90,9 +90,27 @@ type CustosIniciais = {
     id_produto: number;
     codigo: string;
     produto: string;
+    /** O CMC cru, na unidade em que o Omie cadastrou o produto. */
     custo_omie: number;
+    /** O que vai ser gravado, já por unidade de estoque daqui. */
+    custo: number;
+    um_omie: string | null;
+    um_estoque: string | null;
+    /** "mesma", "embalagem" ou "grandeza" — de onde saiu a conversão. */
+    conversao: string;
     ja_era_referencia: boolean;
   }[];
+  /** O Omie sabia o custo e esta casa recusou, por não saber em que unidade ele está. */
+  sem_conversao: {
+    id_produto: number;
+    codigo: string;
+    produto: string;
+    custo_omie: number;
+    um_omie: string | null;
+    um_estoque: string | null;
+    motivo: string;
+  }[];
+  nao_convertidos: number;
   produtos: number;
   conferidos: number;
   sem_cadastro_aqui: number;
@@ -568,6 +586,7 @@ export default function Omie() {
                       <th>Código</th>
                       <th>Produto</th>
                       <th className="num">Custo no Omie</th>
+                      <th className="num">Custo aqui</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -585,7 +604,23 @@ export default function Omie() {
                             </span>
                           )}
                         </td>
-                        <td className="num">{reais(c.custo_omie)}</td>
+                        <td className="num">
+                          {reais(c.custo_omie)}
+                          {c.um_omie && <span className="text-suave"> /{c.um_omie}</span>}
+                        </td>
+                        {/* 🔑 As duas colunas existem porque a DIFERENÇA entre
+                            elas é a única coisa que denuncia uma embalagem
+                            errada antes de o número virar custo. Iguais, a
+                            unidade é a mesma dos dois lados. */}
+                        <td className="num">
+                          {reais(c.custo)}
+                          {c.um_estoque && <span className="text-suave"> /{c.um_estoque}</span>}
+                          {c.conversao !== "mesma" && (
+                            <span className="ml-2">
+                              <Etiqueta>por {c.conversao}</Etiqueta>
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -604,6 +639,45 @@ export default function Omie() {
                 </div>
               )}
             </>
+          )}
+          {/* ⚠️ **A fila dos recusados fica NESTE cartão**, não escondida atrás
+              de um link: o Omie sabe o custo destes produtos e esta casa não
+              consegue usá-lo porque falta uma linha de cadastro. Dizer só
+              "1.900 aplicados" de 2.198 conferidos cala justamente o que dá
+              para consertar. */}
+          {!!custos.sem_conversao.length && (
+            <div className="mt-5">
+              <Aviso tipo="erro">
+                {custos.nao_convertidos} produto(s) têm custo no Omie mas em unidade que não dá
+                para converter para a daqui. Eles ficaram de fora — gravar o número cru faria o
+                preço do pacote valer como preço do quilo.
+              </Aviso>
+              <div className="mt-3 overflow-x-auto">
+                <table className="tabela" id="custos-sem-conversao">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th className="num">Custo no Omie</th>
+                      <th>Por quê</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {custos.sem_conversao.slice(0, 200).map((c) => (
+                      <tr key={c.id_produto}>
+                        <td className="mono">{c.codigo}</td>
+                        <td>{c.produto}</td>
+                        <td className="num">
+                          {reais(c.custo_omie)}
+                          {c.um_omie && <span className="text-suave"> /{c.um_omie}</span>}
+                        </td>
+                        <td className="text-[12.5px]">{c.motivo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </Cartao>
       )}

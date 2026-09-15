@@ -606,6 +606,104 @@ checar("e a prévia continua respondendo depois de aplicada",
        st == 200 and previa2.get("aplicado") is False, (st, previa2.get("aplicado")))
 
 
+print()
+print("6d. o CMC do Omie vem na unidade DE LA, e e convertido antes de gravar")
+# 🔑 **O `ListarPosEstoque` manda o numero e nao manda a unidade** (15/09/2026,
+# relatado pelo dono: *"o custo tambem ficou estranho"*). Enquanto a unidade de
+# la e a daqui coincidem nao ha o que fazer — e era essa a suposicao calada da
+# versao anterior. Quando divergem, o numero cru multiplica o custo pelo tamanho
+# da embalagem: a MANTEIGA SEM SAL ficou a R$ 315,00/KG, que e o preco do bloco
+# de 5 kg, alimentando toda ficha que a usa.
+def _previa_do_conf():
+    _st, _p = chamar("GET", "/omie/custos-iniciais/previa", token=token)
+    return (next((l for l in (_p.get("linhas") or [])
+                  if l["id_produto"] == produto_conf), None),
+            next((l for l in (_p.get("sem_conversao") or [])
+                  if l["id_produto"] == produto_conf), None))
+
+
+def _cadastro(**campos):
+    """Mexe no cadastro pelo banco: `um_omie` nao tem tela, e e de proposito —
+    ela nao e escolha da casa, e o que o catalogo do Omie disse."""
+    sets = ", ".join(f"{c} = %s" for c in campos)
+    with _cur_custo() as _c:
+        _c.execute(f"UPDATE produtos SET {sets} WHERE id = %s",
+                   [*campos.values(), produto_conf])
+
+
+_cadastro(um_omie="KG", um_compra=None, fator_compra=1)
+linha, recusada = _previa_do_conf()
+checar("unidade igual dos dois lados: o CMC passa inteiro",
+       linha is not None and abs(linha["custo"] - _alvo["nCMC"]) < 0.0001, (linha, recusada))
+checar("e a tela sabe dizer que nao houve conversao",
+       bool(linha) and linha["conversao"] == "mesma", linha)
+
+# O Omie custeia o PACOTE; aqui o estoque e em quilo. 315,00 o pacote de 5 kg
+# sao 63,00 o quilo — e e uma DIVISAO, nao uma multiplicacao.
+_cadastro(um_omie="PCT", um_compra="PCT", fator_compra=5)
+linha, recusada = _previa_do_conf()
+checar("o CMC do pacote vira custo por quilo",
+       linha is not None and abs(linha["custo"] - _alvo["nCMC"] / 5) < 0.0001,
+       (linha, recusada))
+checar("pela embalagem do produto, e a tela diz por onde foi",
+       bool(linha) and linha["conversao"] == "embalagem", linha)
+# ⚠️ **O numero CRU continua a vista.** A diferenca entre as duas colunas e a
+# unica coisa que denuncia uma embalagem errada antes de o custo virar margem.
+checar("e o numero cru continua a vista, para se comparar",
+       bool(linha) and abs(linha["custo_omie"] - _alvo["nCMC"]) < 0.0001, linha)
+
+# ⚠️ **Sem caminho de conversao, RECUSA.** Custo errado nao se anuncia: ele so
+# sai na margem meses depois. Melhor um custo que falta do que um que mente.
+_cadastro(um_omie="UN", um_compra=None, fator_compra=1)
+linha, recusada = _previa_do_conf()
+checar("sem saber quantos KG cabem em 1 UN, a linha e recusada",
+       linha is None and recusada is not None, (linha, recusada))
+checar("e o motivo nomeia as duas unidades",
+       bool(recusada) and "UN" in recusada["motivo"] and "KG" in recusada["motivo"], recusada)
+
+with _cur_custo() as _c:
+    _c.execute("UPDATE produtos SET custo_referencia = 1.23 WHERE id = %s", (produto_conf,))
+chamar("POST", "/omie/custos-iniciais", token=token)
+with _cur_custo() as _c:
+    _c.execute("SELECT custo_referencia FROM produtos WHERE id = %s", (produto_conf,))
+    _ficou = float(_c.fetchone()["custo_referencia"])
+checar("e aplicar NAO grava o numero cru por cima", abs(_ficou - 1.23) < 0.0001, _ficou)
+
+# 🔑 **`um_omie` nula quer dizer "nao sei"** — todo cadastro anterior a migracao
+# 071. A saida barata seria supor que a unidade de la e a daqui, que e verdade
+# para quem nasceu da importacao e nunca foi tocado. So que e exatamente a
+# suposicao que criou o defeito. A auditoria ja guarda quem teve a unidade
+# trocada, e esses ficam de fora ate o catalogo ser reimportado.
+_cadastro(um_omie=None)
+linha, recusada = _previa_do_conf()
+checar("unidade do Omie desconhecida e nunca trocada aqui: o custo passa",
+       linha is not None, (linha, recusada))
+with _cur_custo() as _c:
+    _c.execute("""INSERT INTO auditoria (id_usuario, entidade, id_entidade, acao, antes, depois)
+                  VALUES (NULL, 'produto', %s, 'troca_de_unidade', '{}', '{}')
+                  RETURNING id""", (str(produto_conf),))
+    _aud = _c.fetchone()["id"]
+linha, recusada = _previa_do_conf()
+checar("mas com a unidade daqui ja trocada, recusa",
+       linha is None and recusada is not None, (linha, recusada))
+checar("e manda reimportar o catalogo",
+       bool(recusada) and "catálogo" in recusada["motivo"], recusada)
+
+# ⚠️ **A suite apaga o que ELA criou.** A linha de auditoria acima e cenario, e
+# deixa-la faria toda rodada seguinte recusar este produto — derrubando as
+# checagens de 6c, que valem para `um_omie` nula. Mesma excecao documentada da
+# `smoke_reprocessar`: teste que deixa rastro derruba o proximo.
+with _cur_custo() as _c:
+    _c.execute("DELETE FROM auditoria WHERE id = %s", (_aud,))
+_cadastro(um_omie=None, um_compra=None, fator_compra=1)
+chamar("POST", "/omie/custos-iniciais", token=token)
+with _cur_custo() as _c:
+    _c.execute("SELECT custo_referencia FROM produtos WHERE id = %s", (produto_conf,))
+    _voltou = float(_c.fetchone()["custo_referencia"])
+checar("e o cadastro volta como estava, com o CMC de novo",
+       abs(_voltou - _alvo["nCMC"]) < 0.0001, _voltou)
+
+
 print("6b. o catálogo destrava as notas: nome limpo, de-para pelo id do Omie e a trava da unidade")
 # O rodapé de tributos aproximados que o DANFE manda imprimir vem grudado na
 # descrição. Não é nome de nada — e um nome desses não cabe em tela nenhuma.
@@ -627,6 +725,16 @@ if detalhe.get("um_estoque"):
     st, detalhe = chamar("GET", f"/produtos/{champ['id']}", token=token)
 checar("o rascunho está sem unidade, como o catálogo o deixou",
        not detalhe.get("um_estoque"), detalhe.get("um_estoque"))
+# 🔑 **Mas a unidade do OMIE ficou guardada** (migração 071). `um_estoque` só
+# aceita sigla que existe na casa — "BJ" de bandeja não existe, e por isso o
+# rascunho nasceu sem unidade. Já `um_omie` e uma anotacao sobre o outro lado:
+# e nela que o CMC de la esta, e sem ela o custo entra sem ninguem saber de que
+# unidade ele e.
+with _cur_custo() as _c:
+    _c.execute("SELECT um_omie FROM produtos WHERE id = %s", (champ["id"],))
+    _um_omie = _c.fetchone()["um_omie"]
+checar("mas a unidade do Omie ficou guardada, mesmo nao existindo aqui",
+       _um_omie == "BJ", _um_omie)
 
 # A nota entrou ANTES do catálogo — a ordem de sempre, porque é a nota que
 # revela o que a casa compra. Sem reconciliar, o item ficaria pendente para

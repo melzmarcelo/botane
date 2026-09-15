@@ -1318,27 +1318,44 @@ def _categoria_da_familia(cur, familia: str | None, cache: dict[str, int]) -> in
     return cache[chave]
 
 
-def _completar_produto(cur, id_produto: int, p: dict, id_categoria: int | None) -> bool:
+def _completar_produto(cur, id_produto: int, p: dict, id_categoria: int | None,
+                       um_omie: str | None = None) -> bool:
     """Preenche no produto o que está em branco. Devolve se mexeu em algo.
 
     O `coalesce(coluna, %s)` faz a regra no próprio UPDATE: coluna preenchida
     fica como está, coluna nula recebe o valor de fora. Conferir antes em
     Python custaria um SELECT por produto — são milhares.
+
+    🔑 **`um_omie` é a exceção: ela SOBRESCREVE.** As outras colunas são desta
+    casa e o Omie só as completa; `um_omie` é um fato sobre o outro lado — em
+    que unidade o produto está cadastrado LÁ. Se lá trocaram de UN para KG, o
+    CMC que vem junto passou a ser por quilo, e guardar a unidade antiga faria
+    o custo entrar dividido por cinco. Por isso entra como atribuição, com a
+    condição "está diferente" — que também mantém o UPDATE fora do caminho
+    quando nada mudou.
     """
     campos = {c: p.get(c) for c in _COMPLETAVEIS if p.get(c) is not None}
     if id_categoria:
         campos["id_categoria"] = id_categoria
     if p.get("descricao_detalhada"):
         campos["observacao"] = p["descricao_detalhada"]
-    if not campos:
+    if not campos and not um_omie:
         return False
 
-    sets = ", ".join(f"{c} = coalesce({c}, %s)" for c in campos)
-    condicoes = " OR ".join(f"{c} IS NULL" for c in campos)
+    sets = [f"{c} = coalesce({c}, %s)" for c in campos]
+    condicoes = [f"{c} IS NULL" for c in campos]
+    # ⚠️ Os valores do SET vêm antes do `id` e os da condição depois — a ordem é
+    # a da frase, não a dos campos.
+    do_set, da_condicao = [*campos.values()], []
+    if um_omie:
+        sets.append("um_omie = %s")
+        condicoes.append("um_omie IS DISTINCT FROM %s")
+        do_set.append(um_omie)
+        da_condicao.append(um_omie)
     cur.execute(
-        f"UPDATE produtos SET {sets}, sincronizado_em = now() "
-        f"WHERE id = %s AND ({condicoes})",
-        [*campos.values(), id_produto],
+        f"UPDATE produtos SET {', '.join(sets)}, sincronizado_em = now() "
+        f"WHERE id = %s AND ({' OR '.join(condicoes)})",
+        [*do_set, id_produto, *da_condicao],
     )
     return cur.rowcount > 0
 
@@ -1382,6 +1399,12 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                 # produtos parados por um. Sem unidade conhecida, o produto
                 # nasce sem ela: é rascunho, e rascunho existe justamente para
                 # lembrar que alguém precisa conferir unidade e fator.
+                # 🔑 **A unidade do Omie fica guardada MESMO quando não serve
+                # aqui.** `um_estoque` só aceita sigla que existe na casa; já
+                # `um_omie` é uma anotação sobre o outro lado, e o "M" de metro
+                # que não vira unidade daqui continua sendo a unidade em que o
+                # CMC de lá está. Por isso ela sai do bruto, antes da checagem.
+                um_omie = (p["um"] or "").strip().upper()[:6] or None
                 if p["um"]:
                     cur.execute("SELECT 1 FROM unidades_medida WHERE upper(sigla) = upper(%s)",
                                 (p["um"],))
@@ -1415,20 +1438,22 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
                     # ficavam vazios aqui enquanto estavam preenchidos lá:
                     # quem foi criado antes de o campo ser mapeado, ou criado a
                     # partir do item da nota, nunca mais era completado.
-                    if _completar_produto(cur, existente["id"], p, id_categoria):
+                    if _completar_produto(cur, existente["id"], p, id_categoria, um_omie):
                         completados += 1
                     atualizados += 1
                     continue
                 cur.execute(
-                    """INSERT INTO produtos (codigo, nome, tipo, um_estoque, ncm, codigo_barras,
+                    """INSERT INTO produtos (codigo, nome, tipo, um_estoque, um_omie, ncm,
+                                             codigo_barras,
                                              codigo_omie, marca, cest, peso_liquido, peso_bruto,
                                              estoque_minimo, id_categoria, observacao,
                                              sincronizado_em, origem, status, controla_estoque,
                                              criado_por)
-                       VALUES (%s, %s, 'INSUMO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       VALUES (%s, %s, 'INSUMO', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                                now(), 'OMIE', 'RASCUNHO', true, %s)
                        ON CONFLICT DO NOTHING RETURNING id""",
-                    (p["codigo"] or f"OMIE-{p['codigo_omie']}", p["nome"], p["um"], p["ncm"],
+                    (p["codigo"] or f"OMIE-{p['codigo_omie']}", p["nome"], p["um"], um_omie,
+                     p["ncm"],
                      p["codigo_barras"], p["codigo_omie"], p["marca"], p["cest"],
                      p["peso_liquido"], p["peso_bruto"], p["estoque_minimo"], id_categoria,
                      p["descricao_detalhada"], id_usuario),
@@ -1631,6 +1656,74 @@ def _custear_vendas_sem_custo(cur) -> int:
     return feitos
 
 
+def _trocaram_a_unidade(cur) -> set[str]:
+    """Os produtos cuja unidade de estoque JÁ foi mexida aqui dentro.
+
+    🔑 **É a prova de que a suposição não vale.** Quando `um_omie` é nula (todo
+    cadastro anterior à migração 071), a saída barata seria supor que a unidade
+    de lá é a daqui — o que é verdade para quem nasceu da importação e nunca foi
+    tocado. Mas é exatamente a suposição que criou o defeito: a MANTEIGA nasceu
+    em UN, alguém a passou para KG, e o CMC do bloco de 5 kg entrou como se
+    fosse por quilo.
+
+    A auditoria já guarda o evento — tanto a `troca_de_unidade` quanto o
+    `atualizar` do produto gravam `um_estoque` no antes e no depois. Quem está
+    nesta lista e não tem `um_omie` fica de fora da carga, com o motivo à
+    vista; uma reimportação do catálogo preenche a unidade e destrava.
+    """
+    # ⚠️ Devolve TEXTO, sem `::int`. `id_entidade` é varchar e serve a todas as
+    # entidades; um cast dentro do WHERE pode ser avaliado antes do filtro que o
+    # protege, e aí a consulta estoura por causa de uma linha de outra entidade.
+    cur.execute(
+        """SELECT DISTINCT id_entidade
+             FROM auditoria
+            WHERE entidade = 'produto'
+              AND (acao = 'troca_de_unidade'
+                   OR (antes ? 'um_estoque' AND depois ? 'um_estoque'
+                       AND antes->>'um_estoque' IS DISTINCT FROM depois->>'um_estoque'))"""
+    )
+    return {r["id_entidade"] for r in cur.fetchall()}
+
+
+def _cmc_na_unidade_daqui(cur, id_produto: int, p: dict, cmc: Decimal, ums: dict,
+                          trocaram: set[str]) -> tuple[Decimal | None, str]:
+    """O CMC do Omie, convertido para a unidade em que ESTA casa estoca.
+
+    🔑 **O `ListarPosEstoque` manda o número e não manda a unidade** (15/09/2026,
+    relatado pelo dono: *"o custo também ficou estranho"*). Ele é por unidade de
+    lá; o custo daqui é por `um_estoque`. Enquanto as duas coincidem — o caso de
+    quem nasceu da importação e ficou como veio — não há o que fazer. Quando
+    divergem, gravar o número cru multiplica o custo pelo tamanho da embalagem:
+    a MANTEIGA SEM SAL ficou a R$ 315,00/KG, que é o preço do bloco de 5 kg.
+
+    A conversão é a MESMA da nota (`custos.converter_para_estoque`): embalagem
+    do produto primeiro, grandeza depois. E é uma DIVISÃO — quantas unidades de
+    estoque cabem em uma de lá: R$ 315,00 o pacote ÷ 5 kg no pacote = R$ 63,00
+    o quilo.
+
+    ⚠️ **Sem caminho de conversão, devolve nada.** Recusar a linha e dizer por
+    quê é melhor que gravar um número cuja unidade ninguém sabe: custo errado
+    não se anuncia, ele só sai na margem meses depois.
+    """
+    um_omie = (p.get("um_omie") or "").strip().upper()
+    um_aqui = (p.get("um_estoque") or "").strip().upper()
+    if not um_aqui:
+        return None, "o produto ainda não tem unidade de estoque aqui"
+    if not um_omie:
+        if str(id_produto) in trocaram:
+            return None, ("a unidade daqui já foi trocada e a do Omie é desconhecida — "
+                          "reimporte o catálogo antes de trazer o custo")
+        return cmc, "mesma"
+    if um_omie == um_aqui:
+        return cmc, "mesma"
+    cabem, como = custos.converter_para_estoque(cur, Decimal(1), id_produto, um_omie,
+                                                um_aqui, ums)
+    if not cabem or cabem <= 0:
+        return None, (f"o Omie custeia em {um_omie} e aqui o estoque é em {um_aqui} — "
+                      f"cadastre quantos {um_aqui} cabem em 1 {um_omie}")
+    return (cmc / cabem).quantize(CASAS_CUSTO), como
+
+
 def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                     aplicar: bool = False) -> dict:
     """Traz o custo médio do Omie para os produtos que aqui não têm custo nenhum.
@@ -1657,6 +1750,13 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
     sabe, e gravá-lo faria a ficha calcular com um número inventado — pior que
     calcular sem, porque o "sem_custo" some do aviso.
 
+    ⚠️ **O CMC vem na unidade de LÁ, e é convertido para a daqui** antes de
+    gravar (`_cmc_na_unidade_daqui`). Sem isso, um produto que esta casa passou
+    a estocar em quilo recebia o preço do pacote inteiro — foi o que fez a
+    MANTEIGA SEM SAL valer R$ 315,00/KG. Quando a conversão não existe, a linha
+    é RECUSADA e o motivo vai na resposta: melhor um custo que falta do que um
+    que mente.
+
     ⚠️ **O de-para é o mesmo da nota** (`vinculo.por_codigo_omie`): a coluna e
     depois os apelidos. Um cadastro que absorveu o duplicado responde pelos
     códigos dos dois, e olhar só a coluna deixaria o principal de fora.
@@ -1665,11 +1765,17 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
     2.323 produtos é grande demais para se descobrir o efeito depois.
     """
     achados: list[dict] = []
+    # As linhas que o Omie sabia custear e esta casa recusou, com o porquê de
+    # cada uma. Vão na resposta: um "conferidos 2.198, aplicados 1.900" sem
+    # dizer o que houve com as outras 298 é um silêncio pior que um erro.
+    sem_conversao: list[dict] = []
     vistos = 0
     sem_cadastro = 0
     ja_tem_custo = 0
     sem_cmc = 0
     truncou = {"foi": False}
+    ums = _ums(cur)
+    trocaram = _trocaram_a_unidade(cur)
 
     def marcar(trazidos, total):
         truncou["foi"] = True
@@ -1701,14 +1807,34 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                     ja_tem_custo += 1
                     continue
 
-                cur.execute("SELECT codigo, nome FROM produtos WHERE id = %s", (id_produto,))
+                cur.execute("SELECT codigo, nome, um_estoque, um_omie FROM produtos "
+                            "WHERE id = %s", (id_produto,))
                 p = cur.fetchone()
+                custo, como = _cmc_na_unidade_daqui(cur, id_produto, p, dec(pos["cmc"]),
+                                                    ums, trocaram)
+                if custo is None:
+                    sem_conversao.append({
+                        "id_produto": id_produto, "codigo": p["codigo"],
+                        "produto": p["nome"], "custo_omie": float(pos["cmc"]),
+                        "um_omie": p["um_omie"], "um_estoque": p["um_estoque"],
+                        "motivo": como,
+                    })
+                    continue
                 achados.append({
                     "id_produto": id_produto,
                     "codigo": p["codigo"],
                     "produto": p["nome"],
                     "codigo_omie": pos["codigo_omie"],
                     "custo_omie": float(pos["cmc"]),
+                    # O número que vai ser GRAVADO, já por unidade de estoque
+                    # daqui — e de onde saiu a conta. Quando a unidade é a
+                    # mesma dos dois lados os dois valores coincidem, e é por
+                    # isso que a prévia mostra os dois: a diferença entre eles
+                    # é a única coisa que denuncia uma embalagem errada.
+                    "custo": float(custo),
+                    "um_omie": p["um_omie"],
+                    "um_estoque": p["um_estoque"],
+                    "conversao": como,
                     # Já tinha referência de uma rodada anterior? A linha diz, e
                     # o número novo substitui — referência sobrescreve
                     # referência, nunca custo de verdade.
@@ -1725,7 +1851,7 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                       SET custo_referencia = %s, custo_referencia_em = now(),
                           custo_referencia_origem = 'OMIE'
                     WHERE id = %s""",
-                (a["custo_omie"], a["id_produto"]),
+                (a["custo"], a["id_produto"]),
             )
     if aplicar:
         # ⚠️ Fora do `if achados`: mesmo sem produto novo recebendo referência,
@@ -1734,10 +1860,15 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
         # esse caso para sempre em zero.
         vendas_recalculadas = _custear_vendas_sem_custo(cur)
 
-    achados.sort(key=lambda x: -x["custo_omie"])
+    achados.sort(key=lambda x: -x["custo"])
+    sem_conversao.sort(key=lambda x: -x["custo_omie"])
     return {
         "linhas": achados[:500],
         "produtos": len(achados),
+        # ⚠️ Fica ao lado das linhas aplicadas, não num canto: é a fila de
+        # cadastro que destrava o custo desses produtos.
+        "sem_conversao": sem_conversao[:500],
+        "nao_convertidos": len(sem_conversao),
         # Quantos itens de venda antigos deixaram de contar ZERO no CMV
         # teórico. Sem este número, trazer o custo consertava metade do
         # problema e escondia a outra.
@@ -1756,6 +1887,8 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
             + (f", {ja_tem_custo} já tinham custo" if ja_tem_custo else "")
             + (f", {sem_cadastro} sem cadastro aqui" if sem_cadastro else "")
             + (f", {sem_cmc} sem custo no Omie" if sem_cmc else "")
+            + (f", {len(sem_conversao)} sem conversão de unidade"
+               if sem_conversao else "")
             # 🔑 O número das VENDAS entra na frase: sem ele, "1.971 produtos
             # receberam custo" não diz que 2.121 itens de venda deixaram de
             # contar zero no CMV teórico — que é o efeito que interessa.
