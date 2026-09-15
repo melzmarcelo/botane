@@ -71,6 +71,16 @@ OPERACAO = [
     # relê o cardápio de lá e reconhece o que já está adotado. O que não pode
     # ficar é pendência e envio apontando para produto que não existe mais.
     "pdv_pendencias", "pdv_envios",
+    # 🔑 **Reservas (migrações 068 a 070) entrou aqui em 15/09/2026, e quem
+    # avisou foi a guarda deste script** — ela recusou a limpeza dizendo que
+    # `reservas` aponta para a lista e não estava nela. É a terceira vez que
+    # isso acontece (`ficha_locais` e `inventario_contadores` foram as outras):
+    # **toda tabela nova pendurada na operação precisa passar por aqui no mesmo
+    # dia**, senão a limpeza para de funcionar sem ninguém perceber.
+    # ⚠️ A CONFIGURAÇÃO das reservas NÃO entra: `reserva_config`,
+    # `reserva_horarios` e `reserva_permanencias` são da loja, como `parametros`
+    # — o horário de funcionamento não é dado de operação.
+    "reserva_mesas", "reserva_bloqueios", "reservas",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]
@@ -88,7 +98,10 @@ OPERACAO = [
 # Postgres recusa truncar uma tabela referenciada sem levar quem a referencia.
 # Faz sentido de qualquer forma — vínculo de pessoa com um setor que deixou de
 # existir não é dado, é lixo.
-APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores"]
+# ⚠️ **`mesas` e `saloes` são APOIO, não operação**: são o desenho físico da
+# casa — como os locais de estoque —, e não a reserva de terça às 20h. Quem
+# limpa a operação para testar reserva quer o salão de pé do outro lado.
+APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores", "mesas", "saloes"]
 
 # ---------------------------------------------------------------------------
 # Filiais de teste
