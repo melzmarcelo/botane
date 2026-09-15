@@ -75,6 +75,33 @@ class LocaisDaFichaRequest(BaseModel):
     itens: list[LocalDaFicha] = Field(default_factory=list)
 
 
+class ItemEmMontagem(BaseModel):
+    """Uma linha da receita como ela está NA TELA — ainda sendo digitada.
+
+    ⚠️ **`qtd_bruta` aceita ZERO aqui, e `ItemFicha` não.** Enquanto a pessoa
+    escolhe o insumo e ainda não digitou a quantidade, a linha existe com zero —
+    e recusar isso com 422 apagaria o custo da tela exatamente no meio da
+    digitação, que é quando ele mais serve.
+    """
+    id_insumo: int | None = None
+    id_subficha: int | None = None
+    qtd_bruta: float = Field(default=0, ge=0)
+    qtd_liquida: float | None = Field(default=None, ge=0)
+    um: str | None = Field(default=None, max_length=6)
+    fator_correcao: float = Field(default=1, gt=0)
+    fator_coccao: float = Field(default=1, gt=0)
+    observacao: str | None = None
+    ordem: int = 0
+
+
+class CustoPrevisto(BaseModel):
+    """O que a tela manda para saber quanto a receita está custando agora."""
+    itens: list[ItemEmMontagem] = []
+    rendimento_qtd: float | None = None
+    rendimento_um: str | None = Field(default=None, max_length=6)
+    porcoes: float | None = None
+
+
 class RendimentoSugerido(BaseModel):
     """Os itens de uma receita, para o servidor somar o que ela rende.
 

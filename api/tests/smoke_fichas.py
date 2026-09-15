@@ -481,6 +481,66 @@ for id_ficha in reversed(criados["fichas"]):
     # rodada deixaria mais duas imagens na tabela `arquivos`.
     chamar("DELETE", f"/fichas/{id_ficha}/foto", token=token)
     chamar("DELETE", f"/fichas/{id_ficha}", token=token)
+print("")
+print("A prévia de custo — os números enquanto a receita é montada")
+# 🔑 **Pedido do dono (15/09/2026):** *"na ficha técnica, ao ir preenchendo os
+# dados dos insumos, os valores demonstrados poderiam já ir ajustando na tela"*.
+# Até aqui o custo só mudava depois de salvar: quem montava a receita escrevia
+# no escuro e, se o número saísse estranho, tinha de descobrir qual linha o
+# causou. ⚠️ A conta é a MESMA da ficha gravada (`_custos_das_linhas`) — uma
+# segunda versão dela no navegador divergiria no primeiro ajuste.
+st, prev = chamar("POST", "/fichas/previa-de-custo", {
+    "itens": [{"id_insumo": cafe, "qtd_bruta": 100, "um": "G"}],
+    "porcoes": 2, "rendimento_qtd": 1,
+}, token=token)
+checar("a prévia de custo responde", st == 200, (st, prev))
+um_cafe = float((prev.get("itens") or [{}])[0].get("custo_total") or 0)
+checar("com o custo da linha", um_cafe > 0, prev.get("itens"))
+checar("e o custo por porção é o total dividido pelas porções",
+       abs(float(prev["custo_por_porcao"]) * 2 - float(prev["custo_total"])) < 0.02, prev)
+
+# 🔑 A afirmação central: DOBRAR a quantidade dobra o custo, sem passar por
+# salvar. É isso que a tela passa a mostrar enquanto se digita.
+st, dobro = chamar("POST", "/fichas/previa-de-custo", {
+    "itens": [{"id_insumo": cafe, "qtd_bruta": 200, "um": "G"}],
+    "porcoes": 2, "rendimento_qtd": 1,
+}, token=token)
+checar("dobrar a quantidade dobra o custo",
+       abs(float(dobro["custo_total"]) - 2 * float(prev["custo_total"])) < 0.02,
+       (prev.get("custo_total"), dobro.get("custo_total")))
+
+# ⚠️ **Quantidade ZERO não pode quebrar**: é o estado normal da linha enquanto a
+# pessoa acabou de escolher o insumo e ainda não digitou nada. Um 422 aqui
+# apagaria o custo da tela exatamente no meio da digitação.
+st, zero = chamar("POST", "/fichas/previa-de-custo", {
+    "itens": [{"id_insumo": cafe, "qtd_bruta": 0, "um": "G"}], "porcoes": 1,
+}, token=token)
+checar("linha com quantidade zero responde sem erro", st == 200, (st, zero))
+
+# ⚠️ **Uma linha de resposta para CADA item, na mesma ordem**: a tela casa pelo
+# índice, e devolver um subconjunto poria o custo na linha errada — que é pior
+# do que não mostrar custo nenhum.
+st, tres = chamar("POST", "/fichas/previa-de-custo", {
+    "itens": [{"id_insumo": cafe, "qtd_bruta": 10, "um": "G"},
+              {"id_insumo": sem_preco, "qtd_bruta": 1, "um": "KG"},
+              {"id_insumo": leite, "qtd_bruta": 100, "um": "ML"}],
+    "porcoes": 1,
+}, token=token)
+checar("a resposta traz uma linha por item, na ordem", len(tres.get("itens") or []) == 3,
+       tres.get("itens"))
+checar("e o insumo de cada linha é o que foi mandado",
+       [i["id_insumo"] for i in tres["itens"]] == [cafe, sem_preco, leite],
+       [i["id_insumo"] for i in tres.get("itens", [])])
+checar("com o item sem preço marcado, e contado",
+       tres["itens_sem_custo"] >= 1 and tres["completo"] is False, tres)
+
+# ⚠️ **Não grava nada.** É uma pergunta: a ficha do teste continua com os itens
+# que tinha, e a prévia não deixa rastro.
+st, depois = chamar("GET", f"/fichas/{id_ficha}", token=token)
+checar("a prévia não mexeu na ficha gravada",
+       len(depois.get("itens") or []) > 0, len(depois.get("itens") or []))
+
+
 for id_produto in criados["produtos"]:
     chamar("DELETE", f"/produtos/{id_produto}", token=token)
 for id_forn in criados["fornecedores"]:

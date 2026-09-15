@@ -312,6 +312,92 @@ export default function EditorFicha() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editavel, JSON.stringify(itens), cabecalho.rendimento_um]);
 
+  /**
+   * 🔑 **O custo AO VIVO, enquanto a receita é montada** (15/09/2026, pedido do
+   * dono: *"na ficha técnica, ao ir preenchendo os dados dos insumos, os
+   * valores demonstrados poderiam já ir ajustando na tela"*).
+   *
+   * Até aqui o custo de cada linha e os três totais só mudavam DEPOIS de
+   * salvar: quem montava a receita escrevia no escuro, e um número estranho no
+   * fim não dizia qual linha o causara.
+   *
+   * ⚠️ **A conta vem do SERVIDOR** (`POST /fichas/previa-de-custo`), como a do
+   * rendimento. Ela é a cascata inteira — custo médio, último preço do
+   * fornecedor, custo de referência, conversão de unidade e sub-ficha pelo
+   * rendimento dela — e reescrevê-la aqui criaria a segunda versão da mesma
+   * regra, que divergiria no primeiro ajuste.
+   *
+   * ⚠️ **Casa por ÍNDICE da linha**, e por isso vai uma entrada para cada item
+   * com insumo escolhido, mesmo sem quantidade: mandar só as linhas "prontas"
+   * faria o custo aparecer na linha errada assim que uma delas ficasse de fora.
+   */
+  const [custoAoVivo, setCustoAoVivo] = useState<{
+    itens: Record<number, { custo_total: number | null; origem_custo: string;
+                            aviso: string | null; qtd_estoque: number | null;
+                            um_estoque: string | null }>;
+    custo_total: number | null;
+    custo_por_porcao: number | null;
+    itens_sem_custo: number;
+    completo: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!editavel || !veCusto) return;
+    const posicoes: number[] = [];
+    const corpo = itens.flatMap((i, idx) => {
+      if (!i.id_insumo && !i.id_subficha) return [];
+      posicoes.push(idx);
+      return [{
+        id_insumo: i.id_insumo,
+        id_subficha: i.id_subficha,
+        qtd_bruta: num(i.qtd_bruta) ?? 0,
+        qtd_liquida: num(i.qtd_liquida),
+        um: texto(i.um),
+        fator_coccao: num(i.fator_coccao) ?? 1,
+        ordem: idx,
+      }];
+    });
+    if (!corpo.length) {
+      setCustoAoVivo(null);
+      return;
+    }
+    let valeu = true;
+    // ⚠️ Mesmo debounce do rendimento: quem digita "2", "25", "250" faria três
+    // pedidos e receberia duas respostas fora de ordem.
+    const t = setTimeout(() => {
+      api
+        .post<{ itens: { custo_total: number | null; origem_custo: string;
+                         aviso: string | null; qtd_estoque: number | null;
+                         um_estoque: string | null }[];
+                custo_total: number | null; custo_por_porcao: number | null;
+                itens_sem_custo: number; completo: boolean }>(
+          "/fichas/previa-de-custo",
+          {
+            itens: corpo,
+            rendimento_qtd: num(cabecalho.rendimento_qtd),
+            rendimento_um: texto(cabecalho.rendimento_um),
+            porcoes: num(cabecalho.porcoes),
+          },
+        )
+        .then((r) => {
+          if (!valeu) return;
+          const porLinha: Record<number, (typeof r.itens)[number]> = {};
+          r.itens.forEach((linha, k) => {
+            const onde = posicoes[k];
+            if (onde !== undefined) porLinha[onde] = linha;
+          });
+          setCustoAoVivo({ ...r, itens: porLinha });
+        })
+        .catch(() => valeu && setCustoAoVivo(null));
+    }, 500);
+    return () => {
+      valeu = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editavel, veCusto, JSON.stringify(itens), cabecalho.rendimento_qtd,
+      cabecalho.rendimento_um, cabecalho.porcoes]);
+
   /** Porções e tamanho da porção são o MESMO dado visto de dois lados.
    *
    * 🔑 **Pedido do dono:** *"hoje temos somente a quantidade de porções, mas
@@ -944,13 +1030,19 @@ export default function EditorFicha() {
                     </select>
                   </label>
                   <div className="flex items-end justify-between gap-3 lg:flex-col lg:items-end lg:justify-end">
-                    {veCusto && (
-                      <span className="mono pb-2 text-[14px]">
-                        {item.custo_total !== null && item.custo_total !== undefined
-                          ? custo(Number(item.custo_total))
-                          : "—"}
-                      </span>
-                    )}
+                    {veCusto && (() => {
+                      // ⚠️ O ao vivo GANHA do gravado quando existe — é ele que
+                      // acompanha o que está sendo digitado. Sem ele (ficha
+                      // homologada, ou a resposta ainda a caminho), vale o que
+                      // veio do servidor na carga.
+                      const aoVivo = custoAoVivo?.itens[i];
+                      const valor = aoVivo ? aoVivo.custo_total : item.custo_total;
+                      return (
+                        <span className="mono pb-2 text-[14px]">
+                          {valor !== null && valor !== undefined ? custo(Number(valor)) : "—"}
+                        </span>
+                      );
+                    })()}
                     {editavel && (
                       <button
                         type="button"
@@ -981,13 +1073,22 @@ export default function EditorFicha() {
                       </b>
                     </span>
                   )}
-                  {veCusto && item.origem_custo === "sem_custo" && (
+                  {/* ⚠️ O aviso segue o mesmo dado do custo: com o ao vivo
+                      dizendo "sem preço" e a linha ainda mostrando o valor
+                      antigo, a tela contaria duas histórias. */}
+                  {veCusto && (custoAoVivo?.itens[i]?.origem_custo ?? item.origem_custo)
+                    === "sem_custo" && (
                     <span className="text-alerta">sem preço conhecido</span>
                   )}
-                  {veCusto && item.origem_custo === "subficha_incompleta" && (
+                  {veCusto && (custoAoVivo?.itens[i]?.origem_custo ?? item.origem_custo)
+                    === "subficha_incompleta" && (
                     <span className="text-alerta">a sub-ficha tem item sem preço</span>
                   )}
-                  {item.aviso && <span className="text-erro">{item.aviso}</span>}
+                  {(custoAoVivo?.itens[i]?.aviso ?? item.aviso) && (
+                    <span className="text-erro">
+                      {custoAoVivo?.itens[i]?.aviso ?? item.aviso}
+                    </span>
+                  )}
                   {/* 🔑 **O fator de cocção finalmente tem onde ser digitado.** A
                       coluna existe desde a migração 006 com "muda rendimento, não
                       custo" escrito nela, e a tela nunca a ofereceu: ficava 1 em
@@ -1041,16 +1142,26 @@ export default function EditorFicha() {
           </div>
         )}
 
-        {veCusto && ficha && (
+        {veCusto && ficha && (() => {
+          // 🔑 **Os três totais também acompanham a digitação.** O rendimento e
+          // as porções são campos da mesma tela: mudar "porções" de 4 para 8 tem
+          // de dividir o custo por porção na hora, sem passar por salvar.
+          // ⚠️ `?? ` e não `||`: custo ZERO é um valor, não a ausência dele.
+          const totalAtual = custoAoVivo?.custo_total ?? ficha.custo_total;
+          const porPorcaoAtual = custoAoVivo?.custo_por_porcao ?? ficha.custo_por_porcao;
+          const rendimentoAtual = num(cabecalho.rendimento_qtd) ?? ficha.rendimento_qtd;
+          const semCusto = custoAoVivo?.itens_sem_custo ?? ficha.itens_sem_custo;
+          const completo = custoAoVivo ? custoAoVivo.completo : ficha.custo_completo;
+          return (
           <div className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-3">
             {[
-              { rotulo: "Custo da receita", valor: ficha.custo_total },
-              { rotulo: "Custo por porção", valor: ficha.custo_por_porcao, destaque: true },
+              { rotulo: "Custo da receita", valor: totalAtual },
+              { rotulo: "Custo por porção", valor: porPorcaoAtual, destaque: true },
               {
-                rotulo: `Por ${ficha.rendimento_um ?? "unidade"} rendida`,
+                rotulo: `Por ${texto(cabecalho.rendimento_um) ?? ficha.rendimento_um ?? "unidade"} rendida`,
                 valor:
-                  ficha.custo_total !== null && ficha.rendimento_qtd
-                    ? Number(ficha.custo_total) / Number(ficha.rendimento_qtd)
+                  totalAtual !== null && totalAtual !== undefined && rendimentoAtual
+                    ? Number(totalAtual) / Number(rendimentoAtual)
                     : null,
               },
             ].map((c) => (
@@ -1063,14 +1174,15 @@ export default function EditorFicha() {
                 </p>
               </div>
             ))}
-            {ficha.custo_completo === false && (
+            {completo === false && (
               <p className="bg-superficie px-4 pb-4 text-[13px] text-alerta sm:col-span-3">
-                {ficha.itens_sem_custo} item(ns) sem preço conhecido — o total acima é parcial.
+                {semCusto} item(ns) sem preço conhecido — o total acima é parcial.
                 O preço vem da última compra registrada no fornecedor.
               </p>
             )}
           </div>
-        )}
+          );
+        })()}
       </Cartao>
 
       <Cartao titulo="Preparo">

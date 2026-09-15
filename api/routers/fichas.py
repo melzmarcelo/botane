@@ -20,8 +20,8 @@ import arquivos
 import auditoria
 from database import get_cursor
 from paginacao import com_total
-from models.fichas import (FichaCreate, FichaDuplicar, FichaResponse, FichaResumo,
-                           FichaUpdate, ItemFicha, LocaisDaFichaRequest,
+from models.fichas import (CustoPrevisto, FichaCreate, FichaDuplicar, FichaResponse,
+                           FichaResumo, FichaUpdate, ItemFicha, LocaisDaFichaRequest,
                            RendimentoSugerido)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import custos
@@ -530,6 +530,56 @@ def previa_do_rendimento(
     with get_cursor() as cur:
         return custos.rendimento_sugerido(
             cur, [i.model_dump() for i in body.itens], body.um)
+
+
+@router.post("/previa-de-custo")
+def previa_de_custo(body: CustoPrevisto,
+                    ctx: Contexto = Depends(requer_permissao("fichas.custos"))) -> dict:
+    """Quanto a receita custa AGORA, com o que está na tela — sem gravar nada.
+
+    🔑 **Pedido do dono (15/09/2026):** *"na ficha técnica, ao ir preenchendo os
+    dados dos insumos, os valores demonstrados poderiam já ir ajustando na
+    tela"*. Até aqui o custo só aparecia depois de salvar: quem montava uma
+    receita escrevia no escuro e, se o número saísse estranho, tinha de
+    descobrir sozinho qual linha o causou.
+
+    ⚠️ **Recebe os ITENS, não um id** — como a prévia do rendimento, e pela
+    mesma razão: numa ficha nova não há nada gravado para consultar.
+
+    ⚠️ **A conta é a MESMA da ficha gravada** (`custos._custos_das_linhas`).
+    Calcular no navegador seria a segunda versão da cascata de custo — a que
+    converte unidade, desce em sub-ficha e escolhe entre custo médio, último
+    preço e referência —, e ela divergiria na primeira correção.
+
+    ⚠️ **A permissão é `fichas.custos`**: esta rota só devolve dinheiro. Quem vê
+    a receita sem ver custo não passa por aqui.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = custos.custo_previsto(
+            cur, [i.model_dump() for i in body.itens],
+            body.rendimento_qtd, body.rendimento_um, body.porcoes, id_unidade)
+    return {
+        "custo_total": _num(r["custo_total"]),
+        "custo_por_porcao": _num(r["custo_por_porcao"]),
+        "custo_por_unidade_rendimento": _num(r["custo_por_unidade_rendimento"]),
+        "itens_sem_custo": r["itens_sem_custo"],
+        "completo": r["completo"],
+        # ⚠️ Uma linha por item, na MESMA ordem em que chegaram: a tela casa
+        # pelo índice, e devolver um subconjunto faria o custo aparecer na linha
+        # errada — que é pior do que não aparecer.
+        "itens": [{
+            "id_insumo": i["id_insumo"],
+            "id_subficha": i["id_subficha"],
+            "custo_unitario": _num(i["custo_unitario"]),
+            "custo_total": _num(i["custo_total"]),
+            "origem_custo": i["origem_custo"],
+            "aviso": i["aviso"],
+            "qtd_estoque": _num(i.get("qtd_estoque")),
+            "conversao": i.get("conversao"),
+            "um_estoque": i.get("um_estoque"),
+        } for i in r["itens"]],
+    }
 
 
 @router.post("/{id_ficha}/nova-versao", status_code=201)

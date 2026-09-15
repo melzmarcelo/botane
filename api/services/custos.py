@@ -360,54 +360,22 @@ def _carregar_ums(cur) -> dict:
     return {r["sigla"]: dict(r) for r in cur.fetchall()}
 
 
-def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
-                   _ums: dict | None = None, _nivel: int = 0,
-                   id_unidade: int | None = None) -> dict:
-    """Custo total de uma ficha, item a item, descendo nas sub-fichas.
+def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | None,
+                       visitadas: set[int], _nivel: int) -> tuple[list[dict], Decimal, int]:
+    """O custo de cada linha da receita — o miolo, sem saber de onde ela veio.
 
-    Devolve `{custo_total, custo_por_porcao, custo_por_unidade_rendimento,
-    itens: [...], itens_sem_custo, completo}`. Nada de exceção quando falta
-    preço: o que falta vem marcado, porque a ficha precisa ser útil antes de
-    estar completa.
+    🔑 **Extraído em 15/09/2026** (pedido do dono: *"na ficha técnica, ao ir
+    preenchendo os dados dos insumos, os valores demonstrados poderiam já ir
+    ajustando na tela"*). A tela precisa do custo do que está sendo DIGITADO, e
+    isso não está no banco ainda — mas a conta é a mesma: a cascata do custo do
+    insumo, a conversão para a unidade de estoque, a sub-ficha pelo rendimento
+    dela. ⚠️ **Calcular isso no navegador seria a segunda versão da mesma
+    regra**, e ela divergiria na primeira correção — que é o erro que este
+    projeto já pagou em outras contas.
+
+    `linhas` vem do banco (`custo_da_ficha`) ou da tela (`custo_previsto`), com
+    as mesmas chaves: o que muda é a origem, não o cálculo.
     """
-    visitadas = set(_visitadas or ())
-    if id_ficha in visitadas or _nivel > PROFUNDIDADE_MAXIMA:
-        # Guarda de segurança: a gravação já recusa ciclo, mas dado antigo
-        # não pode derrubar a tela.
-        return {
-            "custo_total": Decimal(0), "custo_por_porcao": Decimal(0),
-            "custo_por_unidade_rendimento": Decimal(0), "itens": [],
-            "itens_sem_custo": 0, "completo": False, "ciclo": True,
-        }
-    visitadas.add(id_ficha)
-    ums = _ums or _carregar_ums(cur)
-
-    cur.execute(
-        """SELECT rendimento_qtd, rendimento_um, porcoes FROM fichas_tecnicas WHERE id = %s""",
-        (id_ficha,),
-    )
-    ficha = cur.fetchone()
-    if not ficha:
-        raise ValueError("ficha inexistente")
-
-    cur.execute(
-        """
-        SELECT fi.id, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.qtd_liquida, fi.um,
-               fi.fator_correcao, fi.fator_coccao, fi.observacao, fi.ordem,
-               p.nome AS insumo, p.um_estoque, p.codigo,
-               sp.nome AS subficha_nome, sf.rendimento_qtd AS sub_rendimento,
-               sf.rendimento_um AS sub_rendimento_um
-          FROM ficha_itens fi
-          LEFT JOIN produtos p ON p.id = fi.id_insumo
-          LEFT JOIN fichas_tecnicas sf ON sf.id = fi.id_subficha
-          LEFT JOIN produtos sp ON sp.id = sf.id_produto
-         WHERE fi.id_ficha = %s
-         ORDER BY fi.ordem, fi.id
-        """,
-        (id_ficha,),
-    )
-    linhas = [dict(r) for r in cur.fetchall()]
-
     itens, total, sem_custo = [], Decimal(0), 0
 
     for l in linhas:
@@ -484,6 +452,59 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
         else:
             total += detalhe["custo_total"]
         itens.append(detalhe)
+    return itens, total, sem_custo
+
+
+def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
+                   _ums: dict | None = None, _nivel: int = 0,
+                   id_unidade: int | None = None) -> dict:
+    """Custo total de uma ficha, item a item, descendo nas sub-fichas.
+
+    Devolve `{custo_total, custo_por_porcao, custo_por_unidade_rendimento,
+    itens: [...], itens_sem_custo, completo}`. Nada de exceção quando falta
+    preço: o que falta vem marcado, porque a ficha precisa ser útil antes de
+    estar completa.
+    """
+    visitadas = set(_visitadas or ())
+    if id_ficha in visitadas or _nivel > PROFUNDIDADE_MAXIMA:
+        # Guarda de segurança: a gravação já recusa ciclo, mas dado antigo
+        # não pode derrubar a tela.
+        return {
+            "custo_total": Decimal(0), "custo_por_porcao": Decimal(0),
+            "custo_por_unidade_rendimento": Decimal(0), "itens": [],
+            "itens_sem_custo": 0, "completo": False, "ciclo": True,
+        }
+    visitadas.add(id_ficha)
+    ums = _ums or _carregar_ums(cur)
+
+    cur.execute(
+        """SELECT rendimento_qtd, rendimento_um, porcoes FROM fichas_tecnicas WHERE id = %s""",
+        (id_ficha,),
+    )
+    ficha = cur.fetchone()
+    if not ficha:
+        raise ValueError("ficha inexistente")
+
+    cur.execute(
+        """
+        SELECT fi.id, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.qtd_liquida, fi.um,
+               fi.fator_correcao, fi.fator_coccao, fi.observacao, fi.ordem,
+               p.nome AS insumo, p.um_estoque, p.codigo,
+               sp.nome AS subficha_nome, sf.rendimento_qtd AS sub_rendimento,
+               sf.rendimento_um AS sub_rendimento_um
+          FROM ficha_itens fi
+          LEFT JOIN produtos p ON p.id = fi.id_insumo
+          LEFT JOIN fichas_tecnicas sf ON sf.id = fi.id_subficha
+          LEFT JOIN produtos sp ON sp.id = sf.id_produto
+         WHERE fi.id_ficha = %s
+         ORDER BY fi.ordem, fi.id
+        """,
+        (id_ficha,),
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+
+    itens, total, sem_custo = _custos_das_linhas(
+        cur, linhas, ums, id_unidade, visitadas, _nivel)
 
     porcoes = dec(ficha["porcoes"]) or Decimal(1)
     rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
@@ -764,4 +785,84 @@ def historico(cur, id_produto: int, id_unidade: int | None = None,
         "provisorio": (custo_provisorio_da_ficha(cur, id_produto, id_unidade)
                        if atual is None else None),
         "linhas": linhas,
+    }
+
+
+def custo_previsto(cur, itens: list[dict], rendimento_qtd, rendimento_um: str | None,
+                   porcoes, id_unidade: int | None = None) -> dict:
+    """O custo de uma ficha que ainda NÃO foi gravada — o que está na tela.
+
+    🔑 **Pedido do dono (15/09/2026):** *"na ficha técnica, ao ir preenchendo os
+    dados dos insumos, os valores demonstrados poderiam já ir ajustando na
+    tela"*. Até aqui o custo só aparecia depois de salvar: quem montava uma
+    receita ia escrevendo no escuro e só via o resultado no fim — e, se o número
+    saísse errado, tinha de descobrir qual linha o causou.
+
+    ⚠️ **É a MESMA conta da ficha gravada** (`_custos_das_linhas`), e por isso
+    não pode divergir dela. O que muda é de onde vêm as linhas: aqui elas chegam
+    da tela, com os ids que a pessoa já escolheu.
+
+    ⚠️ **Não grava nada**, nem toca em `ficha_itens`. É uma pergunta.
+    """
+    ums = _carregar_ums(cur)
+    linhas = []
+    for i in itens:
+        id_insumo = i.get("id_insumo")
+        id_subficha = i.get("id_subficha")
+        linha = {
+            "id": None,
+            "id_insumo": id_insumo,
+            "id_subficha": id_subficha,
+            "qtd_bruta": dec(i.get("qtd_bruta") or 0),
+            "qtd_liquida": (dec(i["qtd_liquida"])
+                            if i.get("qtd_liquida") not in (None, "") else None),
+            "um": (i.get("um") or "").strip().upper() or None,
+            "fator_correcao": dec(i.get("fator_correcao") or 1),
+            "fator_coccao": dec(i.get("fator_coccao") or 1),
+            "observacao": i.get("observacao"),
+            "ordem": i.get("ordem"),
+            "insumo": None, "um_estoque": None, "codigo": None,
+            "subficha_nome": None, "sub_rendimento": None, "sub_rendimento_um": None,
+        }
+        # ⚠️ Os dados do insumo vêm do BANCO, não da tela: nome, unidade de
+        # estoque e código são do cadastro, e aceitar a versão do navegador
+        # abriria a porta para calcular sobre um produto que não é aquele.
+        if id_insumo:
+            cur.execute(
+                "SELECT nome, um_estoque, codigo FROM produtos WHERE id = %s", (id_insumo,))
+            p = cur.fetchone()
+            if p:
+                linha.update({"insumo": p["nome"], "um_estoque": p["um_estoque"],
+                              "codigo": p["codigo"]})
+        elif id_subficha:
+            cur.execute(
+                """SELECT sf.rendimento_qtd, sf.rendimento_um, sp.nome
+                     FROM fichas_tecnicas sf
+                     JOIN produtos sp ON sp.id = sf.id_produto
+                    WHERE sf.id = %s""",
+                (id_subficha,),
+            )
+            sf = cur.fetchone()
+            if sf:
+                linha.update({"subficha_nome": sf["nome"],
+                              "sub_rendimento": sf["rendimento_qtd"],
+                              "sub_rendimento_um": sf["rendimento_um"]})
+        linhas.append(linha)
+
+    itens_calculados, total, sem_custo = _custos_das_linhas(
+        cur, linhas, ums, id_unidade, set(), 0)
+
+    # ⚠️ Zero vira UM nas divisões, como na ficha gravada: a receita em rascunho
+    # tem rendimento vazio quase o tempo todo, e uma divisão por zero na tela
+    # apagaria o custo enquanto a pessoa digita.
+    p_qtd = dec(porcoes) or Decimal(1)
+    r_qtd = dec(rendimento_qtd) or Decimal(1)
+    return {
+        "custo_total": total.quantize(CASAS_CUSTO),
+        "custo_por_porcao": (total / p_qtd).quantize(CASAS_CUSTO),
+        "custo_por_unidade_rendimento": (total / r_qtd).quantize(CASAS_CUSTO),
+        "itens": itens_calculados,
+        "itens_sem_custo": sem_custo,
+        "completo": sem_custo == 0 and bool(itens_calculados),
+        "rendimento_um": (rendimento_um or "").strip().upper() or None,
     }
