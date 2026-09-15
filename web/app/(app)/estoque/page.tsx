@@ -13,6 +13,7 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "
 import CabecalhoTela from "@/components/cabecalho-tela";
 import BotaoExportar from "@/components/exportar";
 import LotesEmEstoque from "./lotes";
+import ReprocessarEstoque from "./reprocessar";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 import { custo, qtd } from "@/lib/numeros";
@@ -665,7 +666,7 @@ export default function PaginaEstoque() {
         <Cartao>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="min-w-0 flex-1 sm:min-w-[230px]">
-              <span className="rotulo">Produto</span>
+              <span className="rotulo-campo">Produto</span>
               <div className="mt-1.5">
                 <FiltroCadastro
                   fonte={PRODUTOS}
@@ -754,6 +755,32 @@ export default function PaginaEstoque() {
               >
                 Limpar
               </button>
+            )}
+            {/* 🔑 **Só com um produto escolhido** (15/09/2026, pedido do dono).
+                Reprocessar a loja inteira seria minutos de trabalho sobre
+                milhares de movimentos e ninguém poderia conferir o que mudou —
+                o filtro não é limitação, é o que torna a conferência possível.
+                ⚠️ E só para quem pode mexer em custo: o que ele reescreve é
+                custo médio e custo de saída, a mesma autoridade do Ajuste de
+                custo. */}
+            {/* ⚠️ **A dica só aparece na situação em que ela ajuda.** Este filtro
+                é o `FiltroCadastro`: digitar TEXTO filtra a lista, mas não
+                escolhe um produto — quem escolhe é a lupa. E reprocessar precisa
+                de UM produto, não de um recorte. Sem a frase, quem digitou o
+                nome e não viu o botão concluiria que o recurso não existe. */}
+            {!produtoMov && movBusca.trim() && pode("estoque.custo") && (
+              <p className="pb-2 text-[12.5px] text-suave">
+                escolha o produto na lupa para poder reprocessar
+              </p>
+            )}
+            {produtoMov && pode("estoque.custo") && (
+              <ReprocessarEstoque
+                produto={produtoMov}
+                aoTerminar={() => {
+                  void carregarMovimentos();
+                  void carregar();
+                }}
+              />
             )}
           </div>
         </Cartao>

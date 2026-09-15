@@ -7116,6 +7116,112 @@ try {
   checar("e corrigir apaga o erro na hora",
     corrigido.invalido === null && corrigido.temErro === false, corrigido);
   await foto(p, "44b-pecas-do-formulario");
+
+  console.log("10d3. reprocessar o estoque de um produto");
+  // 🔑 **Pedido do dono (15/09/2026):** *"em saldos e movimentos, criar uma
+  // opcao de reprocessar, caso tenha alteracoes, disponibilizar a opcao de
+  // reprocessar o estoque, filtrando por produto"*.
+  // 🔑 O caso e o LANCAMENTO RETROATIVO: a nota do dia 9 entra hoje, depois de
+  // a venda do dia 12 ja ter saido. A venda saiu por custo estimado (nao havia
+  // saldo) e o saldo ficou negativo — e nada disso se acerta sozinho, porque o
+  // custo medio e calculado no instante do lancamento.
+  const mRep = Date.now().toString().slice(-5);
+  const { dados: prodRep } = await api("POST", "/produtos", {
+    codigo: `TREP-${mRep}`, nome: `VINHO REPRO TELA ${mRep}`, tipo: "REVENDA",
+    um_estoque: "UN", controla_estoque: true, status: "ATIVO",
+  }, token);
+  aoTerminar.push(() => api("DELETE", `/produtos/${prodRep.id}`, null, token));
+  const { dados: locaisRep } = await api("GET", "/locais", null, token);
+  const localRep = (locaisRep.find((l) => l.principal) ?? locaisRep[0]).id;
+  // ⚠️ A ordem e o teste: saida primeiro, entrada com data ANTERIOR depois.
+  await api("POST", "/estoque/saidas", {
+    id_produto: prodRep.id, quantidade: 2, tipo: "SAIDA_VENDA", id_local: localRep,
+    data_movimento: "2026-09-12", documento: `TREP-V-${mRep}`,
+  }, token);
+  await api("POST", "/estoque/entradas", {
+    id_produto: prodRep.id, quantidade: 6, custo_unitario: 64, id_local: localRep,
+    data_movimento: "2026-09-09", documento: `TREP-N-${mRep}`,
+  }, token);
+
+  await irPara(p, `${WEB}/estoque`);
+  await p.waitForFunction(() => /Razão de estoque|Saldos/.test(document.body.innerText),
+    { timeout: 20000 }).catch(() => {});
+  await clicarQuando(p, "Movimentos", { exato: true });
+  await new Promise((r) => setTimeout(r, 900));
+
+  // ⚠️ **O produto se escolhe pela LUPA, nao digitando.** Este filtro e o
+  // `FiltroCadastro`: o texto filtra a lista, e quem FIXA um produto e a
+  // janela de pesquisa — e reprocessar precisa de um produto, nao de um
+  // recorte. A tela diz isso a quem digitou e nao viu o botao.
+  const semProduto = await p.evaluate(() => !!document.querySelector("#reprocessar-estoque"));
+  checar("sem produto escolhido, nao ha o que reprocessar", semProduto === false, semProduto);
+
+  await p.evaluate(() =>
+    [...document.querySelectorAll('button[aria-label="Buscar produto"]')].pop()?.click());
+  await p.waitForSelector('[role="dialog"] input', { timeout: 15000 }).catch(() => {});
+  await p.evaluate((nome) => {
+    const campo = document.querySelector('[role="dialog"] input');
+    if (!campo) return;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value").set;
+    setter.call(campo, nome);
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  }, `VINHO REPRO TELA ${mRep}`);
+  await p.waitForFunction((nome) => {
+    const janela = document.querySelector('[role="dialog"]');
+    return !!janela && janela.innerText.includes(nome);
+  }, { timeout: 15000 }, `VINHO REPRO TELA ${mRep}`).catch(() => {});
+  await p.evaluate((nome) => {
+    const linha = [...document.querySelectorAll('[role="dialog"] tbody tr, [role="dialog"] li')]
+      .find((x) => x.innerText.includes(nome));
+    (linha?.querySelector("button") ?? linha)?.click();
+  }, `VINHO REPRO TELA ${mRep}`);
+  await p.waitForSelector("#reprocessar-estoque", { timeout: 15000 }).catch(() => {});
+  checar("escolhido o produto, o botao Reprocessar aparece",
+    await p.evaluate(() => !!document.querySelector("#reprocessar-estoque")));
+
+  await p.evaluate(() => document.querySelector("#reprocessar-estoque")?.click());
+  await p.waitForFunction(() => /Como fica a prateleira/i.test(document.body.innerText),
+    { timeout: 20000 }).catch(() => {});
+  const janelaRep = await p.evaluate(() =>
+    document.querySelector('[role="dialog"]')?.innerText ?? "");
+  // 🔑 **A previa vem ANTES do botao**: isto reescreve numero que alguem ja leu.
+  checar("a previa mostra como fica a prateleira",
+    /Como fica a prateleira/i.test(janelaRep), janelaRep.slice(0, 200));
+  checar("e o que muda em cada movimento",
+    /O que muda em cada movimento/i.test(janelaRep), janelaRep.slice(0, 200));
+  // ⚠️ A saida saiu por ZERO e passa a custar 64 — e a previa TEM de mostrar os
+  // dois numeros, senao quem confirma nao sabe o que esta confirmando.
+  // ⚠️ **O espaco depois do "R$" e NAO SEPARAVEL** (U+00A0): e o que o
+  // `Intl.NumberFormat` produz para BRL, e `includes("R$ 0,00")` com espaco
+  // comum nao casa com ele. No terminal os dois se parecem, entao a falha
+  // aparece como "a tela nao mostra o numero" — com o numero na tela.
+  const semNbsp = janelaRep.replace(/\u00a0/g, " ");
+  checar("dizendo de quanto para quanto vai o custo da saida",
+    semNbsp.includes("R$ 0,00") && semNbsp.includes("R$ 64,00"), semNbsp.slice(0, 400));
+  await foto(p, "44c-reprocessar");
+
+  await clicarQuando(p, "Reprocessar 3 movimento");
+  await p.waitForFunction(() => !document.querySelector('[role="dialog"]'),
+    { timeout: 20000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1200));
+
+  const { dados: movsRep } = await api(
+    "GET", `/estoque/movimentos?id_produto=${prodRep.id}&por_pagina=50`, null, token);
+  const saidaRep = (movsRep ?? []).find((m) => m.tipo === "SAIDA_VENDA");
+  const entradaRep = (movsRep ?? []).find((m) => m.tipo === "ENTRADA_MANUAL");
+  checar("depois de reprocessar, a saida custa a media do momento",
+    Number(saidaRep?.custo_unitario ?? 0) === 64, saidaRep);
+  checar("e o saldo dela deixou de ser negativo",
+    Number(saidaRep?.saldo_apos ?? -1) === 4, saidaRep);
+  // ⚠️ O custo da ENTRADA nao se toca: e o que a casa pagou.
+  checar("o custo da entrada continua o da nota",
+    Number(entradaRep?.custo_unitario ?? 0) === 64, entradaRep);
+  const { dados: saldosRep } = await api(
+    "GET", `/estoque/saldos?id_produto=${prodRep.id}`, null, token);
+  checar("e a prateleira fica com saldo e custo certos",
+    Number(saldosRep?.[0]?.quantidade ?? 0) === 4
+    && Number(saldosRep?.[0]?.custo_medio ?? 0) === 64, saldosRep?.[0]);
   console.log("10e. remessa entre lojas: em transito e recebimento");
   // 🔑 **A remessa em transito continua contando no estoque de quem mandou** — e
   // esta tela existe para esse "continua contando" nao virar armadilha. O que se

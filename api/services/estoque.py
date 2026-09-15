@@ -616,6 +616,257 @@ def _mover_lote(cur, id_movimento, id_unidade, id_local, id_produto, lote, valid
         )
 
 
+def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
+                pode_retroativo: bool = False, id_usuario: int | None = None) -> dict:
+    """Relê o razão deste produto em ordem de data e refaz o que é DERIVADO.
+
+    🔑 **Pedido do dono (15/09/2026):** *"em saldos e movimentos, criar uma opção
+    de reprocessar, caso tenha alterações, disponibilizar a opção de reprocessar
+    o estoque, filtrando por produto"*.
+
+    🔑 **O caso que ele existe para consertar é o LANÇAMENTO RETROATIVO.** A nota
+    do dia 9 é lançada hoje, depois de a venda do dia 12 já ter saído: a venda
+    saiu com custo provisório (não havia saldo) e o saldo ficou negativo, e nada
+    disso se conserta sozinho — o custo médio é calculado no momento do
+    lançamento, com o que a prateleira sabia naquele instante. Reprocessar põe a
+    corrente na ordem da DATA: entra a nota a R$ 64,00, depois sai a venda pelo
+    mesmo custo.
+
+    ⚠️ **Isto NÃO fura o append-only, e a fronteira é a que importa.** O que se
+    reescreve é o que o razão DERIVA: `saldo_apos`, `custo_medio_apos`, o
+    `custo_provisorio` e o custo das SAÍDAS — que nunca foi um fato, é a média
+    do momento. O que não se toca: tipo, quantidade, data, origem, e o **custo
+    das ENTRADAS**, que é o que a casa pagou. Nenhum movimento é criado nem
+    apagado.
+
+    ⚠️ **E não é porta dos fundos para trocar unidade.** Quem já tem razão não
+    troca de unidade (`services/troca_de_unidade.py`): as quantidades históricas
+    estão gravadas na unidade antiga. Reprocessar recalcula sobre os números que
+    estão lá, não os converte.
+
+    ⚠️ **Recusa quando a loja usa CUSTO GERAL e o produto anda em mais de uma
+    prateleira.** Nesse modo a entrada redistribui valor entre as prateleiras e
+    grava uma linha de reavaliação por prateleira — refazer isso numa ordem
+    diferente exigiria CRIAR e APAGAR linhas do razão, que é exatamente o que
+    esta função promete não fazer. Melhor recusar com a frase do que devolver
+    dinheiro aproximado.
+
+    ⚠️ **Período fechado trava**, pela mesma razão do lançamento: ele foi
+    congelado e já foi ao contador. Quem tem `estoque.retroativo` passa, e a
+    auditoria registra.
+
+    Com `aplicar=False` devolve a PRÉVIA — o que mudaria, sem gravar nada. É o
+    padrão da casa para operação que reescreve número que alguém já leu.
+    """
+    cur.execute(
+        "SELECT nome, um_estoque, controla_estoque FROM produtos WHERE id = %s",
+        (id_produto,),
+    )
+    produto = cur.fetchone()
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    par = _parametros(cur, id_unidade)
+    geral = not par.get("custo_por_local", False)
+
+    # ⚠️ **A trava vem antes de ler os movimentos**, e é a mesma do `lancar`: sem
+    # ela, uma entrada lançada no meio do reprocessamento entraria com o saldo
+    # velho e o resultado sairia errado dos dois lados.
+    cur.execute(
+        """SELECT id_local, quantidade, custo_medio FROM estoque_saldos
+            WHERE id_unidade = %s AND id_produto = %s
+            ORDER BY id_local FOR UPDATE""",
+        (id_unidade, id_produto),
+    )
+    saldos_antes = {r["id_local"]: r for r in cur.fetchall()}
+
+    cur.execute(
+        """SELECT id, id_local, data_movimento, tipo, quantidade, custo_unitario,
+                  custo_total, saldo_apos, custo_medio_apos, custo_provisorio, origem_tipo
+             FROM estoque_movimentos
+            WHERE id_unidade = %s AND id_produto = %s
+            ORDER BY data_movimento, id""",
+        (id_unidade, id_produto),
+    )
+    movimentos = cur.fetchall()
+    if not movimentos:
+        return {
+            "produto": produto["nome"], "movimentos": 0, "mudam": 0, "linhas": [],
+            "saldos": [], "aplicado": False,
+            "message": f"{produto['nome']} não tem movimento nesta loja — nada a reprocessar.",
+        }
+
+    prateleiras = {m["id_local"] for m in movimentos}
+    if geral and len(prateleiras) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{produto['nome']} tem movimento em {len(prateleiras)} prateleiras e esta "
+                "loja usa custo único por loja. Nesse modo cada entrada redistribui valor "
+                "entre as prateleiras, e refazer isso exigiria criar e apagar linhas do "
+                "razão — que é o que o reprocessamento não faz. Ajuste o custo à mão em "
+                "Estoque ▸ Ajustes ▸ Custo."
+            ),
+        )
+
+    # A corrente de cada prateleira: saldo, custo médio e o VALOR já registrado
+    # nela (o que a soma dos movimentos diz que ela vale). O valor registrado é o
+    # que permite recalcular a linha de reavaliação do custo geral sem inventar
+    # número: a diferença dela é exatamente `saldo × médio − valor registrado`.
+    corrente: dict[int, list] = {}
+    mudancas: list[dict] = []
+
+    for m in movimentos:
+        local = m["id_local"]
+        saldo, medio, registrado = corrente.get(local, [Decimal(0), Decimal(0), Decimal(0)])
+        qtd = dec(m["quantidade"])
+        unitario = dec(m["custo_unitario"] or 0)
+        total = dec(m["custo_total"] or 0)
+        provisorio = bool(m["custo_provisorio"])
+
+        if m["tipo"] == AJUSTE_CUSTO and m["origem_tipo"] == "CUSTO_GERAL":
+            # A reavaliação que a entrada espalhou. Ela não move mercadoria: o
+            # que ela diz é quanto a prateleira passou a valer.
+            total = ((saldo * medio) - registrado).quantize(Decimal("0.01"))
+            unitario = medio
+            registrado += total
+        elif m["tipo"] == AJUSTE_CUSTO:
+            # Ajuste de custo à mão: o médio passa a ser o que alguém declarou, e
+            # a diferença de valor é o que o movimento registra.
+            # ⚠️ O custo declarado é FATO — foi uma decisão de gente. O que se
+            # recalcula é a diferença, que depende do saldo daquele instante.
+            total = (saldo * (unitario - medio)).quantize(Decimal("0.01"))
+            medio = unitario
+            registrado += total
+        elif qtd > 0:
+            # ⚠️ Entrada: o custo unitário é o que a casa pagou e não se toca.
+            novo_saldo = saldo + qtd
+            if novo_saldo > 0:
+                medio = (((saldo * medio) + (qtd * unitario)) / novo_saldo).quantize(CASAS_CUSTO)
+            else:
+                medio = unitario
+            saldo = novo_saldo
+            total = (qtd * unitario).quantize(Decimal("0.01"))
+            registrado += total
+            provisorio = False
+        else:
+            # Saída: o custo É a média do momento — e é isto que o reprocessamento
+            # acerta. ⚠️ Sem média conhecida na corrente, mantém o que o
+            # movimento já tinha: reprocessar não inventa história que o razão
+            # não tem.
+            if saldo <= 0 and medio == 0:
+                provisorio = True
+            else:
+                unitario = medio
+                provisorio = saldo + qtd < 0
+            saldo = saldo + qtd
+            if saldo <= 0:
+                medio = medio or unitario
+            total = (abs(qtd) * unitario).quantize(Decimal("0.01"))
+            registrado -= total
+
+        corrente[local] = [saldo, medio, registrado]
+
+        antes = (dec(m["saldo_apos"]), dec(m["custo_medio_apos"] or 0),
+                 dec(m["custo_unitario"] or 0), dec(m["custo_total"] or 0),
+                 bool(m["custo_provisorio"]))
+        agora = (saldo, medio, unitario, total, provisorio)
+        if antes != agora:
+            mudancas.append({
+                "id": m["id"],
+                "data": m["data_movimento"],
+                "tipo": m["tipo"],
+                "id_local": local,
+                "saldo_de": antes[0], "saldo_para": saldo,
+                "medio_de": antes[1], "medio_para": medio,
+                "custo_de": antes[2], "custo_para": unitario,
+                "total_de": antes[3], "total_para": total,
+                "provisorio_de": antes[4], "provisorio_para": provisorio,
+            })
+
+    # ⚠️ **O período fechado é conferido sobre o que MUDA**, não sobre tudo: um
+    # produto com anos de histórico tem movimento em período fechado quase
+    # sempre, e travar por isso deixaria o recurso inútil justamente para quem
+    # mais precisa dele.
+    if mudancas and not pode_retroativo:
+        datas = [c["data"] for c in mudancas]
+        cur.execute(
+            """SELECT inicio, fim, ciclo FROM cmv_fechamentos
+                WHERE id_unidade = %s AND status = 'FECHADO'
+                  AND (%s::date BETWEEN inicio AND fim OR %s::date BETWEEN inicio AND fim
+                       OR (inicio BETWEEN %s::date AND %s::date))
+                ORDER BY inicio LIMIT 1""",
+            (id_unidade, min(datas), max(datas), min(datas), max(datas)),
+        )
+        fechado = cur.fetchone()
+        if fechado:
+            from services import periodos
+
+            nome = periodos.rotulo(fechado["inicio"], fechado["fim"],
+                                   fechado["ciclo"] or "MENSAL")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"O reprocessamento mudaria movimento dentro do período de {nome}, "
+                    "que está fechado. Reabra o período — ou peça a quem tem permissão "
+                    "de lançamento retroativo."
+                ),
+            )
+
+    resumo_saldos = []
+    for local, (saldo, medio, _v) in sorted(corrente.items()):
+        antes = saldos_antes.get(local)
+        resumo_saldos.append({
+            "id_local": local,
+            "quantidade_de": dec(antes["quantidade"]) if antes else None,
+            "quantidade_para": saldo,
+            "custo_medio_de": dec(antes["custo_medio"]) if antes else None,
+            "custo_medio_para": medio,
+        })
+
+    if aplicar and mudancas:
+        for c in mudancas:
+            cur.execute(
+                """UPDATE estoque_movimentos
+                      SET saldo_apos = %s, custo_medio_apos = %s, custo_unitario = %s,
+                          custo_total = %s, custo_provisorio = %s
+                    WHERE id = %s""",
+                (c["saldo_para"], c["medio_para"], c["custo_para"], c["total_para"],
+                 c["provisorio_para"], c["id"]),
+            )
+        for s in resumo_saldos:
+            # ⚠️ `INSERT … ON CONFLICT`: a prateleira pode ter perdido a linha de
+            # saldo (o produto foi contado e zerado), e o razão continua sabendo
+            # dela. Sem isto, o reprocessamento deixaria o razão e a fotografia
+            # discordando — que é o defeito que ele existe para fechar.
+            cur.execute(
+                """INSERT INTO estoque_saldos
+                       (id_unidade, id_local, id_produto, quantidade, custo_medio, atualizado_em)
+                   VALUES (%s, %s, %s, %s, %s, now())
+                   ON CONFLICT (id_unidade, id_local, id_produto)
+                   DO UPDATE SET quantidade = excluded.quantidade,
+                                 custo_medio = excluded.custo_medio,
+                                 atualizado_em = now()""",
+                (id_unidade, s["id_local"], id_produto, s["quantidade_para"],
+                 s["custo_medio_para"]),
+            )
+
+    return {
+        "produto": produto["nome"],
+        "um_estoque": produto["um_estoque"],
+        "movimentos": len(movimentos),
+        "mudam": len(mudancas),
+        "linhas": mudancas[:200],
+        "saldos": resumo_saldos,
+        "aplicado": bool(aplicar and mudancas),
+        "message": (
+            f"{len(mudancas)} movimento(s) de {produto['nome']} "
+            + ("foram reprocessados." if aplicar and mudancas else "mudariam.")
+            if mudancas else f"{produto['nome']} já está em ordem — nada mudaria."
+        ),
+    }
+
+
 def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None) -> dict:
     """Movimento não se apaga: nasce o contrário dele, apontando para o original."""
     cur.execute(

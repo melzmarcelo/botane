@@ -399,6 +399,39 @@
   `alerta_validade_dias`, `exigir_motivo_perda`, `exigir_local_movimento`,
   `bloquear_retroativo`, `ciclo_fechamento` e `casas_decimais_qtd`.
 
+- 🔑 **Reprocessar o estoque de um produto** (`services/estoque.reprocessar`,
+  `POST /estoque/reprocessar`, 15/09/2026, pedido do dono: *"em saldos e movimentos, criar uma
+  opção de reprocessar, caso tenha alterações, disponibilizar a opção de reprocessar o estoque,
+  filtrando por produto"*).
+  🔑 **O caso é o LANÇAMENTO RETROATIVO**, e ele não se acerta sozinho: a nota do dia 9 é
+  lançada hoje, depois de a venda do dia 12 já ter saído. A venda saiu com custo estimado (não
+  havia saldo) e o saldo ficou negativo — o custo médio é calculado no INSTANTE do lançamento,
+  com o que a prateleira sabia ali. Reprocessar relê o razão em ordem de DATA e refaz o que é
+  derivado: `saldo_apos`, `custo_medio_apos`, `custo_provisorio` e o custo das SAÍDAS.
+  ⚠️ **Isto não fura o append-only, e a fronteira é a que importa**: o que se reescreve é o que
+  o razão DERIVA. Não se toca em tipo, quantidade, data, origem — nem no **custo das ENTRADAS**,
+  que é o que a casa pagou. Nenhum movimento é criado ou apagado.
+  ⚠️ **E não é porta dos fundos para trocar unidade**: quem já tem razão não troca de unidade
+  ([`troca_de_unidade`](../../api/services/troca_de_unidade.py)), porque as quantidades
+  históricas estão gravadas na unidade antiga. Reprocessar recalcula sobre os números que estão
+  lá; não os converte.
+  ⚠️ **Recusa com custo GERAL e mais de uma prateleira**: nesse modo a entrada redistribui valor
+  entre as prateleiras e grava uma linha de reavaliação por prateleira; refazer isso numa ordem
+  diferente exigiria CRIAR e APAGAR linhas do razão. Melhor recusar com a frase do que devolver
+  dinheiro aproximado.
+  ⚠️ **Período fechado trava** (a mesma regra do lançamento), e a conferência é sobre o que
+  MUDA, não sobre tudo: um produto com anos de histórico tem movimento em período fechado quase
+  sempre, e travar por isso deixaria o recurso inútil para quem mais precisa dele.
+  ⚠️ A prévia é o padrão (`aplicar` nasce falso) e a permissão é `estoque.custo` — a mesma
+  autoridade do Ajuste de custo, que é o que a rota reescreve.
+  🔑 **A suíte apaga o próprio rastro do razão, por SQL** — exceção deliberada. Reprocessar
+  reescreve custo histórico, e três outras suítes conferem `inicial + entradas − saídas = final`
+  sobre a base INTEIRA: qualquer produto com custo reescrito depois de outra fase ter fotografado
+  o período abre essa conta, e a falha aparece em suítes que não têm nada a ver com o assunto.
+  ⚠️ Tentei antes apagar o produto pela API (a diferença ficou), estornar os movimentos (piorou:
+  estorno de saída é mais uma entrada) e mudar as datas de mês (o estoque inicial do mês seguinte
+  passou a discordar). **O que fecha a conta é não deixar rastro nenhum.**
+
 ## Armadilhas já pagas
 
 - 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto

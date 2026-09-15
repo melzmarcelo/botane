@@ -16,6 +16,7 @@ from models.estoque import (
     EstornoRequest,
     MovimentoResponse,
     ProducaoRequest,
+    ReprocessarRequest,
     SaidaRequest,
     SaldoAgrupadoResponse,
     SaldoRedeForaResponse,
@@ -701,6 +702,37 @@ def estornar(id_movimento: int, body: EstornoRequest,
                             depois={"movimento_estorno": r["id"], "motivo": body.motivo})
     return {"id": r["id"], "saldo": float(r["saldo_apos"]),
             "lotes": r.get("lotes") or [], "message": "Movimento estornado"}
+
+
+@router.post("/reprocessar")
+def reprocessar(body: ReprocessarRequest,
+                ctx: Contexto = Depends(requer_permissao("estoque.custo"))) -> dict:
+    """Relê o razão de um produto e refaz o que é derivado — ver o service.
+
+    🔑 **A permissão é a do CUSTO** (`estoque.custo`), e não uma nova: o que esta
+    rota reescreve é custo médio e custo de saída, que é exatamente o que a
+    tela de Ajustes ▸ Custo já deixa corrigir à mão. Uma chave nova para a mesma
+    autoridade só criaria um papel que alguém esqueceria de marcar.
+
+    ⚠️ **Sem `aplicar`, é PRÉVIA e não grava nada.**
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = motor.reprocessar(
+            cur, id_unidade=id_unidade, id_produto=body.id_produto, aplicar=body.aplicar,
+            pode_retroativo=ctx.pode("estoque.retroativo"), id_usuario=ctx.id_usuario,
+        )
+        if r["aplicado"]:
+            auditoria.registrar(
+                cur, ctx.id_usuario, "estoque", body.id_produto, "reprocessar",
+                depois={"movimentos": r["movimentos"], "mudaram": r["mudam"],
+                        "saldos": [{"id_local": s["id_local"],
+                                    "de": float(s["quantidade_de"] or 0),
+                                    "para": float(s["quantidade_para"])}
+                                   for s in r["saldos"]]},
+                id_unidade=id_unidade,
+            )
+    return r
 
 
 @router.post("/producoes", status_code=201)

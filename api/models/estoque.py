@@ -296,3 +296,14 @@ class ItemConferido(BaseModel):
 class RecebimentoRequest(BaseModel):
     itens: list[ItemConferido] = []
     observacao: str | None = None
+
+
+class ReprocessarRequest(BaseModel):
+    """Reprocessar o estoque de UM produto — ver `services.estoque.reprocessar`.
+
+    ⚠️ **`aplicar` nasce FALSO de propósito.** A prévia é o padrão porque isto
+    reescreve número que alguém já leu: o custo de uma saída, o saldo de uma
+    data. Quem confirma tem de ver antes o que muda.
+    """
+    id_produto: int
+    aplicar: bool = False
