@@ -2,169 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
-import { EVENTO_EMPRESA } from "@/lib/eventos";
+import { abrirBuscaDeTelas, EVENTO_EMPRESA } from "@/lib/eventos";
+import { gravarAtalhos, lerAtalhos, TETO_ATALHOS } from "@/lib/atalhos";
+import { INICIO, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
 import { Carregando } from "@/components/ui";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
 import BarraSuperior from "@/components/barra-superior";
 import BarraInferior from "@/components/barra-inferior";
 import BarraNavegacao from "@/components/barra-navegacao";
-
-/** O menu é montado pelas permissões de quem entrou. */
-/** `chave` pode ser uma lista: a tela de Ajustes serve a quatro permissões e
-    quem tem só a de perda também precisa chegar nela. */
-const MENU: {
-  grupo: string;
-  itens: {
-    href: string;
-    nome: string;
-    chave?: string | string[];
-    /** Só entra no menu com o envio ao PDV ligado — ver `enviar_ao_pdv`. */
-    soComEnvioAoPdv?: boolean;
-    /** 🔑 Só entra com MAIS DE UMA loja. Com uma só, a visão da rede é o
-        Início repetido — e item de menu que leva a uma tela redundante ensina
-        a ignorar o menu. */
-    soComVariasLojas?: boolean;
-    /** 🔑 Só entra com o módulo de Reservas ligado NESTA loja
-        (`parametros.reservas_ligado`). Casa que não faz reserva não tem por que
-        ver um grupo inteiro que não leva a lugar nenhum. */
-    soComReservas?: boolean;
-  }[];
-}[] = [
-  {
-    grupo: "Cadastros",
-    itens: [
-      { href: "/produtos", nome: "Produtos", chave: "cadastros.produtos" },
-      { href: "/fichas", nome: "Fichas técnicas", chave: "fichas.visualizar" },
-      // 🔑 **"Pessoas", e não "Fornecedores"** (04/09/2026, pedido do dono): a
-      // tabela passou a guardar quem não vende nada para a casa —
-      // funcionário, sócio. ⚠️ A ROTA continua `/fornecedores`: mudá-la
-      // espalharia risco por Compras, Integrações e exportações para o
-      // usuário ver exatamente a mesma tela. O nome que importa é o do menu.
-      { href: "/fornecedores", nome: "Pessoas", chave: "cadastros.fornecedores" },
-      // As quatro num item só. Quem procura "local de estoque" no menu não o
-      // encontra pelo nome — por isso a tela DIZ o que tem dentro, logo abaixo
-      // do título, e cada aba tem endereço próprio (`?aba=locais`).
-      {
-        href: "/cadastros",
-        nome: "Tabelas de apoio",
-        chave: ["cadastros.setores", "cadastros.locais", "cadastros.categorias",
-                "cadastros.unidades_medida", "cmv.grupos"],
-      },
-      // ⚠️ Só aparece com o envio ao PDV LIGADO. Item de menu para um recurso
-      // desligado é uma porta que abre numa tela que explica que não faz nada.
-      {
-        href: "/exportacao",
-        nome: "Exportação para o PDV",
-        chave: ["integracao.pdv", "admin.integracoes"],
-        soComEnvioAoPdv: true,
-      },
-    ],
-  },
-  {
-    grupo: "Estoque",
-    itens: [
-      { href: "/estoque", nome: "Saldos e movimentos", chave: "estoque.saldos" },
-      {
-        href: "/ajustes",
-        nome: "Ajustes",
-        // ⚠️ Lista de chaves: a tela serve a cinco tipos, e quem tem só a de
-        // custo (ou só a de perda) também precisa chegar nela.
-        chave: ["estoque.entradas", "estoque.saidas", "estoque.perdas",
-                "estoque.transferencias", "estoque.custo"],
-      },
-      {
-        href: "/transferencias",
-        nome: "Remessas entre lojas",
-        // ⚠️ Só aparece com mais de uma loja: numa casa só, remessa não existe
-        // — a transferência entre prateleiras é imediata e mora em Ajustes.
-        soComVariasLojas: true,
-        chave: ["estoque.transferencias", "estoque.transferencia_receber"],
-      },
-      { href: "/producao", nome: "Produção", chave: "estoque.saidas" },
-      { href: "/inventario", nome: "Inventário", chave: "estoque.inventario" },
-    ],
-  },
-  {
-    grupo: "Compras",
-    itens: [{ href: "/compras", nome: "Notas de entrada", chave: "compras.notas" }],
-  },
-  {
-    grupo: "CMV",
-    itens: [
-      { href: "/cmv", nome: "Painel de CMV", chave: "cmv.painel" },
-      { href: "/rede", nome: "Visão da rede", chave: "cmv.painel", soComVariasLojas: true },
-      { href: "/vendas", nome: "Vendas", chave: "cmv.painel" },
-      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
-      // deve — dívida individual, não número de negócio — e a chave do painel é
-      // a mais larga da casa. Fica com as mesmas do servidor.
-      {
-        href: "/consumo",
-        nome: "Períodos de consumo",
-        chave: ["consumo.periodos", "cmv.relatorios"],
-      },
-    ],
-  },
-  {
-    // 🔑 **O grupo inteiro só existe com o módulo ligado** nesta loja
-    // (migração 068). Não é só esconder item: uma casa que não faz reserva não
-    // ganha um grupo a mais no menu para nunca abrir.
-    // ⚠️ O `soComReservas` vai em CADA item, não no grupo: o filtro do menu é
-    // por item, e grupo que fica sem item some sozinho — é assim que
-    // Transferências já desaparece na casa de uma loja só.
-    grupo: "Reservas",
-    itens: [
-      {
-        // 🔑 A agenda vem PRIMEIRO: e a tela que a recepcao abre todo dia. Salao
-        // e Configuracoes se visitam no comeco e quase nunca mais.
-        href: "/reservas/agenda",
-        nome: "Agenda do dia",
-        chave: ["reservas.ver", "reservas.editar"],
-        soComReservas: true,
-      },
-      {
-        href: "/reservas/salao",
-        nome: "Salão",
-        // ⚠️ `reservas.ver` basta para OLHAR o salão — quem atende o telefone
-        // precisa saber quantos lugares existem. Editar exige `configurar`, e
-        // quem decide é o servidor; a tela só esconde os controles.
-        chave: ["reservas.ver", "reservas.configurar"],
-        soComReservas: true,
-      },
-      {
-        href: "/reservas/configuracoes",
-        nome: "Configurações",
-        chave: "reservas.configurar",
-        soComReservas: true,
-      },
-    ],
-  },
-  {
-    grupo: "Administração",
-    itens: [
-      { href: "/empresa", nome: "Empresa", chave: "admin.empresa" },
-      { href: "/lojas", nome: "Lojas", chave: "admin.unidades" },
-      { href: "/usuarios", nome: "Usuários", chave: "admin.usuarios" },
-      { href: "/papeis", nome: "Papéis e permissões", chave: "admin.papeis" },
-      { href: "/integracoes", nome: "Integrações", chave: "admin.integracoes" },
-      { href: "/auditoria", nome: "Auditoria", chave: "admin.auditoria" },
-    ],
-  },
-];
+import PaletaTelas from "@/components/paleta-telas";
+import Icone from "@/components/icone";
 
 /**
- * O Início não pertence a grupo nenhum.
- *
- * 🔑 **Um grupo de um item só é uma pasta com um papel dentro.** "Operação"
- * existia para abrigar Início, Alertas e Ajuda — e as duas últimas foram para o
- * menu do usuário, onde a pessoa as procura: alerta e manual são de QUEM está
- * usando, não de um assunto do sistema. Sobrou o Início, e um cabeçalho de
- * grupo sobre ele só custava um clique para chegar à primeira tela.
+ * 🔑 **O MENU saiu daqui em 15/09/2026** e mora em `lib/menu.ts`: a mesma
+ * lista passou a servir ao menu lateral, à busca do `Ctrl+K` e aos atalhos
+ * fixados. Lista de navegação duplicada é lista que diverge — a tela nova
+ * entra numa e não na outra, e a busca vira uma coisa em que não se confia.
  */
-const INICIO = { href: "/", nome: "Início" };
 
 const CHAVE_MENU = "botane.menu";
 
@@ -414,6 +272,11 @@ function Casca({ children }: { children: React.ReactNode }) {
           gaveta continua existindo — ela só deixa de ser o único caminho. */}
       <BarraNavegacao />
       <BarraInferior />
+
+      {/* 🔑 **A busca de telas** (`Ctrl+K`, 15/09/2026). Fica aqui em cima, e
+          não dentro do menu: o atalho de teclado tem de valer com a gaveta
+          fechada, que é o estado normal no computador. */}
+      <PaletaTelas />
     </div>
   );
 }
@@ -450,78 +313,163 @@ function MenuLateral({
   alternarGrupo: (grupo: string, expandidoAgora: boolean) => void;
   aoNavegar: () => void;
 }) {
+  const ambiente = { pode, enviaAoPdv, variasLojas, temReservas };
+  const entradas = useMemo(
+    () => montarMenu(ambiente),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pode, enviaAoPdv, variasLojas, temReservas],
+  );
+  const telas = useMemo(
+    () => telasDisponiveis(ambiente),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pode, enviaAoPdv, variasLojas, temReservas],
+  );
+
+  /**
+   * 🔑 **Ler o `localStorage` no inicializador é seguro AQUI**, e não seria em
+   * qualquer lugar: este componente só monta depois do `/auth/me` (a casca
+   * devolve `null` enquanto não há `eu`), então ele nunca participa da
+   * hidratação. Num `useEffect`, os atalhos apareceriam um quadro depois e
+   * empurrariam os grupos para baixo — a mesma classe de defeito do convite de
+   * instalação, que deslocava a página inteira depois de ela já estar sendo lida.
+   */
+  const [atalhos, setAtalhos] = useState<string[]>(() => lerAtalhos(telas.map((t) => t.href)));
+
+  const fixar = (href: string) =>
+    setAtalhos((atuais) => {
+      const novos = atuais.includes(href)
+        ? atuais.filter((h) => h !== href)
+        : [...atuais, href].slice(-TETO_ATALHOS);
+      gravarAtalhos(novos);
+      return novos;
+    });
+
+  const porHref = new Map(telas.map((t) => [t.href, t]));
+
+  /**
+   * Uma linha do menu: o link, e o alfinete ao lado.
+   *
+   * ⚠️ O alfinete é IRMÃO do link, nunca filho — `<button>` dentro de `<a>` é
+   * HTML inválido, e o navegador desmancha a árvore em silêncio.
+   */
+  const linha = (item: ItemMenu, fixavel: boolean) => {
+    const ativo = caminho === item.href;
+    const fixado = atalhos.includes(item.href);
+    return (
+      <div key={item.href} className={`menu-linha ${fixavel ? "menu-linha-fixavel" : ""}`}>
+        <Link
+          href={item.href}
+          // A gaveta do celular fecha por mudança de CAMINHO, e as quatro
+          // tabelas de apoio compartilham o mesmo: sem fechar aqui, trocar de
+          // aba deixava o menu por cima.
+          onClick={aoNavegar}
+          aria-current={ativo ? "page" : undefined}
+          className={`menu-item ${ativo ? "menu-item-ativo" : ""}`}
+        >
+          <span className="menu-ico">
+            <Icone nome={item.icone} />
+          </span>
+          <span className="truncate">{item.nome}</span>
+        </Link>
+        {fixavel && (
+          <button
+            type="button"
+            aria-pressed={fixado}
+            aria-label={fixado ? `Tirar ${item.nome} dos atalhos` : `Fixar ${item.nome} nos atalhos`}
+            title={fixado ? "tirar dos atalhos" : "fixar nos atalhos"}
+            onClick={() => fixar(item.href)}
+            className={`menu-fixar ${fixado ? "menu-fixar-marcado" : ""}`}
+          >
+            <Icone nome="alfinete" tamanho={13} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     // ⚠️ A folga do topo vive no `nav`, e não no `aside`: com a marca e a loja
-    // na barra superior, o Início era o primeiro elemento da lateral e encostava
+    // na barra superior, a busca é o primeiro elemento da lateral e encostaria
     // na borda de baixo da barra — dois blocos colados, sem respiro entre eles.
     <nav className="px-3 pb-5 pt-4">
+      {/* 🔑 **A busca abre o menu inteiro em três teclas.** Ela não desfaz a
+          regra dos grupos recolhidos: torna-a irrelevante, porque quem sabe
+          para onde vai deixa de navegar pela árvore. */}
+      <button type="button" id="menu-busca" className="menu-busca" onClick={abrirBuscaDeTelas}>
+        <Icone nome="lupa" tamanho={16} />
+        <span>Buscar tela…</span>
+        {/* ⚠️ Só no ponteiro: no telefone não há `Ctrl`, e anunciar um atalho
+            que não existe ali é ruído. */}
+        <span className="menu-tecla hidden lg:inline">CTRL K</span>
+      </button>
+
       {/* Fora de grupo: a primeira tela não se abre com um clique a mais. */}
-      <Link
-        href={INICIO.href}
-        onClick={aoNavegar}
-        className={`menu-raiz mb-0.5 ${caminho === INICIO.href ? "menu-raiz-ativo" : ""}`}
-      >
-        {INICIO.nome}
-      </Link>
-      {MENU.map((g) => {
-        const itens = g.itens.filter(
-          (i) =>
-            (!i.chave || (Array.isArray(i.chave) ? i.chave.some(pode) : pode(i.chave))) &&
-            (!i.soComEnvioAoPdv || enviaAoPdv) &&
-            (!i.soComVariasLojas || variasLojas) &&
-            (!i.soComReservas || temReservas),
-        );
-        if (!itens.length) return null;
-        const temAtivo = itens.some((i) => i.href === caminho);
-        // 🔑 **O padrão é RECOLHIDO — todos.** O grupo da tela aberta já veio
-        // expandido sozinho, e o efeito era um menu que ia abrindo grupos
-        // conforme se navegava: ao fim de dez minutos estavam todos abertos, e
-        // a lista de vinte itens não cabia mais na altura da tela. A pista de
-        // "você está aqui" não se perde — o título do grupo fica verde, e ele
-        // continua abrindo com um clique.
-        const expandido = abertos[g.grupo] ?? false;
-        return (
-          <div key={g.grupo} className="mb-0.5 shrink-0">
-            <button
-              type="button"
-              aria-expanded={expandido}
-              onClick={() => alternarGrupo(g.grupo, expandido)}
-              className={`menu-grupo ${temAtivo ? "menu-grupo-ativo" : ""}`}
-            >
-              <span>{g.grupo}</span>
-              <svg
-                viewBox="0 0 10 6"
-                aria-hidden="true"
-                className={`h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
-                  expandido ? "" : "-rotate-90"
-                }`}
-              >
-                <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
-                      strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <ul className={`flex flex-col gap-px pb-2 ${expandido ? "" : "hidden"}`}>
-              {itens.map((i) => {
-                const ativo = caminho === i.href;
-                return (
-                  <li key={i.href}>
-                    <Link
-                      href={i.href}
-                      // A gaveta do celular fecha por mudança de CAMINHO, e as
-                      // quatro tabelas de apoio compartilham o mesmo: sem
-                      // fechar aqui, trocar de aba deixava o menu por cima.
-                      onClick={aoNavegar}
-                      className={`menu-item ${ativo ? "menu-item-ativo" : ""}`}
+      {linha(INICIO, false)}
+
+      {/* 🔑 **Os atalhos ocupam o espaço que já estava vazio.** A lateral
+          mostrava seis títulos numa coluna de 900px — 85% dela sem uso — e o
+          menu não sabia que a cozinha não abre as mesmas telas que o escritório. */}
+      {atalhos.length > 0 && (
+        <>
+          <div className="menu-divisor" />
+          <p className="menu-secao">Seus atalhos</p>
+          {atalhos.map((href) => {
+            const item = porHref.get(href);
+            return item ? linha(item, true) : null;
+          })}
+        </>
+      )}
+
+      <div className="menu-divisor" />
+
+      {entradas.map((e) =>
+        e.tipo === "item" ? (
+          // Grupo que sobrou com um item só — ver `montarMenu`.
+          linha(e.item, true)
+        ) : (
+          <div key={e.grupo} className="mb-0.5 shrink-0">
+            {/* 🔑 **O padrão é RECOLHIDO — todos.** O grupo da tela aberta já veio
+                expandido sozinho, e o efeito era um menu que ia abrindo grupos
+                conforme se navegava: ao fim de dez minutos estavam todos abertos, e
+                a lista de vinte itens não cabia mais na altura da tela. A pista de
+                "você está aqui" não se perde — o título do grupo fica verde, e ele
+                continua abrindo com um clique. */}
+            {(() => {
+              const expandido = abertos[e.grupo] ?? false;
+              const temAtivo = e.itens.some((i) => i.href === caminho);
+              return (
+                <>
+                  <button
+                    type="button"
+                    aria-expanded={expandido}
+                    onClick={() => alternarGrupo(e.grupo, expandido)}
+                    className={`menu-grupo ${temAtivo ? "menu-grupo-ativo" : ""}`}
+                  >
+                    <span className="menu-ico">
+                      <Icone nome={e.icone} />
+                    </span>
+                    <span>{e.grupo}</span>
+                    <span className="menu-conta">{e.itens.length}</span>
+                    <svg
+                      viewBox="0 0 10 6"
+                      aria-hidden="true"
+                      className={`ml-1.5 h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
+                        expandido ? "" : "-rotate-90"
+                      }`}
                     >
-                      {i.nome}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+                      <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
+                            strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  <div className={`menu-filhos pb-1.5 ${expandido ? "" : "hidden"}`}>
+                    {e.itens.map((i) => linha(i, true))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
-        );
-      })}
+        ),
+      )}
     </nav>
   );
 }

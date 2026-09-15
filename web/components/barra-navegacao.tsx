@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useSessao } from "@/lib/sessao";
+import Icone from "@/components/icone";
+import type { NomeIcone } from "@/lib/icones";
 
 /**
  * As telas do dia a dia, a um toque — só no celular.
@@ -28,21 +30,25 @@ import { useSessao } from "@/lib/sessao";
  * ganha um atalho para tomar 403 — e o item some em vez de aparecer inerte.
  */
 
-type Destino = { href: string; nome: string; icone: string; chave?: string[] };
+type Destino = { href: string; nome: string; icone: NomeIcone; chave?: string[] };
 
 // ⚠️ A ORDEM é a do dia, não a do organograma: Início abre a manhã, Estoque é o
 // que mais se consulta no salão, Compras é o que chega pela porta, e Reservas só
 // existe para quem ligou o módulo.
 const DESTINOS: Destino[] = [
-  { href: "/", nome: "Início", icone: "◈" },
-  { href: "/estoque", nome: "Estoque", icone: "▤", chave: ["estoque.saldos"] },
-  { href: "/compras", nome: "Compras", icone: "❏", chave: ["compras.notas"] },
+  // ⚠️ **Os mesmos desenhos do menu lateral** (15/09/2026). Eram glifos de
+  // texto (◈ ▤ ❏ ☷), que não são ícone de coisa nenhuma — e o Estoque da barra
+  // não parecia o Estoque do menu, que é justamente a associação que a barra
+  // existe para criar.
+  { href: "/", nome: "Início", icone: "casa" },
+  { href: "/estoque", nome: "Estoque", icone: "caixas", chave: ["estoque.saldos"] },
+  { href: "/compras", nome: "Compras", icone: "nota", chave: ["compras.notas"] },
 ];
 
 const RESERVAS: Destino = {
   href: "/reservas/agenda",
   nome: "Reservas",
-  icone: "☷",
+  icone: "agenda",
   chave: ["reservas.ver", "reservas.editar"],
 };
 
@@ -86,9 +92,7 @@ export default function BarraNavegacao() {
               ativo ? "text-erva" : "text-suave"
             }`}
           >
-            <span aria-hidden className="text-[17px] leading-none">
-              {d.icone}
-            </span>
+            <Icone nome={d.icone} tamanho={19} />
             <span className="text-[10.5px] font-medium leading-none">{d.nome}</span>
           </Link>
         );

@@ -108,6 +108,15 @@ export function Etiqueta({ cor = "neutro", children }: { cor?: "neutro" | "erva"
  */
 const _janelasAbertas: symbol[] = [];
 
+/**
+ * Há alguma janela aberta neste instante?
+ *
+ * 🔑 **Quem pergunta é a busca de telas** (`Ctrl+K`): com a janela de vincular
+ * produto aberta, um atalho distraído navegaria para outra tela e levaria junto
+ * o trabalho de dentro dela. A pilha já existia; só não era visível de fora.
+ */
+export const haJanelaAberta = () => _janelasAbertas.length > 0;
+
 export function Modal({
   titulo,
   descricao,

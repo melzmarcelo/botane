@@ -561,6 +561,28 @@ try {
   checar("cozinha NÃO vê Usuários no menu", !menuCozinha.includes("Usuários"));
   checar("cozinha NÃO vê Auditoria no menu", !menuCozinha.includes("Auditoria"));
 
+  // 🔑 **A BUSCA obedece a mesma permissao que o menu** (15/09/2026). Ela varre
+  // `lib/menu.ts` com o mesmo filtro — e a razao de provar isto aqui e que uma
+  // lista separada seria o caminho natural para a busca: bastaria alguem
+  // escrever "todas as telas" numa constante para a cozinha achar "Empresa",
+  // clicar, e tomar 403. Busca que oferece porta fechada e pior do que busca
+  // nenhuma.
+  await p.keyboard.down("Control");
+  await p.keyboard.press("KeyK");
+  await p.keyboard.up("Control");
+  await p.waitForSelector("#paleta-campo", { timeout: 8000 }).catch(() => null);
+  const buscaCozinha = await p.evaluate(() => ({
+    abriu: !!document.querySelector("#paleta-campo"),
+    telas: [...document.querySelectorAll(".paleta-op")].map((l) => l.innerText.replace(/\n/g, " ")),
+  }));
+  checar("a busca de telas abre para a cozinha tambem", buscaCozinha.abriu, buscaCozinha);
+  checar("e NAO oferece Empresa, que ela nao pode abrir",
+    buscaCozinha.abriu && !buscaCozinha.telas.some((t) => /Empresa/.test(t)), buscaCozinha.telas);
+  checar("nem Papeis e permissoes",
+    buscaCozinha.abriu && !buscaCozinha.telas.some((t) => /Pap/.test(t)), buscaCozinha.telas);
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 200));
+
   // Digitar a rota na barra de endereço não abre porta nenhuma: quem barra é a API.
   await p.goto(`${WEB}/usuarios`, { waitUntil: "networkidle2" });
   // ⚠️ Espera a tela PARAR de carregar, não 900 ms. Numa compilação fria ela
@@ -2460,7 +2482,14 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
   const telaAjustes = await p.evaluate(() => {
     const texto = document.body.innerText;
-    const escolhido = document.querySelector('[aria-pressed="true"]');
+    // ⚠️ **Dentro do `main`, nao no documento inteiro.** A busca era
+    // `document.querySelector('[aria-pressed="true"]')`, e em 15/09/2026 o menu
+    // ganhou o alfinete dos atalhos — um botao de alternancia, com o
+    // `aria-pressed` que a norma pede, e que mora no `aside`, ANTES do `main`.
+    // A partir dali esta sonda media o alfinete (texto vazio) e acusava a tela
+    // de Ajustes de nao ter tipo escolhido. O produto estava certo; o endereco
+    // da medicao e que era largo demais.
+    const escolhido = document.querySelector('main [aria-pressed="true"]');
     return {
       tipos: [
         "Entrada", "Saída", "Perda", "Transferência",
@@ -6618,6 +6647,185 @@ try {
   checar("o rodape fixo mostra a versao", /^v\d+\.\d+\.\d+$/.test(rodapePe?.texto ?? ""), rodapePe);
   checar("e fica preso no pe da janela", rodapePe?.noPe, rodapePe);
 
+  console.log("10d2. o menu novo: busca, atalhos e icones");
+  // 🔑 **O menu foi redesenhado em 15/09/2026** (pedido do dono: *"gostaria de
+  // um menu mais moderno"*). A lateral tinha seis grupos, todos recolhidos —
+  // decisao deliberada, que continua de pe —, e o preco dela era dois cliques
+  // por navegacao numa coluna com 85% do espaco vazio. Tres movimentos:
+  // busca (Ctrl+K), atalhos fixados e icone em cada linha.
+  await irPara(p, `${WEB}/`);
+  await p.waitForSelector("#menu-busca", { timeout: 12000 });
+
+  const menuNovo = await p.evaluate(() => {
+    const linhas = [...document.querySelectorAll("aside .menu-linha")];
+    const grupos = [...document.querySelectorAll("aside .menu-grupo")];
+    return {
+      linhas: linhas.length,
+      // O icone vive DENTRO do link, junto do nome — nao ao lado da linha.
+      semIcone: linhas.filter((l) => !l.querySelector("a svg")).length,
+      gruposSemIcone: grupos.filter((g) => !g.querySelector("svg")).map((g) => g.innerText),
+      // ⚠️ `<button>` dentro de `<a>` e HTML invalido: o navegador desmancha a
+      // arvore em silencio e o leitor de tela anuncia um controle dentro do
+      // outro. O alfinete tem de ser IRMAO do link.
+      botaoDentroDeLink: document.querySelectorAll("aside a button").length,
+      teclaVisivel: document.querySelector(".menu-tecla")?.offsetParent !== null,
+      contas: grupos.map((g) => g.querySelector(".menu-conta")?.textContent ?? null),
+      // O grupo de uma tela so deixou de ser pasta (ver `montarMenu`).
+      grupoCompras: grupos.some((g) => /^compras/i.test(g.innerText.trim())),
+      linkCompras: document.querySelectorAll('aside a[href="/compras"]').length,
+    };
+  });
+  checar("o menu tem linhas e toda linha tem icone",
+    menuNovo.linhas >= 8 && menuNovo.semIcone === 0, menuNovo);
+  checar("todo titulo de grupo tem icone", menuNovo.gruposSemIcone.length === 0, menuNovo);
+  checar("o alfinete e IRMAO do link, nao filho (HTML valido)",
+    menuNovo.botaoDentroDeLink === 0, menuNovo);
+  checar("no computador a busca anuncia o atalho do teclado",
+    menuNovo.teclaVisivel === true, menuNovo);
+  checar("cada grupo diz quantas telas tem dentro",
+    menuNovo.contas.length > 0 && menuNovo.contas.every((c) => /^\d+$/.test(c ?? "")),
+    menuNovo.contas);
+  // 🔑 Abrir uma pasta com um papel dentro e um clique que nao compra nada — e
+  // isto nao vale so para Compras: vale para quem tem permissao de UMA tela
+  // dentro de um grupo de seis.
+  checar("grupo de uma tela so vira item: Compras deixou de ser pasta",
+    menuNovo.grupoCompras === false, menuNovo);
+  checar("e a tela dela continua alcancavel", menuNovo.linkCompras >= 1, menuNovo);
+
+  // ---- a busca (Ctrl+K) ----
+  await p.keyboard.down("Control");
+  await p.keyboard.press("KeyK");
+  await p.keyboard.up("Control");
+  await p.waitForSelector("#paleta-campo", { timeout: 8000 });
+  const paletaAberta = await p.evaluate(() => ({
+    foco: document.activeElement?.id ?? null,
+    opcoes: document.querySelectorAll(".paleta-op").length,
+    primeiraMarcada: document.querySelector(".paleta-op")?.getAttribute("aria-selected"),
+    // A pagina atras nao rola enquanto a busca esta aberta — e a mesma regra da
+    // `Modal`: rolar o que esta por baixo da a impressao de que o clique passou.
+    corpoTravado: document.body.style.overflow,
+  }));
+  checar("Ctrl+K abre a busca ja com o foco no campo",
+    paletaAberta.foco === "paleta-campo", paletaAberta);
+  checar("e oferece as telas que esta pessoa pode abrir",
+    paletaAberta.opcoes >= 10, paletaAberta);
+  checar("a primeira ja vem marcada, para o Enter valer sem seta",
+    paletaAberta.primeiraMarcada === "true", paletaAberta);
+  checar("a pagina atras nao rola com a busca aberta",
+    paletaAberta.corpoTravado === "hidden", paletaAberta);
+
+  // ⚠️ Sem acento de proposito: ninguem digita "Inventário" com o acento numa
+  // busca. Se o filtro comparasse as strings cruas, isto acharia zero.
+  await p.type("#paleta-campo", "invent");
+  await p.waitForFunction(() => document.querySelectorAll(".paleta-op").length === 1,
+    { timeout: 6000 }).catch(() => {});
+  const achadosDaBusca = await p.evaluate(() =>
+    [...document.querySelectorAll(".paleta-op")].map((l) => l.innerText.replace(/\n/g, " ")));
+  checar("digitar sem acento encontra a tela acentuada",
+    achadosDaBusca.length === 1 && /Invent/.test(achadosDaBusca[0]), achadosDaBusca);
+  checar("e o resultado diz de que grupo a tela e",
+    /ESTOQUE/i.test(achadosDaBusca[0] ?? ""), achadosDaBusca);
+  await foto(p, "36b-busca-de-telas");
+
+  await p.keyboard.press("Enter");
+  await p.waitForFunction(() => location.pathname === "/inventario", { timeout: 12000 })
+    .catch(() => {});
+  const depoisDoEnter = await p.evaluate(() => ({
+    rota: location.pathname,
+    fechou: !document.querySelector("#paleta-campo"),
+    corpo: document.body.style.overflow,
+    ativo: document.querySelector("aside .menu-item-ativo")?.innerText.trim() ?? null,
+  }));
+  checar("Enter abre a tela escolhida", depoisDoEnter.rota === "/inventario", depoisDoEnter);
+  checar("a busca fecha ao abrir a tela", depoisDoEnter.fechou, depoisDoEnter);
+  // ⚠️ Devolver a rolagem e o que mais se esquece: uma janela que fecha sem
+  // restaurar `overflow` deixa a PAGINA travada, e o defeito aparece longe.
+  checar("e devolve a rolagem da pagina", depoisDoEnter.corpo !== "hidden", depoisDoEnter);
+  checar("o menu marca a tela em que se esta", depoisDoEnter.ativo === "Inventário",
+    depoisDoEnter);
+
+  // Escape fecha SEM navegar — a saida que todo mundo tenta antes do X.
+  await p.keyboard.down("Control");
+  await p.keyboard.press("KeyK");
+  await p.keyboard.up("Control");
+  await p.waitForSelector("#paleta-campo", { timeout: 8000 });
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 300));
+  const depoisDoEscape = await p.evaluate(() => ({
+    fechou: !document.querySelector("#paleta-campo"),
+    rota: location.pathname,
+  }));
+  checar("Escape fecha a busca sem sair da tela",
+    depoisDoEscape.fechou && depoisDoEscape.rota === "/inventario", depoisDoEscape);
+
+  // O botao do menu abre a mesma busca: quem nao conhece o atalho tambem chega.
+  await p.evaluate(() => document.querySelector("#menu-busca")?.click());
+  await p.waitForSelector("#paleta-campo", { timeout: 8000 }).catch(() => null);
+  checar("o botao do menu abre a mesma busca",
+    await p.evaluate(() => !!document.querySelector("#paleta-campo")));
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 250));
+
+  // ---- os atalhos ----
+  // 🔑 Eles ocupam o espaco que ja estava vazio, e sao de QUEM usa: a cozinha
+  // nao abre as mesmas telas que o escritorio.
+  const atalhosAntes = await p.evaluate(() => ({
+    secao: !!document.querySelector(".menu-secao"),
+    guardados: JSON.parse(localStorage.getItem("botane.atalhos") ?? "null"),
+    marcados: document.querySelectorAll(".menu-fixar-marcado").length,
+  }));
+  checar("o menu abre com uma secao de atalhos", atalhosAntes.secao, atalhosAntes);
+
+  // Fixa o Inventario pelo caminho da pessoa: abre o grupo, toca no alfinete.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("aside .menu-grupo")]
+      .find((b) => /estoque/i.test(b.innerText))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await p.evaluate(() => {
+    const linha = [...document.querySelectorAll("aside .menu-filhos .menu-linha")]
+      .find((l) => /Inventário/.test(l.innerText));
+    linha?.querySelector("button")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  const aoFixar = await p.evaluate(() => ({
+    guardados: JSON.parse(localStorage.getItem("botane.atalhos") ?? "[]"),
+    // O atalho aparece ANTES do primeiro grupo — e essa e a razao de existir.
+    noTopo: (() => {
+      const nav = document.querySelector("aside nav");
+      const alvo = [...nav.querySelectorAll(".menu-linha")]
+        .find((l) => /Inventário/.test(l.innerText));
+      const grupo = nav.querySelector(".menu-grupo");
+      return alvo && grupo
+        ? alvo.compareDocumentPosition(grupo) === Node.DOCUMENT_POSITION_FOLLOWING
+        : null;
+    })(),
+  }));
+  checar("o alfinete fixa a tela nos atalhos",
+    aoFixar.guardados.includes("/inventario"), aoFixar);
+  checar("e ela passa a aparecer antes dos grupos", aoFixar.noTopo === true, aoFixar);
+
+  // ⚠️ **Sobrevive ao recarregar** — e esta e a checagem que importa: a
+  // preferencia mora no navegador, e uma que so vale ate a proxima F5 e uma
+  // preferencia que ninguem usa.
+  await p.reload({ waitUntil: "networkidle2" });
+  await p.waitForSelector(".menu-secao", { timeout: 12000 });
+  const atalhosAoVoltar = await p.evaluate(() =>
+    [...document.querySelectorAll("aside .menu-linha")].map((l) => l.innerText.trim()));
+  checar("o atalho sobrevive ao recarregar a pagina",
+    atalhosAoVoltar.filter((t) => /Inventário/.test(t)).length >= 1, atalhosAoVoltar.slice(0, 8));
+
+  // E sai pelo mesmo gesto — um controle que so sabe adicionar acumula lixo.
+  await p.evaluate(() => {
+    const linha = [...document.querySelectorAll("aside .menu-linha")]
+      .find((l) => /Inventário/.test(l.innerText));
+    linha?.querySelector("button")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  const aoTirar = await p.evaluate(() =>
+    JSON.parse(localStorage.getItem("botane.atalhos") ?? "[]"));
+  checar("e o mesmo alfinete tira", !aoTirar.includes("/inventario"), aoTirar);
+  await foto(p, "36c-menu-novo");
   console.log("10e. remessa entre lojas: em transito e recebimento");
   // 🔑 **A remessa em transito continua contando no estoque de quem mandou** — e
   // esta tela existe para esse "continua contando" nao virar armadilha. O que se

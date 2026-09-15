@@ -149,89 +149,208 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
      existia: o `<button>` do grupo pegava a display por causa da regra de base,
      e o `<a>` do item, não. Metade do menu estava numa fonte, metade na outra.
 
+     🔑 **Redesenhado em 15/09/2026** (pedido do dono: *"gostaria de um menu mais
+     moderno"*). O que mudou, e por quê:
+     * **cada item ganhou ÍCONE.** Era texto puro, e para achar "Inventário"
+       era preciso LER a lista inteira. Ícone é reconhecimento, não leitura.
+     * **o título de grupo saiu das MAIÚSCULAS de 11px** para caixa normal de
+       13,5px. Em 11px, maiúsculas e `letter-spacing` de 0,09em, ele lia como
+       legenda de seção — como se nomeasse o que vem abaixo em vez de ser
+       clicável. É o pedido de "letras amigáveis" aplicado onde mais aparece.
+     * **`.menu-raiz` deixou de existir.** Ele era o Início escrito como título
+       de grupo, justamente para não parecer um filho solto no topo. Com ícone
+       e sem indentação, a linha comum já diz o nível — e uma classe a menos.
+
      ⚠️ **Vão em `@layer components` porque definem `display`** — CSS sem camada
      vence a utilitária do Tailwind, e um `lg:hidden` sobre elas deixaria de
      valer. É a mesma nota do `.campo` e do `.link-acao`. */
-  .menu-grupo {
+
+  /* O convite da busca. Tem BORDA e forma de campo de propósito: é ele que diz
+     "dá para procurar", e quem não o vê nunca descobre o `Ctrl+K`. */
+  .menu-busca {
     display: flex;
-    width: 100%;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
-    border-radius: 9px;
-    padding: 7px 10px;
-    text-align: left;
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 10px;
+    margin-bottom: 12px;
+    border: 1px solid var(--color-linha2);
+    border-radius: 10px;
+    background: var(--color-superficie);
+    color: var(--color-suave);
     font-family: var(--font-display);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
+    font-size: 13.5px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+  }
+  .menu-busca:hover { border-color: var(--color-erva); color: var(--color-erva); }
+  .menu-tecla {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
     color: var(--color-suave);
   }
-  .menu-grupo:hover { background: var(--color-superficie2); }
-  /* "Você está aqui" com o grupo recolhido: o título é a única pista que sobra. */
-  .menu-grupo-ativo { color: var(--color-erva); }
 
+  /* A linha inteira: o link, e o alfinete que vive ao lado dele.
+     ⚠️ **O alfinete é IRMÃO do link, nunca filho.** `<button>` dentro de `<a>`
+     é HTML inválido — o navegador desmancha a árvore, e o leitor de tela passa
+     a anunciar um controle dentro de outro. */
+  .menu-linha { position: relative; display: flex; align-items: center; }
   .menu-item {
-    display: block;
-    position: relative;
-    border-radius: 9px;
-    padding: 9px 10px 9px 22px;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    border-radius: 10px;
+    padding: 9px 10px;
+    /* ⚠️ 44px no toque, 36 no ponteiro: o alvo do dedo não é o do mouse
+       (WCAG 2.5.5). */
+    min-height: 44px;
     font-family: var(--font-display);
-    /* ⚠️ 15px no toque, 14.5 no ponteiro: o alvo do dedo não é o do mouse. */
     font-size: 15px;
     font-weight: 500;
     letter-spacing: -0.004em;
     color: var(--color-tinta);
   }
+  .menu-linha-fixavel .menu-item { padding-right: 32px; }
   .menu-item:hover { background: var(--color-superficie2); }
+  .menu-ico { display: grid; place-items: center; flex: 0 0 18px; color: var(--color-suave); }
   .menu-item-ativo {
     background: var(--color-erva-claro);
     font-weight: 600;
     color: var(--color-erva);
   }
-  /* A marca do item aberto é uma BARRA, não só a cor de fundo: com seis grupos
+  .menu-item-ativo .menu-ico { color: var(--color-erva); }
+  /* A marca do item aberto é uma BARRA, não só a cor de fundo: com os grupos
      recolhidos, a pílula sozinha se perde entre os títulos. Feita com
      `::before` para não empurrar o texto quando aparece. */
   .menu-item-ativo::before {
     content: "";
     position: absolute;
-    left: 8px;
-    top: 9px;
-    bottom: 9px;
+    left: 0;
+    top: 7px;
+    bottom: 7px;
     width: 3px;
     border-radius: 2px;
     background: var(--color-erva);
   }
-  /* 🔑 **O Início é de PRIMEIRO nível, e tem de parecer.** Escrito com
-     `.menu-item` — 14,5px, caixa normal, indentado —, ele lia como um subitem
-     solto no topo, como se pertencesse a um grupo que não estava ali: a lista
-     começava com um filho antes do primeiro pai. Aqui ele usa a mesma tinta dos
-     títulos de grupo, que é o nível a que ele pertence. Sem chevron, porque não
-     abre nada — e é a ausência dele que diz isso. */
-  .menu-raiz {
-    display: block;
-    border-radius: 9px;
-    padding: 7px 10px;
+
+  /* ⚠️ **No toque ele fica à vista, de leve.** `:hover` não existe no telefone,
+     e um controle que só aparece com o ponteiro é um controle que metade das
+     pessoas nunca encontra. */
+  .menu-fixar {
+    position: absolute;
+    right: 4px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--color-suave);
+    opacity: 0.45;
+    cursor: pointer;
+  }
+  .menu-fixar:hover { background: var(--color-papel); color: var(--color-erva); opacity: 1; }
+  .menu-fixar-marcado { color: var(--color-latao); opacity: 1; }
+
+  .menu-grupo {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 9px;
+    border-radius: 10px;
+    padding: 9px 10px;
+    min-height: 44px;
+    text-align: left;
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 13.5px;
     font-weight: 600;
-    letter-spacing: 0.09em;
+    letter-spacing: -0.01em;
+    color: var(--color-suave);
+    cursor: pointer;
+  }
+  .menu-grupo:hover { background: var(--color-superficie2); }
+  /* "Você está aqui" com o grupo recolhido: o título é a única pista que sobra. */
+  .menu-grupo-ativo { color: var(--color-erva); }
+  .menu-grupo-ativo .menu-ico { color: var(--color-erva); }
+  /* Quantas telas esperam lá dentro. Sem isto, abrir um grupo é sempre uma
+     surpresa — e o grupo de uma tela só nem existe mais (ver `montarMenu`). */
+  .menu-conta {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: var(--color-superficie2);
+    border-radius: 999px;
+    padding: 1px 6px;
+  }
+  .menu-grupo-ativo .menu-conta { background: var(--color-erva-claro); color: var(--color-erva); }
+  .menu-filhos { padding-left: 27px; }
+  /* A barra do item ativo alinha com a borda do GRUPO, não com o recuo do
+     filho: é a coluna da esquerda que o olho segue. */
+  .menu-filhos .menu-item-ativo::before { left: -19px; }
+
+  .menu-secao {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-suave);
+    padding: 0 10px;
+    margin-bottom: 2px;
   }
-  .menu-raiz:hover { background: var(--color-superficie2); }
-  /* ⚠️ O título de grupo ativo só muda de COR: ele contém a tela aberta, não é
-     a tela aberta. O Início É — e por isso ganha o fundo, que é a marca de
-     "você está nesta". */
-  .menu-raiz-ativo {
+  .menu-divisor { height: 1px; background: var(--color-linha); margin: 10px 6px; }
+
+  /* ---- a busca de telas (Ctrl+K) ----
+     ⚠️ **O estado marcado vive no CSS, não em variante do Tailwind.** A opção é
+     escolhida pelo teclado, e quem muda é `aria-selected` — que é também o que
+     o leitor de tela anuncia. Uma classe a mais para dizer a mesma coisa é uma
+     chance a mais de as duas discordarem. */
+  .paleta-op {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    font-family: var(--font-display);
+    font-size: 14.5px;
+    cursor: pointer;
+  }
+  .paleta-op[aria-selected="true"] {
     background: var(--color-erva-claro);
     color: var(--color-erva);
   }
+  .paleta-op[aria-selected="true"] .menu-ico,
+  .paleta-op[aria-selected="true"] .paleta-grupo { color: var(--color-erva); }
+  .paleta-grupo {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-suave);
+  }
+  .paleta-realce { background: transparent; font-weight: 700; color: var(--color-latao); }
+  .paleta-op[aria-selected="true"] .paleta-realce {
+    color: var(--color-erva);
+    text-decoration: underline;
+  }
 
   @media (min-width: 1024px) {
-    .menu-item { padding-top: 6.5px; padding-bottom: 6.5px; font-size: 14.5px; }
-    .menu-item-ativo::before { top: 6.5px; bottom: 6.5px; }
+    .menu-item, .menu-grupo { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
+    .menu-item { font-size: 14.5px; }
+    .menu-item-ativo::before { top: 6px; bottom: 6px; }
+    /* No ponteiro o alfinete só aparece na linha sob o cursor (ou com foco de
+       teclado): à vista em vinte e cinco linhas, ele vira ruído. */
+    .menu-fixar { opacity: 0; }
+    .menu-linha:hover .menu-fixar,
+    .menu-linha:focus-within .menu-fixar,
+    .menu-fixar-marcado { opacity: 1; }
   }
 
   /* Ação escrita com `.rotulo` — 10,5px, mono, MAIÚSCULAS, cinza — é a mesma tinta

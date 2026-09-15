@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menu do Botané</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  /* ⚠️ As cores e as fontes são as REAIS do sistema — copiadas de
+     web/app/globals.css, inclusive as escurecidas em 14/09/2026. Protótipo que
+     usa cor aproximada mente sobre o que se está aprovando. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #d8ded0;
+    --linha2: #748069;
+    --sublinhado: #bfc8b6;
+    --erva: #2c6a4a;
+    --erva-claro: #e3efe7;
+    --latao: #7d5a1c;
+    --alerta: #8a5d12;
+    --erro: #95332a;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--papel);
+    color: var(--tinta);
+    font-family: var(--leitura);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .folha { max-width: 1180px; margin: 0 auto; padding: 0 20px; padding-block: 40px 72px; }
+  h1, h2, h3, button, input, label { font-family: var(--display); }
+  .rotulo {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--suave); margin: 0;
+  }
+  .titulo { font-family: var(--display); font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -.02em; margin: 6px 0 0; }
+  @media (max-width: 640px) { .titulo { font-size: 26px; } }
+  .prosa { font-family: var(--corpo); font-size: 1.03em; line-height: 1.55; color: var(--suave); max-width: 66ch; }
+  .prosa strong { color: var(--tinta); font-weight: 500; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--tinta); }
+
+  /* ---------- o interruptor hoje / proposto ---------- */
+  .comandos { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 26px; }
+  .segmentado {
+    display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--superficie2); border: 1px solid var(--linha); border-radius: 12px;
+  }
+  .segmentado button {
+    border: 0; background: transparent; color: var(--suave); cursor: pointer;
+    font-size: 13.5px; font-weight: 600; padding: 8px 16px; border-radius: 9px; min-height: 36px;
+  }
+  .segmentado button[aria-pressed="true"] {
+    background: var(--superficie); color: var(--erva);
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 1px 1px rgba(20,32,26,.06);
+  }
+  .dica { font-size: 13px; color: var(--suave); }
+  kbd {
+    font-family: var(--mono); font-size: 11.5px; background: var(--superficie);
+    border: 1px solid var(--linha2); border-bottom-width: 2px; border-radius: 6px;
+    padding: 2px 6px; color: var(--tinta);
+  }
+
+  /* ---------- a janela do sistema ---------- */
+  .janela-rolo { margin-top: 18px; overflow-x: auto; }
+  .janela {
+    min-width: 860px;
+    background: var(--papel);
+    border: 1px solid var(--linha2);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 12px 28px -18px rgba(20,32,26,.45);
+  }
+  .barra-topo {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    height: 56px; padding: 0 16px;
+    background: var(--superficie); border-bottom: 1px solid var(--linha);
+  }
+  .marca { display: flex; align-items: center; gap: 9px; }
+  .marca-selo {
+    width: 32px; height: 32px; border-radius: 7px; background: var(--erva);
+    color: #fff; display: grid; place-items: center;
+    font-family: var(--display); font-weight: 800; font-size: 15px;
+  }
+  .marca-nome { font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+  .marca-loja { font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--suave); }
+  .eu { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--suave); }
+  .eu span.bola {
+    width: 30px; height: 30px; border-radius: 999px; background: var(--erva-claro); color: var(--erva);
+    display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 12px;
+  }
+  .corpo { display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+  aside {
+    background: var(--superficie); border-right: 1px solid var(--linha);
+    height: 588px; overflow-y: auto; padding: 14px 12px 20px;
+  }
+  main.conteudo { padding: 26px 28px; min-height: 588px; }
+
+  /* ---------- menu: as classes de HOJE, copiadas do globals.css ---------- */
+  .menu-grupo {
+    display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px;
+    border-radius: 9px; padding: 7px 10px; text-align: left; border: 0; background: transparent;
+    font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--suave); cursor: pointer;
+  }
+  .menu-grupo:hover { background: var(--superficie2); }
+  .menu-grupo-ativo { color: var(--erva); }
+  .menu-item {
+    display: block; position: relative; border-radius: 9px; padding: 6.5px 10px 6.5px 22px;
+    font-family: var(--display); font-size: 14.5px; font-weight: 500; letter-spacing: -.004em;
+    color: var(--tinta); text-decoration: none; cursor: pointer;
+  }
+  .menu-item:hover { background: var(--superficie2); }
+  .menu-item-ativo { background: var(--erva-claro); font-weight: 600; color: var(--erva); }
+  .menu-item-ativo::before {
+    content: ""; position: absolute; left: 8px; top: 6.5px; bottom: 6.5px;
+    width: 3px; border-radius: 2px; background: var(--erva);
+  }
+  .menu-raiz {
+    display: block; border-radius: 9px; padding: 7px 10px;
+    font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--suave); text-decoration: none; cursor: pointer;
+  }
+  .menu-raiz:hover { background: var(--superficie2); }
+  .menu-raiz-ativo { background: var(--erva-claro); color: var(--erva); }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .escondido { display: none; }
+  .vazio-hoje {
+    margin: 18px 10px 0; padding-top: 14px; border-top: 1px dashed var(--sublinhado);
+    font-family: var(--corpo); font-size: 13px; line-height: 1.5; color: var(--suave);
+  }
+
+  /* ---------- menu: o PROPOSTO ---------- */
+  .p-busca {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    border: 1px solid var(--linha2); background: var(--superficie); color: var(--suave);
+    border-radius: 10px; padding: 9px 10px; margin-bottom: 14px; cursor: pointer;
+    font-family: var(--display); font-size: 13.5px; font-weight: 500; min-height: 40px;
+  }
+  .p-busca:hover { border-color: var(--erva); color: var(--erva); }
+  .p-busca .atalho { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--suave); }
+  .p-secao { margin: 0 4px 6px; }
+  .p-linha {
+    display: flex; align-items: center; gap: 9px; position: relative;
+    width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer;
+    border-radius: 10px; padding: 8px 8px 8px 10px; min-height: 38px;
+    font-family: var(--display); font-size: 14.5px; font-weight: 500; letter-spacing: -.004em;
+    color: var(--tinta); text-decoration: none;
+  }
+  .p-linha:hover { background: var(--superficie2); }
+  .p-linha .ico { flex: 0 0 18px; color: var(--suave); display: grid; place-items: center; }
+  .p-linha-ativa { background: var(--erva-claro); color: var(--erva); font-weight: 600; }
+  .p-linha-ativa .ico { color: var(--erva); }
+  .p-linha-ativa::before {
+    content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+    width: 3px; border-radius: 2px; background: var(--erva);
+  }
+  .p-grupo {
+    display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: transparent;
+    cursor: pointer; border-radius: 10px; padding: 8px 8px 8px 10px; min-height: 38px;
+    font-family: var(--display); font-size: 13.5px; font-weight: 600; letter-spacing: -.01em;
+    color: var(--suave); text-align: left;
+  }
+  .p-grupo:hover { background: var(--superficie2); }
+  .p-grupo .ico { flex: 0 0 18px; display: grid; place-items: center; }
+  .p-grupo .conta {
+    margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--suave);
+    background: var(--superficie2); border-radius: 999px; padding: 1px 6px;
+  }
+  .p-grupo-ativo { color: var(--erva); }
+  .p-grupo-ativo .conta { background: var(--erva-claro); color: var(--erva); }
+  .p-grupo .chev { margin-left: 6px; transition: transform .18s ease; opacity: .7; }
+  .p-grupo[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+  .p-filhos { padding-left: 27px; margin: 2px 0 6px; }
+  .p-filhos .p-linha { font-size: 14px; padding-left: 8px; }
+  .p-filhos .p-linha-ativa::before { left: -19px; }
+  .p-titulo-secao {
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--suave); padding: 0 10px; margin: 2px 0 4px;
+  }
+  .p-divisor { height: 1px; background: var(--linha); margin: 12px 6px; }
+  .fixar {
+    margin-left: auto; opacity: 0; border: 0; background: transparent; cursor: pointer;
+    color: var(--suave); border-radius: 7px; padding: 4px; line-height: 0;
+  }
+  .p-linha:hover .fixar, .fixar.marcado { opacity: 1; }
+  .fixar:hover { background: var(--papel); color: var(--erva); }
+  .fixar.marcado { color: var(--latao); }
+
+  /* ---------- a paleta de busca ---------- */
+  .veu { position: fixed; inset: 0; background: rgba(20,32,26,.35); display: grid; place-items: start center; padding-top: 12vh; z-index: 50; }
+  .veu[hidden] { display: none; }
+  .paleta {
+    width: min(560px, 92vw); background: var(--superficie); border: 1px solid var(--linha2);
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 26px 60px -24px rgba(20,32,26,.6);
+  }
+  .paleta input {
+    width: 100%; border: 0; border-bottom: 1px solid var(--linha); background: transparent;
+    padding: 15px 16px; font-family: var(--display); font-size: 16px; color: var(--tinta); outline: none;
+  }
+  .paleta input::placeholder { color: var(--suave); }
+  .paleta ul { list-style: none; margin: 0; padding: 6px; max-height: 340px; overflow-y: auto; }
+  .paleta li {
+    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px;
+    font-family: var(--display); font-size: 14.5px; cursor: pointer; min-height: 40px;
+  }
+  .paleta li .ico { color: var(--suave); display: grid; place-items: center; flex: 0 0 18px; }
+  .paleta li .caminho { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--suave); letter-spacing: .04em; text-transform: uppercase; }
+  .paleta li[aria-selected="true"] { background: var(--erva-claro); color: var(--erva); }
+  .paleta li[aria-selected="true"] .ico, .paleta li[aria-selected="true"] .caminho { color: var(--erva); }
+  .paleta li mark { background: transparent; color: var(--latao); font-weight: 700; }
+  .paleta li[aria-selected="true"] mark { color: var(--erva); text-decoration: underline; }
+  .paleta .pe {
+    display: flex; gap: 14px; padding: 9px 14px; border-top: 1px solid var(--linha);
+    font-size: 11.5px; color: var(--suave); background: var(--superficie2);
+  }
+  .paleta .nada { padding: 22px 16px; font-family: var(--corpo); color: var(--suave); }
+
+  /* ---------- a tela de mentira, à direita ---------- */
+  .cartao {
+    background: var(--superficie); border: 1px solid var(--linha);
+    border-radius: 14px; padding: 18px 20px;
+    box-shadow: 0 1px 2px rgba(20,32,26,.08), 0 8px 20px -16px rgba(20,32,26,.35);
+  }
+  .esqueleto { display: flex; flex-direction: column; gap: 11px; margin-top: 16px; }
+  .esqueleto div { height: 12px; border-radius: 999px; background: var(--superficie2); }
+  .medidor {
+    margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline;
+    font-size: 13.5px; color: var(--suave);
+  }
+  .medidor b { font-family: var(--mono); font-weight: 500; color: var(--tinta); }
+
+  /* ---------- notas e celular ---------- */
+  .grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); margin-top: 18px; }
+  .nota { background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px; padding: 18px 20px; }
+  .nota h3 { margin: 8px 0 6px; font-size: 17px; font-weight: 700; letter-spacing: -.015em; }
+  .nota p { margin: 0; font-family: var(--corpo); font-size: 15px; line-height: 1.5; color: var(--suave); }
+  .ordem { font-family: var(--mono); font-size: 11px; color: var(--latao); letter-spacing: .08em; }
+  .secao { margin-top: 56px; }
+  .secao > h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 6px; }
+
+  .celular-linha { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; margin-top: 18px; }
+  .celular {
+    width: 300px; flex: 0 0 auto; border: 1px solid var(--linha2); border-radius: 26px;
+    background: var(--superficie); padding: 10px; box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 16px 34px -22px rgba(20,32,26,.5);
+  }
+  .celular-tela { border: 1px solid var(--linha); border-radius: 18px; overflow: hidden; background: var(--superficie); }
+  .celular-topo { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--linha); }
+  .celular-menu { padding: 12px 10px 8px; height: 392px; overflow: hidden; }
+  .celular .p-linha { min-height: 44px; font-size: 15px; }
+  .celular .p-grupo { min-height: 44px; }
+  .barra-baixo {
+    display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--linha2);
+    background: var(--superficie);
+  }
+  .barra-baixo a {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 48px; text-decoration: none; color: var(--suave); font-size: 10.5px; font-weight: 500;
+    font-family: var(--display);
+  }
+  .barra-baixo a.aceso { color: var(--erva); }
+  svg { display: block; }
+  .selo-maquete {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linha2);
+    border-radius: 999px; padding: 3px 10px; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--latao);
+  }
+  @media (max-width: 720px) {
+    .folha { padding-block: 28px 56px; }
+    .celular { width: 100%; max-width: 320px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="folha">
+  <p class="rotulo">Botané · protótipo de menu · 14/09/2026</p>
+  <h1 class="titulo">Um menu mais moderno</h1>
+  <p class="prosa" style="margin-top:12px">
+    A lateral de hoje tem <strong>seis grupos, todos recolhidos</strong>, e leva a
+    <strong>25 telas</strong>. Recolher tudo foi uma decisão deliberada e continua certa — sem ela,
+    ao fim de dez minutos todos os grupos estavam abertos e a lista não cabia na altura da tela.
+    Só que ela cobra <strong>dois cliques por navegação</strong> e deixa cerca de
+    <strong>85% da coluna vazia</strong>. O menu troca espaço que não usa por cliques que você gasta.
+    Aqui estão os dois lados, para comparar antes de qualquer linha de código mudar.
+  </p>
+
+  <div class="comandos">
+    <div class="segmentado" role="group" aria-label="Versão do menu">
+      <button id="btn-hoje" aria-pressed="true">Hoje</button>
+      <button id="btn-proposto" aria-pressed="false">Proposto</button>
+    </div>
+    <span class="dica">No proposto: <kbd>Ctrl</kbd> + <kbd>K</kbd> abre a busca — e passe o ponteiro sobre um item para fixá-lo nos atalhos.</span>
+  </div>
+
+  <div class="janela-rolo">
+    <div class="janela">
+      <div class="barra-topo">
+        <div class="marca">
+          <span class="marca-selo">B</span>
+          <span>
+            <span class="marca-nome">Botané Deli e Café</span><br>
+            <span class="marca-loja">Salão</span>
+          </span>
+        </div>
+        <div class="eu"><span>Marcelo</span><span class="bola">MM</span></div>
+      </div>
+      <div class="corpo">
+        <aside><nav id="menu"></nav></aside>
+        <main class="conteudo">
+          <p class="rotulo" id="tela-caminho">Início</p>
+          <h2 class="titulo" id="tela-nome" style="margin-top:4px">Início</h2>
+          <p class="prosa" style="margin-top:8px" id="tela-frase">O dia da casa num relance.</p>
+          <div class="cartao" style="margin-top:20px">
+            <p class="rotulo">maquete</p>
+            <div class="esqueleto">
+              <div style="width:72%"></div><div style="width:54%"></div>
+              <div style="width:63%"></div><div style="width:41%"></div><div style="width:58%"></div>
+            </div>
+          </div>
+          <p style="margin-top:18px"><span class="selo-maquete">nenhuma tela real por trás</span></p>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <div class="medidor">
+    <span id="medida-ultima">Abra uma tela para medir o caminho.</span>
+    <span>Nesta sessão — hoje: <b id="conta-hoje">0</b> cliques · proposto: <b id="conta-proposto">0</b></span>
+  </div>
+
+  <section class="secao">
+    <h2>O que muda, em três movimentos</h2>
+    <p class="prosa">Em ordem de valor. Os três são independentes: dá para aprovar um e deixar os outros.</p>
+    <div class="grade">
+      <div class="nota">
+        <p class="ordem">1 · o de maior efeito</p>
+        <h3>Busca de tela (Ctrl+K)</h3>
+        <p>Digita “prod”, Enter, chegou. É a resposta moderna para 25 destinos, e não briga com a
+          regra dos grupos recolhidos — torna-a irrelevante, porque você deixa de navegar pela árvore.
+          Para quem abre o sistema todo dia, é a diferença entre caçar e chegar.</p>
+      </div>
+      <div class="nota">
+        <p class="ordem">2 · ocupa o espaço vazio</p>
+        <h3>Seus atalhos</h3>
+        <p>As telas que <em>esta</em> pessoa de fato abre, fixadas no topo — no espaço que já estava
+          sobrando. A cozinha não usa as mesmas telas que o escritório, e o menu não sabe disso hoje.
+          Fica no navegador, como a preferência de grupo aberto já fica.</p>
+      </div>
+      <div class="nota">
+        <p class="ordem">3 · o que faz parecer moderno</p>
+        <h3>Ícone em cada item</h3>
+        <p>Reconhecimento no lugar de leitura. Hoje é texto puro em caixa alta de 11px, que lê como
+          legenda, não como navegação. O título do grupo desce de MAIÚSCULAS 11px para caixa normal
+          de 13,5px — é o pedido de “letras amigáveis”, aplicado onde ele mais aparece.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>O que NÃO muda</h2>
+    <div class="grade">
+      <div class="nota">
+        <h3>Os grupos continuam recolhidos</h3>
+        <p>A decisão está registrada no código e o motivo dela não mudou. A busca e os atalhos
+          resolvem o incômodo sem desfazê-la.</p>
+      </div>
+      <div class="nota">
+        <h3>A paleta e as fontes</h3>
+        <p>Papel, erva, latão e as quatro famílias seguem iguais — inclusive as cores escurecidas
+          hoje de manhã para passar no contraste. Isto é um menu novo, não um sistema novo.</p>
+      </div>
+      <div class="nota">
+        <h3>A barra inferior do celular</h3>
+        <p>Início, Estoque, Compras e Reservas a um toque continuam lá. O que muda no telefone é a
+          gaveta: ela ganha a busca e os atalhos, e deixa de ser uma lista de seis rótulos.</p>
+      </div>
+      <div class="nota">
+        <h3>Permissão manda no menu</h3>
+        <p>Item que você não pode abrir não aparece — nem na lista, nem na busca, nem como atalho.
+          Continua valendo a mesma regra, inclusive para Reservas, que só existe com o módulo ligado.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Uma coisa a decidir</h2>
+    <div class="grade">
+      <div class="nota">
+        <h3>Compras deixa de ser grupo?</h3>
+        <p>“Compras” tem <strong>um item só</strong> — Notas de entrada. Hoje custa um clique para
+          abrir uma pasta com um papel dentro. No protótipo ele virou item direto. É reversível e é
+          seu o gosto: no proposto, repare que Compras não tem seta.</p>
+      </div>
+      <div class="nota">
+        <h3>Quais são os SEUS quatro atalhos?</h3>
+        <p>Chutei Produtos, Saldos, Notas de entrada e Painel de CMV. Quem opera sabe melhor — e no
+          protótipo dá para trocar: passe o ponteiro sobre qualquer item e clique no alfinete.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>No celular</h2>
+    <p class="prosa">A gaveta proposta. A barra de baixo, que já existe, continua ali — ela é para as
+      quatro telas do dia; a gaveta é para as outras vinte e uma.</p>
+    <div class="celular-linha">
+      <div class="celular">
+        <div class="celular-tela">
+          <div class="celular-topo">
+            <div class="marca">
+              <span class="marca-selo" style="width:26px;height:26px;font-size:13px">B</span>
+              <span class="marca-nome" style="font-size:15px">Botané</span>
+            </div>
+            <span class="rotulo">fechar</span>
+          </div>
+          <div class="celular-menu"><nav id="menu-celular"></nav></div>
+          <div class="barra-baixo">
+            <a href="#" class="aceso"><span data-ico="casa"></span>Início</a>
+            <a href="#"><span data-ico="caixas"></span>Estoque</a>
+            <a href="#"><span data-ico="nota"></span>Compras</a>
+            <a href="#"><span data-ico="agenda"></span>Reservas</a>
+          </div>
+        </div>
+      </div>
+      <p class="prosa" style="flex:1 1 260px;min-width:240px">
+        No telefone a busca vale ainda mais: não há ponteiro para passear pela lista, e rolar uma
+        gaveta de vinte e cinco linhas com o polegar é o que ninguém faz duas vezes. O campo fica no
+        topo da gaveta, e os atalhos logo abaixo — os dois primeiros toques depois de abrir.
+      </p>
+    </div>
+  </section>
+</div>
+
+<div class="veu" id="veu" hidden>
+  <div class="paleta" role="dialog" aria-modal="true" aria-label="Buscar tela">
+    <input id="busca" type="text" placeholder="Buscar tela… (ex.: produto, nota, cmv)" autocomplete="off">
+    <ul id="resultados" role="listbox"></ul>
+    <div class="pe">
+      <span><kbd>↑</kbd> <kbd>↓</kbd> para andar</span>
+      <span><kbd>Enter</kbd> para abrir</span>
+      <span><kbd>Esc</kbd> para fechar</span>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Os ícones são SVG desenhado aqui — nada de biblioteca de ícone: uma fonte de
+   ícones inteira para vinte e cinco desenhos é peso que não se paga. */
+const ICONES = {
+  casa: 'M3 8.5 9 3.5l6 5V15a1 1 0 0 1-1 1h-3v-4H7v4H4a1 1 0 0 1-1-1z',
+  etiqueta: 'M3 3h5l7 7-5 5-7-7zM6 6h.01',
+  caixa: 'M3 6.2 9 3l6 3.2v5.6L9 15l-6-3.2zM3 6.2 9 9.4l6-3.2M9 9.4V15',
+  ficha: 'M5 2.5h8v13H5zM7.5 6h3M7.5 9h3M7.5 12h2',
+  pessoa: 'M9 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 15.5c.6-2.7 2.8-4 5.5-4s4.9 1.3 5.5 4',
+  tabelas: 'M2.5 4.5h13M2.5 9h13M2.5 13.5h13M6 2.5v13',
+  exportar: 'M9 11.5V3m0 0L6 6m3-3 3 3M3.5 12.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2',
+  caixas: 'M2.5 5.5h13v9h-13zM2.5 9h13M7 5.5V3h4v2.5',
+  ajustes: 'M3 5.5h12M3 12.5h12M7 3.5v4M11.5 10.5v4',
+  caminhao: 'M1.5 5.5h8v6h-8zM9.5 8h3l2 2v1.5h-5zM4.5 13.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4zM12 13.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4z',
+  panela: 'M3 7.5h12v3a4.5 4.5 0 0 1-4.5 4.5h-3A4.5 4.5 0 0 1 3 10.5zM6.5 4.5c0-1 1-1.2 1-2M10 4.5c0-1 1-1.2 1-2',
+  inventario: 'M5 2.5h8v13H5zM7 6l1.2 1.2L11 4.5M7 11l1.2 1.2L11 9.5',
+  nota: 'M4 2.5h10v13l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2zM6.5 6h5M6.5 9h5',
+  grafico: 'M3 15V8M7.5 15V4M12 15v-5M2 15.5h14',
+  rede: 'M9 2.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM2.5 9h13M9 2.5c1.8 2 2.6 4.2 2.6 6.5S10.8 14 9 15.5C7.2 14 6.4 11.8 6.4 9S7.2 4.5 9 2.5z',
+  vendas: 'M2.5 3.5h2l1.6 7.6a1 1 0 0 0 1 .8h5.4a1 1 0 0 0 1-.8L15 6H5.2M7 14.5a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8zM12.5 14.5a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8z',
+  calendario: 'M3 4.5h12v11H3zM3 8h12M6.5 2.5v3M11.5 2.5v3',
+  agenda: 'M3 4.5h12v11H3zM3 8h12M6.5 2.5v3M11.5 2.5v3M6 11h2M10 11h2',
+  mesas: 'M2.5 6.5h13M4.5 6.5v6M13.5 6.5v6M6.5 4.5a2.5 2.5 0 0 1 5 0',
+  config: 'M9 11.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4zM9 2.5v1.8M9 13.7v1.8M15.5 9h-1.8M4.3 9H2.5M13.6 4.4l-1.3 1.3M5.7 12.3l-1.3 1.3M13.6 13.6l-1.3-1.3M5.7 5.7 4.4 4.4',
+  predio: 'M3.5 15.5v-13h11v13M6 5.5h2M10 5.5h2M6 9h2M10 9h2M7.5 15.5v-3h3v3',
+  loja: 'M2.5 7.5h13v8h-13zM2.5 7.5 4 3h10l1.5 4.5M7 15.5v-4h4v4',
+  usuarios: 'M6.5 8.5a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2zM1.5 15c.5-2.4 2.5-3.6 5-3.6s4.5 1.2 5 3.6M12 4.2a2.4 2.4 0 0 1 0 4.6M13.2 11.6c1.7.4 2.9 1.5 3.3 3.4',
+  chave: 'M11.5 2.5a4 4 0 1 1-3.3 6.3L3 14h-1.5v-1.5l.9-.9 1.3.3.3-1.3 1.3-1.3 1.3.3.4-1.4a4 4 0 0 1 4.5-5.7z',
+  tomada: 'M6.5 2.5v4M11.5 2.5v4M4.5 6.5h9v2a4.5 4.5 0 0 1-4.5 4.5A4.5 4.5 0 0 1 4.5 8.5zM9 13v3',
+  lupa: 'M8.2 13.4a5.2 5.2 0 1 0 0-10.4 5.2 5.2 0 0 0 0 10.4zM12.2 12.2 15.5 15.5',
+};
+
+function svg(nome, tamanho) {
+  const d = ICONES[nome] || ICONES.caixa;
+  return '<svg width="' + (tamanho || 17) + '" height="' + (tamanho || 17) + '" viewBox="0 0 18 18" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="' + d + '"/></svg>';
+}
+
+/* Os mesmos vinte e cinco destinos do MENU de web/app/(app)/layout.tsx. */
+const INICIO = { href: '/', nome: 'Início', icone: 'casa', frase: 'O dia da casa num relance.' };
+const GRUPOS = [
+  { grupo: 'Cadastros', icone: 'etiqueta', itens: [
+    { href: '/produtos', nome: 'Produtos', icone: 'caixa', frase: 'Tudo o que entra e sai da casa começa aqui.' },
+    { href: '/fichas', nome: 'Fichas técnicas', icone: 'ficha', frase: 'A receita de cada preparo, versionada.' },
+    { href: '/fornecedores', nome: 'Pessoas', icone: 'pessoa', frase: 'Quem vende, quem trabalha, quem consome.' },
+    { href: '/cadastros', nome: 'Tabelas de apoio', icone: 'tabelas', frase: 'Setores, locais, categorias e unidades.' },
+    { href: '/exportacao', nome: 'Exportação para o PDV', icone: 'exportar', frase: 'O que vai para a frente de caixa.' },
+  ]},
+  { grupo: 'Estoque', icone: 'caixas', itens: [
+    { href: '/estoque', nome: 'Saldos e movimentos', icone: 'caixas', frase: 'Quanto tem, e por onde passou.' },
+    { href: '/ajustes', nome: 'Ajustes', icone: 'ajustes', frase: 'Entrada, saída, perda, transferência e custo.' },
+    { href: '/transferencias', nome: 'Remessas entre lojas', icone: 'caminhao', frase: 'O que uma loja manda para a outra.' },
+    { href: '/producao', nome: 'Produção', icone: 'panela', frase: 'O que a cozinha transformou hoje.' },
+    { href: '/inventario', nome: 'Inventário', icone: 'inventario', frase: 'A contagem que acerta o saldo com a prateleira.' },
+  ]},
+  { grupo: 'Compras', icone: 'nota', itens: [
+    { href: '/compras', nome: 'Notas de entrada', icone: 'nota', frase: 'O que chegou pela porta, e por quanto.' },
+  ]},
+  { grupo: 'CMV', icone: 'grafico', itens: [
+    { href: '/cmv', nome: 'Painel de CMV', icone: 'grafico', frase: 'Quanto custou o que se vendeu no período.' },
+    { href: '/rede', nome: 'Visão da rede', icone: 'rede', frase: 'As lojas lado a lado.' },
+    { href: '/vendas', nome: 'Vendas', icone: 'vendas', frase: 'O que saiu pelo caixa.' },
+    { href: '/consumo', nome: 'Períodos de consumo', icone: 'calendario', frase: 'O que cada pessoa consumiu e deve.' },
+  ]},
+  { grupo: 'Reservas', icone: 'agenda', itens: [
+    { href: '/reservas/agenda', nome: 'Agenda do dia', icone: 'agenda', frase: 'Quem vem hoje, e em que mesa.' },
+    { href: '/reservas/salao', nome: 'Salão', icone: 'mesas', frase: 'Os salões, as mesas e os lugares.' },
+    { href: '/reservas/configuracoes', nome: 'Configurações', icone: 'config', frase: 'Horário, permanência e regras da reserva.' },
+  ]},
+  { grupo: 'Administração', icone: 'predio', itens: [
+    { href: '/empresa', nome: 'Empresa', icone: 'predio', frase: 'O nome, o CNPJ e a logo da casa.' },
+    { href: '/lojas', nome: 'Lojas', icone: 'loja', frase: 'As unidades e os parâmetros de cada uma.' },
+    { href: '/usuarios', nome: 'Usuários', icone: 'usuarios', frase: 'Quem entra no sistema.' },
+    { href: '/papeis', nome: 'Papéis e permissões', icone: 'chave', frase: 'O que cada papel pode fazer.' },
+    { href: '/integracoes', nome: 'Integrações', icone: 'tomada', frase: 'Omie, PDV e as chaves de acesso.' },
+    { href: '/auditoria', nome: 'Auditoria', icone: 'lupa', frase: 'Quem fez o quê, e quando.' },
+  ]},
+];
+
+const TODAS = [INICIO].concat(GRUPOS.flatMap(g => g.itens.map(i => Object.assign({ grupo: g.grupo }, i))));
+const porHref = Object.fromEntries(TODAS.map(t => [t.href, t]));
+
+let modo = 'hoje';
+let atual = '/';
+let abertos = {};                       /* grupo -> aberto? — o padrão é recolhido, como hoje */
+let atalhos = ['/produtos', '/estoque', '/compras', '/cmv'];
+const cliques = { hoje: 0, proposto: 0 };
+let desdeNav = 0;
+let viaTeclado = false;
+
+const $ = s => document.querySelector(s);
+
+function contar() { cliques[modo]++; desdeNav++; }
+
+/* ---------------- o menu de HOJE ---------------- */
+function menuHoje() {
+  let h = '<a href="#" class="menu-raiz ' + (atual === '/' ? 'menu-raiz-ativo' : '') +
+    '" data-ir="/">Início</a>';
+  for (const g of GRUPOS) {
+    const aberto = abertos[g.grupo] ?? false;
+    const temAtivo = g.itens.some(i => i.href === atual);
+    h += '<div style="margin-bottom:2px">' +
+      '<button class="menu-grupo ' + (temAtivo ? 'menu-grupo-ativo' : '') + '" data-grupo="' + g.grupo +
+      '" aria-expanded="' + aberto + '"><span>' + g.grupo + '</span>' +
+      '<svg viewBox="0 0 10 6" width="10" height="6" style="opacity:.7;transform:rotate(' + (aberto ? 0 : -90) + 'deg)">' +
+      '<path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</button><ul class="' + (aberto ? '' : 'escondido') + '" style="padding-bottom:8px">' +
+      g.itens.map(i => '<li><a href="#" class="menu-item ' + (i.href === atual ? 'menu-item-ativo' : '') +
+        '" data-ir="' + i.href + '">' + i.nome + '</a></li>').join('') +
+      '</ul></div>';
+  }
+  h += '<p class="vazio-hoje">Daqui para baixo, 380px de coluna sem nada — e toda tela a dois cliques.</p>';
+  return h;
+}
+
+/* ---------------- o menu PROPOSTO ---------------- */
+function linha(item, ehAtalho) {
+  const ativo = item.href === atual ? ' p-linha-ativa' : '';
+  const fixado = atalhos.includes(item.href);
+  const alfinete = '<button class="fixar ' + (fixado ? 'marcado' : '') + '" data-fixar="' + item.href +
+    '" title="' + (fixado ? 'tirar dos atalhos' : 'fixar nos atalhos') + '" aria-label="' +
+    (fixado ? 'Tirar dos atalhos' : 'Fixar nos atalhos') + '">' +
+    '<svg width="14" height="14" viewBox="0 0 18 18" fill="' + (fixado ? 'currentColor' : 'none') +
+    '" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">' +
+    '<path d="M11 2.5 15.5 7l-2.2.6-3 3 .4 2.6-1.3 1.3-3-3-3.4 3.4 3.4-3.4-3-3L4.7 7.3l2.6.4 3-3z"/></svg></button>';
+  return '<a href="#" class="p-linha' + ativo + '" data-ir="' + item.href + '">' +
+    '<span class="ico">' + svg(item.icone) + '</span><span>' + item.nome + '</span>' +
+    (ehAtalho ? '' : alfinete) + '</a>';
+}
+
+function menuProposto(paraCelular) {
+  let h = '<button class="p-busca" data-abrir-busca="1">' + svg('lupa', 16) +
+    '<span>Buscar tela…</span><span class="atalho">' + (paraCelular ? '' : 'CTRL K') + '</span></button>';
+
+  h += linha(INICIO, true);
+
+  if (atalhos.length) {
+    h += '<div class="p-divisor"></div><p class="p-titulo-secao"><span>Seus atalhos</span></p>';
+    h += atalhos.map(href => linha(porHref[href], true)).join('');
+  }
+
+  h += '<div class="p-divisor"></div>';
+
+  for (const g of GRUPOS) {
+    /* 🔑 Grupo de UM item só vira item: abrir uma pasta com um papel dentro é
+       um clique que não compra nada. */
+    if (g.itens.length === 1) { h += linha(g.itens[0], false); continue; }
+    const aberto = abertos[g.grupo] ?? false;
+    const temAtivo = g.itens.some(i => i.href === atual);
+    h += '<button class="p-grupo ' + (temAtivo ? 'p-grupo-ativo' : '') + '" data-grupo="' + g.grupo +
+      '" aria-expanded="' + aberto + '"><span class="ico">' + svg(g.icone) + '</span><span>' + g.grupo +
+      '</span><span class="conta">' + g.itens.length + '</span>' +
+      '<svg class="chev" viewBox="0 0 10 6" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+      '<div class="p-filhos ' + (aberto ? '' : 'escondido') + '">' +
+      g.itens.map(i => linha(i, false)).join('') + '</div>';
+  }
+  return h;
+}
+
+function pintar() {
+  $('#menu').innerHTML = modo === 'hoje' ? menuHoje() : menuProposto(false);
+  $('#menu-celular').innerHTML = menuProposto(true);
+  document.querySelectorAll('.barra-baixo [data-ico]').forEach(el => {
+    el.innerHTML = svg(el.dataset.ico, 18);
+  });
+  $('#btn-hoje').setAttribute('aria-pressed', String(modo === 'hoje'));
+  $('#btn-proposto').setAttribute('aria-pressed', String(modo === 'proposto'));
+  $('#conta-hoje').textContent = cliques.hoje;
+  $('#conta-proposto').textContent = cliques.proposto;
+}
+
+function abrirTela(href) {
+  const t = porHref[href];
+  if (!t) return;
+  atual = href;
+  $('#tela-caminho').textContent = t.grupo || 'Início';
+  $('#tela-nome').textContent = t.nome;
+  $('#tela-frase').textContent = t.frase;
+  const como = viaTeclado
+    ? 'pela busca: <b>0</b> cliques, só o teclado'
+    : '<b>' + desdeNav + '</b> ' + (desdeNav === 1 ? 'clique' : 'cliques');
+  $('#medida-ultima').innerHTML = 'Para abrir <b>' + t.nome + '</b>: ' + como + '.';
+  desdeNav = 0;
+  viaTeclado = false;
+  pintar();
+}
+
+/* ---------------- a paleta ---------------- */
+let achados = [];
+let escolhido = 0;
+
+function semAcento(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function buscar(termo) {
+  const t = semAcento(termo.trim());
+  if (!t) return TODAS.slice(0, 8);
+  return TODAS.filter(i => semAcento(i.nome).includes(t) || semAcento(i.grupo || '').includes(t));
+}
+
+function realce(nome, termo) {
+  const t = semAcento(termo.trim());
+  if (!t) return nome;
+  const i = semAcento(nome).indexOf(t);
+  if (i < 0) return nome;
+  return nome.slice(0, i) + '<mark>' + nome.slice(i, i + t.length) + '</mark>' + nome.slice(i + t.length);
+}
+
+function pintarResultados(termo) {
+  const ul = $('#resultados');
+  if (!achados.length) {
+    ul.innerHTML = '<li class="nada" role="presentation">Nada com esse nome. ' +
+      'Talvez esteja em outro grupo — ou você não tem permissão para esta tela.</li>';
+    return;
+  }
+  ul.innerHTML = achados.map((i, n) =>
+    '<li role="option" aria-selected="' + (n === escolhido) + '" data-n="' + n + '">' +
+    '<span class="ico">' + svg(i.icone) + '</span><span>' + realce(i.nome, termo) + '</span>' +
+    '<span class="caminho">' + (i.grupo || 'início') + '</span></li>').join('');
+}
+
+function abrirBusca() {
+  $('#veu').hidden = false;
+  $('#busca').value = '';
+  achados = buscar('');
+  escolhido = 0;
+  pintarResultados('');
+  $('#busca').focus();
+}
+
+function fecharBusca() { $('#veu').hidden = true; }
+
+$('#busca').addEventListener('input', e => {
+  achados = buscar(e.target.value);
+  escolhido = 0;
+  pintarResultados(e.target.value);
+});
+
+$('#busca').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!achados.length) return;
+    escolhido = (escolhido + (e.key === 'ArrowDown' ? 1 : achados.length - 1)) % achados.length;
+    pintarResultados(e.target.value);
+    const alvo = $('#resultados').children[escolhido];
+    if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!achados.length) return;
+    viaTeclado = true;
+    fecharBusca();
+    abrirTela(achados[escolhido].href);
+  } else if (e.key === 'Escape') {
+    fecharBusca();
+  }
+});
+
+$('#resultados').addEventListener('click', e => {
+  const li = e.target.closest('li[data-n]');
+  if (!li) return;
+  contar();
+  fecharBusca();
+  abrirTela(achados[Number(li.dataset.n)].href);
+});
+
+$('#veu').addEventListener('click', e => { if (e.target === $('#veu')) fecharBusca(); });
+
+window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (modo !== 'proposto') { modo = 'proposto'; pintar(); }
+    abrirBusca();
+  } else if (e.key === 'Escape') {
+    fecharBusca();
+  }
+});
+
+/* ---------------- cliques no menu ---------------- */
+document.addEventListener('click', e => {
+  const fixar = e.target.closest('[data-fixar]');
+  if (fixar) {
+    e.preventDefault();
+    const href = fixar.dataset.fixar;
+    atalhos = atalhos.includes(href)
+      ? atalhos.filter(h => h !== href)
+      : atalhos.concat(href).slice(-5);   /* cinco é o teto: atalho demais é menu de novo */
+    pintar();
+    return;
+  }
+  const busca = e.target.closest('[data-abrir-busca]');
+  if (busca) { e.preventDefault(); contar(); abrirBusca(); return; }
+
+  const grupo = e.target.closest('[data-grupo]');
+  if (grupo) { contar(); abertos[grupo.dataset.grupo] = !(abertos[grupo.dataset.grupo] ?? false); pintar(); return; }
+
+  const ir = e.target.closest('[data-ir]');
+  if (ir) { e.preventDefault(); contar(); abrirTela(ir.dataset.ir); }
+});
+
+$('#btn-hoje').addEventListener('click', () => { modo = 'hoje'; abertos = {}; pintar(); });
+$('#btn-proposto').addEventListener('click', () => { modo = 'proposto'; abertos = {}; pintar(); });
+
+pintar();
+</script>
+</body>
+</html>

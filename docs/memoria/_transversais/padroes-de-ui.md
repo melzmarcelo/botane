@@ -364,6 +364,50 @@
   sinal de que a correção acertou o lugar. Afrouxar a tolerância teria deixado a checagem
   verde e o defeito esperando para morder alguém no celular.
 
+- 🔑 **O menu virou navegação, e não índice de livro** (15/09/2026, pedido do dono: *"pensando
+  em layout, gostaria de um menu mais moderno"*). O diagnóstico não foi "está feio": a lateral
+  levava a **25 telas em 6 grupos, todos recolhidos**, e mostrava **seis linhas numa coluna de
+  900px** — cerca de 85% dela sem uso — enquanto **toda navegação custava dois cliques**. Ou
+  seja: **o menu trocava espaço vertical que não usava por cliques que cobrava.**
+  🔑 **A regra dos grupos recolhidos NÃO foi desfeita** — ela continua certa (sem ela, em dez
+  minutos estão todos abertos e a lista não cabe na altura da tela). O que mudou foi tornar a
+  árvore desnecessária para quem já sabe para onde vai. Três movimentos, nesta ordem de valor:
+  * **Busca de telas com `Ctrl+K`** (`components/paleta-telas.tsx`): digita "invent", Enter,
+    chegou — **zero cliques**. É a resposta moderna para 25 destinos.
+  * **Atalhos fixados** (`lib/atalhos.ts`), no espaço que já estava vazio: a cozinha não abre
+    as mesmas telas que o escritório, e o menu não sabia disso. Alfinete em cada linha, teto
+    de cinco, guardados no navegador como a preferência de grupo aberto já era.
+  * **Ícone em cada item e em cada grupo** (`lib/icones.ts`, 26 traçados próprios): era texto
+    puro em MAIÚSCULAS de 11px, que lê como legenda de seção, não como navegação. O título de
+    grupo desceu para caixa normal de 13,5px — o pedido de "letras amigáveis" onde ele mais
+    aparece. ⚠️ **Nada de biblioteca de ícones**: uma fonte inteira para 26 desenhos é peso de
+    download e uma dependência externa envelhecendo sozinha no meio da navegação.
+  🔑 **Grupo que sobra com UM item vira item** (`montarMenu`): abrir uma pasta com um papel
+  dentro é um clique que não compra nada. Vale para Compras, que nasce com um item só — e,
+  mais importante, para quem tem permissão de UMA tela dentro de um grupo de seis.
+  🔑 **A lista de telas saiu do `layout.tsx` para `lib/menu.ts`**, porque passou a servir a
+  três peças (menu, busca e atalhos). ⚠️ **Lista de navegação duplicada é lista que diverge**:
+  a tela nova entra numa e não na outra, e a busca vira uma coisa em que não se confia. Por
+  isso a bateria prova, na sessão da COZINHA, que a busca não oferece "Empresa" — uma segunda
+  lista seria o caminho natural para esse defeito nascer.
+  ⚠️ **O alfinete é IRMÃO do link, nunca filho.** `<button>` dentro de `<a>` é HTML inválido:
+  o navegador desmancha a árvore em silêncio e o leitor de tela anuncia um controle dentro do
+  outro. A checagem `aside a button === 0` existe para isso.
+  ⚠️ **Os atalhos são lidos no INICIALIZADOR do estado, não num `useEffect`** — e isso só é
+  seguro porque o menu monta depois do `/auth/me` (a casca devolve `null` sem `eu`), então ele
+  nunca participa da hidratação. Num efeito, eles apareceriam um quadro depois e empurrariam
+  os grupos para baixo: exatamente o defeito do convite de instalação, logo acima nesta lista.
+  ⚠️ **A busca não abre por cima de uma janela** (`haJanelaAberta()`, exportado de `ui.tsx`):
+  com a janela de vincular produto aberta, um `Ctrl+K` distraído navegaria para outra tela e
+  levaria junto o trabalho de dentro dela.
+  ⚠️ **`.menu-raiz` deixou de existir.** Ela era o Início escrito como título de grupo, para
+  ele não parecer um filho solto no topo; com ícone e sem indentação, a linha comum já diz o
+  nível. ⚠️ E a barra do celular trocou os glifos de texto (◈ ▤ ❏ ☷) pelos mesmos ícones do
+  menu — o Estoque da barra não parecia o Estoque da lateral, que é justamente a associação
+  que a barra existe para criar.
+  Protótipo aprovado antes de qualquer código: [`apresentacao/menu-prototipo.html`](../../../apresentacao/menu-prototipo.html)
+  (os dois menus lado a lado, com contador de cliques).
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).
