@@ -183,12 +183,12 @@ st, papel = chamar("POST", "/papeis", {
     "nome": f"So saldos {marca}", "permissoes": ["estoque.saldos"],
 }, token=token)
 st, u = chamar("POST", "/usuarios", {
-    "nome": f"Sem custo {marca}", "email": f"semcusto.{marca}@botane.com.br",
+    "nome": f"Sem custo {marca}", "email": f"smoke.semcusto{marca}@botane.com.br",
     "senha": "semcusto12345", "id_papel": (papel or {}).get("id"),
 }, token=token)
 if (u or {}).get("id"):
     st, entrou = chamar("POST", "/auth/login",
-                        {"email": f"semcusto.{marca}@botane.com.br", "senha": "semcusto12345"})
+                        {"email": f"smoke.semcusto{marca}@botane.com.br", "senha": "semcusto12345"})
     if st == 200:
         st, r = chamar("POST", "/estoque/reprocessar", {"id_produto": produto},
                        token=entrou["access_token"])

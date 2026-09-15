@@ -159,13 +159,25 @@ _SQL_FILIAIS = [
 # só dígitos em quatro casas é um ano, e "COZINHA 2024" é nome plausível de
 # casa de verdade. De cinco ou seis caracteres o risco desaparece — ninguém
 # chama um setor de "SALA 537000".
-_CARIMBO = re.compile(r" (?:[0-9A-F]{5,6}|(?=[0-9A-F]{4}$)[0-9A-F]*[A-F][0-9A-F]*)$")
+# ⚠️ **`IGNORECASE` desde 15/09/2026.** O carimbo era só em MAIÚSCULAS, e parte
+# das suítes escreve o dela em minúsculas ("Sem custo b083bc"): **67 papéis**
+# ficaram na base por causa da caixa de seis letras. O que autoriza apagar
+# continua sendo a segunda condição — ninguém referenciar a linha —, e por isso
+# afrouxar o nome aqui é seguro.
+_CARIMBO = re.compile(r" (?:[0-9A-F]{5,6}|(?=[0-9A-F]{4}$)[0-9A-F]*[A-F][0-9A-F]*)$",
+                      re.IGNORECASE)
 
 # ⚠️ `papeis` entra junto porque é o mesmo tipo de sujeira, ainda que não seja
 # "apoio": a suíte do inventário cria um papel por rodada para provar que quem
 # conta não monta a contagem, e eles poluem o cartão "Papéis" de todo cadastro
 # de usuário.
-RESIDUO = ["setores", "locais_estoque", "categorias", "papeis"]
+# ⚠️ **`saloes` entrou em 15/09/2026**, junto com a prioridade do PDV na fusão e
+# o reprocessamento: as rodadas da bateria criam três salões cada ("Principal
+# 415216"…), e como eles são APOIO — o desenho físico da casa, que uma limpeza
+# de operação preserva — iam se acumulando numa base que dizia estar limpa.
+# ⚠️ As MESAS saem junto pelo `ON DELETE CASCADE` da migração 069, e por isso
+# elas entram em `_PROPRIAS`: uma mesa não "prende" o salão dela.
+RESIDUO = ["setores", "locais_estoque", "categorias", "papeis", "saloes"]
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +241,7 @@ def _quem_referencia(cur, tabela: str) -> list[tuple[str, str]]:
 # papel — todo papel tem as dela, e tratá-la como "alguém usa isto" fazia a
 # varredura devolver ZERO papéis: cada um estava preso pelas próprias
 # permissões. A lista aqui é de tabelas que PERTENCEM à linha e saem com ela.
-_PROPRIAS = {"papeis": {"papel_permissoes"}}
+_PROPRIAS = {"papeis": {"papel_permissoes"}, "saloes": {"mesas", "reserva_mesas"}}
 
 
 def residuo_de_teste(cur, tabela: str, ignorar: set[str] | None = None,
@@ -390,8 +402,17 @@ def _sql_usuarios(so_o_admin: bool, contar: bool = False) -> str:
         # ⚠️ `conta.` entrou depois: é o contador que a suíte do inventário cria
         # a cada rodada, para provar que quem conta não monta a contagem. Sem
         # ele no filtro, a base "entregue ao cliente" ia com dezesseis deles.
+        # ⚠️ **Terceira vez que a lista fica para trás** (15/09/2026): `vincp`,
+        # `criap` (suíte do vínculo) e `semcusto` (a do reprocessamento) somavam
+        # **93 usuários inativos** numa base que dizia estar limpa. O padrão é
+        # sempre o mesmo — suíte nova inventa um prefixo, e quem escreve a suíte
+        # não lembra que existe uma lista aqui. 🔑 Quem escrever a próxima:
+        # comece o e-mail com `smoke.`, que já está coberto.
         else """(email LIKE 'smoke.%%' OR email LIKE 'tela.%%'
                  OR email LIKE 'semana.%%' OR email LIKE 'conta.%%'
+                 OR email LIKE 'vincp%%' OR email LIKE 'criap%%'
+                 OR email LIKE 'semcusto%%'
+                 OR email LIKE '%%@teste.com'
                  OR email LIKE '%%.teste@%%' OR email LIKE 'cozinha.teste@%%')
                 AND email <> %s"""
     )
