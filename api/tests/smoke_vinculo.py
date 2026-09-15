@@ -128,21 +128,42 @@ st, prev = chamar("GET", f"/produtos/{do_omie}/vincular/previa?id_sai={do_pdv}",
 checar("a prévia responde", st == 200, (st, prev))
 checar("e diz que pode", prev.get("pode") is True, prev.get("impedimentos"))
 res = prev.get("resultado") or {}
-# ⚠️ A afirmação central: os dois nomes têm funções diferentes. O do Omie é o
-# fiscal, o que aparece na nota; o do PDV é o que sai no cupom.
-checar("a descrição vem do lado do OMIE",
-       res.get("nome") == f"BEB CERV HEINEKEN 350ML {marca}", res.get("nome"))
-checar("e a descrição curta do lado do PDV",
+# 🔑 **O cadastro do PDV tem prioridade** (15/09/2026, pedido do dono: *"sempre
+# dar prioridade para manter o produto do PDV e não do Omie — nomes, código,
+# preço de venda"*). Ele é o que a casa VENDE: carrega o nome que a equipe fala,
+# o preço e o histórico de venda. O do Omie é a cópia fiscal do catálogo.
+# ⚠️ Repare que a prévia é pedida DA TELA DO OMIE e mesmo assim inverte — a
+# direção é dos fatos, não da tela em que se está.
+checar("da tela do Omie, a direção inverte para o lado do PDV",
+       prev.get("invertido") is True and prev["fica"]["id"] == do_pdv,
+       (prev.get("invertido"), prev["fica"]["id"], do_pdv))
+checar("com o motivo dito", "PDV" in (prev.get("motivo_da_direcao") or ""),
+       prev.get("motivo_da_direcao"))
+# ⚠️ **As DUAS descrições passam a vir do cardápio.** Era o contrário até hoje —
+# a longa vinha do Omie, o nome fiscal da nota — e o efeito prático foi o dono
+# reescrever o nome à mão um minuto depois da primeira fusão com dado real.
+# O nome fiscal não se perde: continua na linha da nota (`descricao_fornecedor`),
+# que é o que a conferência lê.
+checar("a descrição vem do lado do PDV",
+       res.get("nome") == f"CERVEJA HEINEKEN PILSEN {marca}", res.get("nome"))
+checar("e a descrição curta também",
        res.get("nome_curto") == f"CERVEJA HEINEKEN PILSEN {marca}", res.get("nome_curto"))
 checar("a prévia diz de onde veio cada uma",
-       (res.get("de_onde") or {}).get("nome") == "omie"
+       (res.get("de_onde") or {}).get("nome") == "pdv"
        and (res.get("de_onde") or {}).get("nome_curto") == "pdv", res.get("de_onde"))
 checar("os dois códigos ficam no mesmo cadastro",
        res.get("codigo_omie") == f"77{marca}" and res.get("codigo_pdv") == f"99{marca}", res)
-checar("e lista os campos que vão ser completados",
-       set(prev.get("completa") or []) >= {"marca", "cest"}, prev.get("completa"))
-checar("dizendo quantos itens de venda mudam de dono",
-       prev.get("itens_de_venda") == 1, prev.get("itens_de_venda"))
+# 🔑 **A checagem que segura o buraco que a direção nova abriria.** O rascunho do
+# cardápio nasce SEM controlar estoque; com ele sobrevivendo, a compra deixaria
+# de entrar no razão — calada — se `controla_estoque` não fosse herdado.
+checar("e o que fica passa a CONTROLAR ESTOQUE, herdando do outro",
+       "controla_estoque" in (prev.get("completa") or []), prev.get("completa"))
+checar("junto com o que mais estiver em branco nele",
+       "ncm" in (prev.get("completa") or []), prev.get("completa"))
+# ⚠️ ZERO, e isso é a regra funcionando: a venda já é do cadastro que FICA, então
+# não muda de dono. Com a direção antiga, ela é que mudava.
+checar("e nenhuma venda precisa mudar de dono",
+       prev.get("itens_de_venda") == 0, prev.get("itens_de_venda"))
 
 st, r = chamar("GET", f"/produtos/{do_omie}/vincular/previa?id_sai={do_omie}", token=token)
 checar("conferir consigo mesmo é recusado", st == 400, st)
@@ -364,8 +385,13 @@ checar("e ele ganhou custo (o do Omie tem custo médio)",
 checar("completou marca e cest", set(r.get("completados") or []) >= {"marca", "cest"}, r)
 
 st, fica = chamar("GET", f"/produtos/{do_omie}", token=token)
-checar("a descrição ficou a do Omie",
-       fica.get("nome") == f"BEB CERV HEINEKEN 350ML {marca}", fica.get("nome"))
+# 🔑 **O nome do PDV prevalece mesmo quando quem SOBREVIVE é o cadastro do
+# Omie** (15/09/2026). Aqui a direção foi decidida pela história — o lado do
+# Omie tem movimento no razão e não pode ser absorvido —, e ainda assim o
+# cadastro passa a se chamar como a casa o chama. É a diferença entre "qual
+# linha sobrevive" (fato do razão) e "de quem é o nome" (escolha do dono).
+checar("a descrição ficou a do PDV, mesmo com o cadastro do Omie sobrevivendo",
+       fica.get("nome") == f"CERVEJA HEINEKEN PILSEN {marca}", fica.get("nome"))
 checar("a curta ficou a do PDV",
        fica.get("nome_curto") == f"CERVEJA HEINEKEN PILSEN {marca}", fica.get("nome_curto"))
 checar("o código do PDV migrou", fica.get("codigo_pdv") == f"99{marca}", fica.get("codigo_pdv"))
@@ -868,6 +894,47 @@ for _p in (o_que_fica, o_que_sai):
 
 for _p in (abacate, terceiro, sem_codigo):
     chamar("DELETE", f"/produtos/{_p}", token=token)
+
+
+
+print("\n9. o lote recusa quem puxaria a direção para o outro lado")
+# 🔑 **Nasceu com a prioridade do PDV** (15/09/2026). `fundir` resolve a direção
+# de novo a cada par — é o que faz o botão Vincular funcionar dos dois lados —, e
+# num LOTE isso vira armadilha: bastava um cadastro do cardápio entre os que
+# saem para aquele par sobreviver do outro lado, deixando o grupo com DOIS
+# sobreviventes e a resposta relatando um principal que não é o de todos.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"LOTE-OM-{marca}", "nome": f"AGUA LOTE {marca}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": True, "status": "ATIVO",
+    "codigo_omie": f"81{marca}",
+}, token=token)
+lote_omie = r.get("id")
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"LOTE-PDV-{marca}", "nome": f"AGUA LOTE {marca}", "tipo": "PRODUZIDO",
+    "producao_propria": True, "controla_estoque": False, "status": "RASCUNHO",
+    "codigo_pdv": f"82{marca}",
+}, token=token)
+lote_pdv = r.get("id")
+checar("dois cadastros do mesmo nome, um de cada porta", bool(lote_omie and lote_pdv),
+       (lote_omie, lote_pdv))
+
+st, r = chamar("POST", "/produtos/duplicados/fundir", {
+    "id_principal": lote_omie, "ids_que_saem": [lote_pdv],
+}, token=token)
+checar("juntar com o do PDV saindo é RECUSADO", st >= 400, (st, r))
+checar("e a recusa diz quem ficaria no lugar",
+       "principal" in str(r.get("detail", "")).lower(), r)
+# ⚠️ E o caminho certo funciona: a partir do cadastro do PDV, que é o principal
+# pela regra — a recusa acima não é um beco, é uma seta.
+st, r = chamar("POST", "/produtos/duplicados/fundir", {
+    "id_principal": lote_pdv, "ids_que_saem": [lote_omie],
+}, token=token)
+checar("e a partir do cadastro do PDV o lote passa", st == 200, (st, r))
+st, sobrou = chamar("GET", f"/produtos/{lote_pdv}", token=token)
+checar("com o do cardápio sobrevivendo e controlando estoque",
+       sobrou.get("ativo") is True and sobrou.get("controla_estoque") is True, sobrou)
+
+
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

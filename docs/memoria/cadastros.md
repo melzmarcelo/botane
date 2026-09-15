@@ -337,6 +337,35 @@
   ⚠️ **Todos os escolhidos têm de cair no MESMO principal.** A direção é dos fatos: um cadastro
   com história puxa a fusão para o lado dele. Num lote isso vira trava com frase, porque o
   sobrevivente seria outro e a pessoa confirmaria uma coisa acontecendo outra.
+  🔑 **O cadastro do PDV passou a ter prioridade sobre o do Omie** (15/09/2026, pedido do dono:
+  *"sempre dar prioridade para manter o produto do PDV e não do Omie — nomes, código, preço de
+  venda"*). Ele é o que a casa VENDE: carrega o nome que a equipe fala, o preço e o histórico de
+  venda; o do Omie é a cópia fiscal do catálogo do fornecedor. O que motivou foi a primeira
+  fusão feita com dado real: o produto sobreviveu chamando-se "ANA&GRAZI VINHO FINO TINTO SECO
+  SYRAH 6X750 ML" e o dono reescreveu o nome à mão **um minuto depois** — a regra antiga estava
+  criando trabalho, não guardando informação.
+  ⚠️ **A ordem dos critérios importa, e ela custou duas rodadas para ficar certa:**
+  1. **história** — e agora olhada dos DOIS lados. Antes bastava perguntar pelo escolhido:
+     não tendo ele impedimento, a resposta caía no `return` do fim, que mantém a tela — e a tela
+     era justamente quem tinha razão. Esse acaso acabou quando o critério do PDV entrou no meio,
+     e a fusão passou a morrer com *"os dois têm história"*. **Quem tem história fica, sempre.**
+  2. **PDV contra OMIE** — e só contra o Omie. Contra um cadastro da CASA ele não vale: do outro
+     lado está um cadastro que alguém fez, com ficha, categoria e setor, e o do PDV é um
+     rascunho gerado sozinho. Quem cobrou isso foi a suíte do PDV, com o "PAO DE QUEIJO" da casa
+     recebendo o código do rascunho.
+  3. **controlar estoque** · 4. **a tela**.
+  ⚠️ **E o critério 3 virou HERANÇA, não direção**: `controla_estoque` entrou em `_COMPLETAVEIS`.
+  Ele existia porque o rascunho do cardápio nasce sem controlar, e fundir o do Omie nele
+  produzia um produto **sem controlar estoque** — a compra deixaria de entrar no razão, calada.
+  Mudar a ordem sem essa linha teria reaberto um defeito que já custou caro.
+  🔑 **O NOME vem do lado do PDV mesmo quando quem sobrevive é o do Omie** (`_nomes`): são duas
+  perguntas diferentes — *qual linha sobrevive* é fato do razão, *de quem é o nome* é escolha do
+  dono. O nome fiscal não se perde: continua na linha da nota (`descricao_fornecedor`), que é o
+  que a conferência lê.
+  🔑 **E o PREÇO DE VENDA atravessa quando o que fica está sem preço** — é a única das três
+  coisas pedidas que mora em outra tabela (`produto_precos`), e por isso não vinha por
+  `_COMPLETAVEIS`. ⚠️ Só quando não há preço vigente nenhum: sobrescrever seria mudar o que a
+  casa cobra por causa de uma fusão, e a linha nova apagaria a pergunta "quando o preço subiu?".
   ⚠️ **Um pedido por cadastro, em ordem, e parar no meio deixa as anteriores feitas** — que é um
   estado bom, não pela metade: cada fusão é a mesma operação repetida. A mensagem de erro diz
   quantas já foram.

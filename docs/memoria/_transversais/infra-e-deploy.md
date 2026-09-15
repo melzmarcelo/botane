@@ -67,6 +67,15 @@
   `ON CONFLICT (servico) WHERE id_unidade IS NULL`. Toda leitura da configuração global também
   filtra `AND id_unidade IS NULL`.
 
+- ⚠️ **A API local pode estar rodando SEM `--reload`, e nada avisa** (15/09/2026). O
+  `iniciar_local.ps1` sobe com `--reload`, mas o processo que estava de pé tinha sido iniciado
+  **sem ele, no dia anterior**: mudança em `services/` não valia, e o sintoma foi a suíte
+  falhando em sete checagens novas com o código certo no disco. A função pura devolvia o
+  resultado novo quando chamada direto em Python, e a mesma regra pela API devolvia o antigo —
+  **essa discordância é a assinatura de processo velho**, não de lógica errada. Conferir com
+  `Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Select CommandLine` antes de
+  caçar o defeito em outro lugar.
+
 - ⚠️ **Matar o uvicorn no Windows pode deixar o worker órfão** segurando a 9200 — e o
   processo novo **sobe do mesmo jeito**, sem "address already in use". Os dois respondem
   alternadamente e metade dos pedidos volta do código velho (endpoint novo dando 404 no meio

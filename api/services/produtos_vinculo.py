@@ -79,6 +79,13 @@ _REAPONTAVEIS = (
 _COMPLETAVEIS = (
     "id_categoria", "id_setor", "um_estoque", "um_compra", "ncm", "cest", "marca",
     "peso_liquido", "peso_bruto", "id_local_padrao", "codigo_barras", "observacao",
+    # 🔑 **`controla_estoque` entrou em 15/09/2026, junto com a prioridade do
+    # PDV na direção.** A regra "se está em branco no que fica, vem do que sai"
+    # vale para booleano como OR: se um dos dois controla estoque, o que fica
+    # controla. ⚠️ **É esta linha que segura o buraco que a direção abriu**: o
+    # rascunho do cardápio nasce sem controlar, e sem a herança a compra
+    # deixaria de entrar no razão, calada — ver `direcao`.
+    "controla_estoque",
 )
 
 
@@ -167,18 +174,66 @@ def direcao(cur, id_tela: int, id_escolhido: int) -> tuple[int, int, bool]:
     A ordem dos critérios:
 
     1. **história** — só um lado pode ser absorvido, então não há escolha;
-    2. **controlar estoque** — o cadastro que controla é o operacional; o do
-       cardápio é um lugar-guardado que nasce sem controlar. Sem este critério,
-       fundir o do Omie no rascunho do PDV produzia um produto com os dois
-       códigos e **sem controlar estoque**: a compra deixaria de entrar no razão,
-       calada, e o saldo pararia de existir para aquele item;
-    3. **a tela** — sendo os dois iguais nos critérios acima, manda o contexto de
+    2. **o lado do PDV** — ver abaixo;
+    3. **controlar estoque** — o cadastro que controla é o operacional; o do
+       cardápio é um lugar-guardado que nasce sem controlar;
+    4. **a tela** — sendo os dois iguais nos critérios acima, manda o contexto de
        quem está olhando.
+
+    🔑 **O cadastro do PDV tem prioridade** (15/09/2026, pedido do dono: *"sempre
+    dar prioridade para manter o produto do PDV e não do Omie — nomes, código,
+    preço de venda"*). A razão é de negócio: o cadastro do cardápio é o que a
+    casa VENDE — ele carrega o nome que a equipe fala, o preço de venda e o
+    histórico de venda —, enquanto o do Omie é a cópia fiscal do catálogo do
+    fornecedor. Fundindo ao contrário, o produto sobrevivia com o nome da nota
+    ("ANA&GRAZI VINHO FINO TINTO SECO SYRAH 6X750 ML") e alguém reescrevia o
+    nome na mão logo em seguida — foi exatamente o que aconteceu na primeira
+    fusão feita com dado real.
+
+    ⚠️ **E o critério de controlar estoque continua valendo — só que agora ele é
+    resolvido por HERANÇA, não por direção.** Ele existia porque fundir o do Omie
+    no rascunho do PDV produzia um produto com os dois códigos e **sem controlar
+    estoque**: a compra deixaria de entrar no razão, calada, e o saldo pararia de
+    existir para aquele item. O buraco não some por ter mudado a ordem — quem o
+    fecha é `controla_estoque` estar em `_COMPLETAVEIS`: se um dos dois controla,
+    o que fica passa a controlar. Sem isso, esta mudança reabriria um defeito que
+    já custou caro.
     """
-    if impedimentos(cur, id_escolhido) and not impedimentos(cur, id_tela):
+    # ⚠️ **A história é olhada dos DOIS lados, e isso passou a importar em
+    # 15/09/2026.** Antes bastava perguntar pelo escolhido: não tendo ele
+    # impedimento, a resposta caía no `return` do fim, que mantém a tela — e a
+    # tela era justamente quem tinha história. Com o critério do PDV entrando no
+    # meio, esse acaso acabou: ele escolhia o lado do cardápio mesmo quando o
+    # outro tinha razão, e a fusão morria com "os dois têm história". Quem tem
+    # história fica, sempre, e é o primeiro critério por isso.
+    tem_tela = bool(impedimentos(cur, id_tela))
+    tem_escolhido = bool(impedimentos(cur, id_escolhido))
+    if tem_escolhido and not tem_tela:
         return id_escolhido, id_tela, True
+    if tem_tela and not tem_escolhido:
+        return id_tela, id_escolhido, False
 
     tela, escolhido = _carregar(cur, id_tela), _carregar(cur, id_escolhido)
+
+    # ⚠️ **O critério é PDV contra OMIE, e não "PDV contra tudo".** O pedido do
+    # dono foi *"prioridade para manter o produto do PDV e não do Omie"* — as
+    # duas cópias automáticas do mesmo produto, uma vinda do cardápio e outra do
+    # catálogo do fornecedor. **Contra um cadastro da CASA ele não vale**: lá o
+    # que está do outro lado é um cadastro que alguém fez, com ficha, categoria
+    # e setor, e o do PDV é um rascunho gerado sozinho — inverter arquivaria o
+    # trabalho de gente em favor de um esboço. Foi a suíte do PDV que cobrou
+    # isto, com o "PAO DE QUEIJO" da casa recebendo o código do rascunho.
+    def so_do_pdv(p):
+        return bool((p or {}).get("codigo_pdv")) and not (p or {}).get("codigo_omie")
+
+    def so_do_omie(p):
+        return bool((p or {}).get("codigo_omie")) and not (p or {}).get("codigo_pdv")
+
+    if so_do_pdv(escolhido) and so_do_omie(tela):
+        return id_escolhido, id_tela, True
+    if so_do_pdv(tela) and so_do_omie(escolhido):
+        return id_tela, id_escolhido, False
+
     if (escolhido or {}).get("controla_estoque") and not (tela or {}).get("controla_estoque"):
         return id_escolhido, id_tela, True
 
@@ -294,6 +349,24 @@ def fundir_grupo(cur, id_principal: int, ids_que_saem: list[int], id_usuario: in
             "Estes cadastros têm história e não podem ser absorvidos: "
             + "; ".join(f"{i} ({', '.join(t)})" for i, t in travados.items()))
 
+    # 🔑 **E recusa quando algum deles PUXARIA a direção para o lado dele**
+    # (15/09/2026, junto com a prioridade do PDV). `fundir` resolve a direção de
+    # novo a cada par — é o que faz o botão Vincular funcionar dos dois lados —,
+    # e num LOTE isso vira armadilha: bastava um cadastro do cardápio na lista
+    # dos que saem para aquele par sobreviver do outro lado, deixando o grupo
+    # com dois sobreviventes e esta função relatando um principal que não é o
+    # principal de todos.
+    # ⚠️ Recusa ANTES de começar, pela mesma razão do bloco acima: parar no meio
+    # deixaria o grupo pela metade, e quem olhasse a lista depois não saberia
+    # dizer o que aconteceu com quais.
+    contramao = [i for i in ids_que_saem if direcao(cur, id_principal, i)[0] != id_principal]
+    if contramao:
+        cur.execute("SELECT id, nome FROM produtos WHERE id = ANY(%s)", (contramao,))
+        quais = "; ".join(f"{r['nome']}" for r in cur.fetchall())
+        raise ValueError(
+            f"Estes ficariam como principal, e não o escolhido: {quais}. "
+            "Refaça a partir de um deles — ou tire-os da lista.")
+
     feitos, baixados = [], 0
     for id_sai in ids_que_saem:
         r = fundir(cur, id_principal, id_sai, id_usuario, baixar_vendas)
@@ -323,11 +396,18 @@ def previa(cur, id_tela: int, id_escolhido: int) -> dict:
 
     # ⚠️ Trocar a direção sem dizer por quê é pior que não trocar: a pessoa
     # confirma achando que o cadastro que abriu é o que fica.
+    # ⚠️ **A ordem aqui espelha a de `direcao`** — e tem de continuar espelhando.
+    # Dizer "controla estoque" quando o que decidiu foi o PDV é explicar a tela
+    # com uma regra que não foi a aplicada: quem lê confirma achando que
+    # entendeu.
     motivo = None
     if invertido:
-        motivo = ("tem história que não muda de cadastro"
-                  if impedimentos(cur, id_sai) or fica["movimentos"]
-                  else "é o cadastro que controla estoque")
+        if impedimentos(cur, id_sai) or fica["movimentos"]:
+            motivo = "tem história que não muda de cadastro"
+        elif fica.get("codigo_pdv") and not sai.get("codigo_pdv"):
+            motivo = "é o cadastro do PDV, que tem o nome e o preço de venda"
+        else:
+            motivo = "é o cadastro que controla estoque"
 
     travas = impedimentos(cur, id_sai)
     nome, nome_curto, de_onde = _nomes(fica, sai)
@@ -490,27 +570,34 @@ def _local_da_baixa(cur, fica: dict) -> int | None:
 def _nomes(fica: dict, sai: dict) -> tuple[str, str | None, dict]:
     """De onde vem a descrição e a descrição curta.
 
-    ⚠️ **A descrição longa vem do lado do OMIE e a curta do lado do PDV**, e não
-    é preferência estética: são nomes com funções diferentes. O do Omie é o nome
-    fiscal, o que aparece na nota do fornecedor e o que a pessoa procura quando
-    confere uma compra — "BEB CERV HEINEKEN 350ML". O do PDV é o que sai no
-    cupom e o que a equipe fala — "CERVEJA HEINEKEN PILSEN". Guardar os dois é o
-    que faz o mesmo cadastro ser reconhecível nas duas pontas.
+    🔑 **As duas vêm do lado do PDV** (15/09/2026, pedido do dono: *"sempre dar
+    prioridade para manter o produto do PDV e não do Omie — nomes, código, preço
+    de venda"*). O nome do cardápio é o que a equipe fala e o que sai no cupom —
+    "ANA & GRAZI VINHO TINTO SYRAH". O do Omie é o fiscal, o da nota do
+    fornecedor — "ANA&GRAZI VINHO FINO TINTO SECO SYRAH 6X750 ML".
 
-    ⚠️ Sem lado do Omie ou sem lado do PDV, vale o que o cadastro que FICA já
+    ⚠️ **Era o contrário até hoje, e a troca tem um custo que vale dizer:** o
+    nome fiscal deixa de ser o título do cadastro. Ele não se perde — continua na
+    LINHA DA NOTA (`descricao_fornecedor`, que é o que a conferência lê) e no
+    de-para do fornecedor. O que se ganha é o cadastro chamar-se, na lista e na
+    ficha, do jeito que a casa o chama. Na primeira fusão com dado real o dono
+    reescreveu o nome à mão um minuto depois da fusão — a regra antiga estava
+    criando trabalho, não guardando informação.
+
+    ⚠️ Sem lado do PDV, vale o do Omie; sem os dois, o que o cadastro que FICA já
     tinha — nunca apagar para ficar em branco.
     """
     lado_omie = fica if fica["codigo_omie"] else (sai if sai["codigo_omie"] else None)
     lado_pdv = fica if fica["codigo_pdv"] else (sai if sai["codigo_pdv"] else None)
 
-    nome = (lado_omie or fica)["nome"] or fica["nome"]
+    nome = (lado_pdv or lado_omie or fica)["nome"] or fica["nome"]
     curto = None
     if lado_pdv:
         curto = lado_pdv["nome_curto"] or lado_pdv["nome"]
     curto = curto or fica["nome_curto"]
 
     return nome, (curto[:60] if curto else None), {
-        "nome": "omie" if lado_omie else "cadastro que fica",
+        "nome": "pdv" if lado_pdv else ("omie" if lado_omie else "cadastro que fica"),
         "nome_curto": "pdv" if lado_pdv else "cadastro que fica",
     }
 
@@ -546,6 +633,7 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
     número é o do dia em que a venda aconteceu.
     """
     from services import cmv as motor
+    from services import precos
     from services.omie import vinculo as vinculo_omie
     from services.pdv import vinculo
 
@@ -655,6 +743,24 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
              sai.get("custo_referencia_origem"), id_fica),
         )
         completados.append("custo_referencia")
+
+    # 🔑 **E o PREÇO DE VENDA atravessa quando o que fica está sem ele**
+    # (15/09/2026, pedido do dono, junto da prioridade do PDV). Com a direção
+    # nova o cadastro do cardápio quase sempre fica — e é ele que tem preço —,
+    # mas sobra o caso de dois cadastros do Omie: um com preço, outro sem. O
+    # preço é a única das três coisas pedidas que mora em OUTRA tabela, e por
+    # isso não vinha por `_COMPLETAVEIS`.
+    # ⚠️ **Só quando o que fica não tem preço nenhum.** Sobrescrever um preço
+    # vigente seria mudar o que a casa cobra por causa de uma fusão — e
+    # `produto_precos` é histórico: a linha nova apagaria a pergunta "quando o
+    # preço subiu?" com uma resposta que não é de venda nenhuma.
+    # ⚠️ Preço da CASA (`id_unidade` nulo): o da loja é escolha de quem opera
+    # aquela loja, e carregá-lo de um cadastro que está sendo arquivado
+    # espalharia essa escolha para uma loja que não a fez.
+    if precos.vigente(cur, id_fica) is None:
+        preco_que_sai = precos.vigente(cur, id_sai)
+        if preco_que_sai is not None and precos.gravar(cur, id_fica, preco_que_sai, id_usuario):
+            completados.append("preco_venda")
 
     # ----------------------------------------- apelidos e itens de venda mudam
     cur.execute(

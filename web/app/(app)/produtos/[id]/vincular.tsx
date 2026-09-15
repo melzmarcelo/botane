@@ -372,10 +372,19 @@ export default function Vincular({
                 trava: se um dos escolhidos puxa a fusão para o lado dele, o
                 sobrevivente seria outro e a pessoa confirmaria uma coisa
                 acontecendo outra. */}
+            {/* ⚠️ **A frase fala da DIVERGÊNCIA, não da inversão** (15/09/2026).
+                Ela dizia "…e não este — porque {motivo}", e o `motivo` só existe
+                quando a direção inverte EM RELAÇÃO À TELA. Num lote, o que trava
+                é outra coisa: dois escolhidos caindo em principais diferentes — e
+                aí o motivo vinha nulo e a tela mostrava "porque ." seguido de
+                ponto final. Agora ela nomeia os dois destinos, que é o que a
+                pessoa precisa para decidir de onde refazer. */}
             {divergentes.map((p) => (
               <Aviso key={`inv-${p.escolhido}`} tipo="erro">
-                <b>{p.sai.nome}</b> ficaria como o cadastro principal, e não este — porque{" "}
-                {p.motivo_da_direcao}. Tire-o da lista e refaça a partir dele.
+                <b>{p.sai.nome}</b> não cairia em <b>{principal?.nome}</b>, e sim em{" "}
+                <b>{p.fica.nome}</b>
+                {p.motivo_da_direcao ? `, porque ele ${p.motivo_da_direcao}` : ""}. Refaça a
+                fusão a partir de <b>{principal?.nome}</b> — ou tire este da lista.
               </Aviso>
             ))}
 

@@ -408,7 +408,22 @@ export default function PaginaNota() {
                         </span>
                       )}
                     </td>
-                    <td className="num mono">{custo(Number(i.valor_unitario))}</td>
+                    {/* 🔑 **O valor unitário é o da NOTA — por caixa, por fardo,
+                        pelo que o fornecedor vendeu** (15/09/2026, relatado pelo
+                        dono: *"no item 1 não está realizando a conversão correta
+                        do valor unitário"*). E a conta estava certa: a coluna
+                        "Custo un." ao lado já mostrava os R$ 64,00 por garrafa.
+                        O que faltava era a coluna DIZER de que unidade ela fala:
+                        "R$ 384,00" na mesma linha de "= 6 UN" lê como 384 por
+                        garrafa, e ninguém percorre cinco colunas para conferir.
+                        ⚠️ A unidade vai na CÉLULA, não no cabeçalho: ela muda de
+                        linha para linha — uma nota traz caixa, fardo e quilo. */}
+                    <td className="num mono">
+                      {custo(Number(i.valor_unitario))}
+                      {i.um_nota && (
+                        <span className="text-[12px] text-suave"> /{i.um_nota}</span>
+                      )}
+                    </td>
                     <td className="num mono">
                       {reais(
                         Number(i.valor_total) ||
@@ -571,6 +586,14 @@ export default function PaginaNota() {
                         <>
                           <span className="mono font-semibold">
                             {custo(Number(i.custo_aquisicao_unitario))}
+                            {/* O par da anterior: aqui é o custo por unidade de
+                                ESTOQUE, que é o que vai para o razão. */}
+                            {i.um_estoque && (
+                              <span className="text-[12px] font-normal text-suave">
+                                {" "}
+                                /{i.um_estoque}
+                              </span>
+                            )}
                           </span>
                           {i.variacao_preco_pct !== null && (
                             // ⚠️ **Quem decide é o SERVIDOR** (`variacao_acima`).

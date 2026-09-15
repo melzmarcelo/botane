@@ -4953,7 +4953,12 @@ try {
   aoTerminar.push(() => api("DELETE", `/produtos/${vincA.id}`, null, token));
   aoTerminar.push(() => api("DELETE", `/produtos/${vincB.id}`, null, token));
 
-  await irPara(p, `${WEB}/produtos/${vincA.id}`);
+  // 🔑 **A fusao comeca pelo cadastro do PDV** (15/09/2026). Pela regra nova ele
+  // e o principal — e juntar A PARTIR do outro lado, num lote, agora esbarra na
+  // trava que existe desde sempre: os escolhidos tem de cair todos no MESMO
+  // principal, e com o do cardapio entre eles a direcao deixa de ser unica. A
+  // tela diz isso e manda refazer a partir dele, que e o que esta fase faz.
+  await irPara(p, `${WEB}/produtos/${vincB.id}`);
   await new Promise((r) => setTimeout(r, 1800));
   const temBotao = await p.evaluate(() =>
     [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Vincular"));
@@ -5001,12 +5006,12 @@ try {
   }, mVinc);
   checar("a janela de busca abre por cima da Vincular", naJanela.abriu, naJanela);
   checar("oferecendo caixinha para marcar varios", naJanela.caixinhas > 0, naJanela);
-  // ⚠️ O produto ABERTO e o `vincA`; ele nao pode aparecer entre os candidatos.
+  // ⚠️ O produto ABERTO e o `vincB`; ele nao pode aparecer entre os candidatos.
   checar("e NAO lista o proprio produto que se esta vinculando",
-    !naJanela.linhas.some((l) => l.includes(`BEB CERV HEINEKEN 350ML ${mVinc}`)),
+    !naJanela.linhas.some((l) => l.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`)),
     naJanela.linhas.slice(0, 4));
   checar("mas lista os demais cadastros",
-    naJanela.linhas.some((l) => l.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`)),
+    naJanela.linhas.some((l) => l.includes(`BEB CERV HEINEKEN 350ML ${mVinc}`)),
     naJanela.linhas.slice(0, 4));
   // Escape fecha SO a janela de busca; a Vincular continua aberta para o resto.
   await p.keyboard.press("Escape");
@@ -5071,17 +5076,31 @@ try {
   await new Promise((r) => setTimeout(r, 500));
 
   if (busca) {
-    await busca.type(`CERVEJA HEINEKEN PILSEN ${mVinc}`);
+    await busca.type(`BEB CERV HEINEKEN 350ML ${mVinc}`);
     await p.keyboard.press("Tab");
     await new Promise((r) => setTimeout(r, 1800));
     const previa = await textoVisivel(p);
     // ⚠️ A previa vem ANTES do botao porque fusao nao tem desfazer: quem
     // confirma precisa ver com que nome o produto vai ficar.
     checar("a previa mostra como fica", /Como fica/i.test(previa), previa.slice(0, 160));
-    checar("a descricao vem do lado do Omie",
-      previa.includes(`BEB CERV HEINEKEN 350ML ${mVinc}`), previa.slice(0, 260));
-    checar("e a curta do lado do PDV",
+    // 🔑 **As duas descricoes vem do lado do PDV** (15/09/2026, pedido do dono:
+    // *"sempre dar prioridade para manter o produto do PDV e nao do Omie —
+    // nomes, codigo, preco de venda"*). O nome do cardapio e o que a equipe
+    // fala; o do Omie e o fiscal, que continua na linha da nota.
+    checar("as duas descricoes vem do lado do PDV",
       previa.includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`), previa.slice(0, 260));
+    // ⚠️ E o cartao "Fica" nomeia o cadastro do PDV: e ele que sobrevive agora,
+    // e a tela tem de dizer isso ANTES de alguem confirmar — fusao nao tem
+    // desfazer. Medido no cartao, e nao no texto solto da tela: o nome do outro
+    // cadastro aparece em mais lugares, e procurar por ausencia num texto
+    // inteiro passaria verde por acidente.
+    const ficaNaTela = await p.evaluate(() => {
+      const cartoes = [...document.querySelectorAll("div")].filter(
+        (d) => (d.querySelector(":scope > p.rotulo")?.textContent ?? "").trim() === "Fica");
+      return cartoes.length ? cartoes[0].innerText.replace(/\n/g, " / ") : null;
+    });
+    checar("e o cartao 'Fica' nomeia o cadastro do PDV",
+      (ficaNaTela ?? "").includes(`CERVEJA HEINEKEN PILSEN ${mVinc}`), ficaNaTela);
     checar("dizendo que o outro vira inativo", /vira inativo/i.test(previa));
     // ⚠️ Nada a baixar aqui (o lado do PDV nao vendeu), e a tela DIZ isso em vez
     // de calar: caixinha ausente sem explicacao lê como funcionalidade faltando.
@@ -5185,15 +5204,21 @@ try {
     // uma busca que não seleciona nada.
     await p.waitForNavigation({ waitUntil: "networkidle2", timeout: 8000 })
       .catch(() => {});
-    const { dados: depois } = await api("GET", `/produtos/${vincA.id}`, null, token);
-    checar("a fusao pela tela junta os dois nomes",
-      depois.nome === `BEB CERV HEINEKEN 350ML ${mVinc}`
+    const { dados: depois } = await api("GET", `/produtos/${vincB.id}`, null, token);
+    // ⚠️ As duas descricoes sao a do PDV — e o nome fiscal do Omie nao se perde:
+    // ele continua na linha da nota, que e o que a conferencia le.
+    checar("a fusao pela tela deixa o cadastro com o nome do PDV",
+      depois.nome === `CERVEJA HEINEKEN PILSEN ${mVinc}`
       && depois.nome_curto === `CERVEJA HEINEKEN PILSEN ${mVinc}`,
       [depois.nome, depois.nome_curto]);
+    // 🔑 E ele passa a CONTROLAR ESTOQUE, herdado do cadastro do Omie: sem essa
+    // heranca, a compra deixaria de entrar no razao — calada.
+    checar("e passa a controlar estoque, herdado do outro",
+      depois.controla_estoque === true, depois.controla_estoque);
     checar("e os codigos das duas integracoes",
       depois.codigo_omie === `771${mVinc}` && depois.codigo_pdv === `991${mVinc}`,
       [depois.codigo_omie, depois.codigo_pdv]);
-    const { dados: saiu } = await api("GET", `/produtos/${vincB.id}`, null, token);
+    const { dados: saiu } = await api("GET", `/produtos/${vincA.id}`, null, token);
     checar("e o outro ficou inativo, nao apagado", saiu.ativo === false, saiu.ativo);
     // 🔑 E o código do Omie do terceiro não se perdeu: virou apelido, e é por
     // ele que a próxima nota daquele fornecedor cai neste cadastro.
@@ -5232,11 +5257,15 @@ try {
   // por cima dele fazia o recarregamento chegar DEPOIS e devolver a página
   // anterior — onde o botão "Vincular" também existe. A busca então casava com
   // o produto errado e a espera estourava, três linhas adiante da causa.
-  await irPara(p, `${WEB}/produtos/${invPdv.id}`);
+  // ⚠️ **A tela passou a ser a do OMIE** (15/09/2026). Com a prioridade do PDV,
+  // quem inverte agora é este lado — e é a inversão que este bloco existe para
+  // exercitar. Abrindo do cardápio, a direção deixaria de inverter e a checagem
+  // passaria sem provar nada, que é o pior desfecho possível para ela.
+  await irPara(p, `${WEB}/produtos/${invOmie.id}`);
   // Espera por algo que só existe na tela de DESTINO: o código deste cadastro.
   await p.waitForFunction(
     (codigo) => document.body.innerText.includes(codigo),
-    { timeout: 20000 }, `TINV-P-${mInv}`);
+    { timeout: 20000 }, `TINV-O-${mInv}`);
   await p.waitForFunction(
     () => [...document.querySelectorAll("button")]
       .some((b) => b.textContent?.trim() === "Vincular"), { timeout: 15000 });
@@ -5293,14 +5322,14 @@ try {
   };
 
   try {
-    const escolheu = await escolherNaBusca(`AGUA COM GAS ${mInv}`, `881${mInv}`);
-    checar("a busca da janela escolhe o cadastro do Omie", escolheu);
+    const escolheu = await escolherNaBusca(`AGUA GAS PDV ${mInv}`, `991${mInv}`);
+    checar("a busca da janela escolhe o cadastro do cardapio", escolheu);
     if (escolheu) {
       const avisoInv = await textoVisivel(p);
       // ⚠️ **Inverter calado seria pior que não inverter**: a pessoa confirma
       // achando que o cadastro que abriu é o que fica.
       checar("a previa avisa que a direcao foi invertida",
-        /invertid|controla estoque/i.test(avisoInv), avisoInv.slice(0, 300));
+        /invertid|cadastro do PDV|controla estoque/i.test(avisoInv), avisoInv.slice(0, 300));
 
       await p.evaluate(() => {
         [...document.querySelectorAll("button")]
@@ -5315,11 +5344,18 @@ try {
         !/dois cadastros diferentes/i.test(textoDepois), textoDepois.slice(0, 300));
       const { dados: ficouInv } = await api("GET", `/produtos/${invOmie.id}`, null, token);
       const { dados: saiuInv } = await api("GET", `/produtos/${invPdv.id}`, null, token);
-      checar("o cadastro que controla estoque sobrevive",
-        ficouInv.ativo === true && ficouInv.codigo_pdv === `991${mInv}`,
-        [ficouInv.ativo, ficouInv.codigo_pdv]);
-      checar("e o rascunho do PDV, que era o da tela, foi absorvido",
-        saiuInv.ativo === false, saiuInv.ativo);
+      // 🔑 Quem sobrevive e o cadastro do PDV, mesmo tendo sido o ESCOLHIDO — e
+      // ele leva os dois codigos junto.
+      checar("o cadastro do PDV sobrevive, com os dois codigos",
+        saiuInv.ativo === true && saiuInv.codigo_pdv === `991${mInv}`
+        && saiuInv.codigo_omie === `881${mInv}`,
+        [saiuInv.ativo, saiuInv.codigo_pdv, saiuInv.codigo_omie]);
+      // ⚠️ E ele passa a controlar estoque, herdado do que foi absorvido: sem a
+      // heranca, a compra deixaria de entrar no razao — calada.
+      checar("controlando estoque, herdado do cadastro do Omie",
+        saiuInv.controla_estoque === true, saiuInv.controla_estoque);
+      checar("e o do Omie, que era o da tela, foi absorvido",
+        ficouInv.ativo === false, ficouInv.ativo);
     }
   } catch (e) {
     // O diagnóstico vai junto: sem ele a falha diz só "timeout", e o que se
