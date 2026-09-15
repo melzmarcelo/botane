@@ -199,6 +199,12 @@ export default function FormularioProduto() {
     /** "zera", "dispara" ou nulo — o custo dando um salto de ordem de grandeza
      *  num dos dois sentidos. Os dois pedem confirmação. */
     custo_salto?: "zera" | "dispara" | null;
+    /** 🔑 O fator veio de uma SUPOSIÇÃO: o cadastro nada sabia sobre a unidade
+     *  antiga (UN), e quem respondeu foi a embalagem que a pessoa acabou de
+     *  informar. Pede o mesmo sim explícito do salto — `custo_referencia` não
+     *  tem tela de edição, e a conversão não se desfaz. */
+    supondo?: boolean;
+    origem_do_fator?: string;
     resumo?: string;
     conversoes?: { campo: string; de: number; para: number }[];
   } | null>(null);
@@ -324,7 +330,8 @@ export default function FormularioProduto() {
     // qualquer um dos dois lados. O servidor tambem recusa sem confirmacao:
     // esta janela existe para a pessoa ver os dois numeros e responder, nao
     // para ser a unica guarda.
-    if (!confirmado && previaUnidade?.muda && previaUnidade.custo_salto) {
+    if (!confirmado && previaUnidade?.muda
+        && (previaUnidade.custo_salto || previaUnidade.supondo)) {
       setConfirmandoCusto(true);
       return;
     }
@@ -606,6 +613,15 @@ export default function FormularioProduto() {
               {c.campo !== "custo_referencia" && " (na nova unidade)"}
             </span>
           ))}
+          {/* ⚠️ A suposição aparece ANTES de a pessoa salvar, e não só no 409:
+              quem lê "supondo que o que o cadastro contava como 1 UN é um PCT"
+              corrige o número ali mesmo, se a leitura estiver errada. */}
+          {previaUnidade.supondo && !previaUnidade.custo_salto && (
+            <span className="mt-1 block">
+              ⚠️ O sistema não sabia quanto valia <b>1 UN</b> neste cadastro — está{" "}
+              {previaUnidade.origem_do_fator}. Ele vai perguntar antes de gravar.
+            </span>
+          )}
           {previaUnidade.custo_salto && (
             <span className="mt-1 block">
               ⚠️ Isso{" "}

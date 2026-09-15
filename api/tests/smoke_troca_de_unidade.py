@@ -306,6 +306,84 @@ st, r = chamar("PUT", f"/produtos/{comum}",
 checar("trocar CX por UN de 12 continua gravando sem perguntar", st == 200, (st, r))
 
 
+# 🔑 **Sem NADA a converter, o fator deixa de ser exigido** (15/09/2026,
+# relatado pelo dono: a "MANTEIGA SEM SAL - 5KG", importada do Omie em UN, que
+# ele quis passar para KG comprando em PCT de 5).
+# ⚠️ O sistema recusava por não saber um número que não ia usar: aquele cadastro
+# era um rascunho recém-importado — sem custo, sem mínimo, sem máximo, sem
+# embalagem e sem um movimento sequer. A "conversão" não tinha o que converter,
+# e a recusa ainda mandava cadastrar uma embalagem para viabilizar uma conta que
+# não existe. ⚠️ **UN e KG não convertem entre si por grandeza**, que é o que
+# torna este caso diferente de CX→UN: nenhuma regra geral salva.
+vazio = criar("MANTEIGA IMPORTADA", "UN")
+st, r = chamar("PUT", f"/produtos/{vazio}",
+               {"um_estoque": "KG", "um_compra": "PCT", "fator_compra": 5}, token=token)
+checar("sem custo, minimo, maximo nem embalagem, a troca UN->KG passa", st == 200, (st, r))
+d = campos_de(vazio, ["um_estoque", "um_compra", "fator_compra", "custo_referencia"])
+checar("com a unidade de estoque nova", d["um_estoque"] == "KG", d)
+checar("e a de compra do jeito que foi informada",
+       d["um_compra"] == "PCT" and float(d["fator_compra"]) == 5, d)
+checar("sem inventar custo nenhum", d["custo_referencia"] is None, d)
+
+# 🔑 **O PACOTE que se acabou de informar responde quando "UN" não diz nada**
+# (15/09/2026, relatado pelo dono: a "FLOR DE SAL PCT 500G", importada do Omie
+# em UN a R$ 21,87, que ele quis passar para KG comprando PCT de 0,5).
+# ⚠️ UN é a unidade que não diz nada — é o padrão do catálogo do Omie e quer
+# dizer "um do que vier", e o que vinha ali era o pacote. Mas é SUPOSIÇÃO, e por
+# isso a gravação pede um sim explícito: `custo_referencia` não tem tela de
+# edição, e um fator errado apaga um número que não volta.
+flor = criar("FLOR DE SAL PCT 500G", "UN")
+escrever_custo(flor, 21.865)
+st, r = chamar("PUT", f"/produtos/{flor}",
+               {"um_estoque": "KG", "um_compra": "PCT", "fator_compra": 0.5}, token=token)
+checar("a troca supondo o pacote PEDE confirmacao", st == 409, (st, r))
+checar("e a pergunta diz o que foi suposto",
+       "supondo" in str(r.get("detail", "")), r.get("detail"))
+# ⚠️ **Os dois custos na frase**: sem eles, "confirma?" não é pergunta informada
+# — e é justamente o valor que não volta.
+checar("com os dois custos a vista",
+       "21,86" in str(r.get("detail", "")) and "43,73" in str(r.get("detail", "")),
+       r.get("detail"))
+st, r = chamar("PUT", f"/produtos/{flor}",
+               {"um_estoque": "KG", "um_compra": "PCT", "fator_compra": 0.5,
+                "confirmar_troca_de_unidade": True}, token=token)
+checar("com o sim explicito, a troca acontece", st == 200, (st, r))
+d = campos_de(flor, ["um_estoque", "um_compra", "fator_compra", "custo_referencia"])
+checar("o estoque passa a ser em KG", d["um_estoque"] == "KG", d)
+# 🔑 O custo do pacote de meio quilo vira o custo do QUILO: 21,865 / 0,5.
+checar("e o custo vira o do quilo", perto(float(d["custo_referencia"]), 43.73, 0.01), d)
+checar("com a unidade de compra gravada como informada",
+       d["um_compra"] == "PCT" and float(d["fator_compra"]) == 0.5, d)
+
+# ⚠️ **E o degrau da suposição NÃO atropela o que o cadastro sabe**: com uma
+# embalagem gravada, quem responde é ela — fato ganha de palpite, sempre.
+sabido = criar("TEMPERO COM EMBALAGEM", "UN")
+escrever_custo(sabido, 10)
+st, r = chamar("PUT", f"/produtos/{sabido}/unidades",
+               {"itens": [{"um": "KG", "fator": 4}]}, token=token)
+checar("o cadastro ganha a embalagem KG de fator 4", st in (200, 201), (st, r))
+st, r = chamar("PUT", f"/produtos/{sabido}",
+               {"um_estoque": "KG", "um_compra": "PCT", "fator_compra": 0.5,
+                "confirmar_troca_de_unidade": True}, token=token)
+checar("a troca acontece pelo que o cadastro ja sabia", st == 200, (st, r))
+d = campos_de(sabido, ["custo_referencia"])
+# 1 KG = 4 UN gravados, entao 1 UN = 0,25 KG: o custo do quilo e 10 / 0,25 = 40.
+checar("e o custo sai do fato, nao da suposicao",
+       perto(float(d["custo_referencia"]), 40, 0.01), d)
+
+# ⚠️ **E com ALGO a converter e NADA de onde inferir, a recusa continua** — é
+# ela que impediu R$ 33,99 de virarem R$ 0,03. Aqui não há embalagem, não há
+# unidade de compra informada e UN não converte em KG por grandeza: não sobra
+# nenhuma fonte, e supor sozinho seria inventar o custo.
+com_custo = criar("MANTEIGA COM CUSTO", "UN")
+escrever_custo(com_custo, 40)
+st, r = chamar("PUT", f"/produtos/{com_custo}", {"um_estoque": "KG"}, token=token)
+checar("havendo custo e nada de onde inferir, a troca UN->KG e recusada",
+       st >= 400, (st, r))
+checar("e a recusa diz que nao sabe quantos KG cabem num UN",
+       "quantos KG cabem" in str(r.get("detail", "")), r.get("detail"))
+
+
 for pid in criados:
     chamar("DELETE", f"/produtos/{pid}", token=token)
 

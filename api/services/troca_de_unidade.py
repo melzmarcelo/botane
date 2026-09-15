@@ -101,6 +101,35 @@ def _fator(cur, id_produto: int, antiga: str, nova: str, ums: dict,
         if f > 0:
             return f, f"pela unidade de compra {antiga}, de fator {_br(f)}"
 
+    # 1b. **A unidade de compra que está sendo informada, quando a antiga é UN e
+    #     o cadastro não sabe NADA sobre ela** (15/09/2026, relatado pelo dono:
+    #     a "FLOR DE SAL PCT 500G", importada do Omie em UN a R$ 21,87, que ele
+    #     quis passar para KG comprando PCT de 0,5).
+    #     🔑 **UN é a unidade que não diz nada.** É o padrão do catálogo do Omie
+    #     e quer dizer "um do que vier" — e o que vinha, ali, era o pacote. Quem
+    #     declara "compro em PCT e nele cabem 0,5 KG" está dizendo, na mesma
+    #     frase, quanto valia aquele "1 UN" que o cadastro contava.
+    #     ⚠️ **É uma SUPOSIÇÃO, e por isso ela volta marcada** (`suposto`): quem
+    #     grava tem de responder um sim explícito, com os dois custos à vista.
+    #     `custo_referencia` não tem tela de edição — se a suposição estiver
+    #     errada, o número não volta.
+    #     ⚠️ **Só quando a antiga é UN**, e a mira é estreita de propósito: com
+    #     o estoque em CX, supor que a caixa é o pacote seria palpite sobre o
+    #     mundo. E só quando o cadastro está mudo — havendo embalagem ou unidade
+    #     de compra gravada, quem responde é o degrau 2, que é fato.
+    if antiga.strip().upper() == "UN" and um_compra and dec(fator_compra) > 0:
+        cur.execute(
+            """SELECT (SELECT count(*) FROM produto_unidades WHERE id_produto = %s) AS embalagens,
+                      (SELECT um_compra FROM produtos WHERE id = %s) AS um_compra_gravada""",
+            (id_produto, id_produto),
+        )
+        mudo = cur.fetchone()
+        if not mudo["embalagens"] and not (mudo["um_compra_gravada"] or "").strip():
+            f = dec(fator_compra)
+            return f, (
+                f"supondo que o que o cadastro contava como 1 {antiga} é um "
+                f"{um_compra.strip().upper()}, que você informou ter {_br(f)} {nova}")
+
     # Quantas ANTIGAS cabem em uma NOVA — invertido, é quantas NOVAS cabem numa
     # antiga. ⚠️ Antes da grandeza pela mesma razão de `converter_para_estoque`:
     # o cadastro DESTE produto ganha da regra geral.
@@ -145,7 +174,45 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
                 f"que houver, ou cadastre outro produto."),
         }
 
+    # 🔑 **O que a troca tem para converter — perguntado ANTES do fator**
+    # (15/09/2026, relatado pelo dono: a MANTEIGA SEM SAL - 5KG, importada do
+    # Omie em UN, que ele quis passar para KG comprando em PCT de 5).
+    # ⚠️ **O sistema recusava por não saber um número que não ia usar.** Aquele
+    # produto era um rascunho recém-importado: sem custo de referência, sem
+    # mínimo, sem máximo, sem embalagem cadastrada e sem um movimento sequer. A
+    # "conversão" não tinha nada para converter — e ainda assim a falta do
+    # fator barrava a troca, mandando cadastrar uma embalagem para que uma
+    # conta que não existe pudesse ser feita.
+    # ⚠️ A ordem importa: com algo a converter, o fator continua obrigatório, e
+    # a recusa continua sendo a coisa certa — converter no escuro é como R$
+    # 33,99 viraram R$ 0,03.
+    cur.execute(
+        """SELECT custo_referencia, estoque_minimo, estoque_maximo
+             FROM produtos WHERE id = %s""",
+        (id_produto,),
+    )
+    p = dict(cur.fetchone() or {})
+    cur.execute(
+        "SELECT count(*) AS n FROM produto_unidades WHERE id_produto = %s", (id_produto,))
+    embalagens = cur.fetchone()["n"]
+    tem_o_que_converter = embalagens > 0 or any(
+        p.get(campo) is not None
+        for campo in ("custo_referencia", "estoque_minimo", "estoque_maximo"))
+
     fator, origem = _fator(cur, id_produto, a, n, ums, um_compra, fator_compra)
+    if not fator and not tem_o_que_converter:
+        return {
+            "muda": True, "pode": True,
+            "custo_salto": None,
+            "de": a, "para": n,
+            "fator": 1.0,
+            "origem_do_fator": "não havia número nenhum para converter",
+            "conversoes": [],
+            "embalagens": 0,
+            "resumo": (
+                f"De {a} para {n} — este cadastro ainda não tem custo, mínimo, máximo nem "
+                "embalagem, então não há nada a converter."),
+        }
     if not fator:
         return {
             "muda": True, "pode": False,
@@ -160,13 +227,8 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
                 f"o fator correspondente."),
         }
 
-    # O que a troca leva junto, e como.
-    cur.execute(
-        """SELECT custo_referencia, estoque_minimo, estoque_maximo
-             FROM produtos WHERE id = %s""",
-        (id_produto,),
-    )
-    p = dict(cur.fetchone() or {})
+    # O que a troca leva junto, e como. (`p` e `embalagens` vêm de cima — o
+    # levantamento do que existe é o mesmo que decide se o fator é exigido.)
     conversoes = []
     custo_salto = None
     # ⚠️ **O custo DIVIDE, as quantidades MULTIPLICAM.** O custo é por unidade:
@@ -231,16 +293,18 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
     # estoque em CX, a caixa tinha fator 1; com o estoque em UN ela passa a
     # valer 12. Deixá-las como estavam faria a nota de uma caixa baixar uma
     # unidade.
-    cur.execute(
-        "SELECT count(*) AS n FROM produto_unidades WHERE id_produto = %s", (id_produto,))
-    embalagens = cur.fetchone()["n"]
-
     return {
         "muda": True, "pode": True,
         # "zera" quando o custo desaparece aos olhos de quem olha, "dispara"
         # quando ele multiplica de vez. Quem chama tem de perguntar antes de
         # gravar — nos dois casos.
         "custo_salto": custo_salto,
+        # ⚠️ **A suposição também exige um sim explícito**, e pela mesma razão do
+        # salto: `custo_referencia` não tem tela de edição, então um fator
+        # errado apaga um número que não volta. Só pergunta quando há custo a
+        # converter — sem ele não há nada a perder, e perguntar seria ruído.
+        "supondo": origem.startswith("supondo") and any(
+            c["campo"] == "custo_referencia" for c in conversoes),
         "de": a, "para": n,
         "fator": float(fator), "origem_do_fator": origem,
         "conversoes": conversoes,
@@ -266,6 +330,12 @@ def frase_do_salto(plano: dict) -> str:
         return "Confirme a troca de unidade."
     cabeca = (f"Trocar de {plano['de']} para {plano['para']} com fator "
               f"{_br(plano['fator'])}")
+    # 🔑 **A frase da SUPOSIÇÃO diz o que foi suposto**, e não só o resultado:
+    # é o que permite responder "não, o pacote tem outro tamanho" antes de o
+    # custo virar outro número para sempre.
+    if plano.get("supondo") and not plano.get("custo_salto"):
+        return (f"{cabeca} — {plano['origem_do_fator']} — leva o custo de "
+                f"{_reais(c['de'])} para {_reais(c['para'])}. Confirme se é isso mesmo.")
     if plano.get("custo_salto") == "dispara":
         return (f"{cabeca} multiplica o custo de {_reais(c['de'])} para "
                 f"{_reais(c['para'])}. Se o fator estiver invertido, esse número "

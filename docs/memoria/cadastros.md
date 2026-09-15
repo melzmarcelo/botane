@@ -909,6 +909,30 @@
   quiser o número certo corrige o fator ANTES de trocar; a prévia da tela mostra o resultado
   enquanto se digita, e é ela que denuncia o 1 que ninguém escolheu.
 
+- 🔑 **Trocar de UN para KG declarando a compra na MESMA tela** (15/09/2026, dois relatos do
+  dono, pelo produto 218 — *"MANTEIGA SEM SAL - 5KG: quero estoque em KG e compra PCT com
+  conversão de 5, mas aparece 'Não dá para converter de UN para KG'"* — e pelo 745, *"UN de
+  estoque para KG, compra PCT fator 0,5; preciso disto ajustado para o cliente poder cadastrar
+  assim"*). O produto nasceu do catálogo do Omie em **UN** e nunca teve fator nenhum: as duas
+  fontes de `_fator` (o cadastro antigo e a embalagem invertida) não tinham o que responder, e
+  UN→KG não converte por grandeza. A recusa estava certa na mecânica e errada na vida — a pessoa
+  estava **dizendo**, ali, quanto pesa a unidade.
+  🔑 **Duas correções, e a ordem entre elas é a regra.** Primeira: `avaliar()` junta o que
+  PRECISA converter antes de exigir um fator — sem custo, sem mínimo e sem embalagem não há nada
+  a converter, e recusar era pedir um número para não usá-lo (`pode: True, fator: 1`). Segunda:
+  quando a unidade antiga é **UN sem fator nenhum no cadastro** e a pessoa declara a unidade de
+  compra na mesma gravação, o fator declarado vale — é a **suposição** de que a UN que estava lá
+  era a embalagem que ela acabou de descrever.
+  ⚠️ **Suposição pede um sim explícito**, pela mesma razão do salto de custo: `custo_referencia`
+  não tem tela de edição, e um fator errado apaga um número que não volta. `plano["supondo"]` só
+  liga quando há custo a converter — sem ele não há o que perder, e perguntar seria ruído —, e a
+  frase diz **o que foi suposto**, não só o resultado: é o que permite responder "não, o pacote
+  tem outro tamanho" antes de o custo virar outro número para sempre.
+  ⚠️ **E a troca converte `custo_referencia` — mas a próxima importação do Omie o reescrevia.**
+  Foi o que fez a MANTEIGA voltar para R$ 315,00/KG dez minutos depois de a conversão acertá-la.
+  A correção mora em Custos (`um_omie`, migração 071): quem teve a unidade trocada aqui fica de
+  fora da carga de custo até o catálogo ser reimportado.
+
 - 🔑 **O ovo comprado na dúzia, contado por unidade e usado em GRAMAS**
   (12/09/2026, caso da cliente trazido pelo dono: *"ela compra a dúzia de ovos, e entra no
   estoque em unidade. Mas em determinadas receitas ela usa, por exemplo, 50 GR de ovo"*).

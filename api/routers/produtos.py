@@ -1006,7 +1006,12 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         # multiplica por mil e o mesmo fator invertido visto do outro lado, e e
         # tao irreversivel quanto o que zera. A frase de cada caso mora no
         # service, junto da regra que decide perguntar.
-        if plano.get("custo_salto") and not dados.pop("confirmar_troca_de_unidade", False):
+        # ⚠️ **E a SUPOSIÇÃO entra na mesma porta** (15/09/2026): quando o fator
+        # veio de supor que "1 UN" era o pacote que a pessoa acabou de informar,
+        # o custo muda por uma inferência — e inferência sobre dinheiro que não
+        # tem tela de edição pede o mesmo sim explícito que o salto.
+        if ((plano.get("custo_salto") or plano.get("supondo"))
+                and not dados.pop("confirmar_troca_de_unidade", False)):
             raise HTTPException(
                 status_code=409, detail=troca_de_unidade.frase_do_salto(plano),
             )
