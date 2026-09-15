@@ -5,6 +5,7 @@ onde o estoque mínimo vira decisão em vez de susto.
 """
 
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -27,6 +28,11 @@ class AgendarRequest(BaseModel):
     quantidade: float = Field(gt=0)
     id_local: int | None = None
     observacao: str | None = Field(default=None, max_length=240)
+    # 🔑 **Em que a quantidade foi digitada** (pedido do dono, 15/09/2026):
+    # `PORCOES` é a unidade de estoque do produto (130 cookies) e `RECEITAS`
+    # são voltas inteiras da ficha (2 receitas de 65). O padrão é `PORCOES`,
+    # que é como sempre foi. Ver `services.estoque._quanto_produzir`.
+    medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
 
 
 class ProduzirLinhaRequest(BaseModel):
@@ -73,7 +79,7 @@ def listar(inicio: date | None = None, fim: date | None = None, status: str | No
 
 @router.get("/necessario")
 def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
-               ctx: Contexto = Depends(_ver)) -> dict:
+               medida: str = "PORCOES", ctx: Contexto = Depends(_ver)) -> dict:
     """O que vai ser preciso para produzir tanto — sem produzir nada.
 
     A folha que se leva para a bancada: quanto de cada insumo, quanto disso
@@ -82,7 +88,8 @@ def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
     """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
-        return estoque.previsao_producao(cur, id_unidade, id_produto, quantidade, id_local)
+        return estoque.previsao_producao(cur, id_unidade, id_produto, quantidade, id_local,
+                                         medida)
 
 
 @router.get("/{id_agenda}")
@@ -117,10 +124,15 @@ def obter(id_agenda: int, ctx: Contexto = Depends(_ver)) -> dict:
 def agendar(body: AgendarRequest, ctx: Contexto = Depends(_ver)) -> dict:
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # ⚠️ **A tradução acontece AQUI, na porta.** A agenda guarda sempre a
+        # unidade de estoque; de dentro para lá — resumo, folha da bancada,
+        # produção que fecha a linha — ninguém precisa lembrar de traduzir.
+        quanto = estoque.quantidade_de_estoque(
+            cur, id_unidade, body.id_produto, body.quantidade, body.id_local, body.medida)
         r = motor.agendar(
             cur, id_unidade, body.id_produto,
             body.data_prevista or motor.proximo_dia_util(),
-            body.quantidade, ctx.id_usuario, body.id_local, body.observacao,
+            quanto["quantidade"], ctx.id_usuario, body.id_local, body.observacao,
         )
         auditoria.registrar(cur, ctx.id_usuario, "producao_agenda", r["id"], "agendar",
                             depois=r, id_unidade=id_unidade)

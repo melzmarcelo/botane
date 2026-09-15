@@ -10,6 +10,7 @@
 
 import puppeteer from "puppeteer-core";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const CHROME =
   process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
@@ -7131,6 +7132,19 @@ try {
     um_estoque: "UN", controla_estoque: true, status: "ATIVO",
   }, token);
   aoTerminar.push(() => api("DELETE", `/produtos/${prodRep.id}`, null, token));
+  // 🔑 **E o RAZAO deste produto some junto** — `DELETE /produtos` so inativa o
+  // cadastro, que e o certo para o sistema e insuficiente aqui. Esta fase lanca
+  // uma saida, depois uma entrada com data ANTERIOR, e reprocessa: dali em
+  // diante o razao dele e coerente na ordem da DATA, enquanto `estoque_saldos`
+  // e o resto da base seguem coerentes na ordem de LANCAMENTO. O relatorio de
+  // CMV por grupo le a fotografia pelo `id DESC` e passa a discordar do CMV do
+  // periodo — medido: R$ 256,00 em dois produtos, derrubando smoke_grupos_cmv e
+  // smoke_relatorios, duas suites a tres telas da causa.
+  // ⚠️ Mesma excecao documentada da `smoke_reprocessar`: teste que deixa rastro
+  // derruba o proximo, e o que fecha a conta e nao deixar rastro nenhum.
+  aoTerminar.push(() => {
+    execFileSync("python", ["tests/limpar_rastro.py", "TREP-"], { cwd: "../api" });
+  });
   const { dados: locaisRep } = await api("GET", "/locais", null, token);
   const localRep = (locaisRep.find((l) => l.principal) ?? locaisRep[0]).id;
   // ⚠️ A ordem e o teste: saida primeiro, entrada com data ANTERIOR depois.

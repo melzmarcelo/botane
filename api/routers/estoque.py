@@ -744,9 +744,15 @@ def produzir(body: ProducaoRequest,
         r = motor.produzir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local=body.id_local, id_usuario=ctx.id_usuario, observacao=body.observacao,
+            medida=body.medida,
         )
+        # ⚠️ O que vai para a auditoria é o que ENTROU (`r["quantidade"]`, sempre
+        # na unidade de estoque) junto com o que foi pedido: "2" sozinho não
+        # distingue duas receitas de dois cookies, e foi essa ambiguidade que
+        # fez a produção #29 render dois onde se esperavam cento e trinta.
         auditoria.registrar(cur, ctx.id_usuario, "producao", r["id"], "produzir",
-                            depois={"produto": body.id_produto, "qtd": body.quantidade,
+                            depois={"produto": body.id_produto, "qtd": r["quantidade"],
+                                    "pedido": body.quantidade, "medida": body.medida,
                                     "custo": r["custo_total"]}, id_unidade=id_unidade)
     return r
 

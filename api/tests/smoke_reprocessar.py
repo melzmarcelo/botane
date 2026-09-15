@@ -163,6 +163,55 @@ checar("a segunda prévia não acha nada a mudar", (denovo or {}).get("mudam") =
 checar("e diz isso com todas as letras",
        "em ordem" in (denovo or {}).get("message", ""), denovo)
 
+print("\n4b. o estorno de uma saída acompanha o custo dela")
+# 🔑 **O par que devolve tem de devolver o que tirou.** Reprocessar reescreve o
+# custo da SAÍDA (que nunca foi fato, é a média do momento) e deixava o espelho
+# dela -- o ESTORNO_ENTRADA -- no valor antigo. O par parava de fechar em zero e a
+# diferença ficava pendurada no estoque para sempre, quebrando a identidade
+# `inicial + entradas - saídas = final`. Medido numa base real: uma saída de
+# 2,712 KG repreçada de R$ 63,00 para R$ 315,00 com o estorno parado em
+# R$ 63,00 abriu um buraco de R$ 683,42 num produto só.
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": produto, "quantidade": 2, "tipo": "SAIDA_VENDA", "id_local": principal,
+    "data_movimento": "2026-08-20", "documento": f"REPRO-E-{marca}",
+}, token=token)
+checar("uma saída nova, já com a prateleira valendo 64", st == 201, (st, r))
+id_saida = (r or {}).get("id")
+st, r = chamar("POST", f"/estoque/movimentos/{id_saida}/estornar",
+               {"motivo": "para provar o espelho"}, token=token)
+checar("e o estorno dela é lançado", st == 201, (st, r))
+
+# A nota atrasada que muda a média ANTES da saída: 4 a 100 no dia 15 põem a
+# prateleira em (4x64 + 4x100) / 8 = 82,00.
+st, r = chamar("POST", "/estoque/entradas", {
+    "id_produto": produto, "quantidade": 4, "custo_unitario": 100, "id_local": principal,
+    "data_movimento": "2026-08-15", "documento": f"REPRO-N2-{marca}",
+}, token=token)
+checar("a nota do dia 15 entra por último, com data anterior", st == 201, (st, r))
+
+st, r = chamar("POST", "/estoque/reprocessar", {"id_produto": produto, "aplicar": True},
+               token=token)
+checar("o reprocessamento aplica", st == 200 and (r or {}).get("aplicado") is True, (st, r))
+
+feito = movimentos_de(produto)
+saida20 = next((m for m in feito if m["id"] == id_saida), None)
+espelho = next((m for m in feito if m.get("id_estorno_de") == id_saida), None)
+checar("a saída passou a custar a média do dia 20 (82,00)",
+       float((saida20 or {}).get("custo_unitario") or 0) == 82, saida20)
+# ⚠️ A afirmação central desta fase.
+checar("e o estorno dela custa o MESMO",
+       float((espelho or {}).get("custo_unitario") or 0) == 82, espelho)
+checar("o par volta a valer exatamente zero",
+       float((saida20 or {}).get("custo_total") or 0)
+       == float((espelho or {}).get("custo_total") or 0), (saida20, espelho))
+
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={produto}", token=token)
+linha = (saldos or [{}])[0]
+checar("a prateleira fecha com 8 ao custo de 82,00",
+       float(linha.get("quantidade") or 0) == 8 and float(linha.get("custo_medio") or 0) == 82,
+       linha)
+
+
 print("\n5. produto sem movimento, e quem não pode")
 st, p2 = chamar("POST", "/produtos", {
     "codigo": f"REPRO-VAZIO-{marca}", "nome": f"SEM MOVIMENTO {marca}", "tipo": "REVENDA",

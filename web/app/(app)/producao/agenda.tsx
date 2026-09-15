@@ -75,11 +75,12 @@ const amanha = () => somarDias(1);
 
 export default function AgendaProducao({
   fichas,
-  locais,
   aoProduzir,
 }: {
   fichas: Ficha[];
-  locais: Local[];
+  // ⚠️ **`locais` saiu da lista de props** (15/09/2026): a agenda deixou de
+  // oferecer as prateleiras da casa e passa a perguntar as DO PRODUTO. Manter o
+  // parâmetro sem uso seria deixar a porta velha encostada.
   aoProduzir: () => void;
 }) {
   const aviso = useAviso();
@@ -90,12 +91,51 @@ export default function AgendaProducao({
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [f, setF] = useState({
-    id_produto: "", quantidade: "", data: amanha(), rotulo: "", id_local: "",
+    id_produto: "", quantidade: "",
+    /** Em que a quantidade foi digitada — ver a nota do seletor lá embaixo.
+        ⚠️ Nasce em RECEITAS, como na aba de registrar: é assim que a cozinha
+        pensa, e um padrão diferente por aba seria uma armadilha. O servidor
+        segue com `PORCOES`, e a tela manda o campo sempre. */
+    medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    data: amanha(), rotulo: "", id_local: "",
   });
   // Quanto vai sair de fato de cada linha. Começa no planejado — o caso comum
   // é produzir o que se planejou, e quem digitar por cima está corrigindo.
   const [saida, setSaida] = useState<Record<number, string>>({});
   const [confirmando, setConfirmando] = useState<Linha | null>(null);
+  /**
+   * 🔑 **As prateleiras DESTE produto, e não as da casa** (15/09/2026, pedido do
+   * dono: *"quando agendo uma produção, os setores/prateleira deveriam ser
+   * somente as que o produto pertence"*).
+   *
+   * O seletor oferecia todos os locais ativos da loja — e produzir para uma
+   * prateleira onde o produto não mora não é um erro que a tela pegue: ele
+   * aparece semanas depois, no inventário, como sobra num canto e falta noutro.
+   *
+   * ⚠️ **Vem de `/produtos/{id}/locais`**, que é a mesma lista do cartão "Onde
+   * este produto fica": quem declara a prateleira é o cadastro, e ter duas
+   * respostas para "onde este produto pode estar" seria ter duas verdades.
+   */
+  const [locaisDoProduto, setLocaisDoProduto] = useState<
+    { id_local: number; local: string; setor?: string | null }[] | null
+  >(null);
+
+  useEffect(() => {
+    const id = Number(f.id_produto);
+    if (!id) {
+      setLocaisDoProduto(null);
+      return;
+    }
+    let valeu = true;
+    api
+      .get<{ id_local: number; local: string; setor?: string | null }[]>(
+        `/produtos/${id}/locais`)
+      .then((r) => valeu && setLocaisDoProduto(r))
+      .catch(() => valeu && setLocaisDoProduto([]));
+    return () => {
+      valeu = false;
+    };
+  }, [f.id_produto]);
 
   const carregar = useCallback(async () => {
     try {
@@ -134,6 +174,11 @@ export default function AgendaProducao({
       const r = await api.post<{ message: string }>("/producao-agenda", {
         id_produto: Number(f.id_produto),
         quantidade: Number(f.quantidade.replace(",", ".")),
+        // 🔑 **A agenda guarda sempre a unidade de ESTOQUE**, e o servidor
+        // traduz na porta: quem agenda "2 receitas" deixa 130 UN no plano, e
+        // daí para dentro — resumo do dia, folha da bancada, produção que
+        // fecha a linha — ninguém precisa lembrar de traduzir.
+        medida: f.medida,
         data_prevista: f.data,
         // 🔑 **Para QUAL prateleira** (migração 066, pedido do dono: "ao programar
         // a produção seleciona qual local será produzido"). A agenda já guardava
@@ -144,7 +189,8 @@ export default function AgendaProducao({
         id_local: f.id_local ? Number(f.id_local) : null,
       });
       aviso.sucesso(r.message);
-      setF({ id_produto: "", quantidade: "", data: f.data, rotulo: "", id_local: f.id_local });
+      setF({ id_produto: "", quantidade: "", medida: f.medida, data: f.data, rotulo: "",
+             id_local: f.id_local });
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível agendar");
@@ -277,6 +323,39 @@ export default function AgendaProducao({
               }
             />
           </Campo>
+          {/* 🔑 **Para qual prateleira** — e é ela que decide o rendimento quando
+              a ficha tem destinos: a massa que vai para a vitrine passa pelo forno
+              e não rende o mesmo que a que vai para a câmara. */}
+          <Campo
+            className="sm:col-span-2"
+            rotulo="Para qual prateleira"
+            dica={
+              !f.id_produto
+                ? "escolha o preparo primeiro"
+                : locaisDoProduto && !locaisDoProduto.length
+                  ? "este preparo ainda não está em prateleira nenhuma — acrescente no cadastro dele"
+                  : "vazio = a do produto"
+            }
+          >
+            <select
+              className="campo"
+              aria-label="Prateleira de destino"
+              value={f.id_local}
+              disabled={!f.id_produto}
+              onChange={(e) => setF({ ...f, id_local: e.target.value })}
+            >
+              <option value="">— a do produto —</option>
+              {/* ⚠️ Só as prateleiras onde o preparo MORA. A lista da casa
+                  inteira deixava agendar para um canto em que ele nunca esteve,
+                  e o erro só apareceria na contagem do fim do mês. */}
+              {(locaisDoProduto ?? []).map((l) => (
+                <option key={l.id_local} value={l.id_local}>
+                  {l.local}
+                  {l.setor ? ` · ${l.setor}` : ""}
+                </option>
+              ))}
+            </select>
+          </Campo>
           <Campo rotulo="Quantidade">
             <input
               className="campo mono"
@@ -286,6 +365,27 @@ export default function AgendaProducao({
               onChange={(e) => setF({ ...f, quantidade: e.target.value })}
             />
           </Campo>
+          {/* 🔑 **A medida tem CAMPO PRÓPRIO** (15/09/2026, pedido do dono:
+              *"informar se vamos produzir X porções ou X rendimentos"*). "2"
+              sozinho não distingue dois cookies de duas receitas de 65 — e foi
+              essa ambiguidade que fez uma produção inteira entrar como duas
+              unidades. ⚠️ A primeira versão enfiava o seletor dentro do campo do
+              número e os dois brigavam pela mesma coluna: o `.campo` tem 16px
+              de fonte (para o iPhone não dar zoom) e o seletor estourava a
+              linha, sobrando meia dúzia de caracteres para a quantidade. */}
+          <Campo
+            rotulo="Medida"
+            dica={f.medida === "RECEITAS" ? "voltas inteiras da ficha" : "na unidade do produto"}
+          >
+            <select
+              className="campo"
+              value={f.medida}
+              onChange={(e) => setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" })}
+            >
+              <option value="PORCOES">porções</option>
+              <option value="RECEITAS">receitas</option>
+            </select>
+          </Campo>
           <Campo rotulo="Para quando">
             <input
               className="campo"
@@ -294,24 +394,6 @@ export default function AgendaProducao({
               value={f.data}
               onChange={(e) => setF({ ...f, data: e.target.value })}
             />
-          </Campo>
-          {/* 🔑 **Para qual prateleira** — e é ela que decide o rendimento quando
-              a ficha tem destinos: a massa que vai para a vitrine passa pelo forno
-              e não rende o mesmo que a que vai para a câmara. */}
-          <Campo rotulo="Para qual prateleira" dica="vazio = a do produto">
-            <select
-              className="campo"
-              aria-label="Prateleira de destino"
-              value={f.id_local}
-              onChange={(e) => setF({ ...f, id_local: e.target.value })}
-            >
-              <option value="">— a do produto —</option>
-              {locais.filter((l) => l.ativo).map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome}
-                </option>
-              ))}
-            </select>
           </Campo>
           <div className="flex items-end">
             <button className="btn btn-primario" type="submit" aria-busy={ocupado} disabled={ocupado}>

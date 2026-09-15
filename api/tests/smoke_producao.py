@@ -278,6 +278,122 @@ for pid in (farinha, po, massa, cafe):
     chamar("DELETE", f"/produtos/{pid}", token=token)
 checar("limpeza concluída", True)
 
+print("")
+print("9. a receita que rende em KG um produto contado em UN")
+# 🔑 **Relatado pelo dono (15/09/2026):** *"a ficha do COOKIES FLAT produz 65
+# porções, coloquei para produzir 2 e no estoque só entraram 2 UN"*. O que ele
+# viu é verdade — e o que ninguém via é que a conta por trás estava errada.
+# ⚠️ **As duas pontas falam unidades diferentes**: a quantidade está na unidade
+# de ESTOQUE (UN de cookie) e o rendimento, na da RECEITA (KG de massa).
+# `qtd / rendimento` dividia unidade por quilo: 2 / 8,535 = **0,234 receita**,
+# 23% dos ingredientes para fazer dois cookies, quando o certo é 2/65 = 3,08%.
+# Sete vezes e meia de manteiga, farinha e chocolate a mais saindo do estoque —
+# e o custo do cookie inflado na mesma medida.
+biscoito = novo_produto(f"Prod cookie {SUF}", "UN", tipo="PRODUZIDO", producao_propria=True)
+manteiga = novo_produto(f"Prod manteiga {SUF}", "KG", tipo="INSUMO")
+chamar("POST", "/estoque/entradas",
+       {"id_produto": manteiga, "quantidade": 50, "custo_unitario": 10,
+        "id_local": local["id"]}, token=token)
+# A receita rende 8,535 KG de massa = 65 cookies, e leva 1,3 KG de manteiga.
+st, r = chamar("POST", "/fichas", {
+    "id_produto": biscoito, "rendimento_qtd": 8.535, "rendimento_um": "KG", "porcoes": 65,
+    "itens": [{"id_insumo": manteiga, "qtd_bruta": 1.3, "um": "KG"}]}, token=token)
+ficha_biscoito = r.get("id")
+chamar("POST", f"/fichas/{ficha_biscoito}/homologar", {}, token=token)
+
+st, prev = chamar("GET", f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=2",
+                  token=token)
+checar("a previsao responde", st == 200, (st, prev))
+# 🔑 A afirmação central: 2 cookies são 2/65 da receita, não 2/8,535.
+checar("2 unidades sao 2/65 da receita, e nao 2/8,535",
+       perto(prev.get("lotes"), 2 / 65, 0.0001), prev.get("lotes"))
+manteiga_prevista = next((i for i in prev.get("itens", []) if i["id_produto"] == manteiga), {})
+checar("e a manteiga necessaria acompanha",
+       perto(manteiga_prevista.get("necessario"), 1.3 * 2 / 65, 0.0001), manteiga_prevista)
+
+# ⚠️ E a RECEITA INTEIRA continua sendo a receita inteira: 65 unidades = 1 lote.
+st, cheia = chamar("GET", f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=65",
+                   token=token)
+checar("65 unidades dao exatamente uma receita", perto(cheia.get("lotes"), 1), cheia.get("lotes"))
+
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": biscoito, "quantidade": 2, "id_local": local["id"]}, token=token)
+checar("produzir 2 cookies grava", st == 201, (st, r))
+st, mov = chamar(
+    "GET", f"/estoque/movimentos?id_produto={manteiga}&por_pagina=10", token=token)
+saida = next((m for m in (mov or []) if m["tipo"] == "SAIDA_PRODUCAO"), None)
+checar("e tira do estoque a manteiga de DOIS cookies, nao a de quinze",
+       perto(abs(float((saida or {}).get("quantidade") or 0)), 1.3 * 2 / 65, 0.0001), saida)
+# 🔑 O custo do cookie sai do que REALMENTE saiu: 0,04 KG de manteiga a R$ 10,00
+# dão R$ 0,40 para dois cookies — R$ 0,20 cada.
+st, produzido = chamar("GET", f"/estoque/saldos?id_produto={biscoito}", token=token)
+checar("e o custo do cookie e o do ingrediente que ele levou",
+       perto(float((produzido or [{}])[0].get("custo_medio") or 0), 0.2, 0.01), produzido)
+
+
+print()
+print("10. pedir em RECEITAS, e nao em porcoes")
+# 🔑 **Pedido do dono (15/09/2026):** *"na producao podemos ter como informar
+# se vamos produzir X porcoes ou X rendimentos -- a ficha tem rendimento de 10 KG
+# sendo 60 porcoes; informar 2 rendimento gera 120 porcoes"*. As duas contas
+# sempre existiram (uma e o inverso da outra); o que faltava era a pessoa poder
+# dizer QUAL das duas ela esta digitando. Sem isso, "2" era ambiguo -- e foi
+# essa ambiguidade que fez dois cookies entrarem onde se esperavam cento e
+# trinta.
+st, duas = chamar(
+    "GET",
+    f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=2&medida=RECEITAS",
+    token=token)
+checar("a previsao aceita o pedido em receitas", st == 200, (st, duas))
+checar("duas receitas sao duas voltas da ficha", perto(duas.get("lotes"), 2), duas.get("lotes"))
+# ⚠️ A afirmacao central: o que ENTRA e sempre na unidade de estoque.
+checar("e viram 130 unidades de estoque", perto(duas.get("quantidade"), 130),
+       duas.get("quantidade"))
+checar("a tela sabe quantas unidades UMA receita rende",
+       perto(duas.get("porcoes_por_receita"), 65), duas.get("porcoes_por_receita"))
+st, cento = chamar(
+    "GET", f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=130",
+    token=token)
+# 🔑 Os dois caminhos tem de chegar ao MESMO lugar: sao a mesma conta, lida
+# de dois lados. Se um dia divergirem, a tela passa a mentir em um dos dois.
+checar("e pedir 130 porcoes da exatamente o mesmo",
+       perto(cento.get("lotes"), duas.get("lotes"))
+       and perto(cento.get("custo_total"), duas.get("custo_total")), (cento, duas))
+
+st, antes_saldo = chamar("GET", f"/estoque/saldos?id_produto={manteiga}", token=token)
+tinha = float((antes_saldo or [{}])[0].get("quantidade") or 0)
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": biscoito, "quantidade": 2, "medida": "RECEITAS",
+    "id_local": local["id"]}, token=token)
+checar("produzir DUAS RECEITAS grava", st == 201, (st, r))
+checar("e o que entrou no estoque sao 130 unidades", perto((r or {}).get("quantidade"), 130), r)
+checar("a resposta diz que foram 2 receitas", perto((r or {}).get("lotes"), 2), r)
+st, depois_saldo = chamar("GET", f"/estoque/saldos?id_produto={manteiga}", token=token)
+ficou = float((depois_saldo or [{}])[0].get("quantidade") or 0)
+# 2 receitas x 1,3 KG = 2,6 KG de manteiga -- a receita inteira, duas vezes.
+checar("e saiu a manteiga de duas receitas inteiras", perto(tinha - ficou, 2.6, 0.0001),
+       (tinha, ficou))
+
+# A agenda tambem aceita o pedido em receitas -- e traduz NA PORTA. Ela guarda
+# sempre a unidade de estoque: de dentro para la (resumo do dia, folha da
+# bancada, producao que fecha a linha) ninguem precisa lembrar de traduzir, e a
+# primeira consulta que esquecesse produziria dois cookies.
+st, r = chamar("POST", "/producao-agenda", {
+    "id_produto": biscoito, "quantidade": 2, "medida": "RECEITAS",
+    "data_prevista": str(amanha), "id_local": local["id"]}, token=token)
+checar("agendar em receitas responde", st == 201, (st, r))
+checar("e a agenda guarda 130, nao 2", perto((r or {}).get("quantidade"), 130), r)
+
+# ⚠️ **O padrao continua sendo PORCOES.** Quem nao manda nada pede na
+# unidade do produto, que e como sempre foi -- mudar o padrao reescreveria o
+# significado de toda tela e todo script que ja chama esta rota.
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": biscoito, "quantidade": 65, "id_local": local["id"]}, token=token)
+checar("sem medida, 65 continua querendo dizer 65 unidades",
+       st == 201 and perto((r or {}).get("quantidade"), 65) and perto((r or {}).get("lotes"), 1),
+       (st, r))
+
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

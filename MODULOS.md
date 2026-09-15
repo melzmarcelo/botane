@@ -17,10 +17,10 @@ entregue.
 | Módulo | Memória | Suítes |
 |---|---|---|
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits` |
-| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `producao` |
+| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `producao`, `rendimento`, `rendimento_por_local` |
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes` |
-| [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
+| [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |

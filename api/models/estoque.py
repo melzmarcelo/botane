@@ -1,6 +1,7 @@
 """Modelos do estoque."""
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -190,6 +191,13 @@ class ProducaoRequest(BaseModel):
     quantidade: float = Field(gt=0)
     id_local: int | None = None
     observacao: str | None = None
+    # 🔑 **Em que a quantidade foi digitada** (pedido do dono, 15/09/2026:
+    # *"na produção podemos ter como informar se vamos produzir X porções ou X
+    # rendimentos"*). `PORCOES` é a unidade de estoque do produto — 130 cookies
+    # — e `RECEITAS` são voltas inteiras da ficha — 2 receitas de 65. O padrão
+    # é `PORCOES`, que é como sempre foi, e o razão continua gravando só a
+    # unidade de estoque. Ver `services.estoque._quanto_produzir`.
+    medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
 
 
 class InventarioCreate(BaseModel):

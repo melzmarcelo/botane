@@ -442,6 +442,65 @@
   checagens adiante**, dizendo que a agenda não abre a folha. Duas correções, e as duas valem
   como regra: **filtrar pelo produto ATIVO** e **conferir o POST que monta a precondição**.
 
+- 🔑 **O custo da ficha se ajusta ENQUANTO se digita** (`POST /fichas/previa-de-custo`,
+  15/09/2026, pedido do dono: *"na ficha técnica, ao ir preenchendo os dados dos insumos, os
+  valores demonstrados poderiam já ir ajustando na tela"*). Até então o custo só aparecia depois
+  de salvar: quem montava uma receita escrevia no escuro e, se o número saísse estranho, tinha de
+  descobrir sozinho qual linha o causou.
+  ⚠️ **Recebe os ITENS, não um id** — como a prévia do rendimento, e pela mesma razão: numa ficha
+  nova não há nada gravado para consultar.
+  ⚠️ **A conta é a MESMA da ficha gravada.** O miolo saiu para `custos._custos_das_linhas` e os
+  dois caminhos passam por ele; calcular no navegador seria a segunda versão da cascata de custo
+  — a que converte unidade, desce em sub-ficha e escolhe entre custo médio, último preço e
+  referência —, e ela divergiria na primeira correção.
+  ⚠️ **Uma linha por item, na MESMA ordem em que chegaram**: a tela casa pelo índice, e devolver
+  um subconjunto faria o custo aparecer na linha errada — pior do que não aparecer.
+  ⚠️ A permissão é `fichas.custos`: a rota só devolve dinheiro.
+
+- 🔑 **Só se agenda para prateleira onde o preparo MORA** (15/09/2026, pedido do dono: *"quando
+  agendo uma produção, os setores/prateleira deveriam ser somente as que o produto pertence"*, e
+  depois a regra geral: *"acho que em todo o sistema só podemos adicionar produtos para os quais
+  eles têm cadastro"*). A lista da casa inteira deixava agendar para um canto em que o preparo
+  nunca esteve — e não é erro que a tela pegue: aparece semanas depois, na contagem, como sobra
+  num lugar e falta em outro.
+
+- 🔑 **A quantidade da produção e o rendimento da ficha falavam unidades diferentes**
+  (15/09/2026, relatado pelo dono: *"a ficha do COOKIES FLAT produz 65 porções, coloquei para
+  produzir 2 e no estoque só entraram 2 UN"*). A quantidade está na unidade de **estoque** do
+  produto (UN de cookie); o rendimento, na da **receita** (8,535 KG de massa). `qtd / rendimento`
+  dividia unidade por quilo: 2 ÷ 8,535 = **0,234 receita** — 23% dos ingredientes para fazer dois
+  cookies, quando o certo era 2/65 = 3,08%. Sete vezes e meia de manteiga, farinha e chocolate
+  saindo do estoque, e o custo do cookie inflado na mesma medida (R$ 72,74 a unidade).
+  A ponte mora em **`estoque._rendimento_em_estoque`** — quantas unidades de estoque UMA receita
+  rende — e a ordem é: (1) as duas unidades são a mesma; (2) as **porções** (do destino, em
+  `ficha_locais`, senão da ficha); (3) a grandeza (KG↔G, L↔ML). ⚠️ **Sem nenhuma das três é
+  recusa**, com a frase mandando preencher as porções: produzir com fator inventado é o que
+  custou sete vezes o ingrediente certo, e o erro só aparece no inventário do mês seguinte.
+  ⚠️ **A prévia (`/producao-agenda/necessario`) usa a MESMA ponte** — prever com outra regra
+  seria prever outra coisa, e a folha da bancada pediria sete vezes mais do que a receita precisa.
+
+- 🔑 **Dá para pedir em PORÇÕES ou em RECEITAS** (15/09/2026, pedido do dono: *"na produção
+  podemos ter como informar se vamos produzir X porções ou X rendimentos — a ficha tem rendimento
+  de 10 KG sendo 60 porções; informar 2 rendimento gera 120 porções"*). `medida=PORCOES` (o
+  padrão, e como sempre foi) é a unidade de estoque do produto; `medida=RECEITAS` são voltas
+  inteiras da ficha. As duas contas sempre existiram — uma é o inverso da outra (`_quanto_produzir`);
+  o que faltava era a pessoa poder dizer **qual das duas está digitando**. Sem isso "2" era
+  ambíguo, e foi essa ambiguidade que fez uma produção inteira entrar como duas unidades.
+  ⚠️ **O razão grava SEMPRE a unidade de estoque.** `RECEITAS` é um jeito de dizer quanto, não
+  outra unidade de medida: gravar "2" com a etiqueta de receita faria o saldo do cookie contar
+  receitas e o inventário da prateleira contar cookies.
+  ⚠️ **A agenda traduz NA PORTA** (`estoque.quantidade_de_estoque`, chamado pelo router): quem
+  agenda "2 receitas" deixa 130 UN no plano, e daí para dentro — resumo do dia, folha da bancada,
+  produção que fecha a linha — ninguém precisa lembrar de traduzir. A primeira consulta que
+  esquecesse produziria dois cookies.
+  🔑 **A TELA nasce em RECEITAS; o SERVIDOR continua em PORCOES** (16/09/2026, pedido do dono:
+  *"coloca como padrão a Receita na medida de produção"*). É assim que a cozinha pensa: ninguém
+  decide fazer 130 cookies, decide fazer duas receitas. ⚠️ Mas o padrão do servidor não pode
+  acompanhar — quem **não** manda o campo (a venda que produz na hora, a linha da agenda sendo
+  cumprida, qualquer script) fala a unidade de estoque, e trocar o padrão de lá reinterpretaria
+  todos eles de uma vez, calado. As duas telas mandam o campo sempre, e o padrão de cada uma é o
+  mesmo: um por aba seria armadilha.
+
 ## Armadilhas já pagas
 
 - 🔑 **Não dava para saber QUAL commit estava no ar, e isso custou uma ida e volta.** `VERSAO` é

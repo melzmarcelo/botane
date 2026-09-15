@@ -682,7 +682,8 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
 
     cur.execute(
         """SELECT id, id_local, data_movimento, tipo, quantidade, custo_unitario,
-                  custo_total, saldo_apos, custo_medio_apos, custo_provisorio, origem_tipo
+                  custo_total, saldo_apos, custo_medio_apos, custo_provisorio, origem_tipo,
+                  id_estorno_de
              FROM estoque_movimentos
             WHERE id_unidade = %s AND id_produto = %s
             ORDER BY data_movimento, id""",
@@ -715,6 +716,16 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
     # número: a diferença dela é exatamente `saldo × médio − valor registrado`.
     corrente: dict[int, list] = {}
     mudancas: list[dict] = []
+    # 🔑 **O estorno de uma SAÍDA custa o que a saída custou** — e por isso ele
+    # acompanha o recálculo dela. Reprocessar reescreve o custo da saída (que
+    # nunca foi fato, é a média do momento) e deixava o espelho dela como
+    # estava: o par que devolvia exatamente o que tirou passava a devolver
+    # outro valor, e a diferença ficava pendurada no estoque para sempre.
+    # Medido: uma saída de 2,712 KG reprecificada de R$ 63 para R$ 315 com o
+    # estorno parado em R$ 63 abria um buraco de R$ 683,42 num produto só.
+    # ⚠️ Vale só para o estorno de saída. O estorno de uma ENTRADA é uma saída,
+    # e saída custa a média do momento — é o caminho de baixo, não este.
+    custo_da_saida: dict[int, Decimal] = {}
 
     for m in movimentos:
         local = m["id_local"]
@@ -723,6 +734,9 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
         unitario = dec(m["custo_unitario"] or 0)
         total = dec(m["custo_total"] or 0)
         provisorio = bool(m["custo_provisorio"])
+        espelha = custo_da_saida.get(m["id_estorno_de"])
+        if espelha is not None:
+            unitario = espelha
 
         if m["tipo"] == AJUSTE_CUSTO and m["origem_tipo"] == "CUSTO_GERAL":
             # A reavaliação que a entrada espalhou. Ela não move mercadoria: o
@@ -764,6 +778,7 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
                 medio = medio or unitario
             total = (abs(qtd) * unitario).quantize(Decimal("0.01"))
             registrado -= total
+            custo_da_saida[m["id"]] = unitario
 
         corrente[local] = [saldo, medio, registrado]
 
@@ -966,6 +981,145 @@ def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_or
             "id_unidade_origem": unidade_origem, "id_unidade_destino": unidade_destino}
 
 
+def _rendimento_em_estoque(cur, id_ficha: int, id_local: int | None, rendimento,
+                           rendimento_um: str | None, um_estoque: str | None,
+                           ums: dict) -> Decimal:
+    """Quantas unidades de ESTOQUE do produto uma receita inteira rende.
+
+    🔑 **As duas pontas falam unidades diferentes, e isso quebrava a conta**
+    (15/09/2026, relatado pelo dono: *"a ficha produz 65 porções, coloquei para
+    produzir 2 e no estoque só entraram 2 UN"*). A quantidade está na unidade de
+    ESTOQUE do produto (UN de cookie); o rendimento, na unidade da RECEITA
+    (8,535 KG de massa). `qtd / rendimento` dividia unidade por quilo e devolvia
+    **0,234 receita** -- 23% dos ingredientes para fazer dois cookies, quando o
+    certo eram 2/65 = **3,08%**. Sete vezes e meia a mais de manteiga, farinha e
+    chocolate saindo do estoque, e o custo do cookie inflado na mesma medida.
+
+    A ponte, em ordem:
+
+    1. **As duas unidades são a mesma** — a receita rende o próprio rendimento,
+       que é o caso da ficha que rende em KG de um produto estocado em KG.
+    2. **As PORÇÕES** — é exatamente "quantas unidades do produto esta receita
+       rende". A ficha do cookie diz 65, e o produto é contado em UN.
+    3. **A grandeza** (KG↔G, L↔ML), para quando as duas são de peso ou volume
+       com siglas diferentes.
+
+    ⚠️ **Sem nenhuma das três, é RECUSA.** Produzir com um fator inventado é
+    o que custou sete vezes o ingrediente certo — e o erro não aparece na hora:
+    aparece no inventário do mês seguinte, como falta.
+    """
+    from services import custos
+
+    r = dec(rendimento) or Decimal(1)
+    um_r = (rendimento_um or "").strip().upper()
+    um_p = (um_estoque or "").strip().upper()
+    if not um_r or not um_p or um_r == um_p:
+        return r
+
+    # 2. As porções — do DESTINO quando ele tem as suas, senão as da ficha.
+    porcoes = None
+    if id_local is not None:
+        cur.execute(
+            "SELECT porcoes FROM ficha_locais WHERE id_ficha = %s AND id_local = %s",
+            (id_ficha, id_local),
+        )
+        linha = cur.fetchone()
+        if linha and dec(linha["porcoes"]) > 0:
+            porcoes = dec(linha["porcoes"])
+    if porcoes is None:
+        cur.execute("SELECT porcoes FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
+        linha = cur.fetchone()
+        if linha and dec(linha["porcoes"]) > 0:
+            porcoes = dec(linha["porcoes"])
+    if porcoes:
+        return porcoes
+
+    # 3. A grandeza: o rendimento traduzido para a unidade do produto.
+    convertida = custos.converter(r, um_r, um_p, ums)
+    if convertida is not None and convertida > 0:
+        return convertida
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"A receita rende em {um_r} e este produto é estocado em {um_p}, e o sistema não "
+            f"sabe quantos {um_p} a receita faz. Informe as PORÇÕES na ficha (quantas unidades "
+            f"ela rende) — é esse número que liga as duas pontas."
+        ),
+    )
+
+
+# As duas maneiras de pedir uma produção. `PORCOES` é a unidade de ESTOQUE do
+# produto (130 cookies); `RECEITAS` são voltas inteiras da ficha (2 receitas de
+# 65).
+#
+# 🔑 **Pedido do dono (15/09/2026):** *"na producao podemos ter como informar
+# se vamos produzir X porções ou X rendimentos — a ficha tem rendimento de 10 KG
+# sendo 60 porções; informar 2 rendimento gera 120 porções"*. As duas contas
+# sempre existiram no fundo (uma é o inverso da outra); o que faltava era a
+# pessoa poder dizer QUAL das duas ela está digitando. Sem isso, "2" era
+# ambíguo — e foi exatamente a ambiguidade que fez dois cookies entrarem onde
+# se esperavam cento e trinta.
+MEDIDAS_DE_PRODUCAO = ("PORCOES", "RECEITAS")
+
+
+def _quanto_produzir(cur, id_ficha: int, id_local: int | None, quantidade, medida: str | None,
+                     rendimento, rendimento_um: str | None, um_estoque: str | None,
+                     ums: dict) -> tuple[Decimal, Decimal, Decimal]:
+    """Traduz o pedido em `(quantidade de estoque, lotes, rendimento em estoque)`.
+
+    ⚠️ **A quantidade gravada no razão é SEMPRE na unidade de estoque** —
+    `RECEITAS` é um jeito de dizer quanto, não outra unidade de medida. Gravar
+    "2" com a etiqueta de receita faria o saldo do cookie contar receitas e o
+    inventário da prateleira contar cookies.
+    """
+    por_receita = _rendimento_em_estoque(cur, id_ficha, id_local, rendimento, rendimento_um,
+                                         um_estoque, ums)
+    pedida = dec(quantidade)
+    if (medida or "PORCOES").upper() == "RECEITAS":
+        lotes = pedida
+        # 4 casas: é a escala de `estoque_movimentos.quantidade`. Arredondar aqui
+        # e não lá embaixo mantém o que a tela mostrou igual ao que entrou.
+        qtd = (lotes * por_receita).quantize(Decimal("0.0001"))
+    else:
+        qtd = pedida
+        lotes = qtd / por_receita
+    return qtd, lotes, por_receita
+
+
+def quantidade_de_estoque(cur, id_unidade: int, id_produto: int, quantidade,
+                         id_local: int | None = None, medida: str | None = None) -> dict:
+    """Traduz "X receitas" em quantidade de estoque. `{quantidade, lotes, porcoes_por_receita}`.
+
+    🔑 **A tradução acontece UMA vez, na porta.** Quem agenda "2 receitas" grava
+    130 UN na agenda, e daí para dentro tudo — o resumo do dia, a folha da
+    bancada, a produção que fecha a linha — continua falando a única unidade que
+    o razão conhece. Guardar "2" com uma etiqueta faria cada consulta ter de
+    lembrar de traduzir, e a primeira que esquecesse produziria dois cookies.
+    """
+    cur.execute(
+        """SELECT f.id, f.rendimento_qtd, f.rendimento_um, p.um_estoque
+             FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
+            WHERE f.id_produto = %s AND f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL""",
+        (id_produto,),
+    )
+    ficha = cur.fetchone()
+    if not ficha:
+        raise HTTPException(status_code=400, detail="Este produto não tem ficha homologada.")
+    if id_local is None:
+        id_local = local_padrao(cur, id_unidade)
+
+    from services import custos
+
+    rendimento, _do_local = rendimento_do_local(
+        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
+    qtd, lotes, por_receita = _quanto_produzir(
+        cur, ficha["id"], id_local, quantidade, medida, rendimento, ficha["rendimento_um"],
+        ficha["um_estoque"], custos._carregar_ums(cur))
+    return {"quantidade": float(qtd), "lotes": float(lotes),
+            "porcoes_por_receita": float(por_receita), "um_estoque": ficha["um_estoque"]}
+
+
 def rendimento_do_local(cur, id_ficha: int, id_local: int | None,
                         rendimento_da_ficha) -> tuple[Decimal, bool]:
     """O rendimento que vale ao produzir PARA este local. `(rendimento, e_do_local)`.
@@ -999,7 +1153,7 @@ def rendimento_do_local(cur, id_ficha: int, id_local: int | None,
 
 
 def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
-                      id_local: int | None = None) -> dict:
+                      id_local: int | None = None, medida: str | None = None) -> dict:
     """O que uma produção VAI precisar, sem produzir nada.
 
     É a folha que a cozinha leva para a bancada: para 22 massas, 4,4 KG de
@@ -1037,8 +1191,14 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     # rende o mesmo que a que vai crua para a câmara.
     rendimento, rend_do_local = rendimento_do_local(
         cur, ficha["id"], id_local, ficha["rendimento_qtd"])
-    lotes = qtd / rendimento
     ums = custos._carregar_ums(cur)
+    # ⚠️ A MESMA ponte da produção: prever com outra regra seria prever outra
+    # coisa — e foi assim que a folha da bancada passou a pedir sete vezes mais
+    # ingrediente do que a receita precisa. Inclusive a leitura da MEDIDA: a
+    # folha de "2 receitas" tem de pedir o mesmo que a produção de "2 receitas".
+    qtd, lotes, por_receita = _quanto_produzir(
+        cur, ficha["id"], id_local, qtd, medida, rendimento, ficha["rendimento_um"],
+        ficha["um_estoque"], ums)
 
     cur.execute(
         """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, fi.observacao,
@@ -1123,6 +1283,9 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         "um_estoque": ficha["um_estoque"],
         "quantidade": float(qtd), "rendimento_qtd": float(rendimento),
         "rendimento_um": ficha["rendimento_um"], "lotes": float(lotes),
+        # Quantas unidades de estoque UMA receita rende. É o número que traduz
+        # um jeito de pedir no outro, e a tela mostra os dois lados com ele.
+        "porcoes_por_receita": float(por_receita),
         # ⚠️ **Quem produz tem de saber QUAL rendimento valeu.** Ele divide o
         # consumo: sem isto a pessoa produz 10 achando que gastou um lote e gastou
         # 1,25 — e a diferença só aparece na contagem.
@@ -1187,11 +1350,16 @@ def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int |
 
 
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
-             id_usuario: int, observacao: str | None = None) -> dict:
+             id_usuario: int, observacao: str | None = None,
+             medida: str | None = None) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque.
 
     O custo do produzido é **o que realmente saiu** — não o custo teórico da
     ficha. Se um insumo estava mais caro hoje, o prato produzido hoje custa mais.
+
+    `medida` diz em que a `quantidade` foi digitada: `PORCOES` (o padrão — a
+    unidade de estoque do produto) ou `RECEITAS` (voltas inteiras da ficha).
+    Ver `_quanto_produzir`.
     """
     cur.execute(
         """SELECT id, versao, rendimento_qtd, rendimento_um FROM fichas_tecnicas
@@ -1212,8 +1380,6 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     # `id_local` já foi resolvido acima, então aqui ele nunca é nulo.
     rendimento, rend_do_local = rendimento_do_local(
         cur, ficha["id"], id_local, ficha["rendimento_qtd"])
-    # Quantas vezes a receita inteira foi feita.
-    lotes = qtd / rendimento
 
     from services import custos  # importado aqui para não criar ciclo de módulos
 
@@ -1221,6 +1387,15 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     cur.execute("SELECT sigla, grandeza, fator_base FROM unidades_medida")
     for r in cur.fetchall():
         ums[r["sigla"]] = dict(r)
+
+    # Quantas vezes a receita inteira foi feita, e quanto isso dá na unidade de
+    # estoque — ver `_quanto_produzir`: a quantidade pedida pode vir em PORÇÕES
+    # (a unidade do produto) ou em RECEITAS (voltas inteiras da ficha).
+    cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (id_produto,))
+    um_estoque_produto = (cur.fetchone() or {}).get("um_estoque")
+    qtd, lotes, por_receita = _quanto_produzir(
+        cur, ficha["id"], id_local, qtd, medida, rendimento, ficha["rendimento_um"],
+        um_estoque_produto, ums)
 
     cur.execute(
         """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, p.um_estoque, p.nome,
@@ -1326,7 +1501,12 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     return {
         "id": id_producao,
         "versao_ficha": ficha["versao"],
+        # ⚠️ **Sempre na unidade de ESTOQUE**, mesmo quando o pedido veio em
+        # receitas: é o que entrou na prateleira, e é o número que a tela
+        # confirma de volta para quem clicou.
         "quantidade": float(qtd),
+        "lotes": float(lotes),
+        "porcoes_por_receita": float(por_receita),
         # Qual rendimento dividiu o consumo — o da ficha ou o desta prateleira.
         "rendimento_qtd": float(rendimento),
         "rendimento_do_local": rend_do_local,

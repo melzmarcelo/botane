@@ -399,6 +399,20 @@
   `alerta_validade_dias`, `exigir_motivo_perda`, `exigir_local_movimento`,
   `bloquear_retroativo`, `ciclo_fechamento` e `casas_decimais_qtd`.
 
+- ⚠️ **`estoque_saldos` é FOTO DERIVADA, e não se corrige na mão** (16/09/2026, pago em duas
+  suítes vermelhas). Corrigindo o custo de referência de um insumo, reescrevi
+  `estoque_saldos.custo_medio` por SQL — parece inofensivo, já que é a fotografia que o
+  reprocessamento reescreve de qualquer jeito. Só que essa coluna ALIMENTA o estoque final do
+  CMV: mexer nela sem um movimento correspondente quebra `inicial + entradas − saídas = final`,
+  e `smoke_ajustes` e `smoke_cmv` acusaram com a diferença exata do que eu havia reavaliado.
+  ⚠️ Pior: reavaliar duas vezes com saldos diferentes não se cancela — o rombo foi a soma das
+  duas. **O instrumento certo é `POST /ajustes/custo`**, que grava um movimento de quantidade
+  ZERO carregando a diferença de valor; e quando a foto já saiu de sincronia, quem a traz de
+  volta é `POST /estoque/reprocessar`, que a recalcula a partir do razão.
+  ⚠️ **Com saldo NEGATIVO o ajuste de custo injeta valor que não volta**: ele é recuperável
+  enquanto o saldo continuar negativo, mas se o saldo passar por zero a diferença fica órfã —
+  média móvel não fecha sobre estoque negativo. Preferir a nota de compra, quando houver.
+
 - 🔑 **Reprocessar o estoque de um produto** (`services/estoque.reprocessar`,
   `POST /estoque/reprocessar`, 15/09/2026, pedido do dono: *"em saldos e movimentos, criar uma
   opção de reprocessar, caso tenha alterações, disponibilizar a opção de reprocessar o estoque,
@@ -424,6 +438,14 @@
   sempre, e travar por isso deixaria o recurso inútil para quem mais precisa dele.
   ⚠️ A prévia é o padrão (`aplicar` nasce falso) e a permissão é `estoque.custo` — a mesma
   autoridade do Ajuste de custo, que é o que a rota reescreve.
+  🔑 **O ESTORNO de uma saída acompanha o custo dela** (16/09/2026). Reprocessar reescrevia o
+  custo da saída e deixava o espelho — o `ESTORNO_ENTRADA` que a devolve — no valor antigo: o par
+  que devolvia exatamente o que tirou passava a devolver outro valor, e a diferença ficava
+  pendurada no estoque para sempre, quebrando a mesma identidade que o reprocessamento existe
+  para fechar. Medido: uma saída de 2,712 KG reprecificada de R$ 63,00 para R$ 315,00 com o
+  estorno parado em R$ 63,00 abriu um buraco de **R$ 683,42 num produto só**.
+  ⚠️ Vale só para o estorno de SAÍDA. O estorno de uma ENTRADA é uma saída, e saída custa a
+  média do momento — cai no caminho normal, não neste.
   🔑 **A suíte apaga o próprio rastro do razão, por SQL** — exceção deliberada. Reprocessar
   reescreve custo histórico, e três outras suítes conferem `inicial + entradas − saídas = final`
   sobre a base INTEIRA: qualquer produto com custo reescrito depois de outra fase ter fotografado

@@ -57,7 +57,66 @@ export default function PaginaProducao() {
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [historico, setHistorico] = useState<Producao[] | null>(null);
-  const [f, setF] = useState({ id_produto: "", quantidade: "", id_local: "", observacao: "" });
+  const [f, setF] = useState({
+    id_produto: "",
+    quantidade: "",
+    /**
+     * 🔑 **Em que a quantidade está sendo digitada** (15/09/2026, pedido do
+     * dono: *"na produção podemos ter como informar se vamos produzir X porções
+     * ou X rendimentos"*). `PORCOES` é a unidade de estoque do produto — 130
+     * cookies — e `RECEITAS` são voltas inteiras da ficha — 2 receitas de 65.
+     * Sem essa escolha, "2" era ambíguo: quem lia "rende 8,535 KG" e digitava 2
+     * pedia dois cookies, não duas receitas.
+     *
+     * ⚠️ **A tela nasce em RECEITAS** (pedido do dono, 16/09/2026) porque é
+     * assim que a cozinha pensa: ninguém decide fazer 130 cookies, decide fazer
+     * duas receitas. ⚠️ **Mas o SERVIDOR continua com `PORCOES` no padrão** —
+     * quem não manda o campo (a venda que produz na hora, a linha da agenda
+     * sendo cumprida, qualquer script) fala a unidade de estoque, e trocar o
+     * padrão de lá reinterpretaria todos eles de uma vez, calado. A tela manda
+     * o campo sempre.
+     */
+    medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    id_local: "",
+    observacao: "",
+  });
+  /**
+   * 🔑 **As prateleiras DESTE preparo, e não as da casa** (15/09/2026, pedido do
+   * dono: *"em todo o sistema, só podemos adicionar produtos para as quais eles
+   * têm cadastro"*). Produzir para um canto onde o produto não mora não é erro
+   * que a tela pegue: ele aparece semanas depois, na contagem, como sobra num
+   * lugar e falta noutro.
+   *
+   * ⚠️ **É a mesma regra que Ajustes já aplicava** (`locaisDoTipo`), pela mesma
+   * fonte (`/produtos/{id}/locais`, a lista do cartão "Onde este produto fica").
+   * ⚠️ **Sem prateleira declarada, a lista da casa volta** — é o caso do preparo
+   * novo, que ainda não esteve em lugar nenhum: recusar ali seria impedir a
+   * primeira produção dele.
+   */
+  const [locaisDoProduto, setLocaisDoProduto] = useState<
+    { id_local: number; local: string }[] | null
+  >(null);
+
+  useEffect(() => {
+    const id = Number(f.id_produto);
+    if (!id) {
+      setLocaisDoProduto(null);
+      return;
+    }
+    let valeu = true;
+    api
+      .get<{ id_local: number; local: string }[]>(`/produtos/${id}/locais`)
+      .then((r) => valeu && setLocaisDoProduto(r))
+      .catch(() => valeu && setLocaisDoProduto([]));
+    return () => {
+      valeu = false;
+    };
+  }, [f.id_produto]);
+
+  const locaisOferecidos =
+    locaisDoProduto && locaisDoProduto.length
+      ? locais.filter((l) => locaisDoProduto.some((o) => o.id_local === l.id))
+      : locais;
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -75,7 +134,14 @@ export default function PaginaProducao() {
    * linha simplesmente volta a mostrar o rendimento da ficha.
    */
   const [vigente, setVigente] = useState<
-    { rendimento_qtd: number; rendimento_do_local: boolean } | null
+    { rendimento_qtd: number; rendimento_do_local: boolean;
+      /** Quantas VEZES a receita inteira sai nesta quantidade. É o número que
+       *  faltava na tela — ver a nota do rótulo abaixo. */
+      lotes?: number; um_estoque?: string | null;
+      /** O que vai entrar no estoque, já traduzido — sempre na unidade do produto. */
+      quantidade?: number;
+      /** Quantas unidades de estoque UMA receita rende. Traduz um jeito no outro. */
+      porcoes_por_receita?: number } | null
   >(null);
 
   useEffect(() => {
@@ -89,7 +155,7 @@ export default function PaginaProducao() {
       api
         .get<typeof vigente>(
           `/producao-agenda/necessario?id_produto=${f.id_produto}` +
-            `&quantidade=${quanto}&id_local=${f.id_local}`,
+            `&quantidade=${quanto}&id_local=${f.id_local}&medida=${f.medida}`,
         )
         .then((r) => valeu && setVigente(r))
         .catch(() => valeu && setVigente(null));
@@ -98,7 +164,7 @@ export default function PaginaProducao() {
       valeu = false;
       clearTimeout(t);
     };
-  }, [f.id_produto, f.id_local, f.quantidade]);
+  }, [f.id_produto, f.id_local, f.quantidade, f.medida]);
 
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
@@ -159,6 +225,7 @@ export default function PaginaProducao() {
       const r = await api.post<Resultado>("/estoque/producoes", {
         id_produto: Number(f.id_produto),
         quantidade: Number(f.quantidade.replace(",", ".")),
+        medida: f.medida,
         id_local: f.id_local ? Number(f.id_local) : null,
         observacao: f.observacao || null,
       });
@@ -205,7 +272,7 @@ export default function PaginaProducao() {
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       {aba === "agenda" && (
-        <AgendaProducao fichas={fichas} locais={locais} aoProduzir={() => void carregar()} />
+        <AgendaProducao fichas={fichas} aoProduzir={() => void carregar()} />
       )}
 
       {resultado && (
@@ -286,8 +353,46 @@ export default function PaginaProducao() {
                       <b className="text-tinta"> nesta prateleira</b>
                     )}{" "}
                     — quantidade diferente é proporcional.
+                    {/* 🔑 **Quantas RECEITAS isso dá** (15/09/2026, relatado pelo
+                        dono: *"a ficha produz 65 porções, coloquei 2 e só
+                        entraram 2 UN"*). A frase acima fala o rendimento na
+                        unidade da RECEITA (8,535 KG) e o campo ao lado pede a
+                        unidade do PRODUTO (UN): quem lê "rende 8,535" e digita
+                        2 está pedindo dois cookies, não duas receitas. Este
+                        número diz, em uma linha, qual das duas coisas vai
+                        acontecer — e vem do servidor, da mesma conta que a
+                        produção roda. */}
+                    {/* 🔑 **A tradução, nos dois sentidos.** Quem pede em
+                        receitas precisa ver quanto entra na prateleira; quem
+                        pede em porções precisa ver quantas voltas da receita
+                        isso dá — é o número que divide o consumo. Vem do
+                        servidor, da mesma conta que a produção roda. */}
+                    {vigente?.lotes !== undefined && vigente.lotes > 0 && (
+                      <b className="block text-tinta">
+                        {f.medida === "RECEITAS"
+                          ? `${qtd(vigente.lotes)} receita(s) = ${qtd(vigente.quantidade ?? 0)} ${
+                              vigente.um_estoque ?? "un"
+                            }`
+                          : `${qtd(vigente.quantidade ?? 0)} ${vigente.um_estoque ?? "un"} = ${qtd(
+                              vigente.lotes,
+                            )} receita(s)`}
+                      </b>
+                    )}
                   </span>
                 )}
+              </Campo>
+              <Campo rotulo="Local" className="sm:col-span-2">
+                <select
+                  className="campo"
+                  value={f.id_local}
+                  onChange={(e) => setF({ ...f, id_local: e.target.value })}
+                >
+                  {locaisOferecidos.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.nome}
+                    </option>
+                  ))}
+                </select>
               </Campo>
               <Campo rotulo="Quantidade produzida">
                 <input
@@ -300,20 +405,37 @@ export default function PaginaProducao() {
                   onChange={(e) => setF({ ...f, quantidade: e.target.value })}
                 />
               </Campo>
-              <Campo rotulo="Local">
+              {/* 🔑 **A medida tem CAMPO PRÓPRIO** (15/09/2026, pedido do dono).
+                  "2" sozinho não distingue dois cookies de duas receitas de 65 —
+                  e foi essa ambiguidade que fez uma produção inteira entrar como
+                  duas unidades. ⚠️ A primeira versão enfiava o seletor dentro do
+                  campo do número: o `.campo` tem 16px de fonte (para o iPhone
+                  não dar zoom), e "porções (UN)" nessa fonte não cabe em uma
+                  fração de coluna — o seletor estourava a linha e sobrava meia
+                  dúzia de caracteres para digitar a quantidade. Dois campos
+                  lado a lado é o padrão de toda outra tela da casa. */}
+              <Campo
+                rotulo="Medida"
+                dica={
+                  f.medida === "RECEITAS"
+                    ? "voltas inteiras da ficha"
+                    : `na unidade do produto${
+                        vigente?.um_estoque ? ` (${vigente.um_estoque})` : ""
+                      }`
+                }
+              >
                 <select
                   className="campo"
-                  value={f.id_local}
-                  onChange={(e) => setF({ ...f, id_local: e.target.value })}
+                  value={f.medida}
+                  onChange={(e) =>
+                    setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" })
+                  }
                 >
-                  {locais.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nome}
-                    </option>
-                  ))}
+                  <option value="PORCOES">porções</option>
+                  <option value="RECEITAS">receitas</option>
                 </select>
               </Campo>
-              <Campo rotulo="Observação" className="sm:col-span-3">
+              <Campo rotulo="Observação" className="sm:col-span-2">
                 <input
                   className="campo"
                   value={f.observacao}
