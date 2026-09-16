@@ -180,8 +180,27 @@
     LISTAS, nunca dos totais**: o rodapé soma a tabela inteira e a tela diz quanto está
     mostrando, porque lista cortada em silêncio se lê como lista completa.
 
-- **A barra de recorte tem QUANDO, ONDE e só então o que fazer** (16/09/2026): período pronto →
-  datas → escopo → ver por → baixar/imprimir. Os botões vinham primeiro, e a pessoa escolhia o
+- **O cabeçalho é "Painel de CMV", e o recorte não se mistura com os botões** (16/09/2026,
+  pedido do dono: *"o nome no cabeçalho pode ser Painel de CMV"*, *"os filtros e botão do
+  cabeçalho estão misturados, podendo haver confusão"*). O título passou a ser o mesmo nome do
+  item de menu. Os cinco controles viviam na mesma fileira, com a mesma altura e o mesmo
+  espaçamento: o seletor de escopo encostava no botão de baixar e nada dizia que um muda o que
+  a tela MOSTRA e o outro TIRA a tela de dentro do sistema. Agora são dois grupos — os três
+  filtros rotulados de um lado, `Baixar` e `Imprimir a tela` do outro — separados por um traço.
+
+- 🔑 **O período é SÓ o ciclo do CMV: as datas soltas saíram** (16/09/2026, pedido do dono:
+  *"colocar como filtro de período somente os períodos do CMV, não os de data inicial e
+  final"*). ⚠️ **Data digitada à mão é onde o engano entra**: "17/08 a 23/08" com um dia a mais
+  e a apuração deixa de bater com o fechamento — e ninguém percebe, porque o número continua
+  saindo. O ciclo da loja (mensal, semanal ou diário) é o único recorte em que a conta fecha
+  com o que foi fechado.
+  ⚠️ **O seletor casa pelo INÍCIO, nunca pelo par início+fim.** O período corrente é truncado
+  em `hoje()`, então o `fim` do estado não é o `fim` do período: casando pelos dois, o corrente
+  NUNCA aparecia escolhido e a tela abria dizendo "outro recorte" sobre o período que estava
+  mostrando. A opção vaga saiu junto — sem datas soltas ela não leva a lugar nenhum.
+
+- **A barra de recorte tem QUANDO, ONDE e só então o que fazer** (16/09/2026): período →
+  escopo → ver por → baixar/imprimir. Os botões vinham primeiro, e a pessoa escolhia o
   que baixar antes de escolher o que estava olhando.
   🔑 **`escopo=loja|empresa`** (`_lojas_do_escopo`, `_apurar_escopo` em `routers/cmv.py`): a
   apuração é por LOJA e está certo — quem opera opera numa de cada vez —, mas quem responde

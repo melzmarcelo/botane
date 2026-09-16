@@ -522,6 +522,21 @@
   vazio. ⚠️ **O desenho não recalcula nada**: os valores vêm prontos da apuração. Um gráfico que
   soma por conta própria é a segunda versão da regra, e diverge na primeira correção.
 
+- 🔑 **Filtro e botão na mesma fileira se confundem — o traço é o que separa** (16/09/2026,
+  pedido do dono sobre o painel de CMV). Controle que muda o que a tela MOSTRA e botão que TIRA
+  a tela de dentro do sistema são famílias diferentes, e alinhados com o mesmo `gap` eles leem
+  como uma coisa só. O padrão é dois grupos num `flex`, o segundo com
+  `border-l-2 border-linha2 pl-3`.
+  ⚠️ **A cor é `linha2`, não `linha`.** Medido: `--color-linha` (#d8ded0) some contra o fundo
+  do miolo — a classe estava no HTML e o traço simplesmente não aparecia.
+  ⚠️ **E sem variante de breakpoint.** `sm:border-l`, `sm:border-linha2` e `sm:pl-4` não
+  chegaram à folha (`border-left-width: 0px` no elemento medido, com 25 s de espera pelo
+  rebuild), enquanto as mesmas utilitárias sem prefixo aplicam — inclusive uma inédita no
+  projeto (`pl-5`), o que descarta "o Tailwind não regenera". Quando a fileira quebra, a
+  barrinha abre a linha de baixo e continua dizendo "aqui começa outro grupo".
+  ⚠️ **Nunca filtre elemento por `className.includes("border-l")`**: `border-linha2` contém
+  esse pedaço. A checagem da bateria procura `border-l-2`.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

@@ -3317,6 +3317,51 @@ try {
   // teste que nao existe, porque ensina a ignorar o vermelho.
   await p.waitForFunction(() => /Food cost/i.test(document.body.innerText),
     { timeout: 30000, polling: 300 }).catch(() => {});
+  // 🔑 **O cabeçalho: o RECORTE de um lado, o que FAZER com ele do outro**
+  // (pedido do dono, 16/09/2026: *"os filtros e botão do cabeçalho estão
+  // misturados, podendo haver confusão"* e *"colocar como filtro de período
+  // somente os períodos do CMV, não os de data inicial e final"*).
+  const cab = await p.evaluate(() => {
+    const h = document.querySelector("main header");
+    const periodo = [...h.querySelectorAll("label")]
+      .find((l) => /^Período$/i.test(l.querySelector("span")?.textContent?.trim() ?? ""));
+    const sel = periodo?.querySelector("select");
+    // ⚠️ `border-l-2`, nunca `border-l`: "border-linha2" CONTÉM "border-l" como
+    // pedaço, e o filtro pegaria qualquer div com borda colorida.
+    const grupos = [...h.querySelectorAll("div")]
+      .filter((d) => typeof d.className === "string" && d.className.includes("border-l-2"));
+    const divisor = grupos[0] ? getComputedStyle(grupos[0]) : null;
+    return {
+      titulo: h.querySelector("h1")?.textContent?.trim(),
+      datas: h.querySelectorAll('input[type="date"]').length,
+      rotulos: [...h.querySelectorAll(".rotulo-campo")].map((x) => x.textContent?.trim()),
+      opcoes: sel ? [...sel.options].map((o) => o.textContent?.trim()) : [],
+      escolhido: sel ? sel.options[sel.selectedIndex]?.textContent?.trim() : null,
+      // ⚠️ **Medido, não presumido**: `--color-linha` some contra o fundo do
+      // miolo, e as variantes `sm:` destas utilitárias não chegaram à folha —
+      // nos dois casos a classe estava no HTML e o traço valia 0px.
+      divisor: divisor ? divisor.borderLeftWidth : null,
+    };
+  });
+  checar("o cabeçalho se chama Painel de CMV", cab.titulo === "Painel de CMV", cab.titulo);
+  // ⚠️ **Data digitada à mão é onde o engano entra**: "17/08 a 23/08" com um dia
+  // a mais e a apuração deixa de bater com o fechamento, sem nada avisando — o
+  // número continua saindo. O ciclo da loja é o único recorte em que a conta
+  // fecha com o que foi fechado.
+  checar("e o período só oferece os ciclos do CMV, sem data solta",
+    cab.datas === 0, cab);
+  checar("sem a opção vaga de 'outro recorte'",
+    cab.opcoes.length > 0 && !cab.opcoes.some((o) => /outro recorte/i.test(o ?? "")),
+    cab.opcoes);
+  // 🔑 O período corrente vem ESCOLHIDO. Antes o seletor casava por início E
+  // fim, e o corrente é truncado em hoje: ele nunca aparecia selecionado, e a
+  // tela abria dizendo "outro recorte" sobre o período que estava mostrando.
+  checar("com o período em curso já escolhido", /em curso/.test(cab.escolhido ?? ""),
+    cab.escolhido);
+  checar("e um traço separa o recorte dos botões", cab.divisor === "2px", cab.divisor);
+  checar("os três filtros são Período, Escopo e Ver por",
+    ["Período", "Escopo", "Ver por"].every((r) => cab.rotulos.includes(r)), cab.rotulos);
+
   const textoCmv = await p.evaluate(() => document.body.innerText);
   checar("painel mostra CMV real e teórico",
     /CMV REAL/i.test(textoCmv) && /CMV TEÓRICO/i.test(textoCmv), textoCmv.slice(0, 80));
