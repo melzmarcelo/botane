@@ -1,6 +1,7 @@
 """Painel de CMV, curva ABC, margem por prato e fechamento de período."""
 
-from datetime import date
+from datetime import date, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -16,7 +17,7 @@ from models.cmv import (
 from models.produtos import TIPOS as TIPOS_PRODUTO
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
-from services import cmv_grupos, periodos, relatorios
+from services import cmv_grupos, memoria_calculo, periodos, relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
 
@@ -49,17 +50,58 @@ def _float(v):
     return None if v is None else float(v)
 
 
+# O que se SOMA ao juntar as lojas. Tudo o mais — percentual, rótulo, lista —
+# ou se recalcula do total ou vale igual para as duas.
+# ⚠️ **Percentual não se soma nem se tira a média.** `food_cost_pct` de duas
+# lojas é `CMV somado ÷ receita somada`, e a média das duas daria outro número
+# sempre que elas tivessem tamanhos diferentes — que é sempre.
+_SOMAVEIS = ("estoque_inicial", "compras", "estoque_final", "cmv_real", "cmv_teorico",
+             "variancia", "perdas", "consumo_interno", "ajustes", "ajuste_custo",
+             "receita", "receita_com_custo", "vendas", "itens_sem_custo",
+             "itens_com_custo")
+
+
+def _apurar_escopo(cur, lojas: list[int], inicio: date, fim: date) -> dict:
+    """A apuração de uma loja, ou a soma das lojas do escopo.
+
+    🔑 **Somar é legítimo porque cada loja tem o próprio estoque**: a conta
+    `inicial + compras − final` de duas lojas é a conta da soma delas. O que não
+    se soma são os percentuais, e por isso eles são refeitos no fim.
+    """
+    if len(lojas) == 1:
+        return motor.apurar(cur, lojas[0], inicio, fim)
+
+    total: dict = {}
+    for loja in lojas:
+        parte = motor.apurar(cur, loja, inicio, fim)
+        for k, v in parte.items():
+            if k in _SOMAVEIS:
+                total[k] = (total.get(k) or 0) + v
+            elif k not in total:
+                total[k] = v
+    receita = total.get("receita") or 0
+    total["food_cost_pct"] = (
+        float(total["cmv_real"] / receita * 100) if receita else None)
+    # ⚠️ A cobertura é por RECEITA, não por contagem de itens: um prato de
+    # R$ 80 sem ficha pesa mais do que dez cafezinhos com ela.
+    total["cobertura_ficha_pct"] = (
+        float((total.get("receita_com_custo") or 0) / receita * 100) if receita else None)
+    return total
+
+
 @router.get("/apuracao", response_model=ApuracaoResponse)
 def apuracao(
     inicio: date | None = None,
     fim: date | None = None,
+    escopo: str = Query(default="loja", pattern="^(loja|empresa)$"),
     ctx: Contexto = Depends(requer_permissao("cmv.painel")),
 ) -> dict:
     with get_cursor() as cur:
-        id_unidade = unidade_atual(cur, ctx)
+        lojas = _lojas_do_escopo(cur, ctx, escopo)
+        id_unidade = lojas[0]
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
         c = periodos.config(cur, id_unidade)
-        r = motor.apurar(cur, id_unidade, inicio, fim)
+        r = _apurar_escopo(cur, lojas, inicio, fim)
         # ⚠️ Vem junto da apuração, não numa segunda chamada: o painel do dono
         # que faz duas requisições pisca duas vezes, e a linha do grupo aparece
         # depois do total — dando a impressão de que foi somada por fora.
@@ -124,18 +166,131 @@ def margem(
         return motor.margem_por_prato(cur, id_unidade, inicio, fim, limite, id_produto)
 
 
+def _lojas_do_escopo(cur, ctx, escopo: str) -> list[int]:
+    """As lojas que a varredura vai correr. `empresa` = todas as do usuário.
+
+    🔑 **Pedido do dono (16/09/2026, protótipo aprovado):** *"podendo ter a opção
+    de ser pela empresa, por loja, por local de estoque..."*. A apuração sempre
+    foi por LOJA, e está certo — quem opera opera numa de cada vez. Mas quem
+    responde pelas duas precisava trocar de loja no seletor e somar de cabeça.
+
+    ⚠️ **Empresa é o que o USUÁRIO enxerga, não o que existe.** Um gerente de
+    filial com uma loja só continua vendo uma loja quando pede "empresa" — o
+    escopo amplia até o limite da permissão, nunca além dele.
+    """
+    if escopo != "empresa":
+        return [unidade_atual(cur, ctx)]
+    if ctx.unidades:
+        return sorted(ctx.unidades)
+    cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id")
+    return [r["id"] for r in cur.fetchall()]
+
+
 @router.get("/por-grupo")
 def por_grupo(
-    agrupar: str = Query(default="setor", pattern="^(setor|categoria|grupo)$"),
+    agrupar: str = Query(default="setor",
+                         pattern="^(setor|categoria|grupo|local|produto|loja)$"),
+    escopo: str = Query(default="loja", pattern="^(loja|empresa)$"),
     inicio: date | None = None,
     fim: date | None = None,
     ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
 ) -> list[dict]:
-    """O CMV do período quebrado por setor, categoria ou grupo da casa."""
+    """O CMV do período quebrado pelo recorte pedido.
+
+    ⚠️ **Não é rateio**: é a mesma conta (`inicial + compras − final`) restrita a
+    cada linha, e a soma das linhas FECHA com o CMV do período — é isso que dá
+    sentido ao corte, e é o que a bateria cobra em todos os eixos.
+    """
+    with get_cursor() as cur:
+        lojas = _lojas_do_escopo(cur, ctx, escopo)
+        inicio, fim = _periodo(cur, lojas[0], inicio, fim)
+        return relatorios.cmv_por_grupo(cur, lojas, inicio, fim, agrupar)
+
+
+@router.get("/memoria")
+def memoria(
+    inicio: date | None = None,
+    fim: date | None = None,
+    limite: int = Query(default=200, ge=10, le=2000),
+    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+) -> dict:
+    """A apuração ABERTA nos documentos que a compõem — a memória de cálculo.
+
+    🔑 **Pedido da contabilidade (02/09/2026), agora como TELA** (16/09/2026,
+    protótipo aprovado pelo dono). A apuração dizia o resultado em dez linhas e
+    não dizia de ONDE cada linha veio; perguntado *"estes R$ 237 mil de compras,
+    de quais notas são?"*, o sistema não tinha resposta. O documento existe em
+    PDF desde então — e a pergunta nasce **olhando o painel**, não baixando um
+    arquivo.
+
+    Quatro quadros, e cada um fecha com a linha que explica: o estoque inicial
+    item a item, as compras por documento, o estoque final item a item, e a
+    conciliação que leva da soma das notas até a linha "Compras".
+
+    ⚠️ **O quadro 2 NÃO fecha com a linha "Compras", e é de propósito**: falta a
+    remessa entre lojas, que é compra do destino sem nota. Quem fecha essa
+    diferença é o quadro 4 — deixá-la solta seria pior que não mostrar.
+
+    ⚠️ **`limite` corta as LISTAS, nunca os totais.** O estoque final desta base
+    tem 1.331 produtos e mandar todos de uma vez trava a tela; os rodapés de cada
+    quadro somam a tabela INTEIRA, e o corte vem dito na resposta (`de`/`ate`)
+    para a tela não deixar acreditar que a lista é tudo.
+    """
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         inicio, fim = _periodo(cur, id_unidade, inicio, fim)
-        return relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, agrupar)
+        vespera = inicio - timedelta(days=1)
+        a = motor.apurar(cur, id_unidade, inicio, fim)
+        fora = motor.tipos_fora_do_cmv(cur)
+
+        inicial = memoria_calculo.estoque_em(cur, id_unidade, vespera, fora)
+        final = memoria_calculo.estoque_em(cur, id_unidade, fim, fora)
+        notas = memoria_calculo.compras_por_nota(cur, id_unidade, inicio, fim, fora)
+        concilia = memoria_calculo.conciliacao_compras(cur, id_unidade, inicio, fim, fora)
+
+        cur.execute(
+            """SELECT 1 FROM cmv_fechamentos
+                WHERE id_unidade = %s AND status = 'FECHADO' AND fim >= %s AND inicio <= %s""",
+            (id_unidade, inicio, fim),
+        )
+        fechado = cur.fetchone() is not None
+
+    def quadro(linhas, campo_soma):
+        """Uma lista cortada, com o total da lista INTEIRA ao pé.
+
+        ⚠️ Só `Decimal` vira `float`. Converter todo número transformava
+        `id_produto` em 5499.0 — e id com vírgula é o tipo de coisa que passa
+        despercebida até alguém montá-lo numa URL.
+        """
+        return {
+            "linhas": [{k: (float(v) if isinstance(v, Decimal) else v)
+                        for k, v in dict(x).items()} for x in linhas[:limite]],
+            "total": len(linhas),
+            "mostrando": min(limite, len(linhas)),
+            "soma": float(sum((x[campo_soma] or 0) for x in linhas)) if linhas else 0.0,
+        }
+
+    return {
+        "inicio": inicio, "fim": fim, "vespera": vespera,
+        "fechado": fechado,
+        "metodo": "custo médio ponderado móvel",
+        # A composição, com o quadro que abre cada linha — é o índice do documento.
+        "composicao": [
+            {"linha": "Estoque inicial", "valor": _float(a["estoque_inicial"]),
+             "quadro": "quadro 1", "posicao": vespera},
+            {"linha": "(+) Compras do período", "valor": _float(a["compras"]),
+             "quadro": "quadros 2 e 4", "posicao": None},
+            {"linha": "(−) Estoque final", "valor": _float(-a["estoque_final"]),
+             "quadro": "quadro 3", "posicao": fim},
+            {"linha": "(=) CMV real do período", "valor": _float(a["cmv_real"]),
+             "quadro": None, "posicao": None},
+        ],
+        "estoque_inicial": quadro(inicial, "valor"),
+        "compras_por_nota": quadro(notas, "valor_no_razao"),
+        "estoque_final": quadro(final, "valor"),
+        "conciliacao": [{"linha": c["linha"], "valor": _float(c["valor"])}
+                        for c in concilia],
+    }
 
 
 @router.get("/precos")

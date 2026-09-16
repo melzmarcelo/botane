@@ -498,6 +498,30 @@
   efeito IMEDIATO, e todo booleano destas telas só vale depois do "Salvar" — um interruptor que
   não liga nada até alguém salvar é um controle que mente. A caixa de marcar está certa aqui.
 
+- 🔑 **Aba é PERGUNTA, não gaveta — e o rótulo diz a pergunta** (16/09/2026, protótipo do
+  painel de CMV aprovado pelo dono). A tela longa que empilha quatro listas obriga a rolar para
+  descobrir o que existe; a mesma tela em abas responde "o que dá para perguntar aqui?" numa
+  linha. O padrão é `<nav role="tablist">` com `<button role="tab" aria-selected>` e
+  `min-h-[44px]` (dedo), borda inferior de 2px no ativo.
+  ⚠️ **A aba só monta quando está aberta** (`{aba === "x" && <Componente/>}`): cada uma destas
+  busca a própria rota, e montar as sete de uma vez faria sete chamadas para mostrar uma.
+  ⚠️ **O rótulo acompanha o estado.** No CMV a aba se chama `Quebra por setor` e vira
+  `Quebra por categoria` quando o eixo muda — aba que não acompanha mente sobre o que está na
+  tela. A bateria cobra isso.
+  ⚠️ **Decisão de RECORTE fica FORA das abas**, no cabeçalho: período, escopo e eixo valem para
+  a tela inteira. Dentro de uma aba elas ficam escondidas de quem está em outra, e a pessoa
+  muda o recorte sem saber que mudou o que as outras seis mostram.
+  ⚠️ **A ordem da barra de filtros é a da leitura**: QUANDO (período pronto, depois datas
+  soltas), ONDE (escopo, eixo) e só então o que fazer com isso (baixar, imprimir). Os botões
+  vinham primeiro, e a pessoa escolhia o que baixar antes de escolher o que estava olhando.
+
+- 🔑 **Gráfico de cinco retângulos se desenha à mão, em SVG** (`cmv/cascata.tsx`, 16/09/2026).
+  Uma dependência de gráfico para isso pesaria mais que a tela inteira. ⚠️ **O `viewBox` reserva
+  as bordas** para os rótulos de fora não serem cortados, e o `aria-label` traz a mesma conta em
+  PALAVRAS — é o que o leitor de tela lê e é por onde a bateria prova que o desenho não saiu
+  vazio. ⚠️ **O desenho não recalcula nada**: os valores vêm prontos da apuração. Um gráfico que
+  soma por conta própria é a segunda versão da regra, e diverge na primeira correção.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

@@ -149,7 +149,93 @@ checar("e fecha com o mesmo total",
        perto(sum(float(g["cmv"]) for g in cats), apuracao.get("cmv_real"), 0.05),
        sum(float(g["cmv"]) for g in cats))
 st, r = chamar("GET", f"/cmv/por-grupo{periodo}&agrupar=fornecedor", token=token)
-checar("agrupamento inventado é recusado (422)", st == 422, st)
+checar("agrupamento inventado e recusado (422)", st == 422, st)
+
+print("3b. os eixos novos do recorte")
+# 🔑 **Protótipo aprovado pelo dono (16/09/2026):** *"podendo ter a opcao de
+# ser pela empresa, por loja, por local de estoque, setor, categoria, produto"*.
+# Os tres saem de graca do grao que ja existe -- a conta e agregada em
+# `(loja, produto, local)`, entao enrolar por prateleira ou por produto e trocar
+# o `GROUP BY`. **Nenhum numero muda, so o eixo.**
+# ⚠️ A afirmacao que importa e sempre a MESMA: a soma FECHA com o CMV do
+# periodo. E ela que da sentido ao corte -- nao e rateio, e a mesma conta
+# restrita a cada linha.
+for eixo in ("local", "produto", "loja"):
+    st, linhas = chamar("GET", f"/cmv/por-grupo{periodo}&agrupar={eixo}", token=token)
+    checar(f"o recorte por {eixo} responde", st == 200 and isinstance(linhas, list),
+           (st, str(linhas)[:120]))
+    if st == 200 and linhas:
+        checar(f"e a soma por {eixo} fecha com o CMV do periodo",
+               perto(sum(float(g["cmv"]) for g in linhas), apuracao.get("cmv_real"), 0.05),
+               (eixo, sum(float(g["cmv"]) for g in linhas), apuracao.get("cmv_real")))
+
+# 🔑 **Empresa e o que o USUARIO enxerga**, e amplia ate o limite da permissao.
+# Numa casa de uma loja so, o escopo de empresa devolve exatamente a mesma conta
+# -- e e essa a prova de que ele nao inventa nada.
+st, emp = chamar("GET", f"/cmv/apuracao{periodo}&escopo=empresa", token=token)
+checar("a apuracao aceita o escopo de empresa", st == 200, (st, str(emp)[:120]))
+checar("e numa casa de uma loja da o mesmo CMV",
+       perto(emp.get("cmv_real"), apuracao.get("cmv_real"), 0.01),
+       (emp.get("cmv_real"), apuracao.get("cmv_real")))
+# ⚠️ Percentual NAO se soma nem se tira a media: a cobertura da empresa e
+# `receita com ficha / receita`, refeita do total.
+checar("com a cobertura de ficha refeita do total, nao somada",
+       perto(emp.get("cobertura_ficha_pct"), apuracao.get("cobertura_ficha_pct"), 0.01),
+       (emp.get("cobertura_ficha_pct"), apuracao.get("cobertura_ficha_pct")))
+# 🔑 A receita COM ficha em reais: e o numerador da cobertura, e percentual
+# nao se soma -- juntar duas lojas exige o numerador.
+# ⚠️ **O numerador tem de ser LIQUIDO como o denominador.** Ele saia da soma
+# BRUTA dos itens com ficha enquanto a receita ja vinha descontada, e numa base
+# com cobertura alta a cobertura passava de 100% -- a tela dizia que a receita
+# com ficha era MAIOR que a receita. O desconto e do CUPOM, entao ele e rateado
+# proporcionalmente: a parte com ficha nunca passa do total do cupom.
+checar("e a apuracao diz a receita que TEM ficha, em reais",
+       apuracao.get("receita_com_custo") is not None
+       and float(apuracao["receita_com_custo"]) <= float(apuracao["receita"]) + 0.01,
+       (apuracao.get("receita_com_custo"), apuracao.get("receita")))
+checar("e a cobertura de ficha nunca passa de 100%",
+       float(apuracao.get("cobertura_ficha_pct") or 0) <= 100.01,
+       apuracao.get("cobertura_ficha_pct"))
+st, r = chamar("GET", f"/cmv/apuracao{periodo}&escopo=galaxia", token=token)
+checar("escopo inventado e recusado (422)", st == 422, st)
+
+print("3c. a memoria de calculo, em tela")
+# 🔑 **Pedido da contabilidade (02/09/2026), agora como TELA.** A apuracao
+# dizia o resultado em dez linhas e nao dizia de ONDE cada linha veio; o
+# documento existe em PDF desde entao -- e a pergunta nasce OLHANDO o painel.
+st, mem = chamar("GET", f"/cmv/memoria{periodo}&limite=10", token=token)
+checar("a memoria de calculo responde", st == 200 and "composicao" in (mem or {}),
+       (st, list(mem or {})))
+if st == 200:
+    comp = {c["linha"]: c["valor"] for c in mem["composicao"]}
+    # ⚠️ A afirmacao central: os quadros FECHAM com as linhas da apuracao.
+    # E isso que transforma a tabela em prova.
+    checar("o quadro 1 fecha com o estoque inicial da apuracao",
+           perto(mem["estoque_inicial"]["soma"], apuracao.get("estoque_inicial"), 0.05),
+           (mem["estoque_inicial"]["soma"], apuracao.get("estoque_inicial")))
+    checar("e o quadro 3 fecha com o estoque final",
+           perto(mem["estoque_final"]["soma"], apuracao.get("estoque_final"), 0.05),
+           (mem["estoque_final"]["soma"], apuracao.get("estoque_final")))
+    checar("a composicao repete a conta do painel",
+           perto(comp.get("(=) CMV real do periodo".replace("periodo", "per\u00edodo")),
+                 apuracao.get("cmv_real"), 0.05), comp)
+    # ⚠️ O quadro 4 e o que responde "por que a soma das notas nao e a linha
+    # Compras" -- e a ultima linha dele TEM de ser a propria linha Compras.
+    checar("e a conciliacao termina na linha Compras da apuracao",
+           mem["conciliacao"] and perto(mem["conciliacao"][-1]["valor"],
+                                        apuracao.get("compras"), 0.05),
+           mem["conciliacao"][-1] if mem["conciliacao"] else None)
+    # ⚠️ O corte e das LISTAS, nunca dos totais: o estoque final tem 1.331
+    # produtos nesta base, e mandar todos trava a tela.
+    checar("o limite corta a lista e nao o total",
+           mem["estoque_final"]["mostrando"] <= 10
+           and mem["estoque_final"]["total"] >= mem["estoque_final"]["mostrando"],
+           (mem["estoque_final"]["mostrando"], mem["estoque_final"]["total"]))
+    # ⚠️ id com virgula e o tipo de coisa que passa despercebida ate alguem
+    # monta-lo numa URL.
+    primeira = (mem["estoque_final"]["linhas"] or [{}])[0]
+    checar("e o id do produto continua inteiro",
+           isinstance(primeira.get("id_produto"), int), primeira.get("id_produto"))
 
 print("4. evolução de preço: o que subiu, e quanto custa")
 st, fornecedores = chamar("GET", "/fornecedores", token=token)

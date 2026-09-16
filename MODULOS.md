@@ -133,6 +133,15 @@ merge**: `api/.env` está fora do versionamento de propósito.
 🔑 **`CMV real = estoque inicial + compras − estoque final`**, e o teórico sai da
 ficha. A diferença entre os dois é a variância, que é o número que interessa.
 
+O painel é **uma tela de sete abas** (16/09/2026): `A conta` (a cascata da
+subtração), `Quebra por <eixo>`, `Curva ABC`, `Margem por prato`,
+`Movimentação`, `O que subiu de preço` e `Memória de cálculo`. O **recorte** fica
+no cabeçalho e vale para todas: período, `escopo` (`loja` ou `empresa`) e `eixo`
+(`loja`, `local`, `setor`, `categoria`, `grupo`, `produto`).
+⚠️ **Percentual não se soma**: no escopo de empresa, food cost e cobertura de
+ficha são REFEITOS dos totais — é por isso que a apuração devolve
+`receita_com_custo` em reais e não só a cobertura em %.
+
 ---
 
 ## Reservas

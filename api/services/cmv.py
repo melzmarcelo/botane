@@ -411,8 +411,8 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
         """SELECT coalesce(sum(vi.valor_total), 0) AS receita,
                   coalesce(sum(vi.quantidade * coalesce(vi.custo_ficha_unitario, 0)), 0) AS teorico,
                   count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS itens_sem_custo,
-                  coalesce(sum(vi.valor_total) FILTER (WHERE vi.custo_ficha_unitario IS NOT NULL), 0)
-                      AS receita_com_custo,
+                  count(*) FILTER (WHERE vi.custo_ficha_unitario IS NOT NULL)
+                      AS itens_com_custo,
                   count(DISTINCT v.id) AS vendas,
                   -- 🔑 **O desconto do cupom, para a receita ser LÍQUIDA.** O
                   -- PDV informa o valor cobrado; gravar a soma dos itens
@@ -434,9 +434,36 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     receita = dec(v["receita"]) - dec(v["descontos"])
     cmv_teorico = dec(v["teorico"])
 
-    cobertura = (
-        (dec(v["receita_com_custo"]) / receita * 100) if receita else Decimal(0)
+    # 🔑 **A receita que TEM ficha, LÍQUIDA — e o desconto rateado é o ponto.**
+    # O numerador saía da soma bruta dos itens com ficha enquanto o denominador
+    # já vinha descontado: numa casa com cobertura alta a cobertura passava de
+    # 100% e o painel dizia que a receita com ficha era MAIOR que a receita.
+    # A bateria pegou (`smoke_relatorios`: 2.102,00 contra 2.079,50).
+    #
+    # ⚠️ **O desconto é do CUPOM, não do item** — não há onde lê-lo por linha. O
+    # rateio proporcional ao valor é o único que fecha: a parte com ficha nunca
+    # passa do total do cupom, então a soma nunca passa da receita. Jogar o
+    # desconto inteiro no numerador puniria a ficha por um abatimento que é do
+    # cupom todo; ignorá-lo é o que estava errado.
+    cur.execute(
+        """SELECT coalesce(sum(
+                      t.com_ficha - coalesce(t.desconto, 0) * t.com_ficha
+                          / nullif(t.total, 0)), 0) AS valor
+             FROM (SELECT d.desconto,
+                          sum(di.valor_total) AS total,
+                          coalesce(sum(di.valor_total)
+                              FILTER (WHERE di.custo_ficha_unitario IS NOT NULL), 0)
+                              AS com_ficha
+                     FROM vendas d
+                     JOIN venda_itens di ON di.id_venda = d.id
+                    WHERE d.id_unidade = %s AND NOT d.cancelada
+                      AND d.data BETWEEN %s AND %s
+                    GROUP BY d.id, d.desconto) t""",
+        (id_unidade, inicio, fim),
     )
+    receita_com_custo = dec(cur.fetchone()["valor"])
+
+    cobertura = (receita_com_custo / receita * 100) if receita else Decimal(0)
 
     return {
         "inicio": inicio,
@@ -455,6 +482,12 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
         "receita": receita,
         "vendas": v["vendas"],
         "itens_sem_custo": v["itens_sem_custo"],
+        "itens_com_custo": v["itens_com_custo"],
+        # 🔑 **A receita que TEM ficha, em reais.** `cobertura_ficha_pct` é a
+        # razão entre as duas, e percentual não se soma: para juntar duas lojas é
+        # preciso o numerador. E ela vale por si na tela — "R$ 18 mil dos
+        # R$ 64 mil vendidos sabem o próprio custo" diz mais que "28,2%".
+        "receita_com_custo": receita_com_custo,
         # Sem isto o CMV teórico mente por omissão: metade dos pratos sem ficha
         # dá um teórico pela metade e uma variância enorme que não existe.
         "cobertura_ficha_pct": cobertura,

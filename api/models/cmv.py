@@ -108,6 +108,12 @@ class ApuracaoResponse(BaseModel):
     receita: float
     vendas: int
     itens_sem_custo: int
+    itens_com_custo: int = 0
+    # 🔑 **A receita que TEM ficha, em reais.** `cobertura_ficha_pct` é a razão
+    # entre esta e a receita; percentual não se soma, então juntar duas lojas
+    # exige o numerador. E ela vale por si na tela: "R$ 18 mil dos R$ 64 mil
+    # vendidos sabem o próprio custo" diz mais do que "28,2%".
+    receita_com_custo: float = 0
     cobertura_ficha_pct: float
     food_cost_pct: float | None = None
     fechado: bool = False

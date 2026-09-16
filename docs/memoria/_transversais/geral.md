@@ -164,6 +164,19 @@
 - `input[type=number]` no Chrome não seleciona conteúdo com `clickCount: 3` — no teste de
   navegador, limpar com ctrl+A, senão o valor entra colado (1 + 8 = 18).
 
+- 🔑 **`[].every(...)` é VERDADEIRO, e foi isso que fez uma checagem da bateria falhar duas
+  rodadas seguidas** (16/09/2026). A espera pelo resultado de um filtro era
+  `[...tbody tr].every(tr => tr.textContent.includes(marca))` — com a tabela ainda vazia a
+  condição nascia verdadeira, o `waitForFunction` voltava na hora e a medição lia a tela ANTES
+  de a resposta chegar. A assinatura da falha (`{linhas:0, total:0, vazio:true}`, com a URL
+  correta e os registros existindo no banco) parecia defeito de paginação e já tinha mandado
+  turbinar o diagnóstico duas vezes; reproduzida isolada, ela passa — na máquina livre a
+  resposta chega antes da leitura por sorte de milissegundos.
+  ⚠️ **Toda espera por "a lista virou X" precisa exigir pelo menos UMA linha**, senão ela é uma
+  espera por nada. A forma certa é `linhas.length > 0 && linhas.every(…)`.
+  ⚠️ Digitar num campo com debounce dispara uma navegação por caractere no App Router; o pedido
+  à API só sai depois da última. Medir por tempo fixo aí é apostar.
+
 ## Stack e portas
 
 - 🔑 **O painel abre com o que a cozinha DESTA pessoa tem para fazer** (`GET /inicio`, bloco

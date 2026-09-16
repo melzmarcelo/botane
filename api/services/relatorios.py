@@ -19,7 +19,7 @@ from services.cmv import TIPOS_COMPRA
 from services.custos import dec
 
 
-def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
+def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
                   agrupar: str = "setor") -> list[dict]:
     """A conta do CMV quebrada por setor, por categoria ou pelos grupos da casa.
 
@@ -54,9 +54,24 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
     produto (`cmv_grupos` + `cmv_grupo_tipos`), que é como o dono separa o que
     não é comida — detergente e marmita entram no custo pela mesma porta dos
     insumos e somem no total.
+
+    🔑 **Os eixos `local`, `produto` e `loja`** (16/09/2026, protótipo aprovado
+    pelo dono: *"podendo ter a opção de ser pela empresa, por loja, por local de
+    estoque, setor, categoria, produto"*). Os três saem de graça do grão que já
+    existe: a conta é agregada em `(produto, local)`, então enrolar por
+    prateleira ou por produto é trocar o `GROUP BY` — nenhum número muda, só o
+    eixo. `loja` é o único que precisa de mais de uma unidade na varredura.
+
+    ⚠️ **`id_unidade` aceita uma LISTA.** A apuração é por loja, e sempre foi —
+    mas "e na empresa inteira?" é uma pergunta legítima de quem responde pelas
+    duas, e hoje ela exigia trocar de loja no seletor e somar de cabeça. Passar
+    a lista faz a varredura correr as duas de uma vez; o `cmv` continua fechando
+    porque cada loja tem o próprio estoque e os valores são aditivos.
     """
-    if agrupar not in ("setor", "categoria", "grupo"):
-        raise ValueError("agrupar deve ser 'setor', 'categoria' ou 'grupo'")
+    if agrupar not in ("setor", "categoria", "grupo", "local", "produto", "loja"):
+        raise ValueError(
+            "agrupar deve ser 'setor', 'categoria', 'grupo', 'local', 'produto' ou 'loja'")
+    unidades = [id_unidade] if isinstance(id_unidade, int) else list(id_unidade)
 
     junta = {
         # ⚠️ `coalesce(l.id_setor, p.id_setor)`: o setor de ONDE saiu, e o do
@@ -72,25 +87,35 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         # varrer o cadastro a cada mudança e deixaria os antigos para trás.
         "grupo": """LEFT JOIN cmv_grupo_tipos gt ON gt.tipo = p.tipo
                     LEFT JOIN cmv_grupos g ON g.id = gt.id_grupo AND g.ativo""",
+        # ⚠️ A prateleira é a do MOVIMENTO, que é o próprio grão da conta — não
+        # o `id_local_padrao` do cadastro. O mesmo açúcar pesa no Bar e na
+        # Confeitaria, e o cadastro só sabe apontar um lugar.
+        "local": "LEFT JOIN locais_estoque g ON g.id = k.id_local",
+        # O produto é o próprio grão: `g` é a tabela que já está na junção.
+        "produto": "LEFT JOIN produtos g ON g.id = k.id_produto",
+        "loja": "LEFT JOIN unidades g ON g.id = k.id_unidade",
     }[agrupar]
     rotulo = {"setor": "Sem setor", "categoria": "Sem categoria",
-              "grupo": "Sem grupo"}[agrupar]
+              "grupo": "Sem grupo", "local": "Sem prateleira",
+              "produto": "Sem produto", "loja": "Sem loja"}[agrupar]
 
     cur.execute(
         f"""
         WITH inicial AS (
-            SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, id_local, saldo_apos * custo_medio_apos AS valor
+            SELECT DISTINCT ON (id_unidade, id_produto, id_local)
+                   id_unidade, id_produto, id_local,
+                   saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
-             WHERE id_unidade = %s AND data_movimento < %s
-             ORDER BY id_produto, id_local, id DESC
+             WHERE id_unidade = ANY(%s) AND data_movimento < %s
+             ORDER BY id_unidade, id_produto, id_local, id DESC
         ),
         final AS (
-            SELECT DISTINCT ON (id_produto, id_local)
-                   id_produto, id_local, saldo_apos * custo_medio_apos AS valor
+            SELECT DISTINCT ON (id_unidade, id_produto, id_local)
+                   id_unidade, id_produto, id_local,
+                   saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
-             WHERE id_unidade = %s AND data_movimento < %s
-             ORDER BY id_produto, id_local, id DESC
+             WHERE id_unidade = ANY(%s) AND data_movimento < %s
+             ORDER BY id_unidade, id_produto, id_local, id DESC
         ),
         -- ⚠️ **Líquida de estorno, como na apuração.** Compra lançada e
         -- estornada deixava o grupo com custo que não houve — e, por tabela, a
@@ -99,18 +124,19 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         -- ORIGINAL (`id_estorno_de`): `ESTORNO_SAIDA` também desfaz
         -- transferência e produção, que nunca foram compra.
         compras AS (
-            SELECT id_produto, id_local, sum(valor) AS valor FROM (
-                SELECT m.id_produto, m.id_local, abs(m.custo_total) AS valor
+            SELECT id_unidade, id_produto, id_local, sum(valor) AS valor FROM (
+                SELECT m.id_unidade, m.id_produto, m.id_local,
+                       abs(m.custo_total) AS valor
                   FROM estoque_movimentos m
-                 WHERE m.id_unidade = %s AND m.tipo = ANY(%s)
+                 WHERE m.id_unidade = ANY(%s) AND m.tipo = ANY(%s)
                    AND m.data_movimento >= %s AND m.data_movimento < %s
                 UNION ALL
-                SELECT e.id_produto, e.id_local, -abs(e.custo_total)
+                SELECT e.id_unidade, e.id_produto, e.id_local, -abs(e.custo_total)
                   FROM estoque_movimentos e
                   JOIN estoque_movimentos o ON o.id = e.id_estorno_de
-                 WHERE e.id_unidade = %s AND o.tipo = ANY(%s)
+                 WHERE e.id_unidade = ANY(%s) AND o.tipo = ANY(%s)
                    AND e.data_movimento >= %s AND e.data_movimento < %s
-            ) _compras GROUP BY 1, 2
+            ) _compras GROUP BY 1, 2, 3
         ),
         -- 🔑 **A remessa entre lojas conta como compra aqui também.** A
         -- apuração passou a somá-la (entrada) e subtraí-la (saída) — sem a
@@ -120,35 +146,35 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
         -- ⚠️ Só o que ATRAVESSA a fronteira: a transferência entre dois locais
         -- da mesma loja continua se anulando sozinha.
         transferencias AS (
-            SELECT m.id_produto, m.id_local,
+            SELECT m.id_unidade, m.id_produto, m.id_local,
                    sum(CASE WHEN m.tipo = 'TRANSFERENCIA_ENTRADA' THEN m.custo_total
                             ELSE -m.custo_total END) AS valor
               FROM estoque_movimentos m
               JOIN estoque_movimentos o ON o.id = m.origem_id
-             WHERE m.id_unidade = %s
+             WHERE m.id_unidade = ANY(%s)
                AND m.tipo IN ('TRANSFERENCIA_ENTRADA', 'TRANSFERENCIA_SAIDA')
                AND m.origem_tipo = 'TRANSFERENCIA'
                AND o.id_unidade <> m.id_unidade
                AND m.data_movimento >= %s AND m.data_movimento < %s
-             GROUP BY 1, 2
+             GROUP BY 1, 2, 3
         ),
         perdas AS (
-            SELECT id_produto, id_local, sum(abs(custo_total)) AS valor
+            SELECT id_unidade, id_produto, id_local, sum(abs(custo_total)) AS valor
               FROM estoque_movimentos
-             WHERE id_unidade = %s AND tipo = 'SAIDA_PERDA'
+             WHERE id_unidade = ANY(%s) AND tipo = 'SAIDA_PERDA'
                AND data_movimento >= %s AND data_movimento < %s
-             GROUP BY 1, 2
+             GROUP BY 1, 2, 3
         ),
         -- ⚠️ **O grão da conta é (produto, LOCAL).** Antes era só o produto, e
         -- era por isso que o setor tinha de vir do cadastro. Somar é
         -- associativo, então o total por categoria e por grupo é idêntico ao
         -- de antes — só o setor passa a ler outra coluna.
         chaves AS (
-            SELECT id_produto, id_local FROM inicial
-            UNION SELECT id_produto, id_local FROM final
-            UNION SELECT id_produto, id_local FROM compras
-            UNION SELECT id_produto, id_local FROM transferencias
-            UNION SELECT id_produto, id_local FROM perdas
+            SELECT id_unidade, id_produto, id_local FROM inicial
+            UNION SELECT id_unidade, id_produto, id_local FROM final
+            UNION SELECT id_unidade, id_produto, id_local FROM compras
+            UNION SELECT id_unidade, id_produto, id_local FROM transferencias
+            UNION SELECT id_unidade, id_produto, id_local FROM perdas
         )
         SELECT coalesce(g.nome, %s) AS grupo,
                coalesce(sum(i.valor), 0) AS estoque_inicial,
@@ -168,15 +194,20 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
           JOIN produtos p ON p.id = k.id_produto
           {junta}
           LEFT JOIN inicial i
-                 ON i.id_produto = k.id_produto AND i.id_local = k.id_local
+                 ON i.id_unidade = k.id_unidade AND i.id_produto = k.id_produto
+                AND i.id_local = k.id_local
           LEFT JOIN final f
-                 ON f.id_produto = k.id_produto AND f.id_local = k.id_local
+                 ON f.id_unidade = k.id_unidade AND f.id_produto = k.id_produto
+                AND f.id_local = k.id_local
           LEFT JOIN compras c
-                 ON c.id_produto = k.id_produto AND c.id_local = k.id_local
+                 ON c.id_unidade = k.id_unidade AND c.id_produto = k.id_produto
+                AND c.id_local = k.id_local
           LEFT JOIN transferencias t
-                 ON t.id_produto = k.id_produto AND t.id_local = k.id_local
+                 ON t.id_unidade = k.id_unidade AND t.id_produto = k.id_produto
+                AND t.id_local = k.id_local
           LEFT JOIN perdas pd
-                 ON pd.id_produto = k.id_produto AND pd.id_local = k.id_local
+                 ON pd.id_unidade = k.id_unidade AND pd.id_produto = k.id_produto
+                AND pd.id_local = k.id_local
          GROUP BY 1
         -- ⚠️ A remessa entra no HAVING: um grupo cujo único movimento no período
         -- foi uma transferência entre lojas tem CMV, e sumiria da lista.
@@ -184,11 +215,11 @@ def cmv_por_grupo(cur, id_unidade: int, inicio: date, fim: date,
             OR coalesce(sum(f.valor), 0) <> 0 OR coalesce(sum(t.valor), 0) <> 0
          ORDER BY 5 DESC
         """,
-        (id_unidade, inicio, id_unidade, fim + timedelta(days=1),
-         id_unidade, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
-         id_unidade, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
-         id_unidade, inicio, fim + timedelta(days=1),
-         id_unidade, inicio, fim + timedelta(days=1), rotulo),
+        (unidades, inicio, unidades, fim + timedelta(days=1),
+         unidades, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
+         unidades, list(TIPOS_COMPRA), inicio, fim + timedelta(days=1),
+         unidades, inicio, fim + timedelta(days=1),
+         unidades, inicio, fim + timedelta(days=1), rotulo),
     )
     linhas = [dict(r) for r in cur.fetchall()]
     total = sum(dec(l["cmv"]) for l in linhas)

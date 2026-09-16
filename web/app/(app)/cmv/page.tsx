@@ -12,6 +12,9 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import CabecalhoTela from "@/components/cabecalho-tela";
 import RelatoriosDono from "./relatorios-dono";
 import Movimentacao from "./movimentacao";
+import Cascata from "./cascata";
+import Quebra, { EIXOS, type Eixo } from "./quebra";
+import MemoriaDeCalculo from "./memoria";
 
 import { pct, qtd } from "@/lib/numeros";
 type Apuracao = {
@@ -30,6 +33,9 @@ type Apuracao = {
   receita: number;
   vendas: number;
   itens_sem_custo: number;
+  itens_com_custo?: number;
+  /** A receita que TEM ficha, em reais — o numerador da cobertura. */
+  receita_com_custo?: number;
   cobertura_ficha_pct: number;
   food_cost_pct: number | null;
   fechado: boolean;
@@ -122,7 +128,23 @@ export default function PaginaCmv() {
   const [confirmando, setConfirmando] = useState<
     { tipo: "fechar" } | { tipo: "reabrir"; id: number; competencia: string } | null
   >(null);
-  const [aba, setAba] = useState<"abc" | "margem" | "movimentacao" | "dono">("abc");
+  /**
+   * 🔑 **As abas do painel** (16/09/2026, protótipo aprovado pelo dono). Eram
+   * quatro listas empilhadas sob os ladrilhos; passam a ser sete perguntas, e a
+   * primeira é **a conta** — que antes só existia como tabela no meio da tela e
+   * pedia que a subtração se montasse na cabeça de quem lê.
+   */
+  const [aba, setAba] = useState<
+    "conta" | "quebra" | "abc" | "margem" | "movimentacao" | "precos" | "memoria"
+  >("conta");
+  /**
+   * 🔑 **O RECORTE** — *"podendo ter a opção de ser pela empresa, por loja, por
+   * local de estoque, setor, categoria, produto"*. `escopo` diz QUAIS lojas
+   * entram na conta; `eixo` diz como a aba Quebra a fatia. São perguntas
+   * diferentes: dá para ver a empresa inteira quebrada por setor.
+   */
+  const [escopo, setEscopo] = useState<"loja" | "empresa">("loja");
+  const [eixo, setEixo] = useState<Eixo>("setor");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
@@ -148,7 +170,7 @@ export default function PaginaCmv() {
     const q = `inicio=${inicio}&fim=${fim}`;
     try {
       const [ap, cur, mar, fec] = await Promise.all([
-        api.get<Apuracao>(`/cmv/apuracao?${q}`),
+        api.get<Apuracao>(`/cmv/apuracao?${q}&escopo=${escopo}`),
         api.get<LinhaAbc[]>(`/cmv/abc?${q}&limite=30`),
         api.get<LinhaMargem[]>(`/cmv/margem?${q}&limite=30`),
         api.get<Fechamento[]>("/cmv/fechamentos"),
@@ -160,7 +182,7 @@ export default function PaginaCmv() {
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
-  }, [inicio, fim]);
+  }, [inicio, fim, escopo]);
 
   useEffect(() => {
     void carregar();
@@ -196,6 +218,8 @@ export default function PaginaCmv() {
   }
 
   const variânciaAlta = a && a.cmv_teorico > 0 && Math.abs(a.variancia_pct ?? 0) > 5;
+  /** Abaixo disto o CMV teórico — e a variância com ele — medem o cadastro. */
+  const pobreDeFicha = !!a && a.receita > 0 && a.cobertura_ficha_pct < 95;
 
   return (
     <div className="flex flex-col gap-6">
@@ -209,76 +233,111 @@ export default function PaginaCmv() {
           </>
         }
         acoes={
+          /* 🔑 **A barra de RECORTE, na ordem da leitura** (16/09/2026,
+             protótipo aprovado): QUANDO (período e datas), DEPOIS onde (escopo e
+             eixo), e só então o que fazer com isso. Os botões vinham primeiro, e
+             a pessoa escolhia o que baixar antes de escolher o que estava
+             olhando. */
           <div className="nao-imprimir flex flex-wrap items-end gap-2">
-                    <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
-                    {/* 🔑 **A memória de cálculo** (pedido da contabilidade, 02/09/2026).
-                        O arquivo do contador dizia o RESULTADO em dez linhas; este abre
-                        cada uma nos documentos que a compõem — o estoque inicial e o
-                        final item a item, as compras por nota, e a conciliação que
-                        explica por que a soma das notas não é a linha "Compras".
-                        ⚠️ Fica ao LADO do outro, não no lugar dele: um é o resumo que se
-                        lê, o outro é o anexo que se confere. Quem quer um raramente quer
-                        o outro no mesmo momento. */}
-                    <BotaoExportar
-                      relatorio="memoria-cmv"
-                      rotulo="Memória de cálculo"
-                      iniciais={{ inicio, fim }}
-                      formatoPadrao="pdf"
-                    />
-                    {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
-                        os cartões e os gráficos. O PDF da janela é a tabela do relatório
-                        — são duas coisas, e quem quer uma raramente quer a outra. */}
-                    <button className="btn btn-secundario" onClick={() => window.print()}>
-                      Imprimir a tela
-                    </button>
-                    {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
-                        que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
-                        engano entra — um dia a mais e a apuração deixa de bater com o
-                        fechamento. As datas continuam ali para o recorte fora do ritmo. */}
-                    {ciclo && ciclo.periodos.length > 0 && (
-                      <label>
-                        <span className="rotulo-campo">Período</span>
-                        <select
-                          className="campo mt-1.5"
-                          value={
-                            ciclo.periodos.find((p) => p.inicio === inicio && p.fim === fim)?.inicio ?? ""
-                          }
-                          onChange={(e) => {
-                            const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
-                            if (!p) return;
-                            setInicio(p.inicio);
-                            setFim(p.fim > hoje() ? hoje() : p.fim);
-                          }}
-                        >
-                          <option value="">outro recorte</option>
-                          {ciclo.periodos.map((p) => (
-                            <option key={p.inicio} value={p.inicio}>
-                              {p.rotulo}
-                              {p.corrente ? " (em curso)" : p.status === "FECHADO" ? " · fechado" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                    <label>
-                      <span className="rotulo-campo">De</span>
-                      <input
-                        className="campo mt-1.5"
-                        type="date"
-                        value={inicio}
-                        onChange={(e) => setInicio(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      <span className="rotulo-campo">Até</span>
-                      <input
-                        className="campo mt-1.5"
-                        type="date"
-                        value={fim}
-                        onChange={(e) => setFim(e.target.value)}
-                      />
-                    </label>
-                  </div>
+            {/* ⚠️ Escolher o período pronto vem ANTES de escolher datas soltas: é o
+                que a casa usa todo dia, e digitar "17/08 a 23/08" à mão é onde o
+                engano entra — um dia a mais e a apuração deixa de bater com o
+                fechamento. As datas continuam ali para o recorte fora do ritmo. */}
+            {ciclo && ciclo.periodos.length > 0 && (
+              <label>
+                <span className="rotulo-campo">Período</span>
+                <select
+                  className="campo mt-1.5"
+                  value={
+                    ciclo.periodos.find((p) => p.inicio === inicio && p.fim === fim)?.inicio ?? ""
+                  }
+                  onChange={(e) => {
+                    const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
+                    if (!p) return;
+                    setInicio(p.inicio);
+                    setFim(p.fim > hoje() ? hoje() : p.fim);
+                  }}
+                >
+                  <option value="">outro recorte</option>
+                  {ciclo.periodos.map((p) => (
+                    <option key={p.inicio} value={p.inicio}>
+                      {p.rotulo}
+                      {p.corrente ? " (em curso)" : p.status === "FECHADO" ? " · fechado" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label>
+              <span className="rotulo-campo">De</span>
+              <input
+                className="campo mt-1.5"
+                type="date"
+                value={inicio}
+                onChange={(e) => setInicio(e.target.value)}
+              />
+            </label>
+            <label>
+              <span className="rotulo-campo">Até</span>
+              <input
+                className="campo mt-1.5"
+                type="date"
+                value={fim}
+                onChange={(e) => setFim(e.target.value)}
+              />
+            </label>
+            {/* 🔑 **O ESCOPO** (16/09/2026, protótipo aprovado): a apuração é por
+                LOJA e está certo — quem opera opera numa de cada vez. Mas quem
+                responde pelas duas precisava trocar de loja no seletor e somar de
+                cabeça. ⚠️ Empresa é o que o USUÁRIO enxerga: quem tem uma loja só
+                continua vendo uma loja, e o escopo amplia até o limite da
+                permissão, nunca além dele. */}
+            <label>
+              <span className="rotulo-campo">Escopo</span>
+              <span className="mt-1.5 block w-[152px]">
+                <select
+                  className="campo"
+                  value={escopo}
+                  onChange={(e) => setEscopo(e.target.value as "loja" | "empresa")}
+                >
+                  <option value="loja">Esta loja</option>
+                  <option value="empresa">Empresa inteira</option>
+                </select>
+              </span>
+            </label>
+            {/* 🔑 **Ver por**: o eixo da aba Quebra. Fica aqui em cima, e não
+                dentro dela, porque é decisão de RECORTE — a mesma família do
+                período e do escopo. */}
+            <label>
+              <span className="rotulo-campo">Ver por</span>
+              <span className="mt-1.5 block w-[160px]">
+                <select
+                  className="campo"
+                  value={eixo}
+                  onChange={(e) => {
+                    setEixo(e.target.value as Eixo);
+                    setAba("quebra");
+                  }}
+                >
+                  {(Object.keys(EIXOS) as Eixo[]).map((x) => (
+                    <option key={x} value={x}>
+                      {EIXOS[x]}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </label>
+            <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
+            {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
+                os cartões e os gráficos. O PDF da janela é a tabela do relatório
+                — são duas coisas, e quem quer uma raramente quer a outra.
+                ⚠️ **O PDF da memória de cálculo saiu daqui** e foi para dentro da
+                aba dela: ele é o anexo que se confere, e o lugar de conferir
+                passou a ser a tela. */}
+            <button className="btn btn-secundario" onClick={() => window.print()}>
+              Imprimir a tela
+            </button>
+          </div>
         }
       />
 
@@ -288,51 +347,83 @@ export default function PaginaCmv() {
         <Carregando />
       ) : (
         <>
-          <div className="grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { r: "CMV real", v: reais(a.cmv_real), d: "estoque inicial + compras − final" },
-              { r: "CMV teórico", v: reais(a.cmv_teorico), d: "vendas × custo da ficha" },
-              {
-                r: "Variância",
-                v: reais(a.variancia),
-                d: pct(a.variancia_pct) + " do teórico",
-                destaque: true,
-              },
-              {
-                r: "Food cost",
-                v: pct(a.food_cost_pct),
-                d: `sobre ${reais(a.receita)} de receita`,
-              },
-            ].map((c) => (
-              <div key={c.r} className="bg-superficie p-4">
-                <p className="rotulo">{c.r}</p>
-                <p
-                  className={`mono mt-1 text-[22px] ${
-                    c.destaque
-                      ? a.variancia > 0
-                        ? "font-bold text-erro"
-                        : "font-bold text-erva"
-                      : ""
-                  }`}
-                >
-                  {c.v}
-                </p>
-                <p className="mt-0.5 text-[12.5px] text-suave">{c.d}</p>
-              </div>
-            ))}
-          </div>
-
-          {a.cobertura_ficha_pct < 95 && a.receita > 0 && (
+          {/* 🔑 **A CONFIANÇA do número vem ANTES do número** (16/09/2026,
+              protótipo aprovado). Com 28% de cobertura de ficha, a variância de
+              235% desta base não é notícia sobre a cozinha — é sobre o cadastro:
+              o teórico compara a fatia que tem ficha contra o CMV inteiro. O
+              painel mostrava o número grande e calava sobre isso.
+              ⚠️ Fica ACIMA dos ladrilhos, não abaixo: quem lê o número já leu. */}
+          {/* ⚠️ `info` É o amarelo da casa: `.aviso-info` usa `--color-alerta`.
+              Ver `globals.css` — o nome ficou do começo e a cor é a certa. */}
+          {pobreDeFicha && (
             <Aviso tipo="info">
-              Só {pct(a.cobertura_ficha_pct)} da receita está com prato vinculado a uma ficha —
-              o CMV teórico acima é dessa fatia, não do faturamento inteiro.{" "}
+              <b>O CMV teórico deste período não é confiável.</b> Só{" "}
+              {pct(a.cobertura_ficha_pct)} da receita tem ficha técnica —{" "}
+              <b className="mono">{a.itens_sem_custo}</b> itens vendidos não sabem o próprio
+              custo e entram na conta valendo zero
+              {a.receita_com_custo != null && (
+                <>
+                  {" "}
+                  ({reais(a.receita_com_custo)} dos {reais(a.receita)} vendidos)
+                </>
+              )}
+              . Por isso a variância aparece em {pct(a.variancia_pct)}: ela está medindo o
+              cadastro, não a cozinha.{" "}
               <Link href="/vendas" className="underline">
-                ver itens sem vínculo
+                ver os itens sem custo
               </Link>
             </Aviso>
           )}
 
-          {variânciaAlta && (
+          <div className="grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                r: "CMV real", selo: "do razão", v: reais(a.cmv_real),
+                d: "o que saiu do estoque: comprado, contado e baixado",
+                cor: "text-erva",
+              },
+              {
+                r: "Receita", v: reais(a.receita),
+                d: `${a.vendas} venda(s) no período`,
+              },
+              {
+                r: "Food cost", v: pct(a.food_cost_pct),
+                d: `CMV real ÷ receita${escopo === "empresa" ? " · empresa inteira" : ""}`,
+              },
+              // ⚠️ O teórico leva o SELO da cobertura: sem ele, ele compete de
+              // igual para igual com o real, e não é a mesma coisa.
+              // ⚠️ **A variância perdeu o ladrilho e virou a LEGENDA do teórico**
+              // (16/09/2026, protótipo aprovado). Sozinha ela competia de igual
+              // com o CMV real, e ela não é um número: é a RELAÇÃO entre dois —
+              // fora do lugar onde essa relação nasce, ninguém sabe do que ela
+              // é diferença. O ladrilho vago virou Receita, que faltava.
+              {
+                r: "CMV teórico",
+                selo: pobreDeFicha ? `${pct(a.cobertura_ficha_pct)} de ficha` : undefined,
+                v: reais(a.cmv_teorico),
+                d: "o que as fichas dizem que deveria ter saído",
+                extra: `Variância: ${reais(a.variancia)} (${pct(a.variancia_pct)})`,
+                cor: pobreDeFicha ? "text-alerta" : undefined,
+              },
+            ].map((c) => (
+              <div key={c.r} className="bg-superficie p-4">
+                <p className="rotulo flex items-center justify-between gap-2">
+                  {c.r}
+                  {c.selo && <Etiqueta cor="alerta">{c.selo}</Etiqueta>}
+                </p>
+                <p className={`mono mt-1 text-[24px] ${c.cor ?? ""}`}>{c.v}</p>
+                <p className="mt-0.5 text-[12.5px] leading-snug text-suave">{c.d}</p>
+                {c.extra && (
+                  <p className="mono mt-1 text-[12.5px] leading-snug text-suave">{c.extra}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* ⚠️ A variância só vira aviso quando o teórico MERECE confiança:
+              com meia cozinha sem ficha, dizer "saiu 15 mil a mais" é acusar o
+              estoque de um buraco que está no cadastro. */}
+          {variânciaAlta && !pobreDeFicha && (
             <Aviso tipo={a.variancia > 0 ? "erro" : "info"}>
               {a.variancia > 0
                 ? `Saiu ${reais(a.variancia)} a mais do estoque do que as receitas justificam. Olhe perdas (${reais(a.perdas)}), porção fora do padrão e desvio.`
@@ -358,8 +449,75 @@ export default function PaginaCmv() {
             </Aviso>
           )}
 
+
+          {/* 🔑 **Sete perguntas, não quatro listas** (16/09/2026, protótipo
+              aprovado). A primeira é A CONTA — ela existia como tabela no meio
+              da tela e pedia que a subtração se montasse na cabeça de quem lê.
+              ⚠️ A ordem é a da leitura: primeiro o total, depois onde ele pesa,
+              depois o detalhe, e por último a prova. */}
+          <nav className="flex flex-wrap gap-1 border-b border-linha" role="tablist">
+            {([
+              ["conta", "A conta"],
+              ["quebra", `Quebra por ${EIXOS[eixo]}`],
+              ["abc", "Curva ABC"],
+              ["margem", "Margem por prato"],
+              ["movimentacao", "Movimentação"],
+              ["precos", "O que subiu de preço"],
+              ["memoria", "Memória de cálculo"],
+            ] as const).map(([x, texto]) => (
+              <button
+                key={x}
+                role="tab"
+                aria-selected={aba === x}
+                onClick={() => setAba(x)}
+                className={`-mb-px min-h-[44px] border-b-2 px-3 py-2 text-[14.5px] ${
+                  aba === x
+                    ? "border-erva font-semibold text-erva"
+                    : "border-transparent text-suave hover:text-tinta"
+                }`}
+              >
+                {texto}
+              </button>
+            ))}
+            {/* ⚠️ A memória tem o PDF dela dentro da aba, com o documento
+                inteiro: baixar "esta tabela" ali seria baixar um dos quatro
+                quadros e chamá-lo de memória de cálculo. */}
+            {aba !== "memoria" && (
+              <BotaoExportar
+                className="link-acao nao-imprimir ml-auto self-center"
+                rotulo="baixar esta tabela"
+                relatorio={
+                  aba === "abc"
+                    ? "abc"
+                    : aba === "movimentacao"
+                      ? "movimentacao"
+                      : aba === "precos"
+                        ? "precos"
+                        : "cmv"
+                }
+                iniciais={{ inicio, fim }}
+              />
+            )}
+          </nav>
+
+          {aba === "conta" && (
+            <Cartao
+              titulo="Como se chega ao CMV"
+              descricao="Estoque inicial + compras − estoque final. Cada barra parte de onde a anterior terminou."
+            >
+              <Cascata
+                inicial={a.estoque_inicial}
+                compras={a.compras}
+                final={a.estoque_final}
+                cmv={a.cmv_real}
+                receita={a.receita}
+              />
+            </Cartao>
+          )}
+
+          {aba === "conta" && (
           <Cartao
-            titulo="Como o CMV se formou"
+            titulo="O que explica o CMV"
             descricao="A conta aberta, para conferir de onde cada real veio."
             acao={
               a.fechado ? (
@@ -416,46 +574,23 @@ export default function PaginaCmv() {
               {a.itens_sem_custo > 0 && ` · ${a.itens_sem_custo} item(ns) vendido(s) sem custo conhecido`}
             </p>
           </Cartao>
+          )}
 
-          <nav className="flex gap-1 border-b border-linha">
-            {(["abc", "margem", "movimentacao", "dono"] as const).map((x) => (
-              <button
-                key={x}
-                onClick={() => setAba(x)}
-                className={`-mb-px border-b-2 px-3 py-2 text-[14.5px] ${
-                  aba === x
-                    ? "border-erva font-semibold text-erva"
-                    : "border-transparent text-suave hover:text-tinta"
-                }`}
-              >
-                {x === "abc"
-                  ? "Curva ABC de insumos"
-                  : x === "margem"
-                    ? "Margem por prato"
-                    : x === "movimentacao"
-                      ? "Movimentação do estoque"
-                      : "Onde pesa e o que subiu"}
-              </button>
-            ))}
-            <BotaoExportar
-              className="link-acao nao-imprimir ml-auto self-center"
-              rotulo="baixar esta tabela"
-              relatorio={
-                aba === "abc"
-                  ? "abc"
-                  : aba === "movimentacao"
-                    ? "movimentacao"
-                    : aba === "dono"
-                      ? "precos"
-                      : "cmv"
-              }
-              iniciais={{ inicio, fim }}
+          {aba === "quebra" && (
+            <Quebra
+              inicio={inicio}
+              fim={fim}
+              eixo={eixo}
+              escopo={escopo}
+              cmvDoPeriodo={a.cmv_real}
             />
-          </nav>
+          )}
 
           {aba === "movimentacao" && <Movimentacao inicio={inicio} fim={fim} />}
 
-          {aba === "dono" && <RelatoriosDono inicio={inicio} fim={fim} />}
+          {aba === "precos" && <RelatoriosDono inicio={inicio} fim={fim} />}
+
+          {aba === "memoria" && <MemoriaDeCalculo inicio={inicio} fim={fim} />}
 
           {aba === "abc" && (
             <Cartao

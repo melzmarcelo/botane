@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de CMV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  /* As cores e as fontes são as REAIS do sistema (web/app/globals.css): o que se
+     aprova aqui é o que sai na tela, não um desenho parecido.
+     ⚠️ E a cor SEMÂNTICA é separada do acento: erva=bom, alerta=atenção,
+     erro=ruim, latão=estimado. Num painel de números, pintar tudo com o acento
+     da casa apaga justamente a informação que a cor carrega. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #d8ded0;
+    --linha2: #748069;
+    --erva: #2c6a4a;
+    --erva-claro: #e3efe7;
+    --latao: #7d5a1c;
+    --alerta: #8a5d12;
+    --alerta-claro: #f6ecd9;
+    --erro: #95332a;
+    --erro-claro: #f7e7e4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font-family: var(--leitura); font-size: 16px; -webkit-font-smoothing: antialiased;
+  }
+  .folha { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; }
+  h1, h2, h3 { font-family: var(--display); }
+  .rotulo-secao {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--suave); margin: 0;
+  }
+  .titulo { font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -.02em; margin: 6px 0 0; }
+  @media (max-width: 640px) { .titulo { font-size: 26px; } }
+  .prosa { font-family: var(--corpo); font-size: 1.03em; line-height: 1.55; color: var(--suave); max-width: 66ch; }
+  .prosa strong { color: var(--tinta); font-weight: 500; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .comandos {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 24px;
+    position: sticky; top: 0; z-index: 20; padding-block: 12px;
+    background: linear-gradient(var(--papel) 72%, transparent);
+  }
+  .segmentado {
+    display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--superficie2); border: 1px solid var(--linha); border-radius: 12px;
+  }
+  .segmentado button {
+    border: 0; background: transparent; color: var(--suave); cursor: pointer;
+    font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    padding: 8px 16px; border-radius: 9px; min-height: 36px;
+  }
+  .segmentado button[aria-pressed="true"] {
+    background: var(--superficie); color: var(--erva);
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 1px 1px rgba(20,32,26,.06);
+  }
+  .dica-topo { font-size: 13px; color: var(--suave); }
+
+  .secao { margin-top: 44px; }
+  .secao > h2 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4px; }
+  .cartao {
+    background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px;
+    padding: 20px; margin-top: 14px;
+    box-shadow: 0 1px 2px rgba(20,32,26,.04), 0 10px 28px -18px rgba(20,32,26,.22);
+  }
+  .cartao > h3 {
+    font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; margin: 0;
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .cartao > h3 .diz { font-family: var(--leitura); font-size: 12.5px; font-weight: 400; color: var(--suave); }
+  .corpo { margin-top: 14px; }
+  .nota {
+    font-family: var(--corpo); font-size: 14.5px; line-height: 1.5; color: var(--suave);
+    margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--linha);
+  }
+  .nota b { color: var(--tinta); font-weight: 500; }
+
+  body[data-modo="hoje"] .so-proposto { display: none; }
+  body[data-modo="proposto"] .so-hoje { display: none; }
+
+  /* ---------- a barra do RECORTE ---------- */
+  .recorte {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--linha);
+  }
+  .campo-caixa label { display: block; }
+  .rot {
+    display: block; font-family: var(--display); font-size: 12.5px; font-weight: 600;
+    letter-spacing: -.005em; color: var(--tinta);
+  }
+  .campo {
+    border: 1px solid var(--linha2); border-radius: 10px; background: var(--superficie);
+    padding: 9px 11px; font-size: 14.5px; color: var(--tinta);
+    font-family: var(--display); margin-top: 5px; width: 100%;
+  }
+  .campo.mono { font-family: var(--mono); }
+  .l-160 { width: 172px; } .l-130 { width: 138px; } .l-220 { width: 232px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; border-radius: 10px;
+    border: 1px solid var(--linha2); background: var(--superficie); color: var(--tinta);
+    font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    padding: 9px 14px; min-height: 40px; cursor: pointer;
+  }
+  .btn-primario { background: var(--erva); border-color: var(--erva); color: #fff; }
+
+  /* ---------- ladrilhos: só onde o número É o ponto ---------- */
+  .ladrilhos { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-top: 18px; }
+  .ladrilho { border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px; background: var(--superficie); }
+  .ladrilho .topo {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--suave); display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .ladrilho .numero {
+    font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 27px;
+    font-weight: 500; letter-spacing: -.02em; display: block; margin-top: 6px; line-height: 1.1;
+  }
+  .ladrilho .sob { display: block; margin-top: 4px; font-size: 12.5px; color: var(--suave); line-height: 1.35; }
+  .ladrilho.forte { border-color: var(--erva); background: var(--erva-claro); }
+  .ladrilho.forte .numero { color: var(--erva); }
+  .ladrilho.duvida { border-color: var(--alerta); background: var(--alerta-claro); }
+  .ladrilho.duvida .numero { color: var(--alerta); }
+  .selo {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .05em; border-radius: 999px;
+    padding: 1px 7px; border: 1px solid currentColor; text-transform: none;
+  }
+
+  /* ---------- faixa de confiança ---------- */
+  .faixa {
+    display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 14px 16px;
+    border: 1px solid var(--alerta); background: var(--alerta-claro); margin-top: 16px;
+  }
+  .faixa .sinal { font-size: 18px; line-height: 1.2; }
+  .faixa p { margin: 0; font-family: var(--corpo); font-size: 14.5px; line-height: 1.5; color: var(--tinta); }
+  .faixa .medida { font-family: var(--mono); font-weight: 500; }
+
+  /* ---------- abas ---------- */
+  .abas { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--linha); margin-top: 18px; }
+  .abas button {
+    border: 0; background: transparent; cursor: pointer; color: var(--suave);
+    font-family: var(--display); font-size: 14.5px; font-weight: 600;
+    padding: 10px 15px 11px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    min-height: 44px; display: inline-flex; align-items: center; gap: 7px;
+  }
+  .abas button[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--erva); }
+  .painel[hidden] { display: none; }
+
+  /* ---------- tabelas ---------- */
+  .rolagem { overflow-x: auto; }
+  .tabela { width: 100%; border-collapse: collapse; }
+  .tabela th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--suave); font-weight: 500;
+    padding: 8px 12px; background: var(--superficie2); white-space: nowrap;
+  }
+  .tabela td { padding: 9px 12px; border-top: 1px solid var(--linha); font-size: 14px; }
+  .tabela .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tabela tfoot td { border-top: 2px solid var(--linha2); font-weight: 600; }
+  .etiqueta {
+    display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--linha2);
+    border-radius: 999px; padding: 1px 9px; font-family: var(--mono); font-size: 11.5px;
+    color: var(--suave); background: var(--superficie);
+  }
+  .etiqueta.a { border-color: var(--erva); color: var(--erva); background: var(--erva-claro); }
+  .etiqueta.b { border-color: var(--alerta); color: var(--alerta); background: var(--alerta-claro); }
+  .etiqueta.c { border-color: var(--linha2); }
+  .etiqueta.erro { border-color: var(--erro); color: var(--erro); background: var(--erro-claro); }
+  .bom { color: var(--erva); } .mau { color: var(--erro); } .meio { color: var(--alerta); }
+
+  /* ---------- barra dentro da célula ---------- */
+  .barra { height: 8px; border-radius: 999px; background: var(--superficie2); overflow: hidden; min-width: 90px; }
+  .barra > span { display: block; height: 100%; background: var(--erva); border-radius: 999px; }
+  .barra.aten > span { background: var(--alerta); }
+
+  .fita { display: flex; align-items: center; gap: 8px; margin-top: 18px;
+          font-size: 12.5px; color: var(--suave); font-family: var(--mono); }
+  .fita::before, .fita::after { content: ""; height: 1px; background: var(--linha); flex: 1; }
+  .marca-nova {
+    display: inline-flex; align-items: center; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--latao);
+    background: var(--alerta-claro); border: 1px solid var(--alerta);
+    border-radius: 999px; padding: 1px 7px;
+  }
+  .legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--suave); }
+  .legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+</style>
+</head>
+<body data-modo="proposto">
+<div class="folha">
+
+  <p class="rotulo-secao">Botané · protótipo</p>
+  <h1 class="titulo">Painel de CMV</h1>
+  <p class="prosa" style="margin-top:10px">
+    O painel de hoje empilha quatro listas e pede que a conta se monte na cabeça de quem lê. A
+    proposta põe <strong>a conta na frente</strong> — em cascata, com os números reais desta base —,
+    deixa escolher <strong>o recorte</strong> (empresa, loja, prateleira, setor, categoria,
+    produto) e separa o resto em abas. E faz uma coisa que o painel não fazia:
+    <strong>dizer o quanto o número merece confiança</strong> antes de mostrá-lo grande.
+  </p>
+
+  <div class="comandos">
+    <div class="segmentado" role="group" aria-label="Comparar">
+      <button type="button" data-ver="hoje" aria-pressed="false">Como é hoje</button>
+      <button type="button" data-ver="proposto" aria-pressed="true">Proposto</button>
+    </div>
+    <span class="dica-topo">Mesmos dados, do período de 01/09 a 16/09/2026.</span>
+  </div>
+
+  <!-- ======================= HOJE ======================= -->
+  <section class="secao so-hoje">
+    <h2>Hoje: os números soltos, e a conta por sua conta</h2>
+    <p class="prosa">
+      O painel mostra os totais numa fileira e quatro abas embaixo. O que falta não é dado — é
+      <strong>a relação entre eles</strong>: a conta que leva do estoque inicial ao CMV, e o aviso
+      de que o CMV teórico desta base é ficção.
+    </p>
+
+    <div class="cartao">
+      <h3>Painel de CMV <span class="diz">01/09 a 16/09/2026</span></h3>
+      <div class="corpo ladrilhos">
+        <div class="ladrilho"><span class="topo">CMV real</span>
+          <span class="numero">R$ 21.523,89</span></div>
+        <div class="ladrilho"><span class="topo">CMV teórico</span>
+          <span class="numero">R$ 6.429,00</span></div>
+        <div class="ladrilho"><span class="topo">Variância</span>
+          <span class="numero">234,8%</span></div>
+        <div class="ladrilho"><span class="topo">Food cost</span>
+          <span class="numero">33,5%</span></div>
+      </div>
+      <p class="nota">
+        ⚠️ <b>234,8% de variância não é notícia sobre a cozinha</b> — é notícia sobre o cadastro:
+        só <b>28%</b> das vendas têm ficha, então o teórico compara 6 mil contra 21 mil porque
+        <b>1.526 itens vendidos não sabem o próprio custo</b>. O painel mostra o número grande e
+        cala sobre isso.
+      </p>
+      <p class="nota" style="border:0;padding-top:0;margin-top:8px">
+        ⚠️ E não há como perguntar <b>"e na Confeitaria?"</b> ou <b>"e na câmara fria?"</b>: o
+        recorte por setor e por categoria existe num relatório separado, fora do painel.
+      </p>
+    </div>
+
+    <div class="cartao"><h3>Curva ABC</h3>
+      <p class="nota" style="border:0;padding:0;margin-top:8px">Lista de 50 linhas.</p></div>
+    <div class="cartao"><h3>Margem por produto</h3>
+      <p class="nota" style="border:0;padding:0;margin-top:8px">Lista de 50 linhas.</p></div>
+    <div class="cartao"><h3>Movimentação</h3>
+      <p class="nota" style="border:0;padding:0;margin-top:8px">Lista por produto.</p></div>
+    <div class="cartao"><h3>Relatórios do dono</h3></div>
+
+    <p class="fita">e a impressão sai com o menu de lado, cortando as colunas da direita</p>
+  </section>
+
+  <!-- ===================== PROPOSTO ===================== -->
+  <section class="secao so-proposto">
+    <h2>Proposto: a conta na frente, o recorte à mão, cinco abas</h2>
+
+    <div class="cartao" style="padding-top:16px">
+      <p class="rotulo-secao">CMV</p>
+      <h2 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:4px 0 14px">
+        Painel de CMV
+      </h2>
+
+      <!-- ---------- a barra do recorte ---------- -->
+      <div class="recorte">
+        <div class="campo-caixa"><label><span class="rot">Período</span>
+          <select class="campo l-220"><option>Este mês · 01/09 a 16/09</option>
+            <option>Mês passado</option><option>Últimos 30 dias</option>
+            <option>Ciclo de consumo</option><option>Datas soltas…</option></select></label></div>
+        <!-- 🔑 O RECORTE: é ele que responde "e na Confeitaria?" -->
+        <div class="campo-caixa"><label><span class="rot">Ver por</span>
+          <select class="campo l-160" id="recorte">
+            <option value="empresa">Empresa (todas as lojas)</option>
+            <option value="loja" selected>Loja</option>
+            <option value="local">Prateleira</option>
+            <option value="setor">Setor</option>
+            <option value="categoria">Categoria</option>
+            <option value="grupo">Grupo do CMV</option>
+            <option value="produto">Produto</option>
+          </select></label></div>
+        <div class="campo-caixa"><label><span class="rot">Filtrar</span>
+          <select class="campo l-160"><option>— tudo —</option>
+            <option>Matriz</option><option>Filial</option></select></label></div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">
+          <button class="btn" type="button">Imprimir</button>
+          <button class="btn" type="button">Baixar</button>
+          <button class="btn btn-primario" type="button">Fechar o mês</button>
+        </div>
+      </div>
+
+      <!-- ---------- a faixa de confiança ---------- -->
+      <div class="faixa">
+        <span class="sinal">⚠️</span>
+        <p>
+          <b>O CMV teórico deste período não é confiável.</b> Só
+          <span class="medida">28,2%</span> das vendas têm ficha técnica —
+          <span class="medida">1.526</span> itens vendidos não sabem o próprio custo e entram na
+          conta valendo zero. Por isso a variância aparece em
+          <span class="medida">234,8%</span>: ela está medindo o cadastro, não a cozinha.
+          <a href="#" style="color:var(--erva)">ver os 1.526 itens sem custo →</a>
+        </p>
+      </div>
+
+      <!-- ---------- os ladrilhos ---------- -->
+      <div class="ladrilhos">
+        <div class="ladrilho forte">
+          <span class="topo">CMV real <span class="selo">do razão</span></span>
+          <span class="numero">R$ 21.523,89</span>
+          <span class="sob">o que saiu do estoque: comprado, contado e baixado</span>
+        </div>
+        <div class="ladrilho">
+          <span class="topo">Receita</span>
+          <span class="numero">R$ 64.322,75</span>
+          <span class="sob">590 vendas no período</span>
+        </div>
+        <div class="ladrilho">
+          <span class="topo">Food cost</span>
+          <span class="numero">33,5%</span>
+          <span class="sob">CMV real ÷ receita · meta da casa: 30%</span>
+        </div>
+        <div class="ladrilho duvida">
+          <span class="topo">CMV teórico <span class="selo">28% de ficha</span></span>
+          <span class="numero">R$ 6.429,00</span>
+          <span class="sob">o que as fichas dizem que deveria ter saído</span>
+        </div>
+      </div>
+
+      <!-- ---------- abas ---------- -->
+      <div class="abas" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-aba="conta">A conta</button>
+        <button type="button" role="tab" aria-selected="false" data-aba="quebra">
+          Quebra <span class="marca-nova">nova</span></button>
+        <button type="button" role="tab" aria-selected="false" data-aba="abc">Curva ABC</button>
+        <button type="button" role="tab" aria-selected="false" data-aba="margem">Margem</button>
+        <button type="button" role="tab" aria-selected="false" data-aba="movimentacao">Movimentação</button>
+        <button type="button" role="tab" aria-selected="false" data-aba="memoria">
+          Memória de cálculo <span class="marca-nova">nova</span></button>
+      </div>
+
+      <!-- ================= A CONTA ================= -->
+      <div class="painel" data-painel="conta">
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>Como se chega ao CMV <span class="diz">estoque inicial + compras − estoque final</span></h3>
+          <div class="corpo rolagem">
+            <!-- cascata: cada barra parte de onde a anterior terminou -->
+            <svg viewBox="0 0 900 260" width="100%" height="260" role="img"
+                 aria-label="Cascata do CMV: 4.432 de estoque inicial mais 237.665 de compras menos 220.573 de estoque final dão 21.524 de CMV">
+              <!-- grade -->
+              <g stroke="#d8ded0" stroke-width="1">
+                <line x1="70" y1="30" x2="880" y2="30"></line>
+                <line x1="70" y1="90" x2="880" y2="90"></line>
+                <line x1="70" y1="150" x2="880" y2="150"></line>
+                <line x1="70" y1="210" x2="880" y2="210"></line>
+              </g>
+              <g font-family="IBM Plex Mono, monospace" font-size="10" fill="#5d6c61" text-anchor="end">
+                <text x="62" y="34">240 mil</text>
+                <text x="62" y="94">160 mil</text>
+                <text x="62" y="154">80 mil</text>
+                <text x="62" y="214">0</text>
+              </g>
+              <!-- 1. estoque inicial: 4.432 (≈3px) -->
+              <rect x="95" y="207" width="110" height="3" fill="#748069" rx="1"></rect>
+              <!-- 2. compras: +237.665, partindo do topo do inicial -->
+              <rect x="255" y="29" width="110" height="178" fill="#2c6a4a" rx="2"></rect>
+              <!-- 3. estoque final: −220.573, descendo do topo -->
+              <rect x="415" y="31" width="110" height="165" fill="#95332a" rx="2"></rect>
+              <!-- 4. CMV: o que sobra, do zero -->
+              <rect x="575" y="194" width="110" height="16" fill="#14201a" rx="2"></rect>
+              <!-- 5. receita, para comparar -->
+              <rect x="735" y="162" width="110" height="48" fill="#7d5a1c" rx="2"></rect>
+              <g font-family="IBM Plex Mono, monospace" font-size="11" fill="#14201a" text-anchor="middle">
+                <text x="150" y="228">4.432</text>
+                <text x="310" y="228">+237.665</text>
+                <text x="470" y="228">−220.573</text>
+                <text x="630" y="228">21.524</text>
+                <text x="790" y="228">64.323</text>
+              </g>
+              <g font-family="Inter, sans-serif" font-size="11" fill="#5d6c61" text-anchor="middle">
+                <text x="150" y="246">estoque inicial</text>
+                <text x="310" y="246">compras</text>
+                <text x="470" y="246">estoque final</text>
+                <text x="630" y="246">= CMV real</text>
+                <text x="790" y="246">receita</text>
+              </g>
+            </svg>
+          </div>
+          <p class="nota">
+            🔑 <b>É a mesma conta do relatório, desenhada.</b> Hoje os cinco números existem em
+            ladrilhos separados e quem lê monta a subtração de cabeça — e é justamente aí que se
+            deixa de notar que <b>o estoque final cresceu 220 mil</b>: a casa comprou muito mais do
+            que consumiu no período.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>O que explica o CMV <span class="diz">as saídas que não são venda</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Linha</th><th class="num">Valor</th><th>Peso no CMV</th><th class="num">%</th></tr></thead>
+              <tbody>
+                <tr><td>Perdas</td><td class="num mau">R$ 6.278,00</td>
+                    <td><span class="barra aten"><span style="width:29%"></span></span></td>
+                    <td class="num">29,2%</td></tr>
+                <tr><td>Consumo interno</td><td class="num">R$ 7.344,32</td>
+                    <td><span class="barra aten"><span style="width:34%"></span></span></td>
+                    <td class="num">34,1%</td></tr>
+                <tr><td>Ajustes de inventário</td><td class="num bom">−R$ 2.846,00</td>
+                    <td><span class="barra"><span style="width:13%"></span></span></td>
+                    <td class="num">−13,2%</td></tr>
+                <tr><td>Ajuste de custo</td><td class="num bom">−R$ 859,53</td>
+                    <td><span class="barra"><span style="width:4%"></span></span></td>
+                    <td class="num">−4,0%</td></tr>
+              </tbody>
+              <tfoot><tr><td>Sobra: consumo de produção e venda</td>
+                <td class="num">R$ 11.607,06</td><td></td><td class="num">53,9%</td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            ⚠️ <b>63% do CMV deste período não é prato vendido</b> — é perda e consumo interno. É o
+            tipo de coisa que o food cost sozinho esconde, e que esta tabela põe na primeira tela.
+          </p>
+        </div>
+      </div>
+
+      <!-- ================= QUEBRA ================= -->
+      <div class="painel" data-painel="quebra" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>
+            CMV por <span id="titulo-recorte">loja</span>
+            <span class="diz">a MESMA conta, restrita a cada linha — não é rateio</span>
+          </h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr>
+                <th>Loja</th><th class="num">Estoque inicial</th><th class="num">Compras</th>
+                <th class="num">Estoque final</th><th class="num">CMV</th>
+                <th>Participação</th><th class="num">%</th>
+              </tr></thead>
+              <tbody>
+                <tr><td><b>Matriz</b></td><td class="num">R$ 4.432,00</td><td class="num">R$ 235.452,68</td>
+                    <td class="num">R$ 219.681,16</td><td class="num">R$ 20.203,52</td>
+                    <td><span class="barra"><span style="width:94%"></span></span></td>
+                    <td class="num">93,9%</td></tr>
+                <tr><td>Filial Centro</td><td class="num">R$ 0,00</td><td class="num">R$ 2.212,00</td>
+                    <td class="num">R$ 891,63</td><td class="num">R$ 1.320,37</td>
+                    <td><span class="barra"><span style="width:6%"></span></span></td>
+                    <td class="num">6,1%</td></tr>
+              </tbody>
+              <tfoot><tr><td>Total</td><td class="num">R$ 4.432,00</td><td class="num">R$ 237.664,68</td>
+                <td class="num">R$ 220.572,79</td><td class="num">R$ 21.523,89</td>
+                <td></td><td class="num">100%</td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>A soma das linhas FECHA com o CMV do período</b>, e é isso que dá sentido ao
+            corte: não é rateio, é a mesma conta restrita a cada recorte. Trocar "Ver por" no alto
+            troca só esta tabela — <b>loja, prateleira, setor, categoria, grupo do CMV ou
+            produto</b>.
+          </p>
+          <p class="nota" style="border:0;padding-top:0;margin-top:8px">
+            ⚠️ <b>Empresa é um recorte, não uma tela à parte.</b> Quem responde pelas duas lojas
+            hoje precisa trocar de loja no seletor do topo e somar de cabeça.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Onde o dinheiro está <span class="diz">o mesmo período, por setor</span></h3>
+          <div class="corpo">
+            <svg viewBox="0 0 900 190" width="100%" height="190" role="img"
+                 aria-label="CMV por setor: Confeitaria 9.842, Cozinha 6.310, Bar 3.420, Cafeteria 1.952">
+              <g font-family="Inter, sans-serif" font-size="12" fill="#14201a">
+                <text x="0" y="26">Confeitaria</text>
+                <text x="0" y="68">Cozinha</text>
+                <text x="0" y="110">Bar</text>
+                <text x="0" y="152">Cafeteria</text>
+              </g>
+              <g rx="3">
+                <rect x="110" y="12" width="560" height="20" fill="#2c6a4a" rx="3"></rect>
+                <rect x="110" y="54" width="359" height="20" fill="#2c6a4a" rx="3"></rect>
+                <rect x="110" y="96" width="195" height="20" fill="#2c6a4a" rx="3"></rect>
+                <rect x="110" y="138" width="111" height="20" fill="#2c6a4a" rx="3"></rect>
+              </g>
+              <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#14201a">
+                <text x="684" y="27">R$ 9.842,00 · 45,7%</text>
+                <text x="483" y="69">R$ 6.310,00 · 29,3%</text>
+                <text x="319" y="111">R$ 3.420,00 · 15,9%</text>
+                <text x="235" y="153">R$ 1.952,00 · 9,1%</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= ABC ================= -->
+      <div class="painel" data-painel="abc" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>Curva ABC <span class="diz">onde o dinheiro do estoque foi parar</span></h3>
+          <div class="corpo">
+            <svg viewBox="0 0 900 220" width="100%" height="220" role="img"
+                 aria-label="Curva ABC acumulada: os quatro primeiros insumos somam 18% do consumo; a classe A vai até 80%">
+              <g stroke="#d8ded0" stroke-width="1">
+                <line x1="40" y1="20" x2="880" y2="20"></line>
+                <line x1="40" y1="70" x2="880" y2="70"></line>
+                <line x1="40" y1="120" x2="880" y2="120"></line>
+                <line x1="40" y1="170" x2="880" y2="170"></line>
+              </g>
+              <g font-family="IBM Plex Mono, monospace" font-size="10" fill="#5d6c61" text-anchor="end">
+                <text x="34" y="24">100%</text><text x="34" y="74">75%</text>
+                <text x="34" y="124">50%</text><text x="34" y="174">25%</text>
+              </g>
+              <!-- faixa da classe A (ate 80% acumulado) -->
+              <rect x="40" y="20" width="250" height="150" fill="#e3efe7"></rect>
+              <text x="52" y="38" font-family="Inter, sans-serif" font-size="11" fill="#2c6a4a">classe A · 80% do valor</text>
+              <!-- a curva acumulada -->
+              <path d="M40 170 L110 146 L180 138 L250 132 L320 118 L400 96 L490 72 L590 52 L700 36 L880 20"
+                    fill="none" stroke="#2c6a4a" stroke-width="2.5" stroke-linejoin="round"></path>
+              <!-- barras do valor de cada item -->
+              <g fill="#748069">
+                <rect x="46" y="146" width="18" height="24" rx="2"></rect>
+                <rect x="76" y="162" width="18" height="8" rx="2"></rect>
+                <rect x="106" y="166" width="18" height="4" rx="2"></rect>
+                <rect x="136" y="167" width="18" height="3" rx="2"></rect>
+                <rect x="166" y="167" width="18" height="3" rx="2"></rect>
+              </g>
+              <text x="46" y="192" font-family="Inter, sans-serif" font-size="11" fill="#5d6c61">
+                manteiga · 12,2% sozinha
+              </text>
+            </svg>
+            <div class="legenda">
+              <span><i style="background:#748069"></i>valor consumido no período</span>
+              <span><i style="background:#2c6a4a"></i>acumulado</span>
+              <span><i style="background:#e3efe7;border:1px solid #2c6a4a"></i>classe A</span>
+            </div>
+          </div>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>#</th><th>Insumo</th><th class="num">Quantidade</th>
+                <th class="num">Valor</th><th class="num">Part.</th><th class="num">Acum.</th><th>Classe</th></tr></thead>
+              <tbody>
+                <tr><td class="num">1</td><td><b>MANTEIGA SEM SAL</b>
+                      <span style="display:block;font-size:12px;color:var(--suave)" class="mono">218</span></td>
+                    <td class="num">20,262 KG</td><td class="num">R$ 5.357,35</td>
+                    <td class="num">12,2%</td><td class="num">12,2%</td>
+                    <td><span class="etiqueta a">A</span></td></tr>
+                <tr><td class="num">2</td><td>BARRA CHOCOLATE AMARGO 60% 1 KG
+                      <span style="display:block;font-size:12px;color:var(--suave)" class="mono">000334</span></td>
+                    <td class="num">25,402 KG</td><td class="num">R$ 1.894,70</td>
+                    <td class="num">4,3%</td><td class="num">16,5%</td>
+                    <td><span class="etiqueta a">A</span></td></tr>
+                <tr><td class="num">3</td><td>FARINHA TRIGO
+                      <span style="display:block;font-size:12px;color:var(--suave)" class="mono">94138</span></td>
+                    <td class="num">27,200 KG</td><td class="num">R$ 477,34</td>
+                    <td class="num">1,1%</td><td class="num">17,6%</td>
+                    <td><span class="etiqueta a">A</span></td></tr>
+                <tr><td class="num">4</td><td>ACUCAR MASCAVO 1KG
+                      <span style="display:block;font-size:12px;color:var(--suave)" class="mono">999</span></td>
+                    <td class="num">26,100 KG</td><td class="num">R$ 310,69</td>
+                    <td class="num">0,7%</td><td class="num">18,3%</td>
+                    <td><span class="etiqueta b">B</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>A manteiga sozinha é 12,2% do consumo do período.</b> É a linha que justifica ir
+            atrás do preço dela com o fornecedor — e a mesma que, custando R$ 315,00/KG em vez de
+            R$ 63,00, contaminava toda ficha que a usa.
+          </p>
+        </div>
+      </div>
+
+      <!-- ================= MARGEM ================= -->
+      <div class="painel" data-painel="margem" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>Margem por prato <span class="diz">receita, custo da ficha e o que sobra</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Prato</th><th class="num">Vendidos</th><th class="num">Receita</th>
+                <th class="num">Custo</th><th class="num">Margem</th><th>Food cost</th>
+                <th class="num">%</th></tr></thead>
+              <tbody>
+                <tr><td><b>COOKIES FLAT</b></td><td class="num">130</td>
+                    <td class="num">R$ 1.170,00</td><td class="num">R$ 558,22</td>
+                    <td class="num bom">R$ 611,78</td>
+                    <td><span class="barra"><span style="width:48%"></span></span></td>
+                    <td class="num">47,7%</td></tr>
+                <tr><td>CUCA FRUTAS MEDIA</td><td class="num">44</td>
+                    <td class="num">R$ 2.068,00</td>
+                    <td class="num meio">sem ficha</td><td class="num">—</td>
+                    <td><span class="etiqueta b">não dá para saber</span></td>
+                    <td class="num">—</td></tr>
+                <tr><td>CAFE LATTE</td><td class="num">124</td>
+                    <td class="num">R$ 2.005,00</td>
+                    <td class="num meio">sem ficha</td><td class="num">—</td>
+                    <td><span class="etiqueta b">não dá para saber</span></td>
+                    <td class="num">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>"Sem ficha" deixa de virar 100% de margem.</b> Hoje o prato sem custo aparece com
+            margem de 100% e food cost 0% — o número mais otimista da tela é o do prato sobre o
+            qual nada se sabe. Aqui ele diz que <b>não dá para saber</b>, e some da média.
+          </p>
+          <p class="nota" style="border:0;padding-top:0;margin-top:8px">
+            ⚠️ São <b>40 dos 50 pratos mais vendidos</b> nessa situação. A lista ordena por receita
+            em risco: o primeiro a ganhar ficha é o que mais vende sem custo.
+          </p>
+        </div>
+      </div>
+
+      <!-- ================= MOVIMENTAÇÃO ================= -->
+      <div class="painel" data-painel="movimentacao" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>Movimentação <span class="diz">a memória de cálculo: item a item, o que entrou e o que saiu</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th>
+                <th class="num">Saídas</th><th class="num">Final</th><th class="num">Custo médio</th></tr></thead>
+              <tbody>
+                <tr><td><b>MANTEIGA SEM SAL</b> <span class="mono" style="color:var(--suave)">218</span></td>
+                    <td class="num">0,000 KG<br><span style="font-size:12px;color:var(--suave)">R$ 0,00</span></td>
+                    <td class="num">10,645 KG<br><span style="font-size:12px;color:var(--suave)">R$ 3.353,08</span></td>
+                    <td class="num">13,482 KG<br><span style="font-size:12px;color:var(--suave)">R$ 3.531,82</span></td>
+                    <td class="num mau">−2,837 KG<br><span style="font-size:12px;color:var(--suave)">−R$ 178,74</span></td>
+                    <td class="num">R$ 63,00</td></tr>
+                <tr><td>FARINHA TRIGO <span class="mono" style="color:var(--suave)">94138</span></td>
+                    <td class="num">0,000 KG</td><td class="num">27,200 KG</td>
+                    <td class="num">27,200 KG</td><td class="num">0,000 KG</td>
+                    <td class="num">R$ 17,55</td></tr>
+              </tbody>
+              <tfoot><tr><td>Total do período</td><td class="num">R$ 4.432,00</td>
+                <td class="num">R$ 237.664,68</td><td class="num">R$ 21.523,89</td>
+                <td class="num">R$ 220.572,79</td><td></td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>O rodapé fecha com os ladrilhos do topo</b>, e é essa amarração que transforma a
+            tabela em prova: inicial + entradas − saídas = final, por item e no total. Saldo
+            <b>negativo</b> aparece em vermelho — é onde faltou lançar uma entrada.
+          </p>
+        </div>
+      </div>
+
+      <!-- ================= MEMÓRIA DE CÁLCULO ================= -->
+      <div class="painel" data-painel="memoria" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>
+            A apuração, aberta nos documentos que a compõem
+            <span class="diz">a resposta para "de onde veio este número?"</span>
+            <span style="margin-left:auto"><button class="btn" type="button">Baixar em PDF</button></span>
+          </h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Composição do CMV</th><th class="num">Valor</th><th>Aberto em</th></tr></thead>
+              <tbody>
+                <tr><td>Estoque inicial <span style="color:var(--suave)">(posição em 31/08/2026)</span></td>
+                    <td class="num">R$ 4.432,00</td>
+                    <td><a href="#q1" style="color:var(--erva)">quadro 1</a></td></tr>
+                <tr><td>(+) Compras do período</td><td class="num">R$ 237.664,68</td>
+                    <td><a href="#q2" style="color:var(--erva)">quadros 2 e 4</a></td></tr>
+                <tr><td>(−) Estoque final <span style="color:var(--suave)">(posição em 16/09/2026)</span></td>
+                    <td class="num">−R$ 220.572,79</td>
+                    <td><a href="#q3" style="color:var(--erva)">quadro 3</a></td></tr>
+              </tbody>
+              <tfoot><tr><td>(=) CMV real do período</td><td class="num">R$ 21.523,89</td><td></td></tr></tfoot>
+            </table>
+          </div>
+          <div class="legenda" style="margin-top:12px">
+            <span><b style="color:var(--tinta)">Método de custeio:</b> custo médio ponderado móvel</span>
+            <span><b style="color:var(--tinta)">Situação do período:</b>
+              <span class="etiqueta b">aberto — o número ainda pode mudar</span></span>
+          </div>
+          <p class="nota">
+            🔑 <b>Pedido da contabilidade (02/09/2026):</b> a apuração dizia o resultado em dez
+            linhas e não dizia de ONDE cada linha veio. Perguntado "estes R$ 237 mil de compras,
+            de quais notas são?", o sistema não tinha resposta. O documento já existe em PDF;
+            <b>o que muda é passar a existir como TELA</b> — a pergunta nasce olhando o painel, e
+            hoje é preciso baixar um arquivo para respondê-la.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none" id="q4">
+          <h3>Quadro 4 — Conciliação <span class="diz">por que a soma das notas não é a linha "Compras"</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Da soma das notas até a linha Compras</th><th class="num">Valor</th></tr></thead>
+              <tbody>
+                <tr><td>Soma dos totais das 132 nota(s) lançada(s) no período</td>
+                    <td class="num">R$ 10.661,00</td></tr>
+                <tr><td>(−) Diferença entre o total da nota e o que virou mercadoria
+                        <span style="display:block;font-size:12.5px;color:var(--suave)">item ignorado, desconto, frete e IPI/ST rateados</span></td>
+                    <td class="num">R$ 19.760,00</td></tr>
+                <tr><td>(=) Entradas por nota, como entraram no razão</td>
+                    <td class="num">R$ 30.421,00</td></tr>
+                <tr><td>(−) Compras de tipo fora do CMV
+                        <span style="display:block;font-size:12.5px;color:var(--suave)">limpeza, embalagem, utensílio</span></td>
+                    <td class="num">R$ 0,00</td></tr>
+                <tr><td><b>(+) Entradas digitadas sem nota</b></td>
+                    <td class="num mau">R$ 241.703,68</td></tr>
+                <tr><td>(−) Entradas lançadas e estornadas dentro do período</td>
+                    <td class="num">−R$ 30.960,00</td></tr>
+                <tr><td>(+) Remessa recebida de outra loja, menos a enviada</td>
+                    <td class="num">−R$ 3.500,00</td></tr>
+              </tbody>
+              <tfoot><tr><td>(=) Linha "Compras" da apuração</td>
+                <td class="num">R$ 237.664,68</td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>Este quadro é o que mais responde, e nesta base ele grita:</b> as 132 notas do
+            período somam R$ 10.661,00, e as <b>entradas digitadas SEM nota somam
+            R$ 241.703,68</b>. Quase tudo o que entrou no estoque não veio de documento fiscal —
+            é a primeira coisa que o contador vai perguntar, e aqui a tela responde antes dele.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none" id="q2">
+          <h3>Quadro 2 — Compras do período, por documento <span class="diz">136 notas</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Documento</th><th>Fornecedor</th><th class="num">Entrada</th>
+                <th class="num">Itens</th><th class="num">Total da nota</th>
+                <th class="num">Entrou no estoque</th><th class="num">Diferença</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">NF 4812/1</td><td>SMOKE DISTRIBUIDORA</td>
+                    <td class="num">12/09</td><td class="num">2</td>
+                    <td class="num">R$ 700,00</td><td class="num">R$ 0,00</td>
+                    <td class="num mau">−R$ 700,00</td></tr>
+                <tr><td class="mono">NF R0491000</td><td>28.584.728 CELSO KENJI ISHI</td>
+                    <td class="num">13/09</td><td class="num">1</td>
+                    <td class="num">R$ 100,00</td><td class="num">R$ 100,00</td>
+                    <td class="num">R$ 0,00</td></tr>
+                <tr><td class="mono">NF R1021000</td><td>28.584.728 CELSO KENJI ISHI</td>
+                    <td class="num">13/09</td><td class="num">1</td>
+                    <td class="num">R$ 100,00</td><td class="num">R$ 100,00</td>
+                    <td class="num">R$ 0,00</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="5">Soma do que entrou no razão</td>
+                <td class="num">R$ 30.421,00</td>
+                <td class="num" style="font-weight:400;color:var(--suave)">ver o quadro 4</td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            ⚠️ <b>Este quadro NÃO fecha com a linha "Compras", e é de propósito</b> — falta a
+            remessa entre lojas, que é compra do destino sem nota. O rodapé manda para o quadro 4
+            em vez de deixar a diferença solta.
+            ⚠️ A coluna <b>Diferença</b> é onde mora o erro de lançamento: a NF 4812/1 entrou com
+            R$ 700,00 de total e <b>zero</b> de mercadoria no estoque.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none" id="q1">
+          <h3>Quadro 1 — Estoque inicial, item a item <span class="diz">posição em 31/08/2026 · 80 produtos</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Código</th><th>Produto</th><th>Un.</th><th>Categoria</th>
+                <th class="num">Quantidade</th><th class="num">Custo unitário</th>
+                <th class="num">Valor</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">P0880</td><td>ACUCAR XML 190400</td><td>UN</td><td>—</td>
+                    <td class="num">10,000</td><td class="num">R$ 10,00</td>
+                    <td class="num">R$ 100,00</td></tr>
+                <tr><td class="mono">P0517</td><td>ACUCAR XML 212500</td><td>UN</td><td>—</td>
+                    <td class="num">10,000</td><td class="num">R$ 10,00</td>
+                    <td class="num">R$ 100,00</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="6">Soma dos 80 produtos</td>
+                <td class="num">R$ 4.432,00</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="cartao" style="box-shadow:none" id="q3">
+          <h3>Quadro 3 — Estoque final, item a item <span class="diz">posição em 16/09/2026 · 1.331 produtos</span></h3>
+          <div class="corpo rolagem">
+            <table class="tabela">
+              <thead><tr><th>Código</th><th>Produto</th><th>Un.</th><th>Categoria</th>
+                <th class="num">Quantidade</th><th class="num">Custo unitário</th>
+                <th class="num">Valor</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">P0525</td><td>PROD PÓ DE CAFÉ 02D45</td><td>KG</td><td>—</td>
+                    <td class="num">99,700</td><td class="num">R$ 40,00</td>
+                    <td class="num">R$ 3.988,00</td></tr>
+                <tr><td class="mono">P0465</td><td>PROD PÓ DE CAFÉ 1A8DE</td><td>KG</td><td>—</td>
+                    <td class="num">99,700</td><td class="num">R$ 40,00</td>
+                    <td class="num">R$ 3.988,00</td></tr>
+                <tr><td class="mono">218</td><td>MANTEIGA SEM SAL</td><td>KG</td><td>Laticínios</td>
+                    <td class="num mau">−2,837</td><td class="num">R$ 63,00</td>
+                    <td class="num mau">−R$ 178,74</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="6">Soma dos 1.331 produtos</td>
+                <td class="num">R$ 220.572,79</td></tr></tfoot>
+            </table>
+          </div>
+          <p class="nota">
+            🔑 <b>Os quadros 1 e 3 FECHAM na casa do centavo</b> com as linhas da apuração — é
+            isso que transforma a tabela em prova. Conferido nesta base: R$ 4.432,00 e
+            R$ 220.572,79, exatamente.
+            ⚠️ Saldo <b>negativo</b> aparece em vermelho: é produto que saiu sem ter entrado, e
+            ele diminui o estoque final — ou seja, <b>aumenta</b> o CMV.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h3>O que muda, em uma linha cada</h3>
+      <div class="corpo">
+        <ul class="prosa" style="margin:0;padding-left:20px">
+          <li><strong>A conta vem na frente</strong>, em cascata, com os cinco números amarrados —
+            hoje eles são ladrilhos soltos e a subtração se faz de cabeça.</li>
+          <li><strong>A confiança do número vem ANTES do número.</strong> Com 28% de cobertura de
+            ficha, a variância de 234,8% mede o cadastro, não a cozinha — e o painel diz isso.</li>
+          <li><strong>"Ver por"</strong> passa a recortar tudo: empresa, loja, prateleira, setor,
+            categoria, grupo do CMV e produto. Empresa deixa de exigir somar de cabeça.</li>
+          <li><strong>Uma aba nova, "Quebra"</strong>, com a mesma conta restrita a cada linha — e
+            a soma fecha com o total, que é o que dá sentido ao corte.</li>
+          <li><strong>O que explica o CMV</strong> ganha tabela própria: 63% deste período é perda
+            e consumo interno, não prato vendido.</li>
+          <li><strong>Gráficos que são leitura, não enfeite</strong>: a cascata, as barras do
+            recorte e a curva acumulada do ABC.</li>
+          <li><strong>Prato sem ficha deixa de mostrar 100% de margem</strong> e passa a dizer que
+            não dá para saber.</li>
+          <li><strong>Imprimir sai limpo</strong> — a mesma correção de grade que a folha da
+            produção já recebeu.</li>
+          <li><strong>A memória de cálculo vira aba</strong>: os quatro quadros que abrem a
+            apuração nos documentos que a compõem — hoje ela só existe em PDF, e a pergunta
+            nasce olhando o painel.</li>
+        </ul>
+      </div>
+      <p class="nota">
+        ⚠️ <b>Os números desta tela são os desta base, de 01/09 a 16/09/2026</b>, lidos das rotas
+        que já existem — apuração, ABC, margem, movimentação e por-grupo. O que falta no servidor é
+        recortar por <b>loja</b> e por <b>prateleira</b>; setor, categoria e grupo já existem.
+      </p>
+    </div>
+  </section>
+</div>
+
+<script>
+  document.querySelectorAll(".segmentado button").forEach((b) => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".segmentado button").forEach((o) =>
+        o.setAttribute("aria-pressed", String(o === b)));
+      document.body.dataset.modo = b.dataset.ver;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  // As abas funcionam de verdade: é o que se está aprovando.
+  document.querySelectorAll('.abas [role="tab"]').forEach((aba) => {
+    aba.addEventListener("click", () => {
+      document.querySelectorAll('.abas [role="tab"]').forEach((o) =>
+        o.setAttribute("aria-selected", String(o === aba)));
+      document.querySelectorAll("[data-painel]").forEach((p) => {
+        p.hidden = p.dataset.painel !== aba.dataset.aba;
+      });
+    });
+  });
+
+  // O recorte troca o título da tabela da Quebra — para o protótipo mostrar que
+  // é UMA tabela que muda de eixo, não sete telas.
+  const rec = document.getElementById("recorte");
+  const titulo = document.getElementById("titulo-recorte");
+  const nomes = { empresa: "empresa", loja: "loja", local: "prateleira", setor: "setor",
+                  categoria: "categoria", grupo: "grupo do CMV", produto: "produto" };
+  rec?.addEventListener("change", () => { titulo.textContent = nomes[rec.value]; });
+</script>
+</body>
+</html>

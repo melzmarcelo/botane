@@ -154,7 +154,68 @@
   ⚠️ Sem escolher o produto, a memória por produto sai com uma frase mandando escolher, e não
   vazia: vazio se lê como "não houve movimento", que é outra coisa.
 
+- **O painel virou SETE ABAS, e a primeira é a conta** (16/09/2026, protótipo aprovado pelo
+  dono: *"alterar para aparecer em Abas as informações, que elas apareçam de forma clara e
+  real, podendo ter a opção de ser pela empresa, por loja, por local de estoque, setor,
+  categoria, produto"*). `A conta` · `Quebra por <eixo>` · `Curva ABC` · `Margem por prato` ·
+  `Movimentação` · `O que subiu de preço` · `Memória de cálculo`. Eram quatro listas empilhadas
+  sob os ladrilhos.
+  - **`cascata.tsx`** desenha `inicial + compras − final = CMV` em SVG à mão, sem biblioteca —
+    cinco retângulos e dez rótulos. ⚠️ **É a MESMA conta da apuração, nada é recalculado ali**:
+    um desenho que somasse por conta própria seria a segunda versão da regra e divergiria na
+    primeira correção. A escala é `max(inicial + compras, receita, cmv)`, senão a barra da
+    receita estoura o quadro. O `aria-label` é a conta em palavras — e é por ele que a bateria
+    prova que o desenho não está vazio.
+  - **`quebra.tsx`** é o antigo "Onde o custo pesa" com **seis eixos** (`loja`, `local`,
+    `setor`, `categoria`, `grupo`, `produto`) em vez de dois, comandado pelo **"Ver por" do
+    alto da tela** — eixo é decisão de RECORTE, da mesma família do período e do escopo, e
+    dentro da aba ficava escondido. O rodapé escreve que **a soma das linhas fecha com o CMV do
+    período**: é essa propriedade que separa o corte de um rateio, e é a primeira coisa que
+    alguém confere ao desconfiar do número. ⚠️ O eixo `produto` traz mais de mil linhas nesta
+    base — cresce em blocos de 60, sem paginar: quem investiga lê de cima para baixo e trocar
+    de página perde o fio.
+  - **`memoria.tsx`** traz para a TELA o documento que só existia em PDF. ⚠️ **O quadro 4 vem
+    PRIMEIRO, ao contrário do papel**: no PDF a ordem é a da conta, na tela é a da dúvida — e a
+    dúvida é sempre *"por que a soma das notas não é a linha Compras?"*. ⚠️ **O corte é das
+    LISTAS, nunca dos totais**: o rodapé soma a tabela inteira e a tela diz quanto está
+    mostrando, porque lista cortada em silêncio se lê como lista completa.
+
+- **A barra de recorte tem QUANDO, ONDE e só então o que fazer** (16/09/2026): período pronto →
+  datas → escopo → ver por → baixar/imprimir. Os botões vinham primeiro, e a pessoa escolhia o
+  que baixar antes de escolher o que estava olhando.
+  🔑 **`escopo=loja|empresa`** (`_lojas_do_escopo`, `_apurar_escopo` em `routers/cmv.py`): a
+  apuração é por LOJA e está certo — quem opera opera numa de cada vez —, mas quem responde
+  pelas duas tinha de trocar de loja no seletor e somar de cabeça. ⚠️ **Empresa é o que o
+  USUÁRIO enxerga**: amplia até o limite da permissão, nunca além dele, e numa casa de uma loja
+  só devolve exatamente a mesma conta. ⚠️ **Percentual não se soma nem se tira média**: food
+  cost e cobertura são REFEITOS dos totais no fim, e é por isso que `receita_com_custo` existe
+  como número em reais — juntar duas lojas exige o numerador.
+
+- **A confiança do número vem ANTES do número** (16/09/2026). Com 29% de cobertura de ficha, a
+  variância de 236% desta base não é notícia sobre a cozinha — é sobre o cadastro: o teórico
+  compara a fatia que tem ficha contra o CMV inteiro. A faixa fica ACIMA dos ladrilhos, não
+  abaixo: quem lê o número já leu.
+  ⚠️ **A variância perdeu o ladrilho e virou a legenda do CMV teórico.** Sozinha ela competia
+  de igual para igual com o CMV real, e ela não é um número: é a RELAÇÃO entre dois. O ladrilho
+  vago virou **Receita**, que faltava. ⚠️ O aviso de variância alta só aparece quando o teórico
+  MERECE confiança (`!pobreDeFicha`): com meia cozinha sem ficha, dizer "saiu 15 mil a mais" é
+  acusar o estoque de um buraco que está no cadastro.
+
+
 ## Armadilhas já pagas
+
+- 🔑 **A cobertura de ficha passava de 100%: numerador bruto contra denominador líquido.**
+  `receita` é LÍQUIDA — a soma dos itens menos o desconto do cupom, e isso é antigo e está
+  certo (receita é o denominador do food cost; inflada, ela faz o food cost parecer melhor do
+  que é). `receita_com_custo`, nova em 16/09/2026, saía da soma **bruta** dos itens com ficha.
+  Numa casa com cobertura alta a tela dizia que a receita com ficha era MAIOR que a receita
+  inteira — `smoke_relatorios` pegou em R$ 2.102,00 contra R$ 2.079,50.
+  ⚠️ **O desconto é do CUPOM, não do item** — não há onde lê-lo por linha. O rateio
+  proporcional ao valor é o único que fecha: a parte com ficha nunca passa do total do cupom,
+  logo a soma nunca passa da receita. Jogar o desconto inteiro no numerador puniria a ficha por
+  um abatimento que é do cupom todo; ignorá-lo é o que estava errado.
+  ⚠️ A checagem antiga (`receita_com_custo <= receita`) só pegou porque a base tinha desconto.
+  Agora há uma segunda, direta sobre o efeito: **a cobertura nunca passa de 100%**.
 
 - 🔑 **Apuração e movimentação NÃO respondem a mesma pergunta, e a diferença dormiu até o
   primeiro grupo fora do CMV existir na base.** `cmv.apuracao` desconta do estoque final os

@@ -3320,9 +3320,42 @@ try {
   const textoCmv = await p.evaluate(() => document.body.innerText);
   checar("painel mostra CMV real e teórico",
     /CMV REAL/i.test(textoCmv) && /CMV TEÓRICO/i.test(textoCmv), textoCmv.slice(0, 80));
-  checar("painel mostra a variância", /VARIÂNCIA/i.test(textoCmv));
+  // ⚠️ **A variância deixou de ser ladrilho** (16/09/2026, protótipo aprovado):
+  // ela é a RELAÇÃO entre o real e o teórico, e virou a legenda do teórico. A
+  // checagem antiga procurava a palavra no texto da página inteira e passaria
+  // por acidente pelo cabeçalho da tabela de períodos fechados — procura agora
+  // o ladrilho, que é onde ela precisa estar.
+  const ladrilhos = await p.evaluate(() =>
+    [...document.querySelectorAll("p.rotulo")].map((x) => ({
+      rotulo: x.textContent?.trim(),
+      resto: [...(x.parentElement?.querySelectorAll("p") ?? [])]
+        .slice(1).map((y) => y.textContent?.trim()).join(" · "),
+    })));
+  const teorico = ladrilhos.find((x) => /CMV teórico/i.test(x.rotulo ?? ""));
+  checar("a variância vem junto do CMV teórico, não solta",
+    /Variância: R\$/i.test(teorico?.resto ?? ""), teorico);
+  checar("e a receita ganhou ladrilho próprio",
+    ladrilhos.some((x) => x.rotulo === "Receita"), ladrilhos.map((x) => x.rotulo));
   checar("painel mostra food cost", /FOOD COST/i.test(textoCmv));
-  checar("curva ABC aparece com classe", /Curva ABC/i.test(textoCmv));
+
+  // 🔑 **As sete abas** (16/09/2026, protótipo aprovado). Eram quatro listas
+  // empilhadas; a primeira agora é A CONTA, desenhada.
+  const abasCmv = await p.evaluate(() =>
+    [...document.querySelectorAll('[role="tab"]')].map((b) => b.textContent?.trim()));
+  for (const esperada of ["A conta", "Curva ABC", "Margem por prato", "Movimentação",
+                          "O que subiu de preço", "Memória de cálculo"]) {
+    checar(`o painel tem a aba "${esperada}"`, abasCmv.includes(esperada), abasCmv);
+  }
+  checar("e a aba da quebra leva o eixo escolhido no nome",
+    abasCmv.some((x) => /^Quebra por /.test(x ?? "")), abasCmv);
+  // A cascata: a conta do CMV desenhada, e não mais montada de cabeça. O
+  // `aria-label` é a mesma conta em palavras — se o desenho sumir, ele some com
+  // ela, e a checagem não passa por um SVG vazio.
+  const cascata = await p.evaluate(() =>
+    document.querySelector('svg[role="img"]')?.getAttribute("aria-label") ?? "");
+  checar("a aba A conta desenha a cascata do CMV",
+    /Estoque inicial .*mais compras .*menos estoque final .*CMV/i.test(cascata),
+    cascata.slice(0, 120));
   await foto(p, "25-cmv-painel");
 
   // Limpeza do cenário.
@@ -4255,11 +4288,11 @@ try {
   // A movimentação por produto: a conta que EXPLICA o CMV, e que fecha o mês
   // junto com ele.
   await irPara(p, `${WEB}/cmv`);
-  await new Promise((r) => setTimeout(r, 1500));
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((x) => x.textContent === "Movimentação do estoque")?.click();
-  });
+  // ⚠️ **O rótulo encurtou de "Movimentação do estoque" para "Movimentação"**
+  // quando os botões viraram abas (16/09/2026): dentro do painel do CMV não há
+  // outra movimentação, e o nome comprido roubava a largura das outras seis.
+  checar("a aba Movimentação abre no painel de CMV",
+    await clicarQuando(p, "Movimentação", { exato: true }));
   await new Promise((r) => setTimeout(r, 1800));
   const mov = await p.evaluate(() => {
     const texto = document.body.innerText;
@@ -4290,21 +4323,119 @@ try {
   checar("com a identidade conferida na própria tela", mov.fecha && !mov.naoFecha, mov);
   await foto(p, "24b-movimentacao");
 
-  console.log("7b. relatórios do dono: onde pesa e o que subiu");
+  console.log("7b. a quebra do CMV, o escopo e o que subiu de preço");
   await irPara(p, `${WEB}/cmv`);
-  await new Promise((r) => setTimeout(r, 1500));
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((x) => /onde pesa/i.test(x.textContent))?.click();
+  await p.waitForFunction(() => /Food cost/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+
+  // 🔑 **"Onde o custo pesa" virou a aba Quebra** (16/09/2026, protótipo
+  // aprovado pelo dono): *"podendo ter a opção de ser pela empresa, por loja,
+  // por local de estoque, setor, categoria, produto"*. Eram dois eixos, dentro
+  // da aba dos relatórios do dono; são seis, comandados pelo "Ver por" do alto.
+  const eixos = await p.evaluate(() => {
+    const r = [...document.querySelectorAll("label")]
+      .find((l) => /Ver por/i.test(l.querySelector("span")?.textContent ?? ""));
+    return [...(r?.querySelectorAll("option") ?? [])].map((o) => o.value);
   });
-  await new Promise((r) => setTimeout(r, 2000));
-  const textoDono = await p.evaluate(() => document.body.innerText);
-  checar("a aba de relatórios do dono abre", /Onde o custo pesa/i.test(textoDono),
-    textoDono.slice(0, 140));
-  checar("explica que a soma dos grupos é o CMV",
-    /soma dos grupos é o CMV/i.test(textoDono));
-  checar("e traz o relatório de preços junto",
-    /O que subiu de preço/i.test(textoDono));
+  for (const x of ["loja", "local", "setor", "categoria", "grupo", "produto"]) {
+    checar(`o "Ver por" oferece o eixo ${x}`, eixos.includes(x), eixos);
+  }
+
+  checar("a aba da quebra abre", await clicarQuando(p, "Quebra por "));
+  await new Promise((r) => setTimeout(r, 1800));
+  const quebra = await p.evaluate(() => document.body.innerText);
+  checar("e diz que não é rateio, e sim a mesma conta restrita",
+    /não é rateio/i.test(quebra), quebra.slice(0, 200));
+  // 🔑 **A prova que dá sentido ao corte**: a soma das linhas FECHA com o CMV do
+  // período. Sem ela a tabela seria uma divisão arbitrária de um total, e
+  // ninguém poderia agir sobre uma linha. A tela escreve isso ao pé; se a soma
+  // furar, o texto muda e a checagem cai — que é exatamente o que se quer.
+  checar("a soma das linhas fecha com o CMV do período",
+    /a soma das linhas fecha com o CMV do período/i.test(quebra)
+      || /Nenhum movimento no período/i.test(quebra),
+    (quebra.match(/a soma das linhas difere[^\n]*/i) || [])[0] ?? "fechou");
+
+  // Trocar o eixo tem de recarregar a tabela E renomear a aba: é a mesma
+  // pergunta feita de outro jeito, e a aba que não acompanha mente sobre o que
+  // está na tela.
+  const trocouEixo = await p.evaluate(() => {
+    const r = [...document.querySelectorAll("label")]
+      .find((l) => /Ver por/i.test(l.querySelector("span")?.textContent ?? ""));
+    const sel = r?.querySelector("select");
+    if (!sel) return false;
+    const nativo = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, "value").set;
+    nativo.call(sel, "categoria");
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  const porCategoria = await p.evaluate(() => document.body.innerText);
+  checar("dá para trocar para categoria",
+    trocouEixo && /CMV por categoria/i.test(porCategoria), porCategoria.slice(0, 200));
+
+  // 🔑 **O ESCOPO** (16/09/2026): a apuração é por LOJA e está certo — quem
+  // opera opera numa de cada vez. Quem responde pelas duas tinha de trocar de
+  // loja no seletor e somar de cabeça.
+  // ⚠️ Empresa é o que o USUÁRIO enxerga: numa casa de uma loja só, os dois
+  // escopos devolvem o MESMO número, e isso está certo. O que se cobra aqui é
+  // que a troca exista e não derrube a apuração.
+  const mexerNoEscopo = (valor) => p.evaluate((v) => {
+    const r = [...document.querySelectorAll("label")]
+      .find((l) => /Escopo/i.test(l.querySelector("span")?.textContent ?? ""));
+    const sel = r?.querySelector("select");
+    if (!sel) return null;
+    const nativo = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, "value").set;
+    nativo.call(sel, v);
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return [...sel.querySelectorAll("option")].map((o) => o.value);
+  }, valor);
+
+  const opcoesEscopo = await mexerNoEscopo("empresa");
+  checar("o recorte oferece esta loja e a empresa inteira",
+    !!opcoesEscopo && opcoesEscopo.includes("loja") && opcoesEscopo.includes("empresa"),
+    opcoesEscopo);
+  await new Promise((r) => setTimeout(r, 2200));
+  checar("e a apuração continua de pé no escopo da empresa",
+    /CMV real/i.test(await p.evaluate(() => document.body.innerText)));
+  // Volta para a loja: as fases seguintes leem esta tela esperando o padrão.
+  await mexerNoEscopo("loja");
+  await new Promise((r) => setTimeout(r, 1500));
+
+  checar("a aba do que subiu de preço abre",
+    await clicarQuando(p, "O que subiu de preço"));
+  await new Promise((r) => setTimeout(r, 1800));
+  checar("e traz o relatório de preços",
+    /O que subiu de preço/i.test(await p.evaluate(() => document.body.innerText)));
+
+  // 🔑 **A memória de cálculo virou ABA** (16/09/2026, protótipo aprovado).
+  // Ela só existia em PDF, e a pergunta *"estes R$ 237 mil de compras, de quais
+  // notas são?"* nasce OLHANDO o painel, não baixando arquivo.
+  // ⚠️ **O quadro 4 vem PRIMEIRO, ao contrário do PDF**: no papel a ordem é a
+  // da conta; na tela, a ordem é a da dúvida — e a dúvida é sempre "por que a
+  // soma das notas não é a linha Compras?".
+  checar("a aba da memória de cálculo abre", await clicarQuando(p, "Memória de cálculo"));
+  await p.waitForFunction(() => /Quadro 4/i.test(document.body.innerText),
+    { timeout: 25000, polling: 300 }).catch(() => {});
+  const mem = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    return {
+      texto,
+      ordem: [...texto.matchAll(/Quadro (\d)/g)].map((m) => m[1]).join(""),
+      metodo: /Método de custeio/i.test(texto),
+      situacao: /Situação do período/i.test(texto),
+    };
+  });
+  checar("a memória abre a apuração nos quatro quadros",
+    ["1", "2", "3", "4"].every((n) => mem.ordem.includes(n)), mem.ordem);
+  checar("e a conciliação vem primeiro, que é a dúvida de quem chega",
+    mem.ordem.startsWith("4"), mem.ordem);
+  checar("com o método de custeio e a situação do período à vista",
+    mem.metodo && mem.situacao, { metodo: mem.metodo, situacao: mem.situacao });
+  checar("e a conciliação explica a diferença entre as notas e a linha Compras",
+    /soma das notas/i.test(mem.texto), mem.texto.slice(0, 200));
+  await foto(p, "36-cmv-quebra-e-memoria");
 
   // O número que a tela mostra tem de ser o mesmo que a API devolve.
   const hojeIso = diaLocal();
@@ -4320,16 +4451,6 @@ try {
   } else {
     checar("as participações somam 100%", true, "sem CMV no período");
   }
-
-  // Trocar de setor para categoria tem de recarregar a tabela.
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((x) => x.textContent.trim() === "por categoria")?.click();
-  });
-  await new Promise((r) => setTimeout(r, 1500));
-  checar("dá para trocar para categoria",
-    /por categoria/i.test(await p.evaluate(() => document.body.innerText)));
-  await foto(p, "36-relatorios-dono");
 
   console.log("8c. FEFO: o lote que vence antes sai antes");
   const marcaLote = String(Date.now()).slice(-6);
@@ -6535,9 +6656,21 @@ try {
   ).catch(() => {});
   // E um respiro para a resposta do servidor pintar a lista: a URL muda quando
   // o debounce escreve, e o pedido sai depois dela.
+  // 🔑 **`every` numa lista VAZIA e verdadeiro, e era esse o defeito da espera**
+  // (16/09/2026). A condicao era so "toda linha tem a marca": com a tabela
+  // ainda vazia ela nascia verdadeira, o `waitForFunction` voltava na hora e a
+  // medicao lia a tela ANTES da resposta chegar. Dai a assinatura que ja tinha
+  // mandado turbinar o diagnostico duas vezes -- `{linhas:0, total:0,
+  // vazio:true}` com a URL correta e os produtos existindo no banco -- e o
+  // "reproduzida isolada, ela passa": na maquina livre a resposta chegava antes
+  // da leitura por sorte de milissegundos.
+  // ⚠️ A espera certa exige **pelo menos uma linha** alem de todas casarem.
   await p.waitForFunction(
-    (marca) => [...document.querySelectorAll("tbody tr")].every(
-      (tr) => (tr.textContent ?? "").includes(marca)),
+    (marca) => {
+      const linhas = [...document.querySelectorAll("tbody tr")];
+      return linhas.length > 0
+        && linhas.every((tr) => (tr.textContent ?? "").includes(marca));
+    },
     { timeout: 20000 },
     `${marcaPag}-0`,
   ).catch(() => {});

@@ -7,28 +7,17 @@ import { Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 import { pct as pctDaCasa } from "@/lib/numeros";
 /**
- * Os dois relatórios que o dono usa para decidir.
+ * O relatório de sentar com o fornecedor.
  *
- * **Onde pesa** responde "a cozinha está pesando mais que o bar?" — a mesma
- * conta do CMV, quebrada por setor ou categoria. A barra é proposital: a
- * participação de cada grupo se lê de relance, o número exato fica ao lado
- * para quem quiser conferir.
+ * Ordena pelo **impacto em reais**, não pelo percentual: 8% num item que entra
+ * toda semana dói mais que 60% no que se compra uma vez por trimestre.
  *
- * **O que subiu** é o relatório de sentar com o fornecedor. Ordena pelo
- * impacto em reais, não pelo percentual: 8% num item que entra toda semana
- * dói mais que 60% no que se compra uma vez por trimestre.
+ * ⚠️ **"Onde o custo pesa" saiu daqui** (16/09/2026, protótipo aprovado pelo
+ * dono). Ele era a mesma conta do CMV quebrada por setor ou categoria, escondido
+ * dentro desta aba e com dois eixos; virou a aba **Quebra**, com seis, comandada
+ * pelo "Ver por" do alto da tela. Manter os dois seria manter duas telas
+ * respondendo à mesma pergunta — e uma delas ficaria para trás.
  */
-
-type Grupo = {
-  grupo: string;
-  estoque_inicial: number;
-  compras: number;
-  estoque_final: number;
-  cmv: number;
-  perdas: number;
-  produtos: number;
-  participacao_pct: number;
-};
 
 type Preco = {
   id_produto: number;
@@ -64,23 +53,15 @@ const pct = (n: number) => `${n > 0 ? "+" : ""}${pctDaCasa(n)}`;
 const dataBr = (d: string) => new Date(d + "T00:00").toLocaleDateString("pt-BR");
 
 export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: string }) {
-  const [agrupar, setAgrupar] = useState<"setor" | "categoria">("setor");
-  const [grupos, setGrupos] = useState<Grupo[] | null>(null);
   const [precos, setPrecos] = useState<Preco[] | null>(null);
   const [aberto, setAberto] = useState<number | null>(null);
   const [serie, setSerie] = useState<Compra[] | null>(null);
 
   const carregar = useCallback(async () => {
-    setGrupos(null);
     setPrecos(null);
-    const janela = `inicio=${inicio}&fim=${fim}`;
-    const [g, p] = await Promise.all([
-      api.get<Grupo[]>(`/cmv/por-grupo?${janela}&agrupar=${agrupar}`).catch(() => []),
-      api.get<Preco[]>(`/cmv/precos?${janela}`).catch(() => []),
-    ]);
-    setGrupos(g);
-    setPrecos(p);
-  }, [inicio, fim, agrupar]);
+    setPrecos(
+      await api.get<Preco[]>(`/cmv/precos?inicio=${inicio}&fim=${fim}`).catch(() => []));
+  }, [inicio, fim]);
 
   useEffect(() => {
     void carregar();
@@ -96,90 +77,8 @@ export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: s
     setSerie(await api.get<Compra[]>(`/cmv/precos/${id}`).catch(() => []));
   }
 
-  const maior = Math.max(1, ...(grupos ?? []).map((g) => Math.abs(Number(g.cmv))));
-
   return (
     <div className="flex flex-col gap-6">
-      <Cartao
-        titulo="Onde o custo pesa"
-        descricao="A mesma conta do CMV, quebrada por grupo. A soma dos grupos é o CMV do período."
-        acao={
-          <div className="flex gap-1">
-            {(["setor", "categoria"] as const).map((x) => (
-              <button
-                key={x}
-                onClick={() => setAgrupar(x)}
-                className={`rotulo px-2 py-1 ${
-                  agrupar === x ? "text-erva" : "text-suave hover:text-tinta"
-                }`}
-              >
-                por {x}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {!grupos ? (
-          <Carregando />
-        ) : !grupos.length ? (
-          <Vazio>Nenhum movimento no período.</Vazio>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Grupo</th>
-                  <th className="num">Estoque inicial</th>
-                  <th className="num">Compras</th>
-                  <th className="num">Estoque final</th>
-                  <th className="num">CMV</th>
-                  <th className="num">Perdas</th>
-                  <th>Participação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grupos.map((g) => (
-                  <tr key={g.grupo}>
-                    <td>
-                      <span className="font-semibold">{g.grupo}</span>
-                      <span className="block text-[12.5px] text-suave">
-                        {g.produtos} produto(s)
-                      </span>
-                    </td>
-                    <td className="num mono text-suave">{reais(Number(g.estoque_inicial))}</td>
-                    <td className="num mono text-suave">{reais(Number(g.compras))}</td>
-                    <td className="num mono text-suave">{reais(Number(g.estoque_final))}</td>
-                    <td className="num mono font-semibold">{reais(Number(g.cmv))}</td>
-                    <td className="num mono">
-                      {Number(g.perdas) > 0 ? (
-                        <span className="text-erro">{reais(Number(g.perdas))}</span>
-                      ) : (
-                        <span className="text-suave">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="flex items-center gap-2">
-                        <span className="h-2 w-full max-w-[120px] rounded bg-superficie2">
-                          <span
-                            className="block h-2 rounded bg-erva"
-                            style={{
-                              width: `${Math.min(100, (Math.abs(Number(g.cmv)) / maior) * 100)}%`,
-                            }}
-                          />
-                        </span>
-                        <span className="mono text-[13px] text-suave">
-                          {Number(g.participacao_pct).toFixed(1).replace(".", ",")}%
-                        </span>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Cartao>
-
       <Cartao
         titulo="O que subiu de preço"
         descricao="Ordenado pelo impacto em reais no volume comprado — não pelo percentual."
