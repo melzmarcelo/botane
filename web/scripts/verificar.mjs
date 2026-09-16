@@ -718,6 +718,57 @@ try {
   checar("o formulário do produto tem o código de barras (EAN/GTIN)", fiscais.ean, fiscais);
   checar("e os campos que vêm do cadastro do Omie",
     fiscais.ncm && fiscais.cest && fiscais.marca && fiscais.peso, fiscais);
+
+  // 🔑 **O cadastro em ABAS** (16/09/2026, protótipo aprovado pelo dono). Eram
+  // nove cartoes empilhados: quem entrava para corrigir o preco rolava por
+  // unidade, estoque, fiscal e fornecedores antes de acha-lo.
+  const abasProduto = await p.evaluate(() => {
+    const abas = [...document.querySelectorAll('[role="tab"]')].map((b) => b.textContent.trim());
+    const visiveis = () => [...document.querySelectorAll("section.cartao")]
+      .filter((c) => c.offsetParent !== null)
+      .map((c) => c.querySelector("h2")?.textContent?.trim() ?? "");
+    return { abas, naPrincipal: visiveis() };
+  });
+  checar("o cadastro do produto abre em abas",
+    ["Principal", "Fornecedores", "Estoque", "Movimentação"].every(
+      (x) => abasProduto.abas.includes(x)), abasProduto.abas);
+  // 🔑 Preco e custo no MESMO bloco, porque a pergunta e uma so: da margem?
+  checar("com preço e custo no mesmo bloco, na Principal",
+    abasProduto.naPrincipal.includes("Valores")
+      && !abasProduto.naPrincipal.includes("Fornecedores"),
+    abasProduto.naPrincipal);
+  // ⚠️ O ativo era uma caixinha no pe do cartao "Observacoes", a nove cartoes de
+  // distancia do nome. Desativar e decisao de CADASTRO.
+  const ativoNaIdentificacao = await p.evaluate(() => {
+    const cartao = [...document.querySelectorAll("section.cartao")]
+      .find((c) => c.querySelector("h2")?.textContent?.trim() === "Identificação");
+    return /Ativo/.test(cartao?.querySelector("header")?.innerText ?? "");
+  });
+  checar("e o interruptor de ativo no bloco de identificação", ativoNaIdentificacao);
+
+  // 🔑 **A aba de MOVIMENTACAO, que nao existia.** Para saber por que o saldo de
+  // um item esta negativo era preciso sair do cadastro, abrir Saldos e
+  // movimentos e achar o produto de novo pela lupa.
+  await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
+    .find((b) => b.textContent.trim() === "Movimentação")?.click());
+  await p.waitForFunction(
+    () => /O razão deste produto|não controla estoque/i.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+  const movProduto = await p.evaluate(() => ({
+    abriu: /O razão deste produto|não controla estoque/i.test(document.body.innerText),
+    // ⚠️ So LEITURA: estornar e reprocessar tem permissao propria e previa antes
+    // do botao, e ficam em Saldos e movimentos.
+    semEstornar: ![...document.querySelectorAll("button")]
+      .some((b) => /estornar|reprocessar/i.test(b.textContent ?? "")),
+    levaParaORazao: [...document.querySelectorAll("a")]
+      .some((a) => /Saldos e movimentos/i.test(a.textContent ?? "")),
+  }));
+  checar("a aba de Movimentação abre o razão do produto", movProduto.abriu, movProduto);
+  checar("só de leitura, com o caminho para quem precisa mexer",
+    movProduto.semEstornar && movProduto.levaParaORazao, movProduto);
+  await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
+    .find((b) => b.textContent.trim() === "Principal")?.click());
+  await new Promise((r) => setTimeout(r, 400));
   checar("sem expor o vínculo interno com o Omie", !fiscais.omie, fiscais);
 
   // O aviso de "criado" ficava no TOPO, e o botão de salvar está no fim de um
@@ -1496,10 +1547,11 @@ try {
     await irPara(p, `${WEB}/fichas/${idFicha}`);
     await new Promise((r) => setTimeout(r, 1200));
 
-    // 🔑 **Os destinos moram no CABECALHO, numa tabela** (13/09/2026, pedido do
-    // dono: "o rendimento e os destinos estao em grupos separados; podem ficar
-    // juntos, onde o destino e o local padrao do produto, e cada local novo
-    // adiciona uma linha igual ao padrao").
+    // 🔑 **Os MODOS de rendimento moram no CABECALHO, numa tabela** (13/09/2026
+    // e 16/09/2026, pedidos do dono: "o rendimento e os destinos estao em grupos
+    // separados; podem ficar juntos" e depois "podemos criar mais modos de
+    // rendimento para diferentes setores, com um nome, e este sera o modo
+    // selecionado ao agendar ou produzir").
     // ⚠️ O que se afirma e o comportamento pedido: a linha nova NASCE IGUAL ao
     // padrao. Conferir que o botao existe nao diz nada sobre isso.
     const { dados: vitrineTela } = await api("POST", "/locais",
@@ -1520,33 +1572,39 @@ try {
         dizPadrao: /padr[ãa]o/i.test(texto),
         avisaDivide: /divide o consumo/i.test(texto),
         botao: [...(cartao?.querySelectorAll("button") ?? [])]
-          .some((b) => /\+ prateleira/i.test(b.textContent ?? "")),
+          .some((b) => /\+ modo/i.test(b.textContent ?? "")),
       };
     });
-    checar("o rendimento e os destinos ficam no MESMO cartão do cabeçalho",
+    checar("o rendimento e os modos ficam no MESMO cartão do cabeçalho",
       tabelaRend.noCabecalho && tabelaRend.dizPadrao, tabelaRend);
-    checar("com o caminho para acrescentar uma prateleira, e o aviso do consumo",
+    checar("com o caminho para acrescentar um modo, e o aviso do consumo",
       tabelaRend.botao && tabelaRend.avisaDivide, tabelaRend);
 
     // 🔑 A linha nova NASCE IGUAL ao padrao — e o coracao do pedido.
     const rendPadrao = await p.evaluate(() =>
       document.querySelector('input[aria-label="Rendimento da receita"]')?.value ?? "");
     await p.evaluate(() => [...document.querySelectorAll("button")]
-      .find((b) => /\+ prateleira/i.test(b.textContent ?? ""))?.click());
+      .find((b) => /\+ modo/i.test(b.textContent ?? ""))?.click());
     await new Promise((r) => setTimeout(r, 500));
     const nascida = await p.evaluate(() => ({
       rendimento:
-        document.querySelector('input[aria-label="rendimento do destino 1"]')?.value ?? null,
-      porcoes: document.querySelector('input[aria-label="porções do destino 1"]')?.value ?? null,
-      temSeletor: !!document.querySelector('select[aria-label="prateleira do destino 1"]'),
+        document.querySelector('input[aria-label="rendimento do modo 1"]')?.value ?? null,
+      porcoes: document.querySelector('input[aria-label="porções do modo 1"]')?.value ?? null,
+      temNome: !!document.querySelector('input[aria-label="nome do modo 1"]'),
+      temSeletor: !!document.querySelector('select[aria-label="onde vale o modo 1"]'),
     }));
-    checar("a prateleira nova nasce com o rendimento do padrão",
-      nascida.temSeletor && nascida.rendimento === rendPadrao, { rendPadrao, ...nascida });
+    // 🔑 O NOME e o que a cozinha escolhe na hora de produzir — sem ele o modo
+    // nao existe para quem produz, so para o banco.
+    checar("o modo novo nasce com nome e com o rendimento do padrão",
+      nascida.temNome && nascida.temSeletor && nascida.rendimento === rendPadrao,
+      { rendPadrao, ...nascida });
 
-    // Escolhe a vitrine, muda o rendimento e salva JUNTO com a ficha.
-    const selDestino = await p.$('select[aria-label="prateleira do destino 1"]');
-    await selDestino.select(String(vitrineTela.id));
-    const campoRendDestino = await p.$('input[aria-label="rendimento do destino 1"]');
+    // Batiza o modo, aponta para a vitrine, muda o rendimento e salva JUNTO.
+    const campoNomeModo = await p.$('input[aria-label="nome do modo 1"]');
+    await campoNomeModo.type("Vitrine");
+    const selDestino = await p.$('select[aria-label="onde vale o modo 1"]');
+    await selDestino.select(`l:${vitrineTela.id}`);
+    const campoRendDestino = await p.$('input[aria-label="rendimento do modo 1"]');
     await campoRendDestino.click();
     await p.keyboard.down("Control");
     await p.keyboard.press("KeyA");
@@ -1560,14 +1618,15 @@ try {
     const { dados: fichaComDestino } = await api("GET", `/fichas/${idFicha}`, null, token);
     // ⚠️ Salvar a ficha grava os destinos na MESMA acao: era um cartao com botao
     // proprio, e uma mudanca so exigia salvar duas vezes.
-    checar("salvar a ficha grava os destinos junto",
-      (fichaComDestino?.locais ?? []).some(
-        (l) => l.id_local === vitrineTela.id && Math.abs(Number(l.rendimento_qtd) - 1) < 0.01),
-      fichaComDestino?.locais);
-    await foto(p, "17c-rendimento-por-destino");
-    // Tira o destino: o resto do roteiro produz este bolo e conta com o
-    // rendimento da ficha.
-    await api("PUT", `/fichas/${idFicha}/locais`, { itens: [] }, token);
+    checar("salvar a ficha grava os modos junto",
+      (fichaComDestino?.modos ?? []).some(
+        (m) => m.nome === "Vitrine" && m.id_local === vitrineTela.id
+          && Math.abs(Number(m.rendimento_qtd) - 1) < 0.01),
+      fichaComDestino?.modos);
+    await foto(p, "17c-modos-de-rendimento");
+    // Tira o modo: o resto do roteiro produz este bolo e conta com o rendimento
+    // da ficha.
+    await api("PUT", `/fichas/${idFicha}/modos`, { itens: [] }, token);
 
     // A prateleira de destino ao PROGRAMAR — a agenda guardava o campo desde o
     // comeco e a tela nunca o mandava.
@@ -1941,8 +2000,11 @@ try {
       () => /provis[óo]rio/i.test(document.body.innerText), { timeout: 15000 },
     ).catch(() => {});
     const custoProv = await p.evaluate(() => {
+      // ⚠️ O custo deixou de ter cartao proprio (16/09/2026, cadastro em abas):
+      // ele e METADE de "Valores", ao lado do preco, porque a pergunta e uma so
+      // — da margem?
       const cartao = [...document.querySelectorAll("section.cartao")]
-        .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+        .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Valores");
       const texto = cartao?.innerText ?? "";
       return {
         temCartao: !!cartao,
@@ -2225,6 +2287,13 @@ try {
   aoTerminar.push(() => api("DELETE", `/produtos/${insFicha.id}`, null, token));
   const { dados: novaFicha } = await api("POST", "/fichas", {
     id_produto: prodFicha.id, rendimento_qtd: 1, rendimento_um: "UN", porcoes: 1,
+    // 🔑 **Com MODO DE PREPARO**, porque a folha da producao passou a leva-lo
+    // (16/09/2026, pedido do dono: "quem vai ver esta tela precisa saber as
+    // quantidades e o modo de preparo, e nao os custos"). Sem ele aqui, a
+    // checagem da folha passaria sem provar nada.
+    modo_preparo: "1. Misturar tudo.\n2. Levar ao forno por 20 min.",
+    alergenos: "gluten",
+    tempo_preparo_min: 20,
     itens: [{ id_insumo: insFicha.id, qtd_bruta: 0.2, um: "KG" }],
   }, token);
   await api("POST", `/fichas/${novaFicha.id}/homologar`, null, token);
@@ -2293,11 +2362,70 @@ try {
           cab.includes(c)),
         rende: /A receita rende/i.test(document.body.innerText),
         falta: /tem tudo|item\(ns\) faltando/i.test(document.body.innerText),
+        // 🔑 **A folha e da COZINHA** (16/09/2026, pedido do dono: "quem vai ver
+        // esta tela precisa saber as quantidades e o modo de preparo, e nao os
+        // custos; disponibilizar a impressao desta tela, para que seja passada
+        // para a producao").
+        semColunaCusto: !cab.includes("Custo"),
+        preparo: /Como se faz/i.test(document.body.innerText)
+          && /Levar ao forno/i.test(document.body.innerText),
+        alergenos: /Alérgenos/i.test(document.body.innerText),
+        quanto: /Produzir\s+\d/i.test(document.body.innerText),
+        imprimir: [...document.querySelectorAll("button")]
+          .some((b) => /Imprimir a folha/i.test(b.textContent ?? "")),
+        // 🔑 **A coluna do que REALMENTE foi usado** (16/09/2026, pedido do dono:
+        // "na receita vao 5 ovos, mas por um acaso usei 6"). Em branco e a
+        // receita; o que a pessoa escrever e o que sai do estoque.
+        usei: cab.includes("Usei"),
+        campoUsei: document.querySelectorAll('input[aria-label^="usado de"]').length,
+        // ⚠️ A largura mora no INVOLUCRO: `.campo` tem `width:100%` sem camada e
+        // ganha de uma utilitaria `w-[92px]` na cascata — o campo esticava para
+        // a largura da celula e a coluna virava a mais larga da tabela.
+        larguraUsei: Math.round(
+          document.querySelector('input[aria-label^="usado de"]')
+            ?.getBoundingClientRect().width ?? 0),
       };
     });
     checar("com quantidade por unidade e total", folha.colunas, folha);
     checar("dizendo quantas vezes a receita é feita", folha.rende, folha);
     checar("e se tem tudo ou o que falta", folha.falta, folha);
+    checar("o QUANTO produzir vem em destaque", folha.quanto, folha);
+    // ⚠️ O custo saiu da tabela: ele disputava a leitura com as quantidades, e
+    // quem esta na bancada nao decide nada com ele.
+    checar("e o custo NÃO disputa a tabela com as quantidades", folha.semColunaCusto, folha);
+    checar("o modo de preparo está na folha, com os alérgenos",
+      folha.preparo && folha.alergenos, folha);
+    checar("e a folha se imprime", folha.imprimir, folha);
+    checar("a lista tem a coluna do que foi realmente usado",
+      folha.usei && folha.campoUsei > 0, folha);
+    checar("e o campo dela é estreito, não a coluna inteira",
+      folha.larguraUsei > 0 && folha.larguraUsei < 140, folha);
+
+    // 🔑 **O que vai para o PAPEL**: sem menu, sem botões, sem custo — e com a
+    // tabela INTEIRA. ⚠️ O esqueleto é uma grade de duas colunas; esconder o
+    // menu não tira a coluna dele, e o conteúdo saía espremido em 276px com as
+    // colunas da direita cortadas. No papel não há barra de rolagem para
+    // denunciar o corte.
+    await p.emulateMediaType("print");
+    await new Promise((r) => setTimeout(r, 300));
+    const papel = await p.evaluate(() => {
+      const tabela = document.querySelector("table");
+      const largura = tabela ? tabela.getBoundingClientRect().width : 0;
+      return {
+        semMenu: !/Buscar tela/i.test(document.body.innerText),
+        semCusto: !/custo desta produção/i.test(document.body.innerText),
+        comPreparo: /Como se faz/i.test(document.body.innerText),
+        // A prova de que a grade foi desfeita: a tabela ocupa a folha, não a
+        // faixa do menu.
+        larguraTabela: Math.round(largura),
+        janela: document.documentElement.clientWidth,
+      };
+    });
+    checar("no papel não vai o menu nem o custo", papel.semMenu && papel.semCusto, papel);
+    checar("mas vai o modo de preparo", papel.comPreparo, papel);
+    checar("e a tabela ocupa a folha inteira, sem coluna cortada",
+      papel.larguraTabela > papel.janela * 0.7, papel);
+    await p.emulateMediaType(null);
     await foto(p, "19d-folha-producao");
     // Volta para a agenda: as checagens seguintes são de lá, e ficar na folha
     // faria a próxima medir o campo errado (aqui o rótulo é "Quantidade").
@@ -3130,7 +3258,8 @@ try {
       (mx, x) => (!mx || x.fim > mx ? x.fim : mx), null);
     const base = new Date(ultimo ? `${ultimo}T12:00:00` : Date.now());
     if (ultimo) base.setDate(base.getDate() + 1);
-    const dia = (d) => d.toISOString().slice(0, 10);
+    // ⚠️ Local, nao UTC — ver a nota do `diaLocal` no topo do arquivo.
+    const dia = (d) => d.toLocaleDateString("sv-SE");
     const fim = new Date(base);
     fim.setDate(fim.getDate() + 29);
     const novo = await api("POST", "/consumo/periodos", {
@@ -3631,6 +3760,14 @@ try {
     "POST", "/locais", { nome: `Canto criacao ${mNovo}`, tipo: "SECO" }, token);
 
   await irPara(p, `${WEB}/produtos/novo`);
+  // 🔑 **Em produto NOVO a aba de Estoque continua existindo.** Fornecedor e
+  // movimento apontam para um id que ainda nao ha — a prateleira nao: e ali,
+  // cadastrando, que a pessoa decide onde o produto vai morar.
+  await p.waitForFunction(
+    () => [...document.querySelectorAll('[role="tab"]')]
+      .some((b) => b.textContent.trim() === "Estoque"), { timeout: 15000 }).catch(() => {});
+  await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
+    .find((b) => b.textContent.trim() === "Estoque")?.click());
   await p.waitForSelector("#local-a-acrescentar", { timeout: 15000 });
   checar("a tela de criar produto ja tem o cartao das prateleiras", true);
   const textoNovo = await textoVisivel(p);
@@ -3748,6 +3885,11 @@ try {
   ).then(() => true).catch(() => false);
   checar("salvar releu o produto do servidor, sem F5", releu, nomeMinusculo);
 
+  // ⚠️ **As prateleiras moraram para a aba Estoque** (16/09/2026). A tela e a
+  // mesma; o que mudou e que agora ha uma aba entre ela e quem olha.
+  await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')]
+    .find((b) => b.textContent.trim() === "Estoque")?.click());
+  await new Promise((r) => setTimeout(r, 600));
   const textoLoc = await textoVisivel(p);
   checar("a tela do produto diz em que prateleiras ele está",
     /Onde este produto fica/i.test(textoLoc), textoLoc.slice(0, 160));
@@ -3790,7 +3932,7 @@ try {
   // de referencia responde pela cascata sem aparecer em lugar nenhum.
   const custoNaTela = await p.evaluate(() => {
     const cartao = [...document.querySelectorAll("section.cartao")]
-      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Valores");
     return {
       temCartao: !!cartao,
       // ⚠️ A ORIGEM vem junto do valor: "R$ 20,03" sem dizer se e o que a casa
@@ -3808,7 +3950,7 @@ try {
 
   await p.evaluate(() => {
     const cartao = [...document.querySelectorAll("section.cartao")]
-      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Custo");
+      .find((c) => (c.querySelector("h2")?.textContent ?? "").trim() === "Valores");
     [...(cartao?.querySelectorAll("button") ?? [])]
       .find((b) => b.textContent?.trim() === "Histórico")?.click();
   });
@@ -5559,8 +5701,15 @@ try {
   // ⚠️ **Espera pela RESPOSTA, não por um tempo fixo.** Contra a conta real a
   // varredura leva ~17 s (1.987 produtos em 10 páginas); um `setTimeout` de três
   // segundos reprovava a checagem por impaciência, não por defeito.
+  // ⚠️ **E o orçamento subiu de 30 s para 90** (16/09/2026): 17 s é a medida com
+  // a máquina LIVRE, e esta fase roda no meio da bateria, com a API atendendo
+  // tudo o mais. Com 30 s a checagem caía por contenção — e levava junto as
+  // três seguintes, porque enquanto a conferência roda a tela fica `ocupado` e
+  // os botões ficam DESABILITADOS: `clicarQuando` os pula, e a falha aparecia
+  // como "o botão do custo inicial não está na tela".
+  // 🔑 É o mesmo número que a prévia do custo já usava, pela mesma razão.
   let conf = "";
-  for (let tentativa = 0; tentativa < 30; tentativa++) {
+  for (let tentativa = 0; tentativa < 90; tentativa++) {
     await new Promise((r) => setTimeout(r, 1000));
     conf = await textoVisivel(p);
     if (/produto\(s\) conferido|Nenhum produto com c[óo]digo do Omie|Falha na confer/i.test(conf)) {
@@ -5582,7 +5731,7 @@ try {
   // entra na conta valendo ZERO e o food cost sai bom demais, calado.
   // ⚠️ A tela tem de DIZER que e referencia e nao movimento — quem clica sem
   // isso espera ver o estoque encher, e nada no saldo vai mudar.
-  const clicouCusto = await clicarQuando(p, "Trazer o custo inicial");
+  const clicouCusto = await clicarQuando(p, "Trazer o custo inicial", { limite: 40000 });
   // 🔑 **Afirmar o CLIQUE separa as duas causas.** Sem esta linha, "a previa nao
   // respondeu" tanto pode ser o endpoint lento quanto o botao que nunca foi
   // clicado — e as tres checagens seguintes caem juntas dizendo a coisa errada.
@@ -7984,11 +8133,18 @@ try {
   // primeiro degrau novo, e a tela passaria a oferecer horario que o servidor
   // recusa.
   // Monta um sabado limpo com uma mesa so, para a regra ficar observavel.
+  // ⚠️ **`toISOString()` devolve UTC, e isso quebrava a fase depois das 21h.**
+  // O laco achava o SABADO local e o `toISOString` o escrevia como DOMINGO
+  // (21:00 BRT = 00:00 UTC do dia seguinte). A configuracao abria so o sabado,
+  // a agenda pedia o domingo, e o servidor respondia "a casa nao atende neste
+  // dia da semana" — com a falha aparecendo como "a tela nao oferece marcar
+  // reserva", a seis checagens da causa. E a MESMA armadilha que o `diaLocal`
+  // la de cima existe para evitar; esta linha era a que faltava converter.
   const sabado = (() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return d.toLocaleDateString("sv-SE");
   })();
   const { dados: cfgAgenda } = await api("GET", "/reservas/configuracao", null, token);
   await api("PUT", "/reservas/configuracao", {
@@ -8049,8 +8205,19 @@ try {
     [...document.querySelectorAll("button")]
       .find((b) => b.getAttribute("aria-label") === "horário 12:00")?.click();
   });
+  // ⚠️ **Espera o campo EXISTIR antes de digitar.** O formulario da reserva so
+  // nasce depois do clique no horario, e a funcao ia direto ao `p.$()`: numa
+  // maquina ocupada ele voltava nulo e a suite MORRIA no `campo.type`, levando
+  // junto o relatorio das 770 checagens ja feitas. E a mesma licao das esperas
+  // por conteudo la de cima, paga de novo — aqui com o processo inteiro.
   const escrever = async (rotulo, texto) => {
-    const campo = await p.$(`input[aria-label="${rotulo}"]`);
+    const campo = await p
+      .waitForSelector(`input[aria-label="${rotulo}"]`, { timeout: 15000 })
+      .catch(() => null);
+    if (!campo) {
+      checar(`o campo "${rotulo}" aparece`, false, "nao renderizou em 15s");
+      return;
+    }
     await campo.type(texto);
   };
   await escrever("nome de quem reserva", `Familia ${marcaNota}`);

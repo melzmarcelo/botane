@@ -567,3 +567,24 @@
   tela inteira é a conferência (itens, custos e destinos à vista) e um diálogo no caminho
   comum treina a clicar sem ler. Cancelar linha da agenda também não: é plano, não é razão.
   Cada diálogo diz **o que a ação faz**, não só "tem certeza".
+
+- 🔑 **Imprimir a tela é um recurso de verdade, e o esqueleto atrapalhava** (16/09/2026). O
+  padrão da casa é `window.print()` num botão marcado `nao-imprimir`, e `@media print` em
+  `globals.css` some com menu, botões e o que for marcado. Só que o esqueleto do app é
+  `lg:grid-cols-[276px_minmax(0,1fr)]`: **esconder o `aside` não tira a coluna dele**, e o
+  conteúdo ia parar na faixa de 276px com as colunas da direita cortadas. Descoberto ao imprimir
+  a folha da produção, onde sumia justamente a coluna "Total" — e **o papel não denuncia o corte
+  como a tela denuncia, com a barra de rolagem**. A regra passou a desfazer a grade
+  (`.esqueleto { display: block }`), soltar o `max-width` do miolo e tornar `.overflow-x-auto`
+  visível.
+  ⚠️ **`break-inside: avoid` no cartão inteiro é armadilha**: empurra lista longa para a página
+  seguinte e corta quando ela não cabe em nenhuma. A unidade que não se parte é a LINHA
+  (`.tabela tr`).
+  ⚠️ **O que é dinheiro fica fora do papel quando a folha circula.** A da produção é passada de
+  mão em mão na cozinha: o custo continua na tela, para quem tem a permissão, e sai da impressão.
+
+- ⚠️ **`.campo` tem `width: 100%` FORA de camada, e ganha da utilitária do Tailwind.** Um
+  `className="campo w-[92px]"` não estreita coisa nenhuma: medido, o campo ficou com os 326px da
+  célula e a coluna virou a mais larga da tabela. A largura mora no **invólucro**
+  (`<span className="block w-[96px]"><input className="campo …" /></span>`), que resolve pela
+  cascata em vez de brigar com ela. ⚠️ O mesmo vale para `<select className="campo">`.

@@ -201,6 +201,19 @@
   dele). O sistema já sabe distinguir isso de "não configurado" — `segredos.ilegivel()` —, então
   a tela diz o que houve em vez de mandar redigitar achando que foi erro de digitação.
 
+- ⚠️ **A bateria de TELA bate na conta real do Omie quando o modo é `real`** (16/09/2026). A
+  credencial voltou a estar configurada, e com ela `GET /omie/conferencia` e
+  `/omie/custos-iniciais/previa` levam **~17 s cada** contra a conta do cliente — medido com a
+  máquina livre. A fase de Integrações dava 30 s à conferência e caía por contenção; e a falha se
+  espalhava, porque enquanto ela roda a tela fica `ocupado` e os botões ficam **desabilitados**,
+  então o clique seguinte não acontece e o sintoma vira "o botão do custo inicial não está na
+  tela". O orçamento subiu para 90 s, que é o que a prévia do custo já usava.
+  🔑 **Para rodar a bateria, o modo `simulado` é o certo**: os mesmos endpoints respondem em
+  0,0 s sobre as fixtures, e as duas rotas passam pelo mesmo código. Trocar o modo **preserva a
+  credencial** (`app_key`/`app_secret` em branco mantêm o que está guardado), então voltar ao real
+  é um clique — não é a perda documentada acima.
+  ⚠️ E não é só tempo: cada rodada consumia cota da conta do cliente.
+
 ## Armadilhas já pagas
 
 - 🔑 **A sessão caía no meio do uso, e a causa era o refresh ROTATIVO sem trava no cliente.**

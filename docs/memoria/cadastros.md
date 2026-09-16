@@ -909,6 +909,39 @@
   quiser o número certo corrige o fator ANTES de trocar; a prévia da tela mostra o resultado
   enquanto se digita, e é ela que denuncia o 1 que ninguém escolheu.
 
+- 🔑 **A tela do produto virou QUATRO ABAS** (16/09/2026, protótipo aprovado pelo dono:
+  *"poderia ter algumas abas — as informações principais em uma, fornecedores, estoque; na
+  principal podemos agrupar os valores, ter o preço de venda e custo em um bloco, o produto ativo
+  poderia ter a flag no bloco de identificação; criar uma nova aba de movimentação"*). Eram **nove
+  cartões empilhados** numa página só: quem entrava para corrigir o preço rolava por unidade,
+  estoque, fiscal e fornecedores antes de achá-lo.
+  🔑 **A régua da divisão é a PERGUNTA que trouxe a pessoa**, não a camada do dado: quem vem
+  arrumar o cadastro fica na Principal, quem vem negociar fica em Fornecedores, quem vem conferir
+  prateleira fica em Estoque, quem vem investigar um saldo vai à Movimentação.
+  ⚠️ **Os painéis usam `hidden`, não montagem condicional.** O formulário é UM e salva de uma vez:
+  desmontar o painel faria o que está fora da aba ativa sumir do envio — e o produto perderia
+  campos ao salvar, calado.
+  ⚠️ **Em produto NOVO só existe a Principal**: fornecedor, prateleira e movimento apontam para um
+  produto que ainda não tem id.
+  🔑 **Preço e custo no mesmo bloco ("Valores"), porque a pergunta é uma só**: dá margem? O preço
+  morava dentro de "Unidade e conversão" e o custo vinha depois do cartão de estoque, com outro no
+  meio. ⚠️ E nenhum dos dois tem cartão próprio lá dentro — cartão dentro de cartão faz o olho ler
+  dois blocos onde há um.
+  🔑 **O interruptor de ATIVO foi para o cabeçalho da Identificação.** Era uma caixinha no pé do
+  cartão "Observações", a nove cartões de distância do nome — e desativar é decisão de cadastro, a
+  primeira coisa que se procura quando um item sai de linha.
+  ⚠️ **EAN, NCM, CEST, marca e pesos saíram do cartão "Estoque"** e viraram "Códigos e medidas":
+  eles identificam o produto e não dizem nada sobre prateleira. Os seis interruptores de natureza
+  também saíram de lá, pela mesma razão — só um deles fala de estoque.
+  🔑 **A aba de MOVIMENTAÇÃO é nova e é SÓ LEITURA.** Para saber por que o saldo de um item está
+  negativo era preciso sair do cadastro, abrir Saldos e movimentos e achar o produto de novo pela
+  lupa. Estornar e reprocessar continuam lá, que é a tela com a permissão certa
+  (`estoque.custo`) e com a prévia antes do botão; o link ao pé leva para lá **já filtrado no
+  produto** — Saldos e movimentos passou a aceitar `aba` e `id_produto` pela URL, com o `produto`
+  junto porque o `FiltroCadastro` fixa `{id, rotulo}` e só o id deixaria a etiqueta sem nome.
+  ⚠️ O razão **só é buscado quando a aba abre**: é a tabela que mais cresce da casa, e carregá-la
+  junto com o cadastro faria toda visita ao produto pagar por uma consulta que quase ninguém pediu.
+
 - 🔑 **Trocar de UN para KG declarando a compra na MESMA tela** (15/09/2026, dois relatos do
   dono, pelo produto 218 — *"MANTEIGA SEM SAL - 5KG: quero estoque em KG e compra PCT com
   conversão de 5, mas aparece 'Não dá para converter de UN para KG'"* — e pelo 745, *"UN de

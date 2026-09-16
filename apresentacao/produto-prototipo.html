@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadastro de produto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  /* As cores e as fontes são as REAIS do sistema (web/app/globals.css): o que se
+     aprova aqui é o que sai na tela, não um desenho parecido. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3;
+    --superficie: #fcfdfa;
+    --superficie2: #edf0e7;
+    --tinta: #14201a;
+    --suave: #5d6c61;
+    --linha: #d8ded0;
+    --linha2: #748069;
+    --erva: #2c6a4a;
+    --erva-claro: #e3efe7;
+    --latao: #7d5a1c;
+    --alerta: #8a5d12;
+    --alerta-claro: #f6ecd9;
+    --erro: #95332a;
+    --erro-claro: #f7e7e4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font-family: var(--leitura); font-size: 16px; -webkit-font-smoothing: antialiased;
+  }
+  .folha { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; }
+  h1, h2, h3 { font-family: var(--display); }
+  .rotulo-secao {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--suave); margin: 0;
+  }
+  .titulo { font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -.02em; margin: 6px 0 0; }
+  @media (max-width: 640px) { .titulo { font-size: 26px; } }
+  .prosa { font-family: var(--corpo); font-size: 1.03em; line-height: 1.55; color: var(--suave); max-width: 66ch; }
+  .prosa strong { color: var(--tinta); font-weight: 500; }
+
+  /* ---------- interruptor hoje / proposto ---------- */
+  .comandos {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 24px;
+    position: sticky; top: 0; z-index: 20; padding-block: 12px;
+    background: linear-gradient(var(--papel) 72%, transparent);
+  }
+  .segmentado {
+    display: inline-flex; gap: 3px; padding: 3px;
+    background: var(--superficie2); border: 1px solid var(--linha); border-radius: 12px;
+  }
+  .segmentado button {
+    border: 0; background: transparent; color: var(--suave); cursor: pointer;
+    font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    padding: 8px 16px; border-radius: 9px; min-height: 36px;
+  }
+  .segmentado button[aria-pressed="true"] {
+    background: var(--superficie); color: var(--erva);
+    box-shadow: 0 1px 2px rgba(20,32,26,.10), 0 1px 1px rgba(20,32,26,.06);
+  }
+  .dica-topo { font-size: 13px; color: var(--suave); }
+
+  /* ---------- estrutura ---------- */
+  .secao { margin-top: 44px; }
+  .secao > h2 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 4px; }
+  .cartao {
+    background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px;
+    padding: 20px; margin-top: 14px;
+    box-shadow: 0 1px 2px rgba(20,32,26,.04), 0 10px 28px -18px rgba(20,32,26,.22);
+  }
+  .cartao > h3 {
+    font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; margin: 0;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .cartao > h3 .diz { font-family: var(--leitura); font-size: 12.5px; font-weight: 400; color: var(--suave); }
+  .corpo-cartao { margin-top: 14px; }
+  .nota {
+    font-family: var(--corpo); font-size: 14.5px; line-height: 1.5; color: var(--suave);
+    margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--linha);
+  }
+  .nota b { color: var(--tinta); font-weight: 500; }
+  .nota + .nota { border-top: 0; padding-top: 0; margin-top: 8px; }
+
+  body[data-modo="hoje"] .so-proposto { display: none; }
+  body[data-modo="proposto"] .so-hoje { display: none; }
+
+  /* ---------- peças de formulário ---------- */
+  .grade { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .grade-2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .campo-caixa label { display: block; }
+  .rot {
+    display: block; font-family: var(--display); font-size: 13.5px; font-weight: 600;
+    letter-spacing: -.005em; color: var(--tinta);
+  }
+  .dica { display: block; margin-top: 5px; font-size: 12.5px; color: var(--suave); }
+  .campo {
+    width: 100%; border: 1px solid var(--linha2); border-radius: 10px;
+    background: var(--superficie); padding: 10px 12px; font-size: 15px;
+    color: var(--tinta); font-family: var(--display); margin-top: 6px;
+  }
+  .campo.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .campo:disabled { background: var(--superficie2); color: var(--suave); }
+  .larg-p { max-width: 150px; }
+  .com-prefixo { display: flex; align-items: stretch; margin-top: 6px; }
+  .com-prefixo .prefixo {
+    display: grid; place-items: center; padding: 0 11px;
+    border: 1px solid var(--linha2); border-right: 0; border-radius: 10px 0 0 10px;
+    background: var(--superficie2); color: var(--suave);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .com-prefixo .campo { margin: 0; border-radius: 0 10px 10px 0; }
+
+  /* ---------- abas ---------- */
+  .abas {
+    display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--linha);
+    margin-top: 18px;
+  }
+  .abas button {
+    border: 0; background: transparent; cursor: pointer; color: var(--suave);
+    font-family: var(--display); font-size: 14.5px; font-weight: 600;
+    padding: 10px 16px 11px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .abas button[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--erva); }
+  .abas .conta {
+    font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 999px;
+    background: var(--superficie2); color: var(--suave);
+  }
+  .painel[hidden] { display: none; }
+
+  /* ---------- interruptor do ativo ---------- */
+  .chave { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
+  .chave input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .chave .trilho {
+    width: 42px; height: 24px; border-radius: 999px; background: var(--linha);
+    position: relative; transition: background .15s;
+  }
+  .chave .trilho::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 50%; background: var(--superficie); transition: transform .15s;
+    box-shadow: 0 1px 2px rgba(20,32,26,.3);
+  }
+  .chave input:checked + .trilho { background: var(--erva); }
+  .chave input:checked + .trilho::after { transform: translateX(18px); }
+  .chave input:focus-visible + .trilho { outline: 2px solid var(--erva); outline-offset: 2px; }
+  .chave .texto { font-family: var(--display); font-size: 13.5px; font-weight: 600; }
+
+  /* ---------- etiquetas, avisos, tabelas ---------- */
+  .etiqueta {
+    display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--linha2);
+    border-radius: 999px; padding: 2px 9px; font-family: var(--mono); font-size: 11.5px;
+    color: var(--suave); background: var(--superficie);
+  }
+  .etiqueta.erva { border-color: var(--erva); color: var(--erva); background: var(--erva-claro); }
+  .etiqueta.alerta { border-color: var(--alerta); color: var(--alerta); background: var(--alerta-claro); }
+  .tabela { width: 100%; border-collapse: collapse; }
+  .tabela th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--suave); font-weight: 500;
+    padding: 8px 12px; background: var(--superficie2); white-space: nowrap;
+  }
+  .tabela td { padding: 9px 12px; border-top: 1px solid var(--linha); font-size: 14px; }
+  .tabela .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .rolagem { overflow-x: auto; }
+
+  /* ---------- o bloco de valores ---------- */
+  .valores { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .valor-caixa { border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px; }
+  .valor-caixa .titulo-valor {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--suave);
+  }
+  .valor-caixa .numero {
+    font-family: var(--mono); font-size: 24px; font-weight: 500; margin-top: 4px;
+    display: block; letter-spacing: -.02em;
+  }
+  .valor-caixa .de-onde { display: block; margin-top: 3px; font-size: 12.5px; color: var(--suave); }
+  .valor-caixa.destaque { border-color: var(--erva); background: var(--erva-claro); }
+  .valor-caixa.destaque .numero { color: var(--erva); }
+  .margem { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; font-size: 13.5px; color: var(--suave); }
+  .margem b { font-family: var(--mono); color: var(--tinta); font-weight: 500; }
+
+  /* ---------- a pilha de HOJE ---------- */
+  .pilha-hoje .cartao { margin-top: 12px; }
+  .fita {
+    display: flex; align-items: center; gap: 8px; margin-top: 18px;
+    font-size: 12.5px; color: var(--suave); font-family: var(--mono);
+  }
+  .fita::before, .fita::after { content: ""; height: 1px; background: var(--linha); flex: 1; }
+
+  .lista-natureza { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px;
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .lista-natureza li { display: flex; gap: 10px; align-items: flex-start;
+                       border: 1px solid var(--linha); border-radius: 10px; padding: 11px 13px; }
+  .lista-natureza .nome { display: block; font-size: 14px; font-weight: 600; }
+  .lista-natureza .explica { display: block; margin-top: 2px; font-size: 12.5px; color: var(--suave); line-height: 1.4; }
+  .lista-natureza input { margin-top: 3px; accent-color: var(--erva); width: 16px; height: 16px; }
+
+  .marca-nova {
+    display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--latao); background: var(--alerta-claro); border: 1px solid var(--alerta);
+    border-radius: 999px; padding: 1px 8px;
+  }
+</style>
+</head>
+<body data-modo="proposto">
+<div class="folha">
+
+  <p class="rotulo-secao">Botané · protótipo</p>
+  <h1 class="titulo">Cadastro de produto, em abas</h1>
+  <p class="prosa" style="margin-top:10px">
+    A tela de hoje é <strong>uma pilha de nove cartões</strong> numa página só: quem entra para
+    corrigir o preço rola por unidade, estoque, fiscal e fornecedores antes de achá-lo. A proposta
+    separa o que se olha junto — <strong>Principal</strong>, <strong>Fornecedores</strong>,
+    <strong>Estoque</strong> e a aba nova de <strong>Movimentação</strong> —, junta preço e custo
+    no mesmo bloco e traz o interruptor de <strong>ativo</strong> para onde ele pertence: ao lado
+    do nome.
+  </p>
+
+  <div class="comandos">
+    <div class="segmentado" role="group" aria-label="Comparar">
+      <button type="button" data-ver="hoje" aria-pressed="false">Como é hoje</button>
+      <button type="button" data-ver="proposto" aria-pressed="true">Proposto</button>
+    </div>
+    <span class="dica-topo">Mesmo produto, mesmos campos — muda só onde cada um mora.</span>
+  </div>
+
+  <!-- ======================= HOJE ======================= -->
+  <section class="secao so-hoje pilha-hoje">
+    <h2>Hoje: nove cartões, um embaixo do outro</h2>
+    <p class="prosa">
+      Nada aqui está errado — está tudo junto. A ordem é a de quem construiu, não a de quem usa.
+    </p>
+
+    <div class="cartao">
+      <h3>Identificação</h3>
+      <div class="corpo-cartao grade">
+        <div class="campo-caixa"><label><span class="rot">Nome</span>
+          <input class="campo" value="MANTEIGA SEM SAL"></label></div>
+        <div class="campo-caixa"><label><span class="rot">Código</span>
+          <input class="campo mono" value="218"></label></div>
+        <div class="campo-caixa"><label><span class="rot">Nome curto</span>
+          <input class="campo" value="MANTEIGA S/SAL"></label></div>
+        <div class="campo-caixa"><label><span class="rot">Tipo</span>
+          <select class="campo"><option>Insumo</option></select></label></div>
+        <div class="campo-caixa"><label><span class="rot">Categoria</span>
+          <select class="campo"><option>Laticínios</option></select></label></div>
+        <div class="campo-caixa"><label><span class="rot">Setor</span>
+          <select class="campo"><option>Confeitaria</option></select></label></div>
+      </div>
+      <p class="nota">
+        O <b>ativo</b> não está aqui: ele é uma etiqueta no topo da página e um botão de ação
+        solto. Quem abre o cadastro para desativar o produto procura no lugar errado.
+      </p>
+    </div>
+
+    <div class="cartao">
+      <h3>Unidade e conversão</h3>
+      <div class="corpo-cartao grade">
+        <div class="campo-caixa"><label><span class="rot">Unidade de estoque</span>
+          <select class="campo"><option>KG</option></select></label></div>
+        <div class="campo-caixa"><label><span class="rot">Unidade de compra</span>
+          <select class="campo"><option>PCT</option></select></label></div>
+        <div class="campo-caixa"><label><span class="rot">Fator de conversão</span>
+          <input class="campo mono" value="5"></label></div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h3>Preço nesta loja</h3>
+      <div class="corpo-cartao">
+        <div class="campo-caixa" style="max-width:200px"><label><span class="rot">Preço</span>
+          <span class="com-prefixo"><span class="prefixo">R$</span>
+            <input class="campo mono" value="0,00"></span></label></div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h3>Custo</h3>
+      <div class="corpo-cartao">
+        <p style="margin:0;font-family:var(--mono);font-size:19px">R$ 63,00 <span style="font-size:13px;color:var(--suave)">/ KG</span></p>
+        <p style="margin:6px 0 0;font-size:13px;color:var(--suave)">custo de referência, vindo do Omie</p>
+      </div>
+      <p class="nota">
+        Preço e custo são <b>dois cartões separados, com outro cartão no meio</b> — e a pergunta
+        que se faz olhando um é sempre sobre o outro: dá margem?
+      </p>
+    </div>
+
+    <div class="cartao"><h3>Códigos de fora, e quanto cada um vale</h3>
+      <p class="nota" style="border:0;padding:0;margin:8px 0 0">Omie, PDV e fornecedores.</p></div>
+    <div class="cartao"><h3>Estoque</h3>
+      <p class="nota" style="border:0;padding:0;margin:8px 0 0">
+        Local, local de venda, mínimo, máximo, validade — <b>e junto</b>: EAN, NCM, CEST, marca,
+        peso líquido e bruto, mais os seis interruptores de natureza do produto.</p></div>
+    <div class="cartao"><h3>Fornecedores</h3></div>
+    <div class="cartao"><h3>Onde este produto fica</h3></div>
+    <div class="cartao"><h3>Observações</h3></div>
+
+    <p class="fita">e a movimentação do produto não está aqui — está em outra tela</p>
+  </section>
+
+  <!-- ===================== PROPOSTO ===================== -->
+  <section class="secao so-proposto">
+    <h2>Proposto: quatro abas</h2>
+    <p class="prosa">
+      A régua da divisão é <strong>a pergunta que trouxe a pessoa até aqui</strong>. Quem vem
+      arrumar o cadastro fica na Principal; quem vem negociar fica em Fornecedores; quem vem
+      conferir prateleira fica em Estoque; quem vem investigar um saldo estranho vai direto à
+      Movimentação — hoje ele tem de sair da tela.
+    </p>
+
+    <div class="cartao" style="padding-top:16px">
+      <!-- cabeçalho da tela, como ele fica -->
+      <p class="rotulo-secao">Cadastros</p>
+      <h2 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:4px 0 0">MANTEIGA SEM SAL</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <span class="etiqueta">218</span>
+        <span class="etiqueta">insumo</span>
+        <span class="etiqueta">KG</span>
+        <span class="etiqueta erva">ativo</span>
+      </div>
+
+      <div class="abas" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-aba="principal">Principal</button>
+        <button type="button" role="tab" aria-selected="false" data-aba="fornecedores">
+          Fornecedores <span class="conta">2</span></button>
+        <button type="button" role="tab" aria-selected="false" data-aba="estoque">
+          Estoque <span class="conta">3</span></button>
+        <button type="button" role="tab" aria-selected="false" data-aba="movimentacao">
+          Movimentação <span class="marca-nova">nova</span></button>
+      </div>
+
+      <!-- ---------------- PRINCIPAL ---------------- -->
+      <div class="painel" data-painel="principal">
+
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>
+            Identificação
+            <span class="diz">quem é este produto</span>
+            <label class="chave" style="margin-left:auto">
+              <input type="checkbox" checked>
+              <span class="trilho"></span>
+              <span class="texto">Ativo</span>
+            </label>
+          </h3>
+          <div class="corpo-cartao grade">
+            <div class="campo-caixa"><label><span class="rot">Nome</span>
+              <input class="campo" value="MANTEIGA SEM SAL"></label></div>
+            <div class="campo-caixa"><label><span class="rot">Código</span>
+              <input class="campo mono" value="218"></label></div>
+            <div class="campo-caixa"><label><span class="rot">Nome curto</span>
+              <input class="campo" value="MANTEIGA S/SAL">
+              <span class="dica">para o cardápio e o PDV</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">Tipo</span>
+              <select class="campo"><option>Insumo</option></select></label></div>
+            <div class="campo-caixa"><label><span class="rot">Categoria</span>
+              <select class="campo"><option>Laticínios</option></select></label></div>
+            <div class="campo-caixa"><label><span class="rot">Setor</span>
+              <select class="campo"><option>Confeitaria</option></select></label></div>
+          </div>
+          <p class="nota">
+            🔑 <b>O interruptor de ativo mora aqui</b>, no canto do bloco que diz quem é o
+            produto. Desativar é uma decisão de cadastro, não uma ação de página — e é a primeira
+            coisa que se procura quando um item sai de linha.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Valores <span class="diz">o que se cobra e o que custa, lado a lado</span></h3>
+          <div class="corpo-cartao valores">
+            <div class="valor-caixa destaque">
+              <span class="titulo-valor">Preço de venda</span>
+              <div class="com-prefixo" style="margin-top:8px">
+                <span class="prefixo">R$</span><input class="campo mono" value="0,00">
+              </div>
+              <span class="de-onde">nesta loja · sem preço aqui, vale o da casa</span>
+            </div>
+            <div class="valor-caixa">
+              <span class="titulo-valor">Custo</span>
+              <span class="numero">R$ 63,00</span>
+              <span class="de-onde">por KG · referência do Omie</span>
+            </div>
+            <div class="valor-caixa">
+              <span class="titulo-valor">Última compra</span>
+              <span class="numero" style="color:var(--suave)">—</span>
+              <span class="de-onde">nenhuma nota deste produto ainda</span>
+            </div>
+          </div>
+          <div class="margem">
+            <span>margem: <b>—</b></span>
+            <span>food cost: <b>—</b></span>
+            <span>preço sugerido a 30%: <b>R$ 90,00</b></span>
+          </div>
+          <p class="nota">
+            🔑 <b>Preço e custo no mesmo bloco, porque a pergunta é uma só</b>: dá margem? Hoje
+            eles são dois cartões com um terceiro no meio, e a conta se faz de cabeça. Com os dois
+            à vista, a margem pode ser <b>calculada pela tela</b> — e um preço abaixo do custo
+            aparece na hora de digitar, não no fechamento do mês.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Unidade e conversão <span class="diz">o que separa a caixa comprada do grama consumido</span></h3>
+          <div class="corpo-cartao grade">
+            <div class="campo-caixa"><label><span class="rot">Unidade de estoque</span>
+              <select class="campo"><option>KG</option></select>
+              <span class="dica">como se consome</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">Unidade de compra</span>
+              <select class="campo"><option>PCT</option></select>
+              <span class="dica">como vem do fornecedor</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">Fator de conversão</span>
+              <input class="campo mono" value="5">
+              <span class="dica">1 PCT = 5 KG</span></label></div>
+          </div>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Natureza <span class="diz">o que este produto é, para o sistema</span></h3>
+          <ul class="corpo-cartao lista-natureza">
+            <li><input type="checkbox" checked><span>
+              <span class="nome">Controla estoque</span>
+              <span class="explica">Tem saldo, entra no razão e conta no CMV.</span></span></li>
+            <li><input type="checkbox"><span>
+              <span class="nome">Perecível</span>
+              <span class="explica">Estraga: ganha validade e entra nos alertas.</span></span></li>
+            <li><input type="checkbox"><span>
+              <span class="nome">Produção própria</span>
+              <span class="explica">Nasce de uma ficha técnica, aqui dentro.</span></span></li>
+            <li><input type="checkbox"><span>
+              <span class="nome">Integrado com PDV</span>
+              <span class="explica">Existe (ou deve existir) no cardápio do PDV.</span></span></li>
+          </ul>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Códigos e medidas <span class="diz">o que identifica o produto fora daqui</span></h3>
+          <div class="corpo-cartao grade">
+            <div class="campo-caixa"><label><span class="rot">Código de barras</span>
+              <input class="campo mono" value="7898955711118">
+              <span class="dica">casa o item da nota com este produto</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">NCM</span>
+              <input class="campo mono" value="04051000"></label></div>
+            <div class="campo-caixa"><label><span class="rot">CEST</span>
+              <input class="campo mono" value=""></label></div>
+            <div class="campo-caixa"><label><span class="rot">Marca</span>
+              <input class="campo" value=""></label></div>
+            <div class="campo-caixa"><label><span class="rot">Peso líquido</span>
+              <input class="campo mono" value=""></label></div>
+            <div class="campo-caixa"><label><span class="rot">Peso bruto</span>
+              <input class="campo mono" value=""></label></div>
+          </div>
+          <p class="nota">
+            ⚠️ Estes campos estavam <b>dentro do cartão Estoque</b>, onde ninguém os procura: NCM
+            e EAN identificam o produto, não dizem nada sobre prateleira.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Observações</h3>
+          <div class="corpo-cartao">
+            <textarea class="campo" rows="2" placeholder="o que mais alguém precisa saber"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------------- FORNECEDORES ---------------- -->
+      <div class="painel" data-painel="fornecedores" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>De quem se compra
+            <span class="diz">é o que faz a nota entrar sozinha depois</span></h3>
+          <div class="corpo-cartao rolagem">
+            <table class="tabela">
+              <thead><tr>
+                <th>Fornecedor</th><th>Código deles</th><th>Embalagem</th>
+                <th class="num">Último preço</th><th class="num">Última compra</th><th></th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td><b>ANA &amp; GRAZI B. VINÍCOLA</b> <span class="etiqueta erva">preferencial</span></td>
+                  <td class="mono">104304</td><td>PCT · 5 KG</td>
+                  <td class="num">R$ 315,00</td><td class="num">12/09/2026</td>
+                  <td style="text-align:right"><span class="dica" style="margin:0">editar</span></td>
+                </tr>
+                <tr>
+                  <td>DISTRIBUIDORA CENTRAL</td>
+                  <td class="mono">MSS-5</td><td>CX · 4 PCT</td>
+                  <td class="num">R$ 1.240,00</td><td class="num">02/08/2026</td>
+                  <td style="text-align:right"><span class="dica" style="margin:0">editar</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Códigos de fora <span class="diz">e quantas unidades de estoque vêm em cada um</span></h3>
+          <div class="corpo-cartao rolagem">
+            <table class="tabela">
+              <thead><tr><th>Sistema</th><th>Código</th><th class="num">Vale</th></tr></thead>
+              <tbody>
+                <tr><td>Omie</td><td class="mono">7302594064</td><td class="num">5 KG</td></tr>
+                <tr><td>Omie <span class="dica" style="display:inline">· apelido</span></td>
+                    <td class="mono">7302593753</td><td class="num">5 KG</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="nota">
+            ⚠️ Os códigos de fora saem da Principal e vêm para cá: <b>eles são de quem vende</b>.
+            É aqui que alguém está quando pergunta "com que código eles chamam isto?".
+          </p>
+        </div>
+      </div>
+
+      <!-- ---------------- ESTOQUE ---------------- -->
+      <div class="painel" data-painel="estoque" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>Onde este produto fica <span class="diz">as prateleiras em que ele pode estar</span></h3>
+          <div class="corpo-cartao rolagem">
+            <table class="tabela">
+              <thead><tr><th>Prateleira</th><th>Setor</th><th class="num">Saldo</th><th class="num">Custo médio</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><b>ESTOQUE SECO</b> <span class="etiqueta">padrão</span></td><td>—</td>
+                    <td class="num" style="color:var(--erro)">−2,8371 KG</td><td class="num">R$ 63,00</td>
+                    <td style="text-align:right"><span class="dica" style="margin:0">remover</span></td></tr>
+                <tr><td>CÂMARA FRIA</td><td>Confeitaria</td><td class="num">0 KG</td><td class="num">—</td>
+                    <td style="text-align:right"><span class="dica" style="margin:0">remover</span></td></tr>
+                <tr><td>BAR</td><td>Bar</td><td class="num">0 KG</td><td class="num">—</td>
+                    <td style="text-align:right"><span class="dica" style="margin:0">remover</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="nota">
+            ⚠️ O <b>saldo de cada prateleira aparece aqui</b>, ao lado da linha dela. Hoje a
+            pergunta "tem onde?" e a pergunta "tem quanto?" moram em telas diferentes.
+          </p>
+        </div>
+
+        <div class="cartao" style="box-shadow:none">
+          <h3>Limites e validade <span class="diz">o que dispara alerta</span></h3>
+          <div class="corpo-cartao grade">
+            <div class="campo-caixa"><label><span class="rot">Estoque mínimo</span>
+              <input class="campo mono" value="2">
+              <span class="dica">alerta de ruptura</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">Estoque máximo</span>
+              <input class="campo mono" value=""></label></div>
+            <div class="campo-caixa"><label><span class="rot">Validade (dias)</span>
+              <input class="campo mono" value="">
+              <span class="dica">a partir da entrada</span></label></div>
+            <div class="campo-caixa"><label><span class="rot">Local da venda</span>
+              <select class="campo"><option>— o padrão —</option></select>
+              <span class="dica">de onde o PDV baixa</span></label></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------------- MOVIMENTAÇÃO ---------------- -->
+      <div class="painel" data-painel="movimentacao" hidden>
+        <div class="cartao" style="box-shadow:none;margin-top:18px">
+          <h3>
+            Movimentação <span class="diz">o razão deste produto, do mais recente para trás</span>
+            <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <select class="campo" style="margin:0;width:auto;font-size:13px;padding:7px 10px">
+                <option>últimos 90 dias</option><option>este mês</option><option>tudo</option>
+              </select>
+            </span>
+          </h3>
+          <div class="corpo-cartao rolagem">
+            <table class="tabela">
+              <thead><tr>
+                <th>Quando</th><th>O que foi</th><th>Documento</th><th>Prateleira</th>
+                <th class="num">Quantidade</th><th class="num">Saldo depois</th><th class="num">Custo un.</th>
+              </tr></thead>
+              <tbody>
+                <tr><td class="mono">16/09 17:10</td><td>Saída · produção</td>
+                    <td>Produção #86</td><td>ESTOQUE SECO</td>
+                    <td class="num" style="color:var(--erro)">−2,7120</td><td class="num">−2,8371</td>
+                    <td class="num">R$ 63,00</td></tr>
+                <tr><td class="mono">16/09 16:18</td><td>Ajuste de custo</td>
+                    <td>Lote #1366</td><td>ESTOQUE SECO</td>
+                    <td class="num">0,0000</td><td class="num">−0,1251</td>
+                    <td class="num">R$ 63,00</td></tr>
+                <tr><td class="mono">16/09 16:10</td><td>Estorno · entrada</td>
+                    <td>Estorno do #744</td><td>ESTOQUE SECO</td>
+                    <td class="num" style="color:var(--erva)">+2,7120</td><td class="num">−0,0417</td>
+                    <td class="num">R$ 315,00</td></tr>
+                <tr><td class="mono">15/09 15:10</td><td>Saída · produção</td>
+                    <td>Produção #29</td><td>ESTOQUE SECO</td>
+                    <td class="num" style="color:var(--erro)">−0,3178</td><td class="num">−0,3178</td>
+                    <td class="num">R$ 315,00</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+            <span class="etiqueta">4 de 12</span>
+            <span class="dica" style="margin:0">ver mais</span>
+            <span style="margin-left:auto" class="dica">abrir em Saldos e movimentos →</span>
+          </div>
+          <p class="nota">
+            🔑 <b>A aba que não existia.</b> Hoje, para ver por que o saldo deste produto está
+            negativo, é preciso sair do cadastro, abrir Saldos e movimentos e achar o produto de
+            novo pela lupa — e voltar depois. A pergunta nasce aqui; a resposta passa a estar aqui.
+          </p>
+          <p class="nota">
+            ⚠️ <b>Só leitura.</b> Estornar e reprocessar continuam em Saldos e movimentos, que é a
+            tela com a permissão certa (<span class="mono">estoque.custo</span>). Esta aba
+            responde, não mexe.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h3>O que muda, em uma linha cada</h3>
+      <div class="corpo-cartao">
+        <ul class="prosa" style="margin:0;padding-left:20px">
+          <li><strong>Quatro abas</strong> em vez de nove cartões empilhados — a divisão segue a
+            pergunta que trouxe a pessoa.</li>
+          <li><strong>Ativo</strong> vira interruptor no bloco de identificação, ao lado do nome.</li>
+          <li><strong>Preço e custo no mesmo bloco</strong>, com a margem calculada à vista.</li>
+          <li><strong>EAN, NCM, CEST, marca e pesos</strong> saem de Estoque e viram "Códigos e
+            medidas", na Principal.</li>
+          <li><strong>Códigos de fora</strong> passam para Fornecedores, junto de quem os usa.</li>
+          <li><strong>Saldo por prateleira</strong> entra na aba Estoque, ao lado de cada linha.</li>
+          <li><strong>Movimentação</strong> é aba nova, só leitura, com filtro de período.</li>
+        </ul>
+      </div>
+      <p class="nota">
+        ⚠️ <b>Nenhum campo é criado ou removido.</b> Isto é mudança de arrumação: o que existe
+        continua existindo, no lugar onde se procura por ele. A conta da margem é a única
+        informação nova, e ela é calculada, não digitada.
+      </p>
+    </div>
+  </section>
+</div>
+
+<script>
+  // hoje / proposto
+  document.querySelectorAll(".segmentado button").forEach((b) => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".segmentado button").forEach((o) =>
+        o.setAttribute("aria-pressed", String(o === b)));
+      document.body.dataset.modo = b.dataset.ver;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+
+  // as abas do protótipo funcionam de verdade: é o que se está aprovando
+  document.querySelectorAll('.abas [role="tab"]').forEach((aba) => {
+    aba.addEventListener("click", () => {
+      document.querySelectorAll('.abas [role="tab"]').forEach((o) =>
+        o.setAttribute("aria-selected", String(o === aba)));
+      document.querySelectorAll("[data-painel]").forEach((p) => {
+        p.hidden = p.dataset.painel !== aba.dataset.aba;
+      });
+    });
+  });
+</script>
+</body>
+</html>

@@ -24,6 +24,7 @@ import {
   Cartao,
   Confirmacao,
   Etiqueta,
+  Vazio,
 } from "@/components/ui";
 import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
@@ -33,6 +34,7 @@ import ComposicaoKit from "./kit";
 import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
+import MovimentacaoDoProduto from "./movimentacao";
 import Vincular from "./vincular";
 import Voltar from "@/components/voltar";
 
@@ -105,6 +107,9 @@ export default function FormularioProduto() {
   // 🔑 O preço por loja só faz sentido com mais de uma: com uma só, "da casa"
   // e "desta loja" são a mesma coisa, e o bloco seria ruído.
   const variasLojas = (eu?.unidades.length ?? 0) > 1;
+  /** Qual aba está aberta. Ver a nota do seletor lá embaixo. */
+  const [aba, setAba] = useState<
+    "principal" | "fornecedores" | "estoque" | "movimentacao">("principal");
   const [precoLoja, setPrecoLoja] = useState("");
   const [precoCasa, setPrecoCasa] = useState<number | null>(null);
   /**
@@ -713,7 +718,84 @@ export default function FormularioProduto() {
         </Confirmacao>
       )}
 
-      <Cartao titulo="Identificação">
+
+      {/* 🔑 **A tela em ABAS** (16/09/2026, protótipo aprovado pelo dono:
+          *"poderia ter algumas abas — as informações principais em uma,
+          fornecedores, estoque; e criar uma nova aba de movimentação"*). Eram
+          NOVE cartões empilhados numa página só: quem entrava para corrigir o
+          preço rolava por unidade, estoque, fiscal e fornecedores antes de
+          achá-lo.
+          ⚠️ **A régua da divisão é a PERGUNTA que trouxe a pessoa**, não a
+          camada do dado: quem vem arrumar o cadastro fica na Principal, quem
+          vem negociar fica em Fornecedores, quem vem conferir prateleira fica em
+          Estoque, quem vem investigar um saldo vai à Movimentação.
+          ⚠️ **Nenhum campo nasce ou morre nesta mudança** — é arrumação. Os
+          `hidden` mantêm TODOS os campos montados: o formulário é um só e salva
+          de uma vez, e desmontar o painel faria o que está fora da aba ativa
+          sumir do envio.
+          🔑 **Em produto NOVO sobram Principal e Estoque.** Fornecedor e
+          movimento apontam para um id que ainda não existe — mas a PRATELEIRA
+          não: o cartão dela aparece na criação de propósito (pedido do dono,
+          02/09/2026), porque é ali, cadastrando, que a pessoa decide onde o
+          produto vai morar. Esconder a aba inteira devolveria o defeito que
+          aquele pedido consertou, por outra porta. */}
+      <div className="flex flex-wrap gap-2 border-b border-linha" role="tablist">
+          {(novo
+            ? ([["principal", "Principal"], ["estoque", "Estoque"]] as const)
+            : ([
+            ["principal", "Principal"],
+            ["fornecedores", "Fornecedores"],
+            ["estoque", "Estoque"],
+            ["movimentacao", "Movimentação"],
+          ] as const)).map(([chave, texto]) => (
+            <button
+              key={chave}
+              type="button"
+              role="tab"
+              aria-selected={aba === chave}
+              className={`-mb-px min-h-[44px] border-b-2 px-4 py-2.5 text-[14.5px] font-semibold ${
+                aba === chave
+                  ? "border-erva text-tinta"
+                  : "border-transparent text-suave hover:text-tinta"
+              }`}
+              onClick={() => setAba(chave)}
+            >
+              {texto}
+            </button>
+          ))}
+      </div>
+
+
+      <div hidden={aba !== "principal"} className="flex flex-col gap-6">
+      {/* 🔑 **O interruptor de ATIVO mora aqui** (16/09/2026, protótipo aprovado
+          pelo dono). Ele era uma caixinha no pé do cartão "Observações", a nove
+          cartões de distância do nome — e desativar um produto é decisão de
+          cadastro, a primeira coisa que se procura quando um item sai de linha.
+          ⚠️ Só em produto que JÁ existe: um cadastro novo nasce ativo, e oferecer
+          o contrário seria oferecer criar algo desligado. */}
+      <Cartao
+        titulo="Identificação"
+        acao={
+          !novo && podeEditar ? (
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-erva"
+                checked={f.ativo}
+                onChange={(e) => set("ativo", e.target.checked)}
+              />
+              <span className="text-[14px] font-semibold">
+                Ativo
+                {!f.ativo && (
+                  <span className="ml-2 font-normal text-suave">
+                    some das listas e das buscas
+                  </span>
+                )}
+              </span>
+            </label>
+          ) : undefined
+        }
+      >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* ⚠️ `uppercase` é só CSS, e é de propósito: o valor gravado é
               normalizado pelo BANCO (migração 036, gatilho), porque o nome do
@@ -807,6 +889,105 @@ export default function FormularioProduto() {
         </div>
       </Cartao>
 
+      {/* 🔑 **Preço e custo no mesmo bloco, porque a pergunta é uma só**: dá
+          margem? (16/09/2026, protótipo aprovado.) Eles eram dois cartões com um
+          terceiro no meio — o preço morava dentro de "Unidade e conversão" e o
+          custo vinha depois do de estoque —, e a conta se fazia de cabeça. */}
+      <Cartao
+        titulo="Valores"
+        descricao="O que se cobra e o que custa, lado a lado."
+      >
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div>
+                {/* ⚠️ Este é o preço da CASA. O da loja tem bloco próprio abaixo:
+                    fazer este campo gravar por loja faria o preço "da casa" nunca ser
+                    definido — cada filial teria o seu e nenhuma herdaria nada. */}
+                <Campo
+                  rotulo={variasLojas ? "Preço de venda da casa" : "Preço de venda"}
+                  dica="grava com data de vigência"
+                >
+                  <CampoMoeda
+                    valor={f.preco_venda}
+                    aoMudar={(v) => set("preco_venda", v)}
+                    desabilitado={!podeEditar}
+                  />
+                </Campo>
+          </div>
+          <div>
+            {/* 🔑 **O custo, que não tinha onde ser consultado** (pedido do dono,
+                03/09/2026). Fica ACIMA do cartão de Estoque porque é a pergunta que
+                se faz primeiro ao abrir um insumo — e porque a "Memória de cálculo"
+                do topo só explica o custo médio, que numa casa recém-importada ainda
+                não existe.
+                ⚠️ `estoque.saldos` é a mesma chave do botão de memória ao lado: custo
+                é dado de estoque e não vira dado de cadastro por estar nesta tela. */}
+            {/* ⚠️ **Sem cartão próprio**: aqui ele é METADE de "Valores", e um
+                cartão dentro de outro faz o olho ler dois blocos onde há um. */}
+            {!novo && f.controla_estoque && pode("estoque.saldos") ? (
+              <>
+                <span className="rotulo-campo">Custo</span>
+                <div className="mt-1.5">
+                  {/* ⚠️ `recarga` aqui NAO e enfeite: este bloco busca por conta
+                      propria, e sem ele continuaria mostrando o custo de antes do
+                      salvamento — que e justamente o que obrigava ao F5. */}
+                  <CustoDoProduto
+                    idProduto={Number(id)}
+                    um={f.um_estoque || null}
+                    recarga={recarga}
+                  />
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+        {/* 🔑 **O preço da LOJA, e só com mais de uma.** O da casa vale para todas;
+            este sobrepõe nesta. É a mesma forma da reserva do custo — o específico
+            primeiro, o geral depois — e é o que permite a filial cobrar diferente
+            sem recadastrar centenas de pratos que custam o mesmo nos dois lugares. */}
+        {variasLojas && !novo && (
+          <div className="mt-5 border-t border-linha pt-4">
+            <span className="rotulo-campo">Preço nesta loja</span>
+            <p className="prosa mt-1 text-[13.5px] text-suave">
+              {precoCasa === null
+                ? "Sem preço da casa: o que valer aqui vale só aqui."
+                : `Sem um preço aqui, vale o da casa: ${reais(precoCasa)}.`}
+            </p>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <Campo rotulo="Preço" className="w-[180px]">
+                <CampoMoeda
+                  valor={precoLoja}
+                  aoMudar={setPrecoLoja}
+                  desabilitado={!podeEditar}
+                  placeholder={numeroParaMoeda(precoCasa)}
+                />
+              </Campo>
+              {podeEditar && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primario"
+                    aria-busy={salvandoPreco} disabled={salvandoPreco}
+                    onClick={() => void salvarPrecoDaLoja(moedaParaNumero(precoLoja))}
+                  >
+                    {salvandoPreco ? "Salvando…" : "Salvar preço daqui"}
+                  </button>
+                  {/* ⚠️ Apagar não é zerar: zero seria dizer que aqui o prato é de
+                      graça. Limpar devolve o preço da casa. */}
+                  <button
+                    type="button"
+                    className="link-acao-erro"
+                    aria-busy={salvandoPreco} disabled={salvandoPreco}
+                    onClick={() => void salvarPrecoDaLoja(null)}
+                  >
+                    usar o preço da casa
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </Cartao>
+
       <Cartao
         titulo="Unidade e conversão"
         descricao="A conta do custo por quilo mora aqui: é o que separa a caixa comprada do grama consumido."
@@ -860,378 +1041,250 @@ export default function FormularioProduto() {
               onChange={(e) => set("fator_compra", e.target.value)}
             />
           </Campo>
-          {/* ⚠️ Este é o preço da CASA. O da loja tem bloco próprio abaixo:
-              fazer este campo gravar por loja faria o preço "da casa" nunca ser
-              definido — cada filial teria o seu e nenhuma herdaria nada. */}
-          <Campo
-            rotulo={variasLojas ? "Preço de venda da casa" : "Preço de venda"}
-            dica="grava com data de vigência"
-          >
-            <CampoMoeda
-              valor={f.preco_venda}
-              aoMudar={(v) => set("preco_venda", v)}
-              desabilitado={!podeEditar}
-            />
-          </Campo>
         </div>
       </Cartao>
 
-      {/* 🔑 **O preço da LOJA, e só com mais de uma.** O da casa vale para todas;
-          este sobrepõe nesta. É a mesma forma da reserva do custo — o específico
-          primeiro, o geral depois — e é o que permite a filial cobrar diferente
-          sem recadastrar centenas de pratos que custam o mesmo nos dois lugares. */}
-      {variasLojas && !novo && (
-        <Cartao
-          titulo="Preço nesta loja"
-          descricao={
-            precoCasa === null
-              ? "Sem preço da casa: o que valer aqui vale só aqui."
-              : `Sem um preço aqui, vale o da casa: ${reais(precoCasa)}.`
-          }
-        >
-          <div className="flex flex-wrap items-end gap-3">
-            <Campo rotulo="Preço" className="w-[180px]">
-              <CampoMoeda
-                valor={precoLoja}
-                aoMudar={setPrecoLoja}
-                desabilitado={!podeEditar}
-                placeholder={numeroParaMoeda(precoCasa)}
+      {/* A conversão também só existe depois do produto: ela aponta para ele. */}
+      {!novo && f.controla_estoque && (
+        <UnidadesDeCompra
+          idProduto={Number(id)}
+          umEstoque={f.um_estoque || null}
+          podeEditar={podeEditar}
+        />
+      )}
+
+      {/* 🔑 **A natureza do produto ganhou cartão próprio.** Estes seis
+          interruptores moravam dentro do cartão "Estoque", e só um deles fala de
+          estoque: os outros dizem o que o produto É — se nasce de ficha, se vai ao
+          PDV, se estraga. */}
+      <Cartao
+        titulo="Natureza"
+        descricao="O que este produto é, para o sistema."
+      >
+
+          <ul className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2">
+            {[
+              {
+                campo: "controla_estoque" as const,
+                nome: "Controla estoque",
+                explica: "Desligue para descartável avulso que você não quer contar.",
+              },
+              {
+                campo: "producao_propria" as const,
+                nome: "Produção própria",
+                explica: "Tem ficha técnica. Só vale para produzido ou kit.",
+              },
+              {
+                campo: "perecivel" as const,
+                nome: "Perecível",
+                explica: "Entra nos alertas de vencimento.",
+              },
+              {
+                campo: "controla_lote" as const,
+                nome: "Controla lote",
+                explica: "Opcional no lançamento: o que não for identificado sai do saldo geral.",
+              },
+              {
+                campo: "controla_validade" as const,
+                nome: "Controla validade",
+                explica: "Na saída, o sistema sugere o que vence primeiro.",
+              },
+              // ⚠️ Marca uma DECISÃO, não um fato derivado: quem já tem código
+              // do PDV nasce marcado (e quem ganha o código depois também — quem
+              // garante é o gatilho da 040). Mas um prato novo pode ser marcado
+              // ANTES de existir lá, e um produto que veio de lá pode ser
+              // desmarcado para o Botané não mexer nele.
+              // ⚠️ Só aparece com o envio LIGADO na integração: controle para um
+              // recurso desligado é ruído. Desligar o envio NÃO desmarca ninguém —
+              // o valor gravado fica, e volta a aparecer quando religarem.
+              ...(enviaAoPdv
+                ? [
+                    {
+                      campo: "integrado_pdv" as const,
+                      nome: "Integrado com PDV",
+                      explica: "Este produto existe (ou deve existir) no cardápio do PDV.",
+                    },
+                  ]
+                : []),
+            ].map((i, n, lista) => (
+              <li
+                key={i.campo}
+                // ⚠️ O último só ocupa a linha inteira quando a lista é ÍMPAR —
+                // senão sobra uma célula vazia ao lado dele.
+                className={`flex items-start gap-3 bg-superficie p-4 ${
+                  n === lista.length - 1 && lista.length % 2 ? "sm:col-span-2" : ""
+                }`}
+              >
+                <input
+                  id={i.campo}
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-erva"
+                  disabled={!podeEditar}
+                  checked={f[i.campo]}
+                  onChange={(e) => set(i.campo, e.target.checked)}
+                />
+                <label htmlFor={i.campo} className="cursor-pointer">
+                  <span className="block text-[14.5px] font-semibold">{i.nome}</span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-suave">
+                    {i.explica}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+
+          {/* Duas naturezas que o sistema tratava igual e não são: a massa de
+              pizza fica pronta esperando; o café passado não existe parado. */}
+          {f.producao_propria && (
+            <div className="mt-4 border-t border-linha pt-4">
+              <span className="rotulo">Como este produto é produzido</span>
+              <ul className="mt-2 grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    valor: "PARA_ESTOQUE",
+                    nome: "Para estoque",
+                    explica:
+                      "Produz, guarda e sai depois — para venda ou para outra receita. Tem saldo, tem mínimo e entra na agenda de produção. É a massa de pizza.",
+                  },
+                  {
+                    valor: "NA_HORA",
+                    nome: "Na hora da venda",
+                    explica:
+                      "Não fica em estoque: a venda produz e baixa no mesmo instante, consumindo os insumos da ficha. É o café passado.",
+                  },
+                ].map((m) => {
+                  const escolhido = f.modo_producao === m.valor;
+                  return (
+                    <li key={m.valor}>
+                      <label
+                        className={`flex h-full cursor-pointer items-start gap-3 rounded border p-3.5 ${
+                          escolhido ? "border-erva bg-erva-claro" : "border-linha2 bg-superficie"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="modo_producao"
+                          className="mt-1 h-4 w-4 accent-erva"
+                          disabled={!podeEditar}
+                          checked={escolhido}
+                          onChange={() => set("modo_producao", m.valor)}
+                        />
+                        <span>
+                          <span
+                            className={`block text-[14.5px] font-semibold ${
+                              escolhido ? "text-erva" : ""
+                            }`}
+                          >
+                            {m.nome}
+                          </span>
+                          <span className="mt-0.5 block text-[13px] leading-snug text-suave">
+                            {m.explica}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+      </Cartao>
+
+      {/* ⚠️ **EAN, NCM, CEST, marca e pesos saíram do cartão "Estoque"**, onde
+          ninguém os procurava: eles IDENTIFICAM o produto e não dizem nada sobre
+          prateleira. */}
+      <Cartao
+        titulo="Códigos e medidas"
+        descricao="O que identifica este produto fora daqui — na nota, no fisco, na balança."
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* ⚠️ **O EAN existia no formulário e não tinha campo na tela.** Era
+                enviado ao salvar e lido pela conciliação da nota — nível 3 da
+                cascata, o que casa o item do fornecedor com o produto certo —,
+                mas ninguém conseguia ver nem digitar. Campo morto na direção
+                inversa: o dado entrava só pela importação do Omie. */}
+            <Campo rotulo="Código de barras (EAN/GTIN)" dica="casa o item da nota com este produto">
+              <input
+                className="campo mono"
+                maxLength={20}
+                inputMode="numeric"
+                disabled={!podeEditar}
+                value={f.codigo_barras}
+                onChange={(e) => set("codigo_barras", e.target.value)}
               />
             </Campo>
-            {podeEditar && (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-primario"
-                  aria-busy={salvandoPreco} disabled={salvandoPreco}
-                  onClick={() => void salvarPrecoDaLoja(moedaParaNumero(precoLoja))}
-                >
-                  {salvandoPreco ? "Salvando…" : "Salvar preço daqui"}
-                </button>
-                {/* ⚠️ Apagar não é zerar: zero seria dizer que aqui o prato é de
-                    graça. Limpar devolve o preço da casa. */}
-                <button
-                  type="button"
-                  className="link-acao-erro"
-                  aria-busy={salvandoPreco} disabled={salvandoPreco}
-                  onClick={() => void salvarPrecoDaLoja(null)}
-                >
-                  usar o preço da casa
-                </button>
-              </>
-            )}
-          </div>
-        </Cartao>
-      )}
-
-      {/* 🔑 **O custo, que não tinha onde ser consultado** (pedido do dono,
-          03/09/2026). Fica ACIMA do cartão de Estoque porque é a pergunta que
-          se faz primeiro ao abrir um insumo — e porque a "Memória de cálculo"
-          do topo só explica o custo médio, que numa casa recém-importada ainda
-          não existe.
-          ⚠️ `estoque.saldos` é a mesma chave do botão de memória ao lado: custo
-          é dado de estoque e não vira dado de cadastro por estar nesta tela. */}
-      {!novo && f.controla_estoque && pode("estoque.saldos") && (
-        <Cartao titulo="Custo">
-          {/* ⚠️ `recarga` aqui NAO e enfeite: este cartao busca por conta
-              propria, e sem ele continuaria mostrando o custo de antes do
-              salvamento — que e justamente o que obrigava ao F5. */}
-          <CustoDoProduto
-            idProduto={Number(id)}
-            um={f.um_estoque || null}
-            recarga={recarga}
-          />
-        </Cartao>
-      )}
-
-      {/* 🔑 **O caso do açúcar de confeiteiro** (pedido do dono, 04/09/2026): o
-          fornecedor manda o pacote de 1 kg e o de 500 g como produtos
-          diferentes, e aqui os dois são o mesmo. Depois da fusão, a nota do de
-          500 g entrava como 1 kg por unidade — o estoque dobrava calado.
-          ⚠️ Só quando HÁ código: um produto cadastrado à mão e nunca vinculado
-          não tem o que mostrar, e um cartão vazio em toda tela de produto seria
-          ruído em troca de nada. */}
-      {!novo && !!codigos.length && (
-        <Cartao
-          titulo="Códigos de fora, e quanto cada um vale"
-          descricao="O que o Omie, o PDV e os fornecedores chamam deste produto — e quantas unidades de estoque vêm em cada um."
-        >
-          <CodigosDoProduto
-            idProduto={Number(id)}
-            codigos={codigos}
-            umEstoque={f.um_estoque || null}
-            podeEditar={podeEditar}
-            aoMudar={() => setRecarga((n) => n + 1)}
-          />
-        </Cartao>
-      )}
-
-      <Cartao titulo="Estoque">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* O local é do PRODUTO: uma nota traz congelado e seco na mesma
-              folha, e um local por nota obrigaria a lançar duas vezes. */}
-          <Campo rotulo="Local de estoque" dica="onde este produto entra">
-            <select
-              className="campo"
-              disabled={!podeEditar}
-              aria-label="Local de estoque"
-              value={f.id_local_padrao}
-              onChange={(e) => set("id_local_padrao", e.target.value)}
-            >
-              <option value="">— o local da nota —</option>
-              {locais.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome}
-                </option>
-              ))}
-            </select>
-          </Campo>
-          {/* 🔑 **De onde a VENDA baixa** (migração 066, pedido do dono: "podemos
-              criar no produto mais de um local, qual seria o local de estoque que
-              o PDV consome"). O campo acima fazia TRÊS papéis — a venda, o
-              fallback do consumo de insumo e o destino da produção —, e pôr a
-              vitrine nele fazia a receita da pizza comer a massa da vitrine.
-              ⚠️ Vazio é o normal, e é o padrão: sem escolha, a venda continua
-              saindo do local de estoque, como sempre saiu. */}
-          <Campo rotulo="Local da venda" dica="de onde o PDV baixa">
-            <select
-              className="campo"
-              disabled={!podeEditar}
-              aria-label="Local da venda"
-              value={f.id_local_venda}
-              onChange={(e) => set("id_local_venda", e.target.value)}
-            >
-              <option value="">— o local de estoque —</option>
-              {locais.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.nome}
-                </option>
-              ))}
-            </select>
-          </Campo>
-          <Campo rotulo="Estoque mínimo" dica="alerta de ruptura">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.001"
-              disabled={!podeEditar}
-              value={f.estoque_minimo}
-              onChange={(e) => set("estoque_minimo", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Estoque máximo">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.001"
-              disabled={!podeEditar}
-              value={f.estoque_maximo}
-              onChange={(e) => set("estoque_maximo", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Validade (dias)" dica="a partir da entrada">
-            <input
-              className="campo mono"
-              type="number"
-              disabled={!podeEditar}
-              value={f.validade_dias}
-              onChange={(e) => set("validade_dias", e.target.value)}
-            />
-          </Campo>
-          {/* ⚠️ **O EAN existia no formulário e não tinha campo na tela.** Era
-              enviado ao salvar e lido pela conciliação da nota — nível 3 da
-              cascata, o que casa o item do fornecedor com o produto certo —,
-              mas ninguém conseguia ver nem digitar. Campo morto na direção
-              inversa: o dado entrava só pela importação do Omie. */}
-          <Campo rotulo="Código de barras (EAN/GTIN)" dica="casa o item da nota com este produto">
-            <input
-              className="campo mono"
-              maxLength={20}
-              inputMode="numeric"
-              disabled={!podeEditar}
-              value={f.codigo_barras}
-              onChange={(e) => set("codigo_barras", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="NCM">
-            <input
-              className="campo mono"
-              disabled={!podeEditar}
-              value={f.ncm}
-              onChange={(e) => set("ncm", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="CEST" dica="acompanha o NCM">
-            <input
-              className="campo mono"
-              disabled={!podeEditar}
-              value={f.cest}
-              onChange={(e) => set("cest", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Marca" dica="separa dois “café 500g”">
-            <input
-              className="campo"
-              maxLength={60}
-              disabled={!podeEditar}
-              value={f.marca}
-              onChange={(e) => set("marca", e.target.value)}
-            />
-          </Campo>
-          {/* ⚠️ Peso é conversão, não enfeite: o pacote entra por UN e a ficha
-              consome em KG. O LÍQUIDO é o que interessa — o bruto inclui a
-              embalagem, e ninguém cozinha o papelão. */}
-          <Campo rotulo="Peso líquido" dica="o que dá para usar">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.001"
-              disabled={!podeEditar}
-              value={f.peso_liquido}
-              onChange={(e) => set("peso_liquido", e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Peso bruto" dica="com a embalagem">
-            <input
-              className="campo mono"
-              type="number"
-              step="0.001"
-              disabled={!podeEditar}
-              value={f.peso_bruto}
-              onChange={(e) => set("peso_bruto", e.target.value)}
-            />
-          </Campo>
-        </div>
-
-
-        <ul className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-2">
-          {[
-            {
-              campo: "controla_estoque" as const,
-              nome: "Controla estoque",
-              explica: "Desligue para descartável avulso que você não quer contar.",
-            },
-            {
-              campo: "producao_propria" as const,
-              nome: "Produção própria",
-              explica: "Tem ficha técnica. Só vale para produzido ou kit.",
-            },
-            {
-              campo: "perecivel" as const,
-              nome: "Perecível",
-              explica: "Entra nos alertas de vencimento.",
-            },
-            {
-              campo: "controla_lote" as const,
-              nome: "Controla lote",
-              explica: "Opcional no lançamento: o que não for identificado sai do saldo geral.",
-            },
-            {
-              campo: "controla_validade" as const,
-              nome: "Controla validade",
-              explica: "Na saída, o sistema sugere o que vence primeiro.",
-            },
-            // ⚠️ Marca uma DECISÃO, não um fato derivado: quem já tem código
-            // do PDV nasce marcado (e quem ganha o código depois também — quem
-            // garante é o gatilho da 040). Mas um prato novo pode ser marcado
-            // ANTES de existir lá, e um produto que veio de lá pode ser
-            // desmarcado para o Botané não mexer nele.
-            // ⚠️ Só aparece com o envio LIGADO na integração: controle para um
-            // recurso desligado é ruído. Desligar o envio NÃO desmarca ninguém —
-            // o valor gravado fica, e volta a aparecer quando religarem.
-            ...(enviaAoPdv
-              ? [
-                  {
-                    campo: "integrado_pdv" as const,
-                    nome: "Integrado com PDV",
-                    explica: "Este produto existe (ou deve existir) no cardápio do PDV.",
-                  },
-                ]
-              : []),
-          ].map((i, n, lista) => (
-            <li
-              key={i.campo}
-              // ⚠️ O último só ocupa a linha inteira quando a lista é ÍMPAR —
-              // senão sobra uma célula vazia ao lado dele.
-              className={`flex items-start gap-3 bg-superficie p-4 ${
-                n === lista.length - 1 && lista.length % 2 ? "sm:col-span-2" : ""
-              }`}
-            >
+            <Campo rotulo="NCM">
               <input
-                id={i.campo}
-                type="checkbox"
-                className="mt-1 h-4 w-4 accent-erva"
+                className="campo mono"
                 disabled={!podeEditar}
-                checked={f[i.campo]}
-                onChange={(e) => set(i.campo, e.target.checked)}
+                value={f.ncm}
+                onChange={(e) => set("ncm", e.target.value)}
               />
-              <label htmlFor={i.campo} className="cursor-pointer">
-                <span className="block text-[14.5px] font-semibold">{i.nome}</span>
-                <span className="mt-0.5 block text-[13px] leading-snug text-suave">
-                  {i.explica}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-
-        {/* Duas naturezas que o sistema tratava igual e não são: a massa de
-            pizza fica pronta esperando; o café passado não existe parado. */}
-        {f.producao_propria && (
-          <div className="mt-4 border-t border-linha pt-4">
-            <span className="rotulo">Como este produto é produzido</span>
-            <ul className="mt-2 grid gap-3 sm:grid-cols-2">
-              {[
-                {
-                  valor: "PARA_ESTOQUE",
-                  nome: "Para estoque",
-                  explica:
-                    "Produz, guarda e sai depois — para venda ou para outra receita. Tem saldo, tem mínimo e entra na agenda de produção. É a massa de pizza.",
-                },
-                {
-                  valor: "NA_HORA",
-                  nome: "Na hora da venda",
-                  explica:
-                    "Não fica em estoque: a venda produz e baixa no mesmo instante, consumindo os insumos da ficha. É o café passado.",
-                },
-              ].map((m) => {
-                const escolhido = f.modo_producao === m.valor;
-                return (
-                  <li key={m.valor}>
-                    <label
-                      className={`flex h-full cursor-pointer items-start gap-3 rounded border p-3.5 ${
-                        escolhido ? "border-erva bg-erva-claro" : "border-linha2 bg-superficie"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="modo_producao"
-                        className="mt-1 h-4 w-4 accent-erva"
-                        disabled={!podeEditar}
-                        checked={escolhido}
-                        onChange={() => set("modo_producao", m.valor)}
-                      />
-                      <span>
-                        <span
-                          className={`block text-[14.5px] font-semibold ${
-                            escolhido ? "text-erva" : ""
-                          }`}
-                        >
-                          {m.nome}
-                        </span>
-                        <span className="mt-0.5 block text-[13px] leading-snug text-suave">
-                          {m.explica}
-                        </span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+            </Campo>
+            <Campo rotulo="CEST" dica="acompanha o NCM">
+              <input
+                className="campo mono"
+                disabled={!podeEditar}
+                value={f.cest}
+                onChange={(e) => set("cest", e.target.value)}
+              />
+            </Campo>
+            <Campo rotulo="Marca" dica="separa dois “café 500g”">
+              <input
+                className="campo"
+                maxLength={60}
+                disabled={!podeEditar}
+                value={f.marca}
+                onChange={(e) => set("marca", e.target.value)}
+              />
+            </Campo>
+            {/* ⚠️ Peso é conversão, não enfeite: o pacote entra por UN e a ficha
+                consome em KG. O LÍQUIDO é o que interessa — o bruto inclui a
+                embalagem, e ninguém cozinha o papelão. */}
+            <Campo rotulo="Peso líquido" dica="o que dá para usar">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.001"
+                disabled={!podeEditar}
+                value={f.peso_liquido}
+                onChange={(e) => set("peso_liquido", e.target.value)}
+              />
+            </Campo>
+            <Campo rotulo="Peso bruto" dica="com a embalagem">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.001"
+                disabled={!podeEditar}
+                value={f.peso_bruto}
+                onChange={(e) => set("peso_bruto", e.target.value)}
+              />
+            </Campo>
+        </div>
       </Cartao>
 
+      {/* Combo só faz sentido depois de o produto existir: a composição aponta
+          para ele, e produto novo ainda não tem id. */}
+      {!novo && f.tipo === "KIT" && (
+        <ComposicaoKit
+          idProduto={Number(id)}
+          podeEditar={podeEditar}
+          podeVerCusto={pode("fichas.custos")}
+        />
+      )}
+
+      <Cartao titulo="Observações">
+        <textarea
+          className="campo min-h-[90px]"
+          disabled={!podeEditar}
+          value={f.observacao}
+          onChange={(e) => set("observacao", e.target.value)}
+        />
+      </Cartao>
+      </div>
+
+      <div hidden={aba !== "fornecedores"} className="flex flex-col gap-6">
       <Cartao
         titulo="Fornecedores"
         descricao="De quem se compra, com que código e em que embalagem — é o que faz a nota entrar sozinha depois."
@@ -1369,6 +1422,30 @@ export default function FormularioProduto() {
         )}
       </Cartao>
 
+      {/* 🔑 **O caso do açúcar de confeiteiro** (pedido do dono, 04/09/2026): o
+          fornecedor manda o pacote de 1 kg e o de 500 g como produtos
+          diferentes, e aqui os dois são o mesmo. Depois da fusão, a nota do de
+          500 g entrava como 1 kg por unidade — o estoque dobrava calado.
+          ⚠️ Só quando HÁ código: um produto cadastrado à mão e nunca vinculado
+          não tem o que mostrar, e um cartão vazio em toda tela de produto seria
+          ruído em troca de nada. */}
+      {!novo && !!codigos.length && (
+        <Cartao
+          titulo="Códigos de fora, e quanto cada um vale"
+          descricao="O que o Omie, o PDV e os fornecedores chamam deste produto — e quantas unidades de estoque vêm em cada um."
+        >
+          <CodigosDoProduto
+            idProduto={Number(id)}
+            codigos={codigos}
+            umEstoque={f.um_estoque || null}
+            podeEditar={podeEditar}
+            aoMudar={() => setRecarga((n) => n + 1)}
+          />
+        </Cartao>
+      )}
+      </div>
+
+      <div hidden={aba !== "estoque"} className="flex flex-col gap-6">
       {/* 🔑 As prateleiras onde o produto mora — e o cartão aparece TAMBÉM na
           tela de criar, porque é ali que a pessoa está decidindo isso. Só para
           quem controla estoque: produto que não controla não tem prateleira. */}
@@ -1383,46 +1460,100 @@ export default function FormularioProduto() {
         />
       )}
 
-      {/* A conversão também só existe depois do produto: ela aponta para ele. */}
-      {!novo && f.controla_estoque && (
-        <UnidadesDeCompra
+      <Cartao
+        titulo="Limites e validade"
+        descricao="De onde entra, de onde a venda baixa, e o que dispara alerta."
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* O local é do PRODUTO: uma nota traz congelado e seco na mesma
+                folha, e um local por nota obrigaria a lançar duas vezes. */}
+            <Campo rotulo="Local de estoque" dica="onde este produto entra">
+              <select
+                className="campo"
+                disabled={!podeEditar}
+                aria-label="Local de estoque"
+                value={f.id_local_padrao}
+                onChange={(e) => set("id_local_padrao", e.target.value)}
+              >
+                <option value="">— o local da nota —</option>
+                {locais.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            {/* 🔑 **De onde a VENDA baixa** (migração 066, pedido do dono: "podemos
+                criar no produto mais de um local, qual seria o local de estoque que
+                o PDV consome"). O campo acima fazia TRÊS papéis — a venda, o
+                fallback do consumo de insumo e o destino da produção —, e pôr a
+                vitrine nele fazia a receita da pizza comer a massa da vitrine.
+                ⚠️ Vazio é o normal, e é o padrão: sem escolha, a venda continua
+                saindo do local de estoque, como sempre saiu. */}
+            <Campo rotulo="Local da venda" dica="de onde o PDV baixa">
+              <select
+                className="campo"
+                disabled={!podeEditar}
+                aria-label="Local da venda"
+                value={f.id_local_venda}
+                onChange={(e) => set("id_local_venda", e.target.value)}
+              >
+                <option value="">— o local de estoque —</option>
+                {locais.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.nome}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            <Campo rotulo="Estoque mínimo" dica="alerta de ruptura">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.001"
+                disabled={!podeEditar}
+                value={f.estoque_minimo}
+                onChange={(e) => set("estoque_minimo", e.target.value)}
+              />
+            </Campo>
+            <Campo rotulo="Estoque máximo">
+              <input
+                className="campo mono"
+                type="number"
+                step="0.001"
+                disabled={!podeEditar}
+                value={f.estoque_maximo}
+                onChange={(e) => set("estoque_maximo", e.target.value)}
+              />
+            </Campo>
+            <Campo rotulo="Validade (dias)" dica="a partir da entrada">
+              <input
+                className="campo mono"
+                type="number"
+                disabled={!podeEditar}
+                value={f.validade_dias}
+                onChange={(e) => set("validade_dias", e.target.value)}
+              />
+            </Campo>
+        </div>
+      </Cartao>
+      </div>
+
+      <div hidden={aba !== "movimentacao"} className="flex flex-col gap-6">
+      {!novo && f.controla_estoque ? (
+        <MovimentacaoDoProduto
           idProduto={Number(id)}
           umEstoque={f.um_estoque || null}
-          podeEditar={podeEditar}
+          podeVerCusto={pode("estoque.saldos")}
         />
+      ) : (
+        <Cartao titulo="Movimentação">
+          <Vazio>
+            Este produto não controla estoque — ele não tem razão para mostrar.
+          </Vazio>
+        </Cartao>
       )}
-
-      {/* Combo só faz sentido depois de o produto existir: a composição aponta
-          para ele, e produto novo ainda não tem id. */}
-      {!novo && f.tipo === "KIT" && (
-        <ComposicaoKit
-          idProduto={Number(id)}
-          podeEditar={podeEditar}
-          podeVerCusto={pode("fichas.custos")}
-        />
-      )}
-
-      <Cartao titulo="Observações">
-        <textarea
-          className="campo min-h-[90px]"
-          disabled={!podeEditar}
-          value={f.observacao}
-          onChange={(e) => set("observacao", e.target.value)}
-        />
-        {!novo && podeEditar && (
-          <label className="mt-4 flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-erva"
-              checked={f.ativo}
-              onChange={(e) => set("ativo", e.target.checked)}
-            />
-            <span className="text-[14px]">
-              produto ativo <span className="text-suave">— inativo some das listas e das buscas</span>
-            </span>
-          </label>
-        )}
-      </Cartao>
+      </div>
 
       {podeEditar && (
         <div className="flex justify-end gap-2">
