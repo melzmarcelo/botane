@@ -399,6 +399,20 @@
   `alerta_validade_dias`, `exigir_motivo_perda`, `exigir_local_movimento`,
   `bloquear_retroativo`, `ciclo_fechamento` e `casas_decimais_qtd`.
 
+- 🔑 **A venda leva a HORA dela para o razão, e o DOCUMENTO aparece na tela** (16/09/2026,
+  relatado pelo dono: *"em Saldos e movimentos as vendas estão vindo sem a hora, e podemos
+  adicionar o número do documento, tanto na entrada quanto na saída"*).
+  ⚠️ A venda guarda `data` (date) e `hora` (time) em **colunas separadas**, e a baixa mandava só a
+  data: todo movimento de venda nascia às 00:00. Na coluna "Quando", quarenta vendas do dia
+  viravam quarenta linhas idênticas e a ordem entre elas deixava de existir. `_quando(data, hora)`
+  junta as duas — e **sem hora continua sendo a data pura**, porque a planilha não tem hora e
+  inventar meia-noite explicitamente seria a mesma mentira com mais código.
+  ⚠️ O `documento` **já era gravado** — a nota, o cupom, o lote do ajuste — e a tela não mostrava:
+  para saber de que nota veio uma entrada era preciso abrir Compras e procurar pela data. É por
+  ele que se casa a linha do razão com o papel.
+  ⚠️ A baixa por VÍNCULO continua em "agora": ela agrega muitas vendas num movimento só, e não há
+  uma data única que seja verdade.
+
 - ⚠️ **`estoque_saldos` é FOTO DERIVADA, e não se corrige na mão** (16/09/2026, pago em duas
   suítes vermelhas). Corrigindo o custo de referência de um insumo, reescrevi
   `estoque_saldos.custo_medio` por SQL — parece inofensivo, já que é a fotografia que o

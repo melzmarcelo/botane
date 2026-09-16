@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
@@ -99,7 +100,18 @@ export default function PaginaEstoque() {
   // Quem pode lançar qualquer um dos quatro ajustes vê o atalho para a tela.
   const podeAjustar = ["estoque.entradas", "estoque.saidas", "estoque.perdas",
                        "estoque.transferencias"].some(pode);
-  const [aba, setAba] = useState<"saldos" | "movimentos">("saldos");
+  /**
+   * 🔑 **A aba e o produto entram pela URL** (16/09/2026). A aba de Movimentação
+   * do cadastro de produto manda quem precisa ESTORNAR ou REPROCESSAR para cá —
+   * e mandar para a tela genérica, obrigando a achar o produto de novo pela
+   * lupa, seria mandar de volta ao trabalho que o link existe para poupar.
+   * ⚠️ O `rotulo` vem junto porque o `FiltroCadastro` fixa `{id, rotulo}`: só o
+   * id deixaria a etiqueta do filtro sem nome, e quem chegasse não saberia por
+   * qual produto a lista está filtrada.
+   */
+  const paramsUrl = useSearchParams();
+  const [aba, setAba] = useState<"saldos" | "movimentos">(
+    paramsUrl.get("aba") === "movimentos" ? "movimentos" : "saldos");
   const [saldos, setSaldos] = useState<Saldo[] | null>(null);
   const [movimentos, setMovimentos] = useState<Movimento[] | null>(null);
   const [locais, setLocais] = useState<Local[]>([]);
@@ -141,7 +153,11 @@ export default function PaginaEstoque() {
   // Filtros do razão. Separados dos saldos de propósito: são perguntas
   // diferentes — "quanto tenho hoje" e "o que aconteceu com o café em agosto".
   const [movBusca, setMovBusca] = useState("");
-  const [produtoMov, setProdutoMov] = useState<{ id: number; rotulo: string } | null>(null);
+  const [produtoMov, setProdutoMov] = useState<{ id: number; rotulo: string } | null>(
+    paramsUrl.get("id_produto")
+      ? { id: Number(paramsUrl.get("id_produto")),
+          rotulo: paramsUrl.get("produto") || `produto ${paramsUrl.get("id_produto")}` }
+      : null);
   const [movTipo, setMovTipo] = useState("");
   const [movLocal, setMovLocal] = useState("");
   const [movInicio, setMovInicio] = useState("");
@@ -822,6 +838,14 @@ export default function PaginaEstoque() {
                   <tr>
                     <th>Quando</th>
                     <th>O quê</th>
+                    {/* 🔑 **O DOCUMENTO** (16/09/2026, pedido do dono: *"podemos
+                        adicionar o número do documento, tanto na entrada quanto
+                        na saída"*). O razão já gravava — a nota, o cupom, o lote
+                        do ajuste —, e a tela não mostrava: para saber de que
+                        nota veio uma entrada era preciso abrir Compras e
+                        procurar pela data. É por ele que se casa a linha do
+                        razão com o papel. */}
+                    <th>Documento</th>
                     <th>Produto</th>
                     <th className="num">Qtd</th>
                     <th className="num">Custo un.</th>
@@ -856,6 +880,9 @@ export default function PaginaEstoque() {
                             <Etiqueta cor="alerta">custo provisório</Etiqueta>
                           </span>
                         )}
+                      </td>
+                      <td className="mono text-[12.5px]">
+                        {m.documento || <span className="text-suave">—</span>}
                       </td>
                       <td>
                         {m.produto}

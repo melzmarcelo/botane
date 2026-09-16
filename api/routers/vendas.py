@@ -6,7 +6,7 @@ congelado na importação**: o CMV teórico de março não muda quando alguém c
 uma receita em abril.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -229,6 +229,21 @@ def previa(body: PreviaCupomRequest, ctx: Contexto = Depends(_editar)) -> dict:
         }
 
 
+def _quando(data, hora):
+    """A data da venda COM a hora dela, para o razão.
+
+    🔑 **Relatado pelo dono (16/09/2026):** *"em Saldos e movimentos as vendas
+    estão vindo sem a hora"*. E estavam: a venda guarda `data` (date) e `hora`
+    (time) em colunas separadas, e a baixa mandava só a data — todo movimento de
+    venda nascia às 00:00. Na coluna "Quando", quarenta vendas do dia viravam
+    quarenta linhas idênticas, e a ordem entre elas deixava de existir.
+
+    ⚠️ **Sem hora, continua sendo a data pura.** A planilha não tem hora, e
+    inventar meia-noite explicitamente seria a mesma mentira com mais código.
+    """
+    return datetime.combine(data, hora) if hora else data
+
+
 @router.post("/importar", status_code=201)
 def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> dict:
     """Importa um lote. Documento repetido é ignorado — reimportar não duplica."""
@@ -424,7 +439,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                                      or p_venda.get("id_local_padrao"),
                             id_produto=id_produto,
                             tipo="SAIDA_VENDA", quantidade=item.quantidade,
-                            data_movimento=venda.data,
+                            data_movimento=_quando(venda.data, venda.hora),
                             origem_tipo="VENDA", origem_id=id_venda,
                             documento=venda.documento, id_usuario=ctx.id_usuario,
                             observacao=("Produzido e vendido na hora" if feito
@@ -681,7 +696,7 @@ def baixar_sem_baixa(id_produto: int | None = None,
         if faltas:
             cur.execute(
                 """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
-                          v.documento
+                          v.hora, v.documento
                      FROM venda_itens vi
                      JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
                     WHERE v.id_unidade = %s AND vi.id_produto = ANY(%s)
@@ -709,7 +724,8 @@ def baixar_sem_baixa(id_produto: int | None = None,
                     cur, id_unidade=id_unidade,
                     id_local=item["id_local_padrao"] or reserva,
                     id_produto=item["id_produto"], tipo="SAIDA_VENDA",
-                    quantidade=item["quantidade"], data_movimento=item["data"],
+                    quantidade=item["quantidade"],
+                    data_movimento=_quando(item["data"], item["hora"]),
                     origem_tipo="VENDA", origem_id=item["id_venda"],
                     documento=item["documento"], id_usuario=ctx.id_usuario,
                     observacao="Baixa da venda que ficou para trás do vínculo",

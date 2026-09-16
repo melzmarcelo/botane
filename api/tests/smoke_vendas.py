@@ -545,6 +545,40 @@ if tk_coz:
     checar("e a rota do dia recusa para ele", st == 403, st)
 
 
+print()
+print("A HORA da venda vai para o razao")
+# 🔑 **Relatado pelo dono (16/09/2026):** *"em Saldos e movimentos as vendas
+# estao vindo sem a hora"*. E estavam: a venda guarda `data` (date) e `hora`
+# (time) em colunas separadas, e a baixa mandava so a data -- todo movimento de
+# venda nascia as 00:00. Na coluna "Quando", quarenta vendas do dia viravam
+# quarenta linhas identicas, e a ordem entre elas deixava de existir.
+_suf = str(time.time_ns())[-5:]
+st, _r = chamar("POST", "/produtos", {
+    "nome": f"HORA VENDA {_suf}", "tipo": "REVENDA", "um_estoque": "UN",
+    "controla_estoque": True, "status": "ATIVO"}, token=token)
+_prod_hora = (_r or {}).get("id")
+chamar("POST", "/estoque/entradas",
+       {"id_produto": _prod_hora, "quantidade": 10, "custo_unitario": 2,
+        "id_local": principal["id"]}, token=token)
+st, _r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": hoje, "hora": "14:35", "documento": f"HORA-{_suf}",
+    "origem": "MANUAL", "itens": [
+        {"id_produto": _prod_hora, "quantidade": 1, "valor_unitario": 9}]}]}, token=token)
+checar("a venda com hora e importada", st in (200, 201), (st, _r))
+st, _movs = chamar("GET", f"/estoque/movimentos?id_produto={_prod_hora}&por_pagina=10",
+                   token=token)
+_saida = next((m for m in (_movs or []) if m["tipo"] == "SAIDA_VENDA"), None)
+_quando = str((_saida or {}).get("data_movimento") or "")
+# ⚠️ A afirmacao central: o movimento nasce as 14:35, nao a meia-noite.
+checar("e o movimento dela nasce com a HORA da venda", "14:35" in _quando, _quando)
+# 🔑 E o DOCUMENTO viaja junto, que e por onde a linha do razao se casa com o
+# cupom (pedido do dono: "podemos adicionar o numero do documento, tanto na
+# entrada quanto na saida").
+checar("com o documento da venda na linha",
+       (_saida or {}).get("documento") == f"HORA-{_suf}", _saida)
+chamar("DELETE", f"/produtos/{_prod_hora}", token=token)
+
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")
