@@ -33,6 +33,18 @@ class AgendarRequest(BaseModel):
     # são voltas inteiras da ficha (2 receitas de 65). O padrão é `PORCOES`,
     # que é como sempre foi. Ver `services.estoque._quanto_produzir`.
     medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
+    # 🔑 O modo de rendimento planejado. Nulo é o padrão (ou o que a prateleira
+    # herda). Ele fica GRAVADO na linha: cumprir a agenda três dias depois pelo
+    # rendimento padrão seria a quantidade certa saindo da receita errada.
+    id_modo: int | None = None
+
+
+class ConsumoRealLinha(BaseModel):
+    """O que realmente saiu de uma linha da receita. Ver `models.estoque.ConsumoReal`."""
+
+    id_item: int
+    quantidade: float = Field(ge=0)
+    um: str | None = Field(default=None, max_length=6)
 
 
 class ProduzirLinhaRequest(BaseModel):
@@ -40,6 +52,9 @@ class ProduzirLinhaRequest(BaseModel):
     # do fogão. Vazio = o planejado.
     quantidade: float | None = Field(default=None, gt=0)
     id_local: int | None = None
+    # 🔑 E o mesmo vale INSUMO a INSUMO: a receita pede cinco ovos, a banca usou
+    # seis. É na folha da produção que isso se corrige, que é onde a lista está.
+    consumos: list[ConsumoRealLinha] = Field(default_factory=list)
 
 
 class CancelarRequest(BaseModel):
@@ -79,7 +94,8 @@ def listar(inicio: date | None = None, fim: date | None = None, status: str | No
 
 @router.get("/necessario")
 def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
-               medida: str = "PORCOES", ctx: Contexto = Depends(_ver)) -> dict:
+               medida: str = "PORCOES", id_modo: int | None = None,
+               ctx: Contexto = Depends(_ver)) -> dict:
     """O que vai ser preciso para produzir tanto — sem produzir nada.
 
     A folha que se leva para a bancada: quanto de cada insumo, quanto disso
@@ -89,7 +105,7 @@ def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         return estoque.previsao_producao(cur, id_unidade, id_produto, quantidade, id_local,
-                                         medida)
+                                         medida, id_modo)
 
 
 @router.get("/{id_agenda}")
@@ -115,7 +131,7 @@ def obter(id_agenda: int, ctx: Contexto = Depends(_ver)) -> dict:
         # é o de agora que diz se dá para produzir.
         linha["previsao"] = estoque.previsao_producao(
             cur, linha["id_unidade"], linha["id_produto"], linha["quantidade"],
-            linha["id_local"],
+            linha["id_local"], None, linha.get("id_modo"),
         )
         return linha
 
@@ -128,11 +144,13 @@ def agendar(body: AgendarRequest, ctx: Contexto = Depends(_ver)) -> dict:
         # unidade de estoque; de dentro para lá — resumo, folha da bancada,
         # produção que fecha a linha — ninguém precisa lembrar de traduzir.
         quanto = estoque.quantidade_de_estoque(
-            cur, id_unidade, body.id_produto, body.quantidade, body.id_local, body.medida)
+            cur, id_unidade, body.id_produto, body.quantidade, body.id_local, body.medida,
+            body.id_modo)
         r = motor.agendar(
             cur, id_unidade, body.id_produto,
             body.data_prevista or motor.proximo_dia_util(),
             quanto["quantidade"], ctx.id_usuario, body.id_local, body.observacao,
+            id_modo=quanto["id_modo"],
         )
         auditoria.registrar(cur, ctx.id_usuario, "producao_agenda", r["id"], "agendar",
                             depois=r, id_unidade=id_unidade)
@@ -145,7 +163,8 @@ def produzir(id_agenda: int, body: ProduzirLinhaRequest,
     """Cumpre a linha — é aqui que o estoque se mexe."""
     with get_cursor() as cur:
         r = motor.produzir_linha(cur, id_agenda, ctx.id_usuario, body.quantidade,
-                                 body.id_local)
+                                 body.id_local,
+                                 consumos=[c.model_dump() for c in body.consumos])
         auditoria.registrar(cur, ctx.id_usuario, "producao_agenda", id_agenda, "produzir",
                             depois={"produzido": r["produzido"],
                                     "planejado": r["planejado"],

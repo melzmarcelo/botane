@@ -395,6 +395,87 @@ checar("sem medida, 65 continua querendo dizer 65 unidades",
 
 
 print()
+print("11. o que REALMENTE foi usado")
+# 🔑 **Pedido do dono (16/09/2026):** *"na lista de insumos, ter uma nova
+# coluna com o que realmente foi usado. Por padrao e a mesma quantidade, mas o
+# usuario pode alterar, inclusive a unidade -- por exemplo, na receita vao 5
+# ovos, mas por um acaso usei 6."*
+# 🔑 O razao SEMPRE foi capaz disso; o que faltava era a porta. Quem usava
+# seis ovos lancava cinco, e o sexto sumia do controle ate aparecer semanas
+# depois no inventario, como falta sem causa.
+ovo = novo_produto(f"Prod ovo {SUF}", "UN", tipo="INSUMO")
+chamar("POST", "/estoque/entradas",
+       {"id_produto": ovo, "quantidade": 200, "custo_unitario": 1,
+        "id_local": local["id"]}, token=token)
+bolo = novo_produto(f"Prod bolo {SUF}", "UN", tipo="PRODUZIDO", producao_propria=True)
+st, r = chamar("POST", "/fichas", {
+    "id_produto": bolo, "rendimento_qtd": 1, "rendimento_um": "UN", "porcoes": 1,
+    "itens": [{"id_insumo": ovo, "qtd_bruta": 5, "um": "UN"}]}, token=token)
+ficha_bolo = r.get("id")
+chamar("POST", f"/fichas/{ficha_bolo}/homologar", {}, token=token)
+
+st, prev = chamar("GET", f"/producao-agenda/necessario?id_produto={bolo}&quantidade=1",
+                  token=token)
+item = (prev.get("itens") or [{}])[0]
+# ⚠️ A correcao viaja pela LINHA da receita, nao pelo produto: a mesma ficha
+# pode listar o mesmo insumo duas vezes.
+checar("a folha traz o id da linha da receita", bool(item.get("id_item")), item)
+checar("e as unidades que o insumo aceita", "UN" in (item.get("unidades") or []), item)
+
+st, antes = chamar("GET", f"/estoque/saldos?id_produto={ovo}", token=token)
+tinha = sum(float(x["quantidade"]) for x in (antes or []))
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": bolo, "quantidade": 1, "id_local": local["id"],
+    "consumos": [{"id_item": item["id_item"], "quantidade": 6, "um": "UN"}]}, token=token)
+checar("produzir com a correcao grava", st == 201, (st, r))
+st, depois = chamar("GET", f"/estoque/saldos?id_produto={ovo}", token=token)
+ficou = sum(float(x["quantidade"]) for x in (depois or []))
+# A afirmacao central: sairam SEIS, nao os cinco da receita.
+checar("e sairam os 6 ovos usados, nao os 5 da receita", perto(tinha - ficou, 6),
+       (tinha, ficou))
+checar("a producao fica marcada como corrigida",
+       (r or {}).get("consumo_ajustado") is True, r)
+linha_ovo = next((c for c in (r or {}).get("consumos", []) if c["id_produto"] == ovo), None)
+checar("e a resposta diz o que a receita pedia, ao lado do que saiu",
+       linha_ovo and perto(linha_ovo.get("pedida"), 5) and perto(linha_ovo.get("quantidade"), 6),
+       linha_ovo)
+
+# ⚠️ Sem correcao, nada muda: linha nao tocada e a receita.
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": bolo, "quantidade": 1, "id_local": local["id"]}, token=token)
+checar("sem correcao, a producao segue a receita",
+       st == 201 and (r or {}).get("consumo_ajustado") is False, (st, r))
+
+# 🔑 **Zero e aceito e NAO vira movimento.** "Nao usei" e resposta legitima --
+# acabou, substitui -- e uma linha de quantidade zero no razao diria que algo se
+# moveu.
+st, antes2 = chamar("GET", f"/estoque/saldos?id_produto={ovo}", token=token)
+tinha2 = sum(float(x["quantidade"]) for x in (antes2 or []))
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": bolo, "quantidade": 1, "id_local": local["id"],
+    "consumos": [{"id_item": item["id_item"], "quantidade": 0}]}, token=token)
+checar("produzir sem usar o insumo e aceito", st == 201, (st, r))
+st, depois2 = chamar("GET", f"/estoque/saldos?id_produto={ovo}", token=token)
+checar("e o saldo do insumo nao se mexe",
+       perto(tinha2, sum(float(x["quantidade"]) for x in (depois2 or []))), (tinha2, depois2))
+
+# ⚠️ Unidade sem caminho de conversao e RECUSA: aceitar 1:1 faria "usei 2 CX"
+# baixar duas unidades.
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": bolo, "quantidade": 1, "id_local": local["id"],
+    "consumos": [{"id_item": item["id_item"], "quantidade": 2, "um": "CX"}]}, token=token)
+checar("unidade que nao converte e recusada", st == 400, (st, r))
+checar("e a frase diz o que cadastrar", "converte" in str((r or {}).get("detail", "")), r)
+
+# ⚠️ Correcao de linha que esta ficha nao tem: a receita mudou desde que a
+# folha foi aberta, e gravar seria gravar uma producao que ninguem viu.
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": bolo, "quantidade": 1, "id_local": local["id"],
+    "consumos": [{"id_item": 99999999, "quantidade": 1}]}, token=token)
+checar("correcao de linha que nao e desta ficha e recusada", st == 400, (st, r))
+
+
+print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")

@@ -26,11 +26,31 @@ import {
  * onde vai sair, e o que falta. Sem essa folha, a pessoa descobre que acabou a
  * farinha depois de ligar o forno.
  *
+ * 🔑 **Esta folha é da COZINHA, não do escritório** (16/09/2026, pedido do dono:
+ * *"quem vai ver esta tela precisa saber as quantidades e o modo de preparo, e
+ * não os custos; dar mais foco nisto e disponibilizar a impressão desta tela,
+ * para que seja passada para a produção"*). Três consequências, e elas andam
+ * juntas:
+ *
+ * 1. **O modo de preparo entrou.** Sem ele a folha era meia folha: a pessoa
+ *    levava a lista de ingredientes e abria a ficha noutra tela para saber o que
+ *    fazer com eles.
+ * 2. **O custo saiu da tabela.** Ele era uma coluna ao lado das quantidades,
+ *    disputando a mesma leitura — e quem está na bancada não decide nada com
+ *    ele. Continua na tela, numa linha discreta ao pé, para quem tem a permissão.
+ * 3. **E o custo NÃO é impresso.** A folha é passada de mão em mão na cozinha;
+ *    mandar o custo do prato junto é distribuir margem por engano.
+ *
  * ⚠️ A previsão é sempre de AGORA, nunca a de quando se agendou: o estoque
  * mudou desde então, e é o de agora que diz se dá para produzir.
  */
 
 type ItemPrevisto = {
+  /** A linha da RECEITA. É por ela que a correção viaja: a mesma ficha pode
+      listar o mesmo insumo duas vezes. */
+  id_item: number;
+  /** As unidades que este insumo aceita — as mesmas que a conversão conhece. */
+  unidades: string[];
   id_produto: number;
   produto: string;
   codigo: string;
@@ -63,6 +83,13 @@ type Previsao = {
   itens_faltando: number;
   custo_total: number;
   custo_unitario: number;
+  /** O que a bancada precisa saber além das quantidades. */
+  modo_preparo: string | null;
+  tempo_preparo_min: number | null;
+  alergenos: string | null;
+  ficha_observacao: string | null;
+  /** Qual modo de rendimento está valendo — o planejado, ou o padrão. */
+  modo?: string | null;
 };
 
 type Linha = {
@@ -98,6 +125,19 @@ export default function PaginaOrdemProducao() {
   const [confirmando, setConfirmando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
 
+  /**
+   * 🔑 **O que REALMENTE foi usado** (16/09/2026, pedido do dono: *"na lista de
+   * insumos, ter uma nova coluna com o que realmente foi usado — por padrão a
+   * mesma quantidade, mas o usuário pode alterar, inclusive a unidade; na receita
+   * vão 5 ovos, mas por um acaso usei 6"*).
+   *
+   * ⚠️ **Só viaja o que foi TOCADO.** Mandar todas as linhas faria o número
+   * ARREDONDADO da tela virar o número gravado — 0,626 KG no lugar de 0,62642 —
+   * e marcaria toda produção como corrigida. Linha não tocada é a receita, e a
+   * receita o servidor já sabe calcular.
+   */
+  const [usado, setUsado] = useState<Record<number, { quantidade: string; um: string }>>({});
+
   const carregar = useCallback(async () => {
     try {
       const r = await api.get<Linha>(`/producao-agenda/${id}`);
@@ -122,6 +162,9 @@ export default function PaginaOrdemProducao() {
         `/producao-agenda/necessario?id_produto=${linha.id_produto}&quantidade=${n}`,
       );
       setLinha({ ...linha, previsao: p });
+      // ⚠️ Mudou a quantidade produzida, mudou o que a receita pede: as correções
+      // de antes falavam de outra conta.
+      setUsado({});
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível recalcular");
     }
@@ -133,6 +176,11 @@ export default function PaginaOrdemProducao() {
     try {
       const r = await api.post<{ message: string }>(`/producao-agenda/${id}/produzir`, {
         quantidade: Number(quantidade.replace(",", ".")),
+        consumos: Object.entries(usado).map(([idItem, v]) => ({
+          id_item: Number(idItem),
+          quantidade: Number(v.quantidade.replace(",", ".")) || 0,
+          um: v.um || null,
+        })),
       });
       aviso.sucesso(r.message, {
         texto: "voltar para a agenda",
@@ -158,12 +206,25 @@ export default function PaginaOrdemProducao() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <Voltar href="/producao">
-          produção
-        </Voltar>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
-          {linha.produto}
-        </h1>
+        <div className="nao-imprimir">
+          <Voltar href="/producao">
+            produção
+          </Voltar>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="mt-1 text-[24px] font-bold tracking-tight sm:text-[30px]">
+            {linha.produto}
+          </h1>
+          {/* 🔑 **A folha se imprime e vai para a bancada** (pedido do dono). É o
+              mesmo Ctrl+P do painel de CMV — `nao-imprimir` tira o menu, os
+              botões e o cartão de custo, e sobra a folha. */}
+          <button
+            className="btn btn-secundario nao-imprimir mt-1"
+            onClick={() => window.print()}
+          >
+            Imprimir a folha
+          </button>
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Etiqueta>{linha.codigo}</Etiqueta>
           <Etiqueta>ficha v{p.versao}</Etiqueta>
@@ -175,15 +236,35 @@ export default function PaginaOrdemProducao() {
           )}
           {linha.origem === "ALERTA" && <Etiqueta>veio do alerta</Etiqueta>}
         </div>
-        <p className="mt-2 max-w-[70ch] prosa text-suave">
+        {/* 🔑 **O QUANTO vem primeiro, e grande.** É a única coisa que a pessoa
+            precisa ler de longe, com as mãos ocupadas — e era uma frase corrida
+            no meio de um parágrafo cinza. */}
+        <p className="mt-3 text-[20px] font-semibold tracking-tight sm:text-[24px]">
+          Produzir <span className="mono">{qtd(agora)}</span>{" "}
+          <span className="text-suave">{p.um_estoque}</span>
+          <span className="ml-3 text-[15px] font-normal text-suave">
+            {qtd(p.lotes)} receita(s)
+          </span>
+        </p>
+        <p className="mt-1 max-w-[70ch] prosa text-suave">
           A receita rende <b className="mono">{qtd(p.rendimento_qtd)}</b>{" "}
-          {p.rendimento_um ?? p.um_estoque} por vez — para{" "}
-          <b className="mono">{qtd(agora)}</b> {p.um_estoque} ela é feita{" "}
-          <b className="mono">{qtd(p.lotes)}</b> vez(es).
+          {p.rendimento_um ?? p.um_estoque} por vez
+          {p.modo && (
+            <>
+              {" "}no modo <b>{p.modo}</b>
+            </>
+          )}
+          {p.tempo_preparo_min ? (
+            <>
+              {" "}· leva cerca de <b className="mono">{p.tempo_preparo_min}</b> min
+            </>
+          ) : null}
+          {linha.local && <> · vai para <b>{linha.local}</b></>}.
         </p>
       </header>
 
       {aberta && (
+        <div className="nao-imprimir">
         <Cartao titulo="Quanto produzir">
           <div className="flex flex-wrap items-end gap-3">
             <label>
@@ -209,6 +290,7 @@ export default function PaginaOrdemProducao() {
             </button>
           </div>
         </Cartao>
+        </div>
       )}
 
       <Cartao
@@ -235,7 +317,12 @@ export default function PaginaOrdemProducao() {
                   <th className="num">Por unidade</th>
                   <th className="num">Total</th>
                   <th className="num">Tem no local</th>
-                  {veCusto && <th className="num">Custo</th>}
+                  {/* 🔑 **O que REALMENTE foi usado** (pedido do dono). Em branco
+                      é a receita; quem usou seis ovos onde ela pede cinco
+                      escreve seis, e o sexto deixa de sumir do controle.
+                      ⚠️ A coluna VAI para o papel: a caixa em branco é onde a
+                      banca anota à mão o que gastou, para digitar depois. */}
+                  {aberta && <th className="num">Usei</th>}
                 </tr>
               </thead>
               <tbody>
@@ -254,7 +341,8 @@ export default function PaginaOrdemProducao() {
                     <td className="num whitespace-nowrap text-suave">
                       {qtd(i.por_unidade)} {i.um_ficha ?? i.um_estoque}
                     </td>
-                    <td className="num whitespace-nowrap font-semibold">
+                    {/* O número que a bancada vai pesar: é o maior da linha. */}
+                    <td className="num whitespace-nowrap text-[16px] font-semibold">
                       {qtd(i.necessario)} {i.um_estoque}
                       {i.um_ficha && i.um_ficha !== i.um_estoque && (
                         <span className="block text-[12px] font-normal text-suave">
@@ -274,36 +362,88 @@ export default function PaginaOrdemProducao() {
                         </span>
                       )}
                     </td>
-                    {veCusto && (
-                      <td className="num whitespace-nowrap">
-                        {i.custo === null ? (
-                          <span className="text-alerta">sem custo</span>
-                        ) : (
-                          <>
-                            {reais(i.custo)}
-                            <span className="block text-[12px] text-suave">
-                              {custo(i.custo_unitario ?? 0)} / {i.um_estoque}
+                    {aberta && (
+                      <td className="num">
+                        {/* ⚠️ **A largura mora no INVÓLUCRO, não no campo.**
+                            `.campo` tem `width: 100%` sem camada, e uma
+                            utilitária `w-[92px]` perde para ela na cascata — o
+                            campo esticava para os 326px da célula e a coluna
+                            "Usei" virava a mais larga da tabela. */}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span className="block w-[96px]">
+                          <input
+                            className="campo mono px-2 py-1.5 text-right text-[13.5px]"
+                            inputMode="decimal"
+                            aria-label={`usado de ${i.produto}`}
+                            placeholder={qtd(i.necessario)}
+                            value={usado[i.id_item]?.quantidade ?? ""}
+                            onChange={(e) =>
+                              setUsado((a) => ({
+                                ...a,
+                                [i.id_item]: {
+                                  quantidade: e.target.value,
+                                  um: a[i.id_item]?.um ?? (i.um_estoque ?? ""),
+                                },
+                              }))
+                            }
+                          />
+                          </span>
+                          {/* ⚠️ Só oferece o que a conversão SABE traduzir —
+                              oferecer o resto seria convidar a recusa. */}
+                          {i.unidades.length > 1 ? (
+                            <span className="block w-[74px]">
+                            <select
+                              className="campo px-1.5 py-1.5 text-[13px]"
+                              aria-label={`unidade do usado de ${i.produto}`}
+                              value={usado[i.id_item]?.um ?? (i.um_estoque ?? "")}
+                              onChange={(e) =>
+                                setUsado((a) => ({
+                                  ...a,
+                                  [i.id_item]: {
+                                    quantidade:
+                                      a[i.id_item]?.quantidade ?? String(i.necessario ?? ""),
+                                    um: e.target.value,
+                                  },
+                                }))
+                              }
+                            >
+                              {i.unidades.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
                             </span>
-                          </>
-                        )}
+                          ) : (
+                            <span className="w-[74px] text-left text-[13px] text-suave">
+                              {i.um_estoque}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
                 ))}
               </tbody>
-              {veCusto && (
-                <tfoot>
-                  <tr className="border-t-2 border-linha2 font-semibold">
-                    <td colSpan={3}>Custo da produção</td>
-                    <td className="num text-suave">
-                      {custo(p.custo_unitario)} / {p.um_estoque}
-                    </td>
-                    <td className="num">{reais(p.custo_total)}</td>
-                  </tr>
-                </tfoot>
-              )}
             </table>
           </div>
+        )}
+
+        {/* 🔑 **O custo saiu da tabela** (pedido do dono, 16/09/2026). Ele
+            disputava a leitura com as quantidades e quem está na bancada não
+            decide nada com ele. Continua aqui, numa linha ao pé, para quem tem a
+            permissão — e `nao-imprimir` o mantém fora da folha que circula na
+            cozinha: mandar o custo do prato de mão em mão é distribuir margem
+            por engano. */}
+        {veCusto && !!p.itens.length && (
+          <p className="nao-imprimir mt-4 flex flex-wrap items-baseline justify-end gap-x-3
+                        border-t border-linha pt-3 text-[13.5px] text-suave">
+            <span>custo desta produção</span>
+            <b className="mono text-[15px] text-tinta">{reais(p.custo_total)}</b>
+            <span className="mono">
+              {custo(p.custo_unitario)} / {p.um_estoque}
+            </span>
+          </p>
         )}
 
         {p.itens_faltando > 0 && aberta && (
@@ -314,6 +454,50 @@ export default function PaginaOrdemProducao() {
           </p>
         )}
       </Cartao>
+
+      {/* 🔑 **Como se faz** (16/09/2026, pedido do dono: *"precisa saber as
+          quantidades e o modo de preparo"*). Sem isto a folha era meia folha: a
+          pessoa levava a lista de ingredientes e abria a ficha noutra tela para
+          saber o que fazer com eles.
+          ⚠️ `whitespace-pre-line`: o modo de preparo é digitado em passos, e um
+          texto corrido apaga a ordem que alguém escreveu. */}
+      {/* ⚠️ **A caixa aparece SEMPRE**, mesmo vazia (16/09/2026 — o dono pediu
+          "uma caixa abaixo com os detalhes para preparo, que são cadastrados na
+          ficha" depois de ela já existir, porque a ficha dele não tinha nada
+          escrito e o cartão sumia). Um cartão que some quando está vazio não
+          ensina onde se preenche; um cartão vazio que diz onde, ensina. */}
+      {(
+        <Cartao
+          titulo="Como se faz"
+          descricao={
+            p.tempo_preparo_min
+              ? `Cerca de ${p.tempo_preparo_min} min · ficha v${p.versao}`
+              : `Ficha v${p.versao}`
+          }
+        >
+          {p.modo_preparo ? (
+            <p className="prosa max-w-[80ch] whitespace-pre-line text-[15px] leading-relaxed">
+              {p.modo_preparo}
+            </p>
+          ) : (
+            <Vazio>
+              A ficha ainda não tem modo de preparo escrito.{" "}
+              <Link className="link-acao" href={`/fichas/${p.id_ficha}`}>
+                abrir a ficha
+              </Link>{" "}
+              para preencher — é de lá que esta caixa vem.
+            </Vazio>
+          )}
+          {p.alergenos && (
+            <p className="mt-4 text-[13.5px] text-suave">
+              <b className="text-tinta">Alérgenos:</b> {p.alergenos}
+            </p>
+          )}
+          {p.ficha_observacao && (
+            <p className="mt-2 text-[13.5px] text-suave">{p.ficha_observacao}</p>
+          )}
+        </Cartao>
+      )}
 
       {confirmando && (
         <Confirmacao
@@ -333,6 +517,15 @@ export default function PaginaOrdemProducao() {
           {p.itens_faltando > 0 && (
             <p className="mt-2 text-[13.5px] text-alerta">
               {p.itens_faltando} insumo(s) sem saldo suficiente — o custo sai provisório.
+            </p>
+          )}
+          {/* 🔑 As correções de consumo entram na pergunta: elas mudam o que sai
+              do estoque, e quem confirma tem de saber que vai gravar o que
+              digitou, não o que a receita pedia. */}
+          {!!Object.keys(usado).length && (
+            <p className="mt-2 text-[13.5px]">
+              <b>{Object.keys(usado).length} insumo(s)</b> vão sair na quantidade que você
+              corrigiu, não na da receita.
             </p>
           )}
           <p className="mt-3 text-[13.5px] text-suave">

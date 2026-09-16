@@ -186,6 +186,27 @@ class EstornoRequest(BaseModel):
     motivo: str | None = None
 
 
+class ConsumoReal(BaseModel):
+    """O que REALMENTE saiu de uma linha da receita.
+
+    🔑 **Pedido do dono (16/09/2026):** *"na lista de insumos, ter uma nova
+    coluna com o que realmente foi usado — por padrão a mesma quantidade, mas o
+    usuário pode alterar, inclusive a unidade; na receita vão 5 ovos, mas por um
+    acaso usei 6."*
+
+    ⚠️ **`id_item` é a linha da FICHA, não o produto.** A mesma receita pode
+    listar o mesmo insumo duas vezes (a manteiga da massa e a de untar), e
+    corrigir "a manteiga" mexeria nas duas.
+
+    ⚠️ **Zero é aceito**: "não usei" é resposta legítima, e ela não vira
+    movimento. ⚠️ `um` vazio quer dizer "na unidade de estoque do insumo".
+    """
+
+    id_item: int
+    quantidade: float = Field(ge=0)
+    um: str | None = Field(default=None, max_length=6)
+
+
 class ProducaoRequest(BaseModel):
     id_produto: int
     quantidade: float = Field(gt=0)
@@ -198,6 +219,12 @@ class ProducaoRequest(BaseModel):
     # é `PORCOES`, que é como sempre foi, e o razão continua gravando só a
     # unidade de estoque. Ver `services.estoque._quanto_produzir`.
     medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
+    # 🔑 **Qual MODO de rendimento** (16/09/2026). Nulo é o Modo padrão — ou o
+    # modo que a prateleira/o setor de destino herdam, que é o comportamento da
+    # migração 066. Ver `services.estoque.modo_da_producao`.
+    id_modo: int | None = None
+    # O que realmente saiu, quando não foi o que a ficha pedia. Vazio = a receita.
+    consumos: list[ConsumoReal] = Field(default_factory=list)
 
 
 class InventarioCreate(BaseModel):

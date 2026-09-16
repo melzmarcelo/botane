@@ -684,9 +684,23 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
 /* ---- impressão: o Ctrl+P do painel vira o PDF que vai para o contador ---- */
 @media print {
   aside, header.sticky, .nao-imprimir, button { display: none !important; }
+  /* ⚠️ **O esqueleto é uma GRADE de duas colunas** (menu + conteúdo), e esconder
+     o menu NÃO tira a coluna dele: o conteúdo ia parar na faixa de 276px e a
+     tabela saía com as colunas da direita cortadas. Na folha da produção isso
+     comia justamente a coluna "Total", que é a que a bancada vai pesar — e o
+     papel não denuncia o corte como a tela denuncia, com a barra de rolagem. */
+  .esqueleto { display: block !important; }
   main { padding: 0 !important; }
+  main > div { max-width: none !important; }
+  /* Rolagem lateral não existe no papel: o que passa da largura simplesmente
+     some. Deixar visível faz a tabela caber, encolhendo as colunas. */
+  .overflow-x-auto { overflow: visible !important; }
   body { background: #fff; font-size: 11pt; }
-  .cartao { border-color: #ccc; break-inside: avoid; }
+  /* ⚠️ `break-inside: avoid` no cartão INTEIRO empurrava uma lista longa para a
+     página seguinte — e, quando ela não cabia em nenhuma, cortava. A unidade
+     que não se parte é a LINHA. */
+  .cartao { border-color: #ccc; }
+  .tabela tr, .cartao > h2 { break-inside: avoid; }
   .tabela th { background: #f2f2f2; }
   a[href]::after { content: ""; }
 }

@@ -981,9 +981,8 @@ def transferir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local_or
             "id_unidade_origem": unidade_origem, "id_unidade_destino": unidade_destino}
 
 
-def _rendimento_em_estoque(cur, id_ficha: int, id_local: int | None, rendimento,
-                           rendimento_um: str | None, um_estoque: str | None,
-                           ums: dict) -> Decimal:
+def _rendimento_em_estoque(rendimento, porcoes, rendimento_um: str | None,
+                           um_estoque: str | None, ums: dict) -> Decimal:
     """Quantas unidades de ESTOQUE do produto uma receita inteira rende.
 
     🔑 **As duas pontas falam unidades diferentes, e isso quebrava a conta**
@@ -1016,23 +1015,12 @@ def _rendimento_em_estoque(cur, id_ficha: int, id_local: int | None, rendimento,
     if not um_r or not um_p or um_r == um_p:
         return r
 
-    # 2. As porções — do DESTINO quando ele tem as suas, senão as da ficha.
-    porcoes = None
-    if id_local is not None:
-        cur.execute(
-            "SELECT porcoes FROM ficha_locais WHERE id_ficha = %s AND id_local = %s",
-            (id_ficha, id_local),
-        )
-        linha = cur.fetchone()
-        if linha and dec(linha["porcoes"]) > 0:
-            porcoes = dec(linha["porcoes"])
-    if porcoes is None:
-        cur.execute("SELECT porcoes FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
-        linha = cur.fetchone()
-        if linha and dec(linha["porcoes"]) > 0:
-            porcoes = dec(linha["porcoes"])
-    if porcoes:
-        return porcoes
+    # 2. As porções do MODO que está valendo. ⚠️ Elas chegam resolvidas de cima
+    #    (`modo_da_producao`): a ponte não pergunta ao banco qual modo é, porque
+    #    quem decide isso é quem produz, na tela, e essa resposta tem de ser a
+    #    mesma da prévia, da agenda e do custo.
+    if porcoes and dec(porcoes) > 0:
+        return dec(porcoes)
 
     # 3. A grandeza: o rendimento traduzido para a unidade do produto.
     convertida = custos.converter(r, um_r, um_p, ums)
@@ -1043,8 +1031,8 @@ def _rendimento_em_estoque(cur, id_ficha: int, id_local: int | None, rendimento,
         status_code=400,
         detail=(
             f"A receita rende em {um_r} e este produto é estocado em {um_p}, e o sistema não "
-            f"sabe quantos {um_p} a receita faz. Informe as PORÇÕES na ficha (quantas unidades "
-            f"ela rende) — é esse número que liga as duas pontas."
+            f"sabe quantos {um_p} a receita faz. Informe as PORÇÕES na ficha — ou no modo de "
+            f"rendimento que está sendo usado —, que é o número que liga as duas pontas."
         ),
     )
 
@@ -1063,8 +1051,8 @@ def _rendimento_em_estoque(cur, id_ficha: int, id_local: int | None, rendimento,
 MEDIDAS_DE_PRODUCAO = ("PORCOES", "RECEITAS")
 
 
-def _quanto_produzir(cur, id_ficha: int, id_local: int | None, quantidade, medida: str | None,
-                     rendimento, rendimento_um: str | None, um_estoque: str | None,
+def _quanto_produzir(quantidade, medida: str | None, rendimento, porcoes,
+                     rendimento_um: str | None, um_estoque: str | None,
                      ums: dict) -> tuple[Decimal, Decimal, Decimal]:
     """Traduz o pedido em `(quantidade de estoque, lotes, rendimento em estoque)`.
 
@@ -1073,8 +1061,7 @@ def _quanto_produzir(cur, id_ficha: int, id_local: int | None, quantidade, medid
     "2" com a etiqueta de receita faria o saldo do cookie contar receitas e o
     inventário da prateleira contar cookies.
     """
-    por_receita = _rendimento_em_estoque(cur, id_ficha, id_local, rendimento, rendimento_um,
-                                         um_estoque, ums)
+    por_receita = _rendimento_em_estoque(rendimento, porcoes, rendimento_um, um_estoque, ums)
     pedida = dec(quantidade)
     if (medida or "PORCOES").upper() == "RECEITAS":
         lotes = pedida
@@ -1088,7 +1075,8 @@ def _quanto_produzir(cur, id_ficha: int, id_local: int | None, quantidade, medid
 
 
 def quantidade_de_estoque(cur, id_unidade: int, id_produto: int, quantidade,
-                         id_local: int | None = None, medida: str | None = None) -> dict:
+                         id_local: int | None = None, medida: str | None = None,
+                         id_modo: int | None = None) -> dict:
     """Traduz "X receitas" em quantidade de estoque. `{quantidade, lotes, porcoes_por_receita}`.
 
     🔑 **A tradução acontece UMA vez, na porta.** Quem agenda "2 receitas" grava
@@ -1098,7 +1086,7 @@ def quantidade_de_estoque(cur, id_unidade: int, id_produto: int, quantidade,
     lembrar de traduzir, e a primeira que esquecesse produziria dois cookies.
     """
     cur.execute(
-        """SELECT f.id, f.rendimento_qtd, f.rendimento_um, p.um_estoque
+        """SELECT f.id, f.rendimento_qtd, f.rendimento_um, f.porcoes, p.um_estoque
              FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
             WHERE f.id_produto = %s AND f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL""",
         (id_produto,),
@@ -1111,49 +1099,137 @@ def quantidade_de_estoque(cur, id_unidade: int, id_produto: int, quantidade,
 
     from services import custos
 
-    rendimento, _do_local = rendimento_do_local(
-        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
+    modo = modo_da_producao(cur, ficha["id"], id_local, id_modo, ficha["rendimento_qtd"],
+                            ficha["porcoes"])
     qtd, lotes, por_receita = _quanto_produzir(
-        cur, ficha["id"], id_local, quantidade, medida, rendimento, ficha["rendimento_um"],
+        quantidade, medida, modo["rendimento_qtd"], modo["porcoes"], ficha["rendimento_um"],
         ficha["um_estoque"], custos._carregar_ums(cur))
     return {"quantidade": float(qtd), "lotes": float(lotes),
-            "porcoes_por_receita": float(por_receita), "um_estoque": ficha["um_estoque"]}
+            "porcoes_por_receita": float(por_receita), "um_estoque": ficha["um_estoque"],
+            # Quem agenda precisa gravar QUAL modo foi planejado: cumprir a linha
+            # três dias depois pelo rendimento padrão seria a quantidade certa
+            # saindo da receita errada.
+            "id_modo": modo["id_modo"], "modo": modo["modo"]}
 
 
-def rendimento_do_local(cur, id_ficha: int, id_local: int | None,
-                        rendimento_da_ficha) -> tuple[Decimal, bool]:
-    """O rendimento que vale ao produzir PARA este local. `(rendimento, e_do_local)`.
+def modo_da_producao(cur, id_ficha: int, id_local: int | None, id_modo: int | None,
+                     rendimento_da_ficha, porcoes_da_ficha=None) -> dict:
+    """Qual MODO de rendimento vale nesta produção.
 
-    🔑 **Pedido do dono (12/09/2026):** *"a mesma ficha pode ter processos
-    diferentes — a massa de pizza estocada como insumo e a que vai para a
-    vitrine"*. A da vitrine vai ao forno, então o mesmo lote de ingredientes não
-    rende o mesmo tanto.
+    🔑 **Pedido do dono (16/09/2026):** *"podemos criar mais modos de rendimento
+    para diferentes setores, com um nome, e este será o modo selecionado ao
+    agendar ou produzir. Modo padrão é a receita toda para estoque; podemos ter
+    um Modo Consumo, com o setor Bar e 30 porções; ou outro onde as porções são
+    menores."* Antes disso o modo existia sem nome (`ficha_locais`, migração
+    066) e era **adivinhado** a partir da prateleira de destino.
 
-    ⚠️ **É OVERRIDE, não substituição.** Sem linha em `ficha_locais`, vale o
-    rendimento da ficha — que é o caso de todas as fichas de hoje. É isso que faz
-    esta mudança não mexer em nenhuma produção existente.
+    🔑 **O que o modo muda de verdade não é escala, é a PORÇÃO.** Produzir 30 em
+    vez de 65 sempre funcionou — a quantidade é livre e o consumo é proporcional.
+    O que não existia era a mesma massa render *outra coisa*: os mesmos 8,535 KG
+    em 130 unidades menores, que é outro custo unitário e outra contagem.
 
-    ⚠️ **E ele DIVIDE o consumo** (`lotes = quantidade ÷ rendimento`): produzir
-    10 para um local onde a receita rende 8 consome 1,25 receitas, e para um onde
-    rende 10 consome uma. Por isso quem chama devolve na resposta qual rendimento
-    usou — a tela precisa dizer, senão a pessoa produz achando que gastou outro
-    tanto.
+    A ordem, e ela importa:
+
+    1. **O modo ESCOLHIDO** — quem produz decidiu, e decisão de gente ganha de
+       qualquer regra.
+    2. **O modo desta PRATELEIRA** — é o comportamento da migração 066, que
+       continua valendo para quem nunca vai escolher nada.
+    3. **O modo deste SETOR** — a prateleira do Bar herda o "Consumo — Bar" sem
+       ninguém ter de repetir o cadastro em cada prateleira dele.
+    4. **A própria ficha**, o Modo padrão. ⚠️ Ele NÃO é linha em `ficha_modos`:
+       materializá-lo custaria uma linha por ficha da base para não mudar
+       comportamento nenhum.
+
+    ⚠️ **O rendimento DIVIDE o consumo** (`lotes = quantidade ÷ rendimento`), por
+    isso quem chama devolve na resposta qual modo valeu: sem isso a pessoa
+    produz achando que gastou outro tanto, e a diferença só aparece na contagem.
     """
-    padrao = dec(rendimento_da_ficha) or Decimal(1)
-    if id_local is None:
-        return padrao, False
+    padrao = {
+        "id_modo": None, "modo": "Padrão",
+        "rendimento_qtd": dec(rendimento_da_ficha) or Decimal(1),
+        "porcoes": dec(porcoes_da_ficha) if porcoes_da_ficha else None,
+        "quantidade_sugerida": None,
+        # Mantido com o nome antigo: a tela e a bateria já liam este campo, e o
+        # que ele diz continua verdade — "não é o rendimento da ficha".
+        "rendimento_do_local": False,
+    }
+
+    def montar(linha):
+        return {
+            "id_modo": linha["id"], "modo": linha["nome"],
+            "rendimento_qtd": dec(linha["rendimento_qtd"]) or Decimal(1),
+            "porcoes": dec(linha["porcoes"]) if linha["porcoes"] else None,
+            "quantidade_sugerida": (dec(linha["quantidade_sugerida"])
+                                    if linha["quantidade_sugerida"] else None),
+            "rendimento_do_local": True,
+        }
+
+    campos = ("id, nome, rendimento_qtd, porcoes, quantidade_sugerida, id_local, id_setor")
+
+    if id_modo:
+        cur.execute(
+            f"SELECT {campos} FROM ficha_modos WHERE id = %s AND id_ficha = %s AND ativo",
+            (id_modo, id_ficha),
+        )
+        linha = cur.fetchone()
+        # ⚠️ **Modo que não é desta ficha é RECUSA, não silêncio.** Cair no padrão
+        # produziria com outro rendimento do que a tela mostrou, e ninguém veria.
+        if not linha:
+            raise HTTPException(
+                status_code=400,
+                detail="O modo de rendimento escolhido não é desta ficha, ou foi desativado.",
+            )
+        return montar(linha)
+
+    if id_local is not None:
+        cur.execute(
+            f"""SELECT {campos} FROM ficha_modos
+                 WHERE id_ficha = %s AND id_local = %s AND ativo
+                 ORDER BY ordem, id LIMIT 1""",
+            (id_ficha, id_local),
+        )
+        linha = cur.fetchone()
+        if linha:
+            return montar(linha)
+        cur.execute(
+            f"""SELECT m.id, m.nome, m.rendimento_qtd, m.porcoes, m.quantidade_sugerida,
+                       m.id_local, m.id_setor
+                  FROM ficha_modos m
+                  JOIN locais_estoque l ON l.id_setor = m.id_setor
+                 WHERE m.id_ficha = %s AND l.id = %s AND m.ativo AND m.id_local IS NULL
+                 ORDER BY m.ordem, m.id LIMIT 1""",
+            (id_ficha, id_local),
+        )
+        linha = cur.fetchone()
+        if linha:
+            return montar(linha)
+
+    return padrao
+
+
+def modos_da_ficha(cur, id_ficha: int) -> list[dict]:
+    """Os modos cadastrados, para a tela oferecer a escolha. O padrão não entra.
+
+    ⚠️ Só os ATIVOS: modo desativado continua existindo porque produções antigas
+    apontam para ele, e oferecê-lo de novo desfaria a desativação.
+    """
     cur.execute(
-        "SELECT rendimento_qtd FROM ficha_locais WHERE id_ficha = %s AND id_local = %s",
-        (id_ficha, id_local),
+        """SELECT m.id, m.nome, m.rendimento_qtd, m.porcoes, m.porcao_qtd,
+                  m.quantidade_sugerida, m.id_local, l.nome AS local,
+                  m.id_setor, s.nome AS setor, m.observacao
+             FROM ficha_modos m
+             LEFT JOIN locais_estoque l ON l.id = m.id_local
+             LEFT JOIN setores s ON s.id = m.id_setor
+            WHERE m.id_ficha = %s AND m.ativo
+            ORDER BY m.ordem, m.id""",
+        (id_ficha,),
     )
-    linha = cur.fetchone()
-    if linha and dec(linha["rendimento_qtd"]) > 0:
-        return dec(linha["rendimento_qtd"]), True
-    return padrao, False
+    return [dict(r) for r in cur.fetchall()]
 
 
 def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
-                      id_local: int | None = None, medida: str | None = None) -> dict:
+                      id_local: int | None = None, medida: str | None = None,
+                      id_modo: int | None = None) -> dict:
     """O que uma produção VAI precisar, sem produzir nada.
 
     É a folha que a cozinha leva para a bancada: para 22 massas, 4,4 KG de
@@ -1168,8 +1244,16 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     from services import custos
 
     cur.execute(
-        """SELECT f.id, f.versao, f.rendimento_qtd, f.rendimento_um, p.nome AS produto,
-                  p.codigo, p.um_estoque, p.id_local_padrao
+        """SELECT f.id, f.versao, f.rendimento_qtd, f.rendimento_um, f.porcoes,
+                  -- 🔑 **O MODO DE PREPARO vem junto** (16/09/2026, pedido do dono:
+                  -- *"quem vai ver esta tela precisa saber as quantidades e o modo
+                  -- de preparo, não os custos"*). A folha que vai para a bancada
+                  -- sem o preparo é meia folha: a pessoa levava a lista de
+                  -- ingredientes e abria a ficha noutra tela para saber o que
+                  -- fazer com eles.
+                  f.modo_preparo, f.tempo_preparo_min, f.alergenos,
+                  f.observacao AS ficha_observacao,
+                  p.nome AS produto, p.codigo, p.um_estoque, p.id_local_padrao
              FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
             WHERE f.id_produto = %s AND f.status = 'HOMOLOGADA' AND f.vigente_ate IS NULL""",
         (id_produto,),
@@ -1187,22 +1271,26 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     # procurado num local nulo, nada casava e a folha dizia que faltava tudo.
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
-    # O rendimento pode ser DO LOCAL: a massa que vai ao forno para a vitrine não
-    # rende o mesmo que a que vai crua para a câmara.
-    rendimento, rend_do_local = rendimento_do_local(
-        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
+    # ⚠️ **O MESMO modo da produção**, escolhido ou herdado da prateleira: a
+    # massa que vai ao forno para a vitrine não rende o mesmo que a que vai crua
+    # para a câmara, e prever por um modo e produzir por outro seria prever
+    # outra coisa.
+    modo = modo_da_producao(cur, ficha["id"], id_local, id_modo, ficha["rendimento_qtd"],
+                            ficha["porcoes"])
+    rendimento = modo["rendimento_qtd"]
+    rend_do_local = modo["rendimento_do_local"]
     ums = custos._carregar_ums(cur)
     # ⚠️ A MESMA ponte da produção: prever com outra regra seria prever outra
     # coisa — e foi assim que a folha da bancada passou a pedir sete vezes mais
     # ingrediente do que a receita precisa. Inclusive a leitura da MEDIDA: a
     # folha de "2 receitas" tem de pedir o mesmo que a produção de "2 receitas".
     qtd, lotes, por_receita = _quanto_produzir(
-        cur, ficha["id"], id_local, qtd, medida, rendimento, ficha["rendimento_um"],
+        qtd, medida, rendimento, modo["porcoes"], ficha["rendimento_um"],
         ficha["um_estoque"], ums)
 
     cur.execute(
-        """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, fi.observacao,
-                  p.um_estoque, p.nome, p.codigo, p.id_local_padrao
+        """SELECT fi.id AS id_item, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um,
+                  fi.observacao, p.um_estoque, p.nome, p.codigo, p.id_local_padrao
              FROM ficha_itens fi
              LEFT JOIN produtos p ON p.id = fi.id_insumo
             WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
@@ -1261,9 +1349,30 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         if falta is not None and falta > 0:
             faltam += 1
 
+        # 🔑 **As unidades que ESTE insumo aceita**, para a coluna do que foi
+        # realmente usado poder trocar de unidade. ⚠️ São as mesmas que a
+        # conversão conhece — oferecer uma que ela não sabe traduzir seria
+        # convidar a recusa.
+        cur.execute(
+            """SELECT upper(um) AS um FROM produto_unidades WHERE id_produto = %s
+                UNION SELECT upper(um_compra) FROM produtos
+                        WHERE id = %s AND um_compra IS NOT NULL""",
+            (id_alvo, id_alvo),
+        )
+        unidades = [um_destino] if um_destino else []
+        if item["um"] and item["um"].upper() not in {u.upper() for u in unidades}:
+            unidades.append(item["um"])
+        for r in cur.fetchall():
+            if r["um"] and r["um"] not in {u.upper() for u in unidades}:
+                unidades.append(r["um"])
+
         linhas.append({
+            # A chave da correção é a LINHA da receita, não o produto: a mesma ficha
+            # pode listar o mesmo insumo duas vezes.
+            "id_item": item["id_item"],
             "id_produto": id_alvo, "produto": nome, "codigo": codigo,
             "preparo": eh_preparo,
+            "unidades": unidades,
             "um_ficha": item["um"], "um_estoque": um_destino,
             "por_unidade": float(por_lote / rendimento),
             "na_ficha": float(bruta),
@@ -1281,6 +1390,11 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         "id_ficha": ficha["id"], "versao": ficha["versao"], "id_produto": id_produto,
         "produto": ficha["produto"], "codigo": ficha["codigo"],
         "um_estoque": ficha["um_estoque"],
+        # O que a bancada precisa saber além das quantidades.
+        "modo_preparo": ficha["modo_preparo"],
+        "tempo_preparo_min": ficha["tempo_preparo_min"],
+        "alergenos": ficha["alergenos"],
+        "ficha_observacao": ficha["ficha_observacao"],
         "quantidade": float(qtd), "rendimento_qtd": float(rendimento),
         "rendimento_um": ficha["rendimento_um"], "lotes": float(lotes),
         # Quantas unidades de estoque UMA receita rende. É o número que traduz
@@ -1290,6 +1404,18 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         # consumo: sem isto a pessoa produz 10 achando que gastou um lote e gastou
         # 1,25 — e a diferença só aparece na contagem.
         "rendimento_do_local": rend_do_local,
+        "id_modo": modo["id_modo"], "modo": modo["modo"],
+        "quantidade_sugerida": (float(modo["quantidade_sugerida"])
+                                if modo["quantidade_sugerida"] else None),
+        # Os modos cadastrados nesta ficha, para a tela oferecer a escolha sem
+        # precisar de uma segunda chamada a cada troca de produto.
+        "modos": [{"id": m["id"], "nome": m["nome"],
+                   "rendimento_qtd": float(m["rendimento_qtd"]),
+                   "porcoes": float(m["porcoes"]) if m["porcoes"] else None,
+                   "quantidade_sugerida": (float(m["quantidade_sugerida"])
+                                           if m["quantidade_sugerida"] else None),
+                   "local": m["local"], "setor": m["setor"]}
+                  for m in modos_da_ficha(cur, ficha["id"])],
         "itens": linhas, "itens_faltando": faltam,
         "custo_total": float(custo_total),
         "custo_unitario": float(custo_total / qtd) if qtd else 0.0,
@@ -1351,7 +1477,8 @@ def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int |
 
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
              id_usuario: int, observacao: str | None = None,
-             medida: str | None = None) -> dict:
+             medida: str | None = None, id_modo: int | None = None,
+             consumos: list[dict] | None = None) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque.
 
     O custo do produzido é **o que realmente saiu** — não o custo teórico da
@@ -1360,9 +1487,30 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     `medida` diz em que a `quantidade` foi digitada: `PORCOES` (o padrão — a
     unidade de estoque do produto) ou `RECEITAS` (voltas inteiras da ficha).
     Ver `_quanto_produzir`.
+
+    🔑 **`consumos` corrige o que REALMENTE saiu** (16/09/2026, pedido do dono:
+    *"na lista de insumos, ter uma nova coluna com o que realmente foi usado —
+    por padrão a mesma quantidade, mas o usuário pode alterar, inclusive a
+    unidade; na receita vão 5 ovos, mas por um acaso usei 6"*). Cada entrada é
+    `{id_item, quantidade, um}` e substitui a quantidade calculada daquela linha
+    da receita. O razão já era capaz disso; o que faltava era a porta — quem
+    usava seis ovos lançava cinco, e o sexto sumia do controle até aparecer no
+    inventário como falta sem causa.
+
+    ⚠️ **A chave é o ITEM da ficha, não o produto.** A mesma receita pode listar
+    o mesmo insumo duas vezes (a manteiga da massa e a de untar), e corrigir "a
+    manteiga" mexeria nas duas.
+
+    ⚠️ **A unidade passa pela MESMA conversão de sempre** (embalagem do produto,
+    depois grandeza). Sem caminho, é recusa: aceitar 1:1 faria "usei 2 CX" baixar
+    duas unidades.
+
+    ⚠️ **Zero é aceito e não vira movimento.** "Não usei" é uma resposta
+    legítima (acabou, substituí), e uma linha de quantidade zero no razão diria
+    que algo se moveu.
     """
     cur.execute(
-        """SELECT id, versao, rendimento_qtd, rendimento_um FROM fichas_tecnicas
+        """SELECT id, versao, rendimento_qtd, rendimento_um, porcoes FROM fichas_tecnicas
             WHERE id_produto = %s AND status = 'HOMOLOGADA' AND vigente_ate IS NULL""",
         (id_produto,),
     )
@@ -1376,10 +1524,12 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         id_local = local_padrao(cur, id_unidade)
 
     qtd = dec(quantidade)
-    # ⚠️ O rendimento sai de `ficha_locais` quando o destino tem linha lá — e o
+    # ⚠️ O modo sai do ESCOLHIDO, senão da prateleira, senão do setor dela — e o
     # `id_local` já foi resolvido acima, então aqui ele nunca é nulo.
-    rendimento, rend_do_local = rendimento_do_local(
-        cur, ficha["id"], id_local, ficha["rendimento_qtd"])
+    modo = modo_da_producao(cur, ficha["id"], id_local, id_modo, ficha["rendimento_qtd"],
+                            ficha["porcoes"])
+    rendimento = modo["rendimento_qtd"]
+    rend_do_local = modo["rendimento_do_local"]
 
     from services import custos  # importado aqui para não criar ciclo de módulos
 
@@ -1394,12 +1544,12 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     cur.execute("SELECT um_estoque FROM produtos WHERE id = %s", (id_produto,))
     um_estoque_produto = (cur.fetchone() or {}).get("um_estoque")
     qtd, lotes, por_receita = _quanto_produzir(
-        cur, ficha["id"], id_local, qtd, medida, rendimento, ficha["rendimento_um"],
+        qtd, medida, rendimento, modo["porcoes"], ficha["rendimento_um"],
         um_estoque_produto, ums)
 
     cur.execute(
-        """SELECT fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um, p.um_estoque, p.nome,
-                  p.id_local_padrao
+        """SELECT fi.id AS id_item, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um,
+                  p.um_estoque, p.nome, p.id_local_padrao
              FROM ficha_itens fi
              LEFT JOIN produtos p ON p.id = fi.id_insumo
             WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
@@ -1409,17 +1559,28 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     if not itens:
         raise HTTPException(status_code=400, detail="A ficha não tem ingredientes.")
 
+    # ⚠️ Pela linha da RECEITA, não pelo produto: a mesma ficha pode listar o
+    # mesmo insumo duas vezes, e corrigir "a manteiga" mexeria nas duas.
+    ajustes = {int(c["id_item"]): c for c in (consumos or []) if c.get("id_item")}
+    ajustou = False
+
     cur.execute(
         """INSERT INTO producoes (id_unidade, id_local, id_produto, id_ficha, versao_ficha,
-                                  quantidade, observacao, id_usuario)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                  quantidade, observacao, id_usuario, id_modo)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (id_unidade, id_local, id_produto, ficha["id"], ficha["versao"], qtd, observacao,
-         id_usuario),
+         id_usuario,
+         # 🔑 **O modo fica congelado junto com a versão da ficha**, e pela
+         # mesma razão: o rendimento divide o consumo, e o número tem de se
+         # reproduzir daqui a seis meses.
+         modo["id_modo"]),
     )
     id_producao = cur.fetchone()["id"]
 
     custo_consumido = Decimal(0)
-    consumos = []
+    # ⚠️ Nome próprio: `consumos` é o que ENTROU (a correção de quem produziu),
+    # e isto é o que SAIU. Com o mesmo nome, o segundo apagava o primeiro.
+    linhas_consumo = []
     for item in itens:
         if item["id_subficha"]:
             # Sub-ficha na produção: consome o PRODUTO dela, que precisa ter
@@ -1453,6 +1614,35 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
                 detail=(f"{nome}: {um_origem or '?'} não converte para "
                         f"{um_destino or '?'}. Cadastre esta unidade de compra no produto."),
             )
+        pedida = convertida
+
+        # 🔑 **O que REALMENTE saiu manda.** A receita diz cinco ovos; quem
+        # estava na banca usou seis, e é o sexto que some do controle quando a
+        # tela não deixa corrigir.
+        ajuste = ajustes.pop(item["id_item"], None)
+        if ajuste is not None:
+            usada = dec(ajuste.get("quantidade"))
+            um_usada = (ajuste.get("um") or um_destino)
+            convertida, _c = custos.converter_para_estoque(
+                cur, usada, id_alvo, um_usada, um_destino, ums)
+            if convertida is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"{nome}: {um_usada} não converte para {um_destino or '?'}. "
+                            f"Cadastre esta unidade no produto, ou informe em "
+                            f"{um_destino or 'unidade de estoque'}."),
+                )
+            if convertida != pedida:
+                ajustou = True
+
+        # ⚠️ **Zero não vira movimento.** "Não usei" é resposta legítima —
+        # acabou, substituí — e uma linha de quantidade zero no razão diria que
+        # algo se moveu.
+        if convertida <= 0:
+            linhas_consumo.append({"id_item": item["id_item"], "id_produto": id_alvo,
+                                   "nome": nome, "quantidade": 0.0, "custo": 0.0,
+                                   "pedida": float(pedida)})
+            continue
         # 🔑 **O insumo sai de ONDE SE PRODUZ, quando ele está lá.** A casa
         # trabalha assim: o açúcar entra no Estoque Central e de manhã cada
         # setor leva um pacote para o seu canto — Bar, Confeitaria, Cozinha. Se
@@ -1474,11 +1664,27 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             id_produto=id_alvo,
             tipo="SAIDA_PRODUCAO", quantidade=convertida, origem_tipo="PRODUCAO",
             origem_id=id_producao, id_usuario=id_usuario,
-            observacao=f"Produção #{id_producao}",
+            # ⚠️ O razão diz quando a linha se afastou da receita: quem for
+            # conferir o movimento seis meses depois não tem a ficha ao lado.
+            observacao=(f"Produção #{id_producao}"
+                        + (" · quantidade corrigida" if convertida != pedida else "")),
         )
         custo_consumido += dec(r["custo_exato"])
-        consumos.append({"id_produto": id_alvo, "nome": nome,
-                         "quantidade": float(convertida), "custo": float(r["custo_total"])})
+        linhas_consumo.append({"id_item": item["id_item"], "id_produto": id_alvo, "nome": nome,
+                               "quantidade": float(convertida), "custo": float(r["custo_total"]),
+                               # Quanto a receita pedia: é a comparação que diz se
+                               # a ficha está certa.
+                               "pedida": float(pedida)})
+
+    # ⚠️ **Sobrou correção sem linha correspondente**: a tela mandou um item que
+    # esta ficha não tem (ou uma versão nova mudou a receita entre abrir a folha e
+    # produzir). Ignorar seria gravar uma produção que não é a que a pessoa viu.
+    if ajustes:
+        raise HTTPException(
+            status_code=400,
+            detail=("A receita mudou desde que esta folha foi aberta — recarregue a tela "
+                    "antes de produzir."),
+        )
 
     unitario = (custo_consumido / qtd).quantize(CASAS_CUSTO) if qtd else Decimal(0)
     # O produzido também entra no local dele: o molho vai para a câmara, não
@@ -1494,8 +1700,10 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         observacao=observacao,
     )
     cur.execute(
-        "UPDATE producoes SET custo_total = %s, custo_unitario = %s WHERE id = %s",
-        (custo_consumido.quantize(Decimal("0.01")), unitario, id_producao),
+        """UPDATE producoes SET custo_total = %s, custo_unitario = %s,
+                                consumo_ajustado = %s
+            WHERE id = %s""",
+        (custo_consumido.quantize(Decimal("0.01")), unitario, ajustou, id_producao),
     )
 
     return {
@@ -1507,12 +1715,17 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         "quantidade": float(qtd),
         "lotes": float(lotes),
         "porcoes_por_receita": float(por_receita),
-        # Qual rendimento dividiu o consumo — o da ficha ou o desta prateleira.
+        # Qual rendimento dividiu o consumo, e de qual MODO ele veio. A tela
+        # precisa dizer: sem isso a pessoa produz achando que gastou outro tanto.
         "rendimento_qtd": float(rendimento),
         "rendimento_do_local": rend_do_local,
+        "id_modo": modo["id_modo"], "modo": modo["modo"],
         "custo_total": float(custo_consumido),
         "custo_unitario": float(unitario),
-        "consumos": consumos,
+        "consumos": linhas_consumo,
+        # 🔑 Produção que se afasta da receita com frequência é ficha errada, e
+        # essa pergunta tem de poder ser feita olhando a lista.
+        "consumo_ajustado": ajustou,
         "movimento_entrada": entrada["id"],
         # Onde o produzido entrou — quem produz por causa de uma venda precisa
         # dar a baixa no MESMO local, senão o saldo fica preso lá.

@@ -744,7 +744,8 @@ def produzir(body: ProducaoRequest,
         r = motor.produzir(
             cur, id_unidade=id_unidade, id_produto=body.id_produto, quantidade=body.quantidade,
             id_local=body.id_local, id_usuario=ctx.id_usuario, observacao=body.observacao,
-            medida=body.medida,
+            medida=body.medida, id_modo=body.id_modo,
+            consumos=[c.model_dump() for c in body.consumos],
         )
         # ⚠️ O que vai para a auditoria é o que ENTROU (`r["quantidade"]`, sempre
         # na unidade de estoque) junto com o que foi pedido: "2" sozinho não
@@ -753,7 +754,9 @@ def produzir(body: ProducaoRequest,
         auditoria.registrar(cur, ctx.id_usuario, "producao", r["id"], "produzir",
                             depois={"produto": body.id_produto, "qtd": r["quantidade"],
                                     "pedido": body.quantidade, "medida": body.medida,
-                                    "custo": r["custo_total"]}, id_unidade=id_unidade)
+                                    "modo": r["modo"], "custo": r["custo_total"],
+                                    "consumo_ajustado": r["consumo_ajustado"]},
+                            id_unidade=id_unidade)
     return r
 
 

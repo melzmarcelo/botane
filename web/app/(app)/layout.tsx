@@ -202,7 +202,7 @@ function Casca({ children }: { children: React.ReactNode }) {
           para o PDV" e "Papeis e permissoes" nao cabiam. Nome de tela cortado
           obriga a pessoa a adivinhar o destino, que e o contrario do que um
           menu faz. */}
-      <div className="lg:grid lg:grid-cols-[276px_minmax(0,1fr)]">
+      <div className="esqueleto lg:grid lg:grid-cols-[276px_minmax(0,1fr)]">
       {aberto && (
         <div
           className="fixed inset-0 z-40 bg-tinta/35 lg:hidden"

@@ -36,7 +36,7 @@ export default function BarraInferior() {
   return (
     <footer
       id="barra-inferior"
-      className="fixed inset-x-0 bottom-0 z-30 flex h-8 items-center justify-end border-t border-linha bg-superficie/95 px-4 backdrop-blur-sm sm:px-6"
+      className="nao-imprimir fixed inset-x-0 bottom-0 z-30 flex h-8 items-center justify-end border-t border-linha bg-superficie/95 px-4 backdrop-blur-sm sm:px-6"
     >
       <span className="mono text-[11.5px] text-suave">{versao ? `v${versao}` : ""}</span>
     </footer>

@@ -77,6 +77,12 @@ export default function PaginaProducao() {
      * o campo sempre.
      */
     medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    /**
+     * 🔑 **Qual MODO de rendimento** (16/09/2026, pedido do dono). Vazio é o
+     * Modo padrão — ou o que a prateleira/o setor de destino herdam, que é o
+     * comportamento de sempre. Quem não cadastrou modo nenhum nem vê o campo.
+     */
+    id_modo: "",
     id_local: "",
     observacao: "",
   });
@@ -141,7 +147,13 @@ export default function PaginaProducao() {
       /** O que vai entrar no estoque, já traduzido — sempre na unidade do produto. */
       quantidade?: number;
       /** Quantas unidades de estoque UMA receita rende. Traduz um jeito no outro. */
-      porcoes_por_receita?: number } | null
+      porcoes_por_receita?: number;
+      /** Qual modo está valendo — o escolhido, ou o que a prateleira/o setor herdam. */
+      id_modo?: number | null; modo?: string;
+      /** Os modos desta ficha, para a tela oferecer a escolha sem outra chamada. */
+      modos?: { id: number; nome: string; rendimento_qtd: number; porcoes: number | null;
+                quantidade_sugerida: number | null; local: string | null;
+                setor: string | null }[] } | null
   >(null);
 
   useEffect(() => {
@@ -155,7 +167,8 @@ export default function PaginaProducao() {
       api
         .get<typeof vigente>(
           `/producao-agenda/necessario?id_produto=${f.id_produto}` +
-            `&quantidade=${quanto}&id_local=${f.id_local}&medida=${f.medida}`,
+            `&quantidade=${quanto}&id_local=${f.id_local}&medida=${f.medida}` +
+            (f.id_modo ? `&id_modo=${f.id_modo}` : ""),
         )
         .then((r) => valeu && setVigente(r))
         .catch(() => valeu && setVigente(null));
@@ -164,7 +177,7 @@ export default function PaginaProducao() {
       valeu = false;
       clearTimeout(t);
     };
-  }, [f.id_produto, f.id_local, f.quantidade, f.medida]);
+  }, [f.id_produto, f.id_local, f.quantidade, f.medida, f.id_modo]);
 
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
@@ -226,6 +239,7 @@ export default function PaginaProducao() {
         id_produto: Number(f.id_produto),
         quantidade: Number(f.quantidade.replace(",", ".")),
         medida: f.medida,
+        id_modo: f.id_modo ? Number(f.id_modo) : null,
         id_local: f.id_local ? Number(f.id_local) : null,
         observacao: f.observacao || null,
       });
@@ -394,6 +408,54 @@ export default function PaginaProducao() {
                   ))}
                 </select>
               </Campo>
+              {/* 🔑 **O MODO de rendimento** (16/09/2026, pedido do dono: *"este
+                  será o modo que será selecionado ao agendar ou produzir"*). Ele
+                  vem escolhido pela prateleira ou pelo setor de destino, e trocá-lo
+                  já traz a quantidade que se costuma produzir nele.
+                  ⚠️ **Só aparece quando a ficha TEM modos.** Quase nenhuma tem, e
+                  um seletor de um item é um controle que não controla nada. */}
+              {!!vigente?.modos?.length && (
+                <Campo
+                  rotulo="Modo de rendimento"
+                  className="sm:col-span-2"
+                  dica={
+                    vigente.modo
+                      ? `${vigente.modo} — a receita rende ${qtd(
+                          vigente.rendimento_qtd,
+                        )} ${escolhida?.rendimento_um ?? "un"}`
+                      : undefined
+                  }
+                >
+                  <select
+                    className="campo"
+                    value={f.id_modo}
+                    onChange={(e) => {
+                      const escolhido = vigente.modos?.find(
+                        (m) => String(m.id) === e.target.value,
+                      );
+                      // ⚠️ A quantidade sugerida entra AQUI, na escolha, e não na
+                      // resposta do servidor: vinda de lá ela sobrescreveria o que
+                      // a pessoa está digitando a cada tecla.
+                      setF({
+                        ...f,
+                        id_modo: e.target.value,
+                        medida: escolhido?.quantidade_sugerida ? "PORCOES" : f.medida,
+                        quantidade: escolhido?.quantidade_sugerida
+                          ? String(escolhido.quantidade_sugerida)
+                          : f.quantidade,
+                      });
+                    }}
+                  >
+                    <option value="">Padrão — a receita toda</option>
+                    {vigente.modos.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nome}
+                        {m.local ? ` · ${m.local}` : m.setor ? ` · ${m.setor}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+              )}
               <Campo rotulo="Quantidade produzida">
                 <input
                   className="campo mono"

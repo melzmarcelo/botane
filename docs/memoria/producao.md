@@ -21,7 +21,7 @@
   padrão sai da lista das outras linhas: oferecê-la de novo seria duas verdades para o mesmo
   destino.
   ⚠️ **Salvar a ficha grava os destinos junto** (`PUT /fichas/{id}` e depois
-  `PUT /fichas/{id}/locais`, nessa ordem — se a ficha recusar, os destinos não podem ter mudado
+  `PUT /fichas/{id}/modos`, nessa ordem — se a ficha recusar, os modos não podem ter mudado
   sozinhos). O cartão anterior tinha botão próprio, e uma mudança só exigia salvar duas vezes.
   ⚠️ **Em ficha NOVA só existe a linha do padrão**: destino aponta para uma ficha gravada.
   ⚠️ **A armadilha desta refatoração, e ela custou três checagens**: a sugestão "a soma dos
@@ -62,7 +62,7 @@
   `ficha_itens.id_subficha` é `RESTRICT`, e o custo da outra quebraria); com produção registrada
   (`producoes.id_ficha` é `NO ACTION`); e a FOTO sai primeiro, porque `fichas_tecnicas` não é
   dona do arquivo e apagar a linha deixaria a imagem órfã em `arquivos`. `ficha_itens` e
-  `ficha_locais` somem por CASCADE — são partes da receita, não registros com vida própria.
+  `ficha_modos` somem por CASCADE — são partes da receita, não registros com vida própria.
   ⚠️ A auditoria grava o `excluir` antes do fim da transação: é o único lugar onde resta
   registro de que aquela ficha existiu.
 
@@ -86,7 +86,8 @@
 
 
 - 🔑 **A mesma ficha com PROCESSOS diferentes: a prateleira decide o rendimento**
-  (`ficha_locais` + `produtos.id_local_venda`, migração 066, 12/09/2026, pedido do dono:
+  (`ficha_locais` → hoje `ficha_modos`, + `produtos.id_local_venda`, migração 066,
+  12/09/2026, pedido do dono:
   *"a mesma ficha pode ter processos diferentes. Vamos fazer a massa de pizza e estocar para
   servir como insumo para pizza, mas podemos ter produção de massa de pizza que vai para a
   vitrine"*). E o rendimento muda de verdade — a da vitrine vai ao forno e perde água.
@@ -98,7 +99,7 @@
   VENDA baixa, (2) o fallback de onde os INSUMOS saem (`_de_onde_sai`), (3) o destino padrão da
   produção. Com uma coluna só, pôr a Vitrine como "o local do produto" fazia a receita da pizza
   **comer a massa da vitrine**. `id_local_venda` separa o papel 1 — nulo mantém tudo como era.
-  ⚠️ **`ficha_locais` é OVERRIDE, não substituição.** Sem linha, vale o rendimento da ficha, que
+  ⚠️ **O modo é OVERRIDE, não substituição.** Sem linha, vale o rendimento da ficha, que
   é o caso de todas as fichas de hoje: é isso que faz a migração não mexer em nenhuma produção
   existente. Índice único em (ficha, local) — dois rendimentos para o mesmo destino seria a
   receita com duas verdades.
@@ -442,6 +443,101 @@
   checagens adiante**, dizendo que a agenda não abre a folha. Duas correções, e as duas valem
   como regra: **filtrar pelo produto ATIVO** e **conferir o POST que monta a precondição**.
 
+- 🔑 **O que REALMENTE foi usado, insumo a insumo** (`consumos`, migração 073, 16/09/2026,
+  pedido do dono: *"na lista de insumos, ter uma nova coluna com o que realmente foi usado. Por
+  padrão é a mesma quantidade, mas o usuário pode alterar, inclusive a unidade — por exemplo, na
+  receita vão 5 ovos, mas por um acaso usei 6."*).
+  🔑 **O razão SEMPRE foi capaz disso; o que faltava era a porta.** A produção já gravava o que
+  saiu, e o custo do produzido já era "o que realmente saiu, não o teórico da ficha" — só que a
+  quantidade vinha calculada da receita, sem ninguém poder corrigi-la. Quem usava seis ovos
+  lançava cinco, e o sexto sumia do controle até aparecer no inventário como falta sem causa.
+  ⚠️ **A correção viaja pela LINHA da receita (`id_item`), não pelo produto.** A mesma ficha pode
+  listar o mesmo insumo duas vezes (a manteiga da massa e a de untar), e corrigir "a manteiga"
+  mexeria nas duas.
+  ⚠️ **A unidade passa pela mesma `converter_para_estoque`** (embalagem do produto, depois
+  grandeza). Sem caminho, é recusa: aceitar 1:1 faria "usei 2 CX" baixar duas unidades. A tela só
+  oferece as unidades que a conversão conhece — oferecer o resto seria convidar a recusa.
+  ⚠️ **Zero é aceito e NÃO vira movimento.** "Não usei" é resposta legítima (acabou, substituí), e
+  uma linha de quantidade zero no razão diria que algo se moveu.
+  ⚠️ **Correção de linha que a ficha não tem é RECUSA**, com a frase "a receita mudou desde que
+  esta folha foi aberta": gravar seria gravar uma produção diferente da que a pessoa viu.
+  ⚠️ **Só viaja o que foi TOCADO na tela.** Mandar todas as linhas faria o número ARREDONDADO da
+  tela virar o gravado — 0,626 KG no lugar de 0,62642 — e marcaria toda produção como corrigida.
+  Linha não tocada é a receita, e a receita o servidor já sabe calcular.
+  🔑 **`producoes.consumo_ajustado` é um AVISO, não um dado novo**: tudo o que ele diz já está nos
+  movimentos, bastando comparar com a ficha. Ele existe para a comparação não precisar ser feita —
+  produção que se afasta da receita com frequência é ficha errada, e isso é uma pergunta que
+  alguém tem de fazer olhando a lista. O movimento também carrega "· quantidade corrigida" na
+  observação, para quem conferir o razão seis meses depois sem a ficha ao lado.
+
+- 🔑 **A folha da produção é da COZINHA, não do escritório** (`/producao/{id}`, 16/09/2026,
+  pedido do dono: *"na tela que lista a produção, onde são listados os insumos, podemos focar mais
+  na produção que nos custos — quem vai ver esta tela precisa saber as quantidades e o modo de
+  preparo, e não os custos. Dar mais foco nisto e disponibilizar a impressão desta tela, para que
+  seja passada para a produção."*). Três mudanças, e elas andam juntas:
+  🔑 **O modo de preparo entrou** (`previsao_producao` passou a trazer `modo_preparo`,
+  `tempo_preparo_min`, `alergenos` e a observação da ficha). Sem ele a folha era meia folha: a
+  pessoa levava a lista de ingredientes e abria a ficha noutra tela para saber o que fazer com
+  eles. ⚠️ `whitespace-pre-line` na tela: o preparo é escrito em passos, e texto corrido apaga a
+  ordem que alguém escreveu.
+  🔑 **O custo saiu da tabela.** Era uma coluna ao lado das quantidades, disputando a mesma
+  leitura — e quem está na bancada não decide nada com ele. Continua na tela, numa linha ao pé,
+  para quem tem `fichas.custos`. E o QUANTO produzir virou o maior texto da página: é a única
+  coisa que se lê de longe, com as mãos ocupadas.
+  ⚠️ **O custo NÃO é impresso** (`nao-imprimir`). A folha é passada de mão em mão na cozinha;
+  mandar o custo do prato junto é distribuir margem por engano.
+  🔑 **E a impressão só funcionou depois de desfazer a GRADE do esqueleto.** `@media print`
+  escondia o `aside`, mas o esqueleto é `lg:grid-cols-[276px_minmax(0,1fr)]` — esconder o menu não
+  tira a coluna dele, e o conteúdo ia parar na faixa de 276px com as colunas da direita cortadas.
+  Na folha isso comia justamente a coluna "Total", que é a que a bancada vai pesar, **e o papel
+  não denuncia o corte como a tela denuncia, com a barra de rolagem**. Agora `@media print` põe
+  `.esqueleto { display: block }`, solta o `max-width` do miolo e torna `.overflow-x-auto`
+  visível. ⚠️ Junto saiu o `break-inside: avoid` do cartão INTEIRO, que empurrava lista longa para
+  a página seguinte e cortava quando ela não cabia em nenhuma: a unidade que não se parte é a
+  LINHA.
+
+- 🔑 **Os MODOS de rendimento da ficha** (`ficha_modos`, migração 072, 16/09/2026, pedido do
+  dono: *"no cadastro de ficha posso cadastrar o padrão — o Cookies Flat rende 8,535 KG em 65
+  porções, a receita toda. E podemos criar mais modos de rendimento para diferentes setores, com
+  um nome, e este será o modo selecionado ao agendar ou produzir. Modo padrão é produzir a receita
+  toda para estoque; podemos ter um Modo Consumo, com o setor Bar e 30 porções; ou outro onde as
+  porções são menores."*).
+  🔑 **O que o modo muda não é ESCALA, é a PORÇÃO.** Produzir 30 em vez de 65 sempre funcionou: a
+  quantidade é livre e o consumo é proporcional. O que não existia era a mesma massa render *outra
+  coisa* — os mesmos 8,535 KG em 130 unidades menores, que é outro custo unitário e outra contagem
+  de estoque. É isso que merece cadastro com nome.
+  ⚠️ **`ficha_locais` VIROU `ficha_modos`, não convive com ela.** A tabela da migração 066 já era
+  um modo sem nome, escolhido por adivinhação a partir da prateleira. Duas réguas para a mesma
+  pergunta divergem na primeira correção — e o rendimento DIVIDE o consumo: divergir aí custa
+  ingrediente, não estética. A migração RENOMEIA (preserva ids, FKs e o CASCADE) e batiza cada
+  linha antiga com o nome da prateleira dela.
+  ⚠️ **A ficha continua sendo o Modo padrão, e ele NÃO vira linha**: materializá-lo custaria uma
+  linha por ficha da base para não mudar comportamento nenhum.
+  ⚠️ **A unidade do rendimento continua sendo a da FICHA.** Modo é a mesma receita rendendo outra
+  coisa, não outra receita — deixar cada modo declarar a própria unidade abriria a porta para a
+  ficha render em KG e o modo em UN, que é exatamente a ponte que a produção pagou caro para
+  atravessar.
+  🔑 **A ordem de `modo_da_producao`**: (1) o modo ESCOLHIDO — decisão de gente ganha de qualquer
+  regra; (2) o modo desta PRATELEIRA — o comportamento da 066, que continua valendo para quem
+  nunca vai escolher nada; (3) o modo deste SETOR — a prateleira do Bar herda o "Consumo — Bar"
+  sem repetir o cadastro em cada prateleira dele; (4) a ficha.
+  ⚠️ **Modo que não é desta ficha é RECUSA, não silêncio**: cair no padrão produziria com outro
+  rendimento do que a tela mostrou, e ninguém veria.
+  ⚠️ **Sumiu o índice único por (ficha, local)**: com modos, a mesma prateleira pode ter "Padrão
+  da vitrine" e "Mini da vitrine" — era esse índice que impedia exatamente o que o dono pediu. O
+  que não se repete agora é o NOME, que é por onde a pessoa escolhe.
+  ⚠️ **Substituir DESATIVA o que sumiu, não apaga**: produções e linhas de agenda apontam para o
+  modo que usaram, e apagar a linha levaria junto a resposta para "por que este lote rendeu 130?".
+  O `PUT` casa pelo NOME (`ON CONFLICT (id_ficha, lower(nome))`), então um modo que só mudou de
+  rendimento continua sendo o mesmo modo para quem aponta para ele.
+  🔑 **A agenda e a produção GRAVAM o modo** (`producao_agenda.id_modo`, `producoes.id_modo`). Sem
+  isso, agendar o "Modo mini" e cumprir a linha três dias depois sairia pelo rendimento padrão: a
+  quantidade certa saindo da receita errada, e a diferença só aparecendo na contagem.
+  ⚠️ **A `quantidade_sugerida` é preenchida na ESCOLHA, na tela, não na resposta do servidor** —
+  vinda de lá ela sobrescreveria o que a pessoa está digitando a cada tecla.
+  ⚠️ **O seletor de modo só aparece quando a ficha TEM modos.** Quase nenhuma tem, e um seletor de
+  um item é um controle que não controla nada — é o que mantém a tela idêntica para quem não usa.
+
 - 🔑 **O custo da ficha se ajusta ENQUANTO se digita** (`POST /fichas/previa-de-custo`,
   15/09/2026, pedido do dono: *"na ficha técnica, ao ir preenchendo os dados dos insumos, os
   valores demonstrados poderiam já ir ajustando na tela"*). Até então o custo só aparecia depois
@@ -473,7 +569,7 @@
   saindo do estoque, e o custo do cookie inflado na mesma medida (R$ 72,74 a unidade).
   A ponte mora em **`estoque._rendimento_em_estoque`** — quantas unidades de estoque UMA receita
   rende — e a ordem é: (1) as duas unidades são a mesma; (2) as **porções** (do destino, em
-  `ficha_locais`, senão da ficha); (3) a grandeza (KG↔G, L↔ML). ⚠️ **Sem nenhuma das três é
+  do modo que está valendo, senão da ficha); (3) a grandeza (KG↔G, L↔ML). ⚠️ **Sem nenhuma das três é
   recusa**, com a frase mandando preencher as porções: produzir com fator inventado é o que
   custou sete vezes o ingrediente certo, e o erro só aparece no inventário do mês seguinte.
   ⚠️ **A prévia (`/producao-agenda/necessario`) usa a MESMA ponte** — prever com outra regra

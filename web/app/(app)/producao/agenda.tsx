@@ -45,6 +45,8 @@ type Linha = {
   origem: string;
   observacao: string | null;
   local: string | null;
+  /** O modo de rendimento PLANEJADO. Nulo = o padrão. */
+  modo: string | null;
   saldo_atual: number;
   estoque_minimo: number | null;
   atrasada: boolean;
@@ -97,6 +99,8 @@ export default function AgendaProducao({
         pensa, e um padrão diferente por aba seria uma armadilha. O servidor
         segue com `PORCOES`, e a tela manda o campo sempre. */
     medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    /** Qual MODO de rendimento. Vazio = o padrão, ou o que a prateleira herda. */
+    id_modo: "",
     data: amanha(), rotulo: "", id_local: "",
   });
   // Quanto vai sair de fato de cada linha. Começa no planejado — o caso comum
@@ -132,6 +136,36 @@ export default function AgendaProducao({
         `/produtos/${id}/locais`)
       .then((r) => valeu && setLocaisDoProduto(r))
       .catch(() => valeu && setLocaisDoProduto([]));
+    return () => {
+      valeu = false;
+    };
+  }, [f.id_produto]);
+
+  /**
+   * 🔑 **Os MODOS de rendimento desta ficha** (16/09/2026, pedido do dono). A
+   * lista vem da MESMA rota que a produção usa (`/producao-agenda/necessario`):
+   * ter uma segunda porta para "quais modos esta ficha tem" seria ter duas
+   * respostas para a mesma pergunta.
+   * ⚠️ Silencioso quando falha: produto sem ficha homologada responde 400, e a
+   * tela simplesmente não oferece modo nenhum — que é o certo.
+   */
+  const [modos, setModos] = useState<
+    { id: number; nome: string; quantidade_sugerida: number | null;
+      local: string | null; setor: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    const id = Number(f.id_produto);
+    if (!id) {
+      setModos([]);
+      return;
+    }
+    let valeu = true;
+    api
+      .get<{ modos?: typeof modos }>(
+        `/producao-agenda/necessario?id_produto=${id}&quantidade=1`)
+      .then((r) => valeu && setModos(r.modos ?? []))
+      .catch(() => valeu && setModos([]));
     return () => {
       valeu = false;
     };
@@ -179,6 +213,7 @@ export default function AgendaProducao({
         // daí para dentro — resumo do dia, folha da bancada, produção que
         // fecha a linha — ninguém precisa lembrar de traduzir.
         medida: f.medida,
+        id_modo: f.id_modo ? Number(f.id_modo) : null,
         data_prevista: f.data,
         // 🔑 **Para QUAL prateleira** (migração 066, pedido do dono: "ao programar
         // a produção seleciona qual local será produzido"). A agenda já guardava
@@ -189,8 +224,8 @@ export default function AgendaProducao({
         id_local: f.id_local ? Number(f.id_local) : null,
       });
       aviso.sucesso(r.message);
-      setF({ id_produto: "", quantidade: "", medida: f.medida, data: f.data, rotulo: "",
-             id_local: f.id_local });
+      setF({ id_produto: "", quantidade: "", medida: f.medida, id_modo: "", data: f.data,
+             rotulo: "", id_local: f.id_local });
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível agendar");
@@ -356,6 +391,37 @@ export default function AgendaProducao({
               ))}
             </select>
           </Campo>
+          {/* 🔑 **O MODO de rendimento**, e ele fica GRAVADO na linha: cumprir a
+              agenda três dias depois pelo rendimento padrão seria a quantidade
+              certa saindo da receita errada.
+              ⚠️ Só aparece quando a ficha TEM modos — quase nenhuma tem. */}
+          {!!modos.length && (
+            <Campo rotulo="Modo de rendimento" className="sm:col-span-2">
+              <select
+                className="campo"
+                value={f.id_modo}
+                onChange={(e) => {
+                  const escolhido = modos.find((m) => String(m.id) === e.target.value);
+                  setF({
+                    ...f,
+                    id_modo: e.target.value,
+                    medida: escolhido?.quantidade_sugerida ? "PORCOES" : f.medida,
+                    quantidade: escolhido?.quantidade_sugerida
+                      ? String(escolhido.quantidade_sugerida)
+                      : f.quantidade,
+                  });
+                }}
+              >
+                <option value="">Padrão — a receita toda</option>
+                {modos.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome}
+                    {m.local ? ` · ${m.local}` : m.setor ? ` · ${m.setor}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+          )}
           <Campo rotulo="Quantidade">
             <input
               className="campo mono"
@@ -440,6 +506,15 @@ export default function AgendaProducao({
                         <span className="mono ml-2 text-[13px] text-erva">
                           {qtd(l.quantidade)} {l.um_estoque}
                         </span>
+                        {/* ⚠️ O modo PLANEJADO fica à vista: quem olha a agenda
+                            precisa ver que aquele lote é "Mini", não a receita
+                            padrão — é ele que divide o consumo quando a linha
+                            for cumprida. */}
+                        {l.modo && (
+                          <span className="ml-2">
+                            <Etiqueta>{l.modo}</Etiqueta>
+                          </span>
+                        )}
                         <span className="block text-[12.5px] text-suave">
                           tem {qtd(l.saldo_atual)} {l.um_estoque} em estoque
                           {l.estoque_minimo !== null && ` · mínimo ${qtd(l.estoque_minimo)}`}

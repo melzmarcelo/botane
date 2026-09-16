@@ -41,7 +41,8 @@ def _produto(cur, id_produto: int) -> dict:
 
 def agendar(cur, id_unidade: int, id_produto: int, data_prevista: date,
             quantidade: float, id_usuario: int, id_local: int | None = None,
-            observacao: str | None = None, origem: str = "MANUAL") -> dict:
+            observacao: str | None = None, origem: str = "MANUAL",
+            id_modo: int | None = None) -> dict:
     """Põe (ou soma) uma linha no plano do dia.
 
     Agendar o mesmo produto duas vezes para o mesmo dia SOMA, em vez de criar
@@ -65,14 +66,18 @@ def agendar(cur, id_unidade: int, id_produto: int, data_prevista: date,
 
     cur.execute(
         """INSERT INTO producao_agenda (id_unidade, id_produto, id_local, data_prevista,
-                                        quantidade, origem, observacao, criado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        quantidade, origem, observacao, criado_por, id_modo)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (id_unidade, id_produto, data_prevista) WHERE status = 'PLANEJADA'
            DO UPDATE SET quantidade = producao_agenda.quantidade + EXCLUDED.quantidade,
-                         observacao = coalesce(EXCLUDED.observacao, producao_agenda.observacao)
+                         observacao = coalesce(EXCLUDED.observacao, producao_agenda.observacao),
+                         -- ⚠️ O modo da linha que já existia MANDA. Agendar de novo
+                         -- soma o lote, e trocar a receita por baixo de quem
+                         -- planejou primeiro seria mudar o que ele pediu.
+                         id_modo = coalesce(producao_agenda.id_modo, EXCLUDED.id_modo)
            RETURNING id, quantidade""",
         (id_unidade, id_produto, id_local or p["id_local_padrao"], data_prevista,
-         quantidade, origem, observacao, id_usuario),
+         quantidade, origem, observacao, id_usuario, id_modo),
     )
     linha = cur.fetchone()
     return {"id": linha["id"], "quantidade": float(linha["quantidade"]),
@@ -86,6 +91,9 @@ def listar(cur, id_unidade: int, inicio: date | None = None, fim: date | None = 
         """SELECT a.id, a.id_produto, p.codigo, p.nome AS produto, p.um_estoque,
                   a.data_prevista, a.quantidade, a.status, a.origem, a.observacao,
                   a.id_local, l.nome AS local, a.id_producao,
+                  -- ⚠️ O modo PLANEJADO vai na linha: quem olha a agenda precisa
+                  -- ver que aquele lote é "Mini", não a receita padrão.
+                  a.id_modo, fm.nome AS modo,
                   u.nome AS criado_por, a.criado_em, a.produzido_em,
                   pu.nome AS produzido_por,
                   coalesce((SELECT sum(s.quantidade) FROM estoque_saldos s
@@ -100,6 +108,7 @@ def listar(cur, id_unidade: int, inicio: date | None = None, fim: date | None = 
              LEFT JOIN locais_estoque l ON l.id = a.id_local
              LEFT JOIN usuarios u ON u.id = a.criado_por
              LEFT JOIN usuarios pu ON pu.id = a.produzido_por
+             LEFT JOIN ficha_modos fm ON fm.id = a.id_modo
             WHERE a.id_unidade = %s
               AND (%s::date IS NULL OR a.data_prevista >= %s)
               AND (%s::date IS NULL OR a.data_prevista <= %s)
@@ -112,7 +121,8 @@ def listar(cur, id_unidade: int, inicio: date | None = None, fim: date | None = 
 
 def produzir_linha(cur, id_agenda: int, id_usuario: int,
                    quantidade: float | None = None,
-                   id_local: int | None = None) -> dict:
+                   id_local: int | None = None,
+                   consumos: list[dict] | None = None) -> dict:
     """Cumpre a linha: aí sim o estoque se mexe.
 
     A quantidade pode sair diferente da planejada — a cozinha rendeu mais ou
@@ -148,6 +158,16 @@ def produzir_linha(cur, id_agenda: int, id_usuario: int,
         cur, id_unidade=linha["id_unidade"], id_produto=linha["id_produto"],
         quantidade=float(qtd), id_local=id_local or linha["id_local"],
         id_usuario=id_usuario, observacao=f"Agenda #{id_agenda}",
+        # 🔑 **O modo PLANEJADO é o que vale ao cumprir.** Sem isto, agendar o
+        # "Modo mini" e produzir três dias depois sairia pelo rendimento padrão:
+        # a quantidade certa saindo da receita errada, e a diferença só
+        # aparecendo na contagem do fim do mês.
+        # ⚠️ A quantidade continua na unidade de ESTOQUE, então `medida` fica de
+        # fora: a tradução já aconteceu quando a linha foi agendada.
+        id_modo=linha.get("id_modo"),
+        # 🔑 O que a banca REALMENTE usou, insumo a insumo — é nesta folha que a
+        # lista está, e por isso é daqui que a correção entra.
+        consumos=consumos,
     )
     cur.execute(
         """UPDATE producao_agenda
