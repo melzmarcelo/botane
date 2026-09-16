@@ -13,7 +13,7 @@ import BuscaCadastro, { rotuloDe } from "@/components/busca-cadastro";
 import { fonteProdutos, FonteBusca, ItemBusca } from "@/lib/busca-cadastro";
 import Voltar from "@/components/voltar";
 import DuplicarFicha from "./duplicar";
-import RendimentosPorDestino, { LinhaDestino } from "./rendimentos";
+import ModosDeRendimento, { LinhaModo } from "./rendimentos";
 
 import { custo, qtd } from "@/lib/numeros";
 type Item = {
@@ -49,12 +49,18 @@ type Ficha = {
   /** A prateleira padrão do PRODUTO: encabeça a tabela de rendimentos. */
   id_local_padrao: number | null;
   local_padrao: string | null;
-  locais?: {
-    id_local: number;
-    local: string;
+  /** Os modos de rendimento (migração 072). Vazio = só o Modo padrão, que é a ficha. */
+  modos?: {
+    id: number;
+    nome: string;
+    id_local: number | null;
+    local: string | null;
+    id_setor: number | null;
+    setor: string | null;
     rendimento_qtd: number;
     porcoes: number | null;
     porcao_qtd: number | null;
+    quantidade_sugerida: number | null;
     observacao: string | null;
   }[];
   tempo_preparo_min: number | null;
@@ -151,7 +157,7 @@ export default function EditorFicha() {
    * ⚠️ Vivem no estado da PÁGINA porque salvam junto com ela: o cartão anterior
    * tinha botão próprio, e uma mudança só exigia salvar duas vezes.
    */
-  const [destinos, setDestinos] = useState<LinhaDestino[]>([]);
+  const [destinos, setDestinos] = useState<LinhaModo[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -183,12 +189,18 @@ export default function EditorFicha() {
       observacao: f.observacao ?? "",
     });
     setDestinos(
-      (f.locais ?? []).map((d) => ({
+      (f.modos ?? []).map((d) => ({
+        nome: d.nome,
         id_local: d.id_local,
+        id_setor: d.id_setor,
         rendimento_qtd: String(d.rendimento_qtd ?? ""),
         porcoes: d.porcoes === null || d.porcoes === undefined ? "" : String(d.porcoes),
         porcao_qtd:
           d.porcao_qtd === null || d.porcao_qtd === undefined ? "" : String(d.porcao_qtd),
+        quantidade_sugerida:
+          d.quantidade_sugerida === null || d.quantidade_sugerida === undefined
+            ? ""
+            : String(d.quantidade_sugerida),
         observacao: d.observacao ?? "",
       })),
     );
@@ -491,21 +503,26 @@ export default function EditorFicha() {
         });
       } else {
         await api.put(`/fichas/${id}`, corpo);
-        // 🔑 **Os destinos vão na MESMA ação de salvar** (13/09/2026, pedido do
+        // 🔑 **Os modos vão na MESMA ação de salvar** (13/09/2026, pedido do
         // dono). Eles eram um cartão com botão próprio; juntos no cabeçalho,
         // salvar duas vezes para uma mudança só seria atrito puro.
         // ⚠️ **Depois do PUT da ficha, nunca antes**: se a ficha recusar (uma
-        // homologada, por exemplo), os destinos não podem ter mudado sozinhos.
-        // ⚠️ Linha sem prateleira ou sem rendimento não vai: é linha que a pessoa
-        // abriu e não preencheu, e mandá-la faria o servidor recusar o lote todo.
-        await api.put(`/fichas/${id}/locais`, {
+        // homologada, por exemplo), os modos não podem ter mudado sozinhos.
+        // ⚠️ Linha sem NOME ou sem rendimento não vai: é linha que a pessoa abriu
+        // e não preencheu, e mandá-la faria o servidor recusar o lote todo. O
+        // nome é o que decide, não a prateleira — modo sem destino é legítimo,
+        // ele só não vem pré-escolhido.
+        await api.put(`/fichas/${id}/modos`, {
           itens: destinos
-            .filter((d) => d.id_local && num(d.rendimento_qtd))
+            .filter((d) => d.nome.trim() && num(d.rendimento_qtd))
             .map((d) => ({
-              id_local: Number(d.id_local),
+              nome: d.nome.trim(),
+              id_local: d.id_local ? Number(d.id_local) : null,
+              id_setor: d.id_setor ? Number(d.id_setor) : null,
               rendimento_qtd: num(d.rendimento_qtd),
               porcoes: num(d.porcoes),
               porcao_qtd: num(d.porcao_qtd),
+              quantidade_sugerida: num(d.quantidade_sugerida),
               observacao: texto(d.observacao),
             })),
         });
@@ -846,9 +863,8 @@ export default function EditorFicha() {
             ⚠️ Os três campos continuam existindo no cabeçalho da ficha e no banco:
             o que mudou é o que a tela diz que eles são. Nenhuma ficha existente
             muda de comportamento. */}
-        <RendimentosPorDestino
+        <ModosDeRendimento
           idFicha={nova ? null : Number(id)}
-          idLocalPadrao={ficha?.id_local_padrao ?? null}
           localPadrao={ficha?.local_padrao ?? null}
           um={cabecalho.rendimento_um || null}
           editavel={editavel}

@@ -50,29 +50,41 @@ class FichaUpdate(BaseModel):
     itens: list[ItemFicha] | None = None
 
 
-class LocalDaFicha(BaseModel):
-    """Quanto a receita rende quando produzida PARA esta prateleira.
+class ModoDaFicha(BaseModel):
+    """Um MODO de rendimento da receita: um nome, um formato e onde ele vale.
 
-    🔑 **Pedido do dono (12/09/2026):** a massa de pizza que fica como insumo e a
-    que vai para a vitrine saem da mesma receita — mas a da vitrine vai ao forno,
-    e o rendimento muda.
+    🔑 **Pedido do dono (16/09/2026):** *"podemos criar mais modos de rendimento
+    para diferentes setores, com um nome, e este será o modo selecionado ao
+    agendar ou produzir. Modo padrão é a receita toda para estoque; podemos ter
+    um Modo Consumo, com o setor Bar e 30 porções; ou outro onde as porções são
+    menores."* Antes disso o modo existia sem nome (`ficha_locais`, migração 066)
+    e era adivinhado pela prateleira de destino.
 
-    ⚠️ `porcoes` e `porcao_qtd` são opcionais: o que sempre muda é o rendimento,
-    e obrigar o porcionamento faria pedir um número que ninguém tem.
+    ⚠️ **`id_local` e `id_setor` são os dois opcionais, e os dois são só
+    PRÉ-SELEÇÃO**: eles fazem o modo vir escolhido quando o destino é aquele.
+    Quem decide de verdade é quem produz, na tela.
+
+    ⚠️ `porcoes`, `porcao_qtd` e `quantidade_sugerida` são opcionais: o que
+    sempre muda é o rendimento, e obrigar o resto faria pedir número que ninguém
+    tem. ⚠️ A UNIDADE do rendimento continua sendo a da ficha — modo é a mesma
+    receita rendendo outra coisa, não outra receita.
     """
 
-    id_local: int
+    nome: str = Field(min_length=1, max_length=60)
+    id_local: int | None = None
+    id_setor: int | None = None
     rendimento_qtd: float = Field(gt=0)
     porcoes: float | None = Field(default=None, gt=0)
     porcao_qtd: float | None = Field(default=None, gt=0)
+    quantidade_sugerida: float | None = Field(default=None, gt=0)
     observacao: str | None = Field(default=None, max_length=160)
 
 
-class LocaisDaFichaRequest(BaseModel):
-    """Substitui a tabela inteira de destinos — o mesmo contrato das embalagens
-    do produto (`PUT /produtos/{id}/unidades`), para as duas telas se parecerem."""
+class ModosDaFichaRequest(BaseModel):
+    """Substitui a tabela inteira de modos — o mesmo contrato das embalagens do
+    produto (`PUT /produtos/{id}/unidades`), para as duas telas se parecerem."""
 
-    itens: list[LocalDaFicha] = Field(default_factory=list)
+    itens: list[ModoDaFicha] = Field(default_factory=list)
 
 
 class ItemEmMontagem(BaseModel):
@@ -159,8 +171,8 @@ class FichaResponse(BaseModel):
     produto: str
     codigo: str
     # 🔑 **A prateleira padrão do PRODUTO** (13/09/2026). Ela encabeça a tabela de
-    # rendimentos da ficha: o rendimento da própria ficha é o daquele destino, e os
-    # de `ficha_locais` são os outros. Sem o nome aqui, a tela diria "padrão" sem
+    # rendimentos da ficha: o rendimento da própria ficha é o do Modo padrão, e os
+    # de `ficha_modos` são os outros. Sem o nome aqui, a tela diria "padrão" sem
     # dizer de que prateleira.
     id_local_padrao: int | None = None
     local_padrao: str | None = None
@@ -170,8 +182,9 @@ class FichaResponse(BaseModel):
     rendimento_um: str | None = None
     porcoes: float
     porcao_qtd: float | None = None
-    # Os destinos com rendimento próprio. Lista vazia = a ficha vale para todos.
-    locais: list[dict] = []
+    # Os modos de rendimento cadastrados. Lista vazia = só o Modo padrão, que é a
+    # própria ficha e não vira linha.
+    modos: list[dict] = []
     tempo_preparo_min: int | None = None
     modo_preparo: str | None = None
     alergenos: str | None = None

@@ -60,11 +60,12 @@ OPERACAO = [
     "consumo_periodo_pessoas", "consumo_periodos",
     "venda_itens", "vendas", "cmv_movimentacao", "cmv_fechamentos",
     # cadastro de produto e o que depende dele
-    # ⚠️ `ficha_locais` (migração 066) entra AQUI, junto dos itens: ela aponta
-    # para `fichas_tecnicas` e para `locais_estoque`, e sem ela nesta lista a
-    # guarda do próprio script recusa a limpeza — que foi como ela apareceu. Toda
-    # tabela nova pendurada na operação precisa passar por aqui no mesmo dia.
-    "kit_itens", "ficha_locais", "ficha_itens", "fichas_tecnicas",
+    # ⚠️ `ficha_modos` (migração 072, antes `ficha_locais`/066) entra AQUI, junto
+    # dos itens: ela aponta para `fichas_tecnicas` e para `locais_estoque`, e
+    # sem ela nesta lista a guarda do próprio script recusa a limpeza — que foi
+    # como ela apareceu. Toda tabela nova pendurada na operação precisa passar
+    # por aqui no mesmo dia.
+    "kit_itens", "ficha_modos", "ficha_itens", "fichas_tecnicas",
     "produto_precos", "produto_fornecedor", "produto_unidades", "produtos", "fornecedores",
     # o que já mandamos ao PDV — e o que estava esperando ir
     # ⚠️ **A fila do PDV é DERIVADA, e por isso aguenta perder o histórico**: ela
@@ -74,7 +75,7 @@ OPERACAO = [
     # 🔑 **Reservas (migrações 068 a 070) entrou aqui em 15/09/2026, e quem
     # avisou foi a guarda deste script** — ela recusou a limpeza dizendo que
     # `reservas` aponta para a lista e não estava nela. É a terceira vez que
-    # isso acontece (`ficha_locais` e `inventario_contadores` foram as outras):
+    # isso acontece (`ficha_modos` e `inventario_contadores` foram as outras):
     # **toda tabela nova pendurada na operação precisa passar por aqui no mesmo
     # dia**, senão a limpeza para de funcionar sem ninguém perceber.
     # ⚠️ A CONFIGURAÇÃO das reservas NÃO entra: `reserva_config`,

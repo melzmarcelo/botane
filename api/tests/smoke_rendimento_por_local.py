@@ -117,30 +117,42 @@ st, f = chamar("POST", "/fichas", {
 fichas.append(f.get("id"))
 checar("a ficha da massa rende 10 KG com 6 KG de farinha", st == 201, (st, f))
 
-print("\n2. os destinos com rendimento proprio")
-# A da vitrine vai ao forno e perde agua: o MESMO lote rende 8 KG, nao 10.
-st, r = chamar("PUT", f"/fichas/{f['id']}/locais", {"itens": [
-    {"id_local": vitrine, "rendimento_qtd": 8, "observacao": "assada, perde agua"},
+print("\n2. os MODOS de rendimento")
+# 🔑 Pedido do dono (16/09/2026): o modo tem NOME e vale para uma prateleira
+# ou um setor inteiro. A da vitrine vai ao forno e perde agua: o MESMO lote rende
+# 8 KG, nao 10.
+st, r = chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Vitrine", "id_local": vitrine, "rendimento_qtd": 8,
+     "observacao": "assada, perde agua"},
 ]}, token)
-checar("grava o destino da vitrine", st == 200, (st, r))
+checar("grava o modo da vitrine", st == 200, (st, r))
 st, d = chamar("GET", f"/fichas/{f['id']}", token=token)
-checar("a ficha devolve o destino, com o nome da prateleira",
-       len(d.get("locais") or []) == 1
-       and perto(d["locais"][0].get("rendimento_qtd"), 8)
-       and marca in (d["locais"][0].get("local") or ""), d.get("locais"))
-# ⚠️ Duas linhas para a mesma prateleira seria a receita com duas verdades.
-st, r = chamar("PUT", f"/fichas/{f['id']}/locais", {"itens": [
-    {"id_local": vitrine, "rendimento_qtd": 8},
-    {"id_local": vitrine, "rendimento_qtd": 9},
+checar("a ficha devolve o modo, com nome e prateleira",
+       len(d.get("modos") or []) == 1
+       and d["modos"][0].get("nome") == "Vitrine"
+       and perto(d["modos"][0].get("rendimento_qtd"), 8)
+       and marca in (d["modos"][0].get("local") or ""), d.get("modos"))
+# ⚠️ Dois modos com o mesmo NOME sao uma escolha impossivel de fazer certo.
+st, r = chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Vitrine", "id_local": vitrine, "rendimento_qtd": 8},
+    {"nome": "vitrine", "id_local": vitrine, "rendimento_qtd": 9},
 ]}, token)
-checar("recusa a mesma prateleira duas vezes", st == 400, (st, r))
-st, r = chamar("PUT", f"/fichas/{f['id']}/locais", {"itens": [
-    {"id_local": 99999999, "rendimento_qtd": 8},
+checar("recusa o mesmo nome duas vezes", st == 400, (st, r))
+# 🔑 Mas a mesma PRATELEIRA com dois modos e legitimo -- e era o indice unico
+# de `ficha_locais` que impedia exatamente o que o dono pediu.
+st, r = chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Vitrine", "id_local": vitrine, "rendimento_qtd": 8},
+    {"nome": "Vitrine mini", "id_local": vitrine, "rendimento_qtd": 8, "porcoes": 40},
+]}, token)
+checar("aceita dois modos na MESMA prateleira", st == 200, (st, r))
+st, r = chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Fora", "id_local": 99999999, "rendimento_qtd": 8},
 ]}, token)
 checar("e recusa prateleira que nao e desta loja", st == 400, (st, r))
-# Repoe o destino bom (a checagem acima nao gravou nada).
-chamar("PUT", f"/fichas/{f['id']}/locais", {"itens": [
-    {"id_local": vitrine, "rendimento_qtd": 8, "porcoes": 20, "porcao_qtd": 0.4},
+# Repoe o modo bom (a checagem acima nao gravou nada).
+chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Vitrine", "id_local": vitrine, "rendimento_qtd": 8, "porcoes": 20,
+     "porcao_qtd": 0.4},
 ]}, token)
 chamar("POST", f"/fichas/{f['id']}/homologar", None, token)
 
@@ -199,17 +211,122 @@ print("\n6. a copia da ficha leva os destinos")
 st, nv = chamar("POST", f"/fichas/{f['id']}/nova-versao", token=token)
 fichas.append(nv.get("id"))
 st, d2 = chamar("GET", f"/fichas/{nv.get('id')}", token=token)
-checar("a nova versao nasce com o destino da vitrine",
-       len(d2.get("locais") or []) == 1 and perto(d2["locais"][0]["rendimento_qtd"], 8),
-       d2.get("locais"))
+checar("a nova versao nasce com o modo da vitrine",
+       len(d2.get("modos") or []) == 1 and perto(d2["modos"][0]["rendimento_qtd"], 8)
+       and d2["modos"][0]["nome"] == "Vitrine", d2.get("modos"))
 
 print("\n7. ficha homologada nao troca de rendimento")
 # O rendimento divide o consumo: mexer nele numa ficha publicada mudaria o custo
 # ja apurado. E a mesma trava dos itens.
-st, r = chamar("PUT", f"/fichas/{f['id']}/locais", {"itens": [
-    {"id_local": vitrine, "rendimento_qtd": 7},
+st, r = chamar("PUT", f"/fichas/{f['id']}/modos", {"itens": [
+    {"nome": "Vitrine", "id_local": vitrine, "rendimento_qtd": 7},
 ]}, token)
-checar("recusa mexer nos destinos de ficha homologada", st == 400, (st, r))
+checar("recusa mexer nos modos de ficha homologada", st == 400, (st, r))
+
+print("\n7b. o modo com NOME, o modo do SETOR e a quantidade sugerida")
+# 🔑 **Pedido do dono (16/09/2026):** *"podemos criar mais modos de rendimento
+# para diferentes setores, com um nome, e este sera o modo selecionado ao agendar
+# ou produzir. Modo padrao e a receita toda para estoque; podemos ter um Modo
+# Consumo, com o setor Bar e 30 porcoes; ou outro onde as porcoes sao menores."*
+# 🔑 **O que o modo muda nao e escala, e a PORCAO.** Produzir 30 em vez de 60
+# sempre funcionou; o que nao existia era a mesma massa render OUTRA COISA -- os
+# mesmos 10 KG em 120 unidades menores, que e outro custo unitario e outra
+# contagem de estoque.
+st, setores = chamar("GET", "/setores", token=token)
+id_setor = (setores or [{}])[0].get("id")
+bar = local("Bar ensaio")
+if id_setor:
+    chamar("PUT", f"/locais/{bar}", {"nome": f"Bar ensaio {marca}", "id_setor": id_setor,
+                                     "tipo": "SECO"}, token)
+
+biscoito = novo("Rloc biscoito", "PRODUZIDO", "UN", producao_propria=True,
+                id_local_padrao=camara)
+chamar("POST", f"/produtos/{biscoito}/locais", {"id_local": bar}, token)
+st, fb = chamar("POST", "/fichas", {
+    "id_produto": biscoito, "rendimento_qtd": 10, "rendimento_um": "KG", "porcoes": 60,
+    "itens": [{"id_insumo": farinha, "qtd_bruta": 6, "um": "KG"}],
+}, token)
+fichas.append(fb.get("id"))
+checar("a ficha do biscoito rende 10 KG em 60 porcoes", st == 201, (st, fb))
+
+st, r = chamar("PUT", f"/fichas/{fb['id']}/modos", {"itens": [
+    {"nome": "Consumo Bar", "id_setor": id_setor, "rendimento_qtd": 10, "porcoes": 60,
+     "quantidade_sugerida": 30},
+    {"nome": "Mini", "rendimento_qtd": 10, "porcoes": 120},
+]}, token)
+checar("grava os dois modos", st == 200, (st, r))
+st, d = chamar("GET", f"/fichas/{fb['id']}", token=token)
+modos = {m["nome"]: m for m in (d.get("modos") or [])}
+checar("a ficha devolve os dois, com setor e sugestao",
+       len(modos) == 2 and modos.get("Consumo Bar", {}).get("quantidade_sugerida") == 30,
+       d.get("modos"))
+chamar("POST", f"/fichas/{fb['id']}/homologar", None, token)
+
+id_mini = modos.get("Mini", {}).get("id")
+id_bar = modos.get("Consumo Bar", {}).get("id")
+
+# ⚠️ Sem modo, valem as 60 porcoes da ficha: 60 UN = 1 receita = 6 KG.
+st, sem = chamar("GET",
+                 f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=60"
+                 f"&id_local={camara}", token=token)
+checar("sem modo, 60 unidades dao uma receita", perto(sem.get("lotes"), 1), sem.get("lotes"))
+# 🔑 A afirmacao central: no Mini a MESMA massa faz 120 unidades, entao 60
+# unidades sao MEIA receita -- metade da farinha, e cada biscoito custa metade.
+st, mini = chamar("GET",
+                  f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=60"
+                  f"&id_local={camara}&id_modo={id_mini}", token=token)
+checar("no modo Mini, 60 unidades sao MEIA receita", perto(mini.get("lotes"), 0.5),
+       mini.get("lotes"))
+checar("e a farinha cai pela metade",
+       perto((mini.get("itens") or [{}])[0].get("necessario"), 3),
+       (mini.get("itens") or [{}])[0])
+checar("a resposta diz qual modo valeu", mini.get("modo") == "Mini", mini.get("modo"))
+# ⚠️ E pedir em RECEITAS no modo Mini rende 120, nao 60.
+st, umaMini = chamar("GET",
+                     f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=1"
+                     f"&id_local={camara}&id_modo={id_mini}&medida=RECEITAS", token=token)
+checar("uma receita no modo Mini da 120 unidades", perto(umaMini.get("quantidade"), 120),
+       umaMini.get("quantidade"))
+
+# 🔑 O modo do SETOR vem escolhido sozinho quando a prateleira de destino e de
+# la -- e o que poupa repetir o cadastro em cada prateleira do Bar.
+if id_setor:
+    st, porSetor = chamar("GET",
+                          f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=30"
+                          f"&id_local={bar}", token=token)
+    checar("a prateleira do Bar herda o modo do SETOR",
+           porSetor.get("modo") == "Consumo Bar", porSetor.get("modo"))
+
+# ⚠️ Modo de OUTRA ficha e RECUSA, nao silencio: cair no padrao produziria
+# com outro rendimento do que a tela mostrou, e ninguem veria.
+st, r = chamar("GET",
+               f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=10"
+               f"&id_local={camara}&id_modo=99999999", token=token)
+checar("modo que nao e desta ficha e recusado", st == 400, (st, r))
+
+# 🔑 **O modo fica GRAVADO na linha da agenda.** Sem isto, agendar o Mini e
+# cumprir tres dias depois sairia pelo rendimento padrao: a quantidade certa
+# saindo da receita errada, e a diferenca so aparecendo na contagem.
+st, ag = chamar("POST", "/producao-agenda", {
+    "id_produto": biscoito, "quantidade": 60, "id_local": camara, "id_modo": id_mini,
+    "data_prevista": None}, token)
+checar("agendar no modo Mini responde", st == 201, (st, ag))
+st, lista = chamar("GET", "/producao-agenda", token=token)
+linha = next((x for x in (lista or {}).get("linhas", []) if x["id"] == ag.get("id")), None)
+checar("e a linha da agenda mostra o modo", (linha or {}).get("modo") == "Mini", linha)
+
+st, saldo_antes = chamar("GET", f"/estoque/saldos?id_produto={farinha}", token=token)
+tinha = sum(float(x["quantidade"]) for x in (saldo_antes or []))
+st, r = chamar("POST", f"/producao-agenda/{ag['id']}/produzir", {}, token)
+checar("cumprir a linha produz", st == 200, (st, r))
+st, saldo_depois = chamar("GET", f"/estoque/saldos?id_produto={farinha}", token=token)
+ficou = sum(float(x["quantidade"]) for x in (saldo_depois or []))
+# A prova: pelo modo Mini, 60 unidades gastam 3 KG. Pelo padrao gastariam 6.
+checar("e gasta a farinha do MODO PLANEJADO, nao a do padrao",
+       perto(tinha - ficou, 3), (tinha, ficou))
+
+id_bar  # o modo do setor fica cadastrado; a checagem dele e a de heranca acima
+
 
 print("\n8. limpeza")
 for fid in reversed([x for x in fichas if x]):

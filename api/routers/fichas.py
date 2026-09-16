@@ -21,7 +21,7 @@ import auditoria
 from database import get_cursor
 from paginacao import com_total
 from models.fichas import (CustoPrevisto, FichaCreate, FichaDuplicar, FichaResponse,
-                           FichaResumo, FichaUpdate, ItemFicha, LocaisDaFichaRequest,
+                           FichaResumo, FichaUpdate, ItemFicha, ModosDaFichaRequest,
                            RendimentoSugerido)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import custos
@@ -190,19 +190,23 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         if not f:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
         ficha = dict(f)
-        # Os destinos com rendimento próprio (migração 066). Lista vazia é o caso
-        # de quase toda ficha: sem linha, vale o rendimento dela.
+        # Os MODOS de rendimento (migração 072, antes `ficha_locais`/066). Lista
+        # vazia é o caso de quase toda ficha: sem modo, vale o rendimento dela —
+        # o Modo padrão, que não é linha.
         cur.execute(
-            """SELECT fl.id_local, l.nome AS local, fl.rendimento_qtd, fl.porcoes,
-                      fl.porcao_qtd, fl.observacao
-                 FROM ficha_locais fl
-                 JOIN locais_estoque l ON l.id = fl.id_local
-                WHERE fl.id_ficha = %s ORDER BY l.nome""",
+            """SELECT m.id, m.nome, m.id_local, l.nome AS local, m.id_setor,
+                      s.nome AS setor, m.rendimento_qtd, m.porcoes, m.porcao_qtd,
+                      m.quantidade_sugerida, m.observacao
+                 FROM ficha_modos m
+                 LEFT JOIN locais_estoque l ON l.id = m.id_local
+                 LEFT JOIN setores s ON s.id = m.id_setor
+                WHERE m.id_ficha = %s AND m.ativo ORDER BY m.ordem, m.id""",
             (id_ficha,),
         )
-        locais = [{**dict(r), "rendimento_qtd": _num(r["rendimento_qtd"]),
-                   "porcoes": _num(r["porcoes"]), "porcao_qtd": _num(r["porcao_qtd"])}
-                  for r in cur.fetchall()]
+        modos = [{**dict(r), "rendimento_qtd": _num(r["rendimento_qtd"]),
+                  "porcoes": _num(r["porcoes"]), "porcao_qtd": _num(r["porcao_qtd"]),
+                  "quantidade_sugerida": _num(r["quantidade_sugerida"])}
+                 for r in cur.fetchall()]
         calculo = custos.custo_da_ficha(cur, id_ficha)
 
     itens = []
@@ -253,7 +257,7 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
         # A prateleira padrão do produto encabeça a tabela de rendimentos.
         "id_local_padrao": ficha["id_local_padrao"],
         "local_padrao": ficha["local_padrao"],
-        "locais": locais,
+        "modos": modos,
         "tempo_preparo_min": ficha["tempo_preparo_min"],
         "modo_preparo": ficha["modo_preparo"],
         "alergenos": ficha["alergenos"],
@@ -429,38 +433,52 @@ def _copiar_ficha(cur, f, id_produto: int, id_usuario: int | None) -> tuple[int,
              FROM ficha_itens WHERE id_ficha = %s""",
         (nova, f["id"]),
     )
-    # ⚠️ **Os destinos vêm junto** (migração 066). A versão nova é a mesma receita
-    # com um ajuste, e os rendimentos por prateleira são parte dela: nascer sem
-    # eles faria a produção para a vitrine voltar ao rendimento da câmara, calada.
+    # ⚠️ **Os MODOS vêm junto** (migração 072). A versão nova é a mesma receita
+    # com um ajuste, e os modos de rendimento são parte dela: nascer sem eles
+    # faria a produção da vitrine voltar ao rendimento padrão, calada.
     cur.execute(
-        """INSERT INTO ficha_locais (id_ficha, id_local, rendimento_qtd, porcoes,
-                                     porcao_qtd, observacao)
-           SELECT %s, id_local, rendimento_qtd, porcoes, porcao_qtd, observacao
-             FROM ficha_locais WHERE id_ficha = %s""",
+        """INSERT INTO ficha_modos (id_ficha, nome, id_local, id_setor, rendimento_qtd,
+                                    porcoes, porcao_qtd, quantidade_sugerida, observacao,
+                                    ordem, ativo)
+           SELECT %s, nome, id_local, id_setor, rendimento_qtd, porcoes, porcao_qtd,
+                  quantidade_sugerida, observacao, ordem, ativo
+             FROM ficha_modos WHERE id_ficha = %s""",
         (nova, f["id"]),
     )
     return nova, versao
 
 
-@router.put("/{id_ficha}/locais")
-def gravar_locais(id_ficha: int, body: LocaisDaFichaRequest,
-                  ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
-    """Os destinos desta receita, com o rendimento de cada um.
+@router.put("/{id_ficha}/modos")
+def gravar_modos(id_ficha: int, body: ModosDaFichaRequest,
+                 ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    """Os MODOS de rendimento desta receita.
 
-    🔑 **Pedido do dono (12/09/2026):** *"dentro da ficha técnica podemos ter os
-    locais e informar rendimentos e porções por local, e ao programar a produção
-    seleciona qual local será produzido"*. A massa que vai à vitrine passa pelo
-    forno: o mesmo lote de ingredientes não rende o mesmo tanto.
+    🔑 **Pedido do dono (16/09/2026):** *"podemos criar mais modos de rendimento
+    para diferentes setores, com um nome, e este será o modo selecionado ao
+    agendar ou produzir. Modo padrão é a receita toda para estoque; podemos ter
+    um Modo Consumo, com o setor Bar e 30 porções; ou outro onde as porções são
+    menores."*
+
+    🔑 **O que o modo muda não é escala, é a PORÇÃO.** Produzir 30 em vez de 65
+    sempre funcionou. O que não existia era a mesma massa render *outra coisa*:
+    os mesmos 8,535 KG em 130 unidades menores — outro custo unitário, outra
+    contagem de estoque.
 
     ⚠️ **Substitui a tabela inteira**, como `PUT /produtos/{id}/unidades` — as duas
     telas fazem a mesma coisa e é melhor que se pareçam.
 
     ⚠️ **Ficha homologada NÃO é editável**, e isto é receita: o rendimento divide
     o consumo, então mexer nele numa ficha publicada mudaria o custo já apurado.
-    É a mesma trava dos itens.
 
-    ⚠️ **O local tem de ser desta loja e estar ativo** — rendimento apontando para
-    prateleira de outra unidade seria um número que nunca valeria para ninguém.
+    ⚠️ **Substituir DESATIVA o que sumiu, não apaga.** Produções e linhas de
+    agenda apontam para o modo que usaram, e apagar a linha levaria junto a
+    resposta para "por que este lote rendeu 130?". É a mesma razão de produto com
+    movimento virar inativo em vez de sumir.
+
+    ⚠️ **Nome não se repete na mesma ficha** — é por ele que a cozinha escolhe,
+    e dois iguais são uma escolha impossível de fazer certo. E prateleira e setor
+    têm de ser desta loja: modo apontando para fora seria um número que nunca
+    valeria para ninguém.
     """
     with get_cursor() as cur:
         cur.execute("SELECT status FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
@@ -470,38 +488,61 @@ def gravar_locais(id_ficha: int, body: LocaisDaFichaRequest,
         _travar_se_homologada(f["status"])
 
         id_unidade = unidade_atual(cur, ctx)
-        vistos: set[int] = set()
+        vistos: set[str] = set()
         for item in body.itens:
-            if item.id_local in vistos:
+            chave = item.nome.strip().lower()
+            if not chave:
+                raise HTTPException(status_code=400, detail="O modo precisa de um nome.")
+            if chave in vistos:
                 raise HTTPException(
                     status_code=400,
-                    detail="A mesma prateleira aparece duas vezes — some num destino só.",
+                    detail=f'"{item.nome}" aparece duas vezes — cada modo tem um nome só.',
                 )
-            vistos.add(item.id_local)
-            cur.execute(
-                """SELECT nome FROM locais_estoque
-                    WHERE id = %s AND id_unidade = %s AND ativo""",
-                (item.id_local, id_unidade),
-            )
-            if not cur.fetchone():
-                raise HTTPException(
-                    status_code=400,
-                    detail="Prateleira não encontrada nesta loja, ou inativa.",
+            vistos.add(chave)
+            if item.id_local is not None:
+                cur.execute(
+                    """SELECT nome FROM locais_estoque
+                        WHERE id = %s AND id_unidade = %s AND ativo""",
+                    (item.id_local, id_unidade),
                 )
+                if not cur.fetchone():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Prateleira não encontrada nesta loja, ou inativa.",
+                    )
+            if item.id_setor is not None:
+                cur.execute("SELECT nome FROM setores WHERE id = %s AND ativo",
+                            (item.id_setor,))
+                if not cur.fetchone():
+                    raise HTTPException(status_code=400, detail="Setor não encontrado, "
+                                                               "ou inativo.")
 
-        cur.execute("DELETE FROM ficha_locais WHERE id_ficha = %s", (id_ficha,))
-        for item in body.itens:
+        # ⚠️ Desativa todos e reativa os que voltaram, casando pelo NOME: o id
+        # não viaja para a tela num cadastro que se edita como tabela, e um modo
+        # que só mudou de rendimento tem de continuar sendo o mesmo modo para as
+        # linhas de agenda que apontam para ele.
+        cur.execute("UPDATE ficha_modos SET ativo = false WHERE id_ficha = %s", (id_ficha,))
+        for ordem, item in enumerate(body.itens):
             cur.execute(
-                """INSERT INTO ficha_locais (id_ficha, id_local, rendimento_qtd, porcoes,
-                                             porcao_qtd, observacao)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (id_ficha, item.id_local, item.rendimento_qtd, item.porcoes,
-                 item.porcao_qtd, item.observacao),
+                """INSERT INTO ficha_modos (id_ficha, nome, id_local, id_setor,
+                                            rendimento_qtd, porcoes, porcao_qtd,
+                                            quantidade_sugerida, observacao, ordem, ativo)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+                   ON CONFLICT (id_ficha, lower(nome)) DO UPDATE
+                      SET id_local = excluded.id_local, id_setor = excluded.id_setor,
+                          rendimento_qtd = excluded.rendimento_qtd,
+                          porcoes = excluded.porcoes, porcao_qtd = excluded.porcao_qtd,
+                          quantidade_sugerida = excluded.quantidade_sugerida,
+                          observacao = excluded.observacao, ordem = excluded.ordem,
+                          ativo = true""",
+                (id_ficha, item.nome.strip(), item.id_local, item.id_setor,
+                 item.rendimento_qtd, item.porcoes, item.porcao_qtd,
+                 item.quantidade_sugerida, item.observacao, ordem),
             )
-        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "locais",
-                            depois={"destinos": len(body.itens)})
-    return {"message": (f"{len(body.itens)} destino(s) gravado(s)" if body.itens
-                        else "Destinos removidos — vale o rendimento da ficha")}
+        auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "modos",
+                            depois={"modos": [i.nome for i in body.itens]})
+    return {"message": (f"{len(body.itens)} modo(s) gravado(s)" if body.itens
+                        else "Modos removidos — vale o rendimento da ficha")}
 
 
 @router.post("/rendimento-sugerido")
@@ -701,7 +742,7 @@ def arquivar(id_ficha: int,
          o do banco;
       3. a FOTO sai primeiro: `fichas_tecnicas` não é dona do arquivo, e apagar a
          linha deixaria a imagem órfã em `arquivos`.
-    `ficha_itens` e `ficha_locais` somem por CASCADE — são partes da receita, não
+    `ficha_itens` e `ficha_modos` somem por CASCADE — são partes da receita, não
     registros com vida própria.
     """
     with get_cursor() as cur:
