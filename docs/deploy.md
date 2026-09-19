@@ -346,9 +346,19 @@ segundo deploy com as duas variáveis é inofensivo. Coberto por `api/tests/smok
 O Claude consulta o Botané por `https://sistema.botanedeliecafe.com.br/api/mcp`. Na primeira
 promoção que o leva ao ar:
 
-1. **`doctl apps update <id> --spec .do/app.yaml`**, e não só o botão de deploy: o spec novo traz
-   as duas rotas `/.well-known/oauth-…` para a API e a variável `API_URL_PUBLICA`. O botão
-   reimplanta o spec que já está lá, sem elas.
+1. **Levar ao app no ar as duas rotas `/.well-known/oauth-…` e a variável `API_URL_PUBLICA`**
+   — o botão de deploy reimplanta o spec que já está lá, sem elas.
+   ⚠️ **NUNCA com `doctl apps update --spec .do/app.yaml` direto do repositório**: os segredos
+   ali valem `DEFINA_NO_PAINEL`, e aplicar o arquivo SOBRESCREVE os do painel. É exatamente o
+   `JWT_SECRET curto demais (16 caracteres)` que já parou o start em produção — 16 é o tamanho
+   de `DEFINA_NO_PAINEL`. Dois caminhos seguros:
+   - **pelo painel**: componente `api` ▸ *Settings* ▸ *HTTP Request Routes*, acrescentar
+     `/.well-known/oauth-protected-resource` e `/.well-known/oauth-authorization-server` com
+     *Preserve Path Prefix* ligado; e em *Environment Variables*,
+     `API_URL_PUBLICA = ${APP_URL}/api`;
+   - **pelo `doctl`, partindo do spec DO AR**: `doctl apps spec get <id> > .tmp/spec-ar.yaml`
+     (os segredos vêm cifrados, `EV[…]`, e assim voltam intactos), acrescentar as rotas e a
+     variável copiando de `.do/app.yaml`, e `doctl apps update <id> --spec .tmp/spec-ar.yaml`.
 2. Verificar pelo item 9 da seção 4.
 3. No claude.ai: **Configurações ▸ Conectores ▸ Adicionar conector personalizado**, colar a URL
    acima e conectar — abre a página de login do Botané. Só entra quem tem a permissão
