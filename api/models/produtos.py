@@ -146,6 +146,13 @@ class ProdutoUpdate(ProdutoBase):
     # o servidor recusa com 409 e reenviar com isto em `true` é dizer "sim, é isso
     # mesmo". Retirado antes do UPDATE, como o de cima.
     confirmar_reativacao: bool = False
+    # 🔑 **Quantos da unidade NOVA vale 1 da ANTIGA** (19/09/2026, pedido do
+    # dono: *"caso tenhamos 10 UN e queremos utilizar para KG, abrir uma tela
+    # para conversao, exemplo: cada UN vale 2 KG"*). So chega quando o sistema
+    # nao sabe a relacao sozinho: KG->G ele resolve pela grandeza.
+    # ⚠️ Tambem nao e campo do produto — e retirado antes do UPDATE, como os
+    # dois acima. Maior que zero: fator zero faria a mercadoria desaparecer.
+    fator_troca_unidade: float | None = Field(default=None, gt=0)
     nome: str | None = Field(default=None, min_length=2, max_length=160)
     codigo: str | None = Field(default=None, max_length=40)
     tipo: str | None = None

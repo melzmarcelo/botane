@@ -333,11 +333,12 @@ def _ajustar_um(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
         """INSERT INTO estoque_movimentos
                (id_unidade, id_local, id_produto, tipo, quantidade,
                 custo_unitario, custo_total, saldo_apos, custo_medio_apos,
-                origem_tipo, origem_id, documento, observacao, id_usuario)
-           VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, 'AJUSTE_LOTE', %s, %s, %s, %s)
+                origem_tipo, origem_id, documento, observacao, id_usuario, um)
+           VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, 'AJUSTE_LOTE', %s, %s, %s, %s,
+                   (SELECT um_estoque FROM produtos WHERE id = %s))
            RETURNING id""",
         (id_unidade, local, id_produto, AJUSTE_CUSTO, novo_arred, diferenca,
-         saldo, novo_arred, id_lote, documento, observacao, id_usuario),
+         saldo, novo_arred, id_lote, documento, observacao, id_usuario, id_produto),
     )
     id_movimento = cur.fetchone()["id"]
 
@@ -377,12 +378,13 @@ def _ajustar_um(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
                     """INSERT INTO estoque_movimentos
                            (id_unidade, id_local, id_produto, tipo, quantidade,
                             custo_unitario, custo_total, saldo_apos, custo_medio_apos,
-                            origem_tipo, origem_id, documento, observacao, id_usuario)
+                            origem_tipo, origem_id, documento, observacao, id_usuario, um)
                        VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s,
-                               'AJUSTE_LOTE', %s, %s, %s, %s)""",
+                               'AJUSTE_LOTE', %s, %s, %s, %s,
+                               (SELECT um_estoque FROM produtos WHERE id = %s))""",
                     (id_unidade, outra["id_local"], id_produto, AJUSTE_CUSTO, novo_arred,
                      d, q, novo_arred, id_lote, documento,
-                     "Custo único da loja", id_usuario),
+                     "Custo único da loja", id_usuario, id_produto),
                 )
                 diferenca_total += d
             cur.execute(

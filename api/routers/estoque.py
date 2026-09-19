@@ -447,6 +447,12 @@ def movimentos(
             SELECT m.id, m.data_movimento, m.tipo, m.id_produto, p.nome AS produto, p.codigo,
                    l.nome AS local, m.quantidade, m.custo_unitario, m.custo_total,
                    m.saldo_apos, m.custo_medio_apos, m.custo_provisorio, m.documento,
+                   -- 🔑 **A unidade DAQUELA linha** (migração 076). Sem ela, uma
+                   -- quantidade gravada em CX seria lida na unidade de hoje, e o
+                   -- razão passaria a mentir justamente sobre o que a troca de
+                   -- unidade veio permitir. `coalesce` porque linha antiga de
+                   -- produto sem unidade não ganhou sigla no backfill.
+                   coalesce(m.um, p.um_estoque) AS um,
                    pm.nome AS motivo, m.observacao, u.nome AS usuario, m.id_estorno_de,
                    -- De onde o movimento veio. Sem isto, um ajuste feito em lote é
                    -- indistinguível de um avulso, e a pergunta "de onde veio?" só

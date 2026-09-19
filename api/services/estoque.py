@@ -23,13 +23,27 @@ from fastapi import HTTPException
 
 from services.custos import CASAS_CUSTO, custo_do_insumo, dec
 
+# 🔑 **A conversão de unidade é um PAR de movimentos** (19/09/2026, pedido do
+# dono: *"mesmo com estoque, às vezes queremos alterar a unidade do produto"*).
+# O saldo sai inteiro na unidade antiga e volta inteiro na nova, pelo MESMO
+# valor: o razão registra a virada em vez de fingir que não houve, e nenhuma
+# linha antiga precisa ser reescrita — o append-only fica intacto.
+# ⚠️ **Eles não são compra, nem perda, nem consumo.** O CMV soma por tipo
+# NOMEADO (`TIPOS_COMPRA`, `SAIDA_PERDA`…), então estes ficam de fora por
+# construção — e é isso que mantém a conversão neutra na conta do mês. Entrar em
+# `ENTRADAS`/`SAIDAS` é só para o razão saber de que lado a quantidade cai.
+CONVERSAO_ENTRADA = "CONVERSAO_UM_ENTRADA"
+CONVERSAO_SAIDA = "CONVERSAO_UM_SAIDA"
+
 ENTRADAS = {
     "ENTRADA_NF", "ENTRADA_MANUAL", "ENTRADA_PRODUCAO", "ENTRADA_DEVOLUCAO",
     "TRANSFERENCIA_ENTRADA", "AJUSTE_INVENTARIO_ENTRADA", "ESTORNO_ENTRADA",
+    CONVERSAO_ENTRADA,
 }
 SAIDAS = {
     "SAIDA_VENDA", "SAIDA_PRODUCAO", "SAIDA_PERDA", "SAIDA_CONSUMO_INTERNO",
     "TRANSFERENCIA_SAIDA", "AJUSTE_INVENTARIO_SAIDA", "ESTORNO_SAIDA",
+    CONVERSAO_SAIDA,
 }
 # 🔑 **`AJUSTE_CUSTO` não é entrada nem saída** — é o único movimento que mexe
 # no VALOR sem mexer na quantidade. Fica fora dos dois conjuntos de propósito:
@@ -54,7 +68,14 @@ ROTULOS = {
     "AJUSTE_INVENTARIO_SAIDA": "Ajuste de inventário (falta)",
     "ESTORNO_SAIDA": "Estorno (saída)",
     "AJUSTE_CUSTO": "Ajuste de custo",
+    CONVERSAO_ENTRADA: "Conversão de unidade (entrada)",
+    CONVERSAO_SAIDA: "Conversão de unidade (saída)",
 }
+
+
+def _num(v) -> str:
+    """O número como esta casa escreve: vírgula, e sem zero à toa."""
+    return f"{float(v):g}".replace(".", ",")
 
 
 def _parametros(cur, id_unidade: int) -> dict:
@@ -270,7 +291,8 @@ def lancar(
         raise HTTPException(status_code=400, detail="Quantidade precisa ser maior que zero.")
 
     cur.execute(
-        "SELECT nome, controla_estoque, controla_lote, ativo FROM produtos WHERE id = %s",
+        "SELECT nome, controla_estoque, controla_lote, ativo, um_estoque "
+        "FROM produtos WHERE id = %s",
         (id_produto,),
     )
     produto = cur.fetchone()
@@ -395,18 +417,24 @@ def lancar(
     custo_exato = qtd * unitario
     custo_total = custo_exato.quantize(Decimal("0.01"))
 
+    # 🔑 **A UNIDADE vai na linha** (migração 076, 19/09/2026). Sem ela o razão
+    # não sabe em que unidade cada quantidade foi gravada, e era exatamente isso
+    # que impedia trocar a unidade de um produto com histórico: o passado diria
+    # "10" numa unidade e o saldo "10" noutra. Com a unidade na linha, o passado
+    # continua legível na unidade da época e nada precisa ser reescrito — o
+    # append-only fica intacto.
     cur.execute(
         """INSERT INTO estoque_movimentos
                (id_unidade, id_local, id_produto, data_movimento, tipo, quantidade,
                 custo_unitario, custo_total, saldo_apos, custo_medio_apos, custo_provisorio,
                 origem_tipo, origem_id, id_estorno_de, id_motivo_perda, documento,
-                observacao, id_usuario)
+                observacao, id_usuario, um)
            VALUES (%s, %s, %s, coalesce(%s, now()), %s, %s, %s, %s, %s, %s, %s,
-                   %s, %s, %s, %s, %s, %s, %s)
+                   %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id, data_movimento""",
         (id_unidade, id_local, id_produto, data_movimento, tipo, sinal, unitario, custo_total,
          saldo_novo, medio_novo, provisorio, origem_tipo, origem_id, id_estorno_de,
-         id_motivo_perda, documento, observacao, id_usuario),
+         id_motivo_perda, documento, observacao, id_usuario, produto.get("um_estoque")),
     )
     movimento = cur.fetchone()
 
@@ -466,13 +494,14 @@ def lancar(
                            (id_unidade, id_local, id_produto, data_movimento, tipo,
                             quantidade, custo_unitario, custo_total, saldo_apos,
                             custo_medio_apos, origem_tipo, origem_id, observacao,
-                            id_usuario)
+                            id_usuario, um)
                        VALUES (%s, %s, %s, coalesce(%s, now()), %s, 0, %s, %s, %s, %s,
-                               'CUSTO_GERAL', %s, %s, %s)""",
+                               'CUSTO_GERAL', %s, %s, %s, %s)""",
                     (id_unidade, prateleira["id_local"], id_produto, data_movimento,
                      AJUSTE_CUSTO, medio_novo, diferenca, q, medio_novo,
                      movimento["id"],
-                     "Reavaliação pelo custo único da loja", id_usuario),
+                     "Reavaliação pelo custo único da loja", id_usuario,
+                     produto.get("um_estoque")),
                 )
             if not dela:
                 cur.execute(
@@ -879,6 +908,152 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
             + ("foram reprocessados." if aplicar and mudancas else "mudariam.")
             if mudancas else f"{produto['nome']} já está em ordem — nada mudaria."
         ),
+    }
+
+
+def saldo_a_converter(cur, id_produto: int) -> list[dict]:
+    """Onde o produto tem saldo, em toda loja e prateleira. Só lê.
+
+    ⚠️ **Toda loja, não só a atual.** `produtos.um_estoque` é do CADASTRO, que é
+    global: trocar a unidade na matriz muda o denominador da filial junto. Virar
+    só o saldo de quem está olhando deixaria a outra loja com a quantidade velha
+    sob a unidade nova — exatamente a mentira que a recusa antiga evitava.
+    """
+    cur.execute(
+        """SELECT s.id_unidade, s.id_local, l.nome AS local, u.nome AS loja,
+                  s.quantidade, s.custo_medio,
+                  round(s.quantidade * s.custo_medio, 2) AS valor
+             FROM estoque_saldos s
+             JOIN locais_estoque l ON l.id = s.id_local
+             JOIN unidades u ON u.id = s.id_unidade
+            WHERE s.id_produto = %s AND s.quantidade <> 0
+            ORDER BY s.id_unidade, lower(l.nome)""",
+        (id_produto,),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def converter_unidade(cur, *, id_produto: int, de: str, para: str, fator,
+                      id_usuario: int | None = None) -> dict:
+    """Vira o saldo de um produto para outra unidade, pelo razão.
+
+    🔑 **Pedido do dono (19/09/2026):** *"mesmo com estoque, às vezes queremos
+    alterar a unidade do produto… temos 10kg em estoque, e vamos alterar para
+    grama, possível converter"*. Até aqui o sistema recusava a troca com
+    histórico, e a recusa estava certa pelo que se sabia — o razão é append-only
+    e as quantidades antigas estão gravadas na unidade antiga.
+
+    🔑 **O que desfez o impasse foi a migração 076**: cada linha do razão passou
+    a dizer em que unidade foi gravada. Com isso o passado continua legível na
+    unidade da época, e a virada é registrada como um PAR de movimentos — sai
+    tudo na unidade antiga, entra tudo na nova. Nada é reescrito.
+
+    ⚠️ **O VALOR é preservado, e é isso que mantém o CMV intacto.** A conta do
+    mês é `inicial + compras − final`: a conversão não é compra, e o estoque
+    final precisa valer exatamente o mesmo depois. Por isso a entrada não usa
+    `custo_medio ÷ fator` — usa o valor que a SAÍDA de fato levou, dividido pela
+    quantidade nova. Dividir o custo daria diferença de centavos a cada
+    prateleira, e centavo que sobra no razão vira buraco no CMV.
+
+    ⚠️ **Prateleira por prateleira, loja por loja.** O custo médio pode diferir
+    entre prateleiras (`custo_por_local`), então cada uma converte com o valor
+    dela.
+
+    ⚠️ **`fator` é quantas unidades NOVAS cabem em UMA antiga**: KG→G é 1000, e
+    "cada UN vale 2 KG" é 2. É a mesma direção que `troca_de_unidade` usa.
+    """
+    f = dec(fator)
+    if f <= 0:
+        raise HTTPException(status_code=400, detail="O fator precisa ser maior que zero.")
+
+    linhas = saldo_a_converter(cur, id_produto)
+    convertidos = []
+    for linha in linhas:
+        qtd_velha = dec(linha["quantidade"])
+        if qtd_velha <= 0:
+            # ⚠️ Saldo NEGATIVO não se converte por um par de movimentos: a
+            # saída não teria o que tirar. Ele é produto que saiu sem ter
+            # entrado, e o caminho é o inventário — não a troca de unidade.
+            raise HTTPException(
+                status_code=409,
+                detail=(f"{linha['loja']} · {linha['local']} está com saldo negativo "
+                        f"({linha['quantidade']}). Acerte o estoque antes de trocar a "
+                        f"unidade — a conversão precisa de saldo para virar."),
+            )
+        qtd_nova = (qtd_velha * f).quantize(Decimal("0.0001"))
+        if qtd_nova <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Converter {_num(qtd_velha)} {de} por {_num(f)} daria zero em "
+                        f"{para}: a quantidade desapareceria na conta."),
+            )
+
+        saida = lancar(
+            cur, id_unidade=linha["id_unidade"], id_produto=id_produto,
+            tipo=CONVERSAO_SAIDA, quantidade=qtd_velha, id_local=linha["id_local"],
+            observacao=f"Troca de unidade: {de} → {para}",
+            id_usuario=id_usuario, pode_retroativo=True,
+        )
+        # 🔑 **O valor que a saída levou é o que a entrada devolve.** Ele já vem
+        # arredondado a centavos pelo razão; usá-lo como numerador é o que faz
+        # o estoque final valer o mesmo dos dois lados da virada.
+        valor = dec(saida["custo_total"])
+        convertidos.append({
+            **linha, "quantidade_nova": qtd_nova, "valor_convertido": valor,
+            "id_saida": saida["id"],
+            # 🔑 **O LOTE atravessa a virada.** A saída sem lote informado
+            # consome FEFO e devolve de quais lotes tirou; a entrada repõe os
+            # MESMOS lotes, com as quantidades convertidas. Sem isto, um produto
+            # com controle de lote perderia a rastreabilidade na troca de
+            # unidade — e o alerta de vencimento passaria a mentir, porque a
+            # validade estava no lote que sumiu.
+            "lotes": saida.get("lotes") or [],
+        })
+
+    # ⚠️ **O cadastro muda NO MEIO**, entre a saída e a entrada, e é de
+    # propósito: `lancar` grava em cada linha a unidade vigente do produto. A
+    # saída precisa nascer em `de` e a entrada em `para` — é assim que o razão
+    # conta a história certa quando alguém for ler.
+    cur.execute("UPDATE produtos SET um_estoque = %s WHERE id = %s", (para, id_produto))
+
+    for c in convertidos:
+        unitario = (c["valor_convertido"] / c["quantidade_nova"]) if c["quantidade_nova"] else 0
+        conta = f"Troca de unidade: {de} → {para} (1 {de} = {_num(f)} {para})"
+        # ⚠️ **Com lote, a entrada é uma por LOTE** — e a última leva a sobra da
+        # divisão, para a soma fechar com a quantidade que a saída levou.
+        pedacos = []
+        restante = c["quantidade_nova"]
+        for i, l in enumerate(c["lotes"]):
+            if l.get("lote") is None and l.get("validade") is None:
+                continue
+            q = (dec(l["quantidade"]) * f).quantize(Decimal("0.0001"))
+            pedacos.append((min(q, restante), l.get("lote"), l.get("validade")))
+            restante -= pedacos[-1][0]
+        if restante > 0 or not pedacos:
+            pedacos.append((restante, None, None))
+
+        c["id_entrada"] = None
+        for q, lote, validade in pedacos:
+            if q <= 0:
+                continue
+            entrada = lancar(
+                cur, id_unidade=c["id_unidade"], id_produto=id_produto,
+                tipo=CONVERSAO_ENTRADA, quantidade=q,
+                id_local=c["id_local"], custo_unitario=unitario,
+                observacao=conta, lote=lote, validade=validade,
+                id_usuario=id_usuario, pode_retroativo=True,
+            )
+            c["id_entrada"] = c["id_entrada"] or entrada["id"]
+
+    return {
+        "de": de, "para": para, "fator": f,
+        "prateleiras": len(convertidos),
+        "linhas": [
+            {"loja": c["loja"], "local": c["local"],
+             "de": c["quantidade"], "para": c["quantidade_nova"],
+             "valor": c["valor_convertido"]}
+            for c in convertidos
+        ],
     }
 
 

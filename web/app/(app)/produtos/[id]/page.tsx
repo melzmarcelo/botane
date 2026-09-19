@@ -26,7 +26,7 @@ import {
   Etiqueta,
   Vazio,
 } from "@/components/ui";
-import { moedaParaNumero, numeroParaMoeda } from "@/lib/numeros";
+import { moedaParaNumero, numeroParaMoeda, qtd } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import CodigosDoProduto, { CodigoExterno } from "./codigos";
@@ -212,7 +212,25 @@ export default function FormularioProduto() {
     origem_do_fator?: string;
     resumo?: string;
     conversoes?: { campo: string; de: number; para: number }[];
+    /** 🔑 O sistema NÃO sabe a relação entre as duas unidades e está
+     *  perguntando (19/09/2026, pedido do dono: *"abrir uma tela para
+     *  conversão, exemplo: cada UN vale 2 KG"*). KG→G ele resolve sozinho, pela
+     *  grandeza; UN→KG ninguém resolve sem alguém dizer. */
+    precisa_fator?: boolean;
+    pergunta?: string;
+    de?: string;
+    para?: string;
+    /** O saldo que vai virar, prateleira por prateleira. É o que faz a troca
+     *  deixar de ser um salto no escuro: "10 KG viram 10.000 G", escrito. */
+    saldo?: { loja: string; local: string; de: number; para: number; valor: number }[];
+    /** Quantas prateleiras têm saldo — vem nos DOIS ramos, o que pergunta o
+     *  fator e o que já planeja a conversão. */
+    prateleiras?: number;
+    saldo_total?: number;
+    movimentos?: number;
   } | null>(null);
+  /** O que a pessoa respondeu a "quantos KG vale 1 UN?". */
+  const [fatorTroca, setFatorTroca] = useState("");
   const [confirmandoCusto, setConfirmandoCusto] = useState(false);
   /**
    * 🔑 **Quem absorveu este cadastro numa fusão** (13/09/2026, relato do dono:
@@ -287,6 +305,9 @@ export default function FormularioProduto() {
     const q = new URLSearchParams({ um_estoque: f.um_estoque });
     if (f.um_compra) q.set("um_compra", f.um_compra);
     if (f.fator_compra) q.set("fator_compra", f.fator_compra.replace(",", "."));
+    // ⚠️ O que a pessoa digitou entra na PRÓPRIA prévia: é assim que ela vê
+    // "10 UN viram 20 KG" enquanto ajusta o número, e não depois de gravar.
+    if (fatorTroca.trim()) q.set("fator", fatorTroca.replace(",", "."));
     const t = setTimeout(() => {
       api
         .get<typeof previaUnidade>(`/produtos/${id}/troca-de-unidade?${q}`)
@@ -298,7 +319,7 @@ export default function FormularioProduto() {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, novo, carregando, f.um_estoque, f.um_compra, f.fator_compra]);
+  }, [id, novo, carregando, f.um_estoque, f.um_compra, f.fator_compra, fatorTroca]);
 
   async function salvarPrecoDaLoja(valor: number | null) {
     setSalvandoPreco(true);
@@ -436,6 +457,11 @@ export default function FormularioProduto() {
           ...corpo,
           ativo: f.ativo,
           confirmar_troca_de_unidade: confirmado,
+          // ⚠️ Só quando há o que responder: mandar `null` a cada gravação
+          // sujaria a auditoria com um campo que ninguém preencheu.
+          ...(fatorTroca.trim()
+            ? { fator_troca_unidade: Number(fatorTroca.replace(",", ".")) }
+            : {}),
         });
         // 🔑 **O preço que é DA LOJA é gravado pela rota da loja** — ver
         // `precoEhDaLoja`. Com uma loja só o campo edita o preço que vale, e
@@ -603,7 +629,49 @@ export default function FormularioProduto() {
 
       {/* 🔑 **O que a troca de unidade vai fazer, enquanto se digita.** Era
           invisivel: o custo so mudava depois de gravar, e ai nao havia volta. */}
-      {previaUnidade?.muda && !previaUnidade.pode && (
+      {/* 🔑 **A tela de conversão** (19/09/2026, pedido do dono: *"caso tenhamos
+          10 UN e queremos utilizar para KG, abrir uma tela para conversão,
+          exemplo: cada UN vale 2 KG"*). Antes isto era uma RECUSA seca: o
+          sistema dizia que não sabia converter e parava ali. Agora ele
+          pergunta — e o que a pessoa responde vira o fator.
+          ⚠️ `info` É o amarelo da casa (`.aviso-info` usa `--color-alerta`):
+          é pergunta, não erro. */}
+      {previaUnidade?.muda && previaUnidade.precisa_fator && (
+        <Aviso tipo="info">
+          <b>{previaUnidade.pergunta}</b>
+          <span className="mt-1 block">
+            O sistema não sabe a relação entre <b>{previaUnidade.de}</b> e{" "}
+            <b>{previaUnidade.para}</b> — elas não são da mesma grandeza, e este cadastro
+            não tem embalagem que as ligue. Diga quanto vale uma, e ele converte o resto.
+          </span>
+          <span className="mt-2 flex flex-wrap items-end gap-2">
+            <label>
+              <span className="rotulo-campo">
+                1 {previaUnidade.de} vale quantos {previaUnidade.para}?
+              </span>
+              {/* ⚠️ A largura mora no INVÓLUCRO: `.campo` tem `width:100%` fora
+                  de camada e ganha da utilitária do Tailwind. */}
+              <span className="mt-1.5 block w-[120px]">
+                <input
+                  className="campo mono text-right"
+                  inputMode="decimal"
+                  id="fator-troca-unidade"
+                  aria-label={`quantos ${previaUnidade.para} vale 1 ${previaUnidade.de}`}
+                  placeholder="2"
+                  value={fatorTroca}
+                  onChange={(e) => setFatorTroca(e.target.value)}
+                />
+              </span>
+            </label>
+            {(previaUnidade.prateleiras ?? 0) > 0 && (
+              <span className="pb-2 text-[13px] text-suave">
+                há saldo em {previaUnidade.prateleiras} prateleira(s) — ele vira junto
+              </span>
+            )}
+          </span>
+        </Aviso>
+      )}
+      {previaUnidade?.muda && !previaUnidade.pode && !previaUnidade.precisa_fator && (
         <Aviso tipo="erro">{previaUnidade.motivo}</Aviso>
       )}
       {previaUnidade?.muda && previaUnidade.pode && (
@@ -621,6 +689,27 @@ export default function FormularioProduto() {
           {/* ⚠️ A suposição aparece ANTES de a pessoa salvar, e não só no 409:
               quem lê "supondo que o que o cadastro contava como 1 UN é um PCT"
               corrige o número ali mesmo, se a leitura estiver errada. */}
+          {/* 🔑 **O saldo que vira, escrito prateleira por prateleira.** É a
+              diferença entre "confie em mim" e "10 KG viram 10.000 G". O razão
+              não se reescreve: a virada entra como um par de movimentos, e o
+              histórico antigo continua na unidade da época. */}
+          {(previaUnidade.saldo ?? []).length > 0 && (
+            <span className="mt-2 block">
+              <b>O estoque vira junto</b>, por um movimento de conversão no razão:
+              {(previaUnidade.saldo ?? []).map((l, i) => (
+                <span key={i} className="mt-0.5 block">
+                  {l.loja} · {l.local}: <b className="mono">{qtd(l.de)} {previaUnidade.de}</b>
+                  {" → "}
+                  <b className="mono">{qtd(l.para)} {previaUnidade.para}</b>
+                  <span className="text-suave"> (o valor não muda: {reais(l.valor)})</span>
+                </span>
+              ))}
+              <span className="mt-0.5 block text-[12.5px] text-suave">
+                O histórico anterior continua gravado em {previaUnidade.de} — o razão não se
+                reescreve, e cada linha diz em que unidade foi lançada.
+              </span>
+            </span>
+          )}
           {previaUnidade.supondo && !previaUnidade.custo_salto && (
             <span className="mt-1 block">
               ⚠️ O sistema não sabia quanto valia <b>1 UN</b> neste cadastro — está{" "}

@@ -4575,6 +4575,97 @@ try {
     checar("as participações somam 100%", true, "sem CMV no período");
   }
 
+  console.log("8b2. trocar a unidade de um produto QUE TEM estoque");
+  // 🔑 **Pedido do dono (19/09/2026):** *"mesmo com estoque, às vezes queremos
+  // alterar a unidade do produto… caso tenhamos 10 UN e queremos utilizar para
+  // KG, abrir uma tela para conversão, exemplo: cada UN vale 2 KG"*. Até aqui a
+  // tela RECUSAVA a troca quando havia movimento.
+  const mTroca = String(Date.now()).slice(-6);
+  const localTroca = await garantirLocal();
+  const { dados: prodTroca } = await api("POST", "/produtos",
+    { nome: `Troca tela ${mTroca}`, tipo: "INSUMO", um_estoque: "UN" }, token);
+  await api("POST", "/estoque/entradas",
+    { id_produto: prodTroca.id, quantidade: 10, custo_unitario: 7,
+      id_local: localTroca }, token);
+
+  await irPara(p, `${WEB}/produtos/${prodTroca.id}`);
+  await p.waitForFunction(() => /Unidade de estoque/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1200));
+
+  // ⚠️ O seletor nativo, não `p.select`: a tela reage ao `change` do React, e o
+  // valor precisa ser posto pelo setter nativo para o estado acompanhar.
+  const escolheuKg = await p.evaluate(() => {
+    const l = [...document.querySelectorAll("label")]
+      .find((x) => /^Unidade de estoque/i.test(x.textContent?.trim() ?? ""));
+    const sel = l?.querySelector("select");
+    if (!sel || ![...sel.options].some((o) => o.value === "KG")) return false;
+    const nativo = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, "value").set;
+    nativo.call(sel, "KG");
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  });
+  checar("a ficha do produto deixa escolher outra unidade de estoque", escolheuKg);
+  await new Promise((r) => setTimeout(r, 2600));
+
+  // 🔑 **A tela PERGUNTA em vez de recusar.** UN e KG não são da mesma grandeza
+  // e este cadastro não tem embalagem que as ligue: ninguém sabe o número, e é
+  // isso que abre a caixinha.
+  const pergunta = await p.evaluate(() => ({
+    texto: document.body.innerText,
+    campo: !!document.querySelector("#fator-troca-unidade"),
+  }));
+  checar("sem saber a relação, a tela pergunta quanto vale 1 UN",
+    /Quantos KG vale 1 UN/i.test(pergunta.texto), pergunta.texto.slice(0, 200));
+  checar("com a caixinha para informar o fator", pergunta.campo, pergunta);
+  // ⚠️ A recusa antiga NÃO pode voltar disfarçada de pergunta: se a tela ainda
+  // dissesse "zere o saldo", o recurso não existiria.
+  checar("e não manda mais zerar o saldo",
+    !/zere o saldo/i.test(pergunta.texto));
+
+  await p.type("#fator-troca-unidade", "2");
+  await new Promise((r) => setTimeout(r, 2800));
+  const previsto = await p.evaluate(() => document.body.innerText);
+  // 🔑 **O saldo que vira, escrito.** É a diferença entre "confie em mim" e
+  // "10 UN viram 20 KG".
+  checar("informado o fator, a tela mostra o que o estoque vira",
+    /10 UN/.test(previsto) && /20 KG/.test(previsto),
+    (previsto.match(/[^\n]*→[^\n]*/) || [])[0] ?? previsto.slice(0, 200));
+  checar("e diz que o valor não muda", /o valor não muda/i.test(previsto));
+  // ⚠️ **O razão é append-only, e a tela precisa dizer isso.** Quem troca a
+  // unidade tem de saber que o histórico continua na unidade de antes — senão
+  // vai ler o razão achando que tudo virou.
+  checar("avisando que o histórico continua na unidade antiga",
+    /histórico anterior continua gravado em UN/i.test(previsto));
+  await foto(p, "35b-troca-de-unidade");
+
+  checar("e dá para salvar", await clicarQuando(p, "Salvar"));
+  await new Promise((r) => setTimeout(r, 2500));
+  // A confirmação do salto de custo: R$ 7,00 vira R$ 3,50, que não é salto —
+  // mas se a janela aparecer, responde.
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => /confirmar|sim|trocar/i.test(b.textContent ?? ""))?.click();
+  });
+  await new Promise((r) => setTimeout(r, 2500));
+
+  const { dados: saldoTroca } = await api(
+    "GET", `/estoque/saldos?id_produto=${prodTroca.id}`, null, token);
+  checar("o estoque virou de verdade: 10 UN = 20 KG",
+    Math.abs(Number(saldoTroca?.[0]?.quantidade ?? 0) - 20) < 0.001, saldoTroca?.[0]);
+  const { dados: movTroca } = await api(
+    "GET", `/estoque/movimentos?id_produto=${prodTroca.id}`, null, token);
+  const linhasTroca = Array.isArray(movTroca) ? movTroca : (movTroca?.itens ?? []);
+  // 🔑 **A prova de que nada foi reescrito**: a entrada original continua em UN.
+  const original = linhasTroca.find((m) => m.tipo === "ENTRADA_MANUAL");
+  checar("e a entrada ORIGINAL continua gravada em UN", original?.um === "UN", original);
+  checar("enquanto a conversão nasce em KG",
+    linhasTroca.find((m) => m.tipo === "CONVERSAO_UM_ENTRADA")?.um === "KG",
+    linhasTroca.map((m) => `${m.tipo}:${m.um}`));
+  await api("DELETE", `/produtos/${prodTroca.id}`, null, token);
+
   console.log("8c. FEFO: o lote que vence antes sai antes");
   const marcaLote = String(Date.now()).slice(-6);
   const localFefo = await garantirLocal();

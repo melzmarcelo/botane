@@ -830,6 +830,26 @@
   Teste que não roda passa. Agora ele cria papel e usuário próprios e AFIRMA que a permissão
   falta antes de medir.
 
+- 🔑 **A troca de unidade deixou de ser recusada quando há razão** (19/09/2026, pedido do
+  dono). `troca_de_unidade.avaliar` contava os movimentos e parava ali; agora ele planeja a
+  conversão, e `aplicar` chama `estoque.converter_unidade` antes de mexer no cadastro. O
+  plano leva o **saldo prateleira por prateleira**, que é o que a tela escreve antes do sim.
+  ⚠️ **A quarta fonte do fator é a PESSOA** (`_fator(..., informado)`), e ela vem na FRENTE
+  das três antigas: quem digitou o número está olhando a mercadoria; o cadastro pode estar
+  velho.
+  ⚠️ **Sem saber a relação, o sistema PERGUNTA em vez de recusar** — `precisa_fator` é o que
+  abre a caixinha *"Quantos KG vale 1 UN?"*. KG→G ele resolve sozinho, pela grandeza; UN→KG
+  ninguém resolve sem alguém dizer. ⚠️ Mas **sem resposta continua recusando**: gravar a
+  unidade nova deixando a quantidade seria o pior dos mundos.
+  ⚠️ **Com SALDO sempre há o que converter.** O atalho "não havia número nenhum para
+  converter" existe para o rascunho recém-importado; aplicá-lo a um produto com mercadoria na
+  prateleira viraria a unidade deixando a quantidade intacta.
+  ⚠️ **`fator_troca_unidade` sai de `dados` com `pop`, não `get`**: é instrução da troca, não
+  campo do produto. Deixado ali, o filtro de `_EDITAVEIS` o descartaria em silêncio.
+  ⚠️ **As fichas NÃO precisam ser convertidas**: `ficha_itens.um` guarda a unidade do item, e
+  o conversor central resolve na hora do custo. Medido: 224 itens já usavam unidade diferente
+  da do insumo antes disto.
+
 ## Armadilhas já pagas
 
 - ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**

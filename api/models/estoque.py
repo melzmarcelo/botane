@@ -134,6 +134,13 @@ class MovimentoResponse(BaseModel):
     codigo: str
     local: str
     quantidade: float
+    # 🔑 **A unidade DAQUELA linha** (migração 076, 19/09/2026). Trocar a unidade
+    # de um produto com histórico passou a ser possível justamente porque cada
+    # linha diz em que unidade foi gravada: sem isto, uma quantidade lançada em
+    # CX seria lida na unidade de hoje, e o razão mentiria sobre o passado.
+    # ⚠️ Nula em linha antiga de produto que nunca teve unidade — a consulta cai
+    # na do produto, e ali também pode não haver.
+    um: str | None = None
     custo_unitario: float
     custo_total: float
     # NOTA, PRODUCAO, VENDA, AJUSTE_LOTE… — o que originou o movimento.

@@ -468,6 +468,49 @@
   estorno de saída é mais uma entrada) e mudar as datas de mês (o estoque inicial do mês seguinte
   passou a discordar). **O que fecha a conta é não deixar rastro nenhum.**
 
+- 🔑 **`estoque_movimentos.um`: a unidade em que CADA linha foi gravada** (migração 076,
+  19/09/2026). Nasceu para desfazer um impasse: o razão é append-only, as quantidades
+  históricas estão na unidade antiga, e por isso trocar a unidade de um produto com
+  movimento era **recusado** — converter só o cadastro faria o razão dizer "10" numa
+  unidade e o saldo "10" noutra.
+  🔑 **Com a unidade na LINHA, o passado continua legível na unidade da época e o futuro
+  anda na nova.** Nada precisa ser reescrito, e é isso que torna a troca possível sem ferir
+  a regra mais antiga da casa.
+  ⚠️ **O backfill diz o que era VERDADE**, não um palpite: nenhuma conversão existia ainda,
+  então toda linha estava na unidade atual do produto. Medido: 6.403 de 6.404 linhas
+  ganharam sigla — a que faltou é de produto sem `um_estoque` (rascunho do Omie), e nula ali
+  é "não sei", não zero.
+  ⚠️ **Sem FK para `unidades_medida`**: a sigla histórica tem de sobreviver a alguém apagar
+  a unidade do cadastro.
+  ⚠️ **Todo INSERT no razão grava `um`** — são quatro, dois em `estoque.py` e dois em
+  `ajustes.py`. Um que esqueça deixa a linha muda, e a tela cai na unidade de hoje.
+
+- 🔑 **Trocar a unidade com saldo é um PAR de movimentos, não um UPDATE**
+  (`estoque.converter_unidade`, 19/09/2026, pedido do dono: *"mesmo com estoque, às vezes
+  queremos alterar a unidade do produto, gostaria que fosse possível"*). Sai tudo em
+  `CONVERSAO_UM_SAIDA` na unidade antiga, entra tudo em `CONVERSAO_UM_ENTRADA` na nova.
+  ⚠️ **O VALOR é preservado, e é isso que mantém o CMV intacto.** A entrada NÃO usa
+  `custo_medio ÷ fator`: usa o valor que a SAÍDA de fato levou, dividido pela quantidade
+  nova. Dividir o custo daria centavos de diferença por prateleira, e centavo que sobra no
+  razão vira buraco no CMV. Medido: 10 KG a R$ 30 → 10.000 G a R$ 0,03, CMV real inalterado.
+  ⚠️ **Os dois tipos não são compra, perda nem consumo** — o CMV soma por tipo NOMEADO
+  (`TIPOS_COMPRA`, `SAIDA_PERDA`…), então ficam de fora por construção. Entrar em
+  `ENTRADAS`/`SAIDAS` é só para o razão saber de que lado a quantidade cai.
+  ⚠️ **O cadastro muda NO MEIO do par**, entre a saída e a entrada: `lancar` grava em cada
+  linha a unidade vigente, então a saída precisa nascer na antiga e a entrada na nova.
+  ⚠️ **Toda loja, não só a atual**: `um_estoque` é do cadastro, que é global. Virar só o
+  saldo de quem está olhando deixaria a filial com a quantidade velha sob a unidade nova.
+  ⚠️ **O LOTE atravessa a virada**: a saída sem lote informado consome FEFO e devolve de
+  quais lotes tirou; a entrada repõe os mesmos, com as quantidades convertidas, e a última
+  leva a sobra da divisão. Sem isso a validade some junto com o lote, e o alerta de
+  vencimento passa a mentir.
+  ⚠️ **Saldo NEGATIVO não converte**: a saída não teria o que tirar. O caminho é o
+  inventário, e a recusa diz isso.
+  ⚠️ **Resíduo conhecido, e pequeno:** com fator que não divide redondo (7 CX a R$ 13,37
+  viram 21 UN), `custo_medio` de 6 casas não reproduz o valor exato — medido, R$ 0,000007 por
+  prateleira. É a mesma aritmética do custo médio que o sistema já carrega em qualquer
+  entrada de preço quebrado; a tolerância de R$ 0,05 das suítes existe por isso.
+
 ## Armadilhas já pagas
 
 - 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto

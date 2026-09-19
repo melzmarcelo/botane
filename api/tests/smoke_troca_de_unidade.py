@@ -196,23 +196,101 @@ checar("e o custo de antes ficou gravado na auditoria",
        aud and perto((aud["antes"] or {}).get("custo_referencia"), 8), aud and aud["antes"])
 
 
-print("\n5. produto COM razão não troca de unidade — e o motivo é dito")
-# ⚠️ **`estoque_movimentos` é append-only.** As quantidades históricas estão
-# gravadas na unidade antiga e não há como reescrevê-las: converter só o cadastro
-# deixaria o saldo dizendo "10" numa unidade e o histórico "10" noutra.
+print("\n5. produto COM razão AGORA troca — e o estoque vira junto")
+# 🔑 **Pedido do dono (19/09/2026):** *"mesmo com estoque, às vezes queremos
+# alterar a unidade do produto, gostaria que fosse possível"*. Ate aqui isto era
+# uma RECUSA, e ela estava certa pelo que se sabia: `estoque_movimentos` e
+# append-only, as quantidades historicas estao gravadas na unidade antiga, e
+# trocar so o cadastro deixaria o saldo dizendo "10" numa unidade e o historico
+# "10" noutra.
+# 🔑 **O que desfez o impasse foi a migracao 076**: cada linha do razao passou a
+# dizer em que unidade foi gravada. O passado continua legivel na unidade da
+# epoca, a virada entra como um PAR de movimentos, e nada e reescrito.
 com_razao = criar("ITEM COM MOVIMENTO", "CX")
 st, r = chamar("POST", "/ajustes/estoque", {
     "id_produto": com_razao, "quantidade_certa": 5, "id_local": local["id"],
     "observacao": f"cenario {marca}"}, token=token)
 checar("o produto ganha um movimento no razão", st == 201, (st, r))
 
+st, previa = chamar(
+    "GET", f"/produtos/{com_razao}/troca-de-unidade?um_estoque=UN&um_compra=CX&fator_compra=12",
+    token=token)
+checar("a previa aceita a troca mesmo com razao", previa.get("pode") is True, previa)
+# ⚠️ A previa diz PRATELEIRA POR PRATELEIRA o que vai virar. Sem isso a troca
+# seria um salto no escuro sobre mercadoria de verdade.
+saldo_previsto = previa.get("saldo") or []
+checar("e mostra o saldo que vai virar, prateleira por prateleira",
+       len(saldo_previsto) == 1 and abs(float(saldo_previsto[0]["de"]) - 5) < 0.001
+       and abs(float(saldo_previsto[0]["para"]) - 60) < 0.001, saldo_previsto)
+
 st, r = chamar("PUT", f"/produtos/{com_razao}",
-               {"um_estoque": "UN", "um_compra": "CX", "fator_compra": 12}, token=token)
-checar("a troca é RECUSADA", st == 400, (st, r))
-checar("dizendo que há movimento gravado na unidade antiga",
-       "movimento" in (r.get("detail") or "").lower(), r.get("detail"))
+               {"um_estoque": "UN", "um_compra": "CX", "fator_compra": 12,
+                "confirmar_troca_de_unidade": True}, token=token)
+checar("a troca é ACEITA", st == 200, (st, r))
 d = campos_de(com_razao, ["um_estoque"])
-checar("e a unidade continua CX", d["um_estoque"] == "CX", d)
+checar("e a unidade passa a ser UN", d["um_estoque"] == "UN", d)
+
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={com_razao}", token=token)
+atual = (saldos or [{}])[0]
+# 5 CX x 12 = 60 UN.
+checar("o saldo virou: 5 CX = 60 UN",
+       abs(float(atual.get("quantidade") or 0) - 60) < 0.001, atual)
+
+st, movs = chamar("GET", f"/estoque/movimentos?id_produto={com_razao}", token=token)
+linhas = movs if isinstance(movs, list) else (movs or {}).get("itens", [])
+tipos = [m.get("tipo") for m in linhas]
+checar("o razao ganhou o PAR de conversao",
+       "CONVERSAO_UM_SAIDA" in tipos and "CONVERSAO_UM_ENTRADA" in tipos, tipos)
+# 🔑 **A prova de que nada foi reescrito**: o ajuste original continua dizendo CX.
+antigo = next((m for m in linhas if m.get("tipo", "").startswith("AJUSTE_INVENTARIO")), None)
+checar("e a linha ANTIGA continua gravada em CX",
+       (antigo or {}).get("um") == "CX", antigo)
+nova_linha = next((m for m in linhas if m.get("tipo") == "CONVERSAO_UM_ENTRADA"), None)
+checar("enquanto a entrada da conversao ja nasce em UN",
+       (nova_linha or {}).get("um") == "UN", nova_linha)
+# ⚠️ **O VALOR e preservado, e e isso que mantem o CMV intacto.** A conversao
+# nao e compra: se o estoque final mudasse de valor, o CMV do mes se moveria
+# por uma troca de rotulo.
+saida = next((m for m in linhas if m.get("tipo") == "CONVERSAO_UM_SAIDA"), None)
+# ⚠️ `or 0` NAO serve aqui: em Python `0.0 or -1` e -1, e o produto deste
+# cenario tem custo zero. A checagem media a propria armadilha.
+checar("o par entra e sai pelo MESMO valor",
+       saida is not None and nova_linha is not None
+       and abs(float(saida["custo_total"]) - float(nova_linha["custo_total"])) < 0.005,
+       (saida, nova_linha))
+
+print("\n5b. sem saber a relacao, o sistema PERGUNTA em vez de recusar")
+# 🔑 *"caso tenhamos 10 UN e queremos utilizar para KG, abrir uma tela para
+# conversao, exemplo: cada UN vale 2 KG"*. UN e KG nao sao da mesma grandeza e
+# este cadastro nao tem embalagem que as ligue: ninguem sabe o numero, e o
+# sistema passa a pedi-lo em vez de barrar.
+sem_relacao = criar("ITEM UN PARA KG", "UN")
+st, r = chamar("POST", "/ajustes/estoque", {
+    "id_produto": sem_relacao, "quantidade_certa": 10, "id_local": local["id"],
+    "observacao": f"cenario {marca}"}, token=token)
+st, previa = chamar("GET", f"/produtos/{sem_relacao}/troca-de-unidade?um_estoque=KG",
+                    token=token)
+checar("a previa pede o fator", previa.get("precisa_fator") is True, previa)
+checar("com a pergunta escrita para a tela",
+       "KG" in (previa.get("pergunta") or "") and "UN" in (previa.get("pergunta") or ""),
+       previa.get("pergunta"))
+checar("e dizendo que ha saldo a virar", (previa.get("prateleiras") or 0) == 1, previa)
+# ⚠️ Sem responder, NAO grava: seria trocar a unidade deixando a quantidade.
+st, r = chamar("PUT", f"/produtos/{sem_relacao}", {"um_estoque": "KG"}, token=token)
+checar("e sem o fator o PUT continua recusando", st >= 400, (st, r))
+
+# Respondida a pergunta, converte.
+st, previa = chamar("GET", f"/produtos/{sem_relacao}/troca-de-unidade?um_estoque=KG&fator=2",
+                    token=token)
+checar("informado o fator, a previa passa a aceitar", previa.get("pode") is True, previa)
+st, r = chamar("PUT", f"/produtos/{sem_relacao}",
+               {"um_estoque": "KG", "fator_troca_unidade": 2,
+                "confirmar_troca_de_unidade": True}, token=token)
+checar("e o PUT grava", st == 200, (st, r))
+st, saldos = chamar("GET", f"/estoque/saldos?id_produto={sem_relacao}", token=token)
+atual = (saldos or [{}])[0]
+checar("10 UN viraram 20 KG",
+       abs(float(atual.get("quantidade") or 0) - 20) < 0.001, atual)
 
 
 print("\n6. PUT que não mexe na unidade continua passando")

@@ -316,6 +316,10 @@ def previa_da_troca_de_unidade(
         um_estoque: str,
         um_compra: str | None = None,
         fator_compra: float | None = None,
+        # 🔑 **Quantos NOVOS vale 1 ANTIGO** (19/09/2026, pedido do dono: *"abrir
+        # uma tela para conversão, exemplo: cada UN vale 2 KG"*). Sem ele a
+        # prévia devolve `precisa_fator`, que é o que faz a tela perguntar.
+        fator: float | None = None,
         ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
     """O que a troca de unidade faria com o custo — ANTES de salvar.
 
@@ -334,7 +338,7 @@ def previa_da_troca_de_unidade(
             raise HTTPException(status_code=404, detail="Produto não encontrado.")
         return troca_de_unidade.avaliar(
             cur, id_produto, atual["um_estoque"], um_estoque,
-            um_compra, fator_compra, motor_custos._carregar_ums(cur))
+            um_compra, fator_compra, motor_custos._carregar_ums(cur), fator)
 
 
 @router.get("/ean-das-notas")
@@ -987,6 +991,11 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
         # ⚠️ **Nao dando para converter, RECUSA com a frase que diz o que fazer.**
         # Gravar a unidade nova deixando o custo velho seria o pior dos mundos:
         # o cadastro diria uma coisa e o numero, outra.
+        # ⚠️ **`pop`, não `get`**: `fator_troca_unidade` é instrução da troca, não
+        # campo do produto. Deixado em `dados`, ele cairia no filtro de
+        # `_EDITAVEIS` — que o descartaria em silêncio — e ninguém saberia por
+        # que a conversão usou outro número.
+        fator_informado = dados.pop("fator_troca_unidade", None)
         plano = troca_de_unidade.avaliar(
             cur, id_produto,
             antes["um_estoque"],
@@ -994,6 +1003,7 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
             dados.get("um_compra", antes["um_compra"]),
             dados.get("fator_compra", antes["fator_compra"]),
             motor_custos._carregar_ums(cur),
+            fator_informado,
         )
         if plano["muda"] and not plano["pode"]:
             raise HTTPException(status_code=400, detail=plano["motivo"])

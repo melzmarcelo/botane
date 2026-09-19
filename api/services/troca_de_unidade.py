@@ -34,6 +34,7 @@ Agora é — pelo mesmo `fator_de_embalagem` da nota e da ficha.
 
 from decimal import Decimal
 
+from services import estoque as estoque_motor
 from services.custos import converter, dec, fator_de_embalagem
 
 
@@ -62,10 +63,19 @@ def _reais(v) -> str:
 
 
 def _fator(cur, id_produto: int, antiga: str, nova: str, ums: dict,
-           um_compra: str | None, fator_compra) -> tuple[Decimal | None, str]:
+           um_compra: str | None, fator_compra,
+           informado=None) -> tuple[Decimal | None, str]:
     """Quantas unidades NOVAS cabem em uma ANTIGA. E de onde saiu o número.
 
-    Três fontes, nesta ordem:
+    🔑 **A quarta fonte é a PESSOA** (19/09/2026, pedido do dono: *"caso
+    tenhamos 10 UN e queremos utilizar para KG, abrir uma tela para conversão,
+    exemplo: cada UN vale 2 KG"*). Quando nenhuma das três abaixo sabe, o
+    sistema deixava de converter e recusava; agora ele PERGUNTA, e o que a
+    pessoa responde entra aqui.
+    ⚠️ **Ela vem na frente de todas**, e é de propósito: quem digitou o número
+    está olhando a mercadoria. O cadastro pode estar velho; a pessoa, não.
+
+    As outras três, nesta ordem:
 
     1. **A unidade de compra que está sendo cadastrada.** É o caso do pedido: o
        estoque vira UN e a compra vira CX com fator 12, então 1 CX = 12 UN. Vem
@@ -96,6 +106,14 @@ def _fator(cur, id_produto: int, antiga: str, nova: str, ums: dict,
     UNIDADE com fator 1, e a conta genérica diria 1 CX = 1 PCT. Por isso as
     fontes (1) e (2) existem: quantas unidades cabem na caixa é do PRODUTO.
     """
+    # ⚠️ **O informado manda em tudo.** Ele é a resposta à pergunta que o
+    # sistema fez por não saber — desprezá-la em favor de um cadastro que já se
+    # mostrou insuficiente seria perguntar por educação.
+    if informado is not None:
+        f = dec(informado)
+        if f > 0:
+            return f, f"informado por você: 1 {antiga} = {_br(f)} {nova}"
+
     if (um_compra or "").strip().upper() == antiga.strip().upper():
         f = dec(fator_compra)
         if f > 0:
@@ -147,7 +165,8 @@ def _fator(cur, id_produto: int, antiga: str, nova: str, ums: dict,
 
 
 def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
-            um_compra: str | None, fator_compra, ums: dict) -> dict:
+            um_compra: str | None, fator_compra, ums: dict,
+            fator_informado=None) -> dict:
     """A troca é possível? Devolve o plano, ou o motivo da recusa.
 
     `{"muda": False}` quando não há troca de unidade — o caso de quase todo PUT.
@@ -157,21 +176,41 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
     if not a or not n or a == n:
         return {"muda": False}
 
-    # ⚠️ **O razão manda.** Antes de qualquer conta: se há movimento, a unidade
-    # antiga está gravada em linhas que não se reescrevem.
+    # 🔑 **O razão deixou de ser um IMPEDIMENTO e virou trabalho a fazer**
+    # (19/09/2026, pedido do dono: *"mesmo com estoque, às vezes queremos
+    # alterar a unidade do produto, gostaria que fosse possível"*).
+    #
+    # ⚠️ **A recusa antiga estava certa pelo que se sabia**: `estoque_movimentos`
+    # é append-only, as quantidades históricas estão gravadas na unidade antiga,
+    # e trocar só o cadastro faria o razão dizer "10" numa unidade e o saldo
+    # "10" noutra — a mesma prateleira valendo dois números.
+    # 🔑 **O que desfez o impasse foi a migração 076**: cada linha do razão
+    # passou a dizer em que unidade foi gravada. O passado continua legível na
+    # unidade da época, e a virada entra como um PAR de movimentos. Nada é
+    # reescrito, e o append-only fica intacto.
     cur.execute(
         "SELECT count(*) AS n FROM estoque_movimentos WHERE id_produto = %s",
         (id_produto,),
     )
     movimentos = cur.fetchone()["n"]
-    if movimentos:
+    cur.execute(
+        """SELECT count(*) AS prateleiras, coalesce(sum(quantidade), 0) AS total,
+                  count(*) FILTER (WHERE quantidade < 0) AS negativas
+             FROM estoque_saldos WHERE id_produto = %s AND quantidade <> 0""",
+        (id_produto,),
+    )
+    saldo = dict(cur.fetchone() or {})
+
+    # ⚠️ **Saldo NEGATIVO não se converte por um par de movimentos**: a saída
+    # não teria o que tirar. Ele é produto que saiu sem ter entrado, e o caminho
+    # é o inventário — não a troca de unidade.
+    if saldo.get("negativas"):
         return {
             "muda": True, "pode": False,
             "motivo": (
-                f"Este produto já tem {movimentos} movimento(s) de estoque gravados em {a}. "
-                f"O razão não se reescreve, então trocar para {n} faria o histórico e o saldo "
-                f"falarem unidades diferentes. Para mudar a unidade, zere o saldo e estorne o "
-                f"que houver, ou cadastre outro produto."),
+                f"Este produto tem saldo NEGATIVO em {saldo['negativas']} prateleira(s). "
+                f"A conversão de {a} para {n} precisa de saldo para virar: acerte o estoque "
+                f"pelo inventário e tente de novo."),
         }
 
     # 🔑 **O que a troca tem para converter — perguntado ANTES do fator**
@@ -199,7 +238,13 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
         p.get(campo) is not None
         for campo in ("custo_referencia", "estoque_minimo", "estoque_maximo"))
 
-    fator, origem = _fator(cur, id_produto, a, n, ums, um_compra, fator_compra)
+    fator, origem = _fator(cur, id_produto, a, n, ums, um_compra, fator_compra,
+                           fator_informado)
+    # ⚠️ **Com SALDO, sempre há o que converter** — mesmo num cadastro sem custo,
+    # sem mínimo e sem embalagem. O atalho "não havia número nenhum" abaixo
+    # existe para o rascunho recém-importado, e aplicá-lo a um produto com
+    # mercadoria na prateleira viraria a unidade deixando a quantidade intacta.
+    tem_o_que_converter = tem_o_que_converter or bool(saldo.get("prateleiras"))
     if not fator and not tem_o_que_converter:
         return {
             "muda": True, "pode": True,
@@ -214,8 +259,18 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
                 "embalagem, então não há nada a converter."),
         }
     if not fator:
+        # 🔑 **Sem saber a relação, o sistema PERGUNTA em vez de recusar**
+        # (19/09/2026): *"caso tenhamos 10 UN e queremos utilizar para KG, abrir
+        # uma tela para conversão, exemplo: cada UN vale 2 KG"*. `precisa_fator`
+        # é o que faz a tela abrir a caixinha — e o que a pessoa responder volta
+        # como `fator_informado`.
         return {
-            "muda": True, "pode": False,
+            "muda": True, "pode": False, "precisa_fator": True,
+            "de": a, "para": n,
+            "prateleiras": saldo.get("prateleiras") or 0,
+            "saldo_total": float(dec(saldo.get("total") or 0)),
+            "saldo": [],
+            "pergunta": f"Quantos {n} vale 1 {a}?",
             # ⚠️ **A frase diz os DOIS caminhos, e os dois funcionam.** A versão
             # anterior mandava "cadastre a embalagem do produto" e não olhava
             # `produto_unidades` em lugar nenhum: quem seguia a instrução levava
@@ -309,6 +364,20 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
         "fator": float(fator), "origem_do_fator": origem,
         "conversoes": conversoes,
         "embalagens": embalagens,
+        # 🔑 **O SALDO a virar, prateleira por prateleira** (19/09/2026). É o que
+        # a tela mostra antes do sim — "10 KG viram 10.000 G" — e o que `aplicar`
+        # manda para o razão. ⚠️ Vem do motor de estoque, não de um SELECT
+        # escrito aqui: quem sabe onde há saldo é ele, e duas consultas
+        # divergiriam no primeiro produto com saldo em duas lojas.
+        "saldo": [
+            {"loja": l["loja"], "local": l["local"],
+             "de": float(dec(l["quantidade"])),
+             "para": float(dec(l["quantidade"]) * fator),
+             "valor": float(dec(l["valor"] or 0))}
+            for l in estoque_motor.saldo_a_converter(cur, id_produto)
+        ],
+        "movimentos": movimentos,
+        "prateleiras": saldo.get("prateleiras") or 0,
         # ⚠️ Sem "(por a unidade de compra...)": a origem já traz a
         # preposição, porque só ela sabe se é "pela" ou "pelo".
         "resumo": (f"1 {a} = {_br(fator)} {n} — {origem}."),
@@ -354,6 +423,22 @@ def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) ->
     custo dividido por doze num produto que continuou em caixa.
     """
     fator = dec(plano["fator"])
+
+    # 🔑 **O SALDO vira primeiro, e pelo RAZÃO** (19/09/2026). A conversão é um
+    # par de movimentos — sai tudo na unidade antiga, entra tudo na nova, pelo
+    # mesmo valor —, e é `converter_unidade` quem o lança. Um `UPDATE` em
+    # `estoque_saldos` aqui feriria a regra mais antiga da casa: só o service de
+    # estoque escreve no razão, e saldo é derivado dele.
+    # ⚠️ **Ele também grava `um_estoque`**, porque a saída precisa nascer na
+    # unidade antiga e a entrada na nova — o cadastro muda no meio do par. Por
+    # isso o `UPDATE` do produto que vem depois, no router, encontra o valor já
+    # correto e não muda nada.
+    if plano.get("saldo"):
+        estoque_motor.converter_unidade(
+            cur, id_produto=id_produto, de=plano["de"], para=plano["para"],
+            fator=fator, id_usuario=id_usuario,
+        )
+
     for c in plano["conversoes"]:
         cur.execute(
             f"UPDATE produtos SET {c['campo']} = %s WHERE id = %s",
