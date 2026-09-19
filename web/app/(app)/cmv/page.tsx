@@ -233,122 +233,101 @@ export default function PaginaCmv() {
           </>
         }
         acoes={
-          /* 🔑 **O RECORTE de um lado, o que FAZER com ele do outro** (pedido do
-             dono, 16/09/2026: *"os filtros e botão do cabeçalho estão
-             misturados, podendo haver confusão"*). Eram cinco controles na mesma
-             fileira, com a mesma altura e o mesmo espaçamento: o seletor de
-             escopo encostava no botão de baixar, e nada dizia que um muda o que
-             a tela MOSTRA e o outro TIRA a tela de dentro do sistema. Agora são
-             dois grupos, separados por um traço.
-             ⚠️ O traço só aparece quando os dois grupos estão lado a lado
-             (`sm:`): numa fileira que quebrou, uma borda esquerda solta no
-             começo da linha de baixo não separa nada — confunde. */
-          <div className="nao-imprimir flex flex-wrap items-end gap-x-4 gap-y-3">
-            <div className="flex flex-wrap items-end gap-2">
-              {/* 🔑 **Só os períodos do CMV, sem data solta** (pedido do dono,
-                  16/09/2026: *"colocar como filtro de período somente os
-                  períodos do CMV, não os de data inicial e final"*).
-                  ⚠️ **Data digitada à mão é onde o engano entra**: "17/08 a
-                  23/08" com um dia a mais e a apuração deixa de bater com o
-                  fechamento — e ninguém percebe, porque o número continua
-                  saindo. O ciclo da loja (mensal, semanal ou diário) é o único
-                  recorte em que a conta fecha com o que foi fechado.
-                  ⚠️ **O período em curso é truncado em HOJE**, então o `fim` do
-                  estado não é o `fim` do período: o seletor casa pelo INÍCIO,
-                  que é a chave de verdade. Casando pelos dois, o período
-                  corrente nunca aparecia escolhido. */}
-              {ciclo && ciclo.periodos.length > 0 && (
-                <label>
-                  <span className="rotulo-campo">Período</span>
-                  <span className="mt-1.5 block w-[232px]">
-                    <select
-                      className="campo"
-                      value={ciclo.periodos.find((p) => p.inicio === inicio)?.inicio ?? ""}
-                      onChange={(e) => {
-                        const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
-                        if (!p) return;
-                        setInicio(p.inicio);
-                        setFim(p.fim > hoje() ? hoje() : p.fim);
-                      }}
-                    >
-                      {ciclo.periodos.map((p) => (
-                        <option key={p.inicio} value={p.inicio}>
-                          {p.rotulo}
-                          {p.corrente
-                            ? " (em curso)"
-                            : p.status === "FECHADO"
-                              ? " · fechado"
-                              : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </label>
-              )}
-              {/* 🔑 **O ESCOPO** (16/09/2026, protótipo aprovado): a apuração é por
-                  LOJA e está certo — quem opera opera numa de cada vez. Mas quem
-                  responde pelas duas precisava trocar de loja no seletor e somar de
-                  cabeça. ⚠️ Empresa é o que o USUÁRIO enxerga: quem tem uma loja só
-                  continua vendo uma loja, e o escopo amplia até o limite da
-                  permissão, nunca além dele. */}
+          /* 🔑 **No cabeçalho só o RECORTE** (pedido do dono, 16/09/2026:
+             primeiro *"os filtros e botão do cabeçalho estão misturados,
+             podendo haver confusão"*, depois *"retirar o baixar e o imprimir
+             tela do cabeçalho"*). A primeira volta separou os dois grupos com
+             um traço; a segunda tirou os botões daqui de vez. Baixar virou
+             **um** botão, na barra das abas, porque o que ele baixa depende da
+             aba — e um botão longe do que ele baixa se clica sem saber o que
+             vem.
+             ⚠️ **"Imprimir a tela" saiu, o recurso não**: `Ctrl+P` continua
+             imprimindo o painel com os cartões e os gráficos, e as regras de
+             `@media print` continuam em `globals.css`. O que sumiu foi o botão
+             que duplicava o atalho do navegador ao lado de um "Baixar" que faz
+             outra coisa. */
+          <div className="nao-imprimir flex flex-wrap items-end gap-2">
+            {/* 🔑 **Só os períodos do CMV, sem data solta** (pedido do dono,
+                16/09/2026: *"colocar como filtro de período somente os
+                períodos do CMV, não os de data inicial e final"*).
+                ⚠️ **Data digitada à mão é onde o engano entra**: "17/08 a
+                23/08" com um dia a mais e a apuração deixa de bater com o
+                fechamento — e ninguém percebe, porque o número continua
+                saindo. O ciclo da loja (mensal, semanal ou diário) é o único
+                recorte em que a conta fecha com o que foi fechado.
+                ⚠️ **O período em curso é truncado em HOJE**, então o `fim` do
+                estado não é o `fim` do período: o seletor casa pelo INÍCIO,
+                que é a chave de verdade. Casando pelos dois, o período
+                corrente nunca aparecia escolhido. */}
+            {ciclo && ciclo.periodos.length > 0 && (
               <label>
-                <span className="rotulo-campo">Escopo</span>
-                <span className="mt-1.5 block w-[152px]">
+                <span className="rotulo-campo">Período</span>
+                <span className="mt-1.5 block w-[232px]">
                   <select
                     className="campo"
-                    value={escopo}
-                    onChange={(e) => setEscopo(e.target.value as "loja" | "empresa")}
-                  >
-                    <option value="loja">Esta loja</option>
-                    <option value="empresa">Empresa inteira</option>
-                  </select>
-                </span>
-              </label>
-              {/* 🔑 **Ver por**: o eixo da aba Quebra. Fica aqui em cima, e não
-                  dentro dela, porque é decisão de RECORTE — a mesma família do
-                  período e do escopo. */}
-              <label>
-                <span className="rotulo-campo">Ver por</span>
-                <span className="mt-1.5 block w-[160px]">
-                  <select
-                    className="campo"
-                    value={eixo}
+                    value={ciclo.periodos.find((p) => p.inicio === inicio)?.inicio ?? ""}
                     onChange={(e) => {
-                      setEixo(e.target.value as Eixo);
-                      setAba("quebra");
+                      const p = ciclo.periodos.find((x) => x.inicio === e.target.value);
+                      if (!p) return;
+                      setInicio(p.inicio);
+                      setFim(p.fim > hoje() ? hoje() : p.fim);
                     }}
                   >
-                    {(Object.keys(EIXOS) as Eixo[]).map((x) => (
-                      <option key={x} value={x}>
-                        {EIXOS[x]}
+                    {ciclo.periodos.map((p) => (
+                      <option key={p.inicio} value={p.inicio}>
+                        {p.rotulo}
+                        {p.corrente
+                          ? " (em curso)"
+                          : p.status === "FECHADO"
+                            ? " · fechado"
+                            : ""}
                       </option>
                     ))}
                   </select>
                 </span>
               </label>
-            </div>
-
-            {/* ⚠️ **O traço é `border-l-2 border-linha2 pl-3`, e as três classes
-                são escolha MEDIDA, não gosto.** `--color-linha` (#d8ded0) some
-                contra o fundo do miolo — medido, o traço não aparecia e os dois
-                grupos continuavam encostados. E as variantes `sm:` destas três
-                utilitárias não chegaram à folha (`border-left-width: 0px` no
-                elemento, com 25 s de espera pelo rebuild), enquanto as versões
-                sem prefixo aplicam: o divisor vale em toda largura. Quando a
-                fileira quebra, a barrinha abre a linha de baixo — continua
-                dizendo "aqui começa outro grupo". */}
-            <div className="flex flex-wrap items-center gap-2 border-l-2 border-linha2 pl-3">
-              <BotaoExportar relatorio="cmv" iniciais={{ inicio, fim }} />
-              {/* ⚠️ Continua existindo: o Ctrl+P imprime a TELA como ela está, com
-                  os cartões e os gráficos. O PDF da janela é a tabela do relatório
-                  — são duas coisas, e quem quer uma raramente quer a outra.
-                  ⚠️ **O PDF da memória de cálculo saiu daqui** e foi para dentro da
-                  aba dela: ele é o anexo que se confere, e o lugar de conferir
-                  passou a ser a tela. */}
-              <button className="btn btn-secundario" onClick={() => window.print()}>
-                Imprimir a tela
-              </button>
-            </div>
+            )}
+            {/* 🔑 **O ESCOPO** (16/09/2026, protótipo aprovado): a apuração é por
+                LOJA e está certo — quem opera opera numa de cada vez. Mas quem
+                responde pelas duas precisava trocar de loja no seletor e somar de
+                cabeça. ⚠️ Empresa é o que o USUÁRIO enxerga: quem tem uma loja só
+                continua vendo uma loja, e o escopo amplia até o limite da
+                permissão, nunca além dele. */}
+            <label>
+              <span className="rotulo-campo">Escopo</span>
+              <span className="mt-1.5 block w-[152px]">
+                <select
+                  className="campo"
+                  value={escopo}
+                  onChange={(e) => setEscopo(e.target.value as "loja" | "empresa")}
+                >
+                  <option value="loja">Esta loja</option>
+                  <option value="empresa">Empresa inteira</option>
+                </select>
+              </span>
+            </label>
+            {/* 🔑 **Ver por**: o eixo da aba Quebra. Fica aqui em cima, e não
+                dentro dela, porque é decisão de RECORTE — a mesma família do
+                período e do escopo. */}
+            <label>
+              <span className="rotulo-campo">Ver por</span>
+              <span className="mt-1.5 block w-[160px]">
+                <select
+                  className="campo"
+                  value={eixo}
+                  onChange={(e) => {
+                    setEixo(e.target.value as Eixo);
+                    setAba("quebra");
+                  }}
+                >
+                  {(Object.keys(EIXOS) as Eixo[]).map((x) => (
+                    <option key={x} value={x}>
+                      {EIXOS[x]}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </label>
           </div>
         }
       />
@@ -491,25 +470,29 @@ export default function PaginaCmv() {
                 {texto}
               </button>
             ))}
-            {/* ⚠️ A memória tem o PDF dela dentro da aba, com o documento
-                inteiro: baixar "esta tabela" ali seria baixar um dos quatro
-                quadros e chamá-lo de memória de cálculo. */}
-            {aba !== "memoria" && (
+            {/* 🔑 **UM botão de baixar, e ele leva a conta MAIS a aba**
+                (pedido do dono, 16/09/2026: *"alterar o baixar esta tabela para
+                um botão de baixar... este deve baixar os números do CMV, abaixo
+                do cabeçalho, e os dados da aba posicionada"*).
+                Eram cinco: um no cabeçalho, um por aba como link discreto, e
+                mais um dentro da memória — cada um dando um arquivo diferente,
+                nenhum com a conta do CMV junto. Quem baixava a curva ABC
+                recebia a curva ABC solta, sem o número que ela explica.
+                ⚠️ **O relatório é sempre `cmv`; o que muda é o filtro `aba`.**
+                Um relatório por aba seria a mesma conta escrita sete vezes, e
+                bastaria corrigir uma para as outras mentirem.
+                ⚠️ **A aba vai com o EIXO junto** quando é a quebra: "quebra" sem
+                dizer por quê não identifica quadro nenhum, e o arquivo sairia
+                num eixo que a pessoa não escolheu.
+                ⚠️ Botão de verdade, não `link-acao`: ele TIRA a tela de dentro
+                do sistema, e isso não é um link de navegação. */}
+            <span className="nao-imprimir ml-auto self-center">
               <BotaoExportar
-                className="link-acao nao-imprimir ml-auto self-center"
-                rotulo="baixar esta tabela"
-                relatorio={
-                  aba === "abc"
-                    ? "abc"
-                    : aba === "movimentacao"
-                      ? "movimentacao"
-                      : aba === "precos"
-                        ? "precos"
-                        : "cmv"
-                }
-                iniciais={{ inicio, fim }}
+                relatorio="cmv"
+                rotulo="Baixar"
+                iniciais={{ inicio, fim, aba: aba === "quebra" ? `quebra-${eixo}` : aba }}
               />
-            )}
+            </span>
           </nav>
 
           {aba === "conta" && (

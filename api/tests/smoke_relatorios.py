@@ -306,6 +306,93 @@ checar("com o insumo do teste", f"Rel azeite {marca}".upper() in csv)
 checar("e traz o quadro por setor no mesmo arquivo", "Onde o custo pesa" in csv)
 checar("com o impacto somado no resumo", "Impacto somado" in csv)
 
+print("7b. o arquivo do painel: a conta do CMV mais a aba em que a pessoa esta")
+# 🔑 **Pedido do dono (16/09/2026):** *"alterar o baixar esta tabela para um
+# botao de baixar... este deve baixar os numeros do CMV, abaixo do cabecalho, e
+# os dados da aba posicionada"*. Eram cinco botoes espalhados pelo painel, cada
+# um dando um arquivo diferente e nenhum com a conta junto: quem baixava a curva
+# ABC recebia a curva ABC solta, sem o numero que ela explica.
+st, cat = chamar("GET", "/exportar/catalogo", token=token)
+rel_cmv = next((r for r in (cat or []) if r["chave"] == "cmv"), None)
+checar("o catalogo declara o relatorio do CMV", rel_cmv is not None, [r["chave"] for r in (cat or [])])
+if rel_cmv:
+    porNome = {f["nome"]: f for f in rel_cmv["filtros"]}
+    # 🔑 **Periodo COM opcoes: o front troca as duas datas por um seletor dos
+    # ciclos.** ⚠️ Data digitada a mao e onde o engano entra -- "17/08 a 23/08"
+    # com um dia a mais e o arquivo deixa de bater com o fechamento, sem nada
+    # avisando, porque o numero continua saindo.
+    periodo_cmv = porNome.get("periodo_cmv")
+    checar("e o periodo dele vem com os ciclos da loja, nao datas soltas",
+           bool(periodo_cmv) and periodo_cmv["tipo"] == "periodo"
+           and len(periodo_cmv.get("opcoes") or []) > 0,
+           periodo_cmv and {k: v for k, v in periodo_cmv.items() if k != "opcoes"})
+    # ⚠️ O valor e `inicio|fim`: o contrato do servidor continua sendo as duas
+    # pontas, e e o front que desmembra. Um parametro novo so para este
+    # relatorio criaria uma segunda forma de dizer periodo.
+    if periodo_cmv and periodo_cmv.get("opcoes"):
+        checar("com o valor no formato inicio|fim",
+               all(str(o["valor"]).count("|") == 1 for o in periodo_cmv["opcoes"]),
+               periodo_cmv["opcoes"][0])
+    aba_f = porNome.get("aba")
+    checar("e a aba e escolha unica, nao doze caixinhas",
+           bool(aba_f) and aba_f["tipo"] == "escolha"
+           and len(aba_f.get("opcoes") or []) == 12,
+           aba_f and {k: v for k, v in (aba_f or {}).items() if k != "opcoes"})
+
+def baixar_cmv(aba: str) -> str:
+    req = _u.Request(
+        BASE + f"/exportar/cmv.csv?inicio={hoje - timedelta(days=3)}&fim={hoje}&aba={aba}")
+    req.add_header("Authorization", f"Bearer {token}")
+    with _u.urlopen(req, timeout=120) as resp:
+        return resp.read().decode("utf-8")
+
+# ⚠️ **A conta vem SEMPRE na frente, em toda aba.** E ela que o quadro de tras
+# explica; sem ela o arquivo e uma tabela sem o numero a que se refere.
+esperado = {
+    "conta": None,
+    "quebra-setor": "Quebra por setor",
+    "abc": "Curva ABC",
+    "margem": "Margem por prato",
+    "movimentacao": "Movimentação de estoque",
+    "precos": "Evolução de preço",
+    "memoria": "Quadro 4",
+}
+for aba, quadro in esperado.items():
+    csv_aba = baixar_cmv(aba)
+    checar(f"o arquivo da aba {aba} abre pela conta do CMV",
+           "Composição do CMV" in csv_aba and "(=) CMV real" in csv_aba,
+           csv_aba[:120])
+    if quadro:
+        checar(f"e traz o quadro da aba {aba} atras dela",
+               quadro in csv_aba, csv_aba[:200])
+    else:
+        # ⚠️ "A conta" nao leva anexo, e e escolha: ela E a composicao, e
+        # repeti-la como quadro dobraria a mesma tabela.
+        checar("e a aba da conta sai sem quadro atras",
+               "Margem por prato" not in csv_aba and "Curva ABC" not in csv_aba,
+               csv_aba[:200])
+
+# ⚠️ **Quem baixa de fora do painel continua recebendo o arquivo do contador.**
+# Sem aba nenhuma o relatorio leva a margem por prato, como sempre levou.
+checar("sem aba, o relatorio segue sendo o do contador",
+       "Margem por prato" in baixar_cmv(""))
+# ⚠️ Valor desconhecido cai no padrao em vez de dar 422: o catalogo ja diz o que
+# existe, e um erro aqui viraria uma tela que nao baixa nada sem dizer por que.
+checar("e uma aba que nao existe cai no padrao, sem erro",
+       "Margem por prato" in baixar_cmv("inventada"))
+
+# 🔑 **Dinheiro em centavos e percentual com uma casa, no quadro da quebra.**
+# O motor encadeia custo unitario de seis casas, e a linha saia
+# `6094,0000000000` / `92,84221351575725` -- num arquivo que vai ao contador
+# isso nao e um valor em reais nem um percentual.
+csv_quebra = baixar_cmv("quebra-setor")
+linhas_quebra = [l for l in csv_quebra.splitlines() if l.count(";") >= 7][1:]
+checar("o quadro da quebra sai arredondado, nao com as seis casas do motor",
+       bool(linhas_quebra) and not any(
+           any(len(c.split(",")[1]) > 2 for c in l.split(";")[1:6] if "," in c)
+           for l in linhas_quebra),
+       linhas_quebra[:2])
+
 print("8. permissão")
 st, r = chamar("POST", "/auth/login", {"email": COZINHA[0], "senha": COZINHA[1]})
 tk = r.get("access_token")

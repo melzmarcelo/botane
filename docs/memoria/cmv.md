@@ -180,13 +180,39 @@
     LISTAS, nunca dos totais**: o rodapé soma a tabela inteira e a tela diz quanto está
     mostrando, porque lista cortada em silêncio se lê como lista completa.
 
-- **O cabeçalho é "Painel de CMV", e o recorte não se mistura com os botões** (16/09/2026,
-  pedido do dono: *"o nome no cabeçalho pode ser Painel de CMV"*, *"os filtros e botão do
-  cabeçalho estão misturados, podendo haver confusão"*). O título passou a ser o mesmo nome do
-  item de menu. Os cinco controles viviam na mesma fileira, com a mesma altura e o mesmo
-  espaçamento: o seletor de escopo encostava no botão de baixar e nada dizia que um muda o que
-  a tela MOSTRA e o outro TIRA a tela de dentro do sistema. Agora são dois grupos — os três
-  filtros rotulados de um lado, `Baixar` e `Imprimir a tela` do outro — separados por um traço.
+- **O cabeçalho é "Painel de CMV", e nele só mora o RECORTE** (16/09/2026, em duas voltas do
+  dono: *"o nome no cabeçalho pode ser Painel de CMV"*, *"os filtros e botão do cabeçalho estão
+  misturados, podendo haver confusão"* e, depois, *"retirar o baixar e o imprimir tela do
+  cabeçalho"*). O título passou a ser o mesmo nome do item de menu. Os cinco controles viviam
+  na mesma fileira, com a mesma altura e o mesmo espaçamento: o seletor de escopo encostava no
+  botão de baixar e nada dizia que um muda o que a tela MOSTRA e o outro TIRA a tela de dentro
+  do sistema. A primeira volta separou os grupos com um traço; a segunda tirou os botões dali.
+  Sobram Período, Escopo e Ver por.
+  ⚠️ **"Imprimir a tela" saiu, o recurso não**: `Ctrl+P` continua imprimindo o painel com os
+  cartões e os gráficos, e as regras de `@media print` continuam em `globals.css`. O que sumiu
+  foi o botão que duplicava o atalho do navegador ao lado de um "Baixar" que faz outra coisa.
+
+- 🔑 **UM botão de baixar, e ele leva a CONTA mais a ABA** (16/09/2026, pedido do dono:
+  *"alterar o baixar esta tabela para um botão de baixar… este deve baixar os números do CMV,
+  abaixo do cabeçalho, e os dados da aba posicionada"*). Eram **cinco**: um no cabeçalho, um
+  por aba como link discreto (`baixar esta tabela`) e mais um dentro da memória — cada um
+  dando um arquivo diferente, e nenhum com a conta do CMV junto. Quem baixava a curva ABC
+  recebia a curva ABC solta, sem o número que ela explica.
+  ⚠️ **O relatório é sempre `cmv`; o que muda é o filtro `aba`.** Um relatório por aba seria a
+  mesma conta escrita sete vezes, e bastaria corrigir uma para as outras mentirem. O anexo sai
+  de `_anexo_da_aba`, que reusa `_abc`, `_movimentacao`, `_precos` e `_memoria_cmv` pela
+  `Saida` deles (`_como_anexo`) — as abas do painel JÁ são relatórios deste catálogo.
+  ⚠️ **A aba vai com o EIXO junto** (`quebra-setor`, `quebra-produto`…): "quebra" sem dizer por
+  quê não identifica quadro nenhum, e o arquivo sairia num eixo que ninguém escolheu. Por isso
+  os seis eixos são opções próprias em `ABAS_DO_PAINEL`, e não um segundo filtro.
+  ⚠️ **"A conta" não leva anexo, e é escolha**: ela É a composição, e repeti-la atrás dobraria
+  a mesma tabela.
+  ⚠️ **Sem `aba`, o arquivo continua sendo o do contador** (a margem por prato), e aba
+  desconhecida cai nesse padrão em vez de dar 422: quem baixa pela URL ou pelo catálogo, fora
+  do painel, recebe o que sempre recebeu.
+  ⚠️ **O botão de dentro da memória saiu junto.** Dois botões na mesma tela dando arquivos
+  diferentes com o mesmo nome é a divergência que ninguém percebe até comparar os dois. O
+  relatório `memoria-cmv` continua no catálogo, para quem o baixa de fora.
 
 - 🔑 **O período é SÓ o ciclo do CMV: as datas soltas saíram** (16/09/2026, pedido do dono:
   *"colocar como filtro de período somente os períodos do CMV, não os de data inicial e

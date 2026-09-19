@@ -42,6 +42,7 @@ from services import consumo_periodo as ciclo_motor
 from services import estoque as estoque_motor
 from services import exportacao
 from services import memoria_calculo as memoria
+from services import periodos as periodos_motor
 from services import relatorios
 
 SITUACOES = [("ativos", "Ativos"), ("inativos", "Inativos"), ("rascunhos", "Rascunhos")]
@@ -123,6 +124,63 @@ def _opcoes_classes(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": c, "nome": f"Classe {c}"} for c in ("A", "B", "C")]
 
 
+def _opcoes_periodo_cmv(cur, id_unidade: int) -> list[dict]:
+    """Os períodos do CICLO da loja — os mesmos que o painel oferece.
+
+    🔑 **Pedido do dono (16/09/2026):** *"esta vai abrir o filtro do período, e
+    não datas como está"*. ⚠️ **Data digitada à mão é onde o engano entra**:
+    "17/08 a 23/08" com um dia a mais e o arquivo deixa de bater com o
+    fechamento — e nada avisa, porque o número continua saindo.
+
+    ⚠️ **O valor é `inicio|fim`, e o front o desmembra em `inicio` e `fim`.**
+    O contrato do servidor não muda: `_periodo(f)` continua lendo as duas
+    pontas, e todo o resto do catálogo segue igual. Um parâmetro novo só para
+    este relatório criaria uma segunda forma de dizer período.
+
+    ⚠️ **O corrente é truncado em HOJE.** Ele ainda não terminou, e oferecer o
+    fim que vai acontecer faria o arquivo prometer dias que não existem.
+    """
+    hoje = date.today()
+    c = periodos_motor.config(cur, id_unidade)
+    lista = periodos_motor.periodos_ate_hoje(
+        c["ciclo"], 12, dia_semana=c["dia_semana"], dia_mes=c["dia_mes"], hoje=hoje)
+    opcoes = []
+    for i, f in lista:
+        ate = min(f, hoje)
+        rotulo = periodos_motor.rotulo(i, f, c["ciclo"])
+        if i <= hoje <= f:
+            rotulo += " (em curso)"
+        opcoes.append({"valor": f"{i}|{ate}", "nome": rotulo})
+    return opcoes
+
+
+# 🔑 **As abas do painel, como conteúdo do arquivo** (pedido do dono,
+# 16/09/2026: *"este deve baixar os números do CMV, abaixo do cabeçalho, e os
+# dados da aba posicionada"*). O arquivo tem sempre duas partes: a conta do CMV
+# e o quadro da aba em que a pessoa está.
+# ⚠️ **Os seis eixos da quebra são opções PRÓPRIAS**, e não um segundo filtro:
+# a janela precisa dizer exatamente o que vai sair, e "Quebra do CMV" com o eixo
+# escondido noutro campo faria escolher duas vezes para uma pergunta só.
+ABAS_DO_PAINEL = [
+    ("conta", "A conta — só a composição do CMV"),
+    ("quebra-loja", "Quebra por loja"),
+    ("quebra-local", "Quebra por prateleira"),
+    ("quebra-setor", "Quebra por setor"),
+    ("quebra-categoria", "Quebra por categoria"),
+    ("quebra-grupo", "Quebra por grupo do CMV"),
+    ("quebra-produto", "Quebra por produto"),
+    ("abc", "Curva ABC de insumos"),
+    ("margem", "Margem por prato"),
+    ("movimentacao", "Movimentação do estoque"),
+    ("precos", "O que subiu de preço"),
+    ("memoria", "Memória de cálculo"),
+]
+
+
+def _opcoes_aba(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in ABAS_DO_PAINEL]
+
+
 FILTROS: dict[str, dict] = {
     "periodo": {"tipo": "periodo", "rotulo": "Período",
                 "ajuda": "o mês corrente, se não escolher"},
@@ -173,6 +231,18 @@ FILTROS: dict[str, dict] = {
     # janela, mas o relatorio usa so a PRIMEIRA.
     "ciclo": {"tipo": "multipla", "rotulo": "Ciclo", "ajuda": "em aberto",
               "opcoes": _opcoes_ciclo},
+    # ⚠️ **Mesmo `tipo: periodo`, com OPÇÕES** — e é isso que muda a cara dele na
+    # janela: o front, vendo opções num filtro de período, troca os dois campos
+    # de data por um seletor dos ciclos e grava `inicio`/`fim` do valor
+    # escolhido. O servidor continua lendo as duas pontas, como sempre leu.
+    "periodo_cmv": {"tipo": "periodo", "rotulo": "Período",
+                    "ajuda": "os períodos do ciclo da loja — o mesmo recorte do painel",
+                    "opcoes": _opcoes_periodo_cmv},
+    # ⚠️ **Escolha ÚNICA, não múltipla.** `detalhe` e `ciclo` são múltiplas e
+    # usam só a primeira, o que sempre foi um remendo do vocabulário da janela;
+    # com doze opções isso viraria doze caixinhas para uma escolha só.
+    "aba": {"tipo": "escolha", "rotulo": "O que levar junto",
+            "ajuda": "a aba em que você está no painel", "opcoes": _opcoes_aba},
 }
 
 
@@ -470,7 +540,6 @@ def _cmv(cur, id_unidade: int, f: dict) -> Saida:
         {"linha": "  dos quais: ajustes de inventário", "valor": reais(a["ajustes"])},
         {"linha": "Receita do período", "valor": reais(a["receita"])},
     ]
-    margem = cmv_motor.margem_por_prato(cur, id_unidade, inicio, fim, 500)
     return Saida(
         linhas,
         [("linha", "Composição do CMV"), ("valor", "Valor (R$)")],
@@ -479,12 +548,99 @@ def _cmv(cur, id_unidade: int, f: dict) -> Saida:
          ("Cobertura de ficha", f"{a['cobertura_ficha_pct']:.1f}%"),
          ("Vendas no período", a["vendas"])],
         inicio, fim,
-        anexos=[(margem,
-                 [("produto", "Prato"), ("quantidade", "Vendidos"), ("receita", "Receita"),
-                  ("custo", "Custo pela ficha"), ("margem", "Margem"),
-                  ("food_cost_pct", "Food cost %"), ("sem_custo", "Tem item sem custo")],
-                 "Margem por prato", None)],
+        anexos=_anexo_da_aba(cur, id_unidade, f, inicio, fim),
     )
+
+
+def _quadro_da_quebra(grupos: list[dict], titulo: str, rotulo_eixo: str) -> tuple:
+    """A quebra do CMV como quadro de arquivo — arredondada para ser lida.
+
+    ⚠️ **Dinheiro em centavos e percentual com uma casa, e isto é apresentação.**
+    O motor encadeia custo unitário de seis casas, então a linha saía
+    `6094,0000000000` e `92,84221351575725` — num arquivo que vai ao contador
+    isso não é um valor em reais nem um percentual, é defeito aparente. O
+    número da CONTA continua com toda a precisão: quem arredonda é a linha do
+    relatório.
+    ⚠️ **Num lugar só**: este mesmo quadro é o anexo do relatório de preços
+    desde sempre, e lá saía cru. Duas cópias arredondariam diferente no dia em
+    que alguém mexesse numa.
+    """
+    def cem(v) -> Decimal:
+        return Decimal(str(v or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    linhas = [
+        {**g,
+         **{c: cem(g.get(c)) for c in
+            ("estoque_inicial", "compras", "estoque_final", "cmv", "perdas")},
+         "participacao_pct": Decimal(str(g.get("participacao_pct") or 0)).quantize(
+             Decimal("0.1"), rounding=ROUND_HALF_UP)}
+        for g in grupos
+    ]
+    return (linhas,
+            [("grupo", rotulo_eixo), ("estoque_inicial", "Estoque inicial"),
+             ("compras", "Compras"), ("estoque_final", "Estoque final"),
+             ("cmv", "CMV"), ("perdas", "Perdas"), ("produtos", "Produtos"),
+             ("participacao_pct", "Participação %")],
+            titulo, None)
+
+
+def _como_anexo(s: "Saida") -> tuple:
+    """Uma `Saida` inteira vira o anexo de outra.
+
+    🔑 **É o que impede a duplicação.** As abas do painel já são relatórios
+    deste mesmo catálogo — curva ABC, movimentação, preços, memória. Reescrever
+    as consultas aqui daria uma segunda versão de cada uma, e elas divergiriam
+    na primeira correção feita só de um lado.
+    """
+    return (s.linhas, s.colunas, s.titulo, None)
+
+
+def _anexo_da_aba(cur, id_unidade: int, f: dict, inicio: date, fim: date) -> list[tuple]:
+    """O quadro da aba em que a pessoa está, atrás da conta do CMV.
+
+    🔑 **Pedido do dono (16/09/2026):** *"este deve baixar os números do CMV,
+    abaixo do cabeçalho, e os dados da aba posicionada"*. Eram cinco botões de
+    baixar espalhados pelo painel — um no cabeçalho e um por aba — e cada um
+    dava um arquivo diferente sem a conta junto. Agora é um só, e o arquivo
+    abre pela conta.
+
+    ⚠️ **A margem por prato continua sendo o padrão**, que é o que este
+    relatório sempre levou: quem baixa sem passar pelo painel (a URL direta, o
+    catálogo) recebe o arquivo do contador como antes.
+    """
+    aba = (f.get("aba") or "").strip() or "margem"
+
+    if aba == "conta":
+        # ⚠️ Nada atrás da conta, e é uma escolha: a aba "A conta" É a
+        # composição, e repeti-la como anexo dobraria o mesmo quadro.
+        return []
+
+    if aba.startswith("quebra-"):
+        eixo = aba.split("-", 1)[1]
+        grupos = relatorios.cmv_por_grupo(cur, id_unidade, inicio, fim, eixo)
+        titulo = {v: n for v, n in ABAS_DO_PAINEL}.get(aba, "Quebra do CMV")
+        return [_quadro_da_quebra(
+            grupos, titulo, titulo.replace("Quebra por ", "").capitalize())]
+
+    if aba == "abc":
+        return [_como_anexo(_abc(cur, id_unidade, f))]
+    if aba == "movimentacao":
+        return [_como_anexo(_movimentacao(cur, id_unidade, f))]
+    if aba == "precos":
+        # ⚠️ O relatório de preços leva um anexo PRÓPRIO (o peso por setor).
+        # Aqui entra só a tabela dele: o anexo do anexo se perderia em silêncio,
+        # e a conta do CMV já está na frente do arquivo.
+        return [_como_anexo(_precos(cur, id_unidade, f))]
+    if aba == "memoria":
+        m = _memoria_cmv(cur, id_unidade, f)
+        return [_como_anexo(m), *m.anexos]
+
+    margem = cmv_motor.margem_por_prato(cur, id_unidade, inicio, fim, 500)
+    return [(margem,
+             [("produto", "Prato"), ("quantidade", "Vendidos"), ("receita", "Receita"),
+              ("custo", "Custo pela ficha"), ("margem", "Margem"),
+              ("food_cost_pct", "Food cost %"), ("sem_custo", "Tem item sem custo")],
+             "Margem por prato", None)]
 
 
 def _abc(cur, id_unidade: int, f: dict) -> Saida:
@@ -578,12 +734,7 @@ def _precos(cur, id_unidade: int, f: dict) -> Saida:
          ("Economia possível",
           round(sum(float(l["economia_possivel"] or 0) for l in linhas), 2))],
         inicio, fim,
-        anexos=[(grupos,
-                 [("grupo", "Setor"), ("estoque_inicial", "Estoque inicial"),
-                  ("compras", "Compras"), ("estoque_final", "Estoque final"),
-                  ("cmv", "CMV"), ("perdas", "Perdas"),
-                  ("participacao_pct", "Participação %")],
-                 "Onde o custo pesa (por setor)", None)],
+        anexos=[_quadro_da_quebra(grupos, "Onde o custo pesa (por setor)", "Setor")],
     )
 
 
@@ -954,8 +1105,8 @@ RELATORIOS: dict[str, Relatorio] = {
         "estoque.saldos", "vencimentos", ("dias", "locais"), _vencimentos),
     "cmv": Relatorio(
         "Apuração do CMV",
-        "A conta aberta linha a linha, com a margem por prato junto — o arquivo do contador.",
-        "cmv.relatorios", "cmv", ("periodo",), _cmv),
+        "A conta aberta linha a linha, com o quadro da aba do painel junto.",
+        "cmv.relatorios", "cmv", ("periodo_cmv", "aba"), _cmv),
     "abc": Relatorio(
         "Curva ABC de insumos", "Onde o dinheiro do consumo se concentra.",
         "cmv.relatorios", "curva-abc", ("periodo", "classes"), _abc),

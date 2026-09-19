@@ -32,7 +32,16 @@ type Opcao = { valor: string | number; nome: string };
 
 type FiltroDoServidor = {
   nome: string;
-  tipo: "periodo" | "data" | "multipla" | "produtos" | "texto" | "numero" | "sim_nao";
+  tipo:
+    | "periodo"
+    | "data"
+    | "multipla"
+    | "produtos"
+    | "texto"
+    | "numero"
+    | "sim_nao"
+    /** Escolha ÚNICA num seletor — o que a aba do painel de CMV usa. */
+    | "escolha";
   rotulo: string;
   ajuda: string;
   opcoes?: Opcao[];
@@ -242,6 +251,47 @@ function Dialogo({
             <div className="grid gap-5 sm:grid-cols-2">
               {rel.filtros.map((f) => {
                 if (f.tipo === "periodo") {
+                  /* 🔑 **Período COM opções é o ciclo da loja, não duas datas**
+                     (pedido do dono, 16/09/2026: *"esta vai abrir o filtro do
+                     período, e não datas como está"*). Quem decide é o
+                     SERVIDOR, mandando as opções — a janela não sabe o que é um
+                     ciclo de CMV, e não deve saber.
+                     ⚠️ **O valor é `inicio|fim` e é desmembrado aqui.** O
+                     contrato do servidor continua sendo as duas pontas: todo o
+                     resto do catálogo segue lendo `inicio` e `fim`, e a
+                     auditoria registra o recorte de verdade, não um apelido. */
+                  if (f.opcoes?.length) {
+                    const atual = `${String(valores.inicio ?? "")}|${String(valores.fim ?? "")}`;
+                    return (
+                      <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
+                        <div>
+                          <span className="rotulo">{f.rotulo}</span>
+                          <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+                        </div>
+                        <select
+                          className="campo"
+                          value={f.opcoes.some((o) => String(o.valor) === atual) ? atual : ""}
+                          onChange={(e) => {
+                            const [i, fi] = e.target.value.split("|");
+                            setValores((v) => ({ ...v, inicio: i ?? "", fim: fi ?? "" }));
+                          }}
+                        >
+                          {/* ⚠️ A linha vazia só existe enquanto o recorte da
+                              tela não casa com nenhum período pronto — sem ela
+                              o seletor mostraria um período que não é o do
+                              arquivo. */}
+                          {!f.opcoes.some((o) => String(o.valor) === atual) && (
+                            <option value="">escolha o período</option>
+                          )}
+                          {f.opcoes.map((o) => (
+                            <option key={String(o.valor)} value={String(o.valor)}>
+                              {o.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
                       <div>
@@ -263,6 +313,32 @@ function Dialogo({
                           onChange={(e) => trocar("fim", e.target.value)}
                         />
                       </div>
+                    </div>
+                  );
+                }
+
+                /* 🔑 **Escolha ÚNICA.** `detalhe` e `ciclo` são múltiplas e o
+                   relatório usa só a primeira — um remendo do vocabulário da
+                   janela que se aguentava com duas ou três opções. Com doze,
+                   viraria doze caixinhas para uma escolha só. */
+                if (f.tipo === "escolha") {
+                  return (
+                    <div key={f.nome} className="flex flex-col gap-2 sm:col-span-2">
+                      <div>
+                        <span className="rotulo">{f.rotulo}</span>
+                        <p className="mt-0.5 text-[12.5px] text-suave">{f.ajuda}</p>
+                      </div>
+                      <select
+                        className="campo"
+                        value={String(valores[f.nome] ?? "")}
+                        onChange={(e) => trocar(f.nome, e.target.value)}
+                      >
+                        {(f.opcoes ?? []).map((o) => (
+                          <option key={String(o.valor)} value={String(o.valor)}>
+                            {o.nome}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   );
                 }

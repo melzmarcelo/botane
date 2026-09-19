@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import { reais } from "@/lib/cadastros";
 import { qtd } from "@/lib/numeros";
 import { Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
-import BotaoExportar from "@/components/exportar";
 
 /**
  * A apuração ABERTA nos documentos que a compõem — a memória de cálculo.
@@ -128,19 +127,15 @@ export default function MemoriaDeCalculo({ inicio, fim }: { inicio: string; fim:
 
   return (
     <div className="flex flex-col gap-6">
+      {/* ⚠️ **O botão daqui saiu** (16/09/2026): o `Baixar` da barra das abas
+          leva esta memória inteira quando é esta a aba aberta, e com a conta do
+          CMV na frente. Dois botões na mesma tela dando arquivos diferentes com
+          o mesmo nome é a divergência que ninguém percebe até comparar os dois.
+          O relatório `memoria-cmv` continua no catálogo, para quem o baixa de
+          fora do painel. */}
       <Cartao
         titulo="A apuração, aberta nos documentos que a compõem"
         descricao="A resposta para “de onde veio este número?”."
-        acao={
-          <span className="nao-imprimir">
-            <BotaoExportar
-              relatorio="memoria-cmv"
-              rotulo="Baixar em PDF"
-              iniciais={{ inicio, fim }}
-              formatoPadrao="pdf"
-            />
-          </span>
-        }
       >
         <div className="overflow-x-auto">
           <table className="tabela">

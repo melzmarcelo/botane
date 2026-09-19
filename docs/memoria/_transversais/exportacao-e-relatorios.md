@@ -110,6 +110,37 @@
   em duas. A régua e o porquê das três famílias estão em
   [`padroes-de-ui.md`](padroes-de-ui.md).
 
+- 🔑 **`tipo: "periodo"` COM opções deixa de ser duas datas e vira o seletor do ciclo**
+  (16/09/2026, pedido do dono sobre o painel de CMV: *"esta vai abrir o filtro do período, e
+  não datas como está"*). Quem decide é o SERVIDOR, mandando `opcoes` no filtro — a janela de
+  exportação não sabe o que é um ciclo de CMV, e não deve saber.
+  ⚠️ **O valor é `inicio|fim`, desmembrado no front.** O contrato do servidor não muda: todo o
+  catálogo segue lendo as duas pontas em `_periodo(f)`, e a auditoria registra o recorte de
+  verdade em vez de um apelido. Um parâmetro novo só para um relatório criaria uma segunda
+  forma de dizer período.
+  ⚠️ **O período corrente é truncado em HOJE** nas opções: ele ainda não terminou, e oferecer
+  o fim que vai acontecer faria o arquivo prometer dias que não existem.
+
+- 🔑 **`tipo: "escolha"` é a escolha ÚNICA, e nasceu porque `multipla` não dava conta.**
+  `detalhe` e `ciclo` são múltiplas e o relatório usa só a PRIMEIRA — um remendo do vocabulário
+  da janela que se aguentava com duas ou três opções. Com as doze abas do painel de CMV isso
+  viraria doze caixinhas para uma escolha só.
+
+- 🔑 **Uma `Saida` inteira vira anexo de outra** (`_como_anexo`, 16/09/2026). É o que permitiu
+  o arquivo do painel de CMV levar a conta mais o quadro da aba sem reescrever consulta
+  nenhuma: as abas já são relatórios deste mesmo catálogo, e uma segunda versão de cada uma
+  divergiria na primeira correção feita só de um lado.
+  ⚠️ **Anexo de anexo se perde em silêncio.** `_precos` leva um anexo próprio (o peso por
+  setor); ao virar anexo do CMV, só a tabela dele entra. A memória é a exceção deliberada —
+  ali os quadros SÃO o documento, e vão todos (`[_como_anexo(m), *m.anexos]`).
+
+- ⚠️ **Dinheiro e percentual saem ARREDONDADOS no quadro, e quem arredonda é a linha do
+  relatório.** O quadro da quebra do CMV saía cru do motor — `6094,0000000000` e
+  `92,84221351575725` —, que num arquivo para o contador não é um valor em reais nem um
+  percentual. Ficou em `_quadro_da_quebra`, num lugar só: o relatório de preços leva esse mesmo
+  quadro como anexo desde sempre e sofria do mesmo. O número da CONTA continua com toda a
+  precisão.
+
 ## Armadilhas já pagas
 
 - ⚠️ **O rodapé do relatório soma as linhas ARREDONDADAS**, de propósito — o total tem de

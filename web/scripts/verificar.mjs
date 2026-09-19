@@ -3341,6 +3341,7 @@ try {
       // miolo, e as variantes `sm:` destas utilitárias não chegaram à folha —
       // nos dois casos a classe estava no HTML e o traço valia 0px.
       divisor: divisor ? divisor.borderLeftWidth : null,
+      botoes: [...h.querySelectorAll("button")].map((x) => x.textContent?.trim()),
     };
   });
   checar("o cabeçalho se chama Painel de CMV", cab.titulo === "Painel de CMV", cab.titulo);
@@ -3358,9 +3359,86 @@ try {
   // tela abria dizendo "outro recorte" sobre o período que estava mostrando.
   checar("com o período em curso já escolhido", /em curso/.test(cab.escolhido ?? ""),
     cab.escolhido);
-  checar("e um traço separa o recorte dos botões", cab.divisor === "2px", cab.divisor);
   checar("os três filtros são Período, Escopo e Ver por",
     ["Período", "Escopo", "Ver por"].every((r) => cab.rotulos.includes(r)), cab.rotulos);
+  // 🔑 **No cabeçalho só o RECORTE** (pedido do dono, 16/09/2026: *"retirar o
+  // baixar e o imprimir tela do cabeçalho"*). Uma volta antes eles ficaram ali,
+  // separados por um traço; agora saíram. ⚠️ "saber mais" é do `ExplicaTela` e
+  // continua — ele abre a frase da tela, não tira nada de dentro do sistema.
+  checar("e nenhum botão de baixar ou imprimir no cabeçalho",
+    !cab.botoes.some((t) => /baixar|imprimir/i.test(t ?? "")), cab.botoes);
+
+  // 🔑 **UM botão de baixar, na barra das abas** (pedido do dono, 16/09/2026:
+  // *"alterar o baixar esta tabela para um botão de baixar"*). Eram cinco
+  // espalhados pelo painel — um no cabeçalho, um por aba como link discreto e
+  // mais um dentro da memória —, cada um dando um arquivo diferente e nenhum
+  // com a conta do CMV junto.
+  const naBarra = await p.evaluate(() => {
+    const nav = document.querySelector('[role="tablist"]');
+    const b = [...(nav?.querySelectorAll("button") ?? [])]
+      .find((x) => x.textContent?.trim() === "Baixar");
+    return { existe: !!b, botao: b ? b.className.includes("btn") : null,
+             quantos: [...document.querySelectorAll("button")]
+               .filter((x) => /^Baixar/i.test(x.textContent?.trim() ?? "")).length };
+  });
+  checar("a barra das abas tem o botão Baixar", naBarra.existe, naBarra);
+  // ⚠️ Botão de verdade, não `link-acao`: ele TIRA a tela de dentro do sistema,
+  // e isso não é um link de navegação.
+  checar("e ele é botão, não link", naBarra.botao === true, naBarra);
+  checar("e é o único da tela", naBarra.quantos === 1, naBarra);
+
+  // A janela dele: o período é o CICLO, e a aba vem semeada com a que está
+  // aberta — é o que faz o arquivo bater com o que está à vista.
+  // ⚠️ Troca de aba ANTES de abrir: com a aba padrão a semeadura acertaria por
+  // coincidência, e a checagem não provaria que ela acompanha.
+  await p.evaluate(() => {
+    [...document.querySelectorAll('[role="tab"]')]
+      .find((b) => b.textContent?.trim() === "Curva ABC")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1800));
+  await p.evaluate(() => {
+    [...document.querySelectorAll('[role="tablist"] button')]
+      .find((b) => b.textContent?.trim() === "Baixar")?.click();
+  });
+  await p.waitForFunction(() => document.querySelector('[role="dialog"]'),
+    { timeout: 15000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1800));
+  const janelaCmv = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    if (!d) return null;
+    const sels = [...d.querySelectorAll("select")].map((x) => ({
+      rotulo: x.closest("div")?.querySelector(".rotulo")?.textContent?.trim() ?? "?",
+      escolhido: x.options[x.selectedIndex]?.textContent?.trim() ?? null,
+      quantas: x.options.length,
+    }));
+    return { datas: d.querySelectorAll('input[type="date"]').length, sels };
+  });
+  checar("a janela de baixar abre", !!janelaCmv, janelaCmv);
+  // 🔑 *"esta vai abrir o filtro do período, e não datas como está"*.
+  checar("e o período nela é o ciclo do CMV, sem campo de data",
+    janelaCmv?.datas === 0
+      && /em curso/.test(janelaCmv.sels.find((x) => x.rotulo === "Período")?.escolhido ?? ""),
+    janelaCmv);
+  // 🔑 *"os dados da aba posicionada"*: a aba aberta chega escolhida. Sem isso,
+  // baixar da aba da curva ABC daria a margem por prato — o padrão do
+  // relatório —, e quem conferisse os dois acharia que um deles mente.
+  checar("e a aba aberta já vem escolhida no arquivo",
+    /Curva ABC/i.test(janelaCmv?.sels.find((x) => /levar junto/i.test(x.rotulo))?.escolhido ?? ""),
+    janelaCmv?.sels);
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => b.textContent?.trim() === "Cancelar")?.click();
+  });
+  // ⚠️ **Devolve a aba.** Este bloco trocou para a Curva ABC de propósito, e as
+  // checagens seguintes leem a aba "A conta" — a da cascata. Fase que desvia,
+  // devolve: sem isto a cascata não estava na tela e a falha acusava o desenho,
+  // que estava intacto.
+  await p.evaluate(() => {
+    [...document.querySelectorAll('[role="tab"]')]
+      .find((b) => b.textContent?.trim() === "A conta")?.click();
+  });
+  await new Promise((r) => setTimeout(r, 1500));
 
   const textoCmv = await p.evaluate(() => document.body.innerText);
   checar("painel mostra CMV real e teórico",

@@ -139,9 +139,15 @@ class _Filtros:
         # ⚠️ Booleano, e não lista: "só as provisórias" é uma pergunta de sim ou
         # não. Ausente e `false` são a mesma coisa — todos os movimentos.
         provisorio: bool = False,
+        # 🔑 **A aba do painel de CMV** (16/09/2026): o arquivo leva sempre a
+        # conta do CMV e, atras dela, o quadro da aba em que a pessoa esta.
+        # ⚠️ Texto simples, e nao um Enum: o catalogo ja diz quais valores
+        # existem, e um 422 aqui transformaria um valor novo numa tela que nao
+        # baixa nada. Valor desconhecido cai no padrao do relatorio.
+        aba: str | None = None,
     ):
         self.como_dict = {
-            "inicio": inicio, "fim": fim, "data": data,
+            "inicio": inicio, "fim": fim, "data": data, "aba": aba,
             "locais": locais, "setores": setores,
             "categorias": categorias, "tipos_produto": tipos_produto,
             "tipos_movimento": tipos_movimento, "situacao": situacao,
