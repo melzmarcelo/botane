@@ -134,6 +134,22 @@ class _Filtros:
         situacao: list[str] | None = Query(default=None),
         classes: list[str] | None = Query(default=None),
         produtos: list[int] | None = Query(default=None),
+        # 🔑 **Os tres filtros do Consumo por pessoa, que NAO chegavam ao
+        # relatorio** (19/09/2026). O catalogo os declara desde sempre --
+        # `ciclo`, `pessoas` e `detalhe` --, a janela os oferecia, a pessoa
+        # escolhia, e aqui eles nao existiam: o FastAPI so repassa o que esta
+        # declarado, entao `f` nunca os trazia e `_consumo_pessoa` caia nos
+        # proprios padroes. O arquivo saia SEMPRE sintetico, do ciclo em aberto
+        # e com todas as pessoas, qualquer que fosse a escolha.
+        # ⚠️ E exatamente a divergencia que o docstring do catalogo diz existir
+        # para evitar: "a tela ofereceria um filtro que o servidor ignora, o
+        # arquivo sairia com mais linhas do que se pediu, e nada denunciaria".
+        # Nada denunciou mesmo -- o documento e o da COBRANCA do funcionario.
+        # ⚠️ `ciclo` e texto, nao inteiro: "aberto" e uma opcao de verdade ao
+        # lado dos ids, e e o padrao numa loja que nunca fechou um ciclo.
+        ciclo: list[str] | None = Query(default=None),
+        pessoas: list[int] | None = Query(default=None),
+        detalhe: list[str] | None = Query(default=None),
         busca: str | None = None,
         dias: int | None = Query(default=None, ge=0, le=365),
         # ⚠️ Booleano, e não lista: "só as provisórias" é uma pergunta de sim ou
@@ -153,6 +169,7 @@ class _Filtros:
             "tipos_movimento": tipos_movimento, "situacao": situacao,
             "classes": classes, "produtos": produtos, "busca": busca, "dias": dias,
             "provisorio": provisorio,
+            "ciclo": ciclo, "pessoas": pessoas, "detalhe": detalhe,
         }
 
     def preenchidos(self) -> dict:

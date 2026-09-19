@@ -143,6 +143,24 @@
 
 ## Armadilhas já pagas
 
+- 🔑 **Três filtros do Consumo por pessoa NÃO chegavam ao relatório, e ninguém soube**
+  (19/09/2026). `ciclo`, `pessoas` e `detalhe` eram declarados no catálogo, a janela os
+  oferecia e a pessoa escolhia — mas `_Filtros` em `routers/exportacoes.py` não os recebia. O
+  FastAPI só repassa o que a dependência DECLARA, então `f` nunca os trazia e
+  `_consumo_pessoa` caía nos próprios padrões: o arquivo saía **sempre** sintético, do ciclo em
+  aberto e com todas as pessoas, qualquer que fosse a escolha.
+  ⚠️ **É exatamente a divergência que o docstring do catálogo diz existir para evitar** — *"a
+  tela ofereceria um filtro que o servidor ignora… e nada denunciaria"*. Nada denunciou mesmo,
+  e o documento é o da COBRANÇA do funcionário.
+  ⚠️ **A suíte tinha checagem e ela não pegava.** Afirmava que o filtro EXISTE no catálogo e
+  que o arquivo SAI — inclusive chamando `?detalhe=analitico` e conferindo que veio um PDF.
+  Nenhuma afirmava sobre o EFEITO. **Filtro que não muda o arquivo é pior que filtro que não
+  existe**: quem escolheu acredita no que pediu.
+  ⚠️ **Todo filtro declarado no catálogo precisa de um parâmetro correspondente em
+  `_Filtros`** — a lista é a mesma em dois arquivos, e é a segunda cópia que envelhece. Ao
+  acrescentar um filtro, acrescente os dois lados e uma checagem do EFEITO.
+  ⚠️ A prova de que a checagem nova pega: repondo o defeito, as quatro caem.
+
 - ⚠️ **O rodapé do relatório soma as linhas ARREDONDADAS**, de propósito — o total tem de
   fechar com a coluna que a pessoa confere a mão. Em centenas de produtos isso dá centavos de
   diferença na identidade "inicial + entradas − saídas = final", que **não são erro de razão**.

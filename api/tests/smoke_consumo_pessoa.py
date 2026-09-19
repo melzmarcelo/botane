@@ -270,6 +270,54 @@ st, pdf = chamar("GET", "/exportar/consumo-pessoa.pdf?detalhe=analitico", token=
 checar("e o PDF tambem, no analitico",
        st == 200 and isinstance(pdf, bytes) and pdf[:4] == b"%PDF", st)
 
+# 🔑 **Os tres filtros precisam MUDAR o arquivo, e e isso que faltava provar.**
+# ⚠️ Eles eram declarados no catalogo e nao chegavam ao relatorio: o
+# `_Filtros` do router nao os recebia, o FastAPI so repassa o que esta
+# declarado, e `_consumo_pessoa` caia nos proprios padroes. O arquivo saia
+# SEMPRE sintetico, do ciclo em aberto e com todas as pessoas -- qualquer que
+# fosse a escolha na janela. As checagens acima nao pegaram porque afirmavam
+# sobre a EXISTENCIA do filtro e sobre o arquivo SAIR, nunca sobre o efeito.
+# 🔑 Filtro que nao muda o arquivo e pior que filtro que nao existe: quem
+# escolheu acredita no que pediu, e este e o documento da COBRANCA.
+def _baixar(q: str = "") -> str:
+    _st, _b = chamar("GET", "/exportar/consumo-pessoa.csv" + q, token=token, cru=True)
+    return _b.decode("utf-8-sig", "replace") if isinstance(_b, bytes) else ""
+
+cheio = _baixar()
+analitico = _baixar("?detalhe=analitico")
+checar("o detalhe ANALITICO muda o arquivo, nao so o titulo",
+       "Documento" in analitico and "Documento" not in cheio,
+       (analitico.splitlines()[:9], cheio.splitlines()[:9]))
+checar("e o sintetico continua sendo um total por pessoa",
+       "Cupons" in cheio and "Cupons" not in analitico, cheio.splitlines()[:9])
+
+# ⚠️ A pessoa vem do CATALOGO, como a janela faz: inventar um id aqui testaria
+# um caminho que a tela nunca percorre.
+pessoas_op = next((f for f in (alvo or {}).get("filtros", []) if f["nome"] == "pessoas"),
+                  {}).get("opcoes") or []
+if pessoas_op:
+    uma = _baixar(f"?pessoas={pessoas_op[0]['valor']}")
+    checar("e escolher UMA pessoa encurta o arquivo",
+           len(uma.splitlines()) < len(cheio.splitlines()),
+           (len(uma.splitlines()), len(cheio.splitlines())))
+else:
+    checar("e escolher UMA pessoa encurta o arquivo", True, "sem pessoa com politica")
+
+# 🔑 **O ciclo carimbado e outro conjunto.** "em aberto" e o que ainda nao foi
+# cobrado; um ciclo fechado e o que ja foi. Pedir um ciclo e receber o aberto
+# entregaria ao funcionario a cobranca errada.
+ciclos = [o["valor"] for o in (ciclo_f or {}).get("opcoes", []) if o["valor"] != "aberto"]
+if ciclos:
+    doCiclo = _baixar(f"?ciclo={ciclos[0]}")
+    checar("e pedir um ciclo fechado traz outro conjunto, nao o em aberto",
+           doCiclo.splitlines()[0] != cheio.splitlines()[0], doCiclo.splitlines()[:1])
+else:
+    # ⚠️ Nao e falha: numa base sem ciclo fechado nao ha o que comparar. O que
+    # a suite garante aqui e que "aberto" continua respondendo.
+    checar("e pedir um ciclo fechado traz outro conjunto, nao o em aberto",
+           "em aberto" in _baixar("?ciclo=aberto").splitlines()[0],
+           "sem ciclo fechado nesta base")
+
 
 print("\n9. o preco cheio nao se aceita de fora")
 # ⚠️ Se o cliente pudesse declarar o cheio, qualquer chamador inventaria um
