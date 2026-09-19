@@ -76,6 +76,13 @@ CORS_ORIGINS = [
 # padrão razoável: é justamente de onde o navegador do usuário fala com a API.
 WEB_URL = os.getenv("WEB_URL", (CORS_ORIGINS[0] if CORS_ORIGINS else "http://localhost:3100"))
 
+# Onde a API é alcançada DE FORA — no ar, `${APP_URL}/api`. É o que o conector
+# do Claude anuncia: a URL do MCP (`…/mcp`) e os endereços do login OAuth.
+# ⚠️ **Não dá para deduzir da requisição.** O App Platform tira o `/api` antes
+# de repassar, então a API não sabe que mora sob ele — e anunciar o endereço
+# sem o prefixo mandaria o claude.ai bater na tela do Next.
+API_URL_PUBLICA = os.getenv("API_URL_PUBLICA", f"http://127.0.0.1:{os.getenv('PORT', '9200')}").rstrip("/")
+
 # Quanto tempo o link de recuperação vale, e quantos pedidos cabem por hora.
 SENHA_TOKEN_MINUTOS = int(os.getenv("SENHA_TOKEN_MINUTOS", "30"))
 SENHA_PEDIDOS_HORA = int(os.getenv("SENHA_PEDIDOS_HORA", "3"))

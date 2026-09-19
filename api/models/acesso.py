@@ -207,3 +207,38 @@ class PermissaoResponse(BaseModel):
     modulo: str
     descricao: str
     ordem: int
+
+
+# ---------------------------------------------------------------- chave de API
+
+
+class TokenApiCreate(BaseModel):
+    """Uma chave de máquina nova para o usuário.
+
+    ⚠️ **Validade obrigatória, e de no máximo um ano.** Chave que não vence é
+    chave que alguém esquece num computador antigo e continua abrindo o sistema
+    anos depois de ninguém lembrar que ela existe.
+    """
+
+    nome: str = Field(min_length=1, max_length=80)
+    dias: int = Field(default=90, ge=1, le=365)
+
+
+class TokenApiResponse(BaseModel):
+    id: int
+    nome: str
+    prefixo: str
+    somente_leitura: bool
+    expira_em: datetime
+    criado_em: datetime
+    criado_por: str | None = None
+    ultimo_uso_em: datetime | None = None
+    revogado_em: datetime | None = None
+    # `manual` (gerada na tela) ou `oauth` (a pessoa conectou o Claude).
+    origem: str = "manual"
+    vence_em: datetime
+
+
+class TokenApiCriado(TokenApiResponse):
+    # ⚠️ A ÚNICA vez em que a chave em claro sai do servidor.
+    token: str

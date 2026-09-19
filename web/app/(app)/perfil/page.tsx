@@ -8,6 +8,8 @@ import { Campo, Cartao, Etiqueta } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
+import ChavesDeAcesso from "@/components/chaves-de-acesso";
+import { URL_CONECTOR, minhasChaves } from "@/lib/tokens-api";
 
 /**
  * O próprio cadastro de quem entrou.
@@ -20,7 +22,7 @@ import ExplicaTela from "@/components/explica-tela";
  */
 export default function PaginaPerfil() {
   const aviso = useAviso();
-  const { eu, recarregar } = useSessao();
+  const { eu, recarregar, pode } = useSessao();
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -113,6 +115,47 @@ export default function PaginaPerfil() {
           </div>
         </form>
       </Cartao>
+
+      {/* 🔑 Só para quem pode conectar o Claude (`integracao.claude`). Mesmo sem
+          a permissão a pessoa poderia ter uma chave gerada pelo administrador —
+          mas aí quem a vê e revoga é ele, no cadastro de usuários. */}
+      {pode("integracao.claude") && (
+        <ChavesDeAcesso
+          fonte={minhasChaves}
+          titulo="Claude"
+          descricao="Consulte o Botané conversando com o Claude: produtos, estoque, compras, vendas e CMV, com as suas permissões e lojas. Só leitura — o Claude não altera nada."
+          topo={<ConectarClaude />}
+        />
+      )}
+    </div>
+  );
+}
+
+/** O endereço que se cola no claude.ai, e o caminho até onde colar. */
+function ConectarClaude() {
+  const aviso = useAviso();
+  return (
+    <div className="mb-5 flex flex-col gap-2">
+      <p className="text-[14px]">
+        No claude.ai: <b>Configurações ▸ Conectores ▸ Adicionar conector personalizado</b>, e
+        cole o endereço abaixo. O Claude abre a tela de entrada do Botané — use o seu e-mail e
+        a sua senha.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="mono break-all rounded-lg border border-linha bg-papel/40 px-3 py-2 text-[13px]">
+          {URL_CONECTOR}
+        </code>
+        <button
+          type="button"
+          className="btn btn-secundario"
+          onClick={() => {
+            void navigator.clipboard.writeText(URL_CONECTOR);
+            aviso.sucesso("Endereço copiado");
+          }}
+        >
+          Copiar
+        </button>
+      </div>
     </div>
   );
 }

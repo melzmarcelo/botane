@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
 import FormularioUsuario, { Vinculo, arranjoMisto, lojasDosVinculos } from "../formulario";
 import Voltar from "@/components/voltar";
+import ChavesDeAcesso from "@/components/chaves-de-acesso";
+import { chavesDoUsuario } from "@/lib/tokens-api";
 
 type Usuario = {
   id: number;
@@ -51,8 +53,16 @@ export default function PaginaUsuario() {
     void carregar();
   }, [carregar]);
 
+  // ⚠️ Usuário inativo não recebe chave: sem `criar`, o cartão não oferece.
+  // Ver e revogar continuam — quem reativar precisa matar o que ficou.
+  const fonte = useMemo(() => {
+    if (!u) return null;
+    const f = chavesDoUsuario(u.id);
+    return u.ativo ? f : { ...f, criar: undefined };
+  }, [u]);
+
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
-  if (!u) return <Carregando />;
+  if (!u || !fonte) return <Carregando />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -95,6 +105,11 @@ export default function PaginaUsuario() {
         misto={arranjoMisto(u.papeis)}
         id={u.id}
         aoGravar={() => router.push("/usuarios")}
+      />
+
+      <ChavesDeAcesso
+        fonte={fonte}
+        descricao="Para o Claude consultar o Botané em nome desta pessoa, com as mesmas permissões e lojas dela. Só leitura: com a chave não se altera nada."
       />
     </div>
   );

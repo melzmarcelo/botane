@@ -241,6 +241,11 @@ Cada item falha de um jeito diferente. Vale rodar todos, e nesta ordem:
    `localhost`, é o `WEB_URL`
 7. Instalar o PWA pelo navegador — só funciona em HTTPS
 8. Configurar SMTP e Omie pela tela de **Integrações** (não vão no `.env`)
+9. **Conector do Claude**: `curl https://…/.well-known/oauth-authorization-server` tem de
+   devolver **JSON** com `issuer` = o domínio. Se vier HTML, as rotas `/.well-known/…` do
+   `app.yaml` não entraram (caiu no Next); se os endereços dentro dele disserem
+   `127.0.0.1`, é o `API_URL_PUBLICA`. Depois, `curl -X POST https://…/api/mcp` → **401**
+   com `WWW-Authenticate` — ver a seção 6c
 
 ---
 
@@ -335,6 +340,28 @@ caminho é redigitar só essas.
 
 ⚠️ **Rodar de novo não faz nada.** A regravação só toca no que a chave atual não abre, então um
 segundo deploy com as duas variáveis é inofensivo. Coberto por `api/tests/smoke_rotacao_segredo.py`.
+
+## 6c. O conector do Claude (MCP)
+
+O Claude consulta o Botané por `https://sistema.botanedeliecafe.com.br/api/mcp`. Na primeira
+promoção que o leva ao ar:
+
+1. **`doctl apps update <id> --spec .do/app.yaml`**, e não só o botão de deploy: o spec novo traz
+   as duas rotas `/.well-known/oauth-…` para a API e a variável `API_URL_PUBLICA`. O botão
+   reimplanta o spec que já está lá, sem elas.
+2. Verificar pelo item 9 da seção 4.
+3. No claude.ai: **Configurações ▸ Conectores ▸ Adicionar conector personalizado**, colar a URL
+   acima e conectar — abre a página de login do Botané. Só entra quem tem a permissão
+   `integracao.claude` (Papéis ▸ "Conectar o Claude"); a migração 075 a deu só aos papéis que
+   administram usuários.
+4. A conexão aparece em **Perfil ▸ Claude** (e em Usuários ▸ Chaves de acesso), com
+   "conectado pelo Claude". Revogar ali derruba na hora.
+
+⚠️ Tudo é **só leitura**, e quem garante é a API (`contexto_da_credencial`). As ferramentas
+do Claude não tocam no Omie; mas a chave que o OAuth emite vale para **qualquer GET** da API
+com as permissões da pessoa, e `GET /omie/conferencia` e irmãos consultam a conta real e gastam
+cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
+`docs/memoria/administrativo.md`.
 
 ## 7. O que não fazer
 

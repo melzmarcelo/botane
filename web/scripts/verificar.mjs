@@ -4946,6 +4946,67 @@ try {
   await api("DELETE", `/usuarios/${criado.id}`, null, token);
   await entrar(p, ADMIN);
 
+  // 🔑 A chave de máquina do conector MCP (migração 074). As regras do servidor
+  // estão em `api/tests/smoke_tokens_api.py`; aqui é o que só a TELA pode errar:
+  // mostrar a chave uma vez, escondê-la depois, e revogar.
+  console.log("9a2. chaves de acesso do conector MCP");
+  const marcaChave = String(Date.now()).slice(-6);
+  const emailChave = `tela.chave.${marcaChave}@botane.com.br`;
+  const { dados: usuarioChave } = await api("POST", "/usuarios", {
+    nome: `Tela Chave ${marcaChave}`, email: emailChave,
+    senha: "provisoria123",
+    papeis: [{ id_papel: papeisSenha.find((x) => x.nome === "Cozinha").id }],
+  }, token);
+  await irPara(p, `${WEB}/usuarios/${usuarioChave.id}`);
+  await p.waitForFunction(() => document.body.innerText.includes("Nenhuma chave gerada"),
+    { timeout: 20000 }).catch(() => {});
+  checar("o cadastro do usuário mostra o cartão de chaves, vazio",
+    /Nenhuma chave gerada/.test(await p.evaluate(() => document.body.innerText)));
+  checar("abre a janela de gerar", await clicarQuando(p, "Gerar chave", { exato: true }));
+  checar("e gera", await clicarQuando(p, "Gerar", { exato: true }));
+  await p.waitForFunction(() => /btn_[\w-]{20,}/.test(document.body.innerText),
+    { timeout: 12000 }).catch(() => {});
+  const textoChave = await p.evaluate(() => document.body.innerText);
+  const valorChave = (textoChave.match(/btn_[\w-]{20,}/) ?? [])[0];
+  checar("a chave aparece inteira, para copiar", !!valorChave);
+  checar("com o aviso de que não aparece de novo", /não aparece de novo/.test(textoChave));
+  const { status: stChave, dados: meChave } = await api("GET", "/auth/me", null, valorChave);
+  checar("e a chave copiada da tela abre a API como a pessoa",
+    stChave === 200 && meChave?.email === emailChave,
+    { stChave, email: meChave?.email });
+  await foto(p, "34b-chave-gerada");
+
+  checar("oferece revogar", await clicarQuando(p, "revogar", { exato: true }));
+  // ⚠️ **O "Revogar" da confirmação é clicado DENTRO da janela.** `clicarQuando`
+  // compara em minúsculas, então "Revogar" casava primeiro com o link "revogar"
+  // da linha, que vem antes no documento: o clique reabria a mesma pergunta e a
+  // confirmação nunca acontecia — e as três checagens seguintes acusavam a tela.
+  await p.waitForSelector('[role="dialog"]', { timeout: 8000 }).catch(() => {});
+  checar("e confirma", await p.evaluate(() => {
+    const b = [...document.querySelectorAll('[role="dialog"] button')]
+      .find((x) => x.textContent.trim() === "Revogar");
+    b?.click();
+    return !!b;
+  }));
+  await p.waitForFunction((v) => !document.body.innerText.includes(v),
+    { timeout: 12000 }, valorChave).catch(() => {});
+  const textoRevogada = await p.evaluate(() => document.body.innerText);
+  checar("revogar some com a chave em claro", !textoRevogada.includes(valorChave));
+  checar("e a linha passa a dizer revogada", /\brevogada\b/.test(textoRevogada));
+  checar("e a chave para de abrir a API",
+    (await api("GET", "/auth/me", null, valorChave)).status === 401);
+  await api("DELETE", `/usuarios/${usuarioChave.id}`, null, token);
+
+  // 🔑 O Perfil é onde a PRÓPRIA pessoa acha o endereço para colar no claude.ai
+  // e desconecta o Claude dela — o admin tem `integracao.claude` (migração 075).
+  await irPara(p, `${WEB}/perfil`);
+  await p.waitForFunction(() => /\/mcp\b/.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+  const textoPerfil = await p.evaluate(() => document.body.innerText);
+  checar("o Perfil mostra o endereço do conector do Claude", /https?:\/\/\S+\/mcp\b/.test(textoPerfil),
+    textoPerfil.slice(0, 200));
+  checar("com o caminho no claude.ai", /Adicionar conector personalizado/.test(textoPerfil));
+
   console.log("9b. instalável no celular (PWA)");
   await p.goto(`${WEB}/`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1500));

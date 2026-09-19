@@ -214,7 +214,100 @@
   é um clique — não é a perda documentada acima.
   ⚠️ E não é só tempo: cada rodada consumia cota da conta do cliente.
 
+- 🔑 **Chave de acesso de MÁQUINA e o conector MCP do Claude** (migrações 074 e 075,
+  19/09/2026, pedido do dono: "usar o Botané pelo Claude via MCP"). O conector mora NA API:
+  `POST /mcp` (no ar, `https://sistema.botanedeliecafe.com.br/api/mcp`), cadastrado no
+  claude.ai como conector personalizado, com login por OAuth. Só leitura.
+  - `tokens_api` guarda **só o hash** (sha256, como o refresh). Duas origens: `manual`
+    (gerada na tela de Usuários, valor `btn_…` mostrado UMA vez, validade 1 a 365 dias) e
+    `oauth` (a pessoa conectou o Claude). Revogar não apaga: a linha diz quem usou e até quando.
+  - 🔑 **A chave age COMO o usuário, nunca por cima dele.** `contexto_da_credencial` resolve a
+    chave para um `id_usuario` e daí é o `Contexto` de sempre: papel, loja e setor valem
+    igual. Usuário desativado leva as chaves junto (`carregar_contexto` recusa inativo).
+  - 🔑 **O prefixo `btn_` escolhe a porta** antes de qualquer conta: JWT começa com `eyJ`.
+  - 🔑 **Só leitura se decide num lugar só** (`contexto_da_credencial`, parâmetro `escreve`).
+    `contexto_atual` passa o método HTTP; o `/mcp` passa `False`, porque é POST por protocolo
+    mas só lê — e cada ferramenta vira um GET por dentro, que passa pela mesma conferência.
+    Vale para toda rota que existe e para as que vão nascer.
+    ⚠️ Nem as escritas "inofensivas" passam: chave vazada que troca a senha do dono toma a conta.
+    ⚠️ **"Só leitura" é pelo método, então GET com efeito passa.** Varrido em 19/09: são
+    benignos (auditoria das exportações, a linha de `parametros` criada na primeira leitura),
+    EXCETO `GET /omie/conferencia`, `/conferencia-notas` e `/custos-iniciais/previa`, que chamam
+    a conta real do Omie e **gastam cota**. As ferramentas do Claude não os chamam, mas a chave
+    vale para qualquer GET — chave vazada de quem tem `integracao.omie` gastaria cota. GET novo
+    que escreva ou chame fora tem de entrar nesta lista.
+  - 🔑 **Chave não gere chave, nem para LISTAR** (`_so_por_login` / `_eu_por_login`, olham
+    `ctx.id_token`). Uma chave que criasse outra ficaria imortal.
+  - 🔑 **As travas de loja do cadastro, pela outra ponta** (`_conferir_alcance`): ninguém gera
+    chave para quem enxerga loja que ele mesmo não enxerga. ⚠️ O alcance do alvo é lido direto
+    de `usuario_papeis`: `carregar_contexto` dá 403 para inativo, e a lista das chaves de quem
+    foi desativado deixava de abrir.
+  - ⚠️ `ultimo_uso_em` grava com **resolução de 1 minuto**; revogada, vencida e inexistente dão
+    **a mesma frase** (401).
+  - **O `/mcp` (`routers/mcp.py`) é escrito À MÃO, sem o SDK `mcp`.** O SDK puxa `uvicorn`,
+    `starlette` e `pydantic` mais novos que os presos no `requirements.txt`. Um servidor só de
+    ferramentas precisa de pouco: JSON-RPC em POST, resposta JSON, `initialize`/`ping`/
+    `tools/list`/`tools/call`. **Sem sessão** (`Mcp-Session-Id`): nada a perder quando o
+    contêiner reinicia. Erro de ferramenta volta como resultado com `isError` (o modelo lê e se
+    corrige); ferramenta inexistente é erro de protocolo.
+  - 🔑 **As ferramentas são rotas que JÁ EXISTEM, chamadas por dentro**
+    (`services/mcp_ferramentas.py`, `httpx.ASGITransport` sobre o próprio app, com a chave de
+    quem pediu). Permissão, loja (`id_loja` → `X-Unidade`) e setor são os da tela. Ferramenta
+    nova = uma entrada em `FERRAMENTAS`. ⚠️ Só inteiro entra no caminho (`{id_produto}`):
+    string ali abriria `../` para outra rota.
+  - 🔑 **OAuth 2.1 à mão** (`services/oauth.py`, `routers/oauth.py`): registro dinâmico aberto
+    (RFC 7591; só https, ou http em localhost), PKCE **S256 obrigatório**, código de uso único
+    queimado ANTES de conferir o verificador (errar não dá segunda chance), `iss` na volta
+    (RFC 9207), revogação (RFC 7009). Cliente ou `redirect_uri` inválidos **nunca
+    redirecionam** — erro na página, senão vira redirecionador aberto. A página de login não
+    abre em moldura (clickjacking).
+  - 🔑 **Uma linha por CONEXÃO, rotacionada no lugar**: a chave vive 1 h e a renovação
+    (`btr_…`, 30 dias deslizantes) troca `token_hash` e `refresh_hash` na MESMA linha. Uma linha
+    por renovação encheria a tela de 24 revogadas por dia. Por isso a tela lê **`vence_em`**
+    (`coalesce(refresh_expira_em, expira_em)`) e não `expira_em`, que pintaria de "vencida" toda
+    conexão parada há uma hora.
+  - 🔑 **Descoberta pela RAIZ do domínio.** O claude.ai lê
+    `/.well-known/oauth-protected-resource/api/mcp` e `/.well-known/oauth-authorization-server`
+    — sem `/api`. O `app.yaml` manda esses dois caminhos para a API com
+    `preserve_path_prefix: true`; sem isso cairiam no Next (404 em HTML). O emissor é a ORIGEM
+    (sem `/api`), e tudo sai de `API_URL_PUBLICA` — a API não tem como deduzir o `/api`, que o
+    App Platform tira antes de repassar.
+  - 🔑 **Permissão nova `integracao.claude`**: conectar o Claude é levar dados da casa para a
+    conta da pessoa num serviço de IA — decisão do dono, papel a papel. Nasce só com quem tem
+    `admin.usuarios`. Exigida na autorização E em todo `POST /mcp` (tirar a permissão corta as
+    conexões já feitas). ⚠️ Na página, a permissão é conferida ANTES da troca obrigatória de
+    senha: é o "não" definitivo.
+  - Tela: `components/chaves-de-acesso.tsx` com uma `FonteDeChaves` (`lib/tokens-api.ts`) — no
+    cadastro do usuário (admin, gera chave) e em **Perfil ▸ Claude** (a pessoa vê o endereço do
+    conector e desconecta pelo `/auth/me/tokens`). ⚠️ O cartão da chave recém-criada é
+    `div.aviso`, não `<Aviso>`: o `Aviso` é `<p>`, e botão dentro de parágrafo é erro de
+    hidratação.
+  - ⚠️ **A fase 1 foi um conector stdio (`conector_mcp/`) e saiu no mesmo dia**: dois catálogos
+    de ferramentas, um em cada lado, divergiriam. O Claude Code usa a mesma URL:
+    `claude mcp add --transport http botane <url>/mcp` (OAuth), ou com
+    `--header "Authorization: Bearer btn_…"` (chave manual — o dono dela precisa de
+    `integracao.claude`).
+  - Cobertura: `smoke_tokens_api.py` (34), `smoke_conector_claude.py` (60: o fluxo do claude.ai
+    passo a passo, sem biblioteca), `smoke_bloqueio_login.py` e o bloco `9a2` do
+    `verificar.mjs`. Validado também com o **SDK oficial** (`mcp` 2.2.0) fazendo descoberta +
+    registro + login + ferramentas contra a API local. ⚠️ O SDK 2.x mudou a API (`FastMCP` →
+    `MCPServer`, atributos em snake_case); exemplo da internet quase sempre é da 1.x.
+  - Próximo: **escrita** pelo Claude (`somente_leitura = false`, ferramentas destrutivas,
+    sempre pelo service).
+
 ## Armadilhas já pagas
+
+- 🔑 **O bloqueio por tentativas de login NUNCA funcionou até 19/09/2026.** O `UPDATE
+  tentativas_login` e o `raise` moravam no MESMO `with get_cursor()`, e `get_conn` faz
+  **rollback** quando uma exceção atravessa o bloco: o contador voltava a zero a cada erro.
+  Qualquer um podia tentar senhas sem limite. Achado ao escrever a página de autorização do
+  Claude, que precisava da mesma trava. Agora mora em `seguranca.conferir_credenciais` (login e
+  página do Claude), que grava a falha e levanta o erro DEPOIS do bloco.
+  🔑 **Regra de bolso: escrita que precisa sobreviver a um erro não pode estar no mesmo
+  `with get_cursor()` do `raise`.** Vale para qualquer contador, registro de tentativa ou log de
+  recusa. Coberto por `tests/smoke_bloqueio_login.py`.
+  ⚠️ Efeito esperado: no ar, cinco senhas erradas passam a travar a conta por
+  `BLOQUEIO_MINUTOS` (15) — o desbloqueio é o botão em Usuários.
 
 - 🔑 **A sessão caía no meio do uso, e a causa era o refresh ROTATIVO sem trava no cliente.**
   O antigo morre no instante em que o novo nasce; as telas disparam várias chamadas juntas

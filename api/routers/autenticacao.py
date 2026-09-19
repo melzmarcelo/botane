@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import auditoria
-from config import BLOQUEIO_MINUTOS, MAX_TENTATIVAS_LOGIN, REFRESH_GRACA_SEGUNDOS
+from config import REFRESH_GRACA_SEGUNDOS
 from database import get_cursor
 from models.acesso import (
     EsqueciSenhaRequest,
@@ -19,6 +19,7 @@ from models.acesso import (
 )
 from seguranca import (
     Contexto,
+    conferir_credenciais,
     contexto_atual,
     criar_access_token,
     gerar_refresh,
@@ -38,48 +39,8 @@ def _ip(request: Request) -> str | None:
 
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, request: Request):
-    email = body.email.strip().lower()
+    u = conferir_credenciais(body.email, body.senha)
     with get_cursor() as cur:
-        cur.execute(
-            """SELECT id, nome, email, senha_hash, ativo, tentativas_login,
-                      bloqueado_ate, trocar_senha
-                 FROM usuarios WHERE lower(email) = %s""",
-            (email,),
-        )
-        u = cur.fetchone()
-
-        # Mensagem única para e-mail errado e senha errada: não confirma quem existe.
-        generico = HTTPException(status_code=401, detail="E-mail ou senha inválidos")
-        if not u:
-            raise generico
-        if not u["ativo"]:
-            raise HTTPException(status_code=403, detail="Usuário inativo")
-        if u["bloqueado_ate"] and u["bloqueado_ate"] > datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=429,
-                detail="Muitas tentativas. Tente de novo em alguns minutos.",
-            )
-
-        if not verificar_senha(body.senha, u["senha_hash"]):
-            tentativas = (u["tentativas_login"] or 0) + 1
-            bloqueio = (
-                datetime.now(timezone.utc) + timedelta(minutes=BLOQUEIO_MINUTOS)
-                if tentativas >= MAX_TENTATIVAS_LOGIN
-                else None
-            )
-            cur.execute(
-                "UPDATE usuarios SET tentativas_login = %s, bloqueado_ate = %s WHERE id = %s",
-                (tentativas, bloqueio, u["id"]),
-            )
-            raise generico
-
-        cur.execute(
-            """UPDATE usuarios
-                  SET tentativas_login = 0, bloqueado_ate = NULL, ultimo_acesso = now()
-                WHERE id = %s""",
-            (u["id"],),
-        )
-
         # ⚠️ A escolha de quem entrou vai para o BANCO, não só para o navegador.
         # O front guarda o token em sessionStorage quando não é persistente, e
         # ele morre com o navegador — mas o servidor não pode confiar nisso:

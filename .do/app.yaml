@@ -84,6 +84,17 @@ services:
     http_port: 8080
     routes:
       - path: /api
+      # 🔑 **O conector do Claude descobre o login pela RAIZ do domínio.** O
+      # claude.ai lê `/.well-known/oauth-protected-resource/api/mcp` e
+      # `/.well-known/oauth-authorization-server` — endereços fixados pelas RFCs
+      # 9728 e 8414, sem o `/api` na frente. Sem estas duas rotas eles cairiam no
+      # Next, que responde 404 em HTML, e o conector diria só "falha ao conectar".
+      # ⚠️ `preserve_path_prefix: true` SÓ aqui: a API precisa receber o caminho
+      # inteiro, que é o nome da rota lá dentro. O `/api` continua sendo tirado.
+      - path: /.well-known/oauth-protected-resource
+        preserve_path_prefix: true
+      - path: /.well-known/oauth-authorization-server
+        preserve_path_prefix: true
     health_check:
       http_path: /saude
       initial_delay_seconds: 30
@@ -138,6 +149,12 @@ services:
       - key: WEB_URL
         scope: RUN_TIME
         value: ${APP_URL}
+      # Onde a API é alcançada de fora. O conector do Claude anuncia a URL do MCP
+      # e os endereços do login a partir daqui — a API não tem como deduzir o
+      # `/api`, porque o App Platform o tira antes de repassar.
+      - key: API_URL_PUBLICA
+        scope: RUN_TIME
+        value: ${APP_URL}/api
 
       # Só valem na PRIMEIRA subida, com a tabela de usuários vazia. Depois
       # disso mudar aqui não muda o usuário que já existe — para trocar é

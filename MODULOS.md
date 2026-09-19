@@ -22,7 +22,7 @@ entregue.
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
-| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
+| [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
@@ -115,13 +115,19 @@ técnica de "ser uma integração".
 
 Empresa, lojas, parâmetros, integrações e usuários.
 
-- **Rotas:** `empresa.py`, `usuarios.py`, `papeis.py`, `autenticacao.py`, `omie.py`, `email_config.py`, `historico.py`, `inicio.py`
-- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`
+- **Rotas:** `empresa.py`, `usuarios.py`, `tokens_api.py`, `oauth.py`, `mcp.py`, `papeis.py`, `autenticacao.py`, `omie.py`, `email_config.py`, `historico.py`, `inicio.py`
+- **Serviços:** `services/omie/`, `agenda_integracao.py`, `email.py`, `segredos.py`, `senhas.py`, `oauth.py`, `mcp_ferramentas.py`
 - **Telas:** `empresa/`, `lojas/`, `usuarios/`, `papeis/`, `integracoes/`, `perfil/`, `auditoria/`, `trocar-senha/`
-- **Permissões:** `admin.empresa`, `admin.unidades`, `admin.usuarios`, `admin.papeis`, `admin.integracoes`, `admin.auditoria`, `integracao.omie`, `integracao.pdv`
+- **Permissões:** `admin.empresa`, `admin.unidades`, `admin.usuarios`, `admin.papeis`, `admin.integracoes`, `admin.auditoria`, `integracao.omie`, `integracao.pdv`, `integracao.claude`
 
 ⚠️ **Credencial de integração é cifrada** (`segredos.py`) e **não se promove por
 merge**: `api/.env` está fora do versionamento de propósito.
+
+🔑 **Conector do Claude (MCP)** em `POST /mcp`, cadastrado no claude.ai pela URL, com
+login OAuth (`oauth.py`) e a permissão `integracao.claude`. Cada conexão é uma linha de
+`tokens_api` (migrações 074/075), **só de leitura**, que age como o usuário e se revoga em
+Usuários ou em Perfil ▸ Claude. As ferramentas são rotas que já existem, chamadas por dentro
+(`mcp_ferramentas.py`). Detalhes na memória do módulo.
 
 ## CMV
 

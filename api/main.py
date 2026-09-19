@@ -51,7 +51,9 @@ from routers import (
     historico,
     inicio,
     inventario,
+    mcp,
     notas,
+    oauth,
     omie,
     papeis,
     pdv,
@@ -59,6 +61,7 @@ from routers import (
     reservas,
     produtos,
     transferencias,
+    tokens_api,
     usuarios,
     vendas,
 )
@@ -333,6 +336,10 @@ def servir_arquivo(nome: str):
 
 app.include_router(autenticacao.router)
 app.include_router(usuarios.router)
+app.include_router(tokens_api.router)
+app.include_router(tokens_api.router_eu)
+app.include_router(oauth.router)
+app.include_router(mcp.router)
 app.include_router(papeis.router)
 app.include_router(empresa.router)
 app.include_router(email_config.router)
