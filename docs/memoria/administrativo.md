@@ -253,7 +253,12 @@
   - 🔑 **As ferramentas são rotas que JÁ EXISTEM, chamadas por dentro**
     (`services/mcp_ferramentas.py`, `httpx.ASGITransport` sobre o próprio app, com a chave de
     quem pediu). Permissão, loja (`id_loja` → `X-Unidade`) e setor são os da tela. Ferramenta
-    nova = uma entrada em `FERRAMENTAS`. ⚠️ Só inteiro entra no caminho (`{id_produto}`):
+    nova = uma entrada em `FERRAMENTAS`. São **60** (20/09/2026), cobrindo produtos, fichas,
+    estoque, produção, inventário, remessas, compras, vendas, consumo, pessoas, tabelas de
+    apoio, CMV, reservas, empresa e auditoria. ⚠️ **O caminho da rota é escrito à mão na
+    tabela, e caminho errado só aparece quando alguém chama** — foi o que aconteceu com a
+    auditoria (`/historico`, que não existe: o router é `/auditoria`). Por isso a suíte chama
+    TODAS: 403 e 409 são resposta de negócio, 404 é defeito. ⚠️ Só inteiro entra no caminho (`{id_produto}`):
     string ali abriria `../` para outra rota.
   - 🔑 **OAuth 2.1 à mão** (`services/oauth.py`, `routers/oauth.py`): registro dinâmico aberto
     (RFC 7591; só https, ou http em localhost), PKCE **S256 obrigatório**, código de uso único

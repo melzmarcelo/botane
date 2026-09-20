@@ -14,6 +14,8 @@ passo é conferido pelo que a especificação exige, não pelo que o cliente tol
 6. código: uso único, preso ao PKCE e ao `redirect_uri`
 7. MCP: initialize, tools/list, tools/call (ok, 403 vira `isError`, argumento
    ruim vira `isError`), método desconhecido, notificação → 202
+7b. TODA ferramenta do catálogo responde — caminho errado aparece como 404,
+   e quem exige argumento diz qual falta
 8. a conexão aparece na tela de chaves do usuário e em "minhas", com origem
 9. renovação rotaciona chave e renovação na MESMA linha; a antiga morre
 10. revogar (RFC 7009 e pela tela) derruba a conexão
@@ -272,6 +274,40 @@ st, _, r = rpc(chave, "resources/list")
 checar("método não suportado dá -32601", r.get("error", {}).get("code") == -32601, r)
 st, _, r = pedir("PUT", "/auth/me", {"nome": "Invadido"}, token=chave)
 checar("a chave do Claude continua só de leitura na API", st == 403, st)
+
+print("\n7b. TODA ferramenta responde")
+# 🔑 Cada ferramenta aponta para uma rota escrita à mão na tabela. Um caminho
+# errado, um parâmetro que a rota não conhece ou uma permissão que o dono da
+# chave não tem só aparecem quando alguém chama — e ninguém chama as 60 à mão.
+# Aqui: quem não exige argumento é CHAMADO; quem exige é conferido pela recusa,
+# que prova que a ferramenta existe e sabe o que pede.
+st, _, r = rpc(chave, "tools/list")
+mudas, exigentes = [], []
+for t in r["result"]["tools"]:
+    obrigatorios = t["inputSchema"].get("required") or []
+    st, _, resp = rpc(chave, "tools/call", {"name": t["name"], "arguments": {}})
+    res = resp.get("result") or {}
+    texto = (res.get("content") or [{}])[0].get("text", "")
+    if "error" in resp or not res:
+        mudas.append((t["name"], resp))
+    elif obrigatorios:
+        if "obrigatório" not in texto:
+            exigentes.append((t["name"], texto[:80]))
+    # 403 (sem permissão) e 409 (módulo desligado nesta loja) são RESPOSTA, não
+    # defeito. 404 não: ali a ferramenta aponta para uma rota que não existe.
+    elif res.get("isError") and not texto.startswith(("403", "409")):
+        mudas.append((t["name"], texto[:90]))
+checar(f"as {len(r['result']['tools'])} ferramentas respondem sem erro de protocolo",
+       not mudas, mudas[:3])
+checar("e as que pedem argumento dizem qual falta", not exigentes, exigentes[:3])
+# As de caminho, com id de verdade — é o que prova a substituição no caminho.
+_, _, lista = rpc(chave, "tools/call", {"name": "lojas", "arguments": {}})
+id_loja = json.loads(lista["result"]["content"][0]["text"])[0]["id"]
+st, _, r = rpc(chave, "tools/call", {"name": "parametros_da_loja",
+                                     "arguments": {"id_unidade": id_loja}})
+checar("ferramenta com id no caminho responde com id de verdade",
+       not r["result"]["isError"], r["result"]["content"][0]["text"][:100])
+
 
 print("\n8. a conexão aparece na tela")
 st, _, lista = pedir("GET", "/usuarios/1/tokens", token=admin)

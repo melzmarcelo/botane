@@ -218,6 +218,249 @@ FERRAMENTAS: list[Ferramenta] = [
         "Margem dos itens vendidos no período: receita, custo e margem por prato.",
         "/cmv/margem",
         {**_PERIODO, "limite": _lim(50, 200, minimo=5)}),
+
+    # ------------------------------------------------------------- produção
+    Ferramenta(
+        "agenda_producao", "Agenda de produção",
+        "O que está planejado, em andamento e feito na produção, por período.",
+        "/producao-agenda",
+        {**_PERIODO, "status": Param("string", "Situação da linha da agenda.")}),
+    Ferramenta(
+        "item_da_agenda", "Uma linha da agenda",
+        "Uma linha da agenda de produção, com a ficha e o que ela consome.",
+        "/producao-agenda/{id_agenda}",
+        {"id_agenda": Param("integer", "Id da linha.", obrigatorio=True)}),
+    Ferramenta(
+        "necessario_para_produzir", "O que falta para produzir",
+        "Quanto de cada insumo uma produção consumiria, e o que falta em estoque.",
+        "/producao-agenda/necessario",
+        {"id_produto": Param("integer", "Produto a produzir.", obrigatorio=True),
+         "quantidade": Param("number", "Quanto produzir.", obrigatorio=True),
+         "medida": Param("string", "A quantidade está em quê.", padrao="PORCOES",
+                         enum=["PORCOES", "RENDIMENTO"]),
+         "id_local": Param("integer", "Prateleira de onde sairiam os insumos."),
+         "id_modo": Param("integer", "Modo de rendimento da ficha, se houver mais de um.")}),
+    Ferramenta(
+        "producoes_feitas", "Produções feitas",
+        "As produções já lançadas, da mais recente — com o que saiu e o custo do produzido.",
+        "/estoque/producoes",
+        {"limite": _lim(50, 200), "offset": _OFFSET}),
+
+    # ------------------------------------------------------------- inventário
+    Ferramenta(
+        "inventarios", "Inventários",
+        "As contagens de estoque da loja, da mais recente.",
+        "/inventarios",
+        {"limite": _lim(25, 500), "offset": _OFFSET}),
+    Ferramenta(
+        "inventario", "Um inventário",
+        "Uma contagem inteira: o que foi contado, o que divergiu e em que pé está.",
+        "/inventarios/{id_inventario}",
+        {"id_inventario": Param("integer", "Id da contagem.", obrigatorio=True)}),
+
+    # ------------------------------------------------------------- remessas e ajustes
+    Ferramenta(
+        "transferencias", "Transferências entre lojas",
+        "As remessas entre lojas, da mais recente.",
+        "/transferencias",
+        {"status": Param("string", "Situação da remessa."),
+         "limite": _lim(25, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "transferencia", "Uma transferência",
+        "Uma remessa com os itens, quem enviou e quem recebeu.",
+        "/transferencias/{id_transferencia}",
+        {"id_transferencia": Param("integer", "Id da remessa.", obrigatorio=True)}),
+    Ferramenta(
+        "lotes_de_ajuste", "Ajustes em lote",
+        "Os ajustes feitos em lote — de saldo (ESTOQUE) ou de custo (CUSTO).",
+        "/ajustes/lotes",
+        {"natureza": Param("string", "Tipo do lote.", enum=["ESTOQUE", "CUSTO"]),
+         "limite": _lim(25, 200), "offset": _OFFSET}),
+
+    # ------------------------------------------------------------- consumo
+    Ferramenta(
+        "consumo_periodos", "Períodos de consumo",
+        "Os períodos de consumo da casa (o que a equipe consumiu e o que será cobrado).",
+        "/consumo/periodos"),
+    Ferramenta(
+        "consumo_periodo", "Um período de consumo",
+        "Um período de consumo aberto por pessoa, com o cheio, o desconto e o a cobrar.",
+        "/consumo/periodos/{id_periodo}",
+        {"id_periodo": Param("integer", "Id do período.", obrigatorio=True)}),
+    Ferramenta(
+        "meu_consumo", "O meu consumo",
+        "O consumo da própria pessoa conectada no período aberto.",
+        "/consumo/meu"),
+    Ferramenta(
+        "consumo_por_pessoa", "Consumo por pessoa",
+        "O que cada pessoa consumiu no período: sintético (totais) ou analítico (item a item).",
+        "/vendas/por-pessoa",
+        {"id_periodo": Param("integer", "Período; sem ele, o aberto."),
+         "id_pessoa": Param("integer", "Só esta pessoa."),
+         "detalhe": Param("string", "Nível do detalhe.", padrao="sintetico",
+                          enum=["sintetico", "analitico"])}),
+
+    # ------------------------------------------------------------- pessoas
+    Ferramenta(
+        "buscar_pessoas", "Buscar pessoas e fornecedores",
+        "Procura no cadastro de pessoas — quem fornece, quem trabalha e quem consome.",
+        "/fornecedores",
+        {"busca": Param("string", "Nome, apelido, CNPJ ou CPF."),
+         "so_fornecedores": Param("boolean", "true = só fornecedores; false = só os demais."),
+         "incluir_inativos": Param("boolean", "Trazer também os inativos.", padrao=False),
+         "limite": _lim(25, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "detalhe_pessoa", "Uma pessoa",
+        "O cadastro completo de uma pessoa ou fornecedor.",
+        "/fornecedores/{id_fornecedor}",
+        {"id_fornecedor": Param("integer", "Id da pessoa.", obrigatorio=True)}),
+    Ferramenta(
+        "produtos_da_pessoa", "O que a pessoa fornece",
+        "Os produtos ligados a esta pessoa, e por quanto da última vez.",
+        "/fornecedores/{id_fornecedor}/produtos",
+        {"id_fornecedor": Param("integer", "Id da pessoa.", obrigatorio=True)}),
+
+    # ------------------------------------------------------------- tabelas de apoio
+    Ferramenta(
+        "setores", "Setores",
+        "Os setores da casa (cozinha, bar, vitrine…) — o recorte de quem produz e conta.",
+        "/setores",
+        {"incluir_inativos": Param("boolean", "Trazer também os inativos.", padrao=False)}),
+    Ferramenta(
+        "locais", "Locais de estoque",
+        "As prateleiras e câmaras onde o estoque mora.",
+        "/locais",
+        {"incluir_inativos": Param("boolean", "Trazer também os inativos.", padrao=False),
+         "todas_lojas": Param("boolean", "De todas as lojas, não só da atual.", padrao=False)}),
+    Ferramenta(
+        "categorias", "Categorias",
+        "A árvore de categorias dos produtos.",
+        "/categorias",
+        {"incluir_inativas": Param("boolean", "Trazer também as inativas.", padrao=False)}),
+    Ferramenta(
+        "unidades_medida", "Unidades de medida",
+        "As unidades de medida cadastradas e como convertem entre si.",
+        "/unidades-medida",
+        {"incluir_inativas": Param("boolean", "Trazer também as inativas.", padrao=False)}),
+
+    # ------------------------------------------------------------- estoque, segunda camada
+    Ferramenta(
+        "saldos_agrupados", "Saldos somados por produto",
+        "O saldo de cada produto somando as prateleiras da loja — uma linha por produto.",
+        "/estoque/saldos-agrupados",
+        {"busca": Param("string", "Nome ou código do produto."),
+         "id_produto": Param("integer", "Só este produto."),
+         "id_setor": Param("integer", "Só os produtos deste setor."),
+         "apenas_com_saldo": Param("boolean", "Só o que tem saldo.", padrao=False),
+         "abaixo_do_minimo": Param("boolean", "Só o que está abaixo do mínimo.", padrao=False),
+         "limite": _lim(50, 500), "offset": _OFFSET}),
+    Ferramenta(
+        "saldos_na_rede", "Saldos em todas as lojas",
+        "O saldo de cada produto loja a loja — a visão da rede, não só da loja atual.",
+        "/estoque/saldos-rede",
+        {"busca": Param("string", "Nome ou código do produto."),
+         "id_produto": Param("integer", "Só este produto."),
+         "apenas_com_saldo": Param("boolean", "Só o que tem saldo.", padrao=False),
+         "abaixo_do_minimo": Param("boolean", "Só o que está abaixo do mínimo.", padrao=False),
+         "limite": _lim(50, 500), "offset": _OFFSET}),
+    Ferramenta(
+        "lotes_de_estoque", "Lotes",
+        "Os lotes em estoque, com validade e quantidade.",
+        "/estoque/lotes",
+        {"id_produto": Param("integer", "Só este produto."),
+         "incluir_zerados": Param("boolean", "Trazer os já consumidos.", padrao=False),
+         "incluir_inativos": Param("boolean", "Trazer produtos inativos.", padrao=False)}),
+
+    # ------------------------------------------------------------- CMV, segunda camada
+    Ferramenta(
+        "cmv_memoria", "Memória de cálculo do CMV",
+        "Linha a linha, como o CMV do período foi formado — de onde veio cada valor.",
+        "/cmv/memoria",
+        {**_PERIODO, "limite": _lim(200, 2000, minimo=10)}),
+    Ferramenta(
+        "cmv_movimentacao", "Movimentação do período",
+        "Por produto: o que tinha, o que entrou, o que saiu e o que sobrou. Diz se o "
+        "período está congelado (fechado) ou calculado na hora (aberto).",
+        "/cmv/movimentacao",
+        _PERIODO),
+    Ferramenta(
+        "o_que_subiu_de_preco", "O que subiu de preço",
+        "Os insumos que mudaram de preço no período, do que mais pesou para o que menos.",
+        "/cmv/precos",
+        {**_PERIODO, "limite": _lim(40, 200, minimo=5)}),
+    Ferramenta(
+        "preco_do_produto", "Histórico de preço de um produto",
+        "Como o preço de compra de um produto andou ao longo do tempo.",
+        "/cmv/precos/{id_produto}",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)}),
+    Ferramenta(
+        "grupos_de_cmv", "Grupos de CMV",
+        "Os grupos com que a casa lê o CMV (o recorte próprio dela).",
+        "/cmv/grupos"),
+    Ferramenta(
+        "fechamentos_de_cmv", "Fechamentos",
+        "Os períodos de CMV já fechados, com quem fechou e quando.",
+        "/cmv/fechamentos"),
+
+    # ------------------------------------------------------------- vendas e notas
+    Ferramenta(
+        "venda", "Uma venda",
+        "Uma venda com os itens, o documento e o que cada item baixou do estoque.",
+        "/vendas/{id_venda}",
+        {"id_venda": Param("integer", "Id da venda.", obrigatorio=True)}),
+    Ferramenta(
+        "vendas_sem_vinculo", "Itens vendidos sem produto",
+        "Itens que o PDV vendeu e que não estão ligados a nenhum produto — furo no CMV.",
+        "/vendas/sem-vinculo",
+        {"busca": Param("string", "Texto do item.")}),
+    Ferramenta(
+        "vinculos_de_notas", "De-para dos fornecedores",
+        "Os vínculos entre o que o fornecedor chama e o produto da casa.",
+        "/notas/vinculos"),
+
+    # ------------------------------------------------------------- a casa
+    Ferramenta(
+        "empresa", "A empresa",
+        "Os dados da empresa (razão social, CNPJ, endereço).",
+        "/empresa"),
+    Ferramenta(
+        "lojas", "As lojas",
+        "As lojas da casa, com apelido e qual é a matriz.",
+        "/unidades",
+        {"incluir_inativas": Param("boolean", "Trazer também as inativas.", padrao=False)}),
+    Ferramenta(
+        "parametros_da_loja", "Parâmetros de uma loja",
+        "Como a loja trabalha: ciclo do CMV, alerta de validade, casas decimais e afins.",
+        "/unidades/{id_unidade}/parametros",
+        {"id_unidade": Param("integer", "Id da loja.", obrigatorio=True)}),
+    Ferramenta(
+        "auditoria", "Histórico de alterações",
+        "Quem mudou o quê no sistema, do mais recente.",
+        "/auditoria",
+        {"entidade": Param("string", "Só desta entidade (ex.: produto, venda, usuario)."),
+         "limite": _lim(50, 500), "offset": _OFFSET}),
+
+    # ------------------------------------------------------------- reservas
+    Ferramenta(
+        "agenda_de_reservas", "Reservas do dia",
+        "O dia inteiro de reservas, como a recepção olha.",
+        "/reservas/agenda",
+        {"data": Param("string", _DATA, obrigatorio=True)}),
+    Ferramenta(
+        "disponibilidade_de_reserva", "Horários livres",
+        "Os horários com mesa livre num dia, para um número de pessoas.",
+        "/reservas/disponibilidade",
+        {"data": Param("string", _DATA, obrigatorio=True),
+         "pessoas": Param("integer", "Quantas pessoas.", obrigatorio=True,
+                          minimo=1, maximo=99)}),
+    Ferramenta(
+        "saloes_e_mesas", "Salões e mesas",
+        "Os salões da casa e as mesas de cada um, com a lotação.",
+        "/reservas/salao"),
+    Ferramenta(
+        "bloqueios_de_reserva", "Bloqueios",
+        "Os dias e horários em que a casa não aceita reserva.",
+        "/reservas/bloqueios"),
 ]
 
 POR_NOME = {f.nome: f for f in FERRAMENTAS}
