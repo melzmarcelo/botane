@@ -29,15 +29,16 @@ export type TokenApiCriado = TokenApi & { token: string };
 export type FonteDeChaves = {
   listar: () => Promise<TokenApi[]>;
   revogar: (idToken: number) => Promise<{ message: string }>;
-  criar?: (nome: string, dias: number) => Promise<TokenApiCriado>;
+  criar?: (nome: string, dias: number, somenteLeitura: boolean) => Promise<TokenApiCriado>;
 };
 
 /** As chaves de um usuário, geridas por quem tem `admin.usuarios`. */
 export const chavesDoUsuario = (idUsuario: number): FonteDeChaves => ({
   listar: () => api.get<TokenApi[]>(`/usuarios/${idUsuario}/tokens`),
   revogar: (idToken) => api.delete(`/usuarios/${idUsuario}/tokens/${idToken}`),
-  criar: (nome, dias) =>
-    api.post<TokenApiCriado>(`/usuarios/${idUsuario}/tokens`, { nome, dias }),
+  criar: (nome, dias, somenteLeitura) =>
+    api.post<TokenApiCriado>(`/usuarios/${idUsuario}/tokens`,
+      { nome, dias, somente_leitura: somenteLeitura }),
 });
 
 /** As da própria pessoa — ver e desconectar, sem precisar de administrador. */

@@ -101,11 +101,24 @@ async def mcp(request: Request) -> Response:
     elif metodo == "ping":
         resultado = {}
     elif metodo == "tools/list":
-        resultado = {"tools": [f.descritor() for f in catalogo.FERRAMENTAS]}
+        # 🔑 **Chave só de leitura não VÊ as ferramentas que gravam.** Escondê-las
+        # é conforto — quem barra de verdade é `contexto_da_credencial`, que dá
+        # 403 no POST lá dentro —, mas evita o modelo propor ao usuário uma ação
+        # que vai falhar, e evita a conversa inteira andar para esse lado.
+        pode_gravar = ctx.token_so_leitura is False
+        resultado = {"tools": [f.descritor() for f in catalogo.FERRAMENTAS
+                               if pode_gravar or not f.grava]}
     elif metodo == "tools/call":
         nome = params.get("name")
         if nome not in catalogo.POR_NOME:
             return JSONResponse(_erro_rpc(id_, -32602, f"Ferramenta desconhecida: {nome}"))
+        if catalogo.POR_NOME[nome].grava and ctx.token_so_leitura is not False:
+            return JSONResponse({"jsonrpc": "2.0", "id": id_, "result": {
+                "content": [{"type": "text", "text":
+                             "Esta chave de acesso é só de leitura. Para alterar, peça ao "
+                             "administrador uma chave marcada como \"permite alterar\" em "
+                             "Usuários ▸ Chaves de acesso."}],
+                "isError": True}})
         try:
             texto = await catalogo.chamar(request.app, credencial, nome,
                                           params.get("arguments") or {})

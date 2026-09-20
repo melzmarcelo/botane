@@ -5,8 +5,10 @@ não lê banco nem decide permissão: ele repassa a pergunta à própria API, co
 credencial de quem perguntou (`chamar`). Por isso permissão, loja e setor são
 os mesmos da tela, e uma regra nova no Botané vale aqui sem mudar esta tabela.
 
-⚠️ **Só GET, e isso é estrutural, não convenção**: `chamar` só sabe fazer GET,
-e a chave do Claude é só de leitura — o servidor recusaria o resto.
+⚠️ **A maioria é GET, e a escrita é a exceção declarada.** Ferramenta com
+`metodo` diferente de GET só aparece — e só funciona — para chave marcada como
+"permite alterar" na tela de Usuários. Quem barra é o servidor, em
+`contexto_da_credencial`: a lista escondida é conforto, não segurança.
 
 Para acrescentar uma ferramenta: uma entrada em `FERRAMENTAS`. O nome dos
 parâmetros é o da ROTA (vão direto para a query string), exceto os que aparecem
@@ -27,6 +29,11 @@ LIMITE_CARACTERES = 60_000
 
 ANOTACOES_LEITURA = {"readOnlyHint": True, "destructiveHint": False,
                      "idempotentHint": True, "openWorldHint": False}
+# ⚠️ `destructiveHint` LIGADO em tudo que grava, inclusive no que "só corrige um
+# campo": é o que faz o Claude perguntar antes de fazer. Nenhuma gravação daqui
+# é idempotente — chamar duas vezes é gravar duas vezes.
+ANOTACOES_ESCRITA = {"readOnlyHint": False, "destructiveHint": True,
+                     "idempotentHint": False, "openWorldHint": False}
 
 
 @dataclass
@@ -38,6 +45,8 @@ class Param:
     enum: list[str] | None = None
     minimo: int | None = None
     maximo: int | None = None
+    # Vai no CORPO em JSON, e não na query. Só nas ferramentas que gravam.
+    no_corpo: bool = False
 
 
 @dataclass
@@ -49,6 +58,11 @@ class Ferramenta:
     params: dict[str, Param] = field(default_factory=dict)
     # Vão sempre na query, sem o modelo escolher (ex.: `agrupar=true`).
     fixos: dict[str, Any] = field(default_factory=dict)
+    metodo: str = "GET"
+
+    @property
+    def grava(self) -> bool:
+        return self.metodo != "GET"
 
     def esquema(self) -> dict:
         props: dict[str, dict] = {}
@@ -70,9 +84,10 @@ class Ferramenta:
                 "additionalProperties": False}
 
     def descritor(self) -> dict:
+        anotacoes = ANOTACOES_ESCRITA if self.grava else ANOTACOES_LEITURA
         return {"name": self.nome, "title": self.titulo, "description": self.descricao,
                 "inputSchema": self.esquema(),
-                "annotations": {"title": self.titulo, **ANOTACOES_LEITURA}}
+                "annotations": {"title": self.titulo, **anotacoes}}
 
 
 _ID_LOJA = Param("integer", "Loja a consultar (id, de `quem_sou`). Sem ele, a loja "
@@ -461,6 +476,111 @@ FERRAMENTAS: list[Ferramenta] = [
         "bloqueios_de_reserva", "Bloqueios",
         "Os dias e horários em que a casa não aceita reserva.",
         "/reservas/bloqueios"),
+
+    # ================================================================ GRAVAÇÃO
+    # ⚠️ Daqui para baixo, tudo ALTERA o sistema. Só aparece para chave marcada
+    # como "permite alterar", e cada uma passa pela mesma rota da tela: as regras
+    # de negócio, as recusas e a auditoria são as mesmas.
+    Ferramenta(
+        "vincular_item_de_nota", "Ligar item de nota a um produto",
+        "Diz de que produto é uma linha da nota — serve para ligar o pendente e para "
+        "TROCAR o que está ligado errado. Com `aprender`, o fornecedor passa a cair "
+        "sozinho nesse produto nas próximas notas.",
+        "/notas/itens/{id_item}/vincular",
+        {"id_item": Param("integer", "Id do item da nota (de `itens_sem_produto` ou "
+                                     "`nota_entrada`).", obrigatorio=True),
+         "id_produto": Param("integer", "Produto da casa.", obrigatorio=True, no_corpo=True),
+         "fator": Param("number", "Quantos da unidade de estoque cabem em 1 da nota "
+                                  "(ex.: caixa com 12 → 12).", no_corpo=True),
+         "aprender": Param("boolean", "Gravar o de-para deste fornecedor.", padrao=True,
+                           no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "ignorar_item_de_nota", "Marcar item como fora do estoque",
+        "Item que a casa não controla em estoque (serviço, descartável avulso). Sai da "
+        "fila de conciliação e não entra no razão.",
+        "/notas/itens/{id_item}/ignorar",
+        {"id_item": Param("integer", "Id do item da nota.", obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "criar_produto_do_item", "Criar produto a partir do item da nota",
+        "Cria o cadastro que falta usando o que a nota já diz, e liga o item a ele. "
+        "⚠️ Confira antes se o produto não existe com outro nome: `buscar_produtos`.",
+        "/notas/itens/{id_item}/criar-produto",
+        {"id_item": Param("integer", "Id do item da nota.", obrigatorio=True),
+         "nome": Param("string", "Nome do produto; sem ele, o da nota.", no_corpo=True),
+         "tipo": Param("string", "Tipo do produto.", padrao="INSUMO", no_corpo=True,
+                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
+                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "um_estoque": Param("string", "Unidade de estoque; sem ela, a da nota.",
+                             no_corpo=True),
+         "fator": Param("number", "Quantos da unidade de estoque cabem em 1 da nota.",
+                        no_corpo=True),
+         "substituir": Param("boolean", "Criar mesmo o item já estando ligado a outro "
+                                        "produto (diga que é de propósito).",
+                             padrao=False, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "criar_produto", "Criar produto",
+        "Cria um produto no cadastro. ⚠️ Procure antes (`buscar_produtos`): dois cadastros "
+        "do mesmo insumo partem o custo médio em dois, e produto criado não se apaga — "
+        "só se desativa.",
+        "/produtos",
+        {"nome": Param("string", "Nome do produto.", obrigatorio=True, no_corpo=True),
+         "tipo": Param("string", "Tipo do produto.", padrao="INSUMO", no_corpo=True,
+                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
+                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "um_estoque": Param("string", "Unidade de estoque (de `unidades_medida`).",
+                             no_corpo=True),
+         "id_categoria": Param("integer", "Categoria (de `categorias`).", no_corpo=True),
+         "id_setor": Param("integer", "Setor (de `setores`).", no_corpo=True),
+         "controla_estoque": Param("boolean", "Controla saldo.", padrao=True, no_corpo=True),
+         "estoque_minimo": Param("number", "Mínimo para o alerta.", no_corpo=True),
+         "estoque_maximo": Param("number", "Máximo de referência.", no_corpo=True),
+         "codigo_barras": Param("string", "EAN.", no_corpo=True),
+         "marca": Param("string", "Marca.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_produto", "Corrigir o cadastro de um produto",
+        "Altera só os campos informados. ⚠️ A UNIDADE de estoque e o fator de compra NÃO "
+        "entram aqui de propósito: trocá-los converte custo e saldo, e isso se faz na tela, "
+        "que mostra a conversão antes.",
+        "/produtos/{id_produto}",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "nome_curto": Param("string", "Nome curto (cupom, etiqueta).", no_corpo=True),
+         "tipo": Param("string", "Tipo do produto.", no_corpo=True,
+                       enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
+                             "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "id_categoria": Param("integer", "Categoria.", no_corpo=True),
+         "id_setor": Param("integer", "Setor.", no_corpo=True),
+         "id_local_padrao": Param("integer", "Prateleira padrão.", no_corpo=True),
+         "id_local_venda": Param("integer", "De onde a venda baixa.", no_corpo=True),
+         "estoque_minimo": Param("number", "Mínimo para o alerta.", no_corpo=True),
+         "estoque_maximo": Param("number", "Máximo de referência.", no_corpo=True),
+         "perecivel": Param("boolean", "É perecível.", no_corpo=True),
+         "validade_dias": Param("integer", "Validade em dias.", no_corpo=True,
+                                minimo=0, maximo=3650),
+         "controla_lote": Param("boolean", "Controla lote.", no_corpo=True),
+         "controla_validade": Param("boolean", "Controla validade.", no_corpo=True),
+         "codigo_barras": Param("string", "EAN.", no_corpo=True),
+         "marca": Param("string", "Marca.", no_corpo=True),
+         "ncm": Param("string", "NCM.", no_corpo=True),
+         "peso_liquido": Param("number", "Peso líquido.", no_corpo=True),
+         "peso_bruto": Param("number", "Peso bruto.", no_corpo=True),
+         "status": Param("string", "Situação do cadastro.", no_corpo=True,
+                         enum=["RASCUNHO", "ATIVO", "ARQUIVADO"])},
+        metodo="PUT"),
+    Ferramenta(
+        "lancar_nota", "Lançar a nota no estoque",
+        "Dá entrada da nota no razão: cada item vira movimento, e o custo médio muda. "
+        "⚠️ É o que MAIS pesa desta lista: o razão é append-only, então desfazer é "
+        "estornar pela tela, não editar. Confira a conciliação (`nota_entrada`) antes.",
+        "/notas/{id_nota}/lancar",
+        {"id_nota": Param("integer", "Id da nota.", obrigatorio=True),
+         "id_local": Param("integer", "Prateleira de entrada; sem ela, a padrão de cada "
+                                      "produto.", no_corpo=True)},
+        metodo="POST"),
 ]
 
 POR_NOME = {f.nome: f for f in FERRAMENTAS}
@@ -509,12 +629,12 @@ def _query(valores: dict[str, Any]) -> dict[str, str]:
 
 
 async def chamar(app, credencial: str, nome: str, args: dict[str, Any] | None) -> str:
-    """Executa a ferramenta como um GET na própria API, com a credencial de quem pediu.
+    """Executa a ferramenta na própria API, com a credencial de quem pediu.
 
     🔑 **Por dentro, sem rede**: `httpx.ASGITransport` entrega o pedido ao app no
     mesmo processo. Passa pelos mesmos middlewares e dependências que um pedido
-    da tela — `contexto_atual` confere a chave de novo, e a trava de só leitura
-    vale porque é GET.
+    da tela — `contexto_atual` confere a chave de novo, e é ali que a chave só de
+    leitura leva 403 ao tentar gravar. Nenhuma regra de negócio é reescrita aqui.
     """
     f = POR_NOME.get(nome)
     if not f:
@@ -525,10 +645,19 @@ async def chamar(app, credencial: str, nome: str, args: dict[str, Any] | None) -
     if id_loja is not None:
         cabecalhos["X-Unidade"] = str(id_loja)
 
+    # ⚠️ **Só o que o modelo MANDOU vai no corpo.** O `PUT` de produto grava com
+    # `exclude_unset`: mandar os não informados como nulo apagaria campo que
+    # ninguém pediu para apagar.
+    corpo = {k: resto.pop(k) for k in list(resto)
+             if f.params.get(k) and f.params[k].no_corpo}
+    corpo = {k: v for k, v in corpo.items() if v is not None}
+
     transporte = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transporte, base_url="http://botane.interno",
                                  timeout=120) as cliente:
-        r = await cliente.get(caminho, params=_query({**f.fixos, **resto}), headers=cabecalhos)
+        r = await cliente.request(f.metodo, caminho, params=_query({**f.fixos, **resto}),
+                                  headers=cabecalhos,
+                                  json=corpo if f.grava else None)
 
     try:
         dados = r.json()

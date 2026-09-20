@@ -1,10 +1,20 @@
 """Registro de auditoria — quem mudou o quê, com o valor antes e depois."""
 
 import json
+from contextvars import ContextVar
 from typing import Any
 
 from database import get_cursor
 from paginacao import pagina
+
+
+# 🔑 **Por onde veio a alteração, sem tocar nos 80 chamadores.** `registrar` é
+# chamado de todo canto com o mesmo punhado de argumentos; acrescentar um
+# parâmetro `origem` significaria passar o contexto em cada um — e a chamada
+# NOVA nasceria sem. Quem marca é `seguranca`, uma vez, ao resolver a chave.
+# ⚠️ `ContextVar` é da tarefa: o servidor reaproveita tarefas entre requisições,
+# então quem marca também devolve (mesma lição do `pediram_o_total`).
+origem_do_pedido: ContextVar[str | None] = ContextVar("origem_do_pedido", default=None)
 
 
 def _limpar(d: dict[str, Any] | None) -> str | None:
@@ -32,8 +42,8 @@ def registrar(
     cur.execute(
         """
         INSERT INTO auditoria (id_usuario, id_unidade, entidade, id_entidade, acao,
-                               antes, depois, ip)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                               antes, depois, ip, origem)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             id_usuario,
@@ -44,6 +54,7 @@ def registrar(
             _limpar(antes),
             _limpar(depois),
             ip,
+            origem_do_pedido.get(),
         ),
     )
 
@@ -62,7 +73,7 @@ def listar(limite: int = 100, offset: int = 0, entidade: str | None = None,
             cur,
             """
             SELECT a.id, a.entidade, a.id_entidade, a.acao, a.antes, a.depois,
-                   a.em, a.ip, u.nome AS usuario, u.email
+                   a.em, a.ip, a.origem, u.nome AS usuario, u.email
               FROM auditoria a
               LEFT JOIN usuarios u ON u.id = a.id_usuario
              WHERE (%s::varchar IS NULL OR a.entidade = %s)

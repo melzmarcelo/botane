@@ -222,6 +222,10 @@ class TokenApiCreate(BaseModel):
 
     nome: str = Field(min_length=1, max_length=80)
     dias: int = Field(default=90, ge=1, le=365)
+    # ⚠️ **Nasce só de leitura, e mudar isso é decisão explícita de quem gera.**
+    # A conexão feita pelo claude.ai é SEMPRE só leitura; alterar exige uma chave
+    # gerada aqui, à mão, para alguém que já pode conectar o Claude.
+    somente_leitura: bool = True
 
 
 class TokenApiResponse(BaseModel):

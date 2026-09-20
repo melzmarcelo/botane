@@ -13,6 +13,7 @@ from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
 import arquivos
+import auditoria
 import paginacao
 from services import segredos
 from services.omie import agenda as agenda_omie
@@ -65,7 +66,7 @@ from routers import (
     usuarios,
     vendas,
 )
-from seguranca import hash_senha
+from seguranca import PREFIXO_TOKEN_API, hash_senha
 
 # 🔑 **A versão é UMA linha, e o último número conta as PROMOÇÕES.** `1.1.xx`:
 # `xx` sobe a cada `main → producao` que vai ao ar, e mais nada — não é contagem
@@ -304,9 +305,22 @@ async def _marcar_pedido_de_total(request, chamar_o_resto):
     """
     marca = paginacao.pediram_o_total.set(
         request.query_params.get("com_total") in ("1", "true"))
+    # 🔑 **Quem marca a origem é o MIDDLEWARE, pelo prefixo da credencial** — e
+    # não a dependência que resolve a chave. `contexto_atual` é SÍNCRONA: o
+    # FastAPI a roda numa thread, com uma CÓPIA do contexto, e o que ela grava
+    # num `ContextVar` morre com a thread. A auditoria saía sempre sem origem, e
+    # a suíte pegou. Aqui o valor é posto antes de a requisição descer, que é
+    # como o `pediram_o_total` logo acima já funciona.
+    # ⚠️ Nulo = veio da tela, e é por isso que ele é reposto a cada requisição:
+    # sem o `reset`, uma chamada de chave deixaria a marca na tarefa e a
+    # requisição seguinte, de gente, sairia como se fosse do Claude.
+    autorizacao = request.headers.get("Authorization", "")
+    de_onde = auditoria.origem_do_pedido.set(
+        "claude" if autorizacao.startswith("Bearer " + PREFIXO_TOKEN_API) else None)
     try:
         return await chamar_o_resto(request)
     finally:
+        auditoria.origem_do_pedido.reset(de_onde)
         # ⚠️ Sempre devolvido: o `ContextVar` é da tarefa, e o servidor
         # reaproveita tarefas entre requisições.
         paginacao.pediram_o_total.reset(marca)

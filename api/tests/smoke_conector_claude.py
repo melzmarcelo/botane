@@ -30,6 +30,7 @@ import json
 import re
 import secrets
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -37,6 +38,7 @@ import urllib.request
 sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 from comum import garantir_cozinha  # noqa: E402
+from database import get_cursor  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
 ADMIN = ("admin@botane.com.br", "botane123")
@@ -192,6 +194,10 @@ def _chamar(metodo, caminho, corpo=None, token=None):
 
 
 garantir_cozinha(_chamar, admin)
+_, _, usuarios = pedir("GET", "/usuarios?incluir_inativos=true&limite=500", token=admin)
+id_cozinha_conector = next(u["id"] for u in usuarios
+                           if u["email"] == "smoke.cozinha@botane.com.br")
+criadas: list[int] = []
 st, cab, pagina = enviar_formulario(url_autorizar(client_id, desafio),
                                     "smoke.cozinha@botane.com.br", "smoke12345")
 checar("quem não tem integracao.claude não conecta",
@@ -307,6 +313,120 @@ st, _, r = rpc(chave, "tools/call", {"name": "parametros_da_loja",
                                      "arguments": {"id_unidade": id_loja}})
 checar("ferramenta com id no caminho responde com id de verdade",
        not r["result"]["isError"], r["result"]["content"][0]["text"][:100])
+
+
+print("\n7c. gravar é outra chave")
+# 🔑 A chave do claude.ai é SEMPRE só de leitura. Alterar exige chave gerada à
+# mão, marcada como "permite alterar" — e é isso que este bloco cobra, dos dois
+# lados: a de leitura nem VÊ as ferramentas que gravam, e a de escrita grava.
+st, _, r = rpc(chave, "tools/list")
+nomes_leitura = {t["name"] for t in r["result"]["tools"]}
+checar("chave de leitura não enxerga as ferramentas que gravam",
+       "vincular_item_de_nota" not in nomes_leitura and "lancar_nota" not in nomes_leitura,
+       sorted(n for n in nomes_leitura if "criar" in n or "lancar" in n))
+st, _, r = rpc(chave, "tools/call", {"name": "criar_produto",
+                                     "arguments": {"nome": "Não deveria existir"}})
+checar("e chamá-las assim mesmo vira isError, não gravação",
+       r["result"]["isError"] and "leitura" in r["result"]["content"][0]["text"], r)
+
+st, _, ke = pedir("POST", "/usuarios/1/tokens",
+                  {"nome": "Claude que altera", "dias": 1, "somente_leitura": False},
+                  token=admin)
+checar("o admin gera chave que altera", st == 201 and ke.get("somente_leitura") is False, st)
+criadas.append(ke.get("id"))
+escrita = ke["token"]
+st, _, r = pedir("POST", f"/usuarios/{id_cozinha_conector}/tokens",
+                 {"nome": "sem permissão", "somente_leitura": False}, token=admin)
+checar("mas não para quem não pode conectar o Claude (400)", st == 400, (st, r))
+
+st, _, r = rpc(escrita, "tools/list")
+gravam = [t for t in r["result"]["tools"] if not t["annotations"]["readOnlyHint"]]
+checar("a chave que altera enxerga as ferramentas de gravação", len(gravam) == 6, len(gravam))
+checar("e todas vêm marcadas como destrutivas, para o Claude perguntar antes",
+       all(t["annotations"]["destructiveHint"] for t in gravam))
+
+marca_p = str(int(time.time()))[-6:]
+st, _, r = rpc(escrita, "tools/call", {"name": "criar_produto", "arguments": {
+    "nome": f"Insumo do Claude {marca_p}", "tipo": "INSUMO", "um_estoque": "KG",
+    "estoque_minimo": 2}})
+criado = json.loads(r["result"]["content"][0]["text"])
+checar("criar_produto cria de verdade", not r["result"]["isError"] and criado.get("id"), r)
+id_novo = criado["id"]
+st, _, r = rpc(escrita, "tools/call", {"name": "atualizar_produto", "arguments": {
+    "id_produto": id_novo, "marca": "Marca do Claude", "estoque_maximo": 9}})
+checar("atualizar_produto corrige o cadastro", not r["result"]["isError"], r)
+st, _, r = rpc(escrita, "tools/call", {"name": "detalhe_produto",
+                                       "arguments": {"id_produto": id_novo}})
+depois = json.loads(r["result"]["content"][0]["text"])
+checar("e grava SÓ o que foi mandado",
+       depois["marca"] == "Marca do Claude" and float(depois["estoque_minimo"]) == 2
+       and float(depois["estoque_maximo"]) == 9,
+       {k: depois.get(k) for k in ("marca", "estoque_minimo", "estoque_maximo")})
+# 🔑 A unidade de estoque fica FORA de propósito: trocá-la converte custo e
+# saldo, e essa conversa é da tela, que mostra os dois números antes.
+campos_update = next(t for t in gravam
+                     if t["name"] == "atualizar_produto")["inputSchema"]["properties"]
+checar("a unidade de estoque não é alterável por aqui",
+       "um_estoque" not in campos_update and "fator_compra" not in campos_update,
+       sorted(campos_update))
+with get_cursor() as cur:
+    cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'produto'
+                    AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_novo),))
+    linha = cur.fetchone()
+checar("a auditoria marca que veio do Claude", (linha or {}).get("origem") == "claude", linha)
+st, _, r = pedir("PUT", f"/produtos/{id_novo}", {"marca": "pela tela"}, token=admin)
+with get_cursor() as cur:
+    cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'produto'
+                    AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_novo),))
+    pela_tela = cur.fetchone()
+checar("e a alteração pela tela NÃO sai marcada",
+       (pela_tela or {}).get("origem") is None, pela_tela)
+
+print("\n7d. conciliar e lançar uma nota, de ponta a ponta pelo conector")
+# 🔑 A fila de conciliação é o trabalho que o dono quis passar ao Claude. Aqui a
+# nota é criada pela API (como o Omie faria), e daí em diante TUDO é ferramenta:
+# achar o item sem produto, ligá-lo e lançar no estoque.
+st, _, nota = pedir("POST", "/notas", {
+    "numero": f"CLA{marca_p}", "data_emissao": "2026-09-20", "data_entrada": "2026-09-20",
+    "itens": [{"descricao": f"INSUMO CLAUDE {marca_p}", "codigo_fornecedor": f"CL{marca_p}",
+               "quantidade": 3, "um": "KG", "valor_unitario": 10}]}, token=admin)
+id_nota = (nota or {}).get("id")
+checar("a nota de teste é criada", st in (200, 201) and id_nota, (st, nota))
+
+st, _, r = rpc(escrita, "tools/call", {"name": "itens_sem_produto", "arguments": {}})
+fila = json.loads(r["result"]["content"][0]["text"])
+item = next((i for i in fila if i["id_nota"] == id_nota), None)
+checar("o item aparece na fila de conciliação", item is not None, len(fila))
+
+st, _, r = rpc(escrita, "tools/call", {"name": "vincular_item_de_nota", "arguments": {
+    "id_item": item["id"], "id_produto": id_novo, "aprender": True}})
+checar("vincular_item_de_nota liga o item ao produto", not r["result"]["isError"], r)
+st, _, r = rpc(escrita, "tools/call", {"name": "nota_entrada",
+                                       "arguments": {"id_nota": id_nota}})
+conferida = json.loads(r["result"]["content"][0]["text"])
+checar("e a nota deixa de ter pendência",
+       all(i.get("id_produto") for i in conferida["itens"]), conferida.get("itens"))
+
+st, _, r = rpc(escrita, "tools/call", {"name": "lancar_nota", "arguments": {"id_nota": id_nota}})
+checar("lancar_nota dá entrada no estoque", not r["result"]["isError"],
+       r["result"]["content"][0]["text"][:120])
+st, _, r = rpc(escrita, "tools/call", {"name": "movimentos_estoque",
+                                       "arguments": {"id_produto": id_novo, "limite": 5}})
+movimentos = json.loads(r["result"]["content"][0]["text"])["itens"]
+checar("e o razão passa a ter a entrada", any(float(m["quantidade"]) == 3 for m in movimentos),
+       [(m["tipo"], m["quantidade"]) for m in movimentos])
+with get_cursor() as cur:
+    cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'nota'
+                    AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_nota),))
+    linha = cur.fetchone()
+checar("o lançamento fica marcado como do Claude na auditoria",
+       (linha or {}).get("origem") == "claude", linha)
+
+# ⚠️ Limpeza: o razão é append-only, então desfazer é ESTORNAR — nunca apagar.
+# É a mesma correção que uma pessoa faria pela tela.
+st, _, r = pedir("POST", f"/notas/{id_nota}/estornar", {}, token=admin)
+checar("o estorno desfaz o lançamento (e é assim que se corrige)", st == 200, (st, r))
+pedir("DELETE", f"/produtos/{id_novo}", token=admin)
 
 
 print("\n8. a conexão aparece na tela")

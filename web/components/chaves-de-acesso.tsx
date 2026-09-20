@@ -47,6 +47,8 @@ export default function ChavesDeAcesso({
   const [gerando, setGerando] = useState(false);
   const [nome, setNome] = useState("Claude");
   const [dias, setDias] = useState(90);
+  // ⚠️ Nasce SÓ LEITURA: alterar é a exceção, e quem gera tem de dizer que quer.
+  const [podeAlterar, setPodeAlterar] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [criada, setCriada] = useState<TokenApiCriado | null>(null);
   const [revogando, setRevogando] = useState<TokenApi | null>(null);
@@ -68,7 +70,7 @@ export default function ChavesDeAcesso({
     if (!fonte.criar) return;
     setOcupado(true);
     try {
-      const c = await fonte.criar(nome.trim(), dias);
+      const c = await fonte.criar(nome.trim(), dias, !podeAlterar);
       setCriada(c);
       setGerando(false);
       await carregar();
@@ -158,11 +160,10 @@ export default function ChavesDeAcesso({
                   <tr key={t.id} className={s === "viva" ? "" : "opacity-55"}>
                     <td>
                       <span className="font-semibold">{t.nome}</span>
-                      {t.origem === "oauth" && (
-                        <span className="ml-2 align-middle">
-                          <Etiqueta>conectado pelo Claude</Etiqueta>
-                        </span>
-                      )}
+                      <span className="ml-2 align-middle">
+                        {t.origem === "oauth" && <Etiqueta>conectado pelo Claude</Etiqueta>}
+                        {!t.somente_leitura && <Etiqueta cor="alerta">altera</Etiqueta>}
+                      </span>
                       <span className="mono block text-[12.5px] text-suave">{t.prefixo}…</span>
                       <span className="block text-[12.5px] text-suave">
                         criada {quando(t.criado_em)}
@@ -226,6 +227,25 @@ export default function ChavesDeAcesso({
                 autoFocus
               />
             </Campo>
+            {/* 🔑 A conexão feita pelo claude.ai é sempre só leitura; alterar só
+                por uma chave gerada aqui, de propósito. */}
+            <Campo rotulo="O que ela pode fazer">
+              <select
+                className="campo"
+                value={podeAlterar ? "alterar" : "ler"}
+                onChange={(e) => setPodeAlterar(e.target.value === "alterar")}
+              >
+                <option value="ler">Só consultar</option>
+                <option value="alterar">Consultar e alterar cadastros</option>
+              </select>
+            </Campo>
+            {podeAlterar && (
+              <p className="aviso aviso-info text-[13.5px]" role="status">
+                Com esta chave o Claude pode conciliar notas, corrigir e criar produtos e
+                lançar notas no estoque — sempre como esta pessoa, e cada alteração fica
+                marcada na Auditoria. Lançamento no estoque só se desfaz por estorno.
+              </p>
+            )}
             <Campo rotulo="Vale por">
               <select className="campo" value={dias} onChange={(e) => setDias(Number(e.target.value))}>
                 {PRAZOS.map((p) => (

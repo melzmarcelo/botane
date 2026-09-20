@@ -15,6 +15,8 @@ type Linha = {
   depois: Record<string, unknown> | null;
   em: string;
   usuario: string | null;
+  /** `claude` quando a alteração veio pelo conector; nulo quando veio da tela. */
+  origem: string | null;
   email: string | null;
 };
 
@@ -72,6 +74,7 @@ export default function PaginaAuditoria() {
               <li key={l.id} className="bg-superficie py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Etiqueta cor={l.acao === "login" ? "neutro" : "erva"}>{l.acao}</Etiqueta>
+                  {l.origem === "claude" && <Etiqueta cor="alerta">pelo Claude</Etiqueta>}
                   <span className="mono text-[12.5px]">
                     {l.entidade}
                     {l.id_entidade ? ` #${l.id_entidade}` : ""}
@@ -115,7 +118,12 @@ export default function PaginaAuditoria() {
                       {l.id_entidade ? ` #${l.id_entidade}` : ""}
                     </td>
                     <td>
-                      <Etiqueta cor={l.acao === "login" ? "neutro" : "erva"}>{l.acao}</Etiqueta>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Etiqueta cor={l.acao === "login" ? "neutro" : "erva"}>{l.acao}</Etiqueta>
+                        {/* 🔑 Quem fez está na coluna "Quem"; isto diz POR ONDE.
+                            É a pergunta de quem procura o que o Claude mexeu. */}
+                        {l.origem === "claude" && <Etiqueta cor="alerta">pelo Claude</Etiqueta>}
+                      </div>
                     </td>
                     <td className="max-w-[420px] text-[13px] text-suave">
                       {aberta === l.id ? (

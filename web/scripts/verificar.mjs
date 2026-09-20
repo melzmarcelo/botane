@@ -5054,6 +5054,19 @@ try {
   checar("o cadastro do usuário mostra o cartão de chaves, vazio",
     /Nenhuma chave gerada/.test(await p.evaluate(() => document.body.innerText)));
   checar("abre a janela de gerar", await clicarQuando(p, "Gerar chave", { exato: true }));
+  // 🔑 A chave nasce só de leitura: alterar é escolha explícita de quem gera, e a
+  // janela diz o que isso libera antes de a pessoa decidir.
+  await p.waitForSelector('[role="dialog"] select', { timeout: 8000 }).catch(() => {});
+  const janelaChave = await p.evaluate(() => {
+    const j = document.querySelector('[role="dialog"]');
+    const sel = j?.querySelector("select");
+    return { opcoes: [...(sel?.options ?? [])].map((o) => o.value).join(","),
+             escolhido: sel?.value, aviso: j?.innerText.includes("estorno") };
+  });
+  checar("a janela oferece só consultar ou também alterar",
+    janelaChave.opcoes === "ler,alterar", janelaChave);
+  checar("e nasce em só consultar", janelaChave.escolhido === "ler", janelaChave);
+  checar("sem aviso de escrita enquanto ela só consulta", janelaChave.aviso === false);
   checar("e gera", await clicarQuando(p, "Gerar", { exato: true }));
   await p.waitForFunction(() => /btn_[\w-]{20,}/.test(document.body.innerText),
     { timeout: 12000 }).catch(() => {});

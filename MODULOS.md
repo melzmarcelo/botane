@@ -127,7 +127,9 @@ merge**: `api/.env` está fora do versionamento de propósito.
 login OAuth (`oauth.py`) e a permissão `integracao.claude`. Cada conexão é uma linha de
 `tokens_api` (migrações 074/075), **só de leitura**, que age como o usuário e se revoga em
 Usuários ou em Perfil ▸ Claude. As ferramentas são rotas que já existem, chamadas por dentro
-(`mcp_ferramentas.py`). Detalhes na memória do módulo.
+(`mcp_ferramentas.py`): 60 de leitura e, só para chave gerada à mão com "permite alterar",
+6 de gravação (conciliar nota, criar e corrigir produto, lançar nota) — a auditoria marca
+o que veio por ali (`origem = claude`, migração 077). Detalhes na memória do módulo.
 
 ## CMV
 

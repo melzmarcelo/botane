@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 import auditoria
 from database import get_cursor
 from models.acesso import TokenApiCreate, TokenApiCriado, TokenApiResponse
-from seguranca import Contexto, contexto_atual, gerar_token_api, requer_permissao
+from seguranca import (Contexto, carregar_contexto, contexto_atual, gerar_token_api,
+                       requer_permissao)
 
 router = APIRouter(prefix="/usuarios/{id_usuario}/tokens", tags=["chaves de acesso"])
 
@@ -91,18 +92,30 @@ def criar(id_usuario: int, body: TokenApiCreate,
     valor, prefixo, hashed = gerar_token_api()
     with get_cursor() as cur:
         _conferir_alcance(cur, id_usuario, ctx, criando=True)
+        if not body.somente_leitura:
+            # 🔑 **Chave que altera é para quem já pode conectar o Claude.** A
+            # permissão é a mesma porta; dar uma chave de escrita a quem não a
+            # tem seria contornar a decisão do dono por um caminho lateral.
+            alvo = carregar_contexto(id_usuario)
+            if not alvo.pode("integracao.claude"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=("Esta pessoa não tem a permissão de conectar o Claude, então "
+                            "não pode receber uma chave que altera. Libere em Papéis."))
         cur.execute(
             """INSERT INTO tokens_api (id_usuario, nome, prefixo, token_hash, expira_em,
-                                       criado_por)
-               VALUES (%s, %s, %s, %s, now() + make_interval(days => %s), %s)
+                                       criado_por, somente_leitura)
+               VALUES (%s, %s, %s, %s, now() + make_interval(days => %s), %s, %s)
                RETURNING id""",
-            (id_usuario, body.nome.strip(), prefixo, hashed, body.dias, ctx.id_usuario),
+            (id_usuario, body.nome.strip(), prefixo, hashed, body.dias, ctx.id_usuario,
+             body.somente_leitura),
         )
         novo = cur.fetchone()["id"]
         # ⚠️ Só nome, prefixo e validade vão para a auditoria — nunca o valor.
         auditoria.registrar(cur, ctx.id_usuario, "token_api", novo, "criar",
                             depois={"id_usuario": id_usuario, "nome": body.nome,
-                                    "prefixo": prefixo, "dias": body.dias})
+                                    "prefixo": prefixo, "dias": body.dias,
+                                    "somente_leitura": body.somente_leitura})
         cur.execute(
             f"""SELECT {_COLUNAS}
                   FROM tokens_api t LEFT JOIN usuarios c ON c.id = t.criado_por

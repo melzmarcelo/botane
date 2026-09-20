@@ -211,6 +211,10 @@ class Contexto:
         # Qual chave de máquina fez a chamada — nulo quando é gente, pelo login.
         # É o que permite às rotas de chave recusarem ser geridas por uma chave.
         self.id_token: int | None = None
+        # A chave permite alterar? Nulo quando quem chama é gente (pelo login),
+        # que altera pelas permissões de sempre. O `/mcp` lê isto para nem
+        # OFERECER as ferramentas de gravação a uma chave só de leitura.
+        self.token_so_leitura: bool | None = None
 
     def pode(self, chave: str) -> bool:
         return chave in self.permissoes
@@ -299,6 +303,7 @@ def contexto_da_credencial(credencial: str, escreve: bool) -> Contexto:
                 detail="Esta chave de acesso é só de leitura — não pode alterar nada.")
         ctx = carregar_contexto(chave["id_usuario"])
         ctx.id_token = chave["id"]
+        ctx.token_so_leitura = chave["somente_leitura"]
         return ctx
     dados = decodificar_token(credencial)
     return carregar_contexto(int(dados["sub"]))

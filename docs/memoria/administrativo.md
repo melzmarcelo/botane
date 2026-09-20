@@ -253,7 +253,7 @@
   - 🔑 **As ferramentas são rotas que JÁ EXISTEM, chamadas por dentro**
     (`services/mcp_ferramentas.py`, `httpx.ASGITransport` sobre o próprio app, com a chave de
     quem pediu). Permissão, loja (`id_loja` → `X-Unidade`) e setor são os da tela. Ferramenta
-    nova = uma entrada em `FERRAMENTAS`. São **60** (20/09/2026), cobrindo produtos, fichas,
+    nova = uma entrada em `FERRAMENTAS`. São **66** (20/09/2026) — 60 de leitura e 6 de gravação —, cobrindo produtos, fichas,
     estoque, produção, inventário, remessas, compras, vendas, consumo, pessoas, tabelas de
     apoio, CMV, reservas, empresa e auditoria. ⚠️ **O caminho da rota é escrito à mão na
     tabela, e caminho errado só aparece quando alguém chama** — foi o que aconteceu com a
@@ -297,8 +297,42 @@
     `verificar.mjs`. Validado também com o **SDK oficial** (`mcp` 2.2.0) fazendo descoberta +
     registro + login + ferramentas contra a API local. ⚠️ O SDK 2.x mudou a API (`FastMCP` →
     `MCPServer`, atributos em snake_case); exemplo da internet quase sempre é da 1.x.
-  - Próximo: **escrita** pelo Claude (`somente_leitura = false`, ferramentas destrutivas,
-    sempre pelo service).
+  - 🔑 **Gravação pelo Claude** (20/09/2026, pedido do dono; migração 077). Seis ferramentas:
+    ligar item de nota a produto, ignorar item, criar produto do item, criar produto,
+    corrigir produto e **lançar nota no estoque**. Todas passam pela MESMA rota da tela, com
+    as mesmas recusas.
+    🔑 **A chave que altera é gerada à MÃO, em Usuários** (`somente_leitura = false`). A
+    conexão feita pelo claude.ai é sempre só leitura — foi a escolha do dono, e é o que
+    limita o estrago de uma conexão esquecida. Chave que altera só para quem já tem
+    `integracao.claude` (a permissão é a mesma de conectar, também por decisão do dono).
+    🔑 **Chave só de leitura nem VÊ as ferramentas que gravam** (`tools/list` filtra). É
+    conforto, não segurança: quem barra é `contexto_da_credencial`, com 403 no POST de
+    dentro. O valor está em não deixar o modelo propor ao usuário algo que vai falhar.
+    ⚠️ **`destructiveHint` ligado em TUDO que grava**, inclusive no que "só corrige um
+    campo": é o que faz o Claude perguntar antes. Nenhuma é idempotente.
+    ⚠️ **A UNIDADE de estoque e o fator de compra ficam fora do `atualizar_produto`**:
+    trocá-los converte custo e saldo, e essa conversa é da tela, que mostra os dois números
+    antes de aplicar.
+    ⚠️ **Só o que o modelo mandou vai no corpo** — o `PUT` de produto grava com
+    `exclude_unset`, e mandar os não informados como nulo apagaria campo que ninguém pediu
+    para apagar.
+    ⚠️ **`lancar_nota` entrou, `estornar` NÃO.** Lançar escreve no razão, que é append-only:
+    desfazer é estornar, e o estorno fica na tela, com gente olhando. Dito ao dono; ele
+    escolheu assim mesmo.
+  - 🔑 **A auditoria diz POR ONDE veio a alteração** (`auditoria.origem`, migração 077):
+    `claude` ou nulo (= a tela), com etiqueta "pelo Claude" na tela de Auditoria. A pergunta
+    "o que o Claude fez ontem?" aparece justamente quando algo saiu errado; sem a coluna, a
+    resposta seria cruzar horário com `ultimo_uso_em` da chave, à mão.
+    🔑 **Quem marca é o MIDDLEWARE, pelo prefixo da credencial — e isso custou uma rodada.**
+    A primeira versão marcava em `contexto_da_credencial`, que é SÍNCRONA: o FastAPI a roda
+    numa thread com uma CÓPIA do contexto, e o `ContextVar` que ela grava morre com a
+    thread. A auditoria saía sempre sem origem. **Regra de bolso: `ContextVar` que as rotas
+    vão ler tem de ser posto ANTES de a requisição descer** — é onde o `pediram_o_total` já
+    estava. ⚠️ E é reposto a cada requisição: sem o `reset`, uma chamada de chave deixaria a
+    marca na tarefa e a requisição seguinte, de gente, sairia como se fosse do Claude.
+  - Cobertura da escrita: blocos `7c` (a chave de leitura não vê nem usa; a que altera grava;
+    a auditoria marca) e `7d` (nota criada, conciliada, lançada e estornada, tudo pelo
+    conector) do `smoke_conector_claude.py`.
 
 ## Armadilhas já pagas
 
