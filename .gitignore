@@ -33,8 +33,12 @@ web/scripts/_saida-navegador.txt
 # proposito: no TEMP do C: o Chrome falha com erro de PROTOCOLO, nao com
 # "disco cheio", e parece instabilidade do teste.
 # ⚠️ Com asterisco: as sondas avulsas criam perfis irmãos (`_chrome-perfil3`),
-# e um deles quase entrou num commit com 300 arquivos de dentro do Chrome.
-web/scripts/_chrome-perfil*/
+# e um perfil de Chrome são 230 arquivos de cache que não moram em repositório.
+# ⚠️ **`_chrome-*`, não `_chrome-perfil*`** (21/09/2026): uma sonda chamou o
+# dela de `_chrome-sonda`, escapou do padrão antigo e os 230 arquivos entraram
+# num commit. O molde agora pega qualquer nome que comece com `_chrome`.
+web/scripts/_chrome-*/
+site/_chrome-*/
 web/tsconfig.tsbuildinfo
 
 # Dump da base local antes de uma limpeza — volume, nao codigo, e fica no D:
