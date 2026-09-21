@@ -59,6 +59,49 @@ existir e ser usada.
   fatia do site, não do cadastro. A suíte afirma que vários ativos convivem, justamente para
   que ninguém "conserte" isso com um índice único achando que é defeito.
 
+## O PDF, que é o que o site exibe (migração 080, 21/09/2026)
+
+🔑 **Pedido do dono:** *"criei o catálogo, agora tenho que poder carregar o PDF, neste caso
+para ele ser exibido."*
+
+- 🔑 **O arquivo mora no BANCO, não em disco**, e quem cuida é `api/arquivos.py` — o mesmo
+  lugar da logo. Não é preferência: o disco do App Platform é EFÊMERO, `api/uploads/` some a
+  cada deploy, e a logo já sumiu assim uma vez. Um cardápio que desaparece na publicação seria
+  pior — o site continuaria anunciando um catálogo no ar, sem nada para mostrar.
+  ⚠️ **Em `catalogos` fica só a URL**; os bytes ficam em `arquivos`, e quem lê recebe um
+  endereço sem saber de onde ele vem. No dia em que o Spaces entrar, só aquele módulo muda.
+
+- ⚠️ **O `content-type` é só o que o NAVEGADOR diz.** `ler_pdf` confere os primeiros bytes:
+  todo PDF começa com `%PDF-`, e quem renomeia um `.exe` para `.pdf` para aí. É a mesma
+  desconfiança que `ler_enviada` tem com a imagem.
+  ⚠️ **10 MB, não os 2 da logo**: o cardápio é ilustrado, e recusar o arquivo da casa por um
+  limite pensado para um logotipo seria recusar o caso de uso inteiro.
+
+- 🔑 **O nome ORIGINAL é gravado à parte.** A URL leva sufixo aleatório (senão o navegador
+  serve o arquivo velho do cache) e não diz mais qual PDF é aquele — quem confere se subiu o
+  certo precisa reconhecer o próprio arquivo. O tamanho também fica gravado: lê-lo exigiria
+  trazer os bytes do PDF só para contar, uma vez por linha da lista.
+
+- 🔑 **A rota que serve é PÚBLICA**, como a da logo: o site de reservas exibe o PDF sem token,
+  e o navegador não manda cabeçalho de autenticação numa `<embed>`. O nome carrega sufixo
+  aleatório, então a URL não é adivinhável.
+  ⚠️ **PDF pode conter JavaScript**, e a rota vive no MESMO domínio da aplicação. Por isso ele
+  sai com `Content-Security-Policy: sandbox` — sem script, sem formulário, sem acesso ao que é
+  da casa — e `X-Content-Type-Options: nosniff`.
+  ⚠️ **`Content-Disposition: inline`, porque o pedido é EXIBIR.** `attachment` forçaria
+  download, e o site precisa mostrar o cardápio, não entregá-lo.
+
+- ⚠️ **Gravar o novo, apontar para ele e apagar o velho são UMA transação.** É a lição que a
+  logo pagou: a versão antiga gravava numa e apagava noutra, e um erro no meio deixava o
+  registro apontando para um arquivo que já não existia.
+  ⚠️ **Excluir o catálogo leva o arquivo junto** — senão os bytes ficariam no banco sem dono
+  nenhum apontando para eles, invisíveis e crescendo.
+  ⚠️ **Tirar o PDF NÃO apaga o catálogo**: trocar o cardápio é rotina, e apagar a capa junto
+  perderia o nome, o período e o histórico.
+
+- ⚠️ **Ativo sem PDF é avisado na lista, não escondido** (*"sem PDF — o site não tem o que
+  exibir"*). É o estado em que a casa anuncia um cardápio e não há o que mostrar.
+
 ## As decisões de desenho
 
 - 🔑 **"No ar hoje" NÃO é o mesmo que ATIVO, e é coluna própria na tela.** Um catálogo ativo
@@ -101,6 +144,16 @@ existir e ser usada.
 
 ## Armadilhas já pagas
 
+- ⚠️ **`sr-only` dentro de `overflow-x-auto` ESCAPA do clipping e rola a página.** O
+  `<input type="file">` escondido de cada linha é `position: absolute`; sem ancestral
+  posicionado, o containing block dele passa a ser o documento, e ele foi parar na coordenada
+  que tinha dentro da tabela larga. Medido: **330px de rolagem lateral numa janela de 400** —
+  e o `overflow-x-auto` estava correto o tempo todo (326 visíveis, 973 de conteúdo). A célula
+  ganhou `relative`, e a bateria passou a medir se a página ROLA de fato
+  (`window.scrollTo(9999,0)` e ler `scrollX`), não só o `scrollWidth`.
+  🔑 **`scrollWidth` maior que a janela NÃO prova rolagem** — dentro de um scroller ele cresce
+  sem que a página role. O teste honesto é tentar rolar.
+
 - ⚠️ **A frase do nome repetido citava o nome DIGITADO, não o gravado.** O índice ignora a
   caixa (`lower(nome)`), então quem tentava "cardapio PERMANENTE" lia *"já existe um chamado
   cardapio PERMANENTE"* — e ia procurar esse nome na lista sem achar, porque lá está
@@ -113,11 +166,10 @@ existir e ser usada.
 
 ## O que vem a seguir
 
-1. **A importação do PDF** — hoje `origem` diz `PDF` e o arquivo ainda não sobe. A capa
-   existe para receber esse anexo.
-2. **Os itens do catálogo** — como cada prato entra, e como ele se liga ao produto daqui.
-3. A publicação no **site de reservas**. ⚠️ É aqui que entra a regra que escolhe entre os
-   vários ativos; ela não existe, e o cadastro não a inventa.
+1. ~~A importação do PDF~~ — **feito**, migração 080.
+2. A publicação no **site de reservas**: é o site que ainda não existe. ⚠️ É aqui que entra a
+   regra que escolhe entre os vários ativos; ela não existe, e o cadastro não a inventa.
+3. Eventualmente, **os itens do catálogo** item a item — se a casa quiser mais que o PDF.
 
 ⚠️ **Ao fechar qualquer uma delas, revise ESTA lista.** Lista de pendências envelhece pior
 que decisão — a memória de Reservas passou uma semana dizendo que o que estava feito não

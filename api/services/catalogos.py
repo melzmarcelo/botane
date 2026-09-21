@@ -29,12 +29,15 @@ from datetime import date
 
 from fastapi import HTTPException
 
+import arquivos
+
 from models.catalogos import ORIGENS, SITUACOES
 
 # As colunas que a tela lê, num lugar só: a lista e o registro têm de mostrar o
 # mesmo catálogo, e duas listas de campos divergem na primeira coluna nova.
 _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
-             c.observacao, u.nome AS criado_por"""
+             c.observacao, u.nome AS criado_por,
+             c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em"""
 
 
 def _publicado_hoje(linha: dict, hoje: date) -> bool:
@@ -58,6 +61,57 @@ def _publicado_hoje(linha: dict, hoje: date) -> bool:
 def _com_publicado(linhas: list[dict]) -> list[dict]:
     hoje = date.today()
     return [{**l, "publicado_hoje": _publicado_hoje(l, hoje)} for l in linhas]
+
+
+def guardar_arquivo(cur, id_unidade: int, id_catalogo: int, conteudo: bytes,
+                    tipo: str, extensao: str, nome_original: str | None) -> dict:
+    """Guarda o PDF do catálogo e aponta para ele. Tudo numa transação.
+
+    🔑 **Pedido do dono (21/09/2026):** *"criei o catálogo, agora tenho que
+    poder carregar o PDF, neste caso para ele ser exibido."*
+
+    ⚠️ **Gravar o novo, apontar para ele e apagar o velho são UMA coisa só.** É
+    a lição que a logo pagou: a versão antiga gravava numa transação e apagava
+    noutra, e um erro no meio deixava o registro apontando para um arquivo que
+    já não existia — o link quebrava e nada explicava. Aqui as três acontecem
+    no mesmo cursor, ou nenhuma acontece.
+    """
+    atual = obter(cur, id_unidade, id_catalogo)
+    antigo = atual.get("arquivo_url")
+
+    url = arquivos.gravar(cur, conteudo, tipo, extensao, f"catalogo-{id_catalogo}")
+    cur.execute(
+        """UPDATE catalogos
+              SET arquivo_url = %s, arquivo_nome = %s, arquivo_bytes = %s,
+                  arquivo_em = now(), atualizado_em = now()
+            WHERE id = %s AND id_unidade = %s""",
+        (url, (nome_original or "").strip()[:255] or None, len(conteudo),
+         id_catalogo, id_unidade),
+    )
+    # ⚠️ **Depois de o registro já apontar para o novo**, e no mesmo cursor.
+    arquivos.remover(antigo, cur)
+    return obter(cur, id_unidade, id_catalogo)
+
+
+def remover_arquivo(cur, id_unidade: int, id_catalogo: int) -> dict:
+    """Tira o PDF do catálogo — o cadastro continua, sem arquivo.
+
+    ⚠️ **Não é o mesmo que excluir o catálogo.** Trocar o cardápio por outro é
+    rotina; apagar a capa junto perderia o nome, o período e o histórico.
+    """
+    atual = obter(cur, id_unidade, id_catalogo)
+    if not atual.get("arquivo_url"):
+        raise HTTPException(status_code=409,
+                            detail="Este catálogo não tem arquivo para remover.")
+    cur.execute(
+        """UPDATE catalogos
+              SET arquivo_url = NULL, arquivo_nome = NULL, arquivo_bytes = NULL,
+                  arquivo_em = NULL, atualizado_em = now()
+            WHERE id = %s AND id_unidade = %s""",
+        (id_catalogo, id_unidade),
+    )
+    arquivos.remover(atual["arquivo_url"], cur)
+    return obter(cur, id_unidade, id_catalogo)
 
 
 def listar(cur, id_unidade: int, situacao: str | None = None) -> list[dict]:
@@ -232,4 +286,7 @@ def excluir(cur, id_unidade: int, id_catalogo: int) -> dict:
         )
     cur.execute("DELETE FROM catalogos WHERE id = %s AND id_unidade = %s",
                 (id_catalogo, id_unidade))
+    # ⚠️ **O arquivo vai junto.** Sem isto os bytes do PDF ficariam no banco
+    # sem dono nenhum apontando para eles — invisíveis, e crescendo.
+    arquivos.remover(atual.get("arquivo_url"), cur)
     return {"message": f"Catálogo “{atual['nome']}” excluído."}

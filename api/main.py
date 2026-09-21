@@ -328,7 +328,7 @@ async def _marcar_pedido_de_total(request, chamar_o_resto):
 
 @app.get(arquivos.PREFIXO_URL + "/{nome}", tags=["infra"])
 def servir_arquivo(nome: str):
-    """A logo, entregue do BANCO.
+    """A logo e o PDF do catálogo, entregues do BANCO.
 
     🔑 **Era um `StaticFiles` sobre `api/uploads/`, e o disco do App Platform é
     EFÊMERO**: a cada deploy a pasta some e a logo com ela. Agora o arquivo vive
@@ -346,8 +346,24 @@ def servir_arquivo(nome: str):
     if not achado:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     conteudo, tipo = achado
-    return Response(content=conteudo, media_type=tipo,
-                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    cabecalhos = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        # ⚠️ **`nosniff` em tudo.** Sem ele o navegador pode adivinhar o tipo
+        # pelo conteúdo e tratar como HTML o que foi gravado como outra coisa —
+        # e esta rota é pública.
+        "X-Content-Type-Options": "nosniff",
+    }
+    if tipo == arquivos.PDF_TIPO:
+        # 🔑 **PDF é servido ISOLADO, e não é zelo excessivo.** Um PDF pode
+        # conter JavaScript, e esta rota vive no MESMO domínio da aplicação (a
+        # API responde sob `/api`, o web na raiz). `sandbox` tira dele qualquer
+        # origem: sem script, sem formulário, sem acesso ao que é da casa.
+        cabecalhos["Content-Security-Policy"] = "sandbox"
+        # ⚠️ **`inline`, porque o pedido é EXIBIR** — *"para ele ser exibido"*.
+        # `attachment` forçaria download, e o site de reservas precisa mostrar o
+        # cardápio, não entregá-lo.
+        cabecalhos["Content-Disposition"] = "inline"
+    return Response(content=conteudo, media_type=tipo, headers=cabecalhos)
 
 app.include_router(autenticacao.router)
 app.include_router(usuarios.router)

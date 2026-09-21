@@ -32,6 +32,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import date, timedelta
 
 BASE = "http://127.0.0.1:9200"
@@ -209,6 +210,126 @@ checar("e NAO apaga o periodo que ninguem tocou",
 st, r = chamar("PUT", f"/catalogos/{no_ar['id']}", {"publica_de": None}, token=token)
 checar("enquanto limpar a data de proposito continua valendo",
        st == 200 and r.get("publica_de") is None, (st, r))
+
+
+print("\n8b. o PDF que o site exibe")
+# 🔑 **Pedido do dono (21/09/2026):** *"criei o catalogo, agora tenho que poder
+# carregar o PDF, neste caso para ele ser exibido."*
+# 🔑 **O arquivo mora no BANCO** (`api/arquivos.py`), nao em disco: o disco do
+# App Platform e EFEMERO e some a cada deploy. A logo ja sumiu assim uma vez; um
+# cardapio que desaparece na publicacao seria pior, porque o site continuaria
+# anunciando um catalogo no ar sem nada para mostrar.
+
+
+def enviar_pdf(id_catalogo, nome_arquivo, conteudo, tipo="application/pdf"):
+    """multipart/form-data na mao — o urllib nao monta."""
+    limite = "----" + uuid.uuid4().hex
+    corpo = b"".join([
+        f"--{limite}\r\n".encode(),
+        (f'Content-Disposition: form-data; name="arquivo"; '
+         f'filename="{nome_arquivo}"\r\n').encode(),
+        f"Content-Type: {tipo}\r\n\r\n".encode(),
+        conteudo,
+        f"\r\n--{limite}--\r\n".encode(),
+    ])
+    req = urllib.request.Request(
+        BASE + f"/catalogos/{id_catalogo}/arquivo", method="POST", data=corpo)
+    req.add_header("content-type", f"multipart/form-data; boundary={limite}")
+    req.add_header("authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return r.status, json.loads(r.read() or b"null")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read() or b"null")
+        except Exception:
+            return e.code, None
+
+
+PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+       b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+       b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n"
+       b"trailer<</Root 1 0 R>>\n%%EOF\n")
+
+st, comPdf = criar("Com arquivo")
+checar("o catalogo nasce SEM arquivo", comPdf.get("arquivo_url") is None, comPdf)
+
+# ⚠️ **O `content-type` e so o que o navegador DIZ.** Um `.exe` renomeado passa
+# por ele e para nos primeiros bytes — todo PDF comeca com `%PDF-`.
+st, r = enviar_pdf(comPdf["id"], "falso.pdf", b"MZ\x90 isto e um executavel")
+checar("arquivo que nao e PDF e recusado", st == 400, (st, r))
+checar("e a frase diz que ele nao comeca como um PDF",
+       "n[ãa]o come" in str(r) or "não começa" in str((r or {}).get("detail", "")),
+       (r or {}).get("detail"))
+st, r = enviar_pdf(comPdf["id"], "foto.png", PDF, tipo="image/png")
+checar("tipo diferente de PDF e recusado", st == 400, (st, r))
+st, r = enviar_pdf(comPdf["id"], "vazio.pdf", b"")
+checar("arquivo vazio e recusado", st == 400, (st, r))
+
+st, r = enviar_pdf(comPdf["id"], "Cardapio de verao 2026.pdf", PDF)
+checar("o PDF de verdade sobe", st == 200 and r.get("arquivo_url"), (st, r))
+# 🔑 **O nome ORIGINAL fica gravado.** A URL leva sufixo aleatorio (senao o
+# navegador serve o arquivo velho do cache) e nao diz mais qual PDF e aquele.
+checar("guardando o nome ORIGINAL, nao o da URL",
+       r.get("arquivo_nome") == "Cardapio de verao 2026.pdf", r.get("arquivo_nome"))
+checar("com o tamanho e a data do arquivo",
+       r.get("arquivo_bytes") == len(PDF) and r.get("arquivo_em"),
+       (r.get("arquivo_bytes"), r.get("arquivo_em")))
+url_pdf = r["arquivo_url"]
+
+# 🔑 **A rota que serve e PUBLICA**, como a da logo: o site de reservas exibe o
+# PDF sem token, e a `<img>`/`<embed>` do navegador nao manda cabecalho de
+# autenticacao. O nome carrega sufixo aleatorio, entao a URL nao e adivinhavel.
+req = urllib.request.Request(BASE + url_pdf)
+with urllib.request.urlopen(req, timeout=60) as resp:
+    corpo_servido = resp.read()
+    cab = {k.lower(): v for k, v in resp.headers.items()}
+checar("o PDF e servido, publico e inteiro", corpo_servido == PDF, len(corpo_servido))
+checar("com o tipo de PDF", cab.get("content-type") == "application/pdf", cab.get("content-type"))
+# 🔑 *"para ele ser exibido"*: `inline`, nao `attachment` — `attachment` forcaria
+# download, e o site precisa MOSTRAR o cardapio.
+checar("e `inline`, porque o pedido e EXIBIR",
+       cab.get("content-disposition") == "inline", cab.get("content-disposition"))
+# ⚠️ **PDF pode conter JavaScript**, e esta rota vive no MESMO dominio da
+# aplicacao. `sandbox` tira dele qualquer origem.
+checar("servido ISOLADO, porque PDF pode conter script",
+       cab.get("content-security-policy") == "sandbox",
+       cab.get("content-security-policy"))
+checar("e sem adivinhacao de tipo",
+       cab.get("x-content-type-options") == "nosniff", cab.get("x-content-type-options"))
+
+# ⚠️ **Trocar apaga o anterior na MESMA transacao.** A versao antiga da logo
+# gravava numa e apagava noutra: um erro no meio deixava o registro apontando
+# para um arquivo que ja nao existia.
+st, r2 = enviar_pdf(comPdf["id"], "Cardapio de inverno.pdf", PDF + b"\n% outra\n")
+checar("trocar o PDF troca a URL", r2.get("arquivo_url") != url_pdf, r2.get("arquivo_url"))
+try:
+    urllib.request.urlopen(urllib.request.Request(BASE + url_pdf), timeout=60)
+    checar("e o anterior deixa de responder", False, "o antigo ainda responde")
+except urllib.error.HTTPError as e:
+    checar("e o anterior deixa de responder", e.code == 404, e.code)
+
+# ⚠️ Tirar o PDF NAO apaga o catalogo: trocar o cardapio e rotina, e apagar a
+# capa junto perderia o nome, o periodo e o historico.
+st, r3 = chamar("DELETE", f"/catalogos/{comPdf['id']}/arquivo", token=token)
+checar("tirar o PDF deixa o catalogo de pe",
+       st == 200 and r3.get("arquivo_url") is None and r3.get("nome"), (st, r3))
+checar("e tirar de novo avisa que nao ha arquivo",
+       chamar("DELETE", f"/catalogos/{comPdf['id']}/arquivo", token=token)[0] == 409)
+
+# 🔑 **Excluir o catalogo leva o arquivo junto**: senao os bytes ficariam no
+# banco sem dono nenhum apontando para eles — invisiveis, e crescendo.
+enviar_pdf(comPdf["id"], "final.pdf", PDF)
+st, cf = chamar("GET", f"/catalogos/{comPdf['id']}", token=token)
+url_final = cf["arquivo_url"]
+chamar("PUT", f"/catalogos/{comPdf['id']}", {"situacao": "RASCUNHO"}, token=token)
+chamar("DELETE", f"/catalogos/{comPdf['id']}", token=token)
+criados.remove(comPdf["id"])
+try:
+    urllib.request.urlopen(urllib.request.Request(BASE + url_final), timeout=60)
+    checar("excluir o catalogo leva o arquivo junto", False, "o arquivo ficou orfao")
+except urllib.error.HTTPError as e:
+    checar("excluir o catalogo leva o arquivo junto", e.code == 404, e.code)
 
 
 print("\n9. so RASCUNHO se apaga")

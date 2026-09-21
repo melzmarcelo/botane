@@ -23,8 +23,9 @@ cada loja, e uma rota que esquecesse o filtro deixaria a filial alterar o
 cardápio da matriz. É a lição que `listar_fechamentos` do CMV pagou.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
+import arquivos
 import auditoria
 from database import get_cursor
 from models.catalogos import (
@@ -116,6 +117,58 @@ def atualizar(id_catalogo: int, body: CatalogoUpdate,
             cur, ctx.id_usuario, "catalogo", id_catalogo, "alterar",
             antes={k: str(antes.get(k)) for k in dados if k in antes},
             depois={k: str(depois.get(k)) for k in dados if k in depois},
+            id_unidade=id_unidade)
+        return depois
+
+
+@router.post("/{id_catalogo}/arquivo", response_model=CatalogoResponse)
+async def enviar_arquivo(id_catalogo: int, arquivo: UploadFile = File(...),
+                         ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Carrega o PDF que o site de reservas vai exibir.
+
+    🔑 **Pedido do dono (21/09/2026):** *"criei o catálogo, agora tenho que
+    poder carregar o PDF, neste caso para ele ser exibido."*
+
+    ⚠️ **Os bytes são lidos ANTES de pedir a conexão.** Até 10 MB vindos pela
+    rede com uma transação aberta prenderiam uma conexão do pool durante todo o
+    envio — é a mesma razão pela qual `ler_pdf` é separado de `gravar`.
+
+    ⚠️ **Substitui o anterior**, se houver: um catálogo tem UM arquivo, e a
+    troca do cardápio é rotina. O antigo é apagado na mesma transação, depois de
+    o registro já apontar para o novo.
+    """
+    conteudo, tipo, extensao = await arquivos.ler_pdf(arquivo)
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        antes = servico.obter(cur, id_unidade, id_catalogo)
+        depois = servico.guardar_arquivo(
+            cur, id_unidade, id_catalogo, conteudo, tipo, extensao, arquivo.filename)
+        # 🔑 **O arquivo é o que o cliente vê.** Trocá-lo muda o cardápio
+        # publicado sem mexer em campo nenhum da capa — a auditoria é o único
+        # lugar onde isso fica registrado.
+        auditoria.registrar(
+            cur, ctx.id_usuario, "catalogo", id_catalogo, "enviar_arquivo",
+            antes={"arquivo_nome": antes.get("arquivo_nome")},
+            depois={"arquivo_nome": depois.get("arquivo_nome"),
+                    "bytes": depois.get("arquivo_bytes")},
+            id_unidade=id_unidade)
+        return depois
+
+
+@router.delete("/{id_catalogo}/arquivo", response_model=CatalogoResponse)
+def remover_arquivo(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Tira o PDF — o catálogo continua, sem arquivo.
+
+    ⚠️ **Declarada ANTES de `DELETE /{id_catalogo}`**, como `/opcoes`: o FastAPI
+    casa rotas na ordem, e o caminho mais específico precisa vir primeiro.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        antes = servico.obter(cur, id_unidade, id_catalogo)
+        depois = servico.remover_arquivo(cur, id_unidade, id_catalogo)
+        auditoria.registrar(
+            cur, ctx.id_usuario, "catalogo", id_catalogo, "remover_arquivo",
+            antes={"arquivo_nome": antes.get("arquivo_nome")},
             id_unidade=id_unidade)
         return depois
 

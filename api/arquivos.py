@@ -1,4 +1,4 @@
-"""Guarda de arquivos enviados pela tela (hoje: a logo da empresa).
+"""Guarda de arquivos enviados pela tela (a logo da empresa e o PDF do catálogo).
 
 🔑 **Mora no BANCO, e não em disco — porque o disco do App Platform é
 EFÊMERO.** `api/uploads/` some a cada deploy: a casa pôs a logo, publicou uma
@@ -30,6 +30,16 @@ TIPOS = {
     "image/webp": ".webp",
 }
 LIMITE_BYTES = 2 * 1024 * 1024
+
+# 🔑 **O PDF do catálogo tem porta própria** (21/09/2026), e não entra em
+# `TIPOS`: aquela lista é de IMAGEM, usada pela logo e pela foto da ficha, e um
+# PDF caindo ali viraria `<img src>` quebrada na próxima tela que reaproveitasse
+# a função.
+PDF_TIPO = "application/pdf"
+# ⚠️ **10 MB, não 2.** O cardápio é ilustrado: as fotos dos pratos fazem um PDF
+# passar dos 2 MB da logo com folga, e recusar o arquivo da casa por um limite
+# pensado para um logotipo seria recusar o caso de uso inteiro.
+PDF_LIMITE_BYTES = 10 * 1024 * 1024
 
 
 def _nome_da_url(url: str | None) -> str | None:
@@ -81,6 +91,48 @@ async def ler_enviada(arquivo: UploadFile) -> tuple[bytes, str, str]:
         raise HTTPException(status_code=400, detail="O arquivo não é uma imagem válida.")
 
     return conteudo, arquivo.content_type or "image/png", extensao
+
+
+async def ler_pdf(arquivo: UploadFile) -> tuple[bytes, str, str]:
+    """Confere o PDF que chegou e devolve `(conteúdo, tipo, extensão)`.
+
+    🔑 **Pedido do dono (21/09/2026):** *"tenho que poder carregar o PDF, neste
+    caso para ele ser exibido"*. É a mesma forma de `ler_enviada`, pelo mesmo
+    motivo: ler o corpo pode demorar, e fazer isso com transação aberta prende
+    uma conexão do pool durante todo o envio.
+
+    ⚠️ **O `content-type` é só o que o NAVEGADOR diz, não o que o arquivo é.**
+    Por isso a conferência dos primeiros bytes: todo PDF começa com `%PDF-`, e
+    quem renomeia um `.exe` para `.pdf` para de passar aqui. É a mesma
+    desconfiança que `ler_enviada` tem com a imagem.
+    """
+    if (arquivo.content_type or "") != PDF_TIPO:
+        raise HTTPException(
+            status_code=400,
+            detail="Formato não aceito. Envie um arquivo PDF.",
+        )
+
+    conteudo = await arquivo.read()
+    if not conteudo:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(conteudo) > PDF_LIMITE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(f"PDF maior que {PDF_LIMITE_BYTES // (1024 * 1024)} MB. "
+                    f"Um cardápio costuma caber bem abaixo disso — se o seu passa, "
+                    f"provavelmente dá para reduzir as imagens dentro dele."),
+        )
+    # ⚠️ `%PDF-` pode vir depois de alguns bytes de lixo em arquivos gerados por
+    # ferramentas antigas; os leitores toleram isso no começo do arquivo. Mil
+    # bytes é folga suficiente sem abrir a porta para um arquivo que só TEM a
+    # assinatura perdida no meio.
+    if b"%PDF-" not in conteudo[:1024]:
+        raise HTTPException(
+            status_code=400,
+            detail="O arquivo não é um PDF válido — ele não começa como um PDF.",
+        )
+
+    return conteudo, PDF_TIPO, ".pdf"
 
 
 def gravar(cur, conteudo: bytes, tipo: str, extensao: str, nome_base: str) -> str:

@@ -14,9 +14,12 @@ import {
   Situacao,
   atualizar,
   criar,
+  enderecoDoArquivo,
+  enviarArquivo,
   excluir,
   listar,
   opcoes as pedirOpcoes,
+  removerArquivo,
 } from "@/lib/catalogos";
 
 /**
@@ -65,6 +68,15 @@ function periodoEmPalavras(c: Catalogo): string {
  * `/catalogos/opcoes`. Uma sigla escrita aqui é a segunda cópia da lista — e
  * esta já provou que diverge calada.
  */
+/** 1,4 MB — não 1468006 bytes. Quem confere se subiu o arquivo certo lê o
+ *  tamanho de relance, e o número cru não diz nada. */
+const tamanho = (b: number | null) => {
+  if (!b) return "";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${Math.round(b / 1024)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+};
+
 const VAZIO: Gravar = {
   nome: "",
   publica_de: "",
@@ -87,6 +99,10 @@ export default function PaginaCatalogos() {
   const [f, setF] = useState<Gravar>(VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState<Catalogo | null>(null);
+  /** Qual catálogo está recebendo PDF agora — para o botão dizer "Enviando…"
+   *  só na linha dele, e não na tela toda. */
+  const [enviando, setEnviando] = useState<number | null>(null);
+  const [tirandoArquivo, setTirandoArquivo] = useState<Catalogo | null>(null);
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -150,6 +166,41 @@ export default function PaginaCatalogos() {
     }
   }
 
+  /**
+   * 🔑 **Pedido do dono (21/09/2026):** *"criei o catálogo, agora tenho que
+   * poder carregar o PDF, neste caso para ele ser exibido."*
+   *
+   * ⚠️ **Um `<input type="file">` escondido por linha, disparado pelo botão.**
+   * O controle nativo não se estiliza e mostra "Nenhum arquivo selecionado" em
+   * inglês conforme o navegador — o botão da casa chama o seletor e o input
+   * fica fora da vista, marcado para leitor de tela.
+   */
+  async function aoEscolherArquivo(c: Catalogo, arquivo: File | undefined) {
+    if (!arquivo) return;
+    setEnviando(c.id);
+    try {
+      const r = await enviarArquivo(c.id, arquivo);
+      aviso.sucesso(`PDF de “${r.nome}” carregado.`);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível enviar o PDF");
+    } finally {
+      setEnviando(null);
+    }
+  }
+
+  async function confirmarRemocaoDoArquivo() {
+    if (!tirandoArquivo) return;
+    try {
+      const r = await removerArquivo(tirandoArquivo.id);
+      aviso.sucesso(`O PDF de “${r.nome}” foi removido.`);
+      setTirandoArquivo(null);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível remover o PDF");
+    }
+  }
+
   async function confirmarExclusao() {
     if (!apagando) return;
     try {
@@ -170,8 +221,7 @@ export default function PaginaCatalogos() {
         explica={
           <>
             A capa do que o site de reservas apresenta ao cliente: o nome que aparece
-            lá, de quando até quando vale e se está no ar. Hoje a origem é um PDF; os itens
-            de cada catálogo vêm a seguir.
+            lá, de quando até quando vale, se está no ar — e o PDF que ele exibe.
           </>
         }
         acoes={
@@ -226,6 +276,7 @@ export default function PaginaCatalogos() {
                   <th>Nome no site do cliente</th>
                   <th>Origem</th>
                   <th>Publicação</th>
+                  <th>PDF</th>
                   <th>Situação</th>
                   <th>No ar hoje</th>
                   {podeEditar && <th></th>}
@@ -242,6 +293,38 @@ export default function PaginaCatalogos() {
                     </td>
                     <td className="text-[13px] text-suave">{c.origem}</td>
                     <td className="text-[13px]">{periodoEmPalavras(c)}</td>
+                    {/* 🔑 **O PDF é o que o site EXIBE.** Sem ele um catálogo no
+                        ar é uma promessa vazia: o site anuncia o cardápio e não
+                        tem o que mostrar. Por isso a coluna fica na lista, e
+                        não escondida na janela de edição. */}
+                    <td className="text-[13px]">
+                      {c.arquivo_url ? (
+                        <>
+                          {/* ⚠️ `target="_blank"` com `rel="noreferrer"`: o PDF
+                              abre para conferir sem perder a tela, e sem dar à
+                              aba nova acesso a esta. */}
+                          <a
+                            className="link-registro"
+                            href={enderecoDoArquivo(c.arquivo_url)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {c.arquivo_nome ?? "ver o PDF"}
+                          </a>
+                          <span className="block text-[12px] text-suave">
+                            {tamanho(c.arquivo_bytes)}
+                            {c.arquivo_em &&
+                              ` · ${new Date(c.arquivo_em).toLocaleDateString("pt-BR")}`}
+                          </span>
+                        </>
+                      ) : (
+                        // ⚠️ **Ativo sem PDF é avisado, não escondido.** É o
+                        // estado que faz o site não ter o que mostrar.
+                        <span className={c.situacao === "ATIVO" ? "text-alerta" : "text-suave"}>
+                          {c.situacao === "ATIVO" ? "sem PDF — o site não tem o que exibir" : "—"}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <Etiqueta
                         cor={
@@ -265,8 +348,55 @@ export default function PaginaCatalogos() {
                       )}
                     </td>
                     {podeEditar && (
-                      <td className="text-right whitespace-nowrap">
-                        <button type="button" className="link-acao" onClick={() => abrir(c)}>
+                      <td className="relative text-right whitespace-nowrap">
+                        {/* ⚠️ **`relative` na célula não é enfeite: sem ele a
+                            página ROLA de lado.** O `<input>` abaixo é
+                            `sr-only`, que é `position: absolute` — e um
+                            absoluto sem ancestral posicionado ESCAPA do
+                            clipping do `overflow-x-auto` que envolve a tabela.
+                            Ele ia parar na coordenada dele dentro da tabela
+                            larga e empurrava o documento: medido, 330px de
+                            rolagem lateral numa janela de 400. Com `relative`,
+                            o scroller volta a ser o dono dele.
+                            ⚠️ O input fica fora da vista; quem chama é o botão. */}
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          id={`arquivo-catalogo-${c.id}`}
+                          className="sr-only"
+                          onChange={(e) => {
+                            void aoEscolherArquivo(c, e.target.files?.[0]);
+                            // ⚠️ Zera o valor: sem isto, escolher o MESMO
+                            // arquivo de novo não dispara `change`, e reenviar
+                            // depois de um erro não funcionaria.
+                            e.target.value = "";
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="link-acao"
+                          aria-busy={enviando === c.id}
+                          disabled={enviando === c.id}
+                          onClick={() =>
+                            document.getElementById(`arquivo-catalogo-${c.id}`)?.click()
+                          }
+                        >
+                          {enviando === c.id
+                            ? "enviando…"
+                            : c.arquivo_url
+                              ? "trocar PDF"
+                              : "carregar PDF"}
+                        </button>
+                        {c.arquivo_url && (
+                          <button
+                            type="button"
+                            className="link-acao link-acao-erro ml-3"
+                            onClick={() => setTirandoArquivo(c)}
+                          >
+                            tirar PDF
+                          </button>
+                        )}
+                        <button type="button" className="link-acao ml-3" onClick={() => abrir(c)}>
                           alterar
                         </button>
                         {/* ⚠️ Excluir só aparece no RASCUNHO. O resto se inativa
@@ -402,6 +532,24 @@ export default function PaginaCatalogos() {
             </Campo>
           </form>
         </Modal>
+      )}
+
+      {tirandoArquivo && (
+        <Confirmacao
+          titulo={`Tirar o PDF de “${tirandoArquivo.nome}”?`}
+          rotuloConfirmar="Tirar o PDF"
+          perigo
+          aoConfirmar={confirmarRemocaoDoArquivo}
+          aoCancelar={() => setTirandoArquivo(null)}
+        >
+          {/* ⚠️ A frase diz o que a ação FAZ. Tirar o PDF não apaga o catálogo
+              — e quem está no ar sem arquivo não tem o que exibir. */}
+          O catálogo continua cadastrado, com o nome e o período. O que sai é o arquivo
+          {tirandoArquivo.situacao === "ATIVO" && (
+            <> — e ele está <b>ativo</b>, então o site fica sem nada para mostrar</>
+          )}
+          . Para pôr outro, use “trocar PDF”.
+        </Confirmacao>
       )}
 
       {apagando && (

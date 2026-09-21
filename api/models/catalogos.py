@@ -6,7 +6,7 @@ que o servidor ignora em silêncio é uma promessa que a tela faz e o site não
 cumpre.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -91,3 +91,11 @@ class CatalogoResponse(BaseModel):
     # procurar no site um cardápio que saiu do ar sozinho.
     publicado_hoje: bool = False
     criado_por: str | None = None
+    # 🔑 **O PDF que o site exibe** (migração 080). `arquivo_url` é o endereço
+    # público; os bytes moram em `arquivos`, e quem lê daqui não sabe disso.
+    arquivo_url: str | None = None
+    # ⚠️ O nome ORIGINAL, porque a URL leva sufixo aleatório e não diz mais qual
+    # PDF é aquele.
+    arquivo_nome: str | None = None
+    arquivo_bytes: int | None = None
+    arquivo_em: datetime | None = None
