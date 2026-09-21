@@ -305,20 +305,50 @@ mensagem.
 
 ## O que vem a seguir
 
-Pela ordem do esboço, e nenhum deles começou:
+⚠️ **Esta lista esteve ERRADA por uma semana, e o erro é instrutivo.** Ela dizia
+"nenhum deles começou" sobre os itens 2 e 3 — que a migração 070 já tinha
+entregado, e que as seções acima deste mesmo arquivo descrevem em detalhe. Foi
+escrita quando era verdade e não foi revista quando deixou de ser.
+🔑 **Lista de pendências envelhece pior que decisão**: a decisão continua
+valendo, a pendência vira mentira no dia em que alguém a cumpre. Ao fechar uma
+fatia, o risco a fechar junto é esta seção.
 
-1. ~~Salões e mesas~~ — **feito** na migração 069, acima.
-2. **A regra de disponibilidade no servidor**, com teste próprio. É a peça que
-   tudo o mais consome e a única que não pode ser refeita depois. O protótipo já
-   a implementa inteira em JavaScript — serve de especificação executável.
-3. **Reserva pelo balcão** e a **agenda do dia**.
-4. Só então a reserva online.
+Pela ordem do esboço (conferido no código em 21/09/2026):
+
+1. ~~Salões e mesas~~ — **feito**, migração 069.
+2. ~~A regra de disponibilidade no servidor, com teste próprio~~ — **feito**,
+   migração 070. Mora em `services/reservas_agenda.py`; a seção "A regra de
+   disponibilidade e a reserva" acima é a documentação dela.
+3. ~~Reserva pelo balcão e a agenda do dia~~ — **feito**, migração 070, com
+   ciclo de status, remarcar e bloqueios.
+4. **A reserva pelo site do cliente — o único que não começou.**
+
+**O que o módulo tem hoje**, medido: 18 rotas em `routers/reservas.py`, os dois
+serviços (`reservas.py` e `reservas_agenda.py`), quatro telas
+(`agenda`, `salao`, `configuracoes` e o `escolher-horario.tsx` que as duas
+primeiras compartilham), **166 checagens** em três suítes de API
+(`smoke_reservas_config`, `_disponibilidade`, `_salao`) e **55 checagens de
+navegador** na fase 12 da bateria — incluindo o caso de estar desligado.
+
+⚠️ **E ele está DESLIGADO em todas as lojas** (`reservas_ligado = false`), o que
+é o nascimento certo — ver a primeira seção — mas quer dizer que nada disto está
+em uso. Construído e testado não é o mesmo que ligado: quem for avaliar o módulo
+precisa acender o interruptor na tela de Lojas primeiro, senão encontra um menu
+sem o grupo e conclui que não existe.
+
+⚠️ **O terreno da reserva online já está preparado**, e é de propósito:
+`reserva_config` tem `aceita_online` (hoje `false`), `teto_online` e
+`confirmacao`, e a regra que o site consumiria é a MESMA que a agenda usa. Não
+há uma segunda regra a escrever — há uma porta a abrir.
 
 ⚠️ **Duas regras que o protótipo revelou e que precisam valer desde a primeira
 linha de código da agenda**: reserva `PENDENTE` já segura a mesa (senão a casa
 aprova no dia seguinte e descobre que não cabe), e o teto do site tem de caber
 no salão (quem pede mais que a maior junta não acha horário e não sabe por quê).
+🔑 A primeira **já vale** — ver "Reserva PENDENTE segura a mesa" acima. A
+segunda espera a reserva online, e é o que `maior_grupo` existe para comparar.
 
 ⚠️ **E a pergunta que continua aberta**: reserva online entra `PENDENTE` ou
-`CONFIRMADA`? O campo `reserva_config.confirmacao` já existe e já é editável na
-tela — a decisão é da casa, e agora ela tem onde ser tomada.
+`CONFIRMADA`? O campo `reserva_config.confirmacao` já existe, já é editável na
+tela e está em `AUTOMATICA` — a decisão é da casa, e agora ela tem onde ser
+tomada.
