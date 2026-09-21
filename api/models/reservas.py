@@ -199,6 +199,18 @@ class ConfiguracaoReservas(BaseModel):
     antecedencia_min_horas: int = Field(default=2, ge=0, le=720)
     antecedencia_max_dias: int = Field(default=30, ge=1, le=365)
     cadastro_completo: bool = True
+    # 🔑 **O texto da mensagem de WhatsApp, da CASA** (migração 081, pedido do
+    # dono, 21/09/2026: *"em configurações da reserva, colocar o texto padrão
+    # configurável para o whatsapp"*). Estava escrito no site, e texto de
+    # cliente escrito em código só muda quando alguém publica.
+    # ⚠️ **São DOIS**: quem clica em "Entre em contato" ainda não escolheu nada;
+    # quem vem da reserva já tem dia, hora e quantas pessoas. Uma frase só nos
+    # dois lugares ou perde o que o cliente já disse, ou manda "reservar para
+    # {pessoas}" sem pessoas nenhuma.
+    # ⚠️ Nulo é "usa o padrão da casa" — o site tem um de reserva; apagar o
+    # campo não pode deixar a mensagem em branco.
+    whatsapp_texto: str | None = Field(default=None, max_length=400)
+    whatsapp_texto_reserva: str | None = Field(default=None, max_length=400)
     horarios: list[HorarioDia]
     permanencias: list[FaixaPermanencia] = []
 

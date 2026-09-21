@@ -141,6 +141,40 @@ checar("e sem cadastro vem nulo, nao um numero inventado",
 chamar("PUT", "/empresa", {**e_antes, "whatsapp": zap_antes}, token=token)
 
 
+print("\n3b. a MENSAGEM que abre no WhatsApp vem da configuracao")
+# 🔑 **Pedido do dono (21/09/2026):** *"em configuracoes da reserva, colocar o
+# texto padrao configuravel para o whatsapp."* Sao duas frases diferentes: quem
+# toca em "Entre em Contato" ainda nao escolheu nada; quem vem da reserva ja tem
+# dia, hora e quantas pessoas.
+# ⚠️ **O site nao pode ter a frase escrita dentro dele** — texto de cliente em
+# codigo so muda quando alguem publica.
+st, cfg_antes = chamar("GET", "/reservas/configuracao", token=token)
+checar("a configuracao da casa responde para o administrador", st == 200, st)
+chamar("PUT", "/reservas/configuracao",
+       {**cfg_antes,
+        "whatsapp_texto": "Oi! Vim pelo site do {casa}.",
+        "whatsapp_texto_reserva": "Mesa para {pessoas}, dia {data} as {hora}?"},
+       token=token)
+st, cz = chamar("GET", "/publico/1/casa")
+checar("os dois textos chegam ao site sem token nenhum",
+       (cz or {}).get("zap_texto") == "Oi! Vim pelo site do {casa}."
+       and (cz or {}).get("zap_texto_reserva") == "Mesa para {pessoas}, dia {data} as {hora}?",
+       ((cz or {}).get("zap_texto"), (cz or {}).get("zap_texto_reserva")))
+# 🔑 Os marcadores chegam CRUS: quem troca `{pessoas}` pelo numero e o site, na
+# hora do clique, porque so ele sabe o que a pessoa escolheu.
+checar("com os marcadores por trocar, nao resolvidos pelo servidor",
+       "{casa}" in ((cz or {}).get("zap_texto") or ""), (cz or {}).get("zap_texto"))
+# ⚠️ **Sem texto cadastrado vem NULO**, e o site cai na frase padrao dele — nao
+# num botao que abre o WhatsApp com a mensagem em branco.
+chamar("PUT", "/reservas/configuracao",
+       {**cfg_antes, "whatsapp_texto": "", "whatsapp_texto_reserva": ""}, token=token)
+st, cz = chamar("GET", "/publico/1/casa")
+checar("e sem texto cadastrado vem nulo, para o site usar o padrao dele",
+       (cz or {}).get("zap_texto") is None and (cz or {}).get("zap_texto_reserva") is None,
+       ((cz or {}).get("zap_texto"), (cz or {}).get("zap_texto_reserva")))
+chamar("PUT", "/reservas/configuracao", cfg_antes, token=token)
+
+
 print("\n4. so o catalogo que a casa esta PUBLICANDO")
 # 🔑 *"Catalogos cadastrados e ativos"* — e "ativo" aqui e mais estreito que a
 # situacao: entra o que esta ATIVO, dentro do periodo E com arquivo.

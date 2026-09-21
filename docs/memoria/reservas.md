@@ -356,6 +356,93 @@ não diz por quê na tela.
   fez. A trava de concorrência já existe desde a 070 (`_travar_o_dia`, por loja e dia).
 
 
+### O texto do WhatsApp mora na configuração, não no site (migração 081)
+
+🔑 **Pedido do dono:** *"nos botões, colocar centralizado o texto, e somente o texto
+necessário, exemplo, Reserve sua Mesa, Catálogo Y, Entre em Contato. Em configurações da
+reserva, colocar o texto padrão configurável para o whatsapp."*
+
+⚠️ **As duas frases estavam ESCRITAS DENTRO DO SITE.** Texto de cliente em código é texto que
+só muda quando alguém publica: a casa que quisesse trocar o tom da mensagem — ou escrever em
+outro idioma, ou citar uma promoção — teria de pedir uma versão nova do site.
+
+- 🔑 **São DOIS textos, não um** (`whatsapp_texto` e `whatsapp_texto_reserva`). Quem toca em
+  "Entre em Contato" ainda não escolheu nada; quem vem da reserva já tem dia, hora e quantas
+  pessoas. Uma frase só nos dois lugares ou perde o que o cliente já disse, ou manda
+  "reservar para {pessoas}" sem pessoas nenhuma.
+- 🔑 **Moram em `reserva_config`, não em `empresa`.** O número do WhatsApp é da empresa; a
+  MENSAGEM é do site de reservas e muda com o que a casa está oferecendo. Dois donos, duas
+  decisões — e foi onde o dono pediu.
+- 🔑 **Os marcadores chegam CRUS ao site** (`{casa}`, `{pessoas}`, `{data}`, `{hora}`). Quem
+  troca é o JavaScript no clique, porque só ele sabe o que a pessoa escolheu na tela. O
+  servidor resolver `{pessoas}` exigiria que ele soubesse de uma escolha que ainda não virou
+  requisição.
+- ⚠️ **Campo em branco vira NULO, não string vazia**, e o site cai no padrão dele. A string
+  vazia passaria pelo `or` do JavaScript igualzinho, mas guardaria no banco uma mensagem que
+  existe e não diz nada — e a tela mostraria o campo preenchido com o vazio.
+- ⚠️ **Limite de 400 caracteres**, porque o texto vira `wa.me?text=`. Recusar na gravação é
+  melhor do que gerar um link que o WhatsApp corta pela metade.
+- ⚠️ A migração semeia o padrão **só onde está nulo**: migração roda de novo em toda base que
+  ainda não a tem, e a casa que já escreveu o texto dela não pode perdê-lo.
+
+🔑 **Os botões do site são só texto, centralizado.** Saíram o ícone, a seta e o subtítulo —
+três elementos que competiam com a única informação que importa. ⚠️ **Dado de contato não é
+botão**: endereço, telefone e e-mail viraram linhas `.dado` (rótulo em cima, valor embaixo),
+porque centralizar um endereço o faz parecer clicável e ele não é.
+
+### A bateria parou de apagar a reserva da casa — `preservar_reserva`
+
+⚠️ **As três suítes de reserva DESMONTAVAM a casa e não a remontavam.** Elas desligam o
+módulo, apagam a semana, apagam salões e mesas — e **precisam** mesmo: metade do que provam é
+como o sistema se comporta com o módulo desligado e o salão vazio. O defeito nunca esteve no
+que fazem no meio, e sim **no estado que deixavam no fim**: módulo desligado e loja sem nada,
+que era "limpo" só enquanto nenhuma loja usava reserva de verdade.
+
+🔑 **Foi assim que a configuração da loja 1 se perdeu, nesta sessão.** Uma rodada morreu no
+meio e deixou a reserva desligada; as duas suítes seguintes respeitaram esse estado, e o sinal
+que sobrou foi **o site do cliente respondendo 404 para a própria casa**. Quem roda a bateria
+não tem como ligar uma coisa à outra.
+
+🔑 **`comum.py` ganhou `preservar_reserva(unidade)`**, no mesmo padrão de
+`preservar_credenciais` e `preservar_logo`: fotografa o interruptor e as oito tabelas do
+módulo (configuração, semana, permanências, bloqueios, salões, mesas, reservas e o vínculo
+reserva↔mesa), e devolve tudo no `atexit`. **Suíte devolve o que encontrou**, não um estado
+que ela supõe ser o certo.
+
+- ⚠️ **No `atexit`, não no fim do roteiro.** É a mesma lição da credencial do Omie: bastou a
+  suíte estourar no meio para o que ela guardava se perder. Guardar e não repor é pior que não
+  guardar — dá sensação de proteção.
+- ⚠️ **Sem reserva nenhuma também é um estado a devolver**: a loja que chega sem salão sai sem
+  salão, e o interruptor volta a desligado.
+- 🔑 **`ON CONFLICT DO NOTHING` sem alvo**, na reposição: cada uma dessas tabelas tem uma chave
+  diferente (`id`, `id_unidade`, o par reserva+mesa), e nomear a coluna erraria só numa delas.
+- ⚠️ A ordem é a das chaves estrangeiras: apaga-se de baixo para cima, repõe-se de cima para
+  baixo — `reserva_mesas` nem tem `id_unidade`, pendura na reserva.
+
+⚠️ **Arquivo descartável não se escreve dentro de `api/`.** O reloader do uvicorn observa a
+pasta: gravar um script temporário ali reinicia a API e derruba a conexão da chamada em curso
+— foi exatamente o que matou a rodada que começou tudo isto.
+
+🔑 **A bateria do NAVEGADOR tinha as duas mesmas faltas**, e as duas foram corrigidas junto:
+
+1. **O interruptor voltava fixo em `false`**, com o comentário *"uma casa que não faz reserva
+   não pode terminar a bateria com o módulo ligado"*. O argumento era verdadeiro quando foi
+   escrito e envelheceu: agora a casa faz reserva. ⚠️ **A fase precisa mesmo COMEÇAR
+   desligada** — ela afirma que o menu não tem o grupo. O que não pode é o estado de teste
+   sobrar no fim. Agora ela fotografa o parâmetro e o devolve.
+2. **Os salões da casa ficavam DESLIGADOS e os de teste ficavam no cadastro.** Desligar os
+   existentes é o jeito certo de a fase começar limpa (excluir é recusado, e com razão: o
+   salão é a resposta para onde aquelas pessoas sentaram) — mas ninguém os religava, e cada
+   rodada deixava mais um `Principal 4779526` na tela de quem usa o sistema.
+
+⚠️ **Salão com reserva pendurada NÃO pode ser excluído, e não há rota que apague reserva** —
+a exclusão de reserva não existe de propósito: reserva é registro do que aconteceu, e vira
+`CANCELADA`/`ENCERRADA`, não some. 🔑 **A consequência é que a bateria não consegue limpar
+tudo**: o salão onde ela criou reserva fica apenas *desativado*, com a reserva encerrada
+junto. É resíduo conhecido e inofensivo (salão inativo sai da disponibilidade), mas cresce uma
+linha por rodada — vale uma limpeza manual de tempos em tempos.
+
+
 ## O que vem a seguir
 
 ⚠️ **Esta lista esteve ERRADA por uma semana, e o erro é instrutivo.** Ela dizia
@@ -381,15 +468,19 @@ Pela ordem do esboço (conferido no código em 21/09/2026):
 **O que o módulo tem hoje**, medido: 18 rotas em `routers/reservas.py`, os dois
 serviços (`reservas.py` e `reservas_agenda.py`), quatro telas
 (`agenda`, `salao`, `configuracoes` e o `escolher-horario.tsx` que as duas
-primeiras compartilham), **166 checagens** em três suítes de API
+primeiras compartilham), **169 checagens** em três suítes de API
 (`smoke_reservas_config`, `_disponibilidade`, `_salao`) e **55 checagens de
 navegador** na fase 12 da bateria — incluindo o caso de estar desligado.
 
-⚠️ **E ele está DESLIGADO em todas as lojas** (`reservas_ligado = false`), o que
-é o nascimento certo — ver a primeira seção — mas quer dizer que nada disto está
-em uso. Construído e testado não é o mesmo que ligado: quem for avaliar o módulo
-precisa acender o interruptor na tela de Lojas primeiro, senão encontra um menu
-sem o grupo e conclui que não existe.
+⚠️ **Ele nasce DESLIGADO em toda loja** (`reservas_ligado = false`), que é o
+nascimento certo — ver a primeira seção. Construído e testado não é o mesmo que
+ligado: quem for avaliar o módulo numa loja nova precisa acender o interruptor
+na tela de Lojas primeiro, senão encontra um menu sem o grupo e conclui que não
+existe.
+🔑 **Na loja 1 ele está LIGADO desde 21/09/2026**, com a semana cadastrada, e é o
+que o site do cliente lê. ⚠️ **Não desligar** — foi pedido explícito do dono
+(*"Ajustes, sem desativar o reservas"*), e desligar deixa o site no ar
+respondendo 404 para a própria casa.
 
 ⚠️ **O terreno da reserva online já está preparado**, e é de propósito:
 `reserva_config` tem `aceita_online` (hoje `false`), `teto_online` e

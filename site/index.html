@@ -108,26 +108,26 @@ body {
 .rot { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
 
 .itens { display: flex; flex-direction: column; gap: 9px; }
+/* 🔑 **Texto CENTRALIZADO e só o necessário** (pedido do dono, 21/09/2026:
+   *"nos botões, colocar centralizado o texto, e somente o texto necessário,
+   exemplo: Reserve sua Mesa, Catálogo Y, Entre em Contato"*).
+   ⚠️ **O ícone e a seta saíram junto, e não por descuido.** Um ícone à esquerda
+   ancora o texto à esquerda: centralizar com ele no lugar deixaria o rótulo
+   torto em relação ao botão. E o subtítulo — "leva menos de um minuto",
+   "abrir o PDF" — era exatamente o texto que não era necessário. */
 .item {
-  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; text-align: center;
   background: var(--superficie-2); border: 1px solid var(--linha);
-  border-radius: var(--raio); padding: 13px 14px;
-  font: 500 15px/1.2 Karla, sans-serif; color: var(--tinta);
+  border-radius: var(--raio); padding: 15px 16px;
+  font: 500 16px/1.25 Karla, sans-serif; color: var(--tinta);
   cursor: pointer; text-decoration: none;
-  /* ⚠️ 44px de alvo: quem usa este site está no celular, quase sempre andando. */
+  /* ⚠️ Alvo de dedo: quem usa este site está no celular, quase sempre andando. */
   min-height: 52px;
 }
 .item:hover { border-color: var(--erva); }
 .item:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
-.item .ic { width: 26px; text-align: center; font-size: 17px; flex: none; }
-.item small {
-  display: block; font-weight: 400; font-size: 12.5px;
-  color: var(--tinta-suave); margin-top: 2px;
-}
 .item.destaque { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
-.item.destaque small { color: rgba(244,240,229,.75); }
-.item .fim { margin-left: auto; color: var(--tinta-suave); font-size: 15px; }
-.item.destaque .fim { color: rgba(244,240,229,.7); }
 
 .regras {
   background: var(--ocre-claro); border: 1px solid var(--linha);
@@ -161,6 +161,13 @@ label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset
 }
 .voltar:hover { color: var(--tinta); }
 .vazio { color: var(--tinta-suave); font-size: 14px; }
+/* Os dados de contato: rótulo em cima, valor embaixo. Não são botões. */
+.dado { margin: 0; padding: 10px 2px; border-bottom: 1px solid var(--linha); }
+.dado span {
+  display: block; font: 500 11px/1.4 "DM Mono", monospace; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tinta-suave);
+}
+.dado a { color: inherit; }
 .pe {
   text-align: center; color: var(--tinta-suave);
   font: 400 11.5px/1.6 "DM Mono", monospace; padding: 4px 0 2px;
@@ -184,11 +191,7 @@ label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset
       <h2 id="nome-da-casa">Botané Deli e Café</h2>
       <p class="sub" id="linha-dias">…</p>
       <div class="itens" id="itens">
-        <button class="item destaque" data-ir="reserva">
-          <span class="ic" aria-hidden="true">🗓️</span>
-          <span>Reservar uma mesa<small>leva menos de um minuto</small></span>
-          <span class="fim" aria-hidden="true">›</span>
-        </button>
+        <button class="item destaque" data-ir="reserva">Reserve sua Mesa</button>
         <!-- 🔑 Os catálogos entram AQUI, um por cardápio, e cada um abre o PDF.
              Quem os monta é o `carregarCatalogos()`. -->
       </div>
@@ -282,10 +285,36 @@ window.addEventListener("popstate", () => ir((location.hash || "#inicio").slice(
 /* ---- quem é a casa ---- */
 let casa = null;
 
+/**
+ * 🔑 **O texto da mensagem vem da CONFIGURAÇÃO da casa** (migração 081, pedido
+ * do dono): Reservas ▸ Configurações ▸ "A mensagem que abre no WhatsApp".
+ * Estava escrito aqui, e texto que o cliente lê escrito em código só muda
+ * quando alguém publica.
+ *
+ * ⚠️ **Os marcadores são trocados AQUI**, no instante do clique: `{pessoas}`,
+ * `{data}` e `{hora}` só existem depois de a pessoa escolher, e o servidor não
+ * sabe o que ela escolheu.
+ * ⚠️ **O padrão continua no site**, para o caso de a casa apagar o campo: um
+ * WhatsApp que abre com a caixa em branco é pior que um texto genérico.
+ */
+function mensagem(modelo, padrao, valores = {}) {
+  const base = (modelo || "").trim() || padrao;
+  return base.replace(/\{(\w+)\}/g, (inteiro, chave) =>
+    chave in valores ? String(valores[chave]) : inteiro);
+}
+
 function linkZap(texto) {
   return casa && casa.whatsapp
     ? `https://wa.me/${casa.whatsapp}?text=${encodeURIComponent(texto)}`
     : null;
+}
+
+/** A mensagem de quem só quer falar com a casa. */
+function zapDeContato() {
+  return linkZap(mensagem(
+    casa && casa.zap_texto,
+    `Olá! Vim pelo site do ${casa ? casa.casa : "Botané"}.`,
+    { casa: casa ? casa.casa : "Botané" }));
 }
 
 async function carregarCasa() {
@@ -332,7 +361,7 @@ async function carregarCasa() {
 /* 🔑 O contato é o ÚLTIMO item da lista, como no protótipo. Com número
    cadastrado ele abre o WhatsApp direto; sem, leva à tela com o que existe. */
 function montarPortaDeContato() {
-  const zap = linkZap(`Olá! Vim pelo site do ${casa ? casa.casa : "Botané"}.`);
+  const zap = zapDeContato();
   const porta = document.createElement(zap ? "a" : "button");
   porta.className = "item";
   if (zap) {
@@ -342,39 +371,42 @@ function montarPortaDeContato() {
   } else {
     porta.dataset.ir = "contato";
   }
-  porta.innerHTML = `<span class="ic" aria-hidden="true">💬</span>
-    <span>Entre em contato<small>${zap ? "abrir uma conversa no WhatsApp"
-      : "telefone, e-mail e endereço"}</small></span>
-    <span class="fim" aria-hidden="true">›</span>`;
+  // ⚠️ Só o rótulo: o subtítulo dizia o que o botão faz, e o botão já diz.
+  porta.textContent = "Entre em Contato";
   $("#itens").appendChild(porta);
 }
 
+/**
+ * A tela de contato só aparece quando NÃO há WhatsApp cadastrado — com número,
+ * o item da página inicial abre a conversa direto.
+ *
+ * ⚠️ **Aqui os dados NÃO viram `.item`.** Aquele botão é centralizado e só
+ * rótulo, por decisão do dono; telefone, e-mail e endereço são conteúdo, e
+ * conteúdo centralizado sem rótulo vira adivinhação.
+ */
 function montarContato() {
   const l = [];
-  const zap = linkZap(`Olá! Vim pelo site do ${casa.casa}.`);
+  const zap = zapDeContato();
   if (zap) {
-    l.push(`<a class="item" href="${zap}" target="_blank" rel="noopener">
-      <span class="ic">💬</span><span>WhatsApp<small>abrir conversa</small></span>
-      <span class="fim">›</span></a>`);
+    l.push(`<a class="item" href="${zap}" target="_blank" rel="noopener">WhatsApp</a>`);
   } else {
     // ⚠️ **Sem número cadastrado, o site DIZ isso** em vez de mostrar um botão
     // que não leva a lugar nenhum. O número sai de Administração ▸ Empresa.
     l.push(`<div class="regras ruim">O WhatsApp ainda não está cadastrado. Quem cuida do
       sistema pode preenchê-lo em Administração ▸ Empresa, e ele aparece aqui na hora.</div>`);
   }
-  if (casa.telefone) l.push(`<a class="item" href="tel:${esc(casa.telefone)}">
-    <span class="ic">☎️</span><span>Telefone<small>${esc(casa.telefone)}</small></span></a>`);
-  if (casa.email) l.push(`<a class="item" href="mailto:${esc(casa.email)}">
-    <span class="ic">✉️</span><span>E-mail<small>${esc(casa.email)}</small></span></a>`);
-  if (casa.endereco) l.push(`<div class="item"><span class="ic">📍</span>
-    <span>Onde estamos<small>${esc(casa.endereco)}${casa.cidade
-      ? " — " + esc(casa.cidade) + "/" + esc(casa.uf) : ""}</small></span></div>`);
+  const linha = (rot, valor, href) => `<p class="dado"><span>${rot}</span>${href
+    ? `<a href="${href}">${valor}</a>` : valor}</p>`;
+  if (casa.telefone) l.push(linha("Telefone", esc(casa.telefone), `tel:${esc(casa.telefone)}`));
+  if (casa.email) l.push(linha("E-mail", esc(casa.email), `mailto:${esc(casa.email)}`));
+  if (casa.endereco) {
+    l.push(linha("Onde estamos", esc(casa.endereco)
+      + (casa.cidade ? " — " + esc(casa.cidade) + "/" + esc(casa.uf) : "")));
+  }
   $("#bloco-contato").innerHTML = l.join("");
 }
 
 /* ---- os cardápios, na PÁGINA INICIAL ---- */
-const ICONES = ["📖", "🎁", "🧺", "🍰", "🥐"];
-
 async function carregarCatalogos() {
   let lista = [];
   try {
@@ -386,7 +418,7 @@ async function carregarCatalogos() {
   // ⚠️ Entram DEPOIS do "Reservar" e ANTES do contato — a ordem da lista é a
   // ordem de importância, e reservar é o que a casa quer que aconteça.
   const contato = $("#itens").querySelector("a.item, button.item[data-ir='contato']");
-  lista.forEach((c, i) => {
+  lista.forEach((c) => {
     const a = document.createElement("a");
     a.className = "item";
     // 🔑 **Clicar ABRE o catálogo** — o PDF, em outra aba. Era uma tela
@@ -394,11 +426,10 @@ async function carregarCatalogos() {
     a.href = `${API}${c.arquivo_url}`;
     a.target = "_blank";
     a.rel = "noopener";
-    a.innerHTML = `<span class="ic" aria-hidden="true">${ICONES[i % ICONES.length]}</span>
-      <span>${esc(c.nome)}<small>${c.ate
-        ? "até " + new Date(c.ate + "T12:00").toLocaleDateString("pt-BR")
-        : "abrir o PDF"}</small></span>
-      <span class="fim" aria-hidden="true">›</span>`;
+    // ⚠️ **O nome do catálogo, e só ele.** A data de fim e o "abrir o PDF"
+    // eram o texto que não era necessário — quem toca num botão chamado
+    // "Catálogo de Encomendas" sabe o que vai abrir.
+    a.textContent = c.nome;
     if (contato) $("#itens").insertBefore(a, contato);
     else $("#itens").appendChild(a);
   });
@@ -453,8 +484,11 @@ $("#horarios").addEventListener("click", (e) => {
   const aviso = $("#aviso-reserva");
   aviso.hidden = false;
   const quando = new Date($("#dia").value + "T12:00").toLocaleDateString("pt-BR");
-  const zap = linkZap(
-    `Olá! Queria reservar para ${$("#pessoas").value} pessoas no dia ${quando} às ${b.textContent}.`);
+  const zap = linkZap(mensagem(
+    casa && casa.zap_texto_reserva,
+    `Olá! Queria reservar para {pessoas} pessoas no dia {data} às {hora}.`,
+    { casa: casa ? casa.casa : "Botané", pessoas: $("#pessoas").value,
+      data: quando, hora: b.textContent }));
   // ⚠️ **A tela não promete o que ainda não faz.** Escolher o horário aqui não
   // grava reserva nenhuma — dizer "reservado" faria o cliente aparecer na porta
   // sem mesa.

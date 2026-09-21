@@ -8554,11 +8554,31 @@ try {
   const ligarReservas = async (valor) =>
     api("PUT", `/unidades/${lojaR}/parametros`, { reservas_ligado: valor }, token);
 
-  // ⚠️ Devolve a loja ao estado de partida aconteça o que acontecer: uma casa
-  // que não faz reserva não pode terminar a bateria com o módulo ligado.
+  // ⚠️ **Devolve a loja ao estado em que ela ESTAVA, aconteça o que acontecer.**
+  // 🔑 Isto já foi `ligarReservas(false)` fixo, com o argumento de que "uma casa
+  // que não faz reserva não pode terminar a bateria com o módulo ligado" — e o
+  // argumento envelheceu no dia em que a loja 1 passou a fazer reserva de
+  // verdade, com o site do cliente lendo dela. O efeito era a bateria passar
+  // inteira e o site responder 404 para a própria casa logo depois.
+  // ⚠️ A fase precisa MESMO começar desligada (ela afirma que o menu não tem o
+  // grupo); o que não pode é o estado de teste sobrar no fim.
+  const { dados: parR } = await api("GET", `/unidades/${lojaR}/parametros`, null, token);
+  const RESERVAS_ANTES = !!parR.reservas_ligado;
+  // 🔑 **E a CONFIGURAÇÃO também é fotografada**, não só o interruptor. A fase
+  // reescreve a semana inteira (e com ela os textos do WhatsApp que o site do
+  // cliente lê): sem esta foto, a bateria passava com 866 checagens verdes e
+  // deixava a casa aberta só no sábado, com a mensagem do WhatsApp apagada.
+  // ⚠️ Só existe configuração para ler com o módulo ligado — daí o `ligar`
+  // antes, e o parâmetro voltando ao lugar logo em seguida.
+  await ligarReservas(true);
+  const { dados: CFG_ANTES } = await api("GET", "/reservas/configuracao", null, token);
   await ligarReservas(false);
   aoTerminar.push(async () => {
-    await ligarReservas(false);
+    // ⚠️ **Ordem:** ligar, devolver a configuração, e só então devolver o
+    // interruptor — gravar configuração com o módulo desligado é 409.
+    await ligarReservas(true);
+    await api("PUT", "/reservas/configuracao", CFG_ANTES, token);
+    await ligarReservas(RESERVAS_ANTES);
   });
 
   await entrar(p, ADMIN);
@@ -8690,6 +8710,31 @@ try {
   for (const s of salaoAntes.saloes) {
     await api("PUT", `/reservas/saloes/${s.id}`, { ativo: false }, token);
   }
+  // ⚠️ **E o `ativo` de cada um volta no fim.** Desligar o salão da casa é o
+  // jeito certo de a fase começar limpa; deixá-lo desligado é tirar as mesas da
+  // disponibilidade sem ninguém ter pedido — e a casa só descobriria ao ver a
+  // agenda vazia num dia cheio.
+  const ATIVOS_ANTES = salaoAntes.saloes.map((s) => ({ id: s.id, ativo: s.ativo }));
+  aoTerminar.push(async () => {
+    for (const s of ATIVOS_ANTES) {
+      await api("PUT", `/reservas/saloes/${s.id}`, { ativo: s.ativo }, token);
+    }
+    // 🔑 **E os salões que ESTA rodada criou saem do cadastro.** Sem isto cada
+    // bateria deixa mais um "Principal 4779526" na tela de quem usa o sistema,
+    // e depois de um mês o salão da casa está enterrado em lixo de teste.
+    // ⚠️ Salão com reserva pendurada RECUSA a exclusão (409, de propósito: é a
+    // resposta para onde aquelas pessoas sentaram) — esse fica só desligado.
+    const { dados: agora } = await api("GET", "/reservas/salao", null, token);
+    for (const sala of agora.saloes.filter((x) => x.nome.includes(marcaNota))) {
+      for (const m of agora.mesas.filter((x) => x.id_salao === sala.id)) {
+        await api("DELETE", `/reservas/mesas/${m.id}`, null, token);
+      }
+      const saiu = await api("DELETE", `/reservas/saloes/${sala.id}`, null, token);
+      if (saiu.status >= 400) {
+        await api("PUT", `/reservas/saloes/${sala.id}`, { ativo: false }, token);
+      }
+    }
+  });
 
   await irPara(p, `${WEB}/reservas/salao`);
   await esperarTexto(p, "maior grupo que cabe", 9000);

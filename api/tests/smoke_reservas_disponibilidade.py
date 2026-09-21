@@ -31,6 +31,7 @@ from datetime import date, timedelta
 sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 
+from comum import preservar_reserva  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
@@ -74,6 +75,12 @@ checar("o administrador entra", bool(token))
 init_pool()
 _st, eu = chamar("GET", "/auth/me", token=token)
 UNIDADE = (eu.get("unidades") or [{}])[0].get("id")
+
+# 🔑 **A suite devolve o que encontrou.** Ela precisa desmontar a reserva da loja
+# para testar (modulo desligado, salao vazio, semana em branco), e sem isto o
+# estado de teste ficava para tras — foi assim que a configuracao da casa se
+# perdeu numa rodada de bateria. Ver `preservar_reserva` em `comum.py`.
+devolver_a_reserva = preservar_reserva(UNIDADE)
 
 chamar("PUT", f"/unidades/{UNIDADE}/parametros", {"reservas_ligado": True}, token)
 
@@ -419,7 +426,8 @@ with get_cursor() as cur:
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
     for tabela in ("reserva_permanencias", "reserva_horarios", "reserva_config"):
         cur.execute(f"DELETE FROM {tabela} WHERE id_unidade = %s", (UNIDADE,))
-chamar("PUT", f"/unidades/{UNIDADE}/parametros", {"reservas_ligado": False}, token)
+# 🔑 E a loja volta ao que era ANTES desta suite — inclusive o interruptor.
+devolver_a_reserva()
 
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")

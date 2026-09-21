@@ -237,6 +237,95 @@ def preservar_credenciais(servico: str = "OMIE"):
     return repor
 
 
+def preservar_reserva(unidade: int):
+    """Fotografa a reserva da loja AGORA e a devolve quando a suíte terminar.
+
+    🔑 **As três suítes de reserva DESMONTAM a casa para testar.** Elas desligam
+    o módulo, apagam a semana, apagam salões e mesas e montam o cenário delas —
+    e precisam mesmo: metade do que provam é como o sistema se comporta com o
+    módulo desligado e com o salão vazio. O problema nunca foi o que elas fazem
+    no meio, e sim **o estado que deixavam no fim**: módulo desligado e loja sem
+    nada, que era "limpo" só enquanto nenhuma loja usava reserva de verdade.
+
+    ⚠️ **Isto já aconteceu.** No dia em que a loja 1 passou a ter a semana
+    cadastrada e o site do cliente lendo dela, uma rodada de bateria apagou a
+    configuração da casa — e o sinal foi o site respondendo 404 para a própria
+    casa. Quem rodou a bateria não tem como ligar uma coisa à outra.
+
+    É a mesma lição de `preservar_credenciais` e `preservar_logo`: **suíte
+    devolve o que encontrou**, e não um estado que ela supõe ser o certo.
+
+    ⚠️ **Registrado no `atexit`**, não no fim do roteiro: foi estourando no meio
+    que uma credencial se perdeu de vez, e foi estourando no meio que a reserva
+    da loja 1 se perdeu. Repor duas vezes não faz mal — é o mesmo valor.
+
+    ⚠️ **Sem reserva nenhuma também é um estado a devolver**: a loja que chegou
+    sem salão sai sem salão, e o módulo volta a desligado.
+    """
+    import atexit
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
+
+    def conectar():
+        return psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER,
+                                password=DB_PASSWORD, dbname=DB_NAME, sslmode=DB_SSLMODE)
+
+    # 🔑 **A ordem é a das chaves estrangeiras**: apaga-se de baixo para cima e
+    # repõe-se de cima para baixo. `reserva_mesas` não tem `id_unidade` — ela
+    # pendura na reserva, e é por ela que se chega à loja.
+    TABELAS = [
+        ("reserva_config", "id_unidade = %s"),
+        ("reserva_horarios", "id_unidade = %s"),
+        ("reserva_permanencias", "id_unidade = %s"),
+        ("reserva_bloqueios", "id_unidade = %s"),
+        ("saloes", "id_unidade = %s"),
+        ("mesas", "id_unidade = %s"),
+        ("reservas", "id_unidade = %s"),
+        ("reserva_mesas", "id_reserva IN (SELECT id FROM reservas WHERE id_unidade = %s)"),
+    ]
+
+    with conectar() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT reservas_ligado FROM parametros WHERE id_unidade = %s", (unidade,))
+        linha = cur.fetchone()
+        ligado = bool(linha and linha["reservas_ligado"])
+        antes = {}
+        for tabela, onde in TABELAS:
+            cur.execute(f"SELECT * FROM {tabela} WHERE {onde}", (unidade,))  # noqa: S608
+            antes[tabela] = [dict(r) for r in cur.fetchall()]
+
+    def repor() -> int:
+        postas = 0
+        with conectar() as conn, conn.cursor() as cur:
+            for tabela, onde in reversed(TABELAS):
+                cur.execute(f"DELETE FROM {tabela} WHERE {onde}", (unidade,))  # noqa: S608
+            for tabela, _onde in TABELAS:
+                for reg in antes[tabela]:
+                    colunas = list(reg)
+                    # ⚠️ `ON CONFLICT DO NOTHING` SEM alvo: cada uma destas
+                    # tabelas tem uma chave diferente (`id`, `id_unidade`, o par
+                    # reserva+mesa), e nomear a coluna errada quebraria só nela.
+                    cur.execute(
+                        f"INSERT INTO {tabela} ({', '.join(colunas)}) "  # noqa: S608
+                        f"VALUES ({', '.join(['%s'] * len(colunas))}) "
+                        "ON CONFLICT DO NOTHING",
+                        [reg[c] for c in colunas],
+                    )
+                    postas += 1
+            cur.execute("UPDATE parametros SET reservas_ligado = %s WHERE id_unidade = %s",
+                        (ligado, unidade))
+            conn.commit()
+        return postas
+
+    atexit.register(repor)
+    return repor
+
+
 def preservar_logo(base: str, token: str) -> None:
     """Guarda a logo da empresa AGORA e a devolve quando a suíte terminar.
 

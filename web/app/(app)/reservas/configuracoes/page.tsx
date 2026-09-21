@@ -55,6 +55,10 @@ type Config = {
   antecedencia_min_horas: number;
   antecedencia_max_dias: number;
   cadastro_completo: boolean;
+  /** 🔑 As mensagens que o site do cliente abre no WhatsApp (migração 081).
+   *  Nulas = usa o padrão da casa. */
+  whatsapp_texto: string | null;
+  whatsapp_texto_reserva: string | null;
   horarios: Horario[];
   permanencias: Faixa[];
   dias_abertos: number;
@@ -153,6 +157,8 @@ export default function ConfiguracoesDeReservas() {
         antecedencia_min_horas: Number(cfg.antecedencia_min_horas),
         antecedencia_max_dias: Number(cfg.antecedencia_max_dias),
         cadastro_completo: cfg.cadastro_completo,
+        whatsapp_texto: cfg.whatsapp_texto,
+        whatsapp_texto_reserva: cfg.whatsapp_texto_reserva,
         horarios: cfg.horarios,
         permanencias: cfg.permanencias.map((f) => ({
           nome: f.nome,
@@ -437,6 +443,58 @@ export default function ConfiguracoesDeReservas() {
               </span>
             </span>
           </label>
+        </div>
+      </Cartao>
+
+      {/* 🔑 **O texto do WhatsApp, escrito pela CASA** (pedido do dono,
+          21/09/2026: *"em configurações da reserva, colocar o texto padrão
+          configurável para o whatsapp"*). Ele estava escrito dentro do site, e
+          texto que o cliente lê escrito em código só muda quando alguém
+          publica — a casa que quisesse outro tom teria de pedir uma versão. */}
+      <Cartao
+        titulo="A mensagem que abre no WhatsApp"
+        descricao="É o que o cliente vê já digitado ao tocar no botão do site. Ele ainda pode apagar e escrever o que quiser."
+      >
+        <div className="flex flex-col gap-4">
+          {/* ⚠️ **Dois textos, não um.** Quem toca em "Entre em contato" ainda
+              não escolheu nada; quem vem da reserva já tem dia, hora e quantas
+              pessoas. A mesma frase nos dois ou perde o que o cliente já disse,
+              ou manda "reservar para {pessoas}" sem pessoas nenhuma. */}
+          <Campo
+            rotulo="Quando tocam em “Entre em Contato”"
+            dica="Use {casa} para o nome da casa."
+          >
+            <input
+              className="campo"
+              id="zap-texto"
+              maxLength={400}
+              disabled={somenteLeitura}
+              placeholder="Olá! Vim pelo site do {casa}."
+              value={cfg.whatsapp_texto ?? ""}
+              onChange={(e) => mudar("whatsapp_texto", e.target.value)}
+            />
+          </Campo>
+          <Campo
+            rotulo="Quando escolhem um horário"
+            dica="Use {pessoas}, {data} e {hora} — o site troca pelo que a pessoa escolheu."
+          >
+            <input
+              className="campo"
+              id="zap-texto-reserva"
+              maxLength={400}
+              disabled={somenteLeitura}
+              placeholder="Olá! Queria reservar para {pessoas} pessoas no dia {data} às {hora}."
+              value={cfg.whatsapp_texto_reserva ?? ""}
+              onChange={(e) => mudar("whatsapp_texto_reserva", e.target.value)}
+            />
+          </Campo>
+          {/* ⚠️ **Em branco não é vazio: é o padrão.** Quem apagar o campo sem
+              querer não fica com o cliente abrindo o WhatsApp mudo. */}
+          <p className="text-[13px] text-suave">
+            Deixando em branco, o site usa a mensagem padrão. O número sai de
+            Administração ▸ Empresa ▸ WhatsApp — sem ele, o site mostra o telefone e o
+            endereço no lugar do botão.
+          </p>
         </div>
       </Cartao>
 

@@ -115,6 +115,7 @@ def casa(id_unidade: int) -> dict:
             # ela em vez de trazer um verde escrito no HTML.
             "cor": e.get("cor_primaria"),
             **_quando_atende(cur, id_unidade),
+            **_textos_do_zap(cur, id_unidade),
         }
 
 
@@ -124,6 +125,30 @@ def casa(id_unidade: int) -> dict:
 # `parametros.fechamento_dia_semana`, e duas convenções de dia da semana no
 # mesmo sistema não dão erro em lugar nenhum — só marcam no dia errado.
 _DIAS = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
+
+
+def _textos_do_zap(cur, id_unidade: int) -> dict:
+    """As mensagens que a casa escreveu para o WhatsApp (migração 081).
+
+    🔑 **Pedido do dono (21/09/2026):** *"em configurações da reserva, colocar o
+    texto padrão configurável para o whatsapp."* Estavam escritas no site, e
+    texto de cliente escrito em código só muda quando alguém publica.
+
+    ⚠️ **Os marcadores são trocados no SITE, não aqui.** `{pessoas}`, `{data}` e
+    `{hora}` só existem no instante do clique — o servidor não sabe o que o
+    cliente escolheu, e montar a frase aqui exigiria mandar a escolha de volta
+    para receber um texto.
+    """
+    cur.execute(
+        """SELECT whatsapp_texto, whatsapp_texto_reserva
+             FROM reserva_config WHERE id_unidade = %s""",
+        (id_unidade,),
+    )
+    t = dict(cur.fetchone() or {})
+    return {
+        "zap_texto": t.get("whatsapp_texto"),
+        "zap_texto_reserva": t.get("whatsapp_texto_reserva"),
+    }
 
 
 def _quando_atende(cur, id_unidade: int) -> dict:

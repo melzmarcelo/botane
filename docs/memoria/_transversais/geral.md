@@ -177,6 +177,24 @@
   ⚠️ Digitar num campo com debounce dispara uma navegação por caractere no App Router; o pedido
   à API só sai depois da última. Medir por tempo fixo aí é apostar.
 
+- 🔑 **Arquivo temporário escrito dentro de `api/` REINICIA a API** (21/09/2026). O reloader do
+  uvicorn observa a pasta inteira: gravar um `_tmp_*.py` em `api/tests/` derruba a conexão da
+  chamada que estiver em curso, e o que se vê é um `ConnectionResetError: [WinError 10054]` no
+  meio de uma suíte — que parece defeito da suíte e não é.
+  ⚠️ **E o estrago não para no erro**: a rodada morre antes da limpeza, e uma suíte que
+  desmonta para testar deixa o estado de teste para trás. Foi assim que a configuração de
+  reservas da loja 1 se perdeu. Script descartável vai para `site/` ou para a raiz, nunca para
+  dentro de `api/`.
+
+- 🔑 **Suíte devolve o que ENCONTROU, não um estado "limpo".** Já são três os casos
+  (`preservar_credenciais`, `preservar_logo` e `preservar_reserva`, todos em `tests/comum.py`),
+  e os três nasceram do mesmo jeito: a suíte apagava dado real do cliente e ninguém ligava uma
+  coisa à outra depois. ⚠️ **Sempre no `atexit`**, nunca como última linha do roteiro — o que
+  se perde é justamente o que a suíte estava guardando quando ela estoura no meio.
+  ⚠️ **"Não tem nada a perder" envelhece**: a limpeza destrutiva de reservas era inofensiva
+  enquanto nenhuma loja usava o módulo, e virou perda de dado no dia em que uma passou a usar.
+  Limpeza escrita quando a tabela estava vazia precisa ser revista quando ela deixa de estar.
+
 ## Stack e portas
 
 - 🔑 **O painel abre com o que a cozinha DESTA pessoa tem para fazer** (`GET /inicio`, bloco

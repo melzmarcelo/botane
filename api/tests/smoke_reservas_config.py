@@ -25,6 +25,7 @@ import urllib.request
 sys.path.insert(0, ".")
 sys.path.insert(0, "tests")
 
+from comum import preservar_reserva  # noqa: E402
 from database import get_cursor, init_pool  # noqa: E402
 
 BASE = "http://127.0.0.1:9200"
@@ -74,6 +75,14 @@ checar("a loja atual responde", bool(UNIDADE), eu.get("unidades"))
 def ligar(valor: bool):
     st, r = chamar("PUT", f"/unidades/{UNIDADE}/parametros", {"reservas_ligado": valor}, token)
     return st, r
+
+# 🔑 **A suite devolve o que encontrou.** Ela precisa desmontar a reserva da loja
+# para testar (modulo desligado, salao vazio, semana em branco), e sem isto o
+# estado de teste ficava para tras — foi assim que a configuracao da casa se
+# perdeu numa rodada de bateria. Ver `preservar_reserva` em `comum.py`.
+_st, _p = chamar("GET", f"/unidades/{UNIDADE}/parametros", token=token)
+LIGADA_ANTES = _p.get("reservas_ligado")
+devolver_a_reserva = preservar_reserva(UNIDADE)
 
 
 print("\n0. o estado de partida: DESLIGADO")
@@ -200,6 +209,34 @@ checar("as faixas foram reescritas para duas", len(cfg["permanencias"]) == 2,
 checar("e a confirmacao manual ficou gravada", cfg["confirmacao"] == "MANUAL",
        cfg["confirmacao"])
 
+# 🔑 **O texto do WhatsApp (21/09/2026)**, pedido do dono: *"em configuracoes da
+# reserva, colocar o texto padrao configuravel para o whatsapp."* Sao DOIS: quem
+# clica em "Entre em contato" ainda nao escolheu nada; quem vem da reserva ja
+# tem dia, hora e pessoas.
+corpo_zap = json.loads(json.dumps(corpo))
+corpo_zap["whatsapp_texto"] = "Oi! Achei voces pelo site do {casa}."
+corpo_zap["whatsapp_texto_reserva"] = "Mesa para {pessoas} dia {data} as {hora}?"
+st, _r = chamar("PUT", "/reservas/configuracao", corpo_zap, token)
+checar("os dois textos do WhatsApp sao aceitos", st == 200, (st, _r))
+st, cfg = chamar("GET", "/reservas/configuracao", token=token)
+checar("e voltam como foram escritos, com os marcadores intactos",
+       cfg.get("whatsapp_texto") == corpo_zap["whatsapp_texto"]
+       and cfg.get("whatsapp_texto_reserva") == corpo_zap["whatsapp_texto_reserva"],
+       (cfg.get("whatsapp_texto"), cfg.get("whatsapp_texto_reserva")))
+
+# ⚠️ **Campo em branco vira NULO, nao string vazia.** O site cai no texto padrao
+# dele quando nao ha mensagem; a string vazia passaria pelo `or` do JavaScript do
+# mesmo jeito, mas guardaria no banco uma mensagem que existe e nao diz nada.
+branco = json.loads(json.dumps(corpo_zap))
+branco["whatsapp_texto"] = "   "
+st, _r = chamar("PUT", "/reservas/configuracao", branco, token)
+st, cfg = chamar("GET", "/reservas/configuracao", token=token)
+checar("texto so com espacos e guardado como vazio, nao como espacos",
+       cfg.get("whatsapp_texto") is None, repr(cfg.get("whatsapp_texto")))
+checar("e o outro texto nao foi junto",
+       cfg.get("whatsapp_texto_reserva") == corpo_zap["whatsapp_texto_reserva"],
+       cfg.get("whatsapp_texto_reserva"))
+
 print("\n6. o que a configuracao RECUSA")
 mau = json.loads(json.dumps(corpo))
 mau["horarios"][5]["ultima_reserva"] = "19:00"   # depois do fechamento do sabado
@@ -220,6 +257,13 @@ mau["permanencias"] = [
 ]
 st, r = chamar("PUT", "/reservas/configuracao", mau, token)
 checar("faixas de permanencia sobrepostas sao recusadas", st == 422, st)
+
+# ⚠️ O texto vai para uma URL `wa.me?text=`, que tem limite. Recusar aqui e
+# melhor do que gerar um link que o WhatsApp corta pela metade.
+mau = json.loads(json.dumps(corpo))
+mau["whatsapp_texto"] = "x" * 401
+st, _r = chamar("PUT", "/reservas/configuracao", mau, token)
+checar("texto de WhatsApp acima de 400 caracteres e recusado", st == 422, st)
 
 mau = json.loads(json.dumps(corpo))
 mau["confirmacao"] = "TALVEZ"
@@ -246,12 +290,12 @@ checar("religar devolve a configuracao como estava",
        (st, cfg.get("dias_abertos")))
 
 print("\n8. limpeza - a loja volta ao estado de partida")
-# ⚠️ Desliga o modulo E apaga a configuracao que esta suite criou: a base local
-# volta a nao ter reserva nenhuma, que e como ela estava antes.
-ligar(False)
-with get_cursor() as cur:
-    for tabela in ("reserva_permanencias", "reserva_horarios", "reserva_config"):
-        cur.execute(f"DELETE FROM {tabela} WHERE id_unidade = %s", (UNIDADE,))
+# 🔑 **Estado de partida, nao estado vazio.** Quem devolve e o `atexit` do
+# `preservar_reserva`; chamar aqui tambem so adianta o mesmo trabalho.
+devolver_a_reserva()
+st, _p = chamar("GET", f"/unidades/{UNIDADE}/parametros", token=token)
+checar("a loja volta ao estado em que a suite a encontrou",
+       _p.get("reservas_ligado") == LIGADA_ANTES, (_p.get("reservas_ligado"), LIGADA_ANTES))
 
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")

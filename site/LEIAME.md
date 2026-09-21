@@ -24,10 +24,22 @@
             Botané Deli e Café
           Ter · Qua · Qui · Sex · Sáb
 
-   🗓️  Reservar uma mesa            ›   (destaque)
-   📖  Catálogo de Encomendas       ›   → abre o PDF
-   💬  Entre em contato             ›   → abre o WhatsApp
+        ╔══════════════════════════╗
+        ║     Reserve sua Mesa     ║   (destaque)
+        ╚══════════════════════════╝
+        ┌──────────────────────────┐
+        │  Catálogo de Encomendas  │   → abre o PDF
+        └──────────────────────────┘
+        ┌──────────────────────────┐
+        │     Entre em Contato     │   → abre o WhatsApp
+        └──────────────────────────┘
 ```
+
+🔑 **Só o texto, centralizado** — pedido do dono (21/09/2026): *"nos botões, colocar
+centralizado o texto, e somente o texto necessário."* Saíram o ícone, a seta e o subtítulo:
+três elementos disputando espaço com a única informação que importa.
+⚠️ **Dado de contato NÃO é botão.** Endereço, telefone e e-mail viraram linhas `.dado`
+(rótulo em cima, valor embaixo). Centralizar um endereço o faz parecer clicável, e ele não é.
 
 ## A cara: o protótipo, linha a linha
 
@@ -84,7 +96,7 @@ Tudo vem de `/publico/{loja}/...`, o único router da casa sem permissão:
 
 | rota | para quê |
 |---|---|
-| `/publico/1/casa` | nome, endereço, telefone e o **WhatsApp** do botão de contato |
+| `/publico/1/casa` | nome, endereço, telefone, o **WhatsApp** e as duas mensagens dele |
 | `/publico/1/catalogos` | os cardápios `ATIVO`, dentro do período **e com PDF** |
 | `/publico/1/horarios?dia=…&pessoas=…` | os horários com mesa, pela mesma regra da agenda |
 
@@ -95,6 +107,13 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
 
 - ✅ **Cardápios** — cada um é um item da página inicial, e clicar abre o PDF.
 - ✅ **Entre em contato** — abre a conversa no WhatsApp com mensagem pronta.
+  🔑 **A mensagem é CADASTRADA**, em Reservas ▸ Configurações (migração 081): uma
+  frase para quem toca em "Entre em Contato" e outra para quem escolheu um
+  horário. ⚠️ **Estava escrita aqui dentro**, e texto de cliente em código só muda
+  quando alguém publica o site.
+  🔑 Os marcadores `{casa}`, `{pessoas}`, `{data}` e `{hora}` chegam crus da API e
+  são trocados aqui, no clique — só o site sabe o que a pessoa escolheu na tela.
+  ⚠️ **Sem texto cadastrado o site usa o padrão dele**, que é o mesmo da migração.
   🔑 `wa.me` é **só um link**: não exige WhatsApp Business API, provedor nem
   modelo aprovado. O esboço de reservas deixou o WhatsApp "para depois" pensando
   no envio automático de confirmação — *abrir* a conversa custa isto.
