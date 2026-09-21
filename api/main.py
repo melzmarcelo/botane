@@ -62,6 +62,7 @@ from routers import (
     producao_agenda,
     reservas,
     produtos,
+    publico,
     transferencias,
     tokens_api,
     usuarios,
@@ -394,6 +395,7 @@ app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
 app.include_router(catalogos.router)
+app.include_router(publico.router)
 app.include_router(reservas.router)
 
 

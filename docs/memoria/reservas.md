@@ -303,6 +303,59 @@ a frase em português, como `_recusar_nome_repetido` faz com o índice único.
 ⚠️ E a suíte afirmava só `st >= 400`, o que **deixou o 500 passar**. Virou `st == 409` com a
 mensagem.
 
+## O site do cliente (21/09/2026)
+
+🔑 **Pedido do dono:** *"agora vamos criar o site para o cliente, onde o front será separado,
+no oficial vamos colocar em `reserva.botanedeliecafe.com.br`. Os itens serão: Reserva,
+Catálogos cadastrados e ativos, Entre em Contato (onde vai abrir o whatsapp para enviar
+mensagem para o número cadastrado para a empresa). Montar assim e depois vamos melhorando."*
+
+⚠️ **O esboço recomendava rota pública no mesmo app; o dono escolheu front separado.** A
+decisão é dele e está tomada — e o que o esboço previa como preço é exatamente o que
+aconteceu: **o CORS voltou a existir**. Hoje `web` e `api` dividem o domínio e o problema não
+existe; com o site em `reserva.…` ele precisa da origem em `CORS_ORIGINS`, senão o site sobe,
+abre bonito e **não carrega nada** — sem cardápio, sem horário e sem o WhatsApp. E o navegador
+não diz por quê na tela.
+
+- **`site/index.html`**, sem build. São três telas que leem a API: um arquivo que abre direto
+  carrega mais rápido no celular de quem está na rua do que qualquer bundle, publica como site
+  estático e não tem build para quebrar numa promoção. ⚠️ **É decisão de hoje**: com login do
+  cliente e "minhas reservas", vale o app — e a troca é de hospedagem, não de backend.
+  ⚠️ **A paleta é a do PROTÓTIPO**, não a do sistema interno: lá dentro é ferramenta de
+  trabalho com dado denso; aqui é a casa se apresentando a quem vai jantar.
+
+- 🔑 **`routers/publico.py` é o ÚNICO router sem permissão da casa**, e por isso é o mais
+  estreito. A regra que substitui a permissão é a do CONTEÚDO: só sai dali o que a casa já
+  decidiu publicar. ⚠️ **Cada resposta é montada à mão** — a tentação é reaproveitar o
+  serializador de dentro, e o preço é vazar o que ninguém pediu: quantas mesas a casa tem,
+  quantas reservas existem hoje, o nome de quem atendeu. A suíte cobra a AUSÊNCIA disso.
+  ⚠️ **A loja vem no CAMINHO** (`/publico/{id_unidade}/…`), não no `X-Unidade`: o site não tem
+  sessão, e um dia haverá duas casas com reserva, cada uma no seu endereço.
+  ⚠️ **404, nunca 403**, para casa com reserva desligada: um 403 diria ao público que aquele
+  número corresponde a uma casa real.
+
+- 🔑 **Os horários vêm da MESMA `reservas_agenda`** que a agenda do balcão usa. Uma segunda
+  regra para o público divergiria, e a divergência apareceria como mesa prometida ao cliente e
+  indisponível na casa. ⚠️ Mas a resposta é **podada**: `mesas_livres` por horário é
+  informação de operação, e o público não precisa saber se o salão está cheio para escolher as
+  19h.
+
+- 🔑 **`wa.me` é só um LINK.** O esboço deixou o WhatsApp para depois pensando no envio
+  automático de confirmação — que exige Business API, provedor e modelo aprovado. **Abrir** a
+  conversa não exige nada disso, e é o que o dono pediu. ⚠️ O número sai de `empresa.whatsapp`
+  e é limpo no servidor (`_so_digitos`): o cadastro aceita "(47) 99910-5033" e o `wa.me` só
+  aceita dígitos. ⚠️ **Sem número cadastrado vem NULO**, e o site diz isso — um placeholder
+  faria o cliente mandar mensagem para um desconhecido.
+
+- 🟡 **A reserva ainda NÃO grava pelo site.** Ele mostra os horários livres, de verdade, e ao
+  escolher um monta a mensagem pronta para o WhatsApp. ⚠️ **A tela não promete o que não faz**:
+  dizer "reservado" faria o cliente aparecer na porta sem mesa.
+  **O que falta para fechar:** identificar quem reserva (o esboço já decidiu: `fornecedores` é
+  a tabela de pessoas, e a chave é o telefone) e **conter abuso** — essa é a diferença entre
+  ler e gravar numa rota pública, e sem limite o salão amanhece lotado de reservas que ninguém
+  fez. A trava de concorrência já existe desde a 070 (`_travar_o_dia`, por loja e dia).
+
+
 ## O que vem a seguir
 
 ⚠️ **Esta lista esteve ERRADA por uma semana, e o erro é instrutivo.** Ela dizia
@@ -321,7 +374,9 @@ Pela ordem do esboço (conferido no código em 21/09/2026):
    disponibilidade e a reserva" acima é a documentação dela.
 3. ~~Reserva pelo balcão e a agenda do dia~~ — **feito**, migração 070, com
    ciclo de status, remarcar e bloqueios.
-4. **A reserva pelo site do cliente — o único que não começou.**
+4. **A reserva pelo site do cliente** — o site existe (ver a seção acima) com as três
+   portas; falta ele GRAVAR a reserva, que é o que exige identificar quem reserva e conter
+   abuso.
 
 **O que o módulo tem hoje**, medido: 18 rotas em `routers/reservas.py`, os dois
 serviços (`reservas.py` e `reservas_agenda.py`), quatro telas

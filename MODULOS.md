@@ -155,7 +155,7 @@ ficha são REFEITOS dos totais — é por isso que a apuração devolve
 
 ## Reservas
 
-- **Rotas:** `reservas.py`, `catalogos.py`
+- **Rotas:** `reservas.py`, `catalogos.py`, `publico.py` (o site do cliente)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `catalogos.py`
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
@@ -171,6 +171,17 @@ recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
 última reserva — e permanência por faixa), o **salão** (salões, mesas e a junta
 entre vizinhas), a **regra de disponibilidade** e a **reserva pelo balcão**, com
 ciclo de status, remarcar e bloqueios. Falta a reserva pelo site do cliente.
+
+🔑 **O SITE DO CLIENTE é o terceiro artefato da casa** (21/09/2026): `site/`,
+um `index.html` estático que vai para `reserva.botanedeliecafe.com.br` e lê a
+MESMA API por `/publico/{loja}/...` — o único router sem permissão.
+Três portas: **Reservar** (mostra os horários, pela mesma regra da agenda),
+**Cardápios** (os catálogos ativos, no ar e com PDF) e **Entre em contato**
+(abre o WhatsApp da empresa).
+⚠️ **O CORS volta a existir**: front separado em outro domínio precisa da origem
+em `CORS_ORIGINS`, senão o site abre e não carrega nada.
+⚠️ **A reserva ainda não GRAVA** pelo site — mostra os horários e monta a
+mensagem do WhatsApp. Gravar exige identificar quem reserva e conter abuso.
 
 🔑 **O CATÁLOGO é daqui** (migração 079, 21/09/2026): a capa do que o site de
 reservas apresenta — nome, **origem `PDF`** (o arquivo importado), período de

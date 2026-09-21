@@ -148,6 +148,7 @@ o recurso cruza módulos (a colheita de EAN nasce em Compras e escreve em Cadast
 | Banco | PostgreSQL local (`botane_db`) | 5432 |
 | API | FastAPI + psycopg, migrações `.sql` numeradas rodando no start | 9200 |
 | Web | Next.js App Router + Tailwind, PWA | 3100 |
+| Site do cliente | `site/` — um `index.html` estático, sem build | 3200 |
 | App | Capacitor sobre o mesmo web (fase 8) | — |
 
 As portas acima são as de casa. No ar, web e API dividem o mesmo domínio (a API sob

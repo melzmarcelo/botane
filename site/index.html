@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="pt-BR" data-loja="1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Botané Deli e Café — Reservas</title>
+<meta name="description" content="Reserve uma mesa, veja o cardápio e fale com a gente.">
+<meta name="theme-color" content="#2F5D4E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================================
+   O site do CLIENTE — reserva.botanedeliecafe.com.br
+   ---------------------------------------------------------------------------
+   🔑 Pedido do dono (21/09/2026): *"agora vamos criar o site para o cliente,
+   onde o front será separado... Os itens serão: Reserva, Catálogos cadastrados
+   e ativos, Entre em Contato (onde vai abrir o whatsapp para enviar mensagem
+   para o número cadastrado para a empresa). Montar assim e depois vamos
+   melhorando."*
+
+   ⚠️ **Esta é a paleta do PROTÓTIPO** (`apresentacao/reservas-prototipo.html`),
+   não a do sistema interno. São dois públicos: lá dentro é ferramenta de
+   trabalho, com dado denso; aqui é a casa se apresentando a quem vai jantar.
+
+   ⚠️ **Nada de build.** São três telas que leem a API — um `index.html` que
+   abre direto carrega mais rápido no celular de quem está na rua do que
+   qualquer bundle, e publica como site estático. No dia em que o site crescer
+   (login do cliente, minhas reservas), aí vale o app.
+   =========================================================================== */
+:root {
+  --papel: #F7F3EC;
+  --superficie: #FFFFFF;
+  --tinta: #1B241F;
+  --tinta-suave: #5E6862;
+  --linha: #E4DCCE;
+  --erva: #2F5D4E;
+  --erva-clara: #E7EFEA;
+  --ocre: #A97516;
+  --barro: #9A3B2E;
+  --sombra: 0 1px 2px rgba(27,36,31,.06), 0 8px 24px rgba(27,36,31,.07);
+  --raio: 14px;
+}
+/* ⚠️ O tema escuro vem do APARELHO: quem reserva às 22h está com o celular no
+   escuro. Só os tokens mudam — os componentes leem sempre daqui. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #101613; --superficie: #18211C; --tinta: #ECE5D8;
+    --tinta-suave: #9AA69F; --linha: #2A362F; --erva-clara: #1E2C25;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--papel);
+  color: var(--tinta);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: Fraunces, Georgia, serif; font-weight: 600; margin: 0; }
+.envelope { max-width: 560px; margin: 0 auto; padding: 0 16px 40px; }
+
+/* ---- o topo ---- */
+.capa { padding: 40px 0 24px; text-align: center; }
+.capa h1 { font-size: 30px; letter-spacing: -.01em; }
+.capa p { color: var(--tinta-suave); margin: 6px 0 0; font-size: 15px; }
+
+/* ---- as três portas ---- */
+.portas { display: grid; gap: 12px; }
+.porta {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: var(--raio); box-shadow: var(--sombra);
+  padding: 16px 18px; text-align: left; cursor: pointer;
+  color: inherit; font: inherit; text-decoration: none;
+  transition: border-color .15s, transform .15s;
+}
+.porta:hover { border-color: var(--erva); }
+.porta:active { transform: scale(.995); }
+.porta:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+.porta .marca {
+  width: 40px; height: 40px; flex: none; border-radius: 11px;
+  background: var(--erva-clara); color: var(--erva);
+  display: grid; place-items: center; font-size: 19px;
+}
+.porta b { display: block; font-weight: 600; font-size: 16.5px; }
+.porta small { display: block; color: var(--tinta-suave); font-size: 13.5px; }
+.porta .seta { margin-left: auto; color: var(--tinta-suave); }
+.porta.destaque { background: var(--erva); border-color: var(--erva); color: #fff; }
+.porta.destaque .marca { background: rgba(255,255,255,.16); color: #fff; }
+.porta.destaque small, .porta.destaque .seta { color: rgba(255,255,255,.78); }
+
+/* ---- as telas ---- */
+.tela { display: none; }
+.tela[data-ativa] { display: block; }
+.voltar {
+  background: none; border: 0; color: var(--tinta-suave); font: inherit;
+  padding: 8px 0; cursor: pointer; font-size: 14.5px;
+}
+.voltar:hover { color: var(--tinta); }
+.bloco {
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: var(--raio); box-shadow: var(--sombra); padding: 18px;
+  margin-top: 12px;
+}
+.rotulo {
+  display: block; font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+  color: var(--tinta-suave); margin-bottom: 6px;
+}
+.campo {
+  width: 100%; padding: 11px 12px; font: inherit; color: inherit;
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 10px;
+}
+.campo:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+.dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ⚠️ Os horários são ALVO DE DEDO: 44px de altura mínima. Quem reserva está no
+   celular, quase sempre andando. */
+.horarios { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.hora {
+  min-height: 44px; min-width: 74px; padding: 8px 14px;
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 10px;
+  font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; color: inherit;
+}
+.hora:hover { border-color: var(--erva); }
+.hora[aria-pressed="true"] { background: var(--erva); border-color: var(--erva); color: #fff; }
+
+.aviso {
+  border-left: 3px solid var(--ocre); background: var(--superficie);
+  padding: 12px 14px; border-radius: 0 10px 10px 0; font-size: 14.5px;
+  color: var(--tinta-suave); margin-top: 12px;
+}
+.aviso.ruim { border-left-color: var(--barro); }
+.vazio { color: var(--tinta-suave); font-size: 14.5px; padding: 6px 0; }
+.pe { text-align: center; color: var(--tinta-suave); font-size: 13px; padding: 28px 0 0; }
+.pe a { color: inherit; }
+
+.cat { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.cat + .cat { border-top: 1px solid var(--linha); }
+.cat b { font-weight: 600; }
+.cat small { display: block; color: var(--tinta-suave); font-size: 13px; }
+.cat .abrir {
+  margin-left: auto; color: var(--erva); font-weight: 600; text-decoration: none;
+  white-space: nowrap; min-height: 44px; display: flex; align-items: center;
+}
+</style>
+</head>
+<body>
+<div class="envelope">
+
+  <header class="capa">
+    <h1 id="nome-da-casa">Botané Deli e Café</h1>
+    <p id="onde-fica">Carregando…</p>
+  </header>
+
+  <!-- ====================== as três portas ====================== -->
+  <main class="tela" data-tela="inicio" data-ativa>
+    <nav class="portas">
+      <button class="porta destaque" data-ir="reserva">
+        <span class="marca" aria-hidden="true">◷</span>
+        <span><b>Reservar uma mesa</b><small>escolha o dia e o horário</small></span>
+        <span class="seta" aria-hidden="true">›</span>
+      </button>
+      <button class="porta" data-ir="catalogos">
+        <span class="marca" aria-hidden="true">☰</span>
+        <span><b>Cardápios</b><small id="quantos-catalogos">ver o que temos hoje</small></span>
+        <span class="seta" aria-hidden="true">›</span>
+      </button>
+      <!-- 🔑 Vira `<a href="https://wa.me/...">` assim que a casa souber o
+           número; enquanto não souber, é um botão que explica. -->
+      <a class="porta" id="porta-contato" href="#" data-ir="contato">
+        <span class="marca" aria-hidden="true">✆</span>
+        <span><b>Entre em contato</b><small id="linha-contato">fale com a gente</small></span>
+        <span class="seta" aria-hidden="true">›</span>
+      </a>
+    </nav>
+  </main>
+
+  <!-- ====================== reservar ====================== -->
+  <section class="tela" data-tela="reserva" aria-labelledby="t-reserva">
+    <button class="voltar" data-ir="inicio">‹ voltar</button>
+    <h2 id="t-reserva">Reservar uma mesa</h2>
+    <div class="bloco">
+      <!-- 🔑 **As pessoas vêm ANTES do horário, e a ordem é a regra.**
+           "Esgotado" depende do tamanho do grupo: às 19h pode não haver mesa
+           para 6 e haver para 2. Perguntar o horário primeiro faria a tela
+           prometer o que o salão não tem. -->
+      <div class="dupla">
+        <label>
+          <span class="rotulo">Quantas pessoas</span>
+          <input class="campo" id="pessoas" type="number" inputmode="numeric"
+                 min="1" max="20" value="2">
+        </label>
+        <label>
+          <span class="rotulo">Que dia</span>
+          <input class="campo" id="dia" type="date">
+        </label>
+      </div>
+      <div style="margin-top:16px">
+        <span class="rotulo">Horários com mesa</span>
+        <div class="horarios" id="horarios" role="group" aria-label="horários disponíveis">
+          <span class="vazio">Escolha o dia e quantas pessoas.</span>
+        </div>
+      </div>
+      <div class="aviso" id="aviso-reserva" hidden></div>
+    </div>
+    <div class="aviso">
+      ⚠️ <b>Esta é a primeira versão.</b> Por enquanto o site mostra os horários que a
+      casa tem livres — para confirmar a mesa, fale com a gente pelo WhatsApp. Reservar
+      direto por aqui é o próximo passo.
+    </div>
+  </section>
+
+  <!-- ====================== cardápios ====================== -->
+  <section class="tela" data-tela="catalogos" aria-labelledby="t-catalogos">
+    <button class="voltar" data-ir="inicio">‹ voltar</button>
+    <h2 id="t-catalogos">Cardápios</h2>
+    <div class="bloco" id="lista-catalogos">
+      <p class="vazio">Carregando…</p>
+    </div>
+  </section>
+
+  <!-- ====================== contato ====================== -->
+  <section class="tela" data-tela="contato" aria-labelledby="t-contato">
+    <button class="voltar" data-ir="inicio">‹ voltar</button>
+    <h2 id="t-contato">Entre em contato</h2>
+    <div class="bloco" id="bloco-contato">
+      <p class="vazio">Carregando…</p>
+    </div>
+  </section>
+
+  <p class="pe" id="rodape"></p>
+</div>
+
+<script>
+/* ===========================================================================
+   ⚠️ **A API é a MESMA do sistema interno.** Não há backend próprio para o
+   site: as rotas `/publico/...` existem justamente para isso, e a regra de
+   disponibilidade é a que a agenda do balcão usa — uma segunda regra aqui
+   divergiria, e a divergência apareceria como mesa prometida ao cliente e não
+   disponível na casa.
+
+   ⚠️ **O endereço é decidido pelo HOSPEDEIRO**, não escrito no código: em casa
+   a API é a de desenvolvimento; publicado, é o domínio do sistema. Um endereço
+   fixo aqui obrigaria a editar o arquivo a cada publicação.
+   =========================================================================== */
+const API = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  ? "http://127.0.0.1:9200"
+  : "https://sistema.botanedeliecafe.com.br/api";
+
+/* A loja sai do `<html data-loja>`: no dia em que houver duas casas com
+   reserva, cada uma publica o seu com o número dela — sem tocar no código. */
+const LOJA = document.documentElement.dataset.loja || "1";
+
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[<>&"]/g,
+  (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+async function pedir(rota) {
+  const r = await fetch(`${API}/publico/${LOJA}${rota}`);
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.json();
+}
+
+/* ---- navegação entre as telas, sem framework ---- */
+function ir(nome) {
+  document.querySelectorAll(".tela").forEach((t) => {
+    if (t.dataset.tela === nome) t.setAttribute("data-ativa", "");
+    else t.removeAttribute("data-ativa");
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  // ⚠️ O botão de VOLTAR do celular precisa funcionar: sem isto, quem está no
+  // cardápio e volta sai do site em vez de ir para o início.
+  if (location.hash !== "#" + nome) history.pushState({ tela: nome }, "", "#" + nome);
+}
+document.addEventListener("click", (e) => {
+  const alvo = e.target.closest("[data-ir]");
+  if (!alvo) return;
+  // ⚠️ O contato vira link de WhatsApp de verdade quando há número — e aí ele
+  // NÃO navega, abre o aplicativo.
+  if (alvo.id === "porta-contato" && alvo.getAttribute("href") !== "#") return;
+  e.preventDefault();
+  ir(alvo.dataset.ir);
+});
+window.addEventListener("popstate", () => ir((location.hash || "#inicio").slice(1)));
+
+/* ---- quem é a casa, e como falar com ela ---- */
+let casa = null;
+async function carregarCasa() {
+  try {
+    casa = await pedir("/casa");
+  } catch {
+    $("#onde-fica").textContent = "Não conseguimos carregar agora. Tente de novo em instantes.";
+    return;
+  }
+  $("#nome-da-casa").textContent = casa.casa;
+  $("#onde-fica").textContent = [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`]
+    .filter(Boolean).join(" · ") || "";
+  $("#rodape").innerHTML = `${esc(casa.casa)}${casa.cidade ? " · " + esc(casa.cidade) : ""}`;
+
+  const porta = $("#porta-contato");
+  if (casa.whatsapp) {
+    // 🔑 **`wa.me` é só um link** — não exige WhatsApp Business API, conta de
+    // provedor nem modelo de mensagem aprovado. O esboço deixou o WhatsApp
+    // "para depois" pensando no envio automático; ABRIR a conversa custa isto.
+    const texto = encodeURIComponent(`Olá! Vim pelo site do ${casa.casa}.`);
+    porta.href = `https://wa.me/${casa.whatsapp}?text=${texto}`;
+    porta.target = "_blank";
+    porta.rel = "noopener";
+    $("#linha-contato").textContent = "abrir uma conversa no WhatsApp";
+  } else {
+    $("#linha-contato").textContent = "telefone, e-mail e endereço";
+  }
+  montarContato();
+}
+
+function montarContato() {
+  if (!casa) return;
+  const linhas = [];
+  if (casa.whatsapp) {
+    const texto = encodeURIComponent(`Olá! Vim pelo site do ${casa.casa}.`);
+    linhas.push(`<p><a class="abrir" href="https://wa.me/${casa.whatsapp}?text=${texto}"
+      target="_blank" rel="noopener">Falar no WhatsApp ›</a></p>`);
+  } else {
+    // ⚠️ **Sem número cadastrado, o site DIZ isso** em vez de mostrar um botão
+    // que não leva a lugar nenhum. O número sai de Administração ▸ Empresa.
+    linhas.push(`<div class="aviso ruim">O WhatsApp ainda não está cadastrado.
+      Quem cuida do sistema pode preenchê-lo em Administração ▸ Empresa, e ele
+      aparece aqui na hora.</div>`);
+  }
+  if (casa.telefone) linhas.push(`<p>Telefone: <a href="tel:${esc(casa.telefone)}">${esc(casa.telefone)}</a></p>`);
+  if (casa.email) linhas.push(`<p>E-mail: <a href="mailto:${esc(casa.email)}">${esc(casa.email)}</a></p>`);
+  if (casa.instagram) linhas.push(`<p>Instagram: ${esc(casa.instagram)}</p>`);
+  if (casa.endereco) linhas.push(`<p>${esc(casa.endereco)}${casa.cidade ? " — " + esc(casa.cidade) + "/" + esc(casa.uf) : ""}</p>`);
+  $("#bloco-contato").innerHTML = linhas.join("");
+}
+
+/* ---- os cardápios que a casa publica hoje ---- */
+async function carregarCatalogos() {
+  let lista = [];
+  try {
+    lista = await pedir("/catalogos");
+  } catch {
+    $("#lista-catalogos").innerHTML =
+      `<p class="vazio">Não conseguimos carregar os cardápios agora.</p>`;
+    return;
+  }
+  if (!lista.length) {
+    $("#quantos-catalogos").textContent = "em breve";
+    $("#lista-catalogos").innerHTML =
+      `<p class="vazio">Ainda não há cardápio publicado. Fale com a gente pelo WhatsApp
+       que contamos o que temos hoje.</p>`;
+    return;
+  }
+  $("#quantos-catalogos").textContent =
+    lista.length === 1 ? "1 cardápio" : `${lista.length} cardápios`;
+  $("#lista-catalogos").innerHTML = lista.map((c) => `
+    <div class="cat">
+      <span>
+        <b>${esc(c.nome)}</b>
+        <small>${c.ate ? "até " + new Date(c.ate + "T12:00").toLocaleDateString("pt-BR") : "PDF"}</small>
+      </span>
+      <a class="abrir" href="${API}${esc(c.arquivo_url)}" target="_blank" rel="noopener">abrir ›</a>
+    </div>`).join("");
+}
+
+/* ---- os horários que a casa tem livres ---- */
+let buscando = null;
+async function buscarHorarios() {
+  const dia = $("#dia").value;
+  const pessoas = Number($("#pessoas").value || 0);
+  const caixa = $("#horarios");
+  const aviso = $("#aviso-reserva");
+  aviso.hidden = true;
+  if (!dia || !pessoas) {
+    caixa.innerHTML = `<span class="vazio">Escolha o dia e quantas pessoas.</span>`;
+    return;
+  }
+  caixa.innerHTML = `<span class="vazio">Procurando mesa…</span>`;
+  // ⚠️ A última busca é a que vale: digitar "12" em "pessoas" dispara duas, e
+  // sem isto a resposta do "1" podia chegar depois e mandar na tela.
+  const minha = Symbol();
+  buscando = minha;
+  let r;
+  try {
+    r = await pedir(`/horarios?dia=${dia}&pessoas=${pessoas}`);
+  } catch {
+    if (buscando !== minha) return;
+    caixa.innerHTML = `<span class="vazio">Não conseguimos consultar agora.</span>`;
+    return;
+  }
+  if (buscando !== minha) return;
+
+  if (!r.horarios.length) {
+    caixa.innerHTML = `<span class="vazio">Nenhum horário livre.</span>`;
+    aviso.hidden = false;
+    aviso.textContent = r.motivo || "Não há mesa para este grupo neste dia.";
+    return;
+  }
+  caixa.innerHTML = r.horarios.map((h) =>
+    `<button class="hora" type="button" aria-pressed="false">${esc(h)}</button>`).join("");
+  if (r.teto && pessoas > r.teto) {
+    aviso.hidden = false;
+    aviso.textContent = `Para ${pessoas} pessoas, fale com a gente — grupos maiores a casa acerta no WhatsApp.`;
+  }
+}
+
+$("#horarios").addEventListener("click", (e) => {
+  const b = e.target.closest(".hora");
+  if (!b) return;
+  $("#horarios").querySelectorAll(".hora")
+    .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  const aviso = $("#aviso-reserva");
+  aviso.hidden = false;
+  // ⚠️ **A tela não promete o que ainda não faz.** Escolher o horário aqui
+  // ainda não grava reserva nenhuma — dizer "reservado" seria mentir, e o
+  // cliente apareceria na porta sem mesa.
+  aviso.innerHTML = casa && casa.whatsapp
+    ? `Você escolheu <b>${esc(b.textContent)}</b>. Para confirmar,
+       <a href="https://wa.me/${casa.whatsapp}?text=${encodeURIComponent(
+         `Olá! Queria reservar para ${$("#pessoas").value} pessoas no dia ` +
+         `${new Date($("#dia").value + "T12:00").toLocaleDateString("pt-BR")} às ${b.textContent}.`)}"
+       target="_blank" rel="noopener">mande a mensagem pronta no WhatsApp ›</a>`
+    : `Você escolheu <b>${esc(b.textContent)}</b>. Ligue para a casa para confirmar.`;
+});
+
+/* ---- começo ---- */
+(function inicio() {
+  // Amanhã, que é o dia em que a maioria das reservas cai.
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  $("#dia").value = iso;
+  $("#dia").min = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 10);
+
+  $("#dia").addEventListener("change", buscarHorarios);
+  $("#pessoas").addEventListener("input", buscarHorarios);
+
+  carregarCasa();
+  carregarCatalogos();
+  buscarHorarios();
+  if (location.hash) ir(location.hash.slice(1));
+})();
+</script>
+</body>
+</html>
