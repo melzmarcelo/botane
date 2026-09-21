@@ -477,6 +477,26 @@ FERRAMENTAS: list[Ferramenta] = [
         "Os dias e horários em que a casa não aceita reserva.",
         "/reservas/bloqueios"),
 
+    Ferramenta(
+        "produtos_duplicados", "Cadastros repetidos",
+        "Cadastros ATIVOS com exatamente o mesmo nome — os candidatos a fusão. Isto "
+        "DETECTA; quem decide é gente: o mesmo nome pode ser coisa diferente (três "
+        "\"VALE-PRESENTE\" de valores diferentes), e nomes longos saem aparados do Omie. "
+        "Para pares que o nome não pega (grafia diferente, abreviação), use "
+        "`buscar_produtos` e compare.",
+        "/produtos/duplicados",
+        {"so_do_omie": Param("boolean", "Só os que vieram do Omie.", padrao=False),
+         "limite": _lim(300, 1000)}),
+    Ferramenta(
+        "previa_de_fusao", "O que a fusão faria",
+        "Mostra, ANTES de fundir: com que nome o produto fica, que campos são completados, "
+        "quantos itens de venda mudam de dono e — quando não dá — o que exatamente trava. "
+        "Chame sempre antes de `fundir_produtos`: fusão não tem desfazer.",
+        "/produtos/{id_produto}/vincular/previa",
+        {"id_produto": Param("integer", "O cadastro que FICA.", obrigatorio=True),
+         "id_sai": Param("integer", "O cadastro que SAI (o sem história).",
+                         obrigatorio=True)}),
+
     # ================================================================ GRAVAÇÃO
     # ⚠️ Daqui para baixo, tudo ALTERA o sistema. Só aparece para chave marcada
     # como "permite alterar", e cada uma passa pela mesma rota da tela: as regras
@@ -571,6 +591,22 @@ FERRAMENTAS: list[Ferramenta] = [
          "status": Param("string", "Situação do cadastro.", no_corpo=True,
                          enum=["RASCUNHO", "ATIVO", "ARQUIVADO"])},
         metodo="PUT"),
+    Ferramenta(
+        "fundir_produtos", "Juntar dois cadastros do mesmo produto",
+        "Funde dois cadastros: o que SAI é absorvido pelo que FICA, e o histórico, os "
+        "códigos e os vínculos passam para ele. ⚠️ **Não tem desfazer** — rode "
+        "`previa_de_fusao` antes e confirme com a pessoa. Quem sai tem de ser o cadastro "
+        "SEM história (sem movimento, ficha, nota ou contagem); o servidor recusa e diz o "
+        "que trava quando a direção está invertida.",
+        "/produtos/{id_produto}/vincular",
+        {"id_produto": Param("integer", "O cadastro que FICA.", obrigatorio=True),
+         "id_sai": Param("integer", "O cadastro que SAI.", obrigatorio=True, no_corpo=True),
+         "baixar_vendas": Param("boolean", "Baixar do estoque as vendas que o cadastro "
+                                           "que sai já tinha feito sem baixar. Deixe "
+                                           "ligado: senão a falta aparece depois, sem nome, "
+                                           "na primeira contagem.",
+                                padrao=True, no_corpo=True)},
+        metodo="POST"),
     Ferramenta(
         "lancar_nota", "Lançar a nota no estoque",
         "Dá entrada da nota no razão: cada item vira movimento, e o custo médio muda. "

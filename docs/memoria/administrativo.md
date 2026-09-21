@@ -253,7 +253,7 @@
   - 🔑 **As ferramentas são rotas que JÁ EXISTEM, chamadas por dentro**
     (`services/mcp_ferramentas.py`, `httpx.ASGITransport` sobre o próprio app, com a chave de
     quem pediu). Permissão, loja (`id_loja` → `X-Unidade`) e setor são os da tela. Ferramenta
-    nova = uma entrada em `FERRAMENTAS`. São **66** (20/09/2026) — 60 de leitura e 6 de gravação —, cobrindo produtos, fichas,
+    nova = uma entrada em `FERRAMENTAS`. São **69** (21/09/2026) — 62 de leitura e 7 de gravação —, cobrindo produtos, fichas,
     estoque, produção, inventário, remessas, compras, vendas, consumo, pessoas, tabelas de
     apoio, CMV, reservas, empresa e auditoria. ⚠️ **O caminho da rota é escrito à mão na
     tabela, e caminho errado só aparece quando alguém chama** — foi o que aconteceu com a
@@ -330,9 +330,18 @@
     vão ler tem de ser posto ANTES de a requisição descer** — é onde o `pediram_o_total` já
     estava. ⚠️ E é reposto a cada requisição: sem o `reset`, uma chamada de chave deixaria a
     marca na tarefa e a requisição seguinte, de gente, sairia como se fosse do Claude.
+  - 🔑 **Achar repetidos e fundi-los pelo Claude** (21/09/2026, pedido do dono: *"buscar
+    pelo Claude os produtos iguais e vincular eles por lá"*): `produtos_duplicados` (nome
+    idêntico, o mesmo sinal da tela), `previa_de_fusao` e `fundir_produtos`.
+    ⚠️ **A prévia não é enfeite: fusão NÃO tem desfazer**, e é ela que diz com que nome
+    fica, o que é completado e o que trava. A descrição da ferramenta manda chamá-la antes.
+    ⚠️ **Quem SAI é o cadastro sem história** — o servidor recusa a direção invertida
+    nomeando o que trava, e é o engano natural de quem olha dois nomes iguais.
+    ⚠️ **A fusão em GRUPO (`/produtos/duplicados/fundir`) ficou de fora**: ela junta vários
+    de uma vez sem prévia par a par, que é justamente a conferência que se quer aqui.
   - Cobertura da escrita: blocos `7c` (a chave de leitura não vê nem usa; a que altera grava;
     a auditoria marca) e `7d` (nota criada, conciliada, lançada e estornada, tudo pelo
-    conector) do `smoke_conector_claude.py`.
+    conector) e `7e` (achar repetidos, prévia, fundir) do `smoke_conector_claude.py`.
 
 ## Armadilhas já pagas
 

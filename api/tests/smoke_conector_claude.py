@@ -16,6 +16,10 @@ passo é conferido pelo que a especificação exige, não pelo que o cliente tol
    ruim vira `isError`), método desconhecido, notificação → 202
 7b. TODA ferramenta do catálogo responde — caminho errado aparece como 404,
    e quem exige argumento diz qual falta
+7c. gravar é outra chave: a de leitura nem vê as ferramentas de escrita, a
+   gerada com "permite alterar" grava, e a auditoria marca que veio do Claude
+7d. conciliar e lançar uma nota inteira pelo conector (e estornar para limpar)
+7e. achar cadastros repetidos, ver a prévia e fundi-los
 8. a conexão aparece na tela de chaves do usuário e em "minhas", com origem
 9. renovação rotaciona chave e renovação na MESMA linha; a antiga morre
 10. revogar (RFC 7009 e pela tela) derruba a conexão
@@ -341,7 +345,12 @@ checar("mas não para quem não pode conectar o Claude (400)", st == 400, (st, r
 
 st, _, r = rpc(escrita, "tools/list")
 gravam = [t for t in r["result"]["tools"] if not t["annotations"]["readOnlyHint"]]
-checar("a chave que altera enxerga as ferramentas de gravação", len(gravam) == 6, len(gravam))
+# ⚠️ Pelos NOMES, não pela contagem: ferramenta nova de gravação quebraria um
+# número fixo aqui, e a suíte acusaria a tela em vez de celebrar a novidade.
+nomes_gravam = {t["name"] for t in gravam}
+checar("a chave que altera enxerga as ferramentas de gravação",
+       {"vincular_item_de_nota", "criar_produto", "atualizar_produto", "lancar_nota",
+        "fundir_produtos"} <= nomes_gravam, sorted(nomes_gravam))
 checar("e todas vêm marcadas como destrutivas, para o Claude perguntar antes",
        all(t["annotations"]["destructiveHint"] for t in gravam))
 
@@ -427,6 +436,55 @@ checar("o lançamento fica marcado como do Claude na auditoria",
 st, _, r = pedir("POST", f"/notas/{id_nota}/estornar", {}, token=admin)
 checar("o estorno desfaz o lançamento (e é assim que se corrige)", st == 200, (st, r))
 pedir("DELETE", f"/produtos/{id_novo}", token=admin)
+
+
+print("\n7e. achar os repetidos e fundi-los pelo conector")
+# 🔑 Pedido do dono (21/09/2026): "buscar pelo Claude os produtos iguais e
+# vincular eles por lá". Fusão NÃO tem desfazer, então o caminho é: achar,
+# ver a prévia, e só então fundir — e é assim que a suíte anda.
+nome_igual = f"REPETIDO DO CLAUDE {marca_p}"
+ids_iguais = []
+for _ in range(2):
+    st, _, p = pedir("POST", "/produtos", {"nome": nome_igual, "tipo": "INSUMO",
+                                           "um_estoque": "KG"}, token=admin)
+    ids_iguais.append(p["id"])
+checar("preparo: dois cadastros com o mesmo nome", len(ids_iguais) == 2, ids_iguais)
+
+st, _, r = rpc(escrita, "tools/call", {"name": "produtos_duplicados",
+                                       "arguments": {"limite": 1000}})
+duplicados = json.loads(r["result"]["content"][0]["text"])
+grupo = next((g for g in duplicados if g.get("nome") == nome_igual), None)
+checar("produtos_duplicados acha o par", grupo is not None,
+       [g.get("nome") for g in duplicados[:3]])
+
+fica, sai = ids_iguais
+st, _, r = rpc(escrita, "tools/call", {"name": "previa_de_fusao",
+                                       "arguments": {"id_produto": fica, "id_sai": sai}})
+previa = json.loads(r["result"]["content"][0]["text"])
+checar("a prévia diz o que a fusão faria, sem fazer",
+       not r["result"]["isError"] and "pode" in previa, previa)
+st, _, r = rpc(escrita, "tools/call", {"name": "detalhe_produto",
+                                       "arguments": {"id_produto": sai}})
+checar("e o que sairia continua lá depois da prévia",
+       not r["result"]["isError"], r["result"]["content"][0]["text"][:80])
+
+st, _, r = rpc(escrita, "tools/call", {"name": "fundir_produtos",
+                                       "arguments": {"id_produto": fica, "id_sai": sai}})
+checar("fundir_produtos junta os dois", not r["result"]["isError"],
+       r["result"]["content"][0]["text"][:120])
+with get_cursor() as cur:
+    cur.execute("SELECT status, fundido_em FROM produtos WHERE id = %s", (sai,))
+    absorvido = cur.fetchone()
+    cur.execute("SELECT status FROM produtos WHERE id = %s", (fica,))
+    sobrevivente = cur.fetchone()
+checar("o que saiu fica marcado como absorvido",
+       absorvido["fundido_em"] is not None, dict(absorvido))
+checar("e o que ficou continua ativo", sobrevivente["status"] == "ATIVO", sobrevivente)
+st, _, r = rpc(chave, "tools/call", {"name": "fundir_produtos",
+                                     "arguments": {"id_produto": fica, "id_sai": sai}})
+checar("chave só de leitura não funde nada",
+       r["result"]["isError"] and "leitura" in r["result"]["content"][0]["text"], r)
+pedir("DELETE", f"/produtos/{fica}", token=admin)
 
 
 print("\n8. a conexão aparece na tela")
