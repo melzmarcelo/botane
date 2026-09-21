@@ -29,6 +29,7 @@ from database import get_cursor
 from seguranca import PREFIXO_TOKEN_API, gerar_token_api, hash_refresh
 
 ESCOPO = "botane.leitura"
+ESCOPO_ESCRITA = "botane.escrita"
 PERMISSAO = "integracao.claude"
 
 # ⚠️ A chave de acesso vive UMA hora; quem mantém a conexão é a renovação. Chave
@@ -89,7 +90,7 @@ def metadados_servidor() -> dict:
                                                   "client_secret_basic"],
         "revocation_endpoint_auth_methods_supported": ["none", "client_secret_post",
                                                        "client_secret_basic"],
-        "scopes_supported": [ESCOPO],
+        "scopes_supported": [ESCOPO, ESCOPO_ESCRITA],
         "authorization_response_iss_parameter_supported": True,
     }
 
@@ -99,7 +100,7 @@ def metadados_recurso() -> dict:
         "resource": url_mcp(),
         "resource_name": "Botané",
         "authorization_servers": [emissor()],
-        "scopes_supported": [ESCOPO],
+        "scopes_supported": [ESCOPO, ESCOPO_ESCRITA],
         "bearer_methods_supported": ["header"],
     }
 
@@ -190,15 +191,15 @@ def recurso_aceito(recurso: str | None) -> bool:
 
 
 def emitir_codigo(c: dict, id_usuario: int, redirect_uri: str, code_challenge: str,
-                  recurso: str | None) -> str:
+                  recurso: str | None, escrita: bool = False) -> str:
     codigo = secrets.token_urlsafe(32)
     with get_cursor() as cur:
         cur.execute(
             """INSERT INTO oauth_codigos (codigo_hash, id_cliente, id_usuario, redirect_uri,
-                                          code_challenge, recurso, expira_em)
-               VALUES (%s, %s, %s, %s, %s, %s, now() + make_interval(mins => %s))""",
+                                          code_challenge, recurso, expira_em, escrita)
+               VALUES (%s, %s, %s, %s, %s, %s, now() + make_interval(mins => %s), %s)""",
             (hash_refresh(codigo), c["id"], id_usuario, redirect_uri, code_challenge,
-             recurso, CODIGO_MINUTOS),
+             recurso, CODIGO_MINUTOS, escrita),
         )
     return codigo
 
@@ -218,9 +219,10 @@ def _pkce_confere(verificador: str | None, desafio: str) -> bool:
 
 # ------------------------------------------------------------------ chave
 
-def _resposta_de_chave(chave: str, renovacao: str) -> dict:
+def _resposta_de_chave(chave: str, renovacao: str, escrita: bool = False) -> dict:
+    escopo = f"{ESCOPO} {ESCOPO_ESCRITA}" if escrita else ESCOPO
     return {"access_token": chave, "token_type": "Bearer",
-            "expires_in": CHAVE_MINUTOS * 60, "refresh_token": renovacao, "scope": ESCOPO}
+            "expires_in": CHAVE_MINUTOS * 60, "refresh_token": renovacao, "scope": escopo}
 
 
 def trocar_codigo(c: dict, codigo: str | None, redirect_uri: str | None,
@@ -236,7 +238,8 @@ def trocar_codigo(c: dict, codigo: str | None, redirect_uri: str | None,
         cur.execute(
             """UPDATE oauth_codigos SET usado_em = now()
                 WHERE codigo_hash = %s AND usado_em IS NULL AND expira_em > now()
-            RETURNING id_cliente, id_usuario, redirect_uri, code_challenge, recurso""",
+            RETURNING id_cliente, id_usuario, redirect_uri, code_challenge, recurso,
+                      escrita""",
             (hash_refresh(codigo),),
         )
         k = cur.fetchone()
@@ -258,16 +261,18 @@ def trocar_codigo(c: dict, codigo: str | None, redirect_uri: str | None,
             """INSERT INTO tokens_api (id_usuario, nome, prefixo, token_hash, somente_leitura,
                                        expira_em, criado_por, origem, id_cliente_oauth,
                                        refresh_hash, refresh_expira_em)
-               VALUES (%s, %s, %s, %s, true, now() + make_interval(mins => %s), %s, 'oauth',
+               VALUES (%s, %s, %s, %s, %s, now() + make_interval(mins => %s), %s, 'oauth',
                        %s, %s, now() + make_interval(days => %s))
                RETURNING id""",
-            (k["id_usuario"], c["nome"][:80], prefixo, chave_hash, CHAVE_MINUTOS,
-             k["id_usuario"], c["id"], hash_refresh(renovacao), RENOVACAO_DIAS),
+            (k["id_usuario"], c["nome"][:80], prefixo, chave_hash, not k["escrita"],
+             CHAVE_MINUTOS, k["id_usuario"], c["id"], hash_refresh(renovacao),
+             RENOVACAO_DIAS),
         )
         id_token = cur.fetchone()["id"]
         auditoria.registrar(cur, k["id_usuario"], "token_api", id_token, "conectar_claude",
-                            depois={"cliente": c["nome"], "prefixo": prefixo})
-    return _resposta_de_chave(chave, renovacao)
+                            depois={"cliente": c["nome"], "prefixo": prefixo,
+                                    "pode_alterar": k["escrita"]})
+    return _resposta_de_chave(chave, renovacao, k["escrita"])
 
 
 def renovar(c: dict, renovacao: str | None) -> dict:
@@ -285,13 +290,16 @@ def renovar(c: dict, renovacao: str | None) -> dict:
                       refresh_expira_em = now() + make_interval(days => %s)
                 WHERE refresh_hash = %s AND id_cliente_oauth = %s
                   AND revogado_em IS NULL AND refresh_expira_em > now()
-            RETURNING id""",
+            RETURNING id, somente_leitura""",
             (chave_hash, prefixo, CHAVE_MINUTOS, hash_refresh(nova), RENOVACAO_DIAS,
              hash_refresh(renovacao), c["id"]),
         )
-        if not cur.fetchone():
+        linha = cur.fetchone()
+        if not linha:
             raise ErroOAuth("invalid_grant", "Renovação inválida, vencida ou revogada.")
-    return _resposta_de_chave(chave, nova)
+    # ⚠️ A renovação PRESERVA o que a pessoa autorizou: a linha é a mesma, e
+    # `somente_leitura` não é tocado. Renovar não amplia nem encolhe o acesso.
+    return _resposta_de_chave(chave, nova, not linha["somente_leitura"])
 
 
 def revogar(c: dict, valor: str | None) -> None:

@@ -301,10 +301,23 @@
     ligar item de nota a produto, ignorar item, criar produto do item, criar produto,
     corrigir produto e **lançar nota no estoque**. Todas passam pela MESMA rota da tela, com
     as mesmas recusas.
-    🔑 **A chave que altera é gerada à MÃO, em Usuários** (`somente_leitura = false`). A
-    conexão feita pelo claude.ai é sempre só leitura — foi a escolha do dono, e é o que
-    limita o estrago de uma conexão esquecida. Chave que altera só para quem já tem
-    `integracao.claude` (a permissão é a mesma de conectar, também por decisão do dono).
+    🔑 **Duas portas para a escrita, e as duas exigem um "sim" explícito**: a chave gerada
+    à MÃO em Usuários (`somente_leitura = false`), e — desde a migração 078 — a **caixa na
+    página de entrada do claude.ai** ("Deixar o Claude alterar cadastros"), que nasce
+    DESMARCADA. Chave que altera só para quem tem `integracao.claude` (a permissão é a
+    mesma de conectar, por decisão do dono).
+    ⚠️ **A segunda porta nasceu de topar na prática** (21/09/2026). No dia anterior o dono
+    escolheu "só chave gerada pelo admin", e a conexão do claude.ai ficou sempre só
+    leitura; quando ele foi juntar cadastros repetidos por lá, o Claude respondeu que o
+    Botané *"só me oferece consultas"* — certo, e inútil para o trabalho que ele queria
+    fazer. Lição: **quando a escrita mora numa porta e o trabalho mora na outra, o desenho
+    não sobrevive ao primeiro uso.**
+    ⚠️ **A escolha viaja no CÓDIGO de autorização** (`oauth_codigos.escrita`), não na
+    sessão: entre a página e a troca por chave não há estado do lado de cá, e sem isso o
+    "sim" se perderia no caminho. A renovação **preserva** (a linha é a mesma e
+    `somente_leitura` não é tocado): renovar não amplia nem encolhe o que foi autorizado.
+    ⚠️ **A frase acima da caixa teve de mudar junto**: ela dizia "não vai poder alterar
+    nada", que virou mentira no instante em que a caixa apareceu logo abaixo.
     🔑 **Chave só de leitura nem VÊ as ferramentas que gravam** (`tools/list` filtra). É
     conforto, não segurança: quem barra é `contexto_da_credencial`, com 403 no POST de
     dentro. O valor está em não deixar o modelo propor ao usuário algo que vai falhar.
@@ -341,7 +354,10 @@
     de uma vez sem prévia par a par, que é justamente a conferência que se quer aqui.
   - Cobertura da escrita: blocos `7c` (a chave de leitura não vê nem usa; a que altera grava;
     a auditoria marca) e `7d` (nota criada, conciliada, lançada e estornada, tudo pelo
-    conector) e `7e` (achar repetidos, prévia, fundir) do `smoke_conector_claude.py`.
+    conector), `7e` (achar repetidos, prévia, fundir) e `7f` (a caixa do claude.ai: marcada
+    grava, desmarcada não, e a renovação preserva) do `smoke_conector_claude.py`.
+    ⚠️ A limpeza do `7f` revogava TODAS as conexões vivas e derrubava os blocos seguintes —
+    agora acha a linha pelo **prefixo da chave**, não por "a primeira de escrita".
 
 ## Armadilhas já pagas
 

@@ -86,6 +86,11 @@ input:focus{outline:2px solid #2c6a4a;outline-offset:1px}
 button{font:600 15px/1 inherit;font-family:inherit;border-radius:999px;padding:12px 18px;
  cursor:pointer;border:1px solid #2c6a4a}
 .sim{background:#2c6a4a;color:#fff;flex:1}.nao{background:transparent;color:#2c6a4a}
+.escolha{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:12px 14px;
+ border:1px solid #d8ded0;border-radius:12px;background:#fcfdfa}
+.escolha input{margin-top:3px;width:18px;height:18px;accent-color:#2c6a4a;flex:none}
+.escolha span{font-size:13.5px;color:#5d6c61}
+.escolha b{display:block;font-size:14.5px;color:#14201a;font-weight:600}
 .erro{background:#f7e7e4;border:1px solid #e8c9c3;color:#95332a;border-radius:12px;
  padding:10px 14px;margin:0 0 14px;font-size:14px}
 """
@@ -148,7 +153,11 @@ def _conferir_pedido(response_type: str | None, client_id: str | None,
 
 
 def _formulario(c: dict, campos: dict[str, str | None], erro: str = "",
-                email: str = "") -> HTMLResponse:
+                email: str = "", escrita: bool = False) -> HTMLResponse:
+    # ⚠️ **Nasce DESMARCADA.** Quem quer que o Claude altere diz que quer; o
+    # contrário — vir marcada e a pessoa desmarcar — transforma um clique
+    # distraído em permissão de escrita.
+    marcado = "checked" if escrita else ""
     escondidos = "".join(
         f'<input type="hidden" name="{k}" value="{html.escape(v)}">'
         for k, v in campos.items() if v is not None)
@@ -162,8 +171,8 @@ quer consultar o Botané em seu nome.<br>
 <p>O aplicativo vai poder <b>ler</b>, com as suas permissões e lojas:</p>
 <ul class="suave"><li>produtos, fichas técnicas e custos</li>
 <li>estoque, notas de compra e vendas</li><li>CMV e relatórios</li></ul>
-<p class="suave" style="margin-top:10px">Não vai poder alterar nada. Dá para desconectar
-a qualquer momento no Botané, em Perfil ▸ Claude.</p>
+<p class="suave" style="margin-top:10px">Alterar, só se você marcar a caixa abaixo. Dá para
+desconectar a qualquer momento no Botané, em Perfil ▸ Claude.</p>
 <form method="post" action="autorizar">{aviso}{escondidos}
 <label for="email">E-mail</label>
 <input id="email" name="email" type="email" autocomplete="username" required
@@ -171,6 +180,12 @@ a qualquer momento no Botané, em Perfil ▸ Claude.</p>
 <label for="senha">Senha</label>
 <input id="senha" name="senha" type="password" autocomplete="current-password" required
  {'autofocus' if email else ''}>
+<label class="escolha" for="escrita">
+<input type="checkbox" id="escrita" name="escrita" value="1" {marcado}>
+<span><b>Deixar o Claude alterar cadastros</b>
+Conciliar notas, criar e corrigir produtos, juntar cadastros repetidos e lançar notas no
+estoque — sempre com as suas permissões, e cada alteração fica registrada na Auditoria.
+Sem marcar, ele só consulta.</span></label>
 <div class="acoes">
 <button class="sim" name="decisao" value="permitir">Entrar e permitir</button>
 <button class="nao" name="decisao" value="negar" formnovalidate>Cancelar</button>
@@ -198,7 +213,8 @@ def autorizar(response_type: str | None = Form(None), client_id: str | None = Fo
               redirect_uri: str | None = Form(None), code_challenge: str | None = Form(None),
               code_challenge_method: str | None = Form(None), state: str | None = Form(None),
               scope: str | None = Form(None), resource: str | None = Form(None),
-              email: str = Form(""), senha: str = Form(""), decisao: str = Form("")):
+              email: str = Form(""), senha: str = Form(""), decisao: str = Form(""),
+              escrita: str = Form("")):
     # ⚠️ Confere TUDO de novo: os campos escondidos vieram do navegador, e o
     # navegador não é de confiança.
     c, erro = _conferir_pedido(response_type, client_id, redirect_uri, code_challenge,
@@ -215,25 +231,28 @@ def autorizar(response_type: str | None = Form(None), client_id: str | None = Fo
             redirect_uri, error="access_denied", error_description="A pessoa não autorizou.",
             state=state, iss=oauth.emissor()), status_code=302)
 
+    quer_escrever = escrita == "1"
     try:
         u = conferir_credenciais(email, senha)
     except HTTPException as e:
-        return _formulario(c, campos, str(e.detail), email)
+        return _formulario(c, campos, str(e.detail), email, quer_escrever)
     try:
         ctx = carregar_contexto(u["id"])
     except HTTPException as e:
-        return _formulario(c, campos, str(e.detail), email)
+        return _formulario(c, campos, str(e.detail), email, quer_escrever)
     if not ctx.pode(oauth.PERMISSAO):
         return _formulario(c, campos, "Seu usuário não tem permissão para conectar o Claude. "
                                       "Peça ao administrador: Papéis ▸ “Conectar o Claude”.",
-                           email)
+                           email, quer_escrever)
     # ⚠️ A permissão vem ANTES da troca de senha: é o "não" definitivo. Na ordem
     # inversa, quem não pode conectar trocaria a senha para só então descobrir.
     if u["trocar_senha"]:
         return _formulario(c, campos, "Você precisa trocar a senha antes. Entre no "
-                                      "Botané pelo navegador, troque, e volte aqui.", email)
+                                      "Botané pelo navegador, troque, e volte aqui.", email,
+                           quer_escrever)
 
-    codigo = oauth.emitir_codigo(c, u["id"], redirect_uri, code_challenge, resource)
+    codigo = oauth.emitir_codigo(c, u["id"], redirect_uri, code_challenge, resource,
+                                 escrita=quer_escrever)
     # ⚠️ 303, não 302: depois de um POST, só o 303 garante que o navegador siga
     # com GET — e o cliente espera o código num GET.
     return RedirectResponse(oauth.url_de_volta(redirect_uri, code=codigo, state=state,

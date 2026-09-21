@@ -20,6 +20,8 @@ passo é conferido pelo que a especificação exige, não pelo que o cliente tol
    gerada com "permite alterar" grava, e a auditoria marca que veio do Claude
 7d. conciliar e lançar uma nota inteira pelo conector (e estornar para limpar)
 7e. achar cadastros repetidos, ver a prévia e fundi-los
+7f. conectar pelo claude.ai marcando "deixar o Claude alterar": a chave nasce
+   podendo gravar, a renovação preserva, e sem marcar continua só leitura
 8. a conexão aparece na tela de chaves do usuário e em "minhas", com origem
 9. renovação rotaciona chave e renovação na MESMA linha; a antiga morre
 10. revogar (RFC 7009 e pela tela) derruba a conexão
@@ -121,12 +123,14 @@ def url_autorizar(client_id, desafio, **extra):
     return "/oauth/autorizar?" + urllib.parse.urlencode(q)
 
 
-def enviar_formulario(url, email, senha, decisao="permitir"):
+def enviar_formulario(url, email, senha, decisao="permitir", escrita=False):
     """O que o navegador faria: ler os campos escondidos e mandar o formulário."""
     st, _, pagina = pedir("GET", url)
     campos = {n: html.unescape(v) for n, v in
               re.findall(r'type="hidden" name="(\w+)" value="([^"]*)"', pagina)}
     campos.update(email=email, senha=senha, decisao=decisao)
+    if escrita:
+        campos["escrita"] = "1"
     return pedir("POST", "/oauth/autorizar", form=campos)
 
 
@@ -485,6 +489,74 @@ st, _, r = rpc(chave, "tools/call", {"name": "fundir_produtos",
 checar("chave só de leitura não funde nada",
        r["result"]["isError"] and "leitura" in r["result"]["content"][0]["text"], r)
 pedir("DELETE", f"/produtos/{fica}", token=admin)
+
+
+print("\n7f. conectar pelo claude.ai autorizando a ALTERAR")
+# 🔑 Pedido do dono (21/09/2026), depois de topar na prática: as ferramentas de
+# gravação não apareciam para a conexão do claude.ai, que nascia só de leitura.
+# Agora a própria pessoa decide na página de entrada, numa caixa que nasce
+# DESMARCADA — vir marcada transformaria um clique distraído em permissão.
+st, _, pagina = pedir("GET", url_autorizar(client_id, pkce()[1]))
+checar("a página oferece a caixa de alterar", 'name="escrita"' in pagina, st)
+depois_da_caixa = pagina.split('name="escrita"')[1][:60]
+checar("e ela nasce desmarcada", "checked" not in depois_da_caixa, depois_da_caixa)
+
+verificador, desafio = pkce()
+st, cab, _ = enviar_formulario(url_autorizar(client_id, desafio), ADMIN[0], ADMIN[1],
+                               escrita=True)
+st, _, com_escrita = pedir("POST", "/oauth/token", form={
+    "grant_type": "authorization_code", "code": parametros_da_volta(cab)["code"],
+    "redirect_uri": VOLTA, "client_id": client_id, "code_verifier": verificador})
+checar("a chave sai com o escopo de escrita",
+       "botane.escrita" in (com_escrita.get("scope") or ""), com_escrita.get("scope"))
+st, _, r = rpc(com_escrita["access_token"], "tools/list")
+checar("e enxerga as ferramentas de gravação",
+       "fundir_produtos" in {t["name"] for t in r["result"]["tools"]})
+st, _, r = rpc(com_escrita["access_token"], "tools/call", {"name": "criar_produto",
+               "arguments": {"nome": f"Pelo claude.ai {marca_p}", "tipo": "INSUMO",
+                             "um_estoque": "KG"}})
+criado_oauth = json.loads(r["result"]["content"][0]["text"])
+checar("e grava de verdade", not r["result"]["isError"] and criado_oauth.get("id"), r)
+pedir("DELETE", f"/produtos/{criado_oauth['id']}", token=admin)
+
+st, _, renovada = pedir("POST", "/oauth/token", form={
+    "grant_type": "refresh_token", "refresh_token": com_escrita["refresh_token"],
+    "client_id": client_id})
+checar("a renovação PRESERVA o que foi autorizado",
+       "botane.escrita" in (renovada.get("scope") or ""), renovada.get("scope"))
+st, _, r = rpc(renovada["access_token"], "tools/list")
+checar("e a chave renovada continua gravando",
+       "fundir_produtos" in {t["name"] for t in r["result"]["tools"]})
+# ⚠️ Acha a linha pelo PREFIXO da chave, não "a primeira de escrita": a suíte
+# tem outras conexões vivas (o bloco 6 usa uma), e revogar a do vizinho faria os
+# blocos seguintes falharem por um defeito que não existe. Foi o que aconteceu.
+def _linha_da_chave(valor):
+    _, _, linhas = pedir("GET", "/auth/me/tokens", token=admin)
+    return next((t for t in linhas if valor.startswith(t["prefixo"])
+                 and not t["revogado_em"]), None)
+
+
+viva_escrita = _linha_da_chave(renovada["access_token"])
+checar("a conexão aparece em 'minhas' como quem altera",
+       viva_escrita is not None and not viva_escrita["somente_leitura"], viva_escrita)
+if viva_escrita:
+    pedir("DELETE", f"/auth/me/tokens/{viva_escrita['id']}", token=admin)
+
+# ⚠️ Sem marcar, continua só de leitura — é o padrão, e é o que vale para quem
+# só aperta "Entrar e permitir".
+verificador, desafio = pkce()
+st, cab, _ = enviar_formulario(url_autorizar(client_id, desafio), ADMIN[0], ADMIN[1])
+st, _, sem_escrita = pedir("POST", "/oauth/token", form={
+    "grant_type": "authorization_code", "code": parametros_da_volta(cab)["code"],
+    "redirect_uri": VOLTA, "client_id": client_id, "code_verifier": verificador})
+checar("sem marcar, a conexão nasce só de leitura",
+       "botane.escrita" not in (sem_escrita.get("scope") or ""), sem_escrita.get("scope"))
+st, _, r = rpc(sem_escrita["access_token"], "tools/list")
+checar("e ela não vê as ferramentas de gravação",
+       "fundir_produtos" not in {t["name"] for t in r["result"]["tools"]})
+so_leitura = _linha_da_chave(sem_escrita["access_token"])
+if so_leitura:
+    pedir("DELETE", f"/auth/me/tokens/{so_leitura['id']}", token=admin)
 
 
 print("\n8. a conexão aparece na tela")
