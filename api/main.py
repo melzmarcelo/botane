@@ -41,6 +41,7 @@ from routers import (
     alertas,
     autenticacao,
     cadastros,
+    catalogos,
     cmv,
     consumo,
     email_config,
@@ -376,6 +377,7 @@ app.include_router(inicio.router)
 app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
+app.include_router(catalogos.router)
 app.include_router(reservas.router)
 
 

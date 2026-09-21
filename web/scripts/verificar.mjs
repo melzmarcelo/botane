@@ -8260,6 +8260,137 @@ try {
   // anterior chamava `DELETE /empresa/logo` dizendo "a real é a que o cliente
   // subir": só que a real já estava lá, e sumia da barra e do cabeçalho de todo
   // PDF. Mesma lição do `preservar_credenciais` e do modo do PDV.
+  console.log("11z. o cadastro de catalogos: a capa do que a casa publica");
+  // 🔑 **Pedido do dono (21/09/2026):** *"vamos iniciar pelo cadastro de
+  // catalogos. Onde teremos o cabecalho do catalogo, origem — neste momento
+  // somente vamos ter PDF —, o nome dele no site do cliente, o periodo de
+  // publicacao, a situacao: rascunho, ativo, inativo."*
+  // ⚠️ **PDF e arquivo, nao PDV** — o modulo nasceu com a sigla errada.
+  const mCat = String(Date.now()).slice(-6);
+
+  // 🔑 **O catalogo e do site de RESERVAS** (correcao do dono, 21/09/2026: *"o
+  // menu de catalogo fica dentro de reservas, onde somente sera demonstrada
+  // quando utilizado reserva"*). Desligado, ele nao existe — e essa e a
+  // primeira coisa que a fase cobra.
+  const { dados: parCat } = await api("GET", "/unidades/1/parametros", null, token);
+  await api("PUT", "/unidades/1/parametros",
+    { ...parCat, reservas_ligado: false }, token);
+  await irPara(p, `${WEB}/catalogos`);
+  await new Promise((r) => setTimeout(r, 1800));
+  // ⚠️ **O menu se lê pelos HREFS, não pelo texto.** O grupo começa recolhido,
+  // então o `innerText` da lateral não traz os itens de dentro — uma checagem
+  // por texto passaria trivialmente nos dois casos, ligado e desligado, e não
+  // provaria nada. O link existe no DOM mesmo com o grupo fechado.
+  const menuTem = () => p.evaluate(() =>
+    [...(document.querySelector("aside")?.querySelectorAll("a") ?? [])]
+      .map((a) => a.getAttribute("href")));
+  const semReservas = await p.evaluate(() => ({ tela: document.body.innerText }));
+  const semLink = await menuTem();
+  checar("com Reservas desligado, o menu nao tem o link de Catalogos",
+    !semLink.includes("/catalogos"), semLink);
+  // ⚠️ **A trava do servidor nao e redundancia da do menu.** Esconder o item e
+  // conforto; o que impede a casa sem reservas de ganhar catalogo e a recusa da
+  // rota — e a tela precisa dizer onde se liga.
+  checar("e a tela diz que o modulo de Reservas nao esta ligado",
+    /Reservas/i.test(semReservas.tela) && /n[ãa]o est[áa] ligado/i.test(semReservas.tela),
+    semReservas.tela.slice(0, 300));
+
+  await api("PUT", "/unidades/1/parametros",
+    { ...parCat, reservas_ligado: true }, token);
+  await irPara(p, `${WEB}/catalogos`);
+  await p.waitForFunction(() => /Os cat[áa]logos desta loja/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+
+  // 🔑 **Dentro do grupo Reservas**, nao em grupo proprio: sem reserva o
+  // catalogo nao tem onde aparecer.
+  const hrefs = await menuTem();
+  checar("ligado, o menu ganha o link de Catalogos",
+    hrefs.includes("/catalogos"), hrefs);
+  // 🔑 **E ele fica DENTRO do grupo Reservas**, entre os itens do módulo — não
+  // num grupo próprio. A ordem dos links prova onde ele mora.
+  checar("e ele fica entre os itens de Reservas",
+    hrefs.indexOf("/catalogos") > hrefs.indexOf("/reservas/agenda")
+      && hrefs.indexOf("/catalogos") < hrefs.length, hrefs.filter((h) => h?.includes("reserva") || h === "/catalogos"));
+
+  checar("a tela abre e oferece criar",
+    await clicarQuando(p, "Novo catálogo", { exato: true }));
+  await p.waitForSelector("#catalogo-nome", { timeout: 15000 }).catch(() => {});
+  // ⚠️ A janela diz o que o VAZIO quer dizer em cada ponta do período: sem isso
+  // a pessoa inventa uma data de fim para o cardápio permanente da casa.
+  const janelaCat = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      campos: ["#catalogo-nome", "#catalogo-origem", "#catalogo-situacao",
+               "#catalogo-de", "#catalogo-ate"].filter((x) => !!d?.querySelector(x)),
+      origens: [...(d?.querySelector("#catalogo-origem")?.options ?? [])]
+        .map((o) => o.value),
+      situacoes: [...(d?.querySelector("#catalogo-situacao")?.options ?? [])]
+        .map((o) => o.value),
+      texto: d?.innerText ?? "",
+    };
+  });
+  checar("a janela tem os cinco campos do cabecalho",
+    janelaCat.campos.length === 5, janelaCat.campos);
+  // 🔑 O vocabulário vem do SERVIDOR — uma cópia na tela divergiria calada no
+  // dia da segunda origem.
+  // ⚠️ **PDF e ARQUIVO, nao PDV** — o modulo nasceu com a sigla errada.
+  checar("com a unica origem de hoje, PDF",
+    JSON.stringify(janelaCat.origens) === JSON.stringify(["PDF"]), janelaCat.origens);
+  checar("e as tres situacoes",
+    JSON.stringify(janelaCat.situacoes)
+      === JSON.stringify(["RASCUNHO", "ATIVO", "INATIVO"]), janelaCat.situacoes);
+  checar("e a tela diz o que o periodo em branco quer dizer",
+    /sem prazo/i.test(janelaCat.texto) && /desde j[áa]/i.test(janelaCat.texto),
+    janelaCat.texto.slice(0, 200));
+
+  await p.type("#catalogo-nome", `Cardapio tela ${mCat}`);
+  await p.evaluate(() => {
+    const sel = document.querySelector("#catalogo-situacao");
+    const set = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, "value").set;
+    set.call(sel, "ATIVO");
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  checar("e salva", await clicarQuando(p, "Salvar", { exato: true }));
+  await p.waitForFunction((m) => document.body.innerText.includes(`Cardapio tela ${m}`),
+    { timeout: 20000, polling: 300 }, mCat).catch(() => {});
+
+  const linhaCat = await p.evaluate((m) => {
+    const tr = [...document.querySelectorAll("tbody tr")]
+      .find((x) => x.textContent.includes(`Cardapio tela ${m}`));
+    return tr ? [...tr.querySelectorAll("td")].map((td) => td.innerText.trim()) : null;
+  }, mCat);
+  checar("o catalogo aparece na lista", !!linhaCat, linhaCat);
+  // 🔑 **"No ar" e coluna PROPRIA, separada da situacao.** Um ativo sem periodo
+  // vale sem prazo — e esta no ar. A confusao entre os dois faria a casa
+  // procurar no site um cardapio que saiu sozinho.
+  checar("ativo e sem periodo aparece como no ar",
+    (linhaCat ?? []).some((c) => /no ar/i.test(c)), linhaCat);
+  checar("e a tela explica que sem periodo vale enquanto estiver ativo",
+    /sem per[íi]odo/i.test(await p.evaluate(() => document.body.innerText)));
+  // ⚠️ **Excluir so aparece no RASCUNHO.** O que ja esteve no ar se inativa —
+  // alguem leu aquele cardapio.
+  // ⚠️ **Exige a LINHA.** `[].some()` é falso, e a negação passava trivialmente
+  // quando o catálogo nem tinha sido criado — a checagem media a si mesma.
+  checar("e um ATIVO nao oferece excluir",
+    !!linhaCat && !linhaCat.some((c) => /excluir/i.test(c)), linhaCat);
+  await foto(p, "37-catalogos");
+
+  // ⚠️ **Volta a RASCUNHO antes de apagar**: o servidor recusa apagar o que ja
+  // esteve no ar, e e a regra que a checagem acima acabou de afirmar. Fase que
+  // desvia, devolve.
+  const { dados: catsDaFase } = await api("GET", "/catalogos", null, token);
+  const meuCat = (catsDaFase ?? []).find((c) => c.nome === `Cardapio tela ${mCat}`);
+  if (meuCat) {
+    await api("PUT", `/catalogos/${meuCat.id}`, { situacao: "RASCUNHO" }, token);
+    await api("DELETE", `/catalogos/${meuCat.id}`, null, token);
+  }
+  // ⚠️ **Devolve o parametro.** A fase 12 logo abaixo comeca afirmando que o
+  // menu NAO tem o grupo Reservas — deixa-lo ligado aqui derrubaria a primeira
+  // checagem dela, e a culpa pareceria ser de Reservas.
+  await api("PUT", "/unidades/1/parametros",
+    { ...parCat, reservas_ligado: !!parCat.reservas_ligado }, token);
+
   console.log("12. o modulo de Reservas, ligado por loja");
   // 🔑 **Pedido do dono (14/09/2026):** o módulo inteiro é ligado por parâmetro
   // da loja, e ligar tem de mudar TRÊS coisas — o menu, a tela e a oferta das

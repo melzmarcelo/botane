@@ -537,6 +537,24 @@
   ⚠️ **Nunca filtre elemento por `className.includes("border-l")`**: `border-linha2` contém
   esse pedaço. A checagem da bateria procura `border-l-2`.
 
+- 🔑 **`<select>` com `value` FORA das `options` MENTE, e não avisa** (21/09/2026). O
+  navegador exibe a primeira opção e o estado do React continua com o valor antigo: a tela
+  mostra uma coisa e o POST manda outra. Custou uma rodada inteira da bateria — o formulário
+  de catálogo mostrava `PDF`, mandava `PDV`, e o 422 do servidor falava de uma origem que
+  ninguém tinha escolhido.
+  ⚠️ **O padrão de um cadastro novo não se escreve na tela** quando a lista vem do servidor:
+  `{ ...VAZIO, origem: op?.origens[0] }`. Uma sigla escrita ali é a segunda cópia da lista, e
+  esta divergiu calada no primeiro dia.
+  ⚠️ E o `value` do próprio `<select>` cai na primeira opção quando o estado ainda não tem
+  uma válida (`f.origem ?? op?.origens[0] ?? ""`) — assim o que se vê e o que se manda são o
+  mesmo.
+
+- ⚠️ **O menu lateral se lê pelos HREFS, nunca pelo `innerText`.** Os grupos começam
+  recolhidos, então o texto da lateral não traz os itens de dentro: uma checagem por texto
+  passa trivialmente com o item presente E com o item ausente, e não prova nada. Os `<a>`
+  existem no DOM mesmo com o grupo fechado, e a ORDEM deles é o que prova em qual grupo o
+  item mora.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

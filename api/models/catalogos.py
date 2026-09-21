@@ -1,0 +1,93 @@
+"""O que entra e o que sai do cadastro de catálogos.
+
+⚠️ **Nada de `body: dict`** — é regra da casa, e aqui ela vale dobrado: os
+campos deste cadastro vão parar no site do cliente, e um campo com nome errado
+que o servidor ignora em silêncio é uma promessa que a tela faz e o site não
+cumpre.
+"""
+
+from datetime import date
+
+from pydantic import BaseModel, Field, model_validator
+
+# 🔑 **Uma origem só, por enquanto** (pedido do dono, 21/09/2026: *"neste
+# momento somente vamos ter PDF"*). A tupla existe para o dia da segunda: quem
+# acrescentar aqui ganha a validação e a tela junto, sem caçar `== "PDF"`
+# espalhado pelo código.
+#
+# ⚠️ **PDF é ARQUIVO, não `PDV`.** A origem é um PDF importado e mostrado no
+# site de reservas; o PDV é o caixa e vive em `services/pdv/`. As três letras
+# parecidas já custaram uma primeira versão inteira deste módulo.
+ORIGENS = ("PDF",)
+
+# RASCUNHO nasce; ATIVO publica; INATIVO guarda sem apagar.
+SITUACOES = ("RASCUNHO", "ATIVO", "INATIVO")
+
+
+class CatalogoBase(BaseModel):
+    """O cabeçalho do catálogo — a capa do que a casa publica."""
+
+    # ⚠️ **`min_length=2`**: "A" não identifica catálogo nenhum numa lista, e
+    # este nome é o que o cliente lê no site.
+    nome: str = Field(min_length=2, max_length=120)
+    origem: str = "PDF"
+    publica_de: date | None = None
+    publica_ate: date | None = None
+    situacao: str = "RASCUNHO"
+    observacao: str | None = None
+
+    @model_validator(mode="after")
+    def _coerente(self):
+        if self.origem not in ORIGENS:
+            raise ValueError(
+                f"Origem desconhecida: {self.origem}. "
+                f"Por enquanto só existe {', '.join(ORIGENS)}.")
+        if self.situacao not in SITUACOES:
+            raise ValueError(
+                f"Situação desconhecida: {self.situacao}. "
+                f"As que existem: {', '.join(SITUACOES)}.")
+        # ⚠️ **Só compara com as DUAS pontas preenchidas.** Uma nula quer dizer
+        # "sem começo" ou "sem prazo", e recusar isso obrigaria a inventar um
+        # "até 2099" para o cardápio permanente da casa.
+        if (self.publica_de and self.publica_ate
+                and self.publica_ate < self.publica_de):
+            raise ValueError(
+                "O fim da publicação não pode ser antes do começo — o catálogo "
+                "sairia do ar antes de entrar.")
+        return self
+
+
+class CatalogoCreate(CatalogoBase):
+    pass
+
+
+class CatalogoUpdate(BaseModel):
+    """A alteração: tudo opcional, porque a tela salva o que mudou.
+
+    ⚠️ **Não herda de `CatalogoBase`.** Herdando, os campos obrigatórios dela
+    continuariam obrigatórios aqui, e mudar só a situação exigiria reenviar o
+    nome — que é como um PUT acaba apagando o que ninguém tocou.
+    """
+
+    nome: str | None = Field(default=None, min_length=2, max_length=120)
+    origem: str | None = None
+    publica_de: date | None = None
+    publica_ate: date | None = None
+    situacao: str | None = None
+    observacao: str | None = None
+
+
+class CatalogoResponse(BaseModel):
+    id: int
+    nome: str
+    origem: str
+    publica_de: date | None = None
+    publica_ate: date | None = None
+    situacao: str
+    observacao: str | None = None
+    # 🔑 **Se ele está no ar HOJE**, que é a pergunta que a lista responde de
+    # relance. Não é `situacao == 'ATIVO'`: um catálogo ativo cujo período já
+    # passou não está publicado, e mostrar os dois como iguais faria a casa
+    # procurar no site um cardápio que saiu do ar sozinho.
+    publicado_hoje: bool = False
+    criado_por: str | None = None

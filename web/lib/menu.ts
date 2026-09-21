@@ -146,6 +146,23 @@ export const MENU: GrupoMenu[] = [
         soComReservas: true,
       },
       {
+        // 🔑 **Catálogos mora DENTRO de Reservas** (correção do dono,
+        // 21/09/2026: *"o menu de catálogo fica dentro de reservas, onde
+        // somente será demonstrada quando utilizado reserva"*). O catálogo é o
+        // PDF que o site de reservas apresenta — sem reserva ele não tem onde
+        // aparecer, e um grupo próprio no menu prometia um módulo que a casa
+        // não usa.
+        // ⚠️ **`soComReservas` como os outros três**: o filtro do menu é por
+        // item, e é ele que faz o catálogo sumir junto com o resto do grupo.
+        href: "/catalogos",
+        nome: "Catálogos",
+        icone: "vendas",
+        // ⚠️ `ver` basta para OLHAR; criar é que exige `editar`, e quem decide
+        // é o servidor — a tela só esconde os controles.
+        chave: ["catalogos.ver", "catalogos.editar"],
+        soComReservas: true,
+      },
+      {
         href: "/reservas/configuracoes",
         nome: "Configurações",
         icone: "config",

@@ -155,10 +155,13 @@ ficha são REFEITOS dos totais — é por isso que a apuração devolve
 
 ## Reservas
 
-- **Rotas:** `reservas.py`
-- **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade)
-- **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`
-- **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`
+- **Rotas:** `reservas.py`, `catalogos.py`
+- **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
+  `catalogos.py`
+- **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
+  `catalogos/`
+- **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`,
+  `catalogos.ver`, `catalogos.editar`
 
 🔑 **É o primeiro módulo LIGADO POR LOJA** (`parametros.reservas_ligado`,
 migração 068). Desligado, ele não existe: sem grupo no menu, com as rotas
@@ -168,6 +171,16 @@ recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
 última reserva — e permanência por faixa), o **salão** (salões, mesas e a junta
 entre vizinhas), a **regra de disponibilidade** e a **reserva pelo balcão**, com
 ciclo de status, remarcar e bloqueios. Falta a reserva pelo site do cliente.
+
+🔑 **O CATÁLOGO é daqui** (migração 079, 21/09/2026): a capa do que o site de
+reservas apresenta — nome, **origem `PDF`** (o arquivo importado), período de
+publicação e situação (`RASCUNHO` · `ATIVO` · `INATIVO`). **É só o cabeçalho.**
+⚠️ De cada LOJA, e **vários ATIVOS convivem**: não há trava de um só nem de
+períodos sobrepostos — quem publicar no site precisará de uma regra que escolha
+entre eles, e ela não existe ainda.
+⚠️ **`PDF` é arquivo, não `PDV`** — o módulo nasceu com a sigla errada.
+🔑 **"No ar hoje" não é o mesmo que ATIVO**: um ativo com período vencido não
+está publicado. Quem responde é o servidor, e a tela mostra em coluna própria.
 
 🔑 **A regra de disponibilidade mora em UM lugar** (`reservas_agenda.py`): a tela
 consulta a mesma que a gravação aplica. "Esgotado" depende do TAMANHO DO GRUPO, a
