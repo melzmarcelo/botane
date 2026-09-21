@@ -288,7 +288,7 @@ export default function PaginaConsumoPeriodos() {
         ) : !emAberto.length ? (
           <Vazio>Ninguém com consumo em aberto.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>
@@ -333,7 +333,7 @@ export default function PaginaConsumoPeriodos() {
         {!(dados?.periodos ?? []).length ? (
           <Vazio>Nenhum período criado ainda.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

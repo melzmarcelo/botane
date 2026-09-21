@@ -191,7 +191,7 @@ export default function LocaisDoProduto({
             : "Este produto ainda não está em nenhuma prateleira desta loja. Acrescente os locais aqui para já poder transferir e contar por eles."}
         </Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="w-full text-[14px]" id="locais-do-produto">
             <thead>
               <tr>

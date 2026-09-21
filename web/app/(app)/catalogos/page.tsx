@@ -269,7 +269,7 @@ export default function PaginaCatalogos() {
               : "Nenhum catálogo ainda. O primeiro nasce como rascunho — dá para nomeá-lo e só publicar depois de conferir."}
           </Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>
@@ -353,7 +353,7 @@ export default function PaginaCatalogos() {
                             página ROLA de lado.** O `<input>` abaixo é
                             `sr-only`, que é `position: absolute` — e um
                             absoluto sem ancestral posicionado ESCAPA do
-                            clipping do `overflow-x-auto` que envolve a tabela.
+                            clipping do `grid-rolante` que envolve a tabela.
                             Ele ia parar na coordenada dele dentro da tabela
                             larga e empurrava o documento: medido, 330px de
                             rolagem lateral numa janela de 400. Com `relative`,

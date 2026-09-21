@@ -71,7 +71,7 @@ export default function PaginaLojas() {
         ) : !lojas.length ? (
           <Vazio>Nenhuma loja cadastrada.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

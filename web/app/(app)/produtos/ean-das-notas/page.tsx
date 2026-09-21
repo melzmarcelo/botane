@@ -153,7 +153,7 @@ export default function PaginaEanDasNotas() {
                   </Aviso>
                 )}
 
-                <div className="overflow-x-auto">
+                <div className="grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -263,7 +263,7 @@ export default function PaginaEanDasNotas() {
               titulo={`${conflitos.length} não dá para aplicar`}
               descricao="O código existe na nota, mas não pode ser gravado — cada linha diz por quê."
             >
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>

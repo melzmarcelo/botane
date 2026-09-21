@@ -466,7 +466,7 @@ export default function Vincular({
                   o duplicado. Aqui a pessoa vê, antes de confirmar, por quais
                   códigos este cadastro vai passar a responder. */}
               <p className="rotulo mt-4">Códigos que passam a cair neste cadastro</p>
-              <div className="mt-1.5 overflow-x-auto">
+              <div className="mt-1.5 grid-rolante">
                 <table className="tabela" id="codigos-do-resultado">
                   <thead>
                     <tr>

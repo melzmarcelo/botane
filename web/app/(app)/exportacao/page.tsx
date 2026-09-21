@@ -323,7 +323,7 @@ export default function PaginaExportacao() {
             </Vazio>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>
@@ -433,7 +433,7 @@ export default function PaginaExportacao() {
                 </tbody>
               </table>
               </div>
-              {/* ⚠️ FORA do `overflow-x-auto`: dentro dele, numa tabela larga o
+              {/* ⚠️ FORA do `grid-rolante`: dentro dele, numa tabela larga o
                   rodapé sai da vista junto com as colunas da direita — e o
                   controle de página é justamente o que não pode sumir. */}
               <Paginacao

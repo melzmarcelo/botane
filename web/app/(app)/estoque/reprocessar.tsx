@@ -124,7 +124,7 @@ export default function ReprocessarEstoque({
             <>
               <div className="mt-4">
                 <p className="rotulo">Como fica a prateleira</p>
-                <div className="mt-1.5 overflow-x-auto">
+                <div className="mt-1.5 grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -154,7 +154,7 @@ export default function ReprocessarEstoque({
 
               <div className="mt-5">
                 <p className="rotulo">O que muda em cada movimento</p>
-                <div className="mt-1.5 overflow-x-auto">
+                <div className="mt-1.5 grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>

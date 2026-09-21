@@ -254,7 +254,7 @@ export default function AgendaDoDia() {
             Nenhuma reserva neste dia.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

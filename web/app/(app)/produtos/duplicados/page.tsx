@@ -199,7 +199,7 @@ export default function Duplicados() {
                   unir dois históricos de estoque não é possível.
                 </Aviso>
               )}
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela mt-2">
                   <thead>
                     <tr>

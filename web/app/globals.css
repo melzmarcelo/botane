@@ -665,6 +665,57 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     .btn[aria-busy="true"]::before { animation: none; }
   }
 }
+/* ---- o grid que rola: altura máxima e cabeçalho fixo ---------------------
+ *
+ * 🔑 **Pedido do dono (21/09/2026):** *"ajuste no scroll bar do grid — quando
+ * tem scroll mas possui muitos itens, a visualização fica ruim, pois precisa ir
+ * até o fim do grid para ir para os últimos campos. Isto em todos os grid."*
+ *
+ * ⚠️ **O problema medido, antes de mexer:** a barra de rolagem horizontal fica
+ * presa ao PÉ do grid, e o grid tem a altura de todas as linhas. Em Saldos ▸
+ * Movimentos com 100 linhas eram **9.842px de altura** — para alcançar a barra
+ * e ver as últimas colunas era preciso descer **9.545px**. Fichas pedia 7.609,
+ * Auditoria 5.083, Alertas 3.328.
+ *
+ * 🔑 **`max-height` põe a barra na base da ÁREA VISÍVEL**, que é onde ela
+ * serve. E, uma vez que o container rola, o cabeçalho pode ficar fixo — o outro
+ * problema da tabela longa, ler a vigésima linha sem saber que coluna é qual.
+ *
+ * ⚠️ **Grid curto NÃO ganha caixa de rolagem**: `max-height` só age quando o
+ * conteúdo passa dela. Uma tabela de três linhas continua exatamente como era.
+ *
+ * ⚠️ **`overflow: auto` nos DOIS eixos, e isso é obrigatório**: com
+ * `overflow-y` visível o navegador converte `overflow-x` para `auto` e o
+ * `position: sticky` do cabeçalho passa a se ancorar na JANELA, não no
+ * container — o cabeçalho sumiria ao rolar a página.
+ */
+.grid-rolante {
+  overflow: auto;
+  /* 70% da altura da janela: sobra espaço para o cabeçalho da tela, os filtros
+     e o rodapé de paginação continuarem à vista enquanto se percorre a lista. */
+  max-height: 70vh;
+}
+.grid-rolante .tabela thead th {
+  position: sticky;
+  top: 0;
+  /* Acima das células, abaixo de qualquer janela ou menu da casa. */
+  z-index: 1;
+}
+/* ⚠️ **A borda do cabeçalho vira SOMBRA, e não é enfeite.** Com
+   `border-collapse: collapse` a borda pertence à tabela, não à célula: ao
+   rolar, ela fica para trás e o cabeçalho flutua sem linha embaixo, com as
+   linhas passando coladas. O `box-shadow` é desenhado pela célula e acompanha.
+   ⚠️ E o fundo do `th` precisa ser OPACO (já é, `--color-superficie2`) — com
+   fundo transparente as linhas apareceriam por baixo do cabeçalho fixo. */
+.grid-rolante .tabela thead th { box-shadow: inset 0 -1px 0 var(--color-linha); }
+
+/* ⚠️ **Dentro de uma JANELA, o grid não ganha altura própria.** O `Modal` já é
+   um scroller (`max-h-[calc(100dvh-2rem)]` com o miolo rolando), e um segundo
+   dentro dele daria rolagem aninhada: a roda do mouse rolaria a lista até o fim
+   antes de mover a janela, e quem procura o botão de baixo não entende por quê.
+   A lista de uma janela é curta por natureza — quem manda ali é o miolo. */
+.modal-miolo .grid-rolante { max-height: none; }
+
 .tabela { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .tabela th {
   text-align: left;
@@ -693,8 +744,14 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   main { padding: 0 !important; }
   main > div { max-width: none !important; }
   /* Rolagem lateral não existe no papel: o que passa da largura simplesmente
-     some. Deixar visível faz a tabela caber, encolhendo as colunas. */
-  .overflow-x-auto { overflow: visible !important; }
+     some. Deixar visível faz a tabela caber, encolhendo as colunas.
+     ⚠️ **E a altura máxima também some.** Um `max-height: 70vh` no papel
+     imprimiria só a primeira tela da lista e cortaria o resto — sem barra de
+     rolagem para denunciar, como a tela denuncia. */
+  .overflow-x-auto, .grid-rolante { overflow: visible !important; max-height: none !important; }
+  /* O cabeçalho fixo não faz sentido no papel: ele se repete por página pelo
+     `display: table-header-group` do próprio HTML. */
+  .grid-rolante .tabela thead th { position: static !important; box-shadow: none !important; }
   body { background: #fff; font-size: 11pt; }
   /* ⚠️ `break-inside: avoid` no cartão INTEIRO empurrava uma lista longa para a
      página seguinte — e, quando ela não cabia em nenhuma, cortava. A unidade

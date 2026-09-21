@@ -101,7 +101,7 @@ export default function Quebra({
         <Vazio>Nenhum movimento no período para este recorte.</Vazio>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

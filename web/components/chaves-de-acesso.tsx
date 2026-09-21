@@ -142,7 +142,7 @@ export default function ChavesDeAcesso({
       ) : !chaves.length ? (
         <Vazio>Nenhuma chave gerada.</Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

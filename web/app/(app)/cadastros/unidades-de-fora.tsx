@@ -120,7 +120,7 @@ export default function UnidadesDeFora({
       {!pendentes.length ? (
         <Vazio>Nenhuma unidade desconhecida veio nas notas.</Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

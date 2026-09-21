@@ -185,7 +185,7 @@ export default function PaginaFichas() {
               ))}
             </ul>
 
-            <div className="hidden overflow-x-auto md:block">
+            <div className="hidden grid-rolante md:block">
               <table className="tabela">
                 <thead>
                   <tr>

@@ -399,7 +399,7 @@ export default function PaginaLancarVenda() {
       {aba === "manual" ? (
         <Cartao titulo="Itens" descricao="Um por linha. A busca aceita código ou nome.">
           <form onSubmit={lancarManual} className="flex flex-col gap-4">
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>
@@ -579,7 +579,7 @@ export default function PaginaLancarVenda() {
                 Separador errado vira uma linha só com tudo dentro, e sem a
                 prévia isso só apareceria depois de gravar. */}
             {previa.linhas.length ? (
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>

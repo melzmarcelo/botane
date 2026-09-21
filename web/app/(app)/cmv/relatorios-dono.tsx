@@ -91,7 +91,7 @@ export default function RelatoriosDono({ inicio, fim }: { inicio: string; fim: s
             a mostrar.
           </Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

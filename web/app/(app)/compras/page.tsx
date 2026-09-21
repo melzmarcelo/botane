@@ -450,7 +450,7 @@ export default function PaginaCompras() {
             </Aviso>
           )}
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

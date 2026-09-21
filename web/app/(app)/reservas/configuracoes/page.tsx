@@ -206,7 +206,7 @@ export default function ConfiguracoesDeReservas() {
         titulo="Horário de funcionamento"
         descricao="Abre e fecha são a loja. A última reserva é até quando a agenda aceita marcar — a diferença entre as duas é a permanência de quem senta por último."
       >
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>
@@ -273,7 +273,7 @@ export default function ConfiguracoesDeReservas() {
           )
         }
       >
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

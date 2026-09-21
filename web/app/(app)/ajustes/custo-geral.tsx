@@ -130,7 +130,7 @@ export default function CustoGeral({ aoLancar }: { aoLancar: () => void }) {
             </Aviso>
           </div>
 
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-3 grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

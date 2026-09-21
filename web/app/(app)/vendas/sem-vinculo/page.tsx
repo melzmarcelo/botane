@@ -111,7 +111,7 @@ export default function PaginaSemVinculo() {
           </Vazio>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>

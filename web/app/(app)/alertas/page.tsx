@@ -155,7 +155,7 @@ export default function PaginaAlertas() {
         {!vencimentos.length ? (
           <Vazio>Nenhum lote com validade próxima.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>
@@ -210,7 +210,7 @@ export default function PaginaAlertas() {
         {!minimos.length ? (
           <Vazio>Nada abaixo do mínimo.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

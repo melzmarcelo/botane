@@ -104,7 +104,7 @@ type Resposta =
  */
 function TabelaSintetica({ linhas }: { linhas: LinhaSintetica[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="grid-rolante">
       <table className="tabela">
         <thead>
           <tr>
@@ -145,7 +145,7 @@ function TabelaSintetica({ linhas }: { linhas: LinhaSintetica[] }) {
 
 function TabelaAnalitica({ linhas }: { linhas: LinhaAnalitica[] }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="grid-rolante">
       <table className="tabela">
         <thead>
           <tr>

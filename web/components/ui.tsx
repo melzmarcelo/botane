@@ -257,7 +257,7 @@ export function Modal({
         </header>
         {/* `min-h-0` é o que deixa um filho de flex encolher abaixo do próprio
             conteúdo — sem ele o `overflow-y-auto` não tem o que rolar. */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="modal-miolo min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
         {rodape && (
           <div className="shrink-0 border-t border-linha px-5 py-4">{rodape}</div>
         )}

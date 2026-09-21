@@ -368,7 +368,7 @@ export default function PaginaNota() {
         {!nota.itens.length ? (
           <Vazio>Esta nota não tem item nenhum.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

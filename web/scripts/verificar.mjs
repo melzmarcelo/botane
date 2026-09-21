@@ -8260,6 +8260,86 @@ try {
   // anterior chamava `DELETE /empresa/logo` dizendo "a real é a que o cliente
   // subir": só que a real já estava lá, e sumia da barra e do cabeçalho de todo
   // PDF. Mesma lição do `preservar_credenciais` e do modo do PDV.
+  console.log("11y. o grid longo: altura maxima e cabecalho fixo");
+  // 🔑 **Pedido do dono (21/09/2026):** *"ajuste no scroll bar do grid — quando
+  // tem scroll mas possui muitos itens, a visualizacao fica ruim, pois precisa
+  // ir ate o fim do grid para ir para os ultimos campos. Isto em todos os
+  // grid."*
+  //
+  // ⚠️ **O numero que motivou a mudanca, medido antes:** em Saldos ▸ Movimentos
+  // com 100 linhas o grid tinha **9.842px de altura**, e a barra de rolagem
+  // horizontal — presa ao pe dele — exigia descer **9.545px** para aparecer.
+  // Fichas pedia 7.609, Auditoria 5.083, Alertas 3.328.
+  await irPara(p, `${WEB}/estoque?aba=movimentos&pp=100`);
+  await p.waitForFunction(
+    () => document.querySelectorAll(".grid-rolante tbody tr").length > 30,
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1200));
+
+  const gridLongo = await p.evaluate(() => {
+    const d = document.querySelector(".grid-rolante");
+    if (!d) return null;
+    const r = d.getBoundingClientRect();
+    return {
+      linhas: d.querySelectorAll("tbody tr").length,
+      altura: Math.round(r.height),
+      janela: window.innerHeight,
+      // 🔑 O NUMERO DO PEDIDO: quanto e preciso descer a PAGINA para alcancar a
+      // barra de rolagem horizontal do grid.
+      descerPara: Math.max(0, Math.round(r.bottom - window.innerHeight)),
+      rolaDentro: d.scrollHeight > d.clientHeight + 1,
+    };
+  });
+  checar("o grid longo existe para medir", (gridLongo?.linhas ?? 0) > 30, gridLongo);
+  // ⚠️ **A altura maxima e 70vh**: a lista deixa de ter a altura de todas as
+  // linhas, e a barra passa a ficar na base da AREA VISIVEL.
+  checar("o grid longo ganha altura maxima, em vez de crescer sem fim",
+    !!gridLongo && gridLongo.altura <= gridLongo.janela * 0.75, gridLongo);
+  checar("e passa a rolar por dentro", gridLongo?.rolaDentro === true, gridLongo);
+  // 🔑 **A prova do pedido**: antes era descer 9.545px; agora e menos de uma
+  // tela. Se alguem devolver a altura, este numero volta a explodir.
+  checar("e a barra de rolagem deixa de ficar no fim da pagina",
+    (gridLongo?.descerPara ?? 99999) < gridLongo.janela,
+    { descerPara: gridLongo?.descerPara, antesEra: 9545 });
+
+  // 🔑 **O cabecalho fica FIXO**, que e o outro problema da tabela longa: ler a
+  // vigesima linha sem saber que coluna e qual.
+  const cabecalhoFixo = await p.evaluate(() => {
+    const d = document.querySelector(".grid-rolante");
+    const th = d?.querySelector("thead th");
+    if (!th) return null;
+    const antes = Math.round(th.getBoundingClientRect().top);
+    d.scrollTop = 1200;
+    const depois = Math.round(th.getBoundingClientRect().top);
+    const posicao = getComputedStyle(th).position;
+    d.scrollTop = 0;
+    return { antes, depois, posicao, grudou: antes === depois };
+  });
+  checar("o cabecalho do grid e sticky", cabecalhoFixo?.posicao === "sticky", cabecalhoFixo);
+  checar("e continua no lugar com a lista rolada", cabecalhoFixo?.grudou === true,
+    cabecalhoFixo);
+
+  // ⚠️ **Grid CURTO nao ganha caixa de rolagem**: `max-height` so age quando o
+  // conteudo passa dela, e uma tabela de tres linhas tem de continuar como era.
+  // ⚠️ **Procura um grid curto na PROPRIA pagina, em vez de apostar numa tela.**
+  // Duas tentativas anteriores erraram o alvo: `/lojas` tem 226 linhas nesta
+  // base (as suites criam unidades) e `/papeis` nao usa tabela. Um "grid curto"
+  // que nao e curto — ou que nao existe — mede a si mesmo, e a checagem cai
+  // acusando a regra de um problema que era da tela escolhida.
+  await irPara(p, `${WEB}/cmv`);
+  await p.waitForFunction(() => /Food cost/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1500));
+  const gridCurto = await p.evaluate(() => {
+    const curtos = [...document.querySelectorAll(".grid-rolante")]
+      .map((d) => ({ linhas: d.querySelectorAll("tbody tr").length,
+                     rolaDentro: d.scrollHeight > d.clientHeight + 1 }))
+      .filter((x) => x.linhas > 0 && x.linhas < 20);
+    return curtos[0] ?? null;
+  });
+  checar("grid curto NAO vira caixa de rolagem",
+    !!gridCurto && gridCurto.rolaDentro === false, gridCurto);
+
   console.log("11z. o cadastro de catalogos: a capa do que a casa publica");
   // 🔑 **Pedido do dono (21/09/2026):** *"vamos iniciar pelo cadastro de
   // catalogos. Onde teremos o cabecalho do catalogo, origem — neste momento

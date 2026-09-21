@@ -100,7 +100,7 @@ export default function ProdutosDaPessoa({ id }: { id: number }) {
           entrada desta pessoa, ou ao vincular um item de nota a um produto.
         </Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

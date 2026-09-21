@@ -229,7 +229,7 @@ export default function NotasOmie() {
 
           {!!conf.faltando.length && (
             <>
-              <div className="mt-3 overflow-x-auto">
+              <div className="mt-3 grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>

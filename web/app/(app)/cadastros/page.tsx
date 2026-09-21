@@ -819,7 +819,7 @@ export default function PaginaCadastros() {
                   </div>
                 </form>
               )}
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>

@@ -218,7 +218,7 @@ export default function PaginaRemessa() {
         {!r.itens.length ? (
           <Vazio>Remessa sem itens.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

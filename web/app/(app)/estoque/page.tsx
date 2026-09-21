@@ -484,7 +484,7 @@ export default function PaginaEstoque() {
               ) : !saldosAgrupados.length ? (
                 <Vazio>Nada em estoque nesta loja. Comece por uma entrada.</Vazio>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -552,7 +552,7 @@ export default function PaginaEstoque() {
               ) : !saldosRede.length ? (
                 <Vazio>Nada em estoque em loja nenhuma. Comece por uma entrada.</Vazio>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -625,7 +625,7 @@ export default function PaginaEstoque() {
             ) : !saldos.length ? (
               <Vazio>Nada em estoque ainda. Comece por uma entrada.</Vazio>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>
@@ -832,7 +832,7 @@ export default function PaginaEstoque() {
                   : "Nenhum movimento ainda."}
             </Vazio>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>

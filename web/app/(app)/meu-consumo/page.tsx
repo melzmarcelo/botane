@@ -143,7 +143,7 @@ export default function PaginaMeuConsumo() {
         {!cupons.length ? (
           <Vazio>Nada em aberto. Você está em dia.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>
@@ -180,7 +180,7 @@ export default function PaginaMeuConsumo() {
           titulo="Períodos já fechados"
           descricao="O recibo de cada ciclo, do jeito que foi cobrado."
         >
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

@@ -121,7 +121,7 @@ export default function PaginaTransferencias() {
               : "Nenhuma remessa aqui."}
           </Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

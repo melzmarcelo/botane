@@ -96,7 +96,7 @@ export default function ModosDeRendimento({
     aoMudarExtras(extras.map((x, j) => (j === i ? { ...x, [campo]: valor } : x)));
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div className="mt-4 grid-rolante">
       <table className="tabela">
         <thead>
           <tr>

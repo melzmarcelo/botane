@@ -55,7 +55,7 @@ function QuadroEstoque({ q, titulo, posicao }: { q: Quadro; titulo: string; posi
         <Vazio>Nenhum produto com saldo nesta data.</Vazio>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>
@@ -137,7 +137,7 @@ export default function MemoriaDeCalculo({ inicio, fim }: { inicio: string; fim:
         titulo="A apuração, aberta nos documentos que a compõem"
         descricao="A resposta para “de onde veio este número?”."
       >
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr><th>Composição do CMV</th><th className="num">Valor</th><th>Aberto em</th></tr>
@@ -180,7 +180,7 @@ export default function MemoriaDeCalculo({ inicio, fim }: { inicio: string; fim:
         titulo="Quadro 4 — Conciliação"
         descricao="Por que a soma das notas não é a linha “Compras”."
       >
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr><th>Da soma das notas até a linha Compras</th><th className="num">Valor</th></tr>
@@ -208,7 +208,7 @@ export default function MemoriaDeCalculo({ inicio, fim }: { inicio: string; fim:
           <Vazio>Nenhuma entrada no período.</Vazio>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>

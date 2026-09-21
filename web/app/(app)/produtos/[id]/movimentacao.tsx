@@ -131,7 +131,7 @@ export default function MovimentacaoDoProduto({
         </Vazio>
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

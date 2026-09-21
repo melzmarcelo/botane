@@ -191,7 +191,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
       ) : !linhas.length ? (
         <Vazio>Nenhum produto com “{busca}”.</Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

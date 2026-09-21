@@ -528,7 +528,7 @@ export default function PaginaCmv() {
               ) : undefined
             }
           >
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <tbody>
                   {[
@@ -597,7 +597,7 @@ export default function PaginaCmv() {
               ) : !abc.length ? (
                 <Vazio>Nenhum consumo no período.</Vazio>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -646,7 +646,7 @@ export default function PaginaCmv() {
               ) : !margem.length ? (
                 <Vazio>Nenhuma venda no período.</Vazio>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="grid-rolante">
                   <table className="tabela">
                     <thead>
                       <tr>
@@ -698,7 +698,7 @@ export default function PaginaCmv() {
             {!fechamentos.length ? (
               <Vazio>Nenhum período fechado ainda.</Vazio>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
                     <tr>

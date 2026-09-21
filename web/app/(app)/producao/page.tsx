@@ -520,7 +520,7 @@ export default function PaginaProducao() {
         ) : !historico.length ? (
           <Vazio>Nenhuma produção registrada ainda.</Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

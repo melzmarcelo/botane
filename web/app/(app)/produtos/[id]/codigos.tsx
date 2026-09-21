@@ -112,7 +112,7 @@ export default function CodigosDoProduto({
         diante: o que já foi lançado não se recalcula.
       </Aviso>
 
-      <div className="mt-3 overflow-x-auto">
+      <div className="mt-3 grid-rolante">
         <table className="tabela">
           <thead>
             <tr>

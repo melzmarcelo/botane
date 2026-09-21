@@ -358,7 +358,7 @@ export default function PaginaVendas() {
             e a diferença só aparece na contagem como <b>ajuste de inventário</b>.
           </Aviso>
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

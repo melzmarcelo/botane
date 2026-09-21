@@ -576,7 +576,7 @@ export default function Omie() {
             </p>
           ) : (
             <>
-              <div className="mt-3 overflow-x-auto">
+              <div className="mt-3 grid-rolante">
                 {/* O id existe para a checagem apontar para ESTA tabela: a tela
                     de Integrações tem outras, e "a primeira que casa" mede a
                     errada. */}
@@ -652,7 +652,7 @@ export default function Omie() {
                 para converter para a daqui. Eles ficaram de fora — gravar o número cru faria o
                 preço do pacote valer como preço do quilo.
               </Aviso>
-              <div className="mt-3 overflow-x-auto">
+              <div className="mt-3 grid-rolante">
                 <table className="tabela" id="custos-sem-conversao">
                   <thead>
                     <tr>
@@ -707,7 +707,7 @@ export default function Omie() {
                 : "Nenhum produto com código do Omie para comparar."}
             </Vazio>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="grid-rolante">
               <table className="tabela">
                 <thead>
                   <tr>

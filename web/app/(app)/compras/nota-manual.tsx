@@ -393,7 +393,7 @@ export default function NotaManual({
         </Campo>
       </div>
 
-      <div className="mt-5 overflow-x-auto">
+      <div className="mt-5 grid-rolante">
         <table className="tabela">
           <thead>
             {/* A largura mora na COLUNA, não no campo: `.campo` é width:100% e

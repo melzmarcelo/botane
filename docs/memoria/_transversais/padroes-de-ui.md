@@ -555,6 +555,32 @@
   existem no DOM mesmo com o grupo fechado, e a ORDEM deles é o que prova em qual grupo o
   item mora.
 
+- 🔑 **`.grid-rolante`: o grid longo tem altura máxima e cabeçalho fixo** (21/09/2026, pedido
+  do dono: *"quando tem scroll mas possui muitos itens, a visualização fica ruim, pois precisa
+  ir até o fim do grid para ir para os últimos campos. Isto em todos os grid"*).
+  ⚠️ **O problema, medido antes de mexer:** a barra de rolagem horizontal fica presa ao PÉ do
+  grid, e o grid tem a altura de todas as linhas. Saldos ▸ Movimentos com 100 linhas tinha
+  **9.842px de altura** e exigia descer **9.545px** para alcançar a barra. Fichas 7.609,
+  Auditoria 5.083, Alertas 3.328. Depois: altura 630px e 333px de descida no pior caso.
+  🔑 **`max-height: 70vh` põe a barra na base da ÁREA VISÍVEL**, que é onde ela serve — e, uma
+  vez que o container rola, o `thead` pode ficar `sticky`, que resolve o outro problema da
+  tabela longa: ler a vigésima linha sem saber que coluna é qual.
+  ⚠️ **`overflow: auto` nos DOIS eixos, e é obrigatório.** Com `overflow-y: visible` o
+  navegador converte `overflow-x` para `auto` e o `sticky` passa a se ancorar na JANELA, não no
+  container — o cabeçalho sumiria ao rolar a página.
+  ⚠️ **A borda do cabeçalho vira `box-shadow`.** Com `border-collapse: collapse` a borda
+  pertence à tabela, não à célula: ao rolar ela fica para trás e o cabeçalho flutua sem linha,
+  com as linhas passando coladas. E o fundo do `th` precisa ser opaco.
+  ⚠️ **Grid curto não ganha caixa**: `max-height` só age quando o conteúdo passa dela.
+  ⚠️ **Dentro de `Modal`, a altura máxima é anulada** (`.modal-miolo .grid-rolante`). A janela
+  já é um scroller, e dois aninhados fazem a roda do mouse rolar a lista inteira antes de mover
+  a janela — quem procura o botão de baixo não entende por quê.
+  ⚠️ **Na impressão, as duas somem** (`overflow: visible`, `max-height: none`): um `70vh` no
+  papel imprimiria só a primeira tela da lista e cortaria o resto, sem barra para denunciar.
+  ⚠️ **Eram 76 `overflow-x-auto` em 54 arquivos, sem componente compartilhado.** A troca foi
+  feita por script, só onde o `<div>` envolve uma `<table>` — a cascata do CMV é um SVG e um
+  `<pre>` de código também usavam a classe, e altura máxima ali cortaria o desenho.
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).

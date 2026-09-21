@@ -157,7 +157,7 @@ export default function ComposicaoKit({
       {!podeEditar && !dados.itens.length ? (
         <Vazio>Nenhum componente definido.</Vazio>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>

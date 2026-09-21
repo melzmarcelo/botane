@@ -196,7 +196,7 @@ export default function PaginaVenda() {
       </div>
 
       <Cartao titulo={`${venda.itens.length} item(ns)`}>
-        <div className="overflow-x-auto">
+        <div className="grid-rolante">
           <table className="tabela">
             <thead>
               <tr>
@@ -295,7 +295,7 @@ export default function PaginaVenda() {
             estoque — combo e serviço não controlam.
           </Vazio>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid-rolante">
             <table className="tabela">
               <thead>
                 <tr>

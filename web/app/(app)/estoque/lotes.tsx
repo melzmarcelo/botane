@@ -43,7 +43,7 @@ export default function LotesEmEstoque() {
       titulo="Lotes em estoque"
       descricao="Na ordem em que vão sair: o que vence antes sai antes."
     >
-      <div className="overflow-x-auto">
+      <div className="grid-rolante">
         <table className="tabela">
           <thead>
             <tr>
