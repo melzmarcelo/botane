@@ -25,7 +25,7 @@ seu endereço. `/publico/{id_unidade}/...` deixa isso resolvido desde já.
 reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -82,7 +82,8 @@ def casa(id_unidade: int) -> dict:
         loja = _casa_aberta(cur, id_unidade)
         cur.execute(
             """SELECT nome_fantasia, razao_social, whatsapp, telefone, email,
-                      instagram, logradouro, numero, bairro, cidade, uf, logo_url
+                      instagram, logradouro, numero, bairro, cidade, uf, logo_url,
+                      cor_primaria
                  FROM empresa WHERE id = 1""",
         )
         e = dict(cur.fetchone() or {})
@@ -105,8 +106,60 @@ def casa(id_unidade: int) -> dict:
             "whatsapp": zap,
             "email": e.get("email"),
             "instagram": e.get("instagram"),
+            # 🔑 **A logo cadastrada** (pedido do dono, 21/09/2026). Nula quando
+            # a casa ainda não enviou uma — e aí o site desenha o medalhão com o
+            # nome, como o protótipo. ⚠️ Inventar uma imagem seria pior: o
+            # cliente veria a marca de outra pessoa.
             "logo_url": e.get("logo_url"),
+            # A cor da casa, que o cadastro já guarda. O site pinta a capa com
+            # ela em vez de trazer um verde escrito no HTML.
+            "cor": e.get("cor_primaria"),
+            **_quando_atende(cur, id_unidade),
         }
+
+
+# 🔑 **Os nomes dos dias, na voz de quem lê** — "Ter" e "Qua", não "2" e "3". A
+# tela do cliente mostra "Ter · Qua · Qui · Sex · Sáb", como o protótipo.
+# ⚠️ ISO: 1 = segunda … 7 = domingo. É a convenção da casa desde
+# `parametros.fechamento_dia_semana`, e duas convenções de dia da semana no
+# mesmo sistema não dão erro em lugar nenhum — só marcam no dia errado.
+_DIAS = {1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb", 7: "Dom"}
+
+
+def _quando_atende(cur, id_unidade: int) -> dict:
+    """Em que dias a casa atende, e se ela está aberta AGORA.
+
+    🔑 **É o que a capa do protótipo mostra**: a tarja "Aberto agora" e a linha
+    com os dias. Sem isso o cliente abre o site às 23h, vê "Reservar uma mesa" e
+    só descobre que a casa está fechada depois de escolher dia e horário.
+
+    ⚠️ **"Aberto agora" é sobre a CASA, não sobre a reserva.** A última reserva
+    é mais cedo que o fechamento de propósito — quem chega às 17h55 numa casa
+    que fecha às 18h ainda é atendido, mas já não se reserva mesa.
+    """
+    cur.execute(
+        """SELECT dia_semana, aberto, abre, fecha FROM reserva_horarios
+            WHERE id_unidade = %s ORDER BY dia_semana""",
+        (id_unidade,),
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    abertos = [d for d in linhas if d["aberto"]]
+    agora = datetime.now()
+    hoje = next((d for d in abertos if d["dia_semana"] == agora.isoweekday()), None)
+    return {
+        "dias": [_DIAS[d["dia_semana"]] for d in abertos],
+        "aberta_agora": bool(hoje and hoje["abre"] <= agora.time() <= hoje["fecha"]),
+        # ⚠️ Quando a casa abre de novo, para a tarja poder dizer "abre Sáb 11:00"
+        # em vez de só "fechado" — que é uma porta na cara de quem chegou.
+        "hoje": (f'{hoje["abre"].strftime("%H:%M")} às {hoje["fecha"].strftime("%H:%M")}'
+                 if hoje else None),
+        "proximo": next(
+            (f'{_DIAS[d["dia_semana"]]} {d["abre"].strftime("%H:%M")}'
+             for i in range(1, 8)
+             for d in abertos
+             if d["dia_semana"] == ((agora.isoweekday() + i - 1) % 7) + 1),
+            None),
+    }
 
 
 @router.get("/{id_unidade}/catalogos")

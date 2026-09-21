@@ -14,6 +14,43 @@
 | `site/` | **o cliente** | `reserva.botanedeliecafe.com.br` |
 | `api/` | os dois | `sistema.botanedeliecafe.com.br/api` |
 
+## As três portas
+
+```
+      ╭──────────────────────────────╮
+      │   capa oliva · "Aberto agora"│
+      │          ( Botané )          │   ← o medalhão, 92px
+      ╰──────────────────────────────╯
+            Botané Deli e Café
+          Ter · Qua · Qui · Sex · Sáb
+
+   🗓️  Reservar uma mesa            ›   (destaque)
+   📖  Catálogo de Encomendas       ›   → abre o PDF
+   💬  Entre em contato             ›   → abre o WhatsApp
+```
+
+## A cara: o protótipo, linha a linha
+
+🔑 **Pedido do dono (21/09/2026):** *"deixa mais próximo ao protótipo que foi proposto em
+`apresentacao/reservas-prototipo.html`, utilizando a logo cadastrada, os catálogos colocar
+tudo na página inicial, no estilo apresentado, e ao clicar no botão, abrir o catálogo."*
+
+A capa de 128px com os dois gradientes radiais sobre o oliva, o **medalhão redondo de 92px**
+descendo 34px por cima dela, a tarja de estado no canto, e a lista de `.item` com ícone à
+esquerda e subtítulo embaixo. As fontes são as de lá — **Fraunces** nos títulos, **Karla** no
+corpo, **DM Mono** nas miudezas.
+
+🔑 **Os catálogos são ITENS DA PÁGINA INICIAL**, um por cardápio, e clicar **abre o PDF**.
+Antes era uma tela separada com uma lista dentro; o protótipo já os mostrava no hub.
+
+⚠️ **A logo cadastrada vira o medalhão.** Sem ela, ele desenha o nome da casa, como o
+protótipo — inventar uma imagem seria pior, o cliente veria a marca de outra pessoa. Sobe em
+Administração ▸ Empresa.
+
+⚠️ **A capa NÃO usa `empresa.cor_primaria`, e isso foi medido na tela.** A cor cadastrada é um
+verde vivo que o sistema interno usa como acento sobre fundo claro; chapada numa capa de 128px
+ela briga com o medalhão escuro e afasta o site justamente do protótipo, que é terroso.
+
 ## Por que um `index.html` e não um app
 
 🔑 **São três telas que leem a API.** Um arquivo que abre direto carrega mais
@@ -56,14 +93,15 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
 
 ## O que já faz, e o que ainda não
 
-- ✅ **Cardápios** — lista os ativos e abre o PDF.
+- ✅ **Cardápios** — cada um é um item da página inicial, e clicar abre o PDF.
 - ✅ **Entre em contato** — abre a conversa no WhatsApp com mensagem pronta.
   🔑 `wa.me` é **só um link**: não exige WhatsApp Business API, provedor nem
   modelo aprovado. O esboço de reservas deixou o WhatsApp "para depois" pensando
   no envio automático de confirmação — *abrir* a conversa custa isto.
-  ⚠️ **Hoje o número está em branco** no cadastro. Sem ele o site diz isso em vez
-  de mostrar um botão que não leva a lugar nenhum: preencher em
-  Administração ▸ Empresa ▸ WhatsApp e ele aparece na hora.
+  ⚠️ **Sem número cadastrado o site DIZ isso**, em vez de mostrar um botão que não
+  leva a lugar nenhum. Sai de Administração ▸ Empresa ▸ WhatsApp, e o servidor
+  limpa a máscara: o cadastro aceita "(47) 99910-5033" e o `wa.me` só aceita
+  dígitos.
 - 🟡 **Reserva** — mostra os horários que a casa tem livres, de verdade, pela
   mesma regra da agenda do balcão. **Ainda não grava**: ao escolher o horário, o
   site monta a mensagem pronta para o WhatsApp.

@@ -98,6 +98,29 @@ proibidos = [k for k in (c or {}) if k in ("id", "id_unidade", "cnpj", "mesas",
 checar("e NADA de id interno, CNPJ ou CPF na resposta", not proibidos, proibidos)
 
 
+print("\n2b. a capa: a logo, os dias e se a casa esta aberta AGORA")
+# 🔑 **E o que a capa do protótipo mostra** (pedido do dono, 21/09/2026: *"deixa
+# mais proximo ao prototipo... utilizando a logo cadastrada"*). Sem isso o
+# cliente abre o site as 23h, ve "Reservar uma mesa" e so descobre que a casa
+# esta fechada depois de escolher dia e horario.
+checar("a casa diz em que dias atende", isinstance((c or {}).get("dias"), list), c)
+checar("e se esta aberta agora", isinstance((c or {}).get("aberta_agora"), bool), c)
+# ⚠️ **"Fechado" sozinho e uma porta na cara.** A tarja diz quando abre — DESDE
+# QUE haja algum dia aberto. Casa que ainda nao configurou horario nenhum nao
+# tem "proximo", e inventar um seria prometer uma abertura que nao existe.
+# ⚠️ **A primeira versao desta checagem exigia `proximo` sempre**, e caiu na
+# bateria: outra suite deixa os dias todos fechados, e a checagem media o estado
+# que a vizinha deixou em vez de medir a regra. O que se afirma e a COERENCIA.
+checar("dizendo quando abre de novo, quando ha dia aberto",
+       bool((c or {}).get("dias")) == ((c or {}).get("proximo") is not None)
+       or (c or {}).get("aberta_agora"),
+       {k: (c or {}).get(k) for k in ("dias", "aberta_agora", "proximo")})
+# 🔑 **A logo CADASTRADA.** ⚠️ Nula quando a casa ainda nao enviou uma — e ai o
+# site desenha o medalhao com o nome, como o protótipo. Inventar uma imagem
+# seria pior: o cliente veria a marca de outra pessoa.
+checar("e o campo da logo existe, mesmo vazio", "logo_url" in (c or {}), list(c or {}))
+
+
 print("\n3. o whatsapp sai so com DIGITOS")
 # ⚠️ O cadastro aceita o numero de qualquer jeito — "(47) 99910-5033" e o normal
 # —, e o `wa.me` nao aceita nada alem de digitos. Quem limpa e o servidor: o site
