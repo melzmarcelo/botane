@@ -243,6 +243,57 @@ checar("repetido na MESMA lista é recusado", st == 409, (st, r))
 checar("dizendo que ele já está ali", "já está" in (r.get("detail") or ""),
        r.get("detail"))
 
+print("\n5b. a ordem dos itens")
+# 🔑 **Pedido do dono (22/09/2026):** *"ao cadastrar os produtos, permitir a
+# ordenação deles, e os novos ir adicionando no fim da lista."*
+# ⚠️ **A ordem e de CADA lista** — a da subcategoria, ou a dos soltos da
+# categoria —, porque sao duas filas diferentes na tela.
+P_DOIS = novo_produto("SEGUNDO", integrado_pdv=True)
+P_TRES = novo_produto("TERCEIRO", integrado_pdv=True)
+st, _r = chamar("POST", f"/catalogos/categorias/{ID_BEB}/itens",
+                {"id_produto": P_DOIS}, token)
+checar("o segundo produto entra", st == 201, (st, _r))
+st, _r = chamar("POST", f"/catalogos/categorias/{ID_BEB}/itens",
+                {"id_produto": P_TRES}, token)
+checar("e o terceiro tambem", st == 201, (st, _r))
+
+st, arvore = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
+bebidas = next(c for c in arvore["categorias"] if c["id"] == ID_BEB)
+ordens = [i["ordem"] for i in bebidas["itens"]]
+# 🔑 **Cada novo entra DEPOIS do ultimo.** Antes todos nasciam com ordem 0 e a
+# lista caia na ordem alfabetica — o cardapio nao e uma lista telefonica.
+checar("cada um nasce com ordem maior que a do anterior",
+       ordens == sorted(ordens) and len(set(ordens)) == len(ordens), ordens)
+checar("e o ultimo cadastrado e o ultimo da lista",
+       bebidas["itens"][-1]["id_produto"] == P_TRES,
+       [i["id_produto"] for i in bebidas["itens"]])
+
+# 🔑 **Reordenar manda a lista INTEIRA.** Mandar so o que se moveu deixaria o
+# servidor adivinhando o resto.
+invertida = list(reversed(bebidas["itens"]))
+st, r = chamar("PUT", "/catalogos/itens/ordem",
+               [{"id": i["id"], "ordem": (n + 1) * 10} for n, i in enumerate(invertida)],
+               token)
+checar("reordenar responde 200", st == 200, (st, r))
+st, arvore = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
+bebidas = next(c for c in arvore["categorias"] if c["id"] == ID_BEB)
+checar("e a lista volta na ordem nova",
+       [i["id_produto"] for i in bebidas["itens"]]
+       == [i["id_produto"] for i in invertida],
+       [i["id_produto"] for i in bebidas["itens"]])
+
+# ⚠️ **Item de OUTRA casa nao entra na lista a ser reordenada.** Sem a conferencia
+# por loja, um id qualquer seria reordenado junto.
+st, r = chamar("PUT", "/catalogos/itens/ordem",
+               [{"id": 999999999, "ordem": 10}], token)
+checar("id que nao existe e recusado com 404", st == 404, (st, r))
+
+# ⚠️ **`/itens/ordem` nao pode ser lida como um id.** Foi o que aconteceu com
+# `/produtos-disponiveis` nesta mesma sessao: rota de um segmento so tem de ser
+# declarada ANTES da que tem parametro.
+checar("e a rota de ordem nao e confundida com /itens/{id}",
+       chamar("PUT", "/catalogos/itens/ordem", [], token)[0] == 200)
+
 print("\n6. o que a rota RECUSA pendurar")
 st, r = chamar("POST", f"/catalogos/categorias/{ID_PRINC}/itens",
                {"id_produto": P_INATIVO}, token)

@@ -300,7 +300,13 @@ def cardapio(id_unidade: int, id_catalogo: int) -> dict:
                       s.descricao AS subcategoria_descricao,
                       s.foto_url AS subcategoria_foto, s.ordem AS subcategoria_ordem,
                       i.id AS id_item, i.ordem AS item_ordem,
-                      p.nome AS produto, p.foto_url AS produto_foto,
+                      -- 🔑 **O nome de vitrine ganha do nome do cadastro**
+                      -- (migração 085): o cadastro normaliza em CAIXA ALTA, e o
+                      -- cardápio do cliente não é lugar de gritar. Nulo cai no
+                      -- nome de sempre — a casa só escreve o segundo quando o
+                      -- primeiro não serve.
+                      coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
+                      p.foto_url AS produto_foto,
                       p.informacao_adicional,
                       -- 🔑 O preço da LOJA primeiro, o da casa depois: é a
                       -- cascata de `services/precos.py`, e uma segunda regra

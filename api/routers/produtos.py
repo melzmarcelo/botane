@@ -60,7 +60,7 @@ _EDITAVEIS = (
     # ⚠️ **A FOTO não entra aqui.** Ela chega por `POST /produtos/{id}/foto`,
     # que é multipart — este formulário é JSON, e um campo de arquivo no meio
     # dele faria o salvar carregar megabytes a cada correção de preço.
-    "informacao_adicional",
+    "nome_catalogo", "informacao_adicional",
 )
 
 

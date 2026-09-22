@@ -309,6 +309,23 @@ checar("o item traz nome, descricao e PRECO",
 checar("e NADA de id de produto na resposta",
        "id_produto" not in item and "id" not in item, list(item))
 
+# 🔑 **O nome de VITRINE ganha do nome do cadastro** (migracao 085).
+chamar("PUT", f"/produtos/{prod['id']}",
+       {**chamar("GET", f"/produtos/{prod['id']}", token=token)[1],
+        "nome_catalogo": "Café Coado"}, token=token)
+st, card = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+nome_na_vitrine = card["categorias"][0]["itens"][0]["nome"]
+checar("o cardapio mostra o nome de vitrine, nao o do cadastro",
+       nome_na_vitrine == "Café Coado", nome_na_vitrine)
+# ⚠️ **Em branco cai no nome do cadastro**, que e o que o nulo quer dizer.
+chamar("PUT", f"/produtos/{prod['id']}",
+       {**chamar("GET", f"/produtos/{prod['id']}", token=token)[1],
+        "nome_catalogo": "   "}, token=token)
+st, card = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+checar("e em branco ele volta ao nome do cadastro",
+       card["categorias"][0]["itens"][0]["nome"] == f"CAFE PUBLICO {marca}",
+       card["categorias"][0]["itens"][0]["nome"])
+
 # 🔑 **Produto desativado SOME do site.** A tela de configuracao o mostra
 # marcado, para a casa descobrir que publicou algo que saiu de linha; o site e
 # quem o esconde.

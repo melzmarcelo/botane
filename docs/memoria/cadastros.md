@@ -879,6 +879,19 @@ aba chamada Catálogo. Nesta aba teremos Foto e um campo para Informação Adici
   atributo do produto: no dia em que a ficha técnica, o PDV ou um cardápio impresso quiserem a
   mesma imagem, ela já está em `foto_url`. `catalogo_foto_url` teria de ser lido como "a foto
   que por acaso mora no catálogo".
+- 🔑 **`nome_catalogo`: o nome como o CLIENTE lê** (migração 085, pedido do dono: *"além da
+  Informação Adicional, colocar o Nome para catálogo junto"*). Nulo quer dizer *"use o nome do
+  cadastro"* — o produto cujo nome já serve à vitrine não precisa de dois.
+  🔑 **Nasceu de um defeito visível**: o cardápio no site mostrava "BATATA RÚSTICA" onde o
+  cardápio impresso diz "Batata Rústica". O cadastro normaliza em CAIXA ALTA, e isso é certo lá
+  dentro — código, busca e conferência de nota vivem melhor sem diferença de caixa.
+  ⚠️ **As três saídas que foram recusadas, e por quê**: minúsculas por CSS quebraria sigla
+  ("NCM", "IPA"); *title case* automático erra nas preposições do português ("Suco De
+  Laranja"); e renomear o produto mudaria o nome para TODO o sistema — nota, estoque, ficha e
+  PDV — para resolver um problema que é só da vitrine.
+  ⚠️ **O nome do cadastro não muda junto**, e a suíte cobra isso: é um segundo nome, não um
+  apelido que reescreve o primeiro.
+
 - ⚠️ **`informacao_adicional` NÃO é `observacao`, e a diferença é quem lê.** Observação é
   recado interno, escrito para quem trabalha na casa; esta é para o CLIENTE. Misturá-las
   publicaria *"conferir com o fornecedor, veio errado da última vez"* no site. A tela diz isso

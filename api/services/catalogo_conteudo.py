@@ -111,6 +111,10 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
     cur.execute(
         """SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
                   p.nome AS produto, p.codigo, p.ativo, p.foto_url,
+                  -- 🔑 O nome que o CLIENTE vai ler, para a tela de
+                  -- configuração mostrar o que sai na vitrine — e não só o que
+                  -- está no cadastro.
+                  nullif(btrim(p.nome_catalogo), '') AS nome_catalogo,
                   p.informacao_adicional, p.um_estoque
              FROM catalogo_itens i
              JOIN produtos p ON p.id = i.id_produto
@@ -401,14 +405,58 @@ def vincular(cur, id_unidade: int, id_categoria: int, dados: dict) -> dict:
             status_code=409,
             detail=f'"{produto["nome"]}" já está nesta lista.')
 
+    # 🔑 **Produto novo entra no FIM da lista** (pedido do dono, 22/09/2026:
+    # *"os novos ir adicionando no fim da lista"*). ⚠️ A ordem é de CADA lista —
+    # a da subcategoria, ou a dos soltos da categoria —, porque são duas filas
+    # diferentes na tela.
+    # ⚠️ **O passo é 10, não 1.** Sobra espaço entre dois vizinhos para o dia em
+    # que alguém quiser encaixar um no meio sem reescrever a lista inteira.
+    cur.execute(
+        """SELECT coalesce(max(ordem), 0) AS ultima FROM catalogo_itens
+            WHERE id_categoria = %s
+              AND ((%s::int IS NULL AND id_subcategoria IS NULL)
+                OR id_subcategoria = %s)""",
+        (id_categoria, id_sub, id_sub),
+    )
+    proxima = int(cur.fetchone()["ultima"]) + 10
     cur.execute(
         """INSERT INTO catalogo_itens (id_categoria, id_subcategoria, id_produto, ordem)
            VALUES (%s, %s, %s, %s) RETURNING id""",
-        (id_categoria, id_sub, produto["id"], dados.get("ordem", 0)),
+        (id_categoria, id_sub, produto["id"], min(proxima, 999)),
     )
     return {"id": cur.fetchone()["id"], "id_produto": produto["id"],
             "produto": produto["nome"],
             "message": f'"{produto["nome"]}" entrou no cardápio.'}
+
+
+def reordenar(cur, id_unidade: int, ordens: list) -> dict:
+    """Grava a nova ordem de uma lista inteira, de uma vez.
+
+    🔑 **A lista INTEIRA, não "sobe um"** (pedido do dono: *"permitir a ordenação
+    deles"*). Mandar só o que se moveu deixaria o servidor adivinhando o resto, e
+    dois cliques rápidos na tela chegariam fora de ordem — a segunda gravação
+    partiria de um estado que a primeira já mudou.
+
+    ⚠️ **Cada item é conferido contra a LOJA.** Sem isso, um id de outra casa
+    entraria na lista e seria reordenado junto: é a mesma lição de
+    `listar_fechamentos` do CMV.
+    """
+    if not ordens:
+        return {"message": "Nada a reordenar."}
+    ids = [o.id for o in ordens]
+    cur.execute(
+        """SELECT i.id FROM catalogo_itens i
+             JOIN catalogo_categorias c ON c.id = i.id_categoria
+             JOIN catalogos k ON k.id = c.id_catalogo
+            WHERE i.id = ANY(%s) AND k.id_unidade = %s""",
+        (ids, id_unidade),
+    )
+    meus = {r["id"] for r in cur.fetchall()}
+    if meus != set(ids):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    for o in ordens:
+        cur.execute("UPDATE catalogo_itens SET ordem = %s WHERE id = %s", (o.ordem, o.id))
+    return {"message": f"{len(ordens)} item(ns) reordenado(s)."}
 
 
 def desvincular(cur, id_unidade: int, id_item: int) -> dict:

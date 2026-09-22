@@ -139,6 +139,27 @@ st, _r = chamar("PUT", f"/produtos/{ID}", {**atual, "informacao_adicional": "x" 
                 token)
 checar("acima de 500 caracteres é recusado", st == 422, st)
 
+print("\n1b. o nome de catálogo")
+# 🔑 **Pedido do dono (22/09/2026):** *"além da Informação Adicional, colocar o
+# Nome para catálogo junto."*
+# ⚠️ **Existe porque o cadastro normaliza em CAIXA ALTA**, e isso é certo lá
+# dentro; o cardápio do cliente é que não é lugar de gritar.
+st, atual = chamar("GET", f"/produtos/{ID}", token=token)
+checar("nasce nulo, que quer dizer 'use o nome do cadastro'",
+       atual.get("nome_catalogo") is None, atual.get("nome_catalogo"))
+st, _r = chamar("PUT", f"/produtos/{ID}",
+                {**atual, "nome_catalogo": "Batata Rústica"}, token)
+checar("aceita o nome de vitrine", st == 200, (st, _r))
+st, atual = chamar("GET", f"/produtos/{ID}", token=token)
+checar("e ele volta com a caixa como foi escrita",
+       atual.get("nome_catalogo") == "Batata Rústica", atual.get("nome_catalogo"))
+# ⚠️ **O nome do CADASTRO não muda junto.** O de vitrine é um segundo nome, não
+# um apelido que reescreve o primeiro — nota, estoque e ficha continuam com ele.
+checar("sem tocar no nome do cadastro",
+       atual.get("nome") == f"PRATO CATALOGO {MARCA}", atual.get("nome"))
+st, _r = chamar("PUT", f"/produtos/{ID}", {**atual, "nome_catalogo": "x" * 121}, token)
+checar("acima de 120 caracteres é recusado", st == 422, st)
+
 print("\n2. a foto sobe por rota própria")
 st, r = enviar_foto(ID, token)
 checar("o envio responde 200", st == 200, (st, r))

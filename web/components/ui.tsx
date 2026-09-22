@@ -32,7 +32,11 @@ export function Cartao({
           {acao}
         </header>
       )}
-      <div className="p-5">{children}</div>
+      {/* ⚠️ **Sem conteúdo, sem caixa.** O miolo com `p-5` desenhava uma faixa
+          vazia de ~50px mesmo recebendo `null` — e numa tela com dez cartões
+          recolhidos isso volta a ser meia tela de nada. Apareceu no cardápio,
+          quando as categorias ganharam o "recolher". */}
+      {children ? <div className="p-5">{children}</div> : null}
     </section>
   );
 }

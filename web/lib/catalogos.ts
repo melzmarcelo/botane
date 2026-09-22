@@ -107,6 +107,8 @@ export type ItemDoCatalogo = {
   id_subcategoria: number | null;
   id_produto: number;
   produto: string;
+  /** 🔑 O nome que o CLIENTE lê, quando a casa escreveu um. Nulo = o de cima. */
+  nome_catalogo: string | null;
   codigo: string;
   /** 🔑 **O produto pode ter sido desativado DEPOIS de entrar no cardápio.** A
    *  tela precisa marcá-lo — senão a casa não descobre que publicou algo que
@@ -202,3 +204,13 @@ export const vincularProduto = (
 
 export const desvincularProduto = (id: number) =>
   api.delete<{ message: string }>(`/catalogos/itens/${id}`);
+
+/**
+ * A nova ordem de uma lista, INTEIRA.
+ *
+ * 🔑 Mandar só o que se moveu deixaria o servidor adivinhando o resto, e dois
+ * cliques rápidos chegariam fora de ordem — a segunda gravação partiria de um
+ * estado que a primeira já mudou.
+ */
+export const reordenarItens = (ordens: { id: number; ordem: number }[]) =>
+  api.put<{ message: string }>("/catalogos/itens/ordem", ordens);

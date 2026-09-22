@@ -224,43 +224,40 @@ if len(entradas) == 2:
 
 print("\n3. os três relatórios saem em planilha, e em PDF quando cabem")
 periodo = f"inicio={inicio}&fim={fim}"
-for chave, params in (("memoria-cmv", periodo),
-                      ("inventario-valorizado", f"data={fim}"),
-                      ("memoria-produto", f"{periodo}&produtos={id_prod}")):
+RELATORIOS = (("memoria-cmv", periodo),
+              ("inventario-valorizado", f"data={fim}"),
+              ("memoria-produto", f"{periodo}&produtos={id_prod}"))
+
+for chave, params in RELATORIOS:
     st, csv = chamar("GET", f"/exportar/{chave}.csv?{params}", token=token, bruto=True)
     # 🔑 **A planilha NÃO tem teto**, e é por isso que ela é a saída oferecida
     # quando o PDF recusa. Ela sai sempre, em qualquer tamanho de base.
     checar(f"{chave} sai em planilha", st == 200 and len(csv) > 50, (st, len(csv)))
 
-# 🔑 **Os dois que cabem saem em PDF.** ⚠️ `memoria-cmv` fica de fora desta lista
-# de propósito — ver o bloco abaixo.
-for chave, params in (("inventario-valorizado", f"data={fim}"),
-                      ("memoria-produto", f"{periodo}&produtos={id_prod}")):
-    st, pdf = chamar("GET", f"/exportar/{chave}.pdf?{params}", token=token, bruto=True)
-    checar(f"{chave} sai em PDF", st == 200 and pdf[:4] == b"%PDF", (st, pdf[:8]))
-
-# ⚠️ **O PDF recusa acima de 5.000 linhas, de propósito** — e esta checagem
-# quebrou meses depois de escrita, sem nada no produto ter mudado: a base de
-# trabalho atravessou o teto (5.125 linhas). Ela afirmava "sai em PDF" sobre um
-# relatório que, nesta casa, legitimamente não sai.
-# 🔑 **E estreitar o filtro NÃO resolve**, o que foi medido: um único dia dá
-# 8.608 linhas — MAIS que o mês inteiro —, porque o volume da memória de CMV são
-# os dois inventários das pontas, não o movimento do meio. O filtro `produtos`
-# também não se aplica a este relatório.
-# 🔑 Então o que a suíte afirma é o CONTRATO, que vale nos dois tamanhos de
-# base: cabendo, sai o PDF; não cabendo, a recusa ENSINA o que fazer.
-st, r = chamar("GET", f"/exportar/memoria-cmv.pdf?{periodo}", token=token, bruto=True)
-if st == 400:
-    detalhe = r.decode("utf-8", "replace")
-    checar("memoria-cmv: acima do teto, o PDF recusa explicando",
-           "5.000" in detalhe, detalhe[:160])
-    # ⚠️ "Erro 400" não ensina ninguém a tirar o relatório que foi tirar. A
-    # recusa tem de apontar a saída que existe — e ela existe: a planilha.
-    checar("e oferece a planilha, que não tem teto",
-           "planilha" in detalhe, detalhe[:160])
-else:
-    checar("memoria-cmv: cabendo no teto, o PDF sai normalmente",
-           st == 200 and r[:4] == b"%PDF", (st, r[:8]))
+# ⚠️ **O PDF recusa acima de 5.000 linhas, de propósito**, e esta seção já
+# quebrou DUAS vezes sem nada no produto ter mudado: primeiro a memória de CMV
+# atravessou o teto, depois o inventário. A base de trabalho só cresce, e uma
+# checagem que afirma "sai em PDF" envelhece junto com ela.
+# 🔑 **E estreitar o filtro NÃO resolve**, o que foi medido: um único dia da
+# memória de CMV dá 8.608 linhas — MAIS que o mês inteiro —, porque o volume são
+# os dois inventários das pontas, não o movimento do meio.
+# 🔑 Então o que a suíte afirma é o CONTRATO, para TODOS, e ele vale nos dois
+# tamanhos de base: cabendo, sai o PDF; não cabendo, a recusa ENSINA o que fazer.
+# ⚠️ Singularizar um relatório — como a primeira correção fez — só adia a
+# próxima quebra para o dia em que o vizinho cruzar o mesmo teto.
+for chave, params in RELATORIOS:
+    st, r = chamar("GET", f"/exportar/{chave}.pdf?{params}", token=token, bruto=True)
+    if st == 400:
+        detalhe = r.decode("utf-8", "replace")
+        checar(f"{chave}: acima do teto, o PDF recusa dizendo o limite",
+               "5.000" in detalhe, detalhe[:160])
+        # ⚠️ "Erro 400" não ensina ninguém a tirar o relatório que foi tirar. A
+        # recusa tem de apontar a saída que existe — e ela existe: a planilha.
+        checar(f"{chave}: e oferece a planilha, que não tem teto",
+               "planilha" in detalhe, detalhe[:160])
+    else:
+        checar(f"{chave}: cabendo no teto, o PDF sai normalmente",
+               st == 200 and r[:4] == b"%PDF", (st, r[:8]))
 
 # ⚠️ O catálogo é a fonte do diálogo: relatório que existe no servidor e não
 # aparece no catálogo é relatório que ninguém consegue baixar pela tela.

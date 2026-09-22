@@ -1,0 +1,21 @@
+-- O nome do produto como o CLIENTE lê, ao lado do nome como a casa o cadastra.
+--
+-- 🔑 **Pedido do dono (22/09/2026):** *"no catálogo do cadastro de produto, além
+-- da Informação Adicional, colocar o Nome para catálogo junto."*
+--
+-- 🔑 **Nasceu de um defeito visível.** O cardápio no site mostrava
+-- "BATATA RÚSTICA" onde o cardápio impresso diz "Batata Rústica": o cadastro de
+-- produtos normaliza o nome em CAIXA ALTA, e isso é certo lá dentro — código,
+-- busca e conferência de nota vivem melhor sem diferença de caixa.
+-- ⚠️ **As saídas que eu recusei, e por quê:**
+--   * minúsculas por CSS quebraria sigla ("NCM", "IPA");
+--   * *title case* automático erra nas preposições do português, e "Suco de
+--     Laranja" viraria "Suco De Laranja";
+--   * renomear o produto mudaria o nome PARA TODO O SISTEMA — nota, estoque,
+--     ficha e PDV —, para resolver um problema que é só da vitrine.
+-- A saída é um segundo nome, escrito pela casa, que só a vitrine lê.
+--
+-- ⚠️ **Nulo quer dizer "use o nome do cadastro".** Não é campo obrigatório: o
+-- produto cujo nome já serve à vitrine não precisa de dois.
+
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS nome_catalogo varchar(120);

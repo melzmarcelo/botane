@@ -30,6 +30,7 @@ import auditoria
 from database import get_cursor
 from models.catalogos import (
     CatalogoCreate, CatalogoResponse, CatalogoUpdate, CategoriaCreate, ItemCreate,
+    ItemOrdem,
     ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
@@ -374,6 +375,23 @@ def vincular_produto(id_categoria: int, body: ItemCreate,
                             "vincular", depois={"produto": posto["produto"]},
                             id_unidade=id_unidade)
         return posto
+
+
+@router.put("/itens/ordem")
+def reordenar_itens(body: list[ItemOrdem], ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """A nova ordem de uma lista, inteira.
+
+    ⚠️ **Declarada ANTES de `/itens/{id_item}`**: `ordem` é um segmento só, e o
+    FastAPI casa rotas na ORDEM — aqui embaixo ela seria lida como um id e
+    responderia 422 dizendo que "ordem" não é um número. Foi exatamente o que
+    aconteceu com `/produtos-disponiveis` nesta mesma sessão.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = conteudo.reordenar(cur, id_unidade, body)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", 0, "reordenar",
+                            depois={"itens": len(body)}, id_unidade=id_unidade)
+        return feito
 
 
 @router.delete("/itens/{id_item}")

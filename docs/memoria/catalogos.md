@@ -278,11 +278,59 @@ só aparece quando há preço na tela.
   transformaria um cardápio de dez seções em dezenas de idas ao banco — e este é o caminho que
   o público percorre.
 
-⚠️ **Os nomes saem em CAIXA ALTA**, e não é decisão do site: o cadastro de produtos normaliza
-assim. Forçar minúsculas por CSS quebraria siglas, e "title case" automático erra nas
-preposições do português ("Suco De Laranja"). Se a casa quiser o nome como no print, o caminho
-é um nome de vitrine no item do catálogo — campo que hoje não existe.
+🔑 **O nome de VITRINE existe desde a migração 085**, e foi o que resolveu o problema que esta
+seção registrava: o cardápio mostrava "BATATA RÚSTICA" onde o impresso diz "Batata Rústica".
+`produtos.nome_catalogo` é o nome como o cliente lê; nulo cai no nome do cadastro, que continua
+em CAIXA ALTA porque lá dentro isso é certo. A consulta da vitrine resolve com
+`coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome)` — em branco é o mesmo que não ter.
+⚠️ **A tela de configuração do cardápio mostra o nome de vitrine PRIMEIRO**, com o do cadastro
+ao lado em cinza: ali se olha o cardápio, não o cadastro — mas quem veio procurar o produto
+precisa reconhecê-lo. Ver `cadastros.md`.
 
 ⚠️ **Sem foto, a bolha da subcategoria fica VAZIA.** A primeira versão punha as duas primeiras
 letras do nome ali, e o que aparecia era "Pr" e "Sa" soltos dentro de um círculo: parece
 defeito, não desenho. O nome já está escrito logo abaixo.
+
+## A ordem dos itens e o recolher das seções (22/09/2026)
+
+🔑 **Pedido do dono:** *"ao cadastrar os produtos, permitir a ordenação deles, e os novos ir
+adicionando no fim da lista. Permitir recolher a categoria e subcategoria para a tela não
+ficar tão longa."*
+
+### A ordem
+
+- ⚠️ **Antes, todo item nascia com `ordem = 0`** e a lista caía na ordem alfabética do
+  desempate — um cardápio não é lista telefônica. Agora cada novo entra com
+  `max(ordem) + 10` **da lista dele**, e "a lista dele" é a da subcategoria, ou a dos soltos
+  da categoria: são duas filas diferentes na tela.
+- 🔑 **O passo é 10, não 1**, para sobrar espaço entre vizinhos no dia em que alguém quiser
+  encaixar um no meio sem reescrever a lista inteira.
+- 🔑 **Reordenar manda a lista INTEIRA renumerada**, não "sobe um". Mandar só o que se moveu
+  deixaria o servidor adivinhando o resto, e dois cliques rápidos chegariam fora de ordem — a
+  segunda gravação partiria de um estado que a primeira já mudou. ⚠️ E trocar só os dois
+  vizinhos deixaria empates quando duas listas antigas tivessem a mesma ordem; empate na
+  ordenação vira posição que depende do acaso da consulta.
+- ⚠️ **Cada id é conferido contra a LOJA** antes de gravar: sem isso, um id de outra casa
+  entraria na lista e seria reordenado junto.
+- 🔑 **Subir e descer, não arrastar.** Arrastar é agradável no mouse e ruim no toque, e esta
+  tela também se usa no celular — onde o arrasto disputa com a rolagem da página. ⚠️ O
+  primeiro não sobe e o último não desce: botão que não faz nada ensina a duvidar dos outros.
+- ⚠️ **`PUT /catalogos/itens/ordem` é declarada ANTES de `/itens/{id_item}`.** `ordem` é um
+  segmento só, e o FastAPI casa rotas na ordem — embaixo, ela seria lida como um id e
+  responderia 422 dizendo que "ordem" não é um número. É o mesmo tropeço de
+  `/produtos-disponiveis`, na mesma sessão, duas horas antes.
+
+### O recolher
+
+- ⚠️ **As seções nascem ABERTAS.** Um cardápio que abre todo fechado esconde o que a pessoa
+  veio conferir e cobra um clique por seção antes de qualquer trabalho.
+- ⚠️ **Fechada, o miolo não é DESENHADO** — e não apenas escondido por CSS. Uma categoria com
+  trinta produtos continuaria montando trinta linhas invisíveis, e a tela que se queria
+  encurtar seguiria pesada.
+- 🔑 **A contagem fica no botão** (`▸ abrir (12)`). Seção fechada sem número é uma caixa que
+  não diz o que guarda, e a pessoa abre uma por uma só para achar o que procura.
+- 🔑 **Recolher vale para quem só LÊ também**: o botão está fora do `podeEditar`, porque a
+  tela longa incomoda igual.
+- ⚠️ **O `Cartao` ganhou uma correção por causa disto**: ele desenhava o miolo com `p-5` mesmo
+  recebendo `null`, e sobrava uma faixa vazia de ~50px por cartão recolhido — meia tela de
+  nada com dez categorias. Agora, sem conteúdo, não há caixa. Vale para a casa inteira.

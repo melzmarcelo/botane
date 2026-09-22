@@ -77,6 +77,8 @@ type Form = {
   peso_bruto: string;
   codigo_barras: string;
   observacao: string;
+  /** 🔑 O nome como o CLIENTE lê. Vazio = usa o nome do cadastro. */
+  nome_catalogo: string;
   /** 🔑 O que o CLIENTE lê sobre o produto — não é a `observacao`, que é
    *  recado interno. Ver a aba Catálogo. */
   informacao_adicional: string;
@@ -92,7 +94,7 @@ const VAZIO: Form = {
   integrado_pdv: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   cest: "", marca: "", peso_liquido: "", peso_bruto: "",
-  codigo_barras: "", observacao: "", informacao_adicional: "",
+  codigo_barras: "", observacao: "", nome_catalogo: "", informacao_adicional: "",
   preco_venda: "", status: "ATIVO", ativo: true,
 };
 
@@ -502,6 +504,7 @@ export default function FormularioProduto() {
       peso_bruto: num(f.peso_bruto),
       codigo_barras: texto(f.codigo_barras),
       observacao: texto(f.observacao),
+      nome_catalogo: texto(f.nome_catalogo),
       informacao_adicional: texto(f.informacao_adicional),
       // ⚠️ Preço que veio da LOJA não sai no corpo do produto: ele é gravado
       // logo abaixo, pela rota da loja. Mandá-lo aqui abriria uma linha
@@ -1798,10 +1801,32 @@ export default function FormularioProduto() {
             </div>
           </Cartao>
 
+          {/* 🔑 **O nome de vitrine** (pedido do dono, 22/09/2026: *"além da
+              Informação Adicional, colocar o Nome para catálogo junto"*).
+              ⚠️ **Existe porque o cadastro normaliza em CAIXA ALTA**, e isso é
+              certo lá dentro — código, busca e conferência de nota vivem melhor
+              sem diferença de caixa. O cardápio do cliente é que não é lugar de
+              gritar. */}
           <Cartao
-            titulo="Informação adicional"
-            descricao="O que contar sobre este produto para quem vai comprar."
+            titulo="Como o cliente vê este produto"
+            descricao="O nome e a descrição que aparecem no cardápio do site."
           >
+            <div className="flex flex-col gap-4">
+              <Campo
+                rotulo="Nome para catálogo"
+                dica={`Em branco, o cardápio usa o nome do cadastro${
+                  f.nome ? ` — “${f.nome}”` : ""}.`}
+              >
+                <input
+                  id="nome-catalogo"
+                  className="campo"
+                  maxLength={120}
+                  disabled={!podeEditar}
+                  placeholder={f.nome || "Batata Rústica"}
+                  value={f.nome_catalogo}
+                  onChange={(e) => set("nome_catalogo", e.target.value)}
+                />
+              </Campo>
             <Campo
               rotulo="Texto do catálogo"
               dica="Aparece junto do produto. Até 500 caracteres."
@@ -1817,6 +1842,7 @@ export default function FormularioProduto() {
                 onChange={(e) => set("informacao_adicional", e.target.value)}
               />
             </Campo>
+            </div>
             {/* ⚠️ **Não é a observação da aba Principal**, e confundir as duas
                 publica recado interno na vitrine. */}
             <p className="mt-3 text-[13px] text-suave">

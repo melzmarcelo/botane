@@ -157,6 +157,41 @@ export default function ConfigurarCatalogo() {
     }
   }
 
+  // --------------------------------------------------------- recolher -----
+  /**
+   * As seções fechadas.
+   *
+   * 🔑 **Pedido do dono (22/09/2026):** *"permitir recolher a categoria e
+   * subcategoria para a tela não ficar tão longa."*
+   * ⚠️ **Nascem ABERTAS.** Um cardápio que abre todo fechado esconde o que a
+   * pessoa veio conferir, e obriga um clique por seção antes de qualquer
+   * trabalho. Quem quer a tela curta recolhe — e a escolha fica de pé enquanto
+   * a tela estiver aberta, inclusive depois de salvar uma seção.
+   */
+  const [fechadas, setFechadas] = useState<Set<string>>(new Set());
+  const chaveDa = (tipo: cat.TipoDeSecao, id: number) => `${tipo}-${id}`;
+  const estaFechada = (tipo: cat.TipoDeSecao, id: number) =>
+    fechadas.has(chaveDa(tipo, id));
+  function alternar(tipo: cat.TipoDeSecao, id: number) {
+    setFechadas((atual) => {
+      const nova = new Set(atual);
+      const k = chaveDa(tipo, id);
+      if (nova.has(k)) nova.delete(k);
+      else nova.add(k);
+      return nova;
+    });
+  }
+  /** Recolher tudo de uma vez — o atalho de quem veio só conferir a estrutura. */
+  function recolherTudo(fechar: boolean) {
+    if (!fechar) return setFechadas(new Set());
+    const todas = new Set<string>();
+    (conteudo?.categorias ?? []).forEach((c) => {
+      todas.add(chaveDa("categoria", c.id));
+      c.subcategorias.forEach((sc) => todas.add(chaveDa("subcategoria", sc.id)));
+    });
+    setFechadas(todas);
+  }
+
   // ----------------------------------------------------------- produtos ---
   /** Onde o produto escolhido vai ser pendurado. */
   const [pendurando, setPendurando] = useState<{
@@ -201,6 +236,57 @@ export default function ConfigurarCatalogo() {
     }
   }
 
+  /**
+   * Sobe ou desce um produto dentro da lista dele.
+   *
+   * 🔑 **A lista inteira é renumerada e enviada de uma vez** (10, 20, 30…): o
+   * servidor grava o que recebe, sem adivinhar. ⚠️ Trocar só os dois vizinhos
+   * deixaria empates quando duas listas antigas tivessem a mesma ordem — e
+   * empate na ordenação vira posição que depende do acaso da consulta.
+   */
+  async function mover(itens: cat.ItemDoCatalogo[], indice: number, passo: number) {
+    const destino = indice + passo;
+    if (destino < 0 || destino >= itens.length) return;
+    const fila = [...itens];
+    [fila[indice], fila[destino]] = [fila[destino], fila[indice]];
+    const ordens = fila.map((i, n) => ({ id: i.id, ordem: (n + 1) * 10 }));
+
+    // 🔑 **A tela troca as duas linhas NA HORA, e só depois avisa o servidor.**
+    // ⚠️ Recarregar a árvore a cada clique custava 2,5s num cardápio de 59
+    // produtos — medido. Mover um item três posições eram sete segundos de
+    // espera, e no meio deles a lista pulava três vezes. O reordenar é uma
+    // troca de lugar: ou a pessoa vê acontecer, ou ela clica de novo achando
+    // que não pegou.
+    const posicao = new Map(ordens.map((o) => [o.id, o.ordem]));
+    setConteudo((atual) => {
+      if (!atual) return atual;
+      const trocar = (lista: cat.ItemDoCatalogo[]) =>
+        lista.some((i) => posicao.has(i.id))
+          ? [...lista]
+              .map((i) => ({ ...i, ordem: posicao.get(i.id) ?? i.ordem }))
+              .sort((a, b) => a.ordem - b.ordem)
+          : lista;
+      return {
+        ...atual,
+        categorias: atual.categorias.map((c) => ({
+          ...c,
+          itens: trocar(c.itens),
+          subcategorias: c.subcategorias.map((sc) => ({ ...sc, itens: trocar(sc.itens) })),
+        })),
+      };
+    });
+
+    try {
+      await cat.reordenarItens(ordens);
+    } catch (e) {
+      aviso.erro(e instanceof ErroApi ? e.message : "Não foi possível reordenar");
+      // ⚠️ **Falhando, a tela volta ao que o SERVIDOR tem.** Deixar a ordem
+      // otimista de pé seria mostrar um cardápio que não existe — e a pessoa
+      // sairia achando que gravou.
+      await recarregar();
+    }
+  }
+
   async function tirarProduto(idItem: number) {
     try {
       const r = await cat.desvincularProduto(idItem);
@@ -233,7 +319,7 @@ export default function ConfigurarCatalogo() {
           <p className="py-2 text-[13.5px] text-suave">Nenhum produto aqui ainda.</p>
         ) : (
           <ul className="flex flex-col gap-px bg-linha text-[14.5px]">
-            {itens.map((i) => (
+            {itens.map((i, n) => (
               <li
                 key={i.id}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-superficie py-2"
@@ -251,9 +337,17 @@ export default function ConfigurarCatalogo() {
                     <span className="text-[10px] text-suave">sem</span>
                   )}
                 </span>
+                {/* 🔑 **O nome que o CLIENTE vai ler vem primeiro.** A tela
+                    de configuração mostra o cardápio, não o cadastro — e quando
+                    a casa escreveu um nome de vitrine, é ele que sai no site.
+                    ⚠️ O nome do cadastro fica ao lado, em cinza, para quem veio
+                    procurar o produto reconhecê-lo. */}
                 <Link href={`/produtos/${i.id_produto}`} className="link-registro">
-                  {i.produto}
+                  {i.nome_catalogo || i.produto}
                 </Link>
+                {i.nome_catalogo && (
+                  <span className="text-[12.5px] text-suave">{i.produto}</span>
+                )}
                 <span className="mono text-[12.5px] text-suave">{i.codigo}</span>
                 {/* ⚠️ **Marcado quando saiu de linha DEPOIS de entrar.** Sem
                     isto a casa publica um prato que não vende mais e só
@@ -263,13 +357,38 @@ export default function ConfigurarCatalogo() {
                   <span className="text-[12.5px] text-suave">sem descrição</span>
                 )}
                 {podeEditar && (
-                  <button
-                    type="button"
-                    className="link-acao link-acao-erro ml-auto"
-                    onClick={() => void tirarProduto(i.id)}
-                  >
-                    tirar
-                  </button>
+                  <span className="ml-auto flex items-center gap-3">
+                    {/* 🔑 **Subir e descer, não arrastar.** Arrastar é
+                        agradável no mouse e ruim no toque, e esta tela também
+                        se usa no celular — onde o arrasto disputa com a rolagem
+                        da página. ⚠️ O primeiro não sobe e o último não desce:
+                        botão que não faz nada ensina a duvidar dos outros. */}
+                    <button
+                      type="button"
+                      className="link-acao"
+                      disabled={n === 0}
+                      aria-label={`subir ${i.nome_catalogo || i.produto}`}
+                      onClick={() => void mover(itens, n, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="link-acao"
+                      disabled={n === itens.length - 1}
+                      aria-label={`descer ${i.nome_catalogo || i.produto}`}
+                      onClick={() => void mover(itens, n, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="link-acao link-acao-erro"
+                      onClick={() => void tirarProduto(i.id)}
+                    >
+                      tirar
+                    </button>
+                  </span>
                 )}
               </li>
             ))}
@@ -289,6 +408,39 @@ export default function ConfigurarCatalogo() {
           </button>
         )}
       </div>
+    );
+  }
+
+  /** Quantos produtos uma categoria tem, contando os das subcategorias. */
+  const totalDa = (c: cat.Categoria) =>
+    c.itens.length + c.subcategorias.reduce((t, s) => t + s.itens.length, 0);
+
+  /**
+   * O botão que abre e fecha uma seção.
+   *
+   * ⚠️ **A contagem fica NO botão.** Seção fechada sem número é uma caixa que
+   * não diz o que guarda — e a pessoa abre uma por uma só para descobrir onde
+   * está o que procura.
+   */
+  function Recolher({
+    tipo,
+    id,
+    itens,
+  }: {
+    tipo: cat.TipoDeSecao;
+    id: number;
+    itens: number;
+  }) {
+    const fechada = estaFechada(tipo, id);
+    return (
+      <button
+        type="button"
+        className="link-acao"
+        aria-expanded={!fechada}
+        onClick={() => alternar(tipo, id)}
+      >
+        {fechada ? `▸ abrir (${itens})` : "▾ recolher"}
+      </button>
     );
   }
 
@@ -355,6 +507,16 @@ export default function ConfigurarCatalogo() {
             <Link href="/catalogos" className="btn btn-secundario">
               ← catálogos
             </Link>
+            {/* 🔑 O atalho de quem veio só conferir a estrutura do cardápio. */}
+            {conteudo.categorias.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-secundario"
+                onClick={() => recolherTudo(fechadas.size === 0)}
+              >
+                {fechadas.size === 0 ? "Recolher tudo" : "Abrir tudo"}
+              </button>
+            )}
             {podeEditar && (
               <button
                 type="button"
@@ -411,8 +573,12 @@ export default function ConfigurarCatalogo() {
             titulo={c.nome}
             descricao={c.descricao ?? undefined}
             acao={
-              podeEditar ? (
-                <span className="flex flex-wrap items-center gap-3">
+              <span className="flex flex-wrap items-center gap-3">
+                {/* 🔑 **Recolher vale para quem só LÊ também** — está fora do
+                    `podeEditar`: a tela longa incomoda igual. */}
+                <Recolher tipo="categoria" id={c.id} itens={totalDa(c)} />
+                {podeEditar && (
+                <>
                   <button
                     type="button"
                     className="link-acao"
@@ -461,10 +627,16 @@ export default function ConfigurarCatalogo() {
                   >
                     excluir
                   </button>
-                </span>
-              ) : undefined
+                </>
+                )}
+              </span>
             }
           >
+            {/* ⚠️ **Fechada, o miolo não é DESENHADO** — e não apenas escondido
+                com CSS. Uma categoria com trinta produtos continuaria montando
+                trinta linhas invisíveis, e a tela que se queria encurtar seguiria
+                pesada do mesmo jeito. */}
+            {estaFechada("categoria", c.id) ? null : (
             <div className="flex flex-col gap-5">
               <FotoDaSecao tipo="categoria" secao={c} />
 
@@ -485,8 +657,10 @@ export default function ConfigurarCatalogo() {
                 <div key={s.id} className="border-l-2 border-linha2 pl-3">
                   <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                     <span className="text-[15px] font-semibold">{s.nome}</span>
-                    {podeEditar && (
-                      <span className="flex gap-3">
+                    <span className="flex gap-3">
+                      <Recolher tipo="subcategoria" id={s.id} itens={s.itens.length} />
+                      {podeEditar && (
+                      <>
                         <button
                           type="button"
                           className="link-acao"
@@ -517,24 +691,30 @@ export default function ConfigurarCatalogo() {
                         >
                           excluir
                         </button>
-                      </span>
-                    )}
+                      </>
+                      )}
+                    </span>
                   </div>
-                  {s.descricao && (
+                  {s.descricao && !estaFechada("subcategoria", s.id) && (
                     <p className="mt-0.5 text-[13.5px] text-suave">{s.descricao}</p>
                   )}
-                  <div className="mt-2">
-                    <FotoDaSecao tipo="subcategoria" secao={s} />
-                  </div>
-                  <ListaDeItens
-                    itens={s.itens}
-                    idCategoria={c.id}
-                    idSubcategoria={s.id}
-                    onde={`${c.nome} ▸ ${s.nome}`}
-                  />
+                  {!estaFechada("subcategoria", s.id) && (
+                    <div className="mt-2">
+                      <FotoDaSecao tipo="subcategoria" secao={s} />
+                    </div>
+                  )}
+                  {estaFechada("subcategoria", s.id) ? null : (
+                    <ListaDeItens
+                      itens={s.itens}
+                      idCategoria={c.id}
+                      idSubcategoria={s.id}
+                      onde={`${c.nome} ▸ ${s.nome}`}
+                    />
+                  )}
                 </div>
               ))}
             </div>
+            )}
           </Cartao>
         ))
       )}

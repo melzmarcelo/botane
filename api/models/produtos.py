@@ -88,6 +88,10 @@ class ProdutoBase(BaseModel):
     # Observação é recado interno, escrito para quem trabalha na casa; esta é
     # para quem vai comer. Misturá-las publicaria "conferir com o fornecedor,
     # veio errado da última vez" no site.
+    # 🔑 **O nome como o CLIENTE lê** (migração 085, pedido do dono). Nulo = use
+    # o nome do cadastro. ⚠️ O cadastro normaliza em CAIXA ALTA, e isso é certo
+    # lá dentro; a vitrine é que precisa de "Batata Rústica".
+    nome_catalogo: str | None = Field(default=None, max_length=120)
     informacao_adicional: str | None = Field(default=None, max_length=500)
 
 
@@ -345,6 +349,7 @@ class ProdutoResponse(BaseModel):
     foto_nome: str | None = None
     foto_bytes: int | None = None
     foto_em: datetime | None = None
+    nome_catalogo: str | None = None
     informacao_adicional: str | None = None
     ativo: bool
     # 🔑 **Quem absorveu este cadastro numa fusão** (migração 063). Chega à tela
