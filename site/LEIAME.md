@@ -1,4 +1,4 @@
-# O site do cliente — `reserva.botanedeliecafe.com.br`
+# O site do cliente — `reservas.botanedeliecafe.com.br`
 
 > Esboço, 21/09/2026. **Pedido do dono:** *"agora vamos criar o site para o
 > cliente, onde o front será separado... Os itens serão: Reserva, Catálogos
@@ -11,7 +11,7 @@
 | | quem usa | onde mora |
 |---|---|---|
 | `web/` | a equipe | `sistema.botanedeliecafe.com.br` |
-| `site/` | **o cliente** | `reserva.botanedeliecafe.com.br` |
+| `site/` | **o cliente** | `reservas.botanedeliecafe.com.br` |
 | `api/` | os dois | `sistema.botanedeliecafe.com.br/api` |
 
 ## As três portas
@@ -161,7 +161,7 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
 ## Para publicar
 
 1. Um componente de **site estático** no App Platform, servindo esta pasta, com
-   o domínio `reserva.botanedeliecafe.com.br`.
+   o domínio `reservas.botanedeliecafe.com.br`.
 2. ⚠️ **Acrescentar esse domínio a `CORS_ORIGINS`** da API, no painel. Sem isso o
    site sobe, abre e não carrega nada — e o navegador não diz por quê na tela.
    É a volta do CORS que o esboço previu ao escolher front separado: hoje `web` e

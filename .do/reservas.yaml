@@ -1,4 +1,4 @@
-# O site do cliente — reserva.botanedeliecafe.com.br
+# O site do cliente — reservas.botanedeliecafe.com.br
 #
 # 🔑 **Pedido do dono (22/09/2026):** *"pode subir tudo que temos no main para a
 # produção, incluindo o projeto Reservas."*
@@ -29,7 +29,7 @@
 #    manda é o HostGator.
 #
 # 2. **`CORS_ORIGINS` da API**, no painel do app `botane`: acrescentar
-#    `https://reserva.botanedeliecafe.com.br`. ⚠️ **Sem isso o site sobe, abre
+#    `https://reservas.botanedeliecafe.com.br`. ⚠️ **Sem isso o site sobe, abre
 #    bonito e não carrega NADA** — sem cardápio, sem horário e sem o WhatsApp —,
 #    e o navegador não diz por quê na tela. É a volta do CORS que o esboço
 #    previu ao escolher front separado. ⚠️ E `allow_credentials` é verdadeiro na
@@ -48,7 +48,7 @@ name: botane-reservas
 region: nyc
 
 domains:
-  - domain: reserva.botanedeliecafe.com.br
+  - domain: reservas.botanedeliecafe.com.br
     type: PRIMARY
 
 static_sites:

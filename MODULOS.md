@@ -180,7 +180,7 @@ ciclo de status, remarcar e bloqueios) e a **reserva pelo site**, com o cadastro
 de quem marca.
 
 🔑 **O SITE DO CLIENTE é o terceiro artefato da casa** (21/09/2026): `site/`,
-um `index.html` estático que vai para `reserva.botanedeliecafe.com.br` e lê a
+um `index.html` estático que vai para `reservas.botanedeliecafe.com.br` e lê a
 MESMA API por `/publico/{loja}/...` — o único router sem permissão.
 Três portas: **Reserve sua Mesa**, **Cardápios** (os catálogos ativos, no ar e
 com PDF) e **Entre em contato** (abre o WhatsApp da empresa).

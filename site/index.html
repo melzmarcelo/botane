@@ -21,7 +21,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
 <style>
 /* ===========================================================================
-   O site do CLIENTE — reserva.botanedeliecafe.com.br
+   O site do CLIENTE — reservas.botanedeliecafe.com.br
    ---------------------------------------------------------------------------
    🔑 **Pedido do dono (21/09/2026):** *"deixa mais próximo ao protótipo que foi
    proposto em `apresentacao/reservas-prototipo.html`, utilizando a logo
@@ -105,6 +105,13 @@ body {
   text-transform: uppercase; opacity: .8;
 }
 .marca img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 🔑 **Fundo BRANCO atrás da logo** (pedido do dono, 22/09/2026, olhando o site
+   no ar). A logo cadastrada tem transparência — os cantos são alfa zero —, e o
+   oliva do medalhão vazava por trás do brasão, escurecendo-o.
+   ⚠️ **Só quando HÁ logo.** Sem ela, o medalhão desenha o nome da casa em tinta
+   clara (`color: #F3EFE4`); branco sobre branco seria um círculo vazio. Por
+   isso a classe vem do JavaScript, junto com a imagem, e não da folha. */
+.marca.com-logo { background: #FFFFFF; }
 .estado {
   position: absolute; right: 10px; top: 10px; border-radius: 999px;
   padding: 5px 10px; font: 500 11px/1 Karla, sans-serif;
@@ -618,9 +625,15 @@ async function carregarCasa() {
   if (casa.logo_url) {
     $("#marca").innerHTML =
       `<img src="${API}${esc(casa.logo_url)}" alt="${esc(casa.casa)}">`;
+    // 🔑 A logo tem transparência: sem o fundo branco, o oliva do medalhão
+    // vaza por trás dela. Ver `.marca.com-logo`.
+    $("#marca").classList.add("com-logo");
   } else {
     const primeiro = (casa.casa || "Botané").split(" ")[0];
     $("#marca").innerHTML = `<b>${esc(primeiro)}</b><span>deli e café</span>`;
+    // ⚠️ Sem logo o medalhão volta ao oliva: a tinta do nome é clara, e branco
+    // sobre branco seria um círculo vazio.
+    $("#marca").classList.remove("com-logo");
   }
   // ⚠️ **A capa NÃO usa `empresa.cor_primaria`, e isso foi medido na tela.** A
   // cor cadastrada é #149445 — um verde vivo, que o sistema interno usa como

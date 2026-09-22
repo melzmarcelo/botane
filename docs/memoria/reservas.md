@@ -310,6 +310,11 @@ no oficial vamos colocar em `reserva.botanedeliecafe.com.br`. Os itens serão: R
 Catálogos cadastrados e ativos, Entre em Contato (onde vai abrir o whatsapp para enviar
 mensagem para o número cadastrado para a empresa). Montar assim e depois vamos melhorando."*
 
+⚠️ **O domínio que foi ao ar é `reservas.…`, com S** (22/09/2026). A citação acima diz
+`reserva.` porque foi assim que o pedido chegou; o endereço publicado é o outro, e o CORS
+exige o domínio EXATO — meio caractere de diferença e o navegador barra tudo sem explicar na
+tela.
+
 ⚠️ **O esboço recomendava rota pública no mesmo app; o dono escolheu front separado.** A
 decisão é dele e está tomada — e o que o esboço previa como preço é exatamente o que
 aconteceu: **o CORS voltou a existir**. Hoje `web` e `api` dividem o domínio e o problema não

@@ -383,7 +383,7 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
   local — mas não conte com isso como única proteção)
 - Promover sem a bateria de testes ter passado na base local
 
-## O site do cliente — `reserva.botanedeliecafe.com.br`
+## O site do cliente — `reservas.botanedeliecafe.com.br`
 
 🔑 **É um app SEPARADO** (`.do/reservas.yaml`), não um componente do `botane`. O app principal
 roteia por CAMINHO (`web` em `/`, `api` em `/api`, mesmo domínio — foi o que fez o CORS deixar
@@ -397,10 +397,10 @@ Na primeira vez:
 1. `doctl apps create --spec .do/reservas.yaml`, ou o botão do painel.
 2. **CNAME no HostGator**: `reserva` → `<o-novo-app>.ondigitalocean.app`, igual ao `sistema`.
 3. ⚠️ **`CORS_ORIGINS` da API, no painel do app `botane`**: acrescentar
-   `https://reserva.botanedeliecafe.com.br`. **Sem isso o site sobe, abre bonito e não carrega
+   `https://reservas.botanedeliecafe.com.br`. **Sem isso o site sobe, abre bonito e não carrega
    nada** — sem cardápio, sem horário e sem o WhatsApp —, e o navegador não explica na tela.
    ⚠️ `allow_credentials` é verdadeiro, então `*` não resolve: tem de ser o domínio exato.
-4. Conferir: `curl https://reserva.botanedeliecafe.com.br` devolve o HTML, e
+4. Conferir: `curl https://reservas.botanedeliecafe.com.br` devolve o HTML, e
    `curl https://sistema.botanedeliecafe.com.br/api/publico/1/casa` devolve a casa.
 
 ⚠️ **`deploy_on_push: false` vale aqui também.** Empurrar não publica.
