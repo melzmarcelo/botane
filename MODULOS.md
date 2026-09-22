@@ -24,7 +24,7 @@ entregue.
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
-| [Reservas](#reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `publico` |
+| [Reservas](#reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `produto_catalogo`, `publico` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---

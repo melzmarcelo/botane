@@ -174,3 +174,17 @@ para ele ser exibido."*
 ⚠️ **Ao fechar qualquer uma delas, revise ESTA lista.** Lista de pendências envelhece pior
 que decisão — a memória de Reservas passou uma semana dizendo que o que estava feito não
 tinha começado.
+
+## O produto ganhou foto e texto de vitrine (migração 083, 22/09/2026)
+
+🔑 **Pedido do dono:** *"no cadastro de produtos, quando utilizando Reservas, criar uma nova
+aba chamada Catálogo. Nesta aba teremos Foto e um campo para Informação Adicional."*
+
+A regra mora em **Cadastros** — são colunas de `produtos` (`foto_url` e
+`informacao_adicional`), e o detalhe está em
+[`cadastros.md`](cadastros.md). O que interessa aqui é o destino:
+
+⚠️ **Ainda NÃO há quem os mostre.** O catálogo de hoje é um PDF que a casa sobe inteiro; estes
+dois campos são o começo do catálogo montado pelo sistema, produto a produto. Enquanto essa
+vitrine não existir, eles são cadastro guardado — e a tela não promete o contrário.
+🔑 **A porta é a mesma de tudo em Reservas**: a aba só aparece com `reservas_ligado`.

@@ -6,8 +6,9 @@ Escrita exige `cadastros.produtos`.
 
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 
+import arquivos
 import auditoria
 from database import get_cursor
 from models.produtos import (
@@ -56,6 +57,10 @@ _EDITAVEIS = (
     # e a completagem só preenche o que está em branco.
     "cest", "marca", "peso_liquido", "peso_bruto",
     "observacao", "status", "ativo",
+    # ⚠️ **A FOTO não entra aqui.** Ela chega por `POST /produtos/{id}/foto`,
+    # que é multipart — este formulário é JSON, e um campo de arquivo no meio
+    # dele faria o salvar carregar megabytes a cada correção de preço.
+    "informacao_adicional",
 )
 
 
@@ -1197,3 +1202,84 @@ def desativar(id_produto: int,
         cur.execute("UPDATE produtos SET ativo = false WHERE id = %s", (id_produto,))
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "desativar")
     return {"message": "Produto desativado"}
+
+
+# ---------------------------------------------------------------------------
+# A foto do produto — a aba Catálogo
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (22/09/2026):** *"no cadastro de produtos, quando
+# utilizando Reservas, criar uma nova aba chamada Catálogo. Nesta aba teremos
+# Foto e um campo para Informação Adicional."*
+#
+# ⚠️ **Rota própria, e não um campo do formulário.** O cadastro do produto é
+# JSON e salva inteiro a cada correção; uma imagem dentro dele faria quem só
+# arruma o preço carregar megabytes sem saber por quê. A informação adicional,
+# essa sim, viaja no formulário — é texto.
+
+
+def _produto_existe(cur, id_produto: int) -> dict:
+    cur.execute("SELECT id, nome, foto_url, foto_nome FROM produtos WHERE id = %s",
+                (id_produto,))
+    achado = cur.fetchone()
+    if not achado:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+    return dict(achado)
+
+
+@router.post("/{id_produto}/foto")
+async def enviar_foto(id_produto: int, arquivo: UploadFile = File(...),
+                      ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))
+                      ) -> dict:
+    """Guarda a foto do produto, substituindo a anterior.
+
+    ⚠️ **Os bytes são lidos ANTES de pedir a conexão** — até 2 MB vindos pela
+    rede com transação aberta prenderiam uma conexão do pool durante o envio
+    inteiro. É a razão de `ler_enviada` ser separado de `gravar`.
+
+    ⚠️ **Gravar o novo, apontar para ele e apagar o velho são UMA coisa só.** É
+    a lição que a logo pagou: gravar numa transação e apagar noutra deixa, num
+    erro no meio, o registro apontando para um arquivo que já não existe — o
+    link quebra e nada explica.
+    """
+    conteudo, tipo, extensao = await arquivos.ler_enviada(arquivo)
+    with get_cursor() as cur:
+        antes = _produto_existe(cur, id_produto)
+        antiga = antes.get("foto_url")
+        url = arquivos.gravar(cur, conteudo, tipo, extensao, f"produto-{id_produto}")
+        cur.execute(
+            """UPDATE produtos
+                  SET foto_url = %s, foto_nome = %s, foto_bytes = %s, foto_em = now()
+                WHERE id = %s""",
+            (url, (arquivo.filename or "").strip()[:255] or None, len(conteudo),
+             id_produto),
+        )
+        if antiga and antiga != url:
+            arquivos.remover(antiga, cur)
+        auditoria.registrar(
+            cur, ctx.id_usuario, "produto", id_produto, "enviar_foto",
+            antes={"foto_nome": antes.get("foto_nome")},
+            depois={"foto_nome": arquivo.filename, "bytes": len(conteudo)})
+        return {"foto_url": url, "foto_nome": arquivo.filename,
+                "foto_bytes": len(conteudo), "message": "Foto atualizada"}
+
+
+@router.delete("/{id_produto}/foto")
+def remover_foto(id_produto: int,
+                 ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))
+                 ) -> dict:
+    """Tira a foto — o produto continua, sem imagem."""
+    with get_cursor() as cur:
+        antes = _produto_existe(cur, id_produto)
+        antiga = antes.get("foto_url")
+        cur.execute(
+            """UPDATE produtos
+                  SET foto_url = NULL, foto_nome = NULL, foto_bytes = NULL, foto_em = NULL
+                WHERE id = %s""",
+            (id_produto,),
+        )
+        if antiga:
+            arquivos.remover(antiga, cur)
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "remover_foto",
+                            antes={"foto_nome": antes.get("foto_nome")})
+        return {"foto_url": None, "message": "Foto removida"}

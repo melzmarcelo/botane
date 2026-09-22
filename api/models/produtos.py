@@ -81,6 +81,14 @@ class ProdutoBase(BaseModel):
     codigo_pdv: str | None = Field(default=None, max_length=40)
     integrado_pdv: bool = False
     observacao: str | None = None
+    # 🔑 **O que o CLIENTE lê sobre este produto** (migração 083, pedido do dono:
+    # *"criar uma nova aba chamada Catálogo. Nesta aba teremos Foto e um campo
+    # para Informação Adicional"*).
+    # ⚠️ **Não confundir com `observacao` logo acima, e a diferença é quem lê.**
+    # Observação é recado interno, escrito para quem trabalha na casa; esta é
+    # para quem vai comer. Misturá-las publicaria "conferir com o fornecedor,
+    # veio errado da última vez" no site.
+    informacao_adicional: str | None = Field(default=None, max_length=500)
 
 
 class UnidadeCompra(BaseModel):
@@ -327,6 +335,17 @@ class ProdutoResponse(BaseModel):
     origem: str
     status: str
     observacao: str | None = None
+    # 🔑 **A aba Catálogo** (migração 083): a foto e o que contar ao cliente.
+    # ⚠️ **Campo novo numa resposta com `response_model` precisa dos DOIS
+    # lugares** — a consulta e o modelo. Faltando aqui, o `SELECT p.*` traz o
+    # dado e o FastAPI o RECORTA fora, em silêncio: a tela recebe nulo num campo
+    # que o banco tem preenchido. Foi assim com `reservas_ligado` no /auth/me e
+    # com o `porcao_qtd` da ficha; esta suíte pegou de primeira.
+    foto_url: str | None = None
+    foto_nome: str | None = None
+    foto_bytes: int | None = None
+    foto_em: datetime | None = None
+    informacao_adicional: str | None = None
     ativo: bool
     # 🔑 **Quem absorveu este cadastro numa fusão** (migração 063). Chega à tela
     # para ela poder avisar ANTES — reativar um absorvido cria um segundo cadastro

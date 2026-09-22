@@ -850,6 +850,39 @@
   o conversor central resolve na hora do custo. Medido: 224 itens já usavam unidade diferente
   da do insumo antes disto.
 
+## A aba Catálogo do produto (migração 083, 22/09/2026)
+
+🔑 **Pedido do dono:** *"no cadastro de produtos, quando utilizando Reservas, criar uma nova
+aba chamada Catálogo. Nesta aba teremos Foto e um campo para Informação Adicional."*
+
+- 🔑 **A aba só existe na casa que usa Reservas** (`parametros.reservas_ligado`, o mesmo
+  interruptor do menu), e só em produto que JÁ existe — a foto sobe por rota própria e precisa
+  de um id. É a mesma regra que já deixava Fornecedores e Movimentação de fora do produto novo.
+- 🔑 **Os nomes das colunas são GENÉRICOS; a aba é que é do catálogo.** Foto de produto é
+  atributo do produto: no dia em que a ficha técnica, o PDV ou um cardápio impresso quiserem a
+  mesma imagem, ela já está em `foto_url`. `catalogo_foto_url` teria de ser lido como "a foto
+  que por acaso mora no catálogo".
+- ⚠️ **`informacao_adicional` NÃO é `observacao`, e a diferença é quem lê.** Observação é
+  recado interno, escrito para quem trabalha na casa; esta é para o CLIENTE. Misturá-las
+  publicaria *"conferir com o fornecedor, veio errado da última vez"* no site. A tela diz isso
+  embaixo do campo, e a suíte cobra que sejam duas colunas.
+- 🔑 **A foto tem rota própria e é gravada NA HORA** (`POST /produtos/{id}/foto`, multipart).
+  ⚠️ Um campo de arquivo dentro do formulário faria quem só arruma o preço carregar megabytes
+  a cada salvar — o cadastro é JSON e salva inteiro. ⚠️ E a tela AVISA que a foto não espera o
+  "Salvar": sem isso, quem trocasse a imagem e saísse sem salvar acharia que perdeu.
+- ⚠️ **Gravar a nova, apontar e apagar a velha são UMA coisa só**, no mesmo cursor — é a lição
+  que a logo pagou: gravar numa transação e apagar noutra deixa, num erro no meio, o registro
+  apontando para arquivo que já não existe.
+- ⚠️ **Campo novo numa resposta com `response_model` precisa dos DOIS lugares.** O
+  `SELECT p.*` já trazia `foto_url` e `informacao_adicional`, e o FastAPI os **recortava fora**
+  em silêncio: a tela recebia nulo num campo que o banco tinha preenchido. É a terceira vez
+  desta armadilha na casa (`reservas_ligado` no `/auth/me`, `porcao_qtd` da ficha) — desta vez
+  a suíte pegou de primeira.
+
+⚠️ **Nada LÊ estes campos ainda.** O catálogo do site é um PDF; foto e informação adicional
+são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos.md).
+
+
 ## Armadilhas já pagas
 
 - ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**

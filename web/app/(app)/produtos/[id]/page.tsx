@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api, ErroApi } from "@/lib/api";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { api, ErroApi, urlArquivo } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import {
@@ -77,6 +77,9 @@ type Form = {
   peso_bruto: string;
   codigo_barras: string;
   observacao: string;
+  /** 🔑 O que o CLIENTE lê sobre o produto — não é a `observacao`, que é
+   *  recado interno. Ver a aba Catálogo. */
+  informacao_adicional: string;
   preco_venda: string;
   status: string;
   ativo: boolean;
@@ -89,7 +92,8 @@ const VAZIO: Form = {
   integrado_pdv: false,
   controla_validade: false, estoque_minimo: "", estoque_maximo: "", ncm: "",
   cest: "", marca: "", peso_liquido: "", peso_bruto: "",
-  codigo_barras: "", observacao: "", preco_venda: "", status: "ATIVO", ativo: true,
+  codigo_barras: "", observacao: "", informacao_adicional: "",
+  preco_venda: "", status: "ATIVO", ativo: true,
 };
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
@@ -109,7 +113,26 @@ export default function FormularioProduto() {
   const variasLojas = (eu?.unidades.length ?? 0) > 1;
   /** Qual aba está aberta. Ver a nota do seletor lá embaixo. */
   const [aba, setAba] = useState<
-    "principal" | "fornecedores" | "estoque" | "movimentacao">("principal");
+    "principal" | "fornecedores" | "estoque" | "movimentacao" | "catalogo">("principal");
+  /**
+   * 🔑 **A aba Catálogo só existe na casa que usa Reservas** (pedido do dono,
+   * 22/09/2026: *"no cadastro de produtos, quando utilizando Reservas, criar
+   * uma nova aba chamada Catálogo"*). É a mesma porta do menu e das rotas:
+   * `parametros.reservas_ligado`, que o `/auth/me` já entrega.
+   */
+  const temCatalogo = !!eu?.reservas_ligado && !novo;
+  /**
+   * A foto fica FORA do formulário, e não é descuido.
+   *
+   * ⚠️ **Ela viaja por rota própria**, `POST /produtos/{id}/foto`, que é
+   * multipart. O formulário é JSON e salva inteiro a cada correção; uma imagem
+   * dentro dele faria quem só arruma o preço carregar megabytes sem saber por
+   * quê. E, como a nota da fusão logo abaixo, o que é leitura não entra em `f`:
+   * entraria no PUT de volta.
+   */
+  const [foto, setFoto] = useState<{ url: string; nome: string | null } | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const seletorDaFoto = useRef<HTMLInputElement>(null);
   const [precoLoja, setPrecoLoja] = useState("");
   const [precoCasa, setPrecoCasa] = useState<number | null>(null);
   /**
@@ -245,6 +268,41 @@ export default function FormularioProduto() {
   );
   const [confirmandoReativacao, setConfirmandoReativacao] = useState("");
 
+  /**
+   * Troca a foto do produto.
+   *
+   * ⚠️ **O seletor é limpo no fim, sempre.** Sem isso, escolher o MESMO arquivo
+   * de novo — depois de um erro, que é justamente quando se tenta de novo — não
+   * dispara `change`, e a tela fica parecendo travada.
+   */
+  async function enviarFoto(arquivo: File | undefined) {
+    if (!arquivo) return;
+    setEnviandoFoto(true);
+    try {
+      const corpo = new FormData();
+      corpo.append("arquivo", arquivo);
+      const r = await api.upload<{ foto_url: string; foto_nome: string | null }>(
+        `/produtos/${id}/foto`, corpo);
+      setFoto({ url: r.foto_url, nome: r.foto_nome });
+      aviso.sucesso("Foto atualizada.");
+    } catch (err) {
+      aviso.erro(err instanceof ErroApi ? err.message : "Não foi possível enviar a imagem");
+    } finally {
+      setEnviandoFoto(false);
+      if (seletorDaFoto.current) seletorDaFoto.current.value = "";
+    }
+  }
+
+  async function removerFoto() {
+    try {
+      await api.delete(`/produtos/${id}/foto`);
+      setFoto(null);
+      aviso.sucesso("Foto removida.");
+    } catch (err) {
+      aviso.erro(err instanceof ErroApi ? err.message : "Não foi possível remover");
+    }
+  }
+
   useEffect(() => {
     if (novo) return;
     api
@@ -262,6 +320,11 @@ export default function FormularioProduto() {
           ),
         } as Form);
         setVinculos((p.fornecedores as VinculoFornecedor[]) ?? []);
+        setFoto(
+          p.foto_url
+            ? { url: String(p.foto_url), nome: (p.foto_nome as string) ?? null }
+            : null,
+        );
         setAbsorvidoPor(
           p.fundido_em
             ? {
@@ -406,6 +469,7 @@ export default function FormularioProduto() {
       peso_bruto: num(f.peso_bruto),
       codigo_barras: texto(f.codigo_barras),
       observacao: texto(f.observacao),
+      informacao_adicional: texto(f.informacao_adicional),
       // ⚠️ Preço que veio da LOJA não sai no corpo do produto: ele é gravado
       // logo abaixo, pela rota da loja. Mandá-lo aqui abriria uma linha
       // vigente da CASA — e a da loja continuaria mandando, deixando o número
@@ -836,6 +900,9 @@ export default function FormularioProduto() {
             ["fornecedores", "Fornecedores"],
             ["estoque", "Estoque"],
             ["movimentacao", "Movimentação"],
+            // 🔑 **Só na casa que usa Reservas**, e só em produto que já
+            // existe: a foto sobe por rota própria e precisa de um id.
+            ...(temCatalogo ? ([["catalogo", "Catálogo"]] as const) : []),
           ] as const)).map(([chave, texto]) => (
             <button
               key={chave}
@@ -1627,6 +1694,105 @@ export default function FormularioProduto() {
         </div>
       </Cartao>
       </div>
+
+      {/* 🔑 **A aba CATÁLOGO** (pedido do dono, 22/09/2026: *"no cadastro de
+          produtos, quando utilizando Reservas, criar uma nova aba chamada
+          Catálogo. Nesta aba teremos Foto e um campo para Informação
+          Adicional"*).
+          ⚠️ **Os dois campos são o que o CLIENTE vê**, e é isso que os separa
+          do resto da tela: preço de custo, NCM e observação interna são da
+          casa; foto e informação adicional são da vitrine. */}
+      {temCatalogo && (
+        <div hidden={aba !== "catalogo"} className="flex flex-col gap-6">
+          <Cartao
+            titulo="A foto do produto"
+            descricao="É a imagem que o catálogo mostra. PNG, JPG ou WEBP, até 2 MB."
+          >
+            <div className="flex flex-wrap items-start gap-5">
+              {/* ⚠️ Moldura de tamanho FIXO, com a imagem contida dentro: sem
+                  ela, uma foto em pé e outra deitada empurram o botão para
+                  lugares diferentes a cada produto. */}
+              <div className="flex h-[132px] w-[132px] shrink-0 items-center justify-center overflow-hidden rounded-lg border border-linha bg-superficie2">
+                {foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={urlArquivo(foto.url) ?? undefined}
+                    alt={f.nome || "foto do produto"}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <span className="px-3 text-center text-[13px] text-suave">
+                    sem foto
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={seletorDaFoto}
+                  id="foto-do-produto"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => enviarFoto(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secundario"
+                  disabled={enviandoFoto || !podeEditar}
+                  onClick={() => seletorDaFoto.current?.click()}
+                >
+                  {enviandoFoto ? "Enviando…" : foto ? "Trocar a foto" : "Escolher uma foto"}
+                </button>
+                {foto && (
+                  <button
+                    type="button"
+                    className="btn btn-secundario"
+                    disabled={enviandoFoto || !podeEditar}
+                    onClick={removerFoto}
+                  >
+                    Remover
+                  </button>
+                )}
+                {/* ⚠️ **A foto é gravada NA HORA, não no salvar.** Ela sobe por
+                    rota própria, e dizer isso evita a pessoa trocar a imagem,
+                    sair sem salvar e achar que perdeu. */}
+                <p className="max-w-[260px] text-[13px] text-suave">
+                  A foto é guardada assim que você a escolhe — não precisa
+                  salvar o produto.
+                  {foto?.nome ? ` Arquivo atual: ${foto.nome}.` : ""}
+                </p>
+              </div>
+            </div>
+          </Cartao>
+
+          <Cartao
+            titulo="Informação adicional"
+            descricao="O que contar sobre este produto para quem vai comprar."
+          >
+            <Campo
+              rotulo="Texto do catálogo"
+              dica="Aparece junto do produto. Até 500 caracteres."
+            >
+              <textarea
+                id="informacao-adicional"
+                className="campo"
+                rows={4}
+                maxLength={500}
+                disabled={!podeEditar}
+                placeholder="Ex.: massa de fermentação natural, 48 horas de descanso."
+                value={f.informacao_adicional}
+                onChange={(e) => set("informacao_adicional", e.target.value)}
+              />
+            </Campo>
+            {/* ⚠️ **Não é a observação da aba Principal**, e confundir as duas
+                publica recado interno na vitrine. */}
+            <p className="mt-3 text-[13px] text-suave">
+              Isto é o que o <b>cliente</b> lê. Recado para a equipe continua em
+              Principal ▸ Observações.
+            </p>
+          </Cartao>
+        </div>
+      )}
 
       <div hidden={aba !== "movimentacao"} className="flex flex-col gap-6">
       {!novo && f.controla_estoque ? (
