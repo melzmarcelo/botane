@@ -31,7 +31,7 @@ from fastapi import HTTPException
 
 import arquivos
 
-from models.catalogos import ORIGENS, SITUACOES
+from models.catalogos import ORIGEM_PRODUTOS, ORIGENS, SITUACOES
 
 # As colunas que a tela lê, num lugar só: a lista e o registro têm de mostrar o
 # mesmo catálogo, e duas listas de campos divergem na primeira coluna nova.
@@ -77,6 +77,16 @@ def guardar_arquivo(cur, id_unidade: int, id_catalogo: int, conteudo: bytes,
     no mesmo cursor, ou nenhuma acontece.
     """
     atual = obter(cur, id_unidade, id_catalogo)
+    # 🔑 **Pedido do dono (22/09/2026):** *"quando for PRODUTO, tirar o campo
+    # para carregar PDF."* A tela esconde o botão; esta recusa é o que GARANTE —
+    # tela é conforto, e um PDF pendurado num catálogo que o site nunca lê é um
+    # arquivo que ninguém sabe que existe.
+    if atual.get("origem") == ORIGEM_PRODUTOS:
+        raise HTTPException(
+            status_code=409,
+            detail=(f'"{atual["nome"]}" é um cardápio montado por produtos, e não '
+                    "exibe PDF. Monte as categorias na tela do catálogo."),
+        )
     antigo = atual.get("arquivo_url")
 
     url = arquivos.gravar(cur, conteudo, tipo, extensao, f"catalogo-{id_catalogo}")
@@ -222,6 +232,19 @@ def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
 
     if "nome" in dados and dados["nome"] is not None:
         _recusar_nome_repetido(cur, id_unidade, dados["nome"], ignorar=id_catalogo)
+
+    # ⚠️ **Trocar de PDF para PRODUTOS com arquivo carregado deixaria o PDF
+    # ÓRFÃO**: ele continuaria no banco, apontado por um catálogo cuja tela não
+    # mostra mais o campo — ninguém saberia que está lá para tirá-lo. A recusa
+    # diz o caminho, que é curto: tirar o PDF primeiro.
+    if dados.get("origem") == ORIGEM_PRODUTOS:
+        de_antes = obter(cur, id_unidade, id_catalogo)
+        if de_antes.get("arquivo_url"):
+            raise HTTPException(
+                status_code=409,
+                detail=("Tire o PDF antes de mudar a origem para PRODUTOS — senão "
+                        "ele fica no sistema sem tela nenhuma para removê-lo."),
+            )
 
     if "origem" in dados and dados["origem"] not in (None, *ORIGENS):
         raise HTTPException(

@@ -29,9 +29,11 @@ import arquivos
 import auditoria
 from database import get_cursor
 from models.catalogos import (
-    CatalogoCreate, CatalogoResponse, CatalogoUpdate, ORIGENS, SITUACOES,
+    CatalogoCreate, CatalogoResponse, CatalogoUpdate, CategoriaCreate, ItemCreate,
+    ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import catalogo_conteudo as conteudo
 from services import catalogos as servico
 from services import reservas as reservas_servico
 
@@ -73,6 +75,19 @@ def opcoes(ctx: Contexto = Depends(_VER)) -> dict:
     with get_cursor() as cur:
         _unidade(cur, ctx)
     return {"origens": list(ORIGENS), "situacoes": list(SITUACOES)}
+
+
+@router.get("/produtos-disponiveis")
+def listar_produtos(busca: str | None = Query(default=None, max_length=80),
+                    ctx: Contexto = Depends(_VER)) -> list[dict]:
+    """Os produtos que podem entrar no cardápio: ativos e vendidos no PDV.
+
+    ⚠️ **Com teto de 50 e busca**, porque a base real tem milhares de produtos —
+    uma lista inteira numa caixa de seleção é uma lista que ninguém percorre.
+    """
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        return conteudo.produtos_disponiveis(cur, busca)
 
 
 @router.get("", response_model=list[CatalogoResponse])
@@ -184,3 +199,188 @@ def excluir(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
                             antes={"nome": antes["nome"], "situacao": antes["situacao"]},
                             id_unidade=id_unidade)
         return r
+
+
+# ---------------------------------------------------------------------------
+# O conteúdo do catálogo de origem PRODUTOS
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (22/09/2026):** *"vamos adicionar a Origem Produtos. Quando
+# for esta origem, ao listar os catálogos, ao clicar sobre vai abrir uma nova
+# página para configuração. Neste, podemos criar Categorias e suas SubCategorias,
+# cada item terá o Nome, Descrição e uma foto. Após isto, podemos vincular os
+# produtos disponíveis no PDV para a subcategoria. Somente produtos ativos."*
+#
+# ⚠️ **Declaradas depois de `/{id_catalogo}` porque todas têm um segmento extra**
+# (`/conteudo`, `/categorias`, `/itens`): o FastAPI casa rotas na ORDEM, e um
+# caminho de dois segmentos nunca é lido como um id.
+# ⚠️ **`/produtos-disponiveis` é a exceção e mora lá em cima, junto de
+# `/opcoes`.** Ela tem um segmento só, e aqui embaixo era engolida por
+# `/{id_catalogo}` — a resposta era um 422 dizendo que "produtos-disponiveis"
+# não é um número inteiro. Escrito aqui como aviso e violado na linha seguinte,
+# na primeira versão deste bloco.
+
+
+@router.get("/{id_catalogo}/conteudo")
+def ver_conteudo(id_catalogo: int, ctx: Contexto = Depends(_VER)) -> dict:
+    """O cardápio inteiro, em árvore — é o que a página de configuração abre."""
+    with get_cursor() as cur:
+        return conteudo.montar(cur, _unidade(cur, ctx), id_catalogo)
+
+
+@router.post("/{id_catalogo}/categorias", status_code=201)
+def criar_categoria(id_catalogo: int, body: CategoriaCreate,
+                    ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        nova = conteudo.criar_categoria(cur, id_unidade, id_catalogo, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_categoria", nova["id"],
+                            "criar", depois={"nome": nova["nome"]},
+                            id_unidade=id_unidade)
+        return nova
+
+
+@router.put("/categorias/{id_categoria}")
+def atualizar_categoria(id_categoria: int, body: CategoriaCreate,
+                        ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        muda = conteudo.atualizar_categoria(cur, id_unidade, id_categoria,
+                                            body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_categoria", id_categoria,
+                            "atualizar", depois={"nome": muda["nome"]},
+                            id_unidade=id_unidade)
+        return muda
+
+
+@router.delete("/categorias/{id_categoria}")
+def excluir_categoria(id_categoria: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Apaga a categoria — e leva subcategorias e vínculos junto.
+
+    🔑 **A resposta diz QUANTOS produtos saíram**, para a tela poder avisar
+    antes: apagar "Menu Principal" com trinta itens dentro não pode ser um
+    clique sem consequência visível.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        fora = conteudo.excluir_categoria(cur, id_unidade, id_categoria)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_categoria", id_categoria,
+                            "excluir", antes={"itens": fora["itens_removidos"]},
+                            id_unidade=id_unidade)
+        return fora
+
+
+@router.post("/categorias/{id_categoria}/subcategorias", status_code=201)
+def criar_subcategoria(id_categoria: int, body: SubcategoriaCreate,
+                       ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        nova = conteudo.criar_subcategoria(cur, id_unidade, id_categoria,
+                                           body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_subcategoria", nova["id"],
+                            "criar", depois={"nome": nova["nome"]},
+                            id_unidade=id_unidade)
+        return nova
+
+
+@router.put("/subcategorias/{id_sub}")
+def atualizar_subcategoria(id_sub: int, body: SubcategoriaCreate,
+                           ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        muda = conteudo.atualizar_subcategoria(cur, id_unidade, id_sub,
+                                               body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_subcategoria", id_sub,
+                            "atualizar", depois={"nome": muda["nome"]},
+                            id_unidade=id_unidade)
+        return muda
+
+
+@router.delete("/subcategorias/{id_sub}")
+def excluir_subcategoria(id_sub: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        fora = conteudo.excluir_subcategoria(cur, id_unidade, id_sub)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_subcategoria", id_sub,
+                            "excluir", antes={"itens": fora["itens_removidos"]},
+                            id_unidade=id_unidade)
+        return fora
+
+
+# --------------------------------------------------------------- a foto ----
+#
+# ⚠️ **Uma rota para os dois tipos de seção**, com o tipo no caminho. Duplicar
+# quatro rotas para categoria e subcategoria daria oito trechos iguais onde a
+# única diferença é o nome da tabela — e a próxima correção teria de ser feita
+# em dois lugares, que é onde se esquece um.
+
+_SECOES = ("categoria", "subcategoria")
+
+
+def _tipo_valido(tipo: str) -> str:
+    if tipo not in _SECOES:
+        raise HTTPException(status_code=404, detail="Seção desconhecida.")
+    return tipo
+
+
+@router.post("/secoes/{tipo}/{id_secao}/foto")
+async def enviar_foto_da_secao(tipo: str, id_secao: int,
+                               arquivo: UploadFile = File(...),
+                               ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """A foto da categoria ou da subcategoria.
+
+    ⚠️ **Os bytes são lidos ANTES de pedir a conexão** — até 2 MB vindos pela
+    rede com transação aberta prenderiam uma conexão do pool durante o envio.
+    """
+    _tipo_valido(tipo)
+    dados, mime, extensao = await arquivos.ler_enviada(arquivo)
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        posta = conteudo.guardar_foto(cur, id_unidade, tipo, id_secao, dados, mime,
+                                      extensao, arquivo.filename)
+        auditoria.registrar(cur, ctx.id_usuario, f"catalogo_{tipo}", id_secao,
+                            "enviar_foto", depois={"foto_nome": arquivo.filename},
+                            id_unidade=id_unidade)
+        return posta
+
+
+@router.delete("/secoes/{tipo}/{id_secao}/foto")
+def remover_foto_da_secao(tipo: str, id_secao: int,
+                          ctx: Contexto = Depends(_EDITAR)) -> dict:
+    _tipo_valido(tipo)
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        fora = conteudo.remover_foto(cur, id_unidade, tipo, id_secao)
+        auditoria.registrar(cur, ctx.id_usuario, f"catalogo_{tipo}", id_secao,
+                            "remover_foto", id_unidade=id_unidade)
+        return fora
+
+
+# ------------------------------------------------------- os produtos -------
+
+@router.post("/categorias/{id_categoria}/itens", status_code=201)
+def vincular_produto(id_categoria: int, body: ItemCreate,
+                     ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Pendura um produto na categoria — ou na subcategoria dela.
+
+    ⚠️ **A recusa é AQUI, não só na tela**: a lista de produtos disponíveis é um
+    conforto; quem garante que só entra produto ativo e vendido no PDV é o
+    servidor. É a regra 4 da casa.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        posto = conteudo.vincular(cur, id_unidade, id_categoria, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", posto["id"],
+                            "vincular", depois={"produto": posto["produto"]},
+                            id_unidade=id_unidade)
+        return posto
+
+
+@router.delete("/itens/{id_item}")
+def desvincular_produto(id_item: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        fora = conteudo.desvincular(cur, id_unidade, id_item)
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item,
+                            "desvincular", id_unidade=id_unidade)
+        return fora

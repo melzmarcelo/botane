@@ -188,3 +188,62 @@ A regra mora em **Cadastros** — são colunas de `produtos` (`foto_url` e
 dois campos são o começo do catálogo montado pelo sistema, produto a produto. Enquanto essa
 vitrine não existir, eles são cadastro guardado — e a tela não promete o contrário.
 🔑 **A porta é a mesma de tudo em Reservas**: a aba só aparece com `reservas_ligado`.
+
+## A origem PRODUTOS: o cardápio montado aqui dentro (migração 084, 22/09/2026)
+
+🔑 **Pedido do dono:** *"vamos adicionar a Origem Produtos. Quando for esta origem, ao listar
+os catálogos, ao clicar sobre vai abrir uma nova página para configuração. Neste, podemos criar
+Categorias (exemplo: Menu Principal) e suas SubCategorias (exemplo: Pra Dividir), cada item
+terá o Nome, Descrição e uma foto. Após isto, podemos vincular os produtos disponíveis no PDV
+para a subcategoria. Somente produtos ativos."*
+
+🔑 **É a segunda origem que a 079 previu**, com estas palavras: *"no dia em que entrar a segunda
+origem — o cardápio montado item a item aqui dentro — os catálogos antigos precisam continuar
+sabendo de onde vieram"*. Por isso `origem` era coluna desde o primeiro dia, e nada precisou
+ser reescrito. ⚠️ `PRODUTOS` **não substitui** `PDF`: são dois jeitos de publicar um cardápio,
+e a casa escolhe por catálogo.
+
+### O modelo, e as duas decisões que o definiram
+
+- 🔑 **Subcategoria é OPCIONAL** (decisão do dono): categoria pode ter produto direto. Cardápio
+  de verdade tem os dois casos — "Menu Principal" se divide em "Pra Dividir" e "Pratos", mas
+  "Bebidas" costuma ser uma lista só. ⚠️ Obrigar a subcategoria faria a casa criar uma com o
+  mesmo nome da categoria só para pendurar os itens, e o site mostraria o título duas vezes.
+- 🔑 **O item sempre sabe a categoria; a subcategoria é que pode faltar.** `catalogo_itens` tem
+  `id_categoria` obrigatório e `id_subcategoria` nulo — assim a consulta do cardápio é uma só
+  nos dois casos.
+- 🔑 **Quem garante que a subcategoria é DAQUELA categoria é o BANCO**, por uma chave composta
+  (`FOREIGN KEY (id_subcategoria, id_categoria)`), não a rota. ⚠️ E com `id_subcategoria` nulo
+  a chave não é cobrada (`MATCH SIMPLE`, o padrão) — que é exatamente o item solto.
+- 🔑 **O mesmo produto PODE estar em mais de uma lista** (decisão do dono): uma porção serve a
+  "Pra Dividir" e a "Menu Principal". O que se impede é a repetição DENTRO da mesma lista.
+  ⚠️ **São dois índices únicos parciais, e a razão é `NULL`**: num índice comum, `(NULL, 42)`
+  nunca colide com outro `(NULL, 42)` — o parcial separa o mundo com subcategoria do mundo sem.
+
+### "Produtos disponíveis no PDV"
+
+⚠️ **NÃO é só `integrado_pdv`** — é a mesma regra da aba Catálogo do produto (083), e pela
+mesma razão: aquela marca é sobre ESCRITA, e "com `codigo_pdv` e desmarcado" é o produto que
+veio de lá e a casa não quer que o Botané mexa. Ele é vendido no balcão todo dia.
+⚠️ **E a recusa é na ROTA, não só na lista da tela.** A lista é conforto; quem garante que só
+entra produto ativo e vendido no balcão é o servidor — regra 4 da casa.
+
+### Armadilhas pagas
+
+- ⚠️ **`/produtos-disponiveis` era engolida por `/{id_catalogo}`**, e o sintoma foi um 422
+  dizendo que *"produtos-disponiveis" não é um número inteiro*. Rota de UM segmento só tem de
+  ser declarada ANTES da que tem parâmetro — como `/opcoes` já fazia. 🔑 O mais instrutivo: o
+  comentário que eu havia escrito ali dizia exatamente isso, e a linha seguinte o violava.
+- ⚠️ **`<Link>` do Next não navega com `a.click()` por `evaluate`**: quem trata o clique é um
+  listener do router, e o clique sintético não passa por ele. Sonda de navegação precisa de um
+  clique de verdade, pelo ponteiro.
+- ⚠️ **Componentes da casa têm nomes próprios de propriedade**, e chutar custa uma volta:
+  `Etiqueta` usa `cor` (não `tom`), `CabecalhoTela` usa `explica` (não `descricao`) e `Vazio`
+  recebe só `children`.
+
+### O que ainda não existe
+
+⚠️ **O site do cliente NÃO mostra este cardápio.** As rotas `/publico/...` continuam
+entregando só os catálogos com PDF — montar a vitrine a partir de categorias é a próxima
+fatia. Até lá, um catálogo de origem PRODUTOS é cadastro guardado, e a tela avisa quando ele
+está em rascunho para a casa não achar que publicou.

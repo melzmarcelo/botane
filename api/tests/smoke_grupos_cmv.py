@@ -81,7 +81,13 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+# ⚠️ **Nove digitos, nao seis.** Com seis, esta suite quebrou numa bateria com
+# "O codigo LIMP889300 ja e de DETERGENTE 889300": o produto de uma rodada
+# ANTIGA, que nao se apaga (produto com movimento nao some), tinha caido na
+# mesma marca. Seis digitos sao um milhao de possibilidades contra uma base que
+# so cresce -- a colisao era questao de tempo, e chega como um 409 que nao tem
+# nada a ver com o que a suite mede.
+marca = str(time.time_ns())[-9:]
 hoje = date.today()
 periodo = f"inicio={hoje.replace(day=1)}&fim={hoje}"
 

@@ -18,7 +18,17 @@ from pydantic import BaseModel, Field, model_validator
 # ⚠️ **PDF é ARQUIVO, não `PDV`.** A origem é um PDF importado e mostrado no
 # site de reservas; o PDV é o caixa e vive em `services/pdv/`. As três letras
 # parecidas já custaram uma primeira versão inteira deste módulo.
-ORIGENS = ("PDF",)
+# 🔑 **A segunda origem chegou** (pedido do dono, 22/09/2026: *"vamos adicionar
+# a Origem Produtos"*), e a tupla fez o trabalho para o qual foi escrita: quem
+# acrescenta aqui ganha a validação e a tela junto, sem caçar `== "PDF"` pelo
+# código. `PRODUTOS` é o cardápio montado aqui dentro — categorias,
+# subcategorias e os produtos de cada uma.
+ORIGENS = ("PDF", "PRODUTOS")
+
+# 🔑 **A origem que monta o cardápio aqui dentro.** Vale a constante em vez do
+# literal: é ela que decide se a tela abre a página de configuração ou o envio
+# de PDF, e um `== "PRODUTOS"` solto em cinco lugares envelhece mal.
+ORIGEM_PRODUTOS = "PRODUTOS"
 
 # RASCUNHO nasce; ATIVO publica; INATIVO guarda sem apagar.
 SITUACOES = ("RASCUNHO", "ATIVO", "INATIVO")
@@ -99,3 +109,58 @@ class CatalogoResponse(BaseModel):
     arquivo_nome: str | None = None
     arquivo_bytes: int | None = None
     arquivo_em: datetime | None = None
+
+
+# ---------------------------------------------------------------------------
+# O catálogo montado por PRODUTOS
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (22/09/2026):** *"podemos criar Categorias (exemplo: Menu
+# Principal) e suas SubCategorias (exemplo: Pra Dividir), cada item terá o Nome,
+# Descrição e uma foto. Após isto, podemos vincular os produtos disponíveis no
+# PDV para a subcategoria. Somente produtos ativos."*
+
+
+class SecaoBase(BaseModel):
+    """O que categoria e subcategoria têm em comum: nome, descrição e ordem.
+
+    ⚠️ **A FOTO não está aqui.** Ela sobe por rota própria, multipart, como a do
+    produto e a do catálogo — um campo de arquivo dentro do formulário faria
+    cada renomeação carregar a imagem inteira de novo.
+    """
+
+    nome: str = Field(min_length=2, max_length=120)
+    descricao: str | None = Field(default=None, max_length=500)
+    # ⚠️ **A ordem é do CARDÁPIO, não alfabética**: "Entradas" antes de
+    # "Sobremesas" é a sequência da refeição, e só a casa sabe qual é.
+    ordem: int = Field(default=0, ge=0, le=999)
+
+
+class CategoriaCreate(SecaoBase):
+    pass
+
+
+class SubcategoriaCreate(SecaoBase):
+    pass
+
+
+class ItemCreate(BaseModel):
+    """Um produto pendurado na categoria ou na subcategoria.
+
+    🔑 **`id_subcategoria` é opcional** (decisão do dono): categoria pode ter
+    produto direto. Cardápio de verdade tem os dois casos — "Menu Principal" se
+    divide em "Pra Dividir" e "Pratos", mas "Bebidas" costuma ser uma lista só.
+    ⚠️ **Quem garante que a subcategoria é DESTA categoria é o banco**, pela
+    chave composta da migração 084 — não esta validação.
+    """
+
+    id_produto: int
+    id_subcategoria: int | None = None
+    ordem: int = Field(default=0, ge=0, le=999)
+
+
+class ItemOrdem(BaseModel):
+    """Reordenar sem recriar: só o que mudou de lugar."""
+
+    id: int
+    ordem: int = Field(ge=0, le=999)

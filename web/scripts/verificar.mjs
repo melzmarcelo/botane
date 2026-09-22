@@ -8412,10 +8412,15 @@ try {
   checar("a janela tem os cinco campos do cabecalho",
     janelaCat.campos.length === 5, janelaCat.campos);
   // 🔑 O vocabulário vem do SERVIDOR — uma cópia na tela divergiria calada no
-  // dia da segunda origem.
+  // dia da segunda origem. 🔑 **E esse dia chegou** (22/09/2026, migração 084):
+  // a tela ganhou PRODUTOS sem uma linha de mudança, porque a lista nunca foi
+  // dela. O que precisou mudar foi ESTA checagem, que afirmava "a única origem
+  // de hoje" — afirmação sobre o que ainda não existe envelhece no dia em que
+  // passa a existir.
   // ⚠️ **PDF e ARQUIVO, nao PDV** — o modulo nasceu com a sigla errada.
-  checar("com a unica origem de hoje, PDF",
-    JSON.stringify(janelaCat.origens) === JSON.stringify(["PDF"]), janelaCat.origens);
+  checar("com as duas origens: o PDF importado e o cardapio montado aqui",
+    JSON.stringify(janelaCat.origens) === JSON.stringify(["PDF", "PRODUTOS"]),
+    janelaCat.origens);
   checar("e as tres situacoes",
     JSON.stringify(janelaCat.situacoes)
       === JSON.stringify(["RASCUNHO", "ATIVO", "INATIVO"]), janelaCat.situacoes);

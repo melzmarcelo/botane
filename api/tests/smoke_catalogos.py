@@ -114,7 +114,12 @@ st, op = chamar("GET", "/catalogos/opcoes", token=token)
 checar("as opcoes respondem", st == 200, (st, op))
 # ⚠️ **PDF e ARQUIVO, nao PDV.** O modulo nasceu com a sigla errada por um
 # engano de digitacao, e a primeira versao inteira foi escrita em cima dela.
-checar("com a unica origem de hoje, PDF", (op or {}).get("origens") == ["PDF"], op)
+# 🔑 **A segunda origem chegou em 22/09/2026** (migracao 084): PRODUTOS e o
+# cardapio montado aqui dentro, por categorias. Esta checagem dizia "a unica
+# origem de hoje" e precisou mudar junto -- afirmacao sobre o que NAO existe
+# ainda envelhece no dia em que passa a existir.
+checar("com as duas origens: o PDF importado e o cardapio montado aqui",
+       (op or {}).get("origens") == ["PDF", "PRODUTOS"], op)
 checar("e as tres situacoes que o dono nomeou",
        (op or {}).get("situacoes") == ["RASCUNHO", "ATIVO", "INATIVO"], op)
 
