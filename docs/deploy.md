@@ -382,3 +382,28 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
 - Rodar `api/limpar_dados.py` apontando para o banco online (ele **recusa** host que não seja
   local — mas não conte com isso como única proteção)
 - Promover sem a bateria de testes ter passado na base local
+
+## O site do cliente — `reserva.botanedeliecafe.com.br`
+
+🔑 **É um app SEPARADO** (`.do/reservas.yaml`), não um componente do `botane`. O app principal
+roteia por CAMINHO (`web` em `/`, `api` em `/api`, mesmo domínio — foi o que fez o CORS deixar
+de existir lá); pôr o site noutro DOMÍNIO dentro dele exigiria trocar todo o roteamento por
+regras de `ingress`, porque `routes:` por componente e `ingress:` não convivem. Seria reescrever
+o que funciona para acrescentar uma peça que não precisa disso — e aplicar spec errado neste app
+já derrubou a produção uma vez.
+
+Na primeira vez:
+
+1. `doctl apps create --spec .do/reservas.yaml`, ou o botão do painel.
+2. **CNAME no HostGator**: `reserva` → `<o-novo-app>.ondigitalocean.app`, igual ao `sistema`.
+3. ⚠️ **`CORS_ORIGINS` da API, no painel do app `botane`**: acrescentar
+   `https://reserva.botanedeliecafe.com.br`. **Sem isso o site sobe, abre bonito e não carrega
+   nada** — sem cardápio, sem horário e sem o WhatsApp —, e o navegador não explica na tela.
+   ⚠️ `allow_credentials` é verdadeiro, então `*` não resolve: tem de ser o domínio exato.
+4. Conferir: `curl https://reserva.botanedeliecafe.com.br` devolve o HTML, e
+   `curl https://sistema.botanedeliecafe.com.br/api/publico/1/casa` devolve a casa.
+
+⚠️ **`deploy_on_push: false` vale aqui também.** Empurrar não publica.
+⚠️ **A reserva online continua nascendo fechada**: `aceita_online` é configuração de cada
+ambiente e não viaja no merge. Sem ela — e sem salão e mesas cadastrados — o site mostra os
+horários e fecha a mesa pelo WhatsApp.

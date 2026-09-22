@@ -1,0 +1,72 @@
+# O site do cliente — reserva.botanedeliecafe.com.br
+#
+# 🔑 **Pedido do dono (22/09/2026):** *"pode subir tudo que temos no main para a
+# produção, incluindo o projeto Reservas."*
+#
+# Um site ESTÁTICO: a pasta `site/` é um `index.html` sozinho, sem build. Ele lê
+# a mesma API do sistema interno, pelas rotas `/publico/...`.
+#
+# ---------------------------------------------------------------------------
+# ⚠️ **Por que um APP SEPARADO, e não um componente do `botane`**
+# ---------------------------------------------------------------------------
+# O app principal roteia por CAMINHO: `web` em `/` e `api` em `/api`, os dois no
+# mesmo domínio — foi a decisão que fez o CORS deixar de existir lá. Pôr este
+# site noutro DOMÍNIO dentro do mesmo app exigiria trocar todo o roteamento por
+# regras de `ingress` com casamento de `authority`, porque `routes:` por
+# componente e `ingress:` não convivem no mesmo spec.
+#
+# 🔑 Ou seja: seria reescrever o roteamento que hoje funciona, para acrescentar
+# uma peça que não precisa dele. E aplicar spec errado neste app já derrubou a
+# produção uma vez. Um app próprio é barato (site estático), isola a falha e não
+# encosta no que está de pé.
+#
+# ---------------------------------------------------------------------------
+# ⚠️ **Três coisas PRECISAM acontecer fora deste arquivo**
+# ---------------------------------------------------------------------------
+# 1. **DNS no HostGator**: um CNAME `reserva` → `<este-app>.ondigitalocean.app`,
+#    igual ao que já existe para `sistema`. Sem ele o domínio não resolve.
+#    ⚠️ Nada de `zone:` aqui: o `zone` diz à DO que ela manda na zona, e quem
+#    manda é o HostGator.
+#
+# 2. **`CORS_ORIGINS` da API**, no painel do app `botane`: acrescentar
+#    `https://reserva.botanedeliecafe.com.br`. ⚠️ **Sem isso o site sobe, abre
+#    bonito e não carrega NADA** — sem cardápio, sem horário e sem o WhatsApp —,
+#    e o navegador não diz por quê na tela. É a volta do CORS que o esboço
+#    previu ao escolher front separado. ⚠️ E `allow_credentials` é verdadeiro na
+#    API, então `*` não resolve: tem de ser o domínio exato.
+#
+# 3. **A reserva online**, se a casa a quiser: `aceita_online` em Reservas ▸
+#    Configurações, com salão e mesas cadastrados. Desligada, o site mostra os
+#    horários e fecha a mesa pelo WhatsApp.
+#
+# Para subir a primeira vez:  doctl apps create --spec .do/reservas.yaml
+# ⚠️ **NUNCA `doctl apps update --spec` a partir do repositório sem antes
+# `doctl apps spec get <id>`** — é a regra que vale para o outro app e vale para
+# este: o arquivo do repositório não conhece o que foi ajustado no painel.
+
+name: botane-reservas
+region: nyc
+
+domains:
+  - domain: reserva.botanedeliecafe.com.br
+    type: PRIMARY
+
+static_sites:
+  - name: site
+    source_dir: /site
+    github:
+      repo: melzmarcelo/botane
+      branch: producao
+      # ⚠️ **Como nos outros dois componentes**: empurrar não publica. Cada
+      # promoção é um ato consciente, feito no painel.
+      deploy_on_push: false
+    # 🔑 **Sem `build_command` e sem `output_dir`**: não há build. O que está em
+    # `site/` é o que vai ao ar — é justamente por isso que ele foi escrito como
+    # um arquivo só, sem bundle para quebrar numa promoção.
+    index_document: index.html
+    # ⚠️ **O 404 devolve a própria página.** A navegação do site é por `#hash`,
+    # não por caminho, mas um link antigo ou um endereço digitado errado cairiam
+    # numa tela de erro da DO, com a cara dela e não a da casa.
+    error_document: index.html
+    routes:
+      - path: /
