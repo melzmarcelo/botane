@@ -30,6 +30,7 @@ from datetime import date
 from fastapi import HTTPException
 
 import arquivos
+from relogio import hoje_da_casa
 
 from models.catalogos import ORIGEM_PRODUTOS, ORIGENS, SITUACOES
 
@@ -59,7 +60,11 @@ def _publicado_hoje(linha: dict, hoje: date) -> bool:
 
 
 def _com_publicado(linhas: list[dict]) -> list[dict]:
-    hoje = date.today()
+    # ⚠️ **A data da CASA.** `date.today()` num servidor em UTC vira o dia
+    # SEGUINTE entre 21h e a meia-noite — e é esta função que decide se um
+    # catálogo está no ar. Três horas por dia em que ele entraria cedo, ou
+    # venceria antes. Ver `relogio.py`.
+    hoje = hoje_da_casa()
     return [{**l, "publicado_hoje": _publicado_hoje(l, hoje)} for l in linhas]
 
 

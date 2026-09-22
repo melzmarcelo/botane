@@ -15,6 +15,12 @@ não deixava de rodar — rodava três horas antes.
 no mesmo fuso que o código presumia. Este arquivo existe para forçar o que só
 acontece no ar: um `agora` em UTC.
 
+🔑 **E o mesmo erro voltou em 22/09/2026, noutro lugar**: a tarja do site do
+cliente dizia *"Fechado · abre Qua 09:30"* às 15:25 de uma terça, com a casa
+aberta até as 18:00. 15:25 em Blumenau são 18:25 em UTC. Duas ocorrências
+distantes, a mesma causa — e foi isso que tirou o helper de dentro do agendador
+e o pôs em `relogio.py`. Esta suíte cobre as duas.
+
 Este arquivo NÃO fala com a API — testa a regra pura, que é onde a decisão mora.
 
     python tests/smoke_agenda_fuso.py
@@ -22,11 +28,13 @@ Este arquivo NÃO fala com a API — testa a regra pura, que é onde a decisão 
 
 import sys
 from datetime import datetime, timedelta, timezone
+from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, ".")
 
 from config import FUSO_DA_CASA  # noqa: E402
+import relogio  # noqa: E402
 from services import agenda_integracao as regra  # noqa: E402
 
 ok = 0
@@ -116,6 +124,47 @@ checar("HORARIA dispara passada uma hora",
        regra.deve_rodar(linha(freq="HORARIA", rodou=uma_hora_atras), vinte))
 checar("e nao dispara antes disso",
        not regra.deve_rodar(linha(freq="HORARIA", rodou=vinte - timedelta(minutes=10)), vinte))
+
+
+print("\n4. a tarja do site do cliente: aberto agora?")
+# 🔑 **A regra da tarja, isolada.** `routers/publico.py` compara
+# `agora_da_casa().time()` com a janela do dia; aqui se prova que a comparacao
+# muda de resposta conforme o relogio — que e o defeito que o dono viu.
+ABRE, FECHA = dt_time(9, 30), dt_time(18, 0)
+
+
+def aberta(quando):
+    return ABRE <= quando.time() <= FECHA
+
+
+# Uma terca as 15:25 na casa — dentro do expediente, sem discussao.
+na_casa = datetime(2026, 9, 22, 15, 25, tzinfo=ZoneInfo(FUSO_DA_CASA))
+no_conteiner = na_casa.astimezone(timezone.utc).replace(tzinfo=None)
+checar("as 15:25 na casa, ela esta ABERTA", aberta(na_casa) is True, na_casa)
+# ⚠️ **O mesmo instante, lido pelo relogio do conteiner, da o contrario.** E o
+# sintoma exato: 18:25 passa das 18:00, e a tarja dizia "Fechado".
+checar("e o relogio do conteiner (18:25 UTC) diria FECHADA",
+       aberta(no_conteiner) is False, no_conteiner)
+checar("sendo o MESMO instante, so que em fusos diferentes",
+       na_casa.astimezone(timezone.utc)
+       == no_conteiner.replace(tzinfo=timezone.utc), (na_casa, no_conteiner))
+
+# 🔑 E o helper devolve a hora da casa, com fuso, venha de onde vier o processo.
+agora = relogio.agora_da_casa()
+checar("agora_da_casa traz fuso, nunca hora solta", agora.tzinfo is not None, agora)
+checar("e o deslocamento e o de Brasilia",
+       agora.utcoffset() == timedelta(hours=-3), agora.utcoffset())
+
+print("\n5. a data da casa, entre 21h e a meia-noite")
+# ⚠️ **`date.today()` num servidor em UTC vira o dia SEGUINTE** nessa janela — e
+# e ela que decide se um catalogo esta publicado hoje.
+noite = datetime(2026, 9, 22, 22, 10, tzinfo=ZoneInfo(FUSO_DA_CASA))
+checar("as 22:10 de 22/09 na casa, a data e 22/09", noite.date().day == 22, noite)
+checar("mas em UTC ja e 23/09",
+       noite.astimezone(timezone.utc).date().day == 23,
+       noite.astimezone(timezone.utc))
+checar("e hoje_da_casa concorda com a data da casa",
+       relogio.hoje_da_casa() == relogio.agora_da_casa().date())
 
 
 print(f"\n{ok} passaram, {len(falhas)} falharam")

@@ -25,13 +25,11 @@ dia: quem clica no botão está pedindo agora, não dispensando a busca da
 madrugada. As duas coisas são pedidos diferentes, feitos por razões diferentes.
 """
 
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 
-from config import FUSO_DA_CASA
-
-# Só para o aviso do fuso indisponível sair UMA vez, e não a cada minuto.
-_avisou_do_fuso: list[bool] = []
+# ⚠️ Re-exportado de propósito: os chamadores pedem
+# `regra.agora_da_casa()`, e a suíte `smoke_agenda_fuso` cobra por esse nome.
+from relogio import agora_da_casa  # noqa: F401
 
 FREQUENCIAS = ("MANUAL", "HORARIA", "DIARIA")
 
@@ -41,33 +39,9 @@ FREQUENCIAS = ("MANUAL", "HORARIA", "DIARIA")
 INTERVALO_DE_CHECAGEM = 60
 
 
-def agora_da_casa() -> datetime:
-    """A hora de AGORA no fuso da casa — nunca o do contêiner.
-
-    🔑 **O agendador perguntava a hora ao sistema operacional**
-    (`datetime.now().astimezone()`), e no App Platform o contêiner roda em UTC:
-    quem configurava "buscar às 20h" tinha a busca disparada às 20h UTC, que são
-    17h em Brasília. A busca não deixava de rodar — rodava três horas antes, e
-    por isso nunca havia registro no horário escolhido.
-
-    ⚠️ **É invisível em desenvolvimento**: a máquina de casa está no mesmo fuso
-    que o código presumia, e todas as suítes rodam local. Só aparece no ar.
-
-    ⚠️ **Sem o banco de fusos, cai para -03:00 e AVISA.** `zoneinfo` lê a base do
-    sistema operacional; imagem enxuta não a traz. O Brasil não tem horário de
-    verão desde 2019, então o deslocamento fixo acerta hoje — mas se ele voltar,
-    o aviso no log é o que impede a descoberta pelo relatório errado. `tzdata`
-    está no `requirements.txt` justamente para este caminho não ser usado.
-    """
-    try:
-        return datetime.now(ZoneInfo(FUSO_DA_CASA))
-    except Exception:  # noqa: BLE001 — fuso indisponível não derruba a busca
-        if not _avisou_do_fuso:
-            print(f"[agenda] fuso {FUSO_DA_CASA} indisponível — usando -03:00 fixo. "
-                  "Instale tzdata para o horário de verão ser respeitado.")
-            _avisou_do_fuso.append(True)
-        return datetime.now(timezone(timedelta(hours=-3)))
-
+# 🔑 **O helper saiu daqui para `relogio.py`** (22/09/2026), quando o MESMO erro
+# apareceu na tarja do site do cliente. Função que dois lugares distantes
+# precisam não mora dentro de um deles — e a segunda ocorrência é a prova.
 
 def deve_rodar(linha: dict, agora: datetime) -> bool:
     """Chegou a hora desta integração?

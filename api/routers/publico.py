@@ -25,11 +25,12 @@ seu endereço. `/publico/{id_unidade}/...` deixa isso resolvido desde já.
 reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 """
 
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from database import get_cursor
+from relogio import agora_da_casa
 from models.catalogos import ORIGEM_PRODUTOS
 from models.reservas import ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
@@ -172,7 +173,12 @@ def _quando_atende(cur, id_unidade: int) -> dict:
     )
     linhas = [dict(r) for r in cur.fetchall()]
     abertos = [d for d in linhas if d["aberto"]]
-    agora = datetime.now()
+    # ⚠️ **A hora da CASA, nunca a do contêiner.** Era `datetime.now()`, e no
+    # App Platform o processo roda em UTC: às 15:25 em Blumenau o servidor via
+    # 18:25, passava do fechamento das 18:00 e a tarja dizia "Fechado · abre Qua
+    # 09:30" com a casa cheia. Errava TODO dia, nas três últimas horas do
+    # expediente. Ver `relogio.py` — é a segunda vez que este erro aparece.
+    agora = agora_da_casa()
     hoje = next((d for d in abertos if d["dia_semana"] == agora.isoweekday()), None)
     return {
         "dias": [_DIAS[d["dia_semana"]] for d in abertos],

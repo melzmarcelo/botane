@@ -208,6 +208,27 @@
   🔑 **CSS se confere no que é SERVIDO**, não no que está no disco: `curl` no `.css` do
   `/_next/static/`, ou `getComputedStyle` na tela. E reiniciar o `npm run dev` é o conserto.
 
+- 🔑 **O FUSO DO CONTÊINER já derrubou DUAS coisas, e por isso virou `relogio.py`.** O App
+  Platform roda o processo em **UTC**; a casa vive em `America/Sao_Paulo`. `datetime.now()` e
+  `date.today()` em Python leem o relógio do sistema operacional, e no ar ele está três horas
+  à frente.
+  1. **04/09/2026, o agendador do Omie**: "buscar às 20h" disparava às 20h UTC — 17h aqui.
+  2. **22/09/2026, a tarja do site do cliente**: *"Fechado · abre Qua 09:30"* às 15:25 de uma
+     terça, com a casa aberta até as 18:00. Errava TODO dia, nas três últimas horas.
+  ⚠️ **É invisível em desenvolvimento e passa por bateria verde**: a máquina de casa está no
+  mesmo fuso que o código presume, e todas as suítes rodam local. Quem vê é quem olha a tela
+  no ar.
+  🔑 **O banco já resolvia do lado dele** — `database.py` abre a sessão em `America/Sao_Paulo`,
+  então `current_date` e `now()` DENTRO do SQL estão certos. Faltava o Python.
+  ⚠️ **Data decidida em SQL não deve vir para o Python** justamente por isso: `current_date` no
+  `WHERE` já é a data da casa; trazer a decisão para cá cria o problema.
+  ⚠️ **`date.today()` é o caso mais estreito e mais difícil de notar**: só erra entre 21h e a
+  meia-noite, quando UTC já virou o dia. É a janela em que um catálogo entraria no ar cedo ou
+  um período venceria antes.
+  🔑 **Função que dois lugares distantes precisam não mora dentro de um deles.** O helper viveu
+  18 dias dentro de `services/agenda_integracao.py`, e a segunda ocorrência foi a prova de que
+  o lugar era errado. `smoke_agenda_fuso` cobre as duas.
+
 ## Stack e portas
 
 - 🔑 **O painel abre com o que a cozinha DESTA pessoa tem para fazer** (`GET /inicio`, bloco
