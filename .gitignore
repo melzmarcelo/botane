@@ -58,3 +58,6 @@ _api.err
 web/.bateria*.txt
 api/.log-api.txt
 api/.log-api.err
+
+# A foto de resgate do `preservar_reserva`: dado da casa, nunca versionado.
+api/tests/_foto_reserva_*.json

@@ -95,6 +95,27 @@ type Painel = {
     todos_setores: boolean;
     setores: string[];
   } | null;
+  /**
+   * As mesas marcadas daqui para a frente.
+   *
+   * ⚠️ **Nulo quando a loja não faz reserva** — ou quando esta pessoa não tem
+   * `reservas.ver`. Não uma lista vazia: vazia se leria como "ninguém
+   * reservou", e o cartão apareceria numa casa que nem usa o módulo.
+   */
+  reservas: {
+    linhas: {
+      id: number;
+      data: string;
+      hora: string;
+      pessoas: number;
+      nome: string;
+      status: "PENDENTE" | "CONFIRMADA";
+      origem: string;
+    }[];
+    total: number;
+    hoje: number;
+    pendentes: number;
+  } | null;
 };
 
 function Indicador({
@@ -197,10 +218,123 @@ export default function Inicio() {
         </Aviso>
       )}
 
-      {/* 🔑 **O dia vem ANTES do período** (pedido do dono, 03/09/2026): o
-          painel respondia pelo mês inteiro e não dizia como foi o último dia —
-          que é a primeira coisa que se olha de manhã. As setas andam entre dias
-          que TÊM venda; quem diz para onde dá para ir é o servidor. */}
+      {/* 🔑 **Grade 2x2 desde o celular** (14/09/2026). O `sm:grid-cols-2` só
+          dividia a partir de 640px: no telefone os quatro viravam uma coluna,
+          cada um com a nota explicativa, e a tela inicial ficava com 2.795px de
+          altura — o food cost só aparecia depois de rolar três telas. Não havia
+          "o dia num relance", que é justamente o que se abre a tela inicial
+          para ver. */}
+      {d && (
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <Indicador
+            rotulo="Custo do que saiu"
+            valor={reais(d.cmv_mes)}
+            nota={`O CMV ${p.periodo.termos.do}: estoque inicial + compras − o que sobrou.`}
+            href="/cmv"
+          />
+          <Indicador
+            rotulo="Food cost"
+            valor={d.food_cost_pct === null ? "—" : pct(d.food_cost_pct)}
+            nota={
+              d.food_cost_pct === null
+                ? `Sem vendas importadas ${p.periodo.termos.neste} — sem receita não há percentual.`
+                : `Sobre ${reais(d.receita_mes)} de receita em ${d.vendas} venda(s).`
+            }
+            tom={d.food_cost_pct !== null && d.food_cost_pct > 40 ? "alerta" : "normal"}
+            href="/cmv"
+          />
+          <Indicador
+            rotulo="Parado na prateleira"
+            valor={reais(d.estoque_agora)}
+            nota="Quanto dinheiro está em estoque neste momento."
+            href="/estoque"
+          />
+          <Indicador
+            rotulo={`Perdas ${p.periodo.termos.do}`}
+            valor={reais(d.perdas_mes)}
+            nota={
+              d.cmv_mes > 0
+                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo ${p.periodo.termos.do}.`
+                : "Quebra, validade e cortesia apontadas."
+            }
+            tom={d.perdas_mes > 0 ? "alerta" : "normal"}
+            href="/estoque"
+          />
+        </section>
+      )}
+
+      {/* 🔑 **As mesas marcadas** (pedido do dono, 21/09/2026): *"caso tenha
+          reserva ativado, listar as reservas marcadas, colocar 5 e adicionar
+          scroll."* Só aparece na loja que usa reserva — o servidor manda nulo
+          nas outras. */}
+      {p.reservas && (
+        <Cartao
+          titulo="Mesas marcadas"
+          descricao={
+            p.reservas.total
+              ? `${p.reservas.hoje} para hoje, ${p.reservas.total} daqui para a frente.`
+              : "Nada marcado daqui para a frente."
+          }
+          acao={
+            <Link href="/reservas/agenda" className="btn btn-secundario">
+              Abrir a agenda
+            </Link>
+          }
+        >
+          {!p.reservas.total ? (
+            <p className="text-[14.5px] text-suave">
+              Quando alguém reservar, pelo balcão ou pelo site, a mesa aparece aqui.
+            </p>
+          ) : (
+            <>
+              {/* 🔑 **O pendente vem ANTES da lista, e em destaque.** Numa casa
+                  em confirmação manual, a reserva que chega pelo site fica
+                  esperando alguém olhar — e até aqui nada avisava ninguém. */}
+              {p.reservas.pendentes > 0 && (
+                <p className="mb-3 text-[13.5px]">
+                  <b className="mono text-alerta">{p.reservas.pendentes}</b>{" "}
+                  <span className="text-suave">
+                    esperando a casa confirmar.
+                  </span>
+                </p>
+              )}
+              <ul className="lista-rolante flex flex-col gap-px bg-linha text-[14.5px]">
+                {p.reservas.linhas.map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-baseline gap-x-3 bg-superficie py-2.5"
+                  >
+                    <span className="mono text-[13px] text-suave">
+                      {diaCurto(r.data)} {r.hora}
+                    </span>
+                    <Link href="/reservas/agenda" className="link-registro">
+                      {r.nome}
+                    </Link>
+                    {/* ⚠️ A etiqueta só aparece no que ainda espera resposta:
+                        marcar TODAS as linhas faria a que precisa de ação
+                        desaparecer no meio das que não precisam. */}
+                    {r.status === "PENDENTE" && (
+                      <span className="text-[12.5px] text-alerta">a confirmar</span>
+                    )}
+                    <span className="mono ml-auto font-semibold">
+                      {r.pessoas}{" "}
+                      <span className="font-normal text-suave">
+                        {r.pessoas === 1 ? "pessoa" : "pessoas"}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {p.reservas.total > p.reservas.linhas.length && (
+                <p className="mt-3 text-[13px] text-suave">
+                  {p.reservas.linhas.length} de {p.reservas.total} — as outras estão na agenda.
+                </p>
+              )}
+            </>
+          )}
+        </Cartao>
+      )}
+
       {p.dia && <VendasDoDia inicial={p.dia} />}
 
       {/* 🔑 **O que a cozinha DESTA pessoa tem para fazer** (pedido do dono,
@@ -245,7 +379,7 @@ export default function Inicio() {
                   <b className="mono">{p.producao.total}</b> no total
                 </span>
               </div>
-              <ul className="mt-3 flex flex-col gap-px bg-linha text-[14.5px]">
+              <ul className="lista-rolante mt-3 flex flex-col gap-px bg-linha text-[14.5px]">
                 {p.producao.linhas.map((l) => (
                   <li
                     key={l.id}
@@ -269,57 +403,16 @@ export default function Inicio() {
               </ul>
               {p.producao.total > p.producao.linhas.length && (
                 <p className="mt-3 text-[13px] text-suave">
-                  Mostrando as {p.producao.linhas.length} primeiras — as outras estão na agenda.
+                  {/* ⚠️ Com a lista rolando, "as primeiras" mentia: as outras
+                      não estão noutra tela, estão logo abaixo. O que continua
+                      valendo é que a agenda tem MAIS do que estas. */}
+                  {p.producao.linhas.length} de {p.producao.total} — role para ver o resto, ou
+                  abra a agenda.
                 </p>
               )}
             </>
           )}
         </Cartao>
-      )}
-
-      {/* 🔑 **Grade 2x2 desde o celular** (14/09/2026). O `sm:grid-cols-2` só
-          dividia a partir de 640px: no telefone os quatro viravam uma coluna,
-          cada um com a nota explicativa, e a tela inicial ficava com 2.795px de
-          altura — o food cost só aparecia depois de rolar três telas. Não havia
-          "o dia num relance", que é justamente o que se abre a tela inicial
-          para ver. */}
-      {d && (
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Indicador
-            rotulo="Custo do que saiu"
-            valor={reais(d.cmv_mes)}
-            nota={`O CMV ${p.periodo.termos.do}: estoque inicial + compras − o que sobrou.`}
-            href="/cmv"
-          />
-          <Indicador
-            rotulo="Food cost"
-            valor={d.food_cost_pct === null ? "—" : pct(d.food_cost_pct)}
-            nota={
-              d.food_cost_pct === null
-                ? `Sem vendas importadas ${p.periodo.termos.neste} — sem receita não há percentual.`
-                : `Sobre ${reais(d.receita_mes)} de receita em ${d.vendas} venda(s).`
-            }
-            tom={d.food_cost_pct !== null && d.food_cost_pct > 40 ? "alerta" : "normal"}
-            href="/cmv"
-          />
-          <Indicador
-            rotulo="Parado na prateleira"
-            valor={reais(d.estoque_agora)}
-            nota="Quanto dinheiro está em estoque neste momento."
-            href="/estoque"
-          />
-          <Indicador
-            rotulo={`Perdas ${p.periodo.termos.do}`}
-            valor={reais(d.perdas_mes)}
-            nota={
-              d.cmv_mes > 0
-                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo ${p.periodo.termos.do}.`
-                : "Quebra, validade e cortesia apontadas."
-            }
-            tom={d.perdas_mes > 0 ? "alerta" : "normal"}
-            href="/estoque"
-          />
-        </section>
       )}
 
       {!!p.alertas.length && (

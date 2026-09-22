@@ -551,6 +551,55 @@ numa casa que confirma à mão seria prometer o que ela ainda não decidiu.
   campo livre obrigatório faz quem não tem nada a dizer escrever "-" para poder seguir. ⚠️ Em
   branco vai como NULO, senão a agenda acende uma linha de recado sem recado.
 
+### As mesas marcadas na tela inicial (22/09/2026)
+
+🔑 **Pedido do dono:** *"reorganizar a tela de início. Primeiro colocar a linha do Custo que
+saiu e outros, depois, caso tenha reserva ativado, listar as reservas marcadas, colocar 5 e
+adicionar scroll. Depois colocar as vendas do dia e depois a agenda, com scroll também, e
+depois os demais."*
+
+A ordem passou a ser: **os indicadores → as mesas marcadas → as vendas do dia → a agenda de
+produção → o resto**. ⚠️ **O dia deixou de vir primeiro**, e o comentário que explicava aquela
+escolha (de 03/09/2026) saiu junto — comentário que defende uma ordem que não existe mais
+ensina a não confiar nos comentários.
+
+- 🔑 **`painel.reservas` é NULO quando a loja não faz reserva** — ou quando a pessoa não tem
+  `reservas.ver`. Não uma lista vazia: vazia se leria como "ninguém reservou", e o cartão
+  apareceria numa casa que nem usa o módulo. É a mesma convenção de `producao`.
+- 🔑 **Só `PENDENTE` e `CONFIRMADA`, de hoje em diante.** `CHEGOU` já sentou e `ENCERRADA` já
+  saiu; misturá-las faz a lista crescer para sempre e esconde o que falta no meio do
+  histórico.
+- 🔑 **`pendentes` vem separado e em destaque, ACIMA da lista.** Numa casa em confirmação
+  manual, a reserva que chega pelo site fica esperando alguém olhar — e até aqui nada avisava
+  ninguém. Este número é o aviso que faltava. ⚠️ E a etiqueta "a confirmar" só marca as linhas
+  pendentes: marcar todas faria a que precisa de ação desaparecer no meio das que não precisam.
+- ⚠️ **O servidor manda 20 linhas, a tela mostra 5 e rola.** Cortar em 5 no servidor faria a
+  rolagem não ter para onde ir.
+
+### A reposição que falha em silêncio custou dado de verdade (22/09/2026)
+
+⚠️ **A bateria apagou salão, mesas, cadastro, duas reservas e a semana da casa** — e o único
+sinal foi uma linha de `atexit` que o Python imprime e ignora, no meio de sessenta suítes
+passando. O placar disse **61/61**.
+
+🔑 **A mecânica, que vale para qualquer `preservar_*`:** a suíte apaga numa transação e repõe
+noutra. Quando a segunda estoura, o `rollback` desfaz só a REPOSIÇÃO — o que foi apagado já
+estava confirmado. Reposição que falha é, portanto, **pior que reposição nenhuma**: a suíte
+destrói com a confiança de quem vai devolver.
+
+🔑 **O gatilho foi uma chave estrangeira NOVA.** A migração 082 ligou `reservas.id_cliente` a
+`reserva_clientes`, e `preservar_reserva` não conhecia essa tabela: repunha a reserva
+carregando o id de um cliente que ninguém tinha reposto. ⚠️ **Chave estrangeira nova no módulo
+entra na lista `TABELAS` do helper**, na posição que a ordem de inserção pede.
+
+🔑 **Agora há uma rede embaixo da rede**: falhando, `repor()` grava a foto inteira num
+`_foto_reserva_unidade<N>.json` ao lado da suíte e imprime um aviso impossível de não ver. Da
+primeira vez o que salvou foi a **auditoria** (`auditoria`, com `entidade`/`acao`/`depois`),
+que tinha o nome do salão, o lote de mesas e cada reserva — sorte, não desenho.
+
+⚠️ **Conferir o placar não basta.** O que provou o estrago foi olhar o ESTADO da casa depois
+da bateria, não o "0 falharam" dela.
+
 ### Duas armadilhas de LIMPEZA, e as duas vieram da mesma correção
 
 🔑 **`preservar_reserva` (feito horas antes) destapou uma dependência de ORDEM que estava

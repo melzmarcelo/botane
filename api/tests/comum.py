@@ -286,6 +286,14 @@ def preservar_reserva(unidade: int):
         ("reserva_bloqueios", "id_unidade = %s"),
         ("saloes", "id_unidade = %s"),
         ("mesas", "id_unidade = %s"),
+        # ⚠️ **Antes de `reservas`, porque `reservas.id_cliente` aponta para cá**
+        # (migração 082). Esquecê-la aqui fez a reposição estourar com
+        # `reservas_id_cliente_fkey`: as reservas voltavam carregando o id de um
+        # cliente que a suíte tinha apagado e ninguém tinha reposto.
+        # 🔑 **Chave estrangeira nova no módulo entra NESTA lista**, na posição
+        # que a ordem de inserção pede — senão o estrago só aparece na bateria
+        # seguinte, e num lugar que não tem nada a ver com a mudança.
+        ("reserva_clientes", "id_unidade = %s"),
         ("reservas", "id_unidade = %s"),
         ("reserva_mesas", "id_reserva IN (SELECT id FROM reservas WHERE id_unidade = %s)"),
     ]
@@ -299,7 +307,7 @@ def preservar_reserva(unidade: int):
             cur.execute(f"SELECT * FROM {tabela} WHERE {onde}", (unidade,))  # noqa: S608
             antes[tabela] = [dict(r) for r in cur.fetchall()]
 
-    def repor() -> int:
+    def _repor_de_verdade() -> int:
         postas = 0
         with conectar() as conn, conn.cursor() as cur:
             for tabela, onde in reversed(TABELAS):
@@ -321,6 +329,50 @@ def preservar_reserva(unidade: int):
                         (ligado, unidade))
             conn.commit()
         return postas
+
+    def repor() -> int:
+        """Devolve a foto — e, se não conseguir, GRAVA A FOTO EM DISCO.
+
+        ⚠️ **Reposição que falha em silêncio é pior que reposição nenhuma**, e
+        isto custou dado de verdade (22/09/2026). A suíte apaga numa transação e
+        repõe noutra: quando a segunda estoura, o `rollback` desfaz só a
+        reposição — o que foi apagado já tinha sido confirmado. O estrago foi
+        a casa perder salão, mesas, cadastro e duas reservas, e a única pista
+        foi uma linha de `atexit` que o Python imprime e ignora.
+        🔑 **A foto em disco é a rede embaixo da rede.** Falhando, fica um JSON
+        com tudo o que havia, e o conserto é lê-lo em vez de reconstituir o que
+        existia pela auditoria — que foi o que salvou daquela vez, por sorte.
+        ⚠️ **E o erro sobe na saída**, com o caminho do arquivo em maiúsculas:
+        `atexit` engole a exceção, então a mensagem tem de ser impossível de
+        não ver em meio a sessenta suítes passando.
+        """
+        import json
+        from datetime import date, datetime, time
+        from decimal import Decimal
+
+        try:
+            return _repor_de_verdade()
+        except Exception as erro:  # noqa: BLE001 - qualquer falha perde dado
+            destino = (Path(__file__).resolve().parent
+                       / f"_foto_reserva_unidade{unidade}.json")
+
+            def texto(v):
+                if isinstance(v, (date, datetime, time, Decimal)):
+                    return str(v)
+                raise TypeError(type(v))
+
+            try:
+                with open(destino, "w", encoding="utf-8") as f:
+                    json.dump({"reservas_ligado": ligado, "tabelas": antes},
+                              f, ensure_ascii=False, indent=2, default=texto)
+                onde = str(destino)
+            except Exception:  # noqa: BLE001 - nem gravar deu; resta a tela
+                onde = "NÃO FOI POSSÍVEL GRAVAR — copie o erro acima"
+            print("\n" + "!" * 72)
+            print("!! A RESERVA DA LOJA NÃO FOI DEVOLVIDA:", erro)
+            print("!! A FOTO DO ESTADO ANTERIOR ESTÁ EM:", onde)
+            print("!" * 72 + "\n")
+            return 0
 
     atexit.register(repor)
     return repor

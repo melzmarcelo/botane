@@ -195,6 +195,19 @@
   enquanto nenhuma loja usava o módulo, e virou perda de dado no dia em que uma passou a usar.
   Limpeza escrita quando a tabela estava vazia precisa ser revista quando ela deixa de estar.
 
+- 🔑 **Dev server de dias PARA de recompilar o `globals.css`, e nada avisa** (22/09/2026). Uma
+  regra nova (`.lista-rolante`) estava no arquivo, o `tsc` passava, a classe estava no
+  elemento — e o estilo calculado vinha `max-height: none`. A folha servida
+  (`/_next/static/chunks/app_globals_*.css`) simplesmente não tinha a regra, e o **hash do
+  arquivo não mudava** nem depois de `touch`. O processo do Next estava de pé havia três dias.
+  ⚠️ **O diagnóstico errado é acreditar no arquivo.** Perdi uma volta inteira supondo que o
+  compilador tinha DESCARTADO a regra — porque o que vinha antes e o que vinha depois dela
+  estavam na folha. Estavam porque foram escritos antes de o watcher congelar.
+  🔑 **A prova barata**: acrescentar uma regra boba com nome único e conferir se ela aparece na
+  folha servida. Não aparecendo nenhuma das duas, o problema não é a regra — é o servidor.
+  🔑 **CSS se confere no que é SERVIDO**, não no que está no disco: `curl` no `.css` do
+  `/_next/static/`, ou `getComputedStyle` na tela. E reiniciar o `npm run dev` é o conserto.
+
 ## Stack e portas
 
 - 🔑 **O painel abre com o que a cozinha DESTA pessoa tem para fazer** (`GET /inicio`, bloco

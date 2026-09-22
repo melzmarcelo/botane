@@ -716,6 +716,23 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
    A lista de uma janela é curta por natureza — quem manda ali é o miolo. */
 .modal-miolo .grid-rolante { max-height: none; }
 
+/* ⚠️ **Uma LISTA que rola, não um grid.** O `.grid-rolante` acima vale para
+   tabela (com `thead` grudado no topo); aqui são as listas da tela inicial —
+   mesas marcadas e o que produzir —, que não têm cabeçalho para fixar.
+   🔑 **Cinco linhas à vista** (pedido do dono, 21/09/2026: *"colocar 5 e
+   adicionar scroll"*). Cada linha é `py-2.5` sobre uma linha de texto de
+   ~21px, mais o filete de 1px entre elas: 5 × 42px ≈ 210px. A medida é em
+   `rem` para acompanhar quem aumenta a fonte do navegador — em pixel fixo, a
+   sexta linha apareceria pela metade justamente para quem já enxerga mal.
+   ⚠️ **`overscroll-behavior: contain`**: sem isso, chegar ao fim da lista com a
+   roda do mouse continua rolando a PÁGINA atrás dela, e quem está lendo as
+   reservas é jogado para o fim da tela inicial sem ter pedido. */
+.lista-rolante {
+  overflow-y: auto;
+  max-height: 13.125rem;
+  overscroll-behavior: contain;
+}
+
 .tabela { width: 100%; border-collapse: collapse; font-size: 14.5px; }
 .tabela th {
   text-align: left;

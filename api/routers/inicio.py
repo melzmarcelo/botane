@@ -23,6 +23,7 @@ from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import periodos, relatorios
+from services import reservas as reservas_servico
 
 router = APIRouter(prefix="/inicio", tags=["Início"])
 
@@ -193,6 +194,45 @@ def _producao_do_setor(cur, id_unidade: int, ctx: Contexto) -> dict:
     }
 
 
+def _reservas_marcadas(cur, id_unidade: int) -> dict:
+    """As mesas que estão marcadas daqui para a frente.
+
+    🔑 **Pedido do dono (21/09/2026):** *"caso tenha reserva ativado, listar as
+    reservas marcadas, colocar 5 e adicionar scroll."*
+
+    🔑 **Só o que ainda vai acontecer**: `PENDENTE` e `CONFIRMADA`, de hoje em
+    diante. ⚠️ `CHEGOU` já sentou e `ENCERRADA` já saiu — misturá-las é o que
+    faz uma lista de tarefas crescer para sempre e esconder o que falta no meio
+    do histórico. É a mesma regra do bloco de produção logo acima.
+
+    🔑 **`pendentes` vem separado de propósito.** Numa casa configurada em
+    confirmação MANUAL, a reserva que chega pelo site fica esperando alguém
+    olhar — e até aqui nada avisava ninguém. Este número é o aviso.
+
+    ⚠️ **Contagem e nome, nunca valor.** Como a produção, este bloco vale para
+    quem não vê dinheiro: é a recepção e o salão que olham reserva.
+    """
+    cur.execute(
+        """SELECT id, data, hora, pessoas, nome, status, origem
+             FROM reservas
+            WHERE id_unidade = %s
+              AND status IN ('PENDENTE', 'CONFIRMADA')
+              AND data >= current_date
+            ORDER BY data, hora, id""",
+        (id_unidade,),
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    hoje = date.today()
+    return {
+        # ⚠️ **Vinte, não cinco.** A tela mostra cinco e rola para ver o resto —
+        # cortar em cinco aqui faria a rolagem não ter para onde ir.
+        "linhas": [{**l, "hora": l["hora"].strftime("%H:%M")} for l in linhas[:20]],
+        "total": len(linhas),
+        "hoje": sum(1 for l in linhas if l["data"] == hoje),
+        "pendentes": sum(1 for l in linhas if l["status"] == "PENDENTE"),
+    }
+
+
 @router.get("/dia")
 def dia(data: date | None = None,
         ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
@@ -269,6 +309,13 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             # é justamente o que o pedido veio corrigir.
             "producao": (_producao_do_setor(cur, id_unidade, ctx)
                          if ctx.pode("producao.agenda") else None),
+            # 🔑 **Nulo quando a loja não faz reserva** — e a tela não desenha o
+            # cartão. É a mesma porta do menu e das rotas: `reservas_ligado`.
+            # ⚠️ E a permissão vale junto: o módulo ligado não obriga todo mundo
+            # a ver a agenda do salão na tela inicial.
+            "reservas": (_reservas_marcadas(cur, id_unidade)
+                         if ctx.pode("reservas.ver")
+                         and reservas_servico.ligado(cur, id_unidade) else None),
             "dinheiro": None,
             # ⚠️ Nulo para quem não vê dinheiro, como o resto: o cartão do dia
             # é valor e ticket médio, e um cartão só com a contagem seria uma

@@ -581,6 +581,22 @@
   feita por script, só onde o `<div>` envolve uma `<table>` — a cascata do CMV é um SVG e um
   `<pre>` de código também usavam a classe, e altura máxima ali cortaria o desenho.
 
+## `.lista-rolante` — cinco linhas à vista (22/09/2026)
+
+🔑 **Pedido do dono:** *"colocar 5 e adicionar scroll"*, sobre as listas da tela inicial.
+
+⚠️ **Não é o `.grid-rolante`.** Aquele é para TABELA, e o que ele resolve é o `thead` grudado
+no topo enquanto se rola. Estas são listas (`<ul>`) sem cabeçalho para fixar, e o que elas
+precisam é só de um teto de altura.
+
+- 🔑 **`max-height: 13.125rem`, em `rem` e não em pixel.** São cinco linhas de `py-2.5` sobre
+  texto de ~21px mais o filete de 1px: 5 × 42px ≈ 210px. ⚠️ Em pixel fixo, quem aumenta a
+  fonte do navegador passa a ver a sexta linha pela metade — justamente quem já enxerga mal.
+- ⚠️ **`overscroll-behavior: contain` não é detalhe.** Sem ele, chegar ao fim da lista com a
+  roda do mouse continua rolando a PÁGINA atrás, e quem estava lendo as reservas é jogado para
+  o fim da tela sem ter pedido.
+
+
 ## Armadilhas já pagas
 
 - Componente `Aviso` renderiza `<p>`: não colocar dentro de outro `<p>` (erro de hidratação).
