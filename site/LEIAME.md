@@ -55,6 +55,10 @@ corpo, **DM Mono** nas miudezas.
 🔑 **Os catálogos são ITENS DA PÁGINA INICIAL**, um por cardápio, e clicar **abre o PDF**.
 Antes era uma tela separada com uma lista dentro; o protótipo já os mostrava no hub.
 
+🔑 **A logo cadastrada vira o medalhão E o ícone da aba.** Os dois são pintados em
+tempo de execução, junto com o título — uma casa nova publica este mesmo arquivo e a aba já
+mostra a marca dela.
+
 ⚠️ **A logo cadastrada vira o medalhão.** Sem ela, ele desenha o nome da casa, como o
 protótipo — inventar uma imagem seria pior, o cliente veria a marca de outra pessoa. Sobe em
 Administração ▸ Empresa.
@@ -134,6 +138,8 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
   cadastro confirma o nome; quem é novo preenche nome, gênero e cidade.
   ⚠️ **A dica do nome é MASCARADA** (`M••••• D•••••`) — sem isso o site seria uma
   consulta aberta de telefone→nome, e não há login nenhum na frente.
+  🔑 **Tem campo de observação** (opcional) — vai para `observacao_cliente`, que
+  a agenda do balcão já mostra ao lado da reserva.
   ⚠️ **Só funciona com `aceita_online` LIGADO** em Reservas ▸ Configurações, e
   com salão e mesas cadastrados. Desligado, o site volta a mostrar os horários e
   fechar pelo WhatsApp — e a tela não promete o que não faz.

@@ -533,6 +533,24 @@ numa casa que confirma à mão seria prometer o que ela ainda não decidiu.
   desenho da 068, e não foi o que o dono pediu. Tela que descreve um campo que o site não
   pergunta ensina a não confiar na tela.
 
+### O ícone da aba e a observação (21/09/2026)
+
+🔑 **Pedido do dono:** *"ajusta a logo no título da página. Adiciona observação na reserva."*
+
+- 🔑 **O ícone da aba é a logo CADASTRADA**, trocada em tempo de execução junto com o medalhão
+  e o `document.title`. Faltava: a aba mostrava o ícone branco de página sem identidade ao
+  lado de um título que já dizia o nome da casa. ⚠️ **Não dá para reaproveitar o `<img>` do
+  medalhão** — o favicon é recurso do documento, e o navegador só o relê quando o `href` do
+  `<link>` muda. ⚠️ **Sem logo, desenha** a inicial sobre o oliva, pelo mesmo princípio do
+  medalhão: inventar uma imagem faria o cliente ver a marca de outra pessoa. ⚠️ E o `#` da cor
+  vai escapado no `data:` — cru, ele encerra a URL ali e vira fragmento; o ícone some sem que
+  nada explique.
+- 🔑 **A observação é `observacao_cliente`, e a agenda do balcão JÁ a mostra.** O campo existia
+  no servidor desde a migração 070 e só não tinha por onde ser preenchido pelo site — campo
+  que ninguém lê do outro lado seria pior que campo nenhum. ⚠️ **Opcional, e dito no rótulo**:
+  campo livre obrigatório faz quem não tem nada a dizer escrever "-" para poder seguir. ⚠️ Em
+  branco vai como NULO, senão a agenda acende uma linha de recado sem recado.
+
 ### Duas armadilhas de LIMPEZA, e as duas vieram da mesma correção
 
 🔑 **`preservar_reserva` (feito horas antes) destapou uma dependência de ORDEM que estava

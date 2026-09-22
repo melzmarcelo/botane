@@ -6,6 +6,16 @@
 <title>Botané Deli e Café — Reservas</title>
 <meta name="description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
 <meta name="theme-color" content="#3C4A3E">
+<!-- 🔑 **O ícone da aba é a LOGO CADASTRADA**, trocada em tempo de execução por
+     `pintarOIcone()` — a mesma que vira o medalhão. Estava faltando, e o que a
+     aba mostrava era o ícone branco de página sem identidade nenhuma, ao lado
+     de um título que diz o nome da casa.
+     ⚠️ **O `href` daqui é só o ponto de partida**: um SVG desenhado, para a aba
+     não piscar em branco enquanto a API responde. -->
+<link rel="icon" id="icone-da-aba"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%233C4A3E'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" id="icone-do-celular"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%233C4A3E'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
@@ -158,6 +168,14 @@ label.campo select {
   border-radius: 10px; padding: 10px 11px; margin-top: 5px; min-height: 43px;
 }
 label.campo select:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+/* A observação usa a mesma caixa dos outros campos. ⚠️ `resize: vertical`: na
+   horizontal ela estouraria a largura da tela no celular. */
+label.campo textarea {
+  width: 100%; font: 400 15px/1.35 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px; padding: 10px 11px; margin-top: 5px; resize: vertical;
+}
+label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
 .dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* ⚠️ Gênero e cidade lado a lado ficam apertados a 400px — e é onde este site
    é lido. Abaixo de 420px eles empilham. */
@@ -291,6 +309,17 @@ label.campo select:focus-visible { outline: 2px solid var(--erva); outline-offse
           <span class="vazio">Escolha o dia e quantas pessoas.</span>
         </div>
       </div>
+      <!-- 🔑 **Pedido do dono (21/09/2026):** *"adiciona observação na reserva."*
+           ⚠️ **É `observacao_cliente`, e a agenda do balcão JÁ a mostra** — o
+           campo existia no servidor desde a migração 070 e só não tinha por
+           onde ser preenchido pelo site. Campo que ninguém lê do outro lado
+           seria pior que campo nenhum.
+           ⚠️ **Opcional, e dito no rótulo.** Um campo livre obrigatório faz
+           quem não tem nada a dizer escrever "-" para poder seguir. -->
+      <label class="campo" for="observacao">Alguma observação? (opcional)
+        <textarea id="observacao" maxlength="500" rows="2"
+                  placeholder="Aniversário, cadeirinha, alguma restrição…"></textarea>
+      </label>
       <div class="regras" id="aviso-reserva" hidden></div>
       <button class="item destaque" id="confirmar" hidden>Confirmar reserva</button>
       <div class="regras" id="rodape-reserva" hidden></div>
@@ -428,6 +457,35 @@ function zapDeContato() {
     { casa: casa ? casa.casa : "Botané" }));
 }
 
+/**
+ * O ícone da aba: a logo da casa, ou a inicial dela desenhada.
+ *
+ * ⚠️ **Não dá para reaproveitar o `<img>` do medalhão.** O favicon é um recurso
+ * do documento, carregado pelo navegador a partir do `href` do `<link>` — e o
+ * navegador só o relê quando o atributo muda.
+ * 🔑 **Sem logo, desenha** — o mesmo princípio do medalhão: inventar uma imagem
+ * faria o cliente ver a marca de outra pessoa. O desenho é a inicial da casa
+ * sobre o oliva, que é a identidade do site.
+ * ⚠️ **O SVG vai como `data:` com os `%` já escapados.** Um `#` cru dentro de um
+ * data URI encerra a URL ali mesmo, e a cor viraria um fragmento — o ícone
+ * some e nada explica.
+ */
+function pintarOIcone(nome, logo) {
+  const href = logo
+    ? API + logo
+    : "data:image/svg+xml," + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+           <circle cx="32" cy="32" r="32" fill="#3C4A3E"/>
+           <text x="32" y="43" text-anchor="middle" fill="#F4F0E5"
+                 font-family="Georgia, serif" font-size="34">${
+                   (nome || "B").trim()[0].toUpperCase()}</text>
+         </svg>`);
+  for (const id of ["#icone-da-aba", "#icone-do-celular"]) {
+    const marca = $(id);
+    if (marca) marca.href = href;
+  }
+}
+
 async function carregarCasa() {
   try {
     casa = await pedir("/casa");
@@ -438,6 +496,7 @@ async function carregarCasa() {
   }
   $("#nome-da-casa").textContent = casa.casa;
   document.title = `${casa.casa} — Reservas`;
+  pintarOIcone(casa.casa, casa.logo_url);
 
   // 🔑 **A logo CADASTRADA** (pedido do dono). Sem ela, o medalhão desenha o
   // nome da casa, como o protótipo — inventar uma imagem seria pior.
@@ -733,6 +792,10 @@ $("#confirmar").addEventListener("click", async () => {
       telefone: eu.telefone, nome: eu.nome, genero: eu.genero, cidade: eu.cidade,
       data: $("#dia").value, hora: horaEscolhida,
       pessoas: Number($("#pessoas").value),
+      // ⚠️ Em branco vai como NULO, não como string vazia: a agenda do balcão
+      // mostra a observação quando ela existe, e uma vazia acenderia uma linha
+      // de recado sem recado nenhum.
+      observacao_cliente: $("#observacao").value.trim() || null,
     });
   } catch (e) {
     $("#confirmar").disabled = false;
