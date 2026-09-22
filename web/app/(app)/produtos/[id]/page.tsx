@@ -115,13 +115,6 @@ export default function FormularioProduto() {
   const [aba, setAba] = useState<
     "principal" | "fornecedores" | "estoque" | "movimentacao" | "catalogo">("principal");
   /**
-   * 🔑 **A aba Catálogo só existe na casa que usa Reservas** (pedido do dono,
-   * 22/09/2026: *"no cadastro de produtos, quando utilizando Reservas, criar
-   * uma nova aba chamada Catálogo"*). É a mesma porta do menu e das rotas:
-   * `parametros.reservas_ligado`, que o `/auth/me` já entrega.
-   */
-  const temCatalogo = !!eu?.reservas_ligado && !novo;
-  /**
    * A foto fica FORA do formulário, e não é descuido.
    *
    * ⚠️ **Ela viaja por rota própria**, `POST /produtos/{id}/foto`, que é
@@ -133,6 +126,15 @@ export default function FormularioProduto() {
   const [foto, setFoto] = useState<{ url: string; nome: string | null } | null>(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const seletorDaFoto = useRef<HTMLInputElement>(null);
+  /**
+   * O código deste produto no PDV.
+   *
+   * ⚠️ **Fica FORA do formulário, pela mesma razão do `absorvidoPor` logo
+   * acima**: é leitura, não edição. Quem escreve `codigo_pdv` é a importação do
+   * cardápio e as rotas do Vincular — entrar em `f` faria a tela mandá-lo de
+   * volta no PUT, e um campo que a tela não edita não deve viajar no salvar.
+   */
+  const [codigoPdv, setCodigoPdv] = useState<string | null>(null);
   const [precoLoja, setPrecoLoja] = useState("");
   const [precoCasa, setPrecoCasa] = useState<number | null>(null);
   /**
@@ -161,6 +163,29 @@ export default function FormularioProduto() {
   const podeEditar = pode("cadastros.produtos");
 
   const [f, setF] = useState<Form>(VAZIO);
+
+  /**
+   * **Este produto vai ao balcão?**
+   *
+   * 🔑 **Pedido do dono (22/09/2026):** *"disponibiliza somente esta aba para
+   * produtos que são utilizados no PDV."*
+   *
+   * ⚠️ **Não basta `integrado_pdv`, e a diferença custa caro.** Aquela marca é
+   * sobre ESCRITA — se o Botané deve criar ou atualizar o produto lá. Um
+   * produto com `codigo_pdv` preenchido e a marca DESLIGADA é um estado
+   * legítimo e comum: *veio do PDV e a casa não quer que o Botané mexa*. Ele é
+   * vendido no balcão todo dia. Cortar por `integrado_pdv` esconderia a aba
+   * justamente dos itens que a casa mais vende.
+   * 🔑 Então são os dois caminhos: **marcado** (existe lá, ou está na fila para
+   * ser criado) **ou com código** (veio de lá). Ver `docs/memoria/vendas.md`.
+   */
+  const vaiAoPdv = f.integrado_pdv || !!codigoPdv;
+  /**
+   * 🔑 **A aba Catálogo pede TRÊS coisas ao mesmo tempo**: a casa usar Reservas
+   * (`parametros.reservas_ligado`, a mesma porta do menu), o produto já existir
+   * — a foto sobe por rota própria e precisa de um id — e ele ir ao balcão.
+   */
+  const temCatalogo = !!eu?.reservas_ligado && !novo && vaiAoPdv;
   const [vinculos, setVinculos] = useState<VinculoFornecedor[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -303,6 +328,13 @@ export default function FormularioProduto() {
     }
   }
 
+  // ⚠️ **Tirar o produto do PDV com a aba Catálogo ABERTA deixava a tela em
+  // branco**: o painel deixa de ser desenhado e o `aba` continua apontando para
+  // ele. Volta para a Principal, que é de onde a pessoa acabou de mexer.
+  useEffect(() => {
+    if (!temCatalogo && aba === "catalogo") setAba("principal");
+  }, [temCatalogo, aba]);
+
   useEffect(() => {
     if (novo) return;
     api
@@ -325,6 +357,7 @@ export default function FormularioProduto() {
             ? { url: String(p.foto_url), nome: (p.foto_nome as string) ?? null }
             : null,
         );
+        setCodigoPdv(p.codigo_pdv ? String(p.codigo_pdv) : null);
         setAbsorvidoPor(
           p.fundido_em
             ? {

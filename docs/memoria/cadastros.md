@@ -855,9 +855,26 @@
 🔑 **Pedido do dono:** *"no cadastro de produtos, quando utilizando Reservas, criar uma nova
 aba chamada Catálogo. Nesta aba teremos Foto e um campo para Informação Adicional."*
 
-- 🔑 **A aba só existe na casa que usa Reservas** (`parametros.reservas_ligado`, o mesmo
-  interruptor do menu), e só em produto que JÁ existe — a foto sobe por rota própria e precisa
-  de um id. É a mesma regra que já deixava Fornecedores e Movimentação de fora do produto novo.
+- 🔑 **A aba pede TRÊS coisas ao mesmo tempo**: a casa usar Reservas
+  (`parametros.reservas_ligado`, o mesmo interruptor do menu), o produto já existir — a foto
+  sobe por rota própria e precisa de um id, como Fornecedores e Movimentação já exigiam — e o
+  produto **ir ao balcão**.
+
+- 🔑 **"Vai ao PDV" NÃO é `integrado_pdv`** (pedido do dono, 22/09/2026: *"disponibiliza
+  somente esta aba para produtos que são utilizados no PDV"*), e a diferença custa caro.
+  ⚠️ `integrado_pdv` é sobre **escrita**: se o Botané deve criar ou atualizar o produto lá.
+  **Com `codigo_pdv` preenchido e a marca DESLIGADA** existe um estado legítimo e comum —
+  *veio do PDV e a casa não quer que o Botané mexa* —, e esse produto é vendido no balcão todo
+  dia. Cortar por `integrado_pdv` esconderia a aba justamente dos itens que a casa mais vende.
+  🔑 São os dois caminhos: **marcado** (existe lá, ou está na fila para ser criado) **ou com
+  código** (veio de lá). Ver `vendas.md`, seção "Enviar ao PDV".
+  ⚠️ **`codigo_pdv` entra na tela como LEITURA, fora do formulário** — pela mesma regra do
+  `absorvidoPor`: quem o escreve é a importação do cardápio e as rotas do Vincular, e pôr em
+  `f` o faria viajar de volta no PUT.
+  ⚠️ **E desmarcar o PDV com a aba ABERTA deixava a tela em branco**: o painel deixa de ser
+  desenhado e o `aba` continua apontando para ele. Volta para a Principal, que é de onde a
+  pessoa acabou de mexer. ⚠️ Só dá para topar nisso com `integracoes.enviar_ao_pdv` LIGADO —
+  a caixa nem aparece com o envio desligado —, o que torna o caso fácil de não testar.
 - 🔑 **Os nomes das colunas são GENÉRICOS; a aba é que é do catálogo.** Foto de produto é
   atributo do produto: no dia em que a ficha técnica, o PDV ou um cardápio impresso quiserem a
   mesma imagem, ela já está em `foto_url`. `catalogo_foto_url` teria de ser lido como "a foto
