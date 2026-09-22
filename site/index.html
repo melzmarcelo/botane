@@ -181,6 +181,99 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
    é lido. Abaixo de 420px eles empilham. */
 @media (max-width: 419px) { .dupla { grid-template-columns: 1fr; } }
 .passos { display: flex; flex-direction: column; gap: 12px; }
+
+/* ===========================================================================
+   O CARDÁPIO — estrutura dos prints, paleta da casa
+   ---------------------------------------------------------------------------
+   🔑 **Pedido do dono (22/09/2026):** *"agora devemos apresentar o catálogo na
+   tela. Usar como exemplo estes dois prints."*
+   🔑 **Decisão do dono, perguntada:** a cara é a do SITE — oliva e areia, como
+   o protótipo — e os prints entram como ESTRUTURA. Eles são pretos; pular de
+   uma capa clara para uma tela preta faria o cliente achar que saiu do site.
+   =========================================================================== */
+
+/* A categoria, como no primeiro print: título, descrição e uma foto grande com
+   o botão por cima, no canto. */
+.secao { display: flex; flex-direction: column; gap: 6px; }
+.secao h3 {
+  font: 600 21px/1.15 Fraunces, Georgia, serif; color: var(--tinta); margin: 0;
+}
+.secao p { margin: 0; font-size: 14px; color: var(--tinta-suave); }
+.capa-secao {
+  position: relative; margin-top: 6px; border-radius: var(--raio);
+  overflow: hidden; background: var(--superficie-2);
+  border: 1px solid var(--linha);
+  /* ⚠️ **Proporção fixa**: sem ela, a página SALTA quando cada foto termina de
+     carregar — e a pessoa que já estava lendo perde a linha. */
+  aspect-ratio: 16 / 10; max-width: 100%;
+}
+.capa-secao img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Sem foto, a moldura não fica vazia: diz o nome, como o medalhão faz. */
+.capa-secao .sem-foto {
+  display: flex; height: 100%; align-items: center; justify-content: center;
+  font: 500 15px/1.2 Fraunces, Georgia, serif; color: var(--tinta-suave);
+  padding: 0 18px; text-align: center;
+}
+.capa-secao .acessar {
+  position: absolute; right: 12px; bottom: 12px;
+  background: var(--erva); color: #F4F0E5; border: 0; border-radius: 999px;
+  padding: 11px 18px; font: 600 13px/1 Karla, sans-serif; cursor: pointer;
+  letter-spacing: .04em; text-transform: uppercase; min-height: 40px;
+}
+
+/* A tira de subcategorias do segundo print: fotos redondas, rolando de lado. */
+.tira {
+  display: flex; gap: 14px; overflow-x: auto; padding: 2px 0 6px;
+  /* ⚠️ `contain`: chegar ao fim da tira com o dedo não pode arrastar a página. */
+  overscroll-behavior-x: contain;
+}
+.tira button {
+  flex: none; width: 78px; background: none; border: 0; padding: 0;
+  cursor: pointer; color: var(--tinta-suave); font: 500 12px/1.25 Karla, sans-serif;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.tira .bolha {
+  width: 66px; height: 66px; border-radius: 50%; overflow: hidden;
+  background: var(--superficie-2); border: 1px solid var(--linha);
+  display: flex; align-items: center; justify-content: center;
+}
+.tira .bolha img { width: 100%; height: 100%; object-fit: cover; }
+.tira button[aria-current="true"] { color: var(--tinta); }
+.tira button[aria-current="true"] .bolha { border-color: var(--erva); border-width: 2px; }
+
+/* O item: nome à esquerda, preço à direita, descrição embaixo. */
+.grupo { margin-top: 18px; }
+.grupo > .rot-grupo {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+  font: 600 15px/1.2 Karla, sans-serif; color: var(--tinta);
+}
+.grupo > .rot-grupo .bolha-pequena {
+  width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex: none;
+  background: var(--superficie-2); border: 1px solid var(--linha);
+}
+.grupo > .rot-grupo .bolha-pequena img { width: 100%; height: 100%; object-fit: cover; }
+.prato { padding: 11px 0; border-bottom: 1px solid var(--linha); }
+.prato .linha1 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+}
+/* ⚠️ **O nome vem do cadastro de produtos, que grava em CAIXA ALTA.** Não é
+   decisão daqui: forçar minúsculas por CSS quebraria siglas, e "title case"
+   automático em português erra nas preposições ("Suco De Laranja"). Fica como
+   a casa cadastrou. */
+.prato .nome { font: 500 15.5px/1.25 Karla, sans-serif; color: var(--tinta); }
+.prato .preco {
+  font: 500 15.5px/1 "DM Mono", monospace; color: var(--tinta); white-space: nowrap;
+}
+.prato .desc { margin: 3px 0 0; font-size: 13.5px; color: var(--tinta-suave); }
+.prato .foto {
+  margin-top: 9px; border-radius: var(--raio); overflow: hidden;
+  aspect-ratio: 16 / 10; background: var(--superficie-2);
+}
+.prato .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pe-cardapio {
+  margin-top: 18px; font: 400 12px/1.5 "DM Mono", monospace;
+  color: var(--tinta-suave); text-align: center;
+}
 .sub-tela { color: var(--tinta-suave); font-size: 14px; margin: -2px 0 2px; }
 /* A tela de "pronto": o que a casa guardou, em linha, para conferir de relance. */
 .recibo { display: flex; flex-direction: column; gap: 2px; text-align: center; }
@@ -335,6 +428,28 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <div class="recibo" id="recibo"></div>
       <div class="regras" id="aviso-pronto"></div>
       <button class="item" data-ir="inicio">Voltar ao início</button>
+    </section>
+
+    <!-- ================= o cardápio: as categorias ================= -->
+    <!-- 🔑 **O primeiro print**: cada categoria é título, descrição e uma foto
+         grande com "ACESSAR" por cima. -->
+    <section class="tela" data-tela="cardapio" aria-labelledby="t-cardapio">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-cardapio">Cardápio</h2>
+      <div class="passos" id="secoes-do-cardapio"></div>
+    </section>
+
+    <!-- ================= o cardápio: dentro da categoria ================= -->
+    <!-- 🔑 **O segundo print**: a tira de subcategorias redondas no topo e, em
+         baixo, os itens agrupados, com nome, preço e descrição. -->
+    <section class="tela" data-tela="secao" aria-labelledby="t-secao">
+      <button class="voltar" data-ir="cardapio">‹ cardápio</button>
+      <h2 id="t-secao">Categoria</h2>
+      <p class="sub-tela" id="secao-descricao"></p>
+      <div class="tira" id="tira-subcategorias" role="group"
+           aria-label="partes desta categoria"></div>
+      <div id="pratos"></div>
+      <p class="pe-cardapio" id="pe-cardapio"></p>
     </section>
 
     <!-- ================= contato ================= -->
@@ -589,20 +704,165 @@ async function carregarCatalogos() {
   // ordem de importância, e reservar é o que a casa quer que aconteça.
   const contato = $("#itens").querySelector("a.item, button.item[data-ir='contato']");
   lista.forEach((c) => {
+    // 🔑 **Duas origens, dois destinos.** O catálogo de PDF abre o arquivo em
+    // outra aba, como sempre; o montado por produtos abre DENTRO do site, na
+    // tela de cardápio. Quem decide é o servidor, pelo campo `origem`.
+    // ⚠️ **O nome do catálogo, e só ele** — a data de fim e o "abrir o PDF"
+    // eram o texto que não era necessário.
+    if (c.origem === "PRODUTOS") {
+      const b = document.createElement("button");
+      b.className = "item";
+      b.textContent = c.nome;
+      b.addEventListener("click", () => abrirCardapio(c.id, c.nome));
+      if (contato) $("#itens").insertBefore(b, contato);
+      else $("#itens").appendChild(b);
+      return;
+    }
     const a = document.createElement("a");
     a.className = "item";
-    // 🔑 **Clicar ABRE o catálogo** — o PDF, em outra aba. Era uma tela
-    // intermediária com uma lista dentro; agora é um toque.
     a.href = `${API}${c.arquivo_url}`;
     a.target = "_blank";
     a.rel = "noopener";
-    // ⚠️ **O nome do catálogo, e só ele.** A data de fim e o "abrir o PDF"
-    // eram o texto que não era necessário — quem toca num botão chamado
-    // "Catálogo de Encomendas" sabe o que vai abrir.
     a.textContent = c.nome;
     if (contato) $("#itens").insertBefore(a, contato);
     else $("#itens").appendChild(a);
   });
+}
+
+/* ---- o cardápio montado ----
+ *
+ * 🔑 **Pedido do dono (22/09/2026):** *"agora devemos apresentar o catálogo na
+ * tela. Usar como exemplo estes dois prints."* A estrutura é a deles; a paleta é
+ * a do site, por decisão do dono.
+ */
+
+/** O cardápio carregado, para a tela da categoria não pedir de novo. */
+let cardapio = null;
+
+const dinheiro = (v) => v === null || v === undefined
+  ? ""
+  : v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Uma foto do servidor, ou a moldura com o nome quando não há. */
+function moldura(url, nome, classe) {
+  return url
+    ? `<img src="${API}${esc(url)}" alt="${esc(nome)}" loading="lazy">`
+    : `<span class="${classe}">${esc(nome)}</span>`;
+}
+
+async function abrirCardapio(id, nome) {
+  const caixa = $("#secoes-do-cardapio");
+  $("#t-cardapio").textContent = nome;
+  caixa.innerHTML = `<p class="vazio">Carregando o cardápio…</p>`;
+  ir("cardapio");
+  try {
+    cardapio = await pedir(`/catalogos/${id}`);
+  } catch (e) {
+    caixa.innerHTML = `<p class="vazio">${esc(e.mensagem
+      || "Não conseguimos abrir o cardápio agora.")}</p>`;
+    return;
+  }
+  if (!cardapio.categorias.length) {
+    caixa.innerHTML = `<p class="vazio">Este cardápio ainda não tem itens.</p>`;
+    return;
+  }
+  caixa.innerHTML = "";
+  cardapio.categorias.forEach((c, i) => {
+    const bloco = document.createElement("div");
+    bloco.className = "secao";
+    // ⚠️ A descrição é opcional: sem ela, o parágrafo nem é desenhado — um
+    // espaço em branco entre o título e a foto pareceria falta de carregamento.
+    bloco.innerHTML = `
+      <h3>${esc(c.nome)}</h3>
+      ${c.descricao ? `<p>${esc(c.descricao)}</p>` : ""}
+      <div class="capa-secao">
+        ${moldura(c.foto, c.nome, "sem-foto")}
+        <button class="acessar" type="button">Acessar ›</button>
+      </div>`;
+    bloco.querySelector(".acessar").addEventListener("click", () => abrirSecao(i));
+    // 🔑 A foto inteira também abre: é o alvo maior, e no celular é o que o
+    // dedo acerta.
+    bloco.querySelector(".capa-secao").addEventListener("click", (e) => {
+      if (!e.target.closest(".acessar")) abrirSecao(i);
+    });
+    caixa.appendChild(bloco);
+  });
+}
+
+/** Desenha um item: nome e preço na mesma linha, descrição embaixo. */
+function desenharPrato(item) {
+  const el = document.createElement("div");
+  el.className = "prato";
+  el.innerHTML = `
+    <div class="linha1">
+      <span class="nome">${esc(item.nome)}</span>
+      ${item.preco !== null && item.preco !== undefined
+        ? `<span class="preco">${dinheiro(item.preco)}</span>` : ""}
+    </div>
+    ${item.descricao ? `<p class="desc">${esc(item.descricao)}</p>` : ""}
+    ${item.foto ? `<div class="foto"><img src="${API}${esc(item.foto)}"
+       alt="${esc(item.nome)}" loading="lazy"></div>` : ""}`;
+  return el;
+}
+
+function abrirSecao(indice) {
+  const c = cardapio.categorias[indice];
+  $("#t-secao").textContent = c.nome;
+  const desc = $("#secao-descricao");
+  desc.textContent = c.descricao || "";
+  desc.hidden = !c.descricao;
+
+  // 🔑 **A tira de subcategorias**, como no segundo print: fotos redondas que
+  // rolam de lado e levam ao grupo lá embaixo.
+  // ⚠️ Só aparece quando HÁ subcategorias — categoria pode ter produto direto,
+  // e uma tira vazia seria uma faixa de nada no topo da tela.
+  const tira = $("#tira-subcategorias");
+  tira.innerHTML = "";
+  tira.hidden = c.subcategorias.length === 0;
+  c.subcategorias.forEach((sc, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    // ⚠️ **Sem foto, a bolha fica VAZIA — não com duas letras.** A primeira
+    // versão punha `sc.nome.slice(0, 2)` ali, e o que aparecia era "Pr" e "Sa"
+    // soltos dentro de um círculo: parece defeito, não desenho. O nome já está
+    // escrito logo abaixo.
+    b.innerHTML = `<span class="bolha">${sc.foto
+      ? `<img src="${API}${esc(sc.foto)}" alt="" loading="lazy">` : ""}</span>
+                   <span>${esc(sc.nome)}</span>`;
+    b.addEventListener("click", () => {
+      const alvo = document.getElementById(`grupo-${i}`);
+      if (alvo) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    tira.appendChild(b);
+  });
+
+  const pratos = $("#pratos");
+  pratos.innerHTML = "";
+  // 🔑 **Os itens soltos vêm ANTES das subcategorias**: eles são da categoria
+  // inteira, e mostrá-los depois faria parecer que pertencem à última parte.
+  c.itens.forEach((i) => pratos.appendChild(desenharPrato(i)));
+  c.subcategorias.forEach((sc, i) => {
+    const grupo = document.createElement("div");
+    grupo.className = "grupo";
+    grupo.id = `grupo-${i}`;
+    grupo.innerHTML = `<div class="rot-grupo">
+        <span class="bolha-pequena">${sc.foto
+          ? `<img src="${API}${esc(sc.foto)}" alt="" loading="lazy">` : ""}</span>
+        <span>${esc(sc.nome)}</span>
+      </div>`;
+    sc.itens.forEach((it) => grupo.appendChild(desenharPrato(it)));
+    pratos.appendChild(grupo);
+  });
+
+  // ⚠️ **O aviso do preço só aparece se houver preço na tela.** Num cardápio
+  // sem preço nenhum ele seria uma ressalva sobre coisa nenhuma.
+  const temPreco = [...c.itens, ...c.subcategorias.flatMap((x) => x.itens)]
+    .some((i) => i.preco !== null && i.preco !== undefined);
+  const pe = $("#pe-cardapio");
+  pe.textContent = temPreco ? "Preços sujeitos a alteração." : "";
+  pe.hidden = !temPreco;
+
+  ir("secao");
 }
 
 /* ---- quem reserva ----

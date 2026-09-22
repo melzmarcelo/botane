@@ -241,9 +241,48 @@ entra produto ativo e vendido no balcão é o servidor — regra 4 da casa.
   `Etiqueta` usa `cor` (não `tom`), `CabecalhoTela` usa `explica` (não `descricao`) e `Vazio`
   recebe só `children`.
 
-### O que ainda não existe
+### O site mostra o cardápio (22/09/2026)
 
-⚠️ **O site do cliente NÃO mostra este cardápio.** As rotas `/publico/...` continuam
-entregando só os catálogos com PDF — montar a vitrine a partir de categorias é a próxima
-fatia. Até lá, um catálogo de origem PRODUTOS é cadastro guardado, e a tela avisa quando ele
-está em rascunho para a casa não achar que publicou.
+🔑 **Pedido do dono:** *"agora devemos apresentar o catálogo na tela. Usar como exemplo estes
+dois prints."* Os prints vieram de outro cardápio online: o primeiro é a lista de categorias —
+título, descrição e uma foto grande com "ACESSAR" por cima; o segundo é o miolo — uma tira
+horizontal de subcategorias redondas e, abaixo, os itens com nome à esquerda, preço à direita
+e descrição embaixo.
+
+🔑 **Decisão do dono, perguntada antes de desenhar:** a cara é a do SITE — oliva e areia, como
+o protótipo —, e os prints entram como **estrutura**. ⚠️ Eles são pretos; pular de uma capa
+clara para uma tela preta faria o cliente achar que saiu do site. Se um dia a casa quiser o
+escuro, o caminho é escurecer o site inteiro, não uma tela.
+
+🔑 **Decisão do dono: o PREÇO aparece**, e sai de `produto_precos` pela mesma cascata do PDV —
+o da loja primeiro, o da casa como segundo degrau. ⚠️ **Uma segunda regra de preço aqui faria
+o site cobrar diferente do balcão.** ⚠️ **Produto sem preço sai SEM preço, não com zero**:
+zero é um número, e número no cardápio é promessa. E o rodapé *"preços sujeitos a alteração"*
+só aparece quando há preço na tela.
+
+- 🔑 **`/publico/{loja}/catalogos` passou a devolver as DUAS origens**, com `origem` dizendo
+  onde o site deve abrir: o PDF em outra aba, o de produtos dentro do site.
+- ⚠️ **Capa sem conteúdo continua fora da lista, e cada origem tem o seu conteúdo**: o PDF é o
+  arquivo; o de produtos são os ITENS VIVOS. Um cardápio publicado e vazio seria um cardápio
+  que não abre.
+- 🔑 **O `id` entra na resposta pública, e é exceção consciente à regra "nada de id interno"**:
+  sem ele o site não tem como pedir o cardápio de volta. Não é segredo — é a chave de algo que
+  a casa decidiu publicar, como o sufixo do PDF também é. ⚠️ O catálogo de PDF continua sem
+  id, porque ali ele não serviria a nada.
+- ⚠️ **Produto desativado SOME do site**, e continua aparecendo marcado na tela de
+  configuração. São papéis diferentes da mesma informação: lá a casa precisa descobrir que
+  publicou algo que saiu de linha; aqui o cliente não pode pedir o que não existe.
+  ⚠️ E o catálogo que fica vazio por isso sai da lista sozinho.
+- ⚠️ **Seção vazia não sai** — uma categoria sem item vivo viraria um título com nada embaixo.
+- 🔑 **Uma consulta só, e a árvore é montada em memória.** Uma consulta por categoria
+  transformaria um cardápio de dez seções em dezenas de idas ao banco — e este é o caminho que
+  o público percorre.
+
+⚠️ **Os nomes saem em CAIXA ALTA**, e não é decisão do site: o cadastro de produtos normaliza
+assim. Forçar minúsculas por CSS quebraria siglas, e "title case" automático erra nas
+preposições do português ("Suco De Laranja"). Se a casa quiser o nome como no print, o caminho
+é um nome de vitrine no item do catálogo — campo que hoje não existe.
+
+⚠️ **Sem foto, a bolha da subcategoria fica VAZIA.** A primeira versão punha as duas primeiras
+letras do nome ali, e o que aparecia era "Pr" e "Sa" soltos dentro de um círculo: parece
+defeito, não desenho. O nome já está escrito logo abaixo.

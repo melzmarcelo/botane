@@ -234,8 +234,14 @@ achado = next((c for c in (lista2 or []) if c["nome"] == f"Pub no ar {marca}"), 
 checar("ativo, no ar e COM PDF aparece", achado is not None,
        [c["nome"] for c in (lista2 or [])])
 checar("com o endereco do arquivo", bool((achado or {}).get("arquivo_url")), achado)
-# ⚠️ Nada de `id` aqui tambem: o site abre o PDF pela URL, nao pelo numero.
-checar("e sem id interno na lista", "id" not in (achado or {}), list(achado or {}))
+# ⚠️ **O catalogo de PDF nao leva id**, e a razao continua a mesma: o site abre
+# o arquivo pela URL, e numero interno que nao serve a nada nao sai daqui.
+# 🔑 **O de PRODUTOS leva** (22/09/2026), e e a excecao consciente da regra: sem
+# ele o site nao tem como pedir o cardapio de volta. Nao e segredo — e a chave
+# de algo que a casa DECIDIU publicar, como o sufixo do PDF tambem e. A secao
+# 4b acima cobra o outro lado.
+checar("e o de PDF vem sem id, que nao serviria para nada",
+       (achado or {}).get("id") is None, achado)
 
 # O PDF e servido ao publico, sem token — e o que o site precisa para exibir.
 if achado:
@@ -248,6 +254,85 @@ if achado:
            cab.get("content-security-policy") == "sandbox",
            cab.get("content-security-policy"))
 
+
+print("\n4b. o cardapio montado por PRODUTOS")
+# 🔑 **Pedido do dono (22/09/2026):** apresentar o catalogo na tela do site.
+# ⚠️ **O catalogo de PRODUTOS entra na lista pelo mesmo criterio do de PDF**,
+# so que o "conteudo" dele sao os ITENS: capa sem conteudo nao entra, em
+# nenhuma das duas origens.
+st, k = chamar("POST", "/catalogos",
+               {"nome": f"Cardapio publico {marca}", "origem": "PRODUTOS",
+                "situacao": "ATIVO"}, token=token)
+ID_CARD = (k or {}).get("id")
+checar("o catalogo de PRODUTOS nasce", st == 201 and bool(ID_CARD), (st, k))
+
+st, lista = chamar("GET", "/publico/1/catalogos")
+checar("ATIVO mas VAZIO nao aparece para o cliente",
+       not any(c.get("id") == ID_CARD for c in lista), lista)
+# ⚠️ E o cardapio dele responde 404: nao existe para o publico.
+st, _r = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+checar("e o cardapio dele ainda assim responde", st in (200, 404), st)
+
+_st, cat = chamar("POST", f"/catalogos/{ID_CARD}/categorias",
+                  {"nome": "Bebidas", "descricao": "Para todos os gostos."},
+                  token=token)
+_st, prod = chamar("POST", "/produtos", {
+    "nome": f"CAFE PUBLICO {marca}", "tipo": "INSUMO", "um_estoque": "UN",
+    "um_compra": "UN", "fator_compra": 1, "controla_estoque": False}, token=token)
+_st, atual = chamar("GET", f"/produtos/{prod['id']}", token=token)
+chamar("PUT", f"/produtos/{prod['id']}",
+       {**atual, "integrado_pdv": True, "preco_venda": 9.5,
+        "informacao_adicional": "Grao do mes, moido na hora"}, token=token)
+chamar("POST", f"/catalogos/categorias/{cat['id']}/itens",
+       {"id_produto": prod["id"]}, token=token)
+
+st, lista = chamar("GET", "/publico/1/catalogos")
+meu = next((c for c in lista if c.get("id") == ID_CARD), None)
+checar("com um item, ele passa a aparecer", bool(meu), lista)
+checar("dizendo a origem, para o site saber onde abrir",
+       (meu or {}).get("origem") == "PRODUTOS", meu)
+# 🔑 O id e a excecao da regra "nada de id interno": sem ele o site nao tem
+# como pedir o cardapio de volta.
+checar("e sem arquivo, porque nao ha PDF nenhum",
+       (meu or {}).get("arquivo_url") is None, meu)
+
+st, card = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+checar("o cardapio abre sem login", st == 200, st)
+checar("com o nome do catalogo", card.get("nome"), card)
+cats = card.get("categorias") or []
+checar("e a categoria dentro", len(cats) == 1 and cats[0]["nome"] == "Bebidas", cats)
+item = (cats[0]["itens"] or [{}])[0] if cats else {}
+checar("o item traz nome, descricao e PRECO",
+       item.get("nome") and item.get("descricao")
+       and item.get("preco") == 9.5, item)
+# ⚠️ **Nada de id interno no cardapio**: o cliente nao precisa do id do produto.
+checar("e NADA de id de produto na resposta",
+       "id_produto" not in item and "id" not in item, list(item))
+
+# 🔑 **Produto desativado SOME do site.** A tela de configuracao o mostra
+# marcado, para a casa descobrir que publicou algo que saiu de linha; o site e
+# quem o esconde.
+chamar("PUT", f"/produtos/{prod['id']}",
+       {**chamar("GET", f"/produtos/{prod['id']}", token=token)[1], "ativo": False},
+       token=token)
+st, card = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+checar("produto inativo some do cardapio publico",
+       not (card.get("categorias") or []), card.get("categorias"))
+st, lista = chamar("GET", "/publico/1/catalogos")
+checar("e o catalogo sai da lista, por ter ficado vazio",
+       not any(c.get("id") == ID_CARD for c in lista), lista)
+
+# ⚠️ RASCUNHO nao existe para o publico, nem pelo endereco direto.
+chamar("PUT", f"/produtos/{prod['id']}",
+       {**chamar("GET", f"/produtos/{prod['id']}", token=token)[1], "ativo": True},
+       token=token)
+chamar("PUT", f"/catalogos/{ID_CARD}", {"situacao": "RASCUNHO"}, token=token)
+st, _r = chamar("GET", f"/publico/1/catalogos/{ID_CARD}")
+checar("cardapio em rascunho responde 404", st == 404, st)
+
+chamar("DELETE", f"/produtos/{prod['id']}", token=token)
+chamar("PUT", f"/catalogos/{ID_CARD}", {"situacao": "RASCUNHO"}, token=token)
+chamar("DELETE", f"/catalogos/{ID_CARD}", token=token)
 
 print("\n5. os horarios, pela MESMA regra da agenda")
 # 🔑 Uma segunda regra para o publico divergiria da primeira, e a divergencia

@@ -30,6 +30,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from database import get_cursor
+from models.catalogos import ORIGEM_PRODUTOS
 from models.reservas import ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
@@ -205,24 +206,156 @@ def catalogos(id_unidade: int) -> list[dict]:
     with get_cursor() as cur:
         _casa_aberta(cur, id_unidade)
         cur.execute(
-            """SELECT nome, arquivo_url, arquivo_nome, arquivo_bytes, publica_ate
-                 FROM catalogos
-                WHERE id_unidade = %s
-                  AND situacao = 'ATIVO'
-                  AND arquivo_url IS NOT NULL
-                  AND (publica_de IS NULL OR publica_de <= current_date)
-                  AND (publica_ate IS NULL OR publica_ate >= current_date)
-                ORDER BY publica_de NULLS FIRST, lower(nome)""",
+            """SELECT c.id, c.nome, c.origem, c.arquivo_url, c.arquivo_bytes,
+                      c.publica_ate,
+                      -- 🔑 **Quantos produtos VIVOS o cardápio tem.** É o que
+                      -- diz se um catálogo de PRODUTOS tem o que mostrar — o
+                      -- equivalente do `arquivo_url IS NOT NULL` do PDF.
+                      (SELECT count(*)
+                         FROM catalogo_itens i
+                         JOIN catalogo_categorias g ON g.id = i.id_categoria
+                         JOIN produtos p ON p.id = i.id_produto
+                        WHERE g.id_catalogo = c.id AND p.ativo) AS itens
+                 FROM catalogos c
+                WHERE c.id_unidade = %s
+                  AND c.situacao = 'ATIVO'
+                  AND (c.publica_de IS NULL OR c.publica_de <= current_date)
+                  AND (c.publica_ate IS NULL OR c.publica_ate >= current_date)
+                ORDER BY c.publica_de NULLS FIRST, lower(c.nome)""",
             (id_unidade,),
         )
-        return [
-            {"nome": r["nome"], "arquivo_url": r["arquivo_url"],
-             "bytes": r["arquivo_bytes"],
-             # ⚠️ Quando termina, para o site poder dizer "até domingo". Só isso
-             # — a data de início não interessa a quem já está vendo.
-             "ate": r["publica_ate"]}
-            for r in cur.fetchall()
-        ]
+        saida = []
+        for r in cur.fetchall():
+            # ⚠️ **Capa sem conteúdo não entra**, e cada origem tem o seu
+            # conteúdo: o PDF é o arquivo, o PRODUTOS são os itens. Mostrar
+            # qualquer uma das duas vazia seria oferecer um cardápio que não
+            # abre. A tela de dentro avisa a casa exatamente sobre isso.
+            if r["origem"] == ORIGEM_PRODUTOS:
+                if not r["itens"]:
+                    continue
+                saida.append({
+                    "nome": r["nome"], "origem": ORIGEM_PRODUTOS,
+                    # ⚠️ **O id entra aqui, e é a exceção da regra "nada de id
+                    # interno".** Sem ele o site não tem como pedir o cardápio
+                    # de volta. Não é segredo: é a chave de algo que a casa
+                    # DECIDIU publicar, como o sufixo do PDF também é.
+                    "id": r["id"],
+                    "arquivo_url": None, "bytes": None,
+                    "ate": r["publica_ate"],
+                })
+                continue
+            if not r["arquivo_url"]:
+                continue
+            saida.append({
+                "nome": r["nome"], "origem": r["origem"], "id": None,
+                "arquivo_url": r["arquivo_url"], "bytes": r["arquivo_bytes"],
+                # ⚠️ Quando termina, para o site poder dizer "até domingo". Só
+                # isso — a data de início não interessa a quem já está vendo.
+                "ate": r["publica_ate"],
+            })
+        return saida
+
+
+@router.get("/{id_unidade}/catalogos/{id_catalogo}")
+def cardapio(id_unidade: int, id_catalogo: int) -> dict:
+    """O cardápio montado: categorias, subcategorias, itens e PREÇO.
+
+    🔑 **Pedido do dono (22/09/2026):** apresentar o catálogo na tela do site,
+    com a estrutura dos dois prints — categoria com foto e descrição, tira de
+    subcategorias, e o item com nome, preço e descrição.
+
+    ⚠️ **Só produto ATIVO sai daqui.** A tela de configuração mostra o
+    desativado marcado, para a casa descobrir que publicou algo que saiu de
+    linha; o site é quem o esconde. São papéis diferentes da mesma informação.
+
+    ⚠️ **Seção vazia não sai.** Uma categoria sem item nenhum vivo viraria um
+    título com nada embaixo — o cliente rolaria procurando o que não existe.
+
+    🔑 **O preço é o VIGENTE da loja**, com o da casa como segundo degrau — a
+    mesma cascata que o PDV usa (`produto_precos`, `id_unidade` primeiro).
+    ⚠️ **Produto sem preço sai sem preço, não com zero.** Zero é um número, e um
+    número no cardápio é uma promessa.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        cur.execute(
+            """SELECT nome FROM catalogos
+                WHERE id = %s AND id_unidade = %s AND situacao = 'ATIVO'
+                  AND origem = %s
+                  AND (publica_de IS NULL OR publica_de <= current_date)
+                  AND (publica_ate IS NULL OR publica_ate >= current_date)""",
+            (id_catalogo, id_unidade, ORIGEM_PRODUTOS),
+        )
+        capa = cur.fetchone()
+        # ⚠️ **404, como o resto daqui**: catálogo em rascunho, fora do período
+        # ou de outra casa simplesmente não existe para o público.
+        if not capa:
+            raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+
+        cur.execute(
+            """SELECT g.id AS id_categoria, g.nome AS categoria,
+                      g.descricao AS categoria_descricao, g.foto_url AS categoria_foto,
+                      g.ordem AS categoria_ordem,
+                      s.id AS id_subcategoria, s.nome AS subcategoria,
+                      s.descricao AS subcategoria_descricao,
+                      s.foto_url AS subcategoria_foto, s.ordem AS subcategoria_ordem,
+                      i.id AS id_item, i.ordem AS item_ordem,
+                      p.nome AS produto, p.foto_url AS produto_foto,
+                      p.informacao_adicional,
+                      -- 🔑 O preço da LOJA primeiro, o da casa depois: é a
+                      -- cascata de `services/precos.py`, e uma segunda regra
+                      -- aqui faria o site cobrar diferente do balcão.
+                      (SELECT pr.preco_venda FROM produto_precos pr
+                        WHERE pr.id_produto = p.id AND pr.vigente_ate IS NULL
+                          AND (pr.id_unidade = %(u)s OR pr.id_unidade IS NULL)
+                        ORDER BY pr.id_unidade NULLS LAST LIMIT 1) AS preco
+                 FROM catalogo_itens i
+                 JOIN catalogo_categorias g ON g.id = i.id_categoria
+                 LEFT JOIN catalogo_subcategorias s ON s.id = i.id_subcategoria
+                 JOIN produtos p ON p.id = i.id_produto
+                WHERE g.id_catalogo = %(c)s AND p.ativo
+                ORDER BY g.ordem, lower(g.nome),
+                         s.ordem NULLS FIRST, lower(s.nome),
+                         i.ordem, lower(p.nome)""",
+            {"c": id_catalogo, "u": id_unidade},
+        )
+        linhas = [dict(r) for r in cur.fetchall()]
+
+        # 🔑 **A árvore é montada aqui, em memória, a partir de UMA consulta.**
+        # Uma consulta por categoria transformaria um cardápio de dez seções em
+        # dezenas de idas ao banco — e este é o caminho que o público percorre.
+        categorias: list[dict] = []
+        por_categoria: dict[int, dict] = {}
+        por_subcategoria: dict[int, dict] = {}
+        for l in linhas:
+            cat = por_categoria.get(l["id_categoria"])
+            if cat is None:
+                cat = {"nome": l["categoria"], "descricao": l["categoria_descricao"],
+                       "foto": l["categoria_foto"], "subcategorias": [], "itens": []}
+                por_categoria[l["id_categoria"]] = cat
+                categorias.append(cat)
+
+            item = {
+                "nome": l["produto"],
+                "descricao": l["informacao_adicional"],
+                "foto": l["produto_foto"],
+                # ⚠️ `float` e não `Decimal`: o JSON não fala decimal, e deixar o
+                # FastAPI resolver mandaria string para a tela.
+                "preco": float(l["preco"]) if l["preco"] is not None else None,
+            }
+            if l["id_subcategoria"] is None:
+                cat["itens"].append(item)
+                continue
+            sub = por_subcategoria.get(l["id_subcategoria"])
+            if sub is None:
+                sub = {"nome": l["subcategoria"],
+                       "descricao": l["subcategoria_descricao"],
+                       "foto": l["subcategoria_foto"], "itens": []}
+                por_subcategoria[l["id_subcategoria"]] = sub
+                cat["subcategorias"].append(sub)
+            sub["itens"].append(item)
+
+        return {"nome": capa["nome"], "categorias": categorias}
 
 
 @router.get("/{id_unidade}/horarios")
