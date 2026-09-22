@@ -98,6 +98,17 @@ checar("com o modulo desligado, o salao responde 409", st == 409, (st, r))
 ligar(True)
 # ⚠️ Ponto de partida MONTADO: a suite grava cadastro, e cadastro sobrevive.
 with get_cursor() as cur:
+    # ⚠️ **Mesa com reserva pendurada NÃO se apaga** — `reserva_mesas_id_mesa_fkey`
+    # é `ON DELETE RESTRICT` de propósito: a mesa é a resposta para onde aquelas
+    # pessoas sentaram. Soltar o vínculo e a reserva primeiro é a ordem das
+    # chaves estrangeiras.
+    # 🔑 **Isto passou despercebido por depender da ORDEM das suítes**: a de
+    # disponibilidade rodava antes e apagava as reservas dela na limpeza, então
+    # esta sempre encontrava a loja vazia. No dia em que aquela passou a DEVOLVER
+    # o que encontrou (`preservar_reserva`), esta quebrou no preparo.
+    cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
+                     (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
+    cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 st, vazio = chamar("GET", "/reservas/salao", token=token)
@@ -288,6 +299,17 @@ checar("pedir mais que o teto de 50 e recusado", st == 422, st)
 
 print("\n10. limpeza")
 with get_cursor() as cur:
+    # ⚠️ **Mesa com reserva pendurada NÃO se apaga** — `reserva_mesas_id_mesa_fkey`
+    # é `ON DELETE RESTRICT` de propósito: a mesa é a resposta para onde aquelas
+    # pessoas sentaram. Soltar o vínculo e a reserva primeiro é a ordem das
+    # chaves estrangeiras.
+    # 🔑 **Isto passou despercebido por depender da ORDEM das suítes**: a de
+    # disponibilidade rodava antes e apagava as reservas dela na limpeza, então
+    # esta sempre encontrava a loja vazia. No dia em que aquela passou a DEVOLVER
+    # o que encontrou (`preservar_reserva`), esta quebrou no preparo.
+    cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
+                     (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
+    cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 # 🔑 E a loja volta ao que era ANTES desta suite — inclusive o interruptor.

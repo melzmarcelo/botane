@@ -420,7 +420,9 @@ export default function ConfiguracoesDeReservas() {
             <span className="text-[14px]">
               Aceitar reserva pelo site
               <span className="block text-[13px] text-suave">
-                Desligado, a casa opera a agenda no balcão. É normal começar assim.
+                Ligado, o cliente marca sozinho pelo site e a reserva cai na agenda. Desligado,
+                o site mostra os horários livres e a mesa se fecha pelo WhatsApp. Precisa de
+                salão e mesas cadastrados — sem eles não há horário a oferecer.
               </span>
             </span>
           </label>
@@ -435,11 +437,15 @@ export default function ConfiguracoesDeReservas() {
             />
             <span className="text-[14px]">
               Pedir cadastro completo de quem é novo
-              {/* ⚠️ Data de nascimento é dado pessoal: guardar só se a casa for
-                  usar de verdade. Pedir por pedir é coletar risco sem troco. */}
+              {/* ⚠️ **Este texto prometia DATA DE NASCIMENTO**, que era o desenho
+                  da migração 068 e não foi o que o dono pediu em 21/09/2026:
+                  *"realiza o cadastro com Nome, telefone, gênero e cidade."*
+                  Tela que descreve um campo que o site não pergunta ensina a
+                  não confiar na tela. Data de nascimento é dado pessoal: só
+                  entra no dia em que a casa for usar o aniversário. */}
               <span className="block text-[13px] text-suave">
-                Ligado, pede nome, data de nascimento, gênero e cidade. Desligado, só o nome — a
-                data de nascimento só vale a pena se a casa for usar o aniversário.
+                Ligado, o site pede gênero e cidade além do nome. Desligado, só o nome — o
+                telefone é sempre perguntado, porque é por ele que a casa reconhece quem volta.
               </span>
             </span>
           </label>

@@ -234,3 +234,46 @@ class ConfiguracaoReservas(BaseModel):
                     f'As faixas "{anterior.nome}" e "{atual.nome}" se sobrepõem. '
                     "Cada horário do dia só pode ter uma permanência.")
         return self
+
+
+class TelefoneDoSite(BaseModel):
+    """A primeira tela da reserva pelo site: só o telefone.
+
+    🔑 **Pedido do dono (21/09/2026):** *"clica em Reserve sua Mesa, abre uma tela
+    com o número do telefone; caso não tenha cadastrada, realiza o cadastro."*
+    ⚠️ **Vai no CORPO, não na URL.** Telefone é dado pessoal, e dado pessoal em
+    query string entra em log de servidor, em histórico de navegador e no
+    `Referer` de qualquer coisa que a página carregar depois.
+    """
+    # ⚠️ **Sem `min_length` aqui, de propósito.** O Pydantic dispara ANTES do
+    # serviço e devolve "String should have at least 8 characters" — em inglês,
+    # falando de caracteres, para quem só digitou o telefone errado. Quem
+    # explica é `telefone_valido`, que sabe dizer que falta o DDD.
+    telefone: str = Field(max_length=30)
+
+
+class ReservaDoSite(BaseModel):
+    """A reserva que o cliente marca sozinho, com o cadastro junto.
+
+    🔑 **Uma requisição só, não três.** Cadastrar, conferir a mesa e gravar a
+    reserva em chamadas separadas deixaria a porta aberta para o cadastro nascer
+    e a reserva falhar logo depois — e a casa ficaria com fichas de gente que
+    nunca reservou. Aqui tudo acontece na mesma transação.
+
+    ⚠️ **`genero` e `cidade` são opcionais AQUI e obrigatórios lá dentro**, se a
+    loja pedir cadastro completo e a pessoa for nova. A regra é da configuração
+    da casa (`reserva_config.cadastro_completo`), não do modelo — um campo
+    obrigatório no Pydantic valeria igual para a casa que só quer o nome.
+    """
+    # ⚠️ **Sem `min_length` aqui, de propósito.** O Pydantic dispara ANTES do
+    # serviço e devolve "String should have at least 8 characters" — em inglês,
+    # falando de caracteres, para quem só digitou o telefone errado. Quem
+    # explica é `telefone_valido`, que sabe dizer que falta o DDD.
+    telefone: str = Field(max_length=30)
+    nome: str = Field(min_length=2, max_length=120)
+    genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
+    cidade: str | None = Field(default=None, max_length=80)
+    data: date
+    hora: time
+    pessoas: int = Field(ge=1, le=99)
+    observacao_cliente: str | None = Field(default=None, max_length=500)

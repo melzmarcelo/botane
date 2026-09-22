@@ -1,0 +1,232 @@
+"""Quem reserva pelo site: achar pelo telefone, cadastrar, e conter abuso.
+
+🔑 **Pedido do dono (21/09/2026):** *"para a realização de reserva, precisamos de
+um cadastro simples do usuário. Clica em Reserve sua Mesa, abre uma tela com o
+número do telefone; caso não tenha cadastrada, realiza o cadastro com Nome,
+telefone, gênero e cidade."*
+
+⚠️ **Este é o primeiro lugar do sistema onde a INTERNET grava.** Todo o resto do
+que o público alcança (`routers/publico.py`) só lê o que a casa já publicou. Uma
+rota que cria registro muda o problema: não basta cuidar do que sai, é preciso
+cuidar de quanto entra. É o item que o esboço de Reservas deixou anotado como
+pendência desde o começo — *"conter abuso: uma rota pública que CRIA registro
+precisa de limite por telefone e por origem, senão o salão amanhece lotado de
+reservas que ninguém fez."*
+"""
+
+import hashlib
+import re
+import unicodedata
+
+from fastapi import HTTPException
+
+GENEROS = ("FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO")
+
+# 🔑 **Os dois limites respondem a ataques diferentes**, e por isso são dois.
+# O do telefone contém quem usa o site como devia e exagera (ou quem marca em
+# todos os horários "para decidir depois"); o da origem contém o roteiro que
+# inventa um telefone novo a cada requisição, para quem o primeiro limite não
+# existe.
+RESERVAS_ATIVAS_POR_TELEFONE = 3
+TENTATIVAS_POR_HORA = 20
+
+
+def so_digitos(v: str | None) -> str:
+    """O telefone como ele é guardado: só números.
+
+    ⚠️ **Normalizar é o que faz o cadastro ser ACHADO.** "(47) 99910-5033" e
+    "47999105033" são a mesma pessoa; guardar como veio faria a pessoa se
+    recadastrar a cada reserva, e a casa ficaria com três fichas dela — cada uma
+    com parte do histórico.
+    """
+    return "".join(c for c in str(v or "") if c.isdigit())
+
+
+def telefone_valido(telefone: str) -> str:
+    """O telefone aparado, ou 422 dizendo o que falta.
+
+    ⚠️ **Dez ou onze dígitos**, que é DDD + número no Brasil. Aceitar menos deixa
+    entrar engano de digitação que a casa só descobre ao ligar; aceitar muito
+    mais deixa entrar lixo de roteiro.
+    """
+    d = so_digitos(telefone)
+    if not 10 <= len(d) <= 13:
+        raise HTTPException(
+            status_code=422,
+            detail="Confira o telefone: precisa do DDD e do número, como (47) 99910-5033.",
+        )
+    return d
+
+
+def _sem_acento(s: str) -> str:
+    sem = unicodedata.normalize("NFKD", s or "")
+    return "".join(c for c in sem if not unicodedata.combining(c))
+
+
+def _primeiro_nome(nome: str) -> str:
+    limpo = re.sub(r"\s+", " ", _sem_acento(nome or "").strip().lower())
+    return limpo.split(" ")[0] if limpo else ""
+
+
+def dica_do_nome(nome: str) -> str:
+    """O nome mascarado: primeira letra de cada parte, como "M••• S•••".
+
+    🔑 **Decisão do dono (21/09/2026)**, entre mostrar o nome e confirmá-lo: a
+    tela CONFIRMA, não revela.
+    ⚠️ **Sem isto o site vira uma consulta aberta de telefone→nome.** A rota não
+    tem login nenhum na frente: quem quisesse bastaria digitar números em
+    sequência e colher o dono de cada um. A dica é o suficiente para a pessoa
+    reconhecer o próprio cadastro e insuficiente para alguém descobrir o alheio.
+    """
+    partes = [p for p in re.split(r"\s+", (nome or "").strip()) if p]
+    return " ".join(p[0].upper() + "•" * max(len(p) - 1, 1) for p in partes[:3])
+
+
+def procurar(cur, id_unidade: int, telefone: str) -> dict:
+    """Existe cadastro para este telefone? Sem dizer de quem é.
+
+    ⚠️ **A resposta é a MESMA forma nos dois casos** (um booleano e uma dica que
+    pode ser nula). Uma resposta 404 para telefone desconhecido e 200 para
+    conhecido diria a mesma coisa que mostrar o nome, só que pelo código de
+    status.
+    """
+    cur.execute(
+        """SELECT nome FROM reserva_clientes
+            WHERE id_unidade = %s AND telefone = %s""",
+        (id_unidade, telefone),
+    )
+    achado = cur.fetchone()
+    return {
+        "cadastrado": bool(achado),
+        "dica": dica_do_nome(achado["nome"]) if achado else None,
+    }
+
+
+def marcar_tentativa(cur, id_unidade: int, origem: str | None) -> None:
+    """Conta mais uma batida nesta porta, e recusa quando passa do limite.
+
+    ⚠️ **O que se guarda é o HASH da origem.** Contar quantas vieram do mesmo
+    lugar não exige saber qual lugar é, e endereço de visitante é dado pessoal
+    que a casa não tem por que acumular.
+    ⚠️ **Sem origem identificável, a contagem cai num balde só** (`"?"`): um
+    proxy que esconde todo mundo faz o limite ficar mais apertado para todos, e
+    isso é melhor do que não ter limite nenhum.
+    """
+    marca = hashlib.sha256((origem or "?").encode()).hexdigest() if origem else "?"
+    cur.execute(
+        """SELECT count(*) AS n FROM reserva_tentativas
+            WHERE id_unidade = %s AND origem = %s AND em > now() - interval '1 hour'""",
+        (id_unidade, marca),
+    )
+    if cur.fetchone()["n"] >= TENTATIVAS_POR_HORA:
+        raise HTTPException(
+            status_code=429,
+            detail="Muitas tentativas em pouco tempo. Tente de novo daqui a pouco.",
+        )
+    cur.execute(
+        "INSERT INTO reserva_tentativas (id_unidade, origem) VALUES (%s, %s)",
+        (id_unidade, marca),
+    )
+
+
+def _recusar_telefone_cheio(cur, id_unidade: int, telefone: str) -> None:
+    """Um telefone só segura algumas mesas de cada vez.
+
+    🔑 **É o limite que protege o SALÃO**, não o servidor: sem ele, uma pessoa
+    marca todos os horários do sábado "para decidir depois" e a casa recusa
+    clientes de verdade a noite inteira.
+    ⚠️ **Conta só o que está VIVO e à frente.** Reserva cancelada não ocupa nada,
+    e a de semana passada já aconteceu — somá-las faria o cliente fiel ser
+    barrado justamente por ser fiel.
+    """
+    cur.execute(
+        """SELECT count(*) AS n FROM reservas
+            WHERE id_unidade = %s AND telefone = %s
+              AND status IN ('PENDENTE', 'CONFIRMADA')
+              AND data >= current_date""",
+        (id_unidade, telefone),
+    )
+    if cur.fetchone()["n"] >= RESERVAS_ATIVAS_POR_TELEFONE:
+        raise HTTPException(
+            status_code=429,
+            detail=(f"Este telefone já tem {RESERVAS_ATIVAS_POR_TELEFONE} reservas em "
+                    "aberto. Para marcar outra, fale com a casa."),
+        )
+
+
+def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
+    """O cliente desta reserva: o que já existe, ou um cadastro novo.
+
+    🔑 **O nome é o que prova que o telefone é seu**, neste nível. Não há login,
+    e não há código por WhatsApp (que exigiria Business API, provedor e modelo
+    aprovado — justamente o que o site evitou ao usar só o link `wa.me`). Quem
+    digita um telefone alheio precisa saber o nome de quem o tem; quem sabe o
+    nome e o telefone já sabe as duas coisas que a reserva revelaria.
+
+    ⚠️ **Confere só o PRIMEIRO nome, sem acento e sem caixa.** Exigir "Maria
+    Eduarda da Silva Santos" idêntico ao que ela digitou meses atrás faria a
+    dona do cadastro ser recusada no próprio telefone — e a saída dela seria se
+    cadastrar de novo, que é o que o índice único impede.
+    """
+    telefone = telefone_valido(corpo.telefone)
+    _recusar_telefone_cheio(cur, id_unidade, telefone)
+
+    cur.execute(
+        """SELECT id, nome, genero, cidade FROM reserva_clientes
+            WHERE id_unidade = %s AND telefone = %s""",
+        (id_unidade, telefone),
+    )
+    achado = cur.fetchone()
+
+    if achado:
+        if _primeiro_nome(corpo.nome) != _primeiro_nome(achado["nome"]):
+            raise HTTPException(
+                status_code=409,
+                detail=("Já temos um cadastro neste telefone, mas o nome não confere. "
+                        "Confira como você se cadastrou, ou fale com a casa."),
+            )
+        # 🔑 **Cidade e gênero podem ser COMPLETADOS numa visita seguinte**, se o
+        # cadastro antigo não os tiver. ⚠️ Mas o que já está preenchido não é
+        # sobrescrito pelo que a tela mandar: quem corrigiu a cidade pelo balcão
+        # não pode perder a correção porque o site reenviou o valor antigo.
+        cur.execute(
+            """UPDATE reserva_clientes
+                  SET genero = COALESCE(genero, %s),
+                      cidade = COALESCE(cidade, %s),
+                      atualizado_em = now()
+                WHERE id = %s""",
+            (corpo.genero, (corpo.cidade or "").strip() or None, achado["id"]),
+        )
+        return {"id": achado["id"], "nome": achado["nome"], "telefone": telefone,
+                "novo": False}
+
+    # ⚠️ **O que o cadastro novo exige sai da CONFIGURAÇÃO da loja**
+    # (`reserva_config.cadastro_completo`), não do código. A casa que só quer o
+    # nome desliga a caixa e o site para de perguntar o resto.
+    if exige_completo:
+        faltando = []
+        if not corpo.genero:
+            faltando.append("gênero")
+        if not (corpo.cidade or "").strip():
+            faltando.append("cidade")
+        if faltando:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Para o primeiro cadastro, informe também: {', '.join(faltando)}.",
+            )
+    if corpo.genero and corpo.genero not in GENEROS:
+        raise HTTPException(status_code=422, detail="Gênero inválido.")
+
+    # 🔑 **`ON CONFLICT` em vez de "perguntar e depois inserir".** Duas abas do
+    # mesmo celular tocando "cadastrar" ao mesmo tempo passam as duas pela
+    # consulta acima; quem decide é o índice único, como manda a regra 8.
+    cur.execute(
+        """INSERT INTO reserva_clientes (id_unidade, telefone, nome, genero, cidade)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (id_unidade, telefone) DO UPDATE SET atualizado_em = now()
+           RETURNING id, nome""",
+        (id_unidade, telefone, corpo.nome.strip(), corpo.genero,
+         (corpo.cidade or "").strip() or None),
+    )
+    novo = cur.fetchone()
+    return {"id": novo["id"], "nome": novo["nome"], "telefone": telefone, "novo": True}

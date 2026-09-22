@@ -129,6 +129,12 @@ body {
 .item:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
 .item.destaque { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
 
+/* ⚠️ **`display` explícito VENCE o `[hidden]` do navegador**, e era um defeito
+   calado: `.regras` é flex, então toda caixa de aviso com `hidden` continuava
+   ocupando espaço — uma moldura vazia sob o botão de confirmar, sem texto e sem
+   explicação. Vale para `.itens`, `.horarios` e `.dupla` pela mesma razão. */
+[hidden] { display: none !important; }
+
 .regras {
   background: var(--ocre-claro); border: 1px solid var(--linha);
   border-radius: var(--raio); padding: 12px 14px; font-size: 13px;
@@ -144,7 +150,23 @@ label.campo input {
   border-radius: 10px; padding: 10px 11px; margin-top: 5px;
 }
 label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+/* O seletor de gênero usa a mesma caixa dos campos de texto: um <select> com a
+   cara do navegador ao lado de um <input> desenhado parece defeito. */
+label.campo select {
+  width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px; padding: 10px 11px; margin-top: 5px; min-height: 43px;
+}
+label.campo select:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
 .dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* ⚠️ Gênero e cidade lado a lado ficam apertados a 400px — e é onde este site
+   é lido. Abaixo de 420px eles empilham. */
+@media (max-width: 419px) { .dupla { grid-template-columns: 1fr; } }
+.passos { display: flex; flex-direction: column; gap: 12px; }
+.sub-tela { color: var(--tinta-suave); font-size: 14px; margin: -2px 0 2px; }
+/* A tela de "pronto": o que a casa guardou, em linha, para conferir de relance. */
+.recibo { display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.recibo b { font: 600 22px/1.2 Fraunces, Georgia, serif; }
 
 .horarios { display: flex; flex-wrap: wrap; gap: 8px; }
 .hora {
@@ -191,15 +213,65 @@ label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset
       <h2 id="nome-da-casa">Botané Deli e Café</h2>
       <p class="sub" id="linha-dias">…</p>
       <div class="itens" id="itens">
-        <button class="item destaque" data-ir="reserva">Reserve sua Mesa</button>
+        <button class="item destaque" id="ir-reservar">Reserve sua Mesa</button>
         <!-- 🔑 Os catálogos entram AQUI, um por cardápio, e cada um abre o PDF.
              Quem os monta é o `carregarCatalogos()`. -->
       </div>
     </section>
 
     <!-- ================= reservar ================= -->
-    <section class="tela" data-tela="reserva" aria-labelledby="t-reserva">
+    <!-- ================= quem reserva ================= -->
+    <!-- 🔑 **Pedido do dono (21/09/2026):** *"clica em Reserve sua Mesa, abre uma
+         tela com o número do telefone; caso não tenha cadastrada, realiza o
+         cadastro com Nome, telefone, gênero e cidade."*
+         ⚠️ **O telefone vem PRIMEIRO, e sozinho.** Mostrar os quatro campos de
+         uma vez faria quem já é cliente preencher tudo de novo para descobrir
+         que já era conhecido. -->
+    <section class="tela" data-tela="quem" aria-labelledby="t-quem">
       <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-quem">Reserve sua mesa</h2>
+      <p class="sub-tela">Comece pelo telefone — é assim que a casa reconhece você.</p>
+      <div class="passos">
+        <label class="campo" for="fone">Seu telefone, com DDD
+          <input id="fone" type="tel" inputmode="tel" autocomplete="tel"
+                 placeholder="(47) 99910-5033">
+        </label>
+
+        <div id="bloco-quem" hidden>
+          <label class="campo" for="nome-cliente">Seu nome
+            <input id="nome-cliente" autocomplete="name" maxlength="120">
+          </label>
+        </div>
+
+        <!-- ⚠️ Gênero e cidade só aparecem para quem NÃO tem cadastro, e só se a
+             casa pedir cadastro completo (`reserva_config.cadastro_completo`). -->
+        <div id="bloco-novo" hidden>
+          <div class="dupla">
+            <label class="campo" for="genero">Gênero
+              <select id="genero">
+                <option value="">escolha…</option>
+                <option value="FEMININO">Feminino</option>
+                <option value="MASCULINO">Masculino</option>
+                <option value="OUTRO">Outro</option>
+                <option value="NAO_INFORMADO">Prefiro não informar</option>
+              </select>
+            </label>
+            <label class="campo" for="cidade">Cidade
+              <input id="cidade" autocomplete="address-level2" maxlength="80">
+            </label>
+          </div>
+        </div>
+
+        <div class="regras" id="aviso-quem" hidden></div>
+        <button class="item destaque" id="avancar">Continuar</button>
+      </div>
+    </section>
+
+    <section class="tela" data-tela="reserva" aria-labelledby="t-reserva">
+      <!-- ⚠️ O voltar depende de por onde a pessoa ENTROU: com reserva online
+           ela veio da identificação; sem, veio da capa. Um alvo fixo mandaria
+           metade dos visitantes para uma tela que eles nunca viram. -->
+      <button class="voltar" id="voltar-reserva" data-ir="inicio">‹ voltar</button>
       <h2 id="t-reserva">Reservar uma mesa</h2>
       <!-- 🔑 **As pessoas vêm ANTES do horário, e a ordem é a regra.**
            "Esgotado" depende do tamanho do grupo: às 19h pode não haver mesa
@@ -220,10 +292,20 @@ label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset
         </div>
       </div>
       <div class="regras" id="aviso-reserva" hidden></div>
-      <div class="regras">
-        <span>⚠️ <b>Esta é a primeira versão.</b> O site mostra os horários que a casa
-        tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.</span>
-      </div>
+      <button class="item destaque" id="confirmar" hidden>Confirmar reserva</button>
+      <div class="regras" id="rodape-reserva" hidden></div>
+    </section>
+
+    <!-- ================= pronto ================= -->
+    <!-- ⚠️ **Esta tela só existe porque a reserva agora GRAVA.** Enquanto o site
+         apenas abria o WhatsApp, dizer "reservado" faria o cliente aparecer na
+         porta sem mesa. Agora há mesa — e o texto muda conforme a casa confirme
+         na hora ou vá olhar depois. -->
+    <section class="tela" data-tela="pronto" aria-labelledby="t-pronto">
+      <h2 id="t-pronto">Pronto!</h2>
+      <div class="recibo" id="recibo"></div>
+      <div class="regras" id="aviso-pronto"></div>
+      <button class="item" data-ir="inicio">Voltar ao início</button>
     </section>
 
     <!-- ================= contato ================= -->
@@ -258,9 +340,38 @@ const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[<>&"]/g,
   (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 
-async function pedir(rota) {
-  const r = await fetch(`${API}/publico/${LOJA}${rota}`);
-  if (!r.ok) throw new Error(String(r.status));
+/**
+ * Uma chamada à API pública. Sem `corpo` é GET; com `corpo`, POST.
+ *
+ * ⚠️ **O erro carrega a FRASE do servidor**, não só o número. É o servidor que
+ * sabe dizer "falta o DDD", "esse horário acabou de ser tomado" ou "muitas
+ * tentativas em pouco tempo" — e era isso que se perdia quando o erro era só o
+ * código de status. A tela mostrando "500" não ajuda ninguém a reservar.
+ * ⚠️ **Telefone e nome vão no CORPO, nunca na URL.** Dado pessoal em query
+ * string entra em log de servidor, em histórico de navegador e no `Referer` de
+ * qualquer coisa que a página carregue depois.
+ */
+async function pedir(rota, corpo) {
+  const r = await fetch(`${API}/publico/${LOJA}${rota}`, corpo === undefined ? undefined : {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+  if (!r.ok) {
+    let frase = "";
+    try {
+      const erro = await r.json();
+      // O FastAPI devolve `detail` como texto, ou como lista quando é o
+      // Pydantic que recusou — nesse caso a primeira mensagem serve.
+      frase = typeof erro.detail === "string"
+        ? erro.detail
+        : (erro.detail && erro.detail[0] && erro.detail[0].msg) || "";
+    } catch { /* resposta sem corpo: fica só o número */ }
+    const e = new Error(String(r.status));
+    e.status = r.status;
+    e.mensagem = frase;
+    throw e;
+  }
   return r.json();
 }
 
@@ -435,6 +546,105 @@ async function carregarCatalogos() {
   });
 }
 
+/* ---- quem reserva ----
+ *
+ * 🔑 **Pedido do dono (21/09/2026):** *"para a realização de reserva, precisamos
+ * de um cadastro simples do usuário. Clica em Reserve sua Mesa, abre uma tela
+ * com o número do telefone; caso não tenha cadastrada, realiza o cadastro com
+ * Nome, telefone, gênero e cidade."*
+ *
+ * ⚠️ **O site NÃO guarda quem é a pessoa entre visitas.** Nada de localStorage:
+ * um celular emprestado marcaria a mesa no nome de quem o emprestou. O telefone
+ * é redigitado, e é ele que identifica.
+ */
+let reservaOnline = { aceita: false };
+const eu = { telefone: "", nome: "", cadastrado: false };
+
+async function saberSeAceita() {
+  try {
+    reservaOnline = await pedir("/reserva");
+  } catch {
+    reservaOnline = { aceita: false };
+  }
+}
+
+function avisar(onde, texto, ruim = true) {
+  const caixa = $(onde);
+  caixa.hidden = !texto;
+  caixa.className = ruim ? "regras ruim" : "regras";
+  // ⚠️ Dentro de um `<span>`: `.regras` é flex em coluna, e texto solto vira um
+  // item por trecho — a frase sairia quebrada em pedaços empilhados.
+  caixa.innerHTML = "";
+  if (texto) {
+    const linha = document.createElement("span");
+    linha.textContent = texto;
+    caixa.appendChild(linha);
+  }
+}
+
+/** O passo em que a tela está: "fone" pergunta o número, "dados" o resto. */
+let passo = "fone";
+
+function voltarAoTelefone() {
+  passo = "fone";
+  $("#bloco-quem").hidden = true;
+  $("#bloco-novo").hidden = true;
+  $("#avancar").textContent = "Continuar";
+  avisar("#aviso-quem", "");
+}
+
+async function consultarTelefone() {
+  const fone = $("#fone").value.trim();
+  if (!fone) return avisar("#aviso-quem", "Digite seu telefone para continuar.");
+  $("#avancar").disabled = true;
+  let r;
+  try {
+    r = await pedir("/reserva/telefone", { telefone: fone });
+  } catch (e) {
+    $("#avancar").disabled = false;
+    // ⚠️ **A mensagem do servidor é a que vale** — é ela que sabe dizer que
+    // falta o DDD, ou que houve tentativa demais em pouco tempo.
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos consultar agora.");
+  }
+  $("#avancar").disabled = false;
+  eu.telefone = fone;
+  eu.cadastrado = !!r.cadastrado;
+  passo = "dados";
+  $("#bloco-quem").hidden = false;
+  // 🔑 **Confirma, não revela** (decisão do dono): quem já tem cadastro vê a
+  // dica mascarada e digita o próprio nome para conferir. Sem isso o site seria
+  // uma consulta aberta de telefone→nome, sem login nenhum na frente.
+  $("#bloco-novo").hidden = eu.cadastrado || !reservaOnline.cadastro_completo;
+  avisar("#aviso-quem", eu.cadastrado
+    ? `Já temos seu cadastro (${r.dica}). Confirme seu nome para continuar.`
+    : "Primeira vez por aqui? Conte quem é você.", false);
+  $("#avancar").textContent = "Escolher dia e horário";
+  $("#nome-cliente").focus();
+}
+
+function guardarDados() {
+  const nome = $("#nome-cliente").value.trim();
+  if (nome.length < 2) return avisar("#aviso-quem", "Diga seu nome para continuar.");
+  if (!$("#bloco-novo").hidden) {
+    if (!$("#genero").value) return avisar("#aviso-quem", "Escolha uma opção de gênero.");
+    if (!$("#cidade").value.trim()) return avisar("#aviso-quem", "Diga sua cidade.");
+  }
+  eu.nome = nome;
+  eu.genero = $("#bloco-novo").hidden ? null : $("#genero").value;
+  eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
+  avisar("#aviso-quem", "");
+  ir("reserva");
+  buscarHorarios();
+}
+
+$("#avancar").addEventListener("click", () => {
+  if (passo === "fone") consultarTelefone();
+  else guardarDados();
+});
+// ⚠️ Mudar o telefone depois de consultado volta ao começo: continuar com os
+// dados de um número e gravar em outro é o jeito de a mesa sair no nome errado.
+$("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTelefone(); });
+
 /* ---- os horários que a casa tem livres ---- */
 let buscando = null;
 async function buscarHorarios() {
@@ -483,19 +693,76 @@ $("#horarios").addEventListener("click", (e) => {
     .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   const aviso = $("#aviso-reserva");
   aviso.hidden = false;
+  horaEscolhida = b.textContent;
   const quando = new Date($("#dia").value + "T12:00").toLocaleDateString("pt-BR");
+
+  // 🔑 **Com reserva online, o site GRAVA** — e o botão diz isso.
+  if (reservaOnline.aceita) {
+    aviso.className = "regras";
+    aviso.innerHTML = `<span>Você escolheu <b>${esc(horaEscolhida)}</b>, dia ${esc(quando)}.</span>`;
+    $("#confirmar").hidden = false;
+    return;
+  }
+
+  // ⚠️ **Sem reserva online, a tela NÃO promete o que não faz.** Escolher o
+  // horário aqui não grava nada — dizer "reservado" faria o cliente aparecer na
+  // porta sem mesa.
+  $("#confirmar").hidden = true;
   const zap = linkZap(mensagem(
     casa && casa.zap_texto_reserva,
     `Olá! Queria reservar para {pessoas} pessoas no dia {data} às {hora}.`,
     { casa: casa ? casa.casa : "Botané", pessoas: $("#pessoas").value,
-      data: quando, hora: b.textContent }));
-  // ⚠️ **A tela não promete o que ainda não faz.** Escolher o horário aqui não
-  // grava reserva nenhuma — dizer "reservado" faria o cliente aparecer na porta
-  // sem mesa.
+      data: quando, hora: horaEscolhida }));
+  // ⚠️ Um `<span>` em volta: `.regras` é flex em coluna, e sem ele o link cai
+  // numa linha só dele, separado da frase que o explica.
   aviso.innerHTML = zap
-    ? `Você escolheu <b>${esc(b.textContent)}</b>. Para confirmar,
-       <a href="${zap}" target="_blank" rel="noopener">mande a mensagem pronta ›</a>`
-    : `Você escolheu <b>${esc(b.textContent)}</b>. Ligue para a casa para confirmar.`;
+    ? `<span>Você escolheu <b>${esc(horaEscolhida)}</b>. Para confirmar,
+       <a href="${zap}" target="_blank" rel="noopener">mande a mensagem pronta ›</a></span>`
+    : `<span>Você escolheu <b>${esc(horaEscolhida)}</b>. Ligue para a casa para confirmar.</span>`;
+});
+
+/** A hora que a pessoa tocou — o que o "Confirmar" vai gravar. */
+let horaEscolhida = null;
+
+$("#confirmar").addEventListener("click", async () => {
+  if (!horaEscolhida) return;
+  $("#confirmar").disabled = true;
+  let feita;
+  try {
+    feita = await pedir("/reserva", {
+      telefone: eu.telefone, nome: eu.nome, genero: eu.genero, cidade: eu.cidade,
+      data: $("#dia").value, hora: horaEscolhida,
+      pessoas: Number($("#pessoas").value),
+    });
+  } catch (e) {
+    $("#confirmar").disabled = false;
+    // ⚠️ **O erro fica NA TELA DO HORÁRIO**, não numa tela de erro: a resposta
+    // costuma ser "esse horário acabou de ser tomado", e a pessoa precisa ver a
+    // lista para escolher outro.
+    avisar("#aviso-reserva", e.mensagem || "Não conseguimos marcar agora.");
+    buscarHorarios();
+    return;
+  }
+  $("#confirmar").disabled = false;
+  $("#confirmar").hidden = true;
+  const quando = new Date(feita.data + "T12:00").toLocaleDateString("pt-BR");
+  $("#recibo").innerHTML =
+    `<b>${esc(quando)} · ${esc(feita.hora)}</b>
+     <span>${feita.pessoas} ${feita.pessoas === 1 ? "pessoa" : "pessoas"},
+     em nome de ${esc(feita.nome)}</span>`;
+  // 🔑 **O texto muda conforme a casa confirme na hora ou vá olhar depois**
+  // (`reserva_config.confirmacao`). Dizer "está reservado" numa casa que
+  // confirma à mão seria prometer o que ela ainda não decidiu.
+  const zap = zapDeContato();
+  $("#aviso-pronto").className = "regras";
+  const falar = zap
+    ? ` <a href="${zap}" target="_blank" rel="noopener">fale com a gente</a>.` : "";
+  $("#aviso-pronto").innerHTML = feita.confirmada
+    ? `<span>Sua mesa está reservada. Até lá!${
+        zap ? " Precisando mudar alguma coisa," + falar : ""}</span>`
+    : `<span>Recebemos seu pedido — a casa confirma em seguida.${
+        zap ? " Se preferir adiantar," + falar : ""}</span>`;
+  ir("pronto");
 });
 
 /* ---- começo ---- */
@@ -511,7 +778,36 @@ $("#horarios").addEventListener("click", (e) => {
   $("#dia").addEventListener("change", buscarHorarios);
   $("#pessoas").addEventListener("input", buscarHorarios);
 
+  // 🔑 **O botão da capa leva a lugares diferentes**, e quem decide é a casa:
+  // aceitando reserva online, ele abre a identificação pelo telefone; não
+  // aceitando, vai direto aos horários e fecha pelo WhatsApp, como antes.
+  // ⚠️ **Sem isso a tela mentiria por um fluxo inteiro**: a pessoa digitaria
+  // telefone, nome, gênero e cidade para descobrir no fim que a casa não marca
+  // pelo site — e a saída dela seria fechar a página, não pegar o WhatsApp.
+  $("#ir-reservar").addEventListener("click", () => {
+    if (reservaOnline.aceita) {
+      voltarAoTelefone();
+      ir("quem");
+      $("#fone").focus();
+    } else {
+      ir("reserva");
+      buscarHorarios();
+    }
+  });
+
   carregarCasa().then(carregarCatalogos);
+  saberSeAceita().then(() => {
+    // ⚠️ Quem não marca pelo site continua vendo o aviso de que a mesa se
+    // fecha pela conversa; quem marca, não — o rodapé diria o contrário do que
+    // o botão logo acima faz.
+    $("#voltar-reserva").dataset.ir = reservaOnline.aceita ? "quem" : "inicio";
+    const rodape = $("#rodape-reserva");
+    rodape.hidden = reservaOnline.aceita;
+    if (!reservaOnline.aceita) {
+      rodape.innerHTML = `⚠️ <b>Esta é a primeira versão.</b> O site mostra os horários
+        que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.`;
+    }
+  });
   buscarHorarios();
   if (location.hash) ir(location.hash.slice(1));
 })();

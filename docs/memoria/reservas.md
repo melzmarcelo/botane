@@ -443,6 +443,118 @@ junto. É resíduo conhecido e inofensivo (salão inativo sai da disponibilidade
 linha por rodada — vale uma limpeza manual de tempos em tempos.
 
 
+## A reserva marcada pelo site, e quem a marca (migração 082, 21/09/2026)
+
+🔑 **Pedido do dono:** *"para a realização de reserva, precisamos de um cadastro simples do
+usuário. Clica em Reserve sua Mesa, abre uma tela com o número do telefone; caso não tenha
+cadastrada, realiza o cadastro com Nome, telefone, gênero e cidade."*
+
+🔑 **É o primeiro lugar deste sistema em que a INTERNET grava.** Tudo o que o público
+alcançava até aqui só mostrava o que a casa já tinha publicado. Uma rota que cria registro
+muda a pergunta: não basta cuidar do que sai, é preciso cuidar de **quanto entra**. Era a
+pendência que o esboço carregava desde o começo, e ela é metade deste trabalho.
+
+### Onde mora quem reserva
+
+⚠️ **O esboço dizia `fornecedores`, e isso estava ERRADO.** Aquela decisão é anterior à
+integração com o Omie; desde então a casa aprendeu, na conta real, o que custa misturar as
+duas coisas — uma conta com 919 cadastros despejou **888 clientes** dentro dos fornecedores, e
+a saída foi filtrar por etiqueta no servidor. Mandar para lá quem reserva mesa é refazer à mão
+o problema que aquele filtro resolveu, e a tela de Fornecedores passaria a listar quem jantou
+no sábado. E `fornecedores` nem tem gênero.
+
+🔑 **`reserva_clientes`, por loja, com o telefone como chave.** ⚠️ **Só dígitos**: o mesmo
+número digitado como `(47) 99910-5033` e como `47999105033` tem de achar o MESMO cadastro,
+senão a pessoa se recadastra a cada visita e a casa fica com três fichas dela, cada uma com
+parte do histórico. ⚠️ **`reservas.id_pessoa` continua existindo e apontando para
+`fornecedores`** — é o vínculo do balcão; quem vem do site entra por `id_cliente`. São dois
+caminhos para a mesma pergunta, e aproveitar a coluna de um para o outro quebraria a agenda de
+quem já usa.
+
+### O nome é o que prova que o telefone é seu
+
+🔑 **Decisão do dono (21/09/2026)**, entre três caminhos: a tela **confirma** o nome, não o
+revela. Quem já tem cadastro vê a dica mascarada (`M••••• D•••••`) e digita o próprio nome.
+
+- ⚠️ **Sem isso o site seria uma consulta aberta de telefone→nome.** Não há login nenhum na
+  frente: bastaria digitar números em sequência para colher o dono de cada um.
+- ⚠️ **A resposta tem a MESMA forma nos dois casos** — um booleano e uma dica que pode ser
+  nula. Devolver 404 para telefone desconhecido e 200 para conhecido diria exatamente a mesma
+  coisa que mostrar o nome, só que pelo código de status.
+- ⚠️ **Confere só o PRIMEIRO nome, sem acento e sem caixa.** Exigir o nome completo idêntico
+  ao que a pessoa digitou meses atrás faria a **dona** do cadastro ser recusada no próprio
+  telefone — e a saída dela seria se cadastrar de novo, que é o que o índice único impede.
+- 🔑 O caminho que de fato prova o telefone é o código por WhatsApp, e ele foi **recusado de
+  propósito**: exige Business API, provedor e modelo aprovado — justamente o que o site evitou
+  ao usar só o link `wa.me`.
+
+### Conter abuso: dois limites, porque são dois ataques
+
+- **Por telefone** (3 reservas vivas e futuras): protege o **salão**, não o servidor. Sem ele,
+  uma pessoa marca todos os horários do sábado "para decidir depois" e a casa recusa clientes
+  de verdade a noite inteira. ⚠️ Conta só o que está vivo e à frente — somar cancelada e
+  passada faria o cliente fiel ser barrado por ser fiel.
+- **Por origem** (20 tentativas por hora): contém o roteiro que inventa um telefone novo a
+  cada requisição, para quem o primeiro limite não existe. ⚠️ **A busca de cadastro também
+  conta**, embora não grave nada: é por ela que uma varredura passaria.
+- ⚠️ **Guarda-se o HASH da origem, não o endereço.** Contar quantas vieram do mesmo lugar não
+  exige saber qual lugar é, e IP de visitante é dado pessoal que a casa não tem por que
+  acumular. ⚠️ E `X-Forwarded-For` é o que vale atrás do App Platform: sem ele tudo chega com
+  o IP do balanceador e o limite por origem vira um limite global que barra a casa inteira.
+
+### A porta que já existia
+
+🔑 **`reserva_config.aceita_online` existia desde a migração 068 e não fazia nada** — o
+terreno estava preparado e a porta, fechada. Agora ela abre. ⚠️ **O site pergunta ANTES de
+mostrar o botão** (`GET /publico/{loja}/reserva`): sem isso a tela mentiria por um fluxo
+inteiro — a pessoa digitaria telefone, nome, gênero e cidade para descobrir no fim que a casa
+não marca pelo site, e a saída dela seria fechar a página, não pegar o WhatsApp.
+🔑 **A regra que aloca a mesa é a MESMA do balcão** (`reservas_agenda.criar`, com o
+`pg_advisory_xact_lock` por loja e dia). Uma segunda regra para o público divergiria, e a
+divergência apareceria como mesa prometida ao cliente e indisponível na casa.
+⚠️ **O status sai da configuração**: `AUTOMATICA` nasce confirmada, `MANUAL` nasce pendente —
+e a tela de "Pronto!" diz coisas diferentes nos dois casos. Dizer "sua mesa está reservada"
+numa casa que confirma à mão seria prometer o que ela ainda não decidiu.
+
+### Armadilhas que esta fatia pagou
+
+- ⚠️ **`min_length` do Pydantic dispara ANTES do serviço**, e devolve *"String should have at
+  least 8 characters"* — em inglês, falando de caracteres, para quem só errou o telefone. O
+  modelo deixou de opinar sobre o tamanho; quem explica é `telefone_valido`, que sabe dizer
+  que falta o DDD. A suíte pegou isto na primeira rodada.
+- ⚠️ **`display` explícito VENCE o `[hidden]` do navegador.** `.regras` é `display: flex`, e
+  toda caixa de aviso com `hidden` continuava ocupando espaço — uma **moldura vazia** sob o
+  botão de confirmar, sem texto e sem explicação. O site não tinha `[hidden] { display: none
+  !important }`; agora tem. Valia também para `.itens`, `.horarios` e `.dupla`.
+- ⚠️ **`.regras` é flex em COLUNA**: texto solto e um `<a>` viram linhas separadas, e a frase
+  saía quebrada com o ponto final órfão embaixo do link. Todo conteúdo de aviso vai dentro de
+  um `<span>`.
+- ⚠️ **A tela de configuração prometia DATA DE NASCIMENTO** em "cadastro completo" — era o
+  desenho da 068, e não foi o que o dono pediu. Tela que descreve um campo que o site não
+  pergunta ensina a não confiar na tela.
+
+### Duas armadilhas de LIMPEZA, e as duas vieram da mesma correção
+
+🔑 **`preservar_reserva` (feito horas antes) destapou uma dependência de ORDEM que estava
+escondida havia semanas.** Enquanto cada suíte terminava apagando tudo, a seguinte sempre
+encontrava a loja vazia — e podia supor isso sem dizer. Quando elas passaram a **devolver o
+que encontraram**, a suposição virou defeito.
+
+- ⚠️ **Mesa com reserva pendurada NÃO se apaga**: `reserva_mesas_id_mesa_fkey` é
+  `ON DELETE RESTRICT`, de propósito — a mesa é a resposta para onde aquelas pessoas sentaram.
+  `smoke_reservas_salao` fazia `DELETE FROM mesas` cru no preparo e quebrava com um
+  `RestrictViolation` **antes da primeira checagem**. A ordem é vínculo → reserva → mesa →
+  salão. A suíte nova nasceu com o mesmo erro e o pagou na primeira rodada.
+- ⚠️ **Limpeza no MEIO do roteiro tem de tirar só o que o teste sujou.** A suíte do site usava
+  o mesmo `esvaziar_a_loja` entre seções, e ele levava as mesas junto: as três checagens
+  seguintes passaram a recusar por *"não há mesa livre"* enquanto mediam outra coisa
+  (confirmação manual, teto do site, cadastro simples). Viraram duas funções: uma esvazia a
+  loja (preparo e fim), outra tira só quem reservou.
+- 🔑 **O teste de que uma suíte é sã é rodá-la DUAS vezes seguidas** e conferir o estado da
+  casa entre as rodadas. Suíte que depende do rastro da vizinha passa ou falha pela ordem do
+  `glob`, e ninguém relaciona a quebra à mudança que a causou.
+
+
 ## O que vem a seguir
 
 ⚠️ **Esta lista esteve ERRADA por uma semana, e o erro é instrutivo.** Ela dizia
@@ -461,9 +573,12 @@ Pela ordem do esboço (conferido no código em 21/09/2026):
    disponibilidade e a reserva" acima é a documentação dela.
 3. ~~Reserva pelo balcão e a agenda do dia~~ — **feito**, migração 070, com
    ciclo de status, remarcar e bloqueios.
-4. **A reserva pelo site do cliente** — o site existe (ver a seção acima) com as três
-   portas; falta ele GRAVAR a reserva, que é o que exige identificar quem reserva e conter
-   abuso.
+4. ~~A reserva pelo site do cliente~~ — **feita**, migração 082. O site identifica pelo
+   telefone, cadastra quem é novo (nome, gênero, cidade) e **grava a reserva**, pela mesma
+   regra do balcão. Os dois pontos que faltavam — identificar quem reserva e conter abuso —
+   são a seção "A reserva marcada pelo site" acima.
+   ⚠️ **Mas a porta continua FECHADA até a casa abrir**: `aceita_online` nasce desligado, e
+   sem salão e mesas cadastrados não há horário a oferecer.
 
 **O que o módulo tem hoje**, medido: 18 rotas em `routers/reservas.py`, os dois
 serviços (`reservas.py` e `reservas_agenda.py`), quatro telas
@@ -494,7 +609,9 @@ no salão (quem pede mais que a maior junta não acha horário e não sabe por q
 🔑 A primeira **já vale** — ver "Reserva PENDENTE segura a mesa" acima. A
 segunda espera a reserva online, e é o que `maior_grupo` existe para comparar.
 
-⚠️ **E a pergunta que continua aberta**: reserva online entra `PENDENTE` ou
+🔑 **A pergunta sobre `PENDENTE` ou `CONFIRMADA` está RESPONDIDA na arquitetura**: quem decide é `reserva_config.confirmacao`, a rota do site o obedece e a tela de "Pronto!" muda de texto conforme. O que resta é a casa escolher.
+
+⚠️ **A pergunta original, para registro**: reserva online entra `PENDENTE` ou
 `CONFIRMADA`? O campo `reserva_config.confirmacao` já existe, já é editável na
 tela e está em `AUTOMATICA` — a decisão é da casa, e agora ela tem onde ser
 tomada.

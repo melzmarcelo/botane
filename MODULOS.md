@@ -24,6 +24,7 @@ entregue.
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
+| [Reservas](#reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `publico` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---
@@ -40,6 +41,10 @@ Produtos, pessoas e as tabelas de apoio — o que todo o resto referencia.
 ⚠️ **"Pessoa" é `fornecedores`**, e a tabela não foi renomeada: desde a migração
 055 ela guarda quem compra, quem trabalha e quem consome. `fornecedor = true`
 distingue.
+⚠️ **Mas quem reserva mesa pelo site NÃO mora aqui** (migração 082): fica em
+`reserva_clientes`, do módulo Reservas. O esboço dizia o contrário, e a razão de
+ter mudado está em `docs/memoria/reservas.md` — foi esta tabela que recebeu 888
+clientes do Omie por engano, e o filtro por etiqueta existe para separá-los.
 
 ⚠️ **A unidade de estoque é o denominador de tudo** — trocá-la converte custo,
 mínimo, máximo e as embalagens, e é recusada em produto que já tem razão.
@@ -157,6 +162,7 @@ ficha são REFEITOS dos totais — é por isso que a apuração devolve
 
 - **Rotas:** `reservas.py`, `catalogos.py`, `publico.py` (o site do cliente)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
+  `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `catalogos.py`
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
   `catalogos/`
@@ -169,19 +175,28 @@ recusando 409 e com as chaves `reservas.*` fora do catálogo de permissões.
 
 ⚠️ Construído até aqui: a **configuração** (três horas por dia — abre, fecha e
 última reserva — e permanência por faixa), o **salão** (salões, mesas e a junta
-entre vizinhas), a **regra de disponibilidade** e a **reserva pelo balcão**, com
-ciclo de status, remarcar e bloqueios. Falta a reserva pelo site do cliente.
+entre vizinhas), a **regra de disponibilidade**, a **reserva pelo balcão** (com
+ciclo de status, remarcar e bloqueios) e a **reserva pelo site**, com o cadastro
+de quem marca.
 
 🔑 **O SITE DO CLIENTE é o terceiro artefato da casa** (21/09/2026): `site/`,
 um `index.html` estático que vai para `reserva.botanedeliecafe.com.br` e lê a
 MESMA API por `/publico/{loja}/...` — o único router sem permissão.
-Três portas: **Reservar** (mostra os horários, pela mesma regra da agenda),
-**Cardápios** (os catálogos ativos, no ar e com PDF) e **Entre em contato**
-(abre o WhatsApp da empresa).
+Três portas: **Reserve sua Mesa**, **Cardápios** (os catálogos ativos, no ar e
+com PDF) e **Entre em contato** (abre o WhatsApp da empresa).
 ⚠️ **O CORS volta a existir**: front separado em outro domínio precisa da origem
 em `CORS_ORIGINS`, senão o site abre e não carrega nada.
-⚠️ **A reserva ainda não GRAVA** pelo site — mostra os horários e monta a
-mensagem do WhatsApp. Gravar exige identificar quem reserva e conter abuso.
+
+🔑 **A reserva pelo site GRAVA** (migração 082, 21/09/2026): telefone primeiro,
+cadastro de quem é novo (nome, gênero, cidade) em `reserva_clientes`, e a mesa
+alocada pela MESMA `reservas_agenda.criar` do balcão.
+⚠️ **São as duas únicas rotas públicas que ESCREVEM no sistema**, e por isso as
+únicas com limite: 3 reservas vivas por telefone e 20 tentativas por hora por
+origem — esta guardada como hash, não como endereço.
+⚠️ **A porta nasce FECHADA** (`reserva_config.aceita_online`) e exige salão e
+mesas cadastrados: sem eles não há horário a oferecer.
+⚠️ **O telefone CONFIRMA o nome, não o revela** (`M••••• D•••••`) — sem isso o
+site seria uma consulta aberta de telefone→nome, sem login nenhum na frente.
 
 🔑 **O CATÁLOGO é daqui** (migração 079, 21/09/2026): a capa do que o site de
 reservas apresenta — nome, **origem `PDF`** (o arquivo importado), período de

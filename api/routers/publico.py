@@ -27,9 +27,11 @@ reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from database import get_cursor
+from models.reservas import ReservaCreate, ReservaDoSite, TelefoneDoSite
+from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
 
@@ -266,4 +268,158 @@ def horarios(
             "teto": min(int(r.get("teto_online") or 0) or 99,
                         int(r.get("maior_grupo") or 0) or 99),
             "motivo": r.get("motivo"),
+        }
+
+
+# ---------------------------------------------------------------------------
+# A reserva pelo site — o único lugar em que a INTERNET grava neste sistema.
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (21/09/2026):** *"para a realização de reserva, precisamos
+# de um cadastro simples do usuário. Clica em Reserve sua Mesa, abre uma tela com
+# o número do telefone; caso não tenha cadastrada, realiza o cadastro com Nome,
+# telefone, gênero e cidade."*
+#
+# ⚠️ **Gravar muda o problema.** Tudo acima nesta arquivo só mostra o que a casa
+# já publicou; aqui nasce registro, e a pergunta deixa de ser "o que pode sair" e
+# passa a ser também "quanto pode entrar". O limite mora em
+# `services/reserva_clientes.py`, e é por telefone E por origem: são dois ataques
+# diferentes.
+
+
+def _de_onde_veio(pedido: Request) -> str | None:
+    """O endereço de quem chamou, para CONTAR — nunca para guardar.
+
+    ⚠️ **`X-Forwarded-For` é o que vale atrás do App Platform**: sem ele, todas as
+    requisições chegam com o IP do balanceador e o limite por origem vira um
+    limite global que barra a casa inteira quando um visitante exagera.
+    ⚠️ E só o PRIMEIRO da lista — o resto é cadeia de proxy, que qualquer um pode
+    inventar acrescentando um cabeçalho.
+    """
+    encaminhado = pedido.headers.get("x-forwarded-for")
+    if encaminhado:
+        return encaminhado.split(",")[0].strip() or None
+    return pedido.client.host if pedido.client else None
+
+
+def _reserva_online(cur, id_unidade: int) -> dict:
+    """A configuração da reserva do site, se a casa a estiver aceitando.
+
+    🔑 **`aceita_online` existia desde a migração 068 e não fazia nada** — o
+    terreno estava preparado e a porta, fechada. É aqui que ela abre.
+    ⚠️ **409 com a frase, não 404**: a casa existe e o site dela está no ar; o
+    que não está ligado é marcar sozinho. O site cai no WhatsApp, que continua
+    funcionando.
+    """
+    cur.execute(
+        """SELECT aceita_online, confirmacao, cadastro_completo, teto_online,
+                  antecedencia_min_horas, antecedencia_max_dias
+             FROM reserva_config WHERE id_unidade = %s""",
+        (id_unidade,),
+    )
+    cfg = cur.fetchone()
+    if not cfg or not cfg["aceita_online"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta casa ainda não marca reserva pelo site. Fale com a gente.",
+        )
+    return dict(cfg)
+
+
+@router.get("/{id_unidade}/reserva")
+def reserva_ligada(id_unidade: int) -> dict:
+    """O site pergunta ANTES de mostrar o botão: dá para marcar por aqui?
+
+    🔑 **Sem isto a tela mentiria por um clique inteiro.** O cliente escolheria
+    dia, pessoas e horário para só então descobrir que a casa não aceita reserva
+    online — e a saída dele seria fechar o site, não pegar o WhatsApp.
+    ⚠️ **Não é 409 aqui.** Esta rota RESPONDE a pergunta; recusar seria obrigar o
+    site a tratar um erro para saber de um estado normal.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        cur.execute(
+            """SELECT aceita_online, cadastro_completo, confirmacao, teto_online
+                 FROM reserva_config WHERE id_unidade = %s""",
+            (id_unidade,),
+        )
+        cfg = cur.fetchone()
+        if not cfg:
+            return {"aceita": False}
+        return {
+            "aceita": bool(cfg["aceita_online"]),
+            # 🔑 O site pergunta gênero e cidade só se a casa quiser.
+            "cadastro_completo": bool(cfg["cadastro_completo"]),
+            # ⚠️ O cliente precisa saber ANTES se a reserva ainda vai ser
+            # confirmada por alguém — senão ele sai achando que tem mesa.
+            "confirma_na_hora": cfg["confirmacao"] == "AUTOMATICA",
+            "teto": int(cfg["teto_online"]),
+        }
+
+
+@router.post("/{id_unidade}/reserva/telefone")
+def procurar_cadastro(id_unidade: int, corpo: TelefoneDoSite, pedido: Request) -> dict:
+    """Já existe cadastro neste telefone? Sem dizer de quem é.
+
+    🔑 **Decisão do dono (21/09/2026)**: a tela CONFIRMA o nome, não o revela.
+    ⚠️ **Sem isso o site seria uma consulta aberta de telefone→nome** — não há
+    login nenhum na frente, e bastaria digitar números em sequência para colher o
+    dono de cada um. A dica (`M••• S•••`) chega para a pessoa reconhecer o
+    próprio cadastro e não chega para descobrir o alheio.
+    ⚠️ **Conta como tentativa.** Esta rota não grava nada, mas é por ela que uma
+    varredura passaria — limitar só a que grava deixaria a porta de leitura
+    aberta justamente para o uso que se quer conter.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        _reserva_online(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        telefone = clientes.telefone_valido(corpo.telefone)
+        return clientes.procurar(cur, id_unidade, telefone)
+
+
+@router.post("/{id_unidade}/reserva", status_code=201)
+def marcar_reserva(id_unidade: int, corpo: ReservaDoSite, pedido: Request) -> dict:
+    """Cadastra quem é (se for novo) e marca a mesa — na MESMA transação.
+
+    🔑 **A regra que decide a mesa é a MESMA do balcão** (`reservas_agenda.criar`,
+    com `pg_advisory_xact_lock` por loja e dia). Uma segunda regra para o público
+    divergiria, e a divergência apareceria como mesa prometida ao cliente e
+    indisponível na casa.
+    ⚠️ **Nada de `id_pessoa` aqui**: aquela coluna aponta para `fornecedores`, que
+    é o cadastro do balcão. Quem vem do site mora em `reserva_clientes` e entra
+    por `id_cliente`.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        cfg = _reserva_online(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+
+        cliente = clientes.resolver(cur, id_unidade, corpo, bool(cfg["cadastro_completo"]))
+
+        # 🔑 **O status sai da configuração da casa**, como `status_inicial` já
+        # decidia: AUTOMATICA nasce confirmada, MANUAL nasce pendente esperando
+        # alguém olhar. É a diferença entre a casa prometer a mesa e a casa
+        # prometer uma resposta.
+        pedido_de_reserva = ReservaCreate(
+            data=corpo.data, hora=corpo.hora, pessoas=corpo.pessoas,
+            nome=cliente["nome"], telefone=cliente["telefone"],
+            origem="SITE", observacao_cliente=corpo.observacao_cliente,
+            confirmacao_da_loja=cfg["confirmacao"],
+        )
+        feita = agenda.criar(cur, id_unidade, pedido_de_reserva, None)
+        cur.execute("UPDATE reservas SET id_cliente = %s WHERE id = %s",
+                    (cliente["id"], feita["id"]))
+
+        return {
+            "status": feita["status"],
+            # ⚠️ **A tela não pode dizer "reservado" quando a casa ainda vai
+            # olhar.** É a mesma regra que impediu o site de prometer o que não
+            # fazia; agora ele faz, e continua não podendo prometer demais.
+            "confirmada": feita["status"] == "CONFIRMADA",
+            "nome": cliente["nome"],
+            "cadastro_novo": cliente["novo"],
+            "data": corpo.data.isoformat(),
+            "hora": corpo.hora.strftime("%H:%M"),
+            "pessoas": corpo.pessoas,
         }

@@ -99,6 +99,14 @@ Tudo vem de `/publico/{loja}/...`, o único router da casa sem permissão:
 | `/publico/1/casa` | nome, endereço, telefone, o **WhatsApp** e as duas mensagens dele |
 | `/publico/1/catalogos` | os cardápios `ATIVO`, dentro do período **e com PDF** |
 | `/publico/1/horarios?dia=…&pessoas=…` | os horários com mesa, pela mesma regra da agenda |
+| `/publico/1/reserva` | se a casa aceita marcar pelo site, e o que perguntar |
+| `POST /publico/1/reserva/telefone` | já há cadastro neste número? (sem dizer de quem) |
+| `POST /publico/1/reserva` | cadastra quem é novo e **grava a reserva** |
+
+⚠️ **As duas últimas são as únicas rotas públicas que ESCREVEM no sistema**, e por isso são as
+únicas com limite: 3 reservas vivas por telefone e 20 tentativas por hora por origem. Telefone
+e nome vão no **corpo**, nunca na URL — dado pessoal em query string entra em log de servidor,
+em histórico de navegador e no `Referer`.
 
 🔑 **A loja sai do `<html data-loja="1">`.** No dia em que houver duas casas com
 reserva, cada uma publica o seu com o número dela — sem tocar no código.
@@ -121,22 +129,28 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
   leva a lugar nenhum. Sai de Administração ▸ Empresa ▸ WhatsApp, e o servidor
   limpa a máscara: o cadastro aceita "(47) 99910-5033" e o `wa.me` só aceita
   dígitos.
-- 🟡 **Reserva** — mostra os horários que a casa tem livres, de verdade, pela
-  mesma regra da agenda do balcão. **Ainda não grava**: ao escolher o horário, o
-  site monta a mensagem pronta para o WhatsApp.
-  ⚠️ **A tela não promete o que não faz.** Dizer "reservado" faria o cliente
-  aparecer na porta sem mesa.
+- ✅ **Reserva** — o cliente marca sozinho, e a reserva cai na agenda do balcão.
+  🔑 **O telefone vem primeiro** (pedido do dono, 21/09/2026): quem já tem
+  cadastro confirma o nome; quem é novo preenche nome, gênero e cidade.
+  ⚠️ **A dica do nome é MASCARADA** (`M••••• D•••••`) — sem isso o site seria uma
+  consulta aberta de telefone→nome, e não há login nenhum na frente.
+  ⚠️ **Só funciona com `aceita_online` LIGADO** em Reservas ▸ Configurações, e
+  com salão e mesas cadastrados. Desligado, o site volta a mostrar os horários e
+  fechar pelo WhatsApp — e a tela não promete o que não faz.
 
-## O que falta para a reserva fechar sozinha
+## A reserva fecha sozinha — o que isso exigiu
 
-1. **Identificar quem reserva** — o esboço já decidiu: `fornecedores` é a tabela
-   de pessoas, e a chave é o telefone.
-2. **Conter abuso.** Esta é a diferença entre ler e gravar: uma rota pública que
-   CRIA registro precisa de limite por telefone e por origem, senão o salão
-   amanhece lotado de reservas que ninguém fez.
-3. **A trava de concorrência já existe** (`_travar_o_dia`, por loja e dia): duas
+1. ~~**Identificar quem reserva**~~ — feito, em `reserva_clientes`. ⚠️ **Não em
+   `fornecedores`**, como o esboço dizia: aquela tabela é de fornecedores, e a
+   casa já pagou por misturar as duas coisas (888 clientes do Omie caíram lá
+   dentro). Ver `docs/memoria/reservas.md`.
+2. ~~**Conter abuso**~~ — feito. Era a diferença entre ler e gravar: 3 reservas
+   vivas por telefone e 20 tentativas por hora por origem, esta guardada como
+   **hash**, não como endereço.
+3. **A trava de concorrência já existia** (`_travar_o_dia`, por loja e dia): duas
    pessoas reservando o mesmo horário ao mesmo tempo é o caso que define a
-   arquitetura, e ele está resolvido desde a migração 070.
+   arquitetura, e ele está resolvido desde a migração 070 — a rota do site usa a
+   MESMA `reservas_agenda.criar` que o balcão.
 
 ## Para publicar
 
