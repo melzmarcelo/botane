@@ -724,3 +724,9 @@ Suas Reservas."*
   `_DO_CLIENTE` — se divergissem, o site mostraria reserva que o botão não acha.
   No site, dois toques no mesmo botão ("Cancelar" → "Cancelar mesmo?"): o
   viewer não tem `confirm()` confiável e um toque só cancelaria por esbarrão.
+- 🔑 **A tela de horários abre em HOJE quando ainda dá para marcar** (pedido do
+  dono, 23/09/2026: *"posicionar no dia corrente, caso aberto ainda"*), senão em
+  amanhã. `abrirReserva()` no site pergunta à própria rota de horários — ⚠️ não à
+  tarja "Aberto agora": às 17h a casa está aberta mas a última reserva já passou,
+  e abrir em hoje daria lista vazia de cara. Dia escolhido à mão (`diaTocado`)
+  não é trocado ao voltar e entrar de novo.

@@ -1004,8 +1004,7 @@ async function guardarDados() {
     if (erro) return avisar("#aviso-quem", erro);
   }
   avisar("#aviso-quem", "");
-  ir("reserva");
-  buscarHorarios();
+  abrirReserva();
 }
 
 /** Busca e desenha "Suas reservas". Devolve a frase de erro, se houver. */
@@ -1213,17 +1212,50 @@ $("#confirmar").addEventListener("click", async () => {
   ir("pronto");
 });
 
+/* ---- em que dia a tela de reserva abre ---- */
+
+/** A data local como o `<input type=date>` quer, `dias` à frente de hoje. */
+function diaIso(dias = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+/** Se a pessoa já escolheu o dia à mão, a tela não o troca por ela. */
+let diaTocado = false;
+
+/**
+ * Abre a tela de horários já no dia mais provável.
+ *
+ * 🔑 **Pedido do dono (23/09/2026):** *"ao entrar para reservar, posicionar no
+ * dia corrente, caso aberto ainda."* HOJE quando ainda há horário marcável;
+ * senão AMANHÃ, como sempre foi.
+ * ⚠️ **"Aberto" aqui é "ainda dá para marcar", não a tarja da capa.** Às 17h de
+ * uma casa que fecha às 18h ela está aberta, mas a última reserva já passou —
+ * abrir em hoje mostraria uma lista vazia de cara. Quem responde é a mesma rota
+ * de horários, com o mesmo corte de antecedência da gravação.
+ */
+async function abrirReserva() {
+  ir("reserva");
+  if (!diaTocado) {
+    let hoje = null;
+    try {
+      hoje = await pedir(`/horarios?dia=${diaIso(0)}&pessoas=${
+        Number($("#pessoas").value || 0) || 2}`);
+    } catch { /* sem resposta, fica amanhã — o seguro */ }
+    if (!diaTocado) {
+      $("#dia").value = hoje && hoje.horarios.length ? diaIso(0) : diaIso(1);
+    }
+  }
+  buscarHorarios();
+}
+
 /* ---- começo ---- */
 (function inicio() {
-  const hojeIso = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10);
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  $("#dia").value = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10);
-  $("#dia").min = hojeIso();
+  $("#dia").value = diaIso(1);
+  $("#dia").min = diaIso(0);
 
-  $("#dia").addEventListener("change", buscarHorarios);
+  $("#dia").addEventListener("change", () => { diaTocado = true; buscarHorarios(); });
   $("#pessoas").addEventListener("input", buscarHorarios);
 
   // 🔑 **O botão da capa leva a lugares diferentes**, e quem decide é a casa:
@@ -1238,8 +1270,7 @@ $("#confirmar").addEventListener("click", async () => {
       ir("quem");
       $("#fone").focus();
     } else {
-      ir("reserva");
-      buscarHorarios();
+      abrirReserva();
     }
   });
 
