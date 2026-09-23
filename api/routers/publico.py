@@ -25,14 +25,14 @@ seu endereço. `/publico/{id_unidade}/...` deixa isso resolvido desde já.
 reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 """
 
-from datetime import date
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from database import get_cursor
 from relogio import agora_da_casa
 from models.catalogos import ORIGEM_PRODUTOS
-from models.reservas import ReservaCreate, ReservaDoSite, TelefoneDoSite
+from models.reservas import CancelamentoDoSite, ClienteDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
@@ -187,11 +187,16 @@ def _quando_atende(cur, id_unidade: int) -> dict:
         # em vez de só "fechado" — que é uma porta na cara de quem chegou.
         "hoje": (f'{hoje["abre"].strftime("%H:%M")} às {hoje["fecha"].strftime("%H:%M")}'
                  if hoje else None),
+        # ⚠️ **O `i` começa em ZERO**: hoje entra quando a casa ainda não abriu.
+        # Começava em 1, e numa quarta às 08:00 com abertura às 09:30 a tarja
+        # dizia "abre Qui 09:30" — pulava o próprio dia. Hoje só conta se a
+        # abertura ainda está à frente; depois do fechamento, o próximo é outro dia.
         "proximo": next(
-            (f'{_DIAS[d["dia_semana"]]} {d["abre"].strftime("%H:%M")}'
-             for i in range(1, 8)
+            (f'{_DIAS[d["dia_semana"]]} às {d["abre"].strftime("%H:%M")}'
+             for i in range(0, 8)
              for d in abertos
-             if d["dia_semana"] == ((agora.isoweekday() + i - 1) % 7) + 1),
+             if d["dia_semana"] == ((agora.isoweekday() + i - 1) % 7) + 1
+             and (i > 0 or agora.time() < d["abre"])),
             None),
     }
 
@@ -393,6 +398,36 @@ def horarios(
     with get_cursor() as cur:
         _casa_aberta(cur, id_unidade)
         r = agenda.disponibilidade(cur, id_unidade, dia, pessoas)
+        livres = [h["hora"] for h in (r.get("horarios") or []) if h["livre"]]
+        motivo = r.get("motivo")
+
+        # 🔑 **Só o que ainda dá tempo de marcar** (pedido do dono, 23/09/2026):
+        # hoje, antes de abrir, o dia inteiro vale; às 10:00 com 2h de
+        # antecedência, só das 12:00 em diante. É o MESMO limite que
+        # `agenda.criar` confere ao gravar — oferecer o que a gravação recusa
+        # era o "toco no horário e nada acontece".
+        cur.execute(
+            "SELECT antecedencia_min_horas FROM reserva_config WHERE id_unidade = %s",
+            (id_unidade,),
+        )
+        cfg = cur.fetchone()
+        horas = int(cfg["antecedencia_min_horas"]) if cfg else 0
+        agora = agora_da_casa().replace(tzinfo=None)
+        limite = agenda.limite_do_site(agora, horas)
+        cedo = [h for h in livres
+                if datetime.combine(dia, time.fromisoformat(h)) < limite]
+        if cedo:
+            livres = [h for h in livres if h not in cedo]
+            if not livres:
+                # ⚠️ **A frase diz POR QUE a lista ficou vazia.** "Nenhum horário
+                # livre" num dia de casa vazia faria o cliente achar que lotou.
+                motivo = ("Esse dia já passou." if dia < agora.date() else
+                          ("Os horários de hoje já passaram" if dia == agora.date()
+                           else "Ainda não dá para marcar esse dia pelo site")
+                          + (f" (reserva pelo site com {horas}h de antecedência)"
+                             if horas else "")
+                          + ". Escolha outro dia ou fale com a casa.")
+
         # ⚠️ **Só o que o cliente precisa, e nada de operação.** A resposta de
         # dentro traz `mesas_livres` por horário — quantas mesas a casa ainda
         # tem —, e isso é informação de negócio: o público não precisa saber se
@@ -405,14 +440,14 @@ def horarios(
             # 🔑 Só os LIVRES, já em texto. Mandar os ocupados junto faria a tela
             # ter de filtrar — e uma tela que filtra é uma tela que pode errar o
             # filtro e oferecer o que não há.
-            "horarios": [h["hora"] for h in (r.get("horarios") or []) if h["livre"]],
+            "horarios": livres,
             # ⚠️ **O teto do site é do CADASTRO**, e o maior grupo é do SALÃO:
             # teto maior que a maior junta é uma promessa que a casa não cumpre,
             # e o site precisa dos dois para não oferecer mesa para 12 quando a
             # maior junta senta 8.
             "teto": min(int(r.get("teto_online") or 0) or 99,
                         int(r.get("maior_grupo") or 0) or 99),
-            "motivo": r.get("motivo"),
+            "motivo": motivo,
         }
 
 
@@ -568,3 +603,102 @@ def marcar_reserva(id_unidade: int, corpo: ReservaDoSite, pedido: Request) -> di
             "hora": corpo.hora.strftime("%H:%M"),
             "pessoas": corpo.pessoas,
         }
+
+
+# 🔑 **"As reservas desta pessoa", escrito UMA vez**: a lista e o cancelamento
+# precisam concordar sobre o que é dela — se divergissem, o site mostraria uma
+# reserva que o botão de cancelar não acha.
+_DO_CLIENTE = """id_unidade = %s
+                  AND (id_cliente = %s
+                       OR regexp_replace(coalesce(telefone, ''), '[^0-9]', '', 'g') = %s)
+                  AND status IN ('PENDENTE', 'CONFIRMADA')
+                  AND data >= current_date"""
+
+
+@router.post("/{id_unidade}/reserva/minhas")
+def minhas_reservas(id_unidade: int, corpo: ClienteDoSite, pedido: Request) -> dict:
+    """As reservas em aberto de quem se identificou — o "Suas reservas".
+
+    🔑 **Pedido do dono (23/09/2026):** *"podemos ter uma área dentro de Reserve
+    sua mesa para Suas Reservas."*
+    ⚠️ **Telefone E nome, como na gravação.** Só o telefone seria uma consulta
+    aberta da agenda de qualquer número; o primeiro nome é a mesma prova que
+    `clientes.resolver` já exige para marcar em nome de alguém.
+    ⚠️ **Telefone sem cadastro devolve lista vazia, não 404** — pelo mesmo
+    motivo de `procurar`: o código de status não pode dizer quem existe.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        _reserva_online(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        telefone = clientes.telefone_valido(corpo.telefone)
+        cliente = clientes.conferir(cur, id_unidade, telefone, corpo.nome)
+        if not cliente:
+            return {"reservas": []}
+        # 🔑 **As do balcão entram também**: quem ligou e deu o mesmo telefone
+        # é a mesma pessoa, e "Suas reservas" sem a que ela marcou por telefone
+        # a faria marcar de novo. O balcão grava o número com máscara; a
+        # comparação é pelos dígitos.
+        cur.execute(
+            f"""SELECT data, hora, pessoas, status, observacao_cliente
+                  FROM reservas
+                 WHERE {_DO_CLIENTE}
+                 ORDER BY data, hora""",
+            (id_unidade, cliente["id"], telefone),
+        )
+        # ⚠️ **Nada de id nem de mesa**, como no resto deste arquivo.
+        return {"reservas": [{
+            "data": r["data"].isoformat(),
+            "hora": r["hora"].strftime("%H:%M"),
+            "pessoas": r["pessoas"],
+            "confirmada": r["status"] == "CONFIRMADA",
+            "observacao": r["observacao_cliente"],
+        } for r in cur.fetchall()]}
+
+
+@router.post("/{id_unidade}/reserva/cancelar")
+def cancelar_reserva(id_unidade: int, corpo: CancelamentoDoSite, pedido: Request) -> dict:
+    """O cliente cancela uma das próprias reservas, em "Suas reservas".
+
+    🔑 **O mesmo caminho do balcão** (`agenda.mudar_status` → `CANCELADA`): a
+    linha não se apaga, a mesa se solta, e a agenda mostra a reserva riscada.
+    ⚠️ **A mesma prova de telefone + primeiro nome** da lista: sem ela, quem
+    soubesse um telefone cancelaria a mesa de outra pessoa.
+    ⚠️ **Reserva cujo horário já passou não se cancela pelo site.** Nesse ponto
+    a pessoa ou veio ou não veio — `NAO_COMPARECEU` é a casa quem marca.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        _reserva_online(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        telefone = clientes.telefone_valido(corpo.telefone)
+        cliente = clientes.conferir(cur, id_unidade, telefone, corpo.nome)
+        # ⚠️ Sem cadastro, a mesma resposta de "não achei": o código de status
+        # não pode dizer se o telefone existe.
+        achada = None
+        if cliente:
+            cur.execute(
+                f"""SELECT id FROM reservas
+                     WHERE {_DO_CLIENTE} AND data = %s AND hora = %s
+                     ORDER BY id LIMIT 1 FOR UPDATE""",
+                (id_unidade, cliente["id"], telefone, corpo.data, corpo.hora),
+            )
+            achada = cur.fetchone()
+        if not achada:
+            raise HTTPException(status_code=404, detail="Reserva não encontrada.")
+        if datetime.combine(corpo.data, corpo.hora) <= agora_da_casa().replace(tzinfo=None):
+            raise HTTPException(
+                status_code=409,
+                detail="O horário desta reserva já passou. Fale com a casa.",
+            )
+        agenda.mudar_status(cur, id_unidade, achada["id"], "CANCELADA")
+        # 🔑 A recepção precisa saber que foi o CLIENTE, e não alguém da casa,
+        # quem cancelou — é a diferença entre um recado e um engano.
+        cur.execute(
+            """UPDATE reservas
+                  SET observacao_interna = concat_ws(' · ', nullif(observacao_interna, ''),
+                                                     'Cancelada pelo cliente no site')
+                WHERE id = %s""",
+            (achada["id"],),
+        )
+        return {"cancelada": True}

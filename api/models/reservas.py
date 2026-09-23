@@ -252,6 +252,26 @@ class TelefoneDoSite(BaseModel):
     telefone: str = Field(max_length=30)
 
 
+class ClienteDoSite(BaseModel):
+    """Quem pergunta pelas próprias reservas: telefone e nome, no CORPO.
+
+    ⚠️ Os dois pelo mesmo motivo de `TelefoneDoSite`: dado pessoal fora da URL.
+    """
+    telefone: str = Field(max_length=30)
+    nome: str = Field(min_length=2, max_length=120)
+
+
+class CancelamentoDoSite(ClienteDoSite):
+    """Qual das próprias reservas o cliente quer cancelar.
+
+    ⚠️ **Por data e hora, não por id**: o site não recebe id interno (regra de
+    `routers/publico.py`). Dentro das reservas de UM cliente, data e hora já
+    dizem qual é.
+    """
+    data: date
+    hora: time
+
+
 class ReservaDoSite(BaseModel):
     """A reserva que o cliente marca sozinho, com o cadastro junto.
 

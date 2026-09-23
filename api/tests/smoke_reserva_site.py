@@ -296,6 +296,97 @@ with get_cursor() as cur:
 st, r = reservar(hora="17:00")
 checar("cancelando uma, a vaga volta", st == 201, (st, r))
 
+print("\n8b. suas reservas (pedido do dono, 23/09/2026)")
+sem_tentativas()
+
+
+def minhas(nome="Marina", telefone=FONE):
+    return chamar("POST", f"/publico/{UNIDADE}/reserva/minhas",
+                  {"telefone": telefone, "nome": nome}, origem="203.0.113.7")
+
+
+st, r = minhas()
+# ⚠️ Tres em aberto: a secao 8 cancelou uma e marcou outra no lugar.
+checar("quem confere o nome ve as proprias reservas em aberto",
+       st == 200 and len(r.get("reservas") or []) == 3, (st, r))
+checar("sem id nem mesa, so o que a pessoa marcou",
+       all(set(x) == {"data", "hora", "pessoas", "confirmada", "observacao"}
+           for x in (r.get("reservas") or [])), r)
+st, r = minhas(nome="Outra")
+checar("nome que nao confere e recusado com a mesma frase da reserva",
+       st == 409 and "não confere" in (r.get("detail") or ""), (st, r))
+st, r = minhas(telefone="47999108888")
+checar("telefone sem cadastro devolve lista vazia, nao 404",
+       st == 200 and r.get("reservas") == [], (st, r))
+# 🔑 A do balcao entra tambem: mesmo telefone, com mascara, e a mesma pessoa.
+with get_cursor() as cur:
+    cur.execute(
+        """INSERT INTO reservas (id_unidade, data, hora, pessoas, status, origem, nome, telefone)
+           VALUES (%s, %s, '12:00', 3, 'CONFIRMADA', 'BALCAO', 'Marina D', '(47) 99910-0001')""",
+        (UNIDADE, DIA))
+st, r = minhas()
+checar("a reserva feita pelo balcao, no mesmo telefone, entra na lista",
+       any(x["hora"] == "12:00" and x["pessoas"] == 3 for x in (r.get("reservas") or [])), r)
+
+
+
+def cancelar(data=DIA, hora="12:00", nome="Marina", telefone=FONE):
+    return chamar("POST", f"/publico/{UNIDADE}/reserva/cancelar",
+                  {"telefone": telefone, "nome": nome, "data": data, "hora": hora},
+                  origem="203.0.113.7")
+
+
+sem_tentativas()
+st, r = cancelar(nome="Outra")
+checar("cancelar com nome que nao confere e recusado", st == 409, (st, r))
+st, r = cancelar(telefone="47999108888")
+checar("telefone sem cadastro recebe 'nao encontrada', sem dizer se existe",
+       st == 404, (st, r))
+st, r = cancelar(hora="21:00")
+checar("horario que a pessoa nao tem recebe 404", st == 404, (st, r))
+st, r = cancelar()
+checar("a propria reserva (mesmo a do balcao) e cancelada", st == 200, (st, r))
+with get_cursor() as cur:
+    cur.execute("""SELECT status, observacao_interna FROM reservas
+                    WHERE id_unidade = %s AND data = %s AND hora = '12:00'""",
+                (UNIDADE, DIA))
+    linha = cur.fetchone()
+checar("no banco ela fica CANCELADA, nao apagada, com o recado para o balcao",
+       linha and linha["status"] == "CANCELADA"
+       and "cliente no site" in (linha["observacao_interna"] or ""), linha)
+st, r = minhas()
+checar("e sai de Suas reservas",
+       not any(x["hora"] == "12:00" for x in (r.get("reservas") or [])), r)
+st, r = cancelar()
+checar("cancelar de novo a mesma da 404", st == 404, (st, r))
+with get_cursor() as cur:
+    cur.execute(
+        """INSERT INTO reservas (id_unidade, data, hora, pessoas, status, origem, nome, telefone)
+           VALUES (%s, current_date, '00:00', 2, 'CONFIRMADA', 'BALCAO', 'Marina D', %s)""",
+        (UNIDADE, FONE))
+st, r = cancelar(data=date.today().isoformat(), hora="00:00")
+checar("reserva cujo horario ja passou nao se cancela pelo site",
+       st == 409 and "passou" in (r.get("detail") or ""), (st, r))
+
+print("\n8c. so os horarios que ainda da tempo de marcar")
+ONTEM = (date.today() - timedelta(days=1)).isoformat()
+HOJE = date.today().isoformat()
+AMANHA = (date.today() + timedelta(days=1)).isoformat()
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={ONTEM}&pessoas=2")
+checar("dia que ja passou nao oferece horario, e diz por que",
+       st == 200 and r.get("horarios") == [] and "passou" in (r.get("motivo") or ""), (st, r))
+gravar_config(aceita_online=True, antecedencia_min_horas=30)
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={HOJE}&pessoas=2")
+checar("com 30h de antecedencia, hoje nao oferece nada, e fala da antecedencia",
+       st == 200 and r.get("horarios") == [] and "30h" in (r.get("motivo") or ""), (st, r))
+st, r = reservar(data=HOJE, hora="20:00", telefone="47999107777", nome="Ana Paz")
+checar("e a gravacao recusa o mesmo que a lista escondeu",
+       st == 409 and "antecedência" in (r.get("detail") or ""), (st, r))
+gravar_config(aceita_online=True)
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={AMANHA}&pessoas=2")
+checar("sem antecedencia, amanha continua com o dia inteiro",
+       st == 200 and "09:00" in (r.get("horarios") or []), (st, r))
+
 print("\n9. o limite por ORIGEM")
 limpar_quem_reservou()
 # ⚠️ Esta secao gasta o limite de proposito: por isso ela e a ultima, e usa uma

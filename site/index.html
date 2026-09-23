@@ -301,6 +301,28 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .voltar:hover { color: var(--tinta); }
 .vazio { color: var(--tinta-suave); font-size: 14px; }
+/* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
+   direita — o mesmo desenho do recibo, só que em lista. */
+.minhas { display: flex; flex-direction: column; gap: 6px; }
+.minhas[hidden] { display: none; }
+.minha {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px;
+}
+.minha b { font-weight: 600; }
+.minha small { display: block; color: var(--tinta-suave); font-size: 13px; }
+.minha .estado-minha { font-size: 12px; color: var(--tinta-suave); white-space: nowrap; }
+.minha .lado { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+/* ⚠️ Discreto de propósito: cancelar é a ação rara da tela, e um botão cheio
+   competiria com "Confirmar reserva". O segundo toque é que ganha a cor. */
+.cancelar-minha {
+  font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+  background: transparent; color: var(--barro);
+  border: 1px solid var(--linha); border-radius: 8px;
+}
+.cancelar-minha[data-certeza] { background: var(--barro); color: #fff; border-color: var(--barro); }
+.cancelar-minha:disabled { opacity: .6; cursor: default; }
 /* Os dados de contato: rótulo em cima, valor embaixo. Não são botões. */
 .dado { margin: 0; padding: 10px 2px; border-bottom: 1px solid var(--linha); }
 .dado span {
@@ -391,6 +413,13 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
            metade dos visitantes para uma tela que eles nunca viram. -->
       <button class="voltar" id="voltar-reserva" data-ir="inicio">‹ voltar</button>
       <h2 id="t-reserva">Reservar uma mesa</h2>
+      <!-- 🔑 **Pedido do dono (23/09/2026):** *"uma área dentro de Reserve sua
+           mesa para Suas Reservas."* Só aparece para quem se identificou e tem
+           reserva em aberto — sem nenhuma, é um título sobre coisa nenhuma. -->
+      <div class="minhas" id="suas-reservas" hidden>
+        <span class="rot">Suas reservas</span>
+        <div class="minhas" id="lista-minhas"></div>
+      </div>
       <!-- 🔑 **As pessoas vêm ANTES do horário, e a ordem é a regra.**
            "Esgotado" depende do tamanho do grupo: às 19h pode não haver mesa
            para 6 e haver para 2. Perguntar o horário primeiro faria a tela
@@ -954,7 +983,7 @@ async function consultarTelefone() {
   $("#nome-cliente").focus();
 }
 
-function guardarDados() {
+async function guardarDados() {
   const nome = $("#nome-cliente").value.trim();
   if (nome.length < 2) return avisar("#aviso-quem", "Diga seu nome para continuar.");
   if (!$("#bloco-novo").hidden) {
@@ -964,10 +993,86 @@ function guardarDados() {
   eu.nome = nome;
   eu.genero = $("#bloco-novo").hidden ? null : $("#genero").value;
   eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
+  // 🔑 **Quem já tem cadastro vê as próprias reservas** — e, de quebra, o nome
+  // é conferido AQUI, não só no "Confirmar". Antes a pessoa escolhia dia,
+  // pessoas e horário para só no fim ouvir que o nome não confere.
+  $("#suas-reservas").hidden = true;
+  if (eu.cadastrado) {
+    $("#avancar").disabled = true;
+    const erro = await carregarMinhas();
+    $("#avancar").disabled = false;
+    if (erro) return avisar("#aviso-quem", erro);
+  }
   avisar("#aviso-quem", "");
   ir("reserva");
   buscarHorarios();
 }
+
+/** Busca e desenha "Suas reservas". Devolve a frase de erro, se houver. */
+async function carregarMinhas() {
+  let r;
+  try {
+    r = await pedir("/reserva/minhas", { telefone: eu.telefone, nome: eu.nome });
+  } catch (e) {
+    // ⚠️ Nome que não confere barra a pessoa (é a prova de que o telefone é
+    // dela); qualquer outra falha só deixa a lista de fora — não é motivo para
+    // impedir uma reserva nova.
+    return e.status === 409 || e.status === 429 || e.status === 422
+      ? (e.mensagem || "Não conseguimos conferir seu cadastro.") : null;
+  }
+  const lista = r.reservas || [];
+  $("#suas-reservas").hidden = !lista.length;
+  $("#lista-minhas").innerHTML = lista.map((x) => {
+    const quando = new Date(x.data + "T12:00")
+      .toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+    return `<div class="minha">
+      <div><b>${esc(quando)} · ${esc(x.hora)}</b>
+        <small>${x.pessoas} ${x.pessoas === 1 ? "pessoa" : "pessoas"}${
+          x.observacao ? " · " + esc(x.observacao) : ""}</small></div>
+      <div class="lado">
+        <span class="estado-minha">${x.confirmada ? "Confirmada" : "Aguardando a casa"}</span>
+        <button class="cancelar-minha" type="button"
+                data-data="${esc(x.data)}" data-hora="${esc(x.hora)}">Cancelar</button>
+      </div>
+    </div>`;
+  }).join("");
+  return null;
+}
+
+/* 🔑 **Cancelar em dois toques.** O site não tem `confirm()` confiável, e um
+   toque só cancelaria a mesa de quem esbarrou no botão rolando a tela. O
+   primeiro toque pergunta; o segundo, no mesmo botão, cancela. */
+$("#lista-minhas").addEventListener("click", async (e) => {
+  const b = e.target.closest(".cancelar-minha");
+  if (!b || b.disabled) return;
+  if (!b.hasAttribute("data-certeza")) {
+    $("#lista-minhas").querySelectorAll("[data-certeza]").forEach((x) => {
+      x.removeAttribute("data-certeza");
+      x.textContent = "Cancelar";
+    });
+    b.setAttribute("data-certeza", "");
+    b.textContent = "Cancelar mesmo?";
+    return;
+  }
+  b.disabled = true;
+  b.textContent = "Cancelando…";
+  try {
+    await pedir("/reserva/cancelar", {
+      telefone: eu.telefone, nome: eu.nome, data: b.dataset.data, hora: b.dataset.hora,
+    });
+  } catch (erro) {
+    b.disabled = false;
+    b.removeAttribute("data-certeza");
+    b.textContent = "Cancelar";
+    avisar("#aviso-reserva", erro.mensagem || "Não conseguimos cancelar agora.");
+    return;
+  }
+  await carregarMinhas();
+  // ⚠️ A mesa que soltou pode ser justamente a do dia na tela: sem recarregar,
+  // o horário continuaria fora da lista.
+  await buscarHorarios();
+  avisar("#aviso-reserva", "Reserva cancelada.", false);
+});
 
 $("#avancar").addEventListener("click", () => {
   if (passo === "fone") consultarTelefone();
@@ -1075,12 +1180,19 @@ $("#confirmar").addEventListener("click", async () => {
     // ⚠️ **O erro fica NA TELA DO HORÁRIO**, não numa tela de erro: a resposta
     // costuma ser "esse horário acabou de ser tomado", e a pessoa precisa ver a
     // lista para escolher outro.
+    // ⚠️ **Recarregar a lista ANTES de avisar**: `buscarHorarios` começa
+    // escondendo `#aviso-reserva`, e na ordem inversa o erro piscava e sumia —
+    // o cliente tocava em Confirmar e nada acontecia.
+    horaEscolhida = null;
+    await buscarHorarios();
     avisar("#aviso-reserva", e.mensagem || "Não conseguimos marcar agora.");
-    buscarHorarios();
     return;
   }
   $("#confirmar").disabled = false;
   $("#confirmar").hidden = true;
+  // A nova entra em "Suas reservas" para quando a pessoa voltar à tela.
+  eu.cadastrado = true;
+  carregarMinhas();
   const quando = new Date(feita.data + "T12:00").toLocaleDateString("pt-BR");
   $("#recibo").innerHTML =
     `<b>${esc(quando)} · ${esc(feita.hora)}</b>

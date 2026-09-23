@@ -37,6 +37,7 @@ from datetime import date, datetime, time, timedelta
 
 from fastapi import HTTPException
 
+from relogio import agora_da_casa
 from services import reservas as cadastro
 
 # Status que NÃO soltam a mesa. Ver o aviso do cabeçalho sobre `PENDENTE`.
@@ -242,6 +243,20 @@ def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
     }
 
 
+def limite_do_site(agora: datetime, antecedencia_horas: int) -> datetime:
+    """O primeiro instante que o SITE ainda pode marcar.
+
+    🔑 **Pedido do dono (23/09/2026):** *"como ainda não abriu a loja hoje, ainda
+    podemos marcar, e conforme o dia anda, podemos permitir ainda em horários
+    que ainda não chegaram — entrando às 10:00, marco para as 12:00."* É o
+    agora mais a antecedência mínima da configuração.
+    ⚠️ **Uma regra só para a LISTA e para a GRAVAÇÃO.** A lista oferecia os
+    horários de hoje que já tinham passado, e a gravação os recusava: o
+    cliente tocava num horário e ouvia "não".
+    """
+    return agora + timedelta(hours=antecedencia_horas)
+
+
 def _travar_o_dia(cur, id_unidade: int, dia: date) -> None:
     """Serializa quem mexe neste (loja, dia) até o fim da transação.
 
@@ -299,9 +314,12 @@ def criar(cur, id_unidade: int, corpo, id_usuario: int | None) -> dict:
                 detail=(f"Para grupos acima de {cfg['teto_online']} pessoas, fale com a "
                         "casa."),
             )
-        agora = datetime.now()
+        # ⚠️ **A hora da CASA** (`relogio.py`). Era `datetime.now()`: no ar o
+        # contêiner roda em UTC, três horas à frente, e às 09:00 uma reserva
+        # para as 12:00 parecia ter antecedência ZERO — recusada.
+        agora = agora_da_casa().replace(tzinfo=None)
         quando = datetime.combine(corpo.data, corpo.hora)
-        if quando - agora < timedelta(hours=int(cfg["antecedencia_min_horas"])):
+        if quando < limite_do_site(agora, int(cfg["antecedencia_min_horas"])):
             raise HTTPException(
                 status_code=409,
                 detail=(f"Reserva pelo site precisa de {cfg['antecedencia_min_horas']}h de "

@@ -687,3 +687,40 @@ segunda espera a reserva online, e é o que `maior_grupo` existe para comparar.
 `CONFIRMADA`? O campo `reserva_config.confirmacao` já existe, já é editável na
 tela e está em `AUTOMATICA` — a decisão é da casa, e agora ela tem onde ser
 tomada.
+
+## O dia de hoje no site, e "Suas reservas" (23/09/2026)
+
+🔑 **Pedido do dono:** *"como ainda não abriu a loja hoje, ainda podemos marcar, e
+conforme o dia anda, podemos permitir ainda em horários que ainda não chegaram —
+entrando às 10:00, marco para as 12:00. E uma área dentro de Reserve sua mesa para
+Suas Reservas."*
+
+- ⚠️ **A tarja pulava o próprio dia.** `_quando_atende` procurava o próximo dia
+  aberto com `range(1, 8)`: numa quarta às 08:00, com abertura às 09:30, dizia
+  "abre Qui". Agora começa em 0, e hoje conta só se a abertura ainda está à frente.
+  O texto virou "Qua às 09:30".
+- ⚠️ **`agenda.criar` usava `datetime.now()`** (UTC no ar, 3h à frente) na
+  antecedência do site: às 09:00 uma reserva para as 12:00 tinha "antecedência
+  zero". Agora `agora_da_casa()` — terceira vez do erro de `relogio.py`.
+- 🔑 **Lista e gravação usam o MESMO limite** (`agenda.limite_do_site` = agora +
+  `antecedencia_min_horas`). A rota pública de horários esconde o que já passou; a
+  lista vazia diz por quê ("os horários de hoje já passaram…"), para ninguém achar
+  que lotou. ⚠️ O filtro mora na rota PÚBLICA, não em `disponibilidade`: o balcão
+  continua vendo o dia inteiro.
+- ⚠️ **O erro do "Confirmar" sumia**: `buscarHorarios()` começa escondendo
+  `#aviso-reserva`, e era chamado DEPOIS do `avisar`. Agora `await` primeiro.
+- 🔑 **`POST /publico/{u}/reserva/minhas`** (telefone + nome no corpo): as
+  reservas PENDENTE/CONFIRMADA de hoje em diante. Mesma prova do primeiro nome que
+  `resolver` (via `clientes.conferir`, com a mesma frase). Sem cadastro → lista
+  vazia, não 404. Entra também a do balcão no mesmo telefone (compara dígitos).
+  Conta tentativa. O site a chama ao confirmar o nome — o que também antecipa o
+  "nome não confere" para antes de escolher horário.
+- 🔑 **Cancelar pelo site** (`POST /publico/{u}/reserva/cancelar`, telefone + nome
+  + data + hora). Por data e hora, não por id — o site não recebe id interno.
+  Usa `agenda.mudar_status(... "CANCELADA")`, o mesmo caminho do balcão: a linha
+  fica, a mesa solta, e `observacao_interna` ganha "Cancelada pelo cliente no
+  site" para a recepção saber quem cancelou. Horário já passado → 409 (vir ou não
+  vir é a casa quem marca). Lista e cancelamento compartilham o filtro
+  `_DO_CLIENTE` — se divergissem, o site mostraria reserva que o botão não acha.
+  No site, dois toques no mesmo botão ("Cancelar" → "Cancelar mesmo?"): o
+  viewer não tem `confirm()` confiável e um toque só cancelaria por esbarrão.

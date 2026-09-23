@@ -28,6 +28,9 @@ GENEROS = ("FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO")
 # inventa um telefone novo a cada requisição, para quem o primeiro limite não
 # existe.
 RESERVAS_ATIVAS_POR_TELEFONE = 3
+
+_NOME_NAO_CONFERE = ("Já temos um cadastro neste telefone, mas o nome não confere. "
+                     "Confira como você se cadastrou, ou fale com a casa.")
 TENTATIVAS_POR_HORA = 20
 
 
@@ -100,6 +103,25 @@ def procurar(cur, id_unidade: int, telefone: str) -> dict:
         "cadastrado": bool(achado),
         "dica": dica_do_nome(achado["nome"]) if achado else None,
     }
+
+
+def conferir(cur, id_unidade: int, telefone: str, nome: str) -> dict | None:
+    """O cadastro deste telefone, se o nome conferir. Sem cadastro, None.
+
+    ⚠️ **Nome que não confere é 409, com a MESMA frase de `resolver`** — é a
+    mesma prova, e duas frases para ela ensinariam qual das portas é mais frouxa.
+    """
+    cur.execute(
+        """SELECT id, nome FROM reserva_clientes
+            WHERE id_unidade = %s AND telefone = %s""",
+        (id_unidade, telefone),
+    )
+    achado = cur.fetchone()
+    if not achado:
+        return None
+    if _primeiro_nome(nome) != _primeiro_nome(achado["nome"]):
+        raise HTTPException(status_code=409, detail=_NOME_NAO_CONFERE)
+    return dict(achado)
 
 
 def marcar_tentativa(cur, id_unidade: int, origem: str | None) -> None:
@@ -180,11 +202,7 @@ def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
 
     if achado:
         if _primeiro_nome(corpo.nome) != _primeiro_nome(achado["nome"]):
-            raise HTTPException(
-                status_code=409,
-                detail=("Já temos um cadastro neste telefone, mas o nome não confere. "
-                        "Confira como você se cadastrou, ou fale com a casa."),
-            )
+            raise HTTPException(status_code=409, detail=_NOME_NAO_CONFERE)
         # 🔑 **Cidade e gênero podem ser COMPLETADOS numa visita seguinte**, se o
         # cadastro antigo não os tiver. ⚠️ Mas o que já está preenchido não é
         # sobrescrito pelo que a tela mandar: quem corrigiu a cidade pelo balcão
