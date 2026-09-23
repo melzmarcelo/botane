@@ -323,9 +323,18 @@
     dentro. O valor está em não deixar o modelo propor ao usuário algo que vai falhar.
     ⚠️ **`destructiveHint` ligado em TUDO que grava**, inclusive no que "só corrige um
     campo": é o que faz o Claude perguntar antes. Nenhuma é idempotente.
-    ⚠️ **A UNIDADE de estoque e o fator de compra ficam fora do `atualizar_produto`**:
-    trocá-los converte custo e saldo, e essa conversa é da tela, que mostra os dois números
-    antes de aplicar.
+    🔑 **O `atualizar_produto` edita TODO campo que o `PUT /produtos/{id}` aceita**
+    (23/09/2026, pedido do dono: *"permitir a marcação de Controla Estoque. Pode liberar
+    ajuste em todos os campos editáveis do produto."*). O `smoke_conector_claude` confere
+    que `ProdutoUpdate.model_fields` ⊆ esquema da ferramenta — campo novo no PUT que não
+    chegar ao conector derruba a suíte.
+    ⚠️ **Até ali a unidade de estoque e o fator de compra ficavam FORA** (20/09), porque
+    trocá-los converte custo e saldo. Entraram porque a ROTA já não deixa a conversão
+    passar calada: o salto de custo volta 409 com os dois números, e só
+    `confirmar_troca_de_unidade` explícito grava — o mesmo vale para
+    `confirmar_reativacao`. A descrição manda o Claude mostrar os números e só reenviar
+    com o sim da pessoa. ⚠️ `fornecedores` SUBSTITUI a lista (o `Param` ganhou `itens`
+    para descrever array). ⚠️ A FOTO continua fora: é multipart.
     ⚠️ **Só o que o modelo mandou vai no corpo** — o `PUT` de produto grava com
     `exclude_unset`, e mandar os não informados como nulo apagaria campo que ninguém pediu
     para apagar.

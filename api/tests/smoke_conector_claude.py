@@ -375,13 +375,43 @@ checar("e grava SÓ o que foi mandado",
        depois["marca"] == "Marca do Claude" and float(depois["estoque_minimo"]) == 2
        and float(depois["estoque_maximo"]) == 9,
        {k: depois.get(k) for k in ("marca", "estoque_minimo", "estoque_maximo")})
-# 🔑 A unidade de estoque fica FORA de propósito: trocá-la converte custo e
-# saldo, e essa conversa é da tela, que mostra os dois números antes.
+# 🔑 **Todos os campos que a tela edita** (pedido do dono, 23/09/2026). Até ali a
+# unidade e o fator ficavam fora; entram porque a ROTA segura a conversão com 409.
 campos_update = next(t for t in gravam
                      if t["name"] == "atualizar_produto")["inputSchema"]["properties"]
-checar("a unidade de estoque não é alterável por aqui",
-       "um_estoque" not in campos_update and "fator_compra" not in campos_update,
-       sorted(campos_update))
+from models.produtos import ProdutoUpdate  # noqa: E402
+checar("o conector aceita TODO campo que o PUT de produto aceita",
+       set(ProdutoUpdate.model_fields) <= set(campos_update),
+       sorted(set(ProdutoUpdate.model_fields) - set(campos_update)))
+st, _, r = rpc(escrita, "tools/call", {"name": "atualizar_produto", "arguments": {
+    "id_produto": id_novo, "controla_estoque": False,
+    "nome_catalogo": "Insumo do Claude", "observacao": "marcado pelo conector"}})
+checar("controla_estoque é desmarcado pelo conector", not r["result"]["isError"], r)
+st, _, r = rpc(escrita, "tools/call", {"name": "detalhe_produto",
+                                       "arguments": {"id_produto": id_novo}})
+d2 = json.loads(r["result"]["content"][0]["text"])
+checar("e grava, junto com os campos que antes não chegavam",
+       d2.get("controla_estoque") is False and d2.get("nome_catalogo") == "Insumo do Claude"
+       and d2.get("observacao") == "marcado pelo conector",
+       {k: d2.get(k) for k in ("controla_estoque", "nome_catalogo", "observacao")})
+# ⚠️ A troca de unidade passa pela MESMA conversão da tela: KG → G multiplica o
+# mínimo por mil. Se o conector gravasse a sigla crua, o mínimo ficaria em 2 g.
+st, _, r = rpc(escrita, "tools/call", {"name": "atualizar_produto", "arguments": {
+    "id_produto": id_novo, "um_estoque": "G"}})
+st, _, r2 = rpc(escrita, "tools/call", {"name": "detalhe_produto",
+                                        "arguments": {"id_produto": id_novo}})
+d3 = json.loads(r2["result"]["content"][0]["text"])
+checar("trocar a unidade pelo conector CONVERTE, como na tela",
+       not r["result"]["isError"] and d3.get("um_estoque") == "G"
+       and float(d3.get("estoque_minimo") or 0) == 2000,
+       (r["result"], {k: d3.get(k) for k in ("um_estoque", "estoque_minimo")}))
+# ⚠️ **Devolve o produto como estava**: o 7d dá entrada de nota NELE, e com o
+# estoque desligado a nota entraria sem mexer no razão — o 7d falharia medindo
+# outra coisa.
+st, _, r = rpc(escrita, "tools/call", {"name": "atualizar_produto", "arguments": {
+    "id_produto": id_novo, "um_estoque": "KG", "controla_estoque": True}})
+checar("e o conector religa o controle e volta a unidade",
+       not r["result"]["isError"], r["result"])
 with get_cursor() as cur:
     cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'produto'
                     AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_novo),))

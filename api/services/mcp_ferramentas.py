@@ -47,6 +47,8 @@ class Param:
     maximo: int | None = None
     # Vai no CORPO em JSON, e não na query. Só nas ferramentas que gravam.
     no_corpo: bool = False
+    # O esquema de cada item, quando `tipo` é "array" (os fornecedores do produto).
+    itens: dict | None = None
 
 
 @dataclass
@@ -78,6 +80,8 @@ class Ferramenta:
                 d["minimum"] = p.minimo
             if p.maximo is not None:
                 d["maximum"] = p.maximo
+            if p.itens is not None:
+                d["items"] = p.itens
             props[nome] = d
         obrig = [n for n, p in self.params.items() if p.obrigatorio]
         return {"type": "object", "properties": props, "required": obrig,
@@ -562,20 +566,57 @@ FERRAMENTAS: list[Ferramenta] = [
         metodo="POST"),
     Ferramenta(
         "atualizar_produto", "Corrigir o cadastro de um produto",
-        "Altera só os campos informados. ⚠️ A UNIDADE de estoque e o fator de compra NÃO "
-        "entram aqui de propósito: trocá-los converte custo e saldo, e isso se faz na tela, "
-        "que mostra a conversão antes.",
+        # 🔑 **Todos os campos que a tela edita** (pedido do dono, 23/09/2026: *"permitir
+        # a marcação de Controla Estoque. Pode liberar ajuste em todos os campos
+        # editáveis do produto."*). A unidade de estoque e o fator de compra estavam
+        # fora desde 20/09 porque convertem custo e saldo; entram agora porque a ROTA
+        # já não deixa a conversão passar calada — o salto de custo volta 409 com os
+        # dois números, e só um `confirmar_troca_de_unidade` explícito grava. É a mesma
+        # porta da tela, que é o princípio das ferramentas de escrita.
+        # ⚠️ A FOTO continua fora: é multipart, e o conector só fala JSON.
+        "Altera só os campos informados — todos os que a tela de produto edita. Leia "
+        "`detalhe_produto` antes. ⚠️ Trocar a UNIDADE de estoque (`um_estoque`) CONVERTE "
+        "custo, mínimo, máximo e fatores: quando o custo dá um salto, o servidor recusa com "
+        "os dois números — mostre-os à pessoa e só reenvie com `confirmar_troca_de_unidade` "
+        "se ela disser sim. Quando ele não souber a relação entre as unidades, pede "
+        "`fator_troca_unidade`. ⚠️ `fornecedores` SUBSTITUI a lista inteira. ⚠️ Desligar "
+        "`controla_estoque` tira o produto do razão: as entradas e baixas seguintes deixam "
+        "de mexer no saldo.",
         "/produtos/{id_produto}",
         {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         # --- identificação
+         "codigo": Param("string", "Código interno (único).", no_corpo=True),
          "nome": Param("string", "Nome.", no_corpo=True),
          "nome_curto": Param("string", "Nome curto (cupom, etiqueta).", no_corpo=True),
          "tipo": Param("string", "Tipo do produto.", no_corpo=True,
                        enum=["INSUMO", "REVENDA", "PRODUZIDO", "KIT", "EMBALAGEM",
                              "MATERIAL_LIMPEZA", "UTENSILIO"]),
-         "id_categoria": Param("integer", "Categoria.", no_corpo=True),
-         "id_setor": Param("integer", "Setor.", no_corpo=True),
-         "id_local_padrao": Param("integer", "Prateleira padrão.", no_corpo=True),
-         "id_local_venda": Param("integer", "De onde a venda baixa.", no_corpo=True),
+         "id_categoria": Param("integer", "Categoria (de `categorias`).", no_corpo=True),
+         "id_setor": Param("integer", "Setor (de `setores`).", no_corpo=True),
+         "status": Param("string", "Situação do cadastro.", no_corpo=True,
+                         enum=["RASCUNHO", "ATIVO", "ARQUIVADO"]),
+         "ativo": Param("boolean", "Ativo nas buscas e telas. Produto não se exclui: "
+                                   "se desativa.", no_corpo=True),
+         "confirmar_reativacao": Param("boolean", "Resposta ao 409 de reativar um cadastro "
+                                                  "absorvido numa fusão. Só com o sim da "
+                                                  "pessoa.", no_corpo=True),
+         # --- estoque
+         "controla_estoque": Param("boolean", "Controla saldo no estoque.", no_corpo=True),
+         "um_estoque": Param("string", "Unidade de estoque (de `unidades_medida`). "
+                                       "Converte custo e saldo — ver a descrição.",
+                             no_corpo=True),
+         "fator_troca_unidade": Param("number", "Quantos da unidade NOVA vale 1 da antiga, "
+                                                "quando o servidor pedir.", no_corpo=True),
+         "confirmar_troca_de_unidade": Param("boolean", "Resposta ao 409 do salto de custo "
+                                                        "na troca de unidade. Só com o sim "
+                                                        "da pessoa.", no_corpo=True),
+         "um_compra": Param("string", "Unidade em que se compra.", no_corpo=True),
+         "fator_compra": Param("number", "Quantos da unidade de estoque vêm em 1 da de "
+                                         "compra.", no_corpo=True),
+         "id_local_padrao": Param("integer", "Prateleira padrão (de `locais`).",
+                                  no_corpo=True),
+         "id_local_venda": Param("integer", "De onde a venda baixa (de `locais`).",
+                                 no_corpo=True),
          "estoque_minimo": Param("number", "Mínimo para o alerta.", no_corpo=True),
          "estoque_maximo": Param("number", "Máximo de referência.", no_corpo=True),
          "perecivel": Param("boolean", "É perecível.", no_corpo=True),
@@ -583,13 +624,43 @@ FERRAMENTAS: list[Ferramenta] = [
                                 minimo=0, maximo=3650),
          "controla_lote": Param("boolean", "Controla lote.", no_corpo=True),
          "controla_validade": Param("boolean", "Controla validade.", no_corpo=True),
+         # --- produção
+         "producao_propria": Param("boolean", "A casa produz este item.", no_corpo=True),
+         "modo_producao": Param("string", "PARA_ESTOQUE produz e guarda; NA_HORA a venda "
+                                          "produz e baixa junto.", no_corpo=True,
+                                enum=["PARA_ESTOQUE", "NA_HORA"]),
+         # --- venda e catálogo
+         "preco_venda": Param("number", "Preço de venda da casa.", no_corpo=True),
+         "nome_catalogo": Param("string", "Nome como o CLIENTE lê no cardápio do site.",
+                                no_corpo=True),
+         "informacao_adicional": Param("string", "Texto para o cliente no cardápio (não é "
+                                                 "a observação interna).", no_corpo=True),
+         # --- fiscal e integrações
          "codigo_barras": Param("string", "EAN.", no_corpo=True),
          "marca": Param("string", "Marca.", no_corpo=True),
          "ncm": Param("string", "NCM.", no_corpo=True),
+         "cest": Param("string", "CEST.", no_corpo=True),
          "peso_liquido": Param("number", "Peso líquido.", no_corpo=True),
          "peso_bruto": Param("number", "Peso bruto.", no_corpo=True),
-         "status": Param("string", "Situação do cadastro.", no_corpo=True,
-                         enum=["RASCUNHO", "ATIVO", "ARQUIVADO"])},
+         "codigo_omie": Param("string", "Código no Omie.", no_corpo=True),
+         "codigo_pdv": Param("string", "Código no PDV Legal.", no_corpo=True),
+         "integrado_pdv": Param("boolean", "Integrado ao PDV Legal.", no_corpo=True),
+         "observacao": Param("string", "Recado interno, para quem trabalha na casa.",
+                             no_corpo=True),
+         "fornecedores": Param(
+             "array", "De quem se compra. SUBSTITUI a lista inteira: mande os que ficam "
+                      "junto com o novo.", no_corpo=True,
+             itens={"type": "object",
+                    "properties": {
+                        "id_fornecedor": {"type": "integer",
+                                          "description": "Id (de `buscar_pessoas`)."},
+                        "codigo_no_fornecedor": {"type": "string"},
+                        "embalagem": {"type": "string"},
+                        "fator": {"type": "number",
+                                  "description": "Unidades de estoque por embalagem."},
+                        "ultimo_preco": {"type": "number"},
+                        "preferencial": {"type": "boolean"}},
+                    "required": ["id_fornecedor"]})},
         metodo="PUT"),
     Ferramenta(
         "fundir_produtos", "Juntar dois cadastros do mesmo produto",
