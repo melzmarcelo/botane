@@ -106,11 +106,24 @@ def procurar(cur, id_unidade: int, telefone: str) -> dict:
     return {
         "cadastrado": bool(achado),
         "dica": dica_do_nome(achado["nome"]) if achado else None,
+        # 🔑 **O primeiro nome, para o site cumprimentar** (24/09/2026). Com a
+        # identificação só pelo telefone, é o que diz à pessoa "é você mesmo".
+        # ⚠️ Só o PRIMEIRO: o sobrenome não ajuda a saudação e completaria a
+        # consulta telefone→pessoa que a dica existia para evitar.
+        "nome": _primeiro_nome_exibido(achado["nome"]) if achado else None,
     }
 
 
-def conferir(cur, id_unidade: int, telefone: str, nome: str) -> dict | None:
-    """O cadastro deste telefone, se o nome conferir. Sem cadastro, None.
+def _primeiro_nome_exibido(nome: str) -> str:
+    partes = (nome or "").strip().split()
+    return partes[0].capitalize() if partes else ""
+
+
+def conferir(cur, id_unidade: int, telefone: str, nome: str | None = None) -> dict | None:
+    """O cadastro deste telefone. Sem cadastro, None.
+
+    🔑 **O telefone basta** (pedido do dono, 24/09/2026). O nome, SE vier, ainda é
+    conferido — mandar um nome errado continua sendo recusado.
 
     ⚠️ **Nome que não confere é 409, com a MESMA frase de `resolver`** — é a
     mesma prova, e duas frases para ela ensinariam qual das portas é mais frouxa.
@@ -123,7 +136,7 @@ def conferir(cur, id_unidade: int, telefone: str, nome: str) -> dict | None:
     achado = cur.fetchone()
     if not achado:
         return None
-    if _primeiro_nome(nome) != _primeiro_nome(achado["nome"]):
+    if nome and _primeiro_nome(nome) != _primeiro_nome(achado["nome"]):
         raise HTTPException(status_code=409, detail=_NOME_NAO_CONFERE)
     return dict(achado)
 
@@ -233,7 +246,9 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     achado = cur.fetchone()
 
     if achado:
-        if _primeiro_nome(corpo.nome) != _primeiro_nome(achado["nome"]):
+        # ⚠️ Só confere o nome que VEIO: desde 24/09 o site não o pede a quem
+        # já tem cadastro (pedido do dono). Nome mandado e errado é recusado.
+        if corpo.nome and _primeiro_nome(corpo.nome) != _primeiro_nome(achado["nome"]):
             raise HTTPException(status_code=409, detail=_NOME_NAO_CONFERE)
         # 🔑 **Cidade e gênero podem ser COMPLETADOS numa visita seguinte**, se o
         # cadastro antigo não os tiver. ⚠️ Mas o que já está preenchido não é
@@ -268,6 +283,9 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
                 status_code=422,
                 detail=f"Para o primeiro cadastro, informe também: {', '.join(faltando)}.",
             )
+    # ⚠️ Sem cadastro, o nome é o mínimo: é por ele que a casa chama a pessoa.
+    if not (corpo.nome or "").strip():
+        raise HTTPException(status_code=422, detail="Diga seu nome para o cadastro.")
     if corpo.genero and corpo.genero not in GENEROS:
         raise HTTPException(status_code=422, detail="Gênero inválido.")
 

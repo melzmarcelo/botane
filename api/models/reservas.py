@@ -258,7 +258,11 @@ class ClienteDoSite(BaseModel):
     ⚠️ Os dois pelo mesmo motivo de `TelefoneDoSite`: dado pessoal fora da URL.
     """
     telefone: str = Field(max_length=30)
-    nome: str = Field(min_length=2, max_length=120)
+    # 🔑 **Opcional desde 24/09/2026** (pedido do dono: *"não solicitar a
+    # confirmação do nome, somente com o telefone já confirmamos os dados"*).
+    # Quem já tem cadastro é reconhecido pelo telefone; o nome só é exigido
+    # de quem é NOVO — e, se vier, ainda é conferido.
+    nome: str | None = Field(default=None, min_length=2, max_length=120)
 
 
 class CancelamentoDoSite(ClienteDoSite):
@@ -279,7 +283,11 @@ class IdentificacaoDoSite(BaseModel):
     decide o que é obrigatório é `clientes.identificar`, pela configuração da loja.
     """
     telefone: str = Field(max_length=30)
-    nome: str = Field(min_length=2, max_length=120)
+    # 🔑 **Opcional desde 24/09/2026** (pedido do dono: *"não solicitar a
+    # confirmação do nome, somente com o telefone já confirmamos os dados"*).
+    # Quem já tem cadastro é reconhecido pelo telefone; o nome só é exigido
+    # de quem é NOVO — e, se vier, ainda é conferido.
+    nome: str | None = Field(default=None, min_length=2, max_length=120)
     genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
     cidade: str | None = Field(default=None, max_length=80)
     nascimento: date | None = None
@@ -303,7 +311,11 @@ class ReservaDoSite(BaseModel):
     # falando de caracteres, para quem só digitou o telefone errado. Quem
     # explica é `telefone_valido`, que sabe dizer que falta o DDD.
     telefone: str = Field(max_length=30)
-    nome: str = Field(min_length=2, max_length=120)
+    # 🔑 **Opcional desde 24/09/2026** (pedido do dono: *"não solicitar a
+    # confirmação do nome, somente com o telefone já confirmamos os dados"*).
+    # Quem já tem cadastro é reconhecido pelo telefone; o nome só é exigido
+    # de quem é NOVO — e, se vier, ainda é conferido.
+    nome: str | None = Field(default=None, min_length=2, max_length=120)
     genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
     cidade: str | None = Field(default=None, max_length=80)
     # 🔑 Migração 086 (pedido do dono, 24/09/2026). Obrigatória para quem é NOVO

@@ -304,6 +304,8 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 /* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
    direita — o mesmo desenho do recibo, só que em lista. */
 .minhas { display: flex; flex-direction: column; gap: 6px; }
+.link-sair { font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--tinta-suave); text-decoration: underline; }
 .minhas[hidden] { display: none; }
 .minha {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -422,6 +424,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <!-- 🔑 **Pedido do dono (23/09/2026):** *"uma área dentro de Reserve sua
            mesa para Suas Reservas."* Só aparece para quem se identificou e tem
            reserva em aberto — sem nenhuma, é um título sobre coisa nenhuma. -->
+      <p class="sub-tela" id="nao-sou-eu" hidden></p>
       <div class="minhas" id="suas-reservas" hidden>
         <span class="rot">Suas reservas</span>
         <div class="minhas" id="lista-minhas"></div>
@@ -786,11 +789,13 @@ async function carregarCatalogos() {
 
 /** Abre um catálogo pelo botão da página inicial. */
 async function abrirCatalogo(c) {
-  if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
-  if (!eu.identificado) return identificarPara(c);
+  if (c.exige_cadastro && !eu.identificado) return identificarPara(c);
   if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
-  mostrarCardapio(c.nome, () =>
-    pedir(`/catalogos/${c.id}/abrir`, { telefone: eu.telefone, nome: eu.nome })
+  aberto = { id: c.id, secao: null };
+  lembrar();
+  if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
+  return mostrarCardapio(c.nome, () =>
+    pedir(`/catalogos/${c.id}/abrir`, { telefone: eu.telefone })
       .then((r) => r.cardapio));
 }
 
@@ -807,7 +812,7 @@ function destravarCatalogos() {
     if (!c || !c.exige_cadastro || c.origem === "PRODUTOS") return;
     try {
       const r = await pedir(`/catalogos/${c.id}/abrir`,
-        { telefone: eu.telefone, nome: eu.nome });
+        { telefone: eu.telefone });
       const a = document.createElement("a");
       a.className = "item";
       a.href = `${API}${r.arquivo_url}`;
@@ -902,6 +907,8 @@ function desenharPrato(item) {
 
 function abrirSecao(indice) {
   const c = cardapio.categorias[indice];
+  if (!c) return;
+  if (aberto) { aberto.secao = indice; lembrar(); }
   $("#t-secao").textContent = c.nome;
   const desc = $("#secao-descricao");
   desc.textContent = c.descricao || "";
@@ -983,6 +990,50 @@ const eu = { telefone: "", nome: "", cadastrado: false, identificado: false };
  */
 let destino = "reserva";
 
+/**
+ * 🔑 **A SESSÃO da aba** (pedido do dono, 24/09/2026: *"trabalhar com sessão —
+ * entrei num catálogo que exigia cadastro; ao entrar na reserva, não preciso
+ * logar novamente"*), e o F5 que volta ao mesmo lugar com dado FRESCO.
+ *
+ * ⚠️ **`sessionStorage`, não `localStorage`.** A decisão de 21/09 era não guardar
+ * nada entre visitas — celular emprestado marcaria mesa no nome do dono. A aba
+ * é o meio-termo: sobrevive ao F5 e some quando a aba fecha. E a tela de
+ * reserva tem o "Não é você?" para quem pegou o celular de alguém.
+ * ⚠️ **Guarda QUEM é e ONDE estava, nunca o conteúdo.** O cardápio é buscado de
+ * novo a cada F5 — é assim que o produto recém-cadastrado aparece.
+ */
+const SESSAO = "botane.sessao";
+/** O catálogo aberto e a seção dentro dele, para o F5 voltar ao mesmo ponto. */
+let aberto = null;
+
+function lembrar() {
+  try {
+    sessionStorage.setItem(SESSAO, JSON.stringify({
+      eu: { telefone: eu.telefone, nome: eu.nome, cadastrado: eu.cadastrado,
+            identificado: eu.identificado },
+      aberto,
+    }));
+  } catch { /* aba privada ou armazenamento bloqueado: o site segue sem memória */ }
+}
+
+function recordar() {
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null");
+    if (!salvo) return;
+    Object.assign(eu, salvo.eu || {});
+    aberto = salvo.aberto || null;
+  } catch { /* idem */ }
+}
+
+/** "Não é você?": esquece a pessoa desta aba e recomeça pelo telefone. */
+function esquecer() {
+  try { sessionStorage.removeItem(SESSAO); } catch { /* idem */ }
+  // ⚠️ Recarrega em vez de limpar à mão: os PDFs destravados viraram links, e
+  // voltar cada um a botão é o tipo de detalhe que se esquece.
+  location.replace(location.pathname + "#quem");
+  location.reload();
+}
+
 async function saberSeAceita() {
   try {
     reservaOnline = await pedir("/reserva");
@@ -1048,15 +1099,22 @@ async function consultarTelefone() {
   $("#avancar").disabled = false;
   eu.telefone = fone;
   eu.cadastrado = !!r.cadastrado;
+  // 🔑 **O telefone BASTA** (pedido do dono, 24/09/2026: *"não solicitar a
+  // confirmação do nome, somente com o telefone já confirmamos os dados"*). Até
+  // ali quem tinha cadastro digitava o próprio nome para conferir — a decisão
+  // de 21/09 era "confirma, não revela". O dono trocou atrito por risco: quem
+  // souber um telefone alheio entra como aquela pessoa.
+  if (eu.cadastrado) {
+    eu.nome = r.nome || "";
+    eu.identificado = true;
+    lembrar();
+    destravarCatalogos();
+    return seguirIdentificado();
+  }
   passo = "dados";
   $("#bloco-quem").hidden = false;
-  // 🔑 **Confirma, não revela** (decisão do dono): quem já tem cadastro vê a
-  // dica mascarada e digita o próprio nome para conferir. Sem isso o site seria
-  // uma consulta aberta de telefone→nome, sem login nenhum na frente.
-  $("#bloco-novo").hidden = eu.cadastrado || !r.cadastro_completo;
-  avisar("#aviso-quem", eu.cadastrado
-    ? `Já temos seu cadastro (${r.dica}). Confirme seu nome para continuar.`
-    : "Primeira vez por aqui? Conte quem é você.", false);
+  $("#bloco-novo").hidden = !r.cadastro_completo;
+  avisar("#aviso-quem", "Primeira vez por aqui? Conte quem é você.", false);
   $("#avancar").textContent = destino === "reserva"
     ? "Escolher dia e horário" : "Abrir o cardápio";
   $("#nome-cliente").focus();
@@ -1075,21 +1133,22 @@ async function guardarDados() {
   eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
   eu.nascimento = $("#bloco-novo").hidden ? null : $("#nascimento").value;
   if (destino !== "reserva") return identificarParaCatalogo();
-  // 🔑 **Quem já tem cadastro vê as próprias reservas** — e, de quebra, o nome
-  // é conferido AQUI, não só no "Confirmar". Antes a pessoa escolhia dia,
-  // pessoas e horário para só no fim ouvir que o nome não confere.
+  // ⚠️ Quem é NOVO e vai reservar só vira cadastro ao confirmar a mesa — a
+  // reserva e o cadastro nascem na mesma transação.
   $("#suas-reservas").hidden = true;
-  if (eu.cadastrado) {
-    $("#avancar").disabled = true;
-    const erro = await carregarMinhas();
-    $("#avancar").disabled = false;
-    if (erro) return avisar("#aviso-quem", erro);
-    // O nome conferiu: a pessoa está identificada, e os catálogos se abrem.
-    eu.identificado = true;
-    destravarCatalogos();
-  }
   avisar("#aviso-quem", "");
   abrirReserva();
+}
+
+/** Já se sabe quem é: segue para onde a pessoa queria ir. */
+async function seguirIdentificado() {
+  avisar("#aviso-quem", "");
+  if (destino === "reserva") {
+    $("#voltar-reserva").dataset.ir = "inicio";
+    await carregarMinhas();
+    return abrirReserva();
+  }
+  return entregarCatalogo(destino, eu.nome);
 }
 
 /** Busca e desenha "Suas reservas". Devolve a frase de erro, se houver. */
@@ -1114,8 +1173,14 @@ async function identificarParaCatalogo() {
   $("#avancar").disabled = false;
   eu.cadastrado = true;
   eu.identificado = true;
-  const alvo = destino;
+  eu.nome = quem.nome || eu.nome;
+  lembrar();
   destravarCatalogos();
+  return entregarCatalogo(destino, eu.nome);
+}
+
+/** Abre o catálogo que pediu identificação: o cardápio na tela, ou o link do PDF. */
+async function entregarCatalogo(alvo, nome) {
   if (alvo.origem === "PRODUTOS") return abrirCatalogo(alvo);
 
   // ⚠️ **O PDF vira um LINK na tela, não um `window.open`.** Depois de esperar a
@@ -1123,7 +1188,7 @@ async function identificarParaCatalogo() {
   // como popup — a pessoa se identificaria e nada abriria.
   let r;
   try {
-    r = await pedir(`/catalogos/${alvo.id}/abrir`, { telefone: eu.telefone, nome: eu.nome });
+    r = await pedir(`/catalogos/${alvo.id}/abrir`, { telefone: eu.telefone });
   } catch (e) {
     return avisar("#aviso-quem", e.mensagem || "Não conseguimos abrir o cardápio agora.");
   }
@@ -1134,7 +1199,7 @@ async function identificarParaCatalogo() {
   caixa.hidden = false;
   caixa.className = "regras";
   // O nome do CADASTRO, não o digitado: quem conferiu com "maria" é a Maria.
-  caixa.innerHTML = `<span>Pronto, ${esc((quem.nome || eu.nome).split(" ")[0])}!</span>
+  caixa.innerHTML = `<span>Pronto${nome ? ", " + esc(nome) : ""}!</span>
     <a class="item destaque" href="${API}${esc(r.arquivo_url)}" target="_blank"
        rel="noopener">Abrir ${esc(alvo.nome)}</a>`;
 }
@@ -1142,13 +1207,11 @@ async function identificarParaCatalogo() {
 async function carregarMinhas() {
   let r;
   try {
-    r = await pedir("/reserva/minhas", { telefone: eu.telefone, nome: eu.nome });
-  } catch (e) {
-    // ⚠️ Nome que não confere barra a pessoa (é a prova de que o telefone é
-    // dela); qualquer outra falha só deixa a lista de fora — não é motivo para
-    // impedir uma reserva nova.
-    return e.status === 409 || e.status === 429 || e.status === 422
-      ? (e.mensagem || "Não conseguimos conferir seu cadastro.") : null;
+    r = await pedir("/reserva/minhas", { telefone: eu.telefone });
+  } catch {
+    // ⚠️ Falha aqui só deixa a lista de fora — não é motivo para impedir uma
+    // reserva nova.
+    return null;
   }
   const lista = r.reservas || [];
   $("#suas-reservas").hidden = !lista.length;
@@ -1188,7 +1251,7 @@ $("#lista-minhas").addEventListener("click", async (e) => {
   b.textContent = "Cancelando…";
   try {
     await pedir("/reserva/cancelar", {
-      telefone: eu.telefone, nome: eu.nome, data: b.dataset.data, hora: b.dataset.hora,
+      telefone: eu.telefone, data: b.dataset.data, hora: b.dataset.hora,
     });
   } catch (erro) {
     b.disabled = false;
@@ -1297,8 +1360,9 @@ $("#confirmar").addEventListener("click", async () => {
   let feita;
   try {
     feita = await pedir("/reserva", {
-      telefone: eu.telefone, nome: eu.nome, genero: eu.genero, cidade: eu.cidade,
-      nascimento: eu.nascimento,
+      // ⚠️ O nome só vai para quem é NOVO: o cadastrado é reconhecido pelo telefone.
+      telefone: eu.telefone, nome: eu.cadastrado ? null : eu.nome,
+      genero: eu.genero, cidade: eu.cidade, nascimento: eu.nascimento,
       data: $("#dia").value, hora: horaEscolhida,
       pessoas: Number($("#pessoas").value),
       // ⚠️ Em branco vai como NULO, não como string vazia: a agenda do balcão
@@ -1323,9 +1387,11 @@ $("#confirmar").addEventListener("click", async () => {
   $("#confirmar").hidden = true;
   // A nova entra em "Suas reservas" para quando a pessoa voltar à tela.
   eu.cadastrado = true;
+  if (feita.nome) eu.nome = feita.nome;
   // ⚠️ A reserva CADASTROU quem era novo: daqui em diante ela está identificada,
   // e o catálogo que exige cadastro não pergunta de novo.
   eu.identificado = true;
+  lembrar();
   destravarCatalogos();
   carregarMinhas();
   const quando = new Date(feita.data + "T12:00").toLocaleDateString("pt-BR");
@@ -1373,6 +1439,15 @@ let diaTocado = false;
  */
 async function abrirReserva() {
   ir("reserva");
+  // 🔑 Quem está identificado nesta aba vê quem é — e a saída, para o celular
+  // emprestado. Sem ela, a sessão da aba prenderia o próximo a usar o aparelho.
+  const naoSou = $("#nao-sou-eu");
+  naoSou.hidden = !(eu.identificado && reservaOnline.aceita);
+  if (!naoSou.hidden) {
+    naoSou.innerHTML = `Olá${eu.nome ? ", " + esc(eu.nome) : ""}! ` +
+      `<button type="button" class="link-sair">Não é você? Trocar telefone</button>`;
+    naoSou.querySelector("button").addEventListener("click", esquecer);
+  }
   if (!diaTocado) {
     let hoje = null;
     try {
@@ -1421,8 +1496,10 @@ async function abrirReserva() {
     }
   });
 
-  carregarCasa().then(carregarCatalogos);
-  saberSeAceita().then(() => {
+  recordar();
+  const aceita = saberSeAceita();
+  Promise.all([carregarCasa().then(carregarCatalogos), aceita]).then(restaurarTela);
+  aceita.then(() => {
     // ⚠️ Quem não marca pelo site continua vendo o aviso de que a mesa se
     // fecha pela conversa; quem marca, não — o rodapé diria o contrário do que
     // o botão logo acima faz.
@@ -1435,8 +1512,39 @@ async function abrirReserva() {
     }
   });
   buscarHorarios();
-  if (location.hash) ir(location.hash.slice(1));
 })();
+
+/**
+ * O F5 volta à tela em que a pessoa estava — e busca o conteúdo DE NOVO.
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"recarregar corretamente as informações
+ * quando der F5, tendo cadastrado um novo produto no catálogo."* O defeito não
+ * era cache: a API responde `private` e o CDN não a guarda. Era o site voltar
+ * para `#cardapio` pelo endereço SEM carregar cardápio nenhum — o F5 mostrava a
+ * tela vazia do HTML, ou a da categoria com o título "Categoria".
+ */
+async function restaurarTela() {
+  if (eu.identificado) destravarCatalogos();
+  const tela = (location.hash || "").slice(1);
+  if (tela === "cardapio" || tela === "secao") {
+    const c = aberto && catalogosDaCasa.find((x) => x.id === aberto.id);
+    // ⚠️ Saiu do ar entre um F5 e outro: volta ao início, não a uma tela vazia.
+    if (!c) return ir("inicio");
+    const secao = aberto.secao;
+    await abrirCatalogo(c);
+    if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);
+    return;
+  }
+  if (tela === "reserva" || tela === "quem") {
+    if (!reservaOnline.aceita) return abrirReserva();
+    destino = "reserva";
+    if (eu.identificado) return seguirIdentificado();
+    return identificarPara("reserva");
+  }
+  // "pronto" é o recibo de uma reserva que já foi: sem ela na memória, é o início.
+  if (tela === "contato") return ir("contato");
+  if (tela && tela !== "inicio") ir("inicio");
+}
 </script>
 </body>
 </html>

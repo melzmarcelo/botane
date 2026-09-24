@@ -745,3 +745,24 @@ Suas Reservas."*
   SEM `_reserva_online`: a casa pode exigir cadastro no catálogo sem marcar mesa pelo site.
   Contam no mesmo limite por origem. O site passou a consultar o telefone por
   `/cliente/telefone` (que devolve `cadastro_completo`); `/reserva/telefone` ficou de pé.
+
+## Só o telefone, a sessão da aba e o F5 (24/09/2026)
+
+🔑 **Pedido do dono:** *"deixar mais estável. Recarregar corretamente as informações quando
+der F5 tendo cadastrado um novo produto no catálogo. Trabalhar com sessão — entrei num
+catálogo que exigia cadastro, ao entrar na reserva não preciso logar novamente. Não
+solicitar a confirmação do nome, somente com o telefone já confirmamos os dados."*
+- ⚠️ **O F5 NÃO era cache** (a API responde `private`, o CDN faz BYPASS). Era o site voltar
+  para `#cardapio`/`#secao` pelo endereço sem carregar cardápio nenhum. Agora
+  `restaurarTela()` reabre o catálogo e a seção guardados e busca o conteúdo DE NOVO.
+- 🔑 **Sessão = `sessionStorage`** (chave `botane.sessao`): quem é (telefone, primeiro nome)
+  e onde estava — nunca o conteúdo. Sobrevive ao F5, some ao fechar a aba. ⚠️ A decisão de
+  21/09 era não guardar nada (celular emprestado); a aba é o meio-termo, e a tela de reserva
+  ganhou "Olá, X! Não é você? Trocar telefone" (`esquecer()`).
+- ⚠️ **"Confirma, não revela" CAIU por decisão do dono.** O cadastrado é reconhecido só pelo
+  telefone: `nome` virou opcional em `ClienteDoSite`/`IdentificacaoDoSite`/`ReservaDoSite`;
+  se vier, ainda é conferido (409). Novo sem nome → 422. **Consequência aceita**: quem souber
+  um telefone alheio vê as reservas em aberto e pode cancelá-las; o que resta de contenção é
+  o limite por origem. Para não completar a consulta telefone→pessoa, o site só recebe o
+  PRIMEIRO nome (`_primeiro_nome_exibido`) em `/cliente/telefone`, `/cliente` e na resposta da
+  reserva. Se um dia isso incomodar, a saída é código por WhatsApp (Business API).

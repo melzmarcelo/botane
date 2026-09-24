@@ -229,7 +229,7 @@ checar("confirmada na hora, porque a casa configurou AUTOMATICA",
 checar("e o site sabe que o cadastro era novo", feita.get("cadastro_novo") is True, feita)
 checar("a resposta devolve o que a tela precisa mostrar",
        feita.get("hora") == "19:00" and feita.get("pessoas") == 2
-       and feita.get("nome") == "Marina Duarte", feita)
+       and feita.get("nome") == "Marina", feita)
 # ⚠️ **Nada de id interno.** E a mesma regra das rotas de leitura: a tentacao e
 # devolver o registro e o preco e vazar o que ninguem pediu.
 checar("e NADA de id interno da reserva nem da mesa",
@@ -309,9 +309,14 @@ print("\n8b. suas reservas (pedido do dono, 23/09/2026)")
 sem_tentativas()
 
 
-def minhas(nome="Marina", telefone=FONE):
-    return chamar("POST", f"/publico/{UNIDADE}/reserva/minhas",
-                  {"telefone": telefone, "nome": nome}, origem="203.0.113.7")
+# 🔑 **Só o telefone** desde 24/09/2026 (pedido do dono). O nome, SE vier, ainda
+# e conferido — e isso continua coberto pelas chamadas com `nome="Outra"`.
+def minhas(nome=None, telefone=FONE):
+    corpo = {"telefone": telefone}
+    if nome:
+        corpo["nome"] = nome
+    return chamar("POST", f"/publico/{UNIDADE}/reserva/minhas", corpo,
+                  origem="203.0.113.7")
 
 
 st, r = minhas()
@@ -339,9 +344,11 @@ checar("a reserva feita pelo balcao, no mesmo telefone, entra na lista",
 
 
 
-def cancelar(data=DIA, hora="12:00", nome="Marina", telefone=FONE):
-    return chamar("POST", f"/publico/{UNIDADE}/reserva/cancelar",
-                  {"telefone": telefone, "nome": nome, "data": data, "hora": hora},
+def cancelar(data=DIA, hora="12:00", nome=None, telefone=FONE):
+    corpo = {"telefone": telefone, "data": data, "hora": hora}
+    if nome:
+        corpo["nome"] = nome
+    return chamar("POST", f"/publico/{UNIDADE}/reserva/cancelar", corpo,
                   origem="203.0.113.7")
 
 
@@ -376,6 +383,29 @@ with get_cursor() as cur:
 st, r = cancelar(data=date.today().isoformat(), hora="00:00")
 checar("reserva cujo horario ja passou nao se cancela pelo site",
        st == 409 and "passou" in (r.get("detail") or ""), (st, r))
+
+print("\n8d. so o telefone basta (pedido do dono, 24/09/2026)")
+sem_tentativas()
+# ⚠️ O telefone chega aqui no limite de reservas em aberto: sem soltar, a
+# reserva abaixo levaria 429 medindo outra coisa.
+with get_cursor() as cur:
+    cur.execute("UPDATE reservas SET status = 'CANCELADA' WHERE id_unidade = %s "
+                "AND telefone = %s", (UNIDADE, FONE))
+st, r = chamar("POST", f"/publico/{UNIDADE}/cliente/telefone", {"telefone": FONE},
+               origem="203.0.113.7")
+checar("o telefone cadastrado devolve o PRIMEIRO nome, para a saudacao",
+       st == 200 and r.get("nome") == "Marina", (st, r))
+checar("e nunca o nome inteiro",
+       "Duarte" not in json.dumps(r, ensure_ascii=False), r)
+st, r = reservar(nome=None, genero=None, cidade=None, nascimento=None, hora="10:00",
+                 data=(date.today() + timedelta(days=4)).isoformat())
+checar("quem ja tem cadastro reserva SEM mandar o nome", st == 201, (st, r))
+st, r = chamar("POST", f"/publico/{UNIDADE}/cliente",
+               {"telefone": "47999106161", "genero": "OUTRO", "cidade": "Blumenau",
+                "nascimento": "1990-01-01"}, origem="203.0.113.7")
+checar("mas quem e NOVO precisa dizer o nome", st == 422 and "nome" in
+       (r.get("detail") or ""), (st, r))
+
 
 print("\n8c. so os horarios que ainda da tempo de marcar")
 ONTEM = (date.today() - timedelta(days=1)).isoformat()

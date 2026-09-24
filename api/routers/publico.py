@@ -623,7 +623,9 @@ def marcar_reserva(id_unidade: int, corpo: ReservaDoSite, pedido: Request) -> di
             # olhar.** É a mesma regra que impediu o site de prometer o que não
             # fazia; agora ele faz, e continua não podendo prometer demais.
             "confirmada": feita["status"] == "CONFIRMADA",
-            "nome": cliente["nome"],
+            # ⚠️ Só o primeiro nome, como nas outras portas do site: desde 24/09
+            # basta o telefone, e o nome inteiro aqui vazaria quem é o dono dele.
+            "nome": clientes._primeiro_nome_exibido(cliente["nome"]),
             "cadastro_novo": cliente["novo"],
             "data": corpo.data.isoformat(),
             "hora": corpo.hora.strftime("%H:%M"),
@@ -647,9 +649,10 @@ def minhas_reservas(id_unidade: int, corpo: ClienteDoSite, pedido: Request) -> d
 
     🔑 **Pedido do dono (23/09/2026):** *"podemos ter uma área dentro de Reserve
     sua mesa para Suas Reservas."*
-    ⚠️ **Telefone E nome, como na gravação.** Só o telefone seria uma consulta
-    aberta da agenda de qualquer número; o primeiro nome é a mesma prova que
-    `clientes.resolver` já exige para marcar em nome de alguém.
+    ⚠️ **Desde 24/09/2026 basta o TELEFONE** (pedido do dono: *"não solicitar a
+    confirmação do nome, somente com o telefone já confirmamos os dados"*). A
+    consequência, aceita pelo dono: quem souber o telefone de alguém vê as
+    reservas em aberto dele. O limite por origem é o que resta de contenção.
     ⚠️ **Telefone sem cadastro devolve lista vazia, não 404** — pelo mesmo
     motivo de `procurar`: o código de status não pode dizer quem existe.
     """
@@ -688,8 +691,9 @@ def cancelar_reserva(id_unidade: int, corpo: CancelamentoDoSite, pedido: Request
 
     🔑 **O mesmo caminho do balcão** (`agenda.mudar_status` → `CANCELADA`): a
     linha não se apaga, a mesa se solta, e a agenda mostra a reserva riscada.
-    ⚠️ **A mesma prova de telefone + primeiro nome** da lista: sem ela, quem
-    soubesse um telefone cancelaria a mesa de outra pessoa.
+    ⚠️ **Desde 24/09/2026 basta o TELEFONE**, como na lista (pedido do dono). A
+    consequência, dita ao dono: quem souber o telefone de alguém pode cancelar a
+    mesa dele. O limite por origem é o que resta de contenção.
     ⚠️ **Reserva cujo horário já passou não se cancela pelo site.** Nesse ponto
     a pessoa ou veio ou não veio — `NAO_COMPARECEU` é a casa quem marca.
     """
@@ -776,7 +780,10 @@ def identificar_cliente(id_unidade: int, corpo: IdentificacaoDoSite,
         clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
         cliente = clientes.identificar(cur, id_unidade, corpo,
                                        _cadastro_completo(cur, id_unidade))
-        return {"nome": cliente["nome"], "cadastro_novo": cliente["novo"]}
+        # ⚠️ Só o PRIMEIRO nome: desde 24/09 basta o telefone para chegar aqui, e o
+        # nome inteiro completaria a consulta telefone→pessoa.
+        return {"nome": clientes._primeiro_nome_exibido(cliente["nome"]),
+                "cadastro_novo": cliente["novo"]}
 
 
 @router.post("/{id_unidade}/catalogos/{id_catalogo}/abrir")
