@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
@@ -527,11 +527,6 @@ export default function ConfiguracoesDeReservas() {
           </p>
         </div>
       </Cartao>
-
-      <p className="text-[13px] text-suave">
-        Salões, mesas e a agenda do dia vêm em seguida.{" "}
-        <Etiqueta>em construção</Etiqueta>
-      </p>
     </div>
   );
 }

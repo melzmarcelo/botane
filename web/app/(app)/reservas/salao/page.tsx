@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
@@ -462,10 +462,6 @@ export default function SalaoDaCasa() {
         </Cartao>
       )}
 
-      <p className="text-[13px] text-suave">
-        A regra de disponibilidade — dado dia, hora e número de pessoas, o que dá para
-        marcar — vem a seguir. <Etiqueta>em construção</Etiqueta>
-      </p>
     </div>
   );
 }
