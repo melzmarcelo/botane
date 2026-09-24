@@ -365,3 +365,9 @@ marca onde ficaria visível."* Tabela `catalogo_lojas (id_catalogo, id_unidade)`
 - ⚠️ Pelo menos uma loja, e só loja ativa (422). As caixas só aparecem na tela com mais de uma
   loja com Reservas ligado (`/catalogos/opcoes` devolve `lojas`).
 - O preço do cardápio é o da loja em que o cliente ESTÁ (já era `produto_precos` por loja).
+
+## ⏳ PENDENTE — tradução para inglês e alemão
+
+O estudo (24/09/2026) mora em `reservas.md`, seção "cardápio e site em inglês e alemão":
+nomes/informação do produto e categorias do catálogo em EN/DE, e o seletor de idioma no
+site. Começa na semana de 28/09/2026, depois de o dono escolher o serviço de tradução.

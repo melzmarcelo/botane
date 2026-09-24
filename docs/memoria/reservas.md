@@ -794,3 +794,32 @@ nem um site por loja).
   `reservas.*`. A regra é "alguma loja usa?" (papel é global); com a Centro ligada a suíte
   quebrou. Agora mede os dois cenários.
 - Cobertura: `4d` do `smoke_publico.py`.
+
+## ⏳ PENDENTE — cardápio e site em inglês e alemão (estudo de 24/09/2026)
+
+🔑 **Pedido do dono:** *"em produtos, aba catálogo, conseguimos gerar o Texto do catálogo em
+outros dois campos, em inglês e alemão, de forma automática? E disponibilizar a escolha do
+idioma no site de reservas?"* Resposta: sim. **Estudo aprovado para começar na semana de
+28/09/2026** — nada foi construído ainda.
+
+**O desenho proposto**
+- Produto, aba Catálogo: `nome_catalogo_en/_de` e `informacao_adicional_en/_de`, gerados
+  ao salvar e editáveis. ⚠️ Tradução corrigida à mão NÃO é sobrescrita depois (guardar se
+  o campo foi gerado ou editado).
+- Site: seletor **PT · EN · DE** no topo, escolha na sessão da aba (como a loja). Faltou
+  tradução → mostra o português, nunca vazio.
+- ⚠️ PDFs de catálogo ficam fora: não dá para traduzir o arquivo automaticamente.
+
+**As três decisões que o dono ainda precisa tomar**
+1. **Quem traduz** — (a) API da Anthropic, Claude Haiku: entende cozinha ("escondidinho"
+   não se traduz ao pé da letra), centavos pelo cardápio inteiro, exige chave paga no
+   `.env`; (b) **DeepL**: ótimo em alemão, plano grátis de 500 mil caracteres/mês, exige
+   conta e chave; (c) sem serviço novo: os campos existem e o **conector do Claude**
+   traduz em lote quando pedirem — custo zero, mas não é automático ao salvar.
+2. **Categorias e subcategorias também** (nome e descrição) — recomendado: senão o turista
+   lê o prato em inglês debaixo de um título em português.
+3. **Os textos do próprio site** (~80 frases: botões, rótulos, avisos) — traduzidos uma
+   vez no código, sem serviço; e as mensagens de erro mais comuns do servidor.
+
+**Sugestão feita:** Claude Haiku (ou DeepL se o dono preferir custo zero), produtos E
+categorias ao salvar, e o site nos três idiomas.
