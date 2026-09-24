@@ -55,6 +55,8 @@ type Config = {
   antecedencia_min_horas: number;
   antecedencia_max_dias: number;
   cadastro_completo: boolean;
+  /** A loja participa da fidelidade (migração 091). */
+  fidelidade_ligada: boolean;
   /** 🔑 As mensagens que o site do cliente abre no WhatsApp (migração 081).
    *  Nulas = usa o padrão da casa. */
   whatsapp_texto: string | null;
@@ -157,6 +159,7 @@ export default function ConfiguracoesDeReservas() {
         antecedencia_min_horas: Number(cfg.antecedencia_min_horas),
         antecedencia_max_dias: Number(cfg.antecedencia_max_dias),
         cadastro_completo: cfg.cadastro_completo,
+        fidelidade_ligada: cfg.fidelidade_ligada,
         whatsapp_texto: cfg.whatsapp_texto,
         whatsapp_texto_reserva: cfg.whatsapp_texto_reserva,
         horarios: cfg.horarios,
@@ -446,6 +449,27 @@ export default function ConfiguracoesDeReservas() {
                 Desligado, só o nome — o telefone é sempre perguntado, porque é por ele que a
                 casa reconhece quem volta. Vale para reservar e para abrir catálogo que
                 exige cadastro.
+              </span>
+            </span>
+          </label>
+
+          {/* 🔑 **Pedido do dono (24/09/2026):** *"na configuração do Portal do Cliente
+              criar a flag se utiliza Fidelidade."* As regras do cartão ficam em
+              Fidelidade → Configuração; aqui só se a LOJA participa. */}
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              disabled={somenteLeitura}
+              checked={cfg.fidelidade_ligada}
+              onChange={(e) => mudar("fidelidade_ligada", e.target.checked)}
+            />
+            <span className="text-[14px]">
+              Utiliza Fidelidade
+              <span className="block text-[13px] text-suave">
+                Ligado, o site mostra o item Fidelidade (visitas e quanto falta para o prêmio) e
+                o QR code da mesa passa a valer nesta loja. As regras do cartão ficam em
+                Fidelidade → Configuração.
               </span>
             </span>
           </label>

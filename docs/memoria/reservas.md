@@ -910,3 +910,65 @@ contato, mudanças), escrito para o que este sistema coleta — não cópia.
 - ⚠️ O termo cita envio de novidades/ofertas por WhatsApp/SMS e o aniversário, como o de
   referência. Se a casa não fizer isso, tirar a linha e subir a versão.
 - Cobertura: seção 4/5 do `smoke_reserva_site.py`; `smoke_publico.py` manda o aceite.
+
+## O grid de Clientes (24/09/2026)
+
+🔑 **Pedido do dono:** *"dentro do Portal do Cliente, criar o menu e a página para listar os
+clientes cadastrados, em grid paginado padrão do sistema."* Menu Portal de Clientes →
+**Clientes** (mesmo nível de Reservas e Catálogos), tela `reservas/clientes/`, rota
+`GET /reservas/clientes` (`clientes.consulta_da_lista` + `paginacao.pagina`, total no `X-Total`).
+- ⚠️ **A rede inteira**, não a loja do seletor: o cadastro é único por telefone desde a 087.
+  A coluna "Cadastro" traz a data e a loja onde nasceu. A rota ainda exige o módulo ligado na
+  loja atual (`_unidade`), como todas do router.
+- `reservas.ver` basta — a agenda já mostra nome e telefone a quem atende.
+- Busca: nome (`ILIKE`, sem caixa; a base não tem `unaccent`) OU dígitos do telefone (3+).
+- "Reservas" conta só as que valeram; canceladas e não-comparecimentos vêm à parte.
+- Termo: "aceito" + data (versão no `title`); "sem registro" nos cadastros de antes da 090.
+- Cobertura: fim da seção 5 do `smoke_reserva_site.py`.
+
+## Fidelidade — o cartão de visitas (migração 091, 24/09/2026)
+
+🔑 **Pedido do dono:** *"O cupom será por visita. Atualmente é utilizado o LeadsFood, onde tem
+um QRCode na mesa, que o cliente lê e realiza o check-in. Após 10, ele recebe um almoço
+grátis."* Conta e consome de segunda a sexta, "mas deixar configurado"; impressão dos QR com
+quantidade, tamanho e informação extra; flag no Portal; link no site acima do "Entre em
+contato". WhatsApp fica para uma fase própria. Estudo inicial: `docs/fidelidade-estudo.md`
+(escrito antes da decisão por visita — a parte de pontos por real e cupom do PDV ficou de fora).
+
+- **Menu** Portal de Clientes → Fidelidade → **Prêmios** (balcão, `fidelidade.operar`) e
+  **Configuração** (`fidelidade.configurar`). Prêmios vem primeiro, como a Agenda antes do Salão.
+  Permissões novas na 091, concedidas ali (Administrador/Gerente tudo, Salão só operar) e
+  escondidas do catálogo com `reservas.*` quando nenhuma loja tem o Portal.
+- **Rotas:** `routers/fidelidade.py` (config, token, `qrcodes.pdf`, prêmios, entregar) e, no
+  `publico.py`, `POST /{loja}/fidelidade/cartao` e `/checkin`; `/casa` traz `fidelidade`
+  (regras, SEM o token) ou nulo. Regra em `services/fidelidade.py`, PDF em `fidelidade_qr.py`.
+- 🔑 **Um programa para a REDE** (`fidelidade_config`, linha única): o cadastro é único por
+  telefone, então o cartão também. **Por loja** só a participação:
+  `reserva_config.fidelidade_ligada` (a flag "Utiliza Fidelidade" do Portal).
+- 🔑 **O QR é o mesmo para todas as mesas da loja**: `site_url/?loja=X&checkin=<token>`. O
+  token prova que a pessoa viu o QR; "gerar outro" invalida os impressos (se um vazar). A
+  numeração "Mesa 7" é só impressa. `site_url` fica na tabela (não no `.env`) para ajustar sem
+  deploy — ⚠️ local, apontar para `http://localhost:3200` antes de testar o QR no celular.
+- ⚠️ **Contra check-in do sofá**: uma visita por cliente por DIA (`UNIQUE (id_cliente, data)`,
+  regra 8), só nos `dias_pontua` e, com `so_no_horario` (padrão), só dentro de abre–fecha do
+  dia pela MESMA `agenda.janelas` (dia especial e bloqueio valem).
+- Ao juntar `visitas` check-ins abertos nasce o prêmio (trava `pg_advisory_xact_lock(910,
+  cliente)` contra dois prêmios). ⚠️ `premio`, `visitas` e `dias_consumo` são **congelados** no
+  prêmio: mudar a configuração não mexe no que já foi ganho. Código de 6 letras sem 0/O/1/I/L.
+- **Entrega**: o cliente mostra o código no cartão do site; o balcão busca em Prêmios e
+  entrega. Recusa: já entregue, vencido, fora do dia de consumo DO PRÊMIO. Status derivado
+  (`usado_em`, `vence_em`), não gravado.
+- 🔑 **LGPD — termo versão `2026-09-24.2`**: acrescenta as visitas e o cartão. Quem aceitou a
+  anterior vê a caixa no site antes do check-in; o aceite grava em transação PRÓPRIA (check-in
+  recusado não desfaz o termo). `identificar` agora GRAVA a versão nova quando a pessoa aceita
+  de novo (antes era COALESCE, "nunca sobrescreve").
+- **Site**: item "Fidelidade" colado acima do contato (os catálogos entram antes dele);
+  tela com os carimbos, "faltam N", prêmios com código. Chegando pelo QR, o check-in é
+  AUTOMÁTICO depois do telefone (a leitura do QR já é o pedido); o `?checkin=` sai do endereço
+  na hora, para o F5 não repetir.
+- **PDF**: A4, três tamanhos que enchem a folha (G 1, M 4, P 12 por folha), título, chamada,
+  informação extra e numeração opcional. QR conferido com leitor (OpenCV) no teste manual.
+- Clientes ganhou a coluna Fidelidade (visitas no cartão e prêmios).
+- Tabelas: `fidelidade_checkins`/`_premios` em `OPERACAO` e em `preservar_reserva`;
+  `fidelidade_config` em `PRESERVADAS`.
+- Cobertura: `smoke_fidelidade.py` (36).

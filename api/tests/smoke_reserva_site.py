@@ -276,6 +276,21 @@ with get_cursor() as cur:
     # nasceria sem mesa e a agenda nao saberia onde sentar ninguem.
     checar("e com mesa de verdade alocada", cur.fetchone()["n"] >= 1)
 
+# 🔑 **O grid de clientes do Portal** (pedido do dono, 24/09/2026). Busca pelos
+# digitos do telefone, e cada linha traz as reservas e o aceite do termo.
+st, cl = chamar("GET", f"/reservas/clientes?busca={FONE[-6:]}&limite=20", token=token)
+achado = next((c for c in (cl if isinstance(cl, list) else []) if c["telefone"] == FONE), {})
+checar("o grid de clientes acha o cadastro pelo telefone",
+       st == 200 and achado.get("nome") == "Marina Duarte", (st, cl))
+checar("com a reserva contada e o termo aceito",
+       achado.get("reservas") == 1 and achado.get("ultima") == DIA
+       and achado.get("termo_aceito_em"), achado)
+st, cl = chamar("GET", "/reservas/clientes?busca=marina duar", token=token)
+checar("e pelo nome, sem caixa",
+       st == 200 and any(c["telefone"] == FONE for c in cl or []), (st, cl))
+checar("mais de 100 por pagina e recusado (422)",
+       chamar("GET", "/reservas/clientes?limite=500", token=token)[0] == 422)
+
 print("\n6. o telefone que JA tem cadastro")
 sem_tentativas()
 st, r = chamar("POST", f"/publico/{UNIDADE}/reserva/telefone", {"telefone": FONE})

@@ -164,6 +164,37 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Reservas",
       },
       {
+        // 🔑 **Clientes** (pedido do dono, 24/09/2026: *"dentro do Portal do
+        // Cliente, criar o menu e a página para listar os clientes
+        // cadastrados"*). Mesmo nível de Reservas e Catálogos: o cadastro serve
+        // aos dois. `reservas.ver` basta — a agenda já mostra nome e telefone.
+        href: "/reservas/clientes",
+        nome: "Clientes",
+        icone: "usuarios",
+        chave: "reservas.ver",
+        soComReservas: true,
+      },
+      {
+        // 🔑 **Fidelidade** (pedido do dono, 24/09/2026: *"no menu podemos ter um
+        // Fidelidade — Configuração"*). O cartão de visitas com check-in por QR.
+        // ⚠️ "Prêmios" vem PRIMEIRO, como a Agenda antes do Salão: é o balcão
+        // conferindo código todo dia; a configuração se faz uma vez.
+        href: "/fidelidade/premios",
+        nome: "Prêmios",
+        icone: "presente",
+        chave: "fidelidade.operar",
+        soComReservas: true,
+        subgrupo: "Fidelidade",
+      },
+      {
+        href: "/fidelidade/configuracao",
+        nome: "Configuração",
+        icone: "config",
+        chave: "fidelidade.configurar",
+        soComReservas: true,
+        subgrupo: "Fidelidade",
+      },
+      {
         // 🔑 Catálogos no MESMO nível de Reservas (pedido do dono): é o que o
         // site apresenta, não uma parte da agenda.
         href: "/catalogos",

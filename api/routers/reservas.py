@@ -18,15 +18,17 @@ os bloqueios do dia. Falta a reserva pelo site do cliente; o estudo está em
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 import auditoria
 from database import get_cursor
+from paginacao import pagina
 from models.reservas import (
     BloqueioCreate, ConfiguracaoReservas, DiaExcecao, MesaCreate, MesasEmLote, MesaUpdate,
     MudarStatus, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import reserva_clientes as clientes
 from services import reservas as servico
 from services import reservas_agenda as agenda
 
@@ -242,6 +244,30 @@ def ver_disponibilidade(
     """
     with get_cursor() as cur:
         return agenda.disponibilidade(cur, _unidade(cur, ctx), data, pessoas, ignorar)
+
+
+@router.get("/clientes")
+def listar_clientes(resposta: Response,
+                    busca: str | None = Query(None, max_length=120),
+                    limite: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
+                    ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> list[dict]:
+    """Os clientes cadastrados pelo site, em grid paginado.
+
+    🔑 **Pedido do dono (24/09/2026):** *"dentro do Portal do Cliente, criar o menu e a
+    página para listar os clientes cadastrados."* ⚠️ `reservas.ver`, como a agenda:
+    quem atende o telefone já vê nome e telefone de quem reservou.
+    ⚠️ O total vem no `X-Total` (`paginacao.pagina`), como em todo grid da casa.
+    """
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        sql, params = clientes.consulta_da_lista(busca)
+        linhas = pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
+    for x in linhas:
+        for campo in ("nascimento", "ultima"):
+            x[campo] = x[campo].isoformat() if x[campo] else None
+        for campo in ("criado_em", "termo_aceito_em"):
+            x[campo] = x[campo].isoformat() if x[campo] else None
+    return linhas
 
 
 @router.get("/agenda")

@@ -89,3 +89,32 @@ export const definirDia = (
   dia: string,
   corpo: { modo: ModoDoDia; motivo?: string | null } & Partial<Janela>,
 ) => api.put<{ message: string; reservas_fora: number }>(`/reservas/dias/${dia}`, corpo);
+
+/** Um cliente cadastrado pelo site (a rede inteira — o cadastro é único). */
+export type Cliente = {
+  id: number;
+  nome: string;
+  telefone: string;
+  genero: string | null;
+  cidade: string | null;
+  nascimento: string | null;
+  criado_em: string;
+  /** Onde se cadastrou. */
+  loja: string | null;
+  /** Reservas que valeram (sem canceladas e não-comparecimentos). */
+  reservas: number;
+  canceladas: number;
+  ultima: string | null;
+  termo_aceito_em: string | null;
+  termo_versao: string | null;
+  /** Visitas no cartão de fidelidade atual (091) e prêmios já ganhos. */
+  no_cartao: number;
+  premios: number;
+};
+
+/** `parametros` vem de `usePaginacao` (limite, offset e o pedido de total). */
+export const listarClientes = (parametros: Record<string, string>, busca: string) => {
+  const q = new URLSearchParams(parametros);
+  if (busca.trim()) q.set("busca", busca.trim());
+  return api.listar<Cliente>(`/reservas/clientes?${q}`);
+};

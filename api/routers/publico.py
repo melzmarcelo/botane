@@ -37,6 +37,8 @@ from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
+from services import fidelidade
+from models.fidelidade import CheckinDoSite
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
 
@@ -151,7 +153,64 @@ def casa(id_unidade: int) -> dict:
             "cor": e.get("cor_primaria"),
             **_quando_atende(cur, id_unidade),
             **_textos_do_zap(cur, id_unidade),
+            # 🔑 **A fidelidade desta loja** (091): as regras, para o site mostrar o
+            # item "Fidelidade" e o que falta. Nula com o programa desligado aqui.
+            # ⚠️ Sem o token — ele é da MESA, e vem só pelo QR.
+            "fidelidade": (fidelidade.regras(fidelidade.config(cur))
+                           if fidelidade.ligada(cur, id_unidade) else None),
         }
+
+
+def _cliente_da_fidelidade(cur, id_unidade: int, telefone: str, pedido: Request) -> int:
+    """O cliente deste telefone, numa casa com fidelidade — ou a recusa que explica."""
+    if not fidelidade.ligada(cur, id_unidade):
+        raise HTTPException(status_code=404, detail="Esta casa não tem programa de fidelidade.")
+    # ⚠️ Conta como tentativa, como a busca de cadastro: é leitura por telefone.
+    clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+    fone = clientes.telefone_valido(telefone)
+    cur.execute("SELECT id FROM reserva_clientes WHERE telefone = %s", (fone,))
+    linha = cur.fetchone()
+    if not linha:
+        raise HTTPException(status_code=404,
+                            detail="Não achamos cadastro neste telefone. Cadastre-se para participar.")
+    return linha["id"]
+
+
+@router.post("/{id_unidade}/fidelidade/cartao")
+def cartao_fidelidade(id_unidade: int, corpo: TelefoneDoSite, pedido: Request) -> dict:
+    """O cartão do cliente: visitas, quanto falta e os prêmios ganhos.
+
+    🔑 **Pedido do dono (24/09/2026):** *"no site de Reservas o link acima do Entre em
+    contato, onde o usuário pode ver quantos pontos tem e quanto falta."*
+    ⚠️ Pelo telefone, como a reserva (decisão do dono de 24/09: o telefone basta).
+    """
+    with get_cursor() as cur:
+        id_cliente = _cliente_da_fidelidade(cur, id_unidade, corpo.telefone, pedido)
+        return fidelidade.cartao(cur, id_cliente)
+
+
+@router.post("/{id_unidade}/fidelidade/checkin")
+def checkin_fidelidade(id_unidade: int, corpo: CheckinDoSite, pedido: Request) -> dict:
+    """O check-in do QR da mesa: uma visita por dia, com a casa aberta.
+
+    ⚠️ **O termo em vigor cita a fidelidade** (versão 2026-09-24.2). Quem aceitou
+    só o anterior precisa aceitar este antes da primeira visita contar — o site
+    mostra a caixa quando o cartão diz `precisa_termo`.
+    """
+    # ⚠️ **O aceite grava na SUA transação**: um check-in recusado (fora do
+    # horário, dia que não conta) não pode desfazer o termo que a pessoa aceitou.
+    with get_cursor() as cur:
+        id_cliente = _cliente_da_fidelidade(cur, id_unidade, corpo.telefone, pedido)
+        if corpo.aceite_termo:
+            clientes.aceitar_termo(cur, id_cliente)
+    with get_cursor() as cur:
+        cur.execute("SELECT termo_versao FROM reserva_clientes WHERE id = %s", (id_cliente,))
+        if cur.fetchone()["termo_versao"] != termo.VERSAO:
+            raise HTTPException(
+                status_code=409,
+                detail="Para participar da fidelidade, marque que está de acordo com o termo "
+                       "de consentimento atualizado.")
+        return fidelidade.checkin(cur, id_unidade, id_cliente, corpo.token)
 
 
 @router.get("/{id_unidade}/termo")

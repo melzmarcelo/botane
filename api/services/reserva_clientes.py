@@ -265,13 +265,13 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
                   SET genero = COALESCE(genero, %s),
                       cidade = COALESCE(cidade, %s),
                       nascimento = COALESCE(nascimento, %s),
-                      termo_aceito_em = COALESCE(termo_aceito_em,
-                                                 CASE WHEN %s THEN now() END),
-                      termo_versao = COALESCE(termo_versao, %s),
+                      termo_aceito_em = CASE WHEN %s AND termo_versao IS DISTINCT FROM %s
+                                             THEN now() ELSE termo_aceito_em END,
+                      termo_versao = CASE WHEN %s THEN %s ELSE termo_versao END,
                       atualizado_em = now()
                 WHERE id = %s""",
             (corpo.genero, (corpo.cidade or "").strip() or None, nascimento,
-             aceitou, termo.VERSAO if aceitou else None, achado["id"]),
+             aceitou, termo.VERSAO, aceitou, termo.VERSAO, achado["id"]),
         )
         return {"id": achado["id"], "nome": achado["nome"], "telefone": telefone,
                 "novo": False}
@@ -319,3 +319,67 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     )
     novo = cur.fetchone()
     return {"id": novo["id"], "nome": novo["nome"], "telefone": telefone, "novo": True}
+
+
+def consulta_da_lista(busca: str | None) -> tuple[str, list]:
+    """Os clientes cadastrados, para o grid do Portal de Clientes — SEM `LIMIT`.
+
+    🔑 **Pedido do dono (24/09/2026):** *"dentro do Portal do Cliente, criar o menu
+    e a página para listar os clientes cadastrados, em grid paginado padrão."*
+    ⚠️ **A rede inteira, não a loja do seletor**: desde a 087 o cadastro é UM (o
+    telefone é único), e quem se cadastrou na matriz é o mesmo cliente na filial.
+    A coluna `loja` diz onde ele nasceu.
+    ⚠️ Sem `LIMIT`: quem corta é `paginacao.pagina`, que conta o total com o
+    mesmo texto.
+    """
+    onde, params = [], []
+    termo_busca = (busca or "").strip()
+    if termo_busca:
+        digitos = so_digitos(termo_busca)
+        # Busca por nome (sem caixa) OU pelos dígitos do telefone —
+        # quem procura "99910" não sabe como o número foi gravado.
+        if digitos and len(digitos) >= 3:
+            onde.append("(c.nome ILIKE %s OR c.telefone LIKE %s)")
+            params += [f"%{termo_busca}%", f"%{digitos}%"]
+        else:
+            onde.append("c.nome ILIKE %s")
+            params.append(f"%{termo_busca}%")
+    sql = f"""
+        SELECT c.id, c.nome, c.telefone, c.genero, c.cidade, c.nascimento,
+               c.criado_em, c.termo_aceito_em, c.termo_versao,
+               coalesce(u.apelido, u.nome) AS loja,
+               coalesce(r.reservas, 0) AS reservas,
+               coalesce(r.canceladas, 0) AS canceladas,
+               r.ultima,
+               (SELECT count(*) FROM fidelidade_checkins f
+                 WHERE f.id_cliente = c.id AND f.id_premio IS NULL) AS no_cartao,
+               (SELECT count(*) FROM fidelidade_premios f
+                 WHERE f.id_cliente = c.id) AS premios
+          FROM reserva_clientes c
+          LEFT JOIN unidades u ON u.id = c.id_unidade
+          LEFT JOIN LATERAL (
+                SELECT count(*) FILTER (WHERE status NOT IN ('CANCELADA', 'NAO_COMPARECEU'))
+                           AS reservas,
+                       count(*) FILTER (WHERE status IN ('CANCELADA', 'NAO_COMPARECEU'))
+                           AS canceladas,
+                       max(data) AS ultima
+                  FROM reservas WHERE id_cliente = c.id
+          ) r ON true
+         {"WHERE " + " AND ".join(onde) if onde else ""}
+         ORDER BY lower(c.nome), c.id"""
+    return sql, params
+
+
+def aceitar_termo(cur, id_cliente: int) -> None:
+    """Registra o aceite da versão EM VIGOR do termo.
+
+    ⚠️ **Guarda a versão mais recente aceita**, com a data dela: quem aceitou a
+    "2026-09-24" e depois a "2026-09-24.2" (fidelidade) fica com a segunda. A
+    auditoria de quem aceitou o quê fica no `auditoria` de quem chama.
+    """
+    cur.execute(
+        """UPDATE reserva_clientes
+              SET termo_aceito_em = now(), termo_versao = %s, atualizado_em = now()
+            WHERE id = %s AND termo_versao IS DISTINCT FROM %s""",
+        (termo.VERSAO, id_cliente, termo.VERSAO),
+    )

@@ -301,6 +301,31 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .voltar:hover { color: var(--tinta); }
 
+/* ---- a fidelidade: o cartão de visitas (pedido do dono, 24/09/2026) ---- */
+.carimbos {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  padding: 16px; border: 1px solid var(--linha); border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+.carimbo {
+  aspect-ratio: 1; border-radius: 50%; border: 2px dashed var(--linha);
+  display: grid; place-content: center; font: 500 12px/1 "DM Mono", monospace;
+  color: var(--tinta-suave);
+}
+.carimbo.feito { background: var(--erva); border: 2px solid var(--erva); color: #F4F0E5; }
+.carimbo.premio { border-style: solid; border-color: var(--ocre, #B8893A); }
+.falta { text-align: center; font-size: 15px; margin: 0; }
+.falta b { font: 400 24px/1.2 Fraunces, Georgia, serif; display: block; }
+.premio-ganho {
+  border: 1px solid var(--erva); border-radius: var(--raio); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 13.5px;
+}
+.premio-ganho .codigo {
+  font: 500 26px/1.1 "DM Mono", monospace; letter-spacing: .18em; color: var(--tinta);
+}
+.premio-ganho.fora { border-color: var(--linha); opacity: .6; }
+.regra-fidelidade { font-size: 13px; color: var(--tinta-suave); margin: 0; }
+
 /* ---- o aceite do termo de consentimento (pedido do dono, 24/09/2026) ---- */
 .aceite {
   display: flex; gap: 10px; align-items: flex-start; font-size: 14px;
@@ -553,6 +578,28 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <p class="pe-cardapio" id="pe-cardapio"></p>
     </section>
 
+    <!-- ================= fidelidade ================= -->
+    <!-- 🔑 **Pedido do dono (24/09/2026):** *"no site de Reservas o link acima do
+         Entre em contato, onde o usuário pode ver quantos pontos tem e quanto falta
+         para chegar no prêmio."* O check-in vem do QR da mesa (`?checkin=`). -->
+    <section class="tela" data-tela="fidelidade" aria-labelledby="t-fidelidade">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-fidelidade">Seu cartão fidelidade</h2>
+      <p class="sub-tela" id="sub-fidelidade"></p>
+      <div class="regras" id="aviso-fidelidade" hidden></div>
+      <div class="carimbos" id="carimbos" aria-live="polite"></div>
+      <p class="falta" id="falta"></p>
+      <div id="premios-fidelidade" class="itens"></div>
+      <label class="aceite" id="termo-fidelidade" hidden>
+        <input type="checkbox" id="aceite-fidelidade">
+        <span>Estou de acordo com o
+          <button type="button" class="link-termo" id="ver-termo-fidelidade">termo de consentimento</button>
+          atualizado, que inclui o programa de fidelidade.</span>
+      </label>
+      <button class="item destaque" id="fazer-checkin" hidden>Fazer check-in</button>
+      <p class="regra-fidelidade" id="regra-fidelidade"></p>
+    </section>
+
     <!-- ================= contato ================= -->
     <section class="tela" data-tela="contato" aria-labelledby="t-contato">
       <button class="voltar" data-ir="inicio">‹ voltar</button>
@@ -765,7 +812,20 @@ async function carregarCasa() {
     [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
 
   montarContato();
+  montarPortaDeFidelidade();
   montarPortaDeContato();
+}
+
+/* 🔑 **A fidelidade fica logo ACIMA do contato** (pedido do dono, 24/09/2026). Só
+   aparece com o programa ligado nesta loja — a API manda `fidelidade` nulo senão. */
+function montarPortaDeFidelidade() {
+  if (!casa.fidelidade) return;
+  const b = document.createElement("button");
+  b.className = "item";
+  b.id = "ir-fidelidade";
+  b.textContent = "Fidelidade";
+  b.addEventListener("click", () => abrirFidelidade());
+  $("#itens").appendChild(b);
 }
 
 /* 🔑 O contato é o ÚLTIMO item da lista, como no protótipo. Com número
@@ -831,7 +891,9 @@ async function carregarCatalogos() {
   catalogosDaCasa = lista;
   // ⚠️ Entram DEPOIS do "Reservar" e ANTES do contato — a ordem da lista é a
   // ordem de importância, e reservar é o que a casa quer que aconteça.
-  const contato = $("#itens").querySelector("a.item, button.item[data-ir='contato']");
+  // ⚠️ `#ir-fidelidade` primeiro: a fidelidade fica colada no contato (pedido do dono).
+  const contato = $("#itens").querySelector(
+    "#ir-fidelidade, a.item, button.item[data-ir='contato']");
   lista.forEach((c) => {
     // 🔑 **Duas origens, dois destinos.** O catálogo de PDF abre o arquivo em
     // outra aba, como sempre; o montado por produtos abre DENTRO do site, na
@@ -1147,6 +1209,14 @@ function voltarAoTelefone() {
   $("#avancar").hidden = false;
   $("#avancar").textContent = "Continuar";
   avisar("#aviso-quem", "");
+  // ⚠️ Três destinos: a reserva, a fidelidade (texto fixo) e um catálogo (objeto).
+  if (destino === "fidelidade") {
+    $("#t-quem").textContent = "Fidelidade";
+    $("#sub-quem").textContent = checkinToken
+      ? "Faça seu check-in: comece pelo telefone."
+      : "Veja suas visitas: comece pelo telefone.";
+    return;
+  }
   const catalogo = destino !== "reserva";
   $("#t-quem").textContent = catalogo ? destino.nome : "Reserve sua mesa";
   $("#sub-quem").textContent = catalogo
@@ -1197,8 +1267,8 @@ async function consultarTelefone() {
   $("#bloco-novo").hidden = !r.cadastro_completo;
   $("#bloco-termo").hidden = false;
   avisar("#aviso-quem", "Primeira vez por aqui? Conte quem é você.", false);
-  $("#avancar").textContent = destino === "reserva"
-    ? "Escolher dia e horário" : "Abrir o cardápio";
+  $("#avancar").textContent = destino === "reserva" ? "Escolher dia e horário"
+    : destino === "fidelidade" ? "Ver meu cartão" : "Abrir o cardápio";
   $("#nome-cliente").focus();
 }
 
@@ -1231,6 +1301,7 @@ async function guardarDados() {
 /** Já se sabe quem é: segue para onde a pessoa queria ir. */
 async function seguirIdentificado() {
   avisar("#aviso-quem", "");
+  if (destino === "fidelidade") return mostrarCartao();
   if (destino === "reserva") {
     $("#voltar-reserva").dataset.ir = "inicio";
     await carregarMinhas();
@@ -1264,6 +1335,7 @@ async function identificarParaCatalogo() {
   eu.nome = quem.nome || eu.nome;
   lembrar();
   destravarCatalogos();
+  if (destino === "fidelidade") return mostrarCartao();
   return entregarCatalogo(destino, eu.nome);
 }
 
@@ -1363,6 +1435,111 @@ $("#avancar").addEventListener("click", () => {
 // dados de um número e gravar em outro é o jeito de a mesa sair no nome errado.
 $("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTelefone(); });
 
+/* ---- a fidelidade ---- */
+// 🔑 **O QR da mesa traz a loja e o segredo do programa** (`?loja=1&checkin=…`).
+// Lidos UMA vez, na chegada, e tirados do endereço: o F5 não repete o check-in
+// (o servidor recusaria, mas a pessoa leria "já fez hoje" sem ter feito nada).
+let checkinToken = null;
+(function lerQrDaMesa() {
+  const q = new URLSearchParams(location.search);
+  if (!q.get("checkin")) return;
+  checkinToken = q.get("checkin");
+  if (q.get("loja")) {
+    // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
+    document.documentElement.dataset.loja = q.get("loja");
+    try {
+      const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
+      salvo.loja = q.get("loja");
+      sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
+    } catch { /* sem memória: o `data-loja` já resolve */ }
+  }
+  history.replaceState(null, "", location.pathname + "#fidelidade");
+})();
+
+function abrirFidelidade() {
+  destino = "fidelidade";
+  if (eu.identificado) return mostrarCartao();
+  identificarPara("fidelidade");
+}
+
+function desenharCartao(c) {
+  $("#sub-fidelidade").textContent =
+    `A cada ${c.visitas} visitas: ${c.premio}.`;
+  const total = c.visitas;
+  // 🔑 Os carimbos: feitos, a fazer e o último marcado como o do prêmio.
+  $("#carimbos").style.gridTemplateColumns = `repeat(${Math.min(total, 5)}, 1fr)`;
+  $("#carimbos").innerHTML = Array.from({ length: total }, (_, i) =>
+    `<span class="carimbo${i < c.no_cartao ? " feito" : ""}${i === total - 1 ? " premio" : ""}"
+       aria-label="visita ${i + 1}${i < c.no_cartao ? " feita" : ""}">${
+       i < c.no_cartao ? "✓" : i === total - 1 ? "★" : i + 1}</span>`).join("");
+  $("#falta").innerHTML = c.faltam
+    ? `<b>${c.no_cartao} de ${total}</b>faltam ${c.faltam} visita${c.faltam === 1 ? "" : "s"} para o prêmio`
+    : `<b>Cartão completo!</b>`;
+  const disponiveis = c.premios.filter((p) => p.status === "DISPONIVEL");
+  const outros = c.premios.filter((p) => p.status !== "DISPONIVEL").slice(0, 3);
+  $("#premios-fidelidade").innerHTML = [...disponiveis, ...outros].map((p) => `
+    <div class="premio-ganho${p.status === "DISPONIVEL" ? "" : " fora"}">
+      <b>${esc(p.premio)}</b>
+      ${p.status === "DISPONIVEL"
+        ? `<span>Mostre este código no caixa:</span><span class="codigo">${esc(p.codigo)}</span>
+           <span>Vale até ${esc(p.vence_em.split("-").reverse().join("/"))}, de ${esc(p.consumo)}.</span>`
+        : `<span>${p.status === "USADO" ? "Já usado" : "Venceu"} · ${esc(p.codigo)}</span>`}
+    </div>`).join("");
+  $("#regra-fidelidade").textContent =
+    `As visitas contam de ${c.pontua}, uma por dia, com o check-in pelo QR code da mesa. ` +
+    `O prêmio vale ${c.validade_dias} dias, de ${c.consumo}.`;
+  const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
+  $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
+  $("#fazer-checkin").hidden = !podeCheckin;
+}
+
+async function mostrarCartao(recado) {
+  ir("fidelidade");
+  avisar("#aviso-fidelidade", "");
+  let c;
+  try {
+    c = await pedir("/fidelidade/cartao", { telefone: eu.telefone });
+  } catch (e) {
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos abrir seu cartão agora.");
+  }
+  desenharCartao(c);
+  if (recado) avisar("#aviso-fidelidade", recado, false);
+  // 🔑 **Veio pelo QR e já aceitou o termo em vigor: o check-in é automático.** Ler
+  // o QR já é o pedido — um segundo toque só atrasaria quem está na mesa.
+  else if (checkinToken && !c.hoje_ja_fez && !c.precisa_termo) fazerCheckin();
+  else if (checkinToken && c.hoje_ja_fez) {
+    avisar("#aviso-fidelidade", "Seu check-in de hoje já está feito. Até a próxima visita!", false);
+  }
+}
+
+async function fazerCheckin() {
+  const precisa = !$("#termo-fidelidade").hidden;
+  if (precisa && !$("#aceite-fidelidade").checked) {
+    return avisar("#aviso-fidelidade",
+      "Para participar, marque que está de acordo com o termo de consentimento.");
+  }
+  $("#fazer-checkin").disabled = true;
+  let r;
+  try {
+    r = await pedir("/fidelidade/checkin", {
+      telefone: eu.telefone, token: checkinToken, aceite_termo: precisa,
+    });
+  } catch (e) {
+    $("#fazer-checkin").disabled = false;
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos fazer o check-in agora.");
+  }
+  $("#fazer-checkin").disabled = false;
+  desenharCartao(r);
+  avisar("#aviso-fidelidade", r.premio_novo
+    ? `🎉 Cartão completo! Você ganhou: ${r.premio_novo.premio}. Mostre o código ${r.premio_novo.codigo} no caixa.`
+    : `Check-in feito! Faltam ${r.faltam} visita${r.faltam === 1 ? "" : "s"}.`, false);
+}
+$("#fazer-checkin").addEventListener("click", () => fazerCheckin());
+$("#ver-termo-fidelidade").addEventListener("click", (e) => {
+  e.preventDefault();
+  abrirTermo();
+});
+
 /* ---- o termo de consentimento ---- */
 // 🔑 **O texto vem da API** (`/termo`), com a versão que o aceite grava: o que o
 // cliente lê e o que o cadastro diz que ele aceitou saem do mesmo lugar.
@@ -1391,6 +1568,7 @@ $("#ver-termo").addEventListener("click", (e) => {
 $("#fechar-termo").addEventListener("click", () => $("#termo").close());
 $("#concordar-termo").addEventListener("click", () => {
   $("#aceite-termo").checked = true;
+  $("#aceite-fidelidade").checked = true;
   $("#termo").close();
   avisar("#aviso-quem", "");
 });
@@ -1758,6 +1936,7 @@ async function restaurarTela() {
   }
   // "pronto" é o recibo de uma reserva que já foi: sem ela na memória, é o início.
   if (tela === "contato") return ir("contato");
+  if (tela === "fidelidade" && casa && casa.fidelidade) return abrirFidelidade();
   if (tela && tela !== "inicio") ir("inicio");
 }
 </script>

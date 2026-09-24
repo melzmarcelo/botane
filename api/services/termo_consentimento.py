@@ -12,7 +12,10 @@ cliente leu e o que o cadastro diz que ele aceitou têm de sair do mesmo lugar.
 para a versão a que disseram sim.
 """
 
-VERSAO = "2026-09-24"
+# 🔑 Histórico: "2026-09-24" (cadastro, reservas, cardápios); "2026-09-24.2" acrescenta
+# o programa de fidelidade (check-in por visita, migração 091) — finalidade nova, e
+# por isso quem aceitou a anterior aceita de novo antes do primeiro check-in.
+VERSAO = "2026-09-24.2"
 
 
 def termo(casa: str, razao_social: str | None, email: str | None,
@@ -38,6 +41,8 @@ def termo(casa: str, razao_social: str | None, email: str | None,
                 "nascimento.",
                 "Os das suas reservas: dia, horário, número de pessoas, observações e o "
                 "histórico de comparecimento e cancelamento.",
+                "As suas visitas registradas no programa de fidelidade (dia e casa de cada "
+                "check-in) e os prêmios ganhos e usados.",
                 "O registro das conversas com a nossa equipe, por WhatsApp, telefone ou "
                 "outro meio.",
             ]},
@@ -46,6 +51,8 @@ def termo(casa: str, razao_social: str | None, email: str | None,
                 "Marcar, confirmar, remarcar e cancelar reservas, e falar com você sobre "
                 "elas.",
                 "Liberar o acesso a cardápios e catálogos que pedem cadastro.",
+                "Manter o seu cartão fidelidade: contar as visitas, emitir e conferir os "
+                "prêmios.",
                 "Enviar novidades, eventos, ofertas e datas especiais (como o seu "
                 "aniversário) por WhatsApp ou SMS. Você pode pedir para não receber a "
                 "qualquer momento.",

@@ -83,6 +83,8 @@ OPERACAO = [
     # — o horário de funcionamento não é dado de operação.
     # O dia especial (089) é o irmão do bloqueio: exceção de UMA data, e vai com ele.
     "reserva_mesas", "reserva_bloqueios", "reserva_dias_especiais", "reservas",
+    # A fidelidade (091) pendura no cliente: visitas e prêmios são operação.
+    "fidelidade_checkins", "fidelidade_premios",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]
@@ -384,6 +386,8 @@ PRESERVADAS = [
     # apontam para pessoas e mesas, que saem no TRUNCATE, e o guarda deste
     # script vai apitar no dia em que a tabela nascer. Que é o serviço dele.
     "reserva_config", "reserva_horarios", "reserva_permanencias",
+    # A regra do cartão (quantas visitas, qual prêmio) descreve a casa.
+    "fidelidade_config",
 ]
 
 

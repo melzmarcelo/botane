@@ -42,6 +42,7 @@ from routers import (
     autenticacao,
     cadastros,
     catalogos,
+    fidelidade,
     cmv,
     consumo,
     email_config,
@@ -397,6 +398,7 @@ app.include_router(exportacoes.router)
 app.include_router(catalogos.router)
 app.include_router(publico.router)
 app.include_router(reservas.router)
+app.include_router(fidelidade.router)
 
 
 @app.get("/saude", tags=["infra"])

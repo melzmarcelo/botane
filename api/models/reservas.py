@@ -230,6 +230,10 @@ class ConfiguracaoReservas(BaseModel):
     antecedencia_min_horas: int = Field(default=2, ge=0, le=720)
     antecedencia_max_dias: int = Field(default=30, ge=1, le=365)
     cadastro_completo: bool = True
+    # 🔑 **Esta loja participa da fidelidade** (migração 091, pedido do dono,
+    # 24/09/2026: *"na configuração do Portal do Cliente criar a flag se utiliza
+    # Fidelidade"*). Ligada, o site mostra o cartão e o QR da mesa vale aqui.
+    fidelidade_ligada: bool = False
     # 🔑 **O texto da mensagem de WhatsApp, da CASA** (migração 081, pedido do
     # dono, 21/09/2026: *"em configurações da reserva, colocar o texto padrão
     # configurável para o whatsapp"*). Estava escrito no site, e texto de

@@ -229,6 +229,7 @@ def obter(cur, id_unidade: int) -> dict:
     cur.execute(
         """SELECT aceita_online, confirmacao, teto_online, tolerancia_min, folga_min,
                   passo_min, antecedencia_min_horas, antecedencia_max_dias, cadastro_completo,
+                  fidelidade_ligada,
                   whatsapp_texto, whatsapp_texto_reserva
              FROM reserva_config WHERE id_unidade = %s""",
         (id_unidade,),
@@ -297,13 +298,13 @@ def salvar(cur, id_unidade: int, body) -> dict:
               SET aceita_online = %s, confirmacao = %s, teto_online = %s,
                   tolerancia_min = %s, folga_min = %s, passo_min = %s,
                   antecedencia_min_horas = %s, antecedencia_max_dias = %s,
-                  cadastro_completo = %s,
+                  cadastro_completo = %s, fidelidade_ligada = %s,
                   whatsapp_texto = %s, whatsapp_texto_reserva = %s,
                   atualizado_em = now()
             WHERE id_unidade = %s""",
         (body.aceita_online, body.confirmacao, body.teto_online, body.tolerancia_min,
          body.folga_min, body.passo_min, body.antecedencia_min_horas,
-         body.antecedencia_max_dias, body.cadastro_completo,
+         body.antecedencia_max_dias, body.cadastro_completo, body.fidelidade_ligada,
          # ⚠️ **Vazio vira NULO, não string vazia.** Nulo quer dizer "usa o
          # padrão"; `''` mandaria o cliente abrir o WhatsApp com a caixa em
          # branco, e quem apagou o campo sem querer não saberia por quê.

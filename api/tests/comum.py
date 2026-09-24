@@ -295,6 +295,10 @@ def preservar_reserva(unidade: int):
         # que a ordem de inserção pede — senão o estrago só aparece na bateria
         # seguinte, e num lugar que não tem nada a ver com a mudança.
         ("reserva_clientes", "id_unidade = %s"),
+        # A fidelidade (091) pendura no cliente — sem ela aqui, apagar o cliente
+        # levaria as visitas em cascata e a reposição não as traria de volta.
+        ("fidelidade_premios", "id_unidade = %s"),
+        ("fidelidade_checkins", "id_unidade = %s"),
         ("reservas", "id_unidade = %s"),
         ("reserva_mesas", "id_reserva IN (SELECT id FROM reservas WHERE id_unidade = %s)"),
     ]

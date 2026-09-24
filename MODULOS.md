@@ -165,14 +165,15 @@ da mesa — é tudo o que o cliente vê no site. Mudou o NOME (menu, telas, par�
 da loja, módulo no catálogo de permissões); ⚠️ as chaves `reservas.*`/`catalogos.*`,
 as rotas `/reservas/...`, a coluna `parametros.reservas_ligado` e os arquivos
 `reservas.md`/`catalogos.md` ficaram, de propósito. Menu: Portal de Clientes →
-Configuração · Reservas (Agenda, Salão) · Catálogos.
+Configuração · Reservas (Agenda, Salão) · Clientes · Fidelidade (Prêmios,
+Configuração) · Catálogos.
 
-- **Rotas:** `reservas.py`, `catalogos.py`, `publico.py` (o site do cliente)
+- **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `publico.py` (o site do cliente)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos)
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
-  `catalogos/`
+  `reservas/clientes/` (o grid dos cadastrados), `fidelidade/`, `catalogos/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`,
   `catalogos.ver`, `catalogos.editar`
 
