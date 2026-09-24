@@ -304,7 +304,6 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 /* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
    direita — o mesmo desenho do recibo, só que em lista. */
 .minhas { display: flex; flex-direction: column; gap: 6px; }
-.loja-nome small { display: block; font-size: 13px; color: var(--tinta-suave); font-weight: 400; }
 .link-sair { font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--tinta-suave); text-decoration: underline; }
 .minhas[hidden] { display: none; }
@@ -1513,8 +1512,10 @@ async function escolherLoja() {
     $("#lista-lojas").innerHTML = "";
     lojasDaCasa.forEach((l) => {
       const b = document.createElement("button");
-      b.className = "item loja-nome";
-      b.innerHTML = `${esc(l.nome)}${l.onde ? `<small>${esc(l.onde)}</small>` : ""}`;
+      // 🔑 **Só o nome** (pedido do dono, 24/09/2026): o endereço aparece no
+      // rodapé DEPOIS da escolha, que é quando ele diz algo a quem vai à casa.
+      b.className = "item";
+      b.textContent = l.nome;
       b.addEventListener("click", () => {
         // ⚠️ O "voltar" do celular reabre esta tela com a loja JÁ carregada:
         // escolher outra ali precisa recarregar tudo, não só trocar de tela.

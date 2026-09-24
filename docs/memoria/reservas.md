@@ -783,8 +783,9 @@ nem um site por loja).
 - 🔑 **Contato por loja**: `unidades.whatsapp` (tela de Lojas). `/publico/{u}/casa` prefere a
   loja e cai na empresa — WhatsApp e e-mail campo a campo; o ENDEREÇO vai inteiro de um lado ou
   do outro (misturar rua de um com bairro de outro dá endereço que não existe).
-- 🔑 **`GET /publico/lojas`**: lojas ativas com `reservas_ligado`, só `{id, nome (apelido),
-  onde}`. No site, com mais de uma, a tela **"Qual casa?"** vem antes de tudo; a escolha vai
+- 🔑 **`GET /publico/lojas`**: lojas ativas com `reservas_ligado`, só `{id, nome (apelido)}`.
+  ⚠️ **Só o nome no seletor** (pedido do dono): o endereço aparece no rodapé DEPOIS da
+  escolha, vindo de `/casa`. No site, com mais de uma, a tela **"Qual casa?"** vem antes de tudo; a escolha vai
   para a sessão da aba (`loja`); "Trocar de loja" esquece a casa e mantém a pessoa (o cadastro
   é único). ⚠️ Trocar RECARREGA a página: cardápios, horários e contato são da loja velha.
   ⚠️ O botão de reservar espera `aceitaPronta` — um toque antes da resposta de `/reserva`

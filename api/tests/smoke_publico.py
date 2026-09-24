@@ -475,9 +475,9 @@ try:
     checar("a lista de casas traz as duas lojas com reserva ligada",
            st == 200 and 1 in ids and ID_FILIAL in ids, (st, lojas))
     minha = next((l for l in lojas if l["id"] == ID_FILIAL), {})
-    checar("pelo APELIDO, com onde fica, e nada de CNPJ",
-           minha.get("nome") == f"Site{marca}" and "Pomerode" in (minha.get("onde") or "")
-           and set(minha) == {"id", "nome", "onde"}, minha)
+    # 🔑 Só o nome no seletor (pedido do dono): o endereço vem de `/casa`.
+    checar("pelo APELIDO, e SO o nome — nem endereco nem CNPJ",
+           minha.get("nome") == f"Site{marca}" and set(minha) == {"id", "nome"}, minha)
 
     st, c1 = chamar("GET", f"/publico/{ID_FILIAL}/casa")
     checar("o contato da filial e o DELA: WhatsApp, endereco e e-mail",

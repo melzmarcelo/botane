@@ -79,21 +79,19 @@ def lojas() -> list[dict]:
 
     🔑 **Pedido do dono (24/09/2026):** duas lojas com reserva ligada no mesmo
     site. O cliente escolhe a casa; reserva, catálogos e contato são dela.
-    ⚠️ **Só o que o cliente precisa para escolher**: nome e onde fica. Nada de
-    CNPJ, nada de quantas mesas — a regra deste arquivo vale aqui também.
+    ⚠️ **Só o NOME** (pedido do dono, 24/09/2026: *"no seletor de loja, colocar
+    somente o nome; o endereço só ao selecionar, no rodapé"*). O endereço sai
+    de `/casa`, depois da escolha. Nada de CNPJ, nada de quantas mesas.
     ⚠️ **Declarada ANTES de `/{id_unidade}/...`** por clareza; o caminho não
     colide, mas quem ler procura a lista antes do detalhe.
     """
     with get_cursor() as cur:
         cur.execute(
-            """SELECT u.id, coalesce(nullif(u.apelido, ''), u.nome) AS nome,
-                      u.bairro, u.cidade, u.uf
+            """SELECT u.id, coalesce(nullif(u.apelido, ''), u.nome) AS nome
                  FROM unidades u JOIN parametros p ON p.id_unidade = u.id
                 WHERE u.ativo AND p.reservas_ligado
                 ORDER BY u.matriz DESC, u.nome""")
-        return [{"id": r["id"], "nome": r["nome"],
-                 "onde": " · ".join(x for x in (r["bairro"], r["cidade"]) if x) or None}
-                for r in cur.fetchall()]
+        return [{"id": r["id"], "nome": r["nome"]} for r in cur.fetchall()]
 
 
 @router.get("/{id_unidade}/casa")
