@@ -971,4 +971,28 @@ contato". WhatsApp fica para uma fase própria. Estudo inicial: `docs/fidelidade
 - Clientes ganhou a coluna Fidelidade (visitas no cartão e prêmios).
 - Tabelas: `fidelidade_checkins`/`_premios` em `OPERACAO` e em `preservar_reserva`;
   `fidelidade_config` em `PRESERVADAS`.
-- Cobertura: `smoke_fidelidade.py` (36).
+- Cobertura: `smoke_fidelidade.py` (47, com a localização).
+
+### Localização no check-in (migração 092, 24/09/2026)
+
+🔑 **Pedido do dono:** *"tem como validar a localização ao ler o QR code e contar a visita? …
+pode implementar a localização configurável."* Fecha a brecha que o token e o horário deixavam:
+quem fotografou o QR marcando a visita do sofá, em dia de semana, com a casa aberta.
+- `fidelidade_config.exige_local` (padrão **ligado**) e `raio_m` (padrão 200, 30–5000) — da
+  REDE; `unidades.latitude/longitude` — de cada LOJA, gravadas em Fidelidade → Configuração
+  ("usar minha localização atual", estando na casa, ou digitadas). `PUT /fidelidade/localizacao`.
+- 🔑 **Quem decide é o SERVIDOR** (`conferir_local`, haversine): o site só pergunta ao celular
+  e manda `latitude/longitude/precisao` no check-in. Conferir no navegador seria conferir no
+  aparelho de quem quer burlar.
+- ⚠️ **Desconta a margem de erro que o celular informa, mas nunca mais que o raio**: dentro de
+  prédio o GPS erra 20–100 m (sem desconto, o cliente no salão seria recusado); sem teto, uma
+  margem de 3 km aprovaria qualquer um. Precisão pior que 1.000 m (só pela rede) → pede GPS.
+- ⚠️ Loja SEM coordenadas com a exigência ligada → check-in recusado dizendo "a casa ainda não
+  configurou" (e a tela avisa em vermelho). Recusar é o lado seguro; a fidelidade nasceu
+  desligada em todas as lojas, então ninguém é pego de surpresa.
+- ⚠️ **Não se guarda a posição do cliente**, só `fidelidade_checkins.distancia_m`. Termo sobe
+  para `2026-09-24.3` citando a localização (re-aceite de quem tinha a .2).
+- A localização é pedida por ÚLTIMO, depois das regras baratas (token, dia, horário): "hoje não
+  conta" é mais útil que um pedido de permissão que não resolveria nada.
+- Não é à prova de GPS falso (app que falsifica posição) — é contra a foto do QR, a fraude
+  provável. Alternativas descartadas por ora: QR rotativo num tablet, aprovação pela equipe.

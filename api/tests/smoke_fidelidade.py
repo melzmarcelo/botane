@@ -85,7 +85,19 @@ def _devolver_config():
             [CFG_ANTES[k] for k in campos])
 
 
+with get_cursor() as cur:
+    cur.execute("SELECT latitude, longitude FROM unidades WHERE id = %s", (UNIDADE,))
+    LOCAL_ANTES = dict(cur.fetchone())
+
+
+def _devolver_local():
+    with get_cursor() as cur:
+        cur.execute("UPDATE unidades SET latitude = %s, longitude = %s WHERE id = %s",
+                    (LOCAL_ANTES["latitude"], LOCAL_ANTES["longitude"], UNIDADE))
+
+
 atexit.register(_devolver_config)
+atexit.register(_devolver_local)
 
 HOJE = date.today()
 DIA_HOJE = HOJE.isoweekday()
@@ -105,7 +117,8 @@ def config_reserva(**mudancas):
 def config_fidelidade(**mudancas):
     corpo = {"visitas": 3, "premio": "Almoco gratis", "validade_dias": 30,
              "dias_pontua": TODOS, "dias_consumo": TODOS, "so_no_horario": True,
-             "site_url": "http://localhost:3200", **mudancas}
+             "site_url": "http://localhost:3200", "exige_local": False, "raio_m": 200,
+             **mudancas}
     return chamar("PUT", "/fidelidade/configuracao", corpo, token)
 
 
@@ -117,11 +130,11 @@ def limpar():
         cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
 
 
-def checkin(tk=None, aceite=False):
+def checkin(tk=None, aceite=False, **posicao):
     with get_cursor() as cur:
         cur.execute("DELETE FROM reserva_tentativas WHERE id_unidade = %s", (UNIDADE,))
     return chamar("POST", f"/publico/{UNIDADE}/fidelidade/checkin",
-                  {"telefone": FONE, "token": tk or TOKEN, "aceite_termo": aceite})
+                  {"telefone": FONE, "token": tk or TOKEN, "aceite_termo": aceite, **posicao})
 
 
 print("\n0. o cenario: Portal ligado, casa aberta o dia todo, fidelidade de 3 visitas")
@@ -186,6 +199,56 @@ st, r = checkin()
 checar("a segunda visita no MESMO dia e recusada", st == 409 and "hoje" in
        (r.get("detail") or ""), (st, r))
 config_reserva()
+config_fidelidade()
+
+print("\n2b. a localizacao: so conta na casa (migracao 092)")
+LOJA = (-26.919000, -49.066000)
+
+
+def sem_visita_hoje():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM fidelidade_checkins WHERE data = %s AND id_cliente = "
+                    "(SELECT id FROM reserva_clientes WHERE telefone = %s)", (HOJE, FONE))
+
+
+sem_visita_hoje()
+with get_cursor() as cur:
+    cur.execute("UPDATE unidades SET latitude = NULL, longitude = NULL WHERE id = %s", (UNIDADE,))
+config_fidelidade(exige_local=True, raio_m=200)
+st, r = checkin(latitude=LOJA[0], longitude=LOJA[1], precisao=10)
+checar("loja sem coordenadas: recusa dizendo que a casa nao configurou",
+       st == 409 and "configurou" in (r.get("detail") or ""), (st, r))
+st, cfg = chamar("PUT", "/fidelidade/localizacao", {"latitude": LOJA[0], "longitude": LOJA[1]},
+                 token)
+checar("a loja grava as coordenadas", st == 200 and cfg.get("local") == {
+    "latitude": LOJA[0], "longitude": LOJA[1]}, (st, cfg.get("local")))
+st, casa = chamar("GET", f"/publico/{UNIDADE}/casa")
+checar("o site sabe que precisa pedir a localizacao",
+       (casa.get("fidelidade") or {}).get("exige_local") is True, casa.get("fidelidade"))
+st, r = checkin()
+checar("sem a posicao do celular, pede a permissao", st == 409 and "localiza" in
+       (r.get("detail") or ""), (st, r))
+st, r = checkin(latitude=LOJA[0] + 0.05, longitude=LOJA[1], precisao=10)
+checar("a 5,6 km, recusa dizendo a distancia", st == 409 and "km" in (r.get("detail") or ""),
+       (st, r))
+st, r = checkin(latitude=LOJA[0], longitude=LOJA[1], precisao=3000)
+checar("localizacao imprecisa demais (so pela rede) pede o GPS", st == 409 and "GPS" in
+       (r.get("detail") or ""), (st, r))
+# ~330 m da loja, com o celular dizendo +-150 m: 330 - 150 = 180, dentro dos 200.
+st, r = checkin(latitude=LOJA[0] + 0.003, longitude=LOJA[1], precisao=150)
+checar("a margem de erro do celular e descontada", st == 200, (st, r))
+sem_visita_hoje()
+# ⚠️ Mas nunca mais que o raio: +-3.000 m de margem nao aprova quem esta a 900 m.
+st, r = checkin(latitude=LOJA[0] + 0.008, longitude=LOJA[1], precisao=900)
+checar("e a margem nao passa do raio", st == 409, (st, r))
+st, r = checkin(latitude=LOJA[0] + 0.0004, longitude=LOJA[1], precisao=20)
+checar("no salao (~45 m), conta", st == 200 and r.get("no_cartao") == 1, (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT distancia_m FROM fidelidade_checkins WHERE data = %s AND id_cliente = "
+                "(SELECT id FROM reserva_clientes WHERE telefone = %s)", (HOJE, FONE))
+    d = (cur.fetchone() or {}).get("distancia_m")
+checar("grava so a DISTANCIA do check-in, nao a posicao", d is not None and 40 <= d <= 50, d)
+checar("raio fora da faixa e recusado (422)", config_fidelidade(raio_m=5)[0] == 422)
 config_fidelidade()
 
 print("\n3. o termo antigo")

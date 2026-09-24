@@ -15,6 +15,11 @@ export type FidelidadeConfig = {
   dias_consumo: number[];
   so_no_horario: boolean;
   site_url: string;
+  /** O check-in só conta perto da loja (092). */
+  exige_local: boolean;
+  raio_m: number;
+  /** As coordenadas da loja ATUAL; nulas = ainda não configuradas. */
+  local: { latitude: number; longitude: number } | null;
   /** A loja ATUAL participa (Portal de Clientes → Configuração). */
   ligada: boolean;
   /** O que o QR desta loja abre. */
@@ -62,8 +67,14 @@ export const DIAS = [
 
 export const obterConfig = () => api.get<FidelidadeConfig>("/fidelidade/configuracao");
 
-export const salvarConfig = (c: Omit<FidelidadeConfig, "ligada" | "link">) =>
+export const salvarConfig = (c: Omit<FidelidadeConfig, "ligada" | "link" | "local">) =>
   api.put<FidelidadeConfig & { message: string }>("/fidelidade/configuracao", c);
+
+export const definirLocal = (latitude: number, longitude: number) =>
+  api.put<FidelidadeConfig & { message: string }>("/fidelidade/localizacao", {
+    latitude,
+    longitude,
+  });
 
 export const trocarToken = () =>
   api.post<FidelidadeConfig & { message: string }>("/fidelidade/token");

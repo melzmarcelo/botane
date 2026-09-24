@@ -21,6 +21,9 @@ class FidelidadeConfig(BaseModel):
     dias_consumo: list[int]
     so_no_horario: bool = True
     site_url: str = Field(min_length=8, max_length=200, pattern=r"^https?://")
+    # 🔑 Migração 092: o check-in só conta perto da loja, pela localização do celular.
+    exige_local: bool = True
+    raio_m: int = Field(default=200, ge=30, le=5000)
 
     _dias_pontua = field_validator("dias_pontua")(_dias)
     _dias_consumo = field_validator("dias_consumo")(_dias)
@@ -39,3 +42,14 @@ class CheckinDoSite(BaseModel):
     token: str = Field(max_length=32)
     # 🔑 O termo em vigor cita a fidelidade; quem aceitou o anterior aceita aqui.
     aceite_termo: bool = False
+    # A posição do celular no check-in (092). ⚠️ Usada para medir a distância e
+    # DESCARTADA — só a distância fica gravada.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    precisao: float | None = Field(default=None, ge=0)
+
+
+class LocalDaLoja(BaseModel):
+    """As coordenadas da loja atual, de onde se mede o raio do check-in."""
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)

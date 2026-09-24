@@ -16,6 +16,7 @@ regra, escrita:
 `reserva_config.fidelidade_ligada`. Estudo em `docs/fidelidade-estudo.md`.
 """
 
+import math
 import secrets
 from datetime import date, datetime, timedelta
 
@@ -49,7 +50,8 @@ def dias_em_texto(dias: list[int]) -> str:
 def config(cur) -> dict:
     cur.execute(
         """SELECT visitas, premio, validade_dias, dias_pontua, dias_consumo,
-                  so_no_horario, token, site_url FROM fidelidade_config WHERE id = 1""")
+                  so_no_horario, token, site_url, exige_local, raio_m
+             FROM fidelidade_config WHERE id = 1""")
     c = dict(cur.fetchone())
     c["dias_pontua"] = sorted(c["dias_pontua"])
     c["dias_consumo"] = sorted(c["dias_consumo"])
@@ -61,11 +63,11 @@ def salvar(cur, body) -> dict:
         """UPDATE fidelidade_config
               SET visitas = %s, premio = %s, validade_dias = %s, dias_pontua = %s,
                   dias_consumo = %s, so_no_horario = %s, site_url = %s,
-                  atualizado_em = now()
+                  exige_local = %s, raio_m = %s, atualizado_em = now()
             WHERE id = 1""",
         (body.visitas, body.premio.strip(), body.validade_dias, sorted(set(body.dias_pontua)),
          sorted(set(body.dias_consumo)), body.so_no_horario,
-         body.site_url.strip().rstrip("/")),
+         body.site_url.strip().rstrip("/"), body.exige_local, body.raio_m),
     )
     return config(cur)
 
@@ -102,7 +104,74 @@ def regras(cfg: dict) -> dict:
         "validade_dias": cfg["validade_dias"],
         "pontua": dias_em_texto(cfg["dias_pontua"]),
         "consumo": dias_em_texto(cfg["dias_consumo"]),
+        # O site só pede a localização quando a casa exige — pedir sem usar é
+        # coletar dado pessoal à toa.
+        "exige_local": cfg["exige_local"],
     }
+
+
+# ---------------------------------------------------------------- localização
+# 🔑 **Pedido do dono (24/09/2026):** *"validar a localização ao ler o QR code e contar
+# a visita … configurável."* (migração 092). Quem decide é o SERVIDOR, pela distância.
+
+# ⚠️ Acima disto o celular não sabe onde está (sem GPS, só pela rede): aceitar seria
+# contar visita de quem está a quilômetros; recusar pedindo para tentar de novo é o certo.
+PRECISAO_MAXIMA_M = 1000
+
+
+def local_da_loja(cur, id_unidade: int) -> tuple[float, float] | None:
+    cur.execute("SELECT latitude, longitude FROM unidades WHERE id = %s", (id_unidade,))
+    r = cur.fetchone()
+    if not r or r["latitude"] is None or r["longitude"] is None:
+        return None
+    return float(r["latitude"]), float(r["longitude"])
+
+
+def definir_local(cur, id_unidade: int, latitude: float, longitude: float) -> None:
+    cur.execute("UPDATE unidades SET latitude = %s, longitude = %s WHERE id = %s",
+                (round(latitude, 6), round(longitude, 6), id_unidade))
+
+
+def distancia_m(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Distância em metros entre dois pontos (haversine) — sobra para 200 m."""
+    lat1, lon1, lat2, lon2 = map(math.radians, (*a, *b))
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
+    return 2 * 6_371_000 * math.asin(math.sqrt(h))
+
+
+def conferir_local(cur, id_unidade: int, cfg: dict, posicao: dict | None) -> int | None:
+    """A distância até a loja, se a casa exige estar nela — ou a recusa que explica.
+
+    ⚠️ **Desconta a margem de erro que o PRÓPRIO celular informa** (até o raio): dentro
+    de prédio o GPS erra 20 a 100 m, e sem isso o cliente sentado no salão seria
+    recusado. Nunca mais que o raio, senão uma margem de 3 km aprovaria qualquer um.
+    """
+    if not cfg["exige_local"]:
+        return None
+    loja = local_da_loja(cur, id_unidade)
+    if not loja:
+        raise HTTPException(
+            status_code=409,
+            detail="Esta casa ainda não configurou a localização do check-in. Avise a equipe.")
+    if not posicao or posicao.get("latitude") is None or posicao.get("longitude") is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Para contar a visita, permita o acesso à localização — ela só confirma "
+                   "que você está na casa.")
+    precisao = float(posicao.get("precisao") or 0)
+    if precisao > PRECISAO_MAXIMA_M:
+        raise HTTPException(
+            status_code=409,
+            detail="Não conseguimos saber onde você está com precisão. Ligue a localização "
+                   "(GPS) do celular e tente de novo.")
+    d = distancia_m(loja, (float(posicao["latitude"]), float(posicao["longitude"])))
+    if d - min(precisao, cfg["raio_m"]) > cfg["raio_m"]:
+        longe = f"{d / 1000:.1f} km".replace(".", ",") if d >= 1000 else f"{d:.0f} m"
+        raise HTTPException(
+            status_code=409,
+            detail=f"O check-in vale dentro da casa, e você parece estar a {longe} dela.")
+    return round(d)
 
 
 def _status(p: dict, hoje: date) -> str:
@@ -171,7 +240,7 @@ def _codigo(cur) -> str:
 
 
 def checkin(cur, id_unidade: int, id_cliente: int, token: str,
-            agora: datetime | None = None) -> dict:
+            agora: datetime | None = None, posicao: dict | None = None) -> dict:
     """Marca a visita de hoje — e fecha o cartão se ela for a que faltava.
 
     ⚠️ **Trava por CLIENTE** (`pg_advisory_xact_lock`): duas abas fazendo o
@@ -198,11 +267,15 @@ def checkin(cur, id_unidade: int, id_cliente: int, token: str,
                 status_code=409,
                 detail="O check-in vale com a casa aberta — faça na mesa, durante a visita.")
 
+    # Por último, depois das regras baratas: a mensagem de "dia que não conta" é mais
+    # útil que a de distância, e não depende de permissão nenhuma.
+    distancia = conferir_local(cur, id_unidade, cfg, posicao)
+
     cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
     cur.execute(
-        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data)
-           VALUES (%s, %s, %s) ON CONFLICT (id_cliente, data) DO NOTHING RETURNING id""",
-        (id_cliente, id_unidade, hoje),
+        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m)
+           VALUES (%s, %s, %s, %s) ON CONFLICT (id_cliente, data) DO NOTHING RETURNING id""",
+        (id_cliente, id_unidade, hoje, distancia),
     )
     if not cur.fetchone():
         raise HTTPException(status_code=409,

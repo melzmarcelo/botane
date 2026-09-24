@@ -15,6 +15,7 @@ import {
 } from "@/lib/fidelidade";
 
 import ImpressaoDosQrCodes from "./impressao";
+import LocalizacaoDoCheckin from "./localizacao";
 
 /**
  * Fidelidade → Configuração: as regras do cartão de visitas e a impressão dos QR.
@@ -63,6 +64,8 @@ export default function ConfiguracaoDaFidelidade() {
         dias_consumo: cfg.dias_consumo,
         so_no_horario: cfg.so_no_horario,
         site_url: cfg.site_url,
+        exige_local: cfg.exige_local,
+        raio_m: Number(cfg.raio_m),
       });
       setCfg(r);
       aviso.sucesso(r.message);
@@ -157,6 +160,11 @@ export default function ConfiguracaoDaFidelidade() {
               </span>
             </span>
           </label>
+          <LocalizacaoDoCheckin
+            cfg={cfg}
+            aoMudar={(exige, raio) => setCfg({ ...cfg, exige_local: exige, raio_m: raio })}
+            aoGravarLocal={setCfg}
+          />
           <div className="flex justify-end">
             <button className="btn btn-primario" onClick={() => void salvar()}
                     aria-busy={ocupado} disabled={ocupado}>

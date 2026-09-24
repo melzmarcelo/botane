@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 import auditoria
 from database import get_cursor
-from models.fidelidade import EntregaPremio, FidelidadeConfig
+from models.fidelidade import EntregaPremio, FidelidadeConfig, LocalDaLoja
 from paginacao import pagina
 from relogio import agora_da_casa
 from routers.reservas import _unidade
@@ -30,7 +30,10 @@ _OPERAR = requer_permissao("fidelidade.operar")
 
 
 def _com_link(cur, id_unidade: int, cfg: dict) -> dict:
+    local = servico.local_da_loja(cur, id_unidade)
     return cfg | {
+        # As coordenadas da LOJA ATUAL (092) — a regra é da rede, o ponto é de cada casa.
+        "local": {"latitude": local[0], "longitude": local[1]} if local else None,
         "ligada": servico.ligada(cur, id_unidade),
         "link": servico.link_do_qr(cfg, id_unidade),
         "regras": servico.regras(cfg),
@@ -56,6 +59,24 @@ def salvar(body: FidelidadeConfig, ctx: Contexto = Depends(_CONFIGURAR)) -> dict
                             antes={k: v for k, v in antes.items() if k != "token"},
                             depois=body.model_dump())
         return _com_link(cur, id_unidade, cfg) | {"message": "Fidelidade salva."}
+
+
+@router.put("/localizacao")
+def definir_localizacao(body: LocalDaLoja, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """As coordenadas da loja atual, de onde se mede o raio do check-in (092).
+
+    🔑 A tela oferece "usar minha localização atual": quem configura estando na casa
+    grava o ponto certo sem procurar coordenada em mapa.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        antes = servico.local_da_loja(cur, id_unidade)
+        servico.definir_local(cur, id_unidade, body.latitude, body.longitude)
+        auditoria.registrar(cur, ctx.id_usuario, "unidade", id_unidade, "localizacao",
+                            antes={"latitude": antes[0], "longitude": antes[1]} if antes else None,
+                            depois=body.model_dump())
+        return _com_link(cur, id_unidade, servico.config(cur)) | {
+            "message": "Localização da loja gravada."}
 
 
 @router.post("/token")

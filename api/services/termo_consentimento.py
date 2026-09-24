@@ -15,7 +15,8 @@ para a versão a que disseram sim.
 # 🔑 Histórico: "2026-09-24" (cadastro, reservas, cardápios); "2026-09-24.2" acrescenta
 # o programa de fidelidade (check-in por visita, migração 091) — finalidade nova, e
 # por isso quem aceitou a anterior aceita de novo antes do primeiro check-in.
-VERSAO = "2026-09-24.2"
+# "2026-09-24.3" acrescenta a localização no check-in (migração 092).
+VERSAO = "2026-09-24.3"
 
 
 def termo(casa: str, razao_social: str | None, email: str | None,
@@ -43,6 +44,9 @@ def termo(casa: str, razao_social: str | None, email: str | None,
                 "histórico de comparecimento e cancelamento.",
                 "As suas visitas registradas no programa de fidelidade (dia e casa de cada "
                 "check-in) e os prêmios ganhos e usados.",
+                "A localização do seu celular no momento do check-in, usada só para "
+                "confirmar que você está na casa. Não guardamos a sua posição — apenas a "
+                "distância até a casa naquele check-in.",
                 "O registro das conversas com a nossa equipe, por WhatsApp, telefone ou "
                 "outro meio.",
             ]},

@@ -210,7 +210,10 @@ def checkin_fidelidade(id_unidade: int, corpo: CheckinDoSite, pedido: Request) -
                 status_code=409,
                 detail="Para participar da fidelidade, marque que está de acordo com o termo "
                        "de consentimento atualizado.")
-        return fidelidade.checkin(cur, id_unidade, id_cliente, corpo.token)
+        return fidelidade.checkin(
+            cur, id_unidade, id_cliente, corpo.token,
+            posicao={"latitude": corpo.latitude, "longitude": corpo.longitude,
+                     "precisao": corpo.precisao})
 
 
 @router.get("/{id_unidade}/termo")

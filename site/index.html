@@ -1462,7 +1462,36 @@ function abrirFidelidade() {
   identificarPara("fidelidade");
 }
 
+/** O último cartão recebido — diz se a casa exige a localização no check-in. */
+let cartaoAtual = null;
+
+/**
+ * A posição do celular, para o servidor medir a distância até a casa (migração 092).
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"validar a localização ao ler o QR code e contar a
+ * visita."* ⚠️ Quem decide é a API; aqui só se pergunta ao aparelho. Recusa ou falha
+ * viram uma frase — nunca um check-in mudo que "não aconteceu".
+ */
+function pedirLocalizacao() {
+  return new Promise((pronto, falhou) => {
+    if (!navigator.geolocation) {
+      return falhou(new Error("Este navegador não informa a localização."));
+    }
+    navigator.geolocation.getCurrentPosition(
+      (p) => pronto({
+        latitude: p.coords.latitude, longitude: p.coords.longitude, precisao: p.coords.accuracy,
+      }),
+      (e) => falhou(new Error(e.code === e.PERMISSION_DENIED
+        ? "Para contar a visita, permita o acesso à localização — ela só confirma que você "
+          + "está na casa. Libere nas configurações do navegador e toque em Fazer check-in."
+        : "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in.")),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 },
+    );
+  });
+}
+
 function desenharCartao(c) {
+  cartaoAtual = c;
   $("#sub-fidelidade").textContent =
     `A cada ${c.visitas} visitas: ${c.premio}.`;
   const total = c.visitas;
@@ -1486,7 +1515,8 @@ function desenharCartao(c) {
         : `<span>${p.status === "USADO" ? "Já usado" : "Venceu"} · ${esc(p.codigo)}</span>`}
     </div>`).join("");
   $("#regra-fidelidade").textContent =
-    `As visitas contam de ${c.pontua}, uma por dia, com o check-in pelo QR code da mesa. ` +
+    `As visitas contam de ${c.pontua}, uma por dia, com o check-in pelo QR code da mesa` +
+    (c.exige_local ? ", estando na casa (o site confirma pela localização). " : ". ") +
     `O prêmio vale ${c.validade_dias} dias, de ${c.consumo}.`;
   const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
   $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
@@ -1519,10 +1549,22 @@ async function fazerCheckin() {
       "Para participar, marque que está de acordo com o termo de consentimento.");
   }
   $("#fazer-checkin").disabled = true;
+  let posicao = {};
+  if (cartaoAtual && cartaoAtual.exige_local) {
+    avisar("#aviso-fidelidade", "Confirmando que você está na casa…", false);
+    try {
+      posicao = await pedirLocalizacao();
+    } catch (e) {
+      $("#fazer-checkin").disabled = false;
+      // ⚠️ O botão aparece: depois de liberar a permissão, a pessoa tenta de novo.
+      $("#fazer-checkin").hidden = false;
+      return avisar("#aviso-fidelidade", e.message);
+    }
+  }
   let r;
   try {
     r = await pedir("/fidelidade/checkin", {
-      telefone: eu.telefone, token: checkinToken, aceite_termo: precisa,
+      telefone: eu.telefone, token: checkinToken, aceite_termo: precisa, ...posicao,
     });
   } catch (e) {
     $("#fazer-checkin").disabled = false;
