@@ -284,6 +284,7 @@ def preservar_reserva(unidade: int):
         ("reserva_horarios", "id_unidade = %s"),
         ("reserva_permanencias", "id_unidade = %s"),
         ("reserva_bloqueios", "id_unidade = %s"),
+        ("reserva_dias_especiais", "id_unidade = %s"),
         ("saloes", "id_unidade = %s"),
         ("mesas", "id_unidade = %s"),
         # ⚠️ **Antes de `reservas`, porque `reservas.id_cliente` aponta para cá**

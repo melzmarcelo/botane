@@ -135,7 +135,11 @@ export default function CalendarioDoMes({
                 title={
                   d.bloqueio
                     ? `Bloqueado: ${d.bloqueio}`
-                    : !d.aberta
+                    : d.especial
+                      ? `Horário especial ${d.especial.abre}–${d.especial.fecha}` +
+                        (d.especial.motivo ? `: ${d.especial.motivo}` : "") +
+                        ` · ${d.reservas} reserva(s)`
+                      : !d.aberta
                       ? "A casa não atende neste dia da semana"
                       : `${d.reservas} reserva(s), ${d.pessoas} pessoa(s)`
                 }
@@ -151,6 +155,13 @@ export default function CalendarioDoMes({
                   className={`mono text-[13px] font-semibold ${eHoje ? "text-[var(--color-erva)]" : ""}`}
                 >
                   {numero}
+                  {/* 🔑 Dia que abre fora do padrão (089): a marca diz "exceção"
+                      sem roubar o espaço das reservas. */}
+                  {d.especial && !d.bloqueio && (
+                    <span className="ml-1 hidden rounded bg-[var(--color-alerta-claro)] px-1 text-[10.5px] font-normal text-[var(--color-alerta)] sm:inline">
+                      {d.especial.abre}–{d.especial.fecha}
+                    </span>
+                  )}
                 </span>
                 {d.bloqueio ? (
                   <span className="mt-auto truncate text-[11px] text-[var(--color-erro)]">
@@ -192,6 +203,12 @@ export default function CalendarioDoMes({
           <span>
             <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[var(--color-superficie2)] align-middle" />
             casa fechada ou bloqueada
+          </span>
+          <span>
+            <span className="mono mr-1 rounded bg-[var(--color-alerta-claro)] px-1 text-[10.5px] text-[var(--color-alerta)]">
+              9:00–14:00
+            </span>
+            horário especial do dia
           </span>
         </p>
       )}

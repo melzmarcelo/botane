@@ -300,6 +300,38 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
   font: 500 13px/1 Karla, sans-serif; padding: 4px 0; align-self: flex-start;
 }
 .voltar:hover { color: var(--tinta); }
+
+/* ---- o aceite do termo de consentimento (pedido do dono, 24/09/2026) ---- */
+.aceite {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 14px;
+  color: var(--tinta); cursor: pointer; line-height: 1.4;
+}
+.aceite input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--erva); }
+.link-termo {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--erva);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { .link-termo { color: var(--tinta); } }
+/* 🔑 `<dialog>` nativo: o Esc, o foco preso e o fundo inerte vêm do navegador. */
+.termo {
+  width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+  padding: 0; border: 1px solid var(--linha); border-radius: 16px;
+  background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra);
+}
+.termo::backdrop { background: rgba(20, 24, 18, .5); }
+.termo[open] { display: flex; flex-direction: column; }
+.termo h3 { margin: 0; padding: 18px 20px 12px; font: 400 19px/1.25 Fraunces, Georgia, serif; }
+.termo .corpo-termo {
+  overflow-y: auto; padding: 0 20px; font-size: 13.5px; color: var(--tinta-suave);
+}
+.termo h4 { margin: 14px 0 4px; font-size: 13.5px; color: var(--tinta); }
+.termo p, .termo ul { margin: 0 0 8px; }
+.termo ul { padding-left: 18px; }
+.termo .pe-termo {
+  display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px;
+  border-top: 1px solid var(--linha);
+}
+.termo .pe-termo button { width: auto; padding: 10px 16px; }
 .vazio { color: var(--tinta-suave); font-size: 14px; }
 /* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
    direita — o mesmo desenho do recibo, só que em lista. */
@@ -423,6 +455,17 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
           </label>
         </div>
 
+        <!-- 🔑 **Pedido do dono (24/09/2026):** *"adicionar o item Estou de acordo
+             com o termo de consentimento … para seguir o cadastro é necessário ter
+             marcado."* Só para quem é NOVO: quem já tem cadastro não o vê.
+             ⚠️ O link é um `<button>` DENTRO do rótulo: tocar nele abre o termo
+             sem marcar a caixa — ler não é o mesmo que concordar. -->
+        <label class="aceite" id="bloco-termo" hidden>
+          <input type="checkbox" id="aceite-termo">
+          <span>Estou de acordo com o
+            <button type="button" class="link-termo" id="ver-termo">termo de consentimento</button>.</span>
+        </label>
+
         <div class="regras" id="aviso-quem" hidden></div>
         <button class="item destaque" id="avancar">Continuar</button>
       </div>
@@ -520,6 +563,15 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <p class="pe" id="rodape"></p>
   </div>
 </div>
+
+<dialog class="termo" id="termo" aria-labelledby="t-termo">
+  <h3 id="t-termo">Termo de consentimento</h3>
+  <div class="corpo-termo" id="texto-termo"><p>Carregando…</p></div>
+  <div class="pe-termo">
+    <button class="item" type="button" id="fechar-termo">Fechar</button>
+    <button class="item destaque" type="button" id="concordar-termo">Li e concordo</button>
+  </div>
+</dialog>
 
 <script>
 /* ===========================================================================
@@ -1090,6 +1142,8 @@ function voltarAoTelefone() {
   passo = "fone";
   $("#bloco-quem").hidden = true;
   $("#bloco-novo").hidden = true;
+  $("#bloco-termo").hidden = true;
+  $("#aceite-termo").checked = false;
   $("#avancar").hidden = false;
   $("#avancar").textContent = "Continuar";
   avisar("#aviso-quem", "");
@@ -1141,6 +1195,7 @@ async function consultarTelefone() {
   passo = "dados";
   $("#bloco-quem").hidden = false;
   $("#bloco-novo").hidden = !r.cadastro_completo;
+  $("#bloco-termo").hidden = false;
   avisar("#aviso-quem", "Primeira vez por aqui? Conte quem é você.", false);
   $("#avancar").textContent = destino === "reserva"
     ? "Escolher dia e horário" : "Abrir o cardápio";
@@ -1155,6 +1210,12 @@ async function guardarDados() {
     if (!$("#cidade").value.trim()) return avisar("#aviso-quem", "Diga sua cidade.");
     if (!$("#nascimento").value) return avisar("#aviso-quem", "Diga sua data de nascimento.");
   }
+  // ⚠️ A API confere de novo: a caixa marcada no navegador não prova nada.
+  if (!$("#aceite-termo").checked) {
+    return avisar("#aviso-quem",
+      "Para seguir com o cadastro, marque que está de acordo com o termo de consentimento.");
+  }
+  eu.aceite = true;
   eu.nome = nome;
   eu.genero = $("#bloco-novo").hidden ? null : $("#genero").value;
   eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
@@ -1191,7 +1252,7 @@ async function identificarParaCatalogo() {
   try {
     quem = await pedir("/cliente", {
       telefone: eu.telefone, nome: eu.nome, genero: eu.genero,
-      cidade: eu.cidade, nascimento: eu.nascimento,
+      cidade: eu.cidade, nascimento: eu.nascimento, aceite_termo: !!eu.aceite,
     });
   } catch (e) {
     $("#avancar").disabled = false;
@@ -1302,6 +1363,40 @@ $("#avancar").addEventListener("click", () => {
 // dados de um número e gravar em outro é o jeito de a mesa sair no nome errado.
 $("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTelefone(); });
 
+/* ---- o termo de consentimento ---- */
+// 🔑 **O texto vem da API** (`/termo`), com a versão que o aceite grava: o que o
+// cliente lê e o que o cadastro diz que ele aceitou saem do mesmo lugar.
+// Busca uma vez, na primeira abertura — quem já é cliente nunca paga por isto.
+let termoCarregado = false;
+async function abrirTermo() {
+  $("#termo").showModal();
+  if (termoCarregado) return;
+  try {
+    const t = await pedir("/termo");
+    $("#t-termo").textContent = t.titulo;
+    $("#texto-termo").innerHTML = t.secoes.map((s) =>
+      (s.titulo ? `<h4>${esc(s.titulo)}</h4>` : "")
+      + (s.paragrafos || []).map((p) => `<p>${esc(p)}</p>`).join("")
+      + (s.itens ? `<ul>${s.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""),
+    ).join("");
+    termoCarregado = true;
+  } catch {
+    $("#texto-termo").innerHTML = "<p>Não conseguimos carregar o termo agora. Tente de novo.</p>";
+  }
+}
+$("#ver-termo").addEventListener("click", (e) => {
+  e.preventDefault(); // dentro do rótulo: sem isto, o toque marcaria a caixa
+  abrirTermo();
+});
+$("#fechar-termo").addEventListener("click", () => $("#termo").close());
+$("#concordar-termo").addEventListener("click", () => {
+  $("#aceite-termo").checked = true;
+  $("#termo").close();
+  avisar("#aviso-quem", "");
+});
+// Tocar fora da caixa fecha, como qualquer janela do celular.
+$("#termo").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
 /* ---- os horários que a casa tem livres ---- */
 let buscando = null;
 async function buscarHorarios() {
@@ -1340,6 +1435,12 @@ async function buscarHorarios() {
   if (r.teto && pessoas > r.teto) {
     aviso.hidden = false;
     aviso.innerHTML = `Para <b>${pessoas} pessoas</b> a casa acerta no WhatsApp.`;
+  } else if (r.aviso) {
+    // 🔑 Dia especial (pedido do dono, 24/09/2026): a segunda que é feriado e
+    // abre diz POR QUE abre, e com que horário — o cliente conhece o padrão.
+    aviso.hidden = false;
+    aviso.innerHTML = `Horário especial neste dia (${esc(r.abre)} às ${esc(r.fecha)}): `
+      + `${esc(r.aviso)}.`;
   }
 }
 
@@ -1390,6 +1491,7 @@ $("#confirmar").addEventListener("click", async () => {
       // ⚠️ O nome só vai para quem é NOVO: o cadastrado é reconhecido pelo telefone.
       telefone: eu.telefone, nome: eu.cadastrado ? null : eu.nome,
       genero: eu.genero, cidade: eu.cidade, nascimento: eu.nascimento,
+      aceite_termo: !!eu.aceite,
       data: $("#dia").value, hora: horaEscolhida,
       pessoas: Number($("#pessoas").value),
       // ⚠️ Em branco vai como NULO, não como string vazia: a agenda do balcão

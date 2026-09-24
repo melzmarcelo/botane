@@ -11,6 +11,7 @@ import ExplicaTela from "@/components/explica-tela";
 
 import CalendarioDoMes, { maiuscula, mesDe } from "./calendario";
 import DetalheDaReserva from "./detalhe";
+import ExcecaoDoDia from "./excecao";
 import { NovaReserva, Remarcar } from "./formularios";
 import LinhaDoTempo from "./linha-do-tempo";
 import { ADIANTE, COR, ROTULO, podeRemarcar } from "./status";
@@ -52,6 +53,8 @@ export default function AgendaDoDia() {
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [marcando, setMarcando] = useState(false);
+  /** A janela de exceção do dia (horário especial ou fechado). */
+  const [excecao, setExcecao] = useState(false);
   /** A reserva aberta no detalhe — pelo ID, para sobreviver ao recarregar. */
   const [aberta, setAberta] = useState<number | null>(null);
 
@@ -176,6 +179,11 @@ export default function AgendaDoDia() {
           <button className="btn btn-secundario" onClick={() => setDia(hoje())}>
             hoje
           </button>
+          {pode("reservas.configurar") && (
+            <button className="btn btn-secundario" onClick={() => setExcecao(true)}>
+              Exceção do dia
+            </button>
+          )}
           {podeEditar && agenda.aberta && !agenda.bloqueio && (
             <button className="btn btn-primario" onClick={() => setMarcando((v) => !v)}>
               Nova reserva
@@ -192,8 +200,28 @@ export default function AgendaDoDia() {
       )}
       {!agenda.aberta && !agenda.bloqueio && (
         <Aviso tipo="info">
-          A casa não atende neste dia da semana. Isso se muda em Portal de Clientes → Configuração.
+          A casa não atende neste dia da semana. Para abrir só hoje, use{" "}
+          <b>Exceção do dia</b>; para toda semana, Portal de Clientes → Configuração.
         </Aviso>
+      )}
+      {agenda.especial && !agenda.bloqueio && (
+        <Aviso tipo="info">
+          Horário especial: <b>{agenda.especial.abre} às {agenda.especial.fecha}</b>, última
+          reserva {agenda.especial.ultima_reserva}
+          {agenda.especial.motivo ? <> — {agenda.especial.motivo}</> : null}.
+        </Aviso>
+      )}
+
+      {excecao && (
+        <ExcecaoDoDia
+          agenda={agenda}
+          nomeDoDia={nomeDoDia}
+          aoFechar={() => setExcecao(false)}
+          aoSalvar={async () => {
+            setExcecao(false);
+            await carregar();
+          }}
+        />
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">

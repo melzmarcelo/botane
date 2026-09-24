@@ -25,7 +25,7 @@ seu endereço. `/publico/{id_unidade}/...` deixa isso resolvido desde já.
 reserva não aparece aqui — nem o catálogo dela, que é do site de reservas.
 """
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -36,6 +36,7 @@ from models.reservas import CancelamentoDoSite, ClienteDoSite, IdentificacaoDoSi
 from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
+from services import termo_consentimento as termo
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
 
@@ -153,6 +154,28 @@ def casa(id_unidade: int) -> dict:
         }
 
 
+@router.get("/{id_unidade}/termo")
+def termo_de_consentimento(id_unidade: int) -> dict:
+    """O termo de consentimento (LGPD) que o cadastro pede para aceitar.
+
+    🔑 **Pedido do dono (24/09/2026)**: *"o termo pode abrir em um popup … e para
+    seguir o cadastro é necessário ter marcado."* O texto e a versão vêm de
+    `services/termo_consentimento.py` — a mesma versão que o aceite grava.
+    ⚠️ Com o nome e o contato da LOJA, pelo mesmo degrau de `/casa`.
+    """
+    with get_cursor() as cur:
+        loja = _casa_aberta(cur, id_unidade)
+        cur.execute("SELECT nome_fantasia, razao_social, whatsapp, email FROM empresa WHERE id = 1")
+        e = dict(cur.fetchone() or {})
+    zap = _so_digitos(loja.get("whatsapp")) or _so_digitos(e.get("whatsapp"))
+    return termo.termo(
+        casa=e.get("nome_fantasia") or e.get("razao_social") or "Botané",
+        razao_social=e.get("razao_social"),
+        email=loja.get("email") or e.get("email"),
+        whatsapp=zap or None,
+    )
+
+
 # 🔑 **Os nomes dos dias, na voz de quem lê** — "Ter" e "Qua", não "2" e "3". A
 # tela do cliente mostra "Ter · Qua · Qui · Sex · Sáb", como o protótipo.
 # ⚠️ ISO: 1 = segunda … 7 = domingo. É a convenção da casa desde
@@ -209,7 +232,11 @@ def _quando_atende(cur, id_unidade: int) -> dict:
     # 09:30" com a casa cheia. Errava TODO dia, nas três últimas horas do
     # expediente. Ver `relogio.py` — é a segunda vez que este erro aparece.
     agora = agora_da_casa()
-    hoje = next((d for d in abertos if d["dia_semana"] == agora.isoweekday()), None)
+    # 🔑 **Hoje e o próximo dia olham a DATA, não só a semana** (089): o 12/10
+    # cai numa segunda fechada e abre; o dia bloqueado cai num sábado aberto e
+    # não abre. A linha "Ter–Sex" continua sendo a semana — é o padrão da casa.
+    datas = agenda.janelas(cur, id_unidade, agora.date(), agora.date() + timedelta(days=14))
+    hoje = datas[agora.date()]["janela"] if datas[agora.date()]["aberta"] else None
     return {
         "dias": [_DIAS[d["dia_semana"]] for d in abertos],
         "aberta_agora": bool(hoje and hoje["abre"] <= agora.time() <= hoje["fecha"]),
@@ -217,16 +244,14 @@ def _quando_atende(cur, id_unidade: int) -> dict:
         # em vez de só "fechado" — que é uma porta na cara de quem chegou.
         "hoje": (f'{hoje["abre"].strftime("%H:%M")} às {hoje["fecha"].strftime("%H:%M")}'
                  if hoje else None),
-        # ⚠️ **O `i` começa em ZERO**: hoje entra quando a casa ainda não abriu.
-        # Começava em 1, e numa quarta às 08:00 com abertura às 09:30 a tarja
-        # dizia "abre Qui 09:30" — pulava o próprio dia. Hoje só conta se a
-        # abertura ainda está à frente; depois do fechamento, o próximo é outro dia.
+        # ⚠️ **Hoje entra quando a casa ainda não abriu.** Começava no dia
+        # seguinte, e numa quarta às 08:00 com abertura às 09:30 a tarja dizia
+        # "abre Qui 09:30" — pulava o próprio dia. Depois do fechamento, o
+        # próximo é outro dia.
         "proximo": next(
-            (f'{_DIAS[d["dia_semana"]]} às {d["abre"].strftime("%H:%M")}'
-             for i in range(0, 8)
-             for d in abertos
-             if d["dia_semana"] == ((agora.isoweekday() + i - 1) % 7) + 1
-             and (i > 0 or agora.time() < d["abre"])),
+            (f'{_DIAS[d.isoweekday()]} às {x["janela"]["abre"].strftime("%H:%M")}'
+             for d, x in sorted(datas.items())
+             if x["aberta"] and (d > agora.date() or agora.time() < x["janela"]["abre"])),
             None),
     }
 
@@ -509,6 +534,9 @@ def horarios(
             "teto": min(int(r.get("teto_online") or 0) or 99,
                         int(r.get("maior_grupo") or 0) or 99),
             "motivo": motivo,
+            # 🔑 O motivo do dia especial (089), para o cliente saber por que a
+            # segunda está aberta — "Feriado: abrimos em horário de sábado".
+            "aviso": r.get("aviso"),
         }
 
 

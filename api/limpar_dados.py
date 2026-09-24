@@ -81,7 +81,8 @@ OPERACAO = [
     # ⚠️ A CONFIGURAÇÃO das reservas NÃO entra: `reserva_config`,
     # `reserva_horarios` e `reserva_permanencias` são da loja, como `parametros`
     # — o horário de funcionamento não é dado de operação.
-    "reserva_mesas", "reserva_bloqueios", "reservas",
+    # O dia especial (089) é o irmão do bloqueio: exceção de UMA data, e vai com ele.
+    "reserva_mesas", "reserva_bloqueios", "reserva_dias_especiais", "reservas",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]

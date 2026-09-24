@@ -98,6 +98,8 @@ def esvaziar_a_loja():
         cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
         cur.execute("DELETE FROM reserva_clientes WHERE id_unidade = %s", (UNIDADE,))
         cur.execute("DELETE FROM reserva_tentativas WHERE id_unidade = %s", (UNIDADE,))
+        cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
+        cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
 
 
 def limpar_quem_reservou():
@@ -167,7 +169,7 @@ FONE = "47999100001"
 
 def reservar(**campos):
     corpo = {"telefone": FONE, "nome": "Marina Duarte", "genero": "FEMININO",
-             "cidade": "Blumenau", "nascimento": "1988-03-09",
+             "cidade": "Blumenau", "nascimento": "1988-03-09", "aceite_termo": True,
              "data": DIA, "hora": "19:00", "pessoas": 2}
     corpo.update(campos)
     return chamar("POST", f"/publico/{UNIDADE}/reserva", corpo, origem="203.0.113.7")
@@ -221,6 +223,15 @@ checar("faltando so a cidade, a mensagem fala so dela",
        st == 422 and "cidade" in (r.get("detail") or "")
        and "gênero" not in (r.get("detail") or ""), (st, r))
 
+# 🔑 **O termo de consentimento** (pedido do dono, 24/09/2026): sem o aceite, o
+# cadastro nao nasce — e quem confere e a API, nao a caixa do navegador.
+st, r = reservar(aceite_termo=False)
+checar("sem aceitar o termo, o cadastro novo e recusado dizendo por que",
+       st == 422 and "termo" in (r.get("detail") or ""), (st, r))
+st, t = chamar("GET", f"/publico/{UNIDADE}/termo")
+checar("o termo e publico, com versao e secoes",
+       st == 200 and t.get("versao") and len(t.get("secoes") or []) >= 5, (st, t))
+
 print("\n5. a primeira reserva, com o cadastro junto")
 st, feita = reservar()
 checar("a reserva nasce (201)", st == 201, (st, feita))
@@ -252,6 +263,13 @@ with get_cursor() as cur:
                 "AND telefone = %s", (UNIDADE, FONE))
     checar("e a data de nascimento tambem",
            str((cur.fetchone() or {}).get("nascimento")) == "1988-03-09")
+    cur.execute("SELECT termo_aceito_em, termo_versao FROM reserva_clientes "
+                "WHERE telefone = %s", (FONE,))
+    aceite = cur.fetchone() or {}
+    # ⚠️ Consentimento e prova: QUANDO e a QUE versao, nao so "aceitou".
+    checar("e o aceite do termo, com data e a versao que foi mostrada",
+           aceite.get("termo_aceito_em") and aceite.get("termo_versao") == t.get("versao"),
+           aceite)
     cur.execute("SELECT count(*) AS n FROM reserva_mesas WHERE id_reserva IN "
                 "(SELECT id FROM reservas WHERE id_unidade = %s)", (UNIDADE,))
     # 🔑 A mesa e alocada pela MESMA regra do balcao — se nao fosse, a reserva
@@ -402,7 +420,7 @@ st, r = reservar(nome=None, genero=None, cidade=None, nascimento=None, hora="10:
 checar("quem ja tem cadastro reserva SEM mandar o nome", st == 201, (st, r))
 st, r = chamar("POST", f"/publico/{UNIDADE}/cliente",
                {"telefone": "47999106161", "genero": "OUTRO", "cidade": "Blumenau",
-                "nascimento": "1990-01-01"}, origem="203.0.113.7")
+                "nascimento": "1990-01-01", "aceite_termo": True}, origem="203.0.113.7")
 checar("mas quem e NOVO precisa dizer o nome", st == 422 and "nome" in
        (r.get("detail") or ""), (st, r))
 
@@ -478,6 +496,82 @@ st, ag = chamar("GET", f"/reservas/agenda?data={DIA}", token=token)
 checar("a agenda do dia traz a janela para a linha do tempo",
        ag.get("abre") == "09:00" and ag.get("fecha") == "22:00" and ag.get("passo"),
        {k: ag.get(k) for k in ("abre", "fecha", "passo")})
+
+print("\n10b. a excecao de um dia, feita no calendario")
+# 🔑 **Pedido do dono (24/09/2026):** *"12/10 e feriado e segunda, que nao atende,
+# mas nesta segunda vamos abrir com horario de sabado; ou tal dia nao abriremos,
+# motivo X — e na reserva, ao selecionar o dia, mostramos o motivo."*
+D = date.fromisoformat(DIA)
+ANTES_D, DEPOIS_D = (D - timedelta(days=1)).isoformat(), (D + timedelta(days=1)).isoformat()
+gravar_config(aceita_online=True, horarios=[
+    {**h, "aberto": h["dia_semana"] != D.isoweekday()} for h in BASE_CFG["horarios"]])
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={DIA}&pessoas=2")
+checar("com o dia da semana fechado, o site nao oferece nada",
+       st == 200 and r.get("horarios") == [], (st, r))
+
+st, r = chamar("PUT", f"/reservas/dias/{DIA}",
+               {"modo": "ESPECIAL", "abre": "10:00", "fecha": "16:00",
+                "ultima_reserva": "14:00", "motivo": "Feriado, abrimos"}, token)
+checar("o dia especial grava", st == 200 and r.get("modo") == "ESPECIAL", (st, r))
+st, ag = chamar("GET", f"/reservas/agenda?data={DIA}", token=token)
+checar("e a agenda do dia passa a abrir, com o horario dele",
+       ag.get("aberta") is True and ag.get("abre") == "10:00"
+       and (ag.get("especial") or {}).get("motivo") == "Feriado, abrimos"
+       and (ag.get("padrao") or {}).get("aberto") is False, ag)
+st, cal = chamar("GET", f"/reservas/calendario?mes={DIA[:7]}", token=token)
+dia_cal = next((d for d in (cal or {}).get("dias", []) if d["data"] == DIA), {})
+checar("o calendario mostra o dia aberto e o horario especial",
+       dia_cal.get("aberta") is True and (dia_cal.get("especial") or {}).get("abre") == "10:00",
+       dia_cal)
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={DIA}&pessoas=2")
+checar("o site oferece a janela do dia especial, e so ela",
+       st == 200 and (r.get("horarios") or [None])[0] == "10:00"
+       and r["horarios"][-1] == "14:00", (st, r))
+checar("e diz ao cliente por que o dia abre", r.get("aviso") == "Feriado, abrimos", r)
+checar("ultima reserva depois do fechamento e recusada (422)",
+       chamar("PUT", f"/reservas/dias/{DIA}",
+              {"modo": "ESPECIAL", "abre": "10:00", "fecha": "12:00",
+               "ultima_reserva": "13:00"}, token)[0] == 422)
+checar("fechar sem motivo e recusado (422)",
+       chamar("PUT", f"/reservas/dias/{DIA}", {"modo": "FECHADO"}, token)[0] == 422)
+
+st, r = chamar("POST", "/reservas", {"data": DIA, "hora": "11:00", "pessoas": 2,
+                                     "nome": "Excecao Teste", "origem": "BALCAO"}, token)
+checar("o balcao marca no dia especial", st == 201, (st, r))
+st, r = chamar("PUT", f"/reservas/dias/{DIA}", {"modo": "FECHADO", "motivo": "Evento fechado"},
+               token)
+# ⚠️ Fechar nao cancela o que ja estava marcado: diz quantas sao, para a casa ligar.
+checar("fechar o dia avisa da reserva que ja estava marcada",
+       st == 200 and r.get("reservas_fora") == 1, (st, r))
+st, ag = chamar("GET", f"/reservas/agenda?data={DIA}", token=token)
+checar("o dia fechado deixa de ser especial — uma data tem UM estado",
+       ag.get("bloqueio") == "Evento fechado" and ag.get("especial") is None
+       and len(ag.get("reservas") or []) == 2, ag)
+st, r = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={DIA}&pessoas=2")
+checar("e o site mostra o motivo ao escolher o dia",
+       r.get("horarios") == [] and "Evento fechado" in (r.get("motivo") or ""), r)
+
+# 🔑 Abrir UM dia no meio de um bloqueio de varios: o resto continua fechado.
+chamar("PUT", f"/reservas/dias/{DIA}", {"modo": "PADRAO"}, token)
+st, _r = chamar("POST", "/reservas/bloqueios",
+                {"de": ANTES_D, "ate": DEPOIS_D, "motivo": "Ferias"}, token)
+st, r = chamar("PUT", f"/reservas/dias/{DIA}",
+               {"modo": "ESPECIAL", "abre": "09:00", "fecha": "18:00",
+                "ultima_reserva": "17:00"}, token)
+st, bl = chamar("GET", "/reservas/bloqueios", token=token)
+periodos = sorted((b["de"], b["ate"], b["motivo"]) for b in bl or [])
+checar("o bloqueio de tres dias vira dois, sem o dia que abriu",
+       periodos == [(ANTES_D, ANTES_D, "Ferias"), (DEPOIS_D, DEPOIS_D, "Ferias")], periodos)
+st, r = chamar("PUT", f"/reservas/dias/{DIA}", {"modo": "PADRAO"}, token)
+st, ag = chamar("GET", f"/reservas/agenda?data={DIA}", token=token)
+checar("voltar ao padrao desfaz a excecao",
+       st == 200 and ag.get("aberta") is False and ag.get("especial") is None
+       and ag.get("bloqueio") is None, ag)
+with get_cursor() as cur:
+    cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("UPDATE reservas SET status = 'CANCELADA' WHERE id_unidade = %s AND data = %s",
+                (UNIDADE, DIA))
+gravar_config()
 
 sem_tentativas()
 limpar_quem_reservou()

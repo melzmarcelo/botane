@@ -34,8 +34,18 @@ export type Agenda = {
   /** A janela do dia, para a linha do tempo. Nulos com a casa fechada. */
   abre: string | null;
   fecha: string | null;
+  ultima_reserva: string | null;
   passo: number;
+  /** Horário próprio desta data (abre fora do padrão da semana). */
+  especial: (Janela & { motivo: string | null }) | null;
+  /** O período do bloqueio que cobre o dia — "fechado de 10 a 20". */
+  bloqueio_de: string | null;
+  bloqueio_ate: string | null;
+  /** O padrão da semana para este dia, o que volta a valer sem exceção. */
+  padrao: (Janela & { aberto: boolean }) | null;
 };
+
+export type Janela = { abre: string; fecha: string; ultima_reserva: string };
 
 export type DiaDoCalendario = {
   data: string;
@@ -43,6 +53,8 @@ export type DiaDoCalendario = {
   aberta: boolean;
   /** Motivo do bloqueio pontual (feriado, evento), se houver. */
   bloqueio: string | null;
+  /** Dia que abre fora do padrão, com o horário dele. */
+  especial: { abre: string; fecha: string; motivo: string | null } | null;
   /** Só as VIVAS — cancelada não enche o dia. */
   reservas: number;
   pessoas: number;
@@ -63,3 +75,17 @@ export const calendario = (mes: string) =>
 
 export const mudarStatus = (id: number, status: string) =>
   api.put<{ message: string }>(`/reservas/${id}/status`, { status });
+
+/** Um dia da semana na configuração — de onde a exceção copia o horário. */
+export type DiaDaSemana = Janela & { dia_semana: number; nome: string; aberto: boolean };
+
+export const semanaDaCasa = () =>
+  api.get<{ horarios: DiaDaSemana[] }>("/reservas/configuracao").then((c) => c.horarios);
+
+export type ModoDoDia = "PADRAO" | "ESPECIAL" | "FECHADO";
+
+/** A exceção de uma data: volta ao padrão, abre com horário próprio ou fecha. */
+export const definirDia = (
+  dia: string,
+  corpo: { modo: ModoDoDia; motivo?: string | null } & Partial<Janela>,
+) => api.put<{ message: string; reservas_fora: number }>(`/reservas/dias/${dia}`, corpo);

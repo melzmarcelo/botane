@@ -862,3 +862,51 @@ daquele dia, e aí pode visualizar a reserva."* Três níveis na mesma tela
 - ⚠️ O "hoje" da página era `toISOString()` (UTC): das 21h à meia-noite a agenda abria no dia
   seguinte. Agora é a data local.
 - Cobertura: bloco 10 do `smoke_reserva_site.py` (números exatos, cancelada fora, 422, janela).
+
+## Exceção de um dia, pelo calendário (migração 089, 24/09/2026)
+
+🔑 **Pedido do dono:** *"dia 12 de outubro é feriado e segunda-feira, que não atende, mas
+nesta segunda vamos abrir … colocamos horário de sábado; ou tal dia não abriremos, motivo X.
+Na reserva, ao selecionar este dia, mostramos o motivo."*
+- Botão **"Exceção do dia"** no dia da agenda (`agenda/excecao.tsx`, só com
+  `reservas.configurar`): **Horário normal / Horário especial / Fechado**. O especial copia o
+  horário de um dia da semana com um clique. Rota única: `PUT /reservas/dias/{data}`
+  (`DiaExcecao`, `agenda.definir_dia`).
+- 🔑 **Abrir é tabela nova (`reserva_dias_especiais`, chave loja+data); fechar CONTINUA sendo
+  `reserva_bloqueios`** (de = ate = a data). O bloqueio já existia com motivo e o site já o
+  explicava — só não tinha tela nenhuma: esta é a primeira.
+- 🔑 **O dia especial entra em `janela_do_dia`**, então agenda, disponibilidade, gravação,
+  remarcar e site respeitam a exceção pela mesma regra. Bloqueio vence (os chamadores o
+  conferem antes). `janelas(de, ate)` faz o mesmo em lote para o calendário e para a tarja
+  "aberto agora"/"abre Seg 09:00" do site, que agora olha a DATA e não só a semana.
+- ⚠️ **Uma data tem UM estado**: gravar tira o especial e o bloqueio anteriores antes. Dia
+  dentro de bloqueio de vários dias **parte o bloqueio em dois** (`_tirar_do_bloqueio`) — abrir
+  o dia 15 das férias de 10 a 20 não reabre o período inteiro.
+- ⚠️ Não mexe em reserva já marcada: a resposta traz `reservas_fora` (fora da nova janela), e
+  a tela mostra a mensagem como alerta.
+- O site: bloqueio → `motivo` ("A casa não recebe neste dia: X."), como já era; dia especial →
+  `aviso` novo ("Horário especial neste dia (10:00 às 16:00): Feriado, abrimos.").
+- A tabela vai com os bloqueios em `OPERACAO` (`limpar_dados.py`) e em `preservar_reserva`.
+- Cobertura: bloco 10b do `smoke_reserva_site.py`.
+
+## Termo de consentimento (LGPD) no cadastro do site (migração 090, 24/09/2026)
+
+🔑 **Pedido do dono:** *"no cadastro de cliente, adicionar o item Estou de acordo com o termo
+de consentimento. O termo pode abrir em um popup … para seguir o cadastro é necessário ter
+marcado."* Referência dele: o termo da LeadsFood (PDF). ⚠️ O nosso é texto PRÓPRIO, com a
+mesma estrutura (dados, finalidades, compartilhamento, segurança, guarda, direitos do titular,
+contato, mudanças), escrito para o que este sistema coleta — não cópia.
+- **O texto mora na API** (`services/termo_consentimento.py`, `GET /publico/{loja}/termo`), com
+  nome e contato da loja/empresa. 🔑 Porque o aceite grava a `VERSAO`: o que o cliente leu e o
+  que o cadastro diz que ele aceitou saem do mesmo lugar. **Mudou o texto, muda a `VERSAO`.**
+- `reserva_clientes.termo_aceito_em` + `termo_versao`. Nulos nos cadastros anteriores — não
+  viram termo; preencher seria afirmar um aceite que não houve.
+- ⚠️ **Só quem é NOVO vê a caixa**; quem é reconhecido pelo telefone segue direto. Se um
+  cliente antigo mandar o aceite, ele é gravado (COALESCE), nunca sobrescrito.
+- ⚠️ **A API recusa (422) o cadastro novo sem `aceite_termo`** — nas duas portas (reserva e
+  catálogo, ambas por `clientes.identificar`). A caixa marcada no navegador não prova nada.
+- Site: `<dialog>` nativo (Esc, foco e fundo vêm do navegador). O link é um `<button>` dentro
+  do rótulo com `preventDefault`: abrir o termo não marca a caixa. "Li e concordo" marca.
+- ⚠️ O termo cita envio de novidades/ofertas por WhatsApp/SMS e o aniversário, como o de
+  referência. Se a casa não fizer isso, tirar a linha e subir a versão.
+- Cobertura: seção 4/5 do `smoke_reserva_site.py`; `smoke_publico.py` manda o aceite.

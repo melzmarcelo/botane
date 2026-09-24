@@ -94,13 +94,32 @@ def bloqueio_do_dia(cur, id_unidade: int, dia: date) -> str | None:
     return linha["motivo"] if linha else None
 
 
+def dia_especial(cur, id_unidade: int, dia: date) -> dict | None:
+    """O horário próprio desta data, se a casa abriu fora do padrão (089)."""
+    cur.execute(
+        """SELECT abre, fecha, ultima_reserva, motivo FROM reserva_dias_especiais
+            WHERE id_unidade = %s AND data = %s""",
+        (id_unidade, dia),
+    )
+    linha = cur.fetchone()
+    return dict(linha) if linha else None
+
+
 def janela_do_dia(cur, id_unidade: int, dia: date) -> dict | None:
     """Abre, fecha e última reserva deste dia — ou None se a casa não recebe.
+
+    🔑 **O dia especial vem PRIMEIRO** (089): o 12/10 cai numa segunda fechada e
+    abre com horário de sábado. É por estar aqui, e não em cada chamador, que a
+    agenda, a disponibilidade, a gravação e o site respeitam a exceção pela mesma
+    regra. ⚠️ O bloqueio continua vencendo — quem chama confere ele antes.
 
     ⚠️ **`isodow`, porque `reserva_horarios.dia_semana` é ISO** (1 = segunda …
     7 = domingo), igual a `parametros.fechamento_dia_semana`. O `dow` do Postgres
     é 0 = domingo e daria o dia errado sem erro nenhum.
     """
+    especial = dia_especial(cur, id_unidade, dia)
+    if especial:
+        return especial | {"aberto": True, "especial": True}
     cur.execute(
         """SELECT h.aberto, h.abre, h.fecha, h.ultima_reserva
              FROM reserva_horarios h
@@ -110,7 +129,134 @@ def janela_do_dia(cur, id_unidade: int, dia: date) -> dict | None:
     linha = cur.fetchone()
     if not linha or not linha["aberto"]:
         return None
-    return dict(linha)
+    return dict(linha) | {"especial": False, "motivo": None}
+
+
+def janelas(cur, id_unidade: int, de: date, ate: date) -> dict[date, dict]:
+    """O que vale em cada dia de `de` a `ate`, em três consultas — para o mês do
+    calendário e a tarja "aberto agora" do site, que olham muitos dias de uma vez.
+
+    Cada dia: `janela` (a mesma de `janela_do_dia`, ou None), `bloqueio` (motivo
+    ou None) e `aberta` — que só é verdade com janela E sem bloqueio.
+    """
+    cur.execute(
+        "SELECT dia_semana, abre, fecha, ultima_reserva FROM reserva_horarios "
+        "WHERE id_unidade = %s AND aberto",
+        (id_unidade,),
+    )
+    semana = {r["dia_semana"]: dict(r) | {"especial": False, "motivo": None}
+              for r in cur.fetchall()}
+    cur.execute(
+        """SELECT data, abre, fecha, ultima_reserva, motivo FROM reserva_dias_especiais
+            WHERE id_unidade = %s AND data BETWEEN %s AND %s""",
+        (id_unidade, de, ate),
+    )
+    especiais = {r["data"]: {"abre": r["abre"], "fecha": r["fecha"],
+                             "ultima_reserva": r["ultima_reserva"], "motivo": r["motivo"],
+                             "especial": True}
+                 for r in cur.fetchall()}
+    cur.execute(
+        """SELECT de, ate, motivo FROM reserva_bloqueios
+            WHERE id_unidade = %s AND ate >= %s AND de <= %s ORDER BY de""",
+        (id_unidade, de, ate),
+    )
+    bloqueios = [dict(r) for r in cur.fetchall()]
+    saida = {}
+    d = de
+    while d <= ate:
+        janela = especiais.get(d) or semana.get(d.isoweekday())
+        bloqueio = next((b["motivo"] for b in bloqueios if b["de"] <= d <= b["ate"]), None)
+        saida[d] = {"janela": janela, "bloqueio": bloqueio,
+                    "aberta": janela is not None and bloqueio is None}
+        d += timedelta(days=1)
+    return saida
+
+
+def _tirar_do_bloqueio(cur, id_unidade: int, dia: date) -> list[dict]:
+    """Solta `dia` de todo bloqueio que o cobre, preservando o resto do período.
+
+    🔑 **Abrir um dia no meio de um bloqueio de vários dias** (férias coletivas
+    de 10 a 20, mas o dia 15 abre) não pode apagar o período inteiro: o bloqueio
+    vira dois — de 10 a 14 e de 16 a 20 —, com o mesmo motivo.
+    """
+    cur.execute(
+        """SELECT id, de, ate, motivo FROM reserva_bloqueios
+            WHERE id_unidade = %s AND %s BETWEEN de AND ate FOR UPDATE""",
+        (id_unidade, dia),
+    )
+    tirados = [dict(r) for r in cur.fetchall()]
+    for b in tirados:
+        cur.execute("DELETE FROM reserva_bloqueios WHERE id = %s", (b["id"],))
+        for de, ate in ((b["de"], dia - timedelta(days=1)), (dia + timedelta(days=1), b["ate"])):
+            if de <= ate:
+                cur.execute(
+                    """INSERT INTO reserva_bloqueios (id_unidade, de, ate, motivo)
+                       VALUES (%s, %s, %s, %s)""",
+                    (id_unidade, de, ate, b["motivo"]),
+                )
+    return tirados
+
+
+def definir_dia(cur, id_unidade: int, dia: date, corpo) -> dict:
+    """Grava a exceção de uma data: volta ao padrão, abre com horário próprio ou fecha.
+
+    🔑 **Pedido do dono (24/09/2026):** *"podemos criar uma exceção diretamente no
+    calendário da agenda … 12/10 abriremos com horário de sábado, ou tal dia não
+    abriremos, motivo X."*
+
+    ⚠️ **Uma data tem UM estado.** Antes de gravar o novo, o anterior sai inteiro
+    — o dia especial e o bloqueio que cobre a data —, senão "fechado" e "abre às
+    9h" conviveriam e quem decidiria seria a ordem das consultas.
+    ⚠️ **Não mexe em reserva já marcada**, como o bloqueio nunca mexeu: a
+    resposta diz quantas ficaram fora da nova janela, para a casa avisar cada uma.
+    """
+    _travar_o_dia(cur, id_unidade, dia)
+    cur.execute(
+        """SELECT abre, fecha, ultima_reserva, motivo FROM reserva_dias_especiais
+            WHERE id_unidade = %s AND data = %s""",
+        (id_unidade, dia),
+    )
+    especial_antes = cur.fetchone()
+    cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s AND data = %s",
+                (id_unidade, dia))
+    bloqueios_antes = _tirar_do_bloqueio(cur, id_unidade, dia)
+
+    if corpo.modo == "ESPECIAL":
+        cur.execute(
+            """INSERT INTO reserva_dias_especiais
+                   (id_unidade, data, abre, fecha, ultima_reserva, motivo)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (id_unidade, dia, corpo.abre, corpo.fecha, corpo.ultima_reserva, corpo.motivo),
+        )
+    elif corpo.modo == "FECHADO":
+        cur.execute(
+            """INSERT INTO reserva_bloqueios (id_unidade, de, ate, motivo)
+               VALUES (%s, %s, %s, %s)""",
+            (id_unidade, dia, dia, corpo.motivo),
+        )
+
+    # Quantas reservas vivas o novo estado deixa de fora.
+    janela = None if corpo.modo == "FECHADO" else janela_do_dia(cur, id_unidade, dia)
+    cur.execute(
+        """SELECT hora FROM reservas
+            WHERE id_unidade = %s AND data = %s AND status = ANY(%s)""",
+        (id_unidade, dia, list(VIVOS)),
+    )
+    horas = [r["hora"] for r in cur.fetchall()]
+    fora = sum(1 for h in horas
+               if not janela or not (janela["abre"] <= h <= janela["ultima_reserva"]))
+    return {
+        "data": dia.isoformat(),
+        "modo": corpo.modo,
+        "reservas_fora": fora,
+        "antes": {
+            "especial": ({k: (_hm(v) if isinstance(v, time) else v)
+                          for k, v in dict(especial_antes).items()}
+                         if especial_antes else None),
+            "bloqueios": [{"de": str(b["de"]), "ate": str(b["ate"]), "motivo": b["motivo"]}
+                          for b in bloqueios_antes],
+        },
+    }
 
 
 def _reservas_do_dia(cur, id_unidade: int, dia: date,
@@ -235,6 +381,9 @@ def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
         "abre": _hm(janela["abre"]),
         "fecha": _hm(janela["fecha"]),
         "ultima_reserva": _hm(janela["ultima_reserva"]),
+        # 🔑 Dia especial (089) com motivo: o site mostra ao escolher o dia
+        # ("Feriado — abrimos em horário de sábado").
+        "aviso": janela["motivo"] if janela["especial"] else None,
         "teto_online": int(cfg["teto_online"]),
         "maior_grupo": cadastro.maior_grupo(cur, id_unidade),
         "horarios": horarios,
@@ -499,6 +648,20 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
     janela = janela_do_dia(cur, id_unidade, dia)
     cur.execute("SELECT passo_min FROM reserva_config WHERE id_unidade = %s", (id_unidade,))
     cfg = cur.fetchone()
+    # O padrão da semana para este dia — é o que a janela de exceção mostra como
+    # "normal", e o que volta a valer se a exceção sair.
+    cur.execute(
+        """SELECT aberto, abre, fecha, ultima_reserva FROM reserva_horarios
+            WHERE id_unidade = %s AND dia_semana = %s""",
+        (id_unidade, dia.isoweekday()),
+    )
+    padrao = cur.fetchone()
+    cur.execute(
+        """SELECT de, ate FROM reserva_bloqueios
+            WHERE id_unidade = %s AND %s BETWEEN de AND ate ORDER BY de LIMIT 1""",
+        (id_unidade, dia),
+    )
+    periodo = cur.fetchone()
     return {
         "data": dia.isoformat(),
         "reservas": linhas,
@@ -512,7 +675,20 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
         # quando a casa não atende no dia — aí a linha do tempo não se desenha.
         "abre": _hm(janela["abre"]) if janela else None,
         "fecha": _hm(janela["fecha"]) if janela else None,
+        "ultima_reserva": _hm(janela["ultima_reserva"]) if janela else None,
         "passo": int(cfg["passo_min"]) if cfg else 30,
+        # 🔑 **A exceção do dia** (089): o horário especial, e de que período é o
+        # bloqueio — "fechado de 10 a 20" é diferente de "fechado hoje".
+        "especial": ({"abre": _hm(janela["abre"]), "fecha": _hm(janela["fecha"]),
+                      "ultima_reserva": _hm(janela["ultima_reserva"]),
+                      "motivo": janela["motivo"]}
+                     if janela and janela["especial"] else None),
+        "bloqueio_de": periodo["de"].isoformat() if periodo else None,
+        "bloqueio_ate": periodo["ate"].isoformat() if periodo else None,
+        "padrao": ({"aberto": padrao["aberto"], "abre": _hm(padrao["abre"]),
+                    "fecha": _hm(padrao["fecha"]),
+                    "ultima_reserva": _hm(padrao["ultima_reserva"])}
+                   if padrao else None),
     }
 
 
@@ -529,15 +705,7 @@ def calendario(cur, id_unidade: int, inicio: date) -> dict:
     são o que a recepção ainda precisa resolver.
     """
     fim = (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-    cur.execute("SELECT dia_semana FROM reserva_horarios WHERE id_unidade = %s AND aberto",
-                (id_unidade,))
-    abertos = {r["dia_semana"] for r in cur.fetchall()}
-    cur.execute(
-        """SELECT de, ate, motivo FROM reserva_bloqueios
-            WHERE id_unidade = %s AND ate >= %s AND de <= %s ORDER BY de""",
-        (id_unidade, inicio, fim),
-    )
-    bloqueios = [dict(r) for r in cur.fetchall()]
+    estado = janelas(cur, id_unidade, inicio, fim)
     cur.execute(
         """SELECT data,
                   count(*) FILTER (WHERE status = ANY(%(vivos)s)) AS reservas,
@@ -553,11 +721,16 @@ def calendario(cur, id_unidade: int, inicio: date) -> dict:
     d = inicio
     while d <= fim:
         x = por_dia.get(d, {})
+        janela = estado[d]["janela"]
         dias.append({
             "data": d.isoformat(),
-            # ⚠️ ISO, como `reserva_horarios.dia_semana`: 1 = segunda … 7 = domingo.
-            "aberta": d.isoweekday() in abertos,
-            "bloqueio": next((b["motivo"] for b in bloqueios if b["de"] <= d <= b["ate"]), None),
+            # A casa atende neste dia — pela semana OU por um dia especial (089).
+            "aberta": janela is not None,
+            "bloqueio": estado[d]["bloqueio"],
+            # 🔑 Dia especial vem com o horário, que é o que a célula mostra.
+            "especial": ({"abre": _hm(janela["abre"]), "fecha": _hm(janela["fecha"]),
+                          "motivo": janela["motivo"]}
+                         if janela and janela["especial"] else None),
             "reservas": int(x.get("reservas") or 0),
             "pessoas": int(x.get("pessoas") or 0),
             "pendentes": int(x.get("pendentes") or 0),

@@ -92,6 +92,7 @@ with get_cursor() as cur:
                 "(SELECT id FROM reservas WHERE id_unidade = %s)", (UNIDADE,))
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 
@@ -422,6 +423,7 @@ with get_cursor() as cur:
                 "(SELECT id FROM reservas WHERE id_unidade = %s)", (UNIDADE,))
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
     for tabela in ("reserva_permanencias", "reserva_horarios", "reserva_config"):

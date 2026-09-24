@@ -395,17 +395,19 @@ with get_cursor() as cur:
 completo = bool(cfg and cfg["cadastro_completo"])
 if completo:
     st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
-                                                 "genero": "FEMININO", "cidade": "Blumenau"})
+                                                 "genero": "FEMININO", "cidade": "Blumenau",
+                                                 "aceite_termo": True})
     checar("com cadastro completo, falta a data de nascimento e a frase diz",
            st == 422 and "nascimento" in (r.get("detail") or ""), (st, r))
 st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
                                              "genero": "FEMININO", "cidade": "Blumenau",
-                                             "nascimento": (hoje + timedelta(days=1)).isoformat()})
+                                             "nascimento": (hoje + timedelta(days=1)).isoformat(),
+                                             "aceite_termo": True})
 checar("nascimento no futuro e recusado", st == 422 and "nascimento" in
        (r.get("detail") or ""), (st, r))
 st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
                                              "genero": "FEMININO", "cidade": "Blumenau",
-                                             "nascimento": "1990-05-17"})
+                                             "nascimento": "1990-05-17", "aceite_termo": True})
 checar("o cliente se cadastra pela porta do catalogo", st == 200 and r.get("cadastro_novo")
        is True, (st, r))
 with get_cursor() as cur:
@@ -520,7 +522,7 @@ try:
     sem_rastro_do_cliente()
     chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
                                           "genero": "FEMININO", "cidade": "Blumenau",
-                                          "nascimento": "1990-05-17"})
+                                          "nascimento": "1990-05-17", "aceite_termo": True})
     st, r = chamar("POST", f"/publico/{ID_FILIAL}/cliente/telefone", {"telefone": FONE_CAT})
     checar("cadastrado na loja 1, a filial ja o conhece — sem novo cadastro",
            st == 200 and r.get("cadastrado") is True and r.get("nome") == "Clara", (st, r))

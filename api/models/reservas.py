@@ -113,6 +113,37 @@ class BloqueioCreate(BaseModel):
         return self
 
 
+class DiaExcecao(BaseModel):
+    """O que vale numa data, por cima do padrão da semana.
+
+    🔑 **Pedido do dono (24/09/2026):** *"12/10 abriremos e colocamos horário de
+    sábado, ou tal dia não abriremos, motivo X."* Três respostas para o mesmo dia:
+    `PADRAO` (volta a valer a semana), `ESPECIAL` (abre com estas horas) e
+    `FECHADO` (bloqueio de um dia, com motivo — é o motivo que o site mostra).
+    """
+    modo: Literal["PADRAO", "ESPECIAL", "FECHADO"]
+    abre: time | None = None
+    fecha: time | None = None
+    ultima_reserva: time | None = None
+    motivo: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def _coerente(self):
+        self.motivo = (self.motivo or "").strip() or None
+        if self.modo == "FECHADO" and not self.motivo:
+            raise ValueError("Diga o motivo — é ele que o cliente vê ao escolher o dia.")
+        if self.modo == "ESPECIAL":
+            if not (self.abre and self.fecha and self.ultima_reserva):
+                raise ValueError("Informe abre, fecha e última reserva do dia especial.")
+            if self.abre >= self.fecha:
+                raise ValueError("A hora de abrir tem de ser antes da de fechar.")
+            if self.ultima_reserva > self.fecha:
+                raise ValueError("A última reserva não pode ser depois do fechamento.")
+            if self.ultima_reserva < self.abre:
+                raise ValueError("A última reserva não pode ser antes de a casa abrir.")
+        return self
+
+
 class SalaoCreate(BaseModel):
     nome: str = Field(min_length=1, max_length=60)
     ativo: bool = True
@@ -291,6 +322,10 @@ class IdentificacaoDoSite(BaseModel):
     genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
     cidade: str | None = Field(default=None, max_length=80)
     nascimento: date | None = None
+    # 🔑 **O aceite do termo de consentimento** (migração 090, pedido do dono,
+    # 24/09/2026). Exigido de quem é NOVO — quem cobra é o serviço, como gênero e
+    # cidade: quem já tem cadastro é reconhecido pelo telefone e não vê o termo.
+    aceite_termo: bool = False
 
 
 class ReservaDoSite(BaseModel):
@@ -322,6 +357,10 @@ class ReservaDoSite(BaseModel):
     # quando a casa pede cadastro completo — quem exige é o serviço, pelo mesmo
     # motivo de gênero e cidade.
     nascimento: date | None = None
+    # 🔑 **O aceite do termo de consentimento** (migração 090, pedido do dono,
+    # 24/09/2026). Exigido de quem é NOVO — quem cobra é o serviço, como gênero e
+    # cidade: quem já tem cadastro é reconhecido pelo telefone e não vê o termo.
+    aceite_termo: bool = False
     data: date
     hora: time
     pessoas: int = Field(ge=1, le=99)

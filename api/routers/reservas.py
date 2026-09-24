@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 import auditoria
 from database import get_cursor
 from models.reservas import (
-    BloqueioCreate, ConfiguracaoReservas, MesaCreate, MesasEmLote, MesaUpdate,
+    BloqueioCreate, ConfiguracaoReservas, DiaExcecao, MesaCreate, MesasEmLote, MesaUpdate,
     MudarStatus, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
@@ -259,6 +259,39 @@ def ver_calendario(mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
     """O mês da agenda, um resumo por dia: reservas, pessoas, pendentes e fechamentos."""
     with get_cursor() as cur:
         return agenda.calendario(cur, _unidade(cur, ctx), date.fromisoformat(mes + "-01"))
+
+
+@router.put("/dias/{data}")
+def definir_dia(data: date, body: DiaExcecao, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """A exceção de uma data, feita direto no calendário da agenda.
+
+    🔑 **Pedido do dono (24/09/2026):** *"12/10 abriremos e colocamos horário de
+    sábado, ou tal dia não abriremos, motivo X. Na reserva, ao selecionar este
+    dia, mostramos o motivo."* `PADRAO` desfaz, `ESPECIAL` abre com horário
+    próprio, `FECHADO` vira bloqueio de um dia — o mesmo que o site já explica.
+
+    ⚠️ **`reservas.configurar`, como o bloqueio**: mudar quando a casa abre não é
+    tarefa de quem atende o telefone.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = agenda.definir_dia(cur, id_unidade, data, body)
+        auditoria.registrar(cur, ctx.id_usuario, "reserva_dia", int(data.strftime("%Y%m%d")),
+                            body.modo.lower(), antes=r["antes"],
+                            depois=body.model_dump(mode="json"))
+    frase = {
+        "PADRAO": f"{data:%d/%m} volta ao horário normal da semana.",
+        "ESPECIAL": (f"{data:%d/%m} abre das {body.abre:%H:%M} às {body.fecha:%H:%M}"
+                     f" (última reserva {body.ultima_reserva:%H:%M})."
+                     if body.modo == "ESPECIAL" else ""),
+        "FECHADO": f"{data:%d/%m} fechado: {body.motivo}.",
+    }[body.modo]
+    n = r["reservas_fora"]
+    return r | {
+        "message": frase + (f" ⚠️ {n} reserva(s) já marcada(s) ficaram fora do horário — "
+                            "elas continuam na agenda para a casa avisar cada uma."
+                            if n else ""),
+    }
 
 
 @router.post("", status_code=201)

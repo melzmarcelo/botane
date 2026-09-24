@@ -23,6 +23,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from relogio import hoje_da_casa
+from services import termo_consentimento as termo
 
 GENEROS = ("FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO")
 
@@ -241,6 +242,7 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     """
     telefone = telefone_valido(corpo.telefone)
     nascimento = _nascimento_valido(getattr(corpo, "nascimento", None))
+    aceitou = bool(getattr(corpo, "aceite_termo", False))
 
     cur.execute(
         """SELECT id, nome, genero, cidade FROM reserva_clientes
@@ -263,10 +265,13 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
                   SET genero = COALESCE(genero, %s),
                       cidade = COALESCE(cidade, %s),
                       nascimento = COALESCE(nascimento, %s),
+                      termo_aceito_em = COALESCE(termo_aceito_em,
+                                                 CASE WHEN %s THEN now() END),
+                      termo_versao = COALESCE(termo_versao, %s),
                       atualizado_em = now()
                 WHERE id = %s""",
             (corpo.genero, (corpo.cidade or "").strip() or None, nascimento,
-             achado["id"]),
+             aceitou, termo.VERSAO if aceitou else None, achado["id"]),
         )
         return {"id": achado["id"], "nome": achado["nome"], "telefone": telefone,
                 "novo": False}
@@ -290,6 +295,13 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     # ⚠️ Sem cadastro, o nome é o mínimo: é por ele que a casa chama a pessoa.
     if not (corpo.nome or "").strip():
         raise HTTPException(status_code=422, detail="Diga seu nome para o cadastro.")
+    # 🔑 **Sem o aceite do termo, o cadastro não nasce** (pedido do dono,
+    # 24/09/2026: *"para seguir o cadastro é necessário ter marcado"*). ⚠️ Conferido
+    # AQUI e não só na tela: a caixa marcada no navegador não prova nada.
+    if not aceitou:
+        raise HTTPException(
+            status_code=422,
+            detail="Para se cadastrar, marque que está de acordo com o termo de consentimento.")
     if corpo.genero and corpo.genero not in GENEROS:
         raise HTTPException(status_code=422, detail="Gênero inválido.")
 
@@ -298,12 +310,12 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     # consulta acima; quem decide é o índice único, como manda a regra 8.
     cur.execute(
         """INSERT INTO reserva_clientes (id_unidade, telefone, nome, genero, cidade,
-                                         nascimento)
-           VALUES (%s, %s, %s, %s, %s, %s)
+                                         nascimento, termo_aceito_em, termo_versao)
+           VALUES (%s, %s, %s, %s, %s, %s, now(), %s)
            ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now()
            RETURNING id, nome""",
         (id_unidade, telefone, corpo.nome.strip(), corpo.genero,
-         (corpo.cidade or "").strip() or None, nascimento),
+         (corpo.cidade or "").strip() or None, nascimento, termo.VERSAO),
     )
     novo = cur.fetchone()
     return {"id": novo["id"], "nome": novo["nome"], "telefone": telefone, "novo": True}
