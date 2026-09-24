@@ -149,7 +149,7 @@ export default function AgendaDoDia() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titulo">Agenda do dia</h1>
+          <h1 className="titulo">Agenda</h1>
           <ExplicaTela>
             Quem vem, quando, e em que mesa. A casa decide a mesa — o cliente reserva lugar.
           </ExplicaTela>
@@ -183,7 +183,7 @@ export default function AgendaDoDia() {
       )}
       {!agenda.aberta && !agenda.bloqueio && (
         <Aviso tipo="info">
-          A casa não atende neste dia da semana. Isso se muda em Reservas → Configurações.
+          A casa não atende neste dia da semana. Isso se muda em Portal de Clientes → Configuração.
         </Aviso>
       )}
 

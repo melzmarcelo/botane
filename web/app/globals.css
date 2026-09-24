@@ -292,6 +292,19 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   /* A barra do item ativo alinha com a borda do GRUPO, não com o recuo do
      filho: é a coluna da esquerda que o olho segue. */
   .menu-filhos .menu-item-ativo::before { left: -19px; }
+  /* 🔑 **O subgrupo** (Portal de Clientes › Reservas): o título tem o peso de
+     um ITEM, não de grupo — ele está dentro de um, e não compete com o de fora. */
+  .menu-subgrupo {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.004em;
+    color: var(--color-tinta);
+  }
+  /* ⚠️ Depois da regra acima: sem isto a cor do subgrupo cobre a do "você está
+     aqui", e o título ficava cinza com a tela aberta lá dentro. */
+  .menu-subgrupo.menu-grupo-ativo { color: var(--color-erva); }
+  .menu-filhos .menu-filhos { padding-left: 22px; }
+  .menu-filhos .menu-filhos .menu-item-ativo::before { left: -41px; }
 
   .menu-secao {
     font-family: var(--font-mono);

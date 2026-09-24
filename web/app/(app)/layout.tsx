@@ -7,7 +7,7 @@ import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { abrirBuscaDeTelas, EVENTO_EMPRESA } from "@/lib/eventos";
 import { gravarAtalhos, lerAtalhos, TETO_ATALHOS } from "@/lib/atalhos";
-import { INICIO, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
+import { INICIO, blocosDoGrupo, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
 import { Carregando } from "@/components/ui";
 import { ConviteInstalar } from "@/components/pwa";
 import { ProvedorAvisos } from "@/components/aviso-flutuante";
@@ -443,6 +443,8 @@ function MenuLateral({
             {(() => {
               const expandido = abertos[e.grupo] ?? false;
               const temAtivo = e.itens.some((i) => i.href === caminho);
+              // ⚠️ O grupo conta o que se vê ao abri-lo: o subgrupo é UMA linha.
+              const linhas = blocosDoGrupo(e.itens).length;
               return (
                 <>
                   <button
@@ -455,7 +457,7 @@ function MenuLateral({
                       <Icone nome={e.icone} />
                     </span>
                     <span>{e.grupo}</span>
-                    <span className="menu-conta">{e.itens.length}</span>
+                    <span className="menu-conta">{linhas}</span>
                     <svg
                       viewBox="0 0 10 6"
                       aria-hidden="true"
@@ -468,7 +470,43 @@ function MenuLateral({
                     </svg>
                   </button>
                   <div className={`menu-filhos pb-1.5 ${expandido ? "" : "hidden"}`}>
-                    {e.itens.map((i) => linha(i, true))}
+                    {blocosDoGrupo(e.itens).map((b) => {
+                      if (b.tipo === "item") return linha(b.item, true);
+                      // 🔑 **O subgrupo segue a regra do grupo**: recolhido por
+                      // padrão, e verde quando a tela aberta está lá dentro.
+                      const chave = `${e.grupo} › ${b.nome}`;
+                      const aberto = abertos[chave] ?? false;
+                      const ativo = b.itens.some((i) => i.href === caminho);
+                      return (
+                        <div key={chave}>
+                          <button
+                            type="button"
+                            aria-expanded={aberto}
+                            onClick={() => alternarGrupo(chave, aberto)}
+                            className={`menu-grupo menu-subgrupo ${ativo ? "menu-grupo-ativo" : ""}`}
+                          >
+                            <span className="menu-ico">
+                              <Icone nome={b.icone} />
+                            </span>
+                            <span>{b.nome}</span>
+                            <span className="menu-conta">{b.itens.length}</span>
+                            <svg
+                              viewBox="0 0 10 6"
+                              aria-hidden="true"
+                              className={`ml-1.5 h-[6px] w-[10px] shrink-0 opacity-70 transition-transform duration-200 ${
+                                aberto ? "" : "-rotate-90"
+                              }`}
+                            >
+                              <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6"
+                                    strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </button>
+                          <div className={`menu-filhos ${aberto ? "" : "hidden"}`}>
+                            {b.itens.map((i) => linha(i, true))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               );

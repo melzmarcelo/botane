@@ -223,7 +223,7 @@ export default function PaginaCatalogos() {
   return (
     <div className="flex flex-col gap-6">
       <CabecalhoTela
-        caminho="Reservas"
+        caminho="Portal de Clientes"
         titulo={<>Catálogos</>}
         explica={
           <>
@@ -621,7 +621,7 @@ export default function PaginaCatalogos() {
                 Exigir cadastro do cliente para abrir
                 <span className="block text-[13px] text-suave">
                   Ligado, o site pede o telefone antes de mostrar o catálogo — e o cadastro,
-                  para quem é novo, com o que a configuração de Reservas pedir.
+                  para quem é novo, com o que a Configuração do Portal de Clientes pedir.
                 </span>
               </span>
             </label>

@@ -92,7 +92,9 @@ if reservas_estava:
 st, r = chamar("GET", "/catalogos", token=token)
 checar("desligado, listar recusa com 409", st == 409, (st, r))
 checar("e a frase diz onde se liga",
-       "Reservas" in str((r or {}).get("detail", "")), (r or {}).get("detail"))
+       # 🔑 "Portal de Clientes" desde 24/09/2026 (migração 088): a frase diz
+       # o nome que a pessoa vai procurar na tela de Lojas.
+       "Portal de Clientes" in str((r or {}).get("detail", "")), (r or {}).get("detail"))
 checar("criar tambem recusa",
        chamar("POST", "/catalogos", {"nome": "Nao deveria"}, token=token)[0] == 409)
 

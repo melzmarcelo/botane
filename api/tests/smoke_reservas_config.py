@@ -138,7 +138,8 @@ checar("e o catalogo passa a oferecer as tres chaves",
        {"reservas.ver", "reservas.editar", "reservas.configurar"} <= chaves,
        sorted(c for c in chaves if c.startswith("reservas.")))
 modulos = {x["modulo"] for x in perms if x["chave"].startswith("reservas.")}
-checar("agrupadas no modulo Reservas", modulos == {"Reservas"}, modulos)
+# 🔑 O módulo virou "Portal de Clientes" (migração 088); as CHAVES não mudaram.
+checar("agrupadas no modulo Portal de Clientes", modulos == {"Portal de Clientes"}, modulos)
 
 print("\n4. a configuracao nasce na primeira visita")
 # ⚠️ **A suite precisa MONTAR o estado virgem**, e a razao esta na secao 7: ela

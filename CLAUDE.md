@@ -128,8 +128,8 @@ arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
 | Vendas | [`vendas.md`](docs/memoria/vendas.md) | vendas, PDV e períodos de consumo |
 | Administrativo | [`administrativo.md`](docs/memoria/administrativo.md) | empresa, lojas, parâmetros, integrações, usuários |
 | CMV | [`cmv.md`](docs/memoria/cmv.md) | o painel do CMV |
-| Catálogos | [`catalogos.md`](docs/memoria/catalogos.md) | o que o site de reservas apresenta (dentro de Reservas) |
-| Reservas | [`reservas.md`](docs/memoria/reservas.md) | reserva de mesa: parâmetro da loja, configuração, salões e mesas |
+| Catálogos | [`catalogos.md`](docs/memoria/catalogos.md) | o que o site do cliente apresenta (dentro do Portal de Clientes) |
+| Portal de Clientes (ex-Reservas) | [`reservas.md`](docs/memoria/reservas.md) | site do cliente, cadastro, reserva de mesa: parâmetro da loja, configuração, salões e mesas |
 
 E o que atravessa todos, em [`docs/memoria/_transversais/`](docs/memoria/_transversais/):
 `padroes-de-ui.md`, `exportacao-e-relatorios.md`, `infra-e-deploy.md` e `geral.md`.

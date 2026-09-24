@@ -823,3 +823,20 @@ idioma no site de reservas?"* Resposta: sim. **Estudo aprovado para começar na 
 
 **Sugestão feita:** Claude Haiku (ou DeepL se o dono preferir custo zero), produtos E
 categorias ao salvar, e o site nos três idiomas.
+
+## O módulo virou "Portal de Clientes" (migração 088, 24/09/2026)
+
+🔑 **Pedido do dono:** *"alterar o módulo Reservas para Portal de Clientes, tanto em textos
+gerais e também na configuração de ativação. No menu: Portal de Clientes — Configuração —
+Reservas, e dentro Agenda e Salão; no mesmo nível de Reservas, Catálogos."*
+- ⚠️ **Mudou só o que a tela diz**: grupo do menu, interruptor da loja ("Portal de
+  Clientes"), títulos ("Configuração do Portal de Clientes", "Agenda"), mensagens 409 da API
+  e `permissoes.modulo` (088). **Ficaram**: chaves `reservas.*`/`catalogos.*` (renomear
+  reescreveria papéis), rotas `/reservas/...` (atalhos e favoritos), a coluna
+  `parametros.reservas_ligado`, o `soComReservas` do menu e o nome dos arquivos de memória.
+- 🔑 **O menu ganhou um terceiro nível**: `ItemMenu.subgrupo` + `blocosDoGrupo()` em
+  `lib/menu.ts`. Subgrupo com um item só vira item (a mesma regra do grupo); recolhido por
+  padrão, verde quando a tela aberta está dentro. A busca (Ctrl+K) e os atalhos não sabem do
+  subgrupo — cada item continua solto para eles. O contador do grupo conta LINHAS visíveis
+  (o subgrupo é uma).
+- A barra de baixo do celular continua dizendo "Reservas": ela leva à Agenda, que é reserva.

@@ -89,10 +89,14 @@ const INTERRUPTORES: { campo: string; nome: string; explica: string }[] = [
     // ⚠️ Desligar não confisca permissão de ninguém nem apaga configuração:
     // religar devolve tudo como estava.
     campo: "reservas_ligado",
-    nome: "Reservas de mesa",
+    // 🔑 **"Portal de Clientes"** desde 24/09/2026 (pedido do dono). O CAMPO
+    // continua `reservas_ligado`: renomear coluna é migração com risco para
+    // trocar só o que a tela diz.
+    nome: "Portal de Clientes",
     explica:
-      "Liga a agenda de reservas nesta loja: o menu, as telas e as permissões de Reserva. " +
-      "Depois de ligar, comece pelas Configurações — a casa nasce fechada em todos os dias.",
+      "Liga o portal nesta loja: o site do cliente (reserva, cardápios e contato), o menu, " +
+      "as telas e as permissões do portal. Depois de ligar, comece pela Configuração — a casa " +
+      "nasce fechada em todos os dias.",
   },
 ];
 

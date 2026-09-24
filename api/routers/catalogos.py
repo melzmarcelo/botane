@@ -55,9 +55,9 @@ def _unidade(cur, ctx: Contexto) -> int:
     if not reservas_servico.ligado(cur, id_unidade):
         raise HTTPException(
             status_code=409,
-            detail=("O catálogo é do site de reservas, e o módulo de Reservas não está "
+            detail=("O catálogo é do site do cliente, e o Portal de Clientes não está "
                     "ligado nesta loja. Ligue em Administração → Lojas, no parâmetro "
-                    "Reservas."),
+                    "Portal de Clientes."),
         )
     return id_unidade
 

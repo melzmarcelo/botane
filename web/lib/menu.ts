@@ -26,6 +26,10 @@ export type ItemMenu = {
       (`parametros.reservas_ligado`). Casa que não faz reserva não tem por que
       ver um grupo inteiro que não leva a lugar nenhum. */
   soComReservas?: boolean;
+  /** 🔑 Um nível a mais dentro do grupo (24/09/2026: "Reservas" com Agenda e
+      Salão dentro do Portal de Clientes). Itens com o mesmo `subgrupo` aparecem
+      sob um título recolhível; a busca e os atalhos continuam vendo cada item. */
+  subgrupo?: string;
 };
 
 export type GrupoMenu = { grupo: string; icone: NomeIcone; itens: ItemMenu[] };
@@ -117,23 +121,36 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
-    // 🔑 **O grupo inteiro só existe com o módulo ligado** nesta loja
-    // (migração 068). Não é só esconder item: uma casa que não faz reserva não
-    // ganha um grupo a mais no menu para nunca abrir.
-    // ⚠️ O `soComReservas` vai em CADA item, não no grupo: o filtro do menu é
-    // por item, e grupo que fica sem item some sozinho — é assim que
-    // Transferências já desaparece na casa de uma loja só.
-    grupo: "Reservas",
-    icone: "agenda",
+    // 🔑 **"Portal de Clientes"** (pedido do dono, 24/09/2026: *"alterar o
+    // módulo Reservas para Portal de Clientes. No menu: Portal de Clientes —
+    // Configuração — Reservas, e dentro dois submenus, Agenda e Salão; no mesmo
+    // nível de Reservas, Catálogos."*). O módulo cresceu além da mesa: é tudo o
+    // que o cliente vê no site — reserva, cardápios, cadastro e contato.
+    // ⚠️ **O grupo inteiro só existe com o módulo ligado** nesta loja (migração
+    // 068). O `soComReservas` vai em CADA item, não no grupo: o filtro do menu é
+    // por item, e grupo que fica sem item some sozinho.
+    // ⚠️ As chaves (`reservas.*`, `catalogos.*`) e as rotas (`/reservas/...`)
+    // NÃO mudaram de nome: renomear chave de permissão reescreveria papéis, e
+    // rota nova quebraria atalho e favorito de quem já usa.
+    grupo: "Portal de Clientes",
+    icone: "pessoa",
     itens: [
       {
-        // 🔑 A agenda vem PRIMEIRO: e a tela que a recepcao abre todo dia. Salao
-        // e Configuracoes se visitam no comeco e quase nunca mais.
+        href: "/reservas/configuracoes",
+        nome: "Configuração",
+        icone: "config",
+        chave: "reservas.configurar",
+        soComReservas: true,
+      },
+      {
+        // 🔑 A agenda vem PRIMEIRO dentro de Reservas: é a tela que a recepção
+        // abre todo dia. O salão se monta no começo e quase nunca mais.
         href: "/reservas/agenda",
-        nome: "Agenda do dia",
+        nome: "Agenda",
         icone: "agenda",
         chave: ["reservas.ver", "reservas.editar"],
         soComReservas: true,
+        subgrupo: "Reservas",
       },
       {
         href: "/reservas/salao",
@@ -144,29 +161,17 @@ export const MENU: GrupoMenu[] = [
         // quem decide é o servidor; a tela só esconde os controles.
         chave: ["reservas.ver", "reservas.configurar"],
         soComReservas: true,
+        subgrupo: "Reservas",
       },
       {
-        // 🔑 **Catálogos mora DENTRO de Reservas** (correção do dono,
-        // 21/09/2026: *"o menu de catálogo fica dentro de reservas, onde
-        // somente será demonstrada quando utilizado reserva"*). O catálogo é o
-        // PDF que o site de reservas apresenta — sem reserva ele não tem onde
-        // aparecer, e um grupo próprio no menu prometia um módulo que a casa
-        // não usa.
-        // ⚠️ **`soComReservas` como os outros três**: o filtro do menu é por
-        // item, e é ele que faz o catálogo sumir junto com o resto do grupo.
+        // 🔑 Catálogos no MESMO nível de Reservas (pedido do dono): é o que o
+        // site apresenta, não uma parte da agenda.
         href: "/catalogos",
         nome: "Catálogos",
         icone: "vendas",
         // ⚠️ `ver` basta para OLHAR; criar é que exige `editar`, e quem decide
         // é o servidor — a tela só esconde os controles.
         chave: ["catalogos.ver", "catalogos.editar"],
-        soComReservas: true,
-      },
-      {
-        href: "/reservas/configuracoes",
-        nome: "Configurações",
-        icone: "config",
-        chave: "reservas.configurar",
         soComReservas: true,
       },
     ],
@@ -242,4 +247,30 @@ export function telasDisponiveis(a: Ambiente): (ItemMenu & { grupo: string })[] 
     { ...INICIO, grupo: "Início" },
     ...MENU.flatMap((g) => g.itens.filter((i) => visivel(i, a)).map((i) => ({ ...i, grupo: g.grupo }))),
   ];
+}
+
+/** Um pedaço do grupo já aberto: um item solto, ou um subgrupo com os seus. */
+export type Bloco =
+  | { tipo: "item"; item: ItemMenu }
+  | { tipo: "sub"; nome: string; icone: NomeIcone; itens: ItemMenu[] };
+
+/**
+ * Os itens de um grupo, com os de mesmo `subgrupo` juntos.
+ *
+ * ⚠️ **Subgrupo que sobra com UM item vira item** — a mesma regra do grupo em
+ * `montarMenu`: um título para abrir e achar uma tela só é um clique à toa.
+ */
+export function blocosDoGrupo(itens: ItemMenu[]): Bloco[] {
+  const blocos: Bloco[] = [];
+  for (const i of itens) {
+    if (!i.subgrupo) {
+      blocos.push({ tipo: "item", item: i });
+      continue;
+    }
+    const ja = blocos.find((b) => b.tipo === "sub" && b.nome === i.subgrupo);
+    if (ja && ja.tipo === "sub") ja.itens.push(i);
+    else blocos.push({ tipo: "sub", nome: i.subgrupo, icone: i.icone, itens: [i] });
+  }
+  return blocos.map((b) => (b.tipo === "sub" && b.itens.length === 1
+    ? { tipo: "item", item: b.itens[0] } : b));
 }

@@ -24,7 +24,7 @@ entregue.
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
-| [Reservas](#reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico` |
+| [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---
@@ -158,7 +158,14 @@ ficha são REFEITOS dos totais — é por isso que a apuração devolve
 
 ---
 
-## Reservas
+## Portal de Clientes (ex-Reservas)
+
+🔑 **Renomeado em 24/09/2026** (pedido do dono, migração 088): o módulo cresceu além
+da mesa — é tudo o que o cliente vê no site. Mudou o NOME (menu, telas, parâmetro
+da loja, módulo no catálogo de permissões); ⚠️ as chaves `reservas.*`/`catalogos.*`,
+as rotas `/reservas/...`, a coluna `parametros.reservas_ligado` e os arquivos
+`reservas.md`/`catalogos.md` ficaram, de propósito. Menu: Portal de Clientes →
+Configuração · Reservas (Agenda, Salão) · Catálogos.
 
 - **Rotas:** `reservas.py`, `catalogos.py`, `publico.py` (o site do cliente)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),

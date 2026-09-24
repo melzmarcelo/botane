@@ -185,9 +185,9 @@ export default function ConfiguracoesDeReservas() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titulo">Configurações de reservas</h1>
+          <h1 className="titulo">Configuração do Portal de Clientes</h1>
           <ExplicaTela>
-            Vale para esta loja. Outra loja com reservas tem a configuração dela.
+            Vale para esta loja. Outra loja com o portal tem a configuração dela.
           </ExplicaTela>
         </div>
         {!somenteLeitura && (
