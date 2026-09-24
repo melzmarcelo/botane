@@ -38,6 +38,8 @@ from models.catalogos import ORIGEM_PRODUTOS, ORIGENS, SITUACOES
 # mesmo catálogo, e duas listas de campos divergem na primeira coluna nova.
 _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
              c.observacao, c.exige_cadastro, u.nome AS criado_por,
+             ARRAY(SELECT l.id_unidade FROM catalogo_lojas l
+                    WHERE l.id_catalogo = c.id ORDER BY l.id_unidade) AS lojas,
              c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em"""
 
 
@@ -221,7 +223,36 @@ def criar(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> dict:
          (dados.get("observacao") or "").strip() or None,
          bool(dados.get("exige_cadastro")), id_usuario),
     )
-    return obter(cur, id_unidade, cur.fetchone()["id"])
+    novo = cur.fetchone()["id"]
+    lojas = dados.get("lojas")
+    _gravar_lojas(cur, novo, [id_unidade] if lojas is None else lojas)
+    return obter(cur, id_unidade, novo)
+
+
+def _gravar_lojas(cur, id_catalogo: int, lojas: list[int]) -> None:
+    """Em que lojas o cliente vê este catálogo — substitui a lista inteira.
+
+    🔑 **Pedido do dono (24/09/2026):** *"no cadastro do catálogo, podemos ter um
+    Visível nas Lojas, aí o usuário marca onde ficaria visível."*
+    ⚠️ **Pelo menos uma.** Um catálogo ATIVO visível em lugar nenhum pareceria
+    publicado na tela de dentro e não apareceria no site — o engano que a
+    coluna "no ar hoje" existe para evitar.
+    ⚠️ **Só loja ATIVA.** Marcar loja desativada não mostraria nada a ninguém.
+    """
+    ids = sorted(set(int(x) for x in lojas))
+    if not ids:
+        raise HTTPException(status_code=422,
+                            detail="Marque ao menos uma loja onde o catálogo fica visível.")
+    cur.execute("SELECT id FROM unidades WHERE ativo AND id = ANY(%s)", (ids,))
+    validas = {r["id"] for r in cur.fetchall()}
+    fora = [x for x in ids if x not in validas]
+    if fora:
+        raise HTTPException(status_code=422,
+                            detail="Só dá para marcar loja ativa como visível.")
+    cur.execute("DELETE FROM catalogo_lojas WHERE id_catalogo = %s", (id_catalogo,))
+    for i in ids:
+        cur.execute("INSERT INTO catalogo_lojas (id_catalogo, id_unidade) VALUES (%s, %s)",
+                    (id_catalogo, i))
 
 
 def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
@@ -295,6 +326,9 @@ def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
             f" WHERE id = %s AND id_unidade = %s",
             (*valores, id_catalogo, id_unidade),
         )
+    # ⚠️ Ausente não é vazio: só troca as lojas quem as mandou.
+    if dados.get("lojas") is not None:
+        _gravar_lojas(cur, id_catalogo, dados["lojas"])
     return obter(cur, id_unidade, id_catalogo)
 
 

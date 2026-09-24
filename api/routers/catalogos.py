@@ -75,7 +75,15 @@ def opcoes(ctx: Contexto = Depends(_VER)) -> dict:
     """
     with get_cursor() as cur:
         _unidade(cur, ctx)
-    return {"origens": list(ORIGENS), "situacoes": list(SITUACOES)}
+        # 🔑 As lojas que o "Visível nas lojas" oferece: ativas e com Reservas
+        # ligado — nas outras não há site para o catálogo aparecer.
+        cur.execute(
+            """SELECT u.id, coalesce(nullif(u.apelido, ''), u.nome) AS nome
+                 FROM unidades u JOIN parametros p ON p.id_unidade = u.id
+                WHERE u.ativo AND p.reservas_ligado
+                ORDER BY u.matriz DESC, u.nome""")
+        lojas = [dict(r) for r in cur.fetchall()]
+    return {"origens": list(ORIGENS), "situacoes": list(SITUACOES), "lojas": lojas}
 
 
 @router.get("/produtos-disponiveis")

@@ -90,7 +90,7 @@ const VAZIO: Gravar = {
 
 export default function PaginaCatalogos() {
   const aviso = useAviso();
-  const { pode } = useSessao();
+  const { pode, unidade } = useSessao();
   const podeEditar = pode("catalogos.editar");
 
   const [lista, setLista] = useState<Catalogo[] | null>(null);
@@ -138,9 +138,12 @@ export default function PaginaCatalogos() {
             situacao: c.situacao,
             observacao: c.observacao ?? "",
             exige_cadastro: c.exige_cadastro,
+            lojas: c.lojas,
           }
         // ⚠️ A origem do catálogo NOVO vem do servidor, nunca escrita aqui.
-        : { ...VAZIO, origem: op?.origens[0] },
+        // 🔑 O catálogo novo nasce visível na loja em que se está — o que o
+        // site sempre fez. As outras, a pessoa marca.
+        : { ...VAZIO, origem: op?.origens[0], lojas: unidade ? [unidade] : [] },
     );
   }
 
@@ -571,6 +574,37 @@ export default function PaginaCatalogos() {
                 onChange={(e) => setF({ ...f, observacao: e.target.value })}
               />
             </Campo>
+
+            {/* 🔑 **Visível nas lojas** (pedido do dono, 24/09/2026: *"no cadastro
+                do catálogo, podemos ter um Visível nas Lojas, aí o usuário marca
+                onde ficaria visível"*). Só aparece com mais de uma loja no site:
+                com uma, a pergunta não tem outra resposta. */}
+            {(op?.lojas.length ?? 0) > 1 && (
+              <Campo
+                rotulo="Visível nas lojas"
+                dica="Em que casas o cliente vê este catálogo no site."
+              >
+                <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1">
+                  {op!.lojas.map((l) => (
+                    <label key={l.id} className="flex items-center gap-2 text-[14px]">
+                      <input
+                        type="checkbox"
+                        checked={(f.lojas ?? []).includes(l.id)}
+                        onChange={(e) =>
+                          setF({
+                            ...f,
+                            lojas: e.target.checked
+                              ? [...(f.lojas ?? []), l.id]
+                              : (f.lojas ?? []).filter((x) => x !== l.id),
+                          })
+                        }
+                      />
+                      {l.nome}
+                    </label>
+                  ))}
+                </div>
+              </Campo>
+            )}
 
             {/* 🔑 **Pedido do dono (24/09/2026):** *"colocar no cadastro do
                 catálogo se exige cadastro."* Catálogo a catálogo: o cardápio

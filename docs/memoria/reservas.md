@@ -766,3 +766,30 @@ solicitar a confirmação do nome, somente com o telefone já confirmamos os dad
   o limite por origem. Para não completar a consulta telefone→pessoa, o site só recebe o
   PRIMEIRO nome (`_primeiro_nome_exibido`) em `/cliente/telefone`, `/cliente` e na resposta da
   reserva. Se um dia isso incomodar, a saída é código por WhatsApp (Business API).
+
+## Duas lojas no mesmo site (migração 087, 24/09/2026)
+
+🔑 **Pedido do dono:** *"o cadastro de cliente seria o mesmo. A reserva, os catálogos e o entre
+em contato seriam separados por loja."* Escolhido o **seletor no site** (não um link por loja
+nem um site por loja).
+- 🔑 **Cliente ÚNICO da casa**: `reserva_clientes` passou a ter índice único só por `telefone`
+  (`ux_reserva_cliente_telefone`); as buscas de `services/reserva_clientes.py` não filtram
+  loja. `id_unidade` ficou como "loja onde se cadastrou" (nulo permitido, FK `SET NULL`).
+  ⚠️ A 087 **funde** os repetidos por telefone antes do índice: fica o mais antigo, completado
+  (COALESCE) com gênero/cidade/nascimento dos outros, e as reservas dos outros passam a apontar
+  para ele. Testado numa transação desfeita com a mesma pessoa em duas lojas.
+- **Por loja continuam**: reservas, "Suas reservas", o limite de 3 em aberto por telefone, as
+  tentativas e o contato.
+- 🔑 **Contato por loja**: `unidades.whatsapp` (tela de Lojas). `/publico/{u}/casa` prefere a
+  loja e cai na empresa — WhatsApp e e-mail campo a campo; o ENDEREÇO vai inteiro de um lado ou
+  do outro (misturar rua de um com bairro de outro dá endereço que não existe).
+- 🔑 **`GET /publico/lojas`**: lojas ativas com `reservas_ligado`, só `{id, nome (apelido),
+  onde}`. No site, com mais de uma, a tela **"Qual casa?"** vem antes de tudo; a escolha vai
+  para a sessão da aba (`loja`); "Trocar de loja" esquece a casa e mantém a pessoa (o cadastro
+  é único). ⚠️ Trocar RECARREGA a página: cardápios, horários e contato são da loja velha.
+  ⚠️ O botão de reservar espera `aceitaPronta` — um toque antes da resposta de `/reserva`
+  caía no caminho de quem não aceita reserva online (achado no teste de duas lojas).
+- ⚠️ **`smoke_reservas_config` supunha uma loja só**: desligar a loja 1 esconderia as chaves
+  `reservas.*`. A regra é "alguma loja usa?" (papel é global); com a Centro ligada a suíte
+  quebrou. Agora mede os dois cenários.
+- Cobertura: `4d` do `smoke_publico.py`.

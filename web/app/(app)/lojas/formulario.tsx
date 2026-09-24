@@ -34,6 +34,7 @@ export type LojaForm = {
   cidade: string;
   uf: string;
   telefone: string;
+  whatsapp: string;
   email: string;
   mesas: string;
 };
@@ -53,6 +54,7 @@ export const LOJA_VAZIA: LojaForm = {
   cidade: "",
   uf: "",
   telefone: "",
+  whatsapp: "",
   email: "",
   mesas: "",
 };
@@ -75,6 +77,7 @@ export function corpoDaLoja(f: LojaForm) {
     cidade: texto(f.cidade),
     uf: texto(f.uf)?.toUpperCase() ?? null,
     telefone: texto(f.telefone),
+    whatsapp: texto(f.whatsapp),
     email: texto(f.email),
     mesas: f.mesas.trim() ? Number(f.mesas) : null,
   };
@@ -285,6 +288,22 @@ export default function FormularioLoja({
               disabled={!podeEditar}
               value={valor.telefone}
               onChange={(e) => troca("telefone", e.target.value)}
+            />
+          </Campo>
+          {/* 🔑 **O WhatsApp da loja** (pedido do dono, 24/09/2026: *"o entre em
+              contato separado por loja"*). É para ele que o site do cliente
+              manda quem escolheu esta casa. */}
+          <Campo
+            rotulo="WhatsApp"
+            className="sm:col-span-3"
+            dica="O Entre em contato do site. Em branco, vale o da empresa."
+          >
+            <input
+              className="campo mono"
+              disabled={!podeEditar}
+              placeholder="(47) 99910-5033"
+              value={valor.whatsapp}
+              onChange={(e) => troca("whatsapp", e.target.value)}
             />
           </Campo>
           <Campo rotulo="E-mail" className="sm:col-span-3">

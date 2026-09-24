@@ -32,6 +32,7 @@ type Loja = {
   apelido: string | null;
   cnpj: string | null;
   inscricao_estadual: string | null;
+  whatsapp: string | null;
   matriz: boolean;
   ativo: boolean;
   cep: string | null;
@@ -152,6 +153,7 @@ export default function PaginaLoja() {
             cidade: achada.cidade ?? "",
             uf: achada.uf ?? "",
             telefone: achada.telefone ?? "",
+            whatsapp: achada.whatsapp ?? "",
             email: achada.email ?? "",
             mesas: achada.mesas === null || achada.mesas === undefined ? "" : String(achada.mesas),
           });

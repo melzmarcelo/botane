@@ -353,3 +353,15 @@ catálogo a catálogo; nasce DESLIGADA (o que já estava no ar continua abrindo 
 - A identificação é a MESMA da reserva (ver `reservas.md`): quem se identificou num catálogo
   não repete o telefone para reservar, e vice-versa — só nesta visita (sem localStorage).
 - Cobertura: `4c` do `smoke_publico.py`.
+
+## Visível nas lojas (migração 087, 24/09/2026)
+
+🔑 **Pedido do dono:** *"no cadastro do catálogo, podemos ter um Visível nas Lojas, aí o usuário
+marca onde ficaria visível."* Tabela `catalogo_lojas (id_catalogo, id_unidade)`.
+- `catalogos.id_unidade` continua a DONA (quem edita, pela loja do seletor do sistema);
+  `catalogo_lojas` diz onde o CLIENTE vê. As consultas públicas filtram por `EXISTS` nela.
+- ⚠️ A 087 semeia cada catálogo existente com a PRÓPRIA loja — sem isso os cardápios no ar
+  sumiriam no deploy. Catálogo novo sem `lojas` nasce só na dona.
+- ⚠️ Pelo menos uma loja, e só loja ativa (422). As caixas só aparecem na tela com mais de uma
+  loja com Reservas ligado (`/catalogos/opcoes` devolve `lojas`).
+- O preço do cardápio é o da loja em que o cliente ESTÁ (já era `produto_precos` por loja).

@@ -62,13 +62,38 @@ def _casa_aberta(cur, id_unidade: int) -> dict:
     ao público que aquele número corresponde a uma casa real.
     """
     cur.execute(
-        "SELECT id, nome, apelido, cidade, uf, telefone FROM unidades WHERE id = %s AND ativo",
+        """SELECT id, nome, apelido, cidade, uf, telefone, whatsapp, email,
+                  logradouro, numero, bairro
+             FROM unidades WHERE id = %s AND ativo""",
         (id_unidade,),
     )
     loja = cur.fetchone()
     if not loja or not reservas_servico.ligado(cur, id_unidade):
         raise HTTPException(status_code=404, detail="Casa não encontrada.")
     return dict(loja)
+
+
+@router.get("/lojas")
+def lojas() -> list[dict]:
+    """As casas que recebem pelo site — o "Qual casa?" da página inicial.
+
+    🔑 **Pedido do dono (24/09/2026):** duas lojas com reserva ligada no mesmo
+    site. O cliente escolhe a casa; reserva, catálogos e contato são dela.
+    ⚠️ **Só o que o cliente precisa para escolher**: nome e onde fica. Nada de
+    CNPJ, nada de quantas mesas — a regra deste arquivo vale aqui também.
+    ⚠️ **Declarada ANTES de `/{id_unidade}/...`** por clareza; o caminho não
+    colide, mas quem ler procura a lista antes do detalhe.
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            """SELECT u.id, coalesce(nullif(u.apelido, ''), u.nome) AS nome,
+                      u.bairro, u.cidade, u.uf
+                 FROM unidades u JOIN parametros p ON p.id_unidade = u.id
+                WHERE u.ativo AND p.reservas_ligado
+                ORDER BY u.matriz DESC, u.nome""")
+        return [{"id": r["id"], "nome": r["nome"],
+                 "onde": " · ".join(x for x in (r["bairro"], r["cidade"]) if x) or None}
+                for r in cur.fetchall()]
 
 
 @router.get("/{id_unidade}/casa")
@@ -95,9 +120,16 @@ def casa(id_unidade: int) -> dict:
         # ⚠️ O telefone da LOJA ganha do da empresa: é para ele que quem quer
         # falar com esta casa deve ligar. O WhatsApp é da empresa porque é o
         # canal único que o dono cadastrou.
-        zap = _so_digitos(e.get("whatsapp"))
+        # 🔑 **O contato é da LOJA, com a empresa como segundo degrau** (pedido do
+        # dono, 24/09/2026: *"o entre em contato separado por loja"*). Loja sem
+        # WhatsApp próprio continua mostrando o da empresa, que é o de sempre.
+        zap = _so_digitos(loja.get("whatsapp")) or _so_digitos(e.get("whatsapp"))
+        # ⚠️ O endereço vai INTEIRO de um lado ou do outro: misturar a rua da
+        # empresa com o bairro da loja daria um endereço que não existe.
+        fonte = loja if loja.get("logradouro") else e
         endereco = ", ".join(
-            [p for p in (e.get("logradouro"), e.get("numero"), e.get("bairro")) if p])
+            [p for p in (fonte.get("logradouro"), fonte.get("numero"), fonte.get("bairro"))
+             if p])
 
         return {
             "loja": loja["apelido"] or loja["nome"],
@@ -108,7 +140,7 @@ def casa(id_unidade: int) -> dict:
             "telefone": loja.get("telefone") or e.get("telefone"),
             # 🔑 Só os dígitos: é o que o `https://wa.me/<numero>` pede.
             "whatsapp": zap,
-            "email": e.get("email"),
+            "email": loja.get("email") or e.get("email"),
             "instagram": e.get("instagram"),
             # 🔑 **A logo cadastrada** (pedido do dono, 21/09/2026). Nula quando
             # a casa ainda não enviou uma — e aí o site desenha o medalhão com o
@@ -228,7 +260,10 @@ def catalogos(id_unidade: int) -> list[dict]:
                          JOIN produtos p ON p.id = i.id_produto
                         WHERE g.id_catalogo = c.id AND p.ativo) AS itens
                  FROM catalogos c
-                WHERE c.id_unidade = %s
+                -- 🔑 **Visível NESTA loja** (migração 087), e não "dono é esta
+                -- loja": a casa marca em que lojas cada catálogo aparece.
+                WHERE EXISTS (SELECT 1 FROM catalogo_lojas l
+                               WHERE l.id_catalogo = c.id AND l.id_unidade = %s)
                   AND c.situacao = 'ATIVO'
                   AND (c.publica_de IS NULL OR c.publica_de <= current_date)
                   AND (c.publica_ate IS NULL OR c.publica_ate >= current_date)
@@ -318,7 +353,9 @@ def _no_ar(cur, id_unidade: int, id_catalogo: int) -> dict | None:
     """
     cur.execute(
         """SELECT nome, origem, arquivo_url, exige_cadastro FROM catalogos
-            WHERE id = %s AND id_unidade = %s AND situacao = 'ATIVO'
+            WHERE id = %s AND situacao = 'ATIVO'
+              AND EXISTS (SELECT 1 FROM catalogo_lojas l
+                           WHERE l.id_catalogo = catalogos.id AND l.id_unidade = %s)
               AND (publica_de IS NULL OR publica_de <= current_date)
               AND (publica_ate IS NULL OR publica_ate >= current_date)""",
         (id_catalogo, id_unidade),

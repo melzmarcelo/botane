@@ -59,6 +59,9 @@ class UnidadeCreate(BaseModel):
     uf: str | None = Field(default=None, max_length=2)
     codigo_ibge: str | None = None
     telefone: str | None = None
+    # 🔑 **O WhatsApp DESTA loja** (migração 087): é o "Entre em contato" do site
+    # quando o cliente escolhe esta casa. Em branco, vale o da empresa.
+    whatsapp: str | None = Field(default=None, max_length=30)
     email: str | None = None
     timezone: str = "America/Sao_Paulo"
     horario_funcionamento: dict | None = None

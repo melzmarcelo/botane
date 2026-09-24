@@ -20,6 +20,8 @@ export type Catalogo = {
   /** 🔑 O cliente se identifica (telefone e, se novo, cadastro) antes de abrir.
    *  Quem garante é o servidor — o site nem recebe o conteúdo sem isso. */
   exige_cadastro: boolean;
+  /** 🔑 As lojas em que o CLIENTE vê este catálogo no site (migração 087). */
+  lojas: number[];
   /** 🔑 Está no ar HOJE — não é o mesmo que estar ATIVO: um ativo cujo período
    *  já passou não está publicado. Quem responde é o servidor, porque é ele que
    *  sabe que dia é hoje na loja. */
@@ -34,7 +36,12 @@ export type Catalogo = {
 };
 
 /** O vocabulário vem do SERVIDOR: manter a lista aqui seria a segunda cópia. */
-export type Opcoes = { origens: string[]; situacoes: Situacao[] };
+export type Opcoes = {
+  origens: string[];
+  situacoes: Situacao[];
+  /** As lojas que o "Visível nas lojas" oferece: ativas e com Reservas ligado. */
+  lojas: { id: number; nome: string }[];
+};
 
 /** ⚠️ Só o rótulo é daqui. O valor é do servidor, e é ele que manda. */
 export const ROTULO_SITUACAO: Record<Situacao, string> = {
@@ -60,6 +67,7 @@ export type Gravar = {
   situacao?: Situacao;
   observacao?: string | null;
   exige_cadastro?: boolean;
+  lojas?: number[];
 };
 
 export const criar = (corpo: Gravar) => api.post<Catalogo>("/catalogos", corpo);

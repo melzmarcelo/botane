@@ -456,6 +456,88 @@ chamar("DELETE", f"/produtos/{prod2['id']}", token=token)
 sem_rastro_do_cliente()
 
 
+print("\n4d. duas lojas no mesmo site")
+# 🔑 **Pedido do dono (24/09/2026):** *"o cadastro de cliente seria o mesmo. A
+# reserva, os catalogos e o entre em contato seriam separados por loja. No
+# cadastro do catalogo, podemos ter um Visivel nas Lojas."*
+st, filial = chamar("POST", "/unidades", {
+    "nome": f"Filial site {marca}", "apelido": f"Site{marca}", "cidade": "Pomerode",
+    "uf": "SC", "logradouro": "Rua da Filial", "numero": "10", "bairro": "Centro",
+    "whatsapp": "(47) 98888-7777", "email": "filial@exemplo.com"}, token=token)
+ID_FILIAL = (filial or {}).get("id")
+checar("preparo: a filial nasce, com WhatsApp proprio", st == 201 and ID_FILIAL, (st, filial))
+_st, par_f = chamar("GET", f"/unidades/{ID_FILIAL}/parametros", token=token)
+chamar("PUT", f"/unidades/{ID_FILIAL}/parametros", {**par_f, "reservas_ligado": True},
+       token=token)
+try:
+    st, lojas = chamar("GET", "/publico/lojas")
+    ids = [l["id"] for l in (lojas or [])]
+    checar("a lista de casas traz as duas lojas com reserva ligada",
+           st == 200 and 1 in ids and ID_FILIAL in ids, (st, lojas))
+    minha = next((l for l in lojas if l["id"] == ID_FILIAL), {})
+    checar("pelo APELIDO, com onde fica, e nada de CNPJ",
+           minha.get("nome") == f"Site{marca}" and "Pomerode" in (minha.get("onde") or "")
+           and set(minha) == {"id", "nome", "onde"}, minha)
+
+    st, c1 = chamar("GET", f"/publico/{ID_FILIAL}/casa")
+    checar("o contato da filial e o DELA: WhatsApp, endereco e e-mail",
+           c1.get("whatsapp") == "47988887777" and "Rua da Filial" in (c1.get("endereco") or "")
+           and c1.get("email") == "filial@exemplo.com", c1)
+    st, c0 = chamar("GET", "/publico/1/casa")
+    checar("e o da loja 1 continua o de antes", c0.get("whatsapp") != "47988887777", c0)
+
+    st, op = chamar("GET", "/catalogos/opcoes", token=token)
+    checar("o cadastro do catalogo oferece as lojas com reserva",
+           ID_FILIAL in [l["id"] for l in (op or {}).get("lojas", [])], op)
+
+    st, cv = chamar("POST", "/catalogos", {"nome": f"So na filial {marca}", "origem": "PRODUTOS",
+                                           "situacao": "ATIVO", "lojas": [ID_FILIAL]}, token=token)
+    ID_CV = (cv or {}).get("id")
+    checar("o catalogo nasce visivel SO na filial", st == 201 and cv.get("lojas") == [ID_FILIAL],
+           (st, cv))
+    _st, catv = chamar("POST", f"/catalogos/{ID_CV}/categorias", {"nome": "Filial"}, token=token)
+    _st, pv = chamar("POST", "/produtos", {"nome": f"PAO DA FILIAL {marca}", "tipo": "INSUMO",
+                                           "um_estoque": "UN", "controla_estoque": False},
+                     token=token)
+    chamar("PUT", f"/produtos/{pv['id']}", {"integrado_pdv": True}, token=token)
+    chamar("POST", f"/catalogos/categorias/{catv['id']}/itens", {"id_produto": pv["id"]},
+           token=token)
+    na = lambda loja: [c.get("id") for c in chamar("GET", f"/publico/{loja}/catalogos")[1]]  # noqa: E731
+    checar("aparece no site da filial", ID_CV in na(ID_FILIAL), na(ID_FILIAL))
+    checar("e NAO no da loja dona", ID_CV not in na(1), na(1))
+    checar("o cardapio abre pela filial",
+           chamar("GET", f"/publico/{ID_FILIAL}/catalogos/{ID_CV}")[0] == 200)
+    checar("e pela loja 1 nao existe (404)",
+           chamar("GET", f"/publico/1/catalogos/{ID_CV}")[0] == 404)
+    st, cv2 = chamar("PUT", f"/catalogos/{ID_CV}", {"lojas": [1, ID_FILIAL]}, token=token)
+    checar("marcando as duas, aparece nas duas",
+           cv2.get("lojas") == sorted([1, ID_FILIAL]) and ID_CV in na(1) and ID_CV in na(ID_FILIAL),
+           cv2)
+    st, r = chamar("PUT", f"/catalogos/{ID_CV}", {"lojas": []}, token=token)
+    checar("visivel em lugar nenhum e recusado (422)", st == 422, (st, r))
+
+    # 🔑 O cadastro e UM: quem se cadastrou numa loja e conhecido na outra.
+    sem_rastro_do_cliente()
+    chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
+                                          "genero": "FEMININO", "cidade": "Blumenau",
+                                          "nascimento": "1990-05-17"})
+    st, r = chamar("POST", f"/publico/{ID_FILIAL}/cliente/telefone", {"telefone": FONE_CAT})
+    checar("cadastrado na loja 1, a filial ja o conhece — sem novo cadastro",
+           st == 200 and r.get("cadastrado") is True and r.get("nome") == "Clara", (st, r))
+    with get_cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM reserva_clientes WHERE telefone = %s", (FONE_CAT,))
+        checar("e existe UM cadastro so", cur.fetchone()["n"] == 1)
+
+    chamar("PUT", f"/catalogos/{ID_CV}", {"situacao": "RASCUNHO"}, token=token)
+    chamar("DELETE", f"/catalogos/{ID_CV}", token=token)
+    chamar("DELETE", f"/produtos/{pv['id']}", token=token)
+finally:
+    sem_rastro_do_cliente()
+    chamar("PUT", f"/unidades/{ID_FILIAL}/parametros", {**par_f, "reservas_ligado": False},
+           token=token)
+    chamar("PUT", f"/unidades/{ID_FILIAL}", {"ativo": False}, token=token)
+
+
 print("\n5. os horarios, pela MESMA regra da agenda")
 # 🔑 Uma segunda regra para o publico divergiria da primeira, e a divergencia
 # apareceria como mesa prometida ao cliente e nao disponivel na casa.

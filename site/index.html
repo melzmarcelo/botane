@@ -304,6 +304,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 /* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
    direita — o mesmo desenho do recibo, só que em lista. */
 .minhas { display: flex; flex-direction: column; gap: 6px; }
+.loja-nome small { display: block; font-size: 13px; color: var(--tinta-suave); font-weight: 400; }
 .link-sair { font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
   color: var(--tinta-suave); text-decoration: underline; }
 .minhas[hidden] { display: none; }
@@ -353,12 +354,25 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <!-- ================= a página inicial ================= -->
     <section class="tela" data-tela="inicio" data-ativa>
       <h2 id="nome-da-casa">Botané Deli e Café</h2>
+      <!-- 🔑 A casa escolhida, e a saída para a outra. Só aparece com mais de
+           uma loja no site — com uma, não há o que trocar. -->
+      <p class="sub" id="loja-atual" hidden></p>
       <p class="sub" id="linha-dias">…</p>
       <div class="itens" id="itens">
         <button class="item destaque" id="ir-reservar">Reserve sua Mesa</button>
         <!-- 🔑 Os catálogos entram AQUI, um por cardápio, e cada um abre o PDF.
              Quem os monta é o `carregarCatalogos()`. -->
       </div>
+    </section>
+
+    <!-- ================= qual casa ================= -->
+    <!-- 🔑 **Pedido do dono (24/09/2026):** duas lojas com reserva no mesmo site.
+         A pergunta vem ANTES de tudo: cardápio, horário e contato são da casa
+         escolhida — mostrar os da Matriz a quem vai à Centro seria o erro caro. -->
+    <section class="tela" data-tela="lojas" aria-labelledby="t-lojas">
+      <h2 id="t-lojas">Qual casa?</h2>
+      <p class="sub-tela">Escolha a unidade — a reserva, o cardápio e o contato são dela.</p>
+      <div class="itens" id="lista-lojas"></div>
     </section>
 
     <!-- ================= reservar ================= -->
@@ -521,9 +535,18 @@ const API = location.hostname === "localhost" || location.hostname === "127.0.0.
   ? "http://127.0.0.1:9200"
   : "https://sistema.botanedeliecafe.com.br/api";
 
-/* A loja sai do `<html data-loja>`: no dia em que houver duas casas com
-   reserva, cada uma publica o seu com o número dela — sem tocar no código. */
-const LOJA = document.documentElement.dataset.loja || "1";
+/* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
+   (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a
+   loja usada se a lista de casas não responder. */
+let LOJA = document.documentElement.dataset.loja || "1";
+/** A pessoa escolheu a casa nesta aba (ou só há uma, e não houve o que escolher). */
+let lojaEscolhida = false;
+/** As casas que recebem pelo site, para o seletor e o "trocar de loja". */
+let lojasDaCasa = [];
+/** Casa, cardápios e reserva da loja atual já estão na tela. */
+let lojaCarregada = false;
+/** A resposta "esta casa marca pelo site?" — o botão de reservar espera por ela. */
+let aceitaPronta = Promise.resolve();
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[<>&"]/g,
@@ -1012,6 +1035,7 @@ function lembrar() {
       eu: { telefone: eu.telefone, nome: eu.nome, cadastrado: eu.cadastrado,
             identificado: eu.identificado },
       aberto,
+      loja: lojaEscolhida ? LOJA : null,
     }));
   } catch { /* aba privada ou armazenamento bloqueado: o site segue sem memória */ }
 }
@@ -1022,12 +1046,16 @@ function recordar() {
     if (!salvo) return;
     Object.assign(eu, salvo.eu || {});
     aberto = salvo.aberto || null;
+    if (salvo.loja) { LOJA = String(salvo.loja); lojaEscolhida = true; }
   } catch { /* idem */ }
 }
 
 /** "Não é você?": esquece a pessoa desta aba e recomeça pelo telefone. */
 function esquecer() {
-  try { sessionStorage.removeItem(SESSAO); } catch { /* idem */ }
+  // ⚠️ Esquece a PESSOA, não a casa: quem troca de telefone continua na loja
+  // que escolheu.
+  Object.assign(eu, { telefone: "", nome: "", cadastrado: false, identificado: false });
+  lembrar();
   // ⚠️ Recarrega em vez de limpar à mão: os PDFs destravados viraram links, e
   // voltar cada um a botão é o tipo de detalhe que se esquece.
   location.replace(location.pathname + "#quem");
@@ -1461,6 +1489,77 @@ async function abrirReserva() {
   buscarHorarios();
 }
 
+/* ---- qual casa ---- */
+
+/**
+ * Decide a loja desta visita: a da sessão, a única que houver, ou a que a
+ * pessoa escolher na tela "Qual casa?". Resolve quando há loja.
+ */
+async function escolherLoja() {
+  try {
+    const r = await fetch(`${API}/publico/lojas`);
+    lojasDaCasa = r.ok ? await r.json() : [];
+  } catch {
+    lojasDaCasa = [];
+  }
+  // ⚠️ Sem a lista (rede, ou API antiga), vale o `data-loja` — o site de antes.
+  if (!lojasDaCasa.length) return;
+  if (lojaEscolhida && lojasDaCasa.some((l) => String(l.id) === LOJA)) return;
+  if (lojasDaCasa.length === 1) {
+    LOJA = String(lojasDaCasa[0].id);
+    return;
+  }
+  return new Promise((pronto) => {
+    $("#lista-lojas").innerHTML = "";
+    lojasDaCasa.forEach((l) => {
+      const b = document.createElement("button");
+      b.className = "item loja-nome";
+      b.innerHTML = `${esc(l.nome)}${l.onde ? `<small>${esc(l.onde)}</small>` : ""}`;
+      b.addEventListener("click", () => {
+        // ⚠️ O "voltar" do celular reabre esta tela com a loja JÁ carregada:
+        // escolher outra ali precisa recarregar tudo, não só trocar de tela.
+        const trocou = lojaCarregada && String(l.id) !== LOJA;
+        LOJA = String(l.id);
+        lojaEscolhida = true;
+        lembrar();
+        if (trocou) {
+          history.replaceState(null, "", location.pathname);
+          return location.reload();
+        }
+        ir("inicio");
+        pronto();
+      });
+      $("#lista-lojas").appendChild(b);
+    });
+    // ⚠️ A tarja "aberto/fechado" é DA LOJA: antes da escolha, ela não tem
+    // de quem falar.
+    $("#estado").hidden = true;
+    ir("lojas");
+  });
+}
+
+/** "Trocar de loja": esquece a casa (a pessoa fica) e recomeça do seletor. */
+function trocarDeLoja() {
+  lojaEscolhida = false;
+  aberto = null;
+  lembrar();
+  // ⚠️ Recarregar é o jeito seguro: cardápios, horários e contato são da loja
+  // velha, e limpar cada um à mão é onde algum ficaria para trás.
+  history.replaceState(null, "", location.pathname);
+  location.reload();
+}
+
+/** Mostra a casa escolhida na página inicial, com a saída para a outra. */
+function mostrarLojaAtual() {
+  const linha = $("#loja-atual");
+  const atual = lojasDaCasa.find((l) => String(l.id) === LOJA);
+  linha.hidden = !(atual && lojasDaCasa.length > 1);
+  if (linha.hidden) return;
+  linha.innerHTML = `${esc(atual.nome)} · ` +
+    `<button type="button" class="link-sair">Trocar de loja</button>`;
+  linha.querySelector("button").addEventListener("click", trocarDeLoja);
+}
+
 /* ---- começo ---- */
 (function inicio() {
   $("#dia").value = diaIso(1);
@@ -1479,6 +1578,10 @@ async function abrirReserva() {
   // telefone, nome, gênero e cidade para descobrir no fim que a casa não marca
   // pelo site — e a saída dela seria fechar a página, não pegar o WhatsApp.
   $("#ir-reservar").addEventListener("click", async () => {
+    // ⚠️ **Espera saber se a casa marca pelo site.** Um toque rápido, antes da
+    // resposta, caía no caminho de quem NÃO aceita — sem identificação, sem
+    // "Suas reservas". Visto no teste de duas lojas, ao trocar de casa.
+    await aceitaPronta;
     // 🔑 **Quem já se identificou para ver um catálogo não repete o telefone.**
     // A reserva usa o mesmo cadastro — só o "Suas reservas" é buscado.
     if (reservaOnline.aceita && eu.identificado) {
@@ -1497,7 +1600,16 @@ async function abrirReserva() {
   });
 
   recordar();
+  escolherLoja().then(carregarLoja);
+})();
+
+/** Tudo o que é DA LOJA: casa, cardápios, reserva — depois de saber qual é. */
+function carregarLoja() {
+  lojaCarregada = true;
+  $("#estado").hidden = false;
+  mostrarLojaAtual();
   const aceita = saberSeAceita();
+  aceitaPronta = aceita;
   Promise.all([carregarCasa().then(carregarCatalogos), aceita]).then(restaurarTela);
   aceita.then(() => {
     // ⚠️ Quem não marca pelo site continua vendo o aviso de que a mesa se
@@ -1512,7 +1624,7 @@ async function abrirReserva() {
     }
   });
   buscarHorarios();
-})();
+}
 
 /**
  * O F5 volta à tela em que a pessoa estava — e busca o conteúdo DE NOVO.

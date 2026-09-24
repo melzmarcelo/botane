@@ -89,6 +89,10 @@ def dica_do_nome(nome: str) -> str:
     return " ".join(p[0].upper() + "•" * max(len(p) - 1, 1) for p in partes[:3])
 
 
+# 🔑 **O cliente é da CASA, não da loja** (migração 087, pedido do dono 24/09/2026:
+# *"o cadastro de cliente seria o mesmo"*). As buscas daqui são só pelo telefone;
+# `id_unidade` continua nos parâmetros porque é a loja onde um cadastro NOVO nasce
+# — e é por loja que continuam o limite de reservas e as tentativas.
 def procurar(cur, id_unidade: int, telefone: str) -> dict:
     """Existe cadastro para este telefone? Sem dizer de quem é.
 
@@ -99,8 +103,8 @@ def procurar(cur, id_unidade: int, telefone: str) -> dict:
     """
     cur.execute(
         """SELECT nome FROM reserva_clientes
-            WHERE id_unidade = %s AND telefone = %s""",
-        (id_unidade, telefone),
+            WHERE telefone = %s""",
+        (telefone,),
     )
     achado = cur.fetchone()
     return {
@@ -130,8 +134,8 @@ def conferir(cur, id_unidade: int, telefone: str, nome: str | None = None) -> di
     """
     cur.execute(
         """SELECT id, nome FROM reserva_clientes
-            WHERE id_unidade = %s AND telefone = %s""",
-        (id_unidade, telefone),
+            WHERE telefone = %s""",
+        (telefone,),
     )
     achado = cur.fetchone()
     if not achado:
@@ -240,8 +244,8 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
 
     cur.execute(
         """SELECT id, nome, genero, cidade FROM reserva_clientes
-            WHERE id_unidade = %s AND telefone = %s""",
-        (id_unidade, telefone),
+            WHERE telefone = %s""",
+        (telefone,),
     )
     achado = cur.fetchone()
 
@@ -296,7 +300,7 @@ def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
         """INSERT INTO reserva_clientes (id_unidade, telefone, nome, genero, cidade,
                                          nascimento)
            VALUES (%s, %s, %s, %s, %s, %s)
-           ON CONFLICT (id_unidade, telefone) DO UPDATE SET atualizado_em = now()
+           ON CONFLICT (telefone) DO UPDATE SET atualizado_em = now()
            RETURNING id, nome""",
         (id_unidade, telefone, corpo.nome.strip(), corpo.genero,
          (corpo.cidade or "").strip() or None, nascimento),

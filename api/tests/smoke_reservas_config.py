@@ -99,9 +99,22 @@ print("\n1. desligado, o catalogo de permissoes nao oferece reservas")
 st, perms = chamar("GET", "/permissoes", token=token)
 chaves = {x["chave"] for x in perms}
 checar("a lista responde", st == 200 and len(chaves) > 20, st)
-checar("e nenhuma chave de reservas aparece",
-       not any(c.startswith("reservas.") for c in chaves),
-       sorted(c for c in chaves if c.startswith("reservas.")))
+# ⚠️ **A regra é "alguma loja usa Reservas?", não "a loja 1 usa?"** (papel é
+# global). Esta suíte desliga só a loja dela; com OUTRA loja ligada — a casa com
+# duas lojas no site, desde 24/09/2026 — as chaves têm de continuar aparecendo.
+# A primeira versão supunha que só a loja 1 existia e falhou no dia em que a
+# segunda loja ligou Reservas.
+with get_cursor() as cur:
+    cur.execute("SELECT 1 FROM parametros WHERE reservas_ligado AND id_unidade <> %s LIMIT 1",
+                (UNIDADE,))
+    outra_ligada = cur.fetchone() is not None
+if outra_ligada:
+    checar("com OUTRA loja usando Reservas, as chaves continuam no catalogo",
+           any(c.startswith("reservas.") for c in chaves), sorted(chaves)[:5])
+else:
+    checar("e nenhuma chave de reservas aparece",
+           not any(c.startswith("reservas.") for c in chaves),
+           sorted(c for c in chaves if c.startswith("reservas.")))
 # ⚠️ Mas elas EXISTEM no banco: o catalogo filtra a vitrine, nao apaga o dado.
 with get_cursor() as cur:
     cur.execute("SELECT count(*) AS n FROM permissoes WHERE chave LIKE 'reservas.%%'")

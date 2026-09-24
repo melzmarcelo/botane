@@ -49,6 +49,9 @@ class CatalogoBase(BaseModel):
     # 24/09/2026). Quem garante é o servidor: a lista pública não entrega o
     # conteúdo deste catálogo, e sim um pedido de identificação.
     exige_cadastro: bool = False
+    # 🔑 **Visível nas lojas** (migração 087, pedido do dono 24/09/2026). Nulo na
+    # criação = só a loja dona, que é o que o site sempre fez.
+    lojas: list[int] | None = None
 
     @model_validator(mode="after")
     def _coerente(self):
@@ -90,6 +93,7 @@ class CatalogoUpdate(BaseModel):
     situacao: str | None = None
     observacao: str | None = None
     exige_cadastro: bool | None = None
+    lojas: list[int] | None = None
 
 
 class CatalogoResponse(BaseModel):
@@ -101,6 +105,8 @@ class CatalogoResponse(BaseModel):
     situacao: str
     observacao: str | None = None
     exige_cadastro: bool = False
+    # As lojas em que o CLIENTE vê este catálogo no site.
+    lojas: list[int] = []
     # 🔑 **Se ele está no ar HOJE**, que é a pergunta que a lista responde de
     # relance. Não é `situacao == 'ATIVO'`: um catálogo ativo cujo período já
     # passou não está publicado, e mostrar os dois como iguais faria a casa
