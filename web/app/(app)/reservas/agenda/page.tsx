@@ -4,101 +4,66 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
-import { api } from "@/lib/api";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import { agendaDoDia, mudarStatus, type Agenda, type Reserva } from "@/lib/reservas";
 import { useSessao } from "@/lib/sessao";
-import EscolherHorario from "../escolher-horario";
 import ExplicaTela from "@/components/explica-tela";
 
+import CalendarioDoMes, { maiuscula, mesDe } from "./calendario";
+import DetalheDaReserva from "./detalhe";
+import { NovaReserva, Remarcar } from "./formularios";
+import LinhaDoTempo from "./linha-do-tempo";
+import { ADIANTE, COR, ROTULO, podeRemarcar } from "./status";
+
 /**
- * A agenda do dia — a tela que a recepção olha o tempo todo.
+ * A agenda — o mês no calendário, o dia por horário, e cada reserva.
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"na agenda de reservas, ter uma visão de
+ * calendário, onde o usuário pode ter uma visão geral do que está reservado, e aí
+ * clicar no dia, dá uma visão mais macro daquele dia, e aí pode visualizar a
+ * reserva."* Três níveis: `visao=mes` (o calendário), `visao=dia` com a linha
+ * do tempo (ou a lista, que era a tela de antes), e o detalhe da reserva.
+ * ⚠️ **Tudo no ENDEREÇO** (`useEstadoNaUrl`): o F5 e o voltar do navegador
+ * devolvem a pessoa ao mês e ao dia em que ela estava.
  *
  * 🔑 **Quem decide se cabe é o SERVIDOR**, sempre. A lista de horários vem de
  * `/reservas/disponibilidade`, que roda a mesma regra que a gravação vai rodar.
- * Uma segunda versão da regra aqui divergiria no primeiro degrau novo, e a tela
- * passaria a oferecer horários que a gravação recusa.
- *
- * 🔑 **O número de pessoas vem ANTES do horário, e a ordem é a regra.**
- * "Esgotado" depende do tamanho do grupo: no mesmo sábado às 12h pode não haver
- * mesa para 6 e haver para 2. Perguntar o horário primeiro obrigaria a tela a
- * mostrar uma lista que ela ainda não sabe calcular.
  *
  * ⚠️ **A reserva não se apaga: muda de status.** Cancelada é um fato, e sumir
  * com a linha levaria junto a resposta para "por que a mesa ficou vazia naquele
  * sábado".
  */
 
-type Reserva = {
-  id: number;
-  hora: string;
-  sai_por_volta: string | null;
-  pessoas: number;
-  status: string;
-  origem: string;
-  nome: string;
-  telefone: string | null;
-  objetivo: string | null;
-  observacao_cliente: string | null;
-  observacao_interna: string | null;
-  mesas: string;
+/** A data de HOJE no relógio de quem usa. ⚠️ Era `toISOString()`, que é UTC: das
+ *  21h à meia-noite a agenda abria no dia seguinte. */
+const hoje = () => {
+  const d = new Date();
+  return `${mesDe(d)}-${String(d.getDate()).padStart(2, "0")}`;
 };
-type Agenda = {
-  data: string;
-  reservas: Reserva[];
-  esperados: number;
-  ativas: number;
-  aberta: boolean;
-  bloqueio: string | null;
-  lugares: number;
-};
-
-/** O que cada status permite fazer em seguida — espelha `TRANSICOES` no servidor.
- *  ⚠️ Quem DECIDE é o servidor: isto só escolhe que botões mostrar. Oferecer um
- *  caminho que ele recusa seria pior que não oferecer nenhum. */
-const ADIANTE: Record<string, { para: string; rotulo: string; perigo?: boolean }[]> = {
-  PENDENTE: [
-    { para: "CONFIRMADA", rotulo: "confirmar" },
-    { para: "CANCELADA", rotulo: "cancelar", perigo: true },
-  ],
-  CONFIRMADA: [
-    { para: "CHEGOU", rotulo: "chegou" },
-    { para: "NAO_COMPARECEU", rotulo: "não veio", perigo: true },
-    { para: "CANCELADA", rotulo: "cancelar", perigo: true },
-  ],
-  CHEGOU: [{ para: "ENCERRADA", rotulo: "encerrar" }],
-  ENCERRADA: [],
-  CANCELADA: [],
-  NAO_COMPARECEU: [],
-};
-
-const ROTULO: Record<string, string> = {
-  PENDENTE: "aguardando", CONFIRMADA: "confirmada", CHEGOU: "chegou",
-  ENCERRADA: "encerrada", CANCELADA: "cancelada", NAO_COMPARECEU: "não veio",
-};
-const COR: Record<string, "neutro" | "erva" | "alerta"> = {
-  PENDENTE: "alerta", CONFIRMADA: "erva", CHEGOU: "erva",
-  ENCERRADA: "neutro", CANCELADA: "neutro", NAO_COMPARECEU: "alerta",
-};
-
-const hoje = () => new Date().toISOString().slice(0, 10);
 
 export default function AgendaDoDia() {
   const { pode } = useSessao();
   const aviso = useAviso();
+  const [visao, setVisao] = useEstadoNaUrl<string>("visao", "mes", { atraso: 0 });
+  const [mes, setMes] = useEstadoNaUrl<string>("mes", mesDe(new Date()), { atraso: 0 });
   const [dia, setDia] = useEstadoNaUrl<string>("dia", hoje(), { atraso: 0 });
+  const [modo, setModo] = useEstadoNaUrl<string>("modo", "tempo", { atraso: 0 });
   const [agenda, setAgenda] = useState<Agenda | null>(null);
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [marcando, setMarcando] = useState(false);
+  /** A reserva aberta no detalhe — pelo ID, para sobreviver ao recarregar. */
+  const [aberta, setAberta] = useState<number | null>(null);
 
   const carregar = useCallback(async () => {
+    if (visao !== "dia") return;
     try {
-      setAgenda(await api.get<Agenda>(`/reservas/agenda?data=${dia}`));
+      setAgenda(await agendaDoDia(dia));
       setErro("");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar a agenda");
     }
-  }, [dia]);
+  }, [dia, visao]);
 
   useEffect(() => {
     void carregar();
@@ -107,9 +72,7 @@ export default function AgendaDoDia() {
   /** O que ainda precisa de confirmação antes de acontecer.
    *
    * ⚠️ **Nunca `window.confirm`.** É a caixa do NAVEGADOR: fonte de sistema,
-   * botão em inglês e nenhuma chance de explicar o que a ação faz. Numa tela que
-   * existe para dar confiança sobre a agenda da casa, a confirmação é parte do
-   * produto — e o componente `Confirmacao` está aqui justamente para isso. */
+   * botão em inglês e nenhuma chance de explicar o que a ação faz. */
   const [confirmar, setConfirmar] = useState<
     { r: Reserva; para: string; rotulo: string } | null
   >(null);
@@ -127,9 +90,7 @@ export default function AgendaDoDia() {
     setConfirmar(null);
     setOcupado(true);
     try {
-      const resposta = await api.put<{ message: string }>(`/reservas/${r.id}/status`, {
-        status: para,
-      });
+      const resposta = await mudarStatus(r.id, para);
       aviso.sucesso(resposta.message);
       await carregar();
     } catch (e) {
@@ -140,16 +101,64 @@ export default function AgendaDoDia() {
     }
   }
 
+  const abrirDia = (d: string) => {
+    setDia(d);
+    setMes(d.slice(0, 7));
+    setVisao("dia");
+  };
+
+  // ------------------------------------------------------------------ o mês
+  if (visao !== "dia") {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="titulo">Agenda</h1>
+            <ExplicaTela>
+              O mês de relance: quantas reservas e pessoas em cada dia, e o que ainda aguarda
+              confirmação. Clique num dia para ver os horários.
+            </ExplicaTela>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-secundario" onClick={() => setMes(mesDe(new Date()))}>
+              este mês
+            </button>
+            <button className="btn btn-primario" onClick={() => abrirDia(hoje())}>
+              Abrir hoje
+            </button>
+          </div>
+        </div>
+        <CalendarioDoMes mes={mes} hoje={hoje()} aoMudarMes={setMes} aoEscolherDia={abrirDia} />
+      </div>
+    );
+  }
+
+  // ------------------------------------------------------------------- o dia
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!agenda) return <Carregando />;
 
   const podeEditar = pode("reservas.editar");
+  const reservaAberta = agenda.reservas.find((r) => r.id === aberta) ?? null;
+  const nomeDoDia = maiuscula(new Date(`${dia}T12:00`).toLocaleDateString("pt-BR", {
+    weekday: "long", day: "2-digit", month: "long",
+  }));
 
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="titulo">Agenda</h1>
+          {/* 🔑 A volta ao calendário cai no MÊS deste dia, não no de hoje. */}
+          <button
+            type="button"
+            className="link-acao mb-1 text-[13px]"
+            onClick={() => {
+              setMes(dia.slice(0, 7));
+              setVisao("mes");
+            }}
+          >
+            ‹ calendário
+          </button>
+          <h1 className="titulo">{nomeDoDia}</h1>
           <ExplicaTela>
             Quem vem, quando, e em que mesa. A casa decide a mesa — o cliente reserva lugar.
           </ExplicaTela>
@@ -223,6 +232,21 @@ export default function AgendaDoDia() {
         />
       )}
 
+      {reservaAberta && !confirmar && !remarcando && (
+        <DetalheDaReserva
+          reserva={reservaAberta}
+          dia={dia}
+          podeEditar={podeEditar}
+          ocupado={ocupado}
+          aoMudar={(r, para, rotulo) => void mudar(r, para, rotulo)}
+          aoRemarcar={(r) => {
+            setAberta(null);
+            setRemarcando(r);
+          }}
+          aoFechar={() => setAberta(null)}
+        />
+      )}
+
       {confirmar && (
         <Confirmacao
           titulo={
@@ -248,8 +272,34 @@ export default function AgendaDoDia() {
         </Confirmacao>
       )}
 
-      <Cartao titulo={`Reservas de ${dia.split("-").reverse().join("/")}`}>
-        {!agenda.reservas.length ? (
+      <Cartao
+        titulo={`Reservas de ${dia.split("-").reverse().join("/")}`}
+        acao={
+          // 🔑 **A linha do tempo é o padrão; a lista continua a um clique.** A
+          // lista é a tela de antes, com as ações na linha — quem já trabalhava
+          // nela não perde nada.
+          <div className="flex gap-1" role="tablist" aria-label="como ver o dia">
+            {[
+              { v: "tempo", r: "Linha do tempo" },
+              { v: "lista", r: "Lista" },
+            ].map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                role="tab"
+                aria-selected={modo === o.v}
+                className={`btn ${modo === o.v ? "btn-primario" : "btn-secundario"} px-3 py-1 text-[13px]`}
+                onClick={() => setModo(o.v)}
+              >
+                {o.r}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {modo === "tempo" ? (
+          <LinhaDoTempo agenda={agenda} aoAbrir={(r) => setAberta(r.id)} />
+        ) : !agenda.reservas.length ? (
           <p className="px-1 py-8 text-center text-[15px] text-suave">
             Nenhuma reserva neste dia.
           </p>
@@ -311,7 +361,7 @@ export default function AgendaDoDia() {
                                 quem ainda não sentou — quem já CHEGOU está na
                                 mesa, e mudar o horário dele não descreve nada
                                 que aconteça no salão. */}
-                            {(r.status === "PENDENTE" || r.status === "CONFIRMADA") && (
+                            {podeRemarcar(r.status) && (
                               <button
                                 className="link-acao"
                                 aria-busy={ocupado} disabled={ocupado}
@@ -342,248 +392,5 @@ export default function AgendaDoDia() {
         )}
       </Cartao>
     </div>
-  );
-}
-
-/**
- * Marcar uma reserva: quantas pessoas → que horários aceitam → quem.
- *
- * 🔑 **A ordem é a regra.** "Esgotado" depende do tamanho do grupo, então o
- * número de pessoas vem primeiro; só depois dele o servidor sabe que horários
- * oferecer. Perguntar o horário antes obrigaria a tela a mostrar uma lista que
- * ela ainda não pode calcular.
- */
-function NovaReserva({
-  dia,
-  aoFechar,
-  aoMarcar,
-}: {
-  dia: string;
-  aoFechar: () => void;
-  aoMarcar: () => Promise<void>;
-}) {
-  const aviso = useAviso();
-  const [pessoas, setPessoas] = useState(2);
-  const [hora, setHora] = useState("");
-  const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [objetivo, setObjetivo] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [ocupado, setOcupado] = useState(false);
-
-  async function marcar() {
-    setOcupado(true);
-    try {
-      const r = await api.post<{ message: string }>("/reservas", {
-        data: dia,
-        hora,
-        pessoas,
-        nome: nome.trim(),
-        telefone: telefone.trim() || null,
-        objetivo: objetivo.trim() || null,
-        observacao_cliente: observacao.trim() || null,
-        origem: "BALCAO",
-      });
-      aviso.sucesso(r.message);
-      await aoMarcar();
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível marcar");
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  return (
-    <Cartao
-      titulo="Nova reserva"
-      descricao="Quantas pessoas primeiro — é isso que decide quais horários existem."
-    >
-      <div className="flex flex-col gap-4">
-        <EscolherHorario
-          dia={dia}
-          pessoas={pessoas}
-          aoMudarPessoas={(n) => {
-            setPessoas(n);
-            // ⚠️ Trocar o grupo INVALIDA o horario escolhido: a mesa que
-            // servia para dois pode nao servir para seis, e manter o
-            // horario aceso deixaria a tela prometendo o que ja nao vale.
-            setHora("");
-          }}
-          hora={hora}
-          aoMudarHora={setHora}
-        />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Campo rotulo="Nome de quem reserva">
-            <input
-              className="campo"
-              aria-label="nome de quem reserva"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Telefone" dica="é por ele que a casa avisa">
-            <input
-              className="campo mono"
-              aria-label="telefone de quem reserva"
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Objetivo" dica="almoço, comemoração…">
-            <input
-              className="campo"
-              aria-label="objetivo da reserva"
-              value={objetivo}
-              onChange={(e) => setObjetivo(e.target.value)}
-            />
-          </Campo>
-          <Campo rotulo="Precisa de algo especial?" dica="aniversário, cadeirinha…">
-            <input
-              className="campo"
-              aria-label="observação da reserva"
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-            />
-          </Campo>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            className="btn btn-primario"
-            aria-busy={ocupado} disabled={ocupado || !hora || nome.trim().length < 2}
-            onClick={() => void marcar()}
-          >
-            {hora ? `Marcar às ${hora}` : "Escolha um horário"}
-          </button>
-          <button className="link-acao" onClick={aoFechar}>
-            cancelar
-          </button>
-          {/* ⚠️ A tela NÃO escolhe a mesa: quem aloca é o servidor, e dizer isso
-              evita a pergunta "por que não posso escolher?" na primeira semana. */}
-          <span className="text-[12.5px] text-suave">
-            A mesa é escolhida pelo sistema — a menor que serve, e só junta mesas quando
-            não houver uma inteira.
-          </span>
-        </div>
-      </div>
-    </Cartao>
-  );
-}
-
-/**
- * Passar a reserva para outro dia, outra hora ou outro tamanho de grupo.
- *
- * 🔑 **É a ligação mais comum depois de marcar** (*"dá para passar para as
- * 13h?"*). Sem isto, a recepção teria de cancelar e recriar — perdendo o
- * histórico da reserva e o lugar de quem marcou primeiro.
- *
- * ⚠️ **A reserva não disputa mesa consigo mesma**: o `ignorar` tira ela da conta
- * de quem ocupa. Sem ele, passar das 12h para as 12h30 esbarraria na própria
- * permanência e a tela diria "sem mesa" apontando para a mesa que ela ocupa.
- *
- * ⚠️ **Só o que MUDA é enviado.** Quem adia meia hora não repete data nem número
- * de pessoas, e mandar tudo faria a auditoria registrar como alteração o que
- * ficou igual.
- */
-function Remarcar({
-  reserva,
-  diaAtual,
-  aoFechar,
-  aoRemarcar,
-}: {
-  reserva: Reserva;
-  diaAtual: string;
-  aoFechar: () => void;
-  aoRemarcar: () => Promise<void>;
-}) {
-  const aviso = useAviso();
-  const [dia, setDia] = useState(diaAtual);
-  const [pessoas, setPessoas] = useState(reserva.pessoas);
-  const [hora, setHora] = useState(reserva.hora);
-  const [ocupado, setOcupado] = useState(false);
-
-  const mudou = dia !== diaAtual || pessoas !== reserva.pessoas || hora !== reserva.hora;
-
-  async function remarcar() {
-    setOcupado(true);
-    try {
-      const corpo: Record<string, unknown> = {};
-      if (dia !== diaAtual) corpo.data = dia;
-      if (hora !== reserva.hora) corpo.hora = hora;
-      if (pessoas !== reserva.pessoas) corpo.pessoas = pessoas;
-      const r = await api.put<{ message: string }>(`/reservas/${reserva.id}`, corpo);
-      aviso.sucesso(r.message);
-      await aoRemarcar();
-    } catch (e) {
-      // ⚠️ Recusado, a reserva fica como estava — e o servidor diz isso na
-      // mensagem. A tela não fecha: quem tentou ainda quer escolher outra hora.
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível remarcar");
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  return (
-    <Cartao
-      titulo={`Remarcar a reserva de ${reserva.nome}`}
-      descricao={`Hoje: ${reserva.hora}, ${reserva.pessoas} pessoa${
-        reserva.pessoas === 1 ? "" : "s"
-      }${reserva.mesas ? `, mesa ${reserva.mesas}` : ""}.`}
-    >
-      <div className="flex flex-col gap-4">
-        <Campo
-          rotulo="Dia"
-          dica="mudando o dia, ela sai desta agenda e aparece na do dia novo"
-          className="max-w-[220px]"
-        >
-          <input
-            className="campo mono"
-            type="date"
-            aria-label="novo dia da reserva"
-            value={dia}
-            onChange={(e) => {
-              setDia(e.target.value || diaAtual);
-              // ⚠️ Dia novo, horários novos: manter o horário aceso prometeria
-              // uma vaga que ninguém consultou.
-              setHora("");
-            }}
-          />
-        </Campo>
-
-        <EscolherHorario
-          dia={dia}
-          pessoas={pessoas}
-          aoMudarPessoas={(n) => {
-            setPessoas(n);
-            setHora("");
-          }}
-          hora={hora}
-          aoMudarHora={setHora}
-          ignorar={reserva.id}
-        />
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            className="btn btn-primario"
-            aria-busy={ocupado} disabled={ocupado || !hora || !mudou}
-            onClick={() => void remarcar()}
-          >
-            {!hora
-              ? "Escolha um horário"
-              : mudou
-                ? "Remarcar"
-                : "Nada mudou ainda"}
-          </button>
-          <button className="link-acao" onClick={aoFechar}>
-            cancelar
-          </button>
-          <span className="text-[12.5px] text-suave">
-            A mesa é escolhida de novo pelo sistema — o horário novo pode não caber na mesa
-            de agora.
-          </span>
-        </div>
-      </div>
-    </Cartao>
   );
 }

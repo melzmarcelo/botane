@@ -453,6 +453,32 @@ checar("com confirmacao MANUAL a reserva nasce PENDENTE",
 checar("e o site e avisado de que ela NAO esta confirmada",
        r.get("confirmada") is False, r)
 
+# 🔑 **O calendario da agenda** (pedido do dono, 24/09/2026). Aqui a loja tem
+# exatamente UMA reserva — a pendente logo acima —, entao os numeros sao exatos.
+st, cal = chamar("GET", f"/reservas/calendario?mes={DIA[:7]}", token=token)
+dia_cal = next((d for d in (cal or {}).get("dias", []) if d["data"] == DIA), {})
+checar("o calendario responde o mes inteiro, um item por dia",
+       st == 200 and len(cal.get("dias") or []) >= 28 and cal["dias"][0]["data"].endswith("-01"),
+       (st, len((cal or {}).get("dias") or [])))
+checar("e resume o dia: 1 reserva, 2 pessoas, 1 aguardando",
+       dia_cal.get("reservas") == 1 and dia_cal.get("pessoas") == 2
+       and dia_cal.get("pendentes") == 1, dia_cal)
+checar("com a casa aberta, pela semana configurada", dia_cal.get("aberta") is True, dia_cal)
+with get_cursor() as cur:
+    cur.execute("UPDATE reservas SET status = 'CANCELADA' WHERE id_unidade = %s AND data = %s",
+                (UNIDADE, DIA))
+st, cal = chamar("GET", f"/reservas/calendario?mes={DIA[:7]}", token=token)
+dia_cal = next((d for d in (cal or {}).get("dias", []) if d["data"] == DIA), {})
+# ⚠️ Cancelada nao enche o dia: o calendario conta so o que segura mesa.
+checar("cancelada sai da conta do calendario",
+       dia_cal.get("reservas") == 0 and dia_cal.get("pendentes") == 0, dia_cal)
+checar("mes invalido e recusado (422)",
+       chamar("GET", "/reservas/calendario?mes=2026-13", token=token)[0] == 422)
+st, ag = chamar("GET", f"/reservas/agenda?data={DIA}", token=token)
+checar("a agenda do dia traz a janela para a linha do tempo",
+       ag.get("abre") == "09:00" and ag.get("fecha") == "22:00" and ag.get("passo"),
+       {k: ag.get(k) for k in ("abre", "fecha", "passo")})
+
 sem_tentativas()
 limpar_quem_reservou()
 gravar_config(aceita_online=True, teto_online=4)

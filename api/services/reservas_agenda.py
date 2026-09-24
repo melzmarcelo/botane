@@ -497,6 +497,8 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
         )
     vivas = [x for x in linhas if x["status"] in VIVOS]
     janela = janela_do_dia(cur, id_unidade, dia)
+    cur.execute("SELECT passo_min FROM reserva_config WHERE id_unidade = %s", (id_unidade,))
+    cfg = cur.fetchone()
     return {
         "data": dia.isoformat(),
         "reservas": linhas,
@@ -504,6 +506,66 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
         "ativas": len(vivas),
         "aberta": janela is not None,
         "bloqueio": bloqueio_do_dia(cur, id_unidade, dia),
+        "lugares": sum(m["lugares"] for m in cadastro._mesas_vivas(cur, id_unidade)),
+        # 🔑 **A janela do dia, para a linha do tempo** (24/09/2026): a visão
+        # macro desenha a ocupação de `abre` a `fecha`, de passo em passo. Nulos
+        # quando a casa não atende no dia — aí a linha do tempo não se desenha.
+        "abre": _hm(janela["abre"]) if janela else None,
+        "fecha": _hm(janela["fecha"]) if janela else None,
+        "passo": int(cfg["passo_min"]) if cfg else 30,
+    }
+
+
+def calendario(cur, id_unidade: int, inicio: date) -> dict:
+    """O mês inteiro, um resumo por dia — a visão de calendário da agenda.
+
+    🔑 **Pedido do dono (24/09/2026):** *"na agenda de reservas, ter uma visão de
+    calendário, onde o usuário tem uma visão geral do que está reservado, e aí
+    clicar no dia."*
+    ⚠️ **Uma consulta agregada para o mês, não uma agenda por dia.** Trinta
+    chamadas a `agenda()` fariam trinta idas ao banco por abertura de tela.
+    ⚠️ **Conta só o que está VIVO** (`VIVOS`): reserva cancelada no calendário
+    faria o dia parecer cheio sem ninguém vir. Os pendentes vêm à parte, porque
+    são o que a recepção ainda precisa resolver.
+    """
+    fim = (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    cur.execute("SELECT dia_semana FROM reserva_horarios WHERE id_unidade = %s AND aberto",
+                (id_unidade,))
+    abertos = {r["dia_semana"] for r in cur.fetchall()}
+    cur.execute(
+        """SELECT de, ate, motivo FROM reserva_bloqueios
+            WHERE id_unidade = %s AND ate >= %s AND de <= %s ORDER BY de""",
+        (id_unidade, inicio, fim),
+    )
+    bloqueios = [dict(r) for r in cur.fetchall()]
+    cur.execute(
+        """SELECT data,
+                  count(*) FILTER (WHERE status = ANY(%(vivos)s)) AS reservas,
+                  coalesce(sum(pessoas) FILTER (WHERE status = ANY(%(vivos)s)), 0) AS pessoas,
+                  count(*) FILTER (WHERE status = 'PENDENTE') AS pendentes
+             FROM reservas
+            WHERE id_unidade = %(u)s AND data BETWEEN %(de)s AND %(ate)s
+            GROUP BY data""",
+        {"vivos": list(VIVOS), "u": id_unidade, "de": inicio, "ate": fim},
+    )
+    por_dia = {r["data"]: dict(r) for r in cur.fetchall()}
+    dias = []
+    d = inicio
+    while d <= fim:
+        x = por_dia.get(d, {})
+        dias.append({
+            "data": d.isoformat(),
+            # ⚠️ ISO, como `reserva_horarios.dia_semana`: 1 = segunda … 7 = domingo.
+            "aberta": d.isoweekday() in abertos,
+            "bloqueio": next((b["motivo"] for b in bloqueios if b["de"] <= d <= b["ate"]), None),
+            "reservas": int(x.get("reservas") or 0),
+            "pessoas": int(x.get("pessoas") or 0),
+            "pendentes": int(x.get("pendentes") or 0),
+        })
+        d += timedelta(days=1)
+    return {
+        "mes": inicio.strftime("%Y-%m"),
+        "dias": dias,
         "lugares": sum(m["lugares"] for m in cadastro._mesas_vivas(cur, id_unidade)),
     }
 

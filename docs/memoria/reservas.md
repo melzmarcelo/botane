@@ -840,3 +840,25 @@ Reservas, e dentro Agenda e Salão; no mesmo nível de Reservas, Catálogos."*
   subgrupo — cada item continua solto para eles. O contador do grupo conta LINHAS visíveis
   (o subgrupo é uma).
 - A barra de baixo do celular continua dizendo "Reservas": ela leva à Agenda, que é reserva.
+
+## A agenda em calendário (24/09/2026)
+
+🔑 **Pedido do dono:** *"na agenda de reservas, ter uma visão de calendário, onde o usuário
+pode ter uma visão geral do que está reservado, e aí clicar no dia, dá uma visão mais macro
+daquele dia, e aí pode visualizar a reserva."* Três níveis na mesma tela
+(`reservas/agenda/`), todos no endereço (`visao=mes|dia`, `mes`, `dia`, `modo=tempo|lista`):
+1. **Mês** — `calendario.tsx`, de `GET /reservas/calendario?mes=AAAA-MM`
+   (`agenda.calendario`): por dia, reservas e pessoas VIVAS, pendentes, dia da semana
+   aberto e bloqueio. ⚠️ Uma consulta agregada para o mês — trinta `agenda()` seriam trinta
+   idas ao banco. Cancelada não conta (não enche o dia). Semana começa na segunda (ISO).
+2. **Dia** — `linha-do-tempo.tsx` (padrão) ou a Lista (a tela de antes, intacta). 🔑 A barra é
+   quem está SENTADO em cada horário, contando a permanência (`sai_por_volta`) — somar só as
+   chegadas mostraria o salão vazio às 12:30 com ele cheio. A agenda do dia passou a devolver
+   `abre`, `fecha` e `passo`. Hora de reserva fora da janela também vira linha.
+3. **Reserva** — `detalhe.tsx`, com as MESMAS ações da lista, pelas mesmas funções da página.
+- `status.ts` guarda `ADIANTE`/`ROTULO`/`COR` (usados pelos três); os formulários de marcar e
+  remarcar foram para `formularios.tsx` (a página passava de 600 linhas). Chamadas novas pela
+  camada de service `web/lib/reservas.ts`.
+- ⚠️ O "hoje" da página era `toISOString()` (UTC): das 21h à meia-noite a agenda abria no dia
+  seguinte. Agora é a data local.
+- Cobertura: bloco 10 do `smoke_reserva_site.py` (números exatos, cancelada fora, 422, janela).

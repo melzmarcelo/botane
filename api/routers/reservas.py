@@ -252,6 +252,15 @@ def ver_agenda(data: date,
         return agenda.agenda(cur, _unidade(cur, ctx), data)
 
 
+@router.get("/calendario")
+def ver_calendario(mes: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+                                    description="AAAA-MM"),
+                   ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
+    """O mês da agenda, um resumo por dia: reservas, pessoas, pendentes e fechamentos."""
+    with get_cursor() as cur:
+        return agenda.calendario(cur, _unidade(cur, ctx), date.fromisoformat(mes + "-01"))
+
+
 @router.post("", status_code=201)
 def criar_reserva(body: ReservaCreate,
                   ctx: Contexto = Depends(requer_permissao("reservas.editar"))) -> dict:
