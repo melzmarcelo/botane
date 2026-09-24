@@ -521,6 +521,106 @@ checar("chave só de leitura não funde nada",
 pedir("DELETE", f"/produtos/{fica}", token=admin)
 
 
+print("\n7g. fichas técnicas pelo conector")
+# 🔑 Pedido do dono (24/09/2026): "disponibilizar a criação de Fichas Técnicas
+# pelo Claude — ela tem muitas fichas em outros arquivos." O Claude lê o arquivo;
+# aqui chega a receita já em ids, pela MESMA rota da tela.
+
+
+def ferramenta(nome, args, token=None):
+    _st, _, r = rpc(token or escrita, "tools/call", {"name": nome, "arguments": args})
+    texto = r["result"]["content"][0]["text"]
+    try:
+        return r["result"]["isError"], json.loads(texto)
+    except json.JSONDecodeError:
+        return r["result"]["isError"], texto
+
+
+ids_insumos = []
+for nome, um in ((f"FARINHA DO CLAUDE {marca_p}", "KG"), (f"OVO DO CLAUDE {marca_p}", "UN")):
+    st, _, p = pedir("POST", "/produtos", {"nome": nome, "tipo": "INSUMO", "um_estoque": um},
+                     token=admin)
+    ids_insumos.append(p["id"])
+farinha, ovo = ids_insumos
+erro, prato = ferramenta("criar_produto", {"nome": f"Bolo do Claude {marca_p}",
+                                           "tipo": "PRODUZIDO", "um_estoque": "UN"})
+checar("preparo: o prato nasce pelo conector, tipo PRODUZIDO", not erro and prato.get("id"),
+       prato)
+id_prato = prato["id"]
+
+nomes_leitura_7g = {t["name"] for t in rpc(chave, "tools/list")[2]["result"]["tools"]}
+checar("chave só de leitura não enxerga as ferramentas de ficha",
+       not {"criar_ficha_tecnica", "atualizar_ficha_tecnica",
+            "nova_versao_da_ficha"} & nomes_leitura_7g)
+
+receita = {"id_produto": id_prato, "rendimento_qtd": 1, "rendimento_um": "KG",
+           "porcoes": 10, "tempo_preparo_min": 50,
+           "modo_preparo": "Misture tudo e asse por 40 minutos.",
+           "itens": [{"id_insumo": farinha, "qtd_bruta": 500, "um": "G"},
+                     {"id_insumo": ovo, "qtd_bruta": 3, "um": "UN"}]}
+erro, criada = ferramenta("criar_ficha_tecnica", receita)
+checar("criar_ficha_tecnica cria a ficha", not erro and criada.get("id"), criada)
+id_ficha = criada.get("id")
+erro, lida = ferramenta("ficha_tecnica", {"id_ficha": id_ficha})
+checar("ela nasce RASCUNHO, com os dois itens e o modo de preparo",
+       lida.get("status") == "RASCUNHO" and len(lida.get("itens") or []) == 2
+       and lida.get("modo_preparo") == receita["modo_preparo"],
+       {k: lida.get(k) for k in ("status", "modo_preparo")})
+checar("e com os ingredientes na ORDEM do arquivo",
+       [i.get("id_insumo") for i in lida.get("itens") or []] == [farinha, ovo],
+       [i.get("id_insumo") for i in lida.get("itens") or []])
+with get_cursor() as cur:
+    cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'ficha'
+                    AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_ficha),))
+    linha = cur.fetchone()
+checar("a auditoria marca que a ficha veio do Claude",
+       (linha or {}).get("origem") == "claude", linha)
+
+# ⚠️ As recusas são as da tela, e chegam ao Claude como erro com a frase.
+erro, r = ferramenta("criar_ficha_tecnica", {**receita, "id_produto": farinha})
+checar("ficha em INSUMO é recusada, dizendo para ajustar o tipo",
+       erro and "produzido" in str(r).lower(), r)
+erro, r = ferramenta("criar_ficha_tecnica", {**receita, "itens": [
+    {"id_insumo": farinha, "id_subficha": id_ficha, "qtd_bruta": 1}]})
+checar("linha com insumo E sub-ficha é recusada", erro and "OU" in str(r), r)
+erro, r = ferramenta("criar_ficha_tecnica", {**receita, "itens": [
+    {"id_insumo": farinha, "qtd_bruta": 0}]})
+checar("quantidade zero é recusada dizendo QUAL campo", erro and "qtd_bruta" in str(r), r)
+
+erro, r = ferramenta("atualizar_ficha_tecnica", {"id_ficha": id_ficha, "porcoes": 12,
+    "itens": [{"id_insumo": farinha, "qtd_bruta": 600, "um": "G"},
+              {"id_insumo": ovo, "qtd_bruta": 4, "um": "UN"}]})
+checar("atualizar_ficha_tecnica corrige o rascunho", not erro, r)
+erro, lida = ferramenta("ficha_tecnica", {"id_ficha": id_ficha})
+checar("e grava as quantidades novas e as porções",
+       float(lida.get("porcoes") or 0) == 12
+       and sorted(float(i["qtd_bruta"]) for i in lida.get("itens") or []) == [4.0, 600.0],
+       lida.get("itens"))
+
+# 🔑 A homologação fica na TELA — o conector nem oferece.
+checar("não existe ferramenta de homologar", "homologar_ficha" not in nomes_gravam)
+st, _, _r = pedir("POST", f"/fichas/{id_ficha}/homologar", token=admin)
+checar("preparo: a casa homologa pela tela", st == 200, (st, _r))
+erro, r = ferramenta("atualizar_ficha_tecnica", {"id_ficha": id_ficha, "porcoes": 8})
+checar("ficha homologada não se edita pelo conector",
+       erro and "nova versão" in str(r), r)
+erro, nova = ferramenta("nova_versao_da_ficha", {"id_ficha": id_ficha})
+checar("nova_versao_da_ficha abre a versão 2 em rascunho",
+       not erro and nova.get("versao") == 2, nova)
+erro, lida = ferramenta("ficha_tecnica", {"id_ficha": nova.get("id")})
+checar("com os itens copiados da homologada",
+       lida.get("status") == "RASCUNHO" and len(lida.get("itens") or []) == 2, lida)
+
+with get_cursor() as cur:
+    cur.execute("SELECT id FROM fichas_tecnicas WHERE id_produto = %s", (id_prato,))
+    fichas_do_prato = [x["id"] for x in cur.fetchall()]
+    cur.execute("DELETE FROM ficha_itens WHERE id_ficha = ANY(%s)", (fichas_do_prato,))
+    cur.execute("DELETE FROM ficha_modos WHERE id_ficha = ANY(%s)", (fichas_do_prato,))
+    cur.execute("DELETE FROM fichas_tecnicas WHERE id = ANY(%s)", (fichas_do_prato,))
+for i in (id_prato, farinha, ovo):
+    pedir("DELETE", f"/produtos/{i}", token=admin)
+
+
 print("\n7f. conectar pelo claude.ai autorizando a ALTERAR")
 # 🔑 Pedido do dono (21/09/2026), depois de topar na prática: as ferramentas de
 # gravação não apareciam para a conexão do claude.ai, que nascia só de leitura.

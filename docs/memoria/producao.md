@@ -640,3 +640,24 @@
   a venda produz e baixa no mesmo lançamento, e o saldo volta a zero). ⚠️ Sem o `NA_HORA` a
   casa venderia mil cafés e o pó continuaria inteiro no razão — ninguém registra produção de
   café a café. O par entrada/saída fica visível no razão de propósito.
+
+## Fichas criadas pelo Claude (24/09/2026)
+
+🔑 **Pedido do dono:** *"disponibilizar a criação de Fichas Técnicas pelo Claude, pois
+ela tem muitas fichas em outros arquivos, e isto facilitaria muito a importação."*
+Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecnica`
+(`POST /fichas`), `atualizar_ficha_tecnica` (`PUT /fichas/{id}`, só rascunho) e
+`nova_versao_da_ficha`. Todas pela MESMA rota da tela, com as mesmas recusas.
+- ⚠️ **Nasce RASCUNHO e a homologação NÃO está no conector**, de propósito. Rascunho já
+  custeia o prato no CMV (degrau reserva da cascata), então a importação serve na hora;
+  homologar é o que libera PRODUZIR e congela a receita, e numa leva de dezenas de
+  fichas lidas de arquivo um "10" que era "100" só aparece quando alguém olha — na tela,
+  com o custo do lado. Se o dono pedir, é uma ferramenta a mais, sobre
+  `POST /fichas/{id}/homologar` (permissão `fichas.homologar`).
+- 🔑 **O roteiro mora na DESCRIÇÃO da ferramenta**: prato tem de ser PRODUZIDO/KIT;
+  conferir `fichas_tecnicas` antes (criar de novo abre versão 2, não corrige); ingrediente
+  vira `id_insumo` por `buscar_produtos`, perguntando antes de criar insumo; ler
+  `ficha_tecnica` depois e avisar `itens_sem_custo`.
+- ⚠️ `itens` SUBSTITUI a lista no `atualizar` (é o `_gravar_itens` da rota). A ordem do
+  array vira a `ordem` — o campo não é exposto.
+- Cobertura: bloco `7g` do `smoke_conector_claude.py`.

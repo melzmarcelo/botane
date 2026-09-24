@@ -94,6 +94,28 @@ class Ferramenta:
                 "annotations": {"title": self.titulo, **anotacoes}}
 
 
+# 🔑 **Uma linha da receita**, com o mesmo contrato de `models.fichas.ItemFicha`.
+# ⚠️ `id_insumo` OU `id_subficha`, nunca os dois — a rota recusa com 400.
+_ITEM_DA_FICHA = {
+    "type": "object",
+    "properties": {
+        "id_insumo": {"type": "integer",
+                      "description": "O ingrediente (de `buscar_produtos`)."},
+        "id_subficha": {"type": "integer",
+                        "description": "Ou uma preparação com ficha própria "
+                                       "(de `fichas_tecnicas`)."},
+        "qtd_bruta": {"type": "number", "description": "Quantidade usada, maior que zero."},
+        "qtd_liquida": {"type": "number",
+                        "description": "Depois de limpar/descascar, se o arquivo disser. "
+                                       "Com as duas, o fator de correção é calculado."},
+        "um": {"type": "string", "description": "Unidade da quantidade (G, KG, ML, UN…)."},
+        "fator_correcao": {"type": "number", "description": "Bruta ÷ líquida. Padrão 1."},
+        "fator_coccao": {"type": "number", "description": "Perda no cozimento. Padrão 1."},
+        "observacao": {"type": "string"}},
+    "required": ["qtd_bruta"],
+}
+
+
 _ID_LOJA = Param("integer", "Loja a consultar (id, de `quem_sou`). Sem ele, a loja "
                             "padrão do usuário.")
 _DATA = "Data AAAA-MM-DD."
@@ -662,6 +684,80 @@ FERRAMENTAS: list[Ferramenta] = [
                         "preferencial": {"type": "boolean"}},
                     "required": ["id_fornecedor"]})},
         metodo="PUT"),
+    # -----------------------------------------------------------------------
+    # Fichas técnicas pelo Claude
+    # -----------------------------------------------------------------------
+    # 🔑 **Pedido do dono (24/09/2026):** *"disponibilizar a criação de Fichas
+    # Técnicas pelo Claude, pois ela tem muitas fichas em outros arquivos, e isto
+    # facilitaria muito a importação/criação destas fichas."* O arquivo (planilha,
+    # PDF, foto do caderno) é lido pelo Claude; aqui chega só a receita já
+    # traduzida para os ids da casa, pela MESMA rota da tela.
+    # ⚠️ **Nasce RASCUNHO, e a homologação fica na TELA.** Rascunho já custeia o
+    # prato no CMV (é o degrau reserva da cascata), então a importação serve na
+    # hora; mas é a homologação que libera PRODUZIR e congela a receita. Numa
+    # leva de dezenas de fichas lidas de arquivo, um "10" que era "100" só
+    # aparece quando alguém olha — e é na tela, com o custo do lado, que se olha.
+    Ferramenta(
+        "criar_ficha_tecnica", "Criar ficha técnica",
+        "Cria a ficha técnica (receita) de um produto, como RASCUNHO. Roteiro: "
+        "(1) `buscar_produtos` pelo prato — ele tem de ser tipo PRODUZIDO ou KIT; se não "
+        "existir, `criar_produto` com tipo PRODUZIDO; (2) `fichas_tecnicas` com o "
+        "`id_produto` — se já houver ficha, NÃO crie outra: corrija o rascunho "
+        "(`atualizar_ficha_tecnica`) ou abra `nova_versao_da_ficha`; (3) cada ingrediente "
+        "vira `id_insumo` via `buscar_produtos` (procure por partes do nome: o cadastro "
+        "costuma estar em CAIXA ALTA e abreviado); o que não existir, `criar_produto` — "
+        "pergunte à pessoa antes de criar insumo; uma preparação que já tem ficha entra "
+        "como `id_subficha`; (4) `um` do item na unidade da receita (`unidades_medida`); "
+        "(5) depois de criar, leia `ficha_tecnica` e avise os `itens_sem_custo`. "
+        "⚠️ Homologar é na tela do sistema.",
+        "/fichas",
+        {"id_produto": Param("integer", "O prato (produto PRODUZIDO ou KIT).",
+                             obrigatorio=True, no_corpo=True),
+         "rendimento_qtd": Param("number", "Quanto a receita rende.", padrao=1,
+                                 no_corpo=True),
+         "rendimento_um": Param("string", "Unidade do rendimento (KG, L, UN…).",
+                                no_corpo=True),
+         "porcoes": Param("number", "Em quantas porções o rendimento se divide.",
+                          padrao=1, no_corpo=True),
+         "porcao_qtd": Param("number", "Tamanho de UMA porção, na unidade do rendimento.",
+                             no_corpo=True),
+         "tempo_preparo_min": Param("integer", "Tempo de preparo, em minutos.",
+                                    no_corpo=True, minimo=0, maximo=6000),
+         "modo_preparo": Param("string", "Modo de preparo, como veio do arquivo.",
+                               no_corpo=True),
+         "alergenos": Param("string", "Alergênicos.", no_corpo=True),
+         "observacao": Param("string", "Observação interna.", no_corpo=True),
+         "itens": Param("array", "Os ingredientes, na ordem da receita.", no_corpo=True,
+                        itens=_ITEM_DA_FICHA)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_ficha_tecnica", "Corrigir uma ficha técnica em rascunho",
+        "Altera só os campos informados de uma ficha em RASCUNHO. ⚠️ `itens` SUBSTITUI a "
+        "lista inteira: leia `ficha_tecnica` e mande todos os que ficam. Ficha "
+        "homologada não se edita — use `nova_versao_da_ficha`.",
+        "/fichas/{id_ficha}",
+        {"id_ficha": Param("integer", "Id da ficha.", obrigatorio=True),
+         "rendimento_qtd": Param("number", "Quanto a receita rende.", no_corpo=True),
+         "rendimento_um": Param("string", "Unidade do rendimento.", no_corpo=True),
+         "porcoes": Param("number", "Número de porções.", no_corpo=True),
+         "porcao_qtd": Param("number", "Tamanho de UMA porção.", no_corpo=True),
+         "tempo_preparo_min": Param("integer", "Tempo de preparo, em minutos.",
+                                    no_corpo=True, minimo=0, maximo=6000),
+         "modo_preparo": Param("string", "Modo de preparo.", no_corpo=True),
+         "alergenos": Param("string", "Alergênicos.", no_corpo=True),
+         "observacao": Param("string", "Observação interna.", no_corpo=True),
+         "itens": Param("array", "TODOS os ingredientes (substitui a lista).",
+                        no_corpo=True, itens=_ITEM_DA_FICHA)},
+        metodo="PUT"),
+    Ferramenta(
+        "nova_versao_da_ficha", "Abrir nova versão de uma ficha",
+        "Copia uma ficha (itens, modos e foto) para uma versão NOVA em rascunho, para "
+        "mudar a receita de um prato que já tem ficha homologada. A vigente continua "
+        "valendo até alguém homologar a nova, na tela. Depois, corrija a nova com "
+        "`atualizar_ficha_tecnica`.",
+        "/fichas/{id_ficha}/nova-versao",
+        {"id_ficha": Param("integer", "A ficha de origem.", obrigatorio=True)},
+        metodo="POST"),
     Ferramenta(
         "fundir_produtos", "Juntar dois cadastros do mesmo produto",
         "Funde dois cadastros: o que SAI é absorvido pelo que FICA, e o histórico, os "

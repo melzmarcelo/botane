@@ -338,6 +338,9 @@
     ⚠️ **Só o que o modelo mandou vai no corpo** — o `PUT` de produto grava com
     `exclude_unset`, e mandar os não informados como nulo apagaria campo que ninguém pediu
     para apagar.
+    🔑 **Fichas técnicas pelo Claude** (24/09/2026): criar, corrigir rascunho e abrir nova
+    versão — homologar NÃO. A regra e o porquê moram em `producao.md` ("Fichas criadas pelo
+    Claude"). O `Param` descreve arrays com `itens` (ingredientes, fornecedores).
     ⚠️ **`lancar_nota` entrou, `estornar` NÃO.** Lançar escreve no razão, que é append-only:
     desfazer é estornar, e o estorno fica na tela, com gente olhando. Dito ao dono; ele
     escolheu assim mesmo.
