@@ -32,7 +32,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from database import get_cursor
 from relogio import agora_da_casa
 from models.catalogos import ORIGEM_PRODUTOS
-from models.reservas import CancelamentoDoSite, ClienteDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
+from models.reservas import CancelamentoDoSite, ClienteDoSite, IdentificacaoDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
@@ -218,7 +218,7 @@ def catalogos(id_unidade: int) -> list[dict]:
         _casa_aberta(cur, id_unidade)
         cur.execute(
             """SELECT c.id, c.nome, c.origem, c.arquivo_url, c.arquivo_bytes,
-                      c.publica_ate,
+                      c.publica_ate, c.exige_cadastro,
                       -- 🔑 **Quantos produtos VIVOS o cardápio tem.** É o que
                       -- diz se um catálogo de PRODUTOS tem o que mostrar — o
                       -- equivalente do `arquivo_url IS NOT NULL` do PDF.
@@ -246,6 +246,7 @@ def catalogos(id_unidade: int) -> list[dict]:
                     continue
                 saida.append({
                     "nome": r["nome"], "origem": ORIGEM_PRODUTOS,
+                    "exige_cadastro": r["exige_cadastro"],
                     # ⚠️ **O id entra aqui, e é a exceção da regra "nada de id
                     # interno".** Sem ele o site não tem como pedir o cardápio
                     # de volta. Não é segredo: é a chave de algo que a casa
@@ -257,9 +258,17 @@ def catalogos(id_unidade: int) -> list[dict]:
                 continue
             if not r["arquivo_url"]:
                 continue
+            # 🔑 **Catálogo que exige cadastro NÃO entrega o endereço do PDF aqui**
+            # (pedido do dono, 24/09/2026). O site recebe o id e pede o arquivo
+            # por `/catalogos/{id}/abrir`, com telefone e nome. Esconder o botão
+            # só na tela seria validação de enfeite: o link estaria na resposta.
+            fechado = r["exige_cadastro"]
             saida.append({
-                "nome": r["nome"], "origem": r["origem"], "id": None,
-                "arquivo_url": r["arquivo_url"], "bytes": r["arquivo_bytes"],
+                "nome": r["nome"], "origem": r["origem"],
+                "exige_cadastro": fechado,
+                "id": r["id"] if fechado else None,
+                "arquivo_url": None if fechado else r["arquivo_url"],
+                "bytes": r["arquivo_bytes"],
                 # ⚠️ Quando termina, para o site poder dizer "até domingo". Só
                 # isso — a data de início não interessa a quem já está vendo.
                 "ate": r["publica_ate"],
@@ -289,90 +298,107 @@ def cardapio(id_unidade: int, id_catalogo: int) -> dict:
     """
     with get_cursor() as cur:
         _casa_aberta(cur, id_unidade)
-        cur.execute(
-            """SELECT nome FROM catalogos
-                WHERE id = %s AND id_unidade = %s AND situacao = 'ATIVO'
-                  AND origem = %s
-                  AND (publica_de IS NULL OR publica_de <= current_date)
-                  AND (publica_ate IS NULL OR publica_ate >= current_date)""",
-            (id_catalogo, id_unidade, ORIGEM_PRODUTOS),
-        )
-        capa = cur.fetchone()
-        # ⚠️ **404, como o resto daqui**: catálogo em rascunho, fora do período
-        # ou de outra casa simplesmente não existe para o público.
-        if not capa:
+        capa = _no_ar(cur, id_unidade, id_catalogo)
+        if not capa or capa["origem"] != ORIGEM_PRODUTOS:
             raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+        # ⚠️ **403 com a frase, não o cardápio.** Sem isto, a exigência de
+        # cadastro seria só do botão: quem chamasse a rota direto leria tudo.
+        if capa["exige_cadastro"]:
+            raise HTTPException(status_code=403,
+                                detail="Identifique-se para ver este cardápio.")
+        return _montar_cardapio(cur, id_unidade, id_catalogo, capa["nome"])
 
-        cur.execute(
-            """SELECT g.id AS id_categoria, g.nome AS categoria,
-                      g.descricao AS categoria_descricao, g.foto_url AS categoria_foto,
-                      g.ordem AS categoria_ordem,
-                      s.id AS id_subcategoria, s.nome AS subcategoria,
-                      s.descricao AS subcategoria_descricao,
-                      s.foto_url AS subcategoria_foto, s.ordem AS subcategoria_ordem,
-                      i.id AS id_item, i.ordem AS item_ordem,
-                      -- 🔑 **O nome de vitrine ganha do nome do cadastro**
-                      -- (migração 085): o cadastro normaliza em CAIXA ALTA, e o
-                      -- cardápio do cliente não é lugar de gritar. Nulo cai no
-                      -- nome de sempre — a casa só escreve o segundo quando o
-                      -- primeiro não serve.
-                      coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
-                      p.foto_url AS produto_foto,
-                      p.informacao_adicional,
-                      -- 🔑 O preço da LOJA primeiro, o da casa depois: é a
-                      -- cascata de `services/precos.py`, e uma segunda regra
-                      -- aqui faria o site cobrar diferente do balcão.
-                      (SELECT pr.preco_venda FROM produto_precos pr
-                        WHERE pr.id_produto = p.id AND pr.vigente_ate IS NULL
-                          AND (pr.id_unidade = %(u)s OR pr.id_unidade IS NULL)
-                        ORDER BY pr.id_unidade NULLS LAST LIMIT 1) AS preco
-                 FROM catalogo_itens i
-                 JOIN catalogo_categorias g ON g.id = i.id_categoria
-                 LEFT JOIN catalogo_subcategorias s ON s.id = i.id_subcategoria
-                 JOIN produtos p ON p.id = i.id_produto
-                WHERE g.id_catalogo = %(c)s AND p.ativo
-                ORDER BY g.ordem, lower(g.nome),
-                         s.ordem NULLS FIRST, lower(s.nome),
-                         i.ordem, lower(p.nome)""",
-            {"c": id_catalogo, "u": id_unidade},
-        )
-        linhas = [dict(r) for r in cur.fetchall()]
 
-        # 🔑 **A árvore é montada aqui, em memória, a partir de UMA consulta.**
-        # Uma consulta por categoria transformaria um cardápio de dez seções em
-        # dezenas de idas ao banco — e este é o caminho que o público percorre.
-        categorias: list[dict] = []
-        por_categoria: dict[int, dict] = {}
-        por_subcategoria: dict[int, dict] = {}
-        for l in linhas:
-            cat = por_categoria.get(l["id_categoria"])
-            if cat is None:
-                cat = {"nome": l["categoria"], "descricao": l["categoria_descricao"],
-                       "foto": l["categoria_foto"], "subcategorias": [], "itens": []}
-                por_categoria[l["id_categoria"]] = cat
-                categorias.append(cat)
+def _no_ar(cur, id_unidade: int, id_catalogo: int) -> dict | None:
+    """O catálogo, se ele está publicado HOJE nesta casa. Senão, None.
 
-            item = {
-                "nome": l["produto"],
-                "descricao": l["informacao_adicional"],
-                "foto": l["produto_foto"],
-                # ⚠️ `float` e não `Decimal`: o JSON não fala decimal, e deixar o
-                # FastAPI resolver mandaria string para a tela.
-                "preco": float(l["preco"]) if l["preco"] is not None else None,
-            }
-            if l["id_subcategoria"] is None:
-                cat["itens"].append(item)
-                continue
-            sub = por_subcategoria.get(l["id_subcategoria"])
-            if sub is None:
-                sub = {"nome": l["subcategoria"],
-                       "descricao": l["subcategoria_descricao"],
-                       "foto": l["subcategoria_foto"], "itens": []}
-                por_subcategoria[l["id_subcategoria"]] = sub
-                cat["subcategorias"].append(sub)
-            sub["itens"].append(item)
+    ⚠️ **A regra do "no ar" é a mesma da lista** (ativo e dentro do período).
+    Rascunho, fora do período ou de outra casa simplesmente não existe para o
+    público — por isso quem chama responde 404.
+    """
+    cur.execute(
+        """SELECT nome, origem, arquivo_url, exige_cadastro FROM catalogos
+            WHERE id = %s AND id_unidade = %s AND situacao = 'ATIVO'
+              AND (publica_de IS NULL OR publica_de <= current_date)
+              AND (publica_ate IS NULL OR publica_ate >= current_date)""",
+        (id_catalogo, id_unidade),
+    )
+    linha = cur.fetchone()
+    return dict(linha) if linha else None
 
-        return {"nome": capa["nome"], "categorias": categorias}
+
+def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str) -> dict:
+    """A árvore do cardápio montado por produtos: categorias, subcategorias, itens."""
+    cur.execute(
+        """SELECT g.id AS id_categoria, g.nome AS categoria,
+                  g.descricao AS categoria_descricao, g.foto_url AS categoria_foto,
+                  g.ordem AS categoria_ordem,
+                  s.id AS id_subcategoria, s.nome AS subcategoria,
+                  s.descricao AS subcategoria_descricao,
+                  s.foto_url AS subcategoria_foto, s.ordem AS subcategoria_ordem,
+                  i.id AS id_item, i.ordem AS item_ordem,
+                  -- 🔑 **O nome de vitrine ganha do nome do cadastro**
+                  -- (migração 085): o cadastro normaliza em CAIXA ALTA, e o
+                  -- cardápio do cliente não é lugar de gritar. Nulo cai no
+                  -- nome de sempre — a casa só escreve o segundo quando o
+                  -- primeiro não serve.
+                  coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
+                  p.foto_url AS produto_foto,
+                  p.informacao_adicional,
+                  -- 🔑 O preço da LOJA primeiro, o da casa depois: é a
+                  -- cascata de `services/precos.py`, e uma segunda regra
+                  -- aqui faria o site cobrar diferente do balcão.
+                  (SELECT pr.preco_venda FROM produto_precos pr
+                    WHERE pr.id_produto = p.id AND pr.vigente_ate IS NULL
+                      AND (pr.id_unidade = %(u)s OR pr.id_unidade IS NULL)
+                    ORDER BY pr.id_unidade NULLS LAST LIMIT 1) AS preco
+             FROM catalogo_itens i
+             JOIN catalogo_categorias g ON g.id = i.id_categoria
+             LEFT JOIN catalogo_subcategorias s ON s.id = i.id_subcategoria
+             JOIN produtos p ON p.id = i.id_produto
+            WHERE g.id_catalogo = %(c)s AND p.ativo
+            ORDER BY g.ordem, lower(g.nome),
+                     s.ordem NULLS FIRST, lower(s.nome),
+                     i.ordem, lower(p.nome)""",
+        {"c": id_catalogo, "u": id_unidade},
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+
+    # 🔑 **A árvore é montada aqui, em memória, a partir de UMA consulta.**
+    # Uma consulta por categoria transformaria um cardápio de dez seções em
+    # dezenas de idas ao banco — e este é o caminho que o público percorre.
+    categorias: list[dict] = []
+    por_categoria: dict[int, dict] = {}
+    por_subcategoria: dict[int, dict] = {}
+    for l in linhas:
+        cat = por_categoria.get(l["id_categoria"])
+        if cat is None:
+            cat = {"nome": l["categoria"], "descricao": l["categoria_descricao"],
+                   "foto": l["categoria_foto"], "subcategorias": [], "itens": []}
+            por_categoria[l["id_categoria"]] = cat
+            categorias.append(cat)
+
+        item = {
+            "nome": l["produto"],
+            "descricao": l["informacao_adicional"],
+            "foto": l["produto_foto"],
+            # ⚠️ `float` e não `Decimal`: o JSON não fala decimal, e deixar o
+            # FastAPI resolver mandaria string para a tela.
+            "preco": float(l["preco"]) if l["preco"] is not None else None,
+        }
+        if l["id_subcategoria"] is None:
+            cat["itens"].append(item)
+            continue
+        sub = por_subcategoria.get(l["id_subcategoria"])
+        if sub is None:
+            sub = {"nome": l["subcategoria"],
+                   "descricao": l["subcategoria_descricao"],
+                   "foto": l["subcategoria_foto"], "itens": []}
+            por_subcategoria[l["id_subcategoria"]] = sub
+            cat["subcategorias"].append(sub)
+        sub["itens"].append(item)
+
+    return {"nome": nome, "categorias": categorias}
 
 
 @router.get("/{id_unidade}/horarios")
@@ -702,3 +728,81 @@ def cancelar_reserva(id_unidade: int, corpo: CancelamentoDoSite, pedido: Request
             (achada["id"],),
         )
         return {"cancelada": True}
+
+
+# ---------------------------------------------------------------------------
+# Quem é a pessoa, sem reserva junto — a porta do catálogo que exige cadastro
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (24/09/2026):** *"adicionar a validação do cliente ao
+# acessar o catálogo, colocar no cadastro do catálogo se exige cadastro."*
+# ⚠️ **Não passam por `_reserva_online`**: a casa pode publicar cardápio que exige
+# cadastro sem marcar mesa pelo site. As batidas contam no mesmo limite por
+# origem das rotas de reserva — é a mesma porta de consulta de telefone.
+
+
+def _cadastro_completo(cur, id_unidade: int) -> bool:
+    cur.execute("SELECT cadastro_completo FROM reserva_config WHERE id_unidade = %s",
+                (id_unidade,))
+    cfg = cur.fetchone()
+    return bool(cfg and cfg["cadastro_completo"])
+
+
+@router.post("/{id_unidade}/cliente/telefone")
+def cliente_por_telefone(id_unidade: int, corpo: TelefoneDoSite, pedido: Request) -> dict:
+    """Já existe cadastro neste telefone? Confirma, não revela — como na reserva.
+
+    Devolve também se a casa pede cadastro completo, para o site saber o que
+    perguntar a quem é novo sem depender da configuração de reserva online.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        telefone = clientes.telefone_valido(corpo.telefone)
+        return {**clientes.procurar(cur, id_unidade, telefone),
+                "cadastro_completo": _cadastro_completo(cur, id_unidade)}
+
+
+@router.post("/{id_unidade}/cliente")
+def identificar_cliente(id_unidade: int, corpo: IdentificacaoDoSite,
+                        pedido: Request) -> dict:
+    """Confere quem já tem cadastro, ou cadastra quem é novo.
+
+    ⚠️ **A mesma regra da reserva** (`clientes.identificar`): primeiro nome que
+    não confere é 409, e o que o cadastro novo exige sai da configuração da loja.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        cliente = clientes.identificar(cur, id_unidade, corpo,
+                                       _cadastro_completo(cur, id_unidade))
+        return {"nome": cliente["nome"], "cadastro_novo": cliente["novo"]}
+
+
+@router.post("/{id_unidade}/catalogos/{id_catalogo}/abrir")
+def abrir_catalogo(id_unidade: int, id_catalogo: int, corpo: ClienteDoSite,
+                   pedido: Request) -> dict:
+    """O conteúdo de um catálogo, para quem se identificou.
+
+    🔑 **É por aqui que o catálogo que exige cadastro se abre**: o PDF devolve o
+    endereço do arquivo; o montado por produtos, o cardápio inteiro.
+    ⚠️ **Telefone sem cadastro é 403 dizendo o que fazer**, não 404: o catálogo
+    existe e está no ar — o que falta é a pessoa se cadastrar.
+    """
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        telefone = clientes.telefone_valido(corpo.telefone)
+        capa = _no_ar(cur, id_unidade, id_catalogo)
+        if not capa:
+            raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+        if not clientes.conferir(cur, id_unidade, telefone, corpo.nome):
+            raise HTTPException(status_code=403,
+                                detail="Faça seu cadastro para abrir este cardápio.")
+        if capa["origem"] == ORIGEM_PRODUTOS:
+            return {"origem": ORIGEM_PRODUTOS,
+                    "cardapio": _montar_cardapio(cur, id_unidade, id_catalogo,
+                                                 capa["nome"])}
+        if not capa["arquivo_url"]:
+            raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+        return {"origem": capa["origem"], "arquivo_url": capa["arquivo_url"]}

@@ -45,6 +45,10 @@ class CatalogoBase(BaseModel):
     publica_ate: date | None = None
     situacao: str = "RASCUNHO"
     observacao: str | None = None
+    # 🔑 **O cliente se identifica antes de abrir** (migração 086, pedido do dono
+    # 24/09/2026). Quem garante é o servidor: a lista pública não entrega o
+    # conteúdo deste catálogo, e sim um pedido de identificação.
+    exige_cadastro: bool = False
 
     @model_validator(mode="after")
     def _coerente(self):
@@ -85,6 +89,7 @@ class CatalogoUpdate(BaseModel):
     publica_ate: date | None = None
     situacao: str | None = None
     observacao: str | None = None
+    exige_cadastro: bool | None = None
 
 
 class CatalogoResponse(BaseModel):
@@ -95,6 +100,7 @@ class CatalogoResponse(BaseModel):
     publica_ate: date | None = None
     situacao: str
     observacao: str | None = None
+    exige_cadastro: bool = False
     # 🔑 **Se ele está no ar HOJE**, que é a pergunta que a lista responde de
     # relance. Não é `situacao == 'ATIVO'`: um catálogo ativo cujo período já
     # passou não está publicado, e mostrar os dois como iguais faria a casa

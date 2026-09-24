@@ -167,7 +167,8 @@ FONE = "47999100001"
 
 def reservar(**campos):
     corpo = {"telefone": FONE, "nome": "Marina Duarte", "genero": "FEMININO",
-             "cidade": "Blumenau", "data": DIA, "hora": "19:00", "pessoas": 2}
+             "cidade": "Blumenau", "nascimento": "1988-03-09",
+             "data": DIA, "hora": "19:00", "pessoas": 2}
     corpo.update(campos)
     return chamar("POST", f"/publico/{UNIDADE}/reserva", corpo, origem="203.0.113.7")
 
@@ -211,6 +212,10 @@ checar("sem genero e sem cidade e recusado", st == 422, (st, r))
 checar("e a mensagem diz os DOIS que faltam",
        "gênero" in (r.get("detail") or "") and "cidade" in (r.get("detail") or ""),
        r.get("detail"))
+st, r = reservar(nascimento=None)
+# 🔑 Migracao 086 (pedido do dono, 24/09/2026): a data entra no cadastro completo.
+checar("sem data de nascimento e recusado, dizendo qual falta",
+       st == 422 and "nascimento" in (r.get("detail") or ""), (st, r))
 st, r = reservar(cidade=None)
 checar("faltando so a cidade, a mensagem fala so dela",
        st == 422 and "cidade" in (r.get("detail") or "")
@@ -243,6 +248,10 @@ with get_cursor() as cur:
            linha and linha["id_cliente"] and linha["nome"] == "Marina Duarte", linha)
     checar("com genero e cidade guardados",
            linha and linha["genero"] == "FEMININO" and linha["cidade"] == "Blumenau", linha)
+    cur.execute("SELECT nascimento FROM reserva_clientes WHERE id_unidade = %s "
+                "AND telefone = %s", (UNIDADE, FONE))
+    checar("e a data de nascimento tambem",
+           str((cur.fetchone() or {}).get("nascimento")) == "1988-03-09")
     cur.execute("SELECT count(*) AS n FROM reserva_mesas WHERE id_reserva IN "
                 "(SELECT id FROM reservas WHERE id_unidade = %s)", (UNIDADE,))
     # 🔑 A mesa e alocada pela MESMA regra do balcao — se nao fosse, a reserva

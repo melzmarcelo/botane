@@ -370,7 +370,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <section class="tela" data-tela="quem" aria-labelledby="t-quem">
       <button class="voltar" data-ir="inicio">‹ voltar</button>
       <h2 id="t-quem">Reserve sua mesa</h2>
-      <p class="sub-tela">Comece pelo telefone — é assim que a casa reconhece você.</p>
+      <p class="sub-tela" id="sub-quem">Comece pelo telefone — é assim que a casa reconhece você.</p>
       <div class="passos">
         <label class="campo" for="fone">Seu telefone, com DDD
           <input id="fone" type="tel" inputmode="tel" autocomplete="tel"
@@ -400,6 +400,12 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
               <input id="cidade" autocomplete="address-level2" maxlength="80">
             </label>
           </div>
+          <!-- 🔑 **Pedido do dono (24/09/2026):** *"adicionar data de nascimento
+               no cadastro do cliente."* Vai junto de gênero e cidade: só para
+               quem é novo, e só se a casa pedir cadastro completo. -->
+          <label class="campo" for="nascimento">Data de nascimento
+            <input id="nascimento" type="date" autocomplete="bday">
+          </label>
         </div>
 
         <div class="regras" id="aviso-quem" hidden></div>
@@ -734,6 +740,9 @@ function montarContato() {
 }
 
 /* ---- os cardápios, na PÁGINA INICIAL ---- */
+/** O que o servidor publicou — para achar o catálogo de cada botão. */
+let catalogosDaCasa = [];
+
 async function carregarCatalogos() {
   let lista = [];
   try {
@@ -742,6 +751,7 @@ async function carregarCatalogos() {
     return;
   }
   if (!lista.length) return;
+  catalogosDaCasa = lista;
   // ⚠️ Entram DEPOIS do "Reservar" e ANTES do contato — a ordem da lista é a
   // ordem de importância, e reservar é o que a casa quer que aconteça.
   const contato = $("#itens").querySelector("a.item, button.item[data-ir='contato']");
@@ -751,11 +761,14 @@ async function carregarCatalogos() {
     // tela de cardápio. Quem decide é o servidor, pelo campo `origem`.
     // ⚠️ **O nome do catálogo, e só ele** — a data de fim e o "abrir o PDF"
     // eram o texto que não era necessário.
-    if (c.origem === "PRODUTOS") {
+    // 🔑 **O que exige cadastro chega SEM conteúdo** — só o id. O botão leva à
+    // identificação; quem já se identificou nesta visita abre direto.
+    if (c.origem === "PRODUTOS" || c.exige_cadastro) {
       const b = document.createElement("button");
       b.className = "item";
       b.textContent = c.nome;
-      b.addEventListener("click", () => abrirCardapio(c.id, c.nome));
+      b.dataset.catalogo = c.id;
+      b.addEventListener("click", () => abrirCatalogo(c));
       if (contato) $("#itens").insertBefore(b, contato);
       else $("#itens").appendChild(b);
       return;
@@ -768,6 +781,41 @@ async function carregarCatalogos() {
     a.textContent = c.nome;
     if (contato) $("#itens").insertBefore(a, contato);
     else $("#itens").appendChild(a);
+  });
+}
+
+/** Abre um catálogo pelo botão da página inicial. */
+async function abrirCatalogo(c) {
+  if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
+  if (!eu.identificado) return identificarPara(c);
+  if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
+  mostrarCardapio(c.nome, () =>
+    pedir(`/catalogos/${c.id}/abrir`, { telefone: eu.telefone, nome: eu.nome })
+      .then((r) => r.cardapio));
+}
+
+/**
+ * Depois da identificação, os PDFs que exigem cadastro viram links de verdade.
+ *
+ * ⚠️ **Um link, e não um `window.open` no toque seguinte**: abrir aba depois de
+ * esperar o servidor é popup para o celular. Buscando o endereço agora, o toque
+ * seguinte já é num `<a>`, que abre sempre.
+ */
+function destravarCatalogos() {
+  $("#itens").querySelectorAll("button[data-catalogo]").forEach(async (b) => {
+    const c = catalogosDaCasa.find((x) => String(x.id) === b.dataset.catalogo);
+    if (!c || !c.exige_cadastro || c.origem === "PRODUTOS") return;
+    try {
+      const r = await pedir(`/catalogos/${c.id}/abrir`,
+        { telefone: eu.telefone, nome: eu.nome });
+      const a = document.createElement("a");
+      a.className = "item";
+      a.href = `${API}${r.arquivo_url}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = c.nome;
+      b.replaceWith(a);
+    } catch { /* fica o botão: tocar de novo leva à identificação */ }
   });
 }
 
@@ -792,13 +840,18 @@ function moldura(url, nome, classe) {
     : `<span class="${classe}">${esc(nome)}</span>`;
 }
 
-async function abrirCardapio(id, nome) {
+function abrirCardapio(id, nome) {
+  return mostrarCardapio(nome, () => pedir(`/catalogos/${id}`));
+}
+
+/** Desenha o cardápio; `buscar` diz de onde ele vem (aberto, ou com cadastro). */
+async function mostrarCardapio(nome, buscar) {
   const caixa = $("#secoes-do-cardapio");
   $("#t-cardapio").textContent = nome;
   caixa.innerHTML = `<p class="vazio">Carregando o cardápio…</p>`;
   ir("cardapio");
   try {
-    cardapio = await pedir(`/catalogos/${id}`);
+    cardapio = await buscar();
   } catch (e) {
     caixa.innerHTML = `<p class="vazio">${esc(e.mensagem
       || "Não conseguimos abrir o cardápio agora.")}</p>`;
@@ -919,7 +972,16 @@ function abrirSecao(indice) {
  * é redigitado, e é ele que identifica.
  */
 let reservaOnline = { aceita: false };
-const eu = { telefone: "", nome: "", cadastrado: false };
+const eu = { telefone: "", nome: "", cadastrado: false, identificado: false };
+
+/**
+ * Para onde a identificação leva: a reserva, ou um catálogo que exige cadastro.
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"adicionar a validação do cliente ao
+ * acessar o catálogo."* A tela de telefone é a MESMA — duas telas de cadastro
+ * divergiriam na primeira regra nova. Muda só o título, o botão e o destino.
+ */
+let destino = "reserva";
 
 async function saberSeAceita() {
   try {
@@ -950,8 +1012,22 @@ function voltarAoTelefone() {
   passo = "fone";
   $("#bloco-quem").hidden = true;
   $("#bloco-novo").hidden = true;
+  $("#avancar").hidden = false;
   $("#avancar").textContent = "Continuar";
   avisar("#aviso-quem", "");
+  const catalogo = destino !== "reserva";
+  $("#t-quem").textContent = catalogo ? destino.nome : "Reserve sua mesa";
+  $("#sub-quem").textContent = catalogo
+    ? "Para abrir este cardápio, a casa pede que você se identifique pelo telefone."
+    : "Comece pelo telefone — é assim que a casa reconhece você.";
+}
+
+/** Leva à tela de telefone, a caminho de `para` ("reserva" ou um catálogo). */
+function identificarPara(para) {
+  destino = para;
+  voltarAoTelefone();
+  ir("quem");
+  $("#fone").focus();
 }
 
 async function consultarTelefone() {
@@ -960,7 +1036,9 @@ async function consultarTelefone() {
   $("#avancar").disabled = true;
   let r;
   try {
-    r = await pedir("/reserva/telefone", { telefone: fone });
+    // ⚠️ `/cliente/telefone`, e não `/reserva/telefone`: esta serve também ao
+    // catálogo, numa casa que não marca mesa pelo site.
+    r = await pedir("/cliente/telefone", { telefone: fone });
   } catch (e) {
     $("#avancar").disabled = false;
     // ⚠️ **A mensagem do servidor é a que vale** — é ela que sabe dizer que
@@ -975,11 +1053,12 @@ async function consultarTelefone() {
   // 🔑 **Confirma, não revela** (decisão do dono): quem já tem cadastro vê a
   // dica mascarada e digita o próprio nome para conferir. Sem isso o site seria
   // uma consulta aberta de telefone→nome, sem login nenhum na frente.
-  $("#bloco-novo").hidden = eu.cadastrado || !reservaOnline.cadastro_completo;
+  $("#bloco-novo").hidden = eu.cadastrado || !r.cadastro_completo;
   avisar("#aviso-quem", eu.cadastrado
     ? `Já temos seu cadastro (${r.dica}). Confirme seu nome para continuar.`
     : "Primeira vez por aqui? Conte quem é você.", false);
-  $("#avancar").textContent = "Escolher dia e horário";
+  $("#avancar").textContent = destino === "reserva"
+    ? "Escolher dia e horário" : "Abrir o cardápio";
   $("#nome-cliente").focus();
 }
 
@@ -989,10 +1068,13 @@ async function guardarDados() {
   if (!$("#bloco-novo").hidden) {
     if (!$("#genero").value) return avisar("#aviso-quem", "Escolha uma opção de gênero.");
     if (!$("#cidade").value.trim()) return avisar("#aviso-quem", "Diga sua cidade.");
+    if (!$("#nascimento").value) return avisar("#aviso-quem", "Diga sua data de nascimento.");
   }
   eu.nome = nome;
   eu.genero = $("#bloco-novo").hidden ? null : $("#genero").value;
   eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
+  eu.nascimento = $("#bloco-novo").hidden ? null : $("#nascimento").value;
+  if (destino !== "reserva") return identificarParaCatalogo();
   // 🔑 **Quem já tem cadastro vê as próprias reservas** — e, de quebra, o nome
   // é conferido AQUI, não só no "Confirmar". Antes a pessoa escolhia dia,
   // pessoas e horário para só no fim ouvir que o nome não confere.
@@ -1002,12 +1084,61 @@ async function guardarDados() {
     const erro = await carregarMinhas();
     $("#avancar").disabled = false;
     if (erro) return avisar("#aviso-quem", erro);
+    // O nome conferiu: a pessoa está identificada, e os catálogos se abrem.
+    eu.identificado = true;
+    destravarCatalogos();
   }
   avisar("#aviso-quem", "");
   abrirReserva();
 }
 
 /** Busca e desenha "Suas reservas". Devolve a frase de erro, se houver. */
+/**
+ * Confere (ou cadastra) quem é, e abre o catálogo que pediu isso.
+ *
+ * ⚠️ **Aqui o cadastro nasce JÁ**, e não na reserva: não há reserva nenhuma a
+ * gravar junto, e o catálogo só abre para quem existe.
+ */
+async function identificarParaCatalogo() {
+  $("#avancar").disabled = true;
+  let quem;
+  try {
+    quem = await pedir("/cliente", {
+      telefone: eu.telefone, nome: eu.nome, genero: eu.genero,
+      cidade: eu.cidade, nascimento: eu.nascimento,
+    });
+  } catch (e) {
+    $("#avancar").disabled = false;
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos conferir seu cadastro.");
+  }
+  $("#avancar").disabled = false;
+  eu.cadastrado = true;
+  eu.identificado = true;
+  const alvo = destino;
+  destravarCatalogos();
+  if (alvo.origem === "PRODUTOS") return abrirCatalogo(alvo);
+
+  // ⚠️ **O PDF vira um LINK na tela, não um `window.open`.** Depois de esperar a
+  // resposta do servidor o toque já "passou", e o celular bloqueia a aba nova
+  // como popup — a pessoa se identificaria e nada abriria.
+  let r;
+  try {
+    r = await pedir(`/catalogos/${alvo.id}/abrir`, { telefone: eu.telefone, nome: eu.nome });
+  } catch (e) {
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos abrir o cardápio agora.");
+  }
+  $("#bloco-quem").hidden = true;
+  $("#bloco-novo").hidden = true;
+  $("#avancar").hidden = true;
+  const caixa = $("#aviso-quem");
+  caixa.hidden = false;
+  caixa.className = "regras";
+  // O nome do CADASTRO, não o digitado: quem conferiu com "maria" é a Maria.
+  caixa.innerHTML = `<span>Pronto, ${esc((quem.nome || eu.nome).split(" ")[0])}!</span>
+    <a class="item destaque" href="${API}${esc(r.arquivo_url)}" target="_blank"
+       rel="noopener">Abrir ${esc(alvo.nome)}</a>`;
+}
+
 async function carregarMinhas() {
   let r;
   try {
@@ -1167,6 +1298,7 @@ $("#confirmar").addEventListener("click", async () => {
   try {
     feita = await pedir("/reserva", {
       telefone: eu.telefone, nome: eu.nome, genero: eu.genero, cidade: eu.cidade,
+      nascimento: eu.nascimento,
       data: $("#dia").value, hora: horaEscolhida,
       pessoas: Number($("#pessoas").value),
       // ⚠️ Em branco vai como NULO, não como string vazia: a agenda do balcão
@@ -1191,6 +1323,10 @@ $("#confirmar").addEventListener("click", async () => {
   $("#confirmar").hidden = true;
   // A nova entra em "Suas reservas" para quando a pessoa voltar à tela.
   eu.cadastrado = true;
+  // ⚠️ A reserva CADASTROU quem era novo: daqui em diante ela está identificada,
+  // e o catálogo que exige cadastro não pergunta de novo.
+  eu.identificado = true;
+  destravarCatalogos();
   carregarMinhas();
   const quando = new Date(feita.data + "T12:00").toLocaleDateString("pt-BR");
   $("#recibo").innerHTML =
@@ -1254,6 +1390,9 @@ async function abrirReserva() {
 (function inicio() {
   $("#dia").value = diaIso(1);
   $("#dia").min = diaIso(0);
+  // ⚠️ Nascimento no futuro é toque errado no seletor — o servidor recusa também.
+  $("#nascimento").max = diaIso(0);
+  $("#nascimento").min = "1900-01-01";
 
   $("#dia").addEventListener("change", () => { diaTocado = true; buscarHorarios(); });
   $("#pessoas").addEventListener("input", buscarHorarios);
@@ -1264,11 +1403,19 @@ async function abrirReserva() {
   // ⚠️ **Sem isso a tela mentiria por um fluxo inteiro**: a pessoa digitaria
   // telefone, nome, gênero e cidade para descobrir no fim que a casa não marca
   // pelo site — e a saída dela seria fechar a página, não pegar o WhatsApp.
-  $("#ir-reservar").addEventListener("click", () => {
+  $("#ir-reservar").addEventListener("click", async () => {
+    // 🔑 **Quem já se identificou para ver um catálogo não repete o telefone.**
+    // A reserva usa o mesmo cadastro — só o "Suas reservas" é buscado.
+    if (reservaOnline.aceita && eu.identificado) {
+      destino = "reserva";
+      $("#voltar-reserva").dataset.ir = "inicio";
+      await carregarMinhas();
+      abrirReserva();
+      return;
+    }
     if (reservaOnline.aceita) {
-      voltarAoTelefone();
-      ir("quem");
-      $("#fone").focus();
+      $("#voltar-reserva").dataset.ir = "quem";
+      identificarPara("reserva");
     } else {
       abrirReserva();
     }

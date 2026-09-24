@@ -272,6 +272,19 @@ class CancelamentoDoSite(ClienteDoSite):
     hora: time
 
 
+class IdentificacaoDoSite(BaseModel):
+    """Quem é a pessoa, sem reserva junto — a porta do catálogo que exige cadastro.
+
+    🔑 Os mesmos campos do cadastro de `ReservaDoSite`, e a mesma regra: quem
+    decide o que é obrigatório é `clientes.identificar`, pela configuração da loja.
+    """
+    telefone: str = Field(max_length=30)
+    nome: str = Field(min_length=2, max_length=120)
+    genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
+    cidade: str | None = Field(default=None, max_length=80)
+    nascimento: date | None = None
+
+
 class ReservaDoSite(BaseModel):
     """A reserva que o cliente marca sozinho, com o cadastro junto.
 
@@ -293,6 +306,10 @@ class ReservaDoSite(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
     genero: Literal["FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO"] | None = None
     cidade: str | None = Field(default=None, max_length=80)
+    # 🔑 Migração 086 (pedido do dono, 24/09/2026). Obrigatória para quem é NOVO
+    # quando a casa pede cadastro completo — quem exige é o serviço, pelo mesmo
+    # motivo de gênero e cidade.
+    nascimento: date | None = None
     data: date
     hora: time
     pessoas: int = Field(ge=1, le=99)

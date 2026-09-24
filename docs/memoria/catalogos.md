@@ -334,3 +334,22 @@ ficar tão longa."*
 - ⚠️ **O `Cartao` ganhou uma correção por causa disto**: ele desenhava o miolo com `p-5` mesmo
   recebendo `null`, e sobrava uma faixa vazia de ~50px por cartão recolhido — meia tela de
   nada com dez categorias. Agora, sem conteúdo, não há caixa. Vale para a casa inteira.
+
+## O catálogo que exige cadastro (migração 086, 24/09/2026)
+
+🔑 **Pedido do dono:** *"adicionar a validação do cliente ao acessar o catálogo, colocar no
+cadastro do catálogo se exige cadastro."* Caixa `exige_cadastro` no formulário do catálogo,
+catálogo a catálogo; nasce DESLIGADA (o que já estava no ar continua abrindo igual).
+- ⚠️ **Quem garante é o SERVIDOR.** Na lista pública, o que exige cadastro vem com `id` e
+  SEM `arquivo_url`; o `GET /publico/{u}/catalogos/{id}` (produtos) responde **403**. O
+  conteúdo só sai por `POST /publico/{u}/catalogos/{id}/abrir` com telefone + primeiro nome
+  de um cadastro existente (403 "faça seu cadastro" se não há; 409 se o nome não confere).
+  Esconder só o botão seria validação de enfeite: o link estaria na resposta.
+- ⚠️ **Limite conhecido:** o endereço do PDF em si (`/arquivos/...`) continua público — quem
+  já o tem abre sem cadastro. A validação é de ACESSO pelo site, não sigilo do arquivo.
+- ⚠️ **O PDF vira LINK, não `window.open`**: abrir aba depois de esperar o servidor é popup
+  para o celular. Depois de identificada, `destravarCatalogos()` troca os botões dos PDFs
+  fechados por `<a>` de verdade; no primeiro, a tela de identificação mostra "Abrir …".
+- A identificação é a MESMA da reserva (ver `reservas.md`): quem se identificou num catálogo
+  não repete o telefone para reservar, e vice-versa — só nesta visita (sem localStorage).
+- Cobertura: `4c` do `smoke_publico.py`.

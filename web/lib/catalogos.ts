@@ -17,6 +17,9 @@ export type Catalogo = {
   publica_ate: string | null;
   situacao: Situacao;
   observacao: string | null;
+  /** 🔑 O cliente se identifica (telefone e, se novo, cadastro) antes de abrir.
+   *  Quem garante é o servidor — o site nem recebe o conteúdo sem isso. */
+  exige_cadastro: boolean;
   /** 🔑 Está no ar HOJE — não é o mesmo que estar ATIVO: um ativo cujo período
    *  já passou não está publicado. Quem responde é o servidor, porque é ele que
    *  sabe que dia é hoje na loja. */
@@ -56,6 +59,7 @@ export type Gravar = {
   publica_ate?: string | null;
   situacao?: Situacao;
   observacao?: string | null;
+  exige_cadastro?: boolean;
 };
 
 export const criar = (corpo: Gravar) => api.post<Catalogo>("/catalogos", corpo);

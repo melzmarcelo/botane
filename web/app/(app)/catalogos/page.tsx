@@ -85,6 +85,7 @@ const VAZIO: Gravar = {
   publica_ate: "",
   situacao: "RASCUNHO",
   observacao: "",
+  exige_cadastro: false,
 };
 
 export default function PaginaCatalogos() {
@@ -136,6 +137,7 @@ export default function PaginaCatalogos() {
             publica_ate: c.publica_ate ?? "",
             situacao: c.situacao,
             observacao: c.observacao ?? "",
+            exige_cadastro: c.exige_cadastro,
           }
         // ⚠️ A origem do catálogo NOVO vem do servidor, nunca escrita aqui.
         : { ...VAZIO, origem: op?.origens[0] },
@@ -303,6 +305,11 @@ export default function PaginaCatalogos() {
                       )}
                       {c.observacao && (
                         <span className="block text-[12.5px] text-suave">{c.observacao}</span>
+                      )}
+                      {c.exige_cadastro && (
+                        <span className="block text-[12.5px] text-suave">
+                          Exige cadastro do cliente
+                        </span>
                       )}
                     </td>
                     <td className="text-[13px] text-suave">{c.origem}</td>
@@ -564,6 +571,26 @@ export default function PaginaCatalogos() {
                 onChange={(e) => setF({ ...f, observacao: e.target.value })}
               />
             </Campo>
+
+            {/* 🔑 **Pedido do dono (24/09/2026):** *"colocar no cadastro do
+                catálogo se exige cadastro."* Catálogo a catálogo: o cardápio
+                do dia pode ser aberto, e o de eventos pedir quem é. */}
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                id="catalogo-exige-cadastro"
+                checked={!!f.exige_cadastro}
+                onChange={(e) => setF({ ...f, exige_cadastro: e.target.checked })}
+              />
+              <span className="text-[14px]">
+                Exigir cadastro do cliente para abrir
+                <span className="block text-[13px] text-suave">
+                  Ligado, o site pede o telefone antes de mostrar o catálogo — e o cadastro,
+                  para quem é novo, com o que a configuração de Reservas pedir.
+                </span>
+              </span>
+            </label>
           </form>
         </Modal>
       )}

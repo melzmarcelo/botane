@@ -351,6 +351,111 @@ chamar("DELETE", f"/produtos/{prod['id']}", token=token)
 chamar("PUT", f"/catalogos/{ID_CARD}", {"situacao": "RASCUNHO"}, token=token)
 chamar("DELETE", f"/catalogos/{ID_CARD}", token=token)
 
+print("\n4c. o catalogo que EXIGE cadastro")
+# 🔑 **Pedido do dono (24/09/2026):** *"adicionar a validacao do cliente ao
+# acessar o catalogo, colocar no cadastro do catalogo se exige cadastro."*
+# ⚠️ Quem garante e o SERVIDOR: a lista nao entrega o conteudo, e o cardapio
+# direto recusa. Esconder so o botao seria validacao de enfeite.
+sys.path.insert(0, ".")
+from database import get_cursor, init_pool  # noqa: E402
+
+init_pool()
+FONE_CAT = "47999104444"
+
+
+def sem_rastro_do_cliente():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM reserva_clientes WHERE id_unidade = 1 AND telefone = %s",
+                    (FONE_CAT,))
+        cur.execute("DELETE FROM reserva_tentativas WHERE id_unidade = 1")
+
+
+sem_rastro_do_cliente()
+st, r = chamar("PUT", f"/catalogos/{publicado['id']}", {"exige_cadastro": True}, token=token)
+checar("a casa marca o catalogo como 'exige cadastro'",
+       st == 200 and r.get("exige_cadastro") is True, (st, r))
+st, lista3 = chamar("GET", "/publico/1/catalogos")
+fechado = next((c for c in lista3 if c["nome"] == f"Pub no ar {marca}"), None)
+checar("ele continua na lista, dizendo que exige cadastro",
+       (fechado or {}).get("exige_cadastro") is True, fechado)
+checar("mas SEM o endereco do PDF, e com o id para pedir",
+       (fechado or {}).get("arquivo_url") is None and (fechado or {}).get("id"), fechado)
+
+st, r = chamar("POST", f"/publico/1/catalogos/{publicado['id']}/abrir",
+               {"telefone": FONE_CAT, "nome": "Clara"})
+checar("sem cadastro, abrir e recusado (403) dizendo o que fazer",
+       st == 403 and "cadastro" in (r.get("detail") or ""), (st, r))
+
+st, r = chamar("POST", "/publico/1/cliente/telefone", {"telefone": FONE_CAT})
+checar("a consulta de telefone responde sem depender da reserva online",
+       st == 200 and r.get("cadastrado") is False and "cadastro_completo" in r, (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT cadastro_completo FROM reserva_config WHERE id_unidade = 1")
+    cfg = cur.fetchone()
+completo = bool(cfg and cfg["cadastro_completo"])
+if completo:
+    st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
+                                                 "genero": "FEMININO", "cidade": "Blumenau"})
+    checar("com cadastro completo, falta a data de nascimento e a frase diz",
+           st == 422 and "nascimento" in (r.get("detail") or ""), (st, r))
+st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
+                                             "genero": "FEMININO", "cidade": "Blumenau",
+                                             "nascimento": (hoje + timedelta(days=1)).isoformat()})
+checar("nascimento no futuro e recusado", st == 422 and "nascimento" in
+       (r.get("detail") or ""), (st, r))
+st, r = chamar("POST", "/publico/1/cliente", {"telefone": FONE_CAT, "nome": "Clara Luz",
+                                             "genero": "FEMININO", "cidade": "Blumenau",
+                                             "nascimento": "1990-05-17"})
+checar("o cliente se cadastra pela porta do catalogo", st == 200 and r.get("cadastro_novo")
+       is True, (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT nascimento FROM reserva_clientes WHERE id_unidade = 1 "
+                "AND telefone = %s", (FONE_CAT,))
+    linha = cur.fetchone()
+checar("com a data de nascimento gravada",
+       linha and str(linha["nascimento"]) == "1990-05-17", linha)
+
+st, r = chamar("POST", f"/publico/1/catalogos/{publicado['id']}/abrir",
+               {"telefone": FONE_CAT, "nome": "Outra"})
+checar("nome que nao confere nao abre (409)", st == 409, (st, r))
+st, r = chamar("POST", f"/publico/1/catalogos/{publicado['id']}/abrir",
+               {"telefone": FONE_CAT, "nome": "clara"})
+checar("identificado, o PDF abre: vem o endereco do arquivo",
+       st == 200 and r.get("arquivo_url") == (achado or {}).get("arquivo_url"), (st, r))
+
+# O cardapio de PRODUTOS: GET direto recusa, abrir entrega.
+st, k2 = chamar("POST", "/catalogos", {"nome": f"Cardapio fechado {marca}",
+                                       "origem": "PRODUTOS", "situacao": "ATIVO",
+                                       "exige_cadastro": True}, token=token)
+ID_FECHADO = (k2 or {}).get("id")
+checar("o catalogo ja pode NASCER exigindo cadastro",
+       st == 201 and (k2 or {}).get("exige_cadastro") is True, (st, k2))
+_st, cat2 = chamar("POST", f"/catalogos/{ID_FECHADO}/categorias", {"nome": "Doces"},
+                   token=token)
+_st, prod2 = chamar("POST", "/produtos", {
+    "nome": f"BRIGADEIRO FECHADO {marca}", "tipo": "INSUMO", "um_estoque": "UN",
+    "controla_estoque": False}, token=token)
+# ⚠️ Só entra no cardápio produto vendido no PDV — a mesma preparação do 4b.
+chamar("PUT", f"/produtos/{prod2['id']}", {"integrado_pdv": True}, token=token)
+st, _r = chamar("POST", f"/catalogos/categorias/{cat2['id']}/itens",
+                {"id_produto": prod2["id"]}, token=token)
+checar("preparo: o produto entra no cardápio fechado", st == 201, (st, _r))
+st, r = chamar("GET", f"/publico/1/catalogos/{ID_FECHADO}")
+checar("o cardapio que exige cadastro NAO abre pelo GET direto (403)", st == 403, (st, r))
+st, r = chamar("POST", f"/publico/1/catalogos/{ID_FECHADO}/abrir",
+               {"telefone": FONE_CAT, "nome": "Clara"})
+checar("e abre para quem se identificou, com as categorias",
+       st == 200 and r.get("origem") == "PRODUTOS"
+       and [c["nome"] for c in (r.get("cardapio") or {}).get("categorias", [])] == ["Doces"],
+       (st, r))
+
+chamar("PUT", f"/catalogos/{publicado['id']}", {"exige_cadastro": False}, token=token)
+chamar("PUT", f"/catalogos/{ID_FECHADO}", {"situacao": "RASCUNHO"}, token=token)
+chamar("DELETE", f"/catalogos/{ID_FECHADO}", token=token)
+chamar("DELETE", f"/produtos/{prod2['id']}", token=token)
+sem_rastro_do_cliente()
+
+
 print("\n5. os horarios, pela MESMA regra da agenda")
 # 🔑 Uma segunda regra para o publico divergiria da primeira, e a divergencia
 # apareceria como mesa prometida ao cliente e nao disponivel na casa.

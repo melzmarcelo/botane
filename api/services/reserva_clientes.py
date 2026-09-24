@@ -18,7 +18,11 @@ import hashlib
 import re
 import unicodedata
 
+from datetime import date
+
 from fastapi import HTTPException
+
+from relogio import hoje_da_casa
 
 GENEROS = ("FEMININO", "MASCULINO", "OUTRO", "NAO_INFORMADO")
 
@@ -176,8 +180,36 @@ def _recusar_telefone_cheio(cur, id_unidade: int, telefone: str) -> None:
         )
 
 
+def _nascimento_valido(nascimento: date | None) -> date | None:
+    """A data de nascimento, se plausível. Nula passa: é "não informou".
+
+    ⚠️ **Futuro e antes de 1900 são engano de digitação**, não gente: o seletor
+    de data do celular começa no ano corrente, e um toque a menos grava "2026".
+    Aceitar isso poria um recém-nascido na lista de aniversariantes.
+    """
+    if nascimento and (nascimento > hoje_da_casa() or nascimento.year < 1900):
+        raise HTTPException(status_code=422, detail="Confira a data de nascimento.")
+    return nascimento
+
+
 def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
-    """O cliente desta reserva: o que já existe, ou um cadastro novo.
+    """O cliente de uma RESERVA: confere o limite do telefone e identifica.
+
+    ⚠️ **O limite de reservas em aberto é só daqui.** Quem se identifica para abrir
+    o catálogo (`identificar`) não está segurando mesa nenhuma.
+    """
+    telefone = telefone_valido(corpo.telefone)
+    _recusar_telefone_cheio(cur, id_unidade, telefone)
+    return identificar(cur, id_unidade, corpo, exige_completo)
+
+
+def identificar(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
+    """Quem é esta pessoa: o cadastro que já existe, ou um novo.
+
+    🔑 **Uma identificação só, para a reserva e para o catálogo** (pedido do dono,
+    24/09/2026: *"adicionar a validação do cliente ao acessar o catálogo"*). Duas
+    portas de cadastro divergiriam na primeira regra nova — e a pessoa que se
+    cadastrou para ver o cardápio já é conhecida quando vai reservar.
 
     🔑 **O nome é o que prova que o telefone é seu**, neste nível. Não há login,
     e não há código por WhatsApp (que exigiria Business API, provedor e modelo
@@ -191,7 +223,7 @@ def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     cadastrar de novo, que é o que o índice único impede.
     """
     telefone = telefone_valido(corpo.telefone)
-    _recusar_telefone_cheio(cur, id_unidade, telefone)
+    nascimento = _nascimento_valido(getattr(corpo, "nascimento", None))
 
     cur.execute(
         """SELECT id, nome, genero, cidade FROM reserva_clientes
@@ -211,9 +243,11 @@ def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
             """UPDATE reserva_clientes
                   SET genero = COALESCE(genero, %s),
                       cidade = COALESCE(cidade, %s),
+                      nascimento = COALESCE(nascimento, %s),
                       atualizado_em = now()
                 WHERE id = %s""",
-            (corpo.genero, (corpo.cidade or "").strip() or None, achado["id"]),
+            (corpo.genero, (corpo.cidade or "").strip() or None, nascimento,
+             achado["id"]),
         )
         return {"id": achado["id"], "nome": achado["nome"], "telefone": telefone,
                 "novo": False}
@@ -227,6 +261,8 @@ def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
             faltando.append("gênero")
         if not (corpo.cidade or "").strip():
             faltando.append("cidade")
+        if not nascimento:
+            faltando.append("data de nascimento")
         if faltando:
             raise HTTPException(
                 status_code=422,
@@ -239,12 +275,13 @@ def resolver(cur, id_unidade: int, corpo, exige_completo: bool) -> dict:
     # mesmo celular tocando "cadastrar" ao mesmo tempo passam as duas pela
     # consulta acima; quem decide é o índice único, como manda a regra 8.
     cur.execute(
-        """INSERT INTO reserva_clientes (id_unidade, telefone, nome, genero, cidade)
-           VALUES (%s, %s, %s, %s, %s)
+        """INSERT INTO reserva_clientes (id_unidade, telefone, nome, genero, cidade,
+                                         nascimento)
+           VALUES (%s, %s, %s, %s, %s, %s)
            ON CONFLICT (id_unidade, telefone) DO UPDATE SET atualizado_em = now()
            RETURNING id, nome""",
         (id_unidade, telefone, corpo.nome.strip(), corpo.genero,
-         (corpo.cidade or "").strip() or None),
+         (corpo.cidade or "").strip() or None, nascimento),
     )
     novo = cur.fetchone()
     return {"id": novo["id"], "nome": novo["nome"], "telefone": telefone, "novo": True}

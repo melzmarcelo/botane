@@ -730,3 +730,18 @@ Suas Reservas."*
   tarja "Aberto agora": às 17h a casa está aberta mas a última reserva já passou,
   e abrir em hoje daria lista vazia de cara. Dia escolhido à mão (`diaTocado`)
   não é trocado ao voltar e entrar de novo.
+
+## Data de nascimento e a identificação sem reserva (migração 086, 24/09/2026)
+
+🔑 **Pedido do dono:** *"adicionar data de nascimento no cadastro do cliente em Reservas."*
+- `reserva_clientes.nascimento` (date, nula). Entra com gênero e cidade: **obrigatória para
+  quem é NOVO quando `cadastro_completo`**, e completada por COALESCE em cadastro antigo
+  (nunca sobrescreve). Futuro ou antes de 1900 → 422 "Confira a data de nascimento" (toque
+  errado no seletor do celular). ⚠️ Estava prevista na 068 e saiu em 21/09 porque não era
+  pedida; o texto da tela de configuração, que tinha sido corrigido por isso, voltou a citá-la.
+- 🔑 **`clientes.identificar` separado de `resolver`**: `resolver` = limite de reservas em
+  aberto por telefone + `identificar`. O catálogo que exige cadastro usa só `identificar`
+  (não segura mesa nenhuma). Rotas `POST /publico/{u}/cliente/telefone` e `/cliente` — ⚠️
+  SEM `_reserva_online`: a casa pode exigir cadastro no catálogo sem marcar mesa pelo site.
+  Contam no mesmo limite por origem. O site passou a consultar o telefone por
+  `/cliente/telefone` (que devolve `cadastro_completo`); `/reserva/telefone` ficou de pé.

@@ -37,7 +37,7 @@ from models.catalogos import ORIGEM_PRODUTOS, ORIGENS, SITUACOES
 # As colunas que a tela lê, num lugar só: a lista e o registro têm de mostrar o
 # mesmo catálogo, e duas listas de campos divergem na primeira coluna nova.
 _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
-             c.observacao, u.nome AS criado_por,
+             c.observacao, c.exige_cadastro, u.nome AS criado_por,
              c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em"""
 
 
@@ -212,13 +212,14 @@ def criar(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> dict:
     cur.execute(
         """INSERT INTO catalogos
                (id_unidade, nome, origem, publica_de, publica_ate, situacao,
-                observacao, criado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                observacao, exige_cadastro, criado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (id_unidade, nome, dados.get("origem") or "PDF",
          dados.get("publica_de"), dados.get("publica_ate"),
          dados.get("situacao") or "RASCUNHO",
-         (dados.get("observacao") or "").strip() or None, id_usuario),
+         (dados.get("observacao") or "").strip() or None,
+         bool(dados.get("exige_cadastro")), id_usuario),
     )
     return obter(cur, id_unidade, cur.fetchone()["id"])
 
@@ -274,11 +275,12 @@ def atualizar(cur, id_unidade: int, id_catalogo: int, dados: dict) -> dict:
                    "sairia do ar antes de entrar.")
 
     campos, valores = [], []
-    for campo in ("nome", "origem", "publica_de", "publica_ate", "situacao", "observacao"):
+    for campo in ("nome", "origem", "publica_de", "publica_ate", "situacao", "observacao",
+                  "exige_cadastro"):
         if campo not in dados:
             continue
         valor = dados[campo]
-        if campo in ("nome", "origem", "situacao") and valor is None:
+        if campo in ("nome", "origem", "situacao", "exige_cadastro") and valor is None:
             # Estes três não têm "vazio": deixar nulo derrubaria o NOT NULL, e a
             # mensagem do banco não diria nada a quem está na tela.
             continue

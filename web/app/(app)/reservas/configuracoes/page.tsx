@@ -437,15 +437,15 @@ export default function ConfiguracoesDeReservas() {
             />
             <span className="text-[14px]">
               Pedir cadastro completo de quem é novo
-              {/* ⚠️ **Este texto prometia DATA DE NASCIMENTO**, que era o desenho
-                  da migração 068 e não foi o que o dono pediu em 21/09/2026:
-                  *"realiza o cadastro com Nome, telefone, gênero e cidade."*
-                  Tela que descreve um campo que o site não pergunta ensina a
-                  não confiar na tela. Data de nascimento é dado pessoal: só
-                  entra no dia em que a casa for usar o aniversário. */}
+              {/* 🔑 **A data de nascimento entrou em 24/09/2026** (migração 086,
+                  pedido do dono). Tinha saído deste texto em 21/09 porque o site
+                  não a perguntava — tela que descreve campo que o site não pede
+                  ensina a não confiar na tela. Agora pergunta. */}
               <span className="block text-[13px] text-suave">
-                Ligado, o site pede gênero e cidade além do nome. Desligado, só o nome — o
-                telefone é sempre perguntado, porque é por ele que a casa reconhece quem volta.
+                Ligado, o site pede gênero, cidade e data de nascimento além do nome.
+                Desligado, só o nome — o telefone é sempre perguntado, porque é por ele que a
+                casa reconhece quem volta. Vale para reservar e para abrir catálogo que
+                exige cadastro.
               </span>
             </span>
           </label>
