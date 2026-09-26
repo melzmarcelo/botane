@@ -250,3 +250,32 @@
   ⚠️ `smoke_estoque` 9f liga `custo_por_local` porque o cenário dele EXIGE prateleiras
   discordando — no modo geral esse cenário não pode existir — e desliga logo depois: a base é
   compartilhada.
+
+## O custo unitário da ficha é o da PORÇÃO — em todo lugar (migração 094, 26/09/2026)
+
+🔑 **Pedido do dono:** *"na venda o custo da ficha técnica está indo por KG, não por
+unidade/porção, que é a correta. No produto mostra a por porção, mas na venda considera o
+custo por KG. Organizar o sistema para sempre considerar a porção no custo unitário de uma
+ficha técnica."* (Repete a decisão de 13/09, que só tinha chegado à tela do produto.)
+- **Uma função só**: `custos.custo_unitario_da_ficha`. Usam: a venda (`cmv.custo_teorico_do_produto`,
+  o custo CONGELADO no item), a tela do produto (`custo_provisorio_da_ficha`), os kits e tudo
+  que passa pela cascata teórica. Duas contas tinham divergido: a venda fazia `total ÷ rendimento`.
+- A regra: **porções > 1 → total ÷ porções, sempre** (inclusive produto estocado em KG).
+  **Sem porções** (receita inteira = uma), a porção seria o LOTE, então vale a ponte da
+  produção `custos.unidades_por_receita` (rendimento na unidade do produto, ou a grandeza
+  G↔KG); sem ponte, o rendimento cru.
+- 🔑 `unidades_por_receita` é também a ponte do ESTOQUE (`estoque._rendimento_em_estoque`
+  agora só a chama e recusa quando ela devolve None) — cópia dupla da regra foi o que deu o bug.
+- ⚠️ O caso que o dono via: **cookie** (8,535 KG em 65 porções, produto em UN) congelava
+  R$ 32,41 por cookie (o custo de 1 KG de massa) em vez de R$ 4,26. Na base real, o Bolinho
+  Amêndoas e Amora tinha 2 vendas a ~R$ 29,68 em vez de ~R$ 2,80.
+- **Migração 094** corrige o custo congelado das vendas antigas: `× rendimento ÷ porções`
+  (preserva o preço dos ingredientes do dia). Só produto com UMA configuração de rendimento
+  em todas as versões da ficha; nunca período de CMV FECHADO. Idempotente pela marca
+  `venda_itens.custo_revisto` (nula nas antigas, `true` por padrão nas novas).
+  ⚠️ Não corrige item de KIT cujo componente tinha ficha (o custo do kit é a soma, gravada
+  sem decompor) — vendas de kit anteriores a 26/09 podem ter o componente inflado.
+- ⚠️ Armadilha conhecida (não resolvida aqui): produto estocado em KG e vendido "por porção"
+  no PDV baixa 1 KG por venda. O custo agora é o da porção, mas a BAIXA segue a unidade de
+  estoque — produto vendido em porção deve ser contado em UN.
+- Cobertura: `smoke_custo_por_porcao.py` (19) e `smoke_rascunho_e_provisorio.py`.

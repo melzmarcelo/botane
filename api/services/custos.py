@@ -455,6 +455,67 @@ def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | Non
     return itens, total, sem_custo
 
 
+def unidades_por_receita(rendimento, porcoes, rendimento_um: str | None,
+                         um_estoque: str | None, ums: dict) -> Decimal | None:
+    """Quantas unidades de ESTOQUE do produto UMA receita rende — ou None se não se sabe.
+
+    🔑 **É a PONTE entre a ficha e o produto, e é UMA só no sistema** (26/09/2026,
+    pedido do dono: *"na venda o custo da ficha técnica está indo por KG, não por
+    unidade/porção … organizar o sistema para sempre considerar a porção no custo
+    unitário de uma ficha técnica"*). A produção já a usava para dar entrada no
+    estoque; a VENDA dividia o custo pelo rendimento cru. No cookie (rende 8,535 KG
+    em 65 porções, contado em UN) a venda congelava o custo de 1 KG de massa por
+    cookie — R$ 32,41 em vez de R$ 4,26.
+
+    A regra, em ordem:
+    1. **A ficha rende na unidade do produto** → o próprio rendimento (a massa de
+       10 KG de um produto estocado em KG).
+    2. **As PORÇÕES** → é exatamente "quantas unidades do produto a receita faz" (65
+       cookies). É o caso de quase todo prato vendido.
+    3. **A grandeza** (KG↔G, L↔ML), quando as duas são peso ou volume.
+
+    ⚠️ Sem nenhuma das três, None — quem produz RECUSA (`estoque`), quem só estima
+    custo decide o que fazer com a dúvida.
+    """
+    r = dec(rendimento) or Decimal(1)
+    um_r = (rendimento_um or "").strip().upper()
+    um_p = (um_estoque or "").strip().upper()
+    if not um_r or not um_p or um_r == um_p:
+        return r
+    if porcoes and dec(porcoes) > 0:
+        return dec(porcoes)
+    convertida = converter(r, um_r, um_p, ums)
+    if convertida is not None and convertida > 0:
+        return convertida
+    return None
+
+
+def custo_unitario_da_ficha(cur, ficha: dict, custo_total, um_estoque: str | None,
+                            ums: dict | None = None) -> Decimal:
+    """O custo de UMA unidade do produto (a porção vendida, o cookie) por esta ficha.
+
+    🔑 **Com mais de uma porção, é SEMPRE o custo da porção** (pedido do dono, 13/09 e
+    de novo em 26/09/2026: *"sempre considerar a porção no custo unitário de uma ficha
+    técnica"*). Vale para a venda (custo congelado), a tela do produto, os kits e o
+    CMV teórico — os quatro pedem aqui, e por isso nunca mais discordam.
+    ⚠️ **Sem porções** (a receita inteira é UMA), a porção seria o LOTE — R$ 20,00 por
+    uma massa de 10 KG embaixo de um rótulo de unidade. Aí vale a ponte da produção
+    (`unidades_por_receita`): o rendimento, quando a ficha rende na unidade do produto,
+    ou a grandeza (G↔KG). Sem ponte nenhuma, o rendimento cru — e a produção desse
+    produto já é recusada pedindo as porções.
+    """
+    porcoes = dec(ficha.get("porcoes")) or Decimal(0)
+    if porcoes > 1:
+        unidades = porcoes
+    else:
+        unidades = unidades_por_receita(ficha.get("rendimento_qtd"), porcoes,
+                                        ficha.get("rendimento_um"), um_estoque,
+                                        ums if ums is not None else _carregar_ums(cur))
+        if not unidades:
+            unidades = dec(ficha.get("rendimento_qtd")) or Decimal(1)
+    return (dec(custo_total) / unidades).quantize(CASAS_CUSTO)
+
+
 def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
                    _ums: dict | None = None, _nivel: int = 0,
                    id_unidade: int | None = None) -> dict:
@@ -622,10 +683,11 @@ def custo_provisorio_da_ficha(cur, id_produto: int, id_unidade: int | None = Non
     está montando a receita agora, e é justamente quem ainda não produziu nada.
     """
     cur.execute(
-        """SELECT id, versao, status, rendimento_qtd, rendimento_um, porcoes, porcao_qtd
-             FROM fichas_tecnicas
-            WHERE id_produto = %s AND status <> 'ARQUIVADA'
-            ORDER BY (status = 'HOMOLOGADA') DESC, versao DESC
+        """SELECT f.id, f.versao, f.status, f.rendimento_qtd, f.rendimento_um, f.porcoes,
+                  f.porcao_qtd, p.um_estoque
+             FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
+            WHERE f.id_produto = %s AND f.status <> 'ARQUIVADA'
+            ORDER BY (f.status = 'HOMOLOGADA') DESC, f.versao DESC
             LIMIT 1""",
         (id_produto,),
     )
@@ -657,7 +719,11 @@ def custo_provisorio_da_ficha(cur, id_produto: int, id_unidade: int | None = Non
         # unidade, que é pior que o número que esta correção veio consertar. Então
         # a porção só lidera quando ela EXISTE como divisão: mais de uma.
         # (Foi a suíte que pegou isto, com a bisnaga de 5 KG.)
-        "custo": float(por_porcao if porcoes > 1 else por_unidade),
+        # 🔑 **O número que lidera é o MESMO que a venda congela**
+        # (`custo_unitario_da_ficha`, 26/09/2026): o da porção quando há mais de
+        # uma — o que o dono pediu em 13/09 —, e o da unidade do produto quando a
+        # receita inteira é uma porção só. A tela e a venda nunca mais discordam.
+        "custo": float(custo_unitario_da_ficha(cur, dict(ficha), total, ficha["um_estoque"])),
         "custo_por_porcao": float(por_porcao),
         "custo_por_unidade": float(por_unidade),
         "porcoes": float(porcoes),

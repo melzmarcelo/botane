@@ -1184,24 +1184,17 @@ def _rendimento_em_estoque(rendimento, porcoes, rendimento_um: str | None,
     """
     from services import custos
 
-    r = dec(rendimento) or Decimal(1)
+    # 🔑 **A ponte mora em `custos.unidades_por_receita`** (26/09/2026): é a MESMA que
+    # divide o custo da ficha na venda. Duas cópias da regra divergiram uma vez — a
+    # venda dividia pelo rendimento cru e congelava o custo de 1 KG de massa por
+    # cookie — e não podem divergir de novo.
+    # ⚠️ As porções chegam resolvidas de cima (`modo_da_producao`): quem decide o
+    # modo é quem produz, na tela, e essa resposta tem de ser a mesma da prévia.
+    unidades = custos.unidades_por_receita(rendimento, porcoes, rendimento_um, um_estoque, ums)
+    if unidades is not None:
+        return unidades
     um_r = (rendimento_um or "").strip().upper()
     um_p = (um_estoque or "").strip().upper()
-    if not um_r or not um_p or um_r == um_p:
-        return r
-
-    # 2. As porções do MODO que está valendo. ⚠️ Elas chegam resolvidas de cima
-    #    (`modo_da_producao`): a ponte não pergunta ao banco qual modo é, porque
-    #    quem decide isso é quem produz, na tela, e essa resposta tem de ser a
-    #    mesma da prévia, da agenda e do custo.
-    if porcoes and dec(porcoes) > 0:
-        return dec(porcoes)
-
-    # 3. A grandeza: o rendimento traduzido para a unidade do produto.
-    convertida = custos.converter(r, um_r, um_p, ums)
-    if convertida is not None and convertida > 0:
-        return convertida
-
     raise HTTPException(
         status_code=400,
         detail=(

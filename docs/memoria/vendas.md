@@ -835,3 +835,7 @@
   "esvaziou" passava trivialmente e "voltou" falhava sempre, acusando a tela de um defeito que
   ela não tinha. Validar o seletor numa sonda isolada antes de gastar a bateria é o que separou
   as três coisas.
+
+- 🔑 **Custo congelado na venda = custo da PORÇÃO** (26/09/2026, migração 094). Era
+  `custo da ficha ÷ rendimento` (o cookie saía pelo custo de 1 KG de massa). A regra mora
+  em Custos — ver `custos.md`, "O custo unitário da ficha é o da PORÇÃO".

@@ -652,8 +652,8 @@ def custo_teorico_do_produto(cur, id_produto: int, _nivel: int = 0,
     # homologada: ali a receita move mercadoria de verdade no razão, e seguir
     # uma versão não aprovada baixaria estoque errado.
     cur.execute(
-        """SELECT f.id, f.rendimento_qtd, f.status
-             FROM fichas_tecnicas f
+        """SELECT f.id, f.rendimento_qtd, f.rendimento_um, f.porcoes, f.status, p.um_estoque
+             FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
             WHERE f.id_produto = %s AND f.vigente_ate IS NULL
               AND f.status IN ('HOMOLOGADA', 'RASCUNHO')
             ORDER BY (f.status = 'HOMOLOGADA') DESC, f.versao DESC, f.id DESC
@@ -665,12 +665,17 @@ def custo_teorico_do_produto(cur, id_produto: int, _nivel: int = 0,
         rascunho = ficha["status"] == "RASCUNHO"
         calculo = custos.custo_da_ficha(cur, ficha["id"], id_unidade=id_unidade)
         if calculo["completo"] or calculo["custo_total"] > 0:
-            rendimento = dec(ficha["rendimento_qtd"]) or Decimal(1)
             if calculo["completo"]:
                 origem = "ficha_rascunho" if rascunho else "ficha"
             else:
                 origem = "ficha_rascunho_parcial" if rascunho else "ficha_parcial"
-            return (calculo["custo_total"] / rendimento), origem
+            # 🔑 **Por UNIDADE VENDIDA, pela ponte da produção** (26/09/2026, pedido do
+            # dono: *"na venda o custo da ficha está indo por KG … sempre considerar a
+            # porção"*). Era `custo_total / rendimento`: no cookie (8,535 KG em 65
+            # porções, vendido em UN) congelava o custo de 1 KG de massa por cookie.
+            # Agora é o custo da porção — a mesma unidade que a venda baixa do estoque.
+            return custos.custo_unitario_da_ficha(
+                cur, ficha, calculo["custo_total"], ficha["um_estoque"]), origem
         return None, "ficha_rascunho_sem_custo" if rascunho else "ficha_sem_custo"
 
     unitario, origem = custos.custo_do_insumo(cur, id_produto, id_unidade)
