@@ -206,3 +206,12 @@ class FichaResponse(BaseModel):
     itens_sem_custo: int | None = None
     custo_completo: bool | None = None
     ve_custo: bool = False
+
+
+class FotoBase64(BaseModel):
+    """A foto do prato em base64 — como o conector do Claude consegue mandar.
+
+    ⚠️ Até ~2,8 milhões de caracteres: 2 MB de imagem em base64. O limite de BYTES
+    é conferido de novo em `arquivos.ler_base64`, depois de decodificar.
+    """
+    imagem_base64: str = Field(min_length=16, max_length=2_900_000)

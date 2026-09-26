@@ -253,7 +253,7 @@
   - 🔑 **As ferramentas são rotas que JÁ EXISTEM, chamadas por dentro**
     (`services/mcp_ferramentas.py`, `httpx.ASGITransport` sobre o próprio app, com a chave de
     quem pediu). Permissão, loja (`id_loja` → `X-Unidade`) e setor são os da tela. Ferramenta
-    nova = uma entrada em `FERRAMENTAS`. São **69** (21/09/2026) — 62 de leitura e 7 de gravação —, cobrindo produtos, fichas,
+    nova = uma entrada em `FERRAMENTAS`. São **80** (26/09/2026) — 64 de leitura e 16 de gravação —, cobrindo produtos, fichas,
     estoque, produção, inventário, remessas, compras, vendas, consumo, pessoas, tabelas de
     apoio, CMV, reservas, empresa e auditoria. ⚠️ **O caminho da rota é escrito à mão na
     tabela, e caminho errado só aparece quando alguém chama** — foi o que aconteceu com a
@@ -370,6 +370,27 @@
     grava, desmarcada não, e a renovação preserva) do `smoke_conector_claude.py`.
     ⚠️ A limpeza do `7f` revogava TODAS as conexões vivas e derrubava os blocos seguintes —
     agora acha a linha pelo **prefixo da chave**, não por "a primeira de escrita".
+
+## O produto e suas tabelas pelo Claude (26/09/2026)
+
+🔑 **Pedido do dono:** *"liberar as opções do produto em tabelas periféricas, como onde o
+produto está, para vincular mais de uma prateleira, unidades de conversão quando há produtos
+vinculados, permitir desativar o produto."* Sete ferramentas novas, todas sobre a MESMA rota
+da tela de produto (regra, trava e auditoria vêm junto):
+- `locais_do_produto` / `incluir_local_do_produto` / `tirar_local_do_produto` —
+  `/produtos/{id}/locais`. Por LOJA (`id_loja`); incluir não lança nada (linha zerada);
+  tirar só com a prateleira vazia (409 com frase).
+- `unidades_de_compra` / `gravar_unidades_de_compra` — `/produtos/{id}/unidades`. ⚠️ O
+  PUT SUBSTITUI a tabela; a padrão vira `um_compra`/`fator_compra`.
+- `converter_codigo_vinculado` — `PUT /produtos/{id}/codigos/conversao`: o código do
+  produto que SAIU numa fusão entra como 1 unidade de estoque até alguém dizer o fator (o
+  caso do açúcar de 500 g). Sistema e código vêm de `detalhe_produto.codigos_externos`.
+- `desativar_produto` — `DELETE /produtos/{id}`. ⚠️ Já dava pelo `atualizar_produto`
+  (`ativo: false`), mas escondido entre 40 campos; o Claude não achava. Reativar continua
+  sendo `atualizar_produto` com `ativo: true` (passa pela trava do produto fundido).
+- As `INSTRUCOES` do servidor diziam "acesso SÓ DE LEITURA" — mentira desde as ferramentas
+  de gravação; agora dizem que grava só com chave que permite alterar, confirmando antes.
+- Cobertura: bloco `7h` do `smoke_conector_claude.py`.
 
 ## Armadilhas já pagas
 

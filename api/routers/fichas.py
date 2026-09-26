@@ -22,7 +22,7 @@ from database import get_cursor
 from paginacao import com_total
 from models.fichas import (CustoPrevisto, FichaCreate, FichaDuplicar, FichaResponse,
                            FichaResumo, FichaUpdate, ItemFicha, ModosDaFichaRequest,
-                           RendimentoSugerido)
+                           FotoBase64, RendimentoSugerido)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import custos
 
@@ -808,10 +808,18 @@ async def enviar_foto(
     # presa é prendê-la pelo tempo do envio.
     conteudo, tipo, extensao = await arquivos.ler_enviada(arquivo)
 
-    # 🔑 **Gravar a nova, apontar para ela e apagar a antiga é UMA transação.**
-    # Antes eram três, e entre a segunda e a terceira a foto antiga já tinha
-    # sido apagada com a ficha ainda apontando para ela — a imagem sumia da
-    # tela e do PDF, sem volta.
+    return _gravar_foto(id_ficha, conteudo, tipo, extensao, ctx)
+
+
+def _gravar_foto(id_ficha: int, conteudo: bytes, tipo: str, extensao: str,
+                 ctx: Contexto, origem: str | None = None) -> dict:
+    """Grava a foto da ficha — a mesma para a tela (multipart) e o Claude (base64).
+
+    🔑 **Gravar a nova, apontar para ela e apagar a antiga é UMA transação.**
+    Antes eram três, e entre a segunda e a terceira a foto antiga já tinha
+    sido apagada com a ficha ainda apontando para ela — a imagem sumia da
+    tela e do PDF, sem volta.
+    """
     with get_cursor() as cur:
         cur.execute("SELECT foto_url FROM fichas_tecnicas WHERE id = %s", (id_ficha,))
         antes = cur.fetchone()
@@ -824,8 +832,22 @@ async def enviar_foto(
         cur.execute("UPDATE fichas_tecnicas SET foto_url = %s WHERE id = %s", (url, id_ficha))
         arquivos.remover(antes["foto_url"], cur)
         auditoria.registrar(cur, ctx.id_usuario, "ficha", id_ficha, "foto",
-                            antes={"foto_url": antes["foto_url"]}, depois={"foto_url": url})
+                            antes={"foto_url": antes["foto_url"]},
+                            depois={"foto_url": url, **({"origem": origem} if origem else {})})
     return {"foto_url": url, "message": "Foto atualizada"}
+
+
+@router.put("/{id_ficha}/foto-base64")
+def enviar_foto_base64(id_ficha: int, body: FotoBase64,
+                       ctx: Contexto = Depends(requer_permissao("fichas.editar"))) -> dict:
+    """A foto do prato em BASE64 — a porta do conector do Claude (MCP), que só fala JSON.
+
+    🔑 **Pedido do dono (26/09/2026):** *"ao importar um PDF no Claude de uma ficha
+    técnica que tem foto, permitir gravar esta imagem na ficha que está sendo gerada."*
+    Mesmas regras e mesma gravação da foto pela tela (`_gravar_foto`).
+    """
+    conteudo, tipo, extensao = arquivos.ler_base64(body.imagem_base64)
+    return _gravar_foto(id_ficha, conteudo, tipo, extensao, ctx, origem="base64")
 
 
 @router.delete("/{id_ficha}/foto")

@@ -685,6 +685,91 @@ FERRAMENTAS: list[Ferramenta] = [
                     "required": ["id_fornecedor"]})},
         metodo="PUT"),
     # -----------------------------------------------------------------------
+    # As tabelas em volta do produto
+    # -----------------------------------------------------------------------
+    # 🔑 **Pedido do dono (26/09/2026):** *"liberar as opções do produto em tabelas
+    # periféricas, como onde o produto está, para vincular mais de uma prateleira,
+    # unidades de conversão quando há produtos vinculados, permitir desativar o
+    # produto."* Cada uma é a MESMA rota que a tela de produto usa — regra, trava e
+    # auditoria vêm junto.
+    Ferramenta(
+        "locais_do_produto", "Onde o produto está",
+        "As prateleiras onde o produto mora NA LOJA, com o saldo de cada uma (e o custo, "
+        "para quem pode ver). Um produto pode morar em várias.",
+        "/produtos/{id_produto}/locais",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)}),
+    Ferramenta(
+        "incluir_local_do_produto", "Pôr o produto em mais uma prateleira",
+        "Diz que o produto também mora nesta prateleira (de `locais`), na loja. Não lança "
+        "nada no estoque: a prateleira entra com saldo zero e passa a aparecer na contagem. "
+        "Repetir não duplica. Para várias prateleiras, chame uma vez para cada.",
+        "/produtos/{id_produto}/locais",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "id_local": Param("integer", "A prateleira (de `locais`).", obrigatorio=True,
+                           no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "tirar_local_do_produto", "Tirar o produto de uma prateleira",
+        "O produto deixa de morar nesta prateleira. ⚠️ Só com ela VAZIA: com saldo, o "
+        "servidor recusa — transferir ou lançar a saída é na tela.",
+        "/produtos/{id_produto}/locais/{id_local}",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "id_local": Param("integer", "A prateleira (de `locais_do_produto`).",
+                           obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "unidades_de_compra", "Unidades de compra do produto",
+        "A tabela de conversão: em que unidades o produto é comprado (caixa, fardo, pacote) "
+        "e quantas unidades de ESTOQUE vêm em cada.",
+        "/produtos/{id_produto}/unidades",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)}),
+    Ferramenta(
+        "gravar_unidades_de_compra", "Gravar as unidades de compra do produto",
+        "⚠️ SUBSTITUI a tabela inteira: leia `unidades_de_compra` e mande todas as que "
+        "ficam, junto com a nova. `fator` = quantas unidades de ESTOQUE vêm em 1 desta (a "
+        "caixa com 12 → 12). A unidade de estoque, se entrar, tem fator 1. Só uma pode ser "
+        "a padrão, e ela vira a unidade de compra do cadastro. Vale para as próximas notas.",
+        "/produtos/{id_produto}/unidades",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "itens": Param("array", "TODAS as unidades de compra (substitui a lista).",
+                        obrigatorio=True, no_corpo=True,
+                        itens={"type": "object",
+                               "properties": {
+                                   "um": {"type": "string",
+                                          "description": "Sigla (de `unidades_medida`)."},
+                                   "fator": {"type": "number",
+                                             "description": "Unidades de estoque em 1 desta."},
+                                   "padrao": {"type": "boolean"},
+                                   "observacao": {"type": "string"}},
+                               "required": ["um", "fator"]})},
+        metodo="PUT"),
+    Ferramenta(
+        "converter_codigo_vinculado", "Conversão do código de um produto vinculado",
+        "Quando dois cadastros foram juntados (`fundir_produtos`), os códigos do que saiu "
+        "viram apelidos do que ficou — e a nota daquele código passa a entrar como 1 "
+        "unidade de estoque. Se o produto que saiu era outra embalagem (o pacote de 500 g "
+        "de um produto em KG), diga quantas unidades de estoque vêm em 1 daquele código "
+        "(0,5). Os códigos estão em `detalhe_produto` → `codigos_externos` (`sistema` e "
+        "`codigo`). ⚠️ Vale da próxima nota em diante; não corrige nota já lançada.",
+        "/produtos/{id_produto}/codigos/conversao",
+        {"id_produto": Param("integer", "O produto que FICOU.", obrigatorio=True),
+         "sistema": Param("string", "O espaço do código (ex.: FORNECEDOR, OMIE), como "
+                                    "está em `codigos_externos`.", obrigatorio=True,
+                          no_corpo=True),
+         "codigo": Param("string", "O código, como está em `codigos_externos`.",
+                         obrigatorio=True, no_corpo=True),
+         "fator": Param("number", "Unidades de estoque em 1 unidade daquele código.",
+                        obrigatorio=True, no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "desativar_produto", "Desativar um produto",
+        "Tira o produto das buscas e das telas. Produto não se exclui — o histórico dele "
+        "(notas, estoque, fichas) continua. Para reativar, `atualizar_produto` com "
+        "`ativo: true`. Confirme com a pessoa antes.",
+        "/produtos/{id_produto}",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)},
+        metodo="DELETE"),
+    # -----------------------------------------------------------------------
     # Fichas técnicas pelo Claude
     # -----------------------------------------------------------------------
     # 🔑 **Pedido do dono (24/09/2026):** *"disponibilizar a criação de Fichas
@@ -708,7 +793,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "costuma estar em CAIXA ALTA e abreviado); o que não existir, `criar_produto` — "
         "pergunte à pessoa antes de criar insumo; uma preparação que já tem ficha entra "
         "como `id_subficha`; (4) `um` do item na unidade da receita (`unidades_medida`); "
-        "(5) depois de criar, leia `ficha_tecnica` e avise os `itens_sem_custo`. "
+        "(5) depois de criar, leia `ficha_tecnica` e avise os `itens_sem_custo`; "
+        "(6) se o arquivo tem a foto do prato, `enviar_foto_da_ficha`. "
         "⚠️ Homologar é na tela do sistema.",
         "/fichas",
         {"id_produto": Param("integer", "O prato (produto PRODUZIDO ou KIT).",
@@ -759,6 +845,29 @@ FERRAMENTAS: list[Ferramenta] = [
         {"id_ficha": Param("integer", "A ficha de origem.", obrigatorio=True)},
         metodo="POST"),
     Ferramenta(
+        "enviar_foto_da_ficha", "Gravar a foto do prato na ficha",
+        # 🔑 **Pedido do dono (26/09/2026):** *"ao importar um PDF no Claude de uma ficha
+        # técnica, e esta tem foto, permitir gravar esta imagem na ficha."*
+        # ⚠️ O modelo NÃO consegue reescrever os bytes de uma imagem que só viu: ele
+        # precisa da execução de código do claude.ai para recortá-la do arquivo. Sem
+        # ela, a saída é a tela da ficha — e a descrição diz isso, para ele não
+        # inventar um base64.
+        "Grava a foto do prato pronto na ficha (substitui a que houver). Use quando o "
+        "arquivo da ficha (PDF, foto) traz a imagem do prato. Como obter o `imagem_base64`: "
+        "com a execução de código, extraia a imagem do arquivo (ex.: PyMuPDF "
+        "`page.get_images()`/`extract_image`, ou recorte a página), reduza para no máximo "
+        "800 px no lado maior e JPEG qualidade ~75 (fica em poucas dezenas de KB), e "
+        "codifique em base64. ⚠️ NUNCA escreva um base64 de memória ou de uma imagem que "
+        "você só viu — ele sai corrompido. Sem execução de código, diga à pessoa para "
+        "anexar a foto na tela da ficha (Fichas técnicas → a ficha → Foto).",
+        "/fichas/{id_ficha}/foto-base64",
+        {"id_ficha": Param("integer", "A ficha (a que acabou de ser criada, por exemplo).",
+                           obrigatorio=True),
+         "imagem_base64": Param("string", "A imagem em base64 (PNG, JPG ou WEBP, até 2 MB). "
+                                          "Aceita o prefixo data:image/...;base64,.",
+                                obrigatorio=True, no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
         "fundir_produtos", "Juntar dois cadastros do mesmo produto",
         "Funde dois cadastros: o que SAI é absorvido pelo que FICA, e o histórico, os "
         "códigos e os vínculos passam para ele. ⚠️ **Não tem desfazer** — rode "
@@ -790,8 +899,9 @@ POR_NOME = {f.nome: f for f in FERRAMENTAS}
 
 INSTRUCOES = (
     "Sistema de gestão do Botané Deli & Café: produtos, fichas técnicas, estoque, compras "
-    "(notas do Omie), vendas e CMV. Acesso SÓ DE LEITURA, com as permissões do usuário "
-    "conectado. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "
+    "(notas do Omie), vendas e CMV. Com as permissões do usuário conectado: consulta "
+    "sempre; grava (cadastro, fichas, notas) só com chave que permite alterar — e toda "
+    "gravação deve ser confirmada com a pessoa antes. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "
     "AAAA-MM-DD. Comece por `quem_sou` para saber lojas e permissões. Um erro 403 quer "
     "dizer que o usuário não tem aquela permissão, não que o dado não existe. O CMV "
     "trabalha no PERÍODO da casa: use `cmv_periodos` antes de escolher datas."

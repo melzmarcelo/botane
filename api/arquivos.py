@@ -93,6 +93,50 @@ async def ler_enviada(arquivo: UploadFile) -> tuple[bytes, str, str]:
     return conteudo, arquivo.content_type or "image/png", extensao
 
 
+# O que o Pillow diz que a imagem É → o tipo que se grava. Pelo CONTEÚDO, não pelo
+# que quem mandou declarou.
+_FORMATOS = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+
+
+def ler_base64(texto: str) -> tuple[bytes, str, str]:
+    """A imagem que chega em BASE64 — a porta do conector do Claude, que só fala JSON.
+
+    🔑 **Pedido do dono (26/09/2026):** *"ao importar um PDF no Claude de uma ficha
+    técnica que tem foto, permitir gravar esta imagem na ficha."* O upload da tela é
+    multipart; o MCP não tem como mandar arquivo, só texto. Mesmas regras de
+    `ler_enviada`: PNG, JPG ou WEBP, até 2 MB, conferida pelo conteúdo.
+    ⚠️ Aceita o prefixo `data:image/...;base64,`, que é como o modelo costuma escrever.
+    """
+    import base64
+    import binascii
+    from io import BytesIO
+
+    from PIL import Image
+
+    bruto = (texto or "").strip()
+    if bruto.startswith("data:") and "," in bruto:
+        bruto = bruto.split(",", 1)[1]
+    bruto = "".join(bruto.split())  # quebras de linha no meio do base64
+    try:
+        conteudo = base64.b64decode(bruto, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="A imagem não é um base64 válido.")
+    if not conteudo:
+        raise HTTPException(status_code=400, detail="Imagem vazia.")
+    if len(conteudo) > LIMITE_BYTES:
+        raise HTTPException(status_code=413, detail="Imagem maior que 2 MB.")
+    try:
+        with Image.open(BytesIO(conteudo)) as img:
+            formato = img.format
+            img.verify()
+    except Exception:
+        raise HTTPException(status_code=400, detail="O conteúdo não é uma imagem válida.")
+    tipo = _FORMATOS.get(formato or "")
+    if not tipo:
+        raise HTTPException(status_code=400, detail="Formato não aceito. Envie PNG, JPG ou WEBP.")
+    return conteudo, tipo, TIPOS[tipo]
+
+
 async def ler_pdf(arquivo: UploadFile) -> tuple[bytes, str, str]:
     """Confere o PDF que chegou e devolve `(conteúdo, tipo, extensão)`.
 

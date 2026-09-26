@@ -661,3 +661,13 @@ Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecn
 - ⚠️ `itens` SUBSTITUI a lista no `atualizar` (é o `_gravar_itens` da rota). A ordem do
   array vira a `ordem` — o campo não é exposto.
 - Cobertura: bloco `7g` do `smoke_conector_claude.py`.
+- 🔑 **A foto do prato pelo Claude** (26/09/2026, pedido do dono: *"ao importar um PDF no
+  Claude de uma ficha técnica, e esta tem foto, permitir gravar esta imagem na ficha"*):
+  `enviar_foto_da_ficha` → `PUT /fichas/{id}/foto-base64` (`FotoBase64`,
+  `arquivos.ler_base64`). O conector só fala JSON, e o upload da tela é multipart. Mesma
+  gravação da tela (`_gravar_foto`, uma transação), mesmas regras (PNG/JPG/WEBP, 2 MB,
+  conferida pelo CONTEÚDO com Pillow); a auditoria marca `origem: base64`.
+  ⚠️ **O modelo não consegue reescrever os bytes de uma imagem que só VIU.** Precisa da
+  execução de código do claude.ai para recortar a foto do PDF (PyMuPDF), reduzir (≤ 800 px,
+  JPEG ~75) e codificar. A descrição da ferramenta proíbe base64 "de memória" e manda, sem
+  execução de código, a pessoa anexar a foto na tela. Cobertura: bloco `7h`.

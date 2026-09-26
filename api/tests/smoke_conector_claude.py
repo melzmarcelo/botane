@@ -621,6 +621,109 @@ for i in (id_prato, farinha, ovo):
     pedir("DELETE", f"/produtos/{i}", token=admin)
 
 
+print("\n7h. as tabelas em volta do produto e a foto da ficha, pelo conector")
+# 🔑 Pedido do dono (26/09/2026): *"liberar as opções do produto em tabelas
+# periféricas — onde o produto está, mais de uma prateleira, unidades de conversão
+# quando há produtos vinculados, desativar — e gravar a foto da ficha do PDF."*
+marca_h = str(time.time_ns() // 100)[-7:]
+erro, prod = ferramenta("criar_produto", {"nome": f"Periferico do Claude {marca_h}",
+                                          "tipo": "INSUMO", "um_estoque": "KG"})
+checar("preparo: um produto novo", not erro and prod.get("id"), prod)
+id_h = prod.get("id")
+erro, locais_casa = ferramenta("locais", {})
+ativos = [x["id"] for x in (locais_casa if isinstance(locais_casa, list) else [])
+          if x.get("ativo", True)][:2]
+checar("preparo: a loja tem ao menos duas prateleiras", len(ativos) == 2, locais_casa)
+for id_local in ativos:
+    erro, r = ferramenta("incluir_local_do_produto", {"id_produto": id_h, "id_local": id_local})
+    checar(f"incluir_local_do_produto põe na prateleira {id_local}", not erro, r)
+erro, onde = ferramenta("locais_do_produto", {"id_produto": id_h})
+checar("locais_do_produto mostra as DUAS prateleiras",
+       not erro and {x.get("id_local") for x in onde} >= set(ativos), onde)
+erro, r = ferramenta("incluir_local_do_produto", {"id_produto": id_h, "id_local": ativos[0]})
+checar("repetir não duplica", not erro and "já era" in str(r), r)
+erro, r = ferramenta("tirar_local_do_produto", {"id_produto": id_h, "id_local": ativos[1]})
+checar("tirar_local_do_produto tira a prateleira vazia", not erro, r)
+erro, onde = ferramenta("locais_do_produto", {"id_produto": id_h})
+checar("e ela sai da lista", ativos[1] not in {x.get("id_local") for x in onde}, onde)
+
+erro, r = ferramenta("gravar_unidades_de_compra", {"id_produto": id_h, "itens": [
+    {"um": "CX", "fator": 12, "padrao": True}, {"um": "UN", "fator": 0.5}]})
+checar("gravar_unidades_de_compra grava a tabela de conversão", not erro, r)
+erro, uns = ferramenta("unidades_de_compra", {"id_produto": id_h})
+checar("unidades_de_compra devolve as duas, a padrão primeiro",
+       not erro and [u["um"] for u in uns] == ["CX", "UN"] and uns[0]["padrao"], uns)
+erro, r = ferramenta("gravar_unidades_de_compra", {"id_produto": id_h, "itens": [
+    {"um": "KG", "fator": 3}]})
+checar("a unidade de estoque com fator diferente de 1 é recusada", erro and "400" in str(r), r)
+
+with get_cursor() as cur:
+    cur.execute("""INSERT INTO codigos_externos (sistema, codigo, id_produto, origem_vinculo)
+                   VALUES ('FORNECEDOR', %s, %s, 'FUSAO')""", (f"MEIO-{marca_h}", id_h))
+erro, r = ferramenta("converter_codigo_vinculado", {"id_produto": id_h, "sistema": "FORNECEDOR",
+                                                    "codigo": f"MEIO-{marca_h}", "fator": 0.5})
+checar("converter_codigo_vinculado diz quanto vale o código do vinculado", not erro, r)
+with get_cursor() as cur:
+    cur.execute("SELECT fator, fator_confirmado FROM codigos_externos WHERE codigo = %s",
+                (f"MEIO-{marca_h}",))
+    cod = cur.fetchone()
+checar("e grava o fator, confirmado", cod and float(cod["fator"]) == 0.5
+       and cod["fator_confirmado"], cod)
+erro, r = ferramenta("converter_codigo_vinculado", {"id_produto": id_h, "sistema": "FORNECEDOR",
+                                                    "codigo": "NAO-EXISTE", "fator": 2})
+checar("código que não é deste produto: 404", erro and "404" in str(r), r)
+
+# A foto da ficha em base64: um PNG de verdade, pequeno.
+from io import BytesIO  # noqa: E402
+
+from PIL import Image  # noqa: E402
+
+buf = BytesIO()
+Image.new("RGB", (40, 30), (200, 120, 40)).save(buf, format="JPEG", quality=75)
+foto64 = base64.b64encode(buf.getvalue()).decode()
+erro, prato_h = ferramenta("criar_produto", {"nome": f"Prato com foto {marca_h}",
+                                             "tipo": "PRODUZIDO", "um_estoque": "UN"})
+erro, ficha_h = ferramenta("criar_ficha_tecnica", {"id_produto": prato_h.get("id"),
+                                                   "rendimento_um": "UN", "itens": [
+    {"id_insumo": id_h, "qtd_bruta": 0.2, "um": "KG"}]})
+checar("preparo: uma ficha nova", not erro and ficha_h.get("id"), ficha_h)
+erro, r = ferramenta("enviar_foto_da_ficha", {"id_ficha": ficha_h.get("id"),
+                                              "imagem_base64": "data:image/jpeg;base64," + foto64})
+checar("enviar_foto_da_ficha grava a foto (aceita o prefixo data:)",
+       not erro and str(r.get("foto_url", "")).startswith("/arquivos/"), r)
+erro, lida = ferramenta("ficha_tecnica", {"id_ficha": ficha_h.get("id")})
+checar("e a ficha passa a apontar para ela", lida.get("foto_url") == r.get("foto_url"), lida)
+erro, r = ferramenta("enviar_foto_da_ficha", {"id_ficha": ficha_h.get("id"),
+                                              "imagem_base64": base64.b64encode(
+                                                  b"isto nao e imagem nenhuma").decode()})
+checar("texto que não é imagem é recusado (400)", erro and "400" in str(r), r)
+erro, r = ferramenta("enviar_foto_da_ficha", {"id_ficha": ficha_h.get("id"),
+                                              "imagem_base64": "@@@ nao e base64 @@@@"})
+checar("base64 inválido é recusado", erro and "400" in str(r), r)
+erro, r = ferramenta("enviar_foto_da_ficha", {"id_ficha": ficha_h.get("id"),
+                                              "imagem_base64": foto64}, token=chave)
+checar("a chave de leitura não grava foto", erro, r)
+
+erro, r = ferramenta("desativar_produto", {"id_produto": id_h})
+checar("desativar_produto desativa", not erro, r)
+erro, d = ferramenta("detalhe_produto", {"id_produto": id_h})
+checar("e o produto fica inativo", d.get("ativo") is False, d.get("ativo"))
+erro, r = ferramenta("atualizar_produto", {"id_produto": id_h, "ativo": True})
+erro, d = ferramenta("detalhe_produto", {"id_produto": id_h})
+checar("reativar é pelo atualizar_produto", d.get("ativo") is True, d.get("ativo"))
+
+with get_cursor() as cur:
+    cur.execute("DELETE FROM ficha_itens WHERE id_ficha = %s", (ficha_h.get("id"),))
+    cur.execute("SELECT foto_url FROM fichas_tecnicas WHERE id = %s", (ficha_h.get("id"),))
+    cur.execute("DELETE FROM arquivos WHERE dono = %s", (f"ficha-{ficha_h.get('id')}",))
+    cur.execute("DELETE FROM fichas_tecnicas WHERE id = %s", (ficha_h.get("id"),))
+    cur.execute("DELETE FROM codigos_externos WHERE codigo = %s", (f"MEIO-{marca_h}",))
+    cur.execute("DELETE FROM produto_unidades WHERE id_produto = %s", (id_h,))
+    cur.execute("DELETE FROM estoque_saldos WHERE id_produto = %s AND quantidade = 0", (id_h,))
+for i in (id_h, prato_h.get("id")):
+    pedir("DELETE", f"/produtos/{i}", token=admin)
+
+
 print("\n7f. conectar pelo claude.ai autorizando a ALTERAR")
 # 🔑 Pedido do dono (21/09/2026), depois de topar na prática: as ferramentas de
 # gravação não apareciam para a conexão do claude.ai, que nascia só de leitura.
