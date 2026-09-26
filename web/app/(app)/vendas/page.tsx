@@ -300,6 +300,7 @@ export default function PaginaVendas() {
                     <Etiqueta cor="alerta">{v.sem_custo} sem custo</Etiqueta>
                   )}
                   {v.cancelada && <Etiqueta cor="alerta">cancelada</Etiqueta>}
+                  {v.consumo_interno && <Etiqueta>consumo interno</Etiqueta>}
                 </span>
               </li>
             ))}

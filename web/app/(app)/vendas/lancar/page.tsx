@@ -85,6 +85,10 @@ export default function PaginaLancarVenda() {
   // lista inteira na memória da tela.
   const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
   const [politica, setPolitica] = useState<PessoaCupom | null>(null);
+  // 🔑 **Consumo interno** (migração 095, pedido do dono, 26/09/2026): só existe com
+  // pessoa. Marcado, o documento baixa o estoque como consumo interno e fica fora
+  // da receita e do CMV teórico — só o custo pesa. Quem decide é o servidor.
+  const [consumoInterno, setConsumoInterno] = useState(false);
 
   // 🔑 **Consumo de pessoa exige ciclo ABERTO** (08/09/2026, pedido do dono):
   // o consumo só se lança dentro de um ciclo, porque é nele que a dívida se
@@ -222,6 +226,7 @@ export default function PaginaLancarVenda() {
             canal: canal || null,
             origem: "MANUAL",
             id_pessoa: pessoa ? pessoa.id : null,
+            consumo_interno: !!pessoa && consumoInterno,
             itens: prontos.map((i) => ({
               id_produto: Number(i.id_produto),
               quantidade: Number(i.quantidade.replace(",", ".")),
@@ -249,6 +254,7 @@ export default function PaginaLancarVenda() {
             canal: canal || null,
             origem: "PLANILHA",
             id_pessoa: pessoa ? pessoa.id : null,
+            consumo_interno: !!pessoa && consumoInterno,
             itens: previa.linhas.map((l) => ({
               codigo: l.codigo || null,
               descricao: l.descricao || null,
@@ -328,6 +334,8 @@ export default function PaginaLancarVenda() {
               selecionado={pessoa}
               aoEscolher={(item: ItemBusca | null) => {
                 setPessoa(item ? { id: item.id, rotulo: rotuloDe(item) } : null);
+                // Sem pessoa não há consumo interno: a caixa some e desmarca.
+                if (!item) setConsumoInterno(false);
                 setPolitica(
                   item ? (item.bruto as unknown as PessoaCupom) : null,
                 );
@@ -335,6 +343,27 @@ export default function PaginaLancarVenda() {
             />
           </Campo>
         </div>
+
+        {/* 🔑 **Considerar consumo interno** (pedido do dono, 26/09/2026): só aparece
+            depois de escolher a pessoa — consumo interno é sempre de alguém. */}
+        {pessoa && (
+          <label className="mt-4 flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={consumoInterno}
+              onChange={(e) => setConsumoInterno(e.target.checked)}
+            />
+            <span className="text-[14px]">
+              Considerar consumo interno
+              <span className="block text-[13px] text-suave">
+                O estoque sai como consumo interno, e o documento fica fora da receita e do
+                CMV teórico: só o custo entra, na linha de consumo interno do CMV. Continua
+                aparecendo no consumo desta pessoa.
+              </span>
+            </span>
+          </label>
+        )}
 
         {/* 🔑 **Sem ciclo aberto, o consumo não se lança** (08/09/2026, pedido
             do dono). ⚠️ A mensagem diz o CAMINHO, não só que não deu: quem está

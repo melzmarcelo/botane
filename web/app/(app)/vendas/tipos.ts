@@ -15,6 +15,8 @@ export type Venda = {
   documento: string | null;
   valor_total: number;
   cancelada: boolean;
+  /** Consumo interno (095): fora da receita e do CMV teórico. */
+  consumo_interno?: boolean;
   itens: number;
   sem_custo: number;
 };
@@ -80,6 +82,8 @@ export type VendaDetalhe = {
   valor_total: number;
   desconto: number;
   cancelada: boolean;
+  /** Consumo interno (095): fora da receita e do CMV teórico. */
+  consumo_interno?: boolean;
   importada_em: string | null;
   usuario: string | null;
   /** Para quem foi este cupom — e a política que valia NO DIA, congelada. */

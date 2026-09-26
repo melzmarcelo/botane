@@ -55,7 +55,7 @@ def listar(
         return pagina(
             cur,
             """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.valor_total,
-                      v.cancelada,
+                      v.cancelada, v.consumo_interno,
                       count(vi.id) AS itens,
                       count(*) FILTER (WHERE vi.custo_ficha_unitario IS NULL) AS sem_custo
                  FROM vendas v
@@ -280,6 +280,13 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         # existir"), a pedido de quem usa. O preco e o previsto la: sem ciclo
         # aberto, a casa para de registrar consumo de pessoa -- e a mensagem
         # abaixo precisa dizer exatamente o que fazer, ou vira um "nao deu".
+        # ⚠️ **Consumo interno é de ALGUÉM** (migração 095): é o campo que a tela só
+        # habilita depois de escolher a pessoa. Sem ela, "consumo interno" seria
+        # mercadoria saindo sem dono — isso é perda, e tem tela própria.
+        if any(v.consumo_interno and not v.id_pessoa for v in body.vendas):
+            raise HTTPException(
+                status_code=422,
+                detail="Consumo interno precisa de uma pessoa: informe para quem é o lançamento.")
         if any(v.id_pessoa for v in body.vendas) and not ciclo.periodo_aberto(cur, id_unidade):
             raise HTTPException(
                 status_code=400,
@@ -335,11 +342,13 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
             cur.execute(
                 """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
                                        valor_total, desconto, cancelada, id_pessoa,
+                                       consumo_interno,
                                        cupom_base, cupom_desconto_pct, id_usuario)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id""",
                 (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
                  venda.documento, total, venda.desconto or 0, venda.cancelada,
-                 venda.id_pessoa,
+                 venda.id_pessoa, bool(venda.consumo_interno and venda.id_pessoa),
                  # 🔑 A política CONGELADA, como o custo da ficha: ela muda no
                  # cadastro, e sem isto o relatório de março passaria a se
                  # explicar por uma regra de setembro.
@@ -438,11 +447,18 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                             id_local=(feito or {}).get("id_local")
                                      or p_venda.get("id_local_padrao"),
                             id_produto=id_produto,
-                            tipo="SAIDA_VENDA", quantidade=item.quantidade,
+                            # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
+                            # o que o põe na linha "dos quais: consumo interno" da
+                            # apuração, com o custo dele. ⚠️ A origem continua VENDA:
+                            # é por ela que o cancelamento acha o movimento a estornar.
+                            tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
+                                  else "SAIDA_VENDA"),
+                            quantidade=item.quantidade,
                             data_movimento=_quando(venda.data, venda.hora),
                             origem_tipo="VENDA", origem_id=id_venda,
                             documento=venda.documento, id_usuario=ctx.id_usuario,
-                            observacao=("Produzido e vendido na hora" if feito
+                            observacao=("Consumo interno" if venda.consumo_interno
+                                        else "Produzido e vendido na hora" if feito
                                         else "Baixa da venda"),
                         )
                         baixados += 1
@@ -577,7 +593,12 @@ def previa_sem_baixa(ctx: Contexto = Depends(_ver)) -> dict:
                ), saiu AS (
                  SELECT m.id_produto, sum(abs(m.quantidade)) AS qtd
                    FROM estoque_movimentos m
-                  WHERE m.id_unidade = %s AND m.tipo = 'SAIDA_VENDA'
+                  WHERE m.id_unidade = %s
+                    -- ⚠️ O consumo interno lançado como VENDA (095) também é
+                    -- saída da venda: sem ele aqui, a tela o daria como "não
+                    -- baixado" e o botão baixaria de novo.
+                    AND (m.tipo = 'SAIDA_VENDA'
+                         OR (m.tipo = 'SAIDA_CONSUMO_INTERNO' AND m.origem_tipo = 'VENDA'))
                     AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
                                      WHERE e.id_estorno_de = m.id)
                   GROUP BY m.id_produto
@@ -675,7 +696,12 @@ def baixar_sem_baixa(id_produto: int | None = None,
                ), saiu AS (
                  SELECT m.id_produto, sum(abs(m.quantidade)) AS qtd
                    FROM estoque_movimentos m
-                  WHERE m.id_unidade = %s AND m.tipo = 'SAIDA_VENDA'
+                  WHERE m.id_unidade = %s
+                    -- ⚠️ O consumo interno lançado como VENDA (095) também é
+                    -- saída da venda: sem ele aqui, a tela o daria como "não
+                    -- baixado" e o botão baixaria de novo.
+                    AND (m.tipo = 'SAIDA_VENDA'
+                         OR (m.tipo = 'SAIDA_CONSUMO_INTERNO' AND m.origem_tipo = 'VENDA'))
                     AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
                                      WHERE e.id_estorno_de = m.id)
                   GROUP BY m.id_produto
@@ -696,7 +722,7 @@ def baixar_sem_baixa(id_produto: int | None = None,
         if faltas:
             cur.execute(
                 """SELECT vi.id, vi.id_produto, vi.quantidade, v.id AS id_venda, v.data,
-                          v.hora, v.documento
+                          v.hora, v.documento, v.consumo_interno
                      FROM venda_itens vi
                      JOIN vendas v ON v.id = vi.id_venda AND NOT v.cancelada
                     WHERE v.id_unidade = %s AND vi.id_produto = ANY(%s)
@@ -723,7 +749,10 @@ def baixar_sem_baixa(id_produto: int | None = None,
                 motor_estoque.lancar(
                     cur, id_unidade=id_unidade,
                     id_local=item["id_local_padrao"] or reserva,
-                    id_produto=item["id_produto"], tipo="SAIDA_VENDA",
+                    id_produto=item["id_produto"],
+                    # O consumo interno (095) sai como consumo interno, também aqui.
+                    tipo=("SAIDA_CONSUMO_INTERNO" if item["consumo_interno"]
+                          else "SAIDA_VENDA"),
                     quantidade=item["quantidade"],
                     data_movimento=_quando(item["data"], item["hora"]),
                     origem_tipo="VENDA", origem_id=item["id_venda"],
@@ -872,7 +901,7 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         cur.execute(
             """SELECT v.id, v.data, v.hora, v.origem, v.canal, v.documento, v.id_externo,
                       v.mesa, v.valor_total, v.desconto, v.cancelada, v.importada_em,
-                      v.id_pessoa, v.cupom_base, v.cupom_desconto_pct,
+                      v.id_pessoa, v.cupom_base, v.cupom_desconto_pct, v.consumo_interno,
                       f.nome AS pessoa,
                       u.nome AS usuario
                  FROM vendas v

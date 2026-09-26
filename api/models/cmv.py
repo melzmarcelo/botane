@@ -51,6 +51,11 @@ class VendaImportar(BaseModel):
     # ⚠️ Só a venda MANUAL usa isto. O cupom que vem do PDV traz os valores
     # cobrados de verdade, e reescrevê-los aqui inventaria receita.
     id_pessoa: int | None = None
+    # 🔑 **Consumo interno** (migração 095, pedido do dono, 26/09/2026): o documento
+    # baixa o estoque como CONSUMO INTERNO e fica fora da receita e do CMV teórico —
+    # só o custo pesa, na linha de consumo interno. ⚠️ Só com pessoa: é o campo que a
+    # tela habilita quando se escolhe para quem é o lançamento.
+    consumo_interno: bool = False
     itens: list[ItemVenda]
 
 
@@ -82,6 +87,9 @@ class VendaResponse(BaseModel):
     documento: str | None = None
     valor_total: float
     cancelada: bool
+    # ⚠️ Campo novo em resposta com `response_model` precisa estar AQUI, senão sai
+    # recortado (a armadilha do `reservas_ligado` e do `porcao_qtd`). Migração 095.
+    consumo_interno: bool = False
     itens: int = 0
     sem_custo: int = 0
 

@@ -853,3 +853,22 @@
 - 🔑 **Custo congelado na venda = custo da PORÇÃO** (26/09/2026, migração 094). Era
   `custo da ficha ÷ rendimento` (o cookie saía pelo custo de 1 KG de massa). A regra mora
   em Custos — ver `custos.md`, "O custo unitário da ficha é o da PORÇÃO".
+
+- 🔑 **Venda de pessoa como CONSUMO INTERNO** (migração 095, 26/09/2026). Pedido do dono:
+  *"quando lanço uma venda para uma pessoa, habilitar um novo campo, Considerar consumo
+  interno … não é considerado no CMV, somente o custo … mesma regra do consumo interno."*
+  `vendas.consumo_interno`; a caixa só aparece na tela depois de escolher a pessoa, e o
+  servidor recusa (422) consumo interno sem pessoa — sem dono, é perda.
+  - O estoque sai como `SAIDA_CONSUMO_INTERNO` (origem continua `VENDA`, que é por onde o
+    cancelamento acha o movimento). O custo cai na linha "dos quais: consumo interno" da
+    apuração, líquida de estorno.
+  - ⚠️ **Fora da receita e do CMV teórico em TODO lugar que soma venda**: apuração (receita,
+    desconto do cupom, teórico, receita com ficha), margem por prato e painel de início. Não
+    fazer isso deixaria um prato que ninguém vendeu no food cost, pelo preço E pela ficha.
+  - ⚠️ **A conferência "vendido × saiu" reconhece o consumo interno de VENDA** como saída
+    (`SAIDA_CONSUMO_INTERNO` com `origem_tipo = 'VENDA'`) — sem isso o botão de baixa
+    atrasada baixaria de novo. E a baixa atrasada usa o tipo do documento.
+  - Continua no consumo por pessoa e no ciclo: o documento é da pessoa.
+  - ⚠️ Não coberto: a fusão de cadastros (`produtos_vinculo`) baixa o "vendido e não saiu" do
+    cadastro que sai como venda, sem distinguir consumo interno — caso raro.
+  - Cobertura: `smoke_venda_consumo_interno.py` (18).

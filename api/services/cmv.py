@@ -423,10 +423,15 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
                   -- multiplicaria o desconto pelo número de itens do cupom.
                   coalesce((SELECT sum(d.desconto) FROM vendas d
                              WHERE d.id_unidade = %s AND NOT d.cancelada
+                               AND NOT d.consumo_interno
                                AND d.data BETWEEN %s AND %s), 0) AS descontos
              FROM venda_itens vi
              JOIN vendas v ON v.id = vi.id_venda
             WHERE v.id_unidade = %s AND NOT v.cancelada
+              -- 🔑 **Consumo interno NÃO é receita nem CMV teórico** (migração 095):
+              -- ninguém vendeu aquele prato. O custo dele já está no CMV real (a
+              -- saída de estoque) e aparece na linha "dos quais: consumo interno".
+              AND NOT v.consumo_interno
               AND v.data BETWEEN %s AND %s""",
         (id_unidade, inicio, fim, id_unidade, inicio, fim),
     )
@@ -456,7 +461,7 @@ def apurar(cur, id_unidade: int, inicio: date, fim: date) -> dict:
                               AS com_ficha
                      FROM vendas d
                      JOIN venda_itens di ON di.id_venda = d.id
-                    WHERE d.id_unidade = %s AND NOT d.cancelada
+                    WHERE d.id_unidade = %s AND NOT d.cancelada AND NOT d.consumo_interno
                       AND d.data BETWEEN %s AND %s
                     GROUP BY d.id, d.desconto) t""",
         (id_unidade, inicio, fim),
@@ -584,7 +589,8 @@ def margem_por_prato(cur, id_unidade: int, inicio: date, fim: date, limite: int 
              FROM venda_itens vi
              JOIN vendas v ON v.id = vi.id_venda
              LEFT JOIN produtos p ON p.id = vi.id_produto
-            WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data BETWEEN %s AND %s
+            WHERE v.id_unidade = %s AND NOT v.cancelada AND NOT v.consumo_interno
+              AND v.data BETWEEN %s AND %s
               {filtro}
             GROUP BY vi.id_produto, coalesce(p.nome, vi.descricao_pdv, 'Sem vínculo'), p.codigo
             ORDER BY receita DESC

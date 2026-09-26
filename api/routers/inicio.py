@@ -79,11 +79,14 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
                   coalesce(sum(vi.valor_total), 0)
                     - coalesce((SELECT sum(d.desconto) FROM vendas d
                                  WHERE d.id_unidade = %s AND NOT d.cancelada
+                                   AND NOT d.consumo_interno
                                    AND d.data = %s), 0) AS receita,
                   coalesce(sum(vi.quantidade), 0) AS itens
              FROM vendas v
              LEFT JOIN venda_itens vi ON vi.id_venda = v.id
-            WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data = %s""",
+            WHERE v.id_unidade = %s AND NOT v.cancelada AND v.data = %s
+              -- Consumo interno (095) não é venda do dia: não é receita nem ticket.
+              AND NOT v.consumo_interno""",
         (id_unidade, data, id_unidade, data),
     )
     r = dict(cur.fetchone())

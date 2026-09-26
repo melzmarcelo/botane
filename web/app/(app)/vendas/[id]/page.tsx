@@ -111,6 +111,8 @@ export default function PaginaVenda() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Consumo interno (095): o documento não é receita nem CMV teórico. */}
+          {venda.consumo_interno && <Etiqueta>consumo interno</Etiqueta>}
           {venda.cancelada ? (
             <Etiqueta cor="alerta">cancelada</Etiqueta>
           ) : (
