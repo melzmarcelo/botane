@@ -72,7 +72,7 @@ st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
 assert st == 200, r
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 garantir_locais(chamar, token)
 st, locais = chamar("GET", "/locais", token=token)
 principal = next((x for x in locais if x.get("principal")), locais[0])["id"]

@@ -73,7 +73,7 @@ if st != 200:
     print("API não respondeu ao login:", st, r)
     sys.exit(1)
 token = r["access_token"]
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 
 print("0. limpa o cenário da rodada anterior")
 # As notas das fixtures são únicas pela chave da NF-e: sem desfazer o que a

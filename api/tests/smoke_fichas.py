@@ -123,7 +123,7 @@ def novo_produto(nome, tipo, um, preco=None, fator=1):
     return r["id"]
 
 
-marca = str(__import__("time").time_ns())[-6:]
+marca = str(__import__("time").time_ns() // 100)[-6:]
 # Café: R$ 40,00 o quilo. Leite: R$ 6,00 o litro.
 cafe = novo_produto(f"Ficha café {marca}", "INSUMO", "KG", preco=40)
 leite = novo_produto(f"Ficha leite {marca}", "INSUMO", "L", preco=6)

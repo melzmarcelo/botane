@@ -81,7 +81,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 EMAIL = f"smoke.setor{marca}@botane.com.br"
 SENHA = "smoke-setor-12345"
 criados: dict = {"setores": [], "produtos": []}

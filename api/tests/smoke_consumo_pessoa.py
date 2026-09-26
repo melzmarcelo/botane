@@ -82,7 +82,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 criados: dict = {"produtos": [], "vendas": []}
 # 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
 # ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa

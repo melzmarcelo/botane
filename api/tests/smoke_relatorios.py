@@ -72,7 +72,7 @@ if st != 200:
     print("API não respondeu ao login:", st, r)
     sys.exit(1)
 token = r["access_token"]
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 
 # O período começa hoje: o teste mede o DELTA que ele mesmo cria, porque o
 # banco local já tem movimento de outras rodadas.

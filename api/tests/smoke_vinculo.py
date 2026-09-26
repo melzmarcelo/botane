@@ -77,7 +77,7 @@ st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
 assert st == 200, r
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 hoje = date.today().isoformat()
 garantir_locais(chamar, token)
 

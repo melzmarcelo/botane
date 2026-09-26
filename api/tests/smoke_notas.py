@@ -108,7 +108,7 @@ if st != 200:
     print("API não respondeu ao login:", st, r)
     sys.exit(1)
 token = r["access_token"]
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 
 # A chave da NF-e tem 44 dígitos e é única — a marca da rodada entra nela para
 # que a segunda execução importe de verdade em vez de bater no de-duplicador.

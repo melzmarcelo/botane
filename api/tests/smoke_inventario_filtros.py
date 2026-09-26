@@ -78,7 +78,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 abertas: list[int] = []
 
 
@@ -275,7 +275,7 @@ print("\n9b. contar e MONTAR a contagem sao permissoes diferentes")
 # 🔑 Ate 30/08/2026 `estoque.inventario` dava as duas coisas: quem ia a
 # prateleira contar podia abrir contagem nova, escolher o recorte e cancelar a
 # dos outros. Quem conta precisa de uma coisa so — abrir a que existe e digitar.
-marca_p = str(time.time_ns())[-6:]
+marca_p = str(time.time_ns() // 100)[-6:]
 st, papel = chamar("POST", "/papeis", {
     "nome": f"So conta {marca_p}", "descricao": "contador de teste",
     "permissoes": ["estoque.inventario", "estoque.saldos"],

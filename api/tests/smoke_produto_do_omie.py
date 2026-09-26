@@ -76,7 +76,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca_teste = str(time.time_ns())[-6:]
+marca_teste = str(time.time_ns() // 100)[-6:]
 preservar_credenciais("OMIE")
 
 # ⚠️ Guarda o MODO e devolve no fim, dê certo ou não. Repor no fim do roteiro

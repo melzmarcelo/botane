@@ -73,7 +73,7 @@ st, r = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
 assert st == 200, r
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 hoje = date.today().isoformat()
 
 print("1. um prato com ficha, para o detalhe ter custo de verdade")
@@ -552,7 +552,7 @@ print("A HORA da venda vai para o razao")
 # (time) em colunas separadas, e a baixa mandava so a data -- todo movimento de
 # venda nascia as 00:00. Na coluna "Quando", quarenta vendas do dia viravam
 # quarenta linhas identicas, e a ordem entre elas deixava de existir.
-_suf = str(time.time_ns())[-5:]
+_suf = str(time.time_ns() // 100)[-5:]
 st, _r = chamar("POST", "/produtos", {
     "nome": f"HORA VENDA {_suf}", "tipo": "REVENDA", "um_estoque": "UN",
     "controla_estoque": True, "status": "ATIVO"}, token=token)

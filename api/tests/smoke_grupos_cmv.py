@@ -87,7 +87,7 @@ token = r["access_token"]
 # mesma marca. Seis digitos sao um milhao de possibilidades contra uma base que
 # so cresce -- a colisao era questao de tempo, e chega como um 409 que nao tem
 # nada a ver com o que a suite mede.
-marca = str(time.time_ns())[-9:]
+marca = str(time.time_ns() // 100)[-9:]
 hoje = date.today()
 periodo = f"inicio={hoje.replace(day=1)}&fim={hoje}"
 

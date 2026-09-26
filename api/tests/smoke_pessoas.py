@@ -92,7 +92,7 @@ token = r["access_token"]
 # alguem -- "662800" esta em 44376628000161, da GERUN TECNOLOGIA. A suite
 # falhava dizendo "a lista traz as duas: 3", e a terceira era um cadastro de
 # verdade. Com a letra na frente, nenhum documento pode casar.
-marca = "P" + str(time.time_ns())[-6:]
+marca = "P" + str(time.time_ns() // 100)[-6:]
 criados: dict = {"pessoas": [], "usuarios": [], "produtos": []}
 # 🔑 **Venda com pessoa exige ciclo de consumo ABERTO** (08/09/2026).
 # ⚠️ O ciclo so se apaga se foi ESTA suite que o abriu: um ciclo da casa

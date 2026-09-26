@@ -80,7 +80,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 hoje = date.today()
 periodo = f"inicio={hoje.replace(day=1)}&fim={hoje}"
 

@@ -88,7 +88,7 @@ if st != 200:
     sys.exit(1)
 token = r["access_token"]
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 # Transferência precisa de dois locais: a base nova tem zero.
 locais = garantir_locais(chamar, token, 2)
 principal = next((l for l in locais if l["principal"]), locais[0])
@@ -562,7 +562,7 @@ print("9b. a segunda loja")
 # comprou a R$ 40/kg e a filial a R$ 52/kg valia R$ 45,30 nas duas, e nenhuma
 # pagou isso. Nao fica contido — este numero alimenta a ficha, o custo CONGELADO
 # do item de venda e a baixa por vinculo.
-marca_f = str(time.time_ns())[-6:]
+marca_f = str(time.time_ns() // 100)[-6:]
 st, filial = chamar("POST", "/unidades", {
     "nome": f"Filial de teste {marca_f}", "apelido": f"F{marca_f}",
 }, token=token)

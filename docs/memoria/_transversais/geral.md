@@ -350,3 +350,11 @@
   ⚠️ O perfil do Chrome do `verificar.mjs` agora fica em `web/scripts/_chrome-perfil` — no
   TEMP do C: (que vive no limite nesta máquina) o Chrome falha com erro de PROTOCOLO em pontos
   diferentes a cada rodada, não com "disco cheio", e isso se lê como teste instável.
+
+- ⚠️ **A marca das suítes precisa descartar os zeros do relógio** (26/09/2026). No Windows
+  `time.time_ns()` anda de 100 em 100: os dois últimos dígitos são sempre `00`, e
+  `str(time.time_ns())[-6:]` tinha só 10 mil valores (o `[-5:]` de `smoke_vendas`, só MIL).
+  Com dezenas de rodadas acumuladas na base, código de nota, de produto, de venda e e-mail de
+  usuário de teste passaram a repetir: `smoke_exportacoes`, `smoke_cmv`, `smoke_notas` e
+  `smoke_inventario_filtros` caíram por isso (este último deixando uma contagem ABERTA que
+  derrubou a rodada seguinte). Agora é `str(time.time_ns() // 100)[-6:]` em todas.

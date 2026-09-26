@@ -122,7 +122,7 @@ token = r["access_token"]
 # `preservar_credenciais`: suíte devolve o que encontrou.
 preservar_logo(BASE, token)
 
-marca = str(time.time_ns())[-6:]
+marca = str(time.time_ns() // 100)[-6:]
 hoje = date.today()
 periodo = f"inicio={hoje.replace(day=1)}&fim={hoje}"
 id_local = garantir_local(chamar, token)["id"]
