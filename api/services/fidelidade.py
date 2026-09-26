@@ -191,7 +191,7 @@ def cartao(cur, id_cliente: int) -> dict:
     )
     abertas = [r["data"] for r in cur.fetchall()]
     cur.execute(
-        """SELECT codigo, premio, vence_em, dias_consumo, emitido_em, usado_em
+        """SELECT codigo, premio, vence_em, vale_de, dias_consumo, emitido_em, usado_em
              FROM fidelidade_premios WHERE id_cliente = %s ORDER BY emitido_em DESC LIMIT 20""",
         (id_cliente,),
     )
@@ -202,6 +202,8 @@ def cartao(cur, id_cliente: int) -> dict:
             "codigo": p["codigo"],
             "premio": p["premio"],
             "vence_em": p["vence_em"].isoformat(),
+            # 🔑 Vale da PRÓXIMA visita em diante (093): o site diz "a partir de …".
+            "vale_de": p["vale_de"].isoformat(),
             "consumo": dias_em_texto(p["dias_consumo"]),
             "status": _status(p, hoje),
         })
@@ -272,6 +274,14 @@ def checkin(cur, id_unidade: int, id_cliente: int, token: str,
     distancia = conferir_local(cur, id_unidade, cfg, posicao)
 
     cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
+    # 🔑 **A visita do prêmio não conta carimbo** (pedido do dono, 24/09/2026: *"no
+    # próximo é grátis e não vale o carimbo"*). Prêmio já entregue hoje → hoje não pontua.
+    # O caso inverso (check-in feito ANTES de pedir o prêmio) é desfeito em `entregar`.
+    if _usou_premio_hoje(cur, id_cliente, hoje):
+        raise HTTPException(
+            status_code=409,
+            detail="Hoje você usou seu prêmio — a visita do prêmio não conta carimbo. "
+                   "O cartão novo começa na próxima visita!")
     cur.execute(
         """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m)
            VALUES (%s, %s, %s, %s) ON CONFLICT (id_cliente, data) DO NOTHING RETURNING id""",
@@ -291,26 +301,42 @@ def checkin(cur, id_unidade: int, id_cliente: int, token: str,
     if len(abertas) >= cfg["visitas"]:
         codigo = _codigo(cur)
         vence = hoje + timedelta(days=cfg["validade_dias"])
+        # 🔑 **"A cada 10, no próximo é grátis"** (pedido do dono, 24/09/2026): o prêmio
+        # do 10º check-in vale a partir do DIA SEGUINTE — a 11ª visita.
+        vale_de = hoje + timedelta(days=1)
         cur.execute(
             """INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
-                                               dias_consumo, vence_em)
-               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                               dias_consumo, vence_em, vale_de)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (id_cliente, id_unidade, codigo, cfg["premio"], cfg["visitas"],
-             cfg["dias_consumo"], vence),
+             cfg["dias_consumo"], vence, vale_de),
         )
         id_premio = cur.fetchone()["id"]
         # As MAIS ANTIGAS fecham o cartão; o que sobrar (se a meta baixou) segue.
         cur.execute("UPDATE fidelidade_checkins SET id_premio = %s WHERE id = ANY(%s)",
                     (id_premio, abertas[:cfg["visitas"]]))
         premio = {"codigo": codigo, "premio": cfg["premio"], "vence_em": vence.isoformat(),
+                  "vale_de": vale_de.isoformat(),
                   "consumo": dias_em_texto(cfg["dias_consumo"])}
     return {"premio_novo": premio, **cartao(cur, id_cliente)}
 
 
-def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
-    """O balcão entrega o prêmio. Uma vez, num dia de consumo, antes de vencer."""
+def _usou_premio_hoje(cur, id_cliente: int, hoje: date) -> bool:
     cur.execute(
-        """SELECT p.id, p.premio, p.vence_em, p.dias_consumo, p.usado_em, c.nome
+        """SELECT 1 FROM fidelidade_premios
+            WHERE id_cliente = %s
+              AND (usado_em AT TIME ZONE 'America/Sao_Paulo')::date = %s""",
+        (id_cliente, hoje),
+    )
+    return cur.fetchone() is not None
+
+
+def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
+    """O balcão entrega o prêmio. Uma vez, da próxima visita em diante, num dia de
+    consumo, antes de vencer — e o carimbo da visita do prêmio sai."""
+    cur.execute(
+        """SELECT p.id, p.id_cliente, p.premio, p.vence_em, p.vale_de, p.dias_consumo,
+                  p.usado_em, c.nome
              FROM fidelidade_premios p JOIN reserva_clientes c ON c.id = p.id_cliente
             WHERE p.codigo = %s FOR UPDATE OF p""",
         ((codigo or "").strip().upper(),),
@@ -326,6 +352,11 @@ def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
     if p["vence_em"] < hoje:
         raise HTTPException(status_code=409,
                             detail=f"Este prêmio venceu em {p['vence_em']:%d/%m/%Y}.")
+    if hoje < p["vale_de"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Este prêmio vale a partir da próxima visita ({p['vale_de']:%d/%m}) — "
+                   "o cartão foi completado hoje.")
     if hoje.isoweekday() not in p["dias_consumo"]:
         raise HTTPException(
             status_code=409,
@@ -335,7 +366,17 @@ def entregar(cur, id_unidade: int, codigo: str, id_usuario: int | None) -> dict:
             WHERE id = %s""",
         (id_usuario, id_unidade, p["id"]),
     )
-    return {"id": p["id"], "premio": p["premio"], "cliente": p["nome"]}
+    # 🔑 **A visita do prêmio não conta carimbo**: se o cliente leu o QR ao chegar e só
+    # depois pediu o prêmio, o check-in de hoje sai. ⚠️ Só o que está ABERTO (sem
+    # prêmio): um check-in que fechou outro cartão hoje já virou prêmio e fica.
+    cur.execute(
+        """DELETE FROM fidelidade_checkins
+            WHERE id_cliente = %s AND data = %s AND id_premio IS NULL RETURNING id""",
+        (p["id_cliente"], hoje),
+    )
+    tirou = cur.fetchone() is not None
+    return {"id": p["id"], "premio": p["premio"], "cliente": p["nome"],
+            "carimbo_retirado": tirou}
 
 
 def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
@@ -357,7 +398,8 @@ def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
             params.append(f"%{digitos}%")
         onde.append("(" + " OR ".join(filtro) + ")")
     sql = f"""
-        SELECT p.id, p.codigo, p.premio, p.visitas, p.emitido_em, p.vence_em, p.usado_em,
+        SELECT p.id, p.codigo, p.premio, p.visitas, p.emitido_em, p.vence_em, p.vale_de,
+               p.usado_em,
                p.dias_consumo, c.nome, c.telefone,
                coalesce(u.apelido, u.nome) AS loja, coalesce(uu.apelido, uu.nome) AS loja_uso,
                us.nome AS entregue_por
@@ -374,8 +416,9 @@ def consulta_premios(status: str | None, busca: str | None) -> tuple[str, list]:
 def linha_do_premio(x: dict, hoje: date) -> dict:
     x = dict(x)
     x["status"] = _status(x, hoje)
-    x["pode_hoje"] = x["status"] == "DISPONIVEL" and hoje.isoweekday() in x["dias_consumo"]
+    x["pode_hoje"] = (x["status"] == "DISPONIVEL" and x["vale_de"] <= hoje
+                      and hoje.isoweekday() in x["dias_consumo"])
     x["consumo"] = dias_em_texto(x.pop("dias_consumo"))
-    for campo in ("emitido_em", "usado_em", "vence_em"):
+    for campo in ("emitido_em", "usado_em", "vence_em", "vale_de"):
         x[campo] = x[campo].isoformat() if x[campo] else None
     return x

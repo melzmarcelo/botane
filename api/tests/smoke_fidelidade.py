@@ -287,12 +287,22 @@ CODIGO = premio.get("codigo")
 
 st, lista = chamar("GET", f"/fidelidade/premios?busca={CODIGO}", token=token)
 checar("o balcao acha o premio pelo codigo", st == 200 and len(lista) == 1
-       and lista[0]["nome"] == "Fidel Teste" and lista[0]["pode_hoje"] is True, (st, lista))
+       and lista[0]["nome"] == "Fidel Teste", (st, lista))
+# 🔑 "A cada 10, no proximo e gratis" (093): o premio vale a partir do DIA SEGUINTE.
+checar("o premio do 10o check-in so vale a partir de amanha",
+       premio.get("vale_de") == (HOJE + timedelta(days=1)).isoformat()
+       and lista and lista[0]["pode_hoje"] is False, (premio, lista))
 st, cl = chamar("GET", f"/reservas/clientes?busca={FONE[-6:]}", token=token)
 checar("o grid de clientes mostra o premio ganho", st == 200 and cl
        and cl[0].get("premios") == 1 and cl[0].get("no_cartao") == 0, cl)
 
 print("\n5. a entrega no balcao")
+st, r = chamar("POST", "/fidelidade/premios/entregar", {"codigo": CODIGO}, token)
+checar("no mesmo dia em que completou, a entrega e recusada (vale na proxima visita)",
+       st == 409 and "proxima visita" in (r.get("detail") or "").replace("ó", "o"), (st, r))
+with get_cursor() as cur:
+    cur.execute("UPDATE fidelidade_premios SET vale_de = %s WHERE codigo = %s",
+                (HOJE - timedelta(days=1), CODIGO))
 # 🔑 Os dias de consumo sao CONGELADOS no premio: mudar a configuracao nao muda o ganho.
 config_fidelidade(dias_consumo=SEM_HOJE)
 with get_cursor() as cur:
@@ -313,9 +323,9 @@ checar("codigo que nao existe: 404", st == 404, (st, r))
 with get_cursor() as cur:
     cur.execute(
         """INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
-                                           dias_consumo, vence_em)
-           VALUES (%s, %s, 'VNC234', 'Almoco', 3, %s, %s)""",
-        (ID_CLIENTE, UNIDADE, TODOS, HOJE - timedelta(days=1)))
+                                           dias_consumo, vence_em, vale_de)
+           VALUES (%s, %s, 'VNC234', 'Almoco', 3, %s, %s, %s)""",
+        (ID_CLIENTE, UNIDADE, TODOS, HOJE - timedelta(days=1), HOJE - timedelta(days=30)))
 st, r = chamar("POST", "/fidelidade/premios/entregar", {"codigo": "VNC234"}, token)
 checar("premio vencido e recusado", st == 409 and "venceu" in (r.get("detail") or ""), (st, r))
 st, lista = chamar("GET", "/fidelidade/premios?status=VENCIDO&busca=VNC234", token=token)
@@ -324,6 +334,32 @@ checar("e aparece como vencido no grid", st == 200 and len(lista) == 1
 st, lista = chamar("GET", f"/fidelidade/premios?status=USADO&busca={CODIGO}", token=token)
 checar("o entregue aparece como usado", st == 200 and len(lista) == 1
        and lista[0]["usado_em"], (st, lista))
+
+print("\n5b. a visita do premio nao conta carimbo")
+# 🔑 "No proximo e gratis e nao vale o carimbo" (pedido do dono, 24/09/2026).
+with get_cursor() as cur:
+    cur.execute("DELETE FROM fidelidade_checkins WHERE id_cliente = %s", (ID_CLIENTE,))
+    # ⚠️ A secao 5 entregou um premio HOJE a este cliente — e hoje ele ja nao pontuaria.
+    # Este cenario e outro dia: o premio anterior passa para ontem.
+    cur.execute("UPDATE fidelidade_premios SET usado_em = usado_em - interval '1 day' "
+                "WHERE id_cliente = %s AND usado_em IS NOT NULL", (ID_CLIENTE,))
+    cur.execute(
+        """INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
+                                           dias_consumo, vence_em, vale_de)
+           VALUES (%s, %s, 'PRX234', 'Almoco', 3, %s, %s, %s)""",
+        (ID_CLIENTE, UNIDADE, TODOS, HOJE + timedelta(days=10), HOJE - timedelta(days=1)))
+# O cliente le o QR ao chegar e SO DEPOIS pede o almoco gratis.
+st, r = checkin()
+checar("ao chegar, o check-in conta", st == 200 and r.get("no_cartao") == 1, (st, r))
+st, r = chamar("POST", "/fidelidade/premios/entregar", {"codigo": "PRX234"}, token)
+checar("entregar o premio RETIRA o carimbo de hoje, e o balcao e avisado",
+       st == 200 and r.get("carimbo_retirado") is True and "retirado" in (r.get("message") or ""),
+       (st, r))
+st, c = chamar("POST", f"/publico/{UNIDADE}/fidelidade/cartao", {"telefone": FONE})
+checar("o cartao volta a zero", c.get("no_cartao") == 0, c)
+st, r = checkin()
+checar("e um novo check-in no dia do premio e recusado explicando",
+       st == 409 and "prêmio" in (r.get("detail") or ""), (st, r))
 
 print("\n6. a loja que nao participa")
 config_reserva(fidelidade_ligada=False)

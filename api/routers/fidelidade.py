@@ -145,4 +145,6 @@ def entregar(body: EntregaPremio, ctx: Contexto = Depends(_OPERAR)) -> dict:
         r = servico.entregar(cur, id_unidade, body.codigo, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "fidelidade_premio", r["id"], "entregar",
                             depois={"codigo": body.codigo.upper(), "loja": id_unidade})
-    return r | {"message": f"Prêmio entregue a {r['cliente']}: {r['premio']}."}
+    return r | {"message": f"Prêmio entregue a {r['cliente']}: {r['premio']}."
+                           + (" O check-in de hoje foi retirado — a visita do prêmio não conta "
+                              "carimbo." if r["carimbo_retirado"] else "")}

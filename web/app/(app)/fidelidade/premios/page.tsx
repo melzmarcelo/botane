@@ -28,6 +28,12 @@ const SITUACOES = [
 const COR = { DISPONIVEL: "erva", USADO: "neutro", VENCIDO: "alerta" } as const;
 const ROTULO = { DISPONIVEL: "disponível", USADO: "entregue", VENCIDO: "vencido" };
 
+/** A data de hoje no relógio de quem usa (AAAA-MM-DD) — sem `toISOString`, que é UTC. */
+const hojeIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const data = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
 
 function telefone(t: string) {
@@ -174,7 +180,13 @@ export default function PremiosDaFidelidade() {
                             Entregar
                           </button>
                         ) : (
-                          <span className="text-[12px] text-suave">hoje não é dia de consumo</span>
+                          <span className="text-[12px] text-suave">
+                            {/* 🔑 "No próximo é grátis": o prêmio completado hoje só vale
+                                amanhã. É o motivo mais comum de não poder entregar. */}
+                            {p.vale_de > hojeIso()
+                              ? `vale a partir de ${data(p.vale_de)}`
+                              : "hoje não é dia de consumo"}
+                          </span>
                         ))}
                     </td>
                   </tr>

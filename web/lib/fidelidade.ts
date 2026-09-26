@@ -35,13 +35,15 @@ export type Premio = {
   telefone: string;
   emitido_em: string;
   vence_em: string;
+  /** Vale da próxima visita em diante (093): o dia seguinte ao do 10º check-in. */
+  vale_de: string;
   usado_em: string | null;
   loja: string | null;
   loja_uso: string | null;
   entregue_por: string | null;
   consumo: string;
   status: "DISPONIVEL" | "USADO" | "VENCIDO";
-  /** Disponível e hoje é dia de consumo. */
+  /** Disponível, já valendo (`vale_de`) e hoje é dia de consumo. */
   pode_hoje: boolean;
 };
 

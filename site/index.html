@@ -1511,13 +1511,16 @@ function desenharCartao(c) {
       <b>${esc(p.premio)}</b>
       ${p.status === "DISPONIVEL"
         ? `<span>Mostre este código no caixa:</span><span class="codigo">${esc(p.codigo)}</span>
-           <span>Vale até ${esc(p.vence_em.split("-").reverse().join("/"))}, de ${esc(p.consumo)}.</span>`
+           <span>${p.vale_de > diaIso(0)
+             ? `Vale a partir da sua próxima visita (${esc(p.vale_de.split("-").reverse().join("/"))}), até`
+             : "Vale até"} ${esc(p.vence_em.split("-").reverse().join("/"))}, de ${esc(p.consumo)}.</span>`
         : `<span>${p.status === "USADO" ? "Já usado" : "Venceu"} · ${esc(p.codigo)}</span>`}
     </div>`).join("");
   $("#regra-fidelidade").textContent =
     `As visitas contam de ${c.pontua}, uma por dia, com o check-in pelo QR code da mesa` +
     (c.exige_local ? ", estando na casa (o site confirma pela localização). " : ". ") +
-    `O prêmio vale ${c.validade_dias} dias, de ${c.consumo}.`;
+    `O prêmio vale da visita seguinte em diante, por ${c.validade_dias} dias, de ${c.consumo} — ` +
+    "e a visita em que você usa o prêmio não conta carimbo.";
   const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
   $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
   $("#fazer-checkin").hidden = !podeCheckin;
@@ -1573,7 +1576,8 @@ async function fazerCheckin() {
   $("#fazer-checkin").disabled = false;
   desenharCartao(r);
   avisar("#aviso-fidelidade", r.premio_novo
-    ? `🎉 Cartão completo! Você ganhou: ${r.premio_novo.premio}. Mostre o código ${r.premio_novo.codigo} no caixa.`
+    ? `🎉 Cartão completo! Você ganhou: ${r.premio_novo.premio}. Ele vale a partir da sua próxima `
+      + `visita — mostre o código ${r.premio_novo.codigo} no caixa.`
     : `Check-in feito! Faltam ${r.faltam} visita${r.faltam === 1 ? "" : "s"}.`, false);
 }
 $("#fazer-checkin").addEventListener("click", () => fazerCheckin());

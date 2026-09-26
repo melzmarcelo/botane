@@ -971,7 +971,22 @@ contato". WhatsApp fica para uma fase própria. Estudo inicial: `docs/fidelidade
 - Clientes ganhou a coluna Fidelidade (visitas no cartão e prêmios).
 - Tabelas: `fidelidade_checkins`/`_premios` em `OPERACAO` e em `preservar_reserva`;
   `fidelidade_config` em `PRESERVADAS`.
-- Cobertura: `smoke_fidelidade.py` (47, com a localização).
+- Cobertura: `smoke_fidelidade.py` (53, com localização e próxima visita).
+
+### "No próximo é grátis e não vale o carimbo" (migração 093, 26/09/2026)
+
+🔑 **Pedido do dono:** *"a cada 10 visitas 1 prêmio, ou seja o prêmio vem na 11ª visita … é
+a 1. A cada 10, no próximo é grátis e não vale o carimbo."* Antes, o prêmio valia na hora
+(podia ser usado na própria 10ª visita) e a visita do prêmio pontuava.
+- `fidelidade_premios.vale_de` = dia seguinte ao do 10º check-in, **gravado** no prêmio como a
+  validade (regra que o cliente leu ao ganhar). `entregar` recusa antes disso; o grid de
+  Prêmios diz "vale a partir de dd/mm"; o site, "a partir da sua próxima visita".
+- **A visita do prêmio não conta carimbo**, nos DOIS sentidos da ordem:
+  - check-in feito ANTES de pedir o prêmio → `entregar` apaga o check-in de hoje (só o ABERTO,
+    `id_premio IS NULL`) e avisa o balcão ("o check-in de hoje foi retirado");
+  - prêmio entregue ANTES → o check-in do dia é recusado explicando.
+  Dia do prêmio = `usado_em` no fuso da casa.
+- ⚠️ Não é configurável, de propósito: é a regra do programa, não uma preferência de loja.
 
 ### Localização no check-in (migração 092, 24/09/2026)
 
