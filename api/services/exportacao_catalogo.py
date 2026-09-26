@@ -84,22 +84,31 @@ def _opcoes_situacao(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": v, "nome": n} for v, n in SITUACOES]
 
 
-def _opcoes_pessoas(cur, _id_unidade: int) -> list[dict]:
-    """As pessoas que TÊM política de cupom — não o cadastro inteiro.
+def _opcoes_pessoas(cur, id_unidade: int) -> list[dict]:
+    """As pessoas que podem aparecer no relatório — não o cadastro inteiro.
 
     ⚠️ Oferecer as 800 do cadastro faria a lista virar a mentira do `<select>`
-    paginado. Quem tem política é quem aparece neste relatório; as demais nunca
-    trariam linha alguma, e escolhê-las devolveria um arquivo vazio sem dizer
-    por quê.
+    paginado, e escolher quem nunca consumiu devolveria um arquivo vazio.
+    🔑 **Quem tem política OU quem tem consumo lançado nesta loja** (26/09/2026,
+    pedido do dono: *"permitir filtrar pessoas para emissão do PDF mesmo sem
+    política, pois vinculei a uma pessoa sem política e não consigo emitir
+    somente para ela"*). Era só quem tinha política — e a tela, que busca no
+    cadastro inteiro, mandava para o arquivo uma pessoa que a lista não tinha.
     """
-    cur.execute("""SELECT id AS valor, nome FROM fornecedores
-                    WHERE ativo AND (cupom_base = 'CUSTO' OR coalesce(cupom_desconto_pct, 0) > 0)
-                    ORDER BY lower(nome)""")
+    cur.execute("""SELECT f.id AS valor, f.nome FROM fornecedores f
+                    WHERE f.ativo
+                      AND (f.cupom_base = 'CUSTO' OR coalesce(f.cupom_desconto_pct, 0) > 0
+                           OR EXISTS (SELECT 1 FROM vendas v
+                                       WHERE v.id_pessoa = f.id AND v.id_unidade = %s
+                                         AND NOT v.cancelada))
+                    ORDER BY lower(f.nome)""", (id_unidade,))
     return [dict(r) for r in cur.fetchall()]
 
 
 def _opcoes_detalhe(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": "sintetico", "nome": "Sintético — um total por pessoa"},
+            {"valor": "documento", "nome": "Por documento — um total por cupom"},
+            {"valor": "documento_itens", "nome": "Por documento, com os itens destacados"},
             {"valor": "analitico", "nome": "Analítico — item a item"}]
 
 
@@ -216,7 +225,7 @@ FILTROS: dict[str, dict] = {
     # valia o estoque naquele dia", e oferecer duas pontas ali faria escolher um
     # intervalo para uma pergunta que tem uma data só.
     "data": {"tipo": "data", "rotulo": "Na data de", "ajuda": "hoje, se não escolher"},
-    "pessoas": {"tipo": "multipla", "rotulo": "Pessoas", "ajuda": "todas com política",
+    "pessoas": {"tipo": "multipla", "rotulo": "Pessoas", "ajuda": "todas",
                 "opcoes": _opcoes_pessoas},
     # ⚠️ Escolha múltipla porque é o vocabulário da janela — mas o relatório usa
     # só a PRIMEIRA: sintético e analítico são dois documentos, e um arquivo com
@@ -1059,7 +1068,41 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
         cur, id_unidade, periodo,
         [int(p) for p in pessoas] if pessoas else None, detalhe)
 
-    if detalhe == "analitico":
+    # ⚠️ Os totais saem das linhas ANTES de achatar: no "com os itens" cada cupom
+    # vira cabeçalho + itens, e somar as linhas achatadas contaria tudo duas vezes.
+    cheio = sum(float(l["total_cheio"] or 0) for l in linhas)
+    total = sum(float(l["total"] or 0) for l in linhas)
+    nomes = {"sintetico": "sintético", "analitico": "analítico",
+             "documento": "por documento", "documento_itens": "por documento com itens"}
+
+    if detalhe == "documento":
+        colunas = [("data", "Data"), ("documento", "Documento"), ("pessoa", "Pessoa"),
+                   ("itens", "Itens"), ("total_cheio", "Valor cheio"),
+                   ("desconto", "Desconto"), ("total", "A cobrar")]
+    elif detalhe == "documento_itens":
+        # 🔑 O cupom é a linha de GRUPO (negrito, com fundo no PDF) e os itens vêm
+        # embaixo, recuados — `_estilo` é lido por `exportacao.pdf_de`.
+        achatadas = []
+        for d in linhas:
+            achatadas.append({
+                "_estilo": "grupo", "data": d["data"], "documento": d["documento"] or "—",
+                "descricao": d["pessoa"], "quantidade": d["itens"],
+                "total_cheio": d["total_cheio"], "desconto": d["desconto"],
+                "total": d["total"]})
+            for i in d["itens_do_documento"]:
+                achatadas.append({
+                    "_estilo": "item",
+                    "descricao": (i["produto"] or "—")
+                                 + (f" ({i['produto_codigo']})" if i["produto_codigo"] else ""),
+                    "quantidade": i["quantidade"], "unitario": i["unitario"],
+                    "total_cheio": i["total_cheio"], "desconto": i["desconto"],
+                    "total": i["total"]})
+        linhas = achatadas
+        colunas = [("data", "Data"), ("documento", "Documento"),
+                   ("descricao", "Pessoa / Produto"), ("quantidade", "Qtd"),
+                   ("unitario", "Cobrado un."), ("total_cheio", "Cheio"),
+                   ("desconto", "Desconto"), ("total", "A cobrar")]
+    elif detalhe == "analitico":
         colunas = [("data", "Data"), ("documento", "Documento"), ("pessoa", "Pessoa"),
                    ("produto_codigo", "Código"), ("produto", "Produto"),
                    ("quantidade", "Quantidade"), ("unitario_cheio", "Preço cheio"),
@@ -1070,11 +1113,9 @@ def _consumo_pessoa(cur, id_unidade: int, f: dict) -> Saida:
                    ("total_cheio", "Valor cheio"), ("desconto", "Desconto"),
                    ("total", "A cobrar")]
 
-    cheio = sum(float(l["total_cheio"] or 0) for l in linhas)
-    total = sum(float(l["total"] or 0) for l in linhas)
     return Saida(
         linhas, colunas,
-        f"Consumo por pessoa — {_nome_do_ciclo(periodo)} — {detalhe}",
+        f"Consumo por pessoa — {_nome_do_ciclo(periodo)} — {nomes.get(detalhe, detalhe)}",
         [("Valor cheio", round(cheio, 2)),
          ("Desconto", round(cheio - total, 2)),
          ("A cobrar", round(total, 2))],

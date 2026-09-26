@@ -11,6 +11,7 @@ import { fontePessoas, ItemBusca } from "@/lib/busca-cadastro";
 import { dataBr } from "../tipos";
 import Voltar from "@/components/voltar";
 import ExplicaTela from "@/components/explica-tela";
+import { TabelaPorDocumento, type LinhaDocumento } from "./tabelas-documento";
 
 /**
  * O que cada pessoa consumiu, e quanto deixou de pagar.
@@ -93,7 +94,10 @@ function rotuloDoCiclo(c: Ciclo) {
  */
 type Resposta =
   | (Totais & { detalhe: "sintetico"; linhas: LinhaSintetica[] })
-  | (Totais & { detalhe: "analitico"; linhas: LinhaAnalitica[] });
+  | (Totais & { detalhe: "analitico"; linhas: LinhaAnalitica[] })
+  | (Totais & { detalhe: "documento" | "documento_itens"; linhas: LinhaDocumento[] });
+
+type Detalhe = Resposta["detalhe"];
 
 /**
  * 🔑 **Cada tabela recebe SÓ a forma que sabe desenhar.** Enquanto as duas
@@ -194,7 +198,7 @@ export default function PaginaConsumoPorPessoa() {
   // único recorte possível numa loja que nunca fechou um ciclo.
   const [ciclo, setCiclo] = useState<string>(EM_ABERTO);
   const [pessoa, setPessoa] = useState<{ id: number; rotulo: string } | null>(null);
-  const [detalhe, setDetalhe] = useState<"sintetico" | "analitico">("sintetico");
+  const [detalhe, setDetalhe] = useState<Detalhe>("sintetico");
   const [dados, setDados] = useState<Resposta | null>(null);
   const [carregando, setCarregando] = useState(true);
 
@@ -283,9 +287,13 @@ export default function PaginaConsumoPorPessoa() {
             <select
               className="campo"
               value={detalhe}
-              onChange={(e) => setDetalhe(e.target.value as "sintetico" | "analitico")}
+              onChange={(e) => setDetalhe(e.target.value as Detalhe)}
             >
               <option value="sintetico">sintético — um total por pessoa</option>
+              {/* 🔑 Pedido do dono (26/09/2026): agrupado por documento, e por
+                  documento com os itens destacados — na tela e no arquivo. */}
+              <option value="documento">por documento — um total por cupom</option>
+              <option value="documento_itens">por documento, com os itens</option>
               <option value="analitico">analítico — item a item</option>
             </select>
           </Campo>
@@ -315,7 +323,11 @@ export default function PaginaConsumoPorPessoa() {
 
       <Cartao
         titulo={
-          visao === "sintetico" ? linhas.length + " pessoa(s)" : linhas.length + " linha(s)"
+          visao === "sintetico"
+            ? linhas.length + " pessoa(s)"
+            : visao === "analitico"
+              ? linhas.length + " linha(s)"
+              : linhas.length + " documento(s)"
         }
       >
         {carregando ? (
@@ -324,8 +336,13 @@ export default function PaginaConsumoPorPessoa() {
           <Vazio>Nenhum consumo com pessoa informada neste período.</Vazio>
         ) : dados.detalhe === "sintetico" ? (
           <TabelaSintetica linhas={dados.linhas} />
-        ) : (
+        ) : dados.detalhe === "analitico" ? (
           <TabelaAnalitica linhas={dados.linhas} />
+        ) : (
+          <TabelaPorDocumento
+            linhas={dados.linhas}
+            comItens={dados.detalhe === "documento_itens"}
+          />
         )}
       </Cartao>
     </div>

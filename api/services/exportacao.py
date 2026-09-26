@@ -495,11 +495,28 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         numericas = {chave: _e_numerica(b_linhas, chave) for chave, _ in b_colunas}
         dados = [[Paragraph(_escapar(cab), cab_dir if numericas[chave] else cab_esq)
                   for chave, cab in b_colunas]]
-        for linha in b_linhas:
+        # 🔑 **Linha de GRUPO** (26/09/2026, consumo por pessoa "agrupado por documento,
+        # destacando os itens"): a linha que vem com `_estilo: "grupo"` é o cabeçalho
+        # do bloco — negrito, com fundo e um traço em cima. As que vêm com
+        # `_estilo: "item"` recuam a primeira célula preenchida, para se lerem como
+        # parte do grupo. Genérico: qualquer relatório pode agrupar assim.
+        grupos: list[int] = []
+        for n, linha in enumerate(b_linhas, start=1):
+            estilo = linha.get("_estilo")
+            if estilo == "grupo":
+                grupos.append(n)
+            # O recuo vai na PRIMEIRA célula preenchida do item — as colunas do
+            # grupo (data, documento) vêm vazias nele, e recuar uma célula vazia
+            # não mostra nada.
+            recuo = next((i for i, (ch, _c) in enumerate(b_colunas)
+                          if linha.get(ch) not in (None, "")), 0)
             dados.append([
-                Paragraph(_escapar(_valor_pdf(linha.get(chave))),
-                          direita if numericas[chave] else normal)
-                for chave, _cab in b_colunas
+                Paragraph(
+                    ("&nbsp;&nbsp;&nbsp;&nbsp;" if estilo == "item" and i == recuo else "")
+                    + (f"<b>{_escapar(_valor_pdf(linha.get(chave)))}</b>" if estilo == "grupo"
+                       else _escapar(_valor_pdf(linha.get(chave)))),
+                    direita if numericas[chave] else normal)
+                for i, (chave, _cab) in enumerate(b_colunas)
             ])
         tabela = Table(dados, colWidths=_larguras(b_linhas, b_colunas, largura),
                        repeatRows=1, hAlign="LEFT")
@@ -512,6 +529,10 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("TOPPADDING", (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            *[cmd for n in grupos for cmd in (
+                ("BACKGROUND", (0, n), (-1, n), _FUNDO),
+                ("LINEABOVE", (0, n), (-1, n), 0.8, _ERVA),
+            )],
         ]))
         historia.append(tabela)
 

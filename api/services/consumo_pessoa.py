@@ -63,6 +63,51 @@ def apurar(cur, id_unidade: int, periodo: dict | None,
     onde, ps = recorte(periodo)
     filtro = (id_unidade, *ps, ids, ids)
 
+    # 🔑 **Por DOCUMENTO** (26/09/2026, pedido do dono: *"criar mais opção de
+    # impressão, agrupado por documento, agrupado por documento e destacando os
+    # itens; ter estas possibilidades na tela também"*). Uma linha por cupom — é
+    # como o funcionário confere: "este cupom é meu, este também".
+    if detalhe in ("documento", "documento_itens"):
+        cur.execute(
+            f"""WITH cupom AS (
+                   SELECT v.id, v.id_pessoa, v.data, v.hora, v.documento, v.desconto,
+                          sum(vi.quantidade * coalesce(vi.valor_unitario_cheio,
+                                                       vi.valor_unitario)) AS cheio,
+                          sum(vi.valor_total) AS itens_total,
+                          count(*) AS itens
+                     FROM vendas v
+                     JOIN venda_itens vi ON vi.id_venda = v.id
+                    WHERE v.id_unidade = %s AND NOT v.cancelada
+                      {onde}
+                      AND (%s::int[] IS NULL OR v.id_pessoa = ANY(%s))
+                      AND v.id_pessoa IS NOT NULL
+                    GROUP BY v.id
+               )
+               SELECT c.id AS id_venda, c.data, c.hora, c.documento,
+                      f.id AS id_pessoa, f.nome AS pessoa,
+                      c.itens, c.cheio AS total_cheio,
+                      -- ⚠️ O desconto do CABEÇALHO do cupom entra no total do
+                      -- documento, como no sintético: é dinheiro que não se cobra.
+                      c.itens_total - c.desconto AS total,
+                      c.cheio - c.itens_total + c.desconto AS desconto
+                 FROM cupom c
+                 JOIN fornecedores f ON f.id = c.id_pessoa
+                ORDER BY f.nome, c.data, c.hora NULLS LAST, c.id""",
+            filtro,
+        )
+        documentos = [dict(r) for r in cur.fetchall()]
+        if detalhe == "documento":
+            return documentos
+        # Os itens de cada documento, pela MESMA consulta do analítico — a linha
+        # de um item não pode valer uma coisa aqui e outra no item a item.
+        itens = apurar(cur, id_unidade, periodo, ids_pessoa, "analitico")
+        por_venda: dict[int, list[dict]] = {}
+        for i in itens:
+            por_venda.setdefault(i["id_venda"], []).append(i)
+        for d in documentos:
+            d["itens_do_documento"] = por_venda.get(d["id_venda"], [])
+        return documentos
+
     if detalhe == "analitico":
         cur.execute(
             f"""SELECT v.id AS id_venda, v.data, v.hora, v.documento,

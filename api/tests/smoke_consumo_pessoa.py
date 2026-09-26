@@ -337,6 +337,76 @@ checar("o cheio mandado pelo cliente e descartado",
        (df.get("itens") or [{}])[0].get("valor_unitario_cheio"))
 
 
+print("\n10. pessoa SEM politica e o relatorio por documento (26/09/2026)")
+# 🔑 Pedido do dono: *"permitir filtrar pessoas para emissao do PDF mesmo sem politica,
+# pois vinculei a uma pessoa sem politica e nao consigo emitir somente para ela"*.
+st, sem = chamar("POST", "/fornecedores", {
+    "nome": f"SEM POLITICA {marca}", "fornecedor": False}, token=token)
+sem_politica = (sem or {}).get("id")
+st, imp = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2026-09-04", "documento": f"DOC{marca}", "origem": "MANUAL",
+    "id_pessoa": sem_politica,
+    "itens": [{"id_produto": produto, "quantidade": 1, "valor_unitario": 50},
+              {"id_produto": produto, "quantidade": 2, "valor_unitario": 30}],
+}]}, token=token)
+st, ld = chamar("GET", f"/vendas?busca=DOC{marca}", token=token)
+criados["vendas"].append((ld or [{}])[0].get("id"))
+checar("a pessoa sem politica consome", st == 200 and sem_politica, (st, imp))
+
+st, cat2 = chamar("GET", "/exportar/catalogo", token=token)
+alvo2 = next((r for r in cat2 or [] if r.get("chave") == "consumo-pessoa"), None)
+op_pessoas = next((f for f in (alvo2 or {}).get("filtros", []) if f["nome"] == "pessoas"),
+                  {}).get("opcoes") or []
+checar("o filtro do ARQUIVO oferece quem consumiu, mesmo sem politica",
+       any(o["valor"] == sem_politica for o in op_pessoas), len(op_pessoas))
+so_ela = _baixar(f"?pessoas={sem_politica}")
+checar("e o arquivo sai SO com ela",
+       f"SEM POLITICA {marca}" in so_ela and f"FUNCIONARIO {marca}" not in so_ela,
+       so_ela[:300])
+
+op_detalhe = next((f for f in (alvo2 or {}).get("filtros", []) if f["nome"] == "detalhe"),
+                  {}).get("opcoes") or []
+checar("o detalhe oferece por documento e por documento com itens",
+       {"documento", "documento_itens"} <= {o["valor"] for o in op_detalhe}, op_detalhe)
+
+st, rd = chamar("GET", f"/vendas/por-pessoa?id_pessoa={sem_politica}&detalhe=documento",
+                token=token)
+d0 = (rd.get("linhas") or [{}])[0]
+checar("por documento: uma linha por cupom, com 2 itens e 110 a cobrar",
+       st == 200 and len(rd.get("linhas") or []) == 1 and d0.get("itens") == 2
+       and perto(d0.get("total"), 110) and d0.get("documento") == f"DOC{marca}", (st, rd))
+st, ri = chamar("GET",
+                f"/vendas/por-pessoa?id_pessoa={sem_politica}&detalhe=documento_itens",
+                token=token)
+i0 = (ri.get("linhas") or [{}])[0]
+checar("por documento com itens: o cupom traz os 2 itens embaixo",
+       len(i0.get("itens_do_documento") or []) == 2, i0)
+checar("e os totais batem com o sintetico",
+       perto(ri.get("total"), 110) and perto(rd.get("total"), 110), (ri.get("total"),))
+st, rf = chamar("GET", f"/vendas/por-pessoa?id_pessoa={funcionario}&detalhe=documento",
+                token=token)
+checar("com politica, o por documento soma o MESMO que o sintetico (80)",
+       perto(rf.get("total"), rel.get("total")), (rf.get("total"), rel.get("total")))
+
+csv_itens = _baixar(f"?pessoas={sem_politica}&detalhe=documento_itens")
+checar("o arquivo por documento com itens: o cupom UMA vez e os itens embaixo",
+       csv_itens.count(f"DOC{marca}") == 1 and csv_itens.count(f"PRATO CUPOM {marca}") >= 2,
+       csv_itens[:400])
+checar("e os totais do arquivo NAO contam o cupom duas vezes",
+       "110" in csv_itens.split("A cobrar")[1].splitlines()[0]
+       if "A cobrar" in csv_itens else False, csv_itens[:400])
+st, pdf2 = chamar("GET",
+                  f"/exportar/consumo-pessoa.pdf?pessoas={sem_politica}&detalhe=documento_itens",
+                  token=token, cru=True)
+checar("o PDF agrupado sai (linha de grupo destacada)",
+       st == 200 and isinstance(pdf2, bytes) and pdf2[:5] == b"%PDF-", st)
+st, pdf3 = chamar("GET", f"/exportar/consumo-pessoa.pdf?pessoas={sem_politica}&detalhe=documento",
+                  token=token, cru=True)
+checar("e o PDF por documento tambem", st == 200 and pdf3[:5] == b"%PDF-", st)
+if sem_politica:
+    chamar("DELETE", f"/fornecedores/{sem_politica}", token=token)
+
+
 _limpar()
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

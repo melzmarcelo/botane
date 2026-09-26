@@ -803,7 +803,8 @@ def periodo_aberto(ctx: Contexto = Depends(_editar)) -> dict:
 def por_pessoa(
     id_periodo: int | None = Query(default=None),
     id_pessoa: int | None = Query(default=None),
-    detalhe: str = Query(default="sintetico", pattern="^(sintetico|analitico)$"),
+    detalhe: str = Query(default="sintetico",
+                         pattern="^(sintetico|analitico|documento|documento_itens)$"),
     ctx: Contexto = Depends(_ver),
 ) -> dict:
     """O que cada pessoa consumiu, e quanto deixou de pagar.

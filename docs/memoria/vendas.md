@@ -627,8 +627,22 @@
   `vendas` com `venda_itens` repete o cabeçalho uma vez por linha, e `sum(v.desconto)` ali
   multiplicaria o desconto pelo número de itens — a armadilha que já custou a conferência do
   dia 02/09.
-  ⚠️ **O filtro de pessoas do relatório exportável só oferece quem TEM política.** As demais
-  nunca trariam linha, e escolhê-las devolveria um arquivo vazio sem dizer por quê.
+  ⚠️ ~~**O filtro de pessoas do relatório exportável só oferece quem TEM política.**~~
+  **Mudou em 26/09/2026**: oferece quem tem política **OU consumo lançado nesta loja**
+  (`_opcoes_pessoas`). Pedido do dono: *"vinculei a uma pessoa sem política e não consigo
+  emitir somente para ela"*. A tela busca no cadastro inteiro e mandava ao arquivo uma pessoa
+  que a lista dele não tinha. O corte continua evitando as centenas de fornecedores.
+  🔑 **Quatro detalhes, na tela e no arquivo** (26/09/2026, pedido do dono: *"agrupado por
+  documento, agrupado por documento e destacando os itens; ter estas possibilidades na tela
+  também"*): sintético · **por documento** (um total por cupom) · **por documento com os
+  itens** · analítico. Os dois novos em `consumo_pessoa.apurar` (a tela e o arquivo usam a
+  mesma). O "com itens" devolve cada cupom com `itens_do_documento`, tirados da MESMA consulta
+  do analítico. ⚠️ O total do documento desconta o desconto do CABEÇALHO do cupom, como o
+  sintético — senão o por documento somaria mais que o sintético.
+  ⚠️ No arquivo, o "com itens" é achatado em linhas com `_estilo` ("grupo"/"item"), que o
+  `exportacao.pdf_de` pinta: grupo em negrito, com fundo e traço em cima; item recuado na
+  primeira célula preenchida. **Genérico** — outro relatório pode agrupar assim. ⚠️ Os totais
+  do resumo saem ANTES de achatar: somar as linhas achatadas contaria cada cupom duas vezes.
 
 - 🔑 **O período de consumo: abre, acumula, fecha no pagamento** (migração 057,
   `services/consumo_periodo.py`, telas `/consumo` e `/meu-consumo`, 04/09/2026).
