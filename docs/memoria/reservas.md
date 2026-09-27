@@ -1011,3 +1011,45 @@ quem fotografou o QR marcando a visita do sofá, em dia de semana, com a casa ab
   conta" é mais útil que um pedido de permissão que não resolveria nada.
 - Não é à prova de GPS falso (app que falsifica posição) — é contra a foto do QR, a fraude
   provável. Alternativas descartadas por ora: QR rotativo num tablet, aprovação pela equipe.
+
+### Código de confirmação no caixa, selos e a tela de QR codes (migração 097, 27/09/2026)
+
+🔑 **Pedido do dono:** *"hoje o método de pontuação é a leitura do QR na mesa. Na configuração,
+vamos implementar o método código de confirmação: no caixa tem um QR, o cliente lê e aparece
+uma tela aguardando um código. Na tela do sistema aparecem os códigos e clientes; o usuário
+passa o código … e pode informar a quantidade de selos, por padrão 1. Implementar também mais
+QR codes: pontuação, cardápio (vai na mesa), reserva. Criar uma tela em reservas para
+organizá-los."*
+- `fidelidade_config.metodo` = `QRCODE_MESA` (a visita conta na leitura, 1 selo) ou
+  `CODIGO_CAIXA`; `codigo_validade_min` (padrão 30). No caixa a LOCALIZAÇÃO não vale
+  (`regras.exige_local` falso): quem confirma a presença é o atendente. E o check-in pelo QR
+  da mesa é RECUSADO nesse método — seria um atalho em volta do atendente.
+- Fluxo: site `POST /fidelidade/codigo/pedir` (depois do telefone, automático como na mesa) →
+  `fidelidade_solicitacoes` PENDENTE (um por cliente, índice único parcial; ler de novo devolve
+  o mesmo) → tela **Fidelidade → Códigos** (`GET /fidelidade/codigos`, atualiza a cada 5 s,
+  pausa com a aba escondida) mostra nome, código de 4 algarismos e selos (± , `PUT`) →
+  cliente digita → `POST /fidelidade/codigo/confirmar`.
+  ⚠️ **O código NUNCA vai para o celular** — só para a tela do caixa. É o que prova que
+  alguém da casa viu o cliente.
+  ⚠️ `confirmar` DEVOLVE o erro em vez de levantar: a tentativa errada precisa ser gravada
+  (a 5ª cancela o pedido), e a exceção desfaria a gravação. Vencido → VENCIDA (lazy).
+- 🔑 **Selos**: `fidelidade_checkins.selos` e `parte`. O cartão soma SELOS. `_fechar_cartoes`
+  fecha quantos cartões couberem; a visita que ultrapassa é REPARTIDA (a sobra vira `parte`
+  nova do mesmo dia, sem prêmio). O índice único virou `(id_cliente, data, parte)` — a visita
+  continua sendo uma por dia (a `parte 0`).
+- O serviço foi repartido: `_validar_token`, `_validar_dia`, `_pode_pontuar_hoje`,
+  `_registrar_visita`, `_fechar_cartoes` — os dois métodos passam pelas mesmas regras
+  (dia que conta, casa aberta, uma visita por dia, visita do prêmio sem selo, prêmio na
+  próxima visita).
+- **Tela Portal de Clientes → QR codes** (`routers/qrcodes.py`, `GET /reservas/qrcodes`,
+  `PUT /reservas/qrcodes/site`, `GET /reservas/qrcodes/pdf?tipo=`): site (`?loja=X`),
+  reserva (`#reserva`), cardápio por catálogo ativo da loja (`&catalogo=ID#cardapio`) e
+  fidelidade (o segredo). O endereço do site fica aqui (continua em
+  `fidelidade_config.site_url`). A impressão saiu da configuração da Fidelidade e virou
+  `reservas/qrcodes/impressao.tsx`, genérica. Registrada ANTES do router de reservas.
+- Site: todo QR com `?loja=` escolhe a loja; `&catalogo=` abre o cardápio (o PDF aberto vai
+  direto ao arquivo, na mesma aba — aba nova sem toque é bloqueada como popup). Os parâmetros
+  saem do endereço na chegada.
+  ⚠️ A lista pública de catálogos passou a mandar o `id` também do PDF (o QR o usa); o que
+  protege o PDF com cadastro continua sendo o `arquivo_url` nulo.
+- Cobertura: seções 5c e 5d do `smoke_fidelidade.py` (80 no total).

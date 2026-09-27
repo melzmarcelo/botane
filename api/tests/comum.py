@@ -299,6 +299,8 @@ def preservar_reserva(unidade: int):
         # levaria as visitas em cascata e a reposição não as traria de volta.
         ("fidelidade_premios", "id_unidade = %s"),
         ("fidelidade_checkins", "id_unidade = %s"),
+        # Os pedidos de código do caixa (097) apontam para o check-in: vêm depois dele.
+        ("fidelidade_solicitacoes", "id_unidade = %s"),
         ("reservas", "id_unidade = %s"),
         ("reserva_mesas", "id_reserva IN (SELECT id FROM reservas WHERE id_unidade = %s)"),
     ]

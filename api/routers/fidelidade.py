@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 import auditoria
 from database import get_cursor
-from models.fidelidade import EntregaPremio, FidelidadeConfig, LocalDaLoja
+from models.fidelidade import EntregaPremio, FidelidadeConfig, LocalDaLoja, SelosDoPedido
 from paginacao import pagina
 from relogio import agora_da_casa
 from routers.reservas import _unidade
@@ -148,3 +148,38 @@ def entregar(body: EntregaPremio, ctx: Contexto = Depends(_OPERAR)) -> dict:
     return r | {"message": f"Prêmio entregue a {r['cliente']}: {r['premio']}."
                            + (" O check-in de hoje foi retirado — a visita do prêmio não conta "
                               "carimbo." if r["carimbo_retirado"] else "")}
+
+
+# ---------------------------------------------------------------- código do caixa (097)
+# 🔑 **Pedido do dono (27/09/2026):** *"na tela do nosso sistema vão aparecer os códigos e
+# clientes … o usuário pode informar a quantidade de selos que o cliente recebeu nesta
+# visita, por padrão 1."* `fidelidade.operar`, a mesma chave de entregar prêmio: é o caixa.
+
+@router.get("/codigos")
+def codigos_do_caixa(ctx: Contexto = Depends(_OPERAR)) -> dict:
+    """Os pedidos que aguardam código nesta loja (com o código) e os confirmados hoje."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cfg = servico.config(cur)
+        return servico.pedidos_do_caixa(cur, id_unidade) | {
+            "metodo": cfg["metodo"], "ligada": servico.ligada(cur, id_unidade)}
+
+
+@router.put("/codigos/{id_pedido}")
+def selos_do_pedido(id_pedido: int, body: SelosDoPedido,
+                    ctx: Contexto = Depends(_OPERAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        servico.definir_selos(cur, id_unidade, id_pedido, body.selos, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "fidelidade_pedido", id_pedido, "selos",
+                            depois={"selos": body.selos})
+    return {"message": f"Esta visita vale {body.selos} selo(s)."}
+
+
+@router.delete("/codigos/{id_pedido}")
+def cancelar_codigo(id_pedido: int, ctx: Contexto = Depends(_OPERAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        servico.cancelar_pedido(cur, id_unidade, id_pedido, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "fidelidade_pedido", id_pedido, "cancelar")
+    return {"message": "Pedido de código cancelado."}

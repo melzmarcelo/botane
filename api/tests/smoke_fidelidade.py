@@ -361,6 +361,150 @@ st, r = checkin()
 checar("e um novo check-in no dia do premio e recusado explicando",
        st == 409 and "prêmio" in (r.get("detail") or ""), (st, r))
 
+print("\n5c. o metodo CODIGO DO CAIXA (097)")
+# 🔑 Pedido do dono (27/09/2026): o cliente le o QR do caixa e fica esperando um codigo;
+# o codigo aparece so na tela do caixa, que tambem escolhe os selos (padrao 1).
+
+
+def zerar_cartao():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM fidelidade_solicitacoes WHERE id_cliente = %s", (ID_CLIENTE,))
+        cur.execute("DELETE FROM fidelidade_checkins WHERE id_cliente = %s", (ID_CLIENTE,))
+        cur.execute("DELETE FROM fidelidade_premios WHERE id_cliente = %s", (ID_CLIENTE,))
+
+
+def pedir_codigo():
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM reserva_tentativas WHERE id_unidade = %s", (UNIDADE,))
+    return chamar("POST", f"/publico/{UNIDADE}/fidelidade/codigo/pedir",
+                  {"telefone": FONE, "token": TOKEN})
+
+
+def confirmar_codigo(codigo):
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM reserva_tentativas WHERE id_unidade = %s", (UNIDADE,))
+    return chamar("POST", f"/publico/{UNIDADE}/fidelidade/codigo/confirmar",
+                  {"telefone": FONE, "codigo": codigo})
+
+
+def codigo_na_tela():
+    _st, tela = chamar("GET", "/fidelidade/codigos", token=token)
+    return next((x for x in (tela or {}).get("pendentes", [])
+                 if x["telefone"] == FONE), None)
+
+
+zerar_cartao()
+st, cfg_c = config_fidelidade(metodo="CODIGO_CAIXA", visitas=3)
+TOKEN = cfg_c.get("token") or TOKEN
+checar("a configuracao grava o metodo do caixa", st == 200 and cfg_c.get("metodo") == "CODIGO_CAIXA",
+       (st, cfg_c.get("metodo")))
+st, casa = chamar("GET", f"/publico/{UNIDADE}/casa")
+checar("o site sabe que e o codigo do caixa (e nao pede localizacao)",
+       (casa.get("fidelidade") or {}).get("metodo") == "CODIGO_CAIXA"
+       and (casa.get("fidelidade") or {}).get("exige_local") is False, casa.get("fidelidade"))
+st, r = checkin()
+checar("o QR sozinho NAO conta: a visita espera o codigo", st == 409 and "caixa" in
+       (r.get("detail") or ""), (st, r))
+
+st, r = pedir_codigo()
+checar("o cliente pede o codigo", st == 200 and r.get("status") == "PENDENTE", (st, r))
+checar("e a resposta ao CELULAR nao traz o codigo", "codigo" not in (r or {}), r)
+st, r2 = pedir_codigo()
+with get_cursor() as cur:
+    cur.execute("SELECT count(*) AS n FROM fidelidade_solicitacoes WHERE id_cliente = %s "
+                "AND status = 'PENDENTE'", (ID_CLIENTE,))
+    n_pend = cur.fetchone()["n"]
+checar("ler o QR de novo nao cria outro pedido", st == 200 and n_pend == 1, n_pend)
+pedido = codigo_na_tela()
+checar("o CAIXA ve o cliente e o codigo de 4 algarismos",
+       pedido and len(pedido["codigo"]) == 4 and pedido["codigo"].isdigit()
+       and pedido["selos"] == 1, pedido)
+st, r = chamar("PUT", f"/fidelidade/codigos/{pedido['id']}", {"selos": 3}, token)
+checar("o caixa ajusta os selos da visita", st == 200, (st, r))
+st, r = confirmar_codigo("0000" if pedido["codigo"] != "0000" else "1111")
+checar("codigo errado e recusado, sem contar a visita", st == 409 and "confere" in
+       (r.get("detail") or ""), (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT tentativas FROM fidelidade_solicitacoes WHERE id = %s", (pedido["id"],))
+    tent = cur.fetchone()["tentativas"]
+checar("e a tentativa errada fica gravada", tent == 1, tent)
+st, r = confirmar_codigo(pedido["codigo"])
+checar("o codigo certo confirma a visita com os 3 selos",
+       st == 200 and r.get("selos") == 3, (st, r))
+checar("3 selos num cartao de 3: premio na hora, cartao zerado",
+       (r.get("premio_novo") or {}).get("codigo") and r.get("no_cartao") == 0, r)
+checar("e o pedido sai da tela do caixa", codigo_na_tela() is None)
+st, r = pedir_codigo()
+checar("pedir de novo no mesmo dia e recusado (uma visita por dia)",
+       st == 409 and "hoje" in (r.get("detail") or ""), (st, r))
+
+# 🔑 A SOBRA vai para o cartao seguinte: 1 selo ontem + 4 hoje = 5 -> 1 premio (3) e 2.
+zerar_cartao()
+with get_cursor() as cur:
+    cur.execute("INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data) "
+                "VALUES (%s, %s, %s)", (ID_CLIENTE, UNIDADE, HOJE - timedelta(days=1)))
+pedir_codigo()
+pedido = codigo_na_tela()
+chamar("PUT", f"/fidelidade/codigos/{pedido['id']}", {"selos": 4}, token)
+st, r = confirmar_codigo(pedido["codigo"])
+checar("1 + 4 selos num cartao de 3: um premio e SOBRAM 2 no cartao novo",
+       st == 200 and len(r.get("premios_novos") or []) == 1 and r.get("no_cartao") == 2, r)
+with get_cursor() as cur:
+    cur.execute("SELECT parte, selos, id_premio FROM fidelidade_checkins WHERE id_cliente = %s "
+                "AND data = %s ORDER BY parte", (ID_CLIENTE, HOJE))
+    partes = [dict(x) for x in cur.fetchall()]
+checar("a visita de hoje foi repartida: 2 no premio, 2 de sobra",
+       [(x["parte"], x["selos"], x["id_premio"] is not None) for x in partes]
+       == [(0, 2, True), (1, 2, False)], partes)
+
+# Cinco erros cancelam; codigo vencido; o caixa cancela.
+zerar_cartao()
+pedir_codigo()
+pedido = codigo_na_tela()
+errado = "0000" if pedido["codigo"] != "0000" else "1111"
+for _ in range(4):
+    confirmar_codigo(errado)
+st, r = confirmar_codigo(errado)
+checar("na quinta tentativa errada o pedido e cancelado", st == 409 and "muitas" in
+       (r.get("detail") or ""), (st, r))
+st, r = confirmar_codigo(pedido["codigo"])
+checar("e nem o codigo certo vale mais", st == 409, (st, r))
+pedir_codigo()
+pedido = codigo_na_tela()
+with get_cursor() as cur:
+    cur.execute("UPDATE fidelidade_solicitacoes SET expira_em = now() - interval '1 minute' "
+                "WHERE id = %s", (pedido["id"],))
+st, r = confirmar_codigo(pedido["codigo"])
+checar("codigo vencido e recusado", st == 409 and "venceu" in (r.get("detail") or ""), (st, r))
+pedir_codigo()
+pedido = codigo_na_tela()
+st, r = chamar("DELETE", f"/fidelidade/codigos/{pedido['id']}", token=token)
+checar("o caixa cancela um pedido", st == 200, (st, r))
+st, r = confirmar_codigo(pedido["codigo"])
+checar("e o codigo cancelado nao confirma", st == 409, (st, r))
+zerar_cartao()
+config_fidelidade()
+
+print("\n5d. a tela de QR codes (27/09/2026)")
+st, qr = chamar("GET", "/reservas/qrcodes", token=token)
+tipos = {t["tipo"] for t in (qr or {}).get("tipos", [])}
+checar("lista site, reserva e fidelidade", {"site", "reserva", "fidelidade"} <= tipos, tipos)
+reserva = next((t for t in qr.get("tipos", []) if t["tipo"] == "reserva"), {})
+checar("o QR da reserva abre o site nesta loja, na reserva",
+       reserva.get("link") == f"{qr.get('site_url')}/?loja={UNIDADE}#reserva", reserva.get("link"))
+fid = next((t for t in qr.get("tipos", []) if t["tipo"] == "fidelidade"), {})
+checar("o da fidelidade traz o segredo do programa", f"checkin={TOKEN}" in (fid.get("link") or ""),
+       fid.get("link"))
+st, pdf = chamar("GET", "/reservas/qrcodes/pdf?tipo=reserva&quantidade=2&tamanho=G",
+                 token=token, bruto=True)
+checar("o PDF do QR da reserva sai", st == 200 and isinstance(pdf, bytes) and pdf[:5] == b"%PDF-",
+       st)
+st, r = chamar("GET", "/reservas/qrcodes/pdf?tipo=cardapio&id_catalogo=999999", token=token)
+checar("cardapio que nao e desta loja: 404", st == 404, (st, r))
+checar("endereco de site invalido e recusado (422)",
+       chamar("PUT", "/reservas/qrcodes/site", {"site_url": "reservas.com"}, token)[0] == 422)
+
+
 print("\n6. a loja que nao participa")
 config_reserva(fidelidade_ligada=False)
 st, casa = chamar("GET", f"/publico/{UNIDADE}/casa")

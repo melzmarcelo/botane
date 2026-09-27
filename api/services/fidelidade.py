@@ -50,7 +50,8 @@ def dias_em_texto(dias: list[int]) -> str:
 def config(cur) -> dict:
     cur.execute(
         """SELECT visitas, premio, validade_dias, dias_pontua, dias_consumo,
-                  so_no_horario, token, site_url, exige_local, raio_m
+                  so_no_horario, token, site_url, exige_local, raio_m,
+                  metodo, codigo_validade_min
              FROM fidelidade_config WHERE id = 1""")
     c = dict(cur.fetchone())
     c["dias_pontua"] = sorted(c["dias_pontua"])
@@ -63,11 +64,13 @@ def salvar(cur, body) -> dict:
         """UPDATE fidelidade_config
               SET visitas = %s, premio = %s, validade_dias = %s, dias_pontua = %s,
                   dias_consumo = %s, so_no_horario = %s, site_url = %s,
-                  exige_local = %s, raio_m = %s, atualizado_em = now()
+                  exige_local = %s, raio_m = %s, metodo = %s, codigo_validade_min = %s,
+                  atualizado_em = now()
             WHERE id = 1""",
         (body.visitas, body.premio.strip(), body.validade_dias, sorted(set(body.dias_pontua)),
          sorted(set(body.dias_consumo)), body.so_no_horario,
-         body.site_url.strip().rstrip("/"), body.exige_local, body.raio_m),
+         body.site_url.strip().rstrip("/"), body.exige_local, body.raio_m,
+         body.metodo, body.codigo_validade_min),
     )
     return config(cur)
 
@@ -105,8 +108,12 @@ def regras(cfg: dict) -> dict:
         "pontua": dias_em_texto(cfg["dias_pontua"]),
         "consumo": dias_em_texto(cfg["dias_consumo"]),
         # O site só pede a localização quando a casa exige — pedir sem usar é
-        # coletar dado pessoal à toa.
-        "exige_local": cfg["exige_local"],
+        # coletar dado pessoal à toa. ⚠️ E nunca no código do caixa (097): ali quem
+        # confirma a presença é o atendente.
+        "exige_local": cfg["exige_local"] and cfg["metodo"] == "QRCODE_MESA",
+        # 🔑 Como a visita se confirma (097): o QR da mesa conta sozinho; o do caixa
+        # espera o código que o atendente passa.
+        "metodo": cfg["metodo"],
     }
 
 
@@ -185,11 +192,12 @@ def cartao(cur, id_cliente: int) -> dict:
     cfg = config(cur)
     hoje = agora_da_casa().date()
     cur.execute(
-        """SELECT data FROM fidelidade_checkins
-            WHERE id_cliente = %s AND id_premio IS NULL ORDER BY data""",
+        """SELECT data, selos FROM fidelidade_checkins
+            WHERE id_cliente = %s AND id_premio IS NULL ORDER BY data, parte""",
         (id_cliente,),
     )
-    abertas = [r["data"] for r in cur.fetchall()]
+    linhas = [dict(r) for r in cur.fetchall()]
+    abertas = [r["data"] for r in linhas]
     cur.execute(
         """SELECT codigo, premio, vence_em, vale_de, dias_consumo, emitido_em, usado_em
              FROM fidelidade_premios WHERE id_cliente = %s ORDER BY emitido_em DESC LIMIT 20""",
@@ -209,14 +217,15 @@ def cartao(cur, id_cliente: int) -> dict:
         })
     cur.execute("SELECT termo_versao FROM reserva_clientes WHERE id = %s", (id_cliente,))
     versao = (cur.fetchone() or {}).get("termo_versao")
-    visitas = len(abertas)
+    # 🔑 O cartão conta SELOS, não linhas (097): uma visita pode valer mais de um.
+    visitas = sum(int(r["selos"]) for r in linhas)
     return {
         **regras(cfg),
         "no_cartao": visitas,
         # ⚠️ Nunca negativo: baixar `visitas` na configuração não pode dizer ao
         # cliente que faltam "-2" — o próximo check-in fecha o cartão.
         "faltam": max(cfg["visitas"] - visitas, 0),
-        "datas": [d.isoformat() for d in abertas],
+        "datas": sorted({d.isoformat() for d in abertas}),
         "hoje_ja_fez": hoje in abertas or _ja_fez_hoje(cur, id_cliente, hoje),
         "premios": premios,
         # 🔑 LGPD: o termo em vigor cita a fidelidade; quem aceitou o anterior
@@ -241,21 +250,15 @@ def _codigo(cur) -> str:
     raise HTTPException(status_code=500, detail="Não foi possível gerar o código do prêmio.")
 
 
-def checkin(cur, id_unidade: int, id_cliente: int, token: str,
-            agora: datetime | None = None, posicao: dict | None = None) -> dict:
-    """Marca a visita de hoje — e fecha o cartão se ela for a que faltava.
-
-    ⚠️ **Trava por CLIENTE** (`pg_advisory_xact_lock`): duas abas fazendo o
-    check-in que completa o cartão ao mesmo tempo gerariam dois prêmios.
-    """
-    if not ligada(cur, id_unidade):
-        raise HTTPException(status_code=404, detail="Esta casa não tem programa de fidelidade.")
-    cfg = config(cur)
+def _validar_token(cfg: dict, token: str | None) -> None:
     if not token or not secrets.compare_digest(str(token), cfg["token"]):
         raise HTTPException(
             status_code=403,
-            detail="Este QR code não vale mais. Peça à equipe o QR code da mesa.")
-    agora = agora or agora_da_casa().replace(tzinfo=None)
+            detail="Este QR code não vale mais. Peça à equipe o QR code atual.")
+
+
+def _validar_dia(cur, id_unidade: int, cfg: dict, agora: datetime) -> None:
+    """Hoje conta, e a casa está aberta — as regras baratas, iguais nos dois métodos."""
     hoje = agora.date()
     if hoje.isoweekday() not in cfg["dias_pontua"]:
         raise HTTPException(
@@ -267,13 +270,11 @@ def checkin(cur, id_unidade: int, id_cliente: int, token: str,
         if not dia["aberta"] or not (janela["abre"] <= agora.time() <= janela["fecha"]):
             raise HTTPException(
                 status_code=409,
-                detail="O check-in vale com a casa aberta — faça na mesa, durante a visita.")
+                detail="A visita vale com a casa aberta — faça durante a visita.")
 
-    # Por último, depois das regras baratas: a mensagem de "dia que não conta" é mais
-    # útil que a de distância, e não depende de permissão nenhuma.
-    distancia = conferir_local(cur, id_unidade, cfg, posicao)
 
-    cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
+def _pode_pontuar_hoje(cur, id_cliente: int, hoje: date) -> None:
+    """Uma visita por dia, e a visita do prêmio não conta — nos dois métodos."""
     # 🔑 **A visita do prêmio não conta carimbo** (pedido do dono, 24/09/2026: *"no
     # próximo é grátis e não vale o carimbo"*). Prêmio já entregue hoje → hoje não pontua.
     # O caso inverso (check-in feito ANTES de pedir o prêmio) é desfeito em `entregar`.
@@ -282,43 +283,306 @@ def checkin(cur, id_unidade: int, id_cliente: int, token: str,
             status_code=409,
             detail="Hoje você usou seu prêmio — a visita do prêmio não conta carimbo. "
                    "O cartão novo começa na próxima visita!")
-    cur.execute(
-        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m)
-           VALUES (%s, %s, %s, %s) ON CONFLICT (id_cliente, data) DO NOTHING RETURNING id""",
-        (id_cliente, id_unidade, hoje, distancia),
-    )
-    if not cur.fetchone():
+    if _ja_fez_hoje(cur, id_cliente, hoje):
         raise HTTPException(status_code=409,
-                            detail="Você já fez o check-in de hoje. Volte num próximo dia!")
+                            detail="Sua visita de hoje já está marcada. Volte num próximo dia!")
 
+
+def _registrar_visita(cur, id_unidade: int, id_cliente: int, hoje: date, selos: int,
+                      distancia: int | None, cfg: dict) -> list[dict]:
+    """Grava a visita de hoje com `selos` e fecha quantos cartões ela completar.
+
+    ⚠️ **Trava por CLIENTE** (`pg_advisory_xact_lock`): duas abas marcando a visita que
+    completa o cartão ao mesmo tempo gerariam dois prêmios.
+    """
+    cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
+    _pode_pontuar_hoje(cur, id_cliente, hoje)
     cur.execute(
-        """SELECT id FROM fidelidade_checkins WHERE id_cliente = %s AND id_premio IS NULL
-            ORDER BY data, id""",
-        (id_cliente,),
+        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m, selos)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (id_cliente, data, parte) DO NOTHING RETURNING id""",
+        (id_cliente, id_unidade, hoje, distancia, selos),
     )
-    abertas = [r["id"] for r in cur.fetchall()]
-    premio = None
-    if len(abertas) >= cfg["visitas"]:
+    linha = cur.fetchone()
+    if not linha:
+        raise HTTPException(status_code=409,
+                            detail="Sua visita de hoje já está marcada. Volte num próximo dia!")
+    cfg["_id_checkin"] = linha["id"]
+    return _fechar_cartoes(cur, id_unidade, id_cliente, hoje, cfg)
+
+
+def _fechar_cartoes(cur, id_unidade: int, id_cliente: int, hoje: date,
+                    cfg: dict) -> list[dict]:
+    """Enquanto os selos abertos cobrirem um cartão, fecha um cartão — e emite o prêmio.
+
+    🔑 **A sobra passa para o cartão seguinte** (097): a visita de 3 selos que completa um
+    cartão com 1 é repartida — 1 vai para o prêmio, 2 ficam numa linha `parte` nova do
+    mesmo dia. As MAIS ANTIGAS fecham primeiro.
+    """
+    premios = []
+    meta = int(cfg["visitas"])
+    while True:
+        cur.execute(
+            """SELECT id, data, parte, selos FROM fidelidade_checkins
+                WHERE id_cliente = %s AND id_premio IS NULL ORDER BY data, parte, id""",
+            (id_cliente,),
+        )
+        abertas = [dict(r) for r in cur.fetchall()]
+        if sum(int(a["selos"]) for a in abertas) < meta:
+            return premios
+        usadas, falta = [], meta
+        for a in abertas:
+            if falta <= 0:
+                break
+            if int(a["selos"]) > falta:
+                # Reparte: o que sobra desta visita vai para uma parte nova do mesmo dia.
+                cur.execute(
+                    """SELECT coalesce(max(parte), 0) + 1 AS proxima FROM fidelidade_checkins
+                        WHERE id_cliente = %s AND data = %s""",
+                    (id_cliente, a["data"]),
+                )
+                proxima = cur.fetchone()["proxima"]
+                cur.execute(
+                    """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, selos, parte)
+                       SELECT id_cliente, id_unidade, data, %s, %s
+                         FROM fidelidade_checkins WHERE id = %s""",
+                    (int(a["selos"]) - falta, proxima, a["id"]),
+                )
+                cur.execute("UPDATE fidelidade_checkins SET selos = %s WHERE id = %s",
+                            (falta, a["id"]))
+                falta = 0
+            else:
+                falta -= int(a["selos"])
+            usadas.append(a["id"])
+
         codigo = _codigo(cur)
         vence = hoje + timedelta(days=cfg["validade_dias"])
         # 🔑 **"A cada 10, no próximo é grátis"** (pedido do dono, 24/09/2026): o prêmio
-        # do 10º check-in vale a partir do DIA SEGUINTE — a 11ª visita.
+        # do cartão completado hoje vale a partir do DIA SEGUINTE — a próxima visita.
         vale_de = hoje + timedelta(days=1)
         cur.execute(
             """INSERT INTO fidelidade_premios (id_cliente, id_unidade, codigo, premio, visitas,
                                                dias_consumo, vence_em, vale_de)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (id_cliente, id_unidade, codigo, cfg["premio"], cfg["visitas"],
+            (id_cliente, id_unidade, codigo, cfg["premio"], meta,
              cfg["dias_consumo"], vence, vale_de),
         )
         id_premio = cur.fetchone()["id"]
-        # As MAIS ANTIGAS fecham o cartão; o que sobrar (se a meta baixou) segue.
         cur.execute("UPDATE fidelidade_checkins SET id_premio = %s WHERE id = ANY(%s)",
-                    (id_premio, abertas[:cfg["visitas"]]))
-        premio = {"codigo": codigo, "premio": cfg["premio"], "vence_em": vence.isoformat(),
-                  "vale_de": vale_de.isoformat(),
-                  "consumo": dias_em_texto(cfg["dias_consumo"])}
-    return {"premio_novo": premio, **cartao(cur, id_cliente)}
+                    (id_premio, usadas))
+        premios.append({"codigo": codigo, "premio": cfg["premio"], "vence_em": vence.isoformat(),
+                        "vale_de": vale_de.isoformat(),
+                        "consumo": dias_em_texto(cfg["dias_consumo"])})
+
+
+def _resposta(cur, id_cliente: int, premios: list[dict]) -> dict:
+    return {"premio_novo": premios[-1] if premios else None, "premios_novos": premios,
+            **cartao(cur, id_cliente)}
+
+
+def checkin(cur, id_unidade: int, id_cliente: int, token: str,
+            agora: datetime | None = None, posicao: dict | None = None) -> dict:
+    """O QR da MESA: marca a visita de hoje (1 selo) — e fecha o cartão se completar."""
+    if not ligada(cur, id_unidade):
+        raise HTTPException(status_code=404, detail="Esta casa não tem programa de fidelidade.")
+    cfg = config(cur)
+    _validar_token(cfg, token)
+    if cfg["metodo"] != "QRCODE_MESA":
+        # ⚠️ Com o código do caixa (097), o QR sozinho não conta: é o atendente que
+        # confirma a visita. Aceitar aqui seria um atalho em volta dele.
+        raise HTTPException(
+            status_code=409,
+            detail="Nesta casa a visita se confirma com o código que o caixa passa.")
+    agora = agora or agora_da_casa().replace(tzinfo=None)
+    _validar_dia(cur, id_unidade, cfg, agora)
+    # Por último, depois das regras baratas: a mensagem de "dia que não conta" é mais
+    # útil que a de distância, e não depende de permissão nenhuma.
+    distancia = conferir_local(cur, id_unidade, cfg, posicao)
+    premios = _registrar_visita(cur, id_unidade, id_cliente, agora.date(), 1, distancia, cfg)
+    return _resposta(cur, id_cliente, premios)
+
+
+# ------------------------------------------------------------ código do caixa (097)
+# 🔑 **Pedido do dono (27/09/2026):** *"no caixa tem um QR code, o cliente lê e aparece uma
+# tela aguardando um código. Na tela do nosso sistema aparecem os códigos e clientes; o
+# usuário passa o código para o cliente confirmar a visita … e informa a quantidade de
+# selos, por padrão 1."*
+# ⚠️ **O código NUNCA sai para o celular** — só para a tela do caixa. É ele que prova que
+# alguém da casa viu o cliente.
+
+TENTATIVAS_MAXIMAS = 5
+
+
+def _vencer_pedidos(cur, id_unidade: int | None = None) -> None:
+    cur.execute(
+        """UPDATE fidelidade_solicitacoes SET status = 'VENCIDA'
+            WHERE status = 'PENDENTE' AND expira_em < now()
+              AND (%s::int IS NULL OR id_unidade = %s)""",
+        (id_unidade, id_unidade),
+    )
+
+
+def _codigo_do_caixa(cur, id_unidade: int) -> str:
+    """4 algarismos — o atendente FALA o código; letra e zero à esquerda viram dúvida."""
+    for _ in range(50):
+        c = str(secrets.randbelow(9000) + 1000)
+        cur.execute(
+            """SELECT 1 FROM fidelidade_solicitacoes
+                WHERE id_unidade = %s AND status = 'PENDENTE' AND codigo = %s""",
+            (id_unidade, c),
+        )
+        if not cur.fetchone():
+            return c
+    raise HTTPException(status_code=503, detail="Muitos pedidos ao mesmo tempo. Tente de novo.")
+
+
+def solicitar(cur, id_unidade: int, id_cliente: int, token: str,
+              agora: datetime | None = None) -> dict:
+    """O cliente leu o QR do caixa: nasce (ou volta) o pedido de código dele.
+
+    ⚠️ Ler de novo devolve o MESMO pedido enquanto ele vale — um por cliente, garantido
+    pelo índice único parcial.
+    """
+    if not ligada(cur, id_unidade):
+        raise HTTPException(status_code=404, detail="Esta casa não tem programa de fidelidade.")
+    cfg = config(cur)
+    _validar_token(cfg, token)
+    if cfg["metodo"] != "CODIGO_CAIXA":
+        raise HTTPException(status_code=409,
+                            detail="Nesta casa a visita se marca pelo QR code da mesa.")
+    agora = agora or agora_da_casa().replace(tzinfo=None)
+    _validar_dia(cur, id_unidade, cfg, agora)
+    _pode_pontuar_hoje(cur, id_cliente, agora.date())
+    _vencer_pedidos(cur, id_unidade)
+    cur.execute(
+        """SELECT id, id_unidade, expira_em, criada_em FROM fidelidade_solicitacoes
+            WHERE id_cliente = %s AND status = 'PENDENTE'""",
+        (id_cliente,),
+    )
+    pedido = cur.fetchone()
+    if pedido and pedido["id_unidade"] != id_unidade:
+        # Pediu na outra loja e veio para esta: o de lá não serve aqui.
+        cur.execute("UPDATE fidelidade_solicitacoes SET status = 'CANCELADA' WHERE id = %s",
+                    (pedido["id"],))
+        pedido = None
+    if not pedido:
+        cur.execute(
+            """INSERT INTO fidelidade_solicitacoes (id_cliente, id_unidade, codigo, expira_em)
+               VALUES (%s, %s, %s, now() + make_interval(mins => %s))
+               RETURNING id, expira_em, criada_em""",
+            (id_cliente, id_unidade, _codigo_do_caixa(cur, id_unidade),
+             int(cfg["codigo_validade_min"])),
+        )
+        pedido = cur.fetchone()
+    return {"status": "PENDENTE", "expira_em": pedido["expira_em"].isoformat(),
+            "mensagem": "Peça o código no caixa e digite aqui."}
+
+
+def confirmar(cur, id_unidade: int, id_cliente: int, codigo: str,
+              agora: datetime | None = None) -> tuple[dict | None, str | None]:
+    """O cliente digitou o código. Devolve `(resposta, None)` ou `(None, erro)`.
+
+    ⚠️ **O erro VOLTA em vez de estourar**: a tentativa errada precisa ficar gravada (é
+    ela que cancela o pedido na quinta), e uma exceção desfaria a gravação junto.
+    """
+    agora = agora or agora_da_casa().replace(tzinfo=None)
+    cur.execute(
+        """SELECT id, codigo, selos, expira_em, tentativas FROM fidelidade_solicitacoes
+            WHERE id_cliente = %s AND id_unidade = %s AND status = 'PENDENTE'
+            FOR UPDATE""",
+        (id_cliente, id_unidade),
+    )
+    pedido = cur.fetchone()
+    if not pedido:
+        return None, "Não há pedido de código em aberto. Leia o QR code do caixa de novo."
+    cur.execute("SELECT now() > %s AS vencido", (pedido["expira_em"],))
+    if cur.fetchone()["vencido"]:
+        cur.execute("UPDATE fidelidade_solicitacoes SET status = 'VENCIDA' WHERE id = %s",
+                    (pedido["id"],))
+        return None, "O código venceu. Leia o QR code do caixa de novo."
+    if (codigo or "").strip() != pedido["codigo"]:
+        tentativas = int(pedido["tentativas"]) + 1
+        cancelou = tentativas >= TENTATIVAS_MAXIMAS
+        cur.execute(
+            """UPDATE fidelidade_solicitacoes
+                  SET tentativas = %s, status = CASE WHEN %s THEN 'CANCELADA' ELSE status END
+                WHERE id = %s""",
+            (tentativas, cancelou, pedido["id"]),
+        )
+        if cancelou:
+            return None, "Código errado muitas vezes. Leia o QR code do caixa de novo."
+        return None, "O código não confere. Confira com o caixa e digite de novo."
+
+    cfg = config(cur)
+    _validar_dia(cur, id_unidade, cfg, agora)
+    premios = _registrar_visita(cur, id_unidade, id_cliente, agora.date(),
+                                int(pedido["selos"]), None, cfg)
+    cur.execute(
+        """UPDATE fidelidade_solicitacoes
+              SET status = 'CONFIRMADA', confirmada_em = now(), id_checkin = %s
+            WHERE id = %s""",
+        (cfg.get("_id_checkin"), pedido["id"]),
+    )
+    return {"selos": int(pedido["selos"]), **_resposta(cur, id_cliente, premios)}, None
+
+
+def pedidos_do_caixa(cur, id_unidade: int) -> dict:
+    """A tela do caixa: os pedidos pendentes (com o código) e os confirmados de hoje."""
+    _vencer_pedidos(cur, id_unidade)
+    cur.execute(
+        """SELECT s.id, s.codigo, s.selos, s.status, s.criada_em, s.expira_em,
+                  s.confirmada_em, s.tentativas, c.nome, c.telefone
+             FROM fidelidade_solicitacoes s JOIN reserva_clientes c ON c.id = s.id_cliente
+            WHERE s.id_unidade = %s
+              AND (s.status = 'PENDENTE'
+                   OR (s.status = 'CONFIRMADA'
+                       AND (s.confirmada_em AT TIME ZONE 'America/Sao_Paulo')::date
+                           = (now() AT TIME ZONE 'America/Sao_Paulo')::date))
+            ORDER BY (s.status = 'PENDENTE') DESC, s.criada_em DESC
+            LIMIT 60""",
+        (id_unidade,),
+    )
+    linhas = []
+    for r in cur.fetchall():
+        r = dict(r)
+        for campo in ("criada_em", "expira_em", "confirmada_em"):
+            r[campo] = r[campo].isoformat() if r[campo] else None
+        linhas.append(r)
+    return {"pendentes": [x for x in linhas if x["status"] == "PENDENTE"],
+            "confirmados": [x for x in linhas if x["status"] == "CONFIRMADA"]}
+
+
+def _pedido_pendente(cur, id_unidade: int, id_pedido: int) -> dict:
+    _vencer_pedidos(cur, id_unidade)
+    cur.execute(
+        """SELECT id, status FROM fidelidade_solicitacoes
+            WHERE id = %s AND id_unidade = %s FOR UPDATE""",
+        (id_pedido, id_unidade),
+    )
+    p = cur.fetchone()
+    if not p:
+        raise HTTPException(status_code=404, detail="Pedido de código não encontrado.")
+    if p["status"] != "PENDENTE":
+        raise HTTPException(status_code=409,
+                            detail="Este pedido não está mais aguardando o código.")
+    return dict(p)
+
+
+def definir_selos(cur, id_unidade: int, id_pedido: int, selos: int,
+                  id_usuario: int | None) -> None:
+    """O caixa diz quantos selos esta visita vale — antes de o cliente digitar."""
+    _pedido_pendente(cur, id_unidade, id_pedido)
+    cur.execute("UPDATE fidelidade_solicitacoes SET selos = %s, atendido_por = %s WHERE id = %s",
+                (selos, id_usuario, id_pedido))
+
+
+def cancelar_pedido(cur, id_unidade: int, id_pedido: int, id_usuario: int | None) -> None:
+    _pedido_pendente(cur, id_unidade, id_pedido)
+    cur.execute(
+        """UPDATE fidelidade_solicitacoes SET status = 'CANCELADA', atendido_por = %s
+            WHERE id = %s""",
+        (id_usuario, id_pedido),
+    )
 
 
 def _usou_premio_hoje(cur, id_cliente: int, hoje: date) -> bool:

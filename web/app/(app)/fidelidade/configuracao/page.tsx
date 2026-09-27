@@ -14,7 +14,6 @@ import {
   type FidelidadeConfig,
 } from "@/lib/fidelidade";
 
-import ImpressaoDosQrCodes from "./impressao";
 import LocalizacaoDoCheckin from "./localizacao";
 
 /**
@@ -66,6 +65,8 @@ export default function ConfiguracaoDaFidelidade() {
         site_url: cfg.site_url,
         exige_local: cfg.exige_local,
         raio_m: Number(cfg.raio_m),
+        metodo: cfg.metodo,
+        codigo_validade_min: Number(cfg.codigo_validade_min),
       });
       setCfg(r);
       aviso.sucesso(r.message);
@@ -147,6 +148,43 @@ export default function ConfiguracaoDaFidelidade() {
                      onChange={(e) => mudar("validade_dias", Number(e.target.value))} />
             </Campo>
           </div>
+          {/* 🔑 **O método de pontuação** (pedido do dono, 27/09/2026): o QR da mesa
+              conta sozinho; o do caixa espera o código que o atendente passa, e o
+              atendente decide quantos selos a visita vale. */}
+          <fieldset>
+            <legend className="rotulo-campo">Como a visita é confirmada</legend>
+            <div className="mt-1.5 grid gap-2 sm:grid-cols-2" role="radiogroup">
+              {[
+                { v: "QRCODE_MESA" as const, r: "QR code na mesa",
+                  d: "O cliente lê o QR e a visita conta na hora — 1 selo." },
+                { v: "CODIGO_CAIXA" as const, r: "Código de confirmação no caixa",
+                  d: "O cliente lê o QR do caixa; o atendente passa o código e escolhe os selos." },
+              ].map((o) => (
+                <button key={o.v} type="button" role="radio" aria-checked={cfg.metodo === o.v}
+                        onClick={() => mudar("metodo", o.v)}
+                        className={`rounded-[10px] border p-3 text-left ${
+                          cfg.metodo === o.v
+                            ? "border-[var(--color-erva)] bg-[var(--color-erva-claro)]"
+                            : "border-[var(--color-linha)] hover:border-[var(--color-erva)]"}`}>
+                  <b className="block text-[14px]">{o.r}</b>
+                  <span className="text-[12.5px] text-suave">{o.d}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          {cfg.metodo === "CODIGO_CAIXA" && (
+            <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+              <Campo rotulo="O código vale por" dica="minutos">
+                <input className="campo mono" type="number" min={2} max={720}
+                       value={cfg.codigo_validade_min}
+                       onChange={(e) => mudar("codigo_validade_min", Number(e.target.value))} />
+              </Campo>
+              <p className="self-end pb-2 text-[13px] text-suave">
+                Os códigos aparecem em Fidelidade → Códigos. Cinco tentativas erradas cancelam o
+                pedido, e o cliente lê o QR de novo.
+              </p>
+            </div>
+          )}
           {dias("dias_pontua", "Dias em que a visita conta")}
           {dias("dias_consumo", "Dias em que o prêmio pode ser consumido")}
           <label className="flex items-start gap-3">
@@ -160,11 +198,15 @@ export default function ConfiguracaoDaFidelidade() {
               </span>
             </span>
           </label>
-          <LocalizacaoDoCheckin
-            cfg={cfg}
-            aoMudar={(exige, raio) => setCfg({ ...cfg, exige_local: exige, raio_m: raio })}
-            aoGravarLocal={setCfg}
-          />
+          {/* A localização só vale para o QR da mesa: no caixa, quem confirma a presença
+              é o atendente. */}
+          {cfg.metodo === "QRCODE_MESA" && (
+            <LocalizacaoDoCheckin
+              cfg={cfg}
+              aoMudar={(exige, raio) => setCfg({ ...cfg, exige_local: exige, raio_m: raio })}
+              aoGravarLocal={setCfg}
+            />
+          )}
           <div className="flex justify-end">
             <button className="btn btn-primario" onClick={() => void salvar()}
                     aria-busy={ocupado} disabled={ocupado}>
@@ -183,15 +225,16 @@ export default function ConfiguracaoDaFidelidade() {
           </button>
         }
       >
-        <div className="flex flex-col gap-4">
-          <Campo rotulo="Endereço do site" dica="Salve o cartão depois de mudar.">
-            <input className="campo mono" value={cfg.site_url}
-                   onChange={(e) => mudar("site_url", e.target.value)} />
-          </Campo>
+        <div className="flex flex-col gap-3">
           <p className="break-all text-[13px] text-suave">
             O QR code abre: <span className="mono text-tinta">{cfg.link}</span>
           </p>
-          <ImpressaoDosQrCodes cfg={cfg} />
+          {/* 🔑 A impressão mora na tela de QR codes (27/09/2026), junto com os de
+              cardápio e reserva — um lugar só para todos os QR da casa. */}
+          <p className="text-[14px]">
+            Para imprimir, e para o endereço do site, use{" "}
+            <Link href="/reservas/qrcodes" className="link-acao">Portal de Clientes → QR codes</Link>.
+          </p>
         </div>
       </Cartao>
 

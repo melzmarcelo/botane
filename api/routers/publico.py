@@ -38,7 +38,7 @@ from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
 from services import fidelidade
-from models.fidelidade import CheckinDoSite
+from models.fidelidade import CheckinDoSite, CodigoDoCaixa, PedidoDeCodigo
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
 
@@ -159,6 +159,48 @@ def casa(id_unidade: int) -> dict:
             "fidelidade": (fidelidade.regras(fidelidade.config(cur))
                            if fidelidade.ligada(cur, id_unidade) else None),
         }
+
+
+def _aceite_do_termo(cur, id_cliente: int, aceitou: bool) -> None:
+    """O termo em vigor cita a fidelidade: sem ele aceito, a visita não conta."""
+    if aceitou:
+        clientes.aceitar_termo(cur, id_cliente)
+    cur.execute("SELECT termo_versao FROM reserva_clientes WHERE id = %s", (id_cliente,))
+    if cur.fetchone()["termo_versao"] != termo.VERSAO:
+        raise HTTPException(
+            status_code=409,
+            detail="Para participar da fidelidade, marque que está de acordo com o termo "
+                   "de consentimento atualizado.")
+
+
+@router.post("/{id_unidade}/fidelidade/codigo/pedir")
+def pedir_codigo(id_unidade: int, corpo: PedidoDeCodigo, pedido: Request) -> dict:
+    """O cliente leu o QR do CAIXA: abre o pedido de código da visita (097).
+
+    ⚠️ **A resposta NÃO traz o código** — ele só aparece na tela do caixa. Devolvê-lo
+    aqui faria o cliente confirmar a própria visita sem ninguém da casa ver.
+    """
+    # O aceite grava na transação dele: um pedido recusado não desfaz o termo.
+    with get_cursor() as cur:
+        id_cliente = _cliente_da_fidelidade(cur, id_unidade, corpo.telefone, pedido)
+        if corpo.aceite_termo:
+            clientes.aceitar_termo(cur, id_cliente)
+    with get_cursor() as cur:
+        _aceite_do_termo(cur, id_cliente, False)
+        return fidelidade.solicitar(cur, id_unidade, id_cliente, corpo.token)
+
+
+@router.post("/{id_unidade}/fidelidade/codigo/confirmar")
+def confirmar_codigo(id_unidade: int, corpo: CodigoDoCaixa, pedido: Request) -> dict:
+    """O cliente digitou o código que o caixa passou: a visita conta, com os selos (097)."""
+    with get_cursor() as cur:
+        id_cliente = _cliente_da_fidelidade(cur, id_unidade, corpo.telefone, pedido)
+        resposta, erro = fidelidade.confirmar(cur, id_unidade, id_cliente, corpo.codigo)
+    # ⚠️ Levanta DEPOIS do `with`: a tentativa errada já foi gravada (é ela que cancela o
+    # pedido na quinta vez) e não pode ser desfeita junto com a recusa.
+    if erro:
+        raise HTTPException(status_code=409, detail=erro)
+    return resposta
 
 
 def _cliente_da_fidelidade(cur, id_unidade: int, telefone: str, pedido: Request) -> int:
@@ -386,7 +428,11 @@ def catalogos(id_unidade: int) -> list[dict]:
             saida.append({
                 "nome": r["nome"], "origem": r["origem"],
                 "exige_cadastro": fechado,
-                "id": r["id"] if fechado else None,
+                # 🔑 O id vai SEMPRE (27/09/2026): o QR do cardápio na mesa aponta o
+                # catálogo pelo id, inclusive o PDF aberto. Não é segredo — é a chave de
+                # algo que a casa decidiu publicar; o que protege o fechado é o
+                # `arquivo_url` nulo, não o id.
+                "id": r["id"],
                 "arquivo_url": None if fechado else r["arquivo_url"],
                 "bytes": r["arquivo_bytes"],
                 # ⚠️ Quando termina, para o site poder dizer "até domingo". Só

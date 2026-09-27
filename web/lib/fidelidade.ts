@@ -15,6 +15,10 @@ export type FidelidadeConfig = {
   dias_consumo: number[];
   so_no_horario: boolean;
   site_url: string;
+  /** Como a visita se confirma (097): QR na mesa, ou código que o caixa passa. */
+  metodo: "QRCODE_MESA" | "CODIGO_CAIXA";
+  /** Por quantos minutos o código do caixa vale. */
+  codigo_validade_min: number;
   /** O check-in só conta perto da loja (092). */
   exige_local: boolean;
   raio_m: number;
@@ -47,15 +51,6 @@ export type Premio = {
   pode_hoje: boolean;
 };
 
-export type ImpressaoQr = {
-  quantidade: number;
-  tamanho: "P" | "M" | "G";
-  titulo: string;
-  chamada: string;
-  extra: string;
-  numerar: boolean;
-  primeira_mesa: number;
-};
 
 export const DIAS = [
   { v: 1, r: "Seg" },
@@ -81,18 +76,6 @@ export const definirLocal = (latitude: number, longitude: number) =>
 export const trocarToken = () =>
   api.post<FidelidadeConfig & { message: string }>("/fidelidade/token");
 
-export function baixarQrCodes(p: ImpressaoQr) {
-  const q = new URLSearchParams({
-    quantidade: String(p.quantidade),
-    tamanho: p.tamanho,
-    titulo: p.titulo,
-    chamada: p.chamada,
-    extra: p.extra,
-    numerar: String(p.numerar),
-    primeira_mesa: String(p.primeira_mesa),
-  });
-  return api.baixar(`/fidelidade/qrcodes.pdf?${q}`);
-}
 
 export const listarPremios = (
   parametros: Record<string, string>,
@@ -103,6 +86,35 @@ export const listarPremios = (
   if (filtros.busca.trim()) q.set("busca", filtros.busca.trim());
   return api.listar<Premio>(`/fidelidade/premios?${q}`);
 };
+
+/** Um pedido de código no caixa (097): o código só existe nesta tela. */
+export type PedidoDeCodigo = {
+  id: number;
+  codigo: string;
+  selos: number;
+  status: "PENDENTE" | "CONFIRMADA";
+  criada_em: string;
+  expira_em: string;
+  confirmada_em: string | null;
+  tentativas: number;
+  nome: string;
+  telefone: string;
+};
+
+export type CodigosDoCaixa = {
+  pendentes: PedidoDeCodigo[];
+  confirmados: PedidoDeCodigo[];
+  metodo: FidelidadeConfig["metodo"];
+  ligada: boolean;
+};
+
+export const codigosDoCaixa = () => api.get<CodigosDoCaixa>("/fidelidade/codigos");
+
+export const selosDoPedido = (id: number, selos: number) =>
+  api.put<{ message: string }>(`/fidelidade/codigos/${id}`, { selos });
+
+export const cancelarPedido = (id: number) =>
+  api.delete<{ message: string }>(`/fidelidade/codigos/${id}`);
 
 export const entregarPremio = (codigo: string) =>
   api.post<{ message: string }>("/fidelidade/premios/entregar", { codigo });

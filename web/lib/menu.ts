@@ -187,12 +187,31 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Fidelidade",
       },
       {
+        // 🔑 **Códigos** (pedido do dono, 27/09/2026): a tela do caixa no método
+        // "código de confirmação" — o cliente lê o QR do caixa e o código aparece aqui.
+        href: "/fidelidade/codigos",
+        nome: "Códigos",
+        icone: "chave",
+        chave: "fidelidade.operar",
+        soComReservas: true,
+        subgrupo: "Fidelidade",
+      },
+      {
         href: "/fidelidade/configuracao",
         nome: "Configuração",
         icone: "config",
         chave: "fidelidade.configurar",
         soComReservas: true,
         subgrupo: "Fidelidade",
+      },
+      {
+        // 🔑 **QR codes** (pedido do dono, 27/09/2026): site, reserva, cardápio de mesa e
+        // fidelidade — todos os QR da casa num lugar só, com a impressão.
+        href: "/reservas/qrcodes",
+        nome: "QR codes",
+        icone: "etiqueta",
+        chave: "reservas.configurar",
+        soComReservas: true,
       },
       {
         // 🔑 Catálogos no MESMO nível de Reservas (pedido do dono): é o que o

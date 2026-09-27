@@ -597,6 +597,15 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
           atualizado, que inclui o programa de fidelidade.</span>
       </label>
       <button class="item destaque" id="fazer-checkin" hidden>Fazer check-in</button>
+      <!-- 🔑 **O código do caixa** (pedido do dono, 27/09/2026): o cliente leu o QR do
+           caixa; o código aparece na tela do ATENDENTE, que o passa. Nunca aqui. -->
+      <div id="bloco-codigo" class="passos" hidden>
+        <label class="campo" for="codigo-caixa">Código que o caixa passou
+          <input id="codigo-caixa" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="6" placeholder="0000">
+        </label>
+        <button class="item destaque" id="confirmar-codigo">Confirmar visita</button>
+      </div>
       <p class="regra-fidelidade" id="regra-fidelidade"></p>
     </section>
 
@@ -1440,20 +1449,28 @@ $("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTele
 // Lidos UMA vez, na chegada, e tirados do endereço: o F5 não repete o check-in
 // (o servidor recusaria, mas a pessoa leria "já fez hoje" sem ter feito nada).
 let checkinToken = null;
+/** O catálogo que veio no QR da mesa (`&catalogo=`), para abrir direto. */
+let catalogoDoQr = null;
 (function lerQrDaMesa() {
+  // 🔑 **Todo QR do Portal diz a loja** (27/09/2026, tela de QR codes): site, reserva,
+  // cardápio e fidelidade. O de cardápio diz também QUAL catálogo; o de fidelidade
+  // traz o segredo do programa.
   const q = new URLSearchParams(location.search);
-  if (!q.get("checkin")) return;
-  checkinToken = q.get("checkin");
-  if (q.get("loja")) {
-    // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
-    document.documentElement.dataset.loja = q.get("loja");
-    try {
-      const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
-      salvo.loja = q.get("loja");
-      sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
-    } catch { /* sem memória: o `data-loja` já resolve */ }
-  }
-  history.replaceState(null, "", location.pathname + "#fidelidade");
+  if (!q.get("loja") && !q.get("checkin")) return;
+  if (q.get("checkin")) checkinToken = q.get("checkin");
+  if (q.get("catalogo")) catalogoDoQr = Number(q.get("catalogo"));
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
+    if (q.get("loja")) salvo.loja = q.get("loja");
+    if (catalogoDoQr) salvo.aberto = { id: catalogoDoQr, secao: null };
+    sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
+  } catch { /* sem memória: o `data-loja` já resolve */ }
+  // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
+  if (q.get("loja")) document.documentElement.dataset.loja = q.get("loja");
+  // Tira os parâmetros do endereço: o F5 não repete o check-in, e o link que a pessoa
+  // compartilhar não carrega o segredo da mesa.
+  const tela = checkinToken ? "#fidelidade" : location.hash;
+  history.replaceState(null, "", location.pathname + tela);
 })();
 
 function abrirFidelidade() {
@@ -1524,6 +1541,10 @@ function desenharCartao(c) {
   const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
   $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
   $("#fazer-checkin").hidden = !podeCheckin;
+  // No caixa, o botão PEDE o código; a visita conta quando o código é digitado.
+  $("#fazer-checkin").textContent = c.metodo === "CODIGO_CAIXA" ? "Pedir código no caixa"
+    : "Fazer check-in";
+  if (!podeCheckin) $("#bloco-codigo").hidden = true;
 }
 
 async function mostrarCartao(recado) {
@@ -1551,6 +1572,7 @@ async function fazerCheckin() {
     return avisar("#aviso-fidelidade",
       "Para participar, marque que está de acordo com o termo de consentimento.");
   }
+  if (cartaoAtual && cartaoAtual.metodo === "CODIGO_CAIXA") return pedirCodigo(precisa);
   $("#fazer-checkin").disabled = true;
   let posicao = {};
   if (cartaoAtual && cartaoAtual.exige_local) {
@@ -1581,6 +1603,52 @@ async function fazerCheckin() {
     : `Check-in feito! Faltam ${r.faltam} visita${r.faltam === 1 ? "" : "s"}.`, false);
 }
 $("#fazer-checkin").addEventListener("click", () => fazerCheckin());
+
+/** O QR do CAIXA: abre o pedido de código. O código aparece só na tela do atendente. */
+async function pedirCodigo(aceite) {
+  $("#fazer-checkin").disabled = true;
+  let r;
+  try {
+    r = await pedir("/fidelidade/codigo/pedir", {
+      telefone: eu.telefone, token: checkinToken, aceite_termo: !!aceite,
+    });
+  } catch (e) {
+    $("#fazer-checkin").disabled = false;
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos pedir o código agora.");
+  }
+  $("#fazer-checkin").disabled = false;
+  $("#fazer-checkin").hidden = true;
+  $("#termo-fidelidade").hidden = true;
+  $("#bloco-codigo").hidden = false;
+  const ate = new Date(r.expira_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  avisar("#aviso-fidelidade", `Peça o código no caixa e digite aqui. Ele vale até ${ate}.`, false);
+  $("#codigo-caixa").focus();
+}
+
+async function confirmarCodigo() {
+  const codigo = $("#codigo-caixa").value.trim();
+  if (codigo.length < 4) return avisar("#aviso-fidelidade", "Digite o código que o caixa passou.");
+  $("#confirmar-codigo").disabled = true;
+  let r;
+  try {
+    r = await pedir("/fidelidade/codigo/confirmar", { telefone: eu.telefone, codigo });
+  } catch (e) {
+    $("#confirmar-codigo").disabled = false;
+    $("#codigo-caixa").select();
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos confirmar agora.");
+  }
+  $("#confirmar-codigo").disabled = false;
+  $("#bloco-codigo").hidden = true;
+  $("#codigo-caixa").value = "";
+  desenharCartao(r);
+  const selos = r.selos > 1 ? `${r.selos} selos` : "1 selo";
+  avisar("#aviso-fidelidade", r.premio_novo
+    ? `🎉 Visita confirmada (+${selos}) e cartão completo! Você ganhou: ${r.premio_novo.premio}. `
+      + `Ele vale a partir da sua próxima visita — mostre o código ${r.premio_novo.codigo} no caixa.`
+    : `Visita confirmada: +${selos}! Faltam ${r.faltam}.`, false);
+}
+$("#confirmar-codigo").addEventListener("click", () => confirmarCodigo());
+$("#codigo-caixa").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmarCodigo(); });
 $("#ver-termo-fidelidade").addEventListener("click", (e) => {
   e.preventDefault();
   abrirTermo();
@@ -1969,6 +2037,14 @@ async function restaurarTela() {
     const c = aberto && catalogosDaCasa.find((x) => x.id === aberto.id);
     // ⚠️ Saiu do ar entre um F5 e outro: volta ao início, não a uma tela vazia.
     if (!c) return ir("inicio");
+    // 🔑 **O QR de um cardápio em PDF abre o PDF** — ele não tem tela dentro do site.
+    // Na mesma aba: sem um toque da pessoa, o celular bloqueia aba nova como popup.
+    if (catalogoDoQr === c.id && c.origem !== "PRODUTOS" && !c.exige_cadastro
+        && c.arquivo_url) {
+      catalogoDoQr = null;
+      location.assign(`${API}${c.arquivo_url}`);
+      return;
+    }
     const secao = aberto.secao;
     await abrirCatalogo(c);
     if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);

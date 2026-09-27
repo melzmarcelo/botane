@@ -1,5 +1,7 @@
 """Modelos da fidelidade do Portal de Clientes."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -24,6 +26,10 @@ class FidelidadeConfig(BaseModel):
     # 🔑 Migração 092: o check-in só conta perto da loja, pela localização do celular.
     exige_local: bool = True
     raio_m: int = Field(default=200, ge=30, le=5000)
+    # 🔑 Como a visita se confirma (097): o QR da MESA conta sozinho; o do CAIXA espera o
+    # código que o atendente passa. E por quantos minutos o código vale.
+    metodo: Literal["QRCODE_MESA", "CODIGO_CAIXA"] = "QRCODE_MESA"
+    codigo_validade_min: int = Field(default=30, ge=2, le=720)
 
     _dias_pontua = field_validator("dias_pontua")(_dias)
     _dias_consumo = field_validator("dias_consumo")(_dias)
@@ -53,3 +59,21 @@ class LocalDaLoja(BaseModel):
     """As coordenadas da loja atual, de onde se mede o raio do check-in."""
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
+
+
+class PedidoDeCodigo(BaseModel):
+    """O cliente leu o QR do caixa e pede o código da visita (097)."""
+    telefone: str = Field(max_length=30)
+    token: str = Field(max_length=32)
+    aceite_termo: bool = False
+
+
+class CodigoDoCaixa(BaseModel):
+    """O código que o caixa passou, digitado pelo cliente (097)."""
+    telefone: str = Field(max_length=30)
+    codigo: str = Field(min_length=4, max_length=6)
+
+
+class SelosDoPedido(BaseModel):
+    """Quantos selos esta visita vale — o caixa decide, padrão 1 (097)."""
+    selos: int = Field(ge=1, le=100)

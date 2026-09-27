@@ -240,8 +240,11 @@ checar("com o endereco do arquivo", bool((achado or {}).get("arquivo_url")), ach
 # ele o site nao tem como pedir o cardapio de volta. Nao e segredo — e a chave
 # de algo que a casa DECIDIU publicar, como o sufixo do PDF tambem e. A secao
 # 4b acima cobra o outro lado.
-checar("e o de PDF vem sem id, que nao serviria para nada",
-       (achado or {}).get("id") is None, achado)
+# ⚠️ **Mudou em 27/09/2026**: o PDF tambem leva o id — o QR do cardapio na mesa aponta o
+# catalogo por ele (tela de QR codes). O que protege o PDF que exige cadastro continua
+# sendo o `arquivo_url` nulo, cobrado na secao 4b.
+checar("e o de PDF tambem vem com id, para o QR do cardapio na mesa",
+       (achado or {}).get("id") is not None, achado)
 
 # O PDF e servido ao publico, sem token — e o que o site precisa para exibir.
 if achado:

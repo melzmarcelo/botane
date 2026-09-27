@@ -43,6 +43,7 @@ from routers import (
     cadastros,
     catalogos,
     fidelidade,
+    qrcodes,
     cmv,
     consumo,
     email_config,
@@ -397,6 +398,8 @@ app.include_router(alertas.router)
 app.include_router(exportacoes.router)
 app.include_router(catalogos.router)
 app.include_router(publico.router)
+# ⚠️ Antes de `reservas`: `/reservas/qrcodes` não pode cair numa rota de reserva.
+app.include_router(qrcodes.router)
 app.include_router(reservas.router)
 app.include_router(fidelidade.router)
 

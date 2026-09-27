@@ -84,7 +84,7 @@ OPERACAO = [
     # O dia especial (089) é o irmão do bloqueio: exceção de UMA data, e vai com ele.
     "reserva_mesas", "reserva_bloqueios", "reserva_dias_especiais", "reservas",
     # A fidelidade (091) pendura no cliente: visitas e prêmios são operação.
-    "fidelidade_checkins", "fidelidade_premios",
+    "fidelidade_checkins", "fidelidade_premios", "fidelidade_solicitacoes",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]
