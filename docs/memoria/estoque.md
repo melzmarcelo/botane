@@ -594,3 +594,22 @@
 
 - **Movimento de estoque não se apaga**: estorno cria a contrapartida apontando para o
   original. Produto desativado mantém saldo e razão (a lista de saldos filtra por padrão).
+
+- 🔑 **Incluir na contagem ABERTA um produto achado fora da lista** (migração 096, 26/09/2026).
+  Pedido do dono: *"ao realizar um inventário de um setor, e for encontrado um produto que não
+  estava no inventário ou não estava naquele setor, como proceder? … pode incluir."*
+  `POST /inventarios/{id}/incluir` + botão "Incluir produto achado" na tela da contagem
+  (`inventario/[id]/incluir-produto.tsx`, service `lib/inventario.ts`).
+  - Entra com o saldo que o sistema tinha NAQUELA prateleira (quase sempre zero) e
+    `inventario_itens.incluido = true`; a tela o marca "incluído na contagem — não estava na
+    lista" e a busca já o posiciona para digitar.
+  - ⚠️ Só nas prateleiras da contagem (`locais_da_contagem`, que vai na resposta — campo novo
+    no `InventarioResponse`, a armadilha do `response_model`): a do cabeçalho, as do recorte
+    ou, sem prateleira no recorte (contagem de setor), as ativas da loja.
+  - ⚠️ Quem CONTA pode incluir (`estoque.inventario`, escalado) — é quem está na prateleira.
+  - ⚠️ No fechamento a sobra entra pelo custo MÉDIO (o `lancar` sem custo), nunca zero; e o
+    produto passa a morar na prateleira (a linha de saldo nasce ali).
+  - 🔑 A tela avisa a pergunta que evita ajuste falso: o produto MORA aqui ou foi guardado no
+    lugar errado? Fora do lugar, devolver e contar onde mora — contado aqui, vira sobra aqui e
+    falta lá. Setor errado no cadastro se corrige no cadastro; a contagem não muda setor.
+  - Cobertura: `smoke_inventario_incluir.py` (14).

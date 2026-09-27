@@ -12,6 +12,7 @@ from database import get_cursor
 from paginacao import com_total
 from models.estoque import (
     ContagemRequest,
+    IncluirItemRequest,
     InventarioCreate,
     InventarioRenomear,
     InventarioResponse,
@@ -140,6 +141,28 @@ def _descrever(cur, inv: dict) -> dict:
     }
 
 
+def _locais_da_contagem(cur, inv: dict) -> list[dict]:
+    """Em que prateleiras se pode INCLUIR um produto achado fora da lista (096).
+
+    A da contagem, se é uma só; as do recorte, se ele escolheu; e, numa contagem de
+    setor ou categoria sem prateleira definida, as ativas da loja — o produto pode ter
+    sido achado em qualquer canto que a contagem está percorrendo.
+    """
+    if inv.get("id_local"):
+        ids = [inv["id_local"]]
+    elif inv.get("filtro_locais"):
+        ids = list(inv["filtro_locais"])
+    else:
+        ids = None
+    cur.execute(
+        """SELECT id, nome FROM locais_estoque
+            WHERE id_unidade = %s AND ativo AND (%s::int[] IS NULL OR id = ANY(%s))
+            ORDER BY principal DESC, lower(nome)""",
+        (inv["id_unidade"], ids, ids),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
 def _montar(cur, id_inventario: int) -> dict:
     cur.execute(
         """SELECT i.*, l.nome AS local_unico FROM inventarios i
@@ -172,7 +195,7 @@ def _montar(cur, id_inventario: int) -> dict:
                   ii.qtd_sistema, ii.qtd_contada, ii.custo_medio, ii.observacao,
                   ii.qtd_informada, ii.um_informada, ii.contado_em, u.nome AS contado_por,
                   c.nome AS categoria, se.nome AS setor, p.tipo,
-                  ii.id_local, l.nome AS local,
+                  ii.id_local, l.nome AS local, ii.incluido,
                   (coalesce(ii.qtd_contada, ii.qtd_sistema) - ii.qtd_sistema) AS diferenca,
                   -- Em que unidades este produto pode ser contado. Vai junto
                   -- para o celular não precisar de uma chamada por produto.
@@ -193,6 +216,7 @@ def _montar(cur, id_inventario: int) -> dict:
     itens = [dict(r) for r in cur.fetchall()]
 
     inv["itens"] = itens
+    inv["locais_da_contagem"] = _locais_da_contagem(cur, inv)
     inv["total_itens"] = len(itens)
     inv["contados"] = sum(1 for i in itens if i["qtd_contada"] is not None)
     inv["diferenca_valor"] = float(
@@ -487,6 +511,68 @@ def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_p
                 (id_inventario, item.id_produto, id_local, convertida, informada,
                  um_informada, item.observacao, ctx.id_usuario, item.id_produto, id_local),
             )
+        return _montar(cur, id_inventario)
+
+
+@router.post("/{id_inventario}/incluir", response_model=InventarioResponse)
+def incluir(id_inventario: int, body: IncluirItemRequest,
+            ctx: Contexto = Depends(_perm)) -> dict:
+    """Inclui na contagem um produto achado na prateleira que não estava na lista.
+
+    🔑 **Pedido do dono (26/09/2026):** *"ao realizar um inventário de um setor, e for
+    encontrado um produto que não estava no inventário ou não estava naquele setor, como
+    proceder? … pode incluir."* A lista nasce do recorte na abertura; o que se acha
+    depois entra por aqui, com o saldo que o sistema tinha NAQUELA prateleira (quase
+    sempre zero) e marcado `incluido`. A quantidade se digita como nos outros itens.
+    ⚠️ **Quem conta pode incluir** (`estoque.inventario`, escalado): é quem está na
+    frente da prateleira. Montar a contagem continua sendo outra chave.
+    ⚠️ **A prateleira tem de ser da contagem** — incluir de outra seria contar um lugar
+    que ninguém está percorrendo.
+    ⚠️ No fechamento, a sobra entra pelo custo MÉDIO do produto (nunca zero), como todo
+    ajuste de inventário.
+    """
+    with get_cursor() as cur:
+        _exigir_contador(cur, id_inventario, ctx)
+        cur.execute("SELECT * FROM inventarios WHERE id = %s", (id_inventario,))
+        inv = cur.fetchone()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Inventário não encontrado")
+        inv = dict(inv)
+        if inv["status"] != "ABERTO":
+            raise HTTPException(status_code=400, detail="Inventário já fechado.")
+        permitidos = {l["id"]: l["nome"] for l in _locais_da_contagem(cur, inv)}
+        id_local = body.id_local or (next(iter(permitidos)) if len(permitidos) == 1 else None)
+        if not id_local:
+            raise HTTPException(status_code=400,
+                                detail="Diga em que prateleira o produto foi achado.")
+        if id_local not in permitidos:
+            raise HTTPException(status_code=400,
+                                detail="Esta prateleira não faz parte desta contagem.")
+        cur.execute("SELECT nome, ativo, controla_estoque FROM produtos WHERE id = %s",
+                    (body.id_produto,))
+        p = cur.fetchone()
+        if not p:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.")
+        if not p["ativo"] or not p["controla_estoque"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{p['nome']} não controla estoque (ou está inativo): não entra em contagem.")
+        cur.execute(
+            """INSERT INTO inventario_itens (id_inventario, id_produto, id_local, qtd_sistema,
+                                             custo_medio, incluido)
+               SELECT %s, %s, %s, coalesce(s.quantidade, 0), coalesce(s.custo_medio, 0), true
+                 FROM (SELECT 1) x
+                 LEFT JOIN estoque_saldos s ON s.id_produto = %s AND s.id_local = %s
+               ON CONFLICT (id_inventario, id_produto, id_local) DO NOTHING
+               RETURNING id""",
+            (id_inventario, body.id_produto, id_local, body.id_produto, id_local),
+        )
+        if not cur.fetchone():
+            raise HTTPException(
+                status_code=409,
+                detail=f"{p['nome']} já está nesta contagem, em {permitidos[id_local]}.")
+        auditoria.registrar(cur, ctx.id_usuario, "inventario", id_inventario, "incluir_item",
+                            depois={"id_produto": body.id_produto, "id_local": id_local})
         return _montar(cur, id_inventario)
 
 

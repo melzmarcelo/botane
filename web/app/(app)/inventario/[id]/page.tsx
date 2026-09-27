@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { nomeTipo, reais, UnidadeMedida } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import IncluirProduto from "./incluir-produto";
 import Voltar from "@/components/voltar";
 
 import { qtd } from "@/lib/numeros";
@@ -55,6 +56,8 @@ type Item = {
   setor: string | null;
   tipo: string | null;
   unidades: Unidade[];
+  /** Achado na prateleira e incluído depois da abertura (096). */
+  incluido?: boolean;
 };
 
 type Inventario = {
@@ -78,6 +81,8 @@ type Inventario = {
   } | null;
   /** Quem foi escalado. Vazio = qualquer um com permissão de contar. */
   contadores?: { id_usuario: number; nome: string }[];
+  /** Onde se pode incluir um produto achado fora da lista (096). */
+  locais_da_contagem?: { id: number; nome: string }[];
 };
 
 /**
@@ -108,6 +113,7 @@ export default function PaginaContagem() {
   const [renomeando, setRenomeando] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const [fechando, setFechando] = useState(false);
+  const [incluindo, setIncluindo] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [ums, setUms] = useState<UnidadeMedida[]>([]);
 
@@ -432,7 +438,30 @@ export default function PaginaContagem() {
           />
           <span className="text-[15px]">só o que falta</span>
         </label>
+        {/* 🔑 **Produto achado fora da lista** (pedido do dono, 26/09/2026). Só com a
+            contagem aberta — fechada, a diferença já virou ajuste. */}
+        {aberto && (
+          <button type="button" className="btn btn-secundario" onClick={() => setIncluindo(true)}>
+            Incluir produto achado
+          </button>
+        )}
       </div>
+
+      {incluindo && (
+        <IncluirProduto<Inventario>
+          idInventario={id}
+          locais={inv.locais_da_contagem ?? []}
+          aoFechar={() => setIncluindo(false)}
+          aoIncluir={(nova, nome) => {
+            setInv(nova);
+            setIncluindo(false);
+            // Mostra o produto recém-incluído: é o próximo a ser contado.
+            setBusca(nome.split(" · ").pop() ?? "");
+            setSoPendentes(false);
+            aviso.sucesso(`${nome} incluído na contagem. Digite a quantidade.`);
+          }}
+        />
+      )}
 
       {!itens.length ? (
         <Vazio>
@@ -566,6 +595,11 @@ function LinhaContagem({
           {/* ⚠️ O local vira o destaque da linha quando a contagem cobre mais
               de um: sem ele, duas linhas do mesmo produto ficam idênticas na
               tela, e quem conta não sabe qual prateleira está na frente. */}
+          {item.incluido && (
+            <p className="mt-1 text-[12.5px] font-medium text-[var(--color-alerta)]">
+              incluído na contagem — não estava na lista
+            </p>
+          )}
           {mostrarLocal && item.local && (
             <p className="mt-1 text-[13px] font-semibold text-erva">{item.local}</p>
           )}

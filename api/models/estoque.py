@@ -286,6 +286,13 @@ class ContagemRequest(BaseModel):
     itens: list[ContagemItem]
 
 
+class IncluirItemRequest(BaseModel):
+    """Um produto achado na prateleira que não estava na lista da contagem (096)."""
+    id_produto: int
+    # Onde foi achado. Opcional só quando a contagem tem UMA prateleira.
+    id_local: int | None = None
+
+
 class InventarioResponse(BaseModel):
     id: int
     nome: str | None = None
@@ -308,6 +315,10 @@ class InventarioResponse(BaseModel):
     filtros: dict | None = None
     # Quem foi escalado para contar. Vazio = qualquer um com a permissão.
     contadores: list[dict] = []
+    # 🔑 As prateleiras em que se pode INCLUIR um produto achado fora da lista (096).
+    # ⚠️ Campo novo em resposta com `response_model` precisa estar AQUI, senão sai
+    # recortado (a armadilha do `reservas_ligado` e do `porcao_qtd`).
+    locais_da_contagem: list[dict] = []
 
 
 # ---------------------------------------------------------------------------
