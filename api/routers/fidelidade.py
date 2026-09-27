@@ -15,7 +15,8 @@ from fastapi import APIRouter, Depends, Query, Response
 
 import auditoria
 from database import get_cursor
-from models.fidelidade import EntregaPremio, FidelidadeConfig, LocalDaLoja, SelosDoPedido
+from models.fidelidade import (DarSelos, EntregaPremio, FidelidadeConfig, LocalDaLoja,
+                               NovoVencimento, SelosDoPedido)
 from paginacao import pagina
 from relogio import agora_da_casa
 from routers.reservas import _unidade
@@ -183,3 +184,85 @@ def cancelar_codigo(id_pedido: int, ctx: Contexto = Depends(_OPERAR)) -> dict:
         servico.cancelar_pedido(cur, id_unidade, id_pedido, ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "fidelidade_pedido", id_pedido, "cancelar")
     return {"message": "Pedido de código cancelado."}
+
+
+# ---------------------------------------------------------------- o painel (098)
+# 🔑 **Pedido do dono (27/09/2026):** *"uma tela para verificar os selos, os resgates, a
+# validade, ajustar o vencimento, dar selos, visualizar tudo que diz respeito ao plano de
+# fidelidade em uma só tela."*
+# ⚠️ **Ver é do caixa (`operar`); mexer é da gerência (`configurar`)**: dar selo, tirar selo
+# e esticar validade é dar benefício de graça.
+
+@router.get("/painel/resumo")
+def resumo_do_programa(ctx: Contexto = Depends(_OPERAR)) -> dict:
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        cfg = servico.config(cur)
+        return servico.resumo(cur) | {"visitas_por_premio": cfg["visitas"],
+                                      "premio": cfg["premio"], "metodo": cfg["metodo"]}
+
+
+@router.get("/participantes")
+def participantes(resposta: Response,
+                  busca: str | None = Query(None, max_length=120),
+                  filtro: str | None = Query(None, pattern="^(com_premio|vencendo|vencidos)$"),
+                  limite: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0),
+                  ctx: Contexto = Depends(_OPERAR)) -> list[dict]:
+    """Quem participa do programa (tem selo ou prêmio), da rede inteira."""
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        sql, params = servico.consulta_participantes(busca, filtro)
+        linhas = pagina(cur, sql, params, limite=limite, offset=offset, resposta=resposta)
+    for x in linhas:
+        for campo in ("ultima_visita", "proximo_vencimento"):
+            x[campo] = x[campo].isoformat() if x[campo] else None
+    return linhas
+
+
+@router.get("/participantes/{id_cliente}")
+def ficha_do_participante(id_cliente: int, ctx: Contexto = Depends(_OPERAR)) -> dict:
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        return servico.ficha(cur, id_cliente)
+
+
+@router.post("/participantes/{id_cliente}/selos")
+def dar_selos(id_cliente: int, body: DarSelos, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        premios = servico.dar_selos(cur, id_unidade, id_cliente, body.selos, body.motivo,
+                                    ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "fidelidade_cliente", id_cliente, "dar_selos",
+                            depois={"selos": body.selos, "motivo": body.motivo,
+                                    "premios": [p["codigo"] for p in premios]},
+                            id_unidade=id_unidade)
+        ficha = servico.ficha(cur, id_cliente)
+    frase = f"{body.selos} selo(s) lançado(s)."
+    if premios:
+        frase += f" O cartão completou: {len(premios)} prêmio(s) — vale(m) a partir de amanhã."
+    return ficha | {"message": frase}
+
+
+@router.delete("/selos/{id_checkin}")
+def retirar_selos(id_checkin: int, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        v = servico.retirar_selo(cur, id_checkin)
+        auditoria.registrar(cur, ctx.id_usuario, "fidelidade_cliente", v["id_cliente"],
+                            "retirar_selos",
+                            antes={"id": id_checkin, "data": str(v["data"]), "selos": v["selos"],
+                                   "origem": v["origem"]})
+        ficha = servico.ficha(cur, v["id_cliente"])
+    return ficha | {"message": f"{v['selos']} selo(s) retirado(s)."}
+
+
+@router.put("/premios/{id_premio}/vencimento")
+def ajustar_vencimento(id_premio: int, body: NovoVencimento,
+                       ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    with get_cursor() as cur:
+        _unidade(cur, ctx)
+        r = servico.ajustar_vencimento(cur, id_premio, body.vence_em)
+        auditoria.registrar(cur, ctx.id_usuario, "fidelidade_premio", id_premio, "vencimento",
+                            antes={"vence_em": r["antes"]}, depois={"vence_em": r["depois"]})
+    return r | {"message": f"Prêmio {r['codigo']} passa a vencer em "
+                           f"{body.vence_em:%d/%m/%Y}."}

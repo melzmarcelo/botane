@@ -236,7 +236,10 @@ def cartao(cur, id_cliente: int) -> dict:
 
 def _ja_fez_hoje(cur, id_cliente: int, hoje: date) -> bool:
     # O check-in de hoje pode já estar DENTRO de um prêmio (o que fechou o cartão).
-    cur.execute("SELECT 1 FROM fidelidade_checkins WHERE id_cliente = %s AND data = %s",
+    # ⚠️ Só a `parte 0` é a visita: o selo dado à mão (098) fica numa parte acima e não
+    # tira do cliente a visita de verdade daquele dia.
+    cur.execute("""SELECT 1 FROM fidelidade_checkins
+                    WHERE id_cliente = %s AND data = %s AND parte = 0""",
                 (id_cliente, hoje))
     return cur.fetchone() is not None
 
@@ -289,7 +292,7 @@ def _pode_pontuar_hoje(cur, id_cliente: int, hoje: date) -> None:
 
 
 def _registrar_visita(cur, id_unidade: int, id_cliente: int, hoje: date, selos: int,
-                      distancia: int | None, cfg: dict) -> list[dict]:
+                      distancia: int | None, cfg: dict, origem: str = "QRCODE") -> list[dict]:
     """Grava a visita de hoje com `selos` e fecha quantos cartões ela completar.
 
     ⚠️ **Trava por CLIENTE** (`pg_advisory_xact_lock`): duas abas marcando a visita que
@@ -298,10 +301,11 @@ def _registrar_visita(cur, id_unidade: int, id_cliente: int, hoje: date, selos: 
     cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
     _pode_pontuar_hoje(cur, id_cliente, hoje)
     cur.execute(
-        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m, selos)
-           VALUES (%s, %s, %s, %s, %s)
+        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, distancia_m, selos,
+                                           origem)
+           VALUES (%s, %s, %s, %s, %s, %s)
            ON CONFLICT (id_cliente, data, parte) DO NOTHING RETURNING id""",
-        (id_cliente, id_unidade, hoje, distancia, selos),
+        (id_cliente, id_unidade, hoje, distancia, selos, origem),
     )
     linha = cur.fetchone()
     if not linha:
@@ -343,8 +347,9 @@ def _fechar_cartoes(cur, id_unidade: int, id_cliente: int, hoje: date,
                 )
                 proxima = cur.fetchone()["proxima"]
                 cur.execute(
-                    """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, selos, parte)
-                       SELECT id_cliente, id_unidade, data, %s, %s
+                    """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, selos, parte,
+                                                       origem, motivo, concedido_por)
+                       SELECT id_cliente, id_unidade, data, %s, %s, origem, motivo, concedido_por
                          FROM fidelidade_checkins WHERE id = %s""",
                     (int(a["selos"]) - falta, proxima, a["id"]),
                 )
@@ -516,7 +521,7 @@ def confirmar(cur, id_unidade: int, id_cliente: int, codigo: str,
     cfg = config(cur)
     _validar_dia(cur, id_unidade, cfg, agora)
     premios = _registrar_visita(cur, id_unidade, id_cliente, agora.date(),
-                                int(pedido["selos"]), None, cfg)
+                                int(pedido["selos"]), None, cfg, origem="CODIGO")
     cur.execute(
         """UPDATE fidelidade_solicitacoes
               SET status = 'CONFIRMADA', confirmada_em = now(), id_checkin = %s
@@ -686,3 +691,225 @@ def linha_do_premio(x: dict, hoje: date) -> dict:
     for campo in ("emitido_em", "usado_em", "vence_em", "vale_de"):
         x[campo] = x[campo].isoformat() if x[campo] else None
     return x
+
+
+# ---------------------------------------------------------------- o painel (098)
+# 🔑 **Pedido do dono (27/09/2026):** *"uma tela para verificar os selos, os resgates, a
+# validade, ajustar o vencimento, dar selos, visualizar tudo que diz respeito ao plano de
+# fidelidade em uma só tela."* O programa é da REDE: o painel também.
+
+def resumo(cur) -> dict:
+    """Os números do programa, para o topo do painel."""
+    cur.execute(
+        """SELECT
+             (SELECT count(DISTINCT id_cliente) FROM fidelidade_checkins) AS participantes,
+             (SELECT coalesce(sum(selos), 0) FROM fidelidade_checkins
+               WHERE id_premio IS NULL) AS selos_abertos,
+             (SELECT count(*) FROM fidelidade_premios
+               WHERE usado_em IS NULL AND vence_em >= %(hoje)s) AS premios_disponiveis,
+             (SELECT count(*) FROM fidelidade_premios
+               WHERE usado_em IS NULL AND vence_em BETWEEN %(hoje)s AND %(semana)s)
+                 AS vencendo_7_dias,
+             (SELECT count(*) FROM fidelidade_premios
+               WHERE usado_em IS NULL AND vence_em < %(hoje)s) AS premios_vencidos,
+             (SELECT count(*) FROM fidelidade_premios
+               WHERE (usado_em AT TIME ZONE 'America/Sao_Paulo')::date >= %(mes)s)
+                 AS entregues_no_mes,
+             (SELECT count(*) FROM fidelidade_checkins
+               WHERE data = %(hoje)s AND parte = 0) AS visitas_hoje""",
+        {"hoje": _hoje(), "semana": _hoje() + timedelta(days=7),
+         "mes": _hoje().replace(day=1)},
+    )
+    return {k: int(v or 0) for k, v in dict(cur.fetchone()).items()}
+
+
+def _hoje() -> date:
+    return agora_da_casa().date()
+
+
+def consulta_participantes(busca: str | None, filtro: str | None) -> tuple[str, list]:
+    """Quem participa (tem selo ou prêmio), para o grid do painel — SEM `LIMIT`."""
+    onde, params = [], []
+    texto = (busca or "").strip()
+    if texto:
+        digitos = "".join(ch for ch in texto if ch.isdigit())
+        if len(digitos) >= 3:
+            onde.append("(c.nome ILIKE %s OR c.telefone LIKE %s)")
+            params += [f"%{texto}%", f"%{digitos}%"]
+        else:
+            onde.append("c.nome ILIKE %s")
+            params.append(f"%{texto}%")
+    hoje = _hoje()
+    if filtro == "com_premio":
+        onde.append("x.disponiveis > 0")
+    elif filtro == "vencendo":
+        onde.append("x.proximo_vencimento BETWEEN %s AND %s")
+        params += [hoje, hoje + timedelta(days=7)]
+    elif filtro == "vencidos":
+        onde.append("x.vencidos > 0")
+    sql = f"""
+        SELECT * FROM (
+          SELECT c.id, c.nome, c.telefone,
+                 (SELECT coalesce(sum(f.selos), 0) FROM fidelidade_checkins f
+                   WHERE f.id_cliente = c.id AND f.id_premio IS NULL) AS no_cartao,
+                 (SELECT count(*) FROM fidelidade_checkins f
+                   WHERE f.id_cliente = c.id AND f.parte = 0) AS visitas,
+                 (SELECT max(f.data) FROM fidelidade_checkins f
+                   WHERE f.id_cliente = c.id AND f.parte = 0) AS ultima_visita,
+                 (SELECT count(*) FROM fidelidade_premios p
+                   WHERE p.id_cliente = c.id AND p.usado_em IS NULL
+                     AND p.vence_em >= '{hoje.isoformat()}') AS disponiveis,
+                 (SELECT count(*) FROM fidelidade_premios p
+                   WHERE p.id_cliente = c.id AND p.usado_em IS NULL
+                     AND p.vence_em < '{hoje.isoformat()}') AS vencidos,
+                 (SELECT count(*) FROM fidelidade_premios p
+                   WHERE p.id_cliente = c.id AND p.usado_em IS NOT NULL) AS usados,
+                 (SELECT min(p.vence_em) FROM fidelidade_premios p
+                   WHERE p.id_cliente = c.id AND p.usado_em IS NULL
+                     AND p.vence_em >= '{hoje.isoformat()}') AS proximo_vencimento
+            FROM reserva_clientes c
+           WHERE EXISTS (SELECT 1 FROM fidelidade_checkins f WHERE f.id_cliente = c.id)
+              OR EXISTS (SELECT 1 FROM fidelidade_premios p WHERE p.id_cliente = c.id)
+        ) x
+        JOIN reserva_clientes c ON c.id = x.id
+        {"WHERE " + " AND ".join(onde) if onde else ""}
+        ORDER BY x.ultima_visita DESC NULLS LAST, lower(x.nome)"""
+    return sql, params
+
+
+def ficha(cur, id_cliente: int) -> dict:
+    """Tudo de um cliente no programa: cartão, visitas, prêmios e pedidos de código."""
+    cur.execute("SELECT id, nome, telefone, termo_versao FROM reserva_clientes WHERE id = %s",
+                (id_cliente,))
+    cliente = cur.fetchone()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+    hoje = _hoje()
+    cur.execute(
+        """SELECT f.id, f.data, f.parte, f.selos, f.origem, f.motivo, f.distancia_m,
+                  f.criado_em, f.id_premio, p.codigo AS premio_codigo,
+                  coalesce(u.apelido, u.nome) AS loja, us.nome AS concedido_por
+             FROM fidelidade_checkins f
+             LEFT JOIN fidelidade_premios p ON p.id = f.id_premio
+             LEFT JOIN unidades u ON u.id = f.id_unidade
+             LEFT JOIN usuarios us ON us.id = f.concedido_por
+            WHERE f.id_cliente = %s
+            ORDER BY f.data DESC, f.parte DESC, f.id DESC
+            LIMIT 200""",
+        (id_cliente,),
+    )
+    visitas = []
+    for v in cur.fetchall():
+        v = dict(v)
+        v["data"] = v["data"].isoformat()
+        v["criado_em"] = v["criado_em"].isoformat() if v["criado_em"] else None
+        visitas.append(v)
+    cur.execute(
+        """SELECT p.id, p.codigo, p.premio, p.visitas, p.emitido_em, p.vale_de, p.vence_em,
+                  p.vencimento_original, p.usado_em, p.dias_consumo,
+                  coalesce(u.apelido, u.nome) AS loja, coalesce(uu.apelido, uu.nome) AS loja_uso,
+                  us.nome AS entregue_por, c.nome, c.telefone
+             FROM fidelidade_premios p
+             JOIN reserva_clientes c ON c.id = p.id_cliente
+             LEFT JOIN unidades u ON u.id = p.id_unidade
+             LEFT JOIN unidades uu ON uu.id = p.id_unidade_uso
+             LEFT JOIN usuarios us ON us.id = p.usado_por
+            WHERE p.id_cliente = %s
+            ORDER BY p.emitido_em DESC""",
+        (id_cliente,),
+    )
+    premios = []
+    for p in cur.fetchall():
+        p = linha_do_premio(dict(p), hoje)
+        p["vencimento_original"] = (p["vencimento_original"].isoformat()
+                                    if p["vencimento_original"] else None)
+        premios.append(p)
+    cur.execute(
+        """SELECT s.id, s.status, s.selos, s.criada_em, s.confirmada_em, s.tentativas,
+                  coalesce(u.apelido, u.nome) AS loja
+             FROM fidelidade_solicitacoes s LEFT JOIN unidades u ON u.id = s.id_unidade
+            WHERE s.id_cliente = %s ORDER BY s.criada_em DESC LIMIT 20""",
+        (id_cliente,),
+    )
+    pedidos = []
+    for r in cur.fetchall():
+        r = dict(r)
+        for campo in ("criada_em", "confirmada_em"):
+            r[campo] = r[campo].isoformat() if r[campo] else None
+        pedidos.append(r)
+    return {"cliente": dict(cliente), "cartao": cartao(cur, id_cliente), "visitas": visitas,
+            "premios": premios, "pedidos": pedidos}
+
+
+def dar_selos(cur, id_unidade: int, id_cliente: int, selos: int, motivo: str,
+              id_usuario: int | None) -> list[dict]:
+    """A gerência dá selos (cortesia, correção). Fecha cartões como uma visita fecharia.
+
+    ⚠️ **Não é a visita do dia**: entra numa `parte` acima de zero, e o cliente ainda
+    pode fazer a visita de verdade hoje. ⚠️ Sem regra de dia/horário/local: quem dá é a
+    casa, de propósito — e fica gravado quem deu e por quê.
+    """
+    cur.execute("SELECT 1 FROM reserva_clientes WHERE id = %s", (id_cliente,))
+    if not cur.fetchone():
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+    cfg = config(cur)
+    hoje = _hoje()
+    cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", (910, id_cliente))
+    cur.execute(
+        """SELECT greatest(coalesce(max(parte), 0), 0) + 1 AS parte FROM fidelidade_checkins
+            WHERE id_cliente = %s AND data = %s""",
+        (id_cliente, hoje),
+    )
+    parte = cur.fetchone()["parte"]
+    cur.execute(
+        """INSERT INTO fidelidade_checkins (id_cliente, id_unidade, data, selos, parte, origem,
+                                           motivo, concedido_por)
+           VALUES (%s, %s, %s, %s, %s, 'MANUAL', %s, %s)""",
+        (id_cliente, id_unidade, hoje, selos, parte, motivo.strip(), id_usuario),
+    )
+    return _fechar_cartoes(cur, id_unidade, id_cliente, hoje, cfg)
+
+
+def retirar_selo(cur, id_checkin: int) -> dict:
+    """Tira um lançamento de selos ainda ABERTO (engano). ⚠️ O que virou prêmio não sai."""
+    cur.execute(
+        """SELECT id, id_cliente, data, selos, origem, id_premio FROM fidelidade_checkins
+            WHERE id = %s FOR UPDATE""",
+        (id_checkin,),
+    )
+    v = cur.fetchone()
+    if not v:
+        raise HTTPException(status_code=404, detail="Lançamento de selos não encontrado.")
+    if v["id_premio"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Estes selos já viraram prêmio — não se tiram. Se foi engano, trate o prêmio.")
+    cur.execute("UPDATE fidelidade_solicitacoes SET id_checkin = NULL WHERE id_checkin = %s",
+                (id_checkin,))
+    cur.execute("DELETE FROM fidelidade_checkins WHERE id = %s", (id_checkin,))
+    return dict(v)
+
+
+def ajustar_vencimento(cur, id_premio: int, vence_em: date) -> dict:
+    """Muda a validade de um prêmio ainda não usado. Guarda a data original na 1ª mudança."""
+    cur.execute(
+        """SELECT id, codigo, vale_de, vence_em, usado_em FROM fidelidade_premios
+            WHERE id = %s FOR UPDATE""",
+        (id_premio,),
+    )
+    p = cur.fetchone()
+    if not p:
+        raise HTTPException(status_code=404, detail="Prêmio não encontrado.")
+    if p["usado_em"]:
+        raise HTTPException(status_code=409, detail="Prêmio já entregue: a validade não importa mais.")
+    if vence_em < p["vale_de"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"O prêmio só começa a valer em {p['vale_de']:%d/%m/%Y}; vencer antes não faz sentido.")
+    cur.execute(
+        """UPDATE fidelidade_premios
+              SET vencimento_original = coalesce(vencimento_original, vence_em), vence_em = %s
+            WHERE id = %s""",
+        (vence_em, id_premio),
+    )
+    return {"codigo": p["codigo"], "antes": p["vence_em"].isoformat(), "depois": vence_em.isoformat()}

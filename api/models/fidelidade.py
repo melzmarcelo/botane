@@ -1,5 +1,6 @@
 """Modelos da fidelidade do Portal de Clientes."""
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -77,3 +78,14 @@ class CodigoDoCaixa(BaseModel):
 class SelosDoPedido(BaseModel):
     """Quantos selos esta visita vale — o caixa decide, padrão 1 (097)."""
     selos: int = Field(ge=1, le=100)
+
+
+class DarSelos(BaseModel):
+    """A gerência dá selos a um cliente (098) — sempre com o porquê."""
+    selos: int = Field(ge=1, le=100)
+    motivo: str = Field(min_length=3, max_length=200)
+
+
+class NovoVencimento(BaseModel):
+    """A nova validade de um prêmio ainda não usado (098)."""
+    vence_em: date

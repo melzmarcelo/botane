@@ -1053,3 +1053,23 @@ organizá-los."*
   ⚠️ A lista pública de catálogos passou a mandar o `id` também do PDF (o QR o usa); o que
   protege o PDF com cadastro continua sendo o `arquivo_url` nulo.
 - Cobertura: seções 5c e 5d do `smoke_fidelidade.py` (80 no total).
+
+### O painel da fidelidade (migração 098, 27/09/2026)
+
+🔑 **Pedido do dono:** *"uma tela para verificar os selos, os resgates, a validade, ajustar o
+vencimento, dar selos, visualizar tudo que diz respeito ao plano de fidelidade em uma só tela."*
+**Fidelidade → Painel** (`fidelidade/painel/`, primeiro do subgrupo): números do programa
+(`GET /fidelidade/painel/resumo`, os cartões filtram o grid), participantes em grid paginado
+(`GET /fidelidade/participantes`, busca e filtros com prêmio / vencendo / vencidos) e a ficha
+do cliente numa janela (`GET /fidelidade/participantes/{id}`): cartão, prêmios, selos lançados
+e pedidos de código.
+- ⚠️ **Ver é do caixa (`fidelidade.operar`); mexer é da gerência (`fidelidade.configurar`)**:
+  dar selos (`POST …/selos`, motivo obrigatório), retirar um lançamento ABERTO
+  (`DELETE /fidelidade/selos/{id}` — o que já virou prêmio não sai) e ajustar o vencimento
+  (`PUT /fidelidade/premios/{id}/vencimento`, nunca antes do `vale_de`; guarda
+  `vencimento_original` na 1ª mudança; prêmio entregue recusa). Tudo auditado.
+- 🔑 `fidelidade_checkins.origem` (QRCODE, CODIGO, MANUAL; as antigas ficam VISITA), `motivo` e
+  `concedido_por`. ⚠️ **O selo MANUAL não é a visita do dia**: entra numa `parte` acima de
+  zero, e `_ja_fez_hoje` passou a olhar só a `parte 0` — o cliente ainda faz a visita de
+  verdade no mesmo dia. A sobra repartida herda a origem do lançamento que a gerou.
+- Cobertura: seção 5e do `smoke_fidelidade.py` (93 no total).

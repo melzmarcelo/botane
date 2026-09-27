@@ -505,6 +505,75 @@ checar("endereco de site invalido e recusado (422)",
        chamar("PUT", "/reservas/qrcodes/site", {"site_url": "reservas.com"}, token)[0] == 422)
 
 
+print("\n5e. o painel: dar selos, retirar, ajustar vencimento (098)")
+# 🔑 Pedido do dono (27/09/2026): *"verificar os selos, os resgates, a validade, ajustar o
+# vencimento, dar selos, visualizar tudo que diz respeito ao plano em uma so tela"*.
+zerar_cartao()
+config_fidelidade()
+st, r = chamar("POST", f"/fidelidade/participantes/{ID_CLIENTE}/selos",
+               {"selos": 2, "motivo": "ok"}, token)
+checar("dar selos sem um motivo de verdade e recusado (422)", st == 422, (st, r))
+st, f = chamar("POST", f"/fidelidade/participantes/{ID_CLIENTE}/selos",
+               {"selos": 2, "motivo": "cortesia de teste"}, token)
+checar("a gerencia da 2 selos", st == 200 and f.get("cartao", {}).get("no_cartao") == 2, (st, f))
+manual = next((v for v in f.get("visitas", []) if v["origem"] == "MANUAL"), {})
+checar("o lancamento diz que foi dado a mao, por quem e por que",
+       manual.get("motivo") == "cortesia de teste" and manual.get("concedido_por")
+       and manual.get("parte", 0) > 0, manual)
+st, r = checkin()
+checar("o selo dado a mao NAO toma a visita do dia: o QR ainda conta",
+       st == 200 and len(r.get("premios_novos") or []) == 1 and r.get("no_cartao") == 0, (st, r))
+with get_cursor() as cur:
+    cur.execute("SELECT origem FROM fidelidade_checkins WHERE id_cliente = %s AND parte = 0 "
+                "AND data = %s", (ID_CLIENTE, HOJE))
+    origem_hoje = (cur.fetchone() or {}).get("origem")
+checar("e a visita do QR fica marcada como QRCODE", origem_hoje == "QRCODE", origem_hoje)
+
+st, f = chamar("GET", f"/fidelidade/participantes/{ID_CLIENTE}", token=token)
+checar("a ficha traz cartao, selos lancados e premio",
+       st == 200 and len(f.get("premios") or []) == 1 and len(f.get("visitas") or []) >= 2, (st, f))
+preso = next((v for v in f.get("visitas", []) if v["id_premio"]), {})
+st, r = chamar("DELETE", f"/fidelidade/selos/{preso.get('id')}", token=token)
+checar("selo que ja virou premio nao se retira", st == 409, (st, r))
+st, f = chamar("POST", f"/fidelidade/participantes/{ID_CLIENTE}/selos",
+               {"selos": 1, "motivo": "lancado por engano"}, token)
+aberto = next((v for v in f.get("visitas", []) if not v["id_premio"]), {})
+st, f = chamar("DELETE", f"/fidelidade/selos/{aberto.get('id')}", token=token)
+checar("o lancamento aberto se retira, e o cartao volta a zero",
+       st == 200 and f.get("cartao", {}).get("no_cartao") == 0, (st, f.get("cartao")))
+
+premio_f = (f.get("premios") or [{}])[0]
+st, r = chamar("PUT", f"/fidelidade/premios/{premio_f.get('id')}/vencimento",
+               {"vence_em": str(HOJE)}, token)
+checar("vencer antes de o premio comecar a valer e recusado", st == 400, (st, r))
+nova = HOJE + timedelta(days=90)
+st, r = chamar("PUT", f"/fidelidade/premios/{premio_f.get('id')}/vencimento",
+               {"vence_em": str(nova)}, token)
+with get_cursor() as cur:
+    cur.execute("SELECT vence_em, vencimento_original FROM fidelidade_premios WHERE id = %s",
+                (premio_f.get("id"),))
+    pv = dict(cur.fetchone())
+checar("o vencimento e ajustado, guardando o original",
+       st == 200 and pv["vence_em"] == nova and pv["vencimento_original"] is not None, (st, r, pv))
+
+st, lista = chamar("GET", "/fidelidade/participantes?filtro=com_premio&limite=100", token=token)
+checar("o painel lista o cliente com premio disponivel",
+       st == 200 and any(x["id"] == ID_CLIENTE and x["disponiveis"] == 1 for x in lista or []),
+       lista)
+st, res = chamar("GET", "/fidelidade/painel/resumo", token=token)
+checar("e o resumo conta participantes e premios",
+       st == 200 and res.get("participantes", 0) >= 1 and res.get("premios_disponiveis", 0) >= 1,
+       res)
+with get_cursor() as cur:
+    cur.execute("UPDATE fidelidade_premios SET vale_de = %s WHERE id = %s",
+                (HOJE - timedelta(days=1), premio_f.get("id")))
+chamar("POST", "/fidelidade/premios/entregar", {"codigo": premio_f.get("codigo")}, token)
+st, r = chamar("PUT", f"/fidelidade/premios/{premio_f.get('id')}/vencimento",
+               {"vence_em": str(nova)}, token)
+checar("premio ja entregue nao tem vencimento a ajustar", st == 409, (st, r))
+zerar_cartao()
+
+
 print("\n6. a loja que nao participa")
 config_reserva(fidelidade_ligada=False)
 st, casa = chamar("GET", f"/publico/{UNIDADE}/casa")

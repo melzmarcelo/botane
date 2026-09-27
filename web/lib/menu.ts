@@ -175,13 +175,23 @@ export const MENU: GrupoMenu[] = [
         soComReservas: true,
       },
       {
+        // 🔑 **Painel** (pedido do dono, 27/09/2026: *"visualizar tudo que diz respeito ao
+        // plano de fidelidade em uma só tela"*). Primeiro do subgrupo: é a visão geral.
+        href: "/fidelidade/painel",
+        nome: "Painel",
+        icone: "presente",
+        chave: "fidelidade.operar",
+        soComReservas: true,
+        subgrupo: "Fidelidade",
+      },
+      {
         // 🔑 **Fidelidade** (pedido do dono, 24/09/2026: *"no menu podemos ter um
         // Fidelidade — Configuração"*). O cartão de visitas com check-in por QR.
         // ⚠️ "Prêmios" vem PRIMEIRO, como a Agenda antes do Salão: é o balcão
         // conferindo código todo dia; a configuração se faz uma vez.
         href: "/fidelidade/premios",
         nome: "Prêmios",
-        icone: "presente",
+        icone: "etiqueta",
         chave: "fidelidade.operar",
         soComReservas: true,
         subgrupo: "Fidelidade",

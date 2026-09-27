@@ -118,3 +118,100 @@ export const cancelarPedido = (id: number) =>
 
 export const entregarPremio = (codigo: string) =>
   api.post<{ message: string }>("/fidelidade/premios/entregar", { codigo });
+
+// ---------------------------------------------------------------- o painel (098)
+
+export type ResumoFidelidade = {
+  participantes: number;
+  selos_abertos: number;
+  premios_disponiveis: number;
+  vencendo_7_dias: number;
+  premios_vencidos: number;
+  entregues_no_mes: number;
+  visitas_hoje: number;
+  visitas_por_premio: number;
+  premio: string;
+  metodo: FidelidadeConfig["metodo"];
+};
+
+export type Participante = {
+  id: number;
+  nome: string;
+  telefone: string;
+  no_cartao: number;
+  visitas: number;
+  ultima_visita: string | null;
+  disponiveis: number;
+  vencidos: number;
+  usados: number;
+  proximo_vencimento: string | null;
+};
+
+export type LancamentoDeSelos = {
+  id: number;
+  data: string;
+  parte: number;
+  selos: number;
+  origem: "VISITA" | "QRCODE" | "CODIGO" | "MANUAL";
+  motivo: string | null;
+  distancia_m: number | null;
+  criado_em: string | null;
+  id_premio: number | null;
+  premio_codigo: string | null;
+  loja: string | null;
+  concedido_por: string | null;
+};
+
+export type PremioDaFicha = Premio & { vale_de: string; vencimento_original: string | null };
+
+export type FichaFidelidade = {
+  cliente: { id: number; nome: string; telefone: string };
+  cartao: {
+    visitas: number;
+    premio: string;
+    no_cartao: number;
+    faltam: number;
+    pontua: string;
+    consumo: string;
+    validade_dias: number;
+  };
+  visitas: LancamentoDeSelos[];
+  premios: PremioDaFicha[];
+  pedidos: {
+    id: number;
+    status: string;
+    selos: number;
+    criada_em: string;
+    confirmada_em: string | null;
+    tentativas: number;
+    loja: string | null;
+  }[];
+};
+
+export const resumoFidelidade = () =>
+  api.get<ResumoFidelidade>("/fidelidade/painel/resumo");
+
+export const listarParticipantes = (
+  parametros: Record<string, string>,
+  filtros: { busca: string; filtro: string },
+) => {
+  const q = new URLSearchParams(parametros);
+  if (filtros.busca.trim()) q.set("busca", filtros.busca.trim());
+  if (filtros.filtro) q.set("filtro", filtros.filtro);
+  return api.listar<Participante>(`/fidelidade/participantes?${q}`);
+};
+
+export const fichaFidelidade = (idCliente: number) =>
+  api.get<FichaFidelidade>(`/fidelidade/participantes/${idCliente}`);
+
+export const darSelos = (idCliente: number, selos: number, motivo: string) =>
+  api.post<FichaFidelidade & { message: string }>(
+    `/fidelidade/participantes/${idCliente}/selos`, { selos, motivo });
+
+export const retirarSelos = (idLancamento: number) =>
+  api.delete<FichaFidelidade & { message: string }>(`/fidelidade/selos/${idLancamento}`);
+
+export const ajustarVencimento = (idPremio: number, venceEm: string) =>
+  api.put<{ message: string }>(`/fidelidade/premios/${idPremio}/vencimento`, {
+    vence_em: venceEm,
+  });
