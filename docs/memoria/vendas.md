@@ -872,3 +872,15 @@
   - ⚠️ Não coberto: a fusão de cadastros (`produtos_vinculo`) baixa o "vendido e não saiu" do
     cadastro que sai como venda, sem distinguir consumo interno — caso raro.
   - Cobertura: `smoke_venda_consumo_interno.py` (18).
+
+- 🔑 **O consumo no ciclo aberto, na ficha da pessoa** (26/09/2026). Pedido do dono: *"no
+  cadastro da pessoa, incluir um item referente a consumos no período aberto atual."*
+  `GET /vendas/por-pessoa/{id}/ciclo-aberto` (`consumo_pessoa.apurar`, por documento com os
+  itens, recortado pelo ciclo aberto — a MESMA consulta do relatório) e o cartão
+  `fornecedores/[id]/consumo-da-pessoa.tsx`, que reaproveita a `TabelaPorDocumento`.
+  - ⚠️ Mesma chave do relatório (`cmv.painel`/`cmv.relatorios`): ver a ficha não é ver o que
+    a pessoa deve. Sem a chave, o cartão SOME (o 403 é engolido de propósito); outro erro vira
+    aviso.
+  - ⚠️ Fornecedor que nunca consumiu não ganha cartão vazio; quem não é só fornecedor vê
+    "nenhum consumo", porque "não deve nada" é informação.
+  - Sem ciclo aberto, o cartão diz isso e aponta para Consumo.

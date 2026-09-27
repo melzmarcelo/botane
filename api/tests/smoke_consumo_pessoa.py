@@ -337,6 +337,23 @@ checar("o cheio mandado pelo cliente e descartado",
        (df.get("itens") or [{}])[0].get("valor_unitario_cheio"))
 
 
+print("\n9b. o consumo no ciclo aberto, para o cadastro da pessoa (26/09/2026)")
+# 🔑 Pedido do dono: *"no cadastro da pessoa, incluir um item referente a consumos no
+# periodo aberto atual"*. A mesma consulta do relatorio — o cartao nao pode discordar.
+st, ca = chamar("GET", f"/vendas/por-pessoa/{funcionario}/ciclo-aberto", token=token)
+checar("a rota responde com o ciclo aberto", st == 200 and (ca.get("periodo") or {}).get(
+    "status") == "ABERTO", (st, ca.get("periodo")))
+checar("com o cupom da pessoa, por documento e com os itens",
+       any(d.get("documento") == f"CUPOM{marca}" and d.get("itens_do_documento")
+           for d in ca.get("documentos") or []), ca.get("documentos"))
+checar("e o MESMO total do relatorio do ciclo aberto",
+       perto(ca.get("total"), rel.get("total")) and perto(ca.get("desconto"), 20),
+       (ca.get("total"), rel.get("total"), ca.get("desconto")))
+st, cv = chamar("GET", "/vendas/por-pessoa/999999/ciclo-aberto", token=token)
+checar("pessoa sem consumo: lista vazia, sem erro",
+       st == 200 and cv.get("documentos") == [] and perto(cv.get("total"), 0), (st, cv))
+
+
 print("\n10. pessoa SEM politica e o relatorio por documento (26/09/2026)")
 # 🔑 Pedido do dono: *"permitir filtrar pessoas para emissao do PDF mesmo sem politica,
 # pois vinculei a uma pessoa sem politica e nao consigo emitir somente para ela"*.

@@ -8,6 +8,7 @@ import { Fornecedor } from "@/lib/cadastros";
 import { Aviso, Carregando, Etiqueta } from "@/components/ui";
 import FormularioFornecedor, { doFornecedor } from "../formulario";
 import ProdutosDaPessoa from "./produtos-da-pessoa";
+import ConsumoDaPessoa from "./consumo-da-pessoa";
 import Voltar from "@/components/voltar";
 
 /** Corrigir um fornecedor — a mesma forma da criação, para o olho reconhecer. */
@@ -71,6 +72,11 @@ export default function PaginaFornecedor() {
           ⚠️ **Depois do formulário, não antes.** A ficha existe para editar a
           pessoa; a lista é consulta. Pôr a tabela primeiro empurraria os campos
           para baixo da dobra em quem tem doze produtos. */}
+      {/* 🔑 **O consumo no ciclo aberto** (26/09/2026, pedido do dono): quanto esta
+          pessoa está devendo agora. ⚠️ Antes dos produtos: para quem consome, é a
+          pergunta que se faz ao abrir a ficha; para o fornecedor que nunca consumiu,
+          o cartão nem aparece. */}
+      <ConsumoDaPessoa id={x.id} soFornecedor={!!x.fornecedor} />
       <ProdutosDaPessoa id={x.id} />
     </div>
   );

@@ -886,6 +886,37 @@ def por_pessoa(
         }
 
 
+@router.get("/por-pessoa/{id_pessoa}/ciclo-aberto")
+def consumo_no_ciclo_aberto(id_pessoa: int, ctx: Contexto = Depends(_ver)) -> dict:
+    """O consumo desta pessoa no ciclo ABERTO — para o cartão do cadastro dela.
+
+    🔑 **Pedido do dono (26/09/2026):** *"no cadastro da pessoa, incluir um item
+    referente a consumos no período aberto atual."* Quem abre a ficha de alguém quer
+    saber quanto ele está devendo AGORA, sem ir ao relatório e escolher filtro.
+    ⚠️ **A mesma consulta do relatório** (`consumo_pessoa.apurar`, por documento com
+    os itens), recortada pelo ciclo aberto como o relatório recorta — o cartão e o
+    PDF entregue ao funcionário não podem discordar.
+    ⚠️ **Mesma chave do relatório**: consumo é dinheiro de alguém, e ver a ficha da
+    pessoa (`cadastros.fornecedores`) não é o mesmo que ver o que ela deve.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        periodo = ciclo.periodo_aberto(cur, id_unidade)
+        if not periodo:
+            return {"periodo": None, "documentos": [], "total_cheio": 0, "desconto": 0,
+                    "total": 0}
+        docs = consumo.apurar(cur, id_unidade, periodo, [id_pessoa], "documento_itens")
+    cheio = round(sum(float(d["total_cheio"] or 0) for d in docs), 2)
+    total = round(sum(float(d["total"] or 0) for d in docs), 2)
+    return {
+        "periodo": periodo,
+        "documentos": docs,
+        "total_cheio": cheio,
+        "desconto": round(cheio - total, 2),
+        "total": total,
+    }
+
+
 @router.get("/{id_venda}")
 def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
     """Uma venda inteira: cabeçalho, itens e o que cada item deixou.
