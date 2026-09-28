@@ -5,6 +5,10 @@
 
 ## O que já existe
 
+- 🔑 **Perda com `origem_tipo = 'ETIQUETA'`** (28/09/2026): o descarte pela etiqueta lança
+  `SAIDA_PERDA` pelo `lancar`, saindo do lote da produção quando ele cobre a quantidade. Ver
+  [`etiquetas.md`](etiquetas.md).
+
 - 🔑 **"Quais são as provisórias?" não tinha resposta** (01/09/2026, pedido do dono). A saída
   que não acha saldo sai por um custo **estimado** e a linha nasce marcada no razão — mas com
   centenas de movimentos a etiqueta só ajuda quem já está olhando para a linha certa. Cada uma

@@ -5,6 +5,10 @@
 
 ## O que já existe
 
+- 🔑 **Produção nasce com lote e validade** (28/09/2026) quando o produto controla lote e tem
+  validade conhecida — regra e armadilhas em [`etiquetas.md`](etiquetas.md). A tela de Produção
+  e o aviso da agenda oferecem "Imprimir etiquetas" logo depois de produzir.
+
 - 🔑 **O rendimento É a tabela de destinos, e ela mora no cabeçalho** (13/09/2026, pedido do
   dono: *"o rendimento e destinos estão em um grupo separado; podemos colocar junto com o
   cabeçalho, onde o destino é o local padrão do produto, e assim gerados os seus rendimentos.

@@ -357,6 +357,45 @@ export const api = {
   },
 
   /**
+   * Abre um PDF da API numa aba nova, para imprimir (as etiquetas).
+   *
+   * ⚠️ **A aba abre ANTES do pedido**: aberta depois do `await`, o navegador a trata
+   * como popup não pedido e a bloqueia. Sem aba (bloqueio mesmo assim), baixa.
+   */
+  async abrir(caminho: string): Promise<void> {
+    const aba = typeof window !== "undefined" ? window.open("", "_blank") : null;
+    const pegar = async () =>
+      fetch(BASE + caminho, {
+        headers: { Authorization: `Bearer ${lerSessao(CHAVE_ACCESS)}` },
+      });
+    let r = await pegar();
+    if (r.status === 401 && (await renovar())) r = await pegar();
+    if (!r.ok) {
+      aba?.close();
+      const texto = await r.text();
+      let dados: unknown = null;
+      try {
+        dados = texto ? JSON.parse(texto) : null;
+      } catch {
+        dados = null;
+      }
+      throw new ErroApi(r.status, mensagemDoErro(dados, r.status));
+    }
+    const url = URL.createObjectURL(await r.blob());
+    if (aba) {
+      aba.location.href = url;
+    } else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "etiquetas.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  },
+
+  /**
    * @param manterConectado guarda a sessão no navegador (localStorage) em vez
    * de encerrá-la ao fechar. O servidor também precisa saber: é ele que decide
    * a validade do refresh, e o front esquecer não é segurança nenhuma.

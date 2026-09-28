@@ -25,6 +25,7 @@ entregue.
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico` |
+| [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---
@@ -227,6 +228,22 @@ existe para ser comparado com `teto_online` — teto maior que a maior junta é 
 promessa que o salão não cumpre.
 
 ---
+
+## Etiquetas
+
+Etiquetas de validade do que se PRODUZ e do que se ABRE (e do que se descongela), com QR
+para consultar, dar baixa e descartar como perda. Estudo em
+[`docs/etiquetas-estudo.md`](docs/etiquetas-estudo.md).
+
+- **Rotas:** `etiquetas.py`
+- **Serviços:** `etiquetas.py` (validade, emissão, PDF, baixa); a produção chama
+  `etiquetas.validade_da_producao` para o lote; o descarte passa por `estoque.lancar`
+- **Telas:** `etiquetas/` (imprimir), `etiquetas/painel/`, `etiquetas/e/[codigo]/` (o QR),
+  `etiquetas/configuracao/`; atalho em `producao/`
+- **Permissões:** `etiquetas.imprimir`, `etiquetas.descartar`, `etiquetas.configurar`
+- **Migração:** `100_etiquetas.sql`
+
+⚠️ **Descartar é perda no razão** (`SAIDA_PERDA`, `origem_tipo = 'ETIQUETA'`), nunca apagar.
 
 ## Transversal
 

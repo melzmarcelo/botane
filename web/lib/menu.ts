@@ -96,6 +96,21 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
+    // 🔑 **Etiquetas** (pedido do dono, 28/09/2026: *"um novo módulo, o de Etiquetas,
+    // para controlar validade, quantidade e demais coisas úteis, em produtos produzidos
+    // e abertos para consumo"*). Imprimir primeiro: é o gesto da bancada, várias vezes
+    // por dia; o painel é a checagem da manhã.
+    grupo: "Etiquetas",
+    icone: "etiqueta",
+    itens: [
+      { href: "/etiquetas", nome: "Imprimir", icone: "etiqueta", chave: "etiquetas.imprimir" },
+      { href: "/etiquetas/painel", nome: "Painel de validades", icone: "calendario",
+        chave: "etiquetas.imprimir" },
+      { href: "/etiquetas/configuracao", nome: "Configuração", icone: "config",
+        chave: "etiquetas.configurar" },
+    ],
+  },
+  {
     grupo: "Compras",
     icone: "nota",
     itens: [

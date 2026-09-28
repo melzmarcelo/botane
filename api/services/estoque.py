@@ -1860,12 +1860,27 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
     cur.execute("SELECT id_local_padrao FROM produtos WHERE id = %s", (id_produto,))
     local_produzido = (cur.fetchone() or {}).get("id_local_padrao")
     local_produzido = _local_desta_loja(cur, local_produzido, id_unidade, id_local)
+    # 🔑 **A produção nasce com LOTE e VALIDADE** (módulo de Etiquetas, 28/09/2026).
+    # Antes o que a cozinha fazia entrava sem data, e o FEFO e o alerta de
+    # vencimento só enxergavam o que veio de nota. O lote é `P<id da produção>` e a
+    # validade sai da regra de produção do produto (ou do `validade_dias`).
+    # ⚠️ Só para quem controla lote — é o que `lancar` já exige para mexer em lote —
+    # e só quando a validade é conhecida: lote sem data não ajuda o FEFO e mudaria
+    # a produção de quem nunca cadastrou validade.
+    lote_producao = validade_producao = None
+    cur.execute("SELECT controla_lote FROM produtos WHERE id = %s", (id_produto,))
+    if (cur.fetchone() or {}).get("controla_lote"):
+        from services import etiquetas  # importado aqui para não criar ciclo de módulos
+        cur.execute("SELECT data FROM producoes WHERE id = %s", (id_producao,))
+        validade_producao = etiquetas.validade_da_producao(
+            cur, id_produto, cur.fetchone()["data"])
+        lote_producao = f"P{id_producao}" if validade_producao else None
     entrada = lancar(
         cur, id_unidade=id_unidade, id_local=local_produzido,
         id_produto=id_produto,
         tipo="ENTRADA_PRODUCAO", quantidade=qtd, custo_unitario=unitario,
         origem_tipo="PRODUCAO", origem_id=id_producao, id_usuario=id_usuario,
-        observacao=observacao,
+        observacao=observacao, lote=lote_producao, validade=validade_producao,
     )
     cur.execute(
         """UPDATE producoes SET custo_total = %s, custo_unitario = %s,
@@ -1898,4 +1913,7 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
         # Onde o produzido entrou — quem produz por causa de uma venda precisa
         # dar a baixa no MESMO local, senão o saldo fica preso lá.
         "id_local": local_produzido,
+        # O lote que a produção criou — a etiqueta imprime o mesmo.
+        "lote": lote_producao,
+        "validade": validade_producao.isoformat() if validade_producao else None,
     }

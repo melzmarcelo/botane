@@ -100,6 +100,20 @@ def levantar(cur, id_unidade: int) -> list[dict]:
     juntar("estoque.vencendo", ATENCAO, f"Vence nos próximos {dias} dias", r.get("n"),
            "Dá tempo de usar antes de virar perda.", "ver os lotes", "/alertas")
 
+    # 🔑 As ETIQUETAS (módulo de Etiquetas, 100): o pote aberto e a produção da
+    # cozinha vencem em horas, não em semanas — a janela do lote não os pega a tempo.
+    r = _um(cur, """
+        SELECT count(*) FILTER (WHERE vence_em < now()) AS vencidas,
+               count(*) FILTER (WHERE vence_em >= now()
+                                  AND vence_em::date = current_date) AS hoje
+          FROM etiquetas WHERE id_unidade = %s AND status = 'ATIVA'""", (id_unidade,))
+    juntar("etiquetas.vencidas", CRITICO, "Etiqueta vencida", r.get("vencidas"),
+           "O pote passou da validade e continua na câmara.",
+           "descartar pela etiqueta", "/etiquetas/painel?situacao=vencidas")
+    juntar("etiquetas.hoje", ATENCAO, "Etiqueta vence hoje", r.get("hoje"),
+           "Usar hoje ou descartar no fim do dia.", "ver as etiquetas",
+           "/etiquetas/painel?situacao=hoje")
+
     r = _um(cur, """
         SELECT count(*) AS n FROM estoque_movimentos
          WHERE id_unidade = %s AND custo_provisorio

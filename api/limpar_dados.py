@@ -39,6 +39,9 @@ from database import get_cursor, init_pool  # noqa: E402
 # tabela de fora aponta para estas, então não é preciso CASCADE (que poderia
 # levar junto justamente o que se quer preservar).
 OPERACAO = [
+    # As etiquetas (100) apontam para o razão (a perda do descarte), a produção e o
+    # produto — saem antes deles. A validade por produto sai com o produto.
+    "etiquetas", "produto_validades",
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",
     # ⚠️ `inventario_contadores` aponta para `inventarios`: sem ela aqui, o
@@ -391,6 +394,8 @@ PRESERVADAS = [
     # A regra do cartão (quantas visitas, qual prêmio) descreve a casa.
     "fidelidade_config",
     "whatsapp_avisos",
+    # O modelo da etiqueta é da impressora da loja, não da operação.
+    "etiqueta_config",
 ]
 
 

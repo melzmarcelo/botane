@@ -44,6 +44,7 @@ type Resultado = {
   custo_total: number;
   custo_unitario: number;
   versao_ficha: number;
+  lote?: string | null;
   consumos: { nome: string; quantidade: number; custo: number }[];
 };
 
@@ -292,7 +293,15 @@ export default function PaginaProducao() {
       {resultado && (
         <Cartao
           titulo="Produção registrada"
-          descricao={`Ficha v${resultado.versao_ficha} · ${resultado.quantidade} produzido(s)`}
+          descricao={`Ficha v${resultado.versao_ficha} · ${resultado.quantidade} produzido(s)${
+            resultado.lote ? ` · lote ${resultado.lote}` : ""}`}
+          // 🔑 Etiquetas (28/09/2026): a produção é o momento natural de etiquetar —
+          // a tela seguinte já vem com o produto, o lote e a quantidade.
+          acao={pode("etiquetas.imprimir") ? (
+            <Link href={`/etiquetas?producao=${resultado.id}`} className="btn btn-primario">
+              Imprimir etiquetas
+            </Link>
+          ) : undefined}
         >
           <div className="grid gap-4 sm:grid-cols-3">
             {veCusto && (

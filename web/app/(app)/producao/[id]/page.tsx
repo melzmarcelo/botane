@@ -174,7 +174,7 @@ export default function PaginaOrdemProducao() {
   async function produzir() {
     setOcupado(true);
     try {
-      const r = await api.post<{ message: string }>(`/producao-agenda/${id}/produzir`, {
+      const r = await api.post<{ message: string; id: number }>(`/producao-agenda/${id}/produzir`, {
         quantidade: Number(quantidade.replace(",", ".")),
         consumos: Object.entries(usado).map(([idItem, v]) => ({
           id_item: Number(idItem),
@@ -182,10 +182,10 @@ export default function PaginaOrdemProducao() {
           um: v.um || null,
         })),
       });
-      aviso.sucesso(r.message, {
-        texto: "voltar para a agenda",
-        ao: () => router.push("/producao"),
-      });
+      // 🔑 Com permissão de etiqueta, o atalho do aviso é etiquetar o que acabou de sair.
+      aviso.sucesso(r.message, pode("etiquetas.imprimir")
+        ? { texto: "imprimir etiquetas", ao: () => router.push(`/etiquetas?producao=${r.id}`) }
+        : { texto: "voltar para a agenda", ao: () => router.push("/producao") });
       setConfirmando(false);
       await carregar();
     } catch (e) {
