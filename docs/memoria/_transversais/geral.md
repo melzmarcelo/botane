@@ -17,6 +17,19 @@
   não existe. Conferir o rótulo do botão e o nome do menu no código antes de citar.
   O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento e parou em 13/09.
 
+- 🔑 **A bateria do navegador tinha 26 falhas e NENHUMA era defeito do sistema** (28/09/2026) —
+  eram testes que não acompanharam telas que mudaram. Três causas, todas de SELETOR:
+  (1) a agenda virou calendário em 24/09 e abre no MÊS: a fase pedia `?dia=` e caía no
+  calendário — 23 falhas em cascata procurando um formulário que não estava na tela. Hoje ela
+  abre `?visao=dia&dia=…&modo=lista` (a lista mantém as ações na linha; a linha do tempo as põe
+  num detalhe). (2) `main table tbody tr` e `querySelector(".grid-rolante")` pegavam OUTRA
+  tabela da mesma tela (104 linhas numa página de 100; um grid de 4 linhas medido como o
+  longo) — agora escolhem a tabela pelo cabeçalho, ou o maior grid. (3) `innerText` respeita o
+  `text-transform: uppercase` do `th`: "O quê" vira "O QUÊ" — casar cabeçalho por
+  `textContent` com `/i`.
+  ⚠️ **Mudou a tela, roda a bateria do navegador no mesmo dia.** A de 24/09 não foi rodada, e as
+  falhas se somaram por quatro dias até alguém olhar.
+
 - `api/db_scripts/`: 001 acesso+empresa, 002 permissões e papéis de fábrica, 003 empresa inicial.
 
 - **Loja atual em `seguranca.unidade_atual(cur, ctx)`** (19/08/2026): estava copiado em SETE

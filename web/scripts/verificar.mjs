@@ -2543,7 +2543,12 @@ try {
     ).catch(() => {});
     await new Promise((r) => setTimeout(r, 1400));
     const soProvisorios = await p.evaluate(() => {
-      const linhas = [...document.querySelectorAll("main table tbody tr")];
+      // ⚠️ Só a tabela do RAZÃO (a que tem a coluna "O quê"): a tela tem outras
+      // tabelas no DOM, e somá-las dava 104 linhas numa página de 100 — com as
+      // quatro de fora, que não são movimento, acusando o filtro.
+      const razao = [...document.querySelectorAll("main table")]
+        .find((t) => /O qu[êe]/i.test(t.querySelector("thead")?.textContent ?? ""));
+      const linhas = [...(razao?.querySelectorAll("tbody tr") ?? [])];
       return {
         linhas: linhas.length,
         // A etiqueta mora na mesma célula do tipo do movimento.
@@ -8286,7 +8291,11 @@ try {
   await new Promise((r) => setTimeout(r, 1200));
 
   const gridLongo = await p.evaluate(() => {
-    const d = document.querySelector(".grid-rolante");
+    // ⚠️ O MAIOR grid da tela, não o primeiro: a aba de movimentos passou a ter
+    // outra tabela antes do razão, e o primeiro `.grid-rolante` tinha 4 linhas.
+    const d = [...document.querySelectorAll(".grid-rolante")]
+      .sort((a, b) => b.querySelectorAll("tbody tr").length
+                      - a.querySelectorAll("tbody tr").length)[0];
     if (!d) return null;
     const r = d.getBoundingClientRect();
     return {
@@ -8314,7 +8323,11 @@ try {
   // 🔑 **O cabecalho fica FIXO**, que e o outro problema da tabela longa: ler a
   // vigesima linha sem saber que coluna e qual.
   const cabecalhoFixo = await p.evaluate(() => {
-    const d = document.querySelector(".grid-rolante");
+    // O mesmo grid medido acima (o maior): no curto, rolar não move nada e a
+    // checagem passaria sem provar coisa alguma.
+    const d = [...document.querySelectorAll(".grid-rolante")]
+      .sort((a, b) => b.querySelectorAll("tbody tr").length
+                      - a.querySelectorAll("tbody tr").length)[0];
     const th = d?.querySelector("thead th");
     if (!th) return null;
     const antes = Math.round(th.getBoundingClientRect().top);
@@ -8381,8 +8394,10 @@ try {
   // conforto; o que impede a casa sem reservas de ganhar catalogo e a recusa da
   // rota — e a tela precisa dizer onde se liga.
   checar("e a tela diz que o modulo de Reservas nao esta ligado",
-    /Reservas/i.test(semReservas.tela) && /n[ãa]o est[áa] ligado/i.test(semReservas.tela),
-    semReservas.tela.slice(0, 300));
+    // O módulo se chama Portal de Clientes desde 24/09/2026; a frase diz o nome novo.
+    /Portal de Clientes|Reservas/i.test(semReservas.tela)
+      && /n[ãa]o est[áa] ligado/i.test(semReservas.tela),
+    semReservas.tela.match(/.{0,80}ligad.{0,80}/s)?.[0] ?? semReservas.tela.slice(-300));
 
   await api("PUT", "/unidades/1/parametros",
     { ...parCat, reservas_ligado: true }, token);
@@ -8937,10 +8952,17 @@ try {
   await api("POST", "/reservas/mesas",
     { id_salao: idSalaoAg, nome: `B${marcaNota}`, lugares: 6, capacidade_max: 6 }, token);
 
-  await irPara(p, `${WEB}/reservas/agenda?dia=${sabado}`);
+  // ⚠️ **A agenda abre no MÊS desde 24/09/2026** (virou calendário): o dia é
+  // `visao=dia`. Sem ele a fase caía no calendário e as vinte e três checagens
+  // seguintes falhavam procurando um formulário que nem estava na tela.
+  // `modo=lista`: a linha do tempo (o padrão do dia) abre cada reserva num
+  // detalhe; a LISTA mantém as ações na própria linha, que é o que esta fase
+  // exercita — remarcar, chegou, encerrar.
+  await irPara(p, `${WEB}/reservas/agenda?visao=dia&dia=${sabado}&modo=lista`);
   await esperarTexto(p, "pessoas esperadas", 9000);
-  checar("a agenda do dia abre", /Agenda do dia/.test(await p.evaluate(
-    () => document.body.innerText)));
+  // O título do dia é o nome dele ("Sábado, 03 de outubro"), não mais "Agenda do dia".
+  checar("a agenda do dia abre", /s[áa]bado/i.test(await p.evaluate(
+    () => document.querySelector("h1")?.innerText ?? "")));
 
   checar("e oferece marcar uma reserva", await clicarQuando(p, "Nova reserva"));
   await esperarTexto(p, "Quantas pessoas primeiro", 6000);
