@@ -5,6 +5,18 @@
 
 ## O que já existe
 
+- 🔑 **O manual (`web/public/ajuda.html`) ficou três semanas parado** — da 1.1.13 (04/09) à
+  1.1.60 (28/09/2026), 47 versões e uns 15 módulos/recursos sem uma linha nele. Atualizado a
+  pedido do dono (*"atualiza todo o Help com todas as novas implementações; deve estar bem
+  desatualizado"*): seções novas `navegar`, `pessoas`, `etiquetas`, `portal`, `fidelidade`,
+  `whatsapp`, `claude` e `novidades` (o histórico por data), e as antigas corrigidas.
+  ⚠️ **Entrega que muda o que o usuário vê entra no manual NO MESMO COMMIT**, e ganha uma
+  linha em "O que mudou, por data". A bateria do navegador (10c) cobra as seções pelo `id`.
+  ⚠️ **Só entra no manual o que tem porta na TELA.** Open Food Facts e a colheita de EAN das
+  notas existem só como rota/script — descrevê-los mandaria o usuário procurar um botão que
+  não existe. Conferir o rótulo do botão e o nome do menu no código antes de citar.
+  O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento e parou em 13/09.
+
 - `api/db_scripts/`: 001 acesso+empresa, 002 permissões e papéis de fábrica, 003 empresa inicial.
 
 - **Loja atual em `seguranca.unidade_atual(cur, ctx)`** (19/08/2026): estava copiado em SETE

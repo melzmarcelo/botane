@@ -266,11 +266,11 @@
 </style>
 
 <header class="capa">
-  <span class="selo">Botané Deli e Café · primeira parte</span>
+  <span class="selo">Botané Deli e Café · versão 1.1.60 · setembro de 2026</span>
   <h1>Botané por dentro</h1>
   <p class="linha-fina">
     Todos os processos do sistema e o caminho que cada dado percorre — de onde ele entra,
-    o que acontece com ele, e onde vira número.
+    o que acontece com ele, e onde vira número. Do estoque ao site do cliente.
   </p>
 </header>
 
@@ -281,6 +281,7 @@
       <li><a href="#proposito">O número que o sistema existe para produzir</a></li>
       <li><a href="#mapa">O mapa do dado</a></li>
       <li><a href="#trilha">De onde vem cada número</a></li>
+      <li><a href="#navegar">Como o sistema se organiza</a></li>
       <li class="grupo"><span class="rotulo">Os processos</span></li>
       <li><a href="#cadastro">1 · Cadastro base</a></li>
       <li><a href="#produto">2 · Produto</a></li>
@@ -295,9 +296,18 @@
       <li><a href="#acesso">11 · Acesso e auditoria</a></li>
       <li><a href="#lojas">12 · Mais de uma loja</a></li>
       <li><a href="#exportar">13 · Levar o número para fora</a></li>
+      <li><a href="#pessoas">14 · Pessoas e consumo</a></li>
+      <li><a href="#etiquetas">15 · Etiquetas de validade</a></li>
+      <li class="grupo"><span class="rotulo">Portal de Clientes</span></li>
+      <li><a href="#portal">16 · Site, reservas e catálogos</a></li>
+      <li><a href="#fidelidade">17 · Fidelidade</a></li>
+      <li><a href="#whatsapp">18 · WhatsApp</a></li>
+      <li class="grupo"><span class="rotulo">Conectado</span></li>
+      <li><a href="#claude">19 · O Claude dentro do Botané</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
+      <li><a href="#novidades">O que mudou, por data</a></li>
     </ol>
   </nav>
 
@@ -508,6 +518,15 @@
         a produção usam. É por isso que a receita pode ser escrita na unidade da cozinha sem
         que ninguém converta de cabeça.
       </p>
+      <div class="regra">
+        <p class="rotulo">O custo unitário de uma ficha é o da PORÇÃO</p>
+        <p>
+          A receita do bolo rende 2 kg e 16 fatias. Quem vende, vende fatia: o custo que vai
+          para a venda, para a tela e para a produção é o <strong>da porção</strong> — o total
+          da receita dividido pelas porções —, nunca o do quilo rendido. Com uma porção só, o
+          custo é o da receita inteira, levado para a unidade de estoque do produto.
+        </p>
+      </div>
 
       <h3>4 · A venda usa o custo do dia, e o congela</h3>
       <p>
@@ -594,8 +613,9 @@
 
       <h3>Onde ver o custo de um produto</h3>
       <p>
-        Abra o produto: o cartão <strong>Custo</strong> mostra o valor de uma unidade de estoque
-        e, embaixo, <strong>de onde ele veio</strong> — custo médio do estoque desta loja,
+        Abra o produto: na aba <strong>Principal</strong>, o bloco <strong>Valores</strong> põe
+        o preço de venda e o custo lado a lado — a pergunta é uma só, <em>dá margem?</em> O
+        custo é o valor de uma unidade de estoque e, embaixo, <strong>de onde ele veio</strong> — custo médio do estoque desta loja,
         último preço pago ao fornecedor, ou custo de referência trazido de fora. As três coisas
         valem diferente, e por isso o número nunca aparece sozinho.
       </p>
@@ -739,6 +759,59 @@
           confiar no número.
         </p>
       </div>
+    </section>
+
+    <!-- ============================================================= navegar -->
+    <section id="navegar">
+      <h2>Como o sistema se organiza</h2>
+      <p class="chamada">
+        Pensado por módulo — área do negócio —, e com três jeitos de chegar a uma tela.
+      </p>
+
+      <table>
+        <thead><tr><th>Grupo do menu</th><th>O que mora nele</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Cadastros</strong></td><td>Produtos, fichas técnicas, pessoas, tabelas de apoio, exportação para o PDV</td></tr>
+          <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
+          <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
+          <tr><td><strong>Compras</strong></td><td>Notas de entrada</td></tr>
+          <tr><td><strong>CMV</strong></td><td>Painel de CMV, visão da rede, vendas, consumo por pessoa e períodos de consumo</td></tr>
+          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos — só aparece na loja que ligou o módulo</td></tr>
+          <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), usuários, papéis, integrações, auditoria</td></tr>
+        </tbody>
+      </table>
+
+      <div class="grade-2">
+        <div class="cartao">
+          <p class="rotulo">Ctrl+K</p>
+          <p style="margin:6px 0 0">
+            Busca de telas: digite “invent”, Enter, chegou — sem abrir grupo nenhum.
+          </p>
+        </div>
+        <div class="cartao">
+          <p class="rotulo">Atalhos fixados</p>
+          <p style="margin:6px 0 0">
+            O alfinete ao lado de cada item fixa a tela no alto do menu (até cinco). A cozinha
+            não abre as mesmas telas que o escritório.
+          </p>
+        </div>
+      </div>
+
+      <p>
+        <strong>Filtro, página e aba moram no endereço.</strong> Filtrar, abrir um registro e
+        voltar devolve a lista exatamente como estava — e um link copiado abre a mesma tela,
+        com o mesmo recorte, no computador de outra pessoa.
+      </p>
+      <p>
+        O <strong>menu do usuário</strong> (canto superior) leva ao perfil, à troca de senha, ao
+        <em>Meu consumo</em> e a esta Ajuda. O rodapé mostra a <strong>versão</strong> do sistema —
+        é o número que se informa quando algo parece diferente do esperado.
+      </p>
+      <p>
+        Grids longos têm <strong>altura máxima e cabeçalho fixo</strong>: a lista rola dentro do
+        quadro e o nome das colunas não some. E toda lista grande é paginada, com a quantidade
+        por página escolhível no rodapé.
+      </p>
     </section>
 
     <!-- ============================================================= cadastro -->
@@ -989,6 +1062,74 @@
         filial que produz um molho cujo local padrão é a câmara da matriz manda o produzido para
         a prateleira principal <em>dela</em>. Não é o cadastro que está errado — o local padrão
         é a resposta certa na loja dele.
+      </p>
+
+      <h3>A tela do produto, em quatro abas</h3>
+      <p>
+        A divisão segue a pergunta que trouxe a pessoa até ali, não a camada do dado:
+      </p>
+      <table>
+        <thead><tr><th>Aba</th><th>Para quem vem…</th><th>O que tem</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Principal</strong></td><td>arrumar o cadastro</td><td>Identificação (com o interruptor <em>ativo</em> no cabeçalho), unidade e conversão, <strong>Valores</strong> (preço e custo juntos), códigos e medidas (EAN, NCM, marca, pesos), natureza</td></tr>
+          <tr><td><strong>Fornecedores</strong></td><td>negociar</td><td>Quem fornece, código e embalagem de cada um, último preço</td></tr>
+          <tr><td><strong>Estoque</strong></td><td>conferir prateleira</td><td>Onde o produto fica, saldo e custo de cada prateleira, lotes</td></tr>
+          <tr><td><strong>Movimentação</strong></td><td>investigar um saldo</td><td>O razão do produto, só leitura — com o link para Saldos e movimentos já filtrado</td></tr>
+        </tbody>
+      </table>
+      <p>
+        O formulário é <strong>um só</strong> e salva de uma vez, qualquer que seja a aba aberta.
+        Produto novo mostra só a Principal: fornecedor, prateleira e movimento precisam de um
+        produto que já exista. Quando o produto vai ao site do cliente, aparece uma quinta aba,
+        <strong>Catálogo</strong> — ver <a href="#portal">Portal de Clientes</a>.
+      </p>
+      <p>
+        Produto de ficha técnica que <strong>ainda não foi produzido</strong> não tem custo médio.
+        Em vez de “—”, a tela mostra o <strong>custo que a ficha prevê</strong>, marcado como
+        previsto — e, se a receita tem ingrediente sem preço, diz quantos faltam. Esse número é
+        só para a tela: ficha, CMV e margem continuam usando o custo apurado.
+      </p>
+
+      <p>
+        O <strong>código de barras (EAN)</strong> fica em <em>Códigos e medidas</em>, na aba
+        Principal. Ele é a chave mais confiável para a nota achar o produto (ver a
+        conciliação, adiante) — vale preencher.
+      </p>
+
+      <h3>Alterar vários de uma vez</h3>
+      <p>
+        Na lista de Produtos, marque as linhas e escolha <strong>Alterar em lote</strong>:
+        tipo, categoria, setor ou ativo/inativo, em lote. Antes de gravar vem a
+        <strong>prévia</strong> — quantos mudam de verdade, quantos já estavam assim e quais o
+        sistema recusa, com o motivo. Unidade, código e preço ficam de fora de propósito: são
+        identidade de <em>um</em> produto, e a unidade converte custo e saldo.
+      </p>
+      <p>
+        Os cadastros <strong>com o mesmo nome</strong> — o abacate que o Omie criou uma vez por
+        fornecedor — se juntam em lote em <strong>Integrações ▸ Cadastros com o mesmo
+        nome</strong>, ao lado de quem os produz.
+      </p>
+
+      <h3>Trocar a unidade de um produto que já tem estoque</h3>
+      <p>
+        O produto nasceu em UN e a casa quer contar em KG. Na aba Principal, troque a unidade:
+        o sistema pergunta <strong>a relação</strong> (quanto pesa uma unidade — do lado que a
+        cozinha sabe) e mostra a prévia do que muda.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A virada é um PAR de movimentos, não uma reescrita</p>
+        <p>
+          O saldo sai inteiro na unidade antiga e volta inteiro na nova, <strong>pelo mesmo
+          valor</strong>. O custo por unidade é convertido junto, as embalagens de compra e as
+          fichas que usam o produto também. Cada linha do razão guarda a unidade em que foi
+          gravada, então o passado continua legível na unidade da época — e nada precisa ser
+          reescrito. A conversão não é compra nem perda: fica fora do CMV.
+        </p>
+      </div>
+      <p>
+        Na mesma tela dá para declarar a <strong>embalagem de compra</strong> (a manteiga em
+        pacote de 5 kg, contada em KG) — sem ela a troca seria recusada por não ter como
+        converter a nota seguinte.
       </p>
 
       <h3>Mandar o cadastro para o PDV</h3>
@@ -1267,6 +1408,60 @@
         lançado não muda, porque o razão não se reescreve.
       </p>
 
+      <h3>O código do produto é do FORNECEDOR</h3>
+      <p>
+        O código que vem na linha da nota é o do produto <em>no fornecedor</em>, e só é único
+        dentro dele: o abacate é o código 1 num fornecedor e o morango é o código 1 em outro. O
+        vínculo aprendido guarda o <strong>fornecedor junto com o código</strong>, e é isso que
+        impede a nota do morango de cair no cadastro do abacate.
+      </p>
+
+      <h3>Consertar a nota antes de lançar</h3>
+      <p>
+        Lançar é o que torna o erro caro — depois dele, o caminho é o estorno. Por isso a
+        conferência da nota resolve tudo ali mesmo:
+      </p>
+      <ul>
+        <li>
+          <strong>“Não é este produto”</strong> — o item chegou casado no produto errado. Abre a
+          busca; com <em>aprender</em>, o vínculo daquele fornecedor é corrigido para as
+          próximas notas; sem, a troca vale só para esta.
+        </li>
+        <li>
+          <strong>Pré-cadastro</strong> — o produto certo ainda não existe. Cria-se um rascunho a
+          partir do item, e ele fica marcado para ser completado.
+        </li>
+        <li>
+          <strong>A conversão, dentro da nota</strong> — clicar no produto da linha abre as
+          unidades dele já com a unidade da nota, sem sair da conferência.
+        </li>
+      </ul>
+      <div class="regra">
+        <p class="rotulo">A nota DECLARA a conversão, e o sistema confere</p>
+        <p>
+          A NF-e traz a unidade comercial e a tributável — uma caixa de 24 sai como
+          <code>1 CX</code> e <code>24 UN</code>. O fornecedor está dizendo o fator no documento
+          fiscal. Se o cadastro diz “CX = 12” e a nota diz 24, o sistema <strong>avisa e
+          pergunta</strong>: sem isso, metade da mercadoria entraria no estoque e o custo
+          unitário sairia pelo dobro, calado.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">A unidade estranha tem de-para</p>
+        <p>
+          O fornecedor escreve <code>BJ</code>, <code>BD</code>, <code>PT</code>… Conforme elas
+          chegam, cada sigla desconhecida é vinculada a uma unidade da casa (ou cadastrada). Sem
+          isso a quantidade entrava 1:1 — dez bandejas de um produto contado em KG viravam dez
+          quilos.
+        </p>
+      </div>
+      <p>
+        <strong>Nota apontando para cadastro arquivado</strong> (sobra de uma fusão): se ainda não
+        foi lançada, o sistema oferece <em>repontar</em> para o produto que ficou, com prévia e um
+        botão só. Se já foi lançada, fica como está — nota e razão concordam, e o razão não se
+        reescreve.
+      </p>
+
       <h3>O custo de aquisição não é o valor da nota</h3>
       <p>
         Caixa de 12 a R$ 60 com R$ 6 de frete dá <strong>R$ 5,50 por unidade</strong>, não R$ 5.
@@ -1419,6 +1614,52 @@
         </p>
       </div>
 
+      <h3>Rendimento, porção e o custo da porção</h3>
+      <p>
+        O cabeçalho da ficha diz <strong>quanto a receita rende</strong> (8,5 kg de massa) e
+        <strong>em quantas porções</strong> (65 cookies). Dá para escrever pelo outro lado: o
+        tamanho da porção, e a ficha calcula quantas rende. Com os ingredientes digitados, a
+        ficha sugere o rendimento pela <em>soma deles</em> — é só aceitar.
+      </p>
+      <p>
+        O <strong>custo aparece enquanto se digita</strong>, pela mesma conta da ficha gravada:
+        quem monta a receita vê o prato ficar caro antes de salvar.
+      </p>
+
+      <h3>A mesma receita, processos diferentes: os modos</h3>
+      <p>
+        A massa de cookie que vai para o estoque rende 65; a mesma massa, porcionada para o Bar,
+        rende 130 menores. Não é outra receita — é outro <strong>modo de rendimento</strong>,
+        com nome, porções e prateleira de destino próprios. A primeira linha da tabela de
+        rendimento <strong>é a ficha</strong> (o modo padrão); cada linha a mais é um modo.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O modo muda a porção, não a escala</p>
+        <p>
+          Produzir 30 em vez de 65 sempre funcionou. O que o modo faz é a mesma massa render
+          <em>outra coisa</em> — outro custo por unidade, outra contagem de estoque. Ao agendar
+          ou produzir, escolhe-se o modo; a prateleira escolhida já sugere o dela. E o modo fica
+          gravado na produção, junto com a versão da ficha.
+        </p>
+      </div>
+
+      <h3>Duplicar, excluir, e a lista de fichas</h3>
+      <ul>
+        <li>
+          <strong>Duplicar receita</strong> copia a ficha para <em>outro</em> produto (o bolo de
+          laranja nasce do de cenoura), com ingredientes e modos. A janela diz o que vai
+          acontecer antes do clique.
+        </li>
+        <li>
+          <strong>Rascunho se exclui; publicada se arquiva.</strong> A ficha que nunca foi
+          homologada não tem passado nenhum. A publicada apurou custo e fica, arquivada.
+        </li>
+        <li>
+          A lista mostra <strong>uma linha por produto</strong> — a versão que vale. As outras
+          versões ficam num seletor dentro da ficha.
+        </li>
+      </ul>
+
       <h3>A foto do prato pronto</h3>
       <p>
         A ficha existe para ser <em>seguida</em>, e quem segue está de pé na cozinha:
@@ -1496,6 +1737,46 @@
         vai ser preciso, quanto existe no local de onde vai sair, e o que falta. É a mesma
         conta que a produção executa — prever com outra regra seria prever outra coisa.
       </p>
+      <p>
+        Só se agenda para a prateleira onde o preparo <strong>mora</strong> (as prateleiras do
+        produto): agendar para um lugar que o produto não tem criaria saldo num canto que
+        ninguém conta.
+      </p>
+
+      <h3>Porções ou receitas</h3>
+      <p>
+        “Produzir 2” é ambíguo: dois cookies ou duas receitas? A produção pergunta em que se
+        está digitando — <strong>porções</strong> (a unidade do produto: 130 cookies) ou
+        <strong>receitas</strong> (voltas inteiras da ficha: 2 receitas de 65). O estoque grava
+        sempre em porções.
+      </p>
+
+      <h3>A folha é da cozinha: o que realmente saiu</h3>
+      <p>
+        A folha mostra quantidades, <strong>modo de preparo</strong>, tempo e alergênicos — não
+        custos —, e se imprime para ir à bancada. Nela, cada insumo tem a coluna
+        <strong>usado de verdade</strong>: por padrão, o que a receita pede; se foram seis ovos
+        em vez de cinco, corrige-se ali, inclusive trocando a unidade.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O sexto ovo não pode sumir</p>
+        <p>
+          Sem essa coluna, quem usou seis lançava cinco, e o sexto aparecia só no inventário,
+          como falta sem causa. O custo do produzido sai do que realmente saiu. Zero também é
+          resposta (“acabou, substituí”) e não vira movimento. E a produção que se afasta da
+          receita fica marcada — se acontece sempre, é a ficha que está errada.
+        </p>
+      </div>
+
+      <h3>A produção nasce com lote e validade</h3>
+      <p>
+        Produto que controla lote e tem validade cadastrada entra no estoque com o lote
+        <code>P&lt;número da produção&gt;</code> e a data de validade. Assim o
+        <strong>FEFO</strong> (vence antes, sai antes) e o alerta de vencimento passam a
+        enxergar o que a cozinha faz, e não só o que veio de nota. Depois de produzir, o botão
+        <strong>Imprimir etiquetas</strong> leva direto às <a href="#etiquetas">etiquetas</a>,
+        com o produto, o lote e a quantidade já preenchidos.
+      </p>
     </section>
 
     <!-- ============================================================== ajustes -->
@@ -1510,8 +1791,37 @@
           <tr><td><strong>Saída</strong></td><td>Consumo interno, cortesia</td><td>Baixa pelo custo médio do momento</td></tr>
           <tr><td><strong>Perda</strong></td><td>Quebra, validade, erro de preparo</td><td>Baixa com <em>motivo obrigatório</em></td></tr>
           <tr><td><strong>Transferência</strong></td><td>Mover entre locais</td><td>Duas linhas: sai de um, entra no outro</td></tr>
+          <tr><td><strong>Ajuste de estoque</strong></td><td>“Tem 12, o sistema diz 15” fora de um inventário</td><td>Informa-se o que <em>realmente</em> tem; o sistema lança a diferença</td></tr>
+          <tr><td><strong>Ajuste de custo</strong></td><td>O custo médio está errado</td><td>Informa-se quanto <em>realmente</em> custa; muda o valor, não a quantidade</td></tr>
         </tbody>
       </table>
+      <p>
+        Os quatro primeiros dizem <strong>o que se moveu</strong>. Os dois ajustes declaram
+        <strong>a verdade</strong> — quanto tem, quanto custa — e o sistema faz a subtração: quem
+        conta lê “12” na prateleira, não “menos 3”.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Os dois ajustes têm efeito oposto no CMV</p>
+        <p>
+          Faltou estoque: o estoque final cai e o CMV <strong>sobe</strong>. Custo corrigido
+          para baixo: o estoque vale menos e o CMV também <strong>sobe</strong>. Cada um aparece
+          em linha própria no painel, para a diferença ter nome.
+        </p>
+      </div>
+
+      <h3>Reprocessar o estoque de um produto</h3>
+      <p>
+        A nota do dia 9 é lançada hoje, depois de a venda do dia 12 já ter saído — com custo
+        estimado, porque não havia saldo. Em <strong>Saldos e movimentos</strong>,
+        <strong>Reprocessar</strong> relê o razão daquele produto em ordem de <em>data</em> e
+        refaz o que é derivado: saldo depois de cada linha, custo médio e o custo das saídas.
+        Mostra a prévia antes de gravar.
+      </p>
+      <p>
+        ⚠️ <strong>Não fura o “o razão só cresce”:</strong> nenhum movimento é criado ou apagado,
+        e tipo, quantidade, data e o custo das <em>entradas</em> — o que a casa pagou — não
+        mudam.
+      </p>
 
       <p>
         A transferência <strong>não cria nem destrói valor</strong> — o mesmo custo sai de um
@@ -1583,6 +1893,8 @@
         Opcionais, ligados só em quem precisa. Quando ligados, a saída escolhe o lote sozinha:
         <strong>o que vence antes sai antes</strong>, quebrando em vários lotes se preciso.
         Lote nunca barra a operação — quem manda no saldo é o razão; lote é camada de controle.
+        A produção também cria lote (ver <a href="#producao">Produção</a>), e o pote aberto na
+        cozinha é controlado pelas <a href="#etiquetas">etiquetas</a>.
       </p>
     </section>
 
@@ -1678,6 +1990,21 @@
         no primeiro número digitado, depois da caminhada até a prateleira. A escala aparece no
         cabeçalho da contagem, para quem não consegue digitar saber por quê sem perguntar.
       </p>
+
+      <h3>Achou na prateleira um produto que não estava na lista</h3>
+      <p>
+        Na contagem aberta, <strong>Incluir produto achado</strong>: busca-se o produto, ele
+        entra marcado como <em>incluído — não estava na lista</em>, com o saldo que o sistema
+        tinha naquela prateleira (quase sempre zero), e conta-se como os outros. Ao fechar, a
+        sobra entra pelo custo médio do produto — nunca por zero — e ele passa a morar ali.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Antes de incluir: ele mora aqui, ou foi guardado no lugar errado?</p>
+        <p>
+          Guardado errado, devolva e conte onde ele mora. Contado aqui, vira sobra aqui e falta
+          lá — dois ajustes falsos para um produto que só mudou de lugar.
+        </p>
+      </div>
     </section>
 
     <!-- ================================================================ venda -->
@@ -1778,6 +2105,35 @@
         Cancelar uma venda <strong>estorna</strong> os movimentos. Cancelar sem devolver
         deixaria o produto fora da prateleira e fora do caixa.
       </p>
+
+      <h3>A venda leva a hora, o documento e o preço</h3>
+      <ul>
+        <li>
+          A baixa no razão leva a <strong>hora do cupom</strong>, e o movimento mostra o número
+          do documento — quem investiga um saldo acha a venda que o mexeu.
+        </li>
+        <li>
+          O <strong>preço do PDV</strong> vem junto na busca automática de vendas, e a ficha e o
+          produto mostram o preço que está lá.
+        </li>
+        <li>
+          O custo congelado no item é o <strong>da porção</strong> (ver
+          <a href="#trilha">De onde vem cada número</a>).
+        </li>
+      </ul>
+
+      <h3>O que foi vendido e não saiu do estoque</h3>
+      <p>
+        O item que ficou sem vínculo e foi vinculado <em>depois</em> já tinha vendido sem baixar.
+        A tela de <strong>Vendas</strong> avisa quando isso existe e mostra
+        <strong>quanto foi vendido e não saiu</strong>, somado por produto; um botão lança as
+        baixas, cada uma com a data da venda que a originou. Sem isso, a diferença apareceria no
+        inventário como ajuste sem nome.
+      </p>
+      <p>
+        Venda para uma <strong>pessoa da casa</strong> — funcionário, sócio — tem regras
+        próprias de preço e de CMV: ver <a href="#pessoas">Pessoas e consumo</a>.
+      </p>
     </section>
 
     <!-- ================================================================== cmv -->
@@ -1785,17 +2141,37 @@
       <h2>9 · CMV e fechamento</h2>
       <p class="chamada">Onde tudo se encontra.</p>
 
+      <p>
+        O painel abre com a barra de recorte — <strong>quando</strong> (o período), <strong>onde</strong>
+        (esta loja ou a empresa) e <strong>ver por</strong> —, os ladrilhos (CMV real, teórico,
+        receita, food cost) e, acima deles, a faixa de <strong>confiança</strong>: com pouca
+        cobertura de ficha, a variância fala do cadastro, não da cozinha. Embaixo, sete abas:
+      </p>
       <table>
-        <thead><tr><th>Relatório</th><th>Responde</th></tr></thead>
+        <thead><tr><th>Aba</th><th>Responde</th></tr></thead>
         <tbody>
-          <tr><td><strong>Painel</strong></td><td>CMV real, teórico, variância e food cost do período</td></tr>
-          <tr><td><strong>Movimentação por produto</strong></td><td>Estoque inicial, entradas, saídas e final de cada item — a conta que <em>explica</em> o CMV</td></tr>
-          <tr><td><strong>CMV por grupo</strong></td><td>A mesma conta quebrada por setor ou categoria. Não é rateio: a soma dos grupos fecha com o total</td></tr>
+          <tr><td><strong>A conta</strong></td><td>O desenho de <em>inicial + compras − final = CMV</em>, com as linhas de perdas, ajustes e grupos</td></tr>
+          <tr><td><strong>Quebra por…</strong></td><td>A mesma conta por loja, local, setor, categoria, grupo ou produto (o “ver por” do alto). Não é rateio: a soma das linhas fecha com o CMV</td></tr>
           <tr><td><strong>Curva ABC</strong></td><td>Onde estão 80% do dinheiro gasto com insumo</td></tr>
           <tr><td><strong>Margem por prato</strong></td><td>O que cada prato vendeu, custou e deixou</td></tr>
-          <tr><td><strong>Evolução de preço</strong></td><td>O que subiu no mês, ordenado pelo <em>impacto em reais</em> — 8% num item semanal dói mais que 60% num trimestral</td></tr>
+          <tr><td><strong>Movimentação</strong></td><td>Estoque inicial, entradas, saídas e final de cada item — a conta que <em>explica</em> o CMV</td></tr>
+          <tr><td><strong>O que subiu de preço</strong></td><td>Ordenado pelo <em>impacto em reais</em> — 8% num item semanal dói mais que 60% num trimestral</td></tr>
+          <tr><td><strong>Memória de cálculo</strong></td><td>Os quatro quadros que a contabilidade pede</td></tr>
         </tbody>
       </table>
+      <div class="regra">
+        <p class="rotulo">O período é o ciclo, não datas soltas</p>
+        <p>
+          Escolhe-se um dos períodos do CMV da loja (o mês, a semana ou o dia, conforme o ritmo).
+          Data digitada à mão é onde o engano entra: um dia a mais e a apuração deixa de bater
+          com o fechamento, sem ninguém notar.
+        </p>
+      </div>
+      <p>
+        <strong>Empresa</strong> soma as lojas que <em>você</em> enxerga, e refaz food cost e
+        cobertura a partir dos totais — percentual não se soma. <strong>Um botão de
+        baixar</strong> leva a conta do CMV mais a aba que está aberta.
+      </p>
 
       <div class="regra">
         <p class="rotulo">Número verdadeiro ou nenhum</p>
@@ -1917,12 +2293,18 @@
       <table>
         <thead><tr><th>Alerta</th><th>Aponta para</th></tr></thead>
         <tbody>
+          <tr><td>Produto com saldo negativo</td><td>A entrada que falta, ou a contagem</td></tr>
           <tr><td>Abaixo do mínimo — item de compra</td><td>Comprar</td></tr>
-          <tr><td>Abaixo do mínimo — item que a casa produz</td><td>Agendar produção</td></tr>
-          <tr><td>Produção atrasada</td><td>A agenda</td></tr>
-          <tr><td>Validade próxima</td><td>O lote que vence</td></tr>
-          <tr><td>Item de nota sem produto</td><td>A fila de conciliação</td></tr>
-          <tr><td>Variação de preço acima do limite</td><td>A nota que subiu</td></tr>
+          <tr><td>Abaixo do mínimo — item que a casa produz, sem agenda</td><td>Agendar produção</td></tr>
+          <tr><td>Produção planejada e não feita</td><td>A agenda</td></tr>
+          <tr><td>Lote vencido, ou vencendo na janela da loja</td><td>O lote que vence</td></tr>
+          <tr><td>Etiqueta vencida, ou que vence hoje</td><td>O painel de validades, já filtrado</td></tr>
+          <tr><td>Saída com custo provisório</td><td>A entrada que ninguém lançou</td></tr>
+          <tr><td>Nota esperando conciliação, ou conciliada e não lançada</td><td>A nota</td></tr>
+          <tr><td>Produto em rascunho</td><td>O cadastro a completar</td></tr>
+          <tr><td>Produto de produção própria sem ficha homologada</td><td>A ficha</td></tr>
+          <tr><td>Item vendido sem produto no cadastro</td><td>Vendas ▸ Sem vínculo</td></tr>
+          <tr><td>Período anterior ainda não fechado</td><td>O fechamento do CMV</td></tr>
         </tbody>
       </table>
 
@@ -2017,10 +2399,7 @@
         quando encontra um ele <strong>avisa antes do botão</strong>: salvar por cima
         substituiria o arranjo atual.
       </p>
-    </section>
 
-    <!-- ================================================================ lojas -->
-    <section id="lojas">
       <h3>De que setor cada pessoa cuida</h3>
       <p>
         No cadastro do usuário, o cartão <strong>De que setor cuida</strong> recorta o painel
@@ -2046,6 +2425,30 @@
         <strong>Não é um zero no lugar do valor — o valor simplesmente não vai até lá.</strong>
       </p>
 
+      <h3>Pessoa e usuário</h3>
+      <p>
+        O usuário é a credencial; a <strong>pessoa</strong> é o cadastro. No cadastro do usuário
+        dá para ligá-lo à pessoa dele — é assim que o funcionário que compra com desconto e quem
+        abre o sistema viram a mesma pessoa, e que o <em>Meu consumo</em> sabe de quem é a conta.
+        Uma pessoa, um usuário.
+      </p>
+
+      <h3>Tentativas de login e chaves de acesso</h3>
+      <p>
+        Senha errada várias vezes seguidas <strong>bloqueia o login por alguns minutos</strong>. É a trava contra quem tenta adivinhar senha.
+      </p>
+      <p>
+        Em <strong>Usuários</strong>, cada pessoa pode ter <strong>chaves de acesso</strong> —
+        para uma máquina ou um programa falar com o Botané sem digitar senha (é o que o
+        <a href="#claude">Claude</a> usa). A chave aparece <strong>uma vez só</strong>, tem
+        validade, pode ser <em>só de leitura</em> e age exatamente como o usuário dono dela:
+        mesmo papel, mesmas lojas. Revogar não apaga — o registro de quem usou e até quando
+        fica. Uma chave nunca cria outra.
+      </p>
+    </section>
+
+    <!-- ================================================================ lojas -->
+    <section id="lojas">
       <h2>12 · Mais de uma loja</h2>
       <p class="chamada">
         Cada loja tem estoque, custo e preço próprios. Quem opera, opera numa de cada vez.
@@ -2063,6 +2466,11 @@
         loja, mas moram em <strong>Integrações</strong>, resolvidas pelo seletor do topo: duas
         portas para a mesma configuração seriam duas versões da mesma verdade.
       </p>
+      <p>
+        O cadastro da loja também guarda o que é dela diante do cliente: o
+        <strong>WhatsApp de contato</strong> que o site mostra e a aba <strong>WhatsApp</strong>, com a conexão com a Meta e os
+        avisos automáticos — ver <a href="#whatsapp">WhatsApp</a>.
+      </p>
 
       <div class="regra">
         <p class="rotulo">O custo do insumo é da LOJA</p>
@@ -2072,6 +2480,16 @@
           médio, e é esse número que entra na ficha, no custo congelado da venda, na margem e no
           food cost. Um erro aqui não fica contido, e não faz barulho: nenhum valor parece
           absurdo, só fica errado e gravado.
+        </p>
+      </div>
+      <div class="regra">
+        <p class="rotulo">E é da loja, não da prateleira</p>
+        <p>
+          Dentro de uma loja, o açúcar da despensa e o do Bar valem o mesmo: o custo médio é
+          calculado sobre o saldo de <strong>todas as prateleiras da loja</strong>. Quando uma
+          compra muda o médio, o sistema lança em cada prateleira com saldo um
+          <em>ajuste de custo</em> que reavalia o que já estava lá — a soma desses ajustes é
+          zero, e é isso que prova que a entrada não criou nem destruiu valor.
         </p>
       </div>
       <p>
@@ -2212,6 +2630,13 @@
         </p>
       </div>
 
+      <p>
+        Outros papéis que saem do sistema: a <strong>folha da produção</strong> (para a
+        bancada), as <strong>etiquetas</strong> no tamanho do rolo, os <strong>QR codes</strong>
+        da casa e o <strong>consumo por pessoa</strong> — o recibo que se entrega ao
+        funcionário.
+      </p>
+
       <h3>A ficha técnica se imprime</h3>
       <p>
         A ficha existe para ser <em>seguida</em>, e quem segue está de pé na cozinha — não na
@@ -2250,6 +2675,431 @@
       </p>
     </section>
 
+    <!-- ============================================================== pessoas -->
+    <section id="pessoas">
+      <h2>14 · Pessoas e consumo</h2>
+      <p class="chamada">
+        Quem vende para a casa, quem trabalha nela e quem consome — um cadastro só.
+      </p>
+
+      <p>
+        O antigo cadastro de fornecedores virou <strong>Cadastros ▸ Pessoas</strong>. Fornecedor
+        continua sendo fornecedor (é uma marca no cadastro, e só quem a tem aparece na nota e
+        no produto); o funcionário e o sócio entram no mesmo lugar, sem a marca.
+      </p>
+
+      <h3>A política de cupom da pessoa</h3>
+      <p>
+        No cadastro da pessoa se diz como ela paga o que consome: pelo <strong>preço de
+        venda</strong> ou pelo <strong>custo</strong>, com ou sem desconto. Lançando uma venda à
+        mão em <strong>Vendas ▸ Lançar</strong> e escolhendo a pessoa, o sistema calcula o valor
+        de cada item — e mostra a prévia do cupom antes de gravar.
+      </p>
+      <table>
+        <thead><tr><th>Política</th><th>Prato de preço 100 e custo 40</th></tr></thead>
+        <tbody>
+          <tr><td>Sem pessoa, ou pelo preço</td><td class="num">100,00</td></tr>
+          <tr><td>Preço com 20% de desconto</td><td class="num">80,00</td></tr>
+          <tr><td>Pelo custo</td><td class="num">40,00</td></tr>
+          <tr><td>Custo com 10% de desconto</td><td class="num">36,00</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Só a venda lançada à mão usa a política: o cupom do PDV traz o que foi cobrado de verdade.
+        Item sem custo conhecido fica pelo preço — e a tela diz isso.
+      </p>
+
+      <h3>Consumo interno</h3>
+      <p>
+        Escolhida a pessoa, aparece a caixa <strong>Considerar consumo interno</strong>. Marcada,
+        o documento é refeição da equipe, não venda: o estoque sai como
+        <em>consumo interno</em>, o <strong>custo</strong> aparece na apuração, e o documento fica
+        <strong>fora da receita e do CMV teórico</strong> — senão o prato que ninguém vendeu
+        entraria no food cost pelo preço e pela ficha. Consumo interno sem pessoa não existe:
+        sem dono, é perda.
+      </p>
+
+      <h3>O período de consumo: abre, acumula, fecha no pagamento</h3>
+      <p>
+        Em <strong>CMV ▸ Períodos de consumo</strong> abre-se o ciclo de cobrança (por exemplo, o mês). Todo
+        consumo de pessoa lançado enquanto ele está aberto se acumula nele; ao
+        <strong>fechar</strong>, cada pessoa ganha o seu recibo e o consumo fica carimbado como
+        cobrado.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Consumo de pessoa só se lança com ciclo aberto</p>
+        <p>
+          É no ciclo que a dívida se acumula. Sem ciclo aberto, a tela avisa e aponta para
+          Períodos de consumo. A venda de balcão, sem pessoa, continua entrando normalmente.
+        </p>
+      </div>
+      <ul>
+        <li>Um ciclo aberto por loja. O fechamento leva tudo o que está em aberto <em>até</em> a data final — inclusive o que ficou de antes, e a tela mostra isso antes do clique.</li>
+        <li>O recibo é congelado: o que se cobrou naquele dia não muda se alguém corrigir uma venda antiga.</li>
+        <li>Só o último ciclo fechado se reabre. O ciclo aberto com datas erradas se exclui (nada foi carimbado nele).</li>
+      </ul>
+
+      <h3>Quem consumiu o quê</h3>
+      <p>
+        <strong>Vendas ▸ Consumo por pessoa</strong> recorta por ciclo e mostra, por pessoa, o total — ou
+        <strong>por documento</strong>, ou <strong>por documento com os itens</strong>. As três
+        formas existem na tela e no PDF, e dá para filtrar qualquer pessoa que tenha consumo,
+        com política ou sem.
+      </p>
+      <p>
+        Na ficha da pessoa (Cadastros ▸ Pessoas), o cartão <strong>Consumo no ciclo
+        aberto</strong> mostra os documentos dela no ciclo atual. E cada um vê a própria conta em
+        <strong>Meu consumo</strong>, no menu do usuário — sem permissão nenhuma, desde que o
+        usuário esteja ligado à sua pessoa.
+      </p>
+    </section>
+
+    <!-- ============================================================ etiquetas -->
+    <section id="etiquetas">
+      <h2>15 · Etiquetas de validade</h2>
+      <p class="chamada">
+        O pote que a cozinha produz, abre ou descongela — com validade, responsável e um QR que
+        diz tudo sobre ele.
+      </p>
+
+      <div class="fluxo">
+        <span>Produzi · abri · descongelei</span> <em>→</em> <span>etiqueta com QR</span>
+        <em>→</em> <span class="destino">usei tudo</span> <em>ou</em>
+        <span class="destino">descartei = perda</span>
+      </div>
+
+      <h3>A validade depende do que aconteceu e de como se guarda</h3>
+      <p>
+        O mesmo molho dura 3 dias refrigerado e 60 congelado; o creme de leite, 3 dias depois de
+        aberto. Em <strong>Etiquetas ▸ Configuração</strong>, cada produto recebe as suas regras:
+        evento (<em>produção, abertura, descongelamento</em>) × conservação
+        (<em>refrigerado, congelado, ambiente</em>), em dias ou em horas, com uma conservação
+        padrão por evento. É ali que entra a tabela de validades da nutricionista.
+      </p>
+      <table>
+        <thead><tr><th>Quem responde pela validade</th><th>Quando</th></tr></thead>
+        <tbody>
+          <tr><td>A data informada na hora</td><td>Sempre que alguém a digita</td></tr>
+          <tr><td>A regra do produto</td><td>Evento e conservação cadastrados</td></tr>
+          <tr><td>A validade do cadastro do produto</td><td>Só na produção, sem regra</td></tr>
+          <tr><td>Ninguém</td><td>A tela pede a data — sem ela não imprime</td></tr>
+        </tbody>
+      </table>
+      <div class="regra">
+        <p class="rotulo">Aberto nunca vale mais que o fabricante</p>
+        <p>
+          Na abertura, informe a validade da embalagem: o “3 dias depois de aberto” de um creme
+          que vence amanhã é amanhã. Embalagem já vencida é recusada.
+        </p>
+      </div>
+      <p>
+        O prazo conta <strong>da hora em que a etiqueta foi feita</strong>, e ela imprime data e
+        hora: feito 28/09 às 13h58 com 3 dias, vence 01/10 às 13h58.
+      </p>
+
+      <h3>Imprimir, na bancada</h3>
+      <p>
+        <strong>Etiquetas ▸ Imprimir</strong>: escolha o produto, toque em <em>Produzi</em>,
+        <em>Abri</em> ou <em>Descongelei</em>, escolha a conservação e quantas etiquetas (uma por
+        pote). A prévia mostra a validade calculada antes de gastar papel. O responsável é quem
+        está logado — no tablet de todos, digita-se outro nome. Os alergênicos vêm da ficha
+        técnica.
+      </p>
+      <p>
+        Da <strong>Produção</strong>, o botão <em>Imprimir etiquetas</em> já traz o produto, o
+        lote da produção e a quantidade — 10 litros em 5 potes são 5 etiquetas de 2.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A impressora</p>
+        <p>
+          O PDF sai no <strong>tamanho do rolo</strong>, uma página por etiqueta (60×40 por
+          padrão; também 40×40, 50×30, 100×50 ou folha A4 com 21 etiquetas). Na impressora
+          térmica, configure o papel no mesmo tamanho e a escala em 100%. O modelo — tamanho,
+          o que aparece, um texto no rodapé — é de cada loja, em Configuração.
+        </p>
+      </div>
+
+      <h3>O QR do pote</h3>
+      <p>
+        Lido no celular (com login), abre tudo sobre o pote: produto, quando e por quem foi
+        feito, validade, onde está, lote, quantidade, alergênicos. E as ações:
+      </p>
+      <ul>
+        <li><strong>Usei tudo</strong> — sai das etiquetas ativas. Não mexe no estoque: o consumo já entrou pela venda ou pela produção que usou o pote.</li>
+        <li><strong>Descartar</strong> — lança a <strong>perda</strong> no estoque, com motivo e valor. É isto que transforma “jogamos fora” em número. (Dá para só tirar das ativas, quando a perda já foi lançada por outro caminho.)</li>
+        <li><strong>Descongelei</strong> — nova etiqueta com o prazo do descongelado, nunca além do pote antigo, que deixa de valer.</li>
+        <li><strong>Reetiquetar</strong> (dividir o pote, trocar de lugar) — nova etiqueta com a <em>mesma</em> validade. Dividir não pode ser jeito de ganhar prazo.</li>
+      </ul>
+      <p>
+        Quando o QR não lê, o código de seis caracteres impresso embaixo dele se digita no
+        painel.
+      </p>
+
+      <h3>O painel de validades</h3>
+      <p>
+        A checagem da manhã: <strong>vencidas</strong>, <strong>vencem hoje</strong>,
+        <strong>vencem amanhã</strong>, todas as ativas e as baixadas, com busca por produto,
+        código ou lote, e quanto se descartou nos últimos 30 dias. O Início avisa quando há
+        etiqueta vencida ou vencendo hoje.
+      </p>
+      <p>
+        <strong>Quem pode:</strong> Cozinha e Conferente imprimem e descartam; o Salão imprime;
+        configurar validades e o modelo é do Gerente e do Administrador.
+      </p>
+    </section>
+
+    <!-- =============================================================== portal -->
+    <section id="portal">
+      <h2>16 · Site, reservas e catálogos</h2>
+      <p class="chamada">
+        O Portal de Clientes: o site da casa, a reserva de mesa e o cardápio — ligado loja a
+        loja.
+      </p>
+
+      <p>
+        O módulo se liga no cadastro da loja (<strong>Lojas ▸ a loja ▸ Cadastro e
+        parâmetros</strong>, interruptor <em>Portal de Clientes</em>), uma loja de cada vez. Ligado,
+        aparece o grupo <strong>Portal de Clientes</strong> no menu e as permissões de reserva
+        (ver, editar, configurar) passam a existir no cadastro de papéis.
+      </p>
+
+      <h3>Configuração</h3>
+      <table>
+        <thead><tr><th>O quê</th><th>Para quê</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Horário por dia da semana</strong></td><td>Quando a casa abre e fecha, e até quando aceita reserva. A casa nasce fechada em todos os dias — a tela diz isso</td></tr>
+          <tr><td><strong>Permanência</strong></td><td>Quanto tempo uma mesa fica ocupada, por tamanho de grupo. É o que decide se o horário está livre</td></tr>
+          <tr><td><strong>Aceita reserva pelo site</strong>, confirmação automática ou manual</td><td>Na manual, a reserva do site chega <em>pendente</em> e a casa confirma</td></tr>
+          <tr><td><strong>Teto online</strong></td><td>O maior grupo que se marca sozinho pelo site; acima disso, contato com a casa</td></tr>
+          <tr><td><strong>Antecedência</strong> mínima e máxima, tolerância, folga, intervalo dos horários</td><td>As regras do relógio da reserva</td></tr>
+          <tr><td><strong>Cadastro completo</strong></td><td>Se o site pede todos os dados do cliente ou só o essencial</td></tr>
+          <tr><td><strong>Textos do WhatsApp</strong></td><td>A mensagem de “entre em contato” e a de quem vem da reserva, com os marcadores da casa, pessoas, data e hora</td></tr>
+          <tr><td><strong>Fidelidade</strong></td><td>Se esta loja participa do cartão — ver <a href="#fidelidade">Fidelidade</a></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Salões e mesas</h3>
+      <p>
+        Cada salão numa aba, com as mesas dele: <strong>lugares</strong> (o confortável) e
+        <strong>capacidade máxima</strong> (apertando), e com quais mesas ela
+        <strong>junta</strong> — é assim que um grupo de 8 senta em duas mesas de 4. O salão se
+        monta em lote (“mesas 1 a 12, de 4 lugares”). Desligar um salão tira as mesas dele da
+        oferta sem apagar nada.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A menor mesa que serve</p>
+        <p>
+          A reserva escolhe a mesa inteira antes de juntar, e a menor que comporta o grupo — pôr
+          um casal na mesa de 8 é o que faz a casa recusar o grupo de 8 que liga depois.
+        </p>
+      </div>
+
+      <h3>A agenda</h3>
+      <p>
+        Um <strong>calendário</strong>: o mês, o dia por horário e cada reserva. Pelo balcão se
+        marca, remarca e cancela; a reserva anda por <em>pendente → confirmada → chegou →
+        encerrada</em> (ou <em>cancelada</em>, <em>não compareceu</em>). O ✓ ao lado diz que o
+        cliente confirmou presença pelo WhatsApp.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A exceção do dia</p>
+        <p>
+          Direto no calendário: <strong>abrir</strong> um dia que normalmente fecha (a segunda de
+          feriado, com o horário de sábado) ou <strong>fechar</strong> um dia que normalmente
+          abre, com o motivo. No site, quem escolhe aquele dia vê o motivo. A exceção vale para a
+          agenda, a disponibilidade e o site ao mesmo tempo.
+        </p>
+      </div>
+
+      <h3>O site do cliente</h3>
+      <p>
+        Um endereço próprio da casa (fora do sistema), com a logo dela. O cliente:
+      </p>
+      <ul>
+        <li><strong>se identifica pelo telefone</strong> — o cadastro é único na rede, vale para as duas lojas;</li>
+        <li>no primeiro cadastro, <strong>aceita o termo de consentimento</strong> (LGPD), que abre numa janela; sem marcar, o cadastro não segue;</li>
+        <li><strong>reserva</strong>: escolhe a loja, o dia (abre em hoje, se ainda dá para marcar) e o horário livre;</li>
+        <li>vê <strong>suas reservas</strong> e pode <strong>cancelar</strong>;</li>
+        <li>abre os <strong>cardápios</strong> (catálogos) e fala com a casa pelo <strong>WhatsApp</strong>;</li>
+        <li>vê o <strong>cartão fidelidade</strong>, quando a loja participa.</li>
+      </ul>
+      <p>
+        Em <strong>Portal de Clientes ▸ Clientes</strong>, a lista de quem se cadastrou, paginada,
+        com o cartão e os prêmios de cada um.
+      </p>
+
+      <h3>Catálogos: o que o site apresenta</h3>
+      <p>
+        Um catálogo é um cardápio publicado. Duas origens:
+      </p>
+      <ul>
+        <li><strong>PDF</strong> — carrega-se o arquivo pronto;</li>
+        <li><strong>Produtos</strong> — o cardápio montado aqui dentro: categorias, subcategorias (opcionais) e os produtos, na ordem que se quiser. O mesmo produto pode estar em mais de uma lista.</li>
+      </ul>
+      <p>
+        O produto que vai ao cardápio ganha no cadastro a aba <strong>Catálogo</strong>: a
+        <strong>foto</strong>, o <strong>nome de vitrine</strong> (como o cliente lê, sem a
+        abreviação do PDV) e o texto que se conta ao cliente. Vários catálogos podem estar ativos
+        ao mesmo tempo, com período de validade — a tela diz quais estão <em>no ar hoje</em>. Só
+        rascunho se apaga; o resto se inativa. Um catálogo pode exigir cadastro para abrir.
+      </p>
+
+      <h3>Os QR codes da casa</h3>
+      <p>
+        <strong>Portal de Clientes ▸ QR codes</strong> junta todos: o do site, o da reserva, o
+        do cardápio de mesa e o da fidelidade. Cada um sai em PDF para imprimir, em três
+        tamanhos (1, 4 ou 12 por folha), com título, chamada e numeração de mesa opcionais.
+      </p>
+    </section>
+
+    <!-- =========================================================== fidelidade -->
+    <section id="fidelidade">
+      <h2>17 · Fidelidade</h2>
+      <p class="chamada">O cartão de visitas: a cada tantas visitas, um prêmio.</p>
+
+      <div class="regra">
+        <p class="rotulo">A regra, como a casa a usa</p>
+        <p>
+          <strong>A cada 10 visitas, a próxima é grátis</strong> — e a visita do prêmio não
+          conta carimbo. O número de visitas, o prêmio, a validade e os dias em que se pontua e
+          se consome (por exemplo, só de segunda a sexta) são configuráveis em
+          <strong>Fidelidade ▸ Configuração</strong>. O programa é da rede: o cartão do cliente
+          vale nas lojas que participam.
+        </p>
+      </div>
+
+      <h3>Como a visita conta</h3>
+      <table>
+        <thead><tr><th>Método</th><th>Como funciona</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>QR na mesa</strong></td>
+            <td>O cliente lê o QR da mesa, entra no site pelo telefone e a visita conta sozinha — uma por dia</td>
+          </tr>
+          <tr>
+            <td><strong>Código do caixa</strong></td>
+            <td>O cliente lê o QR do caixa e recebe um código; o atendente o vê em <strong>Fidelidade ▸ Códigos</strong>, diz quantos <strong>selos</strong> a visita vale e confirma. O código vale por alguns minutos</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="regra">
+        <p class="rotulo">Só conta quem está na casa</p>
+        <p>
+          Com a exigência de local ligada, o celular informa onde está e o <strong>servidor</strong>
+          confere a distância até a loja (o raio é configurável; o ponto da loja se grava na
+          configuração, até pela localização do próprio celular). Foto do QR levada para casa
+          não pontua. Visitas também só contam no horário de funcionamento, se assim configurado.
+        </p>
+      </div>
+
+      <h3>Prêmios e o painel</h3>
+      <p>
+        Completar o cartão gera o prêmio, com validade. Em <strong>Fidelidade ▸ Prêmios</strong>
+        o balcão confere o código do prêmio e marca como entregue.
+      </p>
+      <p>
+        <strong>Fidelidade ▸ Painel</strong> é o programa inteiro numa tela: participantes,
+        selos em cartões abertos, prêmios disponíveis, vencendo e vencidos, entregues no mês,
+        visitas de hoje. Clicando no cliente, a ficha dele — cartão, prêmios, cada selo com a
+        origem (QR, código, manual) — e, com permissão, <strong>dar selos</strong> (com motivo),
+        <strong>retirar</strong> um lançamento errado e <strong>ajustar o vencimento</strong> de
+        um prêmio.
+      </p>
+      <p>
+        <strong>Quem pode:</strong> operar (ver e entregar) é do Salão, do Gerente e do
+        Administrador; configurar e imprimir os QR, do Gerente e do Administrador.
+      </p>
+    </section>
+
+    <!-- ============================================================= whatsapp -->
+    <section id="whatsapp">
+      <h2>18 · WhatsApp</h2>
+      <p class="chamada">
+        Avisos automáticos ao cliente, pela API oficial da Meta — configurados loja a loja.
+      </p>
+
+      <p>
+        Em <strong>Administração ▸ Lojas ▸ a loja ▸ aba WhatsApp</strong>. A loja faz a validação
+        do número com a Meta e informa ali o que a Meta dá: a identificação do número, o token
+        permanente e a chave secreta do app. A mesma aba mostra o endereço e o token que se
+        colam na Meta (o <em>webhook</em>) e traz o passo a passo.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Modo simulado primeiro</p>
+        <p>
+          Enquanto a conta na Meta não fica pronta, as mensagens vão só para o histórico — dá
+          para montar e testar tudo. “Enviar de verdade” liga o envio real, e cada mensagem é
+          cobrada pela Meta.
+        </p>
+      </div>
+
+      <h3>Os avisos</h3>
+      <table>
+        <thead><tr><th>Aviso</th><th>Quando sai</th></tr></thead>
+        <tbody>
+          <tr><td>Reserva recebida (aguardando a casa)</td><td>Ao marcar pelo site, quando a casa confirma à mão</td></tr>
+          <tr><td>Reserva confirmada</td><td>Ao confirmar a reserva</td></tr>
+          <tr><td><strong>Lembrete com confirmação de presença</strong></td><td>Horas antes da reserva, com os botões <em>Confirmar</em> e <em>Cancelar</em></td></tr>
+          <tr><td>Reserva cancelada pela casa</td><td>Quando a casa cancela</td></tr>
+          <tr><td>Prêmio da fidelidade conquistado</td><td>Ao completar o cartão</td></tr>
+          <tr><td>Prêmio da fidelidade vencendo</td><td>Dias antes de vencer</td></tr>
+          <tr><td>Aniversário do cliente</td><td>No dia</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Cada aviso se liga separadamente e aponta para um <strong>modelo aprovado pela
+        Meta</strong> — a tela traz o texto pronto de cada um para cadastrar lá. Mensagem que a
+        casa inicia é sempre um modelo aprovado; essa é a regra da Meta.
+      </p>
+      <div class="regra">
+        <p class="rotulo">A resposta do cliente volta para a agenda</p>
+        <p>
+          Tocando em <strong>Confirmar</strong>, a reserva ganha o ✓ de presença na agenda;
+          em <strong>Cancelar</strong>, ela é cancelada. Quem responde <strong>PARAR</strong>
+          deixa de receber os avisos de marketing (o aniversário); os da própria reserva
+          continuam, porque são o serviço que ele pediu.
+        </p>
+      </div>
+      <p>
+        O <strong>histórico</strong> responde “ele disse que não recebeu”: para quem, qual
+        aviso, quando, e o que aconteceu — enviada, entregue, lida, respondida, ou
+        <em>falhou</em>, com o motivo. A mesma mensagem nunca sai duas vezes, e o envio tenta de
+        novo sozinho quando a Meta falha.
+      </p>
+    </section>
+
+    <!-- =============================================================== claude -->
+    <section id="claude">
+      <h2>19 · O Claude dentro do Botané</h2>
+      <p class="chamada">
+        Perguntar ao sistema em português, e pedir que ele faça.
+      </p>
+
+      <p>
+        O Botané tem um <strong>conector</strong> para o Claude. No claude.ai, adiciona-se como
+        conector personalizado o endereço <code>https://sistema.botanedeliecafe.com.br/api/mcp</code>
+        e entra-se com o próprio login do Botané. A partir daí dá para perguntar
+        <em>“quanto custa o cappuccino?”</em>, <em>“o que subiu de preço este mês?”</em>,
+        <em>“qual o CMV do período?”</em>, <em>“quais reservas temos sábado?”</em> — o Claude
+        consulta a casa inteira: produtos, fichas, estoque, lotes e vencimentos, notas, vendas,
+        CMV, consumo por pessoa, reservas.
+      </p>
+      <p>
+        E ele também <strong>grava</strong>, quando se pede: conciliar item de nota, cadastrar e
+        corrigir produto (inclusive prateleiras, unidades e desativar), criar e corrigir ficha
+        técnica — até a partir do PDF de uma ficha, com a foto do prato —, lançar no estoque e
+        juntar cadastros repetidos, sempre olhando a prévia antes.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O Claude é você</p>
+        <p>
+          Ele age com as permissões e as lojas de quem conectou — nem mais, nem menos. O que você
+          não pode fazer na tela, ele também não pode. E tudo o que ele grava vai para a
+          auditoria em nome de quem conectou.
+        </p>
+      </div>
+    </section>
+
     <!-- =============================================================== regras -->
     <section id="regras">
       <h2>As regras que não se negociam</h2>
@@ -2268,6 +3118,8 @@
           <li><strong>Ficha é versionada</strong>, e o custo é congelado no momento do uso.</li>
           <li><strong>Importar duas vezes não duplica.</strong> Quem garante é o banco, por chave única — nunca o gatilho que disparou.</li>
           <li><strong>Nada de silent fail.</strong> Toda ação diz o que deu certo ou o que impediu.</li>
+          <li><strong>A hora é a da casa</strong>, nunca a do servidor: “hoje” e “agora” são sempre os de Blumenau.</li>
+          <li><strong>Prévia antes do botão</strong> em tudo que mexe em muitos registros de uma vez — fusão, alteração em lote, reprocessar, fechar ciclo.</li>
         </ol>
       </div>
     </section>
@@ -2335,7 +3187,7 @@
               <td>Produção</td>
               <td>Execução de uma linha da agenda</td>
               <td><code>producoes</code> + movimentos</td>
-              <td>Operação ▸ Produção</td>
+              <td>Estoque ▸ Produção</td>
             </tr>
             <tr>
               <td>Venda</td>
@@ -2416,6 +3268,90 @@
               <td>Cadastro do produto</td>
             </tr>
             <tr>
+              <td>Modos de rendimento da ficha</td>
+              <td>Cabeçalho da ficha técnica</td>
+              <td><code>ficha_modos</code></td>
+              <td>Ficha ▸ rendimento</td>
+            </tr>
+            <tr>
+              <td>Pessoa e política de cupom</td>
+              <td>Cadastro da pessoa</td>
+              <td><code>fornecedores</code> (o nome antigo ficou)</td>
+              <td>Cadastros ▸ Pessoas</td>
+            </tr>
+            <tr>
+              <td>Ciclo de consumo e recibos</td>
+              <td>Abrir e fechar o período</td>
+              <td><code>consumo_periodos</code>, <code>consumo_periodo_pessoas</code></td>
+              <td>CMV ▸ Períodos de consumo</td>
+            </tr>
+            <tr>
+              <td>Validade por evento e conservação</td>
+              <td>Configuração das etiquetas</td>
+              <td><code>produto_validades</code></td>
+              <td>Etiquetas ▸ Configuração</td>
+            </tr>
+            <tr>
+              <td>Etiqueta</td>
+              <td>Imprimir (produção, abertura, descongelamento)</td>
+              <td><code>etiquetas</code></td>
+              <td>Etiquetas ▸ Painel de validades</td>
+            </tr>
+            <tr>
+              <td>Configuração do portal, horários e permanências</td>
+              <td>Portal de Clientes ▸ Configuração</td>
+              <td><code>reserva_config</code>, <code>reserva_horarios</code>, <code>reserva_permanencias</code></td>
+              <td>Portal de Clientes ▸ Configuração</td>
+            </tr>
+            <tr>
+              <td>Salões e mesas</td>
+              <td>Portal de Clientes ▸ Salão</td>
+              <td><code>saloes</code>, <code>mesas</code></td>
+              <td>Portal de Clientes ▸ Salão</td>
+            </tr>
+            <tr>
+              <td>Reserva</td>
+              <td>Site do cliente ou balcão</td>
+              <td><code>reservas</code>, <code>reserva_mesas</code></td>
+              <td>Portal de Clientes ▸ Agenda</td>
+            </tr>
+            <tr>
+              <td>Exceção do dia</td>
+              <td>Calendário da agenda</td>
+              <td><code>reserva_dias_especiais</code> (abrir), <code>reserva_bloqueios</code> (fechar)</td>
+              <td>Agenda ▸ o dia</td>
+            </tr>
+            <tr>
+              <td>Cliente do portal e o termo aceito</td>
+              <td>Cadastro pelo site</td>
+              <td><code>reserva_clientes</code></td>
+              <td>Portal de Clientes ▸ Clientes</td>
+            </tr>
+            <tr>
+              <td>Catálogo e seus itens</td>
+              <td>Cadastro de catálogos</td>
+              <td><code>catalogos</code>, <code>catalogo_itens</code></td>
+              <td>Portal de Clientes ▸ Catálogos</td>
+            </tr>
+            <tr>
+              <td>Visitas, selos e prêmios</td>
+              <td>Check-in pelo QR, código do caixa, painel</td>
+              <td><code>fidelidade_checkins</code>, <code>fidelidade_premios</code></td>
+              <td>Fidelidade ▸ Painel</td>
+            </tr>
+            <tr>
+              <td>Mensagens de WhatsApp</td>
+              <td>Os avisos ligados na loja</td>
+              <td><code>whatsapp_mensagens</code></td>
+              <td>Lojas ▸ WhatsApp ▸ histórico</td>
+            </tr>
+            <tr>
+              <td>Chave de acesso</td>
+              <td>Cadastro do usuário, ou o Claude conectado</td>
+              <td><code>tokens_api</code> (só o hash)</td>
+              <td>Administração ▸ Usuários</td>
+            </tr>
+            <tr>
               <td>Sessão de acesso</td>
               <td>Login — e a escolha de “manter conectado”</td>
               <td><code>sessoes</code></td>
@@ -2434,13 +3370,42 @@
         </p>
       </div>
     </section>
+
+    <!-- ============================================================ novidades -->
+    <section id="novidades">
+      <h2>O que mudou, por data</h2>
+      <p class="chamada">
+        O que entrou no sistema desde a primeira parte — para quem volta depois de um tempo.
+      </p>
+      <div class="tabela-caixa">
+        <table>
+          <thead><tr><th>Quando</th><th>O que entrou</th><th>Onde ler</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">04/09</td><td>Fornecedor virou <strong>Pessoa</strong>; política de cupom; <strong>período de consumo</strong>; relatório de consumo por pessoa; <em>Meu consumo</em></td><td><a href="#pessoas">14</a></td></tr>
+            <tr><td class="mono">08/09</td><td>Código de barras no produto; trocar de unidade converte o custo; consumo só dentro de ciclo aberto</td><td><a href="#produto">2</a>, <a href="#pessoas">14</a></td></tr>
+            <tr><td class="mono">09/09</td><td><strong>Alteração em lote</strong> de produtos; filtros e página no endereço; de-para das unidades das notas; preço do PDV na busca de vendas; integrações em abas</td><td><a href="#produto">2</a>, <a href="#nota">3</a></td></tr>
+            <tr><td class="mono">10/09</td><td>A nota confere a conversão que ela declara; nota em cadastro arquivado; custo com duas casas em toda tela</td><td><a href="#nota">3</a></td></tr>
+            <tr><td class="mono">11/09</td><td><strong>Custo médio da loja</strong>, não da prateleira; baixa do que foi vendido e não saiu</td><td><a href="#lojas">12</a>, <a href="#venda">8</a></td></tr>
+            <tr><td class="mono">12–13/09</td><td>Duplicar ficha; rendimento pela soma dos ingredientes; tamanho da porção; rascunho se exclui; custo previsto na tela do produto; uma linha por produto na lista de fichas</td><td><a href="#ficha">4</a></td></tr>
+            <tr><td class="mono">14/09</td><td>Código do produto por fornecedor; trocar o produto de um item na conferência; <strong>Reservas</strong>: configuração e salões</td><td><a href="#nota">3</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">15/09</td><td>Menu novo: <strong>Ctrl+K</strong>, atalhos, ícones; <strong>reprocessar</strong> o estoque de um produto; produzir em porções ou receitas</td><td><a href="#navegar">navegar</a>, <a href="#ajustes">6</a>, <a href="#producao">5</a></td></tr>
+            <tr><td class="mono">16/09</td><td><strong>Modos de rendimento</strong>; folha da produção com o que realmente saiu; produto em quatro abas; <strong>CMV em sete abas</strong>; venda com hora no razão</td><td><a href="#ficha">4</a>, <a href="#producao">5</a>, <a href="#cmv">9</a></td></tr>
+            <tr><td class="mono">19–21/09</td><td>Trocar a unidade de produto com estoque; <strong>conector do Claude</strong> (ler e gravar); catálogos; o <strong>site do cliente</strong> com reserva</td><td><a href="#produto">2</a>, <a href="#claude">19</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">17</a></td></tr>
+            <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">17</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
+            <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">17</a></td></tr>
+            <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">18</a>, <a href="#etiquetas">15</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 
 <footer>
   <p style="margin:0">
-    Botané Deli e Café · manual de referência da primeira parte. Para o passo a passo por
-    função — o que a cozinha faz, o que o conferente faz —, veja o
-    <strong>manual da equipe</strong>.
+    Botané Deli e Café · manual de referência, atualizado na versão 1.1.60 (28/09/2026). A
+    versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
+    cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>
 </footer>

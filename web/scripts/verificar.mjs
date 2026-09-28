@@ -7292,6 +7292,15 @@ try {
     };
   });
   checar("o manual explica de onde vem cada número", trilha.existe, trilha);
+  // 🔑 O manual ficou três semanas parado na versão 1.1.13 (atualizado em 28/09/2026). As
+  // seções dos módulos novos são cobradas pelo id: se uma sumir, a bateria acusa.
+  const secoesNovas = await p.evaluate(() => {
+    const d = document.querySelector("iframe")?.contentDocument;
+    return ["navegar", "pessoas", "etiquetas", "portal", "fidelidade", "whatsapp", "claude",
+            "novidades"].filter((id) => !d?.getElementById(id));
+  });
+  checar("com os módulos novos: pessoas, etiquetas, portal, fidelidade, WhatsApp e Claude",
+    secoesNovas.length === 0, secoesNovas);
   checar("com o custo médio ponderado, o custo congelado e a fórmula do CMV",
     trilha.custoMedio && trilha.congelado && trilha.resumo, trilha);
   // Documento com rolagem própria dentro de página que já rola é briga de
