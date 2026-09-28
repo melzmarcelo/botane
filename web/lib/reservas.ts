@@ -21,6 +21,8 @@ export type Reserva = {
   observacao_cliente: string | null;
   observacao_interna: string | null;
   mesas: string;
+  /** O que o cliente respondeu ao lembrete do WhatsApp (099). */
+  presenca?: "CONFIRMADA" | "CANCELOU" | null;
 };
 
 export type Agenda = {

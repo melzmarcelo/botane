@@ -38,6 +38,7 @@ from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
 from services import fidelidade
+from services import whatsapp
 from models.fidelidade import CheckinDoSite, CodigoDoCaixa, PedidoDeCodigo
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
@@ -787,6 +788,8 @@ def marcar_reserva(id_unidade: int, corpo: ReservaDoSite, pedido: Request) -> di
         feita = agenda.criar(cur, id_unidade, pedido_de_reserva, None)
         cur.execute("UPDATE reservas SET id_cliente = %s WHERE id = %s",
                     (cliente["id"], feita["id"]))
+        # 🔑 WhatsApp (099): recebida (aguardando a casa) ou confirmada, e o lembrete.
+        whatsapp.reserva_mudou(cur, id_unidade, feita["id"])
 
         return {
             "status": feita["status"],
@@ -893,6 +896,8 @@ def cancelar_reserva(id_unidade: int, corpo: CancelamentoDoSite, pedido: Request
                 detail="O horário desta reserva já passou. Fale com a casa.",
             )
         agenda.mudar_status(cur, id_unidade, achada["id"], "CANCELADA")
+        # Cancelou o CLIENTE: o lembrete sai da fila, sem o aviso "a casa cancelou".
+        whatsapp.reserva_mudou(cur, id_unidade, achada["id"], pela_casa=False)
         # 🔑 A recepção precisa saber que foi o CLIENTE, e não alguém da casa,
         # quem cancelou — é a diferença entre um recado e um engano.
         cur.execute(

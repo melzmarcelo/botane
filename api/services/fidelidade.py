@@ -378,6 +378,9 @@ def _fechar_cartoes(cur, id_unidade: int, id_cliente: int, hoje: date,
         premios.append({"codigo": codigo, "premio": cfg["premio"], "vence_em": vence.isoformat(),
                         "vale_de": vale_de.isoformat(),
                         "consumo": dias_em_texto(cfg["dias_consumo"])})
+        # 🔑 WhatsApp (099): "você ganhou", se o aviso estiver ligado na loja.
+        from services import whatsapp
+        whatsapp.premio_ganho(cur, id_unidade, id_cliente, premios[-1])
 
 
 def _resposta(cur, id_cliente: int, premios: list[dict]) -> dict:

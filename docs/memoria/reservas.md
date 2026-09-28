@@ -1073,3 +1073,73 @@ e pedidos de código.
   zero, e `_ja_fez_hoje` passou a olhar só a `parte 0` — o cliente ainda faz a visita de
   verdade no mesmo dia. A sobra repartida herda a origem do lançamento que a gerou.
 - Cobertura: seção 5e do `smoke_fidelidade.py` (93 no total).
+
+## ⏳ PENDENTE — o consumo (resgate) do prêmio da fidelidade (28/09/2026)
+
+🔑 **Pedido do dono:** *"implementar o consumo do prêmio adquirido"*, e em seguida: *"vamos
+gravar em memória este resgate do prêmio, por isto preciso validar com a cliente como é
+utilizado. E implementamos isto depois."* **Nada construído — aguarda a validação com a
+cliente.**
+- **O que existe hoje:** o prêmio nasce ao completar o cartão (código de 6 letras, vale da
+  visita seguinte, `vence_em`, `dias_consumo`). O balcão ENTREGA em Fidelidade → Prêmios ou no
+  Painel: marca `usado_em`/`usado_por`/`id_unidade_uso`, e retira o selo do dia se houver.
+- **O que falta decidir e construir:** o prato servido de graça NÃO sai do estoque pelo
+  Botané e o custo dele não aparece em lugar nenhum — a não ser que o caixa o lance no PDV
+  (aí entra como venda de valor zero, custo no CMV teórico e receita zero, puxando o food
+  cost para cima). As opções levadas ao dono:
+  1. **Baixa + custo pelo Botané**: ao entregar, escolher o(s) prato(s); baixa o estoque
+     (produz na hora se NA_HORA) e o custo cai numa linha própria "prêmios de fidelidade" na
+     apuração — fora da receita e do teórico, como o consumo interno. Dá o custo do programa
+     por mês. (Recomendada.)
+  2. **Pelo PDV**: o caixa lança o prato a zero no PDV; o Botané só liga o cupom ao código do
+     prêmio, para o relatório de custo do programa.
+  3. Só marcar como usado (o que já existe).
+  E, se houver custo: linha própria no CMV ou junto com consumo interno.
+- ⚠️ Perguntas para a cliente: o prêmio é sempre o mesmo prato ou o cliente escolhe? é
+  lançado no PDV hoje (a zero, com desconto de 100%)? quem entrega (caixa, garçom)? o custo
+  do programa precisa aparecer separado no CMV?
+
+## Mensagens por WhatsApp — API oficial da Meta, por loja (migração 099, 28/09/2026)
+
+🔑 **Pedido do dono:** *"envio de mensagens via WhatsApp para clientes, como reservas,
+confirmação de reserva, prêmios e outros assuntos, de forma configurável; e a confirmação de
+presença via WhatsApp."* E a decisão: *"API da Meta direto, com o número atual … tudo
+configurável, numa aba nova dentro da loja: a loja faz toda a validação com a Meta e só
+informa como vamos usar — fica configurável para outros clientes."* Estudo:
+[`docs/whatsapp-estudo.md`](../whatsapp-estudo.md).
+- **Aba WhatsApp no cadastro da loja** (`lojas/[id]` ganhou abas; `lojas/[id]/whatsapp/`:
+  conexão, avisos, histórico). `admin.unidades`. Rotas `routers/whatsapp.py`
+  (`/unidades/{id}/whatsapp`, `/teste`, `/mensagens`) e o webhook público
+  `/publico/whatsapp/webhook` (registrado ANTES do `publico`).
+- **Credenciais na `integracoes`** (`servico = 'whatsapp'`, por loja, cifradas como Omie/PDV):
+  token permanente e App secret. ⚠️ Nunca voltam na resposta ("configurado"), nem na
+  auditoria; campo em branco no salvar MANTÉM o que está. `config` guarda phone_number_id,
+  waba_id, número, versão da API e o `verify_token` (gerado na 1ª visita).
+- **Modo simulado** (padrão): a mensagem vai para o histórico como SIMULADA e não sai. "Enviar
+  de verdade" exige token e phone_number_id (400 sem eles).
+- **Sete avisos** (`EVENTOS` em `services/whatsapp.py`, com o TEXTO do modelo pronto para
+  cadastrar na Meta, variáveis {{n}} e categoria): reserva recebida, confirmada, lembrete com
+  confirmação de presença (botões Confirmo / Preciso cancelar, antecedência em horas),
+  cancelada pela casa, prêmio ganho, prêmio vencendo (dias antes), aniversário (marketing).
+  `whatsapp_avisos`: liga/desliga, nome do modelo, idioma, antecedência — por loja.
+- **Fila = histórico** (`whatsapp_mensagens`). ⚠️ `UNIQUE (id_unidade, evento, chave)`: a mesma
+  mensagem não entra duas vezes (chave = reserva+data+hora; remarcar muda a chave). O laço
+  `whatsapp.laco` (no `lifespan`, a cada 30 s, `SKIP LOCKED`) envia o que venceu; a cada 10 min
+  `varrer` enfileira prêmio vencendo e aniversário. Falha → volta à fila em 5 min, 3 tentativas,
+  e o erro aparece na tela da loja.
+- **Disparos na MESMA transação** do fato: `reserva_mudou` (criar e remarcar no balcão, mudar
+  status, reserva e cancelamento pelo site) e `premio_ganho` (em `_fechar_cartoes`). Remarcar e
+  cancelar tiram da fila o que era da data velha. Cancelou o CLIENTE → sem o aviso "a casa
+  cancelou".
+- **Webhook**: GET confere o `verify_token` de alguma loja; POST acha a loja pelo
+  `phone_number_id` e ⚠️ **confere a `X-Hub-Signature-256` com o App secret dela antes de
+  mexer em qualquer coisa** (403 sem). Estados só AVANÇAM (lida não volta a entregue). Botão
+  `CONFIRMAR:<id>` → `reservas.presenca = CONFIRMADA` (✓ na agenda); `CANCELAR:<id>` → reserva
+  CANCELADA pela regra de status + presença CANCELOU. Em seguida uma RESPOSTA em texto livre
+  (a janela de 24 h que o toque abriu). "PARAR" → `reserva_clientes.whatsapp_optout_em` (sai do
+  aniversário).
+- O envio real monta `template` com `components` body + botões quick_reply cujo `payload` é a
+  referência da mensagem — conferido na suíte com a Meta falsa (`httpx.post` trocado).
+- Tabelas: `whatsapp_mensagens` em `OPERACAO`, `whatsapp_avisos` em `PRESERVADAS`.
+- Cobertura: `smoke_whatsapp.py` (43).
+- ⏳ Falta: a loja fazer a parte dela na Meta (passo a passo na própria aba) e o 1º envio real.

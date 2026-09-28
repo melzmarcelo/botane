@@ -626,6 +626,8 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
     cur.execute(
         """SELECT r.id, r.hora, r.pessoas, r.status, r.origem, r.nome, r.telefone,
                   r.objetivo, r.observacao_cliente, r.observacao_interna, r.id_pessoa,
+                  -- 🔑 O que o cliente respondeu ao lembrete do WhatsApp (099).
+                  r.presenca, r.presenca_em,
                   coalesce(
                       (SELECT string_agg(m.nome, '+' ORDER BY m.nome)
                          FROM reserva_mesas rm JOIN mesas m ON m.id = rm.id_mesa

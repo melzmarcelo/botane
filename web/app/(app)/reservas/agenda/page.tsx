@@ -379,6 +379,15 @@ export default function AgendaDoDia() {
                       <td className="mono">{r.mesas || "—"}</td>
                       <td>
                         <Etiqueta cor={COR[r.status]}>{ROTULO[r.status] ?? r.status}</Etiqueta>
+                        {/* 🔑 A resposta ao lembrete do WhatsApp (099). */}
+                        {r.presenca === "CONFIRMADA" && (
+                          <span className="mt-0.5 block text-[12px] font-medium text-[var(--color-erva)]">
+                            ✓ confirmou pelo WhatsApp
+                          </span>
+                        )}
+                        {r.presenca === "CANCELOU" && (
+                          <span className="mt-0.5 block text-[12px] text-suave">cancelou pelo WhatsApp</span>
+                        )}
                       </td>
                       {podeEditar && (
                         <td>

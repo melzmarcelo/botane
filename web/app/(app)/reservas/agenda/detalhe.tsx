@@ -73,6 +73,8 @@ export default function DetalheDaReserva({
     >
       <div className="flex flex-col">
         {linha("Situação", <Etiqueta cor={COR[r.status]}>{ROTULO[r.status] ?? r.status}</Etiqueta>)}
+        {r.presenca && linha("WhatsApp", r.presenca === "CONFIRMADA"
+          ? "✓ confirmou presença pelo lembrete" : "cancelou pelo lembrete")}
         {linha("Horário", (
           <span className="mono">
             {r.hora}

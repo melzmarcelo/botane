@@ -18,6 +18,7 @@ import paginacao
 from services import segredos
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
+from services import whatsapp as whatsapp_servico
 import impressao
 from config import (
     ADMIN_EMAIL,
@@ -44,6 +45,7 @@ from routers import (
     catalogos,
     fidelidade,
     qrcodes,
+    whatsapp,
     cmv,
     consumo,
     email_config,
@@ -255,7 +257,9 @@ async def lifespan(app: FastAPI):
     # esperar a de vendas terminar — e um erro no meio derrubaria as duas.
     parar = asyncio.Event()
     tarefas = [asyncio.create_task(agenda_omie.laco(parar)),
-               asyncio.create_task(agenda_pdv.laco(parar))]
+               asyncio.create_task(agenda_pdv.laco(parar)),
+               # 🔑 A fila do WhatsApp (099): envia o que venceu e varre os avisos de data.
+               asyncio.create_task(whatsapp_servico.laco(parar))]
 
     print(f"[botane] API {VERSAO} pronta em http://localhost:{PORT}")
     yield
@@ -397,7 +401,10 @@ app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
 app.include_router(catalogos.router)
+# ⚠️ Antes do `publico`: `/publico/whatsapp/webhook` não pode cair em `/publico/{id_unidade}`.
+app.include_router(whatsapp.publico)
 app.include_router(publico.router)
+app.include_router(whatsapp.router)
 # ⚠️ Antes de `reservas`: `/reservas/qrcodes` não pode cair numa rota de reserva.
 app.include_router(qrcodes.router)
 app.include_router(reservas.router)

@@ -31,6 +31,7 @@ from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reserva_clientes as clientes
 from services import reservas as servico
 from services import reservas_agenda as agenda
+from services import whatsapp
 
 router = APIRouter(prefix="/reservas", tags=["Reservas"])
 
@@ -342,6 +343,8 @@ def criar_reserva(body: ReservaCreate,
         if linha:
             body.confirmacao_da_loja = linha["confirmacao"]
         r = agenda.criar(cur, id_unidade, body, ctx.id_usuario)
+        # 🔑 WhatsApp (099): o aviso nasce na MESMA transação — reserva que não grava não avisa.
+        whatsapp.reserva_mudou(cur, id_unidade, r["id"])
         auditoria.registrar(cur, ctx.id_usuario, "reserva", r["id"], "criar",
                             depois={"data": str(body.data), "hora": str(body.hora),
                                     "pessoas": body.pessoas, "nome": body.nome,
@@ -369,6 +372,8 @@ def remarcar_reserva(id_reserva: int, body: ReservaRemarcar,
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
         r = agenda.remarcar(cur, id_unidade, id_reserva, body)
+        # Remarcou: o lembrete da data antiga sai da fila e nasce o da nova.
+        whatsapp.reserva_mudou(cur, id_unidade, id_reserva)
         auditoria.registrar(cur, ctx.id_usuario, "reserva", id_reserva, "remarcar",
                             antes=r["antes"], depois=r["depois"] | {"mesas": r["mesas"]})
     de, para = r["antes"], r["depois"]
@@ -391,6 +396,8 @@ def mudar_status_reserva(id_reserva: int, body: MudarStatus,
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
         r = agenda.mudar_status(cur, id_unidade, id_reserva, body.status)
+        # Pela CASA: confirmou → "confirmada"; cancelou → "cancelada pela casa".
+        whatsapp.reserva_mudou(cur, id_unidade, id_reserva, pela_casa=True)
         auditoria.registrar(cur, ctx.id_usuario, "reserva", id_reserva, "status",
                             antes={"status": r["de"]}, depois={"status": r["para"]})
     return r | {"message": f"Reserva marcada como {body.status.lower()}"}

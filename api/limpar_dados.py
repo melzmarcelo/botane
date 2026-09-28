@@ -85,6 +85,8 @@ OPERACAO = [
     "reserva_mesas", "reserva_bloqueios", "reserva_dias_especiais", "reservas",
     # A fidelidade (091) pendura no cliente: visitas e prêmios são operação.
     "fidelidade_checkins", "fidelidade_premios", "fidelidade_solicitacoes",
+    # O histórico do WhatsApp (099) é operação; os avisos da loja são configuração.
+    "whatsapp_mensagens",
     # sessões e links de senha da base antiga
     "sessoes", "senha_tokens",
 ]
@@ -388,6 +390,7 @@ PRESERVADAS = [
     "reserva_config", "reserva_horarios", "reserva_permanencias",
     # A regra do cartão (quantas visitas, qual prêmio) descreve a casa.
     "fidelidade_config",
+    "whatsapp_avisos",
 ]
 
 

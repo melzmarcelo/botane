@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Campo, Carregando, Cartao, Etiqueta } from "@/components/ui";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import WhatsappDaLojaAba from "./whatsapp";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
 import FormularioLoja, { corpoDaLoja, LOJA_VAZIA, LojaForm } from "../formulario";
@@ -128,6 +130,9 @@ export default function PaginaLoja() {
   const id = Number(useParams().id);
 
   const [loja, setLoja] = useState<Loja | null>(null);
+  // 🔑 **Abas** (28/09/2026): o WhatsApp da loja ganhou a dele — pedido do dono, "numa aba
+  // nova dentro da loja". No endereço, para o F5 voltar à mesma.
+  const [aba, setAba] = useEstadoNaUrl<string>("aba", "cadastro", { atraso: 0 });
   const [f, setF] = useState<LojaForm>(LOJA_VAZIA);
   const [param, setParam] = useState<Parametros | null>(null);
   const [previa, setPrevia] = useState<Previa | null>(null);
@@ -244,6 +249,24 @@ export default function PaginaLoja() {
         </ExplicaTela>
       </header>
 
+      <div className="flex gap-1 border-b border-[var(--color-linha)]" role="tablist" aria-label="partes da loja">
+        {[
+          { v: "cadastro", r: "Cadastro e parâmetros" },
+          { v: "whatsapp", r: "WhatsApp" },
+        ].map((o) => (
+          <button key={o.v} type="button" role="tab" aria-selected={aba === o.v}
+                  onClick={() => setAba(o.v)}
+                  className={`-mb-px border-b-2 px-4 py-2 text-[14px] font-semibold ${
+                    aba === o.v ? "border-[var(--color-erva)] text-tinta"
+                      : "border-transparent text-suave hover:text-tinta"}`}>
+            {o.r}
+          </button>
+        ))}
+      </div>
+
+      {aba === "whatsapp" && <WhatsappDaLojaAba idLoja={loja.id} podeEditar={podeEditar} />}
+
+      {aba !== "whatsapp" && (<>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       <FormularioLoja
@@ -393,6 +416,7 @@ export default function PaginaLoja() {
           </div>
         )}
       </Cartao>
+      </>)}
     </div>
   );
 }
