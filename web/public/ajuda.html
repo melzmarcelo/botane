@@ -266,7 +266,7 @@
 </style>
 
 <header class="capa">
-  <span class="selo">Botané Deli e Café · versão 1.1.60 · setembro de 2026</span>
+  <span class="selo">Botané Deli e Café · versão 1.1.62 · setembro de 2026</span>
   <h1>Botané por dentro</h1>
   <p class="linha-fina">
     Todos os processos do sistema e o caminho que cada dado percorre — de onde ele entra,
@@ -299,7 +299,7 @@
       <li><a href="#pessoas">14 · Pessoas e consumo</a></li>
       <li><a href="#etiquetas">15 · Etiquetas de validade</a></li>
       <li class="grupo"><span class="rotulo">Portal de Clientes</span></li>
-      <li><a href="#portal">16 · Site, reservas e catálogos</a></li>
+      <li><a href="#portal">16 · Site, reservas, catálogos e pedidos</a></li>
       <li><a href="#fidelidade">17 · Fidelidade</a></li>
       <li><a href="#whatsapp">18 · WhatsApp</a></li>
       <li class="grupo"><span class="rotulo">Conectado</span></li>
@@ -772,13 +772,14 @@
         <thead><tr><th>Grupo do menu</th><th>O que mora nele</th></tr></thead>
         <tbody>
           <tr><td><strong>Cadastros</strong></td><td>Produtos, fichas técnicas, pessoas, tabelas de apoio, exportação para o PDV</td></tr>
+          <tr><td><strong>Notas de entrada</strong></td><td>Item direto: as notas de compra</td></tr>
+          <tr><td><strong>Vendas</strong></td><td><strong>Períodos</strong> (os ciclos de consumo) e <strong>Documentos</strong> (os cupons do PDV e os lançados à mão, com Lançar, Consumo por pessoa e Sem vínculo)</td></tr>
           <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
+          <tr><td><strong>CMV</strong></td><td>Item direto: o painel de CMV</td></tr>
+          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos e pedidos (painel e lista) — só aparece na loja que ligou o módulo</td></tr>
           <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
-          <tr><td><strong>Compras</strong></td><td>Notas de entrada</td></tr>
-          <tr><td><strong>CMV</strong></td><td>Painel de CMV, visão da rede, vendas, consumo por pessoa e períodos de consumo</td></tr>
-          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos — só aparece na loja que ligou o módulo</td></tr>
-          <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), usuários, papéis, integrações, auditoria</td></tr>
-        </tbody>
+          <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), visão da rede (com mais de uma loja), usuários, papéis, integrações, auditoria</td></tr>
+</tbody>
       </table>
 
       <div class="grade-2">
@@ -2022,7 +2023,7 @@
       </div>
 
       <p>
-        Em <strong>Vendas ▸ Buscar no PDV</strong> o sistema traz os cupons do período.
+        Em <strong>Vendas ▸ Documentos ▸ Buscar no PDV</strong> o sistema traz os cupons do período.
         Também roda sozinho, se a casa quiser: manual, de hora em hora ou uma vez por dia,
         configurado em Integrações. Venda de sábado que ninguém importa é receita faltando no
         CMV do fim de semana — e a variância sai boa demais, porque o teórico não conta o que
@@ -2082,7 +2083,7 @@
       <h3>O item da venda precisa achar o produto daqui</h3>
       <p>
         O vínculo é pelo <strong>código do PDV</strong>, guardado no cadastro do produto. Item
-        que não acha dono cai na fila de <strong>Vendas ▸ Sem vínculo</strong>, que é uma
+        que não acha dono cai na fila de <strong>Vendas ▸ Documentos ▸ Sem vínculo</strong>, que é uma
         lista de trabalho: alguém percorre, cadastra ou vincula, e volta.
       </p>
       <div class="regra">
@@ -2303,8 +2304,10 @@
           <tr><td>Nota esperando conciliação, ou conciliada e não lançada</td><td>A nota</td></tr>
           <tr><td>Produto em rascunho</td><td>O cadastro a completar</td></tr>
           <tr><td>Produto de produção própria sem ficha homologada</td><td>A ficha</td></tr>
-          <tr><td>Item vendido sem produto no cadastro</td><td>Vendas ▸ Sem vínculo</td></tr>
+          <tr><td>Item vendido sem produto no cadastro</td><td>Vendas ▸ Documentos ▸ Sem vínculo</td></tr>
           <tr><td>Período anterior ainda não fechado</td><td>O fechamento do CMV</td></tr>
+          <tr><td>Pedido do site esperando confirmação há 15 minutos</td><td>O painel de pedidos</td></tr>
+          <tr><td>Pedido confirmado sem lançar no PDV</td><td>A lista, já filtrada</td></tr>
         </tbody>
       </table>
 
@@ -2572,7 +2575,7 @@
       <p>
         Toda outra tela responde por <em>uma</em> loja, e está certo. Mas o dono de duas precisa
         ver as duas — e somar de cabeça dois food costs de bases diferentes é a conta que
-        ninguém faz certo. A tela <strong>Rede</strong> roda a <em>mesma</em> apuração de cada
+        ninguém faz certo. A tela <strong>Administração ▸ Visão da rede</strong> roda a <em>mesma</em> apuração de cada
         loja, uma por vez, e mostra lado a lado.
       </p>
       <div class="regra">
@@ -2692,7 +2695,7 @@
       <p>
         No cadastro da pessoa se diz como ela paga o que consome: pelo <strong>preço de
         venda</strong> ou pelo <strong>custo</strong>, com ou sem desconto. Lançando uma venda à
-        mão em <strong>Vendas ▸ Lançar</strong> e escolhendo a pessoa, o sistema calcula o valor
+        mão em <strong>Vendas ▸ Documentos ▸ Lançar</strong> e escolhendo a pessoa, o sistema calcula o valor
         de cada item — e mostra a prévia do cupom antes de gravar.
       </p>
       <table>
@@ -2721,7 +2724,7 @@
 
       <h3>O período de consumo: abre, acumula, fecha no pagamento</h3>
       <p>
-        Em <strong>CMV ▸ Períodos de consumo</strong> abre-se o ciclo de cobrança (por exemplo, o mês). Todo
+        Em <strong>Vendas ▸ Períodos</strong> abre-se o ciclo de cobrança (por exemplo, o mês). Todo
         consumo de pessoa lançado enquanto ele está aberto se acumula nele; ao
         <strong>fechar</strong>, cada pessoa ganha o seu recibo e o consumo fica carimbado como
         cobrado.
@@ -2730,7 +2733,7 @@
         <p class="rotulo">Consumo de pessoa só se lança com ciclo aberto</p>
         <p>
           É no ciclo que a dívida se acumula. Sem ciclo aberto, a tela avisa e aponta para
-          Períodos de consumo. A venda de balcão, sem pessoa, continua entrando normalmente.
+          Vendas ▸ Períodos. A venda de balcão, sem pessoa, continua entrando normalmente.
         </p>
       </div>
       <ul>
@@ -2741,7 +2744,7 @@
 
       <h3>Quem consumiu o quê</h3>
       <p>
-        <strong>Vendas ▸ Consumo por pessoa</strong> recorta por ciclo e mostra, por pessoa, o total — ou
+        <strong>Vendas ▸ Documentos ▸ Consumo por pessoa</strong> recorta por ciclo e mostra, por pessoa, o total — ou
         <strong>por documento</strong>, ou <strong>por documento com os itens</strong>. As três
         formas existem na tela e no PDF, e dá para filtrar qualquer pessoa que tenha consumo,
         com política ou sem.
@@ -2850,7 +2853,7 @@
 
     <!-- =============================================================== portal -->
     <section id="portal">
-      <h2>16 · Site, reservas e catálogos</h2>
+      <h2>16 · Site, reservas, catálogos e pedidos</h2>
       <p class="chamada">
         O Portal de Clientes: o site da casa, a reserva de mesa e o cardápio — ligado loja a
         loja.
@@ -2942,6 +2945,52 @@
         abreviação do PDV) e o texto que se conta ao cliente. Vários catálogos podem estar ativos
         ao mesmo tempo, com período de validade — a tela diz quais estão <em>no ar hoje</em>. Só
         rascunho se apaga; o resto se inativa. Um catálogo pode exigir cadastro para abrir.
+      </p>
+
+      <h3>Pedidos pelo cardápio</h3>
+      <p>
+        Um catálogo de <strong>Produtos</strong> pode receber pedidos: no cadastro dele, o cartão
+        <strong>Pedidos pelo site</strong> liga o carrinho e diz como — retirada e/ou entrega, taxa de
+        entrega, pedido mínimo, até quantos dias à frente se encomenda (com dia e hora), a
+        antecedência mínima, as formas de pagamento e a <strong>mensagem sobre o pagamento</strong>,
+        que o cliente lê antes de enviar. Catálogo em PDF não aceita pedido.
+      </p>
+      <p>
+        No site, cada item com preço ganha <em>Adicionar</em>; uma barra fixa no pé mostra quantos
+        itens e o total. No pedido, o cliente escolhe retirar ou receber, <em>o quanto antes</em> ou
+        um dia e hora em que a casa atende, como vai pagar, e envia — identificando-se pelo telefone,
+        como na reserva. Ele acompanha em <strong>Meus pedidos</strong> e cancela enquanto a casa
+        ainda não confirmou.
+      </p>
+      <div class="regra perigo">
+        <p class="rotulo">O pedido NÃO vira venda no Botané</p>
+        <p>
+          A casa lança o pedido no <strong>PDV</strong>, como sempre — e a venda chega pela busca de
+          sempre, com estoque, receita e CMV. Aqui a pessoa só marca <strong>“Lançado no PDV”</strong>,
+          com o número do cupom se quiser. Uma segunda venda aqui contaria tudo em dobro, calada.
+          Com o cupom informado, quando a venda chega do PDV o pedido mostra
+          <em>“venda importada ✓”</em> — só para conferir.
+        </p>
+      </div>
+      <p>
+        A casa <strong>sempre confirma</strong> — e pode <strong>trocar produtos</strong> antes:
+        mudar quantidade, tirar item, pôr outro do mesmo cardápio (pelo preço de hoje; o que já
+        estava mantém o preço do envio). O que o cliente pediu fica no histórico, e ele vê o pedido
+        como ficou. O preço é sempre do <strong>servidor</strong>: o site só manda item e quantidade.
+      </p>
+      <table>
+        <thead><tr><th>Tela</th><th>Para quê</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pedidos ▸ Painel</strong></td><td>A tela do balcão: três colunas — <em>confirmar</em>, <em>falta lançar no PDV</em>, <em>para quando</em> —, atualizando sozinha, com som de pedido novo</td></tr>
+          <tr><td><strong>Pedidos ▸ Lista de pedidos</strong></td><td>Todos, com filtros por situação, dia e busca; o detalhe tem confirmar, trocar produtos, recusar, cancelar, lançado no PDV, pago, entregue e o PDF do pedido</td></tr>
+          <tr><td><strong>Início</strong></td><td>O cartão “Pedidos do site” e os alertas: pedido novo parado há 15 minutos, e confirmado sem lançar no PDV</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Situações: <em>novo → confirmado → entregue</em>, ou <em>recusado</em> e <em>cancelado</em>
+        (com motivo, que o cliente vê). O pagamento não passa pelo sistema — marca-se
+        <strong>pago</strong> (Pix, cartão, dinheiro) quando a casa recebe. Ao confirmar, sai o
+        WhatsApp <em>pedido confirmado</em>, se a loja o ligou.
       </p>
 
       <h3>Os QR codes da casa</h3>
@@ -3043,6 +3092,7 @@
           <tr><td>Reserva cancelada pela casa</td><td>Quando a casa cancela</td></tr>
           <tr><td>Prêmio da fidelidade conquistado</td><td>Ao completar o cartão</td></tr>
           <tr><td>Prêmio da fidelidade vencendo</td><td>Dias antes de vencer</td></tr>
+          <tr><td>Pedido do site confirmado</td><td>Quando a casa confirma o pedido, já com o total final</td></tr>
           <tr><td>Aniversário do cliente</td><td>No dia</td></tr>
         </tbody>
       </table>
@@ -3193,7 +3243,7 @@
               <td>Venda</td>
               <td>Planilha do PDV ou lançamento manual</td>
               <td><code>vendas</code>, <code>venda_itens</code></td>
-              <td>CMV ▸ Vendas</td>
+              <td>Vendas ▸ Documentos</td>
             </tr>
             <tr>
               <td>Contagem</td>
@@ -3229,7 +3279,7 @@
               <td>Fechamento do período</td>
               <td>Ação do gerente</td>
               <td><code>cmv_fechamentos</code>, <code>cmv_movimentacao</code></td>
-              <td>CMV ▸ Painel</td>
+              <td>CMV</td>
             </tr>
             <tr>
               <td>Registro de ações</td>
@@ -3283,7 +3333,7 @@
               <td>Ciclo de consumo e recibos</td>
               <td>Abrir e fechar o período</td>
               <td><code>consumo_periodos</code>, <code>consumo_periodo_pessoas</code></td>
-              <td>CMV ▸ Períodos de consumo</td>
+              <td>Vendas ▸ Períodos</td>
             </tr>
             <tr>
               <td>Validade por evento e conservação</td>
@@ -3340,6 +3390,18 @@
               <td>Fidelidade ▸ Painel</td>
             </tr>
             <tr>
+              <td>Pedido do site, itens e histórico</td>
+              <td>O carrinho do cardápio</td>
+              <td><code>pedidos</code>, <code>pedido_itens</code>, <code>pedido_historico</code></td>
+              <td>Portal de Clientes ▸ Pedidos</td>
+            </tr>
+            <tr>
+              <td>Se o catálogo aceita pedido, e como</td>
+              <td>Cadastro do catálogo</td>
+              <td><code>catalogo_pedidos_config</code></td>
+              <td>Catálogos ▸ o catálogo ▸ Pedidos pelo site</td>
+            </tr>
+            <tr>
               <td>Mensagens de WhatsApp</td>
               <td>Os avisos ligados na loja</td>
               <td><code>whatsapp_mensagens</code></td>
@@ -3394,6 +3456,8 @@
             <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">17</a></td></tr>
             <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">17</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
             <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">17</a></td></tr>
+            <tr><td class="mono">28/09</td><td>Menu: <strong>CMV</strong> direto; grupo <strong>Vendas</strong> com Períodos e Documentos; Visão da rede em Administração</td><td><a href="#navegar">navegar</a></td></tr>
+            <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">18</a>, <a href="#etiquetas">15</a></td></tr>
           </tbody>
         </table>

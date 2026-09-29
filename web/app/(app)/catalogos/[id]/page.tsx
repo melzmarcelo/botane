@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Modal, Vazio } from "@/components/ui";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import * as cat from "@/lib/catalogos";
+import PedidosDoCatalogo from "./pedidos";
 
 /**
  * O cardápio montado aqui dentro: categorias, subcategorias e produtos.
@@ -25,6 +26,7 @@ import * as cat from "@/lib/catalogos";
  * modal sem virar rolagem dentro de rolagem. A lista de catálogos continua
  * sendo o cadastro da CAPA; aqui é o miolo.
  */
+
 export default function ConfigurarCatalogo() {
   const { id } = useParams<{ id: string }>();
   const idCatalogo = Number(id);
@@ -560,6 +562,9 @@ export default function ConfigurarCatalogo() {
         className="hidden"
         onChange={(e) => void enviarFoto(e.target.files?.[0])}
       />
+
+      {/* 🔑 Pedidos pelo site (101): o carrinho se liga aqui, no catálogo de produtos. */}
+      <PedidosDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
 
       {conteudo.categorias.length === 0 ? (
         <Vazio>

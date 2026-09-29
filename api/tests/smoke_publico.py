@@ -308,9 +308,11 @@ item = (cats[0]["itens"] or [{}])[0] if cats else {}
 checar("o item traz nome, descricao e PRECO",
        item.get("nome") and item.get("descricao")
        and item.get("preco") == 9.5, item)
-# ⚠️ **Nada de id interno no cardapio**: o cliente nao precisa do id do produto.
-checar("e NADA de id de produto na resposta",
-       "id_produto" not in item and "id" not in item, list(item))
+# ⚠️ **Nada de id do PRODUTO no cardapio**: o cliente nao precisa dele. 🔑 O `id` que
+# aparece desde 28/09/2026 (migracao 101) e o do ITEM do catalogo, que o carrinho manda de
+# volta ao pedir — o servidor e que descobre o produto e o preco.
+checar("e NADA de id de produto na resposta (so o id do ITEM, para o carrinho)",
+       sorted(item) == ["descricao", "foto", "id", "nome", "preco"], list(item))
 
 # 🔑 **O nome de VITRINE ganha do nome do cadastro** (migracao 085).
 chamar("PUT", f"/produtos/{prod['id']}",

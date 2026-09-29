@@ -77,7 +77,7 @@ export default function PaginaRede() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <p className="rotulo">CMV</p>
+        <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">
           Visão da rede
         </h1>

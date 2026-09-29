@@ -687,3 +687,18 @@ precisam é só de um teto de altura.
   célula e a coluna virou a mais larga da tabela. A largura mora no **invólucro**
   (`<span className="block w-[96px]"><input className="campo …" /></span>`), que resolve pela
   cascata em vez de brigar com ela. ⚠️ O mesmo vale para `<select className="campo">`.
+
+- 🔑 **CMV direto no menu; Vendas com Períodos e Documentos** (28/09/2026, pedido do dono:
+  *"colocar o CMV diretamente no menu, criar um novo item com Vendas, e dentro Períodos e
+  Documentos (atual Vendas)"*). O grupo "CMV" ficou com UM item (`/cmv`, nome "CMV") e vira
+  item direto pela regra do `montarMenu`. O grupo novo "Vendas" tem **Períodos** (`/consumo`,
+  mesmas chaves de antes) e **Documentos** (`/vendas`, a antiga tela "Vendas").
+  ⚠️ **A Visão da rede foi para Administração**, ao lado de Lojas: dentro do grupo CMV, numa
+  casa de duas lojas, ele voltaria a ser pasta de dois itens — o contrário do pedido.
+  ⚠️ Rotas e chaves NÃO mudaram (atalho fixado e favorito de quem usa continuam valendo); só
+  nome no menu e o rótulo de caminho das telas (`Vendas`, `Administração`). A bateria do
+  navegador cobra a forma nova; o manual (`ajuda.html`) foi acertado junto.
+  🔑 **E a ordem dos grupos é a do dono** (mesmo dia): *"Cadastro · Nota de Entrada · Vendas ·
+  Estoque · CMV · Portal de Cliente · Etiquetas · Administração"*. É a ordem do array `MENU`
+  em `lib/menu.ts` — grupo novo entra no lugar que o dono disser, não no fim.
+

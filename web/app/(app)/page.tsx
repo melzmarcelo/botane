@@ -1,5 +1,6 @@
 "use client";
 
+import PedidosDoDia, { type PedidosDoInicio } from "./pedidos-do-dia";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -116,6 +117,8 @@ type Painel = {
     hoje: number;
     pendentes: number;
   } | null;
+  /** Os pedidos do site (101). Nulo sem Portal, sem permissão ou sem pedido nenhum. */
+  pedidos?: PedidosDoInicio | null;
 };
 
 function Indicador({
@@ -267,6 +270,8 @@ export default function Inicio() {
           reserva ativado, listar as reservas marcadas, colocar 5 e adicionar
           scroll."* Só aparece na loja que usa reserva — o servidor manda nulo
           nas outras. */}
+      {p.pedidos && <PedidosDoDia p={p.pedidos} />}
+
       {p.reservas && (
         <Cartao
           titulo="Mesas marcadas"

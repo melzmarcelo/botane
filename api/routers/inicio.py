@@ -24,6 +24,7 @@ from services import alertas as alertas_motor
 from services import cmv as cmv_motor
 from services import periodos, relatorios
 from services import reservas as reservas_servico
+from services import pedidos as pedidos_servico
 
 router = APIRouter(prefix="/inicio", tags=["Início"])
 
@@ -319,6 +320,12 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             "reservas": (_reservas_marcadas(cur, id_unidade)
                          if ctx.pode("reservas.ver")
                          and reservas_servico.ligado(cur, id_unidade) else None),
+            # 🔑 **Pedidos do site** (101): os novos esperando confirmação e os confirmados que
+            # ainda não foram lançados no PDV. Nulo sem o Portal, sem permissão, ou numa loja
+            # que nunca recebeu pedido.
+            "pedidos": (pedidos_servico.inicio(cur, id_unidade)
+                        if (ctx.pode("pedidos.ver") or ctx.pode("pedidos.operar"))
+                        and reservas_servico.ligado(cur, id_unidade) else None),
             "dinheiro": None,
             # ⚠️ Nulo para quem não vê dinheiro, como o resto: o cartão do dia
             # é valor e ticket médio, e um cartão só com a contagem seria uma

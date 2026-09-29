@@ -7461,6 +7461,40 @@ try {
   checar("grupo de uma tela so vira item: Compras deixou de ser pasta",
     menuNovo.grupoCompras === false, menuNovo);
   checar("e a tela dela continua alcancavel", menuNovo.linkCompras >= 1, menuNovo);
+  // 🔑 **CMV direto, e Vendas com Períodos e Documentos** (pedido do dono, 28/09/2026).
+  const menuVendas = await p.evaluate(() => {
+    const grupos = [...document.querySelectorAll("aside .menu-grupo")].map((g) => g.innerText.trim());
+    const link = (h) => document.querySelector(`aside a[href="${h}"]`)?.textContent.trim() ?? null;
+    return {
+      grupoCmv: grupos.some((g) => /^cmv/i.test(g)),
+      grupoVendas: grupos.some((g) => /^vendas/i.test(g)),
+      cmv: link("/cmv"), periodos: link("/consumo"), documentos: link("/vendas"),
+    };
+  });
+  checar("o CMV e item direto no menu, nao pasta",
+    !menuVendas.grupoCmv && /CMV/.test(menuVendas.cmv ?? ""), menuVendas);
+  // 🔑 **A ordem é a do dono** (28/09/2026): Cadastro · Nota de entrada · Vendas · Estoque ·
+  // CMV · Portal de Clientes · Etiquetas · Administração. Cada marco é o botão do grupo ou o
+  // link do item direto; a posição no DOM é a posição na lateral.
+  const ordemMenu = await p.evaluate(() => {
+    const todos = [...document.querySelectorAll("aside .menu-grupo, aside a")];
+    const pos = (achar) => todos.findIndex(achar);
+    const grupo = (re) => pos((e) => e.classList.contains("menu-grupo") && re.test(e.innerText.trim()));
+    // ⚠️ A ÚLTIMA ocorrência: a primeira pode ser um atalho fixado, no alto da lateral.
+    const link = (h) => todos.findLastIndex((e) => e.getAttribute?.("href") === h);
+    return [
+      ["Cadastros", grupo(/^cadastros/i)], ["Notas", link("/compras")],
+      ["Vendas", grupo(/^vendas/i)], ["Estoque", grupo(/^estoque/i)], ["CMV", link("/cmv")],
+      ["Portal", grupo(/^portal/i)], ["Etiquetas", grupo(/^etiquetas/i)],
+      ["Administração", grupo(/^administra/i)],
+    ].filter(([, i]) => i >= 0);
+  });
+  checar("os grupos do menu estao na ordem pedida pelo dono",
+    ordemMenu.length >= 7 && ordemMenu.every(([, i], k) => k === 0 || i > ordemMenu[k - 1][1]),
+    ordemMenu);
+  checar("e Vendas e um grupo com Periodos e Documentos",
+    menuVendas.grupoVendas && /Per[íi]odos/.test(menuVendas.periodos ?? "")
+      && /Documentos/.test(menuVendas.documentos ?? ""), menuVendas);
 
   // 🔑 **Nenhum nome de tela pode ser cortado** (15/09/2026, relatado pelo dono:
   // *"aumentar um pouco o menu pois alguns itens cortaram a descricao"*). Com o
@@ -9116,6 +9150,81 @@ try {
   await p.reload({ waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1200));
   checar("junto com o grupo no menu", !(await grupoNoMenu()));
+
+  console.log("13. pedidos pelo catalogo: painel, confirmar e lancado no PDV");
+  // 🔑 Pedido do dono (28/09/2026): *"uma tela com pedidos, um painel para acompanhar"*.
+  // O pedido nasce pela API (o carrinho do SITE tem verificacao propria,
+  // `scripts/verificar-pedido-site.mjs`); aqui se prova o lado da CASA.
+  await ligarReservas(true);
+  const { dados: cfgPed } = await api("GET", "/reservas/configuracao", null, token);
+  // A casa aberta o dia todo, e devolvida no fim: a fase testa o pedido, nao o relogio.
+  await api("PUT", "/reservas/configuracao", {
+    ...cfgPed, horarios: cfgPed.horarios.map((h) => ({ ...h, aberto: true, abre: "00:00",
+      fecha: "23:59", ultima_reserva: "23:00" })) }, token);
+  aoTerminar.push(() => api("PUT", "/reservas/configuracao", cfgPed, token));
+  const { dados: catPed } = await api("POST", "/catalogos",
+    { nome: `Pedidos tela ${marcaNota}`, origem: "PRODUTOS", situacao: "ATIVO" }, token);
+  aoTerminar.push(() => api("DELETE", `/catalogos/${catPed.id}`, null, token));
+  const { dados: gPed } = await api("POST", `/catalogos/${catPed.id}/categorias`, { nome: "Salgados" }, token);
+  const { dados: pPed } = await api("POST", "/produtos", { nome: `TELA COXINHA ${marcaNota}`,
+    tipo: "INSUMO", um_estoque: "UN", controla_estoque: false }, token);
+  const { dados: pAtual } = await api("GET", `/produtos/${pPed.id}`, null, token);
+  await api("PUT", `/produtos/${pPed.id}`, { ...pAtual, integrado_pdv: true, preco_venda: 8 }, token);
+  const { dados: itPed } = await api("POST", `/catalogos/categorias/${gPed.id}/itens`,
+    { id_produto: pPed.id }, token);
+  await api("PUT", `/pedidos/config/${catPed.id}`, { aceita: true, retirada: true, entrega: false,
+    taxa_entrega: 0, pedido_minimo: 0, antecedencia_min: 30, antecedencia_max_dias: 7,
+    pagamentos: ["RETIRADA"], texto_pagamento: null }, token);
+  const fonePed = `4797${String(Date.now()).slice(-7)}`;
+  await api("POST", "/publico/1/cliente", { telefone: fonePed, nome: "Tela Pedido",
+    genero: "MASCULINO", cidade: "Blumenau", nascimento: "1988-01-02", aceite_termo: true });
+  const amanhaPed = new Date(Date.now() + 86400000).toLocaleDateString("sv-SE");
+  const { status: stPed, dados: pedido } = await api("POST", `/publico/1/catalogos/${catPed.id}/pedido`, {
+    telefone: fonePed, chave: `tela-${marcaNota}`, modo: "RETIRADA", forma_pagamento: "RETIRADA",
+    para_quando: `${amanhaPed}T12:00`, itens: [{ id_item: itPed.id, quantidade: 3 }] });
+  checar("o pedido de teste nasce pela API", stPed === 201 && pedido.numero, { stPed, pedido });
+
+  await irPara(p, `${WEB}/pedidos/painel`);
+  checar("o painel mostra o pedido novo", await esperarTexto(p, `Nº ${pedido.numero} · Tela Pedido`, 12000));
+  const colunaDe = () => p.evaluate((n) => {
+    const secoes = [...document.querySelectorAll("main section")];
+    return secoes.findIndex((s) => s.innerText.includes(`Nº ${n} ·`));
+  }, pedido.numero);
+  checar("na primeira coluna, a de confirmar", (await colunaDe()) === 0, await colunaDe());
+  await p.evaluate((n) => {
+    const cartao = [...document.querySelectorAll("main section .cartao")]
+      .find((c) => c.innerText.includes(`Nº ${n} ·`));
+    [...cartao.querySelectorAll("button")].find((b) => b.textContent.trim() === "confirmar")?.click();
+  }, pedido.numero);
+  await p.waitForFunction((n) => {
+    const s = [...document.querySelectorAll("main section")];
+    return s[1] && s[1].innerText.includes(`Nº ${n} ·`);
+  }, { timeout: 12000 }, pedido.numero).catch(() => {});
+  checar("confirmar leva o pedido para 'lancar no PDV'", (await colunaDe()) === 1, await colunaDe());
+  await p.evaluate((n) => {
+    const cartao = [...document.querySelectorAll("main section")][1].querySelectorAll(".cartao");
+    const meu = [...cartao].find((c) => c.innerText.includes(`Nº ${n} ·`));
+    [...meu.querySelectorAll("button")].find((b) => /lan[çc]ado no PDV/i.test(b.textContent))?.click();
+  }, pedido.numero);
+  const campoCupom = await p.waitForSelector("dialog input, [role=dialog] input", { timeout: 8000 })
+    .catch(() => null);
+  if (campoCupom) await campoCupom.type(`CUP${marcaNota}`);
+  checar("a janela do cupom abre", !!campoCupom);
+  checar("e marca como lancado", await clicarQuando(p, "Marcar como lançado"));
+  await new Promise((r) => setTimeout(r, 1500));
+  const { dados: depois } = await api("GET", `/pedidos?situacao=confirmados&busca=${pedido.numero}`, null, token);
+  const esse = (depois || []).find((x) => x.numero === pedido.numero);
+  checar("o servidor gravou o lancamento com o cupom",
+    esse && esse.lancado_pdv_em && esse.cupom_pdv === `CUP${marcaNota}`, esse);
+
+  await irPara(p, `${WEB}/pedidos/${esse ? esse.id : 0}`);
+  checar("o detalhe mostra o pedido e o cupom",
+    await esperarTexto(p, `Pedido ${pedido.numero}`, 10000) && await esperarTexto(p, `CUP${marcaNota}`, 4000));
+  const menuPed = await p.evaluate(() =>
+    [...document.querySelectorAll("aside a")].some((a) => a.getAttribute("href") === "/pedidos/painel"));
+  checar("o menu do Portal tem o painel de pedidos", menuPed);
+  if (esse) await api("POST", `/pedidos/${esse.id}/cancelar`, { motivo: "pedido de teste da bateria" }, token);
+  await ligarReservas(false);
 } finally {
   // O que precisa voltar ao lugar mesmo se o roteiro estourar no meio.
   for (const desfazer of aoTerminar) {

@@ -161,8 +161,8 @@ export default function PaginaVendas() {
   return (
     <div className="flex flex-col gap-6">
       <CabecalhoTela
-        caminho="CMV"
-        titulo={<>Vendas</>}
+        caminho="Vendas"
+        titulo={<>Documentos</>}
         explica={
           <>
             As vendas alimentam o CMV teórico: quantidade vendida × custo da ficha na data. O

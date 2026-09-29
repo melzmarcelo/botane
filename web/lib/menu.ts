@@ -35,6 +35,9 @@ export type ItemMenu = {
 export type GrupoMenu = { grupo: string; icone: NomeIcone; itens: ItemMenu[] };
 
 export const MENU: GrupoMenu[] = [
+  // 🔑 **A ORDEM é a do dono** (28/09/2026): Cadastro · Nota de entrada · Vendas ·
+  // Estoque · CMV · Portal de Clientes · Etiquetas · Administração — o caminho do dado,
+  // da compra ao número.
   {
     grupo: "Cadastros",
     icone: "etiqueta",
@@ -69,6 +72,30 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
+    grupo: "Compras",
+    icone: "nota",
+    itens: [
+      { href: "/compras", nome: "Notas de entrada", icone: "nota", chave: "compras.notas" },
+    ],
+  },
+  {
+    grupo: "Vendas",
+    icone: "vendas",
+    itens: [
+      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
+      // deve — dívida individual, não número de negócio — e a chave do painel é
+      // a mais larga da casa. Fica com as mesmas do servidor.
+      {
+        href: "/consumo",
+        nome: "Períodos",
+        icone: "calendario",
+        chave: ["consumo.periodos", "cmv.relatorios"],
+      },
+      // Os documentos de venda (cupons do PDV e os lançados à mão) — a antiga "Vendas".
+      { href: "/vendas", nome: "Documentos", icone: "vendas", chave: "cmv.painel" },
+    ],
+  },
+  {
     grupo: "Estoque",
     icone: "caixas",
     itens: [
@@ -96,43 +123,15 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
-    // 🔑 **Etiquetas** (pedido do dono, 28/09/2026: *"um novo módulo, o de Etiquetas,
-    // para controlar validade, quantidade e demais coisas úteis, em produtos produzidos
-    // e abertos para consumo"*). Imprimir primeiro: é o gesto da bancada, várias vezes
-    // por dia; o painel é a checagem da manhã.
-    grupo: "Etiquetas",
-    icone: "etiqueta",
-    itens: [
-      { href: "/etiquetas", nome: "Imprimir", icone: "etiqueta", chave: "etiquetas.imprimir" },
-      { href: "/etiquetas/painel", nome: "Painel de validades", icone: "calendario",
-        chave: "etiquetas.imprimir" },
-      { href: "/etiquetas/configuracao", nome: "Configuração", icone: "config",
-        chave: "etiquetas.configurar" },
-    ],
-  },
-  {
-    grupo: "Compras",
-    icone: "nota",
-    itens: [
-      { href: "/compras", nome: "Notas de entrada", icone: "nota", chave: "compras.notas" },
-    ],
-  },
-  {
+    // 🔑 **CMV direto no menu** (pedido do dono, 28/09/2026: *"colocar o CMV diretamente no
+    // menu; criar um novo item com Vendas, e dentro Períodos e Documentos (atual Vendas)"*).
+    // Grupo de um item só vira item em `montarMenu` — é o que o põe direto na lateral.
+    // ⚠️ Por isso a Visão da rede saiu daqui (foi para Administração): com ela, numa casa de
+    // duas lojas, o CMV voltaria a ser uma pasta com dois itens.
     grupo: "CMV",
     icone: "grafico",
     itens: [
-      { href: "/cmv", nome: "Painel de CMV", icone: "grafico", chave: "cmv.painel" },
-      { href: "/rede", nome: "Visão da rede", icone: "rede", chave: "cmv.painel", soComVariasLojas: true },
-      { href: "/vendas", nome: "Vendas", icone: "vendas", chave: "cmv.painel" },
-      // ⚠️ **Não entra com `cmv.painel`.** Esta tela mostra o que cada PESSOA
-      // deve — dívida individual, não número de negócio — e a chave do painel é
-      // a mais larga da casa. Fica com as mesmas do servidor.
-      {
-        href: "/consumo",
-        nome: "Períodos de consumo",
-        icone: "calendario",
-        chave: ["consumo.periodos", "cmv.relatorios"],
-      },
+      { href: "/cmv", nome: "CMV", icone: "grafico", chave: "cmv.painel" },
     ],
   },
   {
@@ -249,6 +248,39 @@ export const MENU: GrupoMenu[] = [
         chave: ["catalogos.ver", "catalogos.editar"],
         soComReservas: true,
       },
+      {
+        // 🔑 **Pedidos pelo catálogo** (pedido do dono, 28/09/2026: *"uma tela com pedidos
+        // e um painel para acompanhar"*). O painel primeiro: é a tela que o balcão deixa aberta.
+        href: "/pedidos/painel",
+        nome: "Painel",
+        icone: "grafico",
+        chave: ["pedidos.ver", "pedidos.operar"],
+        soComReservas: true,
+        subgrupo: "Pedidos",
+      },
+      {
+        href: "/pedidos",
+        nome: "Lista de pedidos",
+        icone: "nota",
+        chave: ["pedidos.ver", "pedidos.operar"],
+        soComReservas: true,
+        subgrupo: "Pedidos",
+      },
+    ],
+  },
+  {
+    // 🔑 **Etiquetas** (pedido do dono, 28/09/2026: *"um novo módulo, o de Etiquetas,
+    // para controlar validade, quantidade e demais coisas úteis, em produtos produzidos
+    // e abertos para consumo"*). Imprimir primeiro: é o gesto da bancada, várias vezes
+    // por dia; o painel é a checagem da manhã.
+    grupo: "Etiquetas",
+    icone: "etiqueta",
+    itens: [
+      { href: "/etiquetas", nome: "Imprimir", icone: "etiqueta", chave: "etiquetas.imprimir" },
+      { href: "/etiquetas/painel", nome: "Painel de validades", icone: "calendario",
+        chave: "etiquetas.imprimir" },
+      { href: "/etiquetas/configuracao", nome: "Configuração", icone: "config",
+        chave: "etiquetas.configurar" },
     ],
   },
   {
@@ -257,6 +289,8 @@ export const MENU: GrupoMenu[] = [
     itens: [
       { href: "/empresa", nome: "Empresa", icone: "predio", chave: "admin.empresa" },
       { href: "/lojas", nome: "Lojas", icone: "loja", chave: "admin.unidades" },
+      // Veio do grupo CMV (28/09/2026): o CMV passou a ser item direto.
+      { href: "/rede", nome: "Visão da rede", icone: "rede", chave: "cmv.painel", soComVariasLojas: true },
       { href: "/usuarios", nome: "Usuários", icone: "usuarios", chave: "admin.usuarios" },
       { href: "/papeis", nome: "Papéis e permissões", icone: "chave", chave: "admin.papeis" },
       { href: "/integracoes", nome: "Integrações", icone: "tomada", chave: "admin.integracoes" },

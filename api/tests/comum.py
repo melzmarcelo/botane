@@ -166,8 +166,17 @@ def garantir_cozinha(chamar, token, email: str = "smoke.cozinha@botane.com.br",
     if not id_cozinha:
         return None
 
-    st, usuarios = chamar("GET", "/usuarios?incluir_inativos=true&limite=500", token=token)
-    existente = next((u for u in (usuarios or []) if u["email"] == email), None)
+    # ⚠️ **E 500 também deixou de bastar** (28/09/2026: 1.101 usuários na base de
+    # desenvolvimento). O usuário das suítes caiu da primeira página e o login voltou a dar
+    # 401 no lugar do 403. Agora percorre as páginas até achar — a lista não tem busca.
+    existente, offset = None, 0
+    while existente is None:
+        st, usuarios = chamar("GET", f"/usuarios?incluir_inativos=true&limite=500&offset={offset}",
+                              token=token)
+        if not usuarios:
+            break
+        existente = next((u for u in usuarios if u["email"] == email), None)
+        offset += 500
     if existente:
         chamar("PUT", f"/usuarios/{existente['id']}",
                {"ativo": True, "senha": senha, "papeis": [{"id_papel": id_cozinha}]}, token=token)
@@ -205,7 +214,7 @@ def preservar_credenciais(servico: str = "OMIE"):
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import psycopg2
-    from psycopg2.extras import RealDictCursor
+    from psycopg2.extras import Json, RealDictCursor
 
     from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
 
@@ -303,6 +312,11 @@ def preservar_reserva(unidade: int):
         ("fidelidade_solicitacoes", "id_unidade = %s"),
         ("reservas", "id_unidade = %s"),
         ("reserva_mesas", "id_reserva IN (SELECT id FROM reservas WHERE id_unidade = %s)"),
+        # ⚠️ Os PEDIDOS do site (101) apontam para o cliente com `ON DELETE SET NULL`: sem
+        # eles aqui, apagar e repor o cliente deixaria todo pedido real SEM DONO, calado.
+        ("pedidos", "id_unidade = %s"),
+        ("pedido_itens", "id_pedido IN (SELECT id FROM pedidos WHERE id_unidade = %s)"),
+        ("pedido_historico", "id_pedido IN (SELECT id FROM pedidos WHERE id_unidade = %s)"),
     ]
 
     with conectar() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -329,7 +343,10 @@ def preservar_reserva(unidade: int):
                         f"INSERT INTO {tabela} ({', '.join(colunas)}) "  # noqa: S608
                         f"VALUES ({', '.join(['%s'] * len(colunas))}) "
                         "ON CONFLICT DO NOTHING",
-                        [reg[c] for c in colunas],
+                        # `jsonb` volta como dict (o histórico do pedido) e o driver não
+                        # sabe gravar dict sem o `Json`.
+                        [Json(reg[c]) if isinstance(reg[c], dict) else reg[c]
+                         for c in colunas],
                     )
                     postas += 1
             cur.execute("UPDATE parametros SET reservas_ligado = %s WHERE id_unidade = %s",

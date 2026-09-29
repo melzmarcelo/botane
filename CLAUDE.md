@@ -128,7 +128,7 @@ arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
 | Vendas | [`vendas.md`](docs/memoria/vendas.md) | vendas, PDV e períodos de consumo |
 | Administrativo | [`administrativo.md`](docs/memoria/administrativo.md) | empresa, lojas, parâmetros, integrações, usuários |
 | CMV | [`cmv.md`](docs/memoria/cmv.md) | o painel do CMV |
-| Catálogos | [`catalogos.md`](docs/memoria/catalogos.md) | o que o site do cliente apresenta (dentro do Portal de Clientes) |
+| Catálogos | [`catalogos.md`](docs/memoria/catalogos.md) | o que o site do cliente apresenta, e os pedidos pelo cardápio (dentro do Portal de Clientes) |
 | Portal de Clientes (ex-Reservas) | [`reservas.md`](docs/memoria/reservas.md) | site do cliente, cadastro, reserva de mesa: parâmetro da loja, configuração, salões e mesas |
 | Etiquetas | [`etiquetas.md`](docs/memoria/etiquetas.md) | etiquetas de validade de produzidos, abertos e descongelados; QR, baixa e descarte |
 

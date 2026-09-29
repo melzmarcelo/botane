@@ -8,6 +8,7 @@ consumo."* (migração 100, `services/etiquetas.py`).
 """
 
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -187,14 +188,17 @@ print("\n5. o PDF")
 ids = ",".join(str(e["id"]) for e in etqs)
 st, tipo, corpo = baixar(f"/etiquetas/pdf?ids={ids}", cozinha)
 checar("sai um PDF", st == 200 and tipo == "application/pdf" and corpo[:4] == b"%PDF", (st, tipo))
-checar("uma página por etiqueta (rolo 60x40)", corpo.count(b"/Type /Page\n") == 5
-       or corpo.count(b"/Type /Page") - corpo.count(b"/Type /Pages") == 5)
+def paginas(pdf: bytes) -> int:
+    # `/Type /Page` sem o `s` de `/Pages`, com o espaço que o reportlab quiser pôr.
+    return len(re.findall(rb"/Type\s*/Page(?!s)", pdf))
+
+
+checar("uma página por etiqueta (rolo 60x40)", paginas(corpo) == 5, paginas(corpo))
 st, r = chamar("PUT", "/etiquetas/configuracao", {"tamanho": "A4", "texto_extra": "Botané"},
                token=token)
 checar("o modelo muda para folha A4", st == 200 and r.get("tamanho") == "A4", (st, r))
 st, tipo, corpo = baixar(f"/etiquetas/pdf?ids={ids}&reimpressao=true", cozinha)
-checar("e o PDF A4 sai numa página só", st == 200 and
-       corpo.count(b"/Type /Page") - corpo.count(b"/Type /Pages") == 1, st)
+checar("e o PDF A4 sai numa página só", st == 200 and paginas(corpo) == 1, (st, paginas(corpo)))
 chamar("PUT", "/etiquetas/configuracao", {"tamanho": "60x40"}, token=token)
 st, r = chamar("PUT", "/etiquetas/configuracao", {"tamanho": "60x40"}, token=cozinha)
 checar("a cozinha não mexe no modelo (403)", st == 403, st)

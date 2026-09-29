@@ -104,6 +104,16 @@ EVENTOS: dict[str, dict] = {
         "categoria": "Utilidade",
         "antecedencia": 3, "unidade": "dias antes",
     },
+    # 🔑 Pedidos pelo catálogo (101): por enquanto só o "confirmado" (decisão do dono).
+    "PEDIDO_CONFIRMADO": {
+        "nome": "Pedido do site confirmado",
+        "quando": "Quando a casa confirma um pedido feito pelo catálogo",
+        "modelo": "pedido_confirmado",
+        "texto": "Olá, {{1}}! Seu pedido nº {{2}} no {{3}} está confirmado: {{4}}, "
+                 "{{5}}. Total: R$ {{6}}. Obrigado!",
+        "variaveis": ["nome", "numero", "casa", "retirada/entrega", "quando", "total"],
+        "categoria": "Utilidade",
+    },
     "ANIVERSARIO": {
         "nome": "Aniversário do cliente",
         "quando": "No dia do aniversário (quem não pediu para parar)",
@@ -255,7 +265,7 @@ def _casa(cur, id_unidade: int) -> str:
 def enfileirar(cur, id_unidade: int, evento: str, chave: str, telefone: str | None,
                variaveis: list, *, nome: str | None = None, id_reserva: int | None = None,
                id_cliente: int | None = None, agendada_para: datetime | None = None,
-               ignorar_aviso: bool = False) -> bool:
+               ignorar_aviso: bool = False, id_pedido: int | None = None) -> bool:
     """Põe a mensagem na fila — se a loja usa WhatsApp e o aviso está ligado.
 
     ⚠️ **A mesma mensagem não entra duas vezes** (índice único em evento + chave): o
@@ -272,11 +282,12 @@ def enfileirar(cur, id_unidade: int, evento: str, chave: str, telefone: str | No
     vs = [str(v) for v in variaveis]
     cur.execute(
         """INSERT INTO whatsapp_mensagens (id_unidade, evento, chave, id_reserva, id_cliente,
-                                           telefone, nome, variaveis, texto, agendada_para)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce(%s, now()))
+                                           telefone, nome, variaveis, texto, agendada_para,
+                                           id_pedido)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, coalesce(%s, now()), %s)
            ON CONFLICT (id_unidade, evento, chave) DO NOTHING RETURNING id""",
         (id_unidade, evento, chave, id_reserva, id_cliente, fone, nome, json.dumps(vs),
-         _montar(evento, vs) if evento != RESPOSTA else vs[0], agendada_para),
+         _montar(evento, vs) if evento != RESPOSTA else vs[0], agendada_para, id_pedido),
     )
     return cur.fetchone() is not None
 
@@ -339,6 +350,24 @@ def premio_ganho(cur, id_unidade: int, id_cliente: int, premio: dict) -> None:
     enfileirar(cur, id_unidade, "PREMIO_GANHO", premio["codigo"], c["telefone"],
                [c["nome"].split(" ")[0], _casa(cur, id_unidade), premio["premio"], vence,
                 premio["codigo"]], nome=c["nome"], id_cliente=id_cliente)
+
+
+def pedido_confirmado(cur, id_unidade: int, id_pedido: int) -> None:
+    """O "pedido confirmado", já com o total final (a casa pode ter trocado produtos)."""
+    cur.execute(
+        """SELECT numero, nome, telefone, modo, para_quando, total, id_cliente
+             FROM pedidos WHERE id = %s AND id_unidade = %s""", (id_pedido, id_unidade))
+    p = cur.fetchone()
+    if not p:
+        return
+    from zoneinfo import ZoneInfo
+    from config import FUSO_DA_CASA
+    quando = p["para_quando"].astimezone(ZoneInfo(FUSO_DA_CASA))
+    modo = "para retirar na loja" if p["modo"] == "RETIRADA" else "para entrega"
+    enfileirar(cur, id_unidade, "PEDIDO_CONFIRMADO", f"pedido:{id_pedido}", p["telefone"],
+               [p["nome"].split(" ")[0], p["numero"], _casa(cur, id_unidade), modo,
+                quando.strftime("%d/%m às %H:%M"), f"{p['total']:.2f}".replace(".", ",")],
+               nome=p["nome"], id_cliente=p["id_cliente"], id_pedido=id_pedido)
 
 
 def varrer(cur) -> int:

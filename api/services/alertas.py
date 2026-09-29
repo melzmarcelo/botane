@@ -114,6 +114,21 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Usar hoje ou descartar no fim do dia.", "ver as etiquetas",
            "/etiquetas/painel?situacao=hoje")
 
+    # 🔑 Os PEDIDOS do site (101): pedido novo parado é cliente esperando resposta, e o
+    # confirmado sem lançamento no PDV é venda que ainda não existe no caixa.
+    r = _um(cur, """
+        SELECT count(*) FILTER (WHERE situacao = 'NOVO'
+                                  AND criado_em < now() - interval '15 minutes') AS parados,
+               count(*) FILTER (WHERE situacao IN ('CONFIRMADO', 'ENTREGUE')
+                                  AND lancado_pdv_em IS NULL) AS sem_pdv
+          FROM pedidos WHERE id_unidade = %s""", (id_unidade,))
+    juntar("pedidos.parados", CRITICO, "Pedido do site esperando confirmação", r.get("parados"),
+           "Há mais de 15 minutos sem resposta — o cliente está esperando.",
+           "confirmar ou recusar", "/pedidos/painel")
+    juntar("pedidos.sem_pdv", ATENCAO, "Pedido confirmado e não lançado no PDV", r.get("sem_pdv"),
+           "Lance no PDV e marque aqui — senão a venda não entra no caixa nem no CMV.",
+           "ver os pedidos", "/pedidos?situacao=sem_pdv")
+
     r = _um(cur, """
         SELECT count(*) AS n FROM estoque_movimentos
          WHERE id_unidade = %s AND custo_provisorio

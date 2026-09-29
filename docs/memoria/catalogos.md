@@ -371,3 +371,46 @@ marca onde ficaria visível."* Tabela `catalogo_lojas (id_catalogo, id_unidade)`
 O estudo (24/09/2026) mora em `reservas.md`, seção "cardápio e site em inglês e alemão":
 nomes/informação do produto e categorias do catálogo em EN/DE, e o seletor de idioma no
 site. Começa na semana de 28/09/2026, depois de o dono escolher o serviço de tradução.
+
+## Pedidos pelo catálogo (migração 101, 28/09/2026)
+
+🔑 **Pedido do dono:** *"o cliente poder realizar pedidos diretamente na tela de catálogo,
+criando esta opção ao criar um catálogo do tipo Produtos; um carrinho de compras para enviar
+pedidos ao sistema; uma tela com pedidos, um painel para acompanhar e aviso na tela inicial. O
+pagamento não será pelo sistema."* Estudo e decisões em [`docs/pedidos-estudo.md`](../pedidos-estudo.md)
+(seção 0). Código: `services/pedidos.py`, `routers/pedidos.py`, rotas no fim de
+`routers/publico.py`, telas `web/app/(app)/pedidos/`, cartão `catalogos/[id]/pedidos.tsx`,
+`pedidos-do-dia.tsx` no Início, e o carrinho em `site/index.html`.
+
+- ⚠️ **O pedido NÃO vira venda** (decisão do dono): a casa lança no PDV e a venda chega pela
+  busca de sempre. Aqui só a MARCA "lançado no PDV" (`lancado_pdv_em`, `cupom_pdv`) — não é
+  situação. Com o cupom, `_ligar_venda` acha a venda importada (`vendas.documento`) na leitura:
+  ligação para conferir, nada muda em estoque, receita ou CMV.
+- 🔑 **Configuração do CATÁLOGO** (`catalogo_pedidos_config`), só origem PRODUTOS (PDF é 400).
+  Retirada/entrega, taxa, mínimo, antecedência mínima (minutos) e máxima (dias), formas de
+  pagamento e o texto sobre o pagamento. Permissão: a do catálogo (`catalogos.editar`).
+- 🔑 **Preço do SERVIDOR.** O cardápio público passou a mandar `id` do ITEM (`catalogo_itens.id`)
+  e `pedidos` (nulo quando não aceita). O site manda item + quantidade; o valor sai da mesma
+  cascata do cardápio (loja → casa). Nome e preço congelados em `pedido_itens`.
+- ⚠️ **Idempotência pelo banco** (regra 8): `ux_pedido_chave (id_unidade, chave)`; o site gera a
+  chave e a TROCA a cada mudança no carrinho — senão o segundo pedido idêntico devolveria o
+  primeiro. Número do balcão por loja (`ux_pedido_numero`), com `pg_advisory_xact_lock`.
+- 🔑 **Quando**: nulo = agora + antecedência mínima, e a casa tem de estar aberta; encomenda
+  confere antecedência, dias à frente, bloqueio e a janela do dia (`reservas_agenda`, com a
+  exceção do dia). ⚠️ Hora sem fuso vinda do site é a hora da CASA (`FUSO_DA_CASA`).
+- 🔑 **Confirmar com troca**: item que já estava mantém o preço do envio; item NOVO entra pelo
+  preço vigente do catálogo. `pedido_historico.detalhe.pedido_pelo_cliente` guarda o original;
+  `alterado` marca o pedido. WhatsApp `PEDIDO_CONFIRMADO` (o único, por decisão do dono).
+- Situações NOVO → CONFIRMADO → ENTREGUE, + RECUSADO e CANCELADO (motivo que o cliente vê). O
+  cliente cancela só enquanto NOVO. Pago é registro (Pix, cartão, dinheiro, outro).
+- Permissões `pedidos.ver` e `pedidos.operar` (Admin, Gerente, Salão), escondidas do catálogo de
+  papéis com o Portal desligado (`routers/papeis.py`).
+- Alertas `pedidos.parados` (NOVO há 15 min, crítico) e `pedidos.sem_pdv`.
+- ⚠️ **`preservar_reserva` (tests/comum.py) passou a levar os pedidos**: eles apontam para
+  `reserva_clientes` com `ON DELETE SET NULL`, e apagar/repor o cliente deixaria todo pedido real
+  sem dono. E a reposição passou a embrulhar `jsonb` em `Json` (o histórico).
+- ⚠️ Achado junto: `catalogo_itens` faltava em `limpar_dados.OPERACAO` desde a 084 — a guarda
+  recusava a limpeza inteira. ⚠️ **`limpar_dados.py` não tem `--help`**: rodá-lo com qualquer
+  argumento mostra a prévia e ESPERA confirmação — não usar para "ver a ajuda".
+- Cobertura: `smoke_pedidos.py` (48), fase 13 da bateria do navegador, e
+  `web/scripts/verificar-pedido-site.mjs` (o carrinho no site, 10).

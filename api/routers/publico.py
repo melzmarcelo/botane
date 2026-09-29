@@ -39,6 +39,8 @@ from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
 from services import fidelidade
 from services import whatsapp
+from services import pedidos as pedidos_servico
+from models.pedidos import PedidoDoCliente, PedidoDoSite
 from models.fidelidade import CheckinDoSite, CodigoDoCaixa, PedidoDeCodigo
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
@@ -548,6 +550,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str) -> dict:
             categorias.append(cat)
 
         item = {
+            # 🔑 O ITEM do catálogo, para o carrinho (101). É o que o site manda de volta ao
+            # pedir — o produto e o preço o servidor descobre; nenhum dos dois vem de lá.
+            "id": l["id_item"],
             "nome": l["produto"],
             "descricao": l["informacao_adicional"],
             "foto": l["produto_foto"],
@@ -567,7 +572,9 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str) -> dict:
             cat["subcategorias"].append(sub)
         sub["itens"].append(item)
 
-    return {"nome": nome, "categorias": categorias}
+    return {"nome": nome, "categorias": categorias,
+            # 🔑 Nulo quando o catálogo não aceita pedido: o site só desenha o carrinho se vier.
+            "pedidos": pedidos_servico.config_publica(cur, id_unidade, id_catalogo)}
 
 
 @router.get("/{id_unidade}/horarios")
@@ -989,3 +996,61 @@ def abrir_catalogo(id_unidade: int, id_catalogo: int, corpo: ClienteDoSite,
         if not capa["arquivo_url"]:
             raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
         return {"origem": capa["origem"], "arquivo_url": capa["arquivo_url"]}
+
+
+# ---------------------------------------------------------------------------
+# Pedidos pelo catálogo (migração 101)
+# ---------------------------------------------------------------------------
+#
+# 🔑 **Pedido do dono (28/09/2026):** *"o cliente poder realizar pedidos diretamente na tela de
+# catálogo … um carrinho de compras para enviar pedidos ao sistema."*
+# ⚠️ **Nenhum preço vem do site**: o servidor recalcula tudo pelo item do catálogo. E o cliente
+# precisa ter cadastro — o mesmo telefone da reserva e do catálogo que exige cadastro.
+
+
+def _cliente_do_pedido(cur, id_unidade: int, telefone: str, nome: str | None,
+                       pedido: Request) -> dict:
+    clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+    fone = clientes.telefone_valido(telefone)
+    cliente = clientes.conferir(cur, id_unidade, fone, nome)
+    if not cliente:
+        raise HTTPException(status_code=403, detail="Faça seu cadastro para enviar o pedido.")
+    cur.execute("SELECT id, nome, telefone FROM reserva_clientes WHERE id = %s", (cliente["id"],))
+    return dict(cur.fetchone())
+
+
+@router.post("/{id_unidade}/catalogos/{id_catalogo}/pedido", status_code=201)
+def enviar_pedido(id_unidade: int, id_catalogo: int, corpo: PedidoDoSite,
+                  pedido: Request) -> dict:
+    """Grava o carrinho. ⚠️ Toque duplo devolve o MESMO pedido (a chave do carrinho)."""
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        capa = _no_ar(cur, id_unidade, id_catalogo)
+        if not capa or capa["origem"] != ORIGEM_PRODUTOS:
+            raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+        cliente = _cliente_do_pedido(cur, id_unidade, corpo.telefone, corpo.nome, pedido)
+        return pedidos_servico.enviar(cur, id_unidade, id_catalogo, cliente, corpo.model_dump())
+
+
+@router.post("/{id_unidade}/pedidos/meus")
+def meus_pedidos(id_unidade: int, corpo: PedidoDoCliente, pedido: Request) -> dict:
+    """Os pedidos de quem se identificou. Telefone sem cadastro: lista vazia, não 404."""
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        clientes.marcar_tentativa(cur, id_unidade, _de_onde_veio(pedido))
+        fone = clientes.telefone_valido(corpo.telefone)
+        cliente = clientes.conferir(cur, id_unidade, fone, corpo.nome)
+        if not cliente:
+            return {"pedidos": []}
+        return {"pedidos": pedidos_servico.meus(cur, id_unidade, cliente["id"])}
+
+
+@router.post("/{id_unidade}/pedidos/{numero}/cancelar")
+def cancelar_pedido(id_unidade: int, numero: int, corpo: PedidoDoCliente,
+                    pedido: Request) -> dict:
+    """O cliente cancela — só enquanto a casa não confirmou."""
+    with get_cursor() as cur:
+        _casa_aberta(cur, id_unidade)
+        cliente = _cliente_do_pedido(cur, id_unidade, corpo.telefone, corpo.nome, pedido)
+        return pedidos_servico.cancelar_pelo_cliente(cur, id_unidade, cliente["id"], numero)
+

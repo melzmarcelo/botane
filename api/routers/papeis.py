@@ -37,9 +37,9 @@ def listar_permissoes(ctx: Contexto = Depends(contexto_atual)) -> list[dict]:
         todas = [dict(r) for r in cur.fetchall()]
         if reservas.ligado_em_alguma_loja(cur):
             return todas
-        # `fidelidade.*` (091) é do mesmo módulo e some junto.
+        # `fidelidade.*` (091) e `pedidos.*` (101) são do mesmo módulo e somem junto.
         return [p for p in todas
-                if not p["chave"].startswith(("reservas.", "fidelidade."))]
+                if not p["chave"].startswith(("reservas.", "fidelidade.", "pedidos."))]
 
 
 @router.get("/papeis", response_model=list[PapelResponse])

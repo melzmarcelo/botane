@@ -294,6 +294,44 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .hora:hover { border-color: var(--erva); }
 .hora[aria-pressed="true"] { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
+/* As escolhas do pedido (retirar/entrega, pagamento) usam o mesmo botão do horário, com
+   a letra do texto em vez da dos números. */
+.hora.texto { font: 500 14.5px/1.2 Karla, sans-serif; }
+
+/* ---- o pedido pelo cardápio (101) ---- */
+.pedir { display: flex; justify-content: flex-end; margin-top: 8px; }
+.pedir .adicionar {
+  min-height: 38px; padding: 6px 16px; border-radius: 999px; cursor: pointer;
+  background: var(--superficie); border: 1px solid var(--erva); color: var(--erva);
+  font: 600 14px/1 Karla, sans-serif;
+}
+.contador { display: inline-flex; align-items: center; gap: 4px; }
+.contador button {
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+  background: var(--erva); border: 0; color: #F4F0E5; font: 600 18px/1 Karla, sans-serif;
+}
+.contador b { min-width: 28px; text-align: center; font: 600 16px/1 "DM Mono", monospace; }
+/* 🔑 A barra do carrinho fica FIXA no pé: é o caminho de volta do cardápio para o pedido,
+   e rolar até o fim de uma seção longa para achá-la é onde o pedido se perde. */
+.barra-carrinho {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20;
+  width: min(420px, calc(100% - 24px)); display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; padding: 14px 18px; border: 0; border-radius: 999px;
+  background: var(--erva); color: #F4F0E5; box-shadow: var(--sombra); cursor: pointer;
+  font: 600 15px/1.2 Karla, sans-serif;
+}
+.linha-carrinho { padding: 10px 0; border-bottom: 1px solid var(--linha); }
+.linha-carrinho .topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.linha-carrinho input {
+  width: 100%; margin-top: 6px; font: 400 13.5px/1.3 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 7px 9px;
+}
+.totais { display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+.totais p { margin: 0; display: flex; justify-content: space-between; }
+.totais .total { font: 600 18px/1.3 Karla, sans-serif; }
+.pedido-meu { border: 1px solid var(--linha); border-radius: var(--raio); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.pedido-meu .situacao { font-weight: 600; }
 
 .voltar {
   background: none; border: 0; color: var(--tinta-suave); cursor: pointer;
@@ -578,6 +616,63 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
       <p class="pe-cardapio" id="pe-cardapio"></p>
     </section>
 
+    <!-- ================= o pedido pelo cardápio (101) ================= -->
+    <!-- 🔑 **Pedido do dono (28/09/2026):** *"o cliente poder realizar pedidos diretamente
+         na tela de catálogo … um carrinho de compras para enviar pedidos ao sistema. O
+         pagamento não será pelo sistema."* A casa confirma cada pedido. -->
+    <section class="tela" data-tela="carrinho" aria-labelledby="t-carrinho">
+      <button class="voltar" id="voltar-carrinho">‹ cardápio</button>
+      <h2 id="t-carrinho">Seu pedido</h2>
+      <div id="itens-carrinho"></div>
+      <div>
+        <span class="rot">Como você quer receber</span>
+        <div class="horarios" id="modos-pedido" role="radiogroup" aria-label="como receber"></div>
+      </div>
+      <label class="campo" id="campo-endereco" hidden>Endereço de entrega
+        <textarea id="endereco-pedido" rows="2" maxlength="300"
+                  placeholder="Rua, número, bairro e um ponto de referência"></textarea>
+      </label>
+      <div>
+        <span class="rot">Para quando</span>
+        <div class="horarios" id="quando-pedido" role="radiogroup" aria-label="para quando">
+          <button class="hora texto" type="button" data-quando="agora" aria-pressed="true">O quanto antes</button>
+          <button class="hora texto" type="button" data-quando="agendar" aria-pressed="false">Escolher dia e hora</button>
+        </div>
+        <div class="dupla" id="agenda-pedido" hidden style="margin-top:10px">
+          <label class="campo">Dia <select id="dia-pedido"></select></label>
+          <label class="campo">Hora <input id="hora-pedido" type="time"></label>
+        </div>
+      </div>
+      <div>
+        <span class="rot">Como vai pagar</span>
+        <div class="horarios" id="pagamentos-pedido" role="radiogroup" aria-label="pagamento"></div>
+      </div>
+      <div class="regras" id="texto-pagamento" hidden></div>
+      <label class="campo">Observação (opcional)
+        <textarea id="obs-pedido" rows="2" maxlength="500"></textarea>
+      </label>
+      <div class="totais" id="totais-pedido"></div>
+      <div class="regras" id="aviso-pedido" hidden></div>
+      <button class="item destaque" id="enviar-pedido">Enviar pedido</button>
+      <button class="item" id="ir-meus-pedidos">Meus pedidos</button>
+    </section>
+
+    <section class="tela" data-tela="pedido-pronto" aria-labelledby="t-pedido-pronto">
+      <h2 id="t-pedido-pronto">Pedido enviado!</h2>
+      <div class="recibo" id="recibo-pedido"></div>
+      <div class="regras" id="aviso-pedido-pronto"></div>
+      <div id="zap-pedido"></div>
+      <button class="item" id="pronto-meus-pedidos">Meus pedidos</button>
+      <button class="item" data-ir="inicio">Voltar ao início</button>
+    </section>
+
+    <section class="tela" data-tela="meus-pedidos" aria-labelledby="t-meus-pedidos">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-meus-pedidos">Meus pedidos</h2>
+      <div class="regras" id="aviso-meus-pedidos" hidden></div>
+      <div class="itens" id="lista-meus-pedidos"></div>
+    </section>
+
     <!-- ================= fidelidade ================= -->
     <!-- 🔑 **Pedido do dono (24/09/2026):** *"no site de Reservas o link acima do
          Entre em contato, onde o usuário pode ver quantos pontos tem e quanto falta
@@ -619,6 +714,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
     <p class="pe" id="rodape"></p>
   </div>
 </div>
+<button class="barra-carrinho" id="barra-carrinho" type="button" hidden></button>
 
 <dialog class="termo" id="termo" aria-labelledby="t-termo">
   <h3 id="t-termo">Termo de consentimento</h3>
@@ -703,6 +799,7 @@ function ir(nome) {
   // ⚠️ O botão de VOLTAR do celular precisa funcionar: sem isto, quem está na
   // reserva e volta sai do site em vez de ir para o início.
   if (location.hash !== "#" + nome) history.pushState({ tela: nome }, "", "#" + nome);
+  atualizarBarra(nome);
 }
 document.addEventListener("click", (e) => {
   const alvo = e.target.closest("[data-ir]");
@@ -1047,6 +1144,15 @@ function desenharPrato(item) {
     ${item.descricao ? `<p class="desc">${esc(item.descricao)}</p>` : ""}
     ${item.foto ? `<div class="foto"><img src="${API}${esc(item.foto)}"
        alt="${esc(item.nome)}" loading="lazy"></div>` : ""}`;
+  // 🔑 O carrinho só existe no cardápio que ACEITA pedido, e só para item com preço: sem
+  // preço não há o que somar, e o servidor recusaria de qualquer jeito.
+  if (podePedir() && item.preco !== null && item.preco !== undefined && item.id) {
+    const caixa = document.createElement("div");
+    caixa.className = "pedir";
+    caixa.dataset.item = item.id;
+    el.appendChild(caixa);
+    desenharControle(caixa, item);
+  }
   return el;
 }
 
@@ -1110,6 +1216,303 @@ function abrirSecao(indice) {
   pe.hidden = !temPreco;
 
   ir("secao");
+}
+
+/* ---- o pedido pelo cardápio (migração 101) ----
+ *
+ * 🔑 **Pedido do dono (28/09/2026):** *"o cliente poder realizar pedidos diretamente na
+ * tela de catálogo … um carrinho de compras para enviar pedidos ao sistema."*
+ * ⚠️ **O carrinho mora na ABA** (`sessionStorage`), como a sessão: sobrevive ao F5 e some
+ * quando a aba fecha. Nada vai ao servidor antes de "Enviar".
+ * ⚠️ **Nenhum preço sai daqui**: o site manda o item e a quantidade, e quem calcula o valor
+ * é o servidor. O total desta tela é PRÉVIA.
+ */
+const CARRINHO = "botane.carrinho";
+/** { id_catalogo, chave, itens: { [idItem]: {id, nome, preco, quantidade, observacao} } } */
+let carrinho = null;
+let pedidoModo = null;
+let pedidoPagamento = null;
+let pedidoQuando = "agora";
+
+function lerCarrinho() {
+  try { carrinho = JSON.parse(sessionStorage.getItem(CARRINHO) || "null"); } catch { carrinho = null; }
+}
+function guardarCarrinho() {
+  try {
+    if (carrinho && Object.keys(carrinho.itens).length) sessionStorage.setItem(CARRINHO, JSON.stringify(carrinho));
+    else sessionStorage.removeItem(CARRINHO);
+  } catch { /* sem armazenamento: o carrinho vive só na tela */ }
+}
+lerCarrinho();
+
+/** O cardápio aberto aceita pedido? (o servidor manda `pedidos` nulo quando não). */
+function podePedir() { return !!(cardapio && cardapio.pedidos && aberto); }
+
+function chaveNova() {
+  return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).slice(0, 60);
+}
+
+/** O carrinho deste cardápio — um carrinho de OUTRO cardápio não se mistura com este. */
+function carrinhoAtual() {
+  if (!podePedir()) return null;
+  if (!carrinho || carrinho.id_catalogo !== aberto.id) {
+    carrinho = { id_catalogo: aberto.id, chave: chaveNova(), itens: {} };
+  }
+  return carrinho;
+}
+
+function quantidadeDe(idItem) {
+  return carrinho && aberto && carrinho.id_catalogo === aberto.id && carrinho.itens[idItem]
+    ? carrinho.itens[idItem].quantidade : 0;
+}
+
+function mudarQuantidade(item, passo) {
+  const c = carrinhoAtual();
+  if (!c) return;
+  const atual = c.itens[item.id] || { id: item.id, nome: item.nome, preco: item.preco, quantidade: 0, observacao: "" };
+  atual.quantidade = Math.max(0, atual.quantidade + passo);
+  if (atual.quantidade) c.itens[item.id] = atual; else delete c.itens[item.id];
+  // ⚠️ Mudou o carrinho, muda a chave: é OUTRO pedido, e não pode ser confundido com um
+  // envio anterior que o servidor já gravou.
+  c.chave = chaveNova();
+  guardarCarrinho();
+  document.querySelectorAll(`.pedir[data-item="${item.id}"]`).forEach((cx) => desenharControle(cx, item));
+  atualizarBarra();
+}
+
+function desenharControle(caixa, item) {
+  const n = quantidadeDe(item.id);
+  caixa.innerHTML = n
+    ? `<span class="contador"><button type="button" aria-label="tirar um">−</button><b>${n}</b>
+       <button type="button" aria-label="pôr mais um">+</button></span>`
+    : `<button type="button" class="adicionar">Adicionar</button>`;
+  const botoes = caixa.querySelectorAll("button");
+  if (n) {
+    botoes[0].addEventListener("click", () => mudarQuantidade(item, -1));
+    botoes[1].addEventListener("click", () => mudarQuantidade(item, 1));
+  } else {
+    botoes[0].addEventListener("click", () => mudarQuantidade(item, 1));
+  }
+}
+
+function somaDoCarrinho() {
+  if (!carrinho) return { n: 0, total: 0 };
+  return Object.values(carrinho.itens).reduce((s, i) =>
+    ({ n: s.n + i.quantidade, total: s.total + i.quantidade * i.preco }), { n: 0, total: 0 });
+}
+
+function atualizarBarra(tela) {
+  const barra = $("#barra-carrinho");
+  if (!barra) return;
+  const onde = tela || (location.hash || "").slice(1);
+  const { n, total } = somaDoCarrinho();
+  const mostra = podePedir() && carrinho && carrinho.id_catalogo === aberto.id && n > 0
+    && (onde === "cardapio" || onde === "secao");
+  barra.hidden = !mostra;
+  if (mostra) {
+    barra.innerHTML = `<span>${n} ${n === 1 ? "item" : "itens"} · R$ ${dinheiro(total)}</span><span>Ver pedido ›</span>`;
+  }
+}
+
+function escolher(caixa, valor) {
+  caixa.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.valor === valor)));
+}
+
+function abrirCarrinho() {
+  const cfg = cardapio.pedidos;
+  const c = carrinhoAtual();
+  $("#voltar-carrinho").onclick = () => ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
+
+  const lista = $("#itens-carrinho");
+  const itens = Object.values(c.itens);
+  lista.innerHTML = itens.length ? "" : `<p class="vazio">Seu pedido está vazio. Volte ao cardápio e toque em “Adicionar”.</p>`;
+  itens.forEach((i) => {
+    const linha = document.createElement("div");
+    linha.className = "linha-carrinho";
+    linha.innerHTML = `<div class="topo"><span>${esc(i.nome)}<br><small>R$ ${dinheiro(i.preco)}</small></span>
+        <span class="pedir" data-item="${i.id}"></span></div>
+      <input type="text" maxlength="200" placeholder="Observação deste item (ex.: sem cebola)" value="${esc(i.observacao || "")}">`;
+    const cx = linha.querySelector(".pedir");
+    desenharControle(cx, i);
+    // No carrinho, o contador redesenha a tela inteira: tirar o último item tira a linha.
+    cx.addEventListener("click", () => setTimeout(abrirCarrinho, 0));
+    linha.querySelector("input").addEventListener("change", (e) => {
+      i.observacao = e.target.value.trim();
+      c.chave = chaveNova();
+      guardarCarrinho();
+    });
+    lista.appendChild(linha);
+  });
+
+  // Como receber
+  const modos = $("#modos-pedido");
+  modos.innerHTML = cfg.modos.map((m) =>
+    `<button class="hora texto" type="button" data-valor="${m.valor}" aria-pressed="false">${esc(m.rotulo)}</button>`).join("");
+  if (!pedidoModo || !cfg.modos.some((m) => m.valor === pedidoModo)) pedidoModo = cfg.modos[0].valor;
+  escolher(modos, pedidoModo);
+  modos.onclick = (e) => {
+    const b = e.target.closest("button[data-valor]");
+    if (!b) return;
+    pedidoModo = b.dataset.valor;
+    escolher(modos, pedidoModo);
+    abrirCarrinhoTotais();
+  };
+
+  // Para quando: "o quanto antes", ou um dos dias em que a casa atende.
+  $("#dia-pedido").innerHTML = cfg.dias.map((d) => {
+    const nome = new Date(`${d.dia}T12:00`).toLocaleDateString("pt-BR",
+      { weekday: "short", day: "2-digit", month: "2-digit" });
+    return `<option value="${d.dia}">${esc(nome)} · ${d.abre}–${d.fecha}</option>`;
+  }).join("");
+  $("#quando-pedido").onclick = (e) => {
+    const b = e.target.closest("button[data-quando]");
+    if (!b) return;
+    pedidoQuando = b.dataset.quando;
+    $("#quando-pedido").querySelectorAll("button").forEach((x) =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    $("#agenda-pedido").hidden = pedidoQuando !== "agendar";
+  };
+  $("#agenda-pedido").hidden = pedidoQuando !== "agendar";
+  // ⚠️ Sem dia nenhum aberto na janela, só "o quanto antes" — e o servidor diz se dá.
+  $("#quando-pedido").querySelector('[data-quando="agendar"]').hidden = !cfg.dias.length;
+
+  // Pagamento — fora do sistema: o cliente só diz como vai pagar.
+  const pags = $("#pagamentos-pedido");
+  pags.innerHTML = cfg.pagamentos.map((p) =>
+    `<button class="hora texto" type="button" data-valor="${p.valor}" aria-pressed="false">${esc(p.rotulo)}</button>`).join("");
+  if (!pedidoPagamento || !cfg.pagamentos.some((p) => p.valor === pedidoPagamento)) pedidoPagamento = cfg.pagamentos[0].valor;
+  escolher(pags, pedidoPagamento);
+  pags.onclick = (e) => {
+    const b = e.target.closest("button[data-valor]");
+    if (!b) return;
+    pedidoPagamento = b.dataset.valor;
+    escolher(pags, pedidoPagamento);
+  };
+  const texto = $("#texto-pagamento");
+  texto.hidden = !cfg.texto_pagamento;
+  texto.innerHTML = cfg.texto_pagamento ? `<span>${esc(cfg.texto_pagamento)}</span>` : "";
+
+  avisar("#aviso-pedido", "");
+  abrirCarrinhoTotais();
+  ir("carrinho");
+}
+
+function abrirCarrinhoTotais() {
+  const cfg = cardapio.pedidos;
+  const { total } = somaDoCarrinho();
+  const taxa = pedidoModo === "ENTREGA" ? cfg.taxa_entrega : 0;
+  $("#campo-endereco").hidden = pedidoModo !== "ENTREGA";
+  const falta = cfg.pedido_minimo > 0 && total < cfg.pedido_minimo;
+  $("#totais-pedido").innerHTML = `
+    <p><span>Itens</span><span>R$ ${dinheiro(total)}</span></p>
+    ${taxa ? `<p><span>Entrega</span><span>R$ ${dinheiro(taxa)}</span></p>` : ""}
+    <p class="total"><span>Total</span><span>R$ ${dinheiro(total + taxa)}</span></p>
+    ${falta ? `<p><small>Pedido mínimo: R$ ${dinheiro(cfg.pedido_minimo)}</small></p>` : ""}`;
+  $("#enviar-pedido").disabled = !total || falta;
+}
+
+async function enviarPedido() {
+  if (!carrinho || !Object.keys(carrinho.itens).length) return abrirCarrinho();
+  // Quem ainda não se identificou passa pelo telefone e volta direto para o envio.
+  if (!eu.identificado) return identificarPara("pedido");
+  let para = null;
+  if (pedidoQuando === "agendar") {
+    const dia = $("#dia-pedido").value;
+    const hora = $("#hora-pedido").value;
+    if (!dia || !hora) { ir("carrinho"); return avisar("#aviso-pedido", "Escolha o dia e a hora do pedido."); }
+    para = `${dia}T${hora}`;
+  }
+  const endereco = $("#endereco-pedido").value.trim();
+  if (pedidoModo === "ENTREGA" && !endereco) {
+    ir("carrinho");
+    return avisar("#aviso-pedido", "Informe o endereço de entrega.");
+  }
+  $("#enviar-pedido").disabled = true;
+  let r;
+  try {
+    r = await pedir(`/catalogos/${carrinho.id_catalogo}/pedido`, {
+      telefone: eu.telefone, chave: carrinho.chave, modo: pedidoModo,
+      endereco: pedidoModo === "ENTREGA" ? endereco : null, para_quando: para,
+      forma_pagamento: pedidoPagamento, observacao: $("#obs-pedido").value.trim() || null,
+      itens: Object.values(carrinho.itens).map((i) => ({
+        id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null })),
+    });
+  } catch (e) {
+    $("#enviar-pedido").disabled = false;
+    ir("carrinho");
+    return avisar("#aviso-pedido", e.mensagem || "Não conseguimos enviar o pedido agora.");
+  }
+  $("#enviar-pedido").disabled = false;
+  const cfg = cardapio && cardapio.pedidos;
+  carrinho = null;
+  guardarCarrinho();
+  $("#obs-pedido").value = "";
+  const quando = new Date(r.para_quando).toLocaleString("pt-BR",
+    { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  $("#recibo-pedido").innerHTML = `<span>Pedido nº</span><b>${r.numero}</b>
+    <span>${esc(r.modo_rotulo)} · ${esc(quando)}</span>
+    <span>Total: R$ ${dinheiro(r.total)} · ${esc(r.forma_pagamento)}</span>`;
+  avisar("#aviso-pedido-pronto",
+    "A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”"
+    + (cfg && cfg.texto_pagamento ? ". " + cfg.texto_pagamento : "."), false);
+  const zap = pedidoPagamento === "WHATSAPP" && linkZap(
+    `Olá! Fiz o pedido nº ${r.numero} pelo site e quero combinar o pagamento.`);
+  $("#zap-pedido").innerHTML = zap
+    ? `<a class="item destaque" href="${zap}" target="_blank" rel="noopener">Combinar o pagamento pelo WhatsApp</a>` : "";
+  ir("pedido-pronto");
+}
+
+const SITUACAO_DO_PEDIDO = {
+  NOVO: "Aguardando a casa confirmar", CONFIRMADO: "Confirmado", ENTREGUE: "Entregue",
+  RECUSADO: "Recusado", CANCELADO: "Cancelado",
+};
+
+async function mostrarMeusPedidos() {
+  if (!eu.identificado) return identificarPara("meus-pedidos");
+  const caixa = $("#lista-meus-pedidos");
+  caixa.innerHTML = `<p class="vazio">Carregando…</p>`;
+  ir("meus-pedidos");
+  let r;
+  try {
+    r = await pedir("/pedidos/meus", { telefone: eu.telefone });
+  } catch (e) {
+    caixa.innerHTML = "";
+    return avisar("#aviso-meus-pedidos", e.mensagem || "Não conseguimos buscar seus pedidos.");
+  }
+  avisar("#aviso-meus-pedidos", "");
+  if (!r.pedidos.length) {
+    caixa.innerHTML = `<p class="vazio">Você ainda não fez pedidos por aqui.</p>`;
+    return;
+  }
+  caixa.innerHTML = "";
+  r.pedidos.forEach((p) => {
+    const quando = new Date(p.para_quando).toLocaleString("pt-BR",
+      { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const el = document.createElement("div");
+    el.className = "pedido-meu";
+    el.innerHTML = `<span class="situacao">Nº ${p.numero} · ${esc(SITUACAO_DO_PEDIDO[p.situacao] || p.situacao)}</span>
+      <span>${esc(p.modo_rotulo)} · ${esc(quando)} · R$ ${dinheiro(p.total)}</span>
+      <small>${p.itens.map((i) => `${i.quantidade}× ${esc(i.nome)}`).join(", ")}</small>
+      ${p.alterado ? `<small>A casa ajustou os itens deste pedido.</small>` : ""}
+      ${p.motivo ? `<small>Motivo: ${esc(p.motivo)}</small>` : ""}`;
+    if (p.situacao === "NOVO") {
+      const b = document.createElement("button");
+      b.className = "item";
+      b.textContent = "Cancelar este pedido";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await pedir(`/pedidos/${p.numero}/cancelar`, { telefone: eu.telefone });
+          mostrarMeusPedidos();
+        } catch (e) {
+          b.disabled = false;
+          avisar("#aviso-meus-pedidos", e.mensagem || "Não conseguimos cancelar agora.");
+        }
+      });
+      el.appendChild(b);
+    }
+    caixa.appendChild(el);
+  });
 }
 
 /* ---- quem reserva ----
@@ -1226,6 +1629,11 @@ function voltarAoTelefone() {
       : "Veja suas visitas: comece pelo telefone.";
     return;
   }
+  if (destino === "pedido" || destino === "meus-pedidos") {
+    $("#t-quem").textContent = destino === "pedido" ? "Seu pedido" : "Meus pedidos";
+    $("#sub-quem").textContent = "A casa reconhece você pelo telefone.";
+    return;
+  }
   const catalogo = destino !== "reserva";
   $("#t-quem").textContent = catalogo ? destino.nome : "Reserve sua mesa";
   $("#sub-quem").textContent = catalogo
@@ -1277,7 +1685,9 @@ async function consultarTelefone() {
   $("#bloco-termo").hidden = false;
   avisar("#aviso-quem", "Primeira vez por aqui? Conte quem é você.", false);
   $("#avancar").textContent = destino === "reserva" ? "Escolher dia e horário"
-    : destino === "fidelidade" ? "Ver meu cartão" : "Abrir o cardápio";
+    : destino === "fidelidade" ? "Ver meu cartão"
+    : destino === "pedido" ? "Enviar o pedido"
+    : destino === "meus-pedidos" ? "Ver meus pedidos" : "Abrir o cardápio";
   $("#nome-cliente").focus();
 }
 
@@ -1311,6 +1721,8 @@ async function guardarDados() {
 async function seguirIdentificado() {
   avisar("#aviso-quem", "");
   if (destino === "fidelidade") return mostrarCartao();
+  if (destino === "pedido") return enviarPedido();
+  if (destino === "meus-pedidos") return mostrarMeusPedidos();
   if (destino === "reserva") {
     $("#voltar-reserva").dataset.ir = "inicio";
     await carregarMinhas();
@@ -1345,6 +1757,8 @@ async function identificarParaCatalogo() {
   lembrar();
   destravarCatalogos();
   if (destino === "fidelidade") return mostrarCartao();
+  if (destino === "pedido") return enviarPedido();
+  if (destino === "meus-pedidos") return mostrarMeusPedidos();
   return entregarCatalogo(destino, eu.nome);
 }
 
@@ -1994,6 +2408,15 @@ function mostrarLojaAtual() {
     }
   });
 
+  // O pedido pelo cardápio (101).
+  $("#barra-carrinho").addEventListener("click", () => abrirCarrinho());
+  $("#enviar-pedido").addEventListener("click", () => {
+    destino = "pedido";
+    enviarPedido();
+  });
+  $("#ir-meus-pedidos").addEventListener("click", () => { destino = "meus-pedidos"; mostrarMeusPedidos(); });
+  $("#pronto-meus-pedidos").addEventListener("click", () => { destino = "meus-pedidos"; mostrarMeusPedidos(); });
+
   recordar();
   escolherLoja().then(carregarLoja);
 })();
@@ -2049,6 +2472,18 @@ async function restaurarTela() {
     await abrirCatalogo(c);
     if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);
     return;
+  }
+  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido.
+  if (tela === "carrinho" && carrinho && aberto) {
+    const c = catalogosDaCasa.find((x) => x.id === aberto.id);
+    if (!c) return ir("inicio");
+    await abrirCatalogo(c);
+    if (podePedir()) return abrirCarrinho();
+    return;
+  }
+  if (tela === "meus-pedidos") {
+    if (eu.identificado) return mostrarMeusPedidos();
+    return ir("inicio");
   }
   if (tela === "reserva" || tela === "quem") {
     if (!reservaOnline.aceita) return abrirReserva();

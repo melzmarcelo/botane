@@ -175,7 +175,7 @@ st, c, _h = chamar("GET", f"/unidades/{UNIDADE}/whatsapp", token=token)
 checar("nasce desligada, em modo simulado, com o token de verificação do webhook",
        st == 200 and c.get("modo") == "simulado" and c.get("verify_token"), (st, c))
 checar("com os 7 avisos e o texto pronto de cada modelo",
-       len(c.get("avisos") or []) == 7 and all("{{1}}" in a["texto"] for a in c["avisos"]),
+       len(c.get("avisos") or []) == 8 and all("{{1}}" in a["texto"] for a in c["avisos"]),
        len(c.get("avisos") or []))
 VERIFY = c.get("verify_token")
 base = {"ativa": True, "modo": "real", "phone_number_id": PNID, "numero": "(47) 99910-5033",
