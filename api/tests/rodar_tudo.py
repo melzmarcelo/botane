@@ -40,6 +40,13 @@ for caminho in suites:
     r = subprocess.run([sys.executable, caminho], capture_output=True, text=True,
                        errors="replace", cwd=".")
     resumo = [ln for ln in (r.stdout or "").splitlines() if "passaram," in ln]
+    # 🔴 **Estado que a suíte NÃO devolveu é falha**, mesmo com tudo verde. O aviso de
+    # `preservar_*` sai no `atexit`, depois do resumo, e o código de saída continua 0: de
+    # 28 a 29/09/2026 a reserva da loja deixou de ser devolvida em TODA rodada e a bateria
+    # dizia 72/72 (ver `docs/memoria/catalogos.md`).
+    nao_devolveu = [ln for ln in (r.stdout or "").splitlines() if "NÃO FOI DEVOLVID" in ln]
+    if nao_devolveu and r.returncode == 0:
+        r.returncode = 1
     marca = "OK " if r.returncode == 0 else "FALHOU"
     print(f"{marca} {os.path.basename(caminho):38} {resumo[-1] if resumo else '(sem resumo)'}")
     if resumo:
@@ -49,7 +56,7 @@ for caminho in suites:
     if r.returncode != 0:
         quebrados.append(caminho)
         for ln in (r.stdout or "").splitlines():
-            if "FALHA" in ln:
+            if "FALHA" in ln or "NÃO FOI DEVOLVID" in ln or "FOTO DO ESTADO" in ln:
                 print("      ", ln.strip())
         if not resumo:
             print("      ", (r.stderr or "")[-800:])

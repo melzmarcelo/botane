@@ -309,6 +309,24 @@ def contexto_da_credencial(credencial: str, escreve: bool) -> Contexto:
     return carregar_contexto(int(dados["sub"]))
 
 
+def ip_do_cliente(request: Request) -> str | None:
+    """O endereço de quem chamou — o que o App Platform DIZ, nunca o que o visitante escreve.
+
+    🔑 **`do-connecting-ip` é preenchido pela DigitalOcean** com o IP de quem se conectou
+    (docs.digitalocean.com → "Where can I find the client IP address…"). Lá o
+    `X-Forwarded-For` traz o servidor de entrada da própria DO.
+    ⚠️ **NUNCA o `X-Forwarded-For` do pedido.** Até 29/09/2026 o site lia o PRIMEIRO item
+    dele — que é justamente o que o visitante escreve. Trocando o cabeçalho a cada chamada,
+    o limite de tentativas nunca estourava: varrer telefones, abrir cartão fidelidade alheio
+    e cadastrar em massa ficavam sem freio (achado na validação de 29/09/2026).
+    Fora do App Platform (em casa) não há o cabeçalho: vale o endereço da conexão.
+    """
+    da_plataforma = (request.headers.get("do-connecting-ip") or "").strip()
+    if da_plataforma:
+        return da_plataforma
+    return request.client.host if request.client else None
+
+
 def contexto_atual(request: Request) -> Contexto:
     """Dependência base: exige autenticação, não exige permissão nenhuma."""
     auth = request.headers.get("Authorization", "")

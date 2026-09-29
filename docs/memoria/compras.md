@@ -207,6 +207,13 @@
 
 ## Armadilhas já pagas
 
+- 🔴 **Rota por número conferia a permissão e NÃO a loja** (validação de 29/09/2026). Ver,
+  editar, lançar, atualizar do Omie, estornar e descartar nota — e vincular, criar produto e
+  ignorar item — buscavam só pelo `id`: quem trabalha só na filial abria e LANÇAVA nota da
+  matriz trocando o número (sequencial) na URL. Agora `_conferir_loja_da_nota` /
+  `_conferir_loja_do_item` respondem **404** (403 confirmaria que existe). Rota nova por número
+  começa por uma delas. Cobertura: `smoke_lojas_do_usuario` §2b.
+
 - ⚠️ **E contagem somada da PÁGINA é a mesma mentira.** A tela de Compras somava `pendentes`
   das notas que tinham vindo na página carregada e chamava aquilo de "a fila da casa inteira" —
   verdade com 37 notas, mentira com 3.670: a pendente cai na página 4 e o botão "Reconciliar"

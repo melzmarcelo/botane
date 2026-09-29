@@ -446,6 +446,11 @@ pagamento não será pelo sistema."* Estudo e decisões em [`docs/pedidos-estudo
 - ⚠️ **`preservar_reserva` (tests/comum.py) passou a levar os pedidos**: eles apontam para
   `reserva_clientes` com `ON DELETE SET NULL`, e apagar/repor o cliente deixaria todo pedido real
   sem dono. E a reposição passou a embrulhar `jsonb` em `Json` (o histórico).
+  🔴 **E esqueceu o import do `Json` em `preservar_reserva`** (estava só em
+  `preservar_credenciais`): de 28 a 29/09/2026 a reposição estourou em TODA rodada, a
+  transação desfazia a tentativa e a loja 1 LOCAL ficou com o cenário do último teste — a
+  configuração de reserva de antes de 28/09 se perdeu na base de casa (o ar não roda suíte).
+  O aviso em maiúsculas saía, mas o `rodar_tudo` só mostra o resumo de cada suíte.
 - ⚠️ Achado junto: `catalogo_itens` faltava em `limpar_dados.OPERACAO` desde a 084 — a guarda
   recusava a limpeza inteira. ⚠️ **`limpar_dados.py` não tem `--help`**: rodá-lo com qualquer
   argumento mostra a prévia e ESPERA confirmação — não usar para "ver a ajuda".

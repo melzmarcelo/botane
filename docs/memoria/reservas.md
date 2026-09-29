@@ -504,8 +504,14 @@ revela. Quem já tem cadastro vê a dica mascarada (`M••••• D•••
   conta**, embora não grave nada: é por ela que uma varredura passaria.
 - ⚠️ **Guarda-se o HASH da origem, não o endereço.** Contar quantas vieram do mesmo lugar não
   exige saber qual lugar é, e IP de visitante é dado pessoal que a casa não tem por que
-  acumular. ⚠️ E `X-Forwarded-For` é o que vale atrás do App Platform: sem ele tudo chega com
-  o IP do balanceador e o limite por origem vira um limite global que barra a casa inteira.
+  acumular.
+- 🔴 **A origem é o `do-connecting-ip`, NUNCA o `X-Forwarded-For`** (validação de 29/09/2026,
+  `seguranca.ip_do_cliente`). A primeira versão lia o PRIMEIRO item do `X-Forwarded-For` —
+  justamente o que o visitante escreve: trocando o cabeçalho a cada chamada, o limite nunca
+  fechava (varrer telefones, abrir cartão fidelidade alheio, cadastrar em massa). No App
+  Platform o `X-Forwarded-For` traz o servidor de entrada da DO; quem traz o visitante é o
+  `do-connecting-ip`, preenchido pela plataforma. Em casa não há o cabeçalho e vale o endereço
+  da conexão. `smoke_reserva_site` §9 prova que forjar o `X-Forwarded-For` não reabre a porta.
 
 ### A porta que já existia
 

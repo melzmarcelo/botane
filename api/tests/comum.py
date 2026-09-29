@@ -277,7 +277,10 @@ def preservar_reserva(unidade: int):
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import psycopg2
-    from psycopg2.extras import RealDictCursor
+    # ⚠️ `Json` AQUI, e não só em `preservar_credenciais`: a reposição embrulha o `jsonb`
+    # dos pedidos com ele, e sem o import ela estourava em TODA rodada (28 a 29/09/2026) —
+    # a loja ficava sem a reserva devolvida e só a foto em disco sobrava.
+    from psycopg2.extras import Json, RealDictCursor
 
     from config import DB_HOST, DB_NAME, DB_PASSWORD, DB_PORT, DB_SSLMODE, DB_USER
 

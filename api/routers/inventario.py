@@ -25,6 +25,20 @@ from services.custos import dec
 
 router = APIRouter(prefix="/inventarios", tags=["inventário"])
 
+
+def _conferir_loja_do_inventario(ctx: Contexto, id_inventario: int) -> None:
+    """A contagem é de uma loja que esta pessoa enxerga? Se não, 404.
+
+    🔑 **Achado na validação de 29/09/2026**: ver, contar, incluir, fechar, cancelar e
+    renomear buscavam só pelo `id` — quem trabalha só na filial fechava a contagem da
+    matriz, e fechar grava ajuste no razão. ⚠️ 404, não 403 (não confirma que existe).
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT id_unidade FROM inventarios WHERE id = %s", (id_inventario,))
+        linha = cur.fetchone()
+    if not linha or not ctx.ve_unidade(linha["id_unidade"]):
+        raise HTTPException(status_code=404, detail="Inventário não encontrado")
+
 # Contar e montar a contagem são trabalhos diferentes, feitos por gente
 # diferente: quem vai à prateleira precisa de uma coisa só — abrir a contagem
 # que já existe e digitar o que viu.
@@ -316,6 +330,7 @@ def previa(
 
 @router.get("/{id_inventario}", response_model=InventarioResponse)
 def obter(id_inventario: int, ctx: Contexto = Depends(_perm)) -> dict:
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         return _montar(cur, id_inventario)
 
@@ -435,6 +450,7 @@ def renomear(id_inventario: int, body: InventarioRenomear,
     Vale também depois de fechada — quem quer achar "a contagem do Natal" seis
     meses depois não deveria depender de ter acertado o nome na abertura.
     """
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         cur.execute("SELECT nome FROM inventarios WHERE id = %s", (id_inventario,))
         antes = cur.fetchone()
@@ -450,6 +466,7 @@ def renomear(id_inventario: int, body: InventarioRenomear,
 @router.put("/{id_inventario}/contagem")
 def contar(id_inventario: int, body: ContagemRequest, ctx: Contexto = Depends(_perm)) -> dict:
     """Grava a contagem. Ainda não mexe no razão — isso é no fechamento."""
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         _exigir_contador(cur, id_inventario, ctx)
         cur.execute("SELECT status, id_local FROM inventarios WHERE id = %s", (id_inventario,))
@@ -531,6 +548,7 @@ def incluir(id_inventario: int, body: IncluirItemRequest,
     ⚠️ No fechamento, a sobra entra pelo custo MÉDIO do produto (nunca zero), como todo
     ajuste de inventário.
     """
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         _exigir_contador(cur, id_inventario, ctx)
         cur.execute("SELECT * FROM inventarios WHERE id = %s", (id_inventario,))
@@ -579,6 +597,7 @@ def incluir(id_inventario: int, body: IncluirItemRequest,
 @router.post("/{id_inventario}/fechar")
 def fechar(id_inventario: int, ctx: Contexto = Depends(requer_permissao("estoque.ajuste"))) -> dict:
     """Fecha e acerta o razão: cada diferença vira um movimento de ajuste."""
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         # 🔑 **`FOR UPDATE`, senão "já fechado" não é guarda nenhuma.** Dois
         # fechamentos simultâneos leem ABERTO os dois e cada diferença vira DOIS
@@ -645,6 +664,7 @@ def fechar(id_inventario: int, ctx: Contexto = Depends(requer_permissao("estoque
 
 @router.delete("/{id_inventario}")
 def cancelar(id_inventario: int, ctx: Contexto = Depends(_perm_criar)) -> dict:
+    _conferir_loja_do_inventario(ctx, id_inventario)
     with get_cursor() as cur:
         cur.execute("SELECT status FROM inventarios WHERE id = %s", (id_inventario,))
         inv = cur.fetchone()

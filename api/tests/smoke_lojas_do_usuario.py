@@ -187,6 +187,52 @@ if id_prod_r and locais_m and local_filial:
            linha_dele.get("valor"))
 
 
+print("\n2b. nota e contagem da OUTRA loja, pelo número")
+# 🔑 **Achado na validação de 29/09/2026**: as rotas por número de Notas e Inventário
+# buscavam só pelo `id`. Quem só vê a filial abria — e lançava — a nota da matriz trocando
+# o número na URL. Agora é 404, como se não existisse (403 confirmaria que existe).
+if id_prod_r and locais_m:
+    st, nota_m = chamar("POST", "/notas", {
+        "numero": f"SEP{marca}", "serie": "1", "data_emissao": time.strftime("%Y-%m-%d"),
+        "id_local": locais_m[0]["id"],
+        "itens": [{"descricao_fornecedor": "INSUMO DA MATRIZ", "id_produto": id_prod_r,
+                   "quantidade": 1, "um": "KG", "valor_unitario": 10}]}, token=token, unidade=1)
+    id_nota_m = (nota_m or {}).get("id")
+    st, inv_m = chamar("POST", "/inventarios", {"id_local": locais_m[0]["id"],
+                                                "produtos": [id_prod_r], "cega": False},
+                       token=token, unidade=1)
+    id_inv_m = (inv_m or {}).get("id")
+    checar("o cenário tem uma nota e uma contagem na matriz", bool(id_nota_m and id_inv_m),
+           (nota_m, inv_m))
+    try:
+        st, _r = chamar("GET", f"/notas/{id_nota_m}", token=token)
+        checar("o administrador abre a nota da matriz", st == 200, st)
+        st, _r = chamar("GET", f"/notas/{id_nota_m}", token=tk)
+        checar("quem só vê a filial NÃO abre a nota da matriz (404)", st == 404, st)
+        st, _r = chamar("POST", f"/notas/{id_nota_m}/lancar", {}, token=tk)
+        checar("nem a lança", st in (403, 404), st)
+        st, _r = chamar("DELETE", f"/notas/{id_nota_m}", token=tk)
+        checar("nem a descarta", st in (403, 404), st)
+        st, n = chamar("GET", f"/notas/{id_nota_m}", token=token)
+        id_item_m = ((n or {}).get("itens") or [{}])[0].get("id")
+        st, _r = chamar("POST", f"/notas/itens/{id_item_m}/ignorar", token=tk)
+        checar("nem mexe nos itens dela", st in (403, 404), st)
+        st, _r = chamar("GET", f"/inventarios/{id_inv_m}", token=tk)
+        checar("NÃO abre a contagem da matriz (404)", st == 404, st)
+        st, _r = chamar("POST", f"/inventarios/{id_inv_m}/fechar", token=tk)
+        checar("nem a fecha — fechar grava no razão", st in (403, 404), st)
+        st, _r = chamar("DELETE", f"/inventarios/{id_inv_m}", token=tk)
+        checar("nem a cancela", st in (403, 404), st)
+        st, inv_ainda = chamar("GET", f"/inventarios/{id_inv_m}", token=token)
+        checar("e a contagem da matriz segue ABERTA", (inv_ainda or {}).get("status") == "ABERTO",
+               inv_ainda)
+    finally:
+        if id_inv_m:
+            chamar("DELETE", f"/inventarios/{id_inv_m}", token=token)
+        if id_nota_m:
+            chamar("DELETE", f"/notas/{id_nota_m}", token=token)
+
+
 print("\n3. ninguém dá acesso a loja que não enxerga")
 # 🔑 Sem esta trava, quem está preso à filial criaria um usuário com acesso à
 # matriz — dando a outra pessoa um alcance que ele mesmo não tem. É escalar

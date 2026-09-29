@@ -211,7 +211,9 @@ finally:
         cur.execute("DELETE FROM integracoes WHERE servico = 'ANTHROPIC' AND id_unidade IS NULL")
         if CHAVE_DA_CASA:
             cols = [k for k in CHAVE_DA_CASA if k != "id"]
-            from psycopg.types.json import Json
+            # ⚠️ `psycopg2`, o driver do projeto: com `psycopg` (o 3) o import estourava e a
+            # chave da CASA não voltava — foi assim que a de verdade se perdeu (29/09/2026).
+            from psycopg2.extras import Json
             cur.execute(f"INSERT INTO integracoes ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))})",
                         [Json(CHAVE_DA_CASA[k]) if k == "config" and CHAVE_DA_CASA[k] is not None
                          else CHAVE_DA_CASA[k] for k in cols])

@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from database import get_cursor
 from relogio import agora_da_casa
+from seguranca import ip_do_cliente
 from models.catalogos import ORIGEM_PRODUTOS
 from models.reservas import CancelamentoDoSite, ClienteDoSite, IdentificacaoDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
@@ -702,16 +703,10 @@ def horarios(
 def _de_onde_veio(pedido: Request) -> str | None:
     """O endereço de quem chamou, para CONTAR — nunca para guardar.
 
-    ⚠️ **`X-Forwarded-For` é o que vale atrás do App Platform**: sem ele, todas as
-    requisições chegam com o IP do balanceador e o limite por origem vira um
-    limite global que barra a casa inteira quando um visitante exagera.
-    ⚠️ E só o PRIMEIRO da lista — o resto é cadeia de proxy, que qualquer um pode
-    inventar acrescentando um cabeçalho.
+    ⚠️ Vem de `seguranca.ip_do_cliente`: o cabeçalho que a DigitalOcean preenche, nunca o
+    `X-Forwarded-For` que o visitante pode escrever (era o furo do limite, 29/09/2026).
     """
-    encaminhado = pedido.headers.get("x-forwarded-for")
-    if encaminhado:
-        return encaminhado.split(",")[0].strip() or None
-    return pedido.client.host if pedido.client else None
+    return ip_do_cliente(pedido)
 
 
 def _reserva_online(cur, id_unidade: int) -> dict:

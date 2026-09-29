@@ -27,6 +27,15 @@
 
 ## Armadilhas já pagas
 
+- 🔴 **Next.js 16.3.1 tinha falha CRÍTICA de execução remota no otimizador de imagem**
+  (GHSA-2xp9-vwfh-vxw4) — e `/_next/image` responde no ar. Subiu para 16.3.7 em 29/09/2026
+  (`npm audit --omit=dev` limpo, `sharp` junto). Rodar `npm audit --omit=dev` antes de promover.
+  ⚠️ Parar o `next dev` no meio deixa `.next/dev/types` cortado e o `next build` seguinte
+  falha em TypeScript num arquivo gerado — apagar `.next/dev` e compilar de novo.
+- ⚠️ **O IP do visitante no App Platform é o `do-connecting-ip`**, não o `X-Forwarded-For`
+  (que lá é o servidor de entrada da DO — e o que o visitante escreve vem na frente dele).
+  Ponto único: `seguranca.ip_do_cliente`.
+
 - 🔑 **`timeout=` do smtplib é POR OPERAÇÃO, e são quatro — o pior caso era 80 s.** Conectar,
   STARTTLS, autenticar e enviar, 20 s cada. O roteamento do App Platform desiste em ~60 s e
   devolve **504 com página HTML**, então o que chegava na tela não era o erro do SMTP: era o do

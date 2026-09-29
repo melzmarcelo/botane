@@ -170,6 +170,10 @@ def criar_unidade(body: UnidadeCreate,
 @router.put("/unidades/{id_unidade}")
 def atualizar_unidade(id_unidade: int, body: UnidadeUpdate,
                       ctx: Contexto = Depends(requer_permissao("admin.unidades"))) -> dict:
+    # ⚠️ A mesma conferência da LEITURA (validação de 29/09/2026): quem cuida só de uma
+    # loja não altera outra trocando o número na URL.
+    if not ctx.ve_unidade(id_unidade):
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
     dados = body.model_dump(exclude_unset=True)
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
@@ -252,6 +256,10 @@ def previa_do_fechamento(
 @router.put("/unidades/{id_unidade}/parametros")
 def atualizar_parametros(id_unidade: int, body: ParametrosUpdate,
                          ctx: Contexto = Depends(requer_permissao("admin.unidades"))) -> dict:
+    # ⚠️ A mesma conferência da LEITURA (validação de 29/09/2026): quem cuida só de uma
+    # loja não altera outra trocando o número na URL.
+    if not ctx.ve_unidade(id_unidade):
+        raise HTTPException(status_code=404, detail="Loja não encontrada")
     dados = body.model_dump(exclude_unset=True)
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para atualizar")

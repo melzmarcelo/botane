@@ -8363,6 +8363,11 @@ try {
       // 🔑 O NUMERO DO PEDIDO: quanto e preciso descer a PAGINA para alcancar a
       // barra de rolagem horizontal do grid.
       descerPara: Math.max(0, Math.round(r.bottom - window.innerHeight)),
+      // ⚠️ Medido a partir do TOPO DO GRID (29/09/2026): o card de lotes acima do razão
+      // cresce com a base, e o razão passou a começar abaixo da primeira tela — o que
+      // não tem nada a ver com a barra dele. O pedido é "não precisar ir até o fim do
+      // grid": chegando ao grid, a barra está a menos de uma tela.
+      descerDoTopo: Math.max(0, Math.round(r.height - window.innerHeight)),
       rolaDentro: d.scrollHeight > d.clientHeight + 1,
     };
   });
@@ -8375,8 +8380,8 @@ try {
   // 🔑 **A prova do pedido**: antes era descer 9.545px; agora e menos de uma
   // tela. Se alguem devolver a altura, este numero volta a explodir.
   checar("e a barra de rolagem deixa de ficar no fim da pagina",
-    (gridLongo?.descerPara ?? 99999) < gridLongo.janela,
-    { descerPara: gridLongo?.descerPara, antesEra: 9545 });
+    (gridLongo?.descerDoTopo ?? 99999) < gridLongo.janela,
+    { descerDoTopo: gridLongo?.descerDoTopo, descerPara: gridLongo?.descerPara, antesEra: 9545 });
 
   // 🔑 **O cabecalho fica FIXO**, que e o outro problema da tabela longa: ler a
   // vigesima linha sem saber que coluna e qual.

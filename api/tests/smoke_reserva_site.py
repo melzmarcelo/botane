@@ -35,15 +35,18 @@ ok = 0
 falhas: list[str] = []
 
 
-def chamar(metodo, caminho, corpo=None, token=None, origem=None):
+def chamar(metodo, caminho, corpo=None, token=None, origem=None, forjado=None):
     req = urllib.request.Request(BASE + urllib.parse.quote(caminho, safe="/?=&"),
                                  method=metodo)
     req.add_header("Content-Type", "application/json")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
-    # 🔑 O limite por origem lê `X-Forwarded-For`: é o que o balanceador manda.
+    # 🔑 O limite por origem lê `do-connecting-ip`: é o que o App Platform preenche com o
+    # IP de quem conectou (`seguranca.ip_do_cliente`). Aqui a suíte faz o papel dele.
     if origem:
-        req.add_header("X-Forwarded-For", origem)
+        req.add_header("do-connecting-ip", origem)
+    if forjado:
+        req.add_header("X-Forwarded-For", forjado)
     dados = json.dumps(corpo, default=str).encode() if corpo is not None else None
     try:
         with urllib.request.urlopen(req, dados, timeout=40) as r:
@@ -474,6 +477,11 @@ checar("e a partir do limite a porta fecha (429)", respostas[-1] == 429, respost
 st, _r = chamar("POST", f"/publico/{UNIDADE}/reserva/telefone",
                 {"telefone": "47999109999"}, origem="198.51.100.9")
 checar("mas outra origem continua entrando", st == 200, st)
+# 🔑 **O `X-Forwarded-For` é do VISITANTE, e não conta** (achado de 29/09/2026). O site lia
+# o primeiro item dele: trocando-o a cada chamada, o limite nunca fechava.
+st, _r = chamar("POST", f"/publico/{UNIDADE}/reserva/telefone",
+                {"telefone": "47999109999"}, origem="198.51.100.4", forjado="10.9.8.7")
+checar("forjar o X-Forwarded-For NÃO reabre a porta de quem estourou", st == 429, st)
 
 print("\n10. o que a casa ainda decide")
 sem_tentativas()

@@ -30,6 +30,31 @@ from services import produtos_vinculo
 
 router = APIRouter(prefix="/notas", tags=["Notas de entrada"])
 
+
+def _conferir_loja_da_nota(ctx: Contexto, id_nota: int) -> None:
+    """A nota é de uma loja que esta pessoa enxerga? Se não, 404 — como se não existisse.
+
+    🔑 **Achado na validação de 29/09/2026**: as rotas por número (ver, editar, lançar,
+    estornar, descartar, itens) buscavam só pelo `id`. Quem trabalha só na filial abria e
+    LANÇAVA nota da matriz trocando o número na URL — os números são sequenciais.
+    ⚠️ 404, não 403: 403 confirmaria que a nota existe noutra loja.
+    """
+    with get_cursor() as cur:
+        cur.execute("SELECT id_unidade FROM notas_entrada WHERE id = %s", (id_nota,))
+        linha = cur.fetchone()
+    if not linha or not ctx.ve_unidade(linha["id_unidade"]):
+        raise HTTPException(status_code=404, detail="Nota não encontrada")
+
+
+def _conferir_loja_do_item(ctx: Contexto, id_item: int) -> None:
+    """O mesmo, chegando pelo ITEM: a loja é a da nota dele."""
+    with get_cursor() as cur:
+        cur.execute("""SELECT n.id_unidade FROM nota_itens i
+                         JOIN notas_entrada n ON n.id = i.id_nota WHERE i.id = %s""", (id_item,))
+        linha = cur.fetchone()
+    if not linha or not ctx.ve_unidade(linha["id_unidade"]):
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+
 # 8 MB cobre com folga a NF-e mais comprida que já vi (uns 900 itens).
 LIMITE_XML = 8 * 1024 * 1024
 
@@ -263,6 +288,7 @@ def editar_manual(id_nota: int, body: NotaManual,
     sem deixar rastro. E **só antes de lançar**: depois de virar movimento no
     razão, o caminho é estornar.
     """
+    _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         cur.execute(
@@ -492,6 +518,7 @@ def desvincular(codigo: str,
 @router.get("/{id_nota}")
 def obter(id_nota: int,
           ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         cur.execute(
             """SELECT n.*, f.nome AS fornecedor FROM notas_entrada n
@@ -638,6 +665,7 @@ def vincular(id_item: int, body: VincularRequest,
     de `codigos_externos` daquele fornecedor passa a apontar para o produto novo.
     Desde a migração 067 isso já não pisa no vínculo do outro fornecedor.
     """
+    _conferir_loja_do_item(ctx, id_item)
     with get_cursor() as cur:
         item = _item_de_nota_aberta(cur, id_item)
         trocou = bool(item["id_produto"]) and item["id_produto"] != body.id_produto
@@ -685,6 +713,7 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
     venda, categoria nem fator conferido; rascunho não entra em ficha nem em
     venda até alguém completar. É a mesma trava do catálogo importado do Omie.
     """
+    _conferir_loja_do_item(ctx, id_item)
     body = body or ProdutoDoItem()
     with get_cursor() as cur:
         item = _item_de_nota_aberta(cur, id_item)
@@ -803,6 +832,7 @@ def criar_produto_do_item(id_item: int, body: ProdutoDoItem | None = None,
 def ignorar(id_item: int,
             ctx: Contexto = Depends(requer_permissao("compras.conciliar"))) -> dict:
     """Item que não se controla em estoque (descartável avulso, serviço)."""
+    _conferir_loja_do_item(ctx, id_item)
     with get_cursor() as cur:
         cur.execute(
             "UPDATE nota_itens SET ignorado = true, id_produto = NULL WHERE id = %s RETURNING id_nota",
@@ -819,6 +849,7 @@ def ignorar(id_item: int,
 @router.post("/{id_nota}/lancar")
 def lancar(id_nota: int, body: LancarRequest,
            ctx: Contexto = Depends(requer_permissao("compras.lancar"))) -> dict:
+    _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         r = importador.lancar_nota(cur, id_nota, ctx.id_usuario, body.id_local,
                                    ctx.pode("estoque.retroativo"))
@@ -847,6 +878,7 @@ def atualizar_do_omie(id_nota: int,
     ⚠️ **Só a nota que veio do Omie.** A digitada é da casa (e se edita pelo
     `PUT`); a do XML é o documento do fornecedor, e não há de onde reler.
     """
+    _conferir_loja_da_nota(ctx, id_nota)
     from services import segredos
     from services.omie import mapeadores
     from services.omie.cliente import ClienteOmie, ErroOmie
@@ -1031,6 +1063,7 @@ def estornar_nota(id_nota: int,
     Nota lançada errada acontece (item vinculado ao produto errado, quantidade
     trocada). O razão não se apaga — o estorno é o caminho.
     """
+    _conferir_loja_da_nota(ctx, id_nota)
     from services import estoque as motor
 
     with get_cursor() as cur:
@@ -1068,6 +1101,7 @@ def descartar(id_nota: int,
               ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
     """Descarta uma nota que não deveria estar aqui (não é da casa, foi digitada
     errada, veio duplicada por outro caminho). Só antes de lançar."""
+    _conferir_loja_da_nota(ctx, id_nota)
     with get_cursor() as cur:
         cur.execute("SELECT status FROM notas_entrada WHERE id = %s", (id_nota,))
         nota = cur.fetchone()

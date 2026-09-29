@@ -25,6 +25,7 @@ from seguranca import (
     gerar_refresh,
     hash_refresh,
     hash_senha,
+    ip_do_cliente,
     unidade_atual,
     verificar_senha,
 )
@@ -34,7 +35,8 @@ router = APIRouter(prefix="/auth", tags=["autenticação"])
 
 
 def _ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    # O IP da pessoa, não o do servidor de entrada da DO (ver `seguranca.ip_do_cliente`).
+    return ip_do_cliente(request)
 
 
 @router.post("/login", response_model=LoginResponse)

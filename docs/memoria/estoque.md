@@ -517,6 +517,12 @@
 
 ## Armadilhas já pagas
 
+- 🔴 **Inventário por número não conferia a loja** (validação de 29/09/2026): ver, contar,
+  incluir, fechar, cancelar e renomear buscavam só pelo `id` — quem só vê a filial fechava a
+  contagem da matriz, e fechar grava ajuste no razão. `_conferir_loja_do_inventario` responde
+  404. O mesmo em `PUT /unidades/{id}` e `/parametros`, que conferiam a loja só na LEITURA.
+  Cobertura: `smoke_lojas_do_usuario` §2b.
+
 - 🔑 **O seletor de local oferecia TODOS os locais da casa — 93 numa base real.** O produto
   costuma estar em UM. Escolher o errado não dava erro na hora: numa saída, o razão registrava
   a baixa por um local onde o insumo nunca passou, criando saldo **negativo com custo
