@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Início — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+  /* Cores e fontes REAIS do sistema (web/app/globals.css). Cor semântica separada do
+     acento: erva = bom, alerta = atenção, erro = ruim. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3; --superficie: #fcfdfa; --superficie2: #edf0e7;
+    --tinta: #14201a; --suave: #5d6c61; --linha: #d8ded0; --linha2: #748069;
+    --erva: #2c6a4a; --erva-claro: #e3efe7; --alerta: #8a5d12; --alerta-claro: #f6ecd9;
+    --erro: #95332a; --erro-claro: #f7e7e4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--leitura);
+         font-size: 15px; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .folha { max-width: 1380px; margin: 0 auto; padding: 32px 20px 80px; }
+  .rotulo-secao { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+                  text-transform: uppercase; color: var(--suave); margin: 0; }
+  .titulo-doc { font-family: var(--display); font-size: 30px; font-weight: 700;
+                letter-spacing: -.02em; margin: 6px 0 0; }
+  .prosa { font-family: var(--corpo); font-size: 17px; line-height: 1.55; color: var(--suave);
+           max-width: 78ch; }
+  .prosa strong { color: var(--tinta); font-weight: 500; }
+
+  /* ---- os comandos do protótipo ---- */
+  .comandos { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 18px 0 22px;
+              position: sticky; top: 0; z-index: 30; padding-block: 10px;
+              background: linear-gradient(var(--papel) 75%, transparent); }
+  .segmentado { display: inline-flex; gap: 3px; padding: 3px; border-radius: 10px;
+                background: var(--superficie2); border: 1px solid var(--linha); }
+  .segmentado button { border: 0; background: none; padding: 7px 12px; border-radius: 7px;
+                       font: 600 13px var(--leitura); color: var(--suave); cursor: pointer; }
+  .segmentado button[aria-pressed="true"] { background: var(--superficie); color: var(--erva);
+                                             box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .comandos .rot { font: 600 12px var(--leitura); color: var(--suave); }
+
+  /* ---- a moldura do sistema ---- */
+  .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); border-radius: 16px;
+         overflow: hidden; border: 1px solid var(--linha2); background: var(--papel);
+         box-shadow: 0 20px 50px -30px rgba(20,32,26,.45); margin-inline: auto; }
+  .app.celular { grid-template-columns: 1fr; max-width: 400px; }
+  .app.celular .lateral { display: none; }
+  .lateral { background: var(--superficie); border-right: 1px solid var(--linha); padding: 16px 12px;
+             font: 500 13.5px var(--display); }
+  .lateral .marca { font: 800 18px var(--display); color: var(--erva); padding: 4px 8px 14px; }
+  .lateral .busca { border: 1px solid var(--linha2); border-radius: 8px; padding: 7px 9px;
+                    color: var(--suave); font: 500 12.5px var(--leitura); margin: 0 4px 12px;
+                    display: flex; justify-content: space-between; }
+  .lateral a { display: block; padding: 7px 10px; border-radius: 8px; color: var(--tinta); }
+  .lateral a.ativo { background: var(--erva-claro); color: var(--erva); font-weight: 700; }
+  .lateral .grupo { color: var(--suave); }
+  .principal { padding: 22px; container-type: inline-size; min-width: 0; }
+  .barra-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+                margin: -22px -22px 18px; padding: 10px 22px; background: var(--superficie);
+                border-bottom: 1px solid var(--linha); font-size: 13px; color: var(--suave); }
+  .chip { border: 1px solid var(--linha2); border-radius: 999px; padding: 3px 10px;
+          font: 600 12px var(--leitura); color: var(--tinta); background: var(--superficie); }
+
+  /* ---- a tela inicial ---- */
+  .cabeca { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+            gap: 6px 16px; margin-bottom: 16px; }
+  .cabeca h1 { font: 700 24px var(--display); letter-spacing: -.02em; margin: 0; }
+  .cabeca p { margin: 0; color: var(--suave); font-size: 13.5px; }
+
+  .grade { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+  .c12 { grid-column: span 12; } .c8 { grid-column: span 8; } .c4 { grid-column: span 4; }
+  .c6 { grid-column: span 6; }
+  @container (max-width: 980px) { .c8, .c4, .c6 { grid-column: span 12; } }
+  /* No celular, o que pede ação vem antes dos números do período. */
+  @container (max-width: 980px) { .grade > [aria-label="atenção"] { order: -1; }
+                                  .grade > [aria-label="hoje"] { order: -2; } }
+
+  .cartao { background: var(--superficie); border: 1px solid var(--linha); border-radius: 12px;
+            padding: 14px 16px; min-width: 0; }
+  .cartao > header { display: flex; justify-content: space-between; align-items: baseline;
+                     gap: 10px; margin-bottom: 10px; }
+  .cartao h2 { font: 700 15px var(--display); margin: 0; }
+  .cartao .ver { font: 600 12.5px var(--leitura); color: var(--erva); white-space: nowrap; }
+
+  /* A faixa "Hoje": seis números numa linha, cada um uma porta. */
+  .faixa { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .faixa > a { padding: 4px 14px; border-left: 1px solid var(--linha); min-width: 0; }
+  .faixa > a:first-child { border-left: 0; padding-left: 0; }
+  .faixa > a:hover .num { color: var(--erva); }
+  @container (max-width: 980px) {
+    .faixa { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; }
+    .faixa > a:nth-child(3n+1) { border-left: 0; padding-left: 0; }
+  }
+  @container (max-width: 480px) {
+    .faixa { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .faixa > a { border-left: 0; padding-left: 0; }
+  }
+  .rot { font: 600 11px var(--leitura); letter-spacing: .06em; text-transform: uppercase;
+         color: var(--suave); display: block; }
+  .num { font: 600 22px var(--mono); letter-spacing: -.02em; display: block; margin-top: 3px;
+         font-variant-numeric: tabular-nums; }
+  .sub { font-size: 12.5px; color: var(--suave); display: block; margin-top: 2px; }
+  .alerta { color: var(--alerta); } .erro { color: var(--erro); } .bom { color: var(--erva); }
+  .nota-faixa { margin: 12px 0 0; padding-top: 10px; border-top: 1px dashed var(--linha);
+                font-size: 12.5px; color: var(--suave); }
+
+  /* O período: quatro números em colunas, com a régua do food cost. */
+  .quatro { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
+  .quatro > a { padding: 2px 14px; border-left: 1px solid var(--linha); min-width: 0; }
+  .quatro > a:first-child { border-left: 0; padding-left: 0; }
+  @container (max-width: 640px) {
+    .quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+    .quatro > a:nth-child(odd) { border-left: 0; padding-left: 0; }
+  }
+  .regua { display: block; height: 6px; border-radius: 3px; background: var(--superficie2); margin-top: 8px;
+           position: relative; overflow: visible; }
+  .regua i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--erva); }
+  .regua b { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--tinta); }
+  .confianca { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 12.5px;
+               color: var(--suave); background: var(--alerta-claro); border-radius: 8px;
+               padding: 7px 10px; }
+
+  /* Atenção: uma linha por assunto, número à esquerda. */
+  .lista { list-style: none; margin: 0; padding: 0; }
+  .lista li { display: flex; align-items: baseline; gap: 10px; padding: 7px 0;
+              border-top: 1px solid var(--linha); font-size: 13.5px; min-width: 0; }
+  .lista li:first-child { border-top: 0; padding-top: 0; }
+  .lista .q { font: 700 13px var(--mono); min-width: 22px; text-align: right; }
+  .lista .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lista .d { color: var(--suave); font: 500 12.5px var(--mono); white-space: nowrap; }
+  .bola { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none;
+          transform: translateY(-1px); }
+  .bola.critico { background: var(--erro); } .bola.atencao { background: #c08a2c; }
+
+  /* As três listas do dia, lado a lado. */
+  .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  @container (max-width: 980px) { .tres { grid-template-columns: 1fr; } }
+  .contagens { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .etq { font: 600 11.5px var(--leitura); border-radius: 999px; padding: 2px 8px;
+         background: var(--superficie2); color: var(--suave); }
+  .etq.alerta { background: var(--alerta-claro); color: var(--alerta); }
+  .etq.erro { background: var(--erro-claro); color: var(--erro); }
+  .etq.bom { background: var(--erva-claro); color: var(--erva); }
+
+  /* O custo por setor: barras em duas colunas. */
+  .barras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 22px; }
+  @container (max-width: 640px) { .barras { grid-template-columns: 1fr; } }
+  .barra .l { display: flex; justify-content: space-between; font-size: 13px; }
+  .barra .trilho { height: 7px; border-radius: 4px; background: var(--superficie2); margin-top: 4px; }
+  .barra .trilho i { display: block; height: 7px; border-radius: 4px; background: var(--erva); }
+
+  /* A casa: seis contadores em grade, sem linhas inteiras para um número. */
+  .contadores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @container (max-width: 480px) { .contadores { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .contadores a { background: var(--superficie2); border-radius: 9px; padding: 9px 10px; }
+  .contadores b { font: 700 18px var(--mono); display: block; }
+  .contadores span { font-size: 12px; color: var(--suave); }
+  .contadores a.zero b { color: var(--suave); font-weight: 500; }
+
+  /* Os perfis do protótipo */
+  .sem-valores [data-valor] { display: none !important; }
+  [data-so-cozinha] { display: none !important; }
+  .sem-valores [data-so-cozinha] { display: block !important; }
+  /* Sem os cartões de dinheiro, o que sobra se junta — sem buraco na grade. */
+  .sem-valores .grade { grid-auto-flow: dense; }
+  .sem-valores .c4 { grid-column: span 6; }
+  .sem-valores .faixa { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @container (max-width: 980px) { .sem-valores .c4 { grid-column: span 12; } }
+  .notas { margin-top: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+           gap: 16px; }
+  .notas .cartao h3 { font: 700 15px var(--display); margin: 0 0 6px; }
+  .notas .cartao p, .notas .cartao li { font-size: 14px; color: var(--suave); line-height: 1.5; }
+  .notas ul { margin: 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<div class="folha">
+  <p class="rotulo-secao">Protótipo · para aprovar antes de construir</p>
+  <h1 class="titulo-doc">A tela inicial, mais limpa</h1>
+  <p class="prosa">
+    Hoje a tela inicial é uma pilha de cartões de largura inteira: <strong>cada número ocupa uma
+    linha</strong> e o que precisa de ação aparece depois de rolar. Aqui a mesma informação vira
+    <strong>colunas</strong>: primeiro o <strong>dia</strong> numa faixa só, depois o
+    <strong>período</strong> ao lado do que <strong>precisa de atenção</strong>, e as listas do dia —
+    pedidos, mesas e produção — lado a lado. Nada foi tirado; troque o perfil e o tamanho da tela
+    nos botões abaixo.
+  </p>
+
+  <div class="comandos">
+    <span class="rot">Quem abre</span>
+    <div class="segmentado" id="perfil">
+      <button aria-pressed="true" data-v="gerente">Gerente (vê valores)</button>
+      <button aria-pressed="false" data-v="cozinha">Cozinha (sem valores)</button>
+    </div>
+    <span class="rot">Tela</span>
+    <div class="segmentado" id="tela">
+      <button aria-pressed="true" data-v="computador">Computador</button>
+      <button aria-pressed="false" data-v="celular">Celular</button>
+    </div>
+  </div>
+
+  <div class="app" id="app">
+    <nav class="lateral" aria-label="menu">
+      <div class="marca">Botané</div>
+      <div class="busca"><span>Buscar tela</span><span class="mono">Ctrl K</span></div>
+      <a class="ativo" href="#">Início</a>
+      <a class="grupo" href="#">Cadastros ›</a>
+      <a href="#">Notas de entrada</a>
+      <a class="grupo" href="#">Vendas ›</a>
+      <a class="grupo" href="#">Estoque ›</a>
+      <a href="#">CMV</a>
+      <a class="grupo" href="#">Portal de Clientes ›</a>
+      <a class="grupo" href="#">Etiquetas ›</a>
+      <a class="grupo" href="#">Administração ›</a>
+    </nav>
+
+    <main class="principal">
+      <div class="barra-topo">
+        <span>Botané Deli &amp; Café</span>
+        <span><span class="chip">Loja Centro</span> &nbsp; atualizado às 10:42</span>
+      </div>
+
+      <div class="cabeca">
+        <h1>Bom dia, Marcelo</h1>
+        <p>Terça, 29 de setembro · período de <b>setembro</b> (aberto, dia 29 de 30)</p>
+      </div>
+
+      <div class="grade">
+        <!-- ============ HOJE ============ -->
+        <section class="cartao c12" aria-label="hoje">
+          <header><h2>Hoje</h2><a class="ver" href="#" data-valor>vendas do dia ›</a></header>
+          <div class="faixa">
+            <a href="#" data-valor><span class="rot">Vendas</span><span class="num">48</span>
+              <span class="sub">cupons até 10:40</span></a>
+            <a href="#" data-valor><span class="rot">Faturado</span><span class="num">R$ 3.284</span>
+              <span class="sub bom">+12% sobre terça passada</span></a>
+            <a href="#" data-valor><span class="rot">Ticket médio</span><span class="num">R$ 68,42</span>
+              <span class="sub">por cupom</span></a>
+            <a href="#"><span class="rot">Pedidos do site</span><span class="num">5</span>
+              <span class="sub alerta">2 a confirmar</span></a>
+            <a href="#"><span class="rot">Mesas</span><span class="num">7</span>
+              <span class="sub">23 pessoas · 1 a confirmar</span></a>
+            <a href="#"><span class="rot">Produção</span><span class="num">6</span>
+              <span class="sub erro">1 atrasada</span></a>
+            <a href="#" data-so-cozinha><span class="rot">Etiquetas</span><span class="num erro">3</span>
+              <span class="sub">vencidas · 5 vencem hoje</span></a>
+          </div>
+          <p class="nota-faixa" data-valor>3 cupons cancelados no PDV (R$ 212,00) — lá o dia tem 51 cupons.</p>
+        </section>
+
+        <!-- ============ O PERÍODO ============ -->
+        <section class="cartao c8" data-valor aria-label="período">
+          <header><h2>Setembro até agora</h2><a class="ver" href="#">painel de CMV ›</a></header>
+          <div class="quatro">
+            <a href="#"><span class="rot">Custo do que saiu</span><span class="num">R$ 41.870</span>
+              <span class="sub">CMV do período</span></a>
+            <a href="#"><span class="rot">Food cost</span><span class="num">31,4%</span>
+              <span class="sub">sobre R$ 133.340 de receita</span>
+              <span class="regua" title="meta 32%"><i style="width:78%"></i><b style="left:80%"></b></span>
+            </a>
+            <a href="#"><span class="rot">Perdas</span><span class="num alerta">R$ 1.265</span>
+              <span class="sub">3,0% do custo</span></a>
+            <a href="#"><span class="rot">Parado no estoque</span><span class="num">R$ 18.930</span>
+              <span class="sub">compras do período R$ 44.210</span></a>
+          </div>
+          <div class="confianca"><span class="bola atencao"></span>
+            <span><b>72% das vendas têm ficha técnica</b> — a comparação com o custo previsto ainda
+              é parcial.</span></div>
+        </section>
+
+        <!-- ============ ATENÇÃO ============ -->
+        <section class="cartao c4" aria-label="atenção">
+          <header><h2>Precisa de atenção</h2><a class="ver" href="#">todos ›</a></header>
+          <ul class="lista">
+            <li><span class="bola critico"></span><span class="q erro">2</span>
+              <span class="t">Pedido do site esperando confirmação</span></li>
+            <li><span class="bola critico"></span><span class="q erro">3</span>
+              <span class="t">Etiqueta vencida na câmara</span></li>
+            <li><span class="bola atencao"></span><span class="q alerta">1</span>
+              <span class="t">Produção planejada e não feita</span></li>
+            <li><span class="bola atencao"></span><span class="q alerta">4</span>
+              <span class="t">Abaixo do estoque mínimo</span></li>
+            <li><span class="bola atencao"></span><span class="q alerta">2</span>
+              <span class="t">Nota esperando conciliação</span></li>
+            <li><span class="bola atencao"></span><span class="q alerta">6</span>
+              <span class="t">Item vendido sem produto no cadastro</span></li>
+          </ul>
+        </section>
+
+        <!-- ============ AS LISTAS DO DIA ============ -->
+        <div class="c12 tres">
+          <section class="cartao" aria-label="pedidos">
+            <header><h2>Pedidos do site</h2><a class="ver" href="#">painel ›</a></header>
+            <div class="contagens"><span class="etq alerta">2 a confirmar</span>
+              <span class="etq erro">1 sem lançar no PDV</span><span class="etq">3 para hoje</span></div>
+            <ul class="lista">
+              <li><span class="d">10:30</span><span class="t">Nº 128 · Ana Paula</span><span class="etq alerta">novo</span></li>
+              <li><span class="d">11:00</span><span class="t">Nº 129 · Rafael M.</span><span class="etq alerta">novo</span></li>
+              <li><span class="d">12:15</span><span class="t">Nº 126 · Juliana K.</span><span class="etq erro">sem PDV</span></li>
+              <li><span class="d">qua 15:00</span><span class="t">Nº 127 · Bolo de cenoura</span><span class="etq bom">confirmado</span></li>
+            </ul>
+          </section>
+          <section class="cartao" aria-label="mesas">
+            <header><h2>Mesas de hoje</h2><a class="ver" href="#">agenda ›</a></header>
+            <div class="contagens"><span class="etq">7 reservas</span><span class="etq">23 pessoas</span>
+              <span class="etq alerta">1 a confirmar</span></div>
+            <ul class="lista">
+              <li><span class="d">11:30</span><span class="t">Família Schmitt</span><span class="d">6 p</span></li>
+              <li><span class="d">12:00</span><span class="t">Carla Nunes</span><span class="d">2 p</span></li>
+              <li><span class="d">12:00</span><span class="t">Pedro Alves · a confirmar</span><span class="d">4 p</span></li>
+              <li><span class="d">12:30</span><span class="t">Empresa Dalmar</span><span class="d">8 p</span></li>
+              <li><span class="d">13:00</span><span class="t">Beatriz L.</span><span class="d">3 p</span></li>
+            </ul>
+          </section>
+          <section class="cartao" aria-label="produção">
+            <header><h2>Para produzir</h2><a class="ver" href="#">agenda ›</a></header>
+            <div class="contagens"><span class="etq">6 hoje</span><span class="etq erro">1 atrasada</span>
+              <span class="etq">14 na semana</span></div>
+            <ul class="lista">
+              <li><span class="d erro">ontem</span><span class="t">Massa de pão de queijo</span><span class="d">2 kg</span></li>
+              <li><span class="d">hoje</span><span class="t">Molho de tomate da casa</span><span class="d">8 L</span></li>
+              <li><span class="d">hoje</span><span class="t">Cookies (modo vitrine)</span><span class="d">65 un</span></li>
+              <li><span class="d">hoje</span><span class="t">Brigadeiro</span><span class="d">120 un</span></li>
+              <li><span class="d">hoje</span><span class="t">Bolo de cenoura</span><span class="d">2 un</span></li>
+            </ul>
+          </section>
+        </div>
+
+        <!-- ============ O CUSTO E A CASA ============ -->
+        <section class="cartao c8" data-valor aria-label="onde o custo pesa">
+          <header><h2>Onde o custo pesa</h2><a class="ver" href="#">quebra no CMV ›</a></header>
+          <div class="barras">
+            <div class="barra"><div class="l"><b>Cozinha</b><span class="mono">R$ 17.480 · 42%</span></div><div class="trilho"><i style="width:42%"></i></div></div>
+            <div class="barra"><div class="l"><b>Confeitaria</b><span class="mono">R$ 10.260 · 25%</span></div><div class="trilho"><i style="width:25%"></i></div></div>
+            <div class="barra"><div class="l"><b>Bar e café</b><span class="mono">R$ 7.950 · 19%</span></div><div class="trilho"><i style="width:19%"></i></div></div>
+            <div class="barra"><div class="l"><b>Embalagens</b><span class="mono">R$ 3.340 · 8%</span></div><div class="trilho"><i style="width:8%"></i></div></div>
+            <div class="barra"><div class="l"><b>Limpeza</b><span class="mono">R$ 1.580 · 4%</span></div><div class="trilho"><i style="width:4%"></i></div></div>
+            <div class="barra"><div class="l"><b>Utensílios</b><span class="mono">R$ 1.260 · 3%</span></div><div class="trilho"><i style="width:3%"></i></div></div>
+          </div>
+        </section>
+        <section class="cartao c4" aria-label="a casa">
+          <header><h2>A casa</h2></header>
+          <div class="contadores">
+            <a href="#"><b>2.214</b><span>produtos</span></a>
+            <a href="#"><b>86</b><span>fichas prontas</span></a>
+            <a href="#"><b class="alerta">2</b><span>notas a conferir</span></a>
+            <a href="#"><b class="alerta">9</b><span>itens a vincular</span></a>
+            <a href="#"><b class="alerta">5</b><span>lotes vencendo</span></a>
+            <a href="#" class="zero"><b>0</b><span>etiquetas vencem hoje</span></a>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="notas">
+    <div class="cartao">
+      <h3>O que mudou</h3>
+      <ul>
+        <li><b>Hoje numa faixa só</b>: vendas, faturado, ticket, pedidos, mesas e produção — seis
+          números, cada um leva à sua tela. Antes eram três cartões de largura inteira.</li>
+        <li><b>O período ao lado do que precisa de atenção</b>: os quatro números em colunas, com a
+          régua do food cost contra a meta e a confiança (cobertura de fichas) dentro do cartão.</li>
+        <li><b>Pedidos, mesas e produção lado a lado</b>, cada um com as contagens em etiquetas e as
+          5 próximas linhas.</li>
+        <li><b>“A casa”</b> virou seis contadores em grade — antes, uma linha inteira por número.</li>
+      </ul>
+    </div>
+    <div class="cartao">
+      <h3>O que continua igual</h3>
+      <ul>
+        <li>Quem não vê valores (a Cozinha) não recebe os números de dinheiro — eles nem saem do
+          servidor. Troque o perfil acima: a faixa do dia fica com pedidos, mesas e produção.</li>
+        <li>Cartão de módulo desligado some (sem Portal, sem pedidos e mesas).</li>
+        <li>Número sem dado é “—”, nunca zero.</li>
+      </ul>
+    </div>
+    <div class="cartao">
+      <h3>Para decidir</h3>
+      <ul>
+        <li>A <b>meta de food cost</b> (a marca na régua) seria um parâmetro novo da loja.</li>
+        <li>“+12% sobre terça passada” é número novo — vale ter a comparação?</li>
+        <li>A ordem das três listas do dia (pedidos · mesas · produção) está boa?</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function segmento(id, aoMudar) {
+    const caixa = document.getElementById(id);
+    caixa.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      caixa.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      aoMudar(b.dataset.v);
+    });
+  }
+  const app = document.getElementById("app");
+  segmento("perfil", (v) => {
+    app.classList.toggle("sem-valores", v === "cozinha");
+    document.querySelector(".cabeca h1").textContent = v === "cozinha" ? "Bom dia, Ana" : "Bom dia, Marcelo";
+  });
+  segmento("tela", (v) => app.classList.toggle("celular", v === "celular"));
+</script>
+</body>
+</html>

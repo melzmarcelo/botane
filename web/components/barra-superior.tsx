@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useSessao } from "@/lib/sessao";
@@ -18,12 +19,22 @@ import { useSessao } from "@/lib/sessao";
  */
 export default function BarraSuperior({
   marca,
+  loja,
   aoAbrirMenu,
 }: {
   marca: React.ReactNode;
+  /** A loja atual, como etiqueta (ou o seletor, com mais de uma). */
+  loja?: React.ReactNode;
   aoAbrirMenu: () => void;
 }) {
   const { eu, sair } = useSessao();
+  // 🔑 **"atualizado às"** (29/09/2026, pedido do dono): a hora em que a tela aberta buscou os
+  // dados — muda a cada navegação. É a resposta para "este número é de agora?".
+  const caminho = usePathname();
+  const [atualizado, setAtualizado] = useState<string>("");
+  useEffect(() => {
+    setAtualizado(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+  }, [caminho]);
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
 
@@ -73,6 +84,15 @@ export default function BarraSuperior({
       </button>
 
       <div className="min-w-0 flex-1">{marca}</div>
+
+      {/* ⚠️ Visível também no celular: com várias lojas, a etiqueta é o seletor — é o único
+          lugar de trocar de loja. */}
+      {loja && <div className="min-w-0 shrink">{loja}</div>}
+      {atualizado && (
+        <span className="hidden shrink-0 text-[12.5px] text-suave md:inline" title="quando esta tela buscou os dados">
+          atualizado às {atualizado}
+        </span>
+      )}
 
       <div className="relative shrink-0" ref={caixa}>
         <button

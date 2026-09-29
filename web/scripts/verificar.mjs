@@ -415,7 +415,7 @@ try {
       const texto = document.body.innerText;
       return {
         temTicket: /Ticket médio/i.test(texto),
-        temValor: /Valor total/i.test(texto),
+        temValor: /Faturado/i.test(texto),
         // ⚠️ Pelo `aria-label`, não pelo caractere: "‹" e "›" são símbolos, e
         // procurá-los por texto casaria com qualquer chevron da página.
         voltar: !!b("dia anterior com venda"),
@@ -473,7 +473,7 @@ try {
       // ⚠️ **Só o dia navegou**: o resto do painel continua o que era. Trocar de
       // dia não pode custar a apuração do período nem a lista de alertas.
       checar("sem recarregar o resto do painel",
-        /Precisa da sua atenção|Custo do que saiu/i.test(naTela), naTela.slice(0, 120));
+        /Precisa de atenção|Custo do que saiu/i.test(naTela), naTela.slice(0, 120));
     }
   } else {
     // ⚠️ Base sem venda nenhuma é estado legítimo (é o primeiro dia da casa), e
@@ -3378,6 +3378,10 @@ try {
   // espalhados pelo painel — um no cabeçalho, um por aba como link discreto e
   // mais um dentro da memória —, cada um dando um arquivo diferente e nenhum
   // com a conta do CMV junto.
+  // ⚠️ Espera o BOTÃO, não o texto do cabeçalho: as abas desenham depois da apuração, e
+  // numa base pesada "Food cost" aparece antes delas (falhou assim em 29/09/2026).
+  await p.waitForFunction(() => [...document.querySelectorAll('[role="tablist"] button')]
+    .some((x) => x.textContent?.trim() === "Baixar"), { timeout: 30000 }).catch(() => {});
   const naBarra = await p.evaluate(() => {
     const nav = document.querySelector('[role="tablist"]');
     const b = [...(nav?.querySelectorAll("button") ?? [])]
@@ -4888,12 +4892,32 @@ try {
   await new Promise((r) => setTimeout(r, 1600));
   const textoInicio = await p.evaluate(() => document.body.innerText);
   checar("o Início mostra o resumo de alertas",
-    listaAlertas.length === 0 || /Precisa da sua atenção/i.test(textoInicio),
+    listaAlertas.length === 0 || /Precisa de atenção/i.test(textoInicio),
     textoInicio.slice(0, 160));
   checar("e traz os indicadores do mês", /Custo do que saiu/i.test(textoInicio),
     textoInicio.slice(0, 200));
-  checar("com o valor parado em estoque", /Parado na prateleira/i.test(textoInicio));
+  checar("com o valor parado em estoque", /Parado no estoque/i.test(textoInicio));
   checar("e o peso de cada setor", /Onde o custo pesa/i.test(textoInicio));
+
+  // 🔑 **A tela inicial nova** (protótipo aprovado em 29/09/2026): o dia numa faixa, o
+  // período ao lado da atenção, e a META de food cost da loja (migração 102) na régua.
+  const { dados: parMeta } = await api("GET", "/unidades/1/parametros", null, token);
+  aoTerminar.push(() => api("PUT", "/unidades/1/parametros",
+    { meta_food_cost_pct: parMeta.meta_food_cost_pct ?? null }, token));
+  await api("PUT", "/unidades/1/parametros", { meta_food_cost_pct: 33 }, token);
+  await irPara(p, `${WEB}/`);
+  await p.reload({ waitUntil: "networkidle2" });
+  await esperarTexto(p, "Custo do que saiu", 9000);
+  const telaNova = await p.evaluate(() => ({
+    texto: document.body.innerText,
+    faixa: !!document.querySelector('section[aria-label="hoje"] .faixa-hoje'),
+    periodo: !!document.querySelector('section[aria-label="período"] .periodo-colunas'),
+  }));
+  checar("a tela inicial tem a faixa do dia e o período em colunas",
+    telaNova.faixa && telaNova.periodo, { faixa: telaNova.faixa, periodo: telaNova.periodo });
+  checar("e a meta de food cost da loja aparece junto do food cost",
+    /meta 33/i.test(telaNova.texto) || /sem vendas importadas/i.test(telaNova.texto),
+    telaNova.texto.slice(0, 400));
 
   // A regra que não pode afrouxar: sem venda importada, food cost é
   // DESCONHECIDO. Zero ali pareceria um resultado excelente.
@@ -7452,9 +7476,9 @@ try {
     menuNovo.botaoDentroDeLink === 0, menuNovo);
   checar("no computador a busca anuncia o atalho do teclado",
     menuNovo.teclaVisivel === true, menuNovo);
-  checar("cada grupo diz quantas telas tem dentro",
-    menuNovo.contas.length > 0 && menuNovo.contas.every((c) => /^\d+$/.test(c ?? "")),
-    menuNovo.contas);
+  // 🔑 **Sem contagem ao lado do grupo** (29/09/2026, pedido do dono): o nome e a seta bastam.
+  checar("o grupo do menu nao mostra contagem, so o nome e a seta",
+    menuNovo.contas.length > 0 && menuNovo.contas.every((c) => c === null), menuNovo.contas);
   // 🔑 Abrir uma pasta com um papel dentro e um clique que nao compra nada — e
   // isto nao vale so para Compras: vale para quem tem permissao de UMA tela
   // dentro de um grupo de seis.

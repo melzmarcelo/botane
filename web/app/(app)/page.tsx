@@ -1,174 +1,41 @@
 "use client";
 
-import PedidosDoDia, { type PedidosDoInicio } from "./pedidos-do-dia";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
+import { Aviso, Carregando } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useSessao } from "@/lib/sessao";
-import { reais } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao } from "@/components/ui";
-import VendasDoDia, { Dia } from "./vendas-do-dia";
 
-import { pct } from "@/lib/numeros";
-import ExplicaTela from "@/components/explica-tela";
+import Atencao from "./_inicio/atencao";
+import { ACasa, OndeOCustoPesa } from "./_inicio/custo-e-casa";
+import FaixaHoje from "./_inicio/faixa";
+import { ListaDeMesas, ListaDePedidos, ListaDeProducao } from "./_inicio/listas";
+import PeriodoAteAgora from "./_inicio/periodo";
+import type { Painel } from "./_inicio/tipos";
 
 /**
  * A tela inicial: a casa inteira num olhar.
  *
- * Duas regras que governam tudo aqui:
+ * 🔑 **Protótipo aprovado pelo dono (29/09/2026):** *"um protótipo de tela inicial mais limpa
+ * e que tenha todas as informações necessárias; talvez alguns dados podem ter colunas e não a
+ * linha toda"* → *"pode implementar conforme o protótipo"* (`apresentacao/inicio-prototipo.html`).
+ * De cima para baixo: o DIA numa faixa; o PERÍODO ao lado do que precisa de ATENÇÃO; as três
+ * listas do dia lado a lado; o custo por setor e "a casa".
  *
- * 1. **Número verdadeiro ou nenhum.** Food cost sem venda importada não é 0%,
- *    é desconhecido — e aparece como "—" com o motivo ao lado. Zero ali
- *    pareceria um resultado excelente.
- * 2. **Cada número traz o que fazer com ele.** Um valor sozinho não decide
- *    nada; por isso cada cartão tem uma linha em português dizendo o que
- *    aquilo significa, e leva para a tela onde se age.
+ * Duas regras que continuam governando tudo:
+ * 1. **Número verdadeiro ou nenhum.** Food cost sem venda importada não é 0%, é "—".
+ * 2. **Cada número é uma porta** para a tela onde se age sobre ele.
+ * ⚠️ Quem não vê valores recebe `dinheiro` e `dia` NULOS — o valor nem sai do servidor —, e
+ * a tela se rearranja sem buraco: atenção ao lado da casa.
  */
-
-type Alerta = {
-  chave: string;
-  severidade: "critico" | "atencao" | "aviso";
-  titulo: string;
-  quantidade: number;
-  detalhe: string;
-  acao: string;
-  href: string;
-};
-
-type Painel = {
-  /** 🔑 **As palavras vêm do SERVIDOR.** Ele é o único que sabe se o
-   *  fechamento desta loja é diário, semanal ou mensal — e o português precisa
-   *  das quatro formas, porque "semana" é feminina e as preposições contraem
-   *  (do/da, deste/desta, neste/nesta). Remontar a frase aqui daria duas
-   *  versões da mesma verdade, que é o que a tela de CMV já recusava. */
-  periodo: {
-    inicio: string;
-    fim: string;
-    rotulo: string;
-    ciclo: string;
-    termos: { o: string; do: string; deste: string; neste: string };
-  };
-  operacao: {
-    produtos: number;
-    fichas: number;
-    notas_abertas: number;
-    itens_a_vincular: number;
-    vencendo: number;
-    abaixo_minimo: number;
-    movimentos_mes: number;
-  };
-  alertas: Alerta[];
-  dinheiro: {
-    estoque_agora: number;
-    compras_mes: number;
-    cmv_mes: number;
-    perdas_mes: number;
-    receita_mes: number;
-    vendas: number;
-    food_cost_pct: number | null;
-    variancia: number | null;
-    cobertura_ficha_pct: number;
-    cmv_teorico: number;
-  } | null;
-  /** O movimento do dia da última venda — nulo para quem não vê dinheiro. */
-  dia: Dia | null;
-  pesos: { grupo: string; cmv: number; participacao_pct: number }[];
-  /**
-   * O que a cozinha DESTA pessoa tem para fazer.
-   *
-   * ⚠️ Nulo para quem não tem `producao.agenda` — não uma lista vazia, que se
-   * leria como "não há nada para produzir".
-   */
-  producao: {
-    linhas: {
-      id: number;
-      id_produto: number;
-      produto: string;
-      um_estoque: string | null;
-      data_prevista: string;
-      quantidade: number;
-      setor: string | null;
-      atrasada: boolean;
-    }[];
-    total: number;
-    atrasadas: number;
-    hoje: number;
-    todos_setores: boolean;
-    setores: string[];
-  } | null;
-  /**
-   * As mesas marcadas daqui para a frente.
-   *
-   * ⚠️ **Nulo quando a loja não faz reserva** — ou quando esta pessoa não tem
-   * `reservas.ver`. Não uma lista vazia: vazia se leria como "ninguém
-   * reservou", e o cartão apareceria numa casa que nem usa o módulo.
-   */
-  reservas: {
-    linhas: {
-      id: number;
-      data: string;
-      hora: string;
-      pessoas: number;
-      nome: string;
-      status: "PENDENTE" | "CONFIRMADA";
-      origem: string;
-    }[];
-    total: number;
-    hoje: number;
-    pendentes: number;
-  } | null;
-  /** Os pedidos do site (101). Nulo sem Portal, sem permissão ou sem pedido nenhum. */
-  pedidos?: PedidosDoInicio | null;
-};
-
-function Indicador({
-  rotulo,
-  valor,
-  nota,
-  href,
-  tom = "normal",
-}: {
-  rotulo: string;
-  valor: string;
-  nota: string;
-  href?: string;
-  tom?: "normal" | "alerta" | "erva";
-}) {
-  const cor =
-    tom === "alerta" ? "text-erro" : tom === "erva" ? "text-erva" : "text-tinta";
-  const conteudo = (
-    <>
-      <p className="rotulo">{rotulo}</p>
-      <p className={`mono mt-1.5 text-[26px] font-bold leading-none ${cor}`}>{valor}</p>
-      {/* ⚠️ **A nota some no celular, e só nele.** Ela é o que faz cada cartão
-          crescer — quatro notas de duas linhas são meia tela de telefone. No
-          computador ela fica: lá sobra espaço e ela ensina o que o número
-          significa. ⚠️ Fica no DOM, escondida por CSS, para o leitor de tela
-          continuar lendo a explicação junto do número. */}
-      <p className="prosa sr-only mt-2 text-[13px] leading-snug text-suave sm:not-sr-only">
-        {nota}
-      </p>
-    </>
-  );
-  return href ? (
-    <Link href={href} className="cartao block p-4 no-underline transition-colors hover:border-erva">
-      {conteudo}
-    </Link>
-  ) : (
-    <div className="cartao p-4">{conteudo}</div>
-  );
+function saudacao() {
+  const h = new Date().getHours();
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
 }
-
-
-/**
- * "04/09" — a data da linha da agenda, curta.
- *
- * ⚠️ **Sem `new Date(iso)`**: o construtor lê `aaaa-mm-dd` como MEIA-NOITE UTC,
- * e no fuso de Brasília isso é o dia anterior às 21h. A agenda de amanhã
- * apareceria como hoje. É a mesma armadilha que `lib/datas.ts` documenta, pela
- * ponta da leitura — aqui o texto já vem pronto do servidor e só é fatiado.
- */
-const diaCurto = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+  "setembro", "outubro", "novembro", "dezembro"];
 
 export default function Inicio() {
   const { eu } = useSessao();
@@ -176,343 +43,82 @@ export default function Inicio() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api
-      .get<Painel>("/inicio")
-      .then(setP)
+    api.get<Painel>("/inicio").then(setP)
       .catch((e) => setErro(e instanceof Error ? e.message : "Falha ao carregar"));
   }, []);
 
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!p) return <Carregando />;
 
-  /** "o mês" no começo da frase vira "O mês".
-   *  ⚠️ Só a primeira letra: `toUpperCase()` no texto inteiro gritaria, e
-   *  `text-transform: capitalize` no CSS maiusculizaria "Semana" E "De". */
-  const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
   const d = p.dinheiro;
   const o = p.operacao;
   const primeiroNome = (eu?.nome ?? "").split(" ")[0];
   const semMovimento = o.movimentos_mes === 0 && o.produtos === 0;
+  const agora = new Date();
+  const listas = [
+    p.pedidos && <ListaDePedidos key="p" p={p.pedidos} />,
+    p.reservas && <ListaDeMesas key="m" r={p.reservas} />,
+    p.producao && <ListaDeProducao key="pr" p={p.producao} />,
+  ].filter(Boolean);
+  const etiquetasHoje = p.etiquetas ? p.etiquetas.hoje : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header>
-        <p className="rotulo">{p.periodo.rotulo}</p>
-        <h1 className="mt-1 text-[26px] font-bold leading-tight tracking-tight sm:text-[32px]">
-          {primeiroNome ? `Olá, ${primeiroNome}` : "Bom dia"}
+    <div className="flex flex-col gap-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h1 className="text-[24px] font-bold leading-tight tracking-tight sm:text-[28px]">
+          {saudacao()}{primeiroNome ? `, ${primeiroNome}` : ""}
         </h1>
-        <ExplicaTela>
-          {maiuscula(p.periodo.termos.o)} corrente, do jeito que está agora.
-        </ExplicaTela>
+        <p className="text-[13.5px] text-suave">
+          {SEMANA[agora.getDay()]}, {agora.getDate()} de {MESES[agora.getMonth()]} · período:{" "}
+          <b className="text-tinta">{p.periodo.rotulo}</b>
+        </p>
       </header>
 
       {semMovimento && (
         <Aviso tipo="info">
           A casa ainda não tem movimento. Comece cadastrando os insumos em{" "}
-          <Link href="/produtos" className="text-erva underline underline-offset-2">
-            Produtos
-          </Link>{" "}
+          <Link href="/produtos" className="text-erva underline underline-offset-2">Produtos</Link>{" "}
           e dando entrada na primeira nota em{" "}
-          <Link href="/compras" className="text-erva underline underline-offset-2">
-            Notas de entrada
-          </Link>
-          .
+          <Link href="/compras" className="text-erva underline underline-offset-2">Notas de entrada</Link>.
         </Aviso>
       )}
 
-      {/* 🔑 **Grade 2x2 desde o celular** (14/09/2026). O `sm:grid-cols-2` só
-          dividia a partir de 640px: no telefone os quatro viravam uma coluna,
-          cada um com a nota explicativa, e a tela inicial ficava com 2.795px de
-          altura — o food cost só aparecia depois de rolar três telas. Não havia
-          "o dia num relance", que é justamente o que se abre a tela inicial
-          para ver. */}
-      {d && (
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Indicador
-            rotulo="Custo do que saiu"
-            valor={reais(d.cmv_mes)}
-            nota={`O CMV ${p.periodo.termos.do}: estoque inicial + compras − o que sobrou.`}
-            href="/cmv"
-          />
-          <Indicador
-            rotulo="Food cost"
-            valor={d.food_cost_pct === null ? "—" : pct(d.food_cost_pct)}
-            nota={
-              d.food_cost_pct === null
-                ? `Sem vendas importadas ${p.periodo.termos.neste} — sem receita não há percentual.`
-                : `Sobre ${reais(d.receita_mes)} de receita em ${d.vendas} venda(s).`
-            }
-            tom={d.food_cost_pct !== null && d.food_cost_pct > 40 ? "alerta" : "normal"}
-            href="/cmv"
-          />
-          <Indicador
-            rotulo="Parado na prateleira"
-            valor={reais(d.estoque_agora)}
-            nota="Quanto dinheiro está em estoque neste momento."
-            href="/estoque"
-          />
-          <Indicador
-            rotulo={`Perdas ${p.periodo.termos.do}`}
-            valor={reais(d.perdas_mes)}
-            nota={
-              d.cmv_mes > 0
-                ? `${pct((d.perdas_mes / d.cmv_mes) * 100)} do custo ${p.periodo.termos.do}.`
-                : "Quebra, validade e cortesia apontadas."
-            }
-            tom={d.perdas_mes > 0 ? "alerta" : "normal"}
-            href="/estoque"
-          />
-        </section>
-      )}
+      <FaixaHoje p={p} />
 
-      {/* 🔑 **As mesas marcadas** (pedido do dono, 21/09/2026): *"caso tenha
-          reserva ativado, listar as reservas marcadas, colocar 5 e adicionar
-          scroll."* Só aparece na loja que usa reserva — o servidor manda nulo
-          nas outras. */}
-      {p.pedidos && <PedidosDoDia p={p.pedidos} />}
-
-      {p.reservas && (
-        <Cartao
-          titulo="Mesas marcadas"
-          descricao={
-            p.reservas.total
-              ? `${p.reservas.hoje} para hoje, ${p.reservas.total} daqui para a frente.`
-              : "Nada marcado daqui para a frente."
-          }
-          acao={
-            <Link href="/reservas/agenda" className="btn btn-secundario">
-              Abrir a agenda
-            </Link>
-          }
-        >
-          {!p.reservas.total ? (
-            <p className="text-[14.5px] text-suave">
-              Quando alguém reservar, pelo balcão ou pelo site, a mesa aparece aqui.
-            </p>
-          ) : (
-            <>
-              {/* 🔑 **O pendente vem ANTES da lista, e em destaque.** Numa casa
-                  em confirmação manual, a reserva que chega pelo site fica
-                  esperando alguém olhar — e até aqui nada avisava ninguém. */}
-              {p.reservas.pendentes > 0 && (
-                <p className="mb-3 text-[13.5px]">
-                  <b className="mono text-alerta">{p.reservas.pendentes}</b>{" "}
-                  <span className="text-suave">
-                    esperando a casa confirmar.
-                  </span>
-                </p>
-              )}
-              <ul className="lista-rolante flex flex-col gap-px bg-linha text-[14.5px]">
-                {p.reservas.linhas.map((r) => (
-                  <li
-                    key={r.id}
-                    className="flex flex-wrap items-baseline gap-x-3 bg-superficie py-2.5"
-                  >
-                    <span className="mono text-[13px] text-suave">
-                      {diaCurto(r.data)} {r.hora}
-                    </span>
-                    <Link href="/reservas/agenda" className="link-registro">
-                      {r.nome}
-                    </Link>
-                    {/* ⚠️ A etiqueta só aparece no que ainda espera resposta:
-                        marcar TODAS as linhas faria a que precisa de ação
-                        desaparecer no meio das que não precisam. */}
-                    {r.status === "PENDENTE" && (
-                      <span className="text-[12.5px] text-alerta">a confirmar</span>
-                    )}
-                    <span className="mono ml-auto font-semibold">
-                      {r.pessoas}{" "}
-                      <span className="font-normal text-suave">
-                        {r.pessoas === 1 ? "pessoa" : "pessoas"}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {p.reservas.total > p.reservas.linhas.length && (
-                <p className="mt-3 text-[13px] text-suave">
-                  {p.reservas.linhas.length} de {p.reservas.total} — as outras estão na agenda.
-                </p>
-              )}
-            </>
-          )}
-        </Cartao>
-      )}
-
-      {p.dia && <VendasDoDia inicial={p.dia} />}
-
-      {/* 🔑 **O que a cozinha DESTA pessoa tem para fazer** (pedido do dono,
-          03/09/2026). A agenda existia só na tela dela: quem entrava de manhã
-          via o painel do mês e tinha de navegar até Produção para descobrir o
-          que assar hoje. E fica AQUI, acima dos números do período, porque para
-          quem não vê dinheiro este é o painel inteiro — o cartão do dia e os
-          indicadores vêm nulos. */}
-      {p.producao && (
-        <Cartao
-          titulo="Para produzir"
-          descricao={
-            p.producao.todos_setores
-              ? "O plano da casa para os próximos sete dias."
-              : `O plano de ${p.producao.setores.join(", ") || "quem você cuida"} para os próximos sete dias.`
-          }
-          acao={
-            <Link href="/producao" className="btn btn-secundario">
-              Abrir a agenda
-            </Link>
-          }
-        >
-          {!p.producao.total ? (
-            // ⚠️ A frase diz se o vazio é da CASA ou só do recorte da pessoa —
-            // senão "nada para produzir" se lê como "a casa não produz nada".
-            <p className="text-[14.5px] text-suave">
-              Nada planejado para os próximos sete dias
-              {p.producao.todos_setores ? "" : " nos seus setores"}.
-            </p>
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13.5px]">
-                <span>
-                  <b className="mono">{p.producao.hoje}</b> para hoje
-                </span>
-                {p.producao.atrasadas > 0 && (
-                  <span className="text-erro">
-                    <b className="mono">{p.producao.atrasadas}</b> atrasada(s)
-                  </span>
-                )}
-                <span className="text-suave">
-                  <b className="mono">{p.producao.total}</b> no total
-                </span>
-              </div>
-              <ul className="lista-rolante mt-3 flex flex-col gap-px bg-linha text-[14.5px]">
-                {p.producao.linhas.map((l) => (
-                  <li
-                    key={l.id}
-                    className="flex flex-wrap items-baseline gap-x-3 bg-superficie py-2.5"
-                  >
-                    <span
-                      className={`mono text-[13px] ${l.atrasada ? "text-erro" : "text-suave"}`}
-                    >
-                      {diaCurto(l.data_prevista)}
-                    </span>
-                    <Link href={`/produtos/${l.id_produto}`} className="link-registro">
-                      {l.produto}
-                    </Link>
-                    {l.setor && <span className="text-[12.5px] text-suave">{l.setor}</span>}
-                    <span className="mono ml-auto font-semibold">
-                      {l.quantidade.toLocaleString("pt-BR")}{" "}
-                      <span className="font-normal text-suave">{l.um_estoque ?? ""}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {p.producao.total > p.producao.linhas.length && (
-                <p className="mt-3 text-[13px] text-suave">
-                  {/* ⚠️ Com a lista rolando, "as primeiras" mentia: as outras
-                      não estão noutra tela, estão logo abaixo. O que continua
-                      valendo é que a agenda tem MAIS do que estas. */}
-                  {p.producao.linhas.length} de {p.producao.total} — role para ver o resto, ou
-                  abra a agenda.
-                </p>
-              )}
-            </>
-          )}
-        </Cartao>
-      )}
-
-      {!!p.alertas.length && (
-        <Cartao
-          titulo="Precisa da sua atenção"
-          descricao={`O que muda o número ${p.periodo.termos.deste} se ficar sem resposta.`}
-        >
-          <ul className="flex flex-col gap-px bg-linha">
-            {p.alertas.slice(0, 5).map((a) => (
-              <li key={a.chave} className="bg-superficie py-3">
-                <Link href={a.href} className="flex flex-wrap items-baseline gap-x-2 no-underline">
-                  <span
-                    className={`mono text-[13px] font-bold ${
-                      a.severidade === "critico" ? "text-erro" : "text-alerta"
-                    }`}
-                  >
-                    {a.quantidade}
-                  </span>
-                  <span className="link-registro">{a.titulo}</span>
-                  <span className="text-[13.5px] text-suave">— {a.acao}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Cartao>
-      )}
-
-      {d && d.cobertura_ficha_pct < 80 && d.vendas > 0 && (
-        <Aviso tipo="info">
-          <b>{pct(d.cobertura_ficha_pct)} das vendas têm ficha técnica.</b> Enquanto essa
-          cobertura não subir, a comparação entre o custo real e o previsto pelas receitas
-          fica incompleta — e a diferença parece maior do que é.
-        </Aviso>
-      )}
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <Cartao titulo="A casa hoje" descricao="O que está cadastrado e o que está esperando.">
-          <ul className="flex flex-col gap-px bg-linha text-[14.5px]">
-            {[
-              { rotulo: "Insumos e produtos", valor: o.produtos, href: "/produtos" },
-              { rotulo: "Fichas técnicas prontas", valor: o.fichas, href: "/fichas" },
-              { rotulo: "Notas esperando conferência", valor: o.notas_abertas, href: "/compras" },
-              { rotulo: "Itens de nota a vincular", valor: o.itens_a_vincular, href: "/compras" },
-              { rotulo: "Lotes vencendo em 7 dias", valor: o.vencendo, href: "/alertas" },
-              { rotulo: "Abaixo do estoque mínimo", valor: o.abaixo_minimo, href: "/alertas" },
-            ].map((l) => (
-              <li key={l.rotulo} className="flex items-center justify-between bg-superficie py-2.5">
-                <Link href={l.href} className="link-registro font-normal">
-                  {l.rotulo}
-                </Link>
-                <span className={`mono font-semibold ${l.valor > 0 ? "" : "text-suave"}`}>
-                  {l.valor}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Cartao>
-
+      {/* O período ao lado do que precisa de atenção. ⚠️ No celular (uma coluna) a atenção
+          vem PRIMEIRO: é o que pede ação. Sem dinheiro, a atenção divide a linha com a casa. */}
+      <div className="grid gap-4 lg:grid-cols-12">
         {d && (
-          <Cartao
-            titulo="Onde o custo pesa"
-            descricao={
-              p.pesos.length
-                ? `A participação de cada setor no custo ${p.periodo.termos.do}.`
-                : `Ainda não há custo apurado ${p.periodo.termos.neste}.`
-            }
-          >
-            {!p.pesos.length ? (
-              <p className="text-[14.5px] text-suave">
-                Assim que houver compra e consumo, o peso de cada setor aparece aqui.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {p.pesos.map((g) => (
-                  <li key={g.grupo}>
-                    <div className="flex items-baseline justify-between gap-3 text-[14.5px]">
-                      <span className="font-semibold">{g.grupo}</span>
-                      <span className="mono text-suave">{reais(g.cmv)}</span>
-                    </div>
-                    <div className="mt-1 h-2 w-full rounded bg-superficie2">
-                      <div
-                        className="h-2 rounded bg-erva"
-                        style={{ width: `${Math.min(100, Math.abs(g.participacao_pct))}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-4 text-[13px] text-suave">
-              Compras {p.periodo.termos.do}: <b className="mono">{reais(d.compras_mes)}</b>
-            </p>
-          </Cartao>
+          <div className="order-2 lg:order-none lg:col-span-8">
+            <PeriodoAteAgora d={d} periodo={p.periodo} />
+          </div>
         )}
-      </section>
+        <div className={`order-1 lg:order-none ${d ? "lg:col-span-4" : "lg:col-span-6"}`}>
+          <Atencao alertas={p.alertas} deste={p.periodo.termos.deste} />
+        </div>
+        {!d && (
+          <div className="order-3 lg:col-span-6">
+            <ACasa o={o} etiquetasHoje={etiquetasHoje} />
+          </div>
+        )}
+      </div>
+
+      {listas.length > 0 && (
+        <div className={`grid gap-4 ${listas.length === 3 ? "lg:grid-cols-3" : listas.length === 2 ? "lg:grid-cols-2" : ""}`}>
+          {listas}
+        </div>
+      )}
+
+      {d && (
+        <div className="grid gap-4 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <OndeOCustoPesa pesos={p.pesos} periodo={p.periodo} compras={d.compras_mes} />
+          </div>
+          <div className="lg:col-span-4">
+            <ACasa o={o} etiquetasHoje={etiquetasHoje} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -96,6 +96,8 @@ class ParametrosUpdate(BaseModel):
     casas_decimais_qtd: int | None = Field(default=None, ge=0, le=6)
     alerta_validade_dias: int | None = Field(default=None, ge=0, le=365)
     alerta_variacao_preco_pct: float | None = Field(default=None, ge=0, le=999)
+    # 🔑 A meta de food cost (migração 102): a marca na régua do Início. Nulo = sem meta.
+    meta_food_cost_pct: float | None = Field(default=None, ge=0, le=100)
     # 🔑 **`bloquear_saida_vencido` e `criar_produto_da_nota` saíram daqui**
     # (11/09/2026, decisão do dono: "tira os dois da tela"). Estavam na tela de
     # Lojas desde o começo e **ninguém os lia** — zero referências em serviço ou

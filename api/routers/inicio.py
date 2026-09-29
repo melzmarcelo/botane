@@ -14,7 +14,7 @@ Três regras que valem para tudo o que sai daqui:
   operacional e mais nada — não um zero no lugar do valor.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
 
@@ -25,12 +25,19 @@ from services import cmv as cmv_motor
 from services import periodos, relatorios
 from services import reservas as reservas_servico
 from services import pedidos as pedidos_servico
+from services import etiquetas as etiquetas_servico
 
 router = APIRouter(prefix="/inicio", tags=["Início"])
 
 
 def _float(v):
     return None if v is None else float(v)
+
+
+def _meta(cur, id_unidade: int) -> float | None:
+    cur.execute("SELECT meta_food_cost_pct FROM parametros WHERE id_unidade = %s", (id_unidade,))
+    v = (cur.fetchone() or {}).get("meta_food_cost_pct")
+    return float(v) if v is not None else None
 
 
 def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | None:
@@ -125,7 +132,39 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
     vizinhos = dict(cur.fetchone())
 
     receita = float(r["receita"])
+
+    # 🔑 **O mesmo dia da semana anterior** (tela inicial nova, 29/09/2026): "terça contra
+    # terça" é a comparação que diz se o dia foi bom — sábado contra segunda não diz nada.
+    # ⚠️ **Até a MESMA hora** quando o dia comparado é hoje e ainda está em curso: às 10h40,
+    # comparar com a terça passada INTEIRA faria todo dia parecer ruim de manhã.
+    cur.execute("SELECT max(hora) AS h FROM vendas WHERE id_unidade = %s AND data = %s "
+                "AND NOT cancelada AND NOT consumo_interno", (id_unidade, data))
+    ate_hora = (cur.fetchone() or {}).get("h") if data == date.today() else None
+    semana_antes = data - timedelta(days=7)
+    cur.execute(
+        """SELECT coalesce(sum(vi.valor_total), 0)
+                    - coalesce((SELECT sum(d.desconto) FROM vendas d
+                                 WHERE d.id_unidade = %(u)s AND NOT d.cancelada
+                                   AND NOT d.consumo_interno AND d.data = %(d)s
+                                   AND (%(h)s::time IS NULL OR d.hora IS NULL OR d.hora <= %(h)s)), 0)
+                  AS receita,
+                  count(DISTINCT v.id) AS vendas
+             FROM vendas v LEFT JOIN venda_itens vi ON vi.id_venda = v.id
+            WHERE v.id_unidade = %(u)s AND v.data = %(d)s AND NOT v.cancelada
+              AND NOT v.consumo_interno
+              AND (%(h)s::time IS NULL OR v.hora IS NULL OR v.hora <= %(h)s)""",
+        {"u": id_unidade, "d": semana_antes, "h": ate_hora},
+    )
+    antes = dict(cur.fetchone())
+    receita_antes = float(antes["receita"])
+    comparacao = ({"data": semana_antes, "receita": receita_antes,
+                   "ate_hora": ate_hora.strftime("%H:%M") if ate_hora else None,
+                   # Nulo quando a semana passada não vendeu: "+∞%" não é número.
+                   "pct": round((receita / receita_antes - 1) * 100, 1) if receita_antes else None}
+                  if antes["vendas"] else None)
+
     return {
+        "comparacao": comparacao,
         "data": data,
         "vendas": r["vendas"],
         "canceladas": canceladas,
@@ -233,6 +272,7 @@ def _reservas_marcadas(cur, id_unidade: int) -> dict:
         "linhas": [{**l, "hora": l["hora"].strftime("%H:%M")} for l in linhas[:20]],
         "total": len(linhas),
         "hoje": sum(1 for l in linhas if l["data"] == hoje),
+        "pessoas_hoje": sum(l["pessoas"] for l in linhas if l["data"] == hoje),
         "pendentes": sum(1 for l in linhas if l["status"] == "PENDENTE"),
     }
 
@@ -323,6 +363,10 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             # 🔑 **Pedidos do site** (101): os novos esperando confirmação e os confirmados que
             # ainda não foram lançados no PDV. Nulo sem o Portal, sem permissão, ou numa loja
             # que nunca recebeu pedido.
+            # 🔑 As etiquetas do dia (100): vencidas e vencendo hoje — a checagem da manhã da
+            # cozinha, que não vê os números de dinheiro.
+            "etiquetas": (etiquetas_servico.alertas(cur, id_unidade)
+                          if ctx.pode("etiquetas.imprimir") else None),
             "pedidos": (pedidos_servico.inicio(cur, id_unidade)
                         if (ctx.pode("pedidos.ver") or ctx.pode("pedidos.operar"))
                         and reservas_servico.ligado(cur, id_unidade) else None),
@@ -354,6 +398,8 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
             "variancia": float(a["variancia"]) if receita else None,
             "cobertura_ficha_pct": float(a["cobertura_ficha_pct"]),
             "cmv_teorico": float(a["cmv_teorico"]),
+            # A marca na régua do food cost (102). Nula = a loja não definiu meta.
+            "meta_food_cost_pct": _meta(cur, id_unidade),
         }
 
         # ⚠️ **Vem no mesmo pacote**, não numa segunda chamada: o painel que faz

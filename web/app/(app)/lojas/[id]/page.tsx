@@ -110,6 +110,8 @@ const NUMEROS: { campo: string; nome: string; dica: string }[] = [
   { campo: "alerta_validade_dias", nome: "Alertar validade com (dias)", dica: "0 desliga" },
   { campo: "alerta_variacao_preco_pct", nome: "Avisar se o preço subir (%)", dica: "vs. última compra" },
   { campo: "casas_decimais_qtd", nome: "Casas decimais na quantidade", dica: "0 a 6" },
+  // 🔑 A marca na régua do food cost, na tela inicial (migração 102). Vazio = sem meta.
+  { campo: "meta_food_cost_pct", nome: "Meta de food cost (%)", dica: "a marca na régua do Início" },
 ];
 
 const CICLOS = [
@@ -386,7 +388,9 @@ export default function PaginaLoja() {
                     disabled={!podeEditar}
                     value={String(param[n.campo] ?? "")}
                     onChange={(e) =>
-                      setParam({ ...param, [n.campo]: Number(e.target.value) })
+                      // ⚠️ A meta vazia é "sem meta" (nulo), não zero — zero seria uma meta.
+                      setParam({ ...param, [n.campo]: e.target.value === "" && n.campo === "meta_food_cost_pct"
+                        ? null : Number(e.target.value) })
                     }
                   />
                 </Campo>

@@ -702,3 +702,37 @@ precisam é só de um teto de altura.
   Estoque · CMV · Portal de Cliente · Etiquetas · Administração"*. É a ordem do array `MENU`
   em `lib/menu.ts` — grupo novo entra no lugar que o dono disser, não no fim.
 
+- 🔑 **A tela inicial nova** (29/09/2026, pedido do dono: *"um protótipo de tela inicial mais
+  limpa e que tenha todas as informações necessárias; talvez alguns dados podem ter colunas e não
+  a linha toda"* → *"pode implementar conforme o protótipo"*, `apresentacao/inicio-prototipo.html`).
+  Código em `web/app/(app)/_inicio/` (pasta privada: o `_` a tira do roteamento) — `faixa.tsx`,
+  `periodo.tsx`, `atencao.tsx`, `listas.tsx`, `custo-e-casa.tsx`, `tipos.ts`; `page.tsx` só monta.
+  Saíram `vendas-do-dia.tsx` e `pedidos-do-dia.tsx` (absorvidos pela faixa e pelas listas).
+  - **A faixa "Hoje"**: vendas, faturado, ticket, pedidos em aberto, mesas e produção, em colunas
+    (6 no computador, 3 no tablet, 2 no celular — `.faixa-hoje` em `globals.css`). As setas entre
+    dias com venda FICARAM (pedido de 03/09): só as vendas navegam.
+  - 🔑 **Faturado contra o MESMO dia da semana anterior** (`_dia_de_vendas.comparacao`), e ATÉ A
+    MESMA HORA quando o dia é hoje — às 10h40, comparar com a terça passada inteira faria toda
+    manhã parecer ruim.
+  - 🔑 **Meta de food cost** (`parametros.meta_food_cost_pct`, migração 102, tela de Lojas): a marca
+    na régua; acima da meta, o número e a régua ficam em alerta. Nula = sem marca.
+  - **O período ao lado da atenção**; no celular a atenção sobe (`order-1`). A cobertura de ficha
+    ficou DENTRO do cartão do período.
+  - **Quem não vê dinheiro** (cozinha): a faixa perde vendas e ganha **Etiquetas** (vencidas ·
+    vencem hoje, `inicio.etiquetas`), e a atenção divide a linha com "A casa" — sem buraco.
+  - ⚠️ "Pedidos do site" na faixa mostra os EM ABERTO (`pedidos.inicio.abertos`): com o "para
+    hoje", a tela dizia "0 · 1 a confirmar", que se lê como contradição.
+  - ⚠️ Os valores do período em 18px: "R$ 1.142.446,49" em quatro colunas estourava (visto na foto
+    da tela com a base de desenvolvimento).
+  - Rótulos que mudaram (e a bateria acompanhou): "Valor total" → **Faturado**, "Precisa da sua
+    atenção" → **Precisa de atenção**, "Parado na prateleira" → **Parado no estoque**.
+  - Cobertura: `smoke_inicio.py` (9) e as checagens do Início na bateria do navegador.
+  - 🔑 **O menu e a barra do topo, a partir do protótipo** (29/09/2026, relato do dono: *"o menu
+    e a barra do topo ficaram diferentes do protótipo"*). ⚠️ No protótipo eles eram ESQUEMÁTICOS
+    (sem ícones, sem atalhos, sem contagem). Perguntado item a item, o dono escolheu só:
+    **tirar a contagem ao lado do grupo** do menu; na barra, **a loja como etiqueta à direita**
+    (`.etiqueta-loja`; com várias lojas a etiqueta É o `<select aria-label="Loja">`) e
+    **"atualizado às HH:MM"** (muda a cada navegação), **mantendo o menu do usuário**. Ícones,
+    atalhos fixados e a marca no topo FICARAM. A etiqueta aparece também no celular — é o único
+    lugar de trocar de loja ali.
+

@@ -88,13 +88,20 @@ def _limpar():
     dono — e ele vira o primeiro `<select>` do documento, quebrando checagens
     de tela que nada têm a ver com loja. Mesma lição do `preservar_credenciais`.
     """
+    # ⚠️ **Entra de novo antes de limpar, e AVISA se não der** (29/09/2026): uma rodada deixou a
+    # filial ATIVA — a limpeza engolia o erro calada (o token da suíte pode ter vencido), e a
+    # bateria do navegador falhou depois numa tela de produto, longe da causa.
     try:
+        _st, novo = chamar("POST", "/auth/login", {"email": ADMIN[0], "senha": ADMIN[1]})
+        tk = (novo or {}).get("access_token") or token
         if criados.get("usuario"):
-            chamar("DELETE", f"/usuarios/{criados['usuario']}", token=token)
+            chamar("DELETE", f"/usuarios/{criados['usuario']}", token=tk)
         if criados.get("filial"):
-            chamar("PUT", f"/unidades/{criados['filial']}", {"ativo": False}, token=token)
-    except Exception:
-        pass
+            st, r = chamar("PUT", f"/unidades/{criados['filial']}", {"ativo": False}, token=tk)
+            if st != 200:
+                print(f"!! a filial de teste {criados['filial']} FICOU ATIVA: {st} {r}")
+    except Exception as erro:  # noqa: BLE001
+        print(f"!! a limpeza da suíte falhou: {erro}")
 
 
 atexit.register(_limpar)

@@ -591,6 +591,7 @@ def inicio(cur, id_unidade: int) -> dict | None:
     """O bloco do Início: nulo quando a loja nunca recebeu pedido."""
     cur.execute(
         """SELECT count(*) FILTER (WHERE situacao = 'NOVO') AS novos,
+                  count(*) FILTER (WHERE situacao IN ('NOVO', 'CONFIRMADO')) AS abertos,
                   count(*) FILTER (WHERE situacao IN ('CONFIRMADO', 'ENTREGUE')
                                      AND lancado_pdv_em IS NULL) AS sem_pdv,
                   count(*) FILTER (WHERE situacao = 'CONFIRMADO'

@@ -144,8 +144,11 @@ function Casca({ children }: { children: React.ReactNode }) {
   // de menor id — o seletor mostraria uma loja e o pedido iria para outra.
   const daLoja =
     eu.unidades.length > 1 ? (
+      // 🔑 **A loja é uma ETIQUETA à direita da barra** (29/09/2026, pedido do dono, a partir do
+      // protótipo da tela inicial). Com várias lojas a etiqueta É o seletor — o mesmo lugar para
+      // ver e para trocar.
       <select
-        className="mono mt-0.5 -ml-1 max-w-[170px] truncate rounded border border-transparent bg-transparent px-1 py-0 text-[11.5px] text-suave hover:border-linha2"
+        className="etiqueta-loja max-w-[180px] cursor-pointer truncate hover:border-erva"
         value={String(unidade)}
         aria-label="Loja"
         onChange={(e) => {
@@ -163,9 +166,7 @@ function Casca({ children }: { children: React.ReactNode }) {
         ))}
       </select>
     ) : loja ? (
-      <span className="mono mt-0.5 truncate text-[11.5px] uppercase tracking-[0.06em] text-suave">
-        {loja.apelido ?? loja.nome}
-      </span>
+      <span className="etiqueta-loja max-w-[180px] truncate">{loja.apelido ?? loja.nome}</span>
     ) : null;
 
   const navegacao = (
@@ -192,7 +193,8 @@ function Casca({ children }: { children: React.ReactNode }) {
       {/* A barra do topo atravessa a tela inteira — inclusive no desktop, onde
           antes só existia no celular. É ela que carrega a marca e quem entrou. */}
       <BarraSuperior
-        marca={<Marca logo={marca.logo} nome={marca.nome} loja={daLoja} />}
+        marca={<Marca logo={marca.logo} nome={marca.nome} />}
+        loja={daLoja}
         aoAbrirMenu={() => setAberto(true)}
       />
 
@@ -443,8 +445,8 @@ function MenuLateral({
             {(() => {
               const expandido = abertos[e.grupo] ?? false;
               const temAtivo = e.itens.some((i) => i.href === caminho);
-              // ⚠️ O grupo conta o que se vê ao abri-lo: o subgrupo é UMA linha.
-              const linhas = blocosDoGrupo(e.itens).length;
+              // 🔑 **Sem a contagem ao lado do grupo** (29/09/2026, pedido do dono, a partir do
+              // protótipo da tela inicial): o nome e a seta bastam.
               return (
                 <>
                   <button
@@ -457,7 +459,6 @@ function MenuLateral({
                       <Icone nome={e.icone} />
                     </span>
                     <span>{e.grupo}</span>
-                    <span className="menu-conta">{linhas}</span>
                     <svg
                       viewBox="0 0 10 6"
                       aria-hidden="true"
@@ -489,7 +490,6 @@ function MenuLateral({
                               <Icone nome={b.icone} />
                             </span>
                             <span>{b.nome}</span>
-                            <span className="menu-conta">{b.itens.length}</span>
                             <svg
                               viewBox="0 0 10 6"
                               aria-hidden="true"
