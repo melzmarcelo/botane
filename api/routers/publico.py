@@ -34,6 +34,7 @@ from relogio import agora_da_casa
 from models.catalogos import ORIGEM_PRODUTOS
 from models.reservas import CancelamentoDoSite, ClienteDoSite, IdentificacaoDoSite, ReservaCreate, ReservaDoSite, TelefoneDoSite
 from services import reserva_clientes as clientes
+from services import traducao
 from services import reservas as reservas_servico
 from services import reservas_agenda as agenda
 from services import termo_consentimento as termo
@@ -363,8 +364,13 @@ def _quando_atende(cur, id_unidade: int) -> dict:
     }
 
 
+_IDIOMA = Query(default=None, pattern="^(pt|en|de)$",
+                description="O idioma do site (103): nomes e textos em inglês ou alemão, "
+                            "com o português onde faltar tradução.")
+
+
 @router.get("/{id_unidade}/catalogos")
-def catalogos(id_unidade: int) -> list[dict]:
+def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
     """Os catálogos que a casa está publicando HOJE.
 
     🔑 *"Catálogos cadastrados e ativos"* — e "ativo" aqui é mais estreito que a
@@ -379,7 +385,7 @@ def catalogos(id_unidade: int) -> list[dict]:
     with get_cursor() as cur:
         _casa_aberta(cur, id_unidade)
         cur.execute(
-            """SELECT c.id, c.nome, c.origem, c.arquivo_url, c.arquivo_bytes,
+            """SELECT c.id, c.nome, c.nome_en, c.nome_de, c.origem, c.arquivo_url, c.arquivo_bytes,
                       c.publica_ate, c.exige_cadastro,
                       -- 🔑 **Quantos produtos VIVOS o cardápio tem.** É o que
                       -- diz se um catálogo de PRODUTOS tem o que mostrar — o
@@ -402,6 +408,8 @@ def catalogos(id_unidade: int) -> list[dict]:
         )
         saida = []
         for r in cur.fetchall():
+            r = dict(r)
+            r["nome"] = traducao.escolher(r["nome"], r["nome_en"], r["nome_de"], idioma)
             # ⚠️ **Capa sem conteúdo não entra**, e cada origem tem o seu
             # conteúdo: o PDF é o arquivo, o PRODUTOS são os itens. Mostrar
             # qualquer uma das duas vazia seria oferecer um cardápio que não
@@ -446,7 +454,7 @@ def catalogos(id_unidade: int) -> list[dict]:
 
 
 @router.get("/{id_unidade}/catalogos/{id_catalogo}")
-def cardapio(id_unidade: int, id_catalogo: int) -> dict:
+def cardapio(id_unidade: int, id_catalogo: int, idioma: str | None = _IDIOMA) -> dict:
     """O cardápio montado: categorias, subcategorias, itens e PREÇO.
 
     🔑 **Pedido do dono (22/09/2026):** apresentar o catálogo na tela do site,
@@ -475,7 +483,9 @@ def cardapio(id_unidade: int, id_catalogo: int) -> dict:
         if capa["exige_cadastro"]:
             raise HTTPException(status_code=403,
                                 detail="Identifique-se para ver este cardápio.")
-        return _montar_cardapio(cur, id_unidade, id_catalogo, capa["nome"])
+        return _montar_cardapio(cur, id_unidade, id_catalogo,
+                                traducao.escolher(capa["nome"], capa["nome_en"], capa["nome_de"],
+                                                  idioma), idioma)
 
 
 def _no_ar(cur, id_unidade: int, id_catalogo: int) -> dict | None:
@@ -486,7 +496,7 @@ def _no_ar(cur, id_unidade: int, id_catalogo: int) -> dict | None:
     público — por isso quem chama responde 404.
     """
     cur.execute(
-        """SELECT nome, origem, arquivo_url, exige_cadastro FROM catalogos
+        """SELECT nome, nome_en, nome_de, origem, arquivo_url, exige_cadastro FROM catalogos
             WHERE id = %s AND situacao = 'ATIVO'
               AND EXISTS (SELECT 1 FROM catalogo_lojas l
                            WHERE l.id_catalogo = catalogos.id AND l.id_unidade = %s)
@@ -498,11 +508,20 @@ def _no_ar(cur, id_unidade: int, id_catalogo: int) -> dict | None:
     return dict(linha) if linha else None
 
 
-def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str) -> dict:
+def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str,
+                     idioma: str | None = None) -> dict:
     """A árvore do cardápio montado por produtos: categorias, subcategorias, itens."""
     cur.execute(
         """SELECT g.id AS id_categoria, g.nome AS categoria,
                   g.descricao AS categoria_descricao, g.foto_url AS categoria_foto,
+                  g.nome_en AS categoria_en, g.nome_de AS categoria_de,
+                  g.descricao_en AS categoria_descricao_en, g.descricao_de AS categoria_descricao_de,
+                  s.nome_en AS subcategoria_en, s.nome_de AS subcategoria_de,
+                  s.descricao_en AS subcategoria_descricao_en,
+                  s.descricao_de AS subcategoria_descricao_de,
+                  p.nome_catalogo_en AS produto_en, p.nome_catalogo_de AS produto_de,
+                  p.informacao_adicional_en AS informacao_en,
+                  p.informacao_adicional_de AS informacao_de,
                   g.ordem AS categoria_ordem,
                   s.id AS id_subcategoria, s.nome AS subcategoria,
                   s.descricao AS subcategoria_descricao,
@@ -534,6 +553,14 @@ def _montar_cardapio(cur, id_unidade: int, id_catalogo: int, nome: str) -> dict:
         {"c": id_catalogo, "u": id_unidade},
     )
     linhas = [dict(r) for r in cur.fetchall()]
+    # 🔑 O idioma do site (103): cada texto no idioma pedido, e o português onde faltar.
+    if idioma in ("en", "de"):
+        for l in linhas:
+            for campo, fonte in (("categoria", "categoria"), ("categoria_descricao", "categoria_descricao"),
+                                 ("subcategoria", "subcategoria"),
+                                 ("subcategoria_descricao", "subcategoria_descricao"),
+                                 ("produto", "produto"), ("informacao_adicional", "informacao")):
+                l[campo] = traducao.escolher(l[campo], l.get(f"{fonte}_en"), l.get(f"{fonte}_de"), idioma)
 
     # 🔑 **A árvore é montada aqui, em memória, a partir de UMA consulta.**
     # Uma consulta por categoria transformaria um cardápio de dez seções em
@@ -971,7 +998,7 @@ def identificar_cliente(id_unidade: int, corpo: IdentificacaoDoSite,
 
 @router.post("/{id_unidade}/catalogos/{id_catalogo}/abrir")
 def abrir_catalogo(id_unidade: int, id_catalogo: int, corpo: ClienteDoSite,
-                   pedido: Request) -> dict:
+                   pedido: Request, idioma: str | None = _IDIOMA) -> dict:
     """O conteúdo de um catálogo, para quem se identificou.
 
     🔑 **É por aqui que o catálogo que exige cadastro se abre**: o PDF devolve o
@@ -992,7 +1019,9 @@ def abrir_catalogo(id_unidade: int, id_catalogo: int, corpo: ClienteDoSite,
         if capa["origem"] == ORIGEM_PRODUTOS:
             return {"origem": ORIGEM_PRODUTOS,
                     "cardapio": _montar_cardapio(cur, id_unidade, id_catalogo,
-                                                 capa["nome"])}
+                                                 traducao.escolher(capa["nome"], capa["nome_en"],
+                                                                   capa["nome_de"], idioma),
+                                                 idioma)}
         if not capa["arquivo_url"]:
             raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
         return {"origem": capa["origem"], "arquivo_url": capa["arquivo_url"]}

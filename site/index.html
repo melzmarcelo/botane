@@ -117,6 +117,15 @@ body {
   padding: 5px 10px; font: 500 11px/1 Karla, sans-serif;
   background: rgba(20,26,22,.72); color: #F1EDE2;
 }
+.idiomas {
+  position: absolute; left: 10px; top: 10px; display: flex; gap: 2px; padding: 3px;
+  border-radius: 999px; background: rgba(20,26,22,.72);
+}
+.idiomas button {
+  border: 0; border-radius: 999px; padding: 3px 8px; cursor: pointer;
+  font: 500 11px/1 Karla, sans-serif; background: transparent; color: #F1EDE2;
+}
+.idiomas button[aria-pressed="true"] { background: #F1EDE2; color: #1B211C; }
 
 /* ---- o corpo ---- */
 .corpo { padding: 46px 20px 26px; display: flex; flex-direction: column; gap: 14px; }
@@ -440,6 +449,8 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 
   <header class="capa">
     <span class="estado" id="estado">…</span>
+    <!-- 🔑 PT · EN · DE (pedido do dono, 29/09/2026). Quem monta é o `montarSeletorDeIdioma`. -->
+    <span class="idiomas" id="idiomas" role="group" aria-label="idioma · language · Sprache"></span>
     <div class="marca" id="marca"><b>Botané</b><span>comida de raiz</span></div>
   </header>
 
@@ -755,6 +766,381 @@ const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? "").replace(/[<>&"]/g,
   (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
 
+/* ===========================================================================
+   🔑 **O site em três idiomas** (pedido do dono, 29/09/2026: "o site nos três
+   idiomas"). PT · EN · DE no alto da capa; a escolha fica na ABA
+   (`sessionStorage`, como a sessão) e, sem escolha, vem do idioma do navegador.
+
+   Duas camadas, de propósito:
+   1. **O cardápio vem traduzido do servidor** (`?idioma=`, migração 103): nomes
+      e descrições que o Claude traduziu e a casa conferiu. Onde falta tradução,
+      o servidor devolve o português — nunca um buraco.
+   2. **Os textos da tela moram AQUI**, num dicionário com a frase em português
+      como chave. ⚠️ Texto FIXO (um nó de texto inteiro, um `placeholder`, um
+      `aria-label`) é traduzido sozinho pelo `traduzirArvore`, que o observador
+      reaplica em tudo o que o JavaScript desenha depois — não precisa de `t()`.
+      Texto MONTADO com dado (`Faltam {n} visitas`) precisa de `t()` com a chave
+      de modelo, senão a frase inteira nunca bate com a chave.
+   ⚠️ **Fica em português, de propósito:** a mensagem que vai para o WhatsApp da
+   CASA (quem lê é a equipe), o termo de consentimento (texto jurídico da casa),
+   o `texto_pagamento` que a casa escreve e as mensagens de erro do servidor.
+   ⚠️ **Trocar de idioma recarrega a página.** O cardápio precisa vir de novo do
+   servidor no idioma novo; carrinho, sessão e tela sobrevivem (estão na aba).
+   =========================================================================== */
+const IDIOMAS = ["pt", "en", "de"];
+const IDIOMA = (() => {
+  try {
+    const salvo = sessionStorage.getItem("botane.idioma");
+    if (IDIOMAS.includes(salvo)) return salvo;
+  } catch { /* sem armazenamento: vale o do navegador */ }
+  const nav = (navigator.language || "pt").slice(0, 2).toLowerCase();
+  return nav === "en" || nav === "de" ? nav : "pt";
+})();
+const LOCALE = { pt: "pt-BR", en: "en-GB", de: "de-DE" }[IDIOMA];
+document.documentElement.lang = LOCALE;
+
+/* O dicionário: "frase em português": ["inglês", "alemão"]. */
+const TRADUCOES = {
+  // ---- capa e navegação
+  "Reserve sua Mesa": ["Book a table", "Tisch reservieren"],
+  "Qual casa?": ["Which location?", "Welcher Standort?"],
+  "Escolha a unidade — a reserva, o cardápio e o contato são dela.":
+    ["Choose the location — the booking, the menu and the contact details are its own.",
+     "Wählen Sie den Standort — Reservierung, Speisekarte und Kontakt gehören zu ihm."],
+  "‹ voltar": ["‹ back", "‹ zurück"],
+  "‹ cardápio": ["‹ menu", "‹ Speisekarte"],
+  "Voltar ao início": ["Back to start", "Zurück zum Anfang"],
+  "Aberto agora": ["Open now", "Jetzt geöffnet"],
+  "Fechado hoje": ["Closed today", "Heute geschlossen"],
+  "Fechado · abre {quando}": ["Closed · opens {quando}", "Geschlossen · öffnet {quando}"],
+  "{dia} às {hora}": ["{dia} at {hora}", "{dia} um {hora}"],
+  "hoje {horas}": ["today {horas}", "heute {horas}"],
+  "Seg": ["Mon", "Mo"], "Ter": ["Tue", "Di"], "Qua": ["Wed", "Mi"], "Qui": ["Thu", "Do"],
+  "Sex": ["Fri", "Fr"], "Sáb": ["Sat", "Sa"], "Dom": ["Sun", "So"],
+  "Reservas": ["Bookings", "Reservierungen"],
+  "Fidelidade": ["Loyalty card", "Treuekarte"],
+  "Entre em Contato": ["Contact us", "Kontakt"],
+  "Entre em contato": ["Contact us", "Kontakt"],
+  "Telefone": ["Phone", "Telefon"],
+  "E-mail": ["E-mail", "E-Mail"],
+  "Onde estamos": ["Where we are", "Hier finden Sie uns"],
+  "O WhatsApp ainda não está cadastrado. Quem cuida do sistema pode preenchê-lo em Administração ▸ Empresa, e ele aparece aqui na hora.":
+    ["WhatsApp is not set up yet.", "WhatsApp ist noch nicht eingerichtet."],
+  "Trocar de loja": ["Change location", "Standort wechseln"],
+  "Não conseguimos carregar agora. Tente em instantes.":
+    ["We couldn't load this right now. Please try again in a moment.",
+     "Das konnte gerade nicht geladen werden. Bitte versuchen Sie es gleich noch einmal."],
+  "Carregando…": ["Loading…", "Wird geladen…"],
+
+  // ---- quem é você
+  "Reserve sua mesa": ["Book your table", "Reservieren Sie Ihren Tisch"],
+  "Comece pelo telefone — é assim que a casa reconhece você.":
+    ["Start with your phone number — that's how we recognise you.",
+     "Beginnen Sie mit Ihrer Telefonnummer — daran erkennen wir Sie."],
+  "Seu telefone, com DDD": ["Your phone number, with area code", "Ihre Telefonnummer, mit Vorwahl"],
+  "Seu nome": ["Your name", "Ihr Name"],
+  "Gênero": ["Gender", "Geschlecht"],
+  "escolha…": ["choose…", "bitte wählen…"],
+  "Feminino": ["Female", "Weiblich"],
+  "Masculino": ["Male", "Männlich"],
+  "Outro": ["Other", "Divers"],
+  "Prefiro não informar": ["Prefer not to say", "Keine Angabe"],
+  "Cidade": ["City", "Stadt"],
+  "Data de nascimento": ["Date of birth", "Geburtsdatum"],
+  "Estou de acordo com o": ["I agree to the", "Ich bin einverstanden mit der"],
+  "termo de consentimento": ["consent terms", "Einwilligungserklärung"],
+  "atualizado, que inclui o programa de fidelidade.":
+    ["(updated), which include the loyalty programme.",
+     "(aktualisiert), die das Treueprogramm einschließt."],
+  "Continuar": ["Continue", "Weiter"],
+  "Faça seu check-in: comece pelo telefone.":
+    ["Check in: start with your phone number.", "Zum Check-in: beginnen Sie mit Ihrer Telefonnummer."],
+  "Veja suas visitas: comece pelo telefone.":
+    ["See your visits: start with your phone number.", "Ihre Besuche: beginnen Sie mit Ihrer Telefonnummer."],
+  "A casa reconhece você pelo telefone.":
+    ["We recognise you by your phone number.", "Wir erkennen Sie an Ihrer Telefonnummer."],
+  "Para abrir este cardápio, a casa pede que você se identifique pelo telefone.":
+    ["To open this menu, please identify yourself with your phone number.",
+     "Um diese Speisekarte zu öffnen, geben Sie bitte Ihre Telefonnummer an."],
+  "Digite seu telefone para continuar.":
+    ["Enter your phone number to continue.", "Geben Sie Ihre Telefonnummer ein, um fortzufahren."],
+  "Não conseguimos consultar agora.":
+    ["We couldn't check right now.", "Das konnte gerade nicht geprüft werden."],
+  "Primeira vez por aqui? Conte quem é você.":
+    ["First time here? Tell us who you are.", "Zum ersten Mal hier? Sagen Sie uns, wer Sie sind."],
+  "Escolher dia e horário": ["Choose day and time", "Tag und Uhrzeit wählen"],
+  "Ver meu cartão": ["See my card", "Meine Karte ansehen"],
+  "Enviar o pedido": ["Send the order", "Bestellung senden"],
+  "Ver meus pedidos": ["See my orders", "Meine Bestellungen ansehen"],
+  "Abrir o cardápio": ["Open the menu", "Speisekarte öffnen"],
+  "Diga seu nome para continuar.": ["Tell us your name to continue.", "Nennen Sie Ihren Namen, um fortzufahren."],
+  "Escolha uma opção de gênero.": ["Choose a gender option.", "Wählen Sie eine Angabe zum Geschlecht."],
+  "Diga sua cidade.": ["Tell us your city.", "Nennen Sie Ihre Stadt."],
+  "Diga sua data de nascimento.": ["Tell us your date of birth.", "Nennen Sie Ihr Geburtsdatum."],
+  "Para seguir com o cadastro, marque que está de acordo com o termo de consentimento.":
+    ["To continue, tick that you agree to the consent terms.",
+     "Um fortzufahren, bestätigen Sie bitte die Einwilligungserklärung."],
+  "Não conseguimos conferir seu cadastro.":
+    ["We couldn't check your details.", "Ihre Angaben konnten nicht geprüft werden."],
+  "Pronto!": ["Done!", "Fertig!"],
+  "Pronto, {nome}!": ["Done, {nome}!", "Fertig, {nome}!"],
+  "Abrir {nome}": ["Open {nome}", "{nome} öffnen"],
+  "Olá, {nome}!": ["Hello, {nome}!", "Hallo, {nome}!"],
+  "Olá!": ["Hello!", "Hallo!"],
+  "Não é você? Trocar telefone": ["Not you? Change phone number", "Nicht Sie? Telefonnummer ändern"],
+
+  // ---- reserva
+  "Reservar uma mesa": ["Book a table", "Einen Tisch reservieren"],
+  "Suas reservas": ["Your bookings", "Ihre Reservierungen"],
+  "Quantas pessoas": ["How many people", "Wie viele Personen"],
+  "Que dia": ["Which day", "Welcher Tag"],
+  "Horários com mesa": ["Times with a free table", "Zeiten mit freiem Tisch"],
+  "horários disponíveis": ["available times", "verfügbare Zeiten"],
+  "Escolha o dia e quantas pessoas.": ["Choose the day and how many people.", "Wählen Sie den Tag und die Personenzahl."],
+  "Alguma observação? (opcional)": ["Anything we should know? (optional)", "Noch etwas, das wir wissen sollten? (optional)"],
+  "Aniversário, cadeirinha, alguma restrição…":
+    ["Birthday, high chair, dietary restrictions…", "Geburtstag, Kinderstuhl, Unverträglichkeiten…"],
+  "Confirmar reserva": ["Confirm booking", "Reservierung bestätigen"],
+  "Procurando mesa…": ["Looking for a table…", "Suche nach einem Tisch…"],
+  "Nenhum horário livre.": ["No free times.", "Keine freien Zeiten."],
+  "Não há mesa para este grupo neste dia.":
+    ["There is no table for this group on this day.", "An diesem Tag gibt es keinen Tisch für diese Gruppe."],
+  "Para <b>{n} pessoas</b> a casa acerta no WhatsApp.":
+    ["For <b>{n} people</b> we arrange it on WhatsApp.", "Für <b>{n} Personen</b> klären wir es per WhatsApp."],
+  "Horário especial neste dia ({abre} às {fecha}): {aviso}.":
+    ["Special hours on this day ({abre}–{fecha}): {aviso}.", "Besondere Öffnungszeiten an diesem Tag ({abre}–{fecha}): {aviso}."],
+  "Você escolheu <b>{hora}</b>, dia {dia}.": ["You chose <b>{hora}</b> on {dia}.", "Sie haben <b>{hora}</b> am {dia} gewählt."],
+  "Você escolheu <b>{hora}</b>. Para confirmar,": ["You chose <b>{hora}</b>. To confirm,", "Sie haben <b>{hora}</b> gewählt. Zur Bestätigung"],
+  "mande a mensagem pronta ›": ["send the ready-made message ›", "senden Sie die vorbereitete Nachricht ›"],
+  "Você escolheu <b>{hora}</b>. Ligue para a casa para confirmar.":
+    ["You chose <b>{hora}</b>. Please call us to confirm.", "Sie haben <b>{hora}</b> gewählt. Bitte rufen Sie uns zur Bestätigung an."],
+  "Não conseguimos marcar agora.": ["We couldn't book it right now.", "Die Reservierung war gerade nicht möglich."],
+  "{n} pessoa": ["{n} person", "{n} Person"],
+  "{n} pessoas": ["{n} people", "{n} Personen"],
+  "{n} pessoas, em nome de {nome}": ["{n} people, under the name {nome}", "{n} Personen, auf den Namen {nome}"],
+  "1 pessoa, em nome de {nome}": ["1 person, under the name {nome}", "1 Person, auf den Namen {nome}"],
+  "Confirmada": ["Confirmed", "Bestätigt"],
+  "Aguardando a casa": ["Waiting for confirmation", "Wartet auf Bestätigung"],
+  "Cancelar": ["Cancel", "Stornieren"],
+  "Cancelar mesmo?": ["Really cancel?", "Wirklich stornieren?"],
+  "Cancelando…": ["Cancelling…", "Wird storniert…"],
+  "Reserva cancelada.": ["Booking cancelled.", "Reservierung storniert."],
+  "Não conseguimos cancelar agora.": ["We couldn't cancel right now.", "Die Stornierung war gerade nicht möglich."],
+  "Sua mesa está reservada. Até lá!": ["Your table is booked. See you then!", "Ihr Tisch ist reserviert. Bis bald!"],
+  "Recebemos seu pedido — a casa confirma em seguida.":
+    ["We've received your request — we'll confirm shortly.", "Wir haben Ihre Anfrage erhalten — wir bestätigen in Kürze."],
+  "Precisando mudar alguma coisa,": ["If you need to change anything,", "Wenn Sie etwas ändern möchten,"],
+  "Se preferir adiantar,": ["If you'd like to speed things up,", "Wenn es schneller gehen soll,"],
+  "fale com a gente": ["talk to us", "schreiben Sie uns"],
+  "Esta é a primeira versão.": ["This is the first version.", "Dies ist die erste Version."],
+  "O site mostra os horários que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.":
+    ["The site shows our free times — to confirm the table, we finalise it on WhatsApp.",
+     "Die Seite zeigt unsere freien Zeiten — bestätigt wird der Tisch per WhatsApp."],
+
+  // ---- cardápio
+  "Cardápio": ["Menu", "Speisekarte"],
+  "Categoria": ["Category", "Kategorie"],
+  "partes desta categoria": ["parts of this category", "Teile dieser Kategorie"],
+  "Carregando o cardápio…": ["Loading the menu…", "Speisekarte wird geladen…"],
+  "Não conseguimos abrir o cardápio agora.": ["We couldn't open the menu right now.", "Die Speisekarte konnte gerade nicht geöffnet werden."],
+  "Este cardápio ainda não tem itens.": ["This menu has no items yet.", "Diese Speisekarte hat noch keine Einträge."],
+  "Acessar ›": ["Open ›", "Öffnen ›"],
+  "Preços sujeitos a alteração.": ["Prices subject to change.", "Preisänderungen vorbehalten."],
+
+  // ---- pedido
+  "Adicionar": ["Add", "Hinzufügen"],
+  "tirar um": ["remove one", "eins weniger"],
+  "pôr mais um": ["add one more", "eins mehr"],
+  "Ver pedido ›": ["View order ›", "Bestellung ansehen ›"],
+  "1 item · R$ {total}": ["1 item · R$ {total}", "1 Artikel · R$ {total}"],
+  "{n} itens · R$ {total}": ["{n} items · R$ {total}", "{n} Artikel · R$ {total}"],
+  "Seu pedido": ["Your order", "Ihre Bestellung"],
+  "Seu pedido está vazio. Volte ao cardápio e toque em “Adicionar”.":
+    ["Your order is empty. Go back to the menu and tap “Add”.",
+     "Ihre Bestellung ist leer. Gehen Sie zurück zur Speisekarte und tippen Sie auf „Hinzufügen“."],
+  "Observação deste item (ex.: sem cebola)": ["Note for this item (e.g. no onion)", "Hinweis zu diesem Artikel (z. B. ohne Zwiebeln)"],
+  "Como você quer receber": ["How would you like to receive it", "Wie möchten Sie es erhalten"],
+  "como receber": ["how to receive", "Art der Übergabe"],
+  "Retirar na loja": ["Pick up in store", "Im Laden abholen"],
+  "Entrega": ["Delivery", "Lieferung"],
+  "Endereço de entrega": ["Delivery address", "Lieferadresse"],
+  "Rua, número, bairro e um ponto de referência":
+    ["Street, number, neighbourhood and a landmark", "Straße, Hausnummer, Viertel und ein Orientierungspunkt"],
+  "Para quando": ["When", "Für wann"],
+  "para quando": ["when", "für wann"],
+  "O quanto antes": ["As soon as possible", "So bald wie möglich"],
+  "Escolher dia e hora": ["Choose day and time", "Tag und Uhrzeit wählen"],
+  "Dia": ["Day", "Tag"],
+  "Hora": ["Time", "Uhrzeit"],
+  "Como vai pagar": ["How will you pay", "Wie zahlen Sie"],
+  "pagamento": ["payment", "Zahlung"],
+  "Na retirada": ["On pick-up", "Bei Abholung"],
+  "Na entrega": ["On delivery", "Bei Lieferung"],
+  "Combinar pelo WhatsApp": ["Arrange on WhatsApp", "Per WhatsApp vereinbaren"],
+  "Observação (opcional)": ["Note (optional)", "Hinweis (optional)"],
+  "Itens": ["Items", "Artikel"],
+  "Total": ["Total", "Gesamt"],
+  "Pedido mínimo: R$ {valor}": ["Minimum order: R$ {valor}", "Mindestbestellwert: R$ {valor}"],
+  "Enviar pedido": ["Send order", "Bestellung senden"],
+  "Meus pedidos": ["My orders", "Meine Bestellungen"],
+  "Escolha o dia e a hora do pedido.": ["Choose the day and time of the order.", "Wählen Sie Tag und Uhrzeit der Bestellung."],
+  "Informe o endereço de entrega.": ["Enter the delivery address.", "Geben Sie die Lieferadresse an."],
+  "Não conseguimos enviar o pedido agora.": ["We couldn't send the order right now.", "Die Bestellung konnte gerade nicht gesendet werden."],
+  "Pedido enviado!": ["Order sent!", "Bestellung gesendet!"],
+  "Pedido nº": ["Order no.", "Bestellung Nr."],
+  "Total: R$ {total} · {pagamento}": ["Total: R$ {total} · {pagamento}", "Gesamt: R$ {total} · {pagamento}"],
+  "A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”":
+    ["We'll check and confirm your order. Follow it in “My orders”",
+     "Wir prüfen und bestätigen Ihre Bestellung. Verfolgen Sie sie unter „Meine Bestellungen“"],
+  "Combinar o pagamento pelo WhatsApp": ["Arrange payment on WhatsApp", "Zahlung per WhatsApp vereinbaren"],
+  "Aguardando a casa confirmar": ["Waiting for confirmation", "Wartet auf Bestätigung"],
+  "Confirmado": ["Confirmed", "Bestätigt"],
+  "Entregue": ["Delivered", "Geliefert"],
+  "Recusado": ["Declined", "Abgelehnt"],
+  "Cancelado": ["Cancelled", "Storniert"],
+  "Nº {numero} · {situacao}": ["No. {numero} · {situacao}", "Nr. {numero} · {situacao}"],
+  "A casa ajustou os itens deste pedido.": ["We adjusted the items in this order.", "Wir haben die Artikel dieser Bestellung angepasst."],
+  "Motivo: {motivo}": ["Reason: {motivo}", "Grund: {motivo}"],
+  "Cancelar este pedido": ["Cancel this order", "Diese Bestellung stornieren"],
+  "Não conseguimos buscar seus pedidos.": ["We couldn't fetch your orders.", "Ihre Bestellungen konnten nicht geladen werden."],
+  "Você ainda não fez pedidos por aqui.": ["You haven't placed any orders here yet.", "Sie haben hier noch nichts bestellt."],
+
+  // ---- fidelidade
+  "Seu cartão fidelidade": ["Your loyalty card", "Ihre Treuekarte"],
+  "Fazer check-in": ["Check in", "Einchecken"],
+  "Pedir código no caixa": ["Ask for a code at the till", "Code an der Kasse anfordern"],
+  "Código que o caixa passou": ["Code from the till", "Code von der Kasse"],
+  "Confirmar visita": ["Confirm visit", "Besuch bestätigen"],
+  "A cada {visitas} visitas: {premio}.": ["Every {visitas} visits: {premio}.", "Alle {visitas} Besuche: {premio}."],
+  "visita {n}": ["visit {n}", "Besuch {n}"],
+  "visita {n} feita": ["visit {n} done", "Besuch {n} erledigt"],
+  "{feitas} de {total}": ["{feitas} of {total}", "{feitas} von {total}"],
+  "falta 1 visita para o prêmio": ["1 visit to go for the reward", "noch 1 Besuch bis zur Prämie"],
+  "faltam {n} visitas para o prêmio": ["{n} visits to go for the reward", "noch {n} Besuche bis zur Prämie"],
+  "Cartão completo!": ["Card complete!", "Karte voll!"],
+  "Mostre este código no caixa:": ["Show this code at the till:", "Zeigen Sie diesen Code an der Kasse:"],
+  "Vale a partir da sua próxima visita ({de}), até {ate}, de {consumo}.":
+    ["Valid from your next visit ({de}) until {ate}, {consumo}.", "Gültig ab Ihrem nächsten Besuch ({de}) bis {ate}, {consumo}."],
+  "Vale até {ate}, de {consumo}.": ["Valid until {ate}, {consumo}.", "Gültig bis {ate}, {consumo}."],
+  "Já usado": ["Already used", "Bereits eingelöst"],
+  "Venceu": ["Expired", "Abgelaufen"],
+  "As visitas contam de {pontua}, uma por dia, com o check-in pelo QR code da mesa":
+    ["Visits count {pontua}, one per day, by checking in with the QR code on the table",
+     "Besuche zählen {pontua}, einer pro Tag, per Check-in mit dem QR-Code am Tisch"],
+  ", estando na casa (o site confirma pela localização). ":
+    [", while you are here (the site confirms it by your location). ", ", wenn Sie vor Ort sind (die Seite prüft es über Ihren Standort). "],
+  "O prêmio vale da visita seguinte em diante, por {dias} dias, de {consumo} — e a visita em que você usa o prêmio não conta carimbo.":
+    ["The reward is valid from the following visit, for {dias} days, {consumo} — and the visit in which you use it earns no stamp.",
+     "Die Prämie gilt ab dem folgenden Besuch für {dias} Tage, {consumo} — und der Besuch, bei dem Sie sie einlösen, zählt keinen Stempel."],
+  "Não conseguimos abrir seu cartão agora.": ["We couldn't open your card right now.", "Ihre Karte konnte gerade nicht geöffnet werden."],
+  "Seu check-in de hoje já está feito. Até a próxima visita!":
+    ["You've already checked in today. See you next time!", "Sie haben heute schon eingecheckt. Bis zum nächsten Besuch!"],
+  "Para participar, marque que está de acordo com o termo de consentimento.":
+    ["To take part, tick that you agree to the consent terms.", "Um teilzunehmen, bestätigen Sie bitte die Einwilligungserklärung."],
+  "Confirmando que você está na casa…": ["Confirming that you are here…", "Wir prüfen, ob Sie vor Ort sind…"],
+  "Este navegador não informa a localização.": ["This browser doesn't share its location.", "Dieser Browser gibt keinen Standort an."],
+  "Para contar a visita, permita o acesso à localização — ela só confirma que você está na casa. Libere nas configurações do navegador e toque em Fazer check-in.":
+    ["To count the visit, allow location access — it only confirms that you are here. Enable it in your browser settings and tap Check in.",
+     "Damit der Besuch zählt, erlauben Sie den Standortzugriff — er bestätigt nur, dass Sie vor Ort sind. Aktivieren Sie ihn in den Browsereinstellungen und tippen Sie auf Einchecken."],
+  "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in.":
+    ["We couldn't get your location. Turn on GPS and tap Check in.", "Ihr Standort konnte nicht ermittelt werden. Schalten Sie GPS ein und tippen Sie auf Einchecken."],
+  "Não conseguimos fazer o check-in agora.": ["We couldn't check you in right now.", "Der Check-in war gerade nicht möglich."],
+  "🎉 Cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.":
+    ["🎉 Card complete! You've won: {premio}. It's valid from your next visit — show code {codigo} at the till.",
+     "🎉 Karte voll! Sie haben gewonnen: {premio}. Gültig ab Ihrem nächsten Besuch — zeigen Sie den Code {codigo} an der Kasse."],
+  "Check-in feito! Falta 1 visita.": ["Checked in! 1 visit to go.", "Eingecheckt! Noch 1 Besuch."],
+  "Check-in feito! Faltam {n} visitas.": ["Checked in! {n} visits to go.", "Eingecheckt! Noch {n} Besuche."],
+  "Não conseguimos pedir o código agora.": ["We couldn't request the code right now.", "Der Code konnte gerade nicht angefordert werden."],
+  "Peça o código no caixa e digite aqui. Ele vale até {ate}.":
+    ["Ask for the code at the till and enter it here. It's valid until {ate}.", "Fragen Sie an der Kasse nach dem Code und geben Sie ihn hier ein. Gültig bis {ate}."],
+  "Digite o código que o caixa passou.": ["Enter the code from the till.", "Geben Sie den Code von der Kasse ein."],
+  "Não conseguimos confirmar agora.": ["We couldn't confirm right now.", "Die Bestätigung war gerade nicht möglich."],
+  "1 selo": ["1 stamp", "1 Stempel"],
+  "{n} selos": ["{n} stamps", "{n} Stempel"],
+  "🎉 Visita confirmada (+{selos}) e cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.":
+    ["🎉 Visit confirmed (+{selos}) and card complete! You've won: {premio}. It's valid from your next visit — show code {codigo} at the till.",
+     "🎉 Besuch bestätigt (+{selos}) und Karte voll! Sie haben gewonnen: {premio}. Gültig ab Ihrem nächsten Besuch — zeigen Sie den Code {codigo} an der Kasse."],
+  "Visita confirmada: +{selos}! Faltam {n}.": ["Visit confirmed: +{selos}! {n} to go.", "Besuch bestätigt: +{selos}! Noch {n}."],
+
+  // ---- o termo
+  "Termo de consentimento": ["Consent terms", "Einwilligungserklärung"],
+  "Fechar": ["Close", "Schließen"],
+  "Li e concordo": ["I have read and agree", "Gelesen und einverstanden"],
+  "Não conseguimos carregar o termo agora. Tente de novo.":
+    ["We couldn't load the terms right now. Please try again.", "Die Erklärung konnte gerade nicht geladen werden. Bitte versuchen Sie es erneut."],
+};
+
+const _chave = (s) => String(s).replace(/\s+/g, " ").trim();
+
+/** A frase no idioma da tela, com os `{valores}` já no lugar. */
+function t(pt, valores = {}) {
+  const par = IDIOMA === "pt" ? null : TRADUCOES[_chave(pt)];
+  const frase = par ? par[IDIOMA === "en" ? 0 : 1] : pt;
+  return frase.replace(/\{(\w+)\}/g, (inteiro, k) => (k in valores ? String(valores[k]) : inteiro));
+}
+
+/** Os dias e horas que o servidor manda em português ("Sáb às 11:00", "08:00 às 18:00"). */
+function tHorario(texto) {
+  if (!texto || IDIOMA === "pt") return texto;
+  const m = /^(\S+) às (\d\d:\d\d)$/.exec(texto);
+  if (m && TRADUCOES[m[1]]) return t("{dia} às {hora}", { dia: t(m[1]), hora: m[2] });
+  return texto.replace(/ às /g, "–");
+}
+
+/* ⚠️ **Só nó INTEIRO e só texto que está no dicionário.** O nome de um prato que
+   por acaso coincida com uma chave seria traduzido — risco aceito: o cardápio já
+   vem traduzido do servidor, e as chaves são frases da tela, não nomes. */
+const _ATRIBUTOS = ["placeholder", "aria-label", "title"];
+function _traduzirNo(no) {
+  if (no.nodeType === Node.TEXT_NODE) {
+    const bruto = no.nodeValue;
+    const chave = _chave(bruto);
+    if (!chave || !(chave in TRADUCOES)) return;
+    const novo = t(chave);
+    const ini = bruto.match(/^\s*/)[0];
+    const fim = bruto.match(/\s*$/)[0];
+    if (bruto !== ini + novo + fim) no.nodeValue = ini + novo + fim;
+    return;
+  }
+  if (no.nodeType !== Node.ELEMENT_NODE || no.tagName === "SCRIPT" || no.tagName === "STYLE") return;
+  for (const a of _ATRIBUTOS) {
+    const v = no.getAttribute(a);
+    if (v && _chave(v) in TRADUCOES) no.setAttribute(a, t(v));
+  }
+  no.childNodes.forEach(_traduzirNo);
+}
+function traduzirArvore(raiz) { if (IDIOMA !== "pt") _traduzirNo(raiz); }
+
+/** O `?idioma=` das rotas do cardápio — em português, nada (é o padrão do servidor). */
+const noIdioma = () => (IDIOMA === "pt" ? "" : `?idioma=${IDIOMA}`);
+
+function montarSeletorDeIdioma() {
+  const caixa = document.getElementById("idiomas");
+  caixa.innerHTML = IDIOMAS.map((i) =>
+    `<button type="button" data-idioma="${i}" aria-pressed="${i === IDIOMA}">${i.toUpperCase()}</button>`).join("");
+  caixa.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-idioma]");
+    if (!b || b.dataset.idioma === IDIOMA) return;
+    try { sessionStorage.setItem("botane.idioma", b.dataset.idioma); } catch { /* sem memória */ }
+    location.reload();
+  });
+}
+
+if (IDIOMA !== "pt") {
+  traduzirArvore(document.body);
+  new MutationObserver((mudancas) => {
+    for (const m of mudancas) {
+      if (m.type === "characterData") _traduzirNo(m.target);
+      else if (m.type === "attributes") _traduzirNo(m.target);
+      else m.addedNodes.forEach(_traduzirNo);
+    }
+  }).observe(document.body, {
+    childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: _ATRIBUTOS,
+  });
+}
+montarSeletorDeIdioma();
+
 /**
  * Uma chamada à API pública. Sem `corpo` é GET; com `corpo`, POST.
  *
@@ -882,7 +1268,7 @@ async function carregarCasa() {
     return;
   }
   $("#nome-da-casa").textContent = casa.casa;
-  document.title = `${casa.casa} — Reservas`;
+  document.title = `${casa.casa} — ${t("Reservas")}`;
   pintarOIcone(casa.casa, casa.logo_url);
 
   // 🔑 **A logo CADASTRADA** (pedido do dono). Sem ela, o medalhão desenha o
@@ -910,9 +1296,10 @@ async function carregarCasa() {
   // ⚠️ **"Fechado" sozinho é uma porta na cara.** A tarja diz quando abre.
   $("#estado").textContent = casa.aberta_agora
     ? "Aberto agora"
-    : casa.proximo ? `Fechado · abre ${casa.proximo}` : "Fechado hoje";
+    : casa.proximo ? t("Fechado · abre {quando}", { quando: tHorario(casa.proximo) }) : "Fechado hoje";
   $("#linha-dias").textContent = (casa.dias || []).length
-    ? casa.dias.join(" · ") + (casa.hoje ? ` · hoje ${casa.hoje}` : "")
+    ? casa.dias.map((d) => t(d)).join(" · ")
+      + (casa.hoje ? " · " + t("hoje {horas}", { horas: tHorario(casa.hoje) }) : "")
     : [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
   $("#rodape").textContent =
     [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
@@ -989,7 +1376,7 @@ let catalogosDaCasa = [];
 async function carregarCatalogos() {
   let lista = [];
   try {
-    lista = await pedir("/catalogos");
+    lista = await pedir(`/catalogos${noIdioma()}`);
   } catch {
     return;
   }
@@ -1037,7 +1424,7 @@ async function abrirCatalogo(c) {
   lembrar();
   if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
   return mostrarCardapio(c.nome, () =>
-    pedir(`/catalogos/${c.id}/abrir`, { telefone: eu.telefone })
+    pedir(`/catalogos/${c.id}/abrir${noIdioma()}`, { telefone: eu.telefone })
       .then((r) => r.cardapio));
 }
 
@@ -1078,7 +1465,7 @@ let cardapio = null;
 
 const dinheiro = (v) => v === null || v === undefined
   ? ""
-  : v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  : v.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Uma foto do servidor, ou a moldura com o nome quando não há. */
 function moldura(url, nome, classe) {
@@ -1088,7 +1475,7 @@ function moldura(url, nome, classe) {
 }
 
 function abrirCardapio(id, nome) {
-  return mostrarCardapio(nome, () => pedir(`/catalogos/${id}`));
+  return mostrarCardapio(nome, () => pedir(`/catalogos/${id}${noIdioma()}`));
 }
 
 /** Desenha o cardápio; `buscar` diz de onde ele vem (aberto, ou com cadastro). */
@@ -1310,7 +1697,8 @@ function atualizarBarra(tela) {
     && (onde === "cardapio" || onde === "secao");
   barra.hidden = !mostra;
   if (mostra) {
-    barra.innerHTML = `<span>${n} ${n === 1 ? "item" : "itens"} · R$ ${dinheiro(total)}</span><span>Ver pedido ›</span>`;
+    barra.innerHTML = `<span>${t(n === 1 ? "1 item · R$ {total}" : "{n} itens · R$ {total}",
+      { n, total: dinheiro(total) })}</span><span>Ver pedido ›</span>`;
   }
 }
 
@@ -1360,7 +1748,7 @@ function abrirCarrinho() {
 
   // Para quando: "o quanto antes", ou um dos dias em que a casa atende.
   $("#dia-pedido").innerHTML = cfg.dias.map((d) => {
-    const nome = new Date(`${d.dia}T12:00`).toLocaleDateString("pt-BR",
+    const nome = new Date(`${d.dia}T12:00`).toLocaleDateString(LOCALE,
       { weekday: "short", day: "2-digit", month: "2-digit" });
     return `<option value="${d.dia}">${esc(nome)} · ${d.abre}–${d.fecha}</option>`;
   }).join("");
@@ -1407,7 +1795,7 @@ function abrirCarrinhoTotais() {
     <p><span>Itens</span><span>R$ ${dinheiro(total)}</span></p>
     ${taxa ? `<p><span>Entrega</span><span>R$ ${dinheiro(taxa)}</span></p>` : ""}
     <p class="total"><span>Total</span><span>R$ ${dinheiro(total + taxa)}</span></p>
-    ${falta ? `<p><small>Pedido mínimo: R$ ${dinheiro(cfg.pedido_minimo)}</small></p>` : ""}`;
+    ${falta ? `<p><small>${t("Pedido mínimo: R$ {valor}", { valor: dinheiro(cfg.pedido_minimo) })}</small></p>` : ""}`;
   $("#enviar-pedido").disabled = !total || falta;
 }
 
@@ -1447,13 +1835,13 @@ async function enviarPedido() {
   carrinho = null;
   guardarCarrinho();
   $("#obs-pedido").value = "";
-  const quando = new Date(r.para_quando).toLocaleString("pt-BR",
+  const quando = new Date(r.para_quando).toLocaleString(LOCALE,
     { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   $("#recibo-pedido").innerHTML = `<span>Pedido nº</span><b>${r.numero}</b>
-    <span>${esc(r.modo_rotulo)} · ${esc(quando)}</span>
-    <span>Total: R$ ${dinheiro(r.total)} · ${esc(r.forma_pagamento)}</span>`;
+    <span>${esc(t(r.modo_rotulo))} · ${esc(quando)}</span>
+    <span>${esc(t("Total: R$ {total} · {pagamento}", { total: dinheiro(r.total), pagamento: t(r.forma_pagamento) }))}</span>`;
   avisar("#aviso-pedido-pronto",
-    "A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”"
+    t("A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”")
     + (cfg && cfg.texto_pagamento ? ". " + cfg.texto_pagamento : "."), false);
   const zap = pedidoPagamento === "WHATSAPP" && linkZap(
     `Olá! Fiz o pedido nº ${r.numero} pelo site e quero combinar o pagamento.`);
@@ -1486,15 +1874,16 @@ async function mostrarMeusPedidos() {
   }
   caixa.innerHTML = "";
   r.pedidos.forEach((p) => {
-    const quando = new Date(p.para_quando).toLocaleString("pt-BR",
+    const quando = new Date(p.para_quando).toLocaleString(LOCALE,
       { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     const el = document.createElement("div");
     el.className = "pedido-meu";
-    el.innerHTML = `<span class="situacao">Nº ${p.numero} · ${esc(SITUACAO_DO_PEDIDO[p.situacao] || p.situacao)}</span>
-      <span>${esc(p.modo_rotulo)} · ${esc(quando)} · R$ ${dinheiro(p.total)}</span>
+    el.innerHTML = `<span class="situacao">${esc(t("Nº {numero} · {situacao}",
+      { numero: p.numero, situacao: t(SITUACAO_DO_PEDIDO[p.situacao] || p.situacao) }))}</span>
+      <span>${esc(t(p.modo_rotulo))} · ${esc(quando)} · R$ ${dinheiro(p.total)}</span>
       <small>${p.itens.map((i) => `${i.quantidade}× ${esc(i.nome)}`).join(", ")}</small>
       ${p.alterado ? `<small>A casa ajustou os itens deste pedido.</small>` : ""}
-      ${p.motivo ? `<small>Motivo: ${esc(p.motivo)}</small>` : ""}`;
+      ${p.motivo ? `<small>${esc(t("Motivo: {motivo}", { motivo: p.motivo }))}</small>` : ""}`;
     if (p.situacao === "NOVO") {
       const b = document.createElement("button");
       b.className = "item";
@@ -1782,9 +2171,9 @@ async function entregarCatalogo(alvo, nome) {
   caixa.hidden = false;
   caixa.className = "regras";
   // O nome do CADASTRO, não o digitado: quem conferiu com "maria" é a Maria.
-  caixa.innerHTML = `<span>Pronto${nome ? ", " + esc(nome) : ""}!</span>
+  caixa.innerHTML = `<span>${nome ? t("Pronto, {nome}!", { nome: esc(nome) }) : t("Pronto!")}</span>
     <a class="item destaque" href="${API}${esc(r.arquivo_url)}" target="_blank"
-       rel="noopener">Abrir ${esc(alvo.nome)}</a>`;
+       rel="noopener">${t("Abrir {nome}", { nome: esc(alvo.nome) })}</a>`;
 }
 
 async function carregarMinhas() {
@@ -1800,10 +2189,10 @@ async function carregarMinhas() {
   $("#suas-reservas").hidden = !lista.length;
   $("#lista-minhas").innerHTML = lista.map((x) => {
     const quando = new Date(x.data + "T12:00")
-      .toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+      .toLocaleDateString(LOCALE, { weekday: "short", day: "2-digit", month: "2-digit" });
     return `<div class="minha">
       <div><b>${esc(quando)} · ${esc(x.hora)}</b>
-        <small>${x.pessoas} ${x.pessoas === 1 ? "pessoa" : "pessoas"}${
+        <small>${t(x.pessoas === 1 ? "{n} pessoa" : "{n} pessoas", { n: x.pessoas })}${
           x.observacao ? " · " + esc(x.observacao) : ""}</small></div>
       <div class="lado">
         <span class="estado-minha">${x.confirmada ? "Confirmada" : "Aguardando a casa"}</span>
@@ -1906,16 +2295,16 @@ let cartaoAtual = null;
 function pedirLocalizacao() {
   return new Promise((pronto, falhou) => {
     if (!navigator.geolocation) {
-      return falhou(new Error("Este navegador não informa a localização."));
+      return falhou(new Error(t("Este navegador não informa a localização.")));
     }
     navigator.geolocation.getCurrentPosition(
       (p) => pronto({
         latitude: p.coords.latitude, longitude: p.coords.longitude, precisao: p.coords.accuracy,
       }),
-      (e) => falhou(new Error(e.code === e.PERMISSION_DENIED
+      (e) => falhou(new Error(t(e.code === e.PERMISSION_DENIED
         ? "Para contar a visita, permita o acesso à localização — ela só confirma que você "
           + "está na casa. Libere nas configurações do navegador e toque em Fazer check-in."
-        : "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in.")),
+        : "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in."))),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 },
     );
   });
@@ -1924,17 +2313,18 @@ function pedirLocalizacao() {
 function desenharCartao(c) {
   cartaoAtual = c;
   $("#sub-fidelidade").textContent =
-    `A cada ${c.visitas} visitas: ${c.premio}.`;
+    t("A cada {visitas} visitas: {premio}.", { visitas: c.visitas, premio: c.premio });
   const total = c.visitas;
   // 🔑 Os carimbos: feitos, a fazer e o último marcado como o do prêmio.
   $("#carimbos").style.gridTemplateColumns = `repeat(${Math.min(total, 5)}, 1fr)`;
   $("#carimbos").innerHTML = Array.from({ length: total }, (_, i) =>
     `<span class="carimbo${i < c.no_cartao ? " feito" : ""}${i === total - 1 ? " premio" : ""}"
-       aria-label="visita ${i + 1}${i < c.no_cartao ? " feita" : ""}">${
+       aria-label="${t(i < c.no_cartao ? "visita {n} feita" : "visita {n}", { n: i + 1 })}">${
        i < c.no_cartao ? "✓" : i === total - 1 ? "★" : i + 1}</span>`).join("");
   $("#falta").innerHTML = c.faltam
-    ? `<b>${c.no_cartao} de ${total}</b>faltam ${c.faltam} visita${c.faltam === 1 ? "" : "s"} para o prêmio`
-    : `<b>Cartão completo!</b>`;
+    ? `<b>${t("{feitas} de {total}", { feitas: c.no_cartao, total })}</b>${t(c.faltam === 1
+      ? "falta 1 visita para o prêmio" : "faltam {n} visitas para o prêmio", { n: c.faltam })}`
+    : `<b>${t("Cartão completo!")}</b>`;
   const disponiveis = c.premios.filter((p) => p.status === "DISPONIVEL");
   const outros = c.premios.filter((p) => p.status !== "DISPONIVEL").slice(0, 3);
   $("#premios-fidelidade").innerHTML = [...disponiveis, ...outros].map((p) => `
@@ -1942,16 +2332,20 @@ function desenharCartao(c) {
       <b>${esc(p.premio)}</b>
       ${p.status === "DISPONIVEL"
         ? `<span>Mostre este código no caixa:</span><span class="codigo">${esc(p.codigo)}</span>
-           <span>${p.vale_de > diaIso(0)
-             ? `Vale a partir da sua próxima visita (${esc(p.vale_de.split("-").reverse().join("/"))}), até`
-             : "Vale até"} ${esc(p.vence_em.split("-").reverse().join("/"))}, de ${esc(p.consumo)}.</span>`
-        : `<span>${p.status === "USADO" ? "Já usado" : "Venceu"} · ${esc(p.codigo)}</span>`}
+           <span>${esc(t(p.vale_de > diaIso(0)
+             ? "Vale a partir da sua próxima visita ({de}), até {ate}, de {consumo}."
+             : "Vale até {ate}, de {consumo}.", {
+               de: p.vale_de.split("-").reverse().join("/"),
+               ate: p.vence_em.split("-").reverse().join("/"), consumo: p.consumo }))}</span>`
+        : `<span>${t(p.status === "USADO" ? "Já usado" : "Venceu")} · ${esc(p.codigo)}</span>`}
     </div>`).join("");
   $("#regra-fidelidade").textContent =
-    `As visitas contam de ${c.pontua}, uma por dia, com o check-in pelo QR code da mesa` +
-    (c.exige_local ? ", estando na casa (o site confirma pela localização). " : ". ") +
-    `O prêmio vale da visita seguinte em diante, por ${c.validade_dias} dias, de ${c.consumo} — ` +
-    "e a visita em que você usa o prêmio não conta carimbo.";
+    t("As visitas contam de {pontua}, uma por dia, com o check-in pelo QR code da mesa",
+      { pontua: c.pontua }) +
+    (c.exige_local ? t(", estando na casa (o site confirma pela localização). ") : ". ") +
+    t("O prêmio vale da visita seguinte em diante, por {dias} dias, de {consumo} — "
+      + "e a visita em que você usa o prêmio não conta carimbo.",
+      { dias: c.validade_dias, consumo: c.consumo });
   const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
   $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
   $("#fazer-checkin").hidden = !podeCheckin;
@@ -2012,9 +2406,10 @@ async function fazerCheckin() {
   $("#fazer-checkin").disabled = false;
   desenharCartao(r);
   avisar("#aviso-fidelidade", r.premio_novo
-    ? `🎉 Cartão completo! Você ganhou: ${r.premio_novo.premio}. Ele vale a partir da sua próxima `
-      + `visita — mostre o código ${r.premio_novo.codigo} no caixa.`
-    : `Check-in feito! Faltam ${r.faltam} visita${r.faltam === 1 ? "" : "s"}.`, false);
+    ? t("🎉 Cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima "
+      + "visita — mostre o código {codigo} no caixa.", r.premio_novo)
+    : t(r.faltam === 1 ? "Check-in feito! Falta 1 visita." : "Check-in feito! Faltam {n} visitas.",
+      { n: r.faltam }), false);
 }
 $("#fazer-checkin").addEventListener("click", () => fazerCheckin());
 
@@ -2034,8 +2429,8 @@ async function pedirCodigo(aceite) {
   $("#fazer-checkin").hidden = true;
   $("#termo-fidelidade").hidden = true;
   $("#bloco-codigo").hidden = false;
-  const ate = new Date(r.expira_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  avisar("#aviso-fidelidade", `Peça o código no caixa e digite aqui. Ele vale até ${ate}.`, false);
+  const ate = new Date(r.expira_em).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
+  avisar("#aviso-fidelidade", t("Peça o código no caixa e digite aqui. Ele vale até {ate}.", { ate }), false);
   $("#codigo-caixa").focus();
 }
 
@@ -2055,11 +2450,12 @@ async function confirmarCodigo() {
   $("#bloco-codigo").hidden = true;
   $("#codigo-caixa").value = "";
   desenharCartao(r);
-  const selos = r.selos > 1 ? `${r.selos} selos` : "1 selo";
+  const selos = r.selos > 1 ? t("{n} selos", { n: r.selos }) : t("1 selo");
   avisar("#aviso-fidelidade", r.premio_novo
-    ? `🎉 Visita confirmada (+${selos}) e cartão completo! Você ganhou: ${r.premio_novo.premio}. `
-      + `Ele vale a partir da sua próxima visita — mostre o código ${r.premio_novo.codigo} no caixa.`
-    : `Visita confirmada: +${selos}! Faltam ${r.faltam}.`, false);
+    ? t("🎉 Visita confirmada (+{selos}) e cartão completo! Você ganhou: {premio}. "
+      + "Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.",
+      { selos, ...r.premio_novo })
+    : t("Visita confirmada: +{selos}! Faltam {n}.", { selos, n: r.faltam }), false);
 }
 $("#confirmar-codigo").addEventListener("click", () => confirmarCodigo());
 $("#codigo-caixa").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmarCodigo(); });
@@ -2140,13 +2536,13 @@ async function buscarHorarios() {
     `<button class="hora" type="button" aria-pressed="false">${esc(h)}</button>`).join("");
   if (r.teto && pessoas > r.teto) {
     aviso.hidden = false;
-    aviso.innerHTML = `Para <b>${pessoas} pessoas</b> a casa acerta no WhatsApp.`;
+    aviso.innerHTML = t("Para <b>{n} pessoas</b> a casa acerta no WhatsApp.", { n: pessoas });
   } else if (r.aviso) {
     // 🔑 Dia especial (pedido do dono, 24/09/2026): a segunda que é feriado e
     // abre diz POR QUE abre, e com que horário — o cliente conhece o padrão.
     aviso.hidden = false;
-    aviso.innerHTML = `Horário especial neste dia (${esc(r.abre)} às ${esc(r.fecha)}): `
-      + `${esc(r.aviso)}.`;
+    aviso.innerHTML = t("Horário especial neste dia ({abre} às {fecha}): {aviso}.",
+      { abre: esc(r.abre), fecha: esc(r.fecha), aviso: esc(r.aviso) });
   }
 }
 
@@ -2158,12 +2554,13 @@ $("#horarios").addEventListener("click", (e) => {
   const aviso = $("#aviso-reserva");
   aviso.hidden = false;
   horaEscolhida = b.textContent;
-  const quando = new Date($("#dia").value + "T12:00").toLocaleDateString("pt-BR");
+  const quando = new Date($("#dia").value + "T12:00").toLocaleDateString(LOCALE);
 
   // 🔑 **Com reserva online, o site GRAVA** — e o botão diz isso.
   if (reservaOnline.aceita) {
     aviso.className = "regras";
-    aviso.innerHTML = `<span>Você escolheu <b>${esc(horaEscolhida)}</b>, dia ${esc(quando)}.</span>`;
+    aviso.innerHTML = `<span>${t("Você escolheu <b>{hora}</b>, dia {dia}.",
+      { hora: esc(horaEscolhida), dia: esc(quando) })}</span>`;
     $("#confirmar").hidden = false;
     return;
   }
@@ -2180,9 +2577,10 @@ $("#horarios").addEventListener("click", (e) => {
   // ⚠️ Um `<span>` em volta: `.regras` é flex em coluna, e sem ele o link cai
   // numa linha só dele, separado da frase que o explica.
   aviso.innerHTML = zap
-    ? `<span>Você escolheu <b>${esc(horaEscolhida)}</b>. Para confirmar,
+    ? `<span>${t("Você escolheu <b>{hora}</b>. Para confirmar,", { hora: esc(horaEscolhida) })}
        <a href="${zap}" target="_blank" rel="noopener">mande a mensagem pronta ›</a></span>`
-    : `<span>Você escolheu <b>${esc(horaEscolhida)}</b>. Ligue para a casa para confirmar.</span>`;
+    : `<span>${t("Você escolheu <b>{hora}</b>. Ligue para a casa para confirmar.",
+      { hora: esc(horaEscolhida) })}</span>`;
 });
 
 /** A hora que a pessoa tocou — o que o "Confirmar" vai gravar. */
@@ -2229,23 +2627,23 @@ $("#confirmar").addEventListener("click", async () => {
   lembrar();
   destravarCatalogos();
   carregarMinhas();
-  const quando = new Date(feita.data + "T12:00").toLocaleDateString("pt-BR");
+  const quando = new Date(feita.data + "T12:00").toLocaleDateString(LOCALE);
   $("#recibo").innerHTML =
     `<b>${esc(quando)} · ${esc(feita.hora)}</b>
-     <span>${feita.pessoas} ${feita.pessoas === 1 ? "pessoa" : "pessoas"},
-     em nome de ${esc(feita.nome)}</span>`;
+     <span>${t(feita.pessoas === 1 ? "1 pessoa, em nome de {nome}" : "{n} pessoas, em nome de {nome}",
+       { n: feita.pessoas, nome: esc(feita.nome) })}</span>`;
   // 🔑 **O texto muda conforme a casa confirme na hora ou vá olhar depois**
   // (`reserva_config.confirmacao`). Dizer "está reservado" numa casa que
   // confirma à mão seria prometer o que ela ainda não decidiu.
   const zap = zapDeContato();
   $("#aviso-pronto").className = "regras";
   const falar = zap
-    ? ` <a href="${zap}" target="_blank" rel="noopener">fale com a gente</a>.` : "";
+    ? ` <a href="${zap}" target="_blank" rel="noopener">${t("fale com a gente")}</a>.` : "";
   $("#aviso-pronto").innerHTML = feita.confirmada
-    ? `<span>Sua mesa está reservada. Até lá!${
-        zap ? " Precisando mudar alguma coisa," + falar : ""}</span>`
-    : `<span>Recebemos seu pedido — a casa confirma em seguida.${
-        zap ? " Se preferir adiantar," + falar : ""}</span>`;
+    ? `<span>${t("Sua mesa está reservada. Até lá!")}${
+        zap ? " " + t("Precisando mudar alguma coisa,") + falar : ""}</span>`
+    : `<span>${t("Recebemos seu pedido — a casa confirma em seguida.")}${
+        zap ? " " + t("Se preferir adiantar,") + falar : ""}</span>`;
   ir("pronto");
 });
 
@@ -2279,7 +2677,7 @@ async function abrirReserva() {
   const naoSou = $("#nao-sou-eu");
   naoSou.hidden = !(eu.identificado && reservaOnline.aceita);
   if (!naoSou.hidden) {
-    naoSou.innerHTML = `Olá${eu.nome ? ", " + esc(eu.nome) : ""}! ` +
+    naoSou.innerHTML = (eu.nome ? t("Olá, {nome}!", { nome: esc(eu.nome) }) : t("Olá!")) + " " +
       `<button type="button" class="link-sair">Não é você? Trocar telefone</button>`;
     naoSou.querySelector("button").addEventListener("click", esquecer);
   }
@@ -2437,8 +2835,8 @@ function carregarLoja() {
     const rodape = $("#rodape-reserva");
     rodape.hidden = reservaOnline.aceita;
     if (!reservaOnline.aceita) {
-      rodape.innerHTML = `⚠️ <b>Esta é a primeira versão.</b> O site mostra os horários
-        que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.`;
+      rodape.innerHTML = `⚠️ <b>${t("Esta é a primeira versão.")}</b> ${t("O site mostra os horários "
+        + "que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.")}`;
     }
   });
   buscarHorarios();

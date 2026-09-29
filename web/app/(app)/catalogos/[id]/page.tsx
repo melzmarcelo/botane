@@ -10,6 +10,7 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Modal, Vazio }
 import CabecalhoTela from "@/components/cabecalho-tela";
 import * as cat from "@/lib/catalogos";
 import PedidosDoCatalogo from "./pedidos";
+import { JanelaDeTraducao, TraducoesDoCatalogo } from "./traducoes-do-catalogo";
 
 /**
  * O cardápio montado aqui dentro: categorias, subcategorias e produtos.
@@ -73,6 +74,7 @@ export default function ConfigurarCatalogo() {
     ordem: string;
   } | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [traduzindo, setTraduzindo] = useState<{ tipo: "categoria" | "subcategoria"; id: number; nome: string } | null>(null);
 
   async function salvarSecao() {
     if (!editando) return;
@@ -565,6 +567,7 @@ export default function ConfigurarCatalogo() {
 
       {/* 🔑 Pedidos pelo site (101): o carrinho se liga aqui, no catálogo de produtos. */}
       <PedidosDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
+      {capa.origem === "PRODUTOS" && <TraducoesDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />}
 
       {conteudo.categorias.length === 0 ? (
         <Vazio>
@@ -599,6 +602,10 @@ export default function ConfigurarCatalogo() {
                     }
                   >
                     + subcategoria
+                  </button>
+                  <button type="button" className="link-acao"
+                          onClick={() => setTraduzindo({ tipo: "categoria", id: c.id, nome: c.nome })}>
+                    traduções
                   </button>
                   <button
                     type="button"
@@ -666,6 +673,10 @@ export default function ConfigurarCatalogo() {
                       <Recolher tipo="subcategoria" id={s.id} itens={s.itens.length} />
                       {podeEditar && (
                       <>
+                        <button type="button" className="link-acao"
+                                onClick={() => setTraduzindo({ tipo: "subcategoria", id: s.id, nome: s.nome })}>
+                          traduções
+                        </button>
                         <button
                           type="button"
                           className="link-acao"
@@ -858,6 +869,9 @@ export default function ConfigurarCatalogo() {
         </Modal>
       )}
 
+      {traduzindo && (
+        <JanelaDeTraducao {...traduzindo} aoFechar={() => setTraduzindo(null)} />
+      )}
       {apagando && (
         <Confirmacao
           titulo={`Excluir "${apagando.nome}"?`}

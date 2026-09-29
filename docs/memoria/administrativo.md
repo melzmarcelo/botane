@@ -22,6 +22,9 @@
 - Credenciais ficam cifradas (`services/segredos.py`, Fernet com chave derivada do
   `JWT_SECRET`) e **nunca voltam pela API** — só mascaradas. Trocar o `JWT_SECRET` invalida
   as credenciais guardadas.
+- Integrações ▸ **Tradução** (29/09/2026): a chave da Anthropic que traduz o cardápio do site,
+  mesmo molde do SMTP (serviço `ANTHROPIC`, da casa toda). A regra mora em
+  [`catalogos.md`](catalogos.md).
 
 - 🔑 **Em que loja cada pessoa trabalha** (31/08/2026, pedido do dono). O escopo por loja
   existe desde o **primeiro script**: `usuario_papeis.id_unidade`, nulo querendo dizer "todas".

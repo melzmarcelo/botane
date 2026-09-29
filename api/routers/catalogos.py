@@ -34,6 +34,7 @@ from models.catalogos import (
     ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
+from services import traducao
 from services import catalogo_conteudo as conteudo
 from services import catalogos as servico
 from services import reservas as reservas_servico
@@ -121,6 +122,7 @@ def criar(body: CatalogoCreate, ctx: Contexto = Depends(_EDITAR)) -> dict:
         novo = servico.criar(cur, id_unidade, body.model_dump(), ctx.id_usuario)
         auditoria.registrar(cur, ctx.id_usuario, "catalogo", novo["id"], "criar",
                             depois=body.model_dump(mode="json"), id_unidade=id_unidade)
+        traducao.tentar(cur, "catalogo", novo["id"])  # o nome, em EN/DE (103)
         return novo
 
 
@@ -142,6 +144,8 @@ def atualizar(id_catalogo: int, body: CatalogoUpdate,
             antes={k: str(antes.get(k)) for k in dados if k in antes},
             depois={k: str(depois.get(k)) for k in dados if k in depois},
             id_unidade=id_unidade)
+        if "nome" in dados:
+            traducao.tentar(cur, "catalogo", id_catalogo)
         return depois
 
 
@@ -246,6 +250,7 @@ def criar_categoria(id_catalogo: int, body: CategoriaCreate,
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_categoria", nova["id"],
                             "criar", depois={"nome": nova["nome"]},
                             id_unidade=id_unidade)
+        traducao.tentar(cur, "categoria", nova["id"])
         return nova
 
 
@@ -259,6 +264,7 @@ def atualizar_categoria(id_categoria: int, body: CategoriaCreate,
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_categoria", id_categoria,
                             "atualizar", depois={"nome": muda["nome"]},
                             id_unidade=id_unidade)
+        traducao.tentar(cur, "categoria", id_categoria)
         return muda
 
 
@@ -289,6 +295,7 @@ def criar_subcategoria(id_categoria: int, body: SubcategoriaCreate,
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_subcategoria", nova["id"],
                             "criar", depois={"nome": nova["nome"]},
                             id_unidade=id_unidade)
+        traducao.tentar(cur, "subcategoria", nova["id"])
         return nova
 
 
@@ -302,6 +309,7 @@ def atualizar_subcategoria(id_sub: int, body: SubcategoriaCreate,
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_subcategoria", id_sub,
                             "atualizar", depois={"nome": muda["nome"]},
                             id_unidade=id_unidade)
+        traducao.tentar(cur, "subcategoria", id_sub)
         return muda
 
 
@@ -382,6 +390,8 @@ def vincular_produto(id_categoria: int, body: ItemCreate,
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", posto["id"],
                             "vincular", depois={"produto": posto["produto"]},
                             id_unidade=id_unidade)
+        # Produto que entra no cardápio sem tradução ganha a dele (103).
+        traducao.tentar(cur, "produto", body.id_produto)
         return posto
 
 

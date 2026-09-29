@@ -123,7 +123,8 @@ try {
 } finally {
   await navegador.close();
   await api("PUT", "/unidades/1/parametros", par, token);
-  await api("DELETE", `/catalogos/${cat.id}`, undefined, token);
+  // ⚠️ Catálogo ATIVO não se apaga (só rascunho): inativa, e ele sai do site.
+  await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
 }
 
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);

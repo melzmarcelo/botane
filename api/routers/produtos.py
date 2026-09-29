@@ -34,7 +34,7 @@ from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import custos as motor_custos
 from services import alteracao_multipla as alteracao_multipla_motor
-from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo
+from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo, traducao
 from services import troca_de_unidade
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
@@ -1049,6 +1049,12 @@ def atualizar(id_produto: int, body: ProdutoUpdate,
 
         auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "atualizar",
                             antes=dict(antes), depois=campos)
+        # 🔑 O cardápio do site em EN/DE (103): mudou o que o cliente lê e o produto está num
+        # catálogo → traduz. Só retraduz se o português mudou; nunca trava o salvar.
+        if {"nome", "nome_catalogo", "informacao_adicional"} & set(campos):
+            cur.execute("SELECT 1 FROM catalogo_itens WHERE id_produto = %s LIMIT 1", (id_produto,))
+            if cur.fetchone():
+                traducao.tentar(cur, "produto", id_produto)
     return {"message": "Produto atualizado"}
 
 

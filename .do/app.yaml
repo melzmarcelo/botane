@@ -166,6 +166,7 @@ services:
       # e-mail e recusa com 422 antes de olhar o banco. Ninguém entrava, e o log
       # dizia "administrador criado" como em qualquer subida boa. Agora o start
       # para e diz o nome da variável.
+
       - key: ADMIN_EMAIL
         scope: RUN_TIME
         value: DEFINA_NO_PAINEL

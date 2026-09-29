@@ -1,5 +1,6 @@
 "use client";
 
+import Traducoes from "@/components/traducoes";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -1849,6 +1850,14 @@ export default function FormularioProduto() {
               Isto é o que o <b>cliente</b> lê. Recado para a equipe continua em
               Principal ▸ Observações.
             </p>
+            {/* 🔑 O site em inglês e alemão (103): o Claude traduz nome e texto ao salvar;
+                aqui se confere e se corrige. ⚠️ `key` na recarga: depois de salvar o produto,
+                a tradução pode ter mudado. */}
+            {!novo && (
+              <div className="mt-4">
+                <Traducoes key={`traducao-${recarga}`} tipo="produto" id={Number(id)} />
+              </div>
+            )}
           </Cartao>
         </div>
       )}

@@ -795,12 +795,29 @@ nem um site por loja).
   quebrou. Agora mede os dois cenários.
 - Cobertura: `4d` do `smoke_publico.py`.
 
-## ⏳ PENDENTE — cardápio e site em inglês e alemão (estudo de 24/09/2026)
+## Cardápio e site em inglês e alemão (estudo de 24/09/2026 — ✅ construído em 29/09/2026)
+
+✅ **Decidido e feito** (migração 103): Claude Haiku, categorias também, site nos três idiomas.
+A regra da tradução do cardápio mora em [`catalogos.md`](catalogos.md). O que é do SITE:
+- Seletor **PT · EN · DE** no canto da capa; a escolha fica na aba (`botane.idioma` no
+  `sessionStorage`) e, sem escolha, vem de `navigator.language`. Trocar RECARREGA a página
+  (o cardápio precisa vir de novo no idioma); carrinho, sessão e tela sobrevivem.
+- 🔑 **Dicionário com a frase em PORTUGUÊS como chave** (`TRADUCOES`). Texto fixo — um nó de
+  texto inteiro, `placeholder`, `aria-label`, `title` — é traduzido sozinho por um
+  `MutationObserver`, inclusive no que o JavaScript desenha depois. ⚠️ Texto MONTADO com dado
+  precisa de `t("modelo {x}", {x})`: a frase inteira nunca bate com a chave. Frase nova na tela
+  = entrada nova no dicionário, senão ela aparece em português no site em inglês.
+- ⚠️ **Fica em português, de propósito**: a mensagem que vai ao WhatsApp da CASA (quem lê é a
+  equipe), o termo de consentimento (texto jurídico), o `texto_pagamento` que a casa escreve, o
+  prêmio/consumo da fidelidade e as mensagens de erro do servidor.
+- Datas e valores no formato do idioma (`LOCALE`); os dias da semana que a API manda ("Sáb às
+  11:00") passam por `tHorario`.
+
+O estudo original, para referência:
 
 🔑 **Pedido do dono:** *"em produtos, aba catálogo, conseguimos gerar o Texto do catálogo em
 outros dois campos, em inglês e alemão, de forma automática? E disponibilizar a escolha do
-idioma no site de reservas?"* Resposta: sim. **Estudo aprovado para começar na semana de
-28/09/2026** — nada foi construído ainda.
+idioma no site de reservas?"*
 
 **O desenho proposto**
 - Produto, aba Catálogo: `nome_catalogo_en/_de` e `informacao_adicional_en/_de`, gerados

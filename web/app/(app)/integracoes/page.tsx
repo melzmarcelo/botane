@@ -5,6 +5,7 @@ import { useSessao } from "@/lib/sessao";
 import Omie from "./omie";
 import PdvLegal from "./pdv-legal";
 import EmailSmtp from "./email-smtp";
+import TraducaoClaude from "./traducao-claude";
 import Duplicados from "./duplicados";
 import ExplicaTela from "@/components/explica-tela";
 
@@ -25,7 +26,7 @@ import ExplicaTela from "@/components/explica-tela";
  * primeira que ela PODE — senão alguém cai numa aba vazia sem entender por quê.
  */
 
-type Aba = "omie" | "pdv" | "email" | "outros";
+type Aba = "omie" | "pdv" | "email" | "traducao" | "outros";
 
 const ABAS: { id: Aba; nome: string; chaves: string[]; explica: string }[] = [
   {
@@ -48,6 +49,13 @@ const ABAS: { id: Aba; nome: string; chaves: string[]; explica: string }[] = [
     chaves: ["admin.integracoes"],
     explica:
       "O servidor que envia a recuperação de senha e os avisos. Sem ele, o link de recuperação fica guardado em disco.",
+  },
+  {
+    id: "traducao",
+    nome: "Tradução",
+    chaves: ["admin.integracoes"],
+    explica:
+      "A chave da Anthropic que traduz o cardápio do site para inglês e alemão. Sem ela, o site mostra o português.",
   },
   {
     id: "outros",
@@ -103,6 +111,7 @@ export default function PaginaIntegracoes() {
       {aba === "omie" && <Omie />}
       {aba === "pdv" && <PdvLegal />}
       {aba === "email" && <EmailSmtp />}
+      {aba === "traducao" && <TraducaoClaude />}
       {aba === "outros" && <Duplicados />}
     </div>
   );

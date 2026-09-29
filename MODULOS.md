@@ -24,7 +24,7 @@ entregue.
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
-| [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos` |
+| [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
@@ -169,11 +169,12 @@ as rotas `/reservas/...`, a coluna `parametros.reservas_ligado` e os arquivos
 Configuração · Reservas (Agenda, Salão) · Clientes · Fidelidade (Prêmios,
 Configuração) · Catálogos · Pedidos (Painel, Lista).
 
-- **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `pedidos.py`, `publico.py` (o site do cliente)
+- **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `pedidos.py`, `traducao.py` (o cardápio em EN/DE), `publico.py` (o site do cliente)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos),
-  `pedidos.py` (o pedido pelo cardápio — NÃO vira venda; a casa lança no PDV)
+  `pedidos.py` (o pedido pelo cardápio — NÃO vira venda; a casa lança no PDV),
+  `traducao.py` (Claude Haiku traduz ao salvar; corrigido à mão não é sobrescrito)
 - **Telas:** `reservas/agenda/`, `reservas/salao/`, `reservas/configuracoes/`,
   `reservas/clientes/` (o grid dos cadastrados), `fidelidade/`, `catalogos/`, `pedidos/`
 - **Permissões:** `reservas.ver`, `reservas.editar`, `reservas.configurar`,

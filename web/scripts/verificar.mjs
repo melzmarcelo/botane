@@ -9188,7 +9188,8 @@ try {
   aoTerminar.push(() => api("PUT", "/reservas/configuracao", cfgPed, token));
   const { dados: catPed } = await api("POST", "/catalogos",
     { nome: `Pedidos tela ${marcaNota}`, origem: "PRODUTOS", situacao: "ATIVO" }, token);
-  aoTerminar.push(() => api("DELETE", `/catalogos/${catPed.id}`, null, token));
+  // ⚠️ Catálogo ATIVO não se apaga (só rascunho): inativa, e ele sai do site.
+  aoTerminar.push(() => api("PUT", `/catalogos/${catPed.id}`, { situacao: "INATIVO" }, token));
   const { dados: gPed } = await api("POST", `/catalogos/${catPed.id}/categorias`, { nome: "Salgados" }, token);
   const { dados: pPed } = await api("POST", "/produtos", { nome: `TELA COXINHA ${marcaNota}`,
     tipo: "INSUMO", um_estoque: "UN", controla_estoque: false }, token);
@@ -9247,6 +9248,45 @@ try {
   const menuPed = await p.evaluate(() =>
     [...document.querySelectorAll("aside a")].some((a) => a.getAttribute("href") === "/pedidos/painel"));
   checar("o menu do Portal tem o painel de pedidos", menuPed);
+
+  // 🔑 A tradução do cardápio (103): o cartão conta o que falta e a seção se corrige à mão.
+  // Sem ANTHROPIC_API_KEY em casa, a automática está desligada — e a tela precisa dizer.
+  await irPara(p, `${WEB}/catalogos/${catPed.id}`);
+  checar("o catálogo mostra o cartão 'Inglês e alemão'", await esperarTexto(p, "Inglês e alemão", 10000));
+  // ⚠️ Com ou sem a chave da casa cadastrada: com ela, o Claude já traduziu ao criar a seção.
+  const { dados: estTr } = await api("GET", `/traducao/catalogo/${catPed.id}/pendentes`, null, token);
+  checar("e diz quanto falta traduzir", await esperarTexto(p,
+    estTr.pendentes ? "sem tradução" : "tudo traduzido", 4000), estTr);
+  checar("e se a automática está ligada", estTr.ligada
+    || await esperarTexto(p, "está desligada", 4000), estTr);
+  checar("cada seção tem o link 'traduções'", await clicarQuando(p, "traduções"));
+  const campoEn = await p.waitForSelector("dialog input, [role=dialog] input", { timeout: 8000 })
+    .catch(() => null);
+  // O campo pode já vir com a tradução automática: apaga antes de digitar.
+  if (campoEn) {
+    await campoEn.focus();
+    await p.keyboard.down("Control"); await p.keyboard.press("a"); await p.keyboard.up("Control");
+    await p.keyboard.press("Backspace");
+    await campoEn.type("Savoury");
+  }
+  checar("a janela de traduções abre com o inglês", !!campoEn);
+  // ⚠️ DENTRO da janela: o cartão do catálogo, atrás dela, tem outro "Salvar tradução".
+  checar("e salva a tradução", await p.evaluate(() => {
+    const b = [...document.querySelectorAll("[role=dialog] button")]
+      .find((x) => x.textContent.trim() === "Salvar tradução");
+    b?.click();
+    return !!b;
+  }));
+  await new Promise((r) => setTimeout(r, 1500));
+  const { dados: trG } = await api("GET", `/traducao/categoria/${gPed.id}`, null, token);
+  checar("o servidor gravou o inglês corrigido à mão",
+    trG && trG.en.nome === "Savoury" && trG.editada.includes("nome_en"), trG);
+  // 🔑 A chave é cadastrada no SISTEMA (pedido do dono, 29/09/2026), não no servidor.
+  await irPara(p, `${WEB}/integracoes?aba=traducao`);
+  checar("Integrações tem a aba Tradução, com a chave da Anthropic",
+    await esperarTexto(p, "Tradução do cardápio (Claude)", 10000)
+    && await esperarTexto(p, "Chave da Anthropic", 4000));
+
   if (esse) await api("POST", `/pedidos/${esse.id}/cancelar`, { motivo: "pedido de teste da bateria" }, token);
   await ligarReservas(false);
 } finally {

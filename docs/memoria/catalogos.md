@@ -366,11 +366,48 @@ marca onde ficaria visível."* Tabela `catalogo_lojas (id_catalogo, id_unidade)`
   loja com Reservas ligado (`/catalogos/opcoes` devolve `lojas`).
 - O preço do cardápio é o da loja em que o cliente ESTÁ (já era `produto_precos` por loja).
 
-## ⏳ PENDENTE — tradução para inglês e alemão
+## Tradução para inglês e alemão (migração 103, 29/09/2026)
 
-O estudo (24/09/2026) mora em `reservas.md`, seção "cardápio e site em inglês e alemão":
-nomes/informação do produto e categorias do catálogo em EN/DE, e o seletor de idioma no
-site. Começa na semana de 28/09/2026, depois de o dono escolher o serviço de tradução.
+🔑 **Decisão do dono:** *"Claude Haiku, categorias também e o site nos três idiomas."* O estudo
+(24/09) está em `reservas.md`. Código: `services/traducao.py`, `routers/traducao.py`,
+`web/components/traducoes.tsx`, `catalogos/[id]/traducoes-do-catalogo.tsx`, e o site
+(`site/index.html`, seção de idiomas).
+
+- Colunas `_en`/`_de` em `produtos` (`nome_catalogo`, `informacao_adicional`),
+  `catalogo_categorias`, `catalogo_subcategorias` (nome e descrição) e `catalogos` (nome).
+  ⚠️ O texto de origem do produto é o **nome de vitrine** (`nome_catalogo`, e o `nome` se ele
+  estiver vazio), não o nome do cadastro.
+- 🔑 **Corrigido à mão não é sobrescrito**: `traducao_editada text[]` guarda as COLUNAS editadas
+  na tela, e a tradução automática as pula. "Gerar de novo" (`forcar`) limpa a marca.
+- 🔑 **Só retraduz quando o português muda**: `traducao_origem` é o sha256 do texto de origem.
+  Salvar sem mexer no texto não chama a Anthropic — e a tela mostra "o português mudou" quando
+  o hash não bate.
+- 🔑 **Traduz ao SALVAR, e salvar nunca quebra por causa disso**: `traducao.tentar` roda num
+  SAVEPOINT e engole o erro (sem chave, API fora, JSON ruim). Ganchos em `routers/catalogos.py`
+  (catálogo, categoria, subcategoria, item vinculado) e no fim de `produtos.atualizar` (só se o
+  produto está em algum catálogo e o texto mudou).
+- 🔑 **A chave da Anthropic é cadastrada no SISTEMA**, em Integrações ▸ Tradução (pedido do dono,
+  29/09/2026: *"trocar a informação da chave no servidor por ela ser cadastrada no sistema — aí o
+  cliente pode configurar a sua chave"*). Mora em `integracoes` (serviço `ANTHROPIC`, id_unidade
+  nulo, o índice parcial da 012), cifrada por `segredos` e **só mascarada** na API — o mesmo
+  molde do SMTP. Permissão `admin.integracoes`. Em branco mantém a guardada; "Testar a chave"
+  faz uma chamada mínima e traduz o erro da Anthropic (401 chave, 400 sem crédito, 429 limite).
+  ⚠️ **Não existe mais `ANTHROPIC_API_KEY` no ambiente** — nem no `.do/app.yaml`: a primeira
+  versão (mesmo dia) a lia do servidor, e quem paga a conta não tem acesso ao painel.
+- Sem chave (ou com "traduzir ao salvar" desmarcado) a tradução fica desligada — e a tela diz,
+  com o link para Integrações. Modelo configurável na mesma tela (padrão
+  `claude-haiku-4-5-20251001`). Os campos seguem editáveis à mão.
+- ⚠️ `smoke_traducao` guarda a linha `ANTHROPIC` da casa no início e a REPÕE no fim (roda sem
+  chave e cadastra uma falsa) — a mesma lição do `preservar_credenciais` do Omie.
+- O cartão "Inglês e alemão" do catálogo conta o que falta (sem tradução OU com o português
+  mudado) e traduz tudo em lotes de 25 — é o caminho para o cardápio que já existia.
+- Público: `?idioma=en|de` em `/catalogos`, `/catalogos/{id}` e `/catalogos/{id}/abrir`
+  (outro idioma é 422). 🔑 **Faltou tradução → português**, nunca vazio (`traducao.escolher`).
+- ⚠️ PDFs de catálogo ficam fora: não dá para traduzir o arquivo.
+- Permissões: vê quem vê catálogo ou produtos; corrige quem edita catálogo ou produtos.
+- Cobertura: `smoke_traducao.py` (25) — ⚠️ com o Claude TROCADO por resposta fixa; nenhuma
+  chamada de verdade à Anthropic sai da bateria. Fase 13 da bateria do navegador (o cartão e a
+  janela de uma seção) e `web/scripts/verificar-idioma-site.mjs` (o site em PT/EN/DE, 20).
 
 ## Pedidos pelo catálogo (migração 101, 28/09/2026)
 
