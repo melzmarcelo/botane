@@ -284,6 +284,12 @@ app = FastAPI(
     version=VERSAO,
     description="Base cadastral e CMV para café/restaurante.",
     lifespan=lifespan,
+    # 🔴 **A documentação só existe em casa** (validação de 29/09/2026). No ar, `/api/docs` e
+    # `/api/openapi.json` respondiam a qualquer pessoa com o mapa inteiro das rotas — o
+    # primeiro passo de quem procura por onde entrar. Ninguém do sistema lê o `openapi.json`.
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None,
+    openapi_url="/openapi.json" if DEBUG else None,
 )
 
 app.add_middleware(
@@ -335,6 +341,28 @@ async def _marcar_pedido_de_total(request, chamar_o_resto):
         # ⚠️ Sempre devolvido: o `ContextVar` é da tarefa, e o servidor
         # reaproveita tarefas entre requisições.
         paginacao.pediram_o_total.reset(marca)
+
+
+# 🔴 **Cabeçalhos de segurança em toda resposta da API** (validação de 29/09/2026: no ar não
+# saía nenhum). ⚠️ `setdefault`: a tela do OAuth e o `/arquivos` já mandam os deles, mais
+# rígidos, e não podem ser afrouxados aqui.
+# ⚠️ Moldura `SAMEORIGIN`, não `DENY`: no ar web e API dividem o domínio, e o próprio
+# sistema pode precisar mostrar um arquivo daqui.
+_CABECALHOS_DE_SEGURANCA = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000",
+}
+
+
+@app.middleware("http")
+async def _cabecalhos_de_seguranca(request, chamar_o_resto):
+    resposta = await chamar_o_resto(request)
+    for nome, valor in _CABECALHOS_DE_SEGURANCA.items():
+        resposta.headers.setdefault(nome, valor)
+    return resposta
+
 
 @app.get(arquivos.PREFIXO_URL + "/{nome}", tags=["infra"])
 def servir_arquivo(nome: str):

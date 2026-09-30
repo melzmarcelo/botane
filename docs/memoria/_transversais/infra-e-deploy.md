@@ -27,6 +27,22 @@
 
 ## Armadilhas já pagas
 
+- 🔴 **Bibliotecas Python com 79 avisos de segurança** (validação de 29/09/2026): starlette 0.38
+  (negação de serviço no envio de arquivo — e o corpo é lido ANTES da checagem de login),
+  python-multipart, pyjwt, cryptography, pillow, python-dotenv. Subiram para fastapi 0.142.1 +
+  starlette 1.7.0 (presa no `requirements.txt`). Conferir antes de promover:
+  `PYTHONUTF8=1 python -m pip_audit -r requirements.txt` (sem o `PYTHONUTF8` o Windows quebra
+  lendo o arquivo). ⚠️ A FastAPI nova guarda cada router incluído como UM objeto em
+  `app.routes` (`_IncludedRouter`): percorrer `app.routes` já não lista as rotas — use
+  `app.openapi()["paths"]` ou desça pelos routers.
+- 🔴 **`/api/docs` e `/api/openapi.json` respondiam no ar** a qualquer pessoa. Agora só existem
+  com `DEBUG` ligado (`main.py`); `smoke_cabecalhos_seguranca` segura.
+- 🔴 **Nenhum cabeçalho de segurança saía** (web nem API). Web: `next.config.mjs` (HSTS, moldura
+  SAMEORIGIN, nosniff, referência, permissões, CSP de moldura/base/plugin/formulário). API:
+  middleware com `setdefault` — a tela do OAuth mantém os dela, mais rígidos. ⚠️ Moldura
+  SAMEORIGIN e não DENY: a Ajuda é um iframe do próprio site. ⚠️ A CSP não restringe script:
+  o Next injeta script inline, e travar pede nonce por página.
+
 - 🔴 **Next.js 16.3.1 tinha falha CRÍTICA de execução remota no otimizador de imagem**
   (GHSA-2xp9-vwfh-vxw4) — e `/_next/image` responde no ar. Subiu para 16.3.7 em 29/09/2026
   (`npm audit --omit=dev` limpo, `sharp` junto). Rodar `npm audit --omit=dev` antes de promover.

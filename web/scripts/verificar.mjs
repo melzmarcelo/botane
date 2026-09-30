@@ -356,6 +356,14 @@ try {
   const url = p.url();
   // Depende de o admin já ter trocado a senha ou não — o que importa é ter entrado.
   checar("admin entra no app", !url.includes("/login"), url);
+  // 🔴 **Cabeçalhos de segurança** (validação de 29/09/2026: no ar não saía nenhum). A
+  // moldura é SAMEORIGIN e não DENY porque a Ajuda é um iframe do próprio site — a fase
+  // 10c prova que ela continua abrindo.
+  const cabWeb = Object.fromEntries((await fetch(`${WEB}/login`)).headers.entries());
+  checar("o sistema web sai com os cabeçalhos de segurança",
+    cabWeb["x-frame-options"] === "SAMEORIGIN" && cabWeb["x-content-type-options"] === "nosniff"
+      && /frame-ancestors 'self'/.test(cabWeb["content-security-policy"] ?? "")
+      && /max-age=/.test(cabWeb["strict-transport-security"] ?? ""), cabWeb);
 
   // 🔑 **A promessa "fecha quando eu fechar o navegador" é aqui que se prova.**
   // Sem marcar "manter conectado", a sessão tem de ficar em `sessionStorage`,
@@ -2166,8 +2174,12 @@ try {
       (x) => x.textContent?.startsWith("Abrir contagem"));
     b?.click();
   });
-  await new Promise((r) => setTimeout(r, 2200));
-  const textoInv = await p.evaluate(() => document.body.innerText);
+  // ⚠️ Espera a TELA da contagem, não um tempo fixo (29/09/2026): com a base crescendo a
+  // contagem passou a abrir em ~3 s (1.900 itens) e os 2,2 s fixos pegavam só o menu.
+  await p.waitForFunction(
+    () => /\/inventario\/\d+/.test(location.pathname) && document.querySelector("main h1"),
+    { timeout: 20000, polling: 200 }).catch(() => {});
+  const textoInv = await p.evaluate(() => document.querySelector("main")?.innerText ?? "");
   // Contar tem tela própria: quem conta anda pela despensa com o celular, e
   // uma tabela de dez colunas não serve na mão.
   checar("abrir a contagem leva para a tela dela", /\/inventario\/\d+/.test(p.url()), p.url());
