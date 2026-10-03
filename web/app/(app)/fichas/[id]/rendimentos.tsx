@@ -95,6 +95,42 @@ export default function ModosDeRendimento({
   const mudar = (i: number, campo: keyof LinhaModo, valor: unknown) =>
     aoMudarExtras(extras.map((x, j) => (j === i ? { ...x, [campo]: valor } : x)));
 
+  /**
+   * 🔑 **Porções e tamanho da porção são o mesmo dado visto de dois lados — no
+   * modo também** (pedido do dono, 03/10/2026: *"nos rendimentos, só colocar
+   * porções, deve calcular Cada porção, e vice-versa"*). A linha do padrão já
+   * fazia a conta; a do modo obrigava a digitar os dois.
+   *
+   * ⚠️ As mesmas três regras do padrão (`mudarRendimento`, `mudarPorcoes` e
+   * `mudarPorcao`, no editor): a conta acontece na DIGITAÇÃO, cada mão escreve
+   * uma vez, e trocar o rendimento mantém o TAMANHO e refaz as porções.
+   */
+  const numero = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
+  const mudarConta = (
+    i: number,
+    campo: "rendimento_qtd" | "porcoes" | "porcao_qtd",
+    valor: string,
+  ) =>
+    aoMudarExtras(
+      extras.map((x, j) => {
+        if (j !== i) return x;
+        const nova = { ...x, [campo]: valor };
+        const rend = numero(nova.rendimento_qtd);
+        if (!rend) return nova;
+        if (campo === "porcoes") {
+          const porcoes = numero(valor);
+          if (!porcoes) return nova;
+          const tamanho = Math.round((rend / porcoes) * 10000) / 10000;
+          return { ...nova, porcao_qtd: tamanho > 0 ? String(tamanho) : "" };
+        }
+        // Rendimento ou tamanho: o que se refaz são as porções.
+        const tamanho = numero(nova.porcao_qtd);
+        if (!tamanho) return nova;
+        const porcoes = Math.round((rend / tamanho) * 100) / 100;
+        return porcoes > 0 ? { ...nova, porcoes: String(porcoes) } : nova;
+      }),
+    );
+
   return (
     <div className="mt-4 grid-rolante">
       <table className="tabela">
@@ -219,7 +255,11 @@ export default function ModosDeRendimento({
                       ` do modo ${i + 1}`
                     }
                     value={l[campo]}
-                    onChange={(e) => mudar(i, campo, e.target.value)}
+                    onChange={(e) =>
+                      campo === "quantidade_sugerida"
+                        ? mudar(i, campo, e.target.value)
+                        : mudarConta(i, campo, e.target.value)
+                    }
                   />
                 </td>
               ))}

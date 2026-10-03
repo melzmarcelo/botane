@@ -1233,6 +1233,18 @@ export default function EditorFicha() {
               onChange={(e) => setCabecalho({ ...cabecalho, modo_preparo: e.target.value })}
             />
           </Campo>
+          {/* ⚠️ A observação GERAL da ficha sempre saiu no PDF, logo depois do
+              modo de preparo, mas não tinha campo aqui: a tela carregava e
+              devolvia o texto sem mostrar, e quem via a nota impressa não
+              achava onde ela estava cadastrada. */}
+          <Campo rotulo="Observações" dica="sai na ficha impressa, depois do modo de preparo">
+            <textarea
+              className="campo min-h-[80px]"
+              disabled={!editavel}
+              value={cabecalho.observacao}
+              onChange={(e) => setCabecalho({ ...cabecalho, observacao: e.target.value })}
+            />
+          </Campo>
         </div>
       </Cartao>
 

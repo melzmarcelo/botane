@@ -541,6 +541,16 @@
   vinda de lá ela sobrescreveria o que a pessoa está digitando a cada tecla.
   ⚠️ **O seletor de modo só aparece quando a ficha TEM modos.** Quase nenhuma tem, e um seletor de
   um item é um controle que não controla nada — é o que mantém a tela idêntica para quem não usa.
+  🔑 **A conta porções ↔ cada porção vale também na linha do MODO** (03/10/2026, pedido do dono:
+  *"nos rendimentos, só colocar porções, deve calcular Cada porção, e vice-versa"*). Só a linha
+  do padrão fazia; o modo obrigava a digitar os dois. `mudarConta`, em `rendimentos.tsx`, repete
+  as regras do padrão: na digitação, e trocar o rendimento mantém o tamanho e refaz as porções.
+
+- ⚠️ **A observação GERAL da ficha não tinha campo na tela** (03/10/2026). `fichas_tecnicas.observacao`
+  sempre saiu no PDF, depois do modo de preparo, e a tela a carregava e devolvia sem mostrar — o
+  dono imprimiu uma ficha, viu a nota e não achou onde estava cadastrada. Agora é o campo
+  "Observações" do cartão Preparo. ⚠️ São TRÊS observações na ficha: a geral, a da linha do
+  ingrediente (coluna do PDF) e a do modo de rendimento (que não sai no PDF).
 
 - 🔑 **O custo da ficha se ajusta ENQUANTO se digita** (`POST /fichas/previa-de-custo`,
   15/09/2026, pedido do dono: *"na ficha técnica, ao ir preenchendo os dados dos insumos, os
