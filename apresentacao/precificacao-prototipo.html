@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Precificação — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+  /* As cores e as fontes são as REAIS do sistema (web/app/globals.css): o que se
+     aprova aqui é o que sai na tela.
+     ⚠️ As duas cores do GRÁFICO (--serie-preco, --serie-custo) não são da
+     paleta da casa: foram escolhidas e VALIDADAS para se distinguirem também
+     para quem não separa verde de laranja — e a linha do custo é tracejada,
+     para a identidade nunca depender só da cor. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3; --superficie: #fcfdfa; --superficie2: #edf0e7;
+    --tinta: #14201a; --suave: #5d6c61; --linha: #d8ded0; --linha2: #748069;
+    --erva: #2c6a4a; --erva-claro: #e3efe7; --latao: #7d5a1c;
+    --alerta: #8a5d12; --alerta-claro: #f6ecd9; --erro: #95332a; --erro-claro: #f7e7e4;
+    --serie-preco: #2a8a5c; --serie-custo: #3d6fc4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--leitura);
+         font-size: 15.5px; -webkit-font-smoothing: antialiased; }
+  .folha { max-width: 1180px; margin: 0 auto; padding: 32px 16px 96px; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; }
+  .rotulo { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--suave); margin: 0; }
+  .titulo { font-size: 30px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; }
+  .prosa { font-family: var(--corpo); font-size: 1.04em; line-height: 1.55; color: var(--suave); max-width: 70ch; }
+  .prosa b { color: var(--tinta); font-weight: 500; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { white-space: nowrap; }
+
+  .abas { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 24px; border-bottom: 1px solid var(--linha2); }
+  .abas button { border: 0; background: transparent; cursor: pointer; font-family: var(--display); font-size: 15px;
+                 font-weight: 600; color: var(--suave); padding: 12px 16px; min-height: 44px;
+                 border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .abas button[aria-selected="true"] { color: var(--erva); border-bottom-color: var(--erva); }
+
+  .cartao { background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px; padding: 20px;
+            box-shadow: 0 1px 0 rgba(20,32,26,.04), 0 8px 24px rgba(20,32,26,.05); margin-top: 20px; }
+  .cartao h2 { font-size: 17px; font-weight: 700; }
+  .cartao > .prosa { margin: 4px 0 0; font-size: 14.5px; }
+  .grade { display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .grade.duas { grid-template-columns: 1.15fr .85fr; } }
+
+  .campo { font: inherit; font-size: 16px; padding: 9px 11px; border: 1px solid var(--linha2); border-radius: 9px;
+           background: #fff; color: var(--tinta); width: 100%; min-height: 42px; }
+  .campo:focus { outline: 2px solid var(--erva); outline-offset: 1px; }
+  .campo:disabled { background: var(--superficie2); color: var(--suave); }
+  .campo.curto { width: 104px; text-align: right; font-family: var(--mono); }
+  label.rot { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 5px; }
+  .btn { font-family: var(--display); font-size: 14.5px; font-weight: 600; border-radius: 9px; padding: 10px 16px;
+         min-height: 42px; cursor: pointer; border: 1px solid var(--erva); background: var(--superficie); color: var(--erva); }
+  .btn.primario { background: var(--erva); color: #fff; }
+  .btn:disabled { background: var(--superficie2); color: var(--suave); border-color: var(--linha); cursor: not-allowed; }
+  .btn.pequeno { padding: 5px 10px; min-height: 32px; font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--suave);
+       font-weight: 500; text-align: left; padding: 10px 10px; background: var(--superficie2); white-space: nowrap; }
+  th.num { text-align: right; }
+  td { padding: 10px; border-top: 1px solid var(--linha); vertical-align: middle; }
+  .rolagem { overflow: auto; max-height: 70vh; border-radius: 10px; margin-top: 14px; }
+  .rolagem thead th { position: sticky; top: 0; z-index: 1; }
+  tr.clicavel { cursor: pointer; }
+  tr.clicavel:hover td { background: var(--superficie2); }
+  tr.aberto td { background: var(--erva-claro); }
+
+  .etiqueta { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px;
+              border: 1px solid var(--linha2); color: var(--suave); white-space: nowrap; }
+  .etiqueta.bom { border-color: #b9d6c5; background: var(--erva-claro); color: var(--erva); }
+  .etiqueta.atencao { border-color: #e2cc9c; background: var(--alerta-claro); color: var(--alerta); }
+  .etiqueta.ruim { border-color: #e8c9c3; background: var(--erro-claro); color: var(--erro); }
+  .aviso { border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-top: 14px;
+           background: var(--alerta-claro); border: 1px solid #e2cc9c; }
+  .aviso.info { background: var(--erva-claro); border-color: #cfe1d5; }
+
+  /* a barra "de cada real vendido" */
+  .barra { display: flex; height: 34px; border-radius: 8px; overflow: hidden; gap: 2px; background: var(--superficie); }
+  .barra span { display: block; min-width: 0; }
+  .legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--suave); }
+  .legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .c-imposto { background: #7b6a8c; } .c-cartao { background: #8d8468; } .c-oper { background: #a08a5a; }
+  .c-outros { background: #9a9d92; } .c-custo { background: var(--serie-custo); } .c-lucro { background: var(--serie-preco); }
+  .c-prejuizo { background: var(--erro); }
+
+  .ladrilhos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+  .ladrilho { border: 1px solid var(--linha); border-radius: 12px; padding: 14px; background: var(--superficie); }
+  .ladrilho b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 600; margin-top: 4px; letter-spacing: -.02em; }
+  .ladrilho small { color: var(--suave); font-size: 12.5px; }
+
+  .dica { position: absolute; pointer-events: none; background: var(--tinta); color: #fff; border-radius: 9px;
+          padding: 9px 11px; font-size: 13px; line-height: 1.45; white-space: nowrap; transform: translate(-50%, -110%);
+          box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  .dica b { font-family: var(--mono); font-weight: 500; }
+  .grafico { position: relative; }
+  svg text { font-family: var(--leitura); }
+  .so-leitura input, .so-leitura select, .so-leitura .btn { pointer-events: none; opacity: .7; }
+  .linha-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-top: 14px; }
+  .linha-form > div { min-width: 0; }
+  .sr { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<div class="folha">
+  <p class="rotulo">Estudo · protótipo navegável · dados inventados</p>
+  <h1 class="titulo">Precificação</h1>
+  <p class="prosa" style="margin-top:10px">Três telas: o que sai de cada real vendido e quanto a casa quer que sobre
+    (<b>Configuração</b>), quais preços estão errados e o que acontece ao corrigir (<b>Precificação</b>), e como o preço e o
+    custo de um produto andaram no tempo (<b>Preços</b>). A conta desta página é a de verdade — mexa nos números.</p>
+
+  <div class="abas" role="tablist">
+    <button role="tab" aria-selected="true" data-aba="config">Configuração</button>
+    <button role="tab" aria-selected="false" data-aba="precificar">Precificação</button>
+    <button role="tab" aria-selected="false" data-aba="precos">Preços</button>
+  </div>
+
+  <!-- ============================================================ CONFIGURAÇÃO -->
+  <section id="aba-config">
+    <div class="cartao">
+      <h2>De quem é a configuração</h2>
+      <p class="prosa">A loja pode ter a própria ou seguir a de outra. Seguindo outra, esta tela fica só para consulta.</p>
+      <div class="linha-form">
+        <div style="flex:1 1 260px"><label class="rot" for="escopo">Esta loja (Filial Centro) usa</label>
+          <select class="campo" id="escopo">
+            <option value="propria">a própria configuração</option>
+            <option value="matriz">a configuração da Matriz</option>
+          </select></div>
+      </div>
+      <div class="aviso" id="aviso-heranca" hidden><b>Somente visualização.</b> Esta loja segue a configuração da
+        <b>Matriz</b>; para alterar, abra a Matriz no seletor de loja. Ao voltar para "a própria", esta loja começa com uma
+        cópia do que está aqui.</div>
+    </div>
+
+    <div id="corpo-config">
+      <div class="grade duas">
+        <div class="cartao">
+          <h2>O que sai de cada real vendido</h2>
+          <p class="prosa">Percentuais sobre o <b>preço de venda</b>. A casa pode criar as linhas que quiser.</p>
+          <div class="rolagem" style="max-height:none">
+            <table>
+              <thead><tr><th>Linha</th><th>Vale para</th><th class="num">% da venda</th><th></th></tr></thead>
+              <tbody id="componentes"></tbody>
+            </table>
+          </div>
+          <div class="linha-form">
+            <button class="btn" id="nova-linha">+ Acrescentar linha</button>
+            <span class="mono" style="color:var(--suave);font-size:13px" id="soma-componentes"></span>
+          </div>
+          <div class="aviso" id="aviso-soma" hidden></div>
+        </div>
+
+        <div class="cartao">
+          <h2>Quanto a casa quer que sobre</h2>
+          <p class="prosa">A margem de lucro, também sobre a venda. Categoria sem margem própria usa a da loja.</p>
+          <div class="linha-form">
+            <div><label class="rot" for="margem">Margem alvo da loja</label>
+              <input class="campo curto" id="margem" type="number" min="0" max="90" step="0.5"> %</div>
+            <div><label class="rot" for="arred">Arredondar o sugerido</label>
+              <select class="campo" id="arred" style="width:190px">
+                <option value="90">para cima, em ,90</option>
+                <option value="50">para cima, em ,00 ou ,50</option>
+                <option value="0">sem arredondar</option>
+              </select></div>
+          </div>
+          <table style="margin-top:14px">
+            <thead><tr><th>Categoria</th><th class="num">Margem própria</th><th class="num">Imposto próprio</th></tr></thead>
+            <tbody id="categorias"></tbody>
+          </table>
+          <p style="font-size:13px;color:var(--suave);margin:10px 0 0">Imposto próprio: para categoria com tributação
+            diferente (bebida com substituição tributária, por exemplo). Em branco, vale o geral.</p>
+        </div>
+      </div>
+
+      <div class="grade duas">
+        <div class="cartao">
+          <h2>Calculadora do custo operacional</h2>
+          <p class="prosa">O que a casa gasta para estar aberta, como percentual do faturamento. O sistema traz o
+            faturamento das vendas; a despesa fixa é informada.</p>
+          <div class="linha-form">
+            <div><label class="rot" for="fixas">Despesa fixa mensal</label>
+              <input class="campo" id="fixas" type="number" step="500" style="width:160px"></div>
+            <div><label class="rot">Faturamento médio (3 meses)</label>
+              <input class="campo mono" id="fat" disabled style="width:170px"></div>
+            <div><label class="rot">Resultado</label>
+              <span class="mono" id="oper-calc" style="font-size:20px;font-weight:600"></span></div>
+            <button class="btn pequeno" id="usar-oper">usar este percentual</button>
+          </div>
+          <p style="font-size:13px;color:var(--suave);margin:12px 0 0" id="meses-fat"></p>
+        </div>
+
+        <div class="cartao">
+          <h2>Calculadora do Simples Nacional</h2>
+          <p class="prosa">A alíquota que vale é a <b>efetiva</b>, não a da tabela.</p>
+          <div class="linha-form">
+            <div><label class="rot" for="rbt">Faturamento dos últimos 12 meses</label>
+              <input class="campo" id="rbt" type="number" step="10000" style="width:190px"></div>
+            <div><label class="rot">Alíquota efetiva (Anexo I)</label>
+              <span class="mono" id="simples-calc" style="font-size:20px;font-weight:600"></span></div>
+            <button class="btn pequeno" id="usar-simples">usar em Impostos</button>
+          </div>
+          <div class="aviso"><b>Estimativa para precificar, não apuração fiscal.</b> Confirme o percentual com a
+            contabilidade — o sistema não emite nota de venda nem apura imposto.</div>
+        </div>
+      </div>
+
+      <div class="cartao">
+        <h2>Como o preço se forma</h2>
+        <p class="prosa">Um produto com <b>R$ 10,00</b> de custo direto, com a configuração acima.</p>
+        <div class="ladrilhos" id="exemplo-ladrilhos"></div>
+        <div style="margin-top:16px"><div class="barra" id="exemplo-barra" role="img"></div>
+          <div class="legenda" id="exemplo-legenda"></div></div>
+        <p style="font-size:13.5px;color:var(--suave);margin:12px 0 0">⚠️ Não é "custo + percentual": imposto e cartão
+          incidem sobre o <b>preço</b>, então a conta é uma divisão — custo ÷ (1 − soma dos percentuais).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ PRECIFICAÇÃO -->
+  <section id="aba-precificar" hidden>
+    <div class="ladrilhos" id="resumo-precificar"></div>
+    <div class="cartao">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+        <div><h2>O que rever primeiro</h2>
+          <p class="prosa" style="margin:4px 0 0;font-size:14.5px">Primeiro o que está abaixo da margem, pelo que mais pesa no mês (diferença ×
+            quantidade vendida em 30 dias). Quem já está acima do mínimo aparece com a folga.</p></div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <span class="mono" id="resumo-selecao" style="font-size:13px;color:var(--suave)"></span>
+          <button class="btn primario" id="aplicar" disabled>Aplicar preços</button>
+        </div>
+      </div>
+      <div class="rolagem">
+        <table>
+          <thead><tr><th><span class="sr">marcar</span></th><th>Produto</th><th class="num">Custo direto</th>
+            <th class="num">Preço atual</th><th class="num">Lucro líquido</th><th class="num">Mínimo sugerido</th>
+            <th class="num">Diferença</th><th class="num">Vendido 30d</th><th class="num">Impacto no mês</th></tr></thead>
+          <tbody id="lista-precificar"></tbody>
+        </table>
+      </div>
+      <p style="font-size:13px;color:var(--suave);margin:12px 0 0">Impacto = se vender a mesma quantidade com o preço
+        sugerido. Subir preço pode mudar a venda; o sistema não prevê isso.</p>
+    </div>
+
+    <div class="cartao" id="detalhe" hidden>
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline">
+        <h2 id="detalhe-nome"></h2><span class="etiqueta" id="detalhe-origem"></span></div>
+      <div class="grade duas" style="margin-top:6px">
+        <div>
+          <p class="rotulo" style="margin-top:14px">De cada venda, no preço atual</p>
+          <div class="barra" id="det-barra-atual" style="margin-top:8px"></div>
+          <p class="rotulo" style="margin-top:16px">No preço sugerido</p>
+          <div class="barra" id="det-barra-sug" style="margin-top:8px"></div>
+          <div class="legenda" id="det-legenda"></div>
+        </div>
+        <div>
+          <label class="rot" for="simular" style="margin-top:14px">E se o preço fosse…</label>
+          <input type="range" id="simular" min="0" max="100" step="0.1" style="width:100%">
+          <div class="ladrilhos" id="det-simulado" style="grid-template-columns:repeat(3,1fr)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="aviso info" id="aplicado" hidden></div>
+  </section>
+
+  <!-- ============================================================ PREÇOS -->
+  <section id="aba-precos" hidden>
+    <div class="cartao">
+      <div class="linha-form" style="margin-top:0">
+        <div style="flex:1 1 280px"><label class="rot" for="produto">Produto</label>
+          <select class="campo" id="produto"></select></div>
+        <button class="btn pequeno" id="ver-tabela" aria-pressed="false">ver como tabela</button>
+      </div>
+      <div class="ladrilhos" id="resumo-precos"></div>
+
+      <h3 style="font-size:15px;margin-top:22px">Preço de venda e custo, em reais</h3>
+      <div class="legenda" style="margin-top:6px">
+        <span><svg width="26" height="10" aria-hidden="true"><line x1="0" y1="5" x2="26" y2="5" stroke="#2a8a5c" stroke-width="2.5"/></svg> Preço de venda</span>
+        <span><svg width="26" height="10" aria-hidden="true"><line x1="0" y1="5" x2="26" y2="5" stroke="#3d6fc4" stroke-width="2.5" stroke-dasharray="5 3"/></svg> Custo direto</span>
+        <span>◆ mudança de preço</span>
+      </div>
+      <div class="grafico" id="graf-valores"></div>
+
+      <h3 style="font-size:15px;margin-top:18px">Margem bruta, em % do preço</h3>
+      <div class="grafico" id="graf-margem"></div>
+      <p style="font-size:13px;color:var(--suave);margin:8px 0 0">A margem tem gráfico próprio de propósito: no mesmo
+        desenho, com um segundo eixo, as duas escalas inventariam uma relação que não existe.</p>
+
+      <div class="rolagem" id="tabela-precos" hidden></div>
+      <div class="aviso" id="aviso-serie"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ============================================================== dados inventados */
+const MESES = ["out/25","nov/25","dez/25","jan/26","fev/26","mar/26","abr/26","mai/26","jun/26","jul/26","ago/26","set/26"];
+const PRODUTOS = [
+  { id: 1, nome: "Cappuccino", cat: "Cafeteria", origem: "ficha", vendido: 412,
+    custo: [2.60,2.60,2.70,2.75,2.90,3.05,3.05,3.20,3.40,3.45,3.60,3.72], preco: [12,12,12,12,12,12,13,13,13,13,13,13] },
+  { id: 2, nome: "Beef Stroganoff", cat: "Pratos", origem: "ficha", vendido: 93,
+    custo: [19.8,20.1,20.9,21.4,22.0,22.6,23.9,24.4,25.2,26.0,26.3,27.1], preco: [62,62,62,62,62,66,66,66,66,66,69,69] },
+  { id: 3, nome: "Cuca de frutas (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 280,
+    custo: [3.1,3.1,3.2,3.2,3.3,3.3,3.4,3.5,3.5,3.6,3.7,3.8], preco: [14,14,14,14,14,14,14,14,14,14,14,14] },
+  { id: 4, nome: "Gnocchi com mignon", cat: "Pratos", origem: "ficha", vendido: 43,
+    custo: [31,31.5,33,34.2,36,37.4,39,41,43.5,45,46.2,47.8], preco: [98,98,98,98,98,98,98,105,105,105,105,105] },
+  { id: 5, nome: "Suco de laranja 300 ml", cat: "Bebidas", origem: "ficha", vendido: 350,
+    custo: [2.9,3.0,3.4,3.9,4.1,3.8,3.5,3.3,3.6,4.0,4.4,4.9], preco: [11,11,11,11,11,11,11,11,11,11,11,11] },
+  { id: 6, nome: "Água mineral 500 ml", cat: "Bebidas", origem: "custo médio", vendido: 520,
+    custo: [1.35,1.35,1.4,1.4,1.4,1.48,1.48,1.5,1.5,1.55,1.55,1.6], preco: [6,6,6,6,6,6,6,6,6,6,6,6] },
+  { id: 7, nome: "Cheesecake (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 112,
+    custo: [6.2,6.3,6.9,7.4,7.6,7.9,8.1,8.6,9.3,9.9,10.4,11.2], preco: [24,24,24,24,24,24,24,24,26,26,26,26] },
+  { id: 8, nome: "Croissant de brie", cat: "Vitrine", origem: "ficha", vendido: 87,
+    custo: [9.5,9.6,9.8,10.1,10.4,10.9,11.3,11.9,12.4,13.0,13.3,13.9], preco: [29,29,29,29,29,29,29,29,29,29,29,29] },
+  { id: 9, nome: "Brownie (unidade)", cat: "Confeitaria", origem: "sem custo", vendido: 140,
+    custo: [null,null,null,null,null,null,null,null,null,null,null,null], preco: [12,12,12,12,12,12,12,12,12,12,12,12] },
+];
+const CATEGORIAS = ["Cafeteria", "Pratos", "Confeitaria", "Bebidas", "Vitrine"];
+const FATURAMENTO = [["jul/26", 228400], ["ago/26", 241900], ["set/26", 235750]];
+
+const cfg = {
+  componentes: [
+    { nome: "Impostos (Simples)", vale: "tudo", pct: 7.3 },
+    { nome: "Taxa de cartão", vale: "tudo", pct: 2.4 },
+    { nome: "Custo operacional", vale: "tudo", pct: 33 },
+  ],
+  margem: 15, arred: "90",
+  porCategoria: { Cafeteria: { margem: 22, imposto: null }, Bebidas: { margem: 18, imposto: 4.2 } },
+  fixas: 77600, rbt: 2760000,
+};
+
+/* ============================================================== a conta */
+const $ = (s) => document.querySelector(s);
+const reais = (v) => v == null ? "—" : "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = (v) => v == null ? "—" : v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+
+/** Os percentuais sobre a venda que valem para uma categoria, SEM a margem. */
+function partes(cat) {
+  const proprio = cfg.porCategoria[cat] || {};
+  return cfg.componentes.map((c, i) => ({
+    nome: c.nome,
+    classe: i === 0 ? "c-imposto" : i === 1 ? "c-cartao" : i === 2 ? "c-oper" : "c-outros",
+    // A primeira linha é o imposto: a categoria pode ter o dela.
+    pct: i === 0 && proprio.imposto != null ? proprio.imposto : c.pct,
+  }));
+}
+const margemDe = (cat) => (cfg.porCategoria[cat] && cfg.porCategoria[cat].margem != null) ? cfg.porCategoria[cat].margem : cfg.margem;
+const somaDe = (cat) => partes(cat).reduce((s, p) => s + p.pct, 0);
+
+function arredondar(v) {
+  if (cfg.arred === "90") { const b = Math.floor(v) + 0.9; return b >= v - 1e-9 ? b : b + 1; }
+  if (cfg.arred === "50") return Math.ceil(v * 2 - 1e-9) / 2;
+  return Math.round(v * 100) / 100;
+}
+/** O preço sugerido — custo ÷ (1 − soma dos percentuais, com a margem). Nulo sem custo ou sem conta possível. */
+function sugerido(custo, cat) {
+  if (custo == null) return null;
+  const total = somaDe(cat) + margemDe(cat);
+  if (total >= 100) return null;
+  return arredondar(custo / (1 - total / 100));
+}
+/** O que sobra de UMA venda a um dado preço. */
+function leitura(custo, preco, cat) {
+  if (custo == null || !preco) return null;
+  const descontos = preco * somaDe(cat) / 100;
+  const lucro = preco - descontos - custo;
+  return { lucro, lucroPct: lucro / preco * 100, foodCost: custo / preco * 100 };
+}
+function barra(el, custo, preco, cat) {
+  const ps = partes(cat).map((p) => ({ ...p, valor: preco * p.pct / 100 }));
+  const lucro = preco - ps.reduce((s, p) => s + p.valor, 0) - custo;
+  const fatias = [...ps, { nome: "Custo direto", classe: "c-custo", valor: custo },
+    lucro >= 0 ? { nome: "Lucro", classe: "c-lucro", valor: lucro } : null].filter(Boolean);
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  el.innerHTML = fatias.map((f) => `<span class="${f.classe}" style="flex:${Math.max(f.valor, 0.0001) / total}" title="${f.nome}: ${reais(f.valor)}"></span>`).join("");
+  el.setAttribute("aria-label", fatias.map((f) => `${f.nome} ${reais(f.valor)}`).join(", ") + (lucro < 0 ? `. Prejuízo de ${reais(-lucro)} por unidade` : ""));
+  return { fatias, lucro };
+}
+const legenda = (fatias) => fatias.map((f) => `<span><i class="${f.classe}"></i>${f.nome} <b class="mono" style="color:var(--tinta)">${reais(f.valor)}</b></span>`).join("");
+
+/* ============================================================== configuração */
+function pintarConfig() {
+  $("#componentes").innerHTML = cfg.componentes.map((c, i) => `
+    <tr><td><input class="campo" value="${c.nome}" data-i="${i}" data-k="nome" aria-label="Nome da linha"></td>
+      <td><select class="campo" data-i="${i}" data-k="vale" aria-label="Vale para">
+        <option value="tudo">tudo</option><option value="delivery"${c.vale === "delivery" ? " selected" : ""}>só delivery</option></select></td>
+      <td class="num"><input class="campo curto" type="number" step="0.1" min="0" value="${c.pct}" data-i="${i}" data-k="pct" aria-label="Percentual de ${c.nome}"></td>
+      <td>${i > 2 ? `<button class="btn pequeno" data-tirar="${i}">tirar</button>` : ""}</td></tr>`).join("");
+  $("#categorias").innerHTML = CATEGORIAS.map((cat) => {
+    const p = cfg.porCategoria[cat] || {};
+    return `<tr><td>${cat}</td>
+      <td class="num"><input class="campo curto" type="number" step="0.5" placeholder="${cfg.margem}" value="${p.margem ?? ""}" data-cat="${cat}" data-k="margem" aria-label="Margem de ${cat}"></td>
+      <td class="num"><input class="campo curto" type="number" step="0.1" placeholder="${cfg.componentes[0].pct}" value="${p.imposto ?? ""}" data-cat="${cat}" data-k="imposto" aria-label="Imposto de ${cat}"></td></tr>`;
+  }).join("");
+  $("#margem").value = cfg.margem; $("#arred").value = cfg.arred; $("#fixas").value = cfg.fixas; $("#rbt").value = cfg.rbt;
+  pintarDerivados();
+}
+function simplesEfetivo(rbt) {
+  // Anexo I (comércio), LC 123/2006: (RBT12 × alíquota nominal − parcela a deduzir) ÷ RBT12.
+  const faixas = [[180000, 4, 0], [360000, 7.3, 5940], [720000, 9.5, 13860], [1800000, 10.7, 22500], [3600000, 14.3, 87300], [4800000, 19, 378000]];
+  const f = faixas.find((x) => rbt <= x[0]);
+  return f && rbt > 0 ? (rbt * f[1] / 100 - f[2]) / rbt * 100 : null;
+}
+function pintarDerivados() {
+  const soma = cfg.componentes.reduce((s, c) => s + c.pct, 0);
+  $("#soma-componentes").textContent = `soma: ${pct(soma)} · com a margem da loja: ${pct(soma + cfg.margem)}`;
+  const estourou = soma + cfg.margem >= 100;
+  $("#aviso-soma").hidden = !estourou;
+  if (estourou) $("#aviso-soma").innerHTML = `<b>A soma chegou a ${pct(soma + cfg.margem)}.</b> Com 100% ou mais não existe preço que pague a conta — reveja os percentuais.`;
+  const media = FATURAMENTO.reduce((s, m) => s + m[1], 0) / FATURAMENTO.length;
+  $("#fat").value = reais(media);
+  $("#oper-calc").textContent = pct(cfg.fixas / media * 100);
+  $("#meses-fat").textContent = "Mês a mês: " + FATURAMENTO.map(([m, v]) => `${m} ${pct(cfg.fixas / v * 100)}`).join(" · ") + ". É uma média — mês fraco faz o percentual subir.";
+  const ef = simplesEfetivo(cfg.rbt);
+  $("#simples-calc").textContent = ef == null ? "fora do Simples" : pct(ef);
+  // o exemplo de R$ 10,00
+  const custo = 10, cat = "Pratos", sug = sugerido(custo, cat);
+  if (sug == null) { $("#exemplo-ladrilhos").innerHTML = `<div class="ladrilho"><small>Sem preço possível</small><b>—</b></div>`; $("#exemplo-barra").innerHTML = ""; $("#exemplo-legenda").innerHTML = ""; return; }
+  const l = leitura(custo, sug, cat);
+  $("#exemplo-ladrilhos").innerHTML = `
+    <div class="ladrilho"><small>Custo direto</small><b>${reais(custo)}</b></div>
+    <div class="ladrilho"><small>Preço sugerido</small><b style="color:var(--erva)">${reais(sug)}</b><small>${(sug / custo).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} × o custo</small></div>
+    <div class="ladrilho"><small>Lucro por unidade</small><b>${reais(l.lucro)}</b><small>${pct(l.lucroPct)} do preço</small></div>
+    <div class="ladrilho"><small>Food cost</small><b>${pct(l.foodCost)}</b><small>custo ÷ preço</small></div>`;
+  $("#exemplo-legenda").innerHTML = legenda(barra($("#exemplo-barra"), custo, sug, cat).fatias);
+}
+$("#aba-config").addEventListener("input", (e) => {
+  const t = e.target;
+  if (t.dataset.i != null) { const c = cfg.componentes[+t.dataset.i]; c[t.dataset.k] = t.dataset.k === "pct" ? (parseFloat(t.value) || 0) : t.value; }
+  else if (t.dataset.cat) { const p = (cfg.porCategoria[t.dataset.cat] ||= {}); p[t.dataset.k] = t.value === "" ? null : parseFloat(t.value); }
+  else if (t.id === "margem") cfg.margem = parseFloat(t.value) || 0;
+  else if (t.id === "arred") cfg.arred = t.value;
+  else if (t.id === "fixas") cfg.fixas = parseFloat(t.value) || 0;
+  else if (t.id === "rbt") cfg.rbt = parseFloat(t.value) || 0;
+  pintarDerivados();
+});
+$("#aba-config").addEventListener("click", (e) => {
+  if (e.target.id === "nova-linha") { cfg.componentes.push({ nome: "Nova linha", vale: "tudo", pct: 0 }); pintarConfig(); }
+  if (e.target.dataset.tirar) { cfg.componentes.splice(+e.target.dataset.tirar, 1); pintarConfig(); }
+  if (e.target.id === "usar-oper") { const media = FATURAMENTO.reduce((s, m) => s + m[1], 0) / FATURAMENTO.length; cfg.componentes[2].pct = Math.round(cfg.fixas / media * 1000) / 10; pintarConfig(); }
+  if (e.target.id === "usar-simples") { const ef = simplesEfetivo(cfg.rbt); if (ef != null) { cfg.componentes[0].pct = Math.round(ef * 10) / 10; pintarConfig(); } }
+});
+$("#escopo").addEventListener("change", (e) => {
+  const herda = e.target.value === "matriz";
+  $("#aviso-heranca").hidden = !herda;
+  $("#corpo-config").classList.toggle("so-leitura", herda);
+  $("#corpo-config").querySelectorAll("input,select,button").forEach((el) => { el.disabled = herda || el.id === "fat"; });
+});
+
+/* ============================================================== precificação */
+const marcados = new Set();
+let aberto = null;
+const atual = (p) => ({ custo: p.custo.at(-1), preco: p.preco.at(-1) });
+function linhas() {
+  return PRODUTOS.map((p) => {
+    const { custo, preco } = atual(p), sug = sugerido(custo, p.cat), l = leitura(custo, preco, p.cat);
+    const dif = sug == null ? null : Math.round((sug - preco) * 100) / 100;
+    // O sugerido é o PISO que entrega a margem. Preço acima dele não é erro a
+    // corrigir — é folga —, e por isso não entra no impacto nem ganha caixa de marcar:
+    // uma tela que sugerisse BAIXAR o cappuccino estaria respondendo o que ninguém perguntou.
+    const abaixo = dif != null && dif > 0.005;
+    return { p, custo, preco, sug, l, dif, abaixo, impacto: abaixo ? dif * p.vendido : null, alvo: margemDe(p.cat) };
+  }).sort((a, b) => (b.impacto ?? -1) - (a.impacto ?? -1) || b.p.vendido - a.p.vendido);
+}
+function situacao(x) {
+  if (x.l == null) return ["sem custo", ""];
+  if (x.l.lucro < 0) return ["prejuízo", "ruim"];
+  if (x.l.lucroPct >= x.alvo - 0.5) return ["na margem", "bom"];
+  if (x.l.lucroPct >= x.alvo / 2) return ["abaixo da margem", "atencao"];
+  return ["muito abaixo", "ruim"];
+}
+function pintarPrecificar() {
+  const ls = linhas();
+  const comConta = ls.filter((x) => x.l), abaixo = comConta.filter((x) => x.l.lucroPct < x.alvo - 0.5);
+  const potencial = ls.reduce((s, x) => s + (x.impacto ?? 0), 0);
+  $("#resumo-precificar").innerHTML = `
+    <div class="ladrilho"><small>Produtos abaixo da margem</small><b>${abaixo.length} de ${comConta.length}</b></div>
+    <div class="ladrilho"><small>Vendendo com prejuízo</small><b style="color:${comConta.some((x) => x.l.lucro < 0) ? "var(--erro)" : "inherit"}">${comConta.filter((x) => x.l.lucro < 0).length}</b></div>
+    <div class="ladrilho"><small>Diferença no mês, corrigindo todos</small><b>${reais(potencial)}</b><small>com o volume dos últimos 30 dias</small></div>
+    <div class="ladrilho"><small>Sem custo, sem sugestão</small><b>${ls.length - comConta.length}</b><small>falta a ficha técnica</small></div>`;
+  $("#lista-precificar").innerHTML = ls.map((x) => {
+    const [rot, cls] = situacao(x), id = x.p.id, mexe = x.abaixo;
+    return `<tr class="clicavel ${aberto === id ? "aberto" : ""}" data-id="${id}">
+      <td><input type="checkbox" data-marcar="${id}" ${marcados.has(id) ? "checked" : ""} ${mexe ? "" : "disabled"} aria-label="Aplicar o sugerido em ${x.p.nome}" style="width:17px;height:17px;accent-color:#2c6a4a"></td>
+      <td><b style="font-weight:600">${x.p.nome}</b><span style="display:block;font-size:12.5px;color:var(--suave)">${x.p.cat} · margem alvo ${pct(x.alvo)}</span></td>
+      <td class="num mono">${reais(x.custo)}</td><td class="num mono">${reais(x.preco)}</td>
+      <td class="num"><span class="mono">${x.l ? pct(x.l.lucroPct) : "—"}</span><br><span class="etiqueta ${cls}">${rot}</span></td>
+      <td class="num mono" style="font-weight:600">${reais(x.sug)}</td>
+      <td class="num mono">${x.dif == null ? "—" : x.abaixo ? "+" + reais(x.dif) : `<span style="color:var(--suave)">folga de ${reais(-x.dif)}</span>`}</td>
+      <td class="num mono">${x.p.vendido}</td>
+      <td class="num mono" style="font-weight:600">${x.impacto == null ? "—" : "+" + reais(x.impacto)}</td></tr>`;
+  }).join("");
+  const sel = ls.filter((x) => marcados.has(x.p.id));
+  $("#aplicar").disabled = sel.length === 0;
+  $("#aplicar").textContent = sel.length ? `Aplicar ${sel.length} preço(s)` : "Aplicar preços";
+  $("#resumo-selecao").textContent = sel.length ? `impacto no mês: ${reais(sel.reduce((s, x) => s + x.impacto, 0))}` : "";
+  pintarDetalhe();
+}
+function pintarDetalhe() {
+  const x = linhas().find((l) => l.p.id === aberto);
+  $("#detalhe").hidden = !x || x.l == null;
+  if (!x || x.l == null) return;
+  $("#detalhe-nome").textContent = x.p.nome;
+  $("#detalhe-origem").textContent = "custo: " + x.p.origem;
+  const a = barra($("#det-barra-atual"), x.custo, x.preco, x.p.cat);
+  if (x.sug != null) barra($("#det-barra-sug"), x.custo, x.sug, x.p.cat);
+  $("#det-legenda").innerHTML = legenda(a.fatias) + (a.lucro < 0 ? `<span style="color:var(--erro)"><b>Prejuízo de ${reais(-a.lucro)} por unidade</b></span>` : "");
+  const r = $("#simular");
+  r.min = (x.custo * 1.05).toFixed(1); r.max = (Math.max(x.sug || 0, x.preco) * 1.5).toFixed(1);
+  if (r.dataset.de !== String(x.p.id)) { r.value = x.preco; r.dataset.de = x.p.id; }
+  const s = leitura(x.custo, +r.value, x.p.cat);
+  $("#det-simulado").innerHTML = `
+    <div class="ladrilho"><small>Preço</small><b>${reais(+r.value)}</b></div>
+    <div class="ladrilho"><small>Lucro por unidade</small><b style="color:${s.lucro < 0 ? "var(--erro)" : "inherit"}">${reais(s.lucro)}</b><small>${pct(s.lucroPct)}</small></div>
+    <div class="ladrilho"><small>No mês (${x.p.vendido} vendas)</small><b>${reais(s.lucro * x.p.vendido)}</b></div>`;
+}
+$("#lista-precificar").addEventListener("click", (e) => {
+  const m = e.target.dataset.marcar;
+  if (m) { marcados.has(+m) ? marcados.delete(+m) : marcados.add(+m); pintarPrecificar(); return; }
+  const tr = e.target.closest("tr"); if (tr) { aberto = aberto === +tr.dataset.id ? null : +tr.dataset.id; pintarPrecificar(); }
+});
+$("#simular").addEventListener("input", pintarDetalhe);
+$("#aplicar").addEventListener("click", () => {
+  const sel = linhas().filter((x) => marcados.has(x.p.id));
+  sel.forEach((x) => { x.p.preco[x.p.preco.length - 1] = x.sug; });
+  $("#aplicado").hidden = false;
+  $("#aplicado").innerHTML = `<b>${sel.length} preço(s) aplicado(s)</b> com vigência a partir de hoje: ${sel.map((x) => x.p.nome).join(", ")}. No sistema, eles entram na fila de envio ao PDV — só valem no caixa depois de enviados.`;
+  marcados.clear(); pintarPrecificar();
+});
+
+/* ============================================================== preços */
+function grafico(el, series, opcoes) {
+  const W = 1080, H = opcoes.alto, m = { e: 54, d: 128, t: 14, b: 30 };
+  const todos = series.flatMap((s) => s.valores.filter((v) => v != null));
+  if (!todos.length) { el.innerHTML = `<p style="color:var(--suave);padding:18px 0">Sem dados para desenhar.</p>`; return; }
+  const max = Math.max(...todos) * 1.12, min = opcoes.zero ? 0 : Math.min(...todos) * 0.9;
+  const x = (i) => m.e + i * (W - m.e - m.d) / (MESES.length - 1), y = (v) => m.t + (H - m.t - m.b) * (1 - (v - min) / (max - min));
+  const passos = 4, grade = [...Array(passos + 1)].map((_, k) => min + (max - min) * k / passos);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${opcoes.rotulo}">`;
+  grade.forEach((g) => { svg += `<line x1="${m.e}" x2="${W - m.d}" y1="${y(g)}" y2="${y(g)}" stroke="#d8ded0" stroke-width="1"/><text x="${m.e - 8}" y="${y(g) + 4}" text-anchor="end" font-size="12" fill="#5d6c61">${opcoes.eixo(g)}</text>`; });
+  MESES.forEach((mes, i) => { if (i % 2 === 0 || i === MESES.length - 1) svg += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle" font-size="12" fill="#5d6c61">${mes}</text>`; });
+  series.forEach((s) => {
+    // Linha em degrau: preço e custo valem até a próxima mudança — ligar os pontos em diagonal inventaria valores no meio do mês.
+    let d = "", pena = false;
+    s.valores.forEach((v, i) => { if (v == null) { pena = false; return; } d += pena ? `H${x(i)}V${y(v)}` : `M${x(i)},${y(v)}`; pena = true; });
+    svg += `<path d="${d}" fill="none" stroke="${s.cor}" stroke-width="2.5" stroke-linejoin="round" ${s.traco ? `stroke-dasharray="${s.traco}"` : ""}/>`;
+    const ult = s.valores.at(-1);
+    if (ult != null) svg += `<text x="${W - m.d + 8}" y="${y(ult) + 4}" font-size="12.5" fill="#14201a"><tspan font-weight="600">${s.nome}</tspan> ${opcoes.valor(ult)}</text>`;
+    (s.marcas || []).forEach((i) => { const v = s.valores[i]; svg += `<rect x="${x(i) - 5}" y="${y(v) - 5}" width="10" height="10" transform="rotate(45 ${x(i)} ${y(v)})" fill="${s.cor}" stroke="#fcfdfa" stroke-width="2"/>`; });
+  });
+  svg += `<line id="mira" y1="${m.t}" y2="${H - m.b}" stroke="#14201a" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/></svg><div class="dica" hidden></div>`;
+  el.innerHTML = svg;
+  const mira = el.querySelector("#mira"), dica = el.querySelector(".dica"), caixa = el.querySelector("svg");
+  caixa.addEventListener("mousemove", (ev) => {
+    const r = caixa.getBoundingClientRect(), px = (ev.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(MESES.length - 1, Math.round((px - m.e) / ((W - m.e - m.d) / (MESES.length - 1)))));
+    mira.setAttribute("x1", x(i)); mira.setAttribute("x2", x(i)); mira.setAttribute("visibility", "visible");
+    dica.hidden = false; dica.style.left = (x(i) / W * r.width) + "px"; dica.style.top = "18px";
+    dica.innerHTML = `<b>${MESES[i]}</b><br>` + opcoes.dica(i);
+  });
+  caixa.addEventListener("mouseleave", () => { mira.setAttribute("visibility", "hidden"); dica.hidden = true; });
+}
+function pintarPrecos() {
+  const p = PRODUTOS.find((q) => q.id === +$("#produto").value);
+  const margem = p.preco.map((v, i) => p.custo[i] == null ? null : (v - p.custo[i]) / v * 100);
+  const mudancas = p.preco.map((v, i) => i > 0 && v !== p.preco[i - 1] ? i : -1).filter((i) => i >= 0);
+  const c0 = p.custo.find((v) => v != null), cN = p.custo.at(-1);
+  $("#resumo-precos").innerHTML = `
+    <div class="ladrilho"><small>Preço em 12 meses</small><b>${reais(p.preco[0])} → ${reais(p.preco.at(-1))}</b><small>${pct((p.preco.at(-1) / p.preco[0] - 1) * 100)} · ${mudancas.length} mudança(s)</small></div>
+    <div class="ladrilho"><small>Custo em 12 meses</small><b>${reais(c0 ?? null)} → ${reais(cN)}</b><small>${c0 ? pct((cN / c0 - 1) * 100) : "sem custo conhecido"}</small></div>
+    <div class="ladrilho"><small>Margem bruta</small><b>${pct(margem[0])} → ${pct(margem.at(-1))}</b><small>${margem[0] != null ? (margem.at(-1) - margem[0]).toLocaleString("pt-BR", { maximumFractionDigits: 1, signDisplay: "always" }) + " pontos" : ""}</small></div>`;
+  grafico($("#graf-valores"), [
+    { nome: "Preço", cor: "#2a8a5c", valores: p.preco, marcas: mudancas },
+    { nome: "Custo", cor: "#3d6fc4", valores: p.custo, traco: "6 4" }],
+    { alto: 300, zero: true, rotulo: `Preço de venda e custo de ${p.nome} nos últimos 12 meses`, eixo: (v) => "R$ " + v.toFixed(0), valor: reais,
+      dica: (i) => `Preço <b>${reais(p.preco[i])}</b><br>Custo <b>${reais(p.custo[i])}</b><br>Margem <b>${pct(margem[i])}</b>` });
+  grafico($("#graf-margem"), [{ nome: "Margem", cor: "#2a8a5c", valores: margem }],
+    { alto: 170, zero: false, rotulo: `Margem bruta de ${p.nome}, em percentual do preço`, eixo: (v) => v.toFixed(0) + "%", valor: pct, dica: (i) => `Margem <b>${pct(margem[i])}</b>` });
+  $("#tabela-precos").innerHTML = `<table><thead><tr><th>Mês</th><th class="num">Preço</th><th class="num">Custo</th><th class="num">Margem</th></tr></thead><tbody>` +
+    MESES.map((mes, i) => `<tr><td>${mes}</td><td class="num mono">${reais(p.preco[i])}</td><td class="num mono">${reais(p.custo[i])}</td><td class="num mono">${pct(margem[i])}</td></tr>`).join("") + `</tbody></table>`;
+  $("#aviso-serie").innerHTML = p.origem === "sem custo"
+    ? `<b>Este produto ainda não tem custo.</b> Sem ficha técnica não há linha de custo nem margem — só o preço.`
+    : p.origem === "ficha"
+      ? `<b>De onde vem o custo:</b> o custo da ficha congelado em cada venda — o que o prato custava no dia em que foi vendido. Dia sem venda não tem ponto; o sistema não inventa a linha.`
+      : `<b>De onde vem o custo:</b> o custo médio do estoque depois de cada compra, guardado no razão.`;
+}
+$("#produto").innerHTML = PRODUTOS.map((p) => `<option value="${p.id}">${p.nome}</option>`).join("");
+$("#produto").value = 5;
+$("#produto").addEventListener("change", pintarPrecos);
+$("#ver-tabela").addEventListener("click", (e) => { const t = $("#tabela-precos"); t.hidden = !t.hidden; e.target.setAttribute("aria-pressed", String(!t.hidden)); e.target.textContent = t.hidden ? "ver como tabela" : "esconder a tabela"; });
+
+/* ============================================================== abas */
+document.querySelector(".abas").addEventListener("click", (e) => {
+  const aba = e.target.dataset.aba; if (!aba) return;
+  document.querySelectorAll(".abas button").forEach((b) => b.setAttribute("aria-selected", String(b === e.target)));
+  ["config", "precificar", "precos"].forEach((a) => { $("#aba-" + a).hidden = a !== aba; });
+  if (aba === "precificar") pintarPrecificar();
+  if (aba === "precos") pintarPrecos();
+});
+pintarConfig();
+</script>
+</body>
+</html>
