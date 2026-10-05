@@ -23,7 +23,7 @@ entregue.
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
-| [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `grupos_cmv`, `ciclos`, `relatorios` |
+| [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
@@ -141,7 +141,7 @@ memória do módulo.
 ## CMV
 
 - **Rotas:** `cmv.py`
-- **Serviços:** `cmv.py`, `cmv_grupos.py`, `periodos.py`, `relatorios.py`, `memoria_calculo.py`
+- **Serviços:** `cmv.py`, `cmv_grupos.py`, `periodos.py`, `relatorios.py`, `memoria_calculo.py`, `cmv_conferencia.py` (o que distorce o período, antes de fechar)
 - **Telas:** `cmv/`
 - **Permissões:** `cmv.painel`, `cmv.relatorios`, `cmv.fechamento`, `cmv.grupos`, `cmv.reabrir`
 

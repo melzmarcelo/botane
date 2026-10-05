@@ -15,6 +15,7 @@ import Movimentacao from "./movimentacao";
 import Cascata from "./cascata";
 import Quebra, { EIXOS, type Eixo } from "./quebra";
 import MemoriaDeCalculo from "./memoria";
+import ConferenciaDoFechamentoLista from "./conferencia";
 
 import { pct, qtd } from "@/lib/numeros";
 type Apuracao = {
@@ -187,6 +188,9 @@ export default function PaginaCmv() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /** Quantas pendências da conferência mudam o número — muda o rótulo do botão. */
+  const [distorcem, setDistorcem] = useState(0);
 
   async function fechar() {
     setOcupado(true);
@@ -520,7 +524,10 @@ export default function PaginaCmv() {
               ) : pode("cmv.fechamento") ? (
                 <button
                   className="btn btn-secundario"
-                  onClick={() => setConfirmando({ tipo: "fechar" })}
+                  onClick={() => {
+                    setDistorcem(0);
+                    setConfirmando({ tipo: "fechar" });
+                  }}
                   aria-busy={ocupado} disabled={ocupado}
                 >
                   Fechar {a.rotulo ? `— ${a.rotulo}` : "o período"}
@@ -757,7 +764,7 @@ export default function PaginaCmv() {
       {confirmando?.tipo === "fechar" && (
         <Confirmacao
           titulo="Fechar o período"
-          rotuloConfirmar="Fechar"
+          rotuloConfirmar={distorcem > 0 ? "Fechar assim mesmo" : "Fechar"}
           ocupado={ocupado}
           aoCancelar={() => setConfirmando(null)}
           aoConfirmar={() => {
@@ -774,6 +781,9 @@ export default function PaginaCmv() {
             período passa a ser recusado — só quem tem a permissão de lançamento retroativo
             passa.
           </p>
+          {/* 🔑 O que ainda distorce o período, ANTES do botão. Avisa e não
+              impede: quem fecha decide, mas decide vendo. */}
+          <ConferenciaDoFechamentoLista competencia={inicio} aoSaber={setDistorcem} />
         </Confirmacao>
       )}
 

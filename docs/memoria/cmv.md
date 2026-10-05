@@ -14,6 +14,30 @@
   (produção, transferência e ajuste inclusive) — a soma que vira CMV continua sendo só a de
   compras; são perguntas diferentes.
 
+- 🔑 **A conferência ANTES de fechar o período** (`services/cmv_conferencia.py`,
+  `GET /cmv/fechamentos/conferencia`, `cmv/conferencia.tsx`, 05/10/2026). Fechar congelava o que
+  estivesse lá: no ar, setembro tinha R$ 235 mil de receita e CMV real de R$ 3 mil, com 94 notas
+  conciliadas sem lançar, saldo negativo e 797 saídas com custo provisório — e nada no caminho de
+  quem clicava em "Fechar" dizia isso.
+  🔑 **AVISA, não impede.** Fechar com pendência é decisão de quem fecha (a nota do dia 30 chega
+  no dia 5, o contador não espera); travar empurraria a casa a não fechar nunca, e sem fechamento
+  nada impede lançar para trás. O botão vira **"Fechar assim mesmo"**, e a auditoria do
+  fechamento grava com que pendências ele foi feito (`depois.pendencias`).
+  ⚠️ **Do PERÍODO e da LOJA, não "de agora"**: o alerta do início conta os últimos 30 dias; aqui
+  a pergunta é o que distorce ESTE recorte. A exceção é o saldo negativo, que só existe como
+  estado de hoje — e o título diz "hoje".
+  ⚠️ **O período sai da MESMA pergunta do fechamento** (`periodos.periodo_do_dia`): conferir um
+  recorte e fechar outro seria pior que não conferir.
+  ⚠️ **Dois pesos**: `distorce` (muda o CMV: nota não lançada, custo provisório, saldo negativo,
+  venda sem vínculo, estoque inicial ou CMV negativos, movimentação que não fecha) e `atencao`
+  (inventário aberto, cobertura de ficha abaixo de 50%).
+  ⚠️ **Cada ponto é uma LINHA que abre o detalhe**: a janela de confirmar tem os botões no fim
+  do corpo, e a lista aberta os empurrava para baixo da dobra.
+  ⚠️ A tolerância da identidade é de 2 centavos POR PRODUTO: um centavo é arredondamento do
+  custo médio, e alarme que sempre toca ninguém escuta.
+  Cobertura: `tests/smoke_cmv_conferencia.py` (17 checagens, por DELTA — a base local tem
+  pendência de verdade).
+
 - **`services/relatorios.py`** (19/08/2026): os dois relatórios do dono. `cmv_por_grupo`
   quebra a MESMA conta do CMV por setor ou categoria — **não é rateio**, e a soma dos grupos
   fecha com o CMV do período (o teste confere isso). Produto sem grupo aparece como "Sem

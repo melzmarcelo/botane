@@ -17,7 +17,7 @@ from models.cmv import (
 from models.produtos import TIPOS as TIPOS_PRODUTO
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
-from services import cmv_grupos, memoria_calculo, periodos, relatorios
+from services import cmv_conferencia, cmv_grupos, memoria_calculo, periodos, relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
 
@@ -545,6 +545,28 @@ def listar_fechamentos(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) 
     return linhas
 
 
+@router.get("/fechamentos/conferencia")
+def conferir_antes_de_fechar(competencia: date,
+                             ctx: Contexto = Depends(requer_permissao("cmv.fechamento"))
+                             ) -> dict:
+    """O que ainda distorce o período que se está prestes a fechar.
+
+    🔑 A lista que a janela de "Fechar" mostra ANTES do botão: nota do período
+    não lançada, saída com custo provisório, saldo negativo, venda sem vínculo,
+    movimentação que não fecha. Avisa, não impede — ver
+    `services/cmv_conferencia.py`.
+    ⚠️ O período sai da MESMA pergunta do fechamento (`periodos.periodo_do_dia`):
+    conferir um recorte e fechar outro seria pior que não conferir.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        c = periodos.config(cur, id_unidade)
+        inicio, fim = periodos.periodo_do_dia(
+            competencia, c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
+        r = cmv_conferencia.conferir(cur, id_unidade, inicio, fim)
+    return r | {"rotulo": periodos.rotulo(inicio, fim, c["ciclo"])}
+
+
 @router.post("/fechamentos", status_code=201)
 def fechar(body: FechamentoRequest,
            ctx: Contexto = Depends(requer_permissao("cmv.fechamento"))) -> dict:
@@ -615,6 +637,12 @@ def fechar(body: FechamentoRequest,
                         "não o atravesse."),
             )
 
+        # 🔑 **O fechamento registra com que pendências foi feito.** A conferência
+        # avisa e não impede; o que ela não pode é sumir — "quem fechou setembro
+        # com 94 notas de fora?" é a pergunta de depois, e a resposta mora na
+        # auditoria.
+        pendencias = cmv_conferencia.conferir(cur, id_unidade, competencia, fim)
+
         r = motor.apurar(cur, id_unidade, competencia, fim)
         cur.execute(
             """INSERT INTO cmv_fechamentos
@@ -646,12 +674,15 @@ def fechar(body: FechamentoRequest,
                             depois={"ciclo": ciclo, "competencia": str(competencia),
                                     "inicio": str(competencia), "fim": str(fim),
                                     "cmv_real": float(r["cmv_real"]),
-                                    "variancia": float(r["variancia"])},
+                                    "variancia": float(r["variancia"]),
+                                    "pendencias": {i["chave"]: i["quantidade"]
+                                                   for i in pendencias["itens"]}},
                             id_unidade=id_unidade)
     return {"id": novo, "ciclo": ciclo, "competencia": str(competencia),
             "inicio": str(competencia), "fim": str(fim), "rotulo": nome,
             "cmv_real": float(r["cmv_real"]), "variancia": float(r["variancia"]),
             "produtos": produtos_congelados,
+            "pendencias": len(pendencias["itens"]),
             # ⚠️ "Período fechado: <nome>" e não "<Nome> fechado": o rótulo tanto
             # é feminino ("semana de 17 a 23") quanto masculino ("agosto de
             # 2026"), e concordar com os dois exigiria o sistema saber o gênero
