@@ -68,8 +68,8 @@ def conferir(cur, id_unidade: int, inicio: date, fim: date) -> dict:
            AND data_movimento >= %(inicio)s AND data_movimento < %(limite)s""", p)
     juntar("custo_provisorio", IMPEDE_O_NUMERO, "Saída com custo provisório no período",
            r.get("n"),
-           "Saiu sem saldo e usou o último custo conhecido. Lançada a entrada que faltava, "
-           "reprocessar o produto em Saldos e movimentos acerta o custo.",
+           "Saiu sem saldo e usou o último custo conhecido — o custo dessas saídas é "
+           "aproximado até a entrada que faltava ser lançada.",
            "/estoque")
 
     r = _um(cur, """
@@ -128,7 +128,7 @@ def conferir(cur, id_unidade: int, inicio: date, fim: date) -> dict:
     juntar("movimentacao_nao_fecha", IMPEDE_O_NUMERO,
            "A movimentação não fecha em algum produto", abertos,
            "Inicial + entradas − saídas não dá o final. A causa comum é lançamento com data "
-           "de trás; reprocessar o produto em Saldos e movimentos põe a corrente em ordem.",
+           "de trás, feito depois de outros movimentos do mesmo produto.",
            "/cmv", diferenca)
 
     cobertura = float(apuracao.get("cobertura_ficha_pct") or 0)
