@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Aviso } from "@/components/ui";
+import MarcaDeEntrada from "@/components/marca-de-entrada";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -29,13 +30,7 @@ export default function Login() {
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
       <div className="w-full max-w-[380px]">
-        <h1 className="text-[42px] font-extrabold leading-[0.95] tracking-[-0.035em]">
-          Botané
-          <span className="block text-[26px] font-semibold tracking-[-0.02em] text-erva">
-            Deli e Café
-          </span>
-        </h1>
-        <p className="rotulo mt-3">Gestão de custo · CMV</p>
+        <MarcaDeEntrada grande />
 
         <div
           className="mt-5 h-[18px] border-b border-linha2 opacity-80"

@@ -383,7 +383,7 @@ export default function PaginaNota() {
                   <th className="num w-[92px] min-w-[92px]">Valor un.</th>
                   <th className="num w-[96px] min-w-[96px]">Total do item</th>
                   <th className="num w-[92px] min-w-[92px]">Frete rateado</th>
-                  <th className="min-w-[176px]">Produto no Botané</th>
+                  <th className="min-w-[176px]">Produto no sistema</th>
                   <th className="min-w-[96px]">Entra em</th>
                   <th className="num w-[100px] min-w-[100px]">Custo un.</th>
                 </tr>

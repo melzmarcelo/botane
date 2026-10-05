@@ -259,7 +259,7 @@ def _montar(evento: str, variaveis: list[str]) -> str:
 def _casa(cur, id_unidade: int) -> str:
     cur.execute("SELECT nome_fantasia, razao_social FROM empresa WHERE id = 1")
     e = cur.fetchone() or {}
-    return e.get("nome_fantasia") or e.get("razao_social") or "Botané"
+    return e.get("nome_fantasia") or e.get("razao_social") or "Nossa casa"
 
 
 def enfileirar(cur, id_unidade: int, evento: str, chave: str, telefone: str | None,

@@ -83,7 +83,7 @@ export default function PaginaIntegracoes() {
         <p className="rotulo">Administração</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Integrações</h1>
         <ExplicaTela>
-          O que o Botané troca com o mundo lá fora. Nada aqui é pré-requisito — o sistema opera
+          O que o sistema troca com o mundo lá fora. Nada aqui é pré-requisito — o sistema opera
           inteiro sem nenhuma delas.
         </ExplicaTela>
       </header>

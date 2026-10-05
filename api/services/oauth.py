@@ -26,6 +26,8 @@ from urllib.parse import urlencode, urlsplit
 import auditoria
 from config import API_URL_PUBLICA
 from database import get_cursor
+from services import marca
+from services import marca
 from seguranca import PREFIXO_TOKEN_API, gerar_token_api, hash_refresh
 
 ESCOPO = "botane.leitura"
@@ -98,7 +100,7 @@ def metadados_servidor() -> dict:
 def metadados_recurso() -> dict:
     return {
         "resource": url_mcp(),
-        "resource_name": "Botané",
+        "resource_name": marca.casa(),
         "authorization_servers": [emissor()],
         "scopes_supported": [ESCOPO, ESCOPO_ESCRITA],
         "bearer_methods_supported": ["header"],

@@ -42,10 +42,15 @@ from services import termo_consentimento as termo
 from services import fidelidade
 from services import whatsapp
 from services import pedidos as pedidos_servico
+from services import marca
 from models.pedidos import PedidoDoCliente, PedidoDoSite
 from models.fidelidade import CheckinDoSite, CodigoDoCaixa, PedidoDeCodigo
 
 router = APIRouter(prefix="/publico", tags=["site do cliente"])
+
+# Como o site chama a casa enquanto o cadastro da empresa está sem nome. ⚠️ Nunca
+# o nome de uma casa de verdade: o cliente veria a marca de outra empresa.
+_CASA_SEM_NOME = "Nossa casa"
 
 
 def _so_digitos(v: str | None) -> str | None:
@@ -79,6 +84,19 @@ def _casa_aberta(cur, id_unidade: int) -> dict:
     if not loja or not reservas_servico.ligado(cur, id_unidade):
         raise HTTPException(status_code=404, detail="Casa não encontrada.")
     return dict(loja)
+
+
+@router.get("/marca")
+def marca_da_casa() -> dict:
+    """O nome e a logo da casa, para a tela de ENTRADA do sistema.
+
+    🔑 **Pedido do dono (05/10/2026):** o login deixou de trazer o nome de uma
+    casa escrito no código — mostra o que está em Administração ▸ Empresa.
+    ⚠️ Pública por necessidade (é a tela de quem ainda não entrou), e por isso
+    devolve só nome e logo. Ver `services/marca.py`.
+    """
+    with get_cursor() as cur:
+        return marca.publica(cur)
 
 
 @router.get("/lojas")
@@ -139,7 +157,7 @@ def casa(id_unidade: int) -> dict:
 
         return {
             "loja": loja["apelido"] or loja["nome"],
-            "casa": e.get("nome_fantasia") or e.get("razao_social") or "Botané",
+            "casa": e.get("nome_fantasia") or e.get("razao_social") or _CASA_SEM_NOME,
             "cidade": loja.get("cidade") or e.get("cidade"),
             "uf": loja.get("uf") or e.get("uf"),
             "endereco": endereco or None,
@@ -278,7 +296,7 @@ def termo_de_consentimento(id_unidade: int) -> dict:
         e = dict(cur.fetchone() or {})
     zap = _so_digitos(loja.get("whatsapp")) or _so_digitos(e.get("whatsapp"))
     return termo.termo(
-        casa=e.get("nome_fantasia") or e.get("razao_social") or "Botané",
+        casa=e.get("nome_fantasia") or e.get("razao_social") or _CASA_SEM_NOME,
         razao_social=e.get("razao_social"),
         email=loja.get("email") or e.get("email"),
         whatsapp=zap or None,

@@ -347,7 +347,7 @@ export default function Omie() {
 
           <p className="text-[13px] text-suave">
             A chave é guardada cifrada e nunca volta pela API — a tela mostra só os últimos
-            dígitos. Na fase 1 o Botané <b>só lê</b> do Omie: nada é escrito lá.
+            dígitos. Na fase 1 o sistema <b>só lê</b> do Omie: nada é escrito lá.
           </p>
 
           {/* ⚠️ **A busca automática nasce desligada.** Cada busca consome cota

@@ -203,7 +203,7 @@ export default function PaginaEmpresa() {
             <input {...entrada("site")} />
           </Campo>
           <Campo rotulo="Instagram">
-            <input {...entrada("instagram")} placeholder="@botane" />
+            <input {...entrada("instagram")} placeholder="@suaempresa" />
           </Campo>
         </div>
       </Cartao>

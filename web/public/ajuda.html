@@ -1,4 +1,4 @@
-<title>Botané por dentro</title>
+<title>O sistema por dentro</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
@@ -266,8 +266,8 @@
 </style>
 
 <header class="capa">
-  <span class="selo">Botané Deli e Café · versão 1.1.63 · setembro de 2026</span>
-  <h1>Botané por dentro</h1>
+  <span class="selo">Manual do sistema · versão 1.1.63 · setembro de 2026</span>
+  <h1>O sistema por dentro</h1>
   <p class="linha-fina">
     Todos os processos do sistema e o caminho que cada dado percorre — de onde ele entra,
     o que acontece com ele, e onde vira número. Do estoque ao site do cliente.
@@ -303,7 +303,7 @@
       <li><a href="#fidelidade">17 · Fidelidade</a></li>
       <li><a href="#whatsapp">18 · WhatsApp</a></li>
       <li class="grupo"><span class="rotulo">Conectado</span></li>
-      <li><a href="#claude">19 · O Claude dentro do Botané</a></li>
+      <li><a href="#claude">19 · O Claude dentro do sistema</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
@@ -1178,7 +1178,7 @@
       <div class="regra">
         <p class="rotulo">Nenhum imposto é enviado</p>
         <p>
-          Os campos fiscais estão preenchidos no PDV e o Botané não tem nenhum deles. Mandá-los
+          Os campos fiscais estão preenchidos no PDV e o sistema não tem nenhum deles. Mandá-los
           <em>zerados</em> derrubaria a emissão fiscal da casa — então eles simplesmente não
           entram no que sai daqui.
         </p>
@@ -2064,10 +2064,10 @@
         dentro infla receita e CMV teórico ao mesmo tempo.
       </p>
 
-      <h3>Por que o PDV mostra mais cupons que o Botané</h3>
+      <h3>Por que o PDV mostra mais cupons que o sistema</h3>
       <p>
         Não mostra mais: mostra a mesma coisa contada de outro jeito. O PDV conta os
-        <strong>cupons emitidos</strong>, incluindo os cancelados; o Botané conta as
+        <strong>cupons emitidos</strong>, incluindo os cancelados; o sistema conta as
         <strong>vendas</strong>. O painel do dia diz a conta em português —
         <em>&ldquo;10 cupom(ns) cancelado(s) no PDV, somando R$ 1.529,00 — lá o dia tem 164
         cupons&rdquo;</em>. Some os dois e o número do PDV aparece.
@@ -2080,7 +2080,7 @@
       <div class="regra">
         <p class="rotulo">O valor é o que a casa recebeu</p>
         <p>
-          O desconto do cupom vem junto e é descontado da receita. Sem isso o Botané somaria as
+          O desconto do cupom vem junto e é descontado da receita. Sem isso o sistema somaria as
           etiquetas em vez do que foi cobrado — e receita é o <em>denominador</em> do food cost:
           inflada, ela faz o food cost parecer melhor do que é.
         </p>
@@ -2453,7 +2453,7 @@
       </p>
       <p>
         Em <strong>Usuários</strong>, cada pessoa pode ter <strong>chaves de acesso</strong> —
-        para uma máquina ou um programa falar com o Botané sem digitar senha (é o que o
+        para uma máquina ou um programa falar com o sistema sem digitar senha (é o que o
         <a href="#claude">Claude</a> usa). A chave aparece <strong>uma vez só</strong>, tem
         validade, pode ser <em>só de leitura</em> e age exatamente como o usuário dono dela:
         mesmo papel, mesmas lojas. Revogar não apaga — o registro de quem usou e até quando
@@ -3004,7 +3004,7 @@
         ainda não confirmou.
       </p>
       <div class="regra perigo">
-        <p class="rotulo">O pedido NÃO vira venda no Botané</p>
+        <p class="rotulo">O pedido NÃO vira venda no sistema</p>
         <p>
           A casa lança o pedido no <strong>PDV</strong>, como sempre — e a venda chega pela busca de
           sempre, com estoque, receita e CMV. Aqui a pessoa só marca <strong>“Lançado no PDV”</strong>,
@@ -3161,15 +3161,15 @@
 
     <!-- =============================================================== claude -->
     <section id="claude">
-      <h2>19 · O Claude dentro do Botané</h2>
+      <h2>19 · O Claude dentro do sistema</h2>
       <p class="chamada">
         Perguntar ao sistema em português, e pedir que ele faça.
       </p>
 
       <p>
-        O Botané tem um <strong>conector</strong> para o Claude. No claude.ai, adiciona-se como
-        conector personalizado o endereço <code>https://sistema.botanedeliecafe.com.br/api/mcp</code>
-        e entra-se com o próprio login do Botané. A partir daí dá para perguntar
+        O sistema tem um <strong>conector</strong> para o Claude. No claude.ai, adiciona-se como
+        conector personalizado o endereço que aparece em <strong>Perfil ▸ Claude</strong>
+        e entra-se com o próprio login do sistema. A partir daí dá para perguntar
         <em>“quanto custa o cappuccino?”</em>, <em>“o que subiu de preço este mês?”</em>,
         <em>“qual o CMV do período?”</em>, <em>“quais reservas temos sábado?”</em> — o Claude
         consulta a casa inteira: produtos, fichas, estoque, lotes e vencimentos, notas, vendas,
@@ -3511,7 +3511,7 @@
 
 <footer>
   <p style="margin:0">
-    Botané Deli e Café · manual de referência, atualizado na versão 1.1.60 (28/09/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

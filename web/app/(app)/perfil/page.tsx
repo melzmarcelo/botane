@@ -123,7 +123,7 @@ export default function PaginaPerfil() {
         <ChavesDeAcesso
           fonte={minhasChaves}
           titulo="Claude"
-          descricao="Consulte o Botané conversando com o Claude: produtos, estoque, compras, vendas e CMV, com as suas permissões e lojas. Só leitura — o Claude não altera nada."
+          descricao="Consulte o sistema conversando com o Claude: produtos, estoque, compras, vendas e CMV, com as suas permissões e lojas. Só leitura — o Claude não altera nada."
           topo={<ConectarClaude />}
         />
       )}
@@ -138,7 +138,7 @@ function ConectarClaude() {
     <div className="mb-5 flex flex-col gap-2">
       <p className="text-[14px]">
         No claude.ai: <b>Configurações ▸ Conectores ▸ Adicionar conector personalizado</b>, e
-        cole o endereço abaixo. O Claude abre a tela de entrada do Botané — use o seu e-mail e
+        cole o endereço abaixo. O Claude abre a tela de entrada do sistema — use o seu e-mail e
         a sua senha.
       </p>
       <div className="flex flex-wrap items-center gap-2">

@@ -22,6 +22,8 @@ import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 
+from services import marca
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
@@ -84,10 +86,10 @@ def csv_de(linhas: list[dict], colunas: list[tuple[str, str]],
     if titulo:
         escritor.writerow([titulo])
         # ⚠️ O carimbo é do ARQUIVO, não de cada quadro: os anexos vinham com
-        # "Botané Deli e Café — gerado em…" repetido embaixo de cada título, e
+        # "<casa> — gerado em…" repetido embaixo de cada título, e
         # a folha de um produto ficava com a mesma linha três vezes.
         if com_carimbo:
-            escritor.writerow([f"Botané Deli e Café — gerado em "
+            escritor.writerow([f"{marca.casa()} — gerado em "
                                f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"])
         escritor.writerow([])
     if resumo:
@@ -367,7 +369,7 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
     doc = SimpleDocTemplate(
         buffer, pagesize=pagina,
         leftMargin=margem, rightMargin=margem, topMargin=margem, bottomMargin=16 * mm,
-        title=titulo or "Botané", author="Botané Deli e Café",
+        title=titulo or "Relatório", author=(empresa or {}).get("nome") or "Sistema de gestão",
     )
 
     normal = ParagraphStyle("corpo", fontName="Helvetica", fontSize=7.5, leading=9.5,
@@ -423,7 +425,7 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
             # da casa e a data — e a data agora mora no rodapé, ao lado de quem
             # emitiu. Repetido em dois lugares, o dado envelhece num deles.
             padrao = None if empresa else (
-                f"Botané Deli e Café — gerado em "
+                f"{marca.casa()} — gerado em "
                 f"{datetime.now().strftime('%d/%m/%Y às %H:%M')}")
             if subtitulo or padrao:
                 historia.append(Paragraph(_escapar(subtitulo or padrao), ParagraphStyle(
@@ -572,7 +574,7 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
         canvas.setFillColor(_SUAVE)
         # À esquerda o título: uma página solta na mesa precisa dizer de que
         # relatório ela é. Ao centro quem emitiu e quando. À direita, onde está.
-        canvas.drawString(margem, 9 * mm, titulo or "Botané Deli e Café")
+        canvas.drawString(margem, 9 * mm, titulo or (empresa or {}).get("nome") or "")
         if emissao:
             canvas.drawCentredString(pagina[0] / 2, 9 * mm, emissao)
         canvas.drawRightString(pagina[0] - margem, 9 * mm, f"Página {numero} de {total}")

@@ -207,7 +207,7 @@ export default function EmailSmtp() {
           <input
             className="campo"
             value={form.remetente_nome}
-            placeholder="Botané Deli e Café"
+            placeholder="O nome da sua empresa"
             onChange={(e) => setForm({ ...form, remetente_nome: e.target.value })}
           />
         </Campo>

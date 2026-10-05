@@ -7,6 +7,7 @@ import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { abrirBuscaDeTelas, EVENTO_EMPRESA } from "@/lib/eventos";
 import { gravarAtalhos, lerAtalhos, TETO_ATALHOS } from "@/lib/atalhos";
+import { NOME_SISTEMA } from "@/lib/marca";
 import { INICIO, blocosDoGrupo, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
 import { Carregando } from "@/components/ui";
 import { ConviteInstalar } from "@/components/pwa";
@@ -89,7 +90,7 @@ function Casca({ children }: { children: React.ReactNode }) {
       return novos;
     });
   const [marca, setMarca] = useState<{ nome: string; logo: string | null }>({
-    nome: "Botané Deli e Café",
+    nome: "",
     logo: null,
   });
 
@@ -111,7 +112,7 @@ function Casca({ children }: { children: React.ReactNode }) {
         )
         .then((e) =>
           setMarca({
-            nome: e.nome_fantasia || e.razao_social || "Botané Deli e Café",
+            nome: e.nome_fantasia || e.razao_social || NOME_SISTEMA,
             logo: urlArquivo(e.logo_url),
           }),
         )

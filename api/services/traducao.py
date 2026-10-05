@@ -66,8 +66,8 @@ ENTIDADES: dict[str, dict] = {
     },
 }
 
-_SISTEMA = """Você traduz o cardápio de um café e restaurante brasileiro (Botané Deli & Café, \
-em Blumenau) para turistas: para inglês ("en") e alemão ("de").
+_SISTEMA = """Você traduz o cardápio de um café e restaurante brasileiro{casa} \
+para turistas: para inglês ("en") e alemão ("de").
 
 Regras:
 - Tradução natural de cardápio, não literal. Capitalização normal (o original pode estar em \
@@ -83,6 +83,15 @@ Responda SÓ com JSON, sem comentário, no formato:
 {"itens": [{"chave": "...", "en": {"nome": "...", "descricao": "..."}, "de": {"nome": "...", "descricao": "..."}}]}"""
 
 
+def _casa(cur) -> str:
+    """" (Nome da casa, em Cidade)", ou vazio — o parêntese do prompt."""
+    cur.execute("SELECT nome_fantasia, razao_social, cidade FROM empresa WHERE id = 1")
+    e = cur.fetchone() or {}
+    nome = e.get("nome_fantasia") or e.get("razao_social")
+    partes = [p for p in (nome, e.get("cidade") and f"em {e['cidade']}") if p]
+    return f" ({', '.join(partes)})" if partes else ""
+
+
 def _config(cur) -> dict:
     """A chave e o modelo guardados. `chave` vazia = desligada."""
     cur.execute("""SELECT ativa, credenciais, config FROM integracoes
@@ -91,7 +100,7 @@ def _config(cur) -> dict:
     if not l:
         return {"ativa": False, "chave": "", "modelo": MODELO_PADRAO, "ilegivel": False}
     cred = segredos.decifrar(l["credenciais"])
-    return {"ativa": bool(l["ativa"]), "chave": (cred.get("chave") or "").strip(),
+    return {"casa": _casa(cur), "ativa": bool(l["ativa"]), "chave": (cred.get("chave") or "").strip(),
             "modelo": (l["config"] or {}).get("modelo") or MODELO_PADRAO,
             "ilegivel": segredos.ilegivel(l["credenciais"])}
 
@@ -116,7 +125,10 @@ def _chamar(itens: list[dict], cfg: dict) -> list[dict]:
         "https://api.anthropic.com/v1/messages",
         headers={"x-api-key": cfg["chave"], "anthropic-version": "2023-06-01",
                  "content-type": "application/json"},
-        json={"model": cfg["modelo"], "max_tokens": 4096, "system": _SISTEMA,
+        json={"model": cfg["modelo"], "max_tokens": 4096,
+              # A casa e a cidade vêm do cadastro da empresa — é contexto para o
+              # tradutor (cardápio de Blumenau não se traduz como o de Salvador).
+              "system": _SISTEMA.replace("{casa}", cfg.get("casa") or ""),
               "messages": [{"role": "user",
                             "content": json.dumps({"itens": itens}, ensure_ascii=False)}]},
         timeout=40,

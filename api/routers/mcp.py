@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from seguranca import contexto_da_credencial
 from services import mcp_ferramentas as catalogo
+from services import marca
 from services import oauth
 
 router = APIRouter(tags=["conector do Claude"])
@@ -56,7 +57,7 @@ def sem_fluxo() -> Response:
 async def mcp(request: Request) -> Response:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
-        return _nao_autorizado("Conecte-se ao Botané para usar este conector.")
+        return _nao_autorizado("Conecte-se ao sistema para usar este conector.")
     credencial = auth[7:]
     try:
         # ⚠️ `escreve=False`: o POST é do protocolo, não uma alteração. Cada
@@ -91,12 +92,14 @@ async def mcp(request: Request) -> Response:
     params = msg.get("params") or {}
 
     if metodo == "initialize":
+        casa = marca.casa()
         pedida = params.get("protocolVersion")
         resultado = {
             "protocolVersion": pedida if pedida in VERSOES else VERSOES[0],
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "botane", "title": "Botané", "version": request.app.version},
-            "instructions": catalogo.INSTRUCOES,
+            "serverInfo": {"name": "sistema-de-gestao", "title": casa,
+                           "version": request.app.version},
+            "instructions": catalogo.INSTRUCOES.format(casa=casa),
         }
     elif metodo == "ping":
         resultado = {}

@@ -280,7 +280,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Botané Deli e Café · API",
+    title="Sistema de gestão · API",
     version=VERSAO,
     description="Base cadastral e CMV para café/restaurante.",
     lifespan=lifespan,

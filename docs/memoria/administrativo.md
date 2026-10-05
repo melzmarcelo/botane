@@ -374,6 +374,36 @@
     ⚠️ A limpeza do `7f` revogava TODAS as conexões vivas e derrubava os blocos seguintes —
     agora acha a linha pelo **prefixo da chave**, não por "a primeira de escrita".
 
+## O nome que aparece é o da CASA, do cadastro (05/10/2026)
+
+🔑 **Pedido do dono:** o sistema nasceu para o Botané e passou a ser levado a outras casas do
+ramo — *"dentro do sistema, não deixar nada fixo como botane, e sim pegar do cadastro de
+empresa"*. O nome estava escrito em dezenas de lugares; cada um mostraria a marca de OUTRA
+empresa ao cliente novo.
+
+- **Duas palavras, e só duas.** *A casa* = nome fantasia (senão razão social) de Administração
+  ▸ Empresa. *O sistema* = como o produto se chama quando o assunto é ele ("entre no sistema").
+  ⚠️ O produto **ainda não tem nome próprio**: o genérico "Sistema de gestão" mora em DOIS
+  lugares — `api/services/marca.py` (`SISTEMA`) e `web/lib/marca.ts` (`NOME_SISTEMA`). Nome
+  escolhido, troca ali.
+- **`GET /publico/marca`** (sem login): nome e logo, **e só isso** — é a porta de quem ainda não
+  entrou. Alimenta o login, as telas de senha, o título/ícone da aba (`components/
+  marca-na-aba.tsx`, como o `pintarOIcone` do site já fazia) e o manifesto do PWA.
+- ⚠️ **`app/manifest.ts` virou dinâmico** (`force-dynamic`, busca a API no servidor com prazo de
+  2,5 s e cai no genérico se falhar): o nome do app instalado é o da casa. Os ÍCONES do PWA
+  continuam os PNG fixos (a xícara) — manifesto pede tamanhos exatos, e a logo cadastrada não
+  tem tamanho garantido.
+- ⚠️ **O login deixou de dizer "Gestão de custo · CMV"**: o sistema é inteiro, não um módulo.
+- Na API saem do cadastro: página do conector Claude (`routers/oauth.py`), `serverInfo` e
+  instruções do MCP, remetente e assuntos de e-mail, carimbo de CSV/PDF, prompt da tradução
+  (casa + cidade). Quem fala com o CLIENTE da casa (site, WhatsApp, fidelidade) usa "Nossa
+  casa" quando o cadastro está sem nome — nunca "Sistema de gestão".
+- ⚠️ **Ficou de fora, de propósito:** as chaves de `localStorage` (`botane.access`,
+  `botane.menu`…) — renomear derrubaria a sessão e as preferências de todo mundo; os comentários
+  do código; o nome do repositório, do banco e do domínio. E `site/index.html` continua com o
+  endereço da API e o `<title>` inicial do Botané: aquele arquivo é o site DE UMA casa, e casa
+  nova ganha o dela.
+
 ## O produto e suas tabelas pelo Claude (26/09/2026)
 
 🔑 **Pedido do dono:** *"liberar as opções do produto em tabelas periféricas, como onde o

@@ -1,17 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RegistroPWA } from "@/components/pwa";
+import MarcaNaAba from "@/components/marca-na-aba";
 
 export const metadata: Metadata = {
-  title: "Botané Deli e Café",
-  description: "Gestão de custo, fichas técnicas e CMV",
-  applicationName: "Botané Deli e Café",
+  // ⚠️ O nome daqui é só o ponto de partida: quem escreve o título e o ícone da
+  // aba é `MarcaNaAba`, com o nome e a logo do cadastro da empresa.
+  title: "Sistema de gestão",
+  description: "Cadastros, fichas técnicas, compras, estoque, vendas, CMV e reservas",
+  applicationName: "Sistema de gestão",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [{ url: "/favicon-32.png", sizes: "32x32", type: "image/png" }],
     apple: "/apple-touch-icon.png",
   },
-  appleWebApp: { capable: true, title: "Botané", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Gestão", statusBarStyle: "default" },
   other: {
     // O Next 16 emite só o nome padronizado `mobile-web-app-capable`, que o
     // Safari do iPhone só entende do iOS 17.4 em diante. Sem o nome antigo,
@@ -41,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <RegistroPWA />
+        <MarcaNaAba />
       </body>
     </html>
   );

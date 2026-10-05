@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from models.oauth import RegistroCliente
 from seguranca import carregar_contexto, conferir_credenciais
+from services import marca
 from services import oauth
 
 router = APIRouter(tags=["conector do Claude"])
@@ -97,10 +98,13 @@ button{font:600 15px/1 inherit;font-family:inherit;border-radius:999px;padding:1
 
 
 def _pagina(titulo: str, corpo: str, status: int = 200) -> HTMLResponse:
+    # O nome no alto é o da CASA, do cadastro — é o que diz à pessoa que ela está
+    # entregando a senha no lugar certo.
+    casa = html.escape(marca.casa())
     doc = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>{html.escape(titulo)} · Botané</title>
-<style>{_CSS}</style></head><body><main><p class="marca">Botané Deli &amp; Café</p>
+<meta name="robots" content="noindex"><title>{html.escape(titulo)} · {casa}</title>
+<style>{_CSS}</style></head><body><main><p class="marca">{casa}</p>
 {corpo}</main></body></html>"""
     # 🔑 Página que pede senha não pode abrir dentro de moldura alheia: é o
     # clickjacking clássico — o botão "Permitir" por baixo de outra coisa.
@@ -132,7 +136,7 @@ def _conferir_pedido(response_type: str | None, client_id: str | None,
     """
     c = oauth.cliente(client_id)
     if not c:
-        return None, _pagina_de_erro("Este aplicativo não está registrado no Botané.")
+        return None, _pagina_de_erro("Este aplicativo não está registrado neste sistema.")
     if not redirect_uri or redirect_uri not in c["redirect_uris"]:
         return None, _pagina_de_erro("O endereço de retorno não confere com o registrado.")
 
@@ -164,15 +168,15 @@ def _formulario(c: dict, campos: dict[str, str | None], erro: str = "",
     volta = urlsplit(campos["redirect_uri"] or "")
     aviso = f'<div class="erro" role="alert">{html.escape(erro)}</div>' if erro else ""
     corpo = f"""
-<h1>Conectar ao Botané</h1>
+<h1>Conectar ao sistema</h1>
 <div class="quem"><b>{html.escape(c['nome'])}</b>
-quer consultar o Botané em seu nome.<br>
+quer consultar o sistema em seu nome.<br>
 <span class="suave">Vai voltar para <code>{html.escape(volta.netloc)}</code></span></div>
 <p>O aplicativo vai poder <b>ler</b>, com as suas permissões e lojas:</p>
 <ul class="suave"><li>produtos, fichas técnicas e custos</li>
 <li>estoque, notas de compra e vendas</li><li>CMV e relatórios</li></ul>
 <p class="suave" style="margin-top:10px">Alterar, só se você marcar a caixa abaixo. Dá para
-desconectar a qualquer momento no Botané, em Perfil ▸ Claude.</p>
+desconectar a qualquer momento no sistema, em Perfil ▸ Claude.</p>
 <form method="post" action="autorizar">{aviso}{escondidos}
 <label for="email">E-mail</label>
 <input id="email" name="email" type="email" autocomplete="username" required
@@ -190,7 +194,7 @@ Sem marcar, ele só consulta.</span></label>
 <button class="sim" name="decisao" value="permitir">Entrar e permitir</button>
 <button class="nao" name="decisao" value="negar" formnovalidate>Cancelar</button>
 </div></form>"""
-    return _pagina("Conectar ao Botané", corpo)
+    return _pagina("Conectar ao sistema", corpo)
 
 
 @router.get("/oauth/autorizar", response_class=HTMLResponse)
@@ -248,7 +252,7 @@ def autorizar(response_type: str | None = Form(None), client_id: str | None = Fo
     # inversa, quem não pode conectar trocaria a senha para só então descobrir.
     if u["trocar_senha"]:
         return _formulario(c, campos, "Você precisa trocar a senha antes. Entre no "
-                                      "Botané pelo navegador, troque, e volte aqui.", email,
+                                      "sistema pelo navegador, troque, e volte aqui.", email,
                            quer_escrever)
 
     codigo = oauth.emitir_codigo(c, u["id"], redirect_uri, code_challenge, resource,

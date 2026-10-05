@@ -85,7 +85,7 @@ export function ConviteInstalar() {
   return (
     <div className="cartao nao-imprimir mb-5 flex flex-wrap items-center justify-between gap-3 border-erva/30 bg-erva-claro p-4">
       <p className="max-w-[60ch] text-[14.5px]">
-        <b>Deixe o Botané na tela inicial do celular.</b>{" "}
+        <b>Deixe o sistema na tela inicial do celular.</b>{" "}
         {ios ? (
           <span className="text-suave">
             No iPhone: toque em Compartilhar (o quadrado com a seta) e depois em “Adicionar à

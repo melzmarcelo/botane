@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Botané Deli e Café — Reservas</title>
+<title>Botané Deli e Café</title>
 <meta name="description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
 <meta name="theme-color" content="#3C4A3E">
 <!-- 🔑 **O ícone da aba é a LOGO CADASTRADA**, trocada em tempo de execução por
@@ -1268,7 +1268,10 @@ async function carregarCasa() {
     return;
   }
   $("#nome-da-casa").textContent = casa.casa;
-  document.title = `${casa.casa} — ${t("Reservas")}`;
+  // 🔑 **Só o nome da casa** (pedido do dono, 05/10/2026): o site deixou de ser só
+  // de reservas — tem cardápio, pedido e fidelidade —, e o "— Reservas" na aba
+  // dizia menos do que ele faz.
+  document.title = casa.casa;
   pintarOIcone(casa.casa, casa.logo_url);
 
   // 🔑 **A logo CADASTRADA** (pedido do dono). Sem ela, o medalhão desenha o

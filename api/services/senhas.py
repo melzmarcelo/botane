@@ -22,7 +22,10 @@ from fastapi import HTTPException
 
 from config import SENHA_PEDIDOS_HORA, SENHA_TOKEN_MINUTOS, WEB_URL
 from seguranca import hash_senha
+from html import escape
+
 from services import email as correio
+from services import marca
 
 
 def _hash(token: str) -> str:
@@ -32,10 +35,10 @@ def _hash(token: str) -> str:
 # ---------------------------------------------------------------- a mensagem
 
 
-def _corpo(nome: str, link: str, minutos: int) -> tuple[str, str]:
+def _corpo(nome: str, link: str, minutos: int, casa: str) -> tuple[str, str]:
     primeiro = (nome or "").split(" ")[0] or "Olá"
     texto = (
-        f"{primeiro}, alguém pediu para redefinir a senha do seu acesso ao Botané.\n\n"
+        f"{primeiro}, alguém pediu para redefinir a senha do seu acesso ao sistema de {casa}.\n\n"
         f"Para escolher uma senha nova, abra este endereço:\n{link}\n\n"
         f"O link vale por {minutos} minutos e só pode ser usado uma vez.\n\n"
         "Se não foi você quem pediu, ignore esta mensagem: sua senha continua a "
@@ -47,7 +50,7 @@ def _corpo(nome: str, link: str, minutos: int) -> tuple[str, str]:
   <div style="max-width:520px;margin:0 auto;background:#fcfdfa;border:1px solid #d8ded0;
               border-radius:6px;padding:28px">
     <p style="margin:0 0 4px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
-              color:#5d6c61">Botané Deli e Café</p>
+              color:#5d6c61">{escape(casa)}</p>
     <h1 style="margin:0 0 16px;font-size:22px">Redefinir a senha</h1>
     <p style="margin:0 0 16px;font-size:15px;line-height:1.6">{primeiro}, alguém pediu para
       redefinir a senha do seu acesso.</p>
@@ -101,8 +104,9 @@ def enviar_link(cur, u: dict, ip: str | None = None, origem: str = "PUBLICA") ->
     """
     token = criar_token(cur, u["id"], ip, origem)
     link = link_de(token)
-    texto, html = _corpo(u["nome"], link, SENHA_TOKEN_MINUTOS)
-    envio = correio.enviar(cur, u["email"], "Botané — redefinir sua senha", texto, html)
+    casa = marca.nome_da_casa(cur)
+    texto, html = _corpo(u["nome"], link, SENHA_TOKEN_MINUTOS, casa)
+    envio = correio.enviar(cur, u["email"], f"{casa} — redefinir sua senha", texto, html)
     return {"link": link, "email": u["email"], **envio}
 
 

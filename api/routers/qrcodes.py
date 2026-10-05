@@ -125,7 +125,7 @@ def pdf(tipo: str = Query(pattern="^(site|reserva|cardapio|fidelidade)$"),
         cur.execute("SELECT coalesce(apelido, nome) AS nome FROM unidades WHERE id = %s",
                     (id_unidade,))
         loja = (cur.fetchone() or {}).get("nome")
-    casa = e.get("nome_fantasia") or e.get("razao_social") or "Botané"
+    casa = e.get("nome_fantasia") or e.get("razao_social") or "Nossa casa"
     if loja:
         casa = f"{casa} · {loja}"
     conteudo = fidelidade_qr.gerar(

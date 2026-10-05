@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { Aviso } from "@/components/ui";
+import MarcaDeEntrada from "@/components/marca-de-entrada";
 import { SENHA_MINIMA } from "@/lib/senha";
 
 /**
@@ -61,7 +62,7 @@ function Formulario() {
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
       <div className="w-full max-w-[380px]">
-        <p className="rotulo">Botané Deli e Café</p>
+        <MarcaDeEntrada />
         <h1 className="mt-2 text-[28px] font-bold tracking-tight">Escolher uma senha nova</h1>
 
         {invalido ? (

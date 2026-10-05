@@ -109,7 +109,7 @@ export default function PaginaUsuario() {
 
       <ChavesDeAcesso
         fonte={fonte}
-        descricao="Para o Claude consultar o Botané em nome desta pessoa, com as mesmas permissões e lojas dela. Só leitura: com a chave não se altera nada."
+        descricao="Para o Claude consultar o sistema em nome desta pessoa, com as mesmas permissões e lojas dela. Só leitura: com a chave não se altera nada."
       />
     </div>
   );

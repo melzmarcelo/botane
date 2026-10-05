@@ -68,7 +68,7 @@ export default function PaginaAjuda() {
       <iframe
         ref={quadro}
         src="/ajuda.html"
-        title="Manual do Botané"
+        title="Manual do sistema"
         onLoad={ajustarAltura}
         className="w-full rounded-xl border border-linha bg-superficie"
         style={{ height: 640 }}

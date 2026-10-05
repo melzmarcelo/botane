@@ -133,7 +133,7 @@ _ESCOPO = Param("string", "`loja` (a atual) ou `empresa` (todas as lojas).",
 
 FERRAMENTAS: list[Ferramenta] = [
     Ferramenta(
-        "quem_sou", "Quem sou eu no Botané",
+        "quem_sou", "Quem sou eu no sistema",
         "Quem é o usuário conectado: nome, papéis, permissões e as LOJAS que ele enxerga. "
         "Chame primeiro: as lojas daqui são os valores aceitos em `id_loja`.",
         "/auth/me"),
@@ -897,8 +897,9 @@ FERRAMENTAS: list[Ferramenta] = [
 
 POR_NOME = {f.nome: f for f in FERRAMENTAS}
 
+# ⚠️ `{casa}` é preenchido em `routers/mcp.py` com o nome do cadastro da empresa.
 INSTRUCOES = (
-    "Sistema de gestão do Botané Deli & Café: produtos, fichas técnicas, estoque, compras "
+    "Sistema de gestão de {casa}: produtos, fichas técnicas, estoque, compras "
     "(notas do Omie), vendas e CMV. Com as permissões do usuário conectado: consulta "
     "sempre; grava (cadastro, fichas, notas) só com chave que permite alterar — e toda "
     "gravação deve ser confirmada com a pessoa antes. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "

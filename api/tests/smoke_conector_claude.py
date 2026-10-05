@@ -175,7 +175,7 @@ for ruim, porque in [("http://evil.example/cb", "http fora de localhost"),
 print("\n4. a página de autorização")
 verificador, desafio = pkce()
 st, cab, pagina = pedir("GET", url_autorizar(client_id, desafio))
-checar("abre a página de login", st == 200 and "Conectar ao Botané" in pagina, st)
+checar("abre a página de login", st == 200 and "Conectar ao sistema" in pagina, st)
 checar("mostra o nome do cliente", "Claude (suíte)" in pagina)
 checar("e não abre em moldura", cab.get("X-Frame-Options") == "DENY", dict(cab))
 st, cab, _ = pedir("GET", url_autorizar("btc_nao_existe", desafio))

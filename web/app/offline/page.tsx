@@ -8,7 +8,7 @@
 export default function PaginaOffline() {
   return (
     <main className="mx-auto flex min-h-screen max-w-[52ch] flex-col justify-center gap-4 px-6">
-      <p className="rotulo">Botané</p>
+      <p className="rotulo">Sistema de gestão</p>
       <h1 className="text-[26px] font-bold tracking-tight">Sem conexão</h1>
       <p className="text-suave">
         O aparelho está sem internet. O que já estava aberto continua na tela — só não dá para

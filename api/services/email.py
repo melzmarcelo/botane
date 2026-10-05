@@ -22,6 +22,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
 from config import BASE_DIR
+from services import marca
 from services import segredos
 
 SERVICO = "SMTP"
@@ -76,18 +77,20 @@ def configuracao(cur) -> dict:
     return cfg
 
 
-def _remetente(cfg: dict) -> str:
-    email = cfg.get("remetente_email") or cfg.get("usuario") or "botane@localhost"
-    return formataddr((cfg.get("remetente_nome") or "Botané Deli e Café", email))
+def _remetente(cfg: dict, casa: str) -> str:
+    email = cfg.get("remetente_email") or cfg.get("usuario") or "sistema@localhost"
+    # Sem nome de remetente configurado, assina a CASA do cadastro.
+    return formataddr((cfg.get("remetente_nome") or casa, email))
 
 
-def _montar(cfg: dict, para: str, assunto: str, texto: str, html: str | None) -> EmailMessage:
+def _montar(cfg: dict, para: str, assunto: str, texto: str, html: str | None,
+            casa: str = marca.SISTEMA) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = assunto
-    msg["From"] = _remetente(cfg)
+    msg["From"] = _remetente(cfg, casa)
     msg["To"] = para
     msg["Date"] = datetime.now().astimezone().strftime("%a, %d %b %Y %H:%M:%S %z")
-    msg["Message-ID"] = make_msgid(domain="botane.local")
+    msg["Message-ID"] = make_msgid(domain="sistema.local")
     # Sempre as duas versões: o texto puro é o que sobra em cliente antigo, em
     # leitor de tela e no filtro de spam que desconfia de e-mail só com HTML.
     msg.set_content(texto)
@@ -113,7 +116,7 @@ def enviar(cur, para: str, assunto: str, texto: str, html: str | None = None) ->
     diria a quem pediu que aquele e-mail existe no sistema.
     """
     cfg = configuracao(cur)
-    msg = _montar(cfg, para, assunto, texto, html)
+    msg = _montar(cfg, para, assunto, texto, html, marca.nome_da_casa(cur))
 
     if cfg["modo"] != "real":
         return {"modo": "simulado", "arquivo": _gravar(msg, para)}
@@ -192,9 +195,9 @@ def testar(cur, para: str) -> dict:
     r = enviar(
         cur,
         para,
-        "Botané — teste de envio",
-        "Se você está lendo isto, o envio de e-mail do Botané está funcionando.\n",
-        "<p>Se você está lendo isto, o envio de e-mail do Botané está funcionando.</p>",
+        f"{marca.nome_da_casa(cur)} — teste de envio",
+        "Se você está lendo isto, o envio de e-mail do sistema está funcionando.\n",
+        "<p>Se você está lendo isto, o envio de e-mail do sistema está funcionando.</p>",
     )
     if r["modo"] == "simulado":
         return {"ok": True, "modo": "simulado",

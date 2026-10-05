@@ -109,7 +109,7 @@ def qrcodes(quantidade: int = Query(1, ge=1, le=200),
         cur.execute("SELECT coalesce(apelido, nome) AS nome FROM unidades WHERE id = %s",
                     (id_unidade,))
         loja = (cur.fetchone() or {}).get("nome")
-    casa = e.get("nome_fantasia") or e.get("razao_social") or "Botané"
+    casa = e.get("nome_fantasia") or e.get("razao_social") or "Nossa casa"
     if loja:
         casa = f"{casa} · {loja}"
     pdf = fidelidade_qr.gerar(

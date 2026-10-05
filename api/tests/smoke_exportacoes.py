@@ -510,7 +510,7 @@ checar("o cadastro no resumo", "Código;" in folha and "Tipo;INSUMO" in folha, f
 checar("o saldo por local", "Saldo por local" in folha, folha[:600])
 checar("e os ultimos movimentos", "Últimos movimentos" in folha, folha[-500:])
 # ⚠️ O carimbo e do ARQUIVO, nao de cada quadro: os anexos vinham com
-# "Botané Deli e Café — gerado em…" repetido embaixo de cada titulo.
+# "<casa> — gerado em…" repetido embaixo de cada titulo.
 checar("com o carimbo uma vez so, no topo", folha.count("gerado em") == 1,
        folha.count("gerado em"))
 st, folha_pdf, _ = chamar(f"GET", f"/exportar/produto/{id_produto}.pdf",

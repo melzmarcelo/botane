@@ -5023,14 +5023,35 @@ try {
     (nome) => document.body.innerText.includes(nome), { timeout: 12000 },
     `Tela Senha ${marcaSenha}`,
   ).catch(() => {});
-  const clicou = await p.evaluate((nome) => {
-    const linha = [...document.querySelectorAll("tr")].find((t) => t.innerText.includes(nome));
-    const b = linha && [...linha.querySelectorAll("button")]
-      .find((x) => /esqueceu a senha/i.test(x.textContent));
-    if (!b) return false;
-    b.click();
-    return true;
-  }, `Tela Senha ${marcaSenha}`);
+  // ⚠️ **Cem por página também deixou de bastar** (05/10/2026): a base local passou
+  // de 1.200 usuários de teste, e o desta rodada caía na página 9. Folhear até
+  // achar é o que uma pessoa faria — e a checagem continua medindo o botão da
+  // linha, não a posição dela.
+  let clicou = false;
+  for (let pagina = 0; pagina < 40 && !clicou; pagina++) {
+    clicou = await p.evaluate((nome) => {
+      const linha = [...document.querySelectorAll("tr")].find((t) => t.innerText.includes(nome));
+      const b = linha && [...linha.querySelectorAll("button")]
+        .find((x) => /esqueceu a senha/i.test(x.textContent));
+      if (!b) return false;
+      b.click();
+      return true;
+    }, `Tela Senha ${marcaSenha}`);
+    if (clicou) break;
+    const primeira = await p.evaluate(() => document.querySelector("tbody tr")?.innerText ?? "");
+    const avancou = await p.evaluate(() => {
+      const proxima = document.querySelector('button[aria-label="Próxima página"]');
+      if (!proxima || proxima.disabled) return false;
+      proxima.click();
+      return true;
+    });
+    if (!avancou) break;
+    // Espera pelo EFEITO: a primeira linha trocar.
+    await p.waitForFunction(
+      (antes) => (document.querySelector("tbody tr")?.innerText ?? "") !== antes,
+      { timeout: 12000 }, primeira,
+    ).catch(() => {});
+  }
   checar("a tela de usuários oferece gerar o link", clicou);
   await new Promise((r) => setTimeout(r, 1500));
   const textoAdmin = await p.evaluate(() => document.body.innerText);
@@ -5165,7 +5186,8 @@ try {
   checar("a página aponta para o manifesto", !!manifesto);
   checar("o manifesto abre em tela cheia", manifesto?.display === "standalone", manifesto?.display);
   checar("tem o nome curto que cabe embaixo do ícone",
-    manifesto?.short_name === "Botané", manifesto?.short_name);
+    !!manifesto?.short_name && manifesto.short_name.length <= 12
+      && !/\s/.test(manifesto.short_name), manifesto?.short_name);
   // Sem os dois tamanhos o Chrome não oferece instalar; sem o maskable o
   // Android corta o desenho na forma do aparelho.
   const tamanhos = (manifesto?.icons ?? []).map((i) => `${i.sizes}:${i.purpose ?? ""}`);
@@ -7314,7 +7336,7 @@ try {
     return tem;
   });
   checar("a Ajuda está no menu do usuário", ajudaNoMenuDoUsuario);
-  checar("o manual carrega dentro da tela", ajuda.titulo === "Botané por dentro", ajuda);
+  checar("o manual carrega dentro da tela", ajuda.titulo === "O sistema por dentro", ajuda);
   checar("com todos os processos e os dois diagramas",
     ajuda.secoes >= 16 && ajuda.diagramas === 2, ajuda);
   // ⚠️ A seção que explica DE ONDE VEM cada número é o coração do manual: é ela
