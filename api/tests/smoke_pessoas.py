@@ -27,6 +27,7 @@ O que este arquivo cobra:
 """
 
 import atexit
+import datetime
 import json
 import sys
 import time
@@ -212,6 +213,14 @@ chamar("POST", "/estoque/entradas", {
     "id_local": local["id"]}, token=token)
 checar("o produto vale 100 e custa 40", bool(prod), prod)
 
+# ⚠️ **As vendas levam a data de HOJE, não uma fixa** (05/10/2026). Eram de
+# 04/09/2026, e a entrada do produto é de hoje: venda datada ANTES da entrada é
+# lançamento retroativo, e a identidade da movimentação do CMV
+# (inicial + entradas − saídas = final) abria em exatamente os R$ 800 da entrada —
+# derrubando a bateria de navegador sempre que esta suíte rodava antes dela no
+# mesmo período. Ver "lançamento retroativo" em `docs/memoria/cmv.md`.
+HOJE = datetime.date.today().isoformat()
+
 casos = [
     ("sem pessoa", None, 100.0, None),
     ("pelo custo", nova_pessoa(f"P CUSTO {marca}", False, "CUSTO", 0), 40.0, "CUSTO"),
@@ -219,7 +228,7 @@ casos = [
     ("custo -10", nova_pessoa(f"P AMBOS {marca}", False, "CUSTO", 10), 36.0, "CUSTO"),
 ]
 for rotulo, id_pessoa, esperado, na_frase in casos:
-    corpo = {"data": "2026-09-04", "documento": f"PES-{rotulo.replace(' ', '')}-{marca}",
+    corpo = {"data": HOJE, "documento": f"PES-{rotulo.replace(' ', '')}-{marca}",
              "origem": "MANUAL",
              "itens": [{"id_produto": prod, "quantidade": 1, "valor_unitario": 100}]}
     if id_pessoa:
@@ -239,7 +248,7 @@ for rotulo, id_pessoa, esperado, na_frase in casos:
 # nao muda nada devolvendo frase faria toda venda anunciar algo que nao houve.
 neutra = nova_pessoa(f"P NEUTRA {marca}", False, "VENDA", 0)
 st, r = chamar("POST", "/vendas/importar", {"vendas": [{
-    "data": "2026-09-04", "documento": f"PES-NEUTRA-{marca}", "origem": "MANUAL",
+    "data": HOJE, "documento": f"PES-NEUTRA-{marca}", "origem": "MANUAL",
     "id_pessoa": neutra,
     "itens": [{"id_produto": prod, "quantidade": 1, "valor_unitario": 100}]}]}, token=token)
 checar("pessoa sem politica nao anuncia ajuste", not (r or {}).get("politicas"),
@@ -248,7 +257,7 @@ checar("pessoa sem politica nao anuncia ajuste", not (r or {}).get("politicas"),
 # ⚠️ Pessoa inexistente ou inativa e recusada — melhor a recusa que uma venda
 # gravada pelo preco cheio quando quem lancou pediu o custo.
 st, r = chamar("POST", "/vendas/importar", {"vendas": [{
-    "data": "2026-09-04", "documento": f"PES-X-{marca}", "origem": "MANUAL",
+    "data": HOJE, "documento": f"PES-X-{marca}", "origem": "MANUAL",
     "id_pessoa": 99999999,
     "itens": [{"id_produto": prod, "quantidade": 1, "valor_unitario": 100}]}]}, token=token)
 checar("pessoa inexistente e recusada", st == 404, (st, r))
