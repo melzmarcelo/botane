@@ -109,6 +109,27 @@
   .linha-form { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-top: 14px; }
   .linha-form > div { min-width: 0; }
   .sr { position: absolute; left: -9999px; }
+
+  /* A busca de cadastro PADRÃO do sistema (`components/busca-cadastro.tsx`): campo
+     de texto + lupa; digita código ou nome, Enter resolve — um resultado só já
+     escolhe, vários abrem a janela. Combobox não serve: com 1.140 produtos, uma
+     lista para rolar não é busca. */
+  .busca { display: flex; gap: 6px; }
+  .busca .btn { flex: none; padding: 0 12px; display: grid; place-items: center; }
+  .veu { position: fixed; inset: 0; z-index: 50; background: rgba(20,32,26,.45); display: grid; place-items: start center;
+         padding: 32px 16px; }
+  .veu[hidden] { display: none; }
+  .janela { width: 100%; max-width: 760px; max-height: calc(100dvh - 4rem); display: flex; flex-direction: column;
+            background: var(--superficie); border-radius: 14px; box-shadow: 0 20px 60px rgba(20,32,26,.3); }
+  .janela header { padding: 18px 20px 12px; border-bottom: 1px solid var(--linha); display: flex; justify-content: space-between; gap: 12px; }
+  .janela header p { margin: 4px 0 0; font-size: 13.5px; color: var(--suave); }
+  .janela .miolo { padding: 16px 20px 20px; overflow-y: auto; min-height: 0; flex: 1; }
+  .janela ul { list-style: none; margin: 14px 0 0; padding: 0; }
+  .janela li { display: flex; align-items: baseline; gap: 12px; padding: 10px 8px; border-top: 1px solid var(--linha); cursor: pointer; }
+  .janela li:first-child { border-top: 0; }
+  .janela li[aria-selected="true"], .janela li:hover { background: var(--erva-claro); }
+  .janela li small { display: block; color: var(--suave); font-size: 12.5px; }
+  .fechar { border: 0; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--suave); }
 </style>
 </head>
 <body>
@@ -277,7 +298,12 @@
     <div class="cartao">
       <div class="linha-form" style="margin-top:0">
         <div style="flex:1 1 280px"><label class="rot" for="produto">Produto</label>
-          <select class="campo" id="produto"></select></div>
+          <div class="busca">
+            <input class="campo" id="produto" placeholder="código ou nome do produto" autocomplete="off" aria-label="Buscar produto">
+            <button class="btn" id="abrir-busca" type="button" aria-label="Buscar produto" title="Buscar produto">
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="m10.6 10.6 3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+          </div></div>
         <button class="btn pequeno" id="ver-tabela" aria-pressed="false">ver como tabela</button>
       </div>
       <div class="ladrilhos" id="resumo-precos"></div>
@@ -301,27 +327,39 @@
   </section>
 </div>
 
+<div class="veu" id="janela-busca" hidden>
+  <div class="janela" role="dialog" aria-modal="true" aria-labelledby="titulo-busca">
+    <header><div><h2 id="titulo-busca" style="font-size:18px">Buscar produto</h2>
+      <p>Digite parte do código ou do nome. ↑ ↓ para andar, Enter para escolher.</p></div>
+      <button class="fechar" id="fechar-busca" aria-label="Fechar">×</button></header>
+    <div class="miolo">
+      <input class="campo" id="termo-busca" placeholder="código ou nome do produto" autocomplete="off">
+      <ul id="resultados-busca" role="listbox"></ul>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================== dados inventados */
 const MESES = ["out/25","nov/25","dez/25","jan/26","fev/26","mar/26","abr/26","mai/26","jun/26","jul/26","ago/26","set/26"];
 const PRODUTOS = [
-  { id: 1, nome: "Cappuccino", cat: "Cafeteria", origem: "ficha", vendido: 412,
+  { id: 1, codigo: "PDV-7029508", nome: "Cappuccino", cat: "Cafeteria", origem: "ficha", vendido: 412,
     custo: [2.60,2.60,2.70,2.75,2.90,3.05,3.05,3.20,3.40,3.45,3.60,3.72], preco: [12,12,12,12,12,12,13,13,13,13,13,13] },
-  { id: 2, nome: "Beef Stroganoff", cat: "Pratos", origem: "ficha", vendido: 93,
+  { id: 2, codigo: "PDV-7029355", nome: "Beef Stroganoff", cat: "Pratos", origem: "ficha", vendido: 93,
     custo: [19.8,20.1,20.9,21.4,22.0,22.6,23.9,24.4,25.2,26.0,26.3,27.1], preco: [62,62,62,62,62,66,66,66,66,66,69,69] },
-  { id: 3, nome: "Cuca de frutas (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 280,
+  { id: 3, codigo: "PDV-7218730", nome: "Cuca de frutas (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 280,
     custo: [3.1,3.1,3.2,3.2,3.3,3.3,3.4,3.5,3.5,3.6,3.7,3.8], preco: [14,14,14,14,14,14,14,14,14,14,14,14] },
-  { id: 4, nome: "Gnocchi com mignon", cat: "Pratos", origem: "ficha", vendido: 43,
+  { id: 4, codigo: "PDV-7029359", nome: "Gnocchi com mignon", cat: "Pratos", origem: "ficha", vendido: 43,
     custo: [31,31.5,33,34.2,36,37.4,39,41,43.5,45,46.2,47.8], preco: [98,98,98,98,98,98,98,105,105,105,105,105] },
-  { id: 5, nome: "Suco de laranja 300 ml", cat: "Bebidas", origem: "ficha", vendido: 350,
+  { id: 5, codigo: "PDV-7029611", nome: "Suco de laranja 300 ml", cat: "Bebidas", origem: "ficha", vendido: 350,
     custo: [2.9,3.0,3.4,3.9,4.1,3.8,3.5,3.3,3.6,4.0,4.4,4.9], preco: [11,11,11,11,11,11,11,11,11,11,11,11] },
-  { id: 6, nome: "Água mineral 500 ml", cat: "Bebidas", origem: "custo médio", vendido: 520,
+  { id: 6, codigo: "000412", nome: "Água mineral 500 ml", cat: "Bebidas", origem: "custo médio", vendido: 520,
     custo: [1.35,1.35,1.4,1.4,1.4,1.48,1.48,1.5,1.5,1.55,1.55,1.6], preco: [6,6,6,6,6,6,6,6,6,6,6,6] },
-  { id: 7, nome: "Cheesecake (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 112,
+  { id: 7, codigo: "PDV-7029440", nome: "Cheesecake (fatia)", cat: "Confeitaria", origem: "ficha", vendido: 112,
     custo: [6.2,6.3,6.9,7.4,7.6,7.9,8.1,8.6,9.3,9.9,10.4,11.2], preco: [24,24,24,24,24,24,24,24,26,26,26,26] },
-  { id: 8, nome: "Croissant de brie", cat: "Vitrine", origem: "ficha", vendido: 87,
+  { id: 8, codigo: "PDV-7029423", nome: "Croissant de brie", cat: "Vitrine", origem: "ficha", vendido: 87,
     custo: [9.5,9.6,9.8,10.1,10.4,10.9,11.3,11.9,12.4,13.0,13.3,13.9], preco: [29,29,29,29,29,29,29,29,29,29,29,29] },
-  { id: 9, nome: "Brownie (unidade)", cat: "Confeitaria", origem: "sem custo", vendido: 140,
+  { id: 9, codigo: "PDV-7029477", nome: "Brownie (unidade)", cat: "Confeitaria", origem: "sem custo", vendido: 140,
     custo: [null,null,null,null,null,null,null,null,null,null,null,null], preco: [12,12,12,12,12,12,12,12,12,12,12,12] },
 ];
 const CATEGORIAS = ["Cafeteria", "Pratos", "Confeitaria", "Bebidas", "Vitrine"];
@@ -570,7 +608,7 @@ function grafico(el, series, opcoes) {
   caixa.addEventListener("mouseleave", () => { mira.setAttribute("visibility", "hidden"); dica.hidden = true; });
 }
 function pintarPrecos() {
-  const p = PRODUTOS.find((q) => q.id === +$("#produto").value);
+  const p = PRODUTOS.find((q) => q.id === produtoAtual);
   const margem = p.preco.map((v, i) => p.custo[i] == null ? null : (v - p.custo[i]) / v * 100);
   const mudancas = p.preco.map((v, i) => i > 0 && v !== p.preco[i - 1] ? i : -1).filter((i) => i >= 0);
   const c0 = p.custo.find((v) => v != null), cN = p.custo.at(-1);
@@ -593,9 +631,59 @@ function pintarPrecos() {
       ? `<b>De onde vem o custo:</b> o custo da ficha congelado em cada venda — o que o prato custava no dia em que foi vendido. Dia sem venda não tem ponto; o sistema não inventa a linha.`
       : `<b>De onde vem o custo:</b> o custo médio do estoque depois de cada compra, guardado no razão.`;
 }
-$("#produto").innerHTML = PRODUTOS.map((p) => `<option value="${p.id}">${p.nome}</option>`).join("");
-$("#produto").value = 5;
-$("#produto").addEventListener("change", pintarPrecos);
+/* ---- a busca de produto, como no sistema: campo + lupa, e a janela quando há mais de um ---- */
+let produtoAtual = 5, marcadoNaBusca = 0, achados = [];
+const rotuloDe = (p) => `${p.codigo} · ${p.nome}`;
+const semAcento = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const procurar = (termo) => { const t = semAcento(termo.trim()); return PRODUTOS.filter((p) => !t || semAcento(rotuloDe(p)).includes(t)); };
+function escolherProduto(p) {
+  produtoAtual = p.id; $("#produto").value = rotuloDe(p); fecharBusca(false); pintarPrecos();
+}
+function pintarResultados() {
+  achados = procurar($("#termo-busca").value);
+  marcadoNaBusca = Math.min(marcadoNaBusca, Math.max(achados.length - 1, 0));
+  $("#resultados-busca").innerHTML = achados.length
+    ? achados.map((p, i) => `<li role="option" aria-selected="${i === marcadoNaBusca}" data-id="${p.id}">
+        <span class="mono" style="flex:none;font-size:12.5px;color:var(--suave)">${p.codigo}</span>
+        <span>${p.nome}<small>${p.cat} · custo: ${p.origem}</small></span></li>`).join("")
+    : `<li style="cursor:default;color:var(--suave)">Nenhum produto com “${$("#termo-busca").value}”.</li>`;
+}
+function abrirBusca(termo) {
+  $("#janela-busca").hidden = false; $("#termo-busca").value = termo; marcadoNaBusca = 0; pintarResultados(); $("#termo-busca").focus();
+}
+function fecharBusca(devolver = true) {
+  $("#janela-busca").hidden = true;
+  // Fechar sem escolher devolve o campo ao produto que está na tela: texto solto
+  // que não corresponde a produto nenhum faria a pessoa achar que escolheu.
+  if (devolver) $("#produto").value = rotuloDe(PRODUTOS.find((p) => p.id === produtoAtual));
+  $("#produto").focus();
+}
+/** Enter ou sair do campo: um resultado só já escolhe; vários abrem a janela. */
+function resolverProduto() {
+  const termo = $("#produto").value.trim(), atualTxt = rotuloDe(PRODUTOS.find((p) => p.id === produtoAtual));
+  if (!termo || termo === atualTxt) { $("#produto").value = atualTxt; return; }
+  const r = procurar(termo);
+  if (r.length === 1) escolherProduto(r[0]); else abrirBusca(termo);
+}
+$("#produto").value = rotuloDe(PRODUTOS.find((p) => p.id === produtoAtual));
+$("#produto").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); resolverProduto(); } });
+$("#produto").addEventListener("change", resolverProduto);
+// Clicar no campo com um produto já escolhido seleciona o texto: quem clica quer
+// trocar, e digitar por cima não pode emendar no rótulo anterior.
+const selecionarRotulo = (e) => { if (e.target.value === rotuloDe(PRODUTOS.find((p) => p.id === produtoAtual))) e.target.select(); };
+$("#produto").addEventListener("focus", selecionarRotulo);
+$("#produto").addEventListener("click", selecionarRotulo);
+$("#abrir-busca").addEventListener("click", () => abrirBusca(""));
+$("#termo-busca").addEventListener("input", () => { marcadoNaBusca = 0; pintarResultados(); });
+$("#termo-busca").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); marcadoNaBusca = Math.min(marcadoNaBusca + 1, achados.length - 1); pintarResultados(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); marcadoNaBusca = Math.max(marcadoNaBusca - 1, 0); pintarResultados(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (achados[marcadoNaBusca]) escolherProduto(achados[marcadoNaBusca]); }
+  else if (e.key === "Escape") fecharBusca();
+});
+$("#resultados-busca").addEventListener("click", (e) => { const li = e.target.closest("li[data-id]"); if (li) escolherProduto(PRODUTOS.find((p) => p.id === +li.dataset.id)); });
+$("#fechar-busca").addEventListener("click", () => fecharBusca());
+$("#janela-busca").addEventListener("mousedown", (e) => { if (e.target.id === "janela-busca") fecharBusca(); });
 $("#ver-tabela").addEventListener("click", (e) => { const t = $("#tabela-precos"); t.hidden = !t.hidden; e.target.setAttribute("aria-pressed", String(!t.hidden)); e.target.textContent = t.hidden ? "ver como tabela" : "esconder a tabela"; });
 
 /* ============================================================== abas */

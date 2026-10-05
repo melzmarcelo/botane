@@ -190,7 +190,12 @@ apertada, é prejuízo por unidade.
 
 ## 5. Preços — a evolução de preço × custo
 
-Escolhe-se um produto e vê-se, em linhas, **o preço de venda e o custo** ao longo do tempo, na
+O produto é escolhido pela **busca de cadastro padrão** (`components/busca-cadastro.tsx`): campo
+de texto com a lupa — digita-se código ou nome, um resultado só já escolhe, vários abrem a
+janela com ↑ ↓ e Enter. ⚠️ Combobox não serve aqui: com mais de mil produtos, uma lista para
+rolar não é busca (corrigido no protótipo a pedido do dono, 05/10/2026).
+
+Escolhido o produto, vê-se, em linhas, **o preço de venda e o custo** ao longo do tempo, na
 mesma escala de reais. A distância entre as duas linhas É a margem bruta — vê-la abrir ou
 fechar é o que a tela existe para mostrar.
 
