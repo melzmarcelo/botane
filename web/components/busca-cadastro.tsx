@@ -62,6 +62,19 @@ export default function BuscaCadastro({
   // Tab dispara blur e o blur também resolve: sem esta trava a busca sairia
   // duas vezes e a janela abriria por cima de si mesma.
   const resolvendoRef = useRef(false);
+  /**
+   * 🔑 **Entrar no campo com um registro já escolhido SELECIONA o texto**
+   * (05/10/2026, pedido do dono, a partir do protótipo de precificação). Quem
+   * volta ao campo quer trocar: sem isto, digitar emendava no rótulo anterior
+   * ("PDV-123 · Cappuccinofatia"), a busca não achava nada e a janela abria
+   * vazia.
+   * ⚠️ **Só quando o campo mostra o escolhido** — com texto solto em digitação,
+   * selecionar tudo apagaria o que a pessoa acabou de escrever.
+   * ⚠️ **Só no clique que DEU o foco.** O segundo clique posiciona o cursor
+   * normalmente: quem quer corrigir uma letra do meio não pode ficar preso a
+   * "seleciona tudo" para sempre.
+   */
+  const acabouDeFocar = useRef(false);
 
   // Quem manda no texto é a escolha: trocar o item por fora (carregar uma nota
   // para corrigir, por exemplo) tem de aparecer no campo.
@@ -94,6 +107,9 @@ export default function BuscaCadastro({
     }
   }, [texto, selecionado?.rotulo, disabled, fonte, aoEscolher]);
 
+  /** O campo está mostrando exatamente o registro escolhido (e não um texto em digitação). */
+  const mostraOEscolhido = !!selecionado && texto === selecionado.rotulo;
+
   function aoTeclar(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       // Enter num campo de busca não pode enviar o formulário: a pessoa está
@@ -124,7 +140,21 @@ export default function BuscaCadastro({
           placeholder={fonte.placeholder}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          onBlur={() => void resolver()}
+          onFocus={(e) => {
+            if (!mostraOEscolhido) return;
+            acabouDeFocar.current = true;
+            e.currentTarget.select();
+          }}
+          onClick={(e) => {
+            // O `mouseup` do clique que deu o foco desfaz a seleção do `onFocus`
+            // em parte dos navegadores — refaz aqui, uma vez só.
+            if (acabouDeFocar.current && mostraOEscolhido) e.currentTarget.select();
+            acabouDeFocar.current = false;
+          }}
+          onBlur={() => {
+            acabouDeFocar.current = false;
+            void resolver();
+          }}
           onKeyDown={aoTeclar}
           aria-label={fonte.titulo}
         />

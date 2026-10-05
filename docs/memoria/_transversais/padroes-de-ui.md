@@ -394,6 +394,18 @@
   sinal de que a correção acertou o lugar. Afrouxar a tolerância teria deixado a checagem
   verde e o defeito esperando para morder alguém no celular.
 
+- 🔑 **Entrar na busca de cadastro com um registro já escolhido SELECIONA o texto**
+  (`components/busca-cadastro.tsx`, 05/10/2026, pedido do dono a partir do protótipo de
+  precificação). Quem volta ao campo quer trocar: digitar emendava no rótulo anterior
+  ("PDV-123 · Cappuccinofatia"), a busca não achava nada e a janela abria vazia.
+  ⚠️ **Só quando o campo mostra o escolhido** — com texto solto em digitação, selecionar tudo
+  apagaria o que a pessoa acabou de escrever.
+  ⚠️ **Só no clique que DEU o foco**: o segundo clique posiciona o cursor. Selecionar a cada
+  clique prenderia quem quer corrigir uma letra do meio.
+  ⚠️ O `onClick` refaz a seleção do `onFocus` porque o `mouseup` do mesmo clique a desfaz em
+  parte dos navegadores.
+  ⚠️ Vale para o `BuscaCadastro`; o `FiltroCadastro` mostra o fixado como etiqueta, não no campo.
+
 - 🔑 **Os atalhos fixados SAÍRAM do menu** (05/10/2026, pedido do dono: *"retira os meus
   atalhos do menu"* — confirmado: o recurso inteiro, para todos). Foram embora a seção "Seus
   atalhos", o alfinete de cada linha, `lib/atalhos.ts`, os estilos `.menu-fixar*`/`.menu-secao`
