@@ -6,7 +6,6 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ProvedorSessao, useSessao } from "@/lib/sessao";
 import { api, definirUnidade, urlArquivo } from "@/lib/api";
 import { abrirBuscaDeTelas, EVENTO_EMPRESA } from "@/lib/eventos";
-import { gravarAtalhos, lerAtalhos, TETO_ATALHOS } from "@/lib/atalhos";
 import { NOME_SISTEMA } from "@/lib/marca";
 import { INICIO, blocosDoGrupo, montarMenu, telasDisponiveis, type ItemMenu } from "@/lib/menu";
 import { Carregando } from "@/components/ui";
@@ -20,7 +19,7 @@ import Icone from "@/components/icone";
 
 /**
  * 🔑 **O MENU saiu daqui em 15/09/2026** e mora em `lib/menu.ts`: a mesma
- * lista passou a servir ao menu lateral, à busca do `Ctrl+K` e aos atalhos
+ * lista passou a servir ao menu lateral e à busca do `Ctrl+K`
  * fixados. Lista de navegação duplicada é lista que diverge — a tela nova
  * entra numa e não na outra, e a busca vira uma coisa em que não se confia.
  */
@@ -200,7 +199,7 @@ function Casca({ children }: { children: React.ReactNode }) {
       />
 
       {/* ⚠️ **276px, e nao 240** (15/09/2026, relatado pelo dono: *"alguns itens
-          cortaram a descricao"*). Com o icone e o alfinete, a coluna de 240
+          cortaram a descricao"*). Com o icone (e, na epoca, o alfinete), a coluna de 240
           deixava ~169px para o texto — e "Saldos e movimentos", "Exportacao
           para o PDV" e "Papeis e permissoes" nao cabiam. Nome de tela cortado
           obriga a pessoa a adivinhar o destino, que e o contrario do que um
@@ -335,37 +334,16 @@ function MenuLateral({
   );
 
   /**
-   * 🔑 **Ler o `localStorage` no inicializador é seguro AQUI**, e não seria em
-   * qualquer lugar: este componente só monta depois do `/auth/me` (a casca
-   * devolve `null` enquanto não há `eu`), então ele nunca participa da
-   * hidratação. Num `useEffect`, os atalhos apareceriam um quadro depois e
-   * empurrariam os grupos para baixo — a mesma classe de defeito do convite de
-   * instalação, que deslocava a página inteira depois de ela já estar sendo lida.
-   */
-  const [atalhos, setAtalhos] = useState<string[]>(() => lerAtalhos(telas.map((t) => t.href)));
-
-  const fixar = (href: string) =>
-    setAtalhos((atuais) => {
-      const novos = atuais.includes(href)
-        ? atuais.filter((h) => h !== href)
-        : [...atuais, href].slice(-TETO_ATALHOS);
-      gravarAtalhos(novos);
-      return novos;
-    });
-
-  const porHref = new Map(telas.map((t) => [t.href, t]));
-
-  /**
-   * Uma linha do menu: o link, e o alfinete ao lado.
+   * Uma linha do menu.
    *
-   * ⚠️ O alfinete é IRMÃO do link, nunca filho — `<button>` dentro de `<a>` é
-   * HTML inválido, e o navegador desmancha a árvore em silêncio.
+   * 🔑 **Os atalhos fixados saíram em 05/10/2026** (pedido do dono): a seção
+   * "Seus atalhos" e o alfinete de cada linha. O menu voltou a ser a busca, o
+   * Início e os grupos — quem quer chegar rápido usa o `Ctrl+K`.
    */
-  const linha = (item: ItemMenu, fixavel: boolean) => {
+  const linha = (item: ItemMenu) => {
     const ativo = caminho === item.href;
-    const fixado = atalhos.includes(item.href);
     return (
-      <div key={item.href} className={`menu-linha ${fixavel ? "menu-linha-fixavel" : ""}`}>
+      <div key={item.href} className="menu-linha">
         <Link
           href={item.href}
           // A gaveta do celular fecha por mudança de CAMINHO, e as quatro
@@ -380,18 +358,6 @@ function MenuLateral({
           </span>
           <span className="truncate">{item.nome}</span>
         </Link>
-        {fixavel && (
-          <button
-            type="button"
-            aria-pressed={fixado}
-            aria-label={fixado ? `Tirar ${item.nome} dos atalhos` : `Fixar ${item.nome} nos atalhos`}
-            title={fixado ? "tirar dos atalhos" : "fixar nos atalhos"}
-            onClick={() => fixar(item.href)}
-            className={`menu-fixar ${fixado ? "menu-fixar-marcado" : ""}`}
-          >
-            <Icone nome="alfinete" tamanho={13} />
-          </button>
-        )}
       </div>
     );
   };
@@ -413,28 +379,14 @@ function MenuLateral({
       </button>
 
       {/* Fora de grupo: a primeira tela não se abre com um clique a mais. */}
-      {linha(INICIO, false)}
-
-      {/* 🔑 **Os atalhos ocupam o espaço que já estava vazio.** A lateral
-          mostrava seis títulos numa coluna de 900px — 85% dela sem uso — e o
-          menu não sabia que a cozinha não abre as mesmas telas que o escritório. */}
-      {atalhos.length > 0 && (
-        <>
-          <div className="menu-divisor" />
-          <p className="menu-secao">Seus atalhos</p>
-          {atalhos.map((href) => {
-            const item = porHref.get(href);
-            return item ? linha(item, true) : null;
-          })}
-        </>
-      )}
+      {linha(INICIO)}
 
       <div className="menu-divisor" />
 
       {entradas.map((e) =>
         e.tipo === "item" ? (
           // Grupo que sobrou com um item só — ver `montarMenu`.
-          linha(e.item, true)
+          linha(e.item)
         ) : (
           <div key={e.grupo} className="mb-0.5 shrink-0">
             {/* 🔑 **O padrão é RECOLHIDO — todos.** O grupo da tela aberta já veio
@@ -473,7 +425,7 @@ function MenuLateral({
                   </button>
                   <div className={`menu-filhos pb-1.5 ${expandido ? "" : "hidden"}`}>
                     {blocosDoGrupo(e.itens).map((b) => {
-                      if (b.tipo === "item") return linha(b.item, true);
+                      if (b.tipo === "item") return linha(b.item);
                       // 🔑 **O subgrupo segue a regra do grupo**: recolhido por
                       // padrão, e verde quando a tela aberta está lá dentro.
                       const chave = `${e.grupo} › ${b.nome}`;
@@ -503,7 +455,7 @@ function MenuLateral({
                             </svg>
                           </button>
                           <div className={`menu-filhos ${aberto ? "" : "hidden"}`}>
-                            {b.itens.map((i) => linha(i, true))}
+                            {b.itens.map((i) => linha(i))}
                           </div>
                         </div>
                       );

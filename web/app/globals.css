@@ -194,10 +194,7 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     color: var(--color-suave);
   }
 
-  /* A linha inteira: o link, e o alfinete que vive ao lado dele.
-     ⚠️ **O alfinete é IRMÃO do link, nunca filho.** `<button>` dentro de `<a>`
-     é HTML inválido — o navegador desmancha a árvore, e o leitor de tela passa
-     a anunciar um controle dentro de outro. */
+  /* A linha do menu. */
   .menu-linha { position: relative; display: flex; align-items: center; }
   .menu-item {
     display: flex;
@@ -216,7 +213,6 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     letter-spacing: -0.004em;
     color: var(--color-tinta);
   }
-  .menu-linha-fixavel .menu-item { padding-right: 32px; }
   .menu-item:hover { background: var(--color-superficie2); }
   .menu-ico { display: grid; place-items: center; flex: 0 0 18px; color: var(--color-suave); }
   .menu-item-ativo {
@@ -238,24 +234,6 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     border-radius: 2px;
     background: var(--color-erva);
   }
-
-  /* ⚠️ **No toque ele fica à vista, de leve.** `:hover` não existe no telefone,
-     e um controle que só aparece com o ponteiro é um controle que metade das
-     pessoas nunca encontra. */
-  .menu-fixar {
-    position: absolute;
-    right: 4px;
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    color: var(--color-suave);
-    opacity: 0.45;
-    cursor: pointer;
-  }
-  .menu-fixar:hover { background: var(--color-papel); color: var(--color-erva); opacity: 1; }
-  .menu-fixar-marcado { color: var(--color-latao); opacity: 1; }
 
   .menu-grupo {
     display: flex;
@@ -306,15 +284,6 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
   .menu-filhos .menu-filhos { padding-left: 22px; }
   .menu-filhos .menu-filhos .menu-item-ativo::before { left: -41px; }
 
-  .menu-secao {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--color-suave);
-    padding: 0 10px;
-    margin-bottom: 2px;
-  }
   .menu-divisor { height: 1px; background: var(--color-linha); margin: 10px 6px; }
 
   /* ---- o rótulo, a dica e o erro de um campo ----
@@ -399,12 +368,6 @@ h1, h2, h3, h4, th, button, label, input, select, textarea {
     .menu-item, .menu-grupo { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
     .menu-item { font-size: 14.5px; }
     .menu-item-ativo::before { top: 6px; bottom: 6px; }
-    /* No ponteiro o alfinete só aparece na linha sob o cursor (ou com foco de
-       teclado): à vista em vinte e cinco linhas, ele vira ruído. */
-    .menu-fixar { opacity: 0; }
-    .menu-linha:hover .menu-fixar,
-    .menu-linha:focus-within .menu-fixar,
-    .menu-fixar-marcado { opacity: 1; }
   }
 
   /* Ação escrita com `.rotulo` — 10,5px, mono, MAIÚSCULAS, cinza — é a mesma tinta

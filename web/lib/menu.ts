@@ -5,7 +5,7 @@ import type { NomeIcone } from "./icones";
  *
  * 🔑 **Saiu do `layout.tsx` em 15/09/2026**, quando a busca por Ctrl+K nasceu:
  * a mesma lista passou a servir a TRÊS peças — o menu lateral, a paleta de
- * busca e os atalhos fixados. Lista de navegação duplicada é lista que
+ * busca (os atalhos fixados saíram em 05/10/2026). Lista de navegação duplicada é lista que
  * diverge: a tela nova entra no menu, não entra na busca, e a busca vira uma
  * coisa em que não se confia.
  */
@@ -28,7 +28,7 @@ export type ItemMenu = {
   soComReservas?: boolean;
   /** 🔑 Um nível a mais dentro do grupo (24/09/2026: "Reservas" com Agenda e
       Salão dentro do Portal de Clientes). Itens com o mesmo `subgrupo` aparecem
-      sob um título recolhível; a busca e os atalhos continuam vendo cada item. */
+      sob um título recolhível; a busca continua vendo cada item. */
   subgrupo?: string;
 };
 

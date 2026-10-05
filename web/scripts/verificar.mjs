@@ -7475,7 +7475,7 @@ try {
   checar("o rodape fixo mostra a versao", /^v\d+\.\d+\.\d+$/.test(rodapePe?.texto ?? ""), rodapePe);
   checar("e fica preso no pe da janela", rodapePe?.noPe, rodapePe);
 
-  console.log("10d2. o menu novo: busca, atalhos e icones");
+  console.log("10d2. o menu novo: busca e icones");
   // 🔑 **O menu foi redesenhado em 15/09/2026** (pedido do dono: *"gostaria de
   // um menu mais moderno"*). A lateral tinha seis grupos, todos recolhidos —
   // decisao deliberada, que continua de pe —, e o preco dela era dois cliques
@@ -7506,7 +7506,7 @@ try {
   checar("o menu tem linhas e toda linha tem icone",
     menuNovo.linhas >= 8 && menuNovo.semIcone === 0, menuNovo);
   checar("todo titulo de grupo tem icone", menuNovo.gruposSemIcone.length === 0, menuNovo);
-  checar("o alfinete e IRMAO do link, nao filho (HTML valido)",
+  checar("nenhum botao mora dentro de um link do menu (HTML valido)",
     menuNovo.botaoDentroDeLink === 0, menuNovo);
   checar("no computador a busca anuncia o atalho do teclado",
     menuNovo.teclaVisivel === true, menuNovo);
@@ -7647,65 +7647,24 @@ try {
   await p.keyboard.press("Escape");
   await new Promise((r) => setTimeout(r, 250));
 
-  // ---- os atalhos ----
-  // 🔑 Eles ocupam o espaco que ja estava vazio, e sao de QUEM usa: a cozinha
-  // nao abre as mesmas telas que o escritorio.
-  const atalhosAntes = await p.evaluate(() => ({
-    secao: !!document.querySelector(".menu-secao"),
-    guardados: JSON.parse(localStorage.getItem("botane.atalhos") ?? "null"),
-    marcados: document.querySelectorAll(".menu-fixar-marcado").length,
-  }));
-  checar("o menu abre com uma secao de atalhos", atalhosAntes.secao, atalhosAntes);
-
-  // Fixa o Inventario pelo caminho da pessoa: abre o grupo, toca no alfinete.
-  await p.evaluate(() => {
-    [...document.querySelectorAll("aside .menu-grupo")]
-      .find((b) => /estoque/i.test(b.innerText))?.click();
+  // ---- os atalhos SAÍRAM ----
+  // 🔑 **Pedido do dono (05/10/2026): "retira os meus atalhos do menu".** A seção
+  // "Seus atalhos" e o alfinete de cada linha deixaram de existir. A checagem
+  // cobra a AUSÊNCIA dos dois — e que cada tela apareça uma vez só na lateral,
+  // que é o efeito visível: antes, a tela fixada aparecia duas vezes.
+  const semAtalhos = await p.evaluate(() => {
+    const hrefs = [...document.querySelectorAll("aside a[href]")].map((a) => a.getAttribute("href"));
+    return {
+      secao: /seus atalhos/i.test(document.querySelector("aside")?.innerText ?? ""),
+      alfinetes: document.querySelectorAll("aside .menu-linha button").length,
+      repetidos: hrefs.filter((h, i) => hrefs.indexOf(h) !== i),
+      telas: hrefs.length,
+    };
   });
-  await new Promise((r) => setTimeout(r, 350));
-  await p.evaluate(() => {
-    const linha = [...document.querySelectorAll("aside .menu-filhos .menu-linha")]
-      .find((l) => /Inventário/.test(l.innerText));
-    linha?.querySelector("button")?.click();
-  });
-  await new Promise((r) => setTimeout(r, 350));
-  const aoFixar = await p.evaluate(() => ({
-    guardados: JSON.parse(localStorage.getItem("botane.atalhos") ?? "[]"),
-    // O atalho aparece ANTES do primeiro grupo — e essa e a razao de existir.
-    noTopo: (() => {
-      const nav = document.querySelector("aside nav");
-      const alvo = [...nav.querySelectorAll(".menu-linha")]
-        .find((l) => /Inventário/.test(l.innerText));
-      const grupo = nav.querySelector(".menu-grupo");
-      return alvo && grupo
-        ? alvo.compareDocumentPosition(grupo) === Node.DOCUMENT_POSITION_FOLLOWING
-        : null;
-    })(),
-  }));
-  checar("o alfinete fixa a tela nos atalhos",
-    aoFixar.guardados.includes("/inventario"), aoFixar);
-  checar("e ela passa a aparecer antes dos grupos", aoFixar.noTopo === true, aoFixar);
-
-  // ⚠️ **Sobrevive ao recarregar** — e esta e a checagem que importa: a
-  // preferencia mora no navegador, e uma que so vale ate a proxima F5 e uma
-  // preferencia que ninguem usa.
-  await p.reload({ waitUntil: "networkidle2" });
-  await p.waitForSelector(".menu-secao", { timeout: 12000 });
-  const atalhosAoVoltar = await p.evaluate(() =>
-    [...document.querySelectorAll("aside .menu-linha")].map((l) => l.innerText.trim()));
-  checar("o atalho sobrevive ao recarregar a pagina",
-    atalhosAoVoltar.filter((t) => /Inventário/.test(t)).length >= 1, atalhosAoVoltar.slice(0, 8));
-
-  // E sai pelo mesmo gesto — um controle que so sabe adicionar acumula lixo.
-  await p.evaluate(() => {
-    const linha = [...document.querySelectorAll("aside .menu-linha")]
-      .find((l) => /Inventário/.test(l.innerText));
-    linha?.querySelector("button")?.click();
-  });
-  await new Promise((r) => setTimeout(r, 350));
-  const aoTirar = await p.evaluate(() =>
-    JSON.parse(localStorage.getItem("botane.atalhos") ?? "[]"));
-  checar("e o mesmo alfinete tira", !aoTirar.includes("/inventario"), aoTirar);
+  checar("o menu nao tem mais a secao de atalhos", semAtalhos.secao === false, semAtalhos);
+  checar("nem alfinete nas linhas", semAtalhos.alfinetes === 0, semAtalhos);
+  checar("e cada tela aparece uma vez so na lateral",
+    semAtalhos.telas >= 8 && semAtalhos.repetidos.length === 0, semAtalhos);
   await foto(p, "36c-menu-novo");
 
   // 🔑 **As peças de formulário, redesenhadas** (15/09/2026, protótipo aprovado

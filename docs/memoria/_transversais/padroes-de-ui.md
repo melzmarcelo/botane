@@ -394,6 +394,17 @@
   sinal de que a correção acertou o lugar. Afrouxar a tolerância teria deixado a checagem
   verde e o defeito esperando para morder alguém no celular.
 
+- 🔑 **Os atalhos fixados SAÍRAM do menu** (05/10/2026, pedido do dono: *"retira os meus
+  atalhos do menu"* — confirmado: o recurso inteiro, para todos). Foram embora a seção "Seus
+  atalhos", o alfinete de cada linha, `lib/atalhos.ts`, os estilos `.menu-fixar*`/`.menu-secao`
+  e o ícone. O menu voltou a ser a busca (`Ctrl+K`), o Início e os grupos.
+  ⚠️ **O item abaixo descreve o recurso como ele ERA**: os trechos sobre atalhos e alfinete
+  ficam como história, e não valem mais. A busca, os ícones, a regra do grupo de um item só e a
+  largura de 276px continuam.
+  ⚠️ A chave `botane.atalhos` pode ter ficado no navegador de quem usava; nada a lê mais.
+  ⚠️ A bateria cobra a AUSÊNCIA (sem seção, sem botão nas linhas) e que cada tela apareça uma
+  vez só na lateral — antes, a tela fixada aparecia duas.
+
 - 🔑 **O menu virou navegação, e não índice de livro** (15/09/2026, pedido do dono: *"pensando
   em layout, gostaria de um menu mais moderno"*). O diagnóstico não foi "está feio": a lateral
   levava a **25 telas em 6 grupos, todos recolhidos**, e mostrava **seis linhas numa coluna de
