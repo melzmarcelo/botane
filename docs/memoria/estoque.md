@@ -472,6 +472,30 @@
   estorno de saída é mais uma entrada) e mudar as datas de mês (o estoque inicial do mês seguinte
   passou a discordar). **O que fecha a conta é não deixar rastro nenhum.**
 
+- 🔑 **A ordem da corrente passou a estar ESCRITA** (`estoque_movimentos.ordem_cadeia`,
+  migração 104, 05/10/2026). O defeito: quem pergunta "quanto havia no dia X" pega o ÚLTIMO
+  movimento antes de X, e "último" era o de maior `id` — a ordem de LANÇAMENTO, em que a
+  fotografia (`saldo_apos`) é tirada. Só que reprocessar refaz a fotografia na ordem da DATA:
+  depois dele o maior `id` deixa de ser o fim da corrente. Medido na base local: venda de
+  setembro lançada depois da entrada de outubro, produto reprocessado — o relatório lia saldo
+  **−5 onde havia 15**, e a soma do CMV por grupo deixou de fechar com o CMV em exatamente os
+  R$ 800 da entrada. A movimentação de data passada errava do mesmo jeito.
+  🔑 **Nula, a coluna vale o `id`** — todo movimento nunca reprocessado, e por isso nada muda
+  para eles. O reprocessamento redistribui os PRÓPRIOS ids do produto na ordem da data: seguem
+  únicos, e menores que o id de qualquer movimento futuro, que entra no fim da corrente.
+  ⚠️ **É derivada**, da família de `saldo_apos`: reescrevê-la não fura o append-only.
+  ⚠️ **São SETE leituras, e todas têm de usar `coalesce(ordem_cadeia, id) DESC`**: três em
+  `cmv.py` (`valor_do_estoque` e as duas da movimentação), duas em `memoria_calculo.py`, duas em
+  `relatorios.py`. Leitura nova da fotografia que ordenar por `id` reabre o defeito — e a soma
+  dos grupos só fecha com o CMV enquanto as sete concordarem.
+  ⚠️ **A migração preenche quem JÁ tinha sido reprocessado**, pela auditoria (`estoque` /
+  `reprocessar`, com loja e hora): os movimentos que existiam até o último reprocessamento
+  ganham a posição pela data. Exercitada na base local sobre o produto que revelou o defeito.
+  ⚠️ **Não resolve o retroativo NÃO reprocessado** — esse continua sendo a limitação antiga
+  (`docs/o-que-falta.md`): a fotografia é a do instante do lançamento.
+  ⚠️ **A checagem foi provada dos dois lados**: sem a correção das leituras, o bloco `3b` do
+  `smoke_reprocessar` falha em 4 das 5 checagens; com ela, passa.
+
 - 🔑 **`estoque_movimentos.um`: a unidade em que CADA linha foi gravada** (migração 076,
   19/09/2026). Nasceu para desfazer um impasse: o razão é append-only, as quantidades
   históricas estão na unidade antiga, e por isso trocar a unidade de um produto com

@@ -85,7 +85,7 @@ def estoque_em(cur, id_unidade: int, ate: date | None,
                   JOIN produtos pr ON pr.id = m.id_produto
                  WHERE m.id_unidade = %(u)s AND m.data_movimento < %(ate)s
                    AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
-                 ORDER BY m.id_produto, m.id_local, m.id DESC
+                 ORDER BY m.id_produto, m.id_local, coalesce(m.ordem_cadeia, m.id) DESC
             )
             SELECT u.id_produto, pr.codigo, pr.nome AS produto, pr.um_estoque,
                    c.nome AS categoria, g.nome AS setor,
@@ -352,7 +352,7 @@ def memoria_do_produto(cur, id_unidade: int, id_produto: int,
         """SELECT DISTINCT ON (m.id_local) m.id_local, m.saldo_apos, m.custo_medio_apos
              FROM estoque_movimentos m
             WHERE m.id_unidade = %s AND m.id_produto = %s AND m.data_movimento < %s
-            ORDER BY m.id_local, m.id DESC""",
+            ORDER BY m.id_local, coalesce(m.ordem_cadeia, m.id) DESC""",
         (id_unidade, id_produto, inicio),
     )
     antes = cur.fetchall()

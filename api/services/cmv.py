@@ -86,7 +86,9 @@ def valor_do_estoque(cur, id_unidade: int, ate: date | None = None,
               JOIN produtos pr ON pr.id = m.id_produto
              WHERE m.id_unidade = %(u)s AND m.data_movimento < %(ate)s
                AND (%(fora)s::varchar[] IS NULL OR pr.tipo <> ALL(%(fora)s))
-             ORDER BY m.id_produto, m.id_local, m.id DESC
+             -- ⚠️ A posição na CORRENTE, não o id: depois de um reprocessamento o
+             -- maior id deixa de ser o fim dela (migração 104).
+             ORDER BY m.id_produto, m.id_local, coalesce(m.ordem_cadeia, m.id) DESC
         )
         SELECT coalesce(sum(saldo_apos * custo_medio_apos), 0) AS valor FROM ultimo
         """,
@@ -122,7 +124,7 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
                    id_produto, id_local, saldo_apos, custo_medio_apos
               FROM estoque_movimentos
              WHERE id_unidade = %(u)s AND data_movimento < %(inicio)s
-             ORDER BY id_produto, id_local, id DESC
+             ORDER BY id_produto, id_local, coalesce(ordem_cadeia, id) DESC
         ),
         final AS (
             -- ⚠️ Quando o período termina HOJE — o caso do mês aberto, que é o
@@ -144,7 +146,7 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
                   FROM estoque_movimentos
                  WHERE id_unidade = %(u)s AND NOT %(fim_e_hoje)s
                    AND data_movimento < %(limite)s
-                 ORDER BY id_produto, id_local, id DESC
+                 ORDER BY id_produto, id_local, coalesce(ordem_cadeia, id) DESC
             ) AS _pelo_razao
         ),
         no_periodo AS (

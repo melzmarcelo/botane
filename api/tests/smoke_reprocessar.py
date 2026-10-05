@@ -157,6 +157,40 @@ linha = (saldos or [{}])[0]
 checar("a prateleira fica com o saldo certo", float(linha.get("quantidade") or 0) == 4, linha)
 checar("e com o custo médio certo", float(linha.get("custo_medio") or 0) == 64, linha)
 
+print("\n3b. quem lê o saldo de uma DATA segue a corrente reprocessada")
+# 🔑 **O defeito de 05/10/2026.** Reprocessar refaz a fotografia na ordem da
+# DATA, e os relatórios pegavam "o último movimento antes do dia X" pelo maior
+# ID. Aqui a entrada tem o id MAIOR e a data MENOR: depois do reprocessamento o
+# fim da corrente é a saída (saldo 4), e quem lia pelo id via a entrada (saldo
+# 6) — 2 unidades, R$ 128, que não existem. A soma do CMV por grupo deixava de
+# fechar com o CMV do período em exatamente esse valor.
+# ⚠️ Agosto inteiro: o recorte termina ANTES de hoje, que é quando a leitura
+# vai ao razão e não à prateleira.
+def perto(a, b, tol=0.01):
+    return a is not None and b is not None and abs(float(a) - float(b)) < tol
+
+
+recorte = "inicio=2026-08-01&fim=2026-08-31"
+st, mov = chamar("GET", f"/cmv/movimentacao?{recorte}", token=token)
+linha_mov = next((l for l in (mov or {}).get("linhas", []) if l["id_produto"] == produto), {})
+checar("a movimentação de agosto termina com 4, não com 6",
+       float(linha_mov.get("qtd_final") or 0) == 4, linha_mov)
+checar("valendo 4 x 64,00 = 256,00", perto(linha_mov.get("valor_final"), 256), linha_mov)
+checar("e a conta do produto fecha: 0 + 384 - 128 = 256",
+       perto(float(linha_mov.get("valor_inicial") or 0)
+             + float(linha_mov.get("valor_entradas") or 0)
+             - float(linha_mov.get("valor_saidas") or 0), linha_mov.get("valor_final")),
+       linha_mov)
+st, por_produto = chamar("GET", f"/cmv/por-grupo?agrupar=produto&{recorte}", token=token)
+linha_grupo = next((g for g in (por_produto or [])
+                    if g.get("grupo") == f"VINHO REPRO {marca}"), {})
+checar("o CMV por produto lê o mesmo estoque final",
+       perto(linha_grupo.get("estoque_final"), 256), linha_grupo)
+st, apur = chamar("GET", f"/cmv/apuracao?{recorte}", token=token)
+soma = sum(float(g["cmv"]) for g in (por_produto or []))
+checar("e a soma dos produtos fecha com o CMV do período",
+       perto(soma, (apur or {}).get("cmv_real"), tol=0.05), (soma, (apur or {}).get("cmv_real")))
+
 print("\n4. rodar de novo não muda nada")
 st, denovo = chamar("POST", "/estoque/reprocessar", {"id_produto": produto}, token=token)
 checar("a segunda prévia não acha nada a mudar", (denovo or {}).get("mudam") == 0, denovo)

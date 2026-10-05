@@ -107,7 +107,10 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
                    saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
              WHERE id_unidade = ANY(%s) AND data_movimento < %s
-             ORDER BY id_unidade, id_produto, id_local, id DESC
+             -- ⚠️ A posição na CORRENTE, não o id (migração 104): é a mesma
+             -- leitura de `cmv.valor_do_estoque`, e as duas têm de concordar
+             -- para a soma dos grupos fechar com o CMV.
+             ORDER BY id_unidade, id_produto, id_local, coalesce(ordem_cadeia, id) DESC
         ),
         final AS (
             SELECT DISTINCT ON (id_unidade, id_produto, id_local)
@@ -115,7 +118,10 @@ def cmv_por_grupo(cur, id_unidade, inicio: date, fim: date,
                    saldo_apos * custo_medio_apos AS valor
               FROM estoque_movimentos
              WHERE id_unidade = ANY(%s) AND data_movimento < %s
-             ORDER BY id_unidade, id_produto, id_local, id DESC
+             -- ⚠️ A posição na CORRENTE, não o id (migração 104): é a mesma
+             -- leitura de `cmv.valor_do_estoque`, e as duas têm de concordar
+             -- para a soma dos grupos fechar com o CMV.
+             ORDER BY id_unidade, id_produto, id_local, coalesce(ordem_cadeia, id) DESC
         ),
         -- ⚠️ **Líquida de estorno, como na apuração.** Compra lançada e
         -- estornada deixava o grupo com custo que não houve — e, por tabela, a

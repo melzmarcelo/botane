@@ -712,7 +712,7 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
     cur.execute(
         """SELECT id, id_local, data_movimento, tipo, quantidade, custo_unitario,
                   custo_total, saldo_apos, custo_medio_apos, custo_provisorio, origem_tipo,
-                  id_estorno_de
+                  id_estorno_de, ordem_cadeia
              FROM estoque_movimentos
             WHERE id_unidade = %s AND id_produto = %s
             ORDER BY data_movimento, id""",
@@ -894,6 +894,23 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
                 (id_unidade, s["id_local"], id_produto, s["quantidade_para"],
                  s["custo_medio_para"]),
             )
+
+    # 🔑 **A corrente passou a estar na ordem da DATA — e isso fica ESCRITO**
+    # (`ordem_cadeia`, migração 104). Quem pergunta "quanto havia no dia X" pega
+    # o último movimento da corrente antes de X; sem isto "último" era o de
+    # maior id, que depois do reprocessamento já não é o fim dela. Medido: uma
+    # venda de setembro lançada depois da entrada de outubro fazia o relatório
+    # ler saldo −5 onde havia 15, e a soma do CMV por grupo abria em R$ 800.
+    # ⚠️ Os PRÓPRIOS ids do produto, redistribuídos na ordem da data: continuam
+    # únicos e menores que o id de qualquer movimento futuro, que entra no fim.
+    # ⚠️ Fora do `if mudancas`: a posição acompanha a corrente mesmo quando
+    # nenhum número mudou.
+    if aplicar:
+        posicoes = sorted(m["id"] for m in movimentos)
+        for m, posicao in zip(movimentos, posicoes):
+            if (m["ordem_cadeia"] or m["id"]) != posicao:
+                cur.execute("UPDATE estoque_movimentos SET ordem_cadeia = %s WHERE id = %s",
+                            (posicao, m["id"]))
 
     return {
         "produto": produto["nome"],
