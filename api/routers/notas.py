@@ -27,6 +27,7 @@ from services import nfe_xml
 from services.omie import importador
 from services.omie import vinculo as vinculo_omie
 from services import produtos_vinculo
+from services import notas_lote
 
 router = APIRouter(prefix="/notas", tags=["Notas de entrada"])
 
@@ -66,6 +67,12 @@ class VincularRequest(BaseModel):
 
 
 class LancarRequest(BaseModel):
+    id_local: int | None = None
+
+
+class LancarLoteRequest(BaseModel):
+    # Nulo = todas as prontas. Uma lista só RESTRINGE: o servidor reclassifica.
+    ids: list[int] | None = Field(default=None, max_length=2000)
     id_local: int | None = None
 
 
@@ -482,6 +489,40 @@ def reconciliar(id_nota: int | None = None,
         f"nenhum dos {r['pendentes']} item(ns) pendentes encontrou produto"
     )
     return r
+
+
+@router.get("/lote/previa")
+def previa_do_lote(ctx: Contexto = Depends(requer_permissao("compras.lancar"))) -> dict:
+    """O que "lançar as conciliadas" faria nesta loja, nota a nota, sem gravar nada.
+
+    🔑 A prévia é o lançamento de verdade, ensaiado e desfeito — ver
+    `services/notas_lote.py`. ⚠️ Declarada ANTES de `/{id_nota}`: "lote" não é
+    número, e depois dela a rota por número responderia 422.
+    """
+    with get_cursor() as cur:
+        return notas_lote.previa(cur, unidade_atual(cur, ctx), ctx.id_usuario,
+                                 pode_retroativo=ctx.pode("estoque.retroativo"))
+
+
+@router.post("/lote/lancar")
+def lancar_o_lote(body: LancarLoteRequest,
+                  ctx: Contexto = Depends(requer_permissao("compras.lancar"))) -> dict:
+    """Lança de uma vez as notas PRONTAS da loja atual (todas, ou só as de `ids`).
+
+    ⚠️ Só as da loja em que a pessoa está: `ids` de outra loja simplesmente não
+    entram, como se não existissem. E nota que pede conferência do fator não é
+    lançada pelo lote — é na tela dela que alguém decide.
+    """
+    with get_cursor() as cur:
+        r = notas_lote.lancar(cur, unidade_atual(cur, ctx), ctx.id_usuario, body.ids,
+                              body.id_local, ctx.pode("estoque.retroativo"))
+    if r["notas"]:
+        frase = f"{r['notas']} nota(s) lançada(s) no estoque, {r['itens']} item(ns)"
+        if r["fora"]:
+            frase += f". {len(r['fora'])} ficaram de fora — veja o motivo de cada uma"
+    else:
+        frase = "Nenhuma nota foi lançada."
+    return r | {"message": frase}
 
 
 @router.get("/vinculos")

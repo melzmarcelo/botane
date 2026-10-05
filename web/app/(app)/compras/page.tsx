@@ -13,6 +13,7 @@ import { qtd } from "@/lib/numeros";
 import { CORES, dataBr, Nota } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
+import LancarLote from "./lote";
 
 /**
  * A lista das notas de entrada — só a lista.
@@ -217,6 +218,7 @@ export default function PaginaCompras() {
   const [aPendentes, setAPendentes] = useState(0);
   const [arquivados, setArquivados] = useState<Arquivados | null>(null);
   const [vendoArquivados, setVendoArquivados] = useState(false);
+  const [vendoLote, setVendoLote] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -253,6 +255,17 @@ export default function PaginaCompras() {
             <Link href="/compras/nova" className="btn btn-secundario">
               Digitar nota
             </Link>
+            {/* 🔑 O lote fica sempre à vista para quem lança: a janela é que diz
+                quantas estão prontas, quantas travam e o que destrava. */}
+            {pode("compras.lancar") && (
+              <button
+                className="btn btn-secundario"
+                onClick={() => setVendoLote(true)}
+                title="Lança de uma vez as notas que já estão conciliadas, com prévia"
+              >
+                Lançar as conciliadas
+              </button>
+            )}
             {pode("integracao.omie") && (
               <button className="btn btn-secundario" onClick={sincronizar} aria-busy={ocupado} disabled={ocupado}>
                 Buscar no Omie
@@ -395,6 +408,10 @@ export default function PaginaCompras() {
           dezenas de linhas de uma vez, e aprovar uma a uma seria um dia de
           trabalho — mas repontar às cegas é pior. A janela mostra de onde para
           onde cada item vai, e o botão faz tudo o que está listado. */}
+      {vendoLote && (
+        <LancarLote aoFechar={() => setVendoLote(false)} aoLancar={() => void carregar()} />
+      )}
+
       {vendoArquivados && arquivados && (
         <Modal
           titulo="Itens apontando para cadastro arquivado"

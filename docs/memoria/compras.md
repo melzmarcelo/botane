@@ -205,6 +205,27 @@
   alerta "completar cadastro" do início já existia, mas ele avisa a casa, não esta nota — e quem
   sabe a unidade e o fator é justamente quem está com a nota na mão.
 
+- 🔑 **Lançar as conciliadas de uma vez, com prévia** (`services/notas_lote.py`,
+  `compras/lote.tsx`, 05/10/2026). No ar havia 94 notas prontas esperando um clique cada,
+  R$ 50 mil de compra fora do estoque — e enquanto esperam, a venda sai sem saldo (negativo,
+  custo provisório) e o CMV fica sem a compra.
+  🔑 **A prévia É o lançamento, ensaiado e desfeito**: cada nota passa pela MESMA
+  `importador.lancar_nota` dentro de um `SAVEPOINT` que volta atrás. Reescrever as recusas na
+  prévia seria a segunda cópia da regra, e ela divergiria na primeira recusa nova.
+  ⚠️ **Três destinos, e o lote só lança o primeiro**: *pronta*; *conferir* (a nota declara
+  conversão diferente da do cadastro, `fator_diverge` — nem a pedido o lote lança, é na tela da
+  nota que alguém decide); *travada* (a frase é a do lançamento).
+  ⚠️ **`ids` só RESTRINGE.** O servidor reclassifica na hora do clique; nota de outra loja, já
+  lançada ou que deixou de estar pronta volta em `fora` com o motivo. Uma recusada não desfaz
+  as outras (ponto de retorno por nota).
+  ⚠️ **Da mais antiga para a mais nova**: o custo médio é calculado na ordem de lançamento.
+  🔑 **A trava quase nunca é da nota, é do CADASTRO** — medido na base local: 594 notas
+  travadas por produto sem unidade de estoque, o mesmo produto em várias. Por isso a prévia traz
+  `destrava`: os cadastros que seguram notas, do que solta mais para o que solta menos. ⚠️ Isso
+  ORIENTA, não decide — quem diz se a nota lança continua sendo o ensaio.
+  ⚠️ **A suíte SEMPRE passa `ids`**: a base local tem notas conciliadas de verdade, e um lote
+  sem `ids` lançaria todas. Cobertura: `tests/smoke_notas_lote.py` (27 checagens).
+
 ## Armadilhas já pagas
 
 - 🔴 **Rota por número conferia a permissão e NÃO a loja** (validação de 29/09/2026). Ver,

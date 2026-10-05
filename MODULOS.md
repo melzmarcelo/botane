@@ -18,7 +18,7 @@ entregue.
 |---|---|---|
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits` |
 | [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `producao`, `rendimento`, `rendimento_por_local` |
-| [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `ean_das_notas` |
+| [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
@@ -65,7 +65,7 @@ faria a produção de ontem mudar de valor sozinha.
 Notas de entrada: XML, digitação, conciliação e lançamento no razão.
 
 - **Rotas:** `notas.py`
-- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`
+- **Serviços:** `nfe_xml.py`, `ean_das_notas.py`, `notas_lote.py` (lançar as conciliadas de uma vez, com prévia)
 - **Telas:** `compras/`, `compras/[id]/`, `compras/nova/`
 - **Permissões:** `compras.notas`, `compras.conciliar`, `compras.lancar`
 
