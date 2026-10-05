@@ -45,6 +45,8 @@ export const ICONES = {
   // Fidelidade (091): o prêmio do cartão de visitas.
   presente: "M3.5 8.5h11v7h-11zM2.5 5.5h13v3h-13zM9 5.5v10M9 5.5C7.8 2.6 5 2.8 5.8 4.6 6.2 5.4 9 5.5 9 5.5s2.8-.1 3.2-.9C13 2.8 10.2 2.6 9 5.5",
   lupa: "M8.2 13.4a5.2 5.2 0 1 0 0-10.4 5.2 5.2 0 0 0 0 10.4zM12.2 12.2 15.5 15.5",
+  // Preços (05/10/2026): duas linhas que se afastam — preço e custo no tempo.
+  preco: "M2.5 12.5l4-3.5 3 2 6-6M2.5 15.5l4-1 3 .5 6-2.5",
 } as const;
 
 export type NomeIcone = keyof typeof ICONES;

@@ -19,7 +19,7 @@ entregue.
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits` |
 | [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `producao`, `rendimento`, `rendimento_por_local` |
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
-| [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes` |
+| [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes`, `preco_custo` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo` |
@@ -78,7 +78,7 @@ Tudo que decide quanto uma coisa custa.
 
 - **Serviço central:** `custos.py` — **o único lugar que sabe quanto custa um insumo**
 - **Também:** `precos.py`, `memoria_calculo.py`, o ajuste de custo em `ajustes.py`
-- **Telas:** o cartão de custo em `produtos/[id]/custo.tsx`, os relatórios de memória
+- **Telas:** o cartão de custo em `produtos/[id]/custo.tsx`, os relatórios de memória, e `precos/` (preço × custo no tempo — o começo da Precificação, `docs/precificacao-estudo.md`)
 
 🔑 **A ordem de precedência é a da confiança:** custo médio do razão → último
 preço do fornecedor → `produtos.custo_referencia`. O médio é o que a casa pagou;

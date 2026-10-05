@@ -122,6 +122,36 @@
 - **O médio segue a ordem de LANÇAMENTO, não a data do movimento** — data serve ao relatório;
   recalcular por data faria o CMV de ontem mudar sozinho.
 
+- 🔑 **Preço × custo no tempo — a primeira tela da Precificação** (`services/preco_custo.py`,
+  `GET /cmv/preco-custo/{id}`, tela `/precos`, 05/10/2026). O estudo inteiro está em
+  [`docs/precificacao-estudo.md`](../precificacao-estudo.md); esta parte só LÊ, e por isso veio
+  primeiro — não depende de nenhuma das decisões em aberto da configuração.
+  🔑 **Três fontes, e a tela DIZ qual usou**: preço de venda de `produto_precos` (o da loja
+  manda; sem ele, o da casa); custo de quem tem FICHA pelo `venda_itens.custo_ficha_unitario`
+  congelado em cada venda; custo de quem se revende pelo `custo_medio_apos` do razão. Quem tem
+  ficha e ainda não vendeu cai no razão em vez de mostrar gráfico vazio.
+  ⚠️ **A ficha não tem série própria**: o custo dela é calculado na hora, com o preço de hoje
+  dos ingredientes. O congelado na venda é a fotografia certa, mas só existe nos dias em que
+  houve venda — a linha segue o último custo conhecido, e a frase embaixo do gráfico diz isso.
+  ⚠️ **Degrau, não diagonal.** Preço e custo valem até a próxima mudança; a API devolve só as
+  datas em que algo mudou (mais as pontas), e o gráfico desenha `H…V…`.
+  ⚠️ **Sem custo é NULO, nunca zero** — zero faria a margem do trecho sair em 100%. A suíte cobra.
+  ⚠️ **A janela começa onde o sistema começa a saber algo**: produto de um mês, visto em doze,
+  teria onze meses vazios à esquerda e o desenho espremido na beirada.
+  ⚠️ **O primeiro preço não é "mudança"**: contá-lo faria todo produto novo aparecer com uma.
+  ⚠️ **A margem tem gráfico PRÓPRIO**, e não um segundo eixo: duas escalas no mesmo desenho
+  inventam uma relação que não existe. As cores das séries (`#2a8a5c`, `#3d6fc4`) foram
+  validadas para daltonismo e a do custo é tracejada — não trocar por gosto.
+  ⚠️ **Sem migração e sem permissão nova**: usa `cmv.painel`/`cmv.relatorios`, a mesma chave da
+  "Margem por prato" (é a mesma informação, vista no tempo). As chaves `precificacao.*` do
+  estudo nascem com a Configuração.
+  ⚠️ **No menu, é um grupo "Preços" de um item só** (vira item direto). Fora do grupo do CMV de
+  propósito: o dono pediu o CMV direto na lateral, e um segundo item o faria voltar a ser pasta.
+  ⚠️ **O produto mora na URL** (`/precos?produto=ID`), para a tela ser destino de link.
+  Cobertura: `tests/smoke_preco_custo.py` (25 checagens) e o bloco de Preços no `verificar.mjs`.
+  ⚠️ A suíte insere a vigência antiga de preço por SQL (a tela só grava preço com a data de
+  hoje) e apaga o que criou — é fixture de `produto_precos`, não do razão.
+
 ## Armadilhas já pagas
 
 - ⚠️ **O ajuste de custo é MAIS UM TIPO na tela de Ajustes, um produto por vez** — não um

@@ -7667,6 +7667,47 @@ try {
     semAtalhos.telas >= 8 && semAtalhos.repetidos.length === 0, semAtalhos);
   await foto(p, "36c-menu-novo");
 
+  // ---- Preço × custo: a primeira tela da Precificação (05/10/2026) ----
+  // 🔑 Só lê. A checagem cobra o que a tela promete: está no menu, abre vazia
+  // pedindo um produto, e com um produto na URL desenha os dois gráficos OU diz
+  // que não há custo — nunca uma tela em branco. ⚠️ O conteúdo dos números é da
+  // suíte da API (`smoke_preco_custo`); aqui é a tela que se mede.
+  await irPara(p, `${WEB}/precos`);
+  await p.waitForSelector("h1", { timeout: 12000 });
+  await new Promise((r) => setTimeout(r, 800));
+  const precosVazia = await p.evaluate(() => ({
+    titulo: document.querySelector("h1")?.innerText ?? "",
+    pede: /Escolha um produto/.test(document.querySelector("main")?.innerText ?? ""),
+    noMenu: document.querySelectorAll('aside a[href="/precos"]').length,
+    // A busca é a PADRÃO da casa (campo + lupa), não um combobox de produtos.
+    combobox: [...document.querySelectorAll("main select")].some((s) => s.options.length > 8),
+  }));
+  checar("a tela de preços abre e está no menu",
+    /Preço/.test(precosVazia.titulo) && precosVazia.noMenu === 1, precosVazia);
+  checar("vazia, ela pede um produto", precosVazia.pede, precosVazia);
+  checar("e o produto se escolhe pela busca padrão, não por combobox",
+    precosVazia.combobox === false, precosVazia);
+  const { dados: algumProduto } = await api("GET", "/produtos?limite=1", null, token);
+  const idDoPreco = (algumProduto ?? [])[0]?.id;
+  if (idDoPreco) {
+    await irPara(p, `${WEB}/precos?produto=${idDoPreco}`);
+    await p.waitForFunction(
+      () => /De onde vem o custo|ainda não tem custo conhecido/.test(document.body.innerText),
+      { timeout: 15000 }).catch(() => {});
+    const precosCheia = await p.evaluate(() => ({
+      explica: /De onde vem o custo|ainda não tem custo conhecido/.test(document.body.innerText),
+      campo: [...document.querySelectorAll("main input.campo")].map((i) => i.value)[0] ?? "",
+      ladrilhos: document.querySelectorAll("main .cartao .rotulo").length,
+      erro: /Falha ao carregar/.test(document.body.innerText),
+    }));
+    checar("com o produto na URL, a tela diz de onde vem o custo (ou que não há)",
+      precosCheia.explica && !precosCheia.erro, precosCheia);
+    checar("e o campo mostra o nome do produto, não o id",
+      precosCheia.campo.length > 0 && !/^\d+$/.test(precosCheia.campo), precosCheia);
+    checar("com os quatro números do resumo", precosCheia.ladrilhos >= 4, precosCheia);
+  }
+  await foto(p, "36d-precos");
+
   // 🔑 **As peças de formulário, redesenhadas** (15/09/2026, protótipo aprovado
   // pelo dono: `apresentacao/pecas-prototipo.html`). Três coisas que a norma
   // mede e uma que ela não mede, mas que era o pior defeito da tela.

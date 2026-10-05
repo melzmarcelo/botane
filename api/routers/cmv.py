@@ -17,7 +17,7 @@ from models.cmv import (
 from models.produtos import TIPOS as TIPOS_PRODUTO
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
-from services import cmv_conferencia, cmv_grupos, memoria_calculo, periodos, relatorios
+from services import cmv_conferencia, cmv_grupos, memoria_calculo, periodos, preco_custo, relatorios
 
 router = APIRouter(prefix="/cmv", tags=["CMV"])
 
@@ -315,6 +315,22 @@ def preco_do_produto(
     """Cada compra do insumo, da mais recente para a mais antiga."""
     with get_cursor() as cur:
         return relatorios.historico_de_preco(cur, unidade_atual(cur, ctx), id_produto)
+
+
+@router.get("/preco-custo/{id_produto}")
+def preco_e_custo(
+    id_produto: int,
+    meses: int = Query(default=12, ge=1, le=36),
+    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+) -> dict:
+    """A evolução do preço de venda e do custo de UM produto, em degraus.
+
+    🔑 A primeira tela da Precificação (`docs/precificacao-estudo.md`): só lê, com
+    o que o sistema já guarda. ⚠️ A mesma chave da "Margem por prato" — é a mesma
+    informação (preço, custo e a distância entre os dois), vista no tempo.
+    """
+    with get_cursor() as cur:
+        return preco_custo.evolucao(cur, unidade_atual(cur, ctx), id_produto, meses)
 
 
 @router.get("/movimentacao")

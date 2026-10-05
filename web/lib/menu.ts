@@ -135,6 +135,18 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
+    // 🔑 **Preços — o começo da Precificação** (05/10/2026, `docs/precificacao-estudo.md`).
+    // Nasce com uma tela só (a que só lê), e por isso aparece direto na lateral — grupo de
+    // um item vira item em `montarMenu`. Configuração e Precificação entram aqui depois.
+    // ⚠️ Fora do grupo do CMV de propósito: o dono pediu o CMV direto no menu, e um segundo
+    // item ali o transformaria de volta numa pasta.
+    grupo: "Preços",
+    icone: "preco",
+    itens: [
+      { href: "/precos", nome: "Preço × custo", icone: "preco", chave: ["cmv.painel", "cmv.relatorios"] },
+    ],
+  },
+  {
     // 🔑 **"Portal de Clientes"** (pedido do dono, 24/09/2026: *"alterar o
     // módulo Reservas para Portal de Clientes. No menu: Portal de Clientes —
     // Configuração — Reservas, e dentro dois submenus, Agenda e Salão; no mesmo
