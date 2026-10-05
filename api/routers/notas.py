@@ -28,6 +28,7 @@ from services.omie import importador
 from services.omie import vinculo as vinculo_omie
 from services import produtos_vinculo
 from services import notas_lote
+from services import estoque as motor_estoque
 
 router = APIRouter(prefix="/notas", tags=["Notas de entrada"])
 
@@ -520,6 +521,9 @@ def lancar_o_lote(body: LancarLoteRequest,
         frase = f"{r['notas']} nota(s) lançada(s) no estoque, {r['itens']} item(ns)"
         if r["fora"]:
             frase += f". {len(r['fora'])} ficaram de fora — veja o motivo de cada uma"
+        aviso = motor_estoque.aviso_fora_de_ordem(r["fora_de_ordem"])
+        if aviso:
+            frase += f". {aviso}"
     else:
         frase = "Nenhuma nota foi lançada."
     return r | {"message": frase}
@@ -895,7 +899,9 @@ def lancar(id_nota: int, body: LancarRequest,
         r = importador.lancar_nota(cur, id_nota, ctx.id_usuario, body.id_local,
                                    ctx.pode("estoque.retroativo"))
         auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "lancar", depois=r)
-    return r | {"message": f"{r['itens_lancados']} item(ns) lançado(s) no estoque"}
+    aviso = motor_estoque.aviso_fora_de_ordem(len(r.get("fora_de_ordem") or []))
+    return r | {"message": f"{r['itens_lancados']} item(ns) lançado(s) no estoque"
+                           + (f". {aviso}" if aviso else "")}
 
 
 @router.post("/{id_nota}/atualizar-do-omie")

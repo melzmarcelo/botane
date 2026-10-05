@@ -38,6 +38,21 @@
   Cobertura: `tests/smoke_cmv_conferencia.py` (17 checagens, por DELTA — a base local tem
   pendência de verdade).
 
+- 🔑 **O lado REAL também diz quando não tem base** (`GET /cmv/conferencia`, faixa no painel,
+  05/10/2026). O painel já avisava que o TEÓRICO é fraco com pouca ficha; do real ele calava —
+  e no ar um mês de R$ 235 mil de receita mostrava food cost de 1,38%, porque 94 notas do
+  período não tinham sido lançadas. É a MESMA lista da janela de fechar (`cmv_conferencia`), no
+  recorte que a tela mostra, só com os pontos de peso `distorce`, e ANTES dos ladrilhos.
+  ⚠️ **Permissão do PAINEL** (`cmv.painel`), não a de fechar: quem lê o número precisa saber o
+  que falta nele, mesmo sem poder congelá-lo. ⚠️ Só no escopo da loja e em período ABERTO — a
+  conferência é por loja, e o fechado já foi decidido.
+  ⚠️ **A busca é à parte e não trava a tela**: aviso fora do ar não pode esconder o número.
+  ⚠️ **Na tela inicial, CMV NEGATIVO vai em vermelho com a legenda dizendo o que é** — estoque
+  que cresceu sem compra lançada não é economia, e sem a legenda ele parecia boa notícia.
+  ⚠️ **O alerta do período aberto falava "Mês de 09/2026"** para uma casa que fecha por
+  SEMANA, e procurava um fechamento mensal que ela nunca faria. Agora pergunta a `periodos`
+  qual é o período anterior, e considera fechado qualquer fechamento que o CUBRA.
+
 - **`services/relatorios.py`** (19/08/2026): os dois relatórios do dono. `cmv_por_grupo`
   quebra a MESMA conta do CMV por setor ou categoria — **não é rateio**, e a soma dos grupos
   fecha com o CMV do período (o teste confere isso). Produto sem grupo aparece como "Sem

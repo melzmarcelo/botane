@@ -24,7 +24,7 @@ from models.fichas import (CustoPrevisto, FichaCreate, FichaDuplicar, FichaRespo
                            FichaResumo, FichaUpdate, ItemFicha, ModosDaFichaRequest,
                            FotoBase64, RendimentoSugerido)
 from seguranca import Contexto, requer_permissao, unidade_atual
-from services import custos
+from services import custos, fichas_fila
 
 router = APIRouter(prefix="/fichas", tags=["fichas técnicas"])
 
@@ -170,6 +170,23 @@ def listar(
                 f["custo_por_porcao"] = _num(c["custo_por_porcao"])
                 f["custo_completo"] = c["completo"]
     return fichas
+
+
+@router.get("/fila")
+def fila_de_fichas(dias: int = Query(default=30, ge=1, le=365),
+                   limite: int = Query(default=30, ge=1, le=200),
+                   ctx: Contexto = Depends(_ver)) -> dict:
+    """Por onde começar: os produtos mais vendidos que ainda não sabem o próprio custo.
+
+    🔑 A ordem é a da RECEITA, e cada linha diz a cobertura a que ela leva — ver
+    `services/fichas_fila.py`. ⚠️ Declarada ANTES de `/{id_ficha}`: "fila" não é
+    número, e depois dela a rota por número responderia 422.
+    ⚠️ Dinheiro só para quem tem `fichas.custos`; os demais recebem a ordem e o
+    percentual.
+    """
+    with get_cursor() as cur:
+        return fichas_fila.fila(cur, unidade_atual(cur, ctx), dias, limite,
+                                ve_valores=ctx.pode("fichas.custos"))
 
 
 @router.get("/{id_ficha}", response_model=FichaResponse)

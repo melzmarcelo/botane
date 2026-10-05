@@ -913,6 +913,16 @@ aba chamada Catálogo. Nesta aba teremos Foto e um campo para Informação Adici
 são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos.md).
 
 
+- 🔑 **O alerta de rascunho conta só o que está EM USO** (`services/produtos_em_uso.py`,
+  05/10/2026). "Produto em rascunho" marcava 1.356 no ar e ninguém lia: quase tudo é resíduo
+  da carga do catálogo do Omie. Em uso = aparece em nota ABERTA, foi vendido nos últimos 30
+  dias ou tem saldo (positivo ou negativo). A frase do alerta diz quantos ficaram de fora.
+  ⚠️ **A condição é escrita UMA vez** e serve ao alerta e ao filtro `em_uso` de `GET /produtos`
+  ("Rascunho em uso" na tela): se as duas discordassem, o alerta diria 40 e a lista aberta por
+  ele mostraria outro número. A suíte cobra que contem igual.
+  ⚠️ **O link do alerta estava QUEBRADO desde sempre**: apontava `/produtos?status=RASCUNHO`,
+  e a tela lê `situacao` — abria a lista sem filtro nenhum.
+
 ## Armadilhas já pagas
 
 - ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**

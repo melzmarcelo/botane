@@ -611,6 +611,25 @@
   todos eles de uma vez, calado. As duas telas mandam o campo sempre, e o padrão de cada uma é o
   mesmo: um por aba seria armadilha.
 
+- 🔑 **"Por onde começar": a fila de fichas pela RECEITA** (`services/fichas_fila.py`,
+  `GET /fichas/fila`, `fichas/fila.tsx`, 05/10/2026). No ar havia 446 produtos de produção
+  própria sem ficha e 2,67% da receita coberta; a pendência era uma lista alfabética do
+  cadastro. A fila ordena pelo que foi VENDIDO sem custo e diz, linha a linha, a cobertura a
+  que se chega resolvendo dali para cima.
+  ⚠️ **Mede `venda_itens` com `custo_ficha_unitario` nulo**, o mesmo que a apuração chama de
+  "item sem custo" — não o cadastro. Produto sem ficha que ninguém vende não distorce nada e
+  não entra.
+  ⚠️ **Três faltas, três destinos**: `sem_ficha` (abre `/fichas/nova?produto=ID`, já com o
+  produto escolhido), `ficha_sem_custo` (a ficha existe e algum ingrediente não tem custo) e
+  `sem_custo` (comprado pronto que nunca teve custo de compra).
+  ⚠️ **Dinheiro só para quem tem `fichas.custos`**; a cozinha recebe a ordem e o percentual.
+  ⚠️ **O custo do item vendido é CONGELADO**: a ficha de hoje custeia as vendas de amanhã, e a
+  tela diz isso — senão quem faz a ficha e volta ao painel acha que não funcionou.
+  ⚠️ `/fichas/nova?produto=` busca o NOME além de guardar o id: o campo mostra o rótulo, e sem
+  ele o produto estaria escolhido por dentro com o campo em branco.
+  Cobertura: `tests/smoke_fila_e_rascunhos.py`. ⚠️ A suíte CANCELA a venda de teste — ela vale
+  R$ 2 milhões de propósito (para caber no topo da fila) e, viva, inflaria a receita do dia.
+
 ## Armadilhas já pagas
 
 - 🔑 **Não dava para saber QUAL commit estava no ar, e isso custou uma ida e volta.** `VERSAO` é

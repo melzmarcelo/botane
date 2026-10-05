@@ -8,6 +8,7 @@ import { useSessao } from "@/lib/sessao";
 import { ProdutoResumo, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
+import FilaDeFichasCartao from "./fila";
 
 import { custo } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
@@ -107,6 +108,10 @@ export default function PaginaFichas() {
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
+
+      {/* 🔑 A fila pela RECEITA vem antes da lista alfabética de pendências: é
+          ela que diz por onde começar. */}
+      <FilaDeFichasCartao podeEditar={podeEditar} />
 
       {!!semFicha.length && podeEditar && (
         <Aviso tipo="info">

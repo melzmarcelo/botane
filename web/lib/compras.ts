@@ -19,6 +19,11 @@ export type NotaDoLote = {
   motivo: string | null;
   /** Quanto entra no estoque — só na pronta. */
   valor_estoque?: number;
+  /**
+   * Quantos produtos desta nota já têm movimento com data POSTERIOR à dela — a
+   * nota atrasada. Não trava; pede reprocessar esses produtos depois.
+   */
+  fora_de_ordem?: number;
 };
 
 export type PreviaDoLote = {

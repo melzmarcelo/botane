@@ -128,7 +128,12 @@ def _classificar(cur, nota: dict, id_usuario: int, id_local: int | None,
             "motivo": (f"A nota declara uma conversão diferente da do cadastro em "
                        f"{mostra}{resto}. Confira na nota antes de lançar."),
         }
-    return linha | {"situacao": PRONTA, "valor_estoque": r["valor"]}
+    # ⚠️ `fora_de_ordem`: quantos produtos desta nota já têm movimento com data
+    # posterior à dela. Não trava nem pede conferência — a nota atrasada é o caso
+    # comum, e é para ela que o lote existe —, mas a prévia mostra, porque esses
+    # produtos pedem reprocessamento depois.
+    return linha | {"situacao": PRONTA, "valor_estoque": r["valor"],
+                    "fora_de_ordem": len(r.get("fora_de_ordem") or [])}
 
 
 def _resumo(linhas: list[dict]) -> dict:
@@ -192,6 +197,7 @@ def lancar(cur, id_unidade: int, id_usuario: int, ids: list[int] | None = None,
     """
     pedidas = set(ids) if ids is not None else None
     lancadas, fora = [], []
+    fora_de_ordem: set[int] = set()
     for nota in _candidatas(cur, id_unidade, travar=True):
         if pedidas is not None and nota["id"] not in pedidas:
             continue
@@ -209,9 +215,14 @@ def lancar(cur, id_unidade: int, id_usuario: int, ids: list[int] | None = None,
                             depois=r | {"lote": True})
         lancadas.append(linha | {"itens_lancados": r["itens_lancados"],
                                  "valor_estoque": r["valor"]})
+        fora_de_ordem.update(r.get("fora_de_ordem") or [])
     return {
         "lancadas": lancadas, "fora": fora,
         "notas": len(lancadas),
         "itens": sum(l["itens_lancados"] for l in lancadas),
         "valor": round(sum(l["valor_estoque"] for l in lancadas), 2),
+        # Os PRODUTOS (distintos) que ficaram fora da ordem das datas — é a
+        # lista de quem reprocessar, não a soma por nota.
+        "fora_de_ordem": len(fora_de_ordem),
+        "produtos_fora_de_ordem": sorted(fora_de_ordem),
     }

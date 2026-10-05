@@ -47,8 +47,14 @@ export default function PeriodoAteAgora({ d, periodo }: { d: Dinheiro; periodo: 
         <Link href="/cmv" className="link-acao text-[13px]">painel de CMV ›</Link>
       </div>
       <div className="periodo-colunas">
+        {/* ⚠️ CMV NEGATIVO não é economia: o estoque cresceu mais do que as compras
+            lançadas explicam — entrada sem nota, ou nota de outro período. O número
+            vai em vermelho e a legenda diz o que ele é, em vez de parecer boa notícia. */}
         <Coluna rotulo="Custo do que saiu" valor={reais(d.cmv_mes)} href="/cmv"
-                sub={`CMV ${periodo.termos.do}`} />
+                tom={d.cmv_mes < 0 ? "erro" : undefined}
+                sub={d.cmv_mes < 0
+                  ? "negativo: há entrada sem compra lançada — confira no painel"
+                  : `CMV ${periodo.termos.do}`} />
         <Coluna rotulo="Food cost" valor={fc === null ? "—" : pct(fc)} href="/cmv"
                 tom={acimaDaMeta ? "alerta" : undefined}
                 sub={fc === null

@@ -99,6 +99,23 @@ export default function EditorFicha() {
 
   const [ficha, setFicha] = useState<Ficha | null>(null);
   const [idProduto, setIdProduto] = useState("");
+  // 🔑 **Quem vem da fila "Por onde começar" já escolheu o produto**
+  // (`/fichas/nova?produto=123`). Sem isto a pessoa clicava em "criar a ficha"
+  // do cappuccino e caía num formulário em branco, procurando o cappuccino.
+  // ⚠️ Num efeito, lendo a barra de endereço: a página é pré-renderizada, e ler
+  // isso na primeira pintura daria HTML diferente do do servidor.
+  useEffect(() => {
+    if (!nova) return;
+    const pedido = new URLSearchParams(window.location.search).get("produto");
+    if (!pedido || !/^\d+$/.test(pedido)) return;
+    setIdProduto(pedido);
+    // ⚠️ O campo mostra o RÓTULO, não o id: sem buscar o nome, o produto estaria
+    // escolhido por dentro e o campo continuaria em branco na tela.
+    api
+      .get<{ id: number; codigo: string | null; nome: string }>(`/produtos/${pedido}`)
+      .then((p) => setRotuloProduto(rotuloDe({ id: p.id, codigo: p.codigo, nome: p.nome })))
+      .catch(() => setIdProduto(""));
+  }, [nova]);
   const [rotuloProduto, setRotuloProduto] = useState("");
   const [cabecalho, setCabecalho] = useState({
     rendimento_qtd: "1", rendimento_um: "", porcoes: "1", porcao_qtd: "",

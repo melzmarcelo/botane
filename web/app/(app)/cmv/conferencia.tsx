@@ -4,7 +4,42 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Aviso, Etiqueta } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
-import { conferirFechamento, type ConferenciaDoFechamento } from "@/lib/cmv";
+import {
+  conferirFechamento,
+  type ConferenciaDoFechamento,
+  type PendenciaDoFechamento,
+} from "@/lib/cmv";
+
+/**
+ * A lista das pendências — uma LINHA por ponto, com o detalhe recolhido.
+ * Serve à janela de fechar e à faixa do painel: a mesma lista em dois lugares
+ * tem de ter a mesma cara, senão parece que são duas conferências.
+ */
+export function ListaDePendencias({ itens }: { itens: PendenciaDoFechamento[] }) {
+  return (
+    <ul className="mt-2 flex flex-col gap-px overflow-hidden rounded-xl border border-linha bg-linha">
+      {itens.map((i) => (
+        <li key={i.chave} className="bg-superficie px-3.5 py-2.5">
+          <details>
+            <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[14px]">
+              <span className="font-semibold">
+                <Etiqueta cor={i.peso === "distorce" ? "alerta" : "neutro"}>{i.quantidade}</Etiqueta>{" "}
+                {i.titulo}
+              </span>
+              <span className="flex items-baseline gap-3">
+                {i.valor !== null && <span className="tabular-nums">{reais(i.valor)}</span>}
+                <Link href={i.href} className="link-acao text-[13.5px]">
+                  resolver
+                </Link>
+              </span>
+            </summary>
+            <p className="mt-1.5 text-[13.5px] leading-snug text-suave">{i.detalhe}</p>
+          </details>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * A conferência que aparece ANTES do botão de fechar o período.
@@ -65,30 +100,10 @@ export default function ConferenciaDoFechamentoLista({
       <p className="text-[14px] font-semibold">
         Antes de fechar — {r.itens.length} ponto(s) neste período
       </p>
-      <ul className="mt-2 flex flex-col gap-px overflow-hidden rounded-xl border border-linha bg-linha">
-        {r.itens.map((i) => (
-          // ⚠️ Uma LINHA por ponto, com o detalhe recolhido: a janela de confirmar
-          // tem os botões no fim do corpo, e uma lista aberta os empurrava para
-          // baixo da dobra — botão que rolou para fora é botão que não existe.
-          <li key={i.chave} className="bg-superficie px-3.5 py-2.5">
-            <details>
-              <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[14px]">
-                <span className="font-semibold">
-                  <Etiqueta cor={i.peso === "distorce" ? "alerta" : "neutro"}>{i.quantidade}</Etiqueta>{" "}
-                  {i.titulo}
-                </span>
-                <span className="flex items-baseline gap-3">
-                  {i.valor !== null && <span className="tabular-nums">{reais(i.valor)}</span>}
-                  <Link href={i.href} className="link-acao text-[13.5px]">
-                    resolver
-                  </Link>
-                </span>
-              </summary>
-              <p className="mt-1.5 text-[13.5px] leading-snug text-suave">{i.detalhe}</p>
-            </details>
-          </li>
-        ))}
-      </ul>
+      {/* ⚠️ Uma LINHA por ponto, com o detalhe recolhido: a janela de confirmar
+          tem os botões no fim do corpo, e uma lista aberta os empurrava para
+          baixo da dobra — botão que rolou para fora é botão que não existe. */}
+      <ListaDePendencias itens={r.itens} />
       {r.distorcem > 0 && (
         <p className="mt-3 text-[13.5px] text-suave">
           Os pontos em destaque <b className="text-tinta">mudam o CMV deste período</b>. Fechar

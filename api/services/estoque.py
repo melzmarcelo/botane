@@ -357,6 +357,20 @@ def lancar(
     saldo_atual, medio_atual = dec(saldo["quantidade"]), dec(saldo["custo_medio"])
     provisorio = False
 
+    # 🔑 **Este movimento entra ANTES de algum que já existe?** Lido com o saldo
+    # travado, que é o que garante que ninguém lança outro no meio. Ver
+    # `AVISO_FORA_DE_ORDEM`. ⚠️ Estorno fica de fora: ele espelha a data do
+    # original de propósito, e avisar ali seria alarme sobre o próprio conserto.
+    fora_de_ordem = False
+    if data_movimento and not id_estorno_de:
+        cur.execute(
+            """SELECT EXISTS (SELECT 1 FROM estoque_movimentos
+                               WHERE id_unidade = %s AND id_produto = %s
+                                 AND data_movimento > %s) AS ha""",
+            (id_unidade, id_produto, data_movimento),
+        )
+        fora_de_ordem = cur.fetchone()["ha"]
+
     # 🔑 **Quem entra na conta do médio: a loja ou a prateleira** (migração 064).
     # No modo geral — o padrão — o médio móvel é calculado sobre o saldo somado
     # de todas as prateleiras e gravado em todas elas: o mesmo açúcar não custa
@@ -537,7 +551,33 @@ def lancar(
         "custo_medio_apos": medio_novo,
         "custo_provisorio": provisorio,
         "lotes": lotes_movidos,
+        "fora_de_ordem": fora_de_ordem,
     }
+
+
+# 🔑 **O aviso do lançamento com data de trás** (05/10/2026). Período ABERTO
+# aceita qualquer data — é assim que a nota do dia 9 entra no dia 12 —, mas o
+# custo médio é calculado no instante do lançamento: as saídas que já tinham
+# acontecido depois daquela data continuam com o custo de antes (muitas vezes
+# provisório), e a movimentação de um recorte passado deixa de fechar.
+# ⚠️ **Avisa, não impede.** Recusar deixaria a nota atrasada sem porta de
+# entrada. O que faltava era dizer, na hora, que existe um segundo passo — o
+# reprocessamento, que põe a corrente na ordem da data.
+AVISO_FORA_DE_ORDEM = (
+    "Já havia movimento com data posterior a esta: o custo das saídas seguintes só "
+    "acompanha depois de reprocessar o produto em Estoque ▸ Saldos e movimentos."
+)
+
+
+def aviso_fora_de_ordem(quantos: int) -> str | None:
+    """A frase para quem lançou `quantos` produtos fora da ordem das datas."""
+    if not quantos:
+        return None
+    if quantos == 1:
+        return AVISO_FORA_DE_ORDEM
+    return (f"{quantos} produtos já tinham movimento com data posterior à deste lançamento: "
+            "o custo das saídas seguintes só acompanha depois de reprocessá-los em "
+            "Estoque ▸ Saldos e movimentos.")
 
 
 def _espelhar_lotes(cur, id_movimento: int, lotes: list, entrada: bool) -> list[dict]:

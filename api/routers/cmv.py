@@ -545,6 +545,25 @@ def listar_fechamentos(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) 
     return linhas
 
 
+@router.get("/conferencia")
+def conferir_periodo(inicio: date | None = None, fim: date | None = None,
+                     ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
+    """O que ainda distorce o CMV REAL do recorte que o painel está mostrando.
+
+    🔑 **O lado real também precisa dizer quando não tem base** (05/10/2026). O
+    painel já avisava que o TEÓRICO é fraco com pouca ficha; do real ele calava
+    — e no ar um mês de R$ 235 mil de receita mostrava food cost de 1,38%,
+    porque 94 notas do período não tinham sido lançadas. É a MESMA lista da
+    janela de fechar (`cmv_conferencia`), no recorte da tela.
+    ⚠️ Permissão do PAINEL, não a de fechar: quem lê o número precisa saber o
+    que falta nele, mesmo sem poder congelá-lo.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        inicio, fim = _periodo(cur, id_unidade, inicio, fim)
+        return cmv_conferencia.conferir(cur, id_unidade, inicio, fim)
+
+
 @router.get("/fechamentos/conferencia")
 def conferir_antes_de_fechar(competencia: date,
                              ctx: Contexto = Depends(requer_permissao("cmv.fechamento"))

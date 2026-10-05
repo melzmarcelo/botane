@@ -27,6 +27,15 @@ export type ConferenciaDoFechamento = {
 };
 
 /**
+ * O que ainda distorce o CMV real do recorte que o PAINEL mostra — a mesma
+ * lista, para quem lê o número (permissão do painel, não a de fechar).
+ */
+export const conferirPeriodo = (inicio: string, fim: string) =>
+  api.get<Omit<ConferenciaDoFechamento, "rotulo">>(
+    `/cmv/conferencia?inicio=${inicio}&fim=${fim}`,
+  );
+
+/**
  * O que ainda distorce o período que se vai fechar. `competencia` é qualquer
  * dia dentro dele — o tamanho do período é o servidor quem diz, como no
  * fechamento.

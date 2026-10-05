@@ -10,6 +10,7 @@ Cada alerta responde três coisas: **o que é**, **quanto é** e **o que fazer**
 
 from datetime import date, timedelta
 
+from services import periodos, produtos_em_uso
 from services.custos import dec
 
 CRITICO, ATENCAO, AVISO = "critico", "atencao", "aviso"
@@ -155,10 +156,21 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "lançar", "/compras", r.get("valor"))
 
     # ---------------------------------------------------------------- cadastro
-    r = _um(cur, "SELECT count(*) AS n FROM produtos WHERE status = 'RASCUNHO' AND ativo")
-    juntar("cadastro.rascunho", ATENCAO, "Produto em rascunho", r.get("n"),
-           "Falta a unidade de estoque e o fator — sem isso ele não entra no estoque.",
-           "completar cadastro", "/produtos?status=RASCUNHO")
+    # 🔑 **Só o rascunho EM USO** (05/10/2026): o que já aparece em nota aberta,
+    # em venda recente ou em prateleira. O total — 1.356 no ar — era um alerta que
+    # ninguém lia; quase tudo é resíduo da carga do catálogo. A frase diz quantos
+    # ficaram de fora, para o número não parecer que o resto sumiu.
+    r = _um(cur, f"""
+        SELECT count(*) FILTER (WHERE {produtos_em_uso.EM_USO.format(u="%(u)s")}) AS n,
+               count(*) AS todos
+          FROM produtos p WHERE p.status = 'RASCUNHO' AND p.ativo""", {"u": id_unidade})
+    parados = (r.get("todos") or 0) - (r.get("n") or 0)
+    juntar("cadastro.rascunho", ATENCAO, "Produto em rascunho já em uso", r.get("n"),
+           "Aparece em nota aberta, em venda recente ou no estoque, e ainda falta completar "
+           "o cadastro (unidade de estoque e fator)."
+           + (f" Outros {parados} rascunhos nunca foram usados e ficam fora deste aviso."
+              if parados else ""),
+           "completar cadastro", "/produtos?situacao=RASCUNHO_EM_USO")
 
     r = _um(cur, """
         SELECT count(*) AS n FROM produtos p
@@ -182,21 +194,34 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Essa receita não entra no CMV teórico, e a variância fica maior do que é.",
            "ver a fila", "/vendas", r.get("valor"))
 
-    hoje = date.today()
-    anterior = (hoje.replace(day=1) - timedelta(days=1)).replace(day=1)
+    # 🔑 **O período ANTERIOR, no ritmo da casa** (05/10/2026). Isto dizia "Mês de
+    # 09/2026 ainda não foi fechado" para uma casa que fecha toda SEMANA — e
+    # procurava um fechamento mensal que ela nunca faria. Quem sabe qual é o
+    # período é `periodos`, o mesmo lugar que o fechamento consulta.
+    c = periodos.config(cur, id_unidade)
+    inicio_atual, _fim = periodos.periodo_do_dia(
+        date.today(), c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
+    anterior, fim_anterior = periodos.periodo_do_dia(
+        inicio_atual - timedelta(days=1), c["ciclo"],
+        dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
+    # ⚠️ Fechado é qualquer fechamento que CUBRA o período — quem trocou de ritmo
+    # tem o mês fechado cobrindo as semanas de dentro dele.
     r = _um(cur, """
         SELECT count(*) AS n FROM cmv_fechamentos
-         WHERE id_unidade = %s AND competencia = %s AND status = 'FECHADO'""",
-            (id_unidade, anterior))
+         WHERE id_unidade = %s AND status = 'FECHADO'
+           AND inicio <= %s AND fim >= %s""",
+            (id_unidade, anterior, fim_anterior))
     if not r.get("n"):
-        cur.execute("SELECT count(*) AS n FROM vendas WHERE id_unidade = %s AND data >= %s",
-                    (id_unidade, anterior))
-        # Só cobra o fechamento se houve movimento no mês — casa nova não é cobrada.
+        cur.execute(
+            "SELECT count(*) AS n FROM vendas WHERE id_unidade = %s AND data BETWEEN %s AND %s",
+            (id_unidade, anterior, fim_anterior))
+        # Só cobra o fechamento se houve venda no período — casa nova não é cobrada.
         if cur.fetchone()["n"]:
+            nome = periodos.rotulo(anterior, fim_anterior, c["ciclo"])
             juntar("cmv.mes_aberto", AVISO,
-                   f"Mês de {anterior.strftime('%m/%Y')} ainda não foi fechado", 1,
+                   f"Período ainda não fechado: {nome}", 1,
                    "Fechar congela o período e evita que alguém lance para trás.",
-                   "fechar o mês", "/cmv")
+                   "fechar o período", "/cmv")
 
     ordem = {CRITICO: 0, ATENCAO: 1, AVISO: 2}
     alertas.sort(key=lambda a: (ordem[a["severidade"]], -a["quantidade"]))

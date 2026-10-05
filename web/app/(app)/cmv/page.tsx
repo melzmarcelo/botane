@@ -15,7 +15,8 @@ import Movimentacao from "./movimentacao";
 import Cascata from "./cascata";
 import Quebra, { EIXOS, type Eixo } from "./quebra";
 import MemoriaDeCalculo from "./memoria";
-import ConferenciaDoFechamentoLista from "./conferencia";
+import ConferenciaDoFechamentoLista, { ListaDePendencias } from "./conferencia";
+import { conferirPeriodo, type PendenciaDoFechamento } from "@/lib/cmv";
 
 import { pct, qtd } from "@/lib/numeros";
 type Apuracao = {
@@ -177,6 +178,15 @@ export default function PaginaCmv() {
         api.get<Fechamento[]>("/cmv/fechamentos"),
       ]);
       setA(ap);
+      // 🔑 O que ainda distorce o lado REAL deste recorte. À parte e sem travar a
+      // tela: é aviso, e um aviso fora do ar não pode esconder o número.
+      // ⚠️ Só no escopo da loja — a conferência é por loja, como o fechamento.
+      setPendencias([]);
+      if (escopo === "loja" && !ap.fechado) {
+        conferirPeriodo(inicio, fim)
+          .then((c) => setPendencias(c.itens.filter((i) => i.peso === "distorce")))
+          .catch(() => {});
+      }
       setAbc(cur);
       setMargem(mar);
       setFechamentos(fec);
@@ -188,6 +198,9 @@ export default function PaginaCmv() {
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /** O que distorce o CMV REAL do recorte na tela (nota não lançada, saldo negativo…). */
+  const [pendencias, setPendencias] = useState<PendenciaDoFechamento[]>([]);
 
   /** Quantas pendências da conferência mudam o número — muda o rótulo do botão. */
   const [distorcem, setDistorcem] = useState(0);
@@ -350,6 +363,20 @@ export default function PaginaCmv() {
               ⚠️ Fica ACIMA dos ladrilhos, não abaixo: quem lê o número já leu. */}
           {/* ⚠️ `info` É o amarelo da casa: `.aviso-info` usa `--color-alerta`.
               Ver `globals.css` — o nome ficou do começo e a cor é a certa. */}
+          {/* 🔑 **O lado REAL também diz quando não tem base** (05/10/2026). A faixa
+              de baixo fala do teórico; do real o painel calava — e um mês de
+              R$ 235 mil de receita mostrava food cost de 1,38% porque 94 notas do
+              período não tinham sido lançadas. É a mesma lista da janela de
+              fechar, antes do número e não depois. */}
+          {pendencias.length > 0 && (
+            <div className="aviso aviso-info">
+              <p>
+                <b>O CMV real deste período ainda está incompleto.</b> Os pontos abaixo mudam o
+                número — e o food cost junto.
+              </p>
+              <ListaDePendencias itens={pendencias} />
+            </div>
+          )}
           {pobreDeFicha && (
             <Aviso tipo="info">
               <b>O CMV teórico deste período não é confiável.</b> Só{" "}

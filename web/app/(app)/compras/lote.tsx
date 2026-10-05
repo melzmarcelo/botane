@@ -181,7 +181,16 @@ export default function LancarLote({
                           </Link>
                           <span className="block text-[13px] text-suave">{n.fornecedor}</span>
                         </td>
-                        <td>{dataBr(n.data)}</td>
+                        <td>
+                          {dataBr(n.data)}
+                          {/* ⚠️ A nota atrasada: já há movimento depois da data dela. */}
+                          {!!n.fora_de_ordem && (
+                            <span className="block text-[12px] text-alerta"
+                                  title="Já há movimento desses produtos com data posterior à desta nota. Depois de lançar, reprocesse-os em Estoque ▸ Saldos e movimentos para o custo das saídas acompanhar.">
+                              {n.fora_de_ordem} produto(s) a reprocessar
+                            </span>
+                          )}
+                        </td>
                         <td className="num tabular-nums">{n.itens}</td>
                         <td className="num tabular-nums">{reais(n.valor_total)}</td>
                       </tr>

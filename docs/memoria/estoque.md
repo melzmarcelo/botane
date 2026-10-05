@@ -472,6 +472,17 @@
   estorno de saída é mais uma entrada) e mudar as datas de mês (o estoque inicial do mês seguinte
   passou a discordar). **O que fecha a conta é não deixar rastro nenhum.**
 
+- 🔑 **O lançamento com data de trás AVISA** (`fora_de_ordem`, 05/10/2026). Período aberto
+  aceita qualquer data — é assim que a nota do dia 9 entra no dia 12 —, mas o custo médio é do
+  instante do lançamento: as saídas que já tinham acontecido depois daquela data ficam com o
+  custo de antes. `estoque.lancar` devolve `fora_de_ordem` quando JÁ existe movimento do
+  produto com data posterior (lido com o saldo travado), e entrada, saída, lançamento de nota e
+  lote de notas levam a frase que manda reprocessar. A prévia do lote marca a nota atrasada.
+  ⚠️ **Avisa, não impede**: recusar deixaria a nota atrasada sem porta de entrada, e é para ela
+  que o lote existe. ⚠️ Estorno fica de fora — ele espelha a data do original de propósito.
+  ⚠️ Só faz sentido recomendar o reprocessamento porque a ordem da corrente passou a ser lida
+  (item abaixo): antes dele, reprocessar quebrava a quebra do CMV.
+
 - 🔑 **A ordem da corrente passou a estar ESCRITA** (`estoque_movimentos.ordem_cadeia`,
   migração 104, 05/10/2026). O defeito: quem pergunta "quanto havia no dia X" pega o ÚLTIMO
   movimento antes de X, e "último" era o de maior `id` — a ordem de LANÇAMENTO, em que a

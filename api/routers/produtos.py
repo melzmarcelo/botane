@@ -35,6 +35,7 @@ from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import custos as motor_custos
 from services import alteracao_multipla as alteracao_multipla_motor
 from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo, traducao
+from services import produtos_em_uso
 from services import troca_de_unidade
 
 router = APIRouter(prefix="/produtos", tags=["produtos"])
@@ -217,6 +218,10 @@ def listar(
     # Recorte que o servidor sabe fazer nao se faz no cliente.
     controla_estoque: bool | None = None,
     excluir_id: int | None = None,
+    # 🔑 **Só o que a operação já está tocando** (05/10/2026): em nota aberta,
+    # vendido nos últimos 30 dias ou com saldo. É o recorte do alerta de
+    # rascunhos — a mesma condição, de `services/produtos_em_uso.py`.
+    em_uso: bool = False,
     limite: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     resposta: Response = None,
@@ -250,12 +255,13 @@ def listar(
                AND (%s::int IS NULL OR p.id <> %s)
                AND (NOT %s OR NOT EXISTS
                     (SELECT 1 FROM fichas_tecnicas f WHERE f.id_produto = p.id))
+               AND (NOT %s OR __EM_USO__)
                AND (%s::varchar IS NULL
                     OR lower(p.nome) LIKE lower('%%' || %s || '%%')
                     OR lower(p.codigo) LIKE lower('%%' || %s || '%%')
                     OR coalesce(p.codigo_barras, '') LIKE '%%' || %s || '%%')
              ORDER BY p.ativo DESC, lower(p.nome)
-            """,
+            """.replace("__EM_USO__", produtos_em_uso.EM_USO.format(u="%s")),
             # ⚠️ A loja vai PRIMEIRO: o `%s` dela está na lista do SELECT, que
             # vem antes do WHERE. Parâmetro posicional é assim — a ordem do SQL
             # é a ordem da tupla.
@@ -264,7 +270,10 @@ def listar(
              tipo, tipo, id_categoria, id_categoria, id_setor, id_setor,
              status, status,
              controla_estoque, controla_estoque, excluir_id, excluir_id,
-             sem_ficha, busca, busca, busca, busca),
+             sem_ficha,
+             # `em_uso` e as três vezes em que a condição pergunta pela loja.
+             em_uso, id_unidade, id_unidade, id_unidade,
+             busca, busca, busca, busca),
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas

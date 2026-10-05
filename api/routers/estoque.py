@@ -604,9 +604,11 @@ def entrada(body: EntradaRequest,
         auditoria.registrar(cur, ctx.id_usuario, "estoque", r["id"], "entrada",
                             depois={"produto": body.id_produto, "qtd": body.quantidade,
                                     "custo": body.custo_unitario}, id_unidade=id_unidade)
+    aviso = motor.aviso_fora_de_ordem(1 if r.get("fora_de_ordem") else 0)
     return {"id": r["id"], "saldo": float(r["saldo_apos"]),
             "custo_medio": float(r["custo_medio_apos"]),
-            "lotes": r.get("lotes") or [], "message": "Entrada lançada"}
+            "lotes": r.get("lotes") or [], "fora_de_ordem": bool(r.get("fora_de_ordem")),
+            "message": "Entrada lançada" + (f". {aviso}" if aviso else "")}
 
 
 @router.post("/saidas", status_code=201)
@@ -638,7 +640,9 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
             # De quais lotes saiu: quem deu baixa precisa poder conferir na
             # prateleira que pegou o pote certo.
             "lotes": r.get("lotes") or [],
-            "message": _frase_dos_lotes(r) or "Saída lançada"}
+            "fora_de_ordem": bool(r.get("fora_de_ordem")),
+            "message": (_frase_dos_lotes(r) or "Saída lançada")
+            + (f". {motor.AVISO_FORA_DE_ORDEM}" if r.get("fora_de_ordem") else "")}
 
 
 @router.post("/transferencias", status_code=201)

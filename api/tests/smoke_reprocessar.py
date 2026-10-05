@@ -103,6 +103,10 @@ st, r = chamar("POST", "/estoque/saidas", {
     "data_movimento": "2026-08-08", "documento": f"REPRO-V-{marca}",
 }, token=token)
 checar("a saída do dia 8/8 é lançada, sem saldo", st == 201, (st, r))
+# 🔑 O aviso do lançamento com data de trás (05/10/2026): só quando JÁ existe
+# movimento depois daquela data. O primeiro do produto não tem como estar fora
+# de ordem.
+checar("o primeiro movimento não avisa nada", (r or {}).get("fora_de_ordem") is False, r)
 checar("e deixa o saldo negativo", float((r or {}).get("saldo", 0)) == -2, r)
 
 st, r = chamar("POST", "/estoque/entradas", {
@@ -110,6 +114,10 @@ st, r = chamar("POST", "/estoque/entradas", {
     "data_movimento": "2026-08-05", "documento": f"REPRO-N-{marca}",
 }, token=token)
 checar("a nota do dia 5/8 entra depois, com data anterior", st == 201, (st, r))
+checar("e a resposta AVISA que ela entrou antes de um movimento que já existia",
+       (r or {}).get("fora_de_ordem") is True, r)
+checar("dizendo o que fazer: reprocessar o produto",
+       "reprocessar" in (r or {}).get("message", "").lower(), (r or {}).get("message"))
 
 antes = movimentos_de(produto)
 saida_antes = next((m for m in antes if m["tipo"] == "SAIDA_VENDA"), None)

@@ -17,7 +17,7 @@ entregue.
 | Módulo | Memória | Suítes |
 |---|---|---|
 | [Cadastros](#cadastros) | `docs/memoria/cadastros.md` | `cadastros`, `pessoas`, `produto_do_omie`, `vinculo`, `conversao`, `acucar_500g`, `utensilios`, `troca_de_unidade`, `openfoodfacts`, `kits` |
-| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `producao`, `rendimento`, `rendimento_por_local` |
+| [Produção](#produção) | `docs/memoria/producao.md` | `fichas`, `fila_e_rascunhos`, `producao`, `rendimento`, `rendimento_por_local` |
 | [Compras](#compras) | `docs/memoria/compras.md` | `notas`, `notas_lote`, `ean_das_notas` |
 | [Custos](#custos) | `docs/memoria/custos.md` | `memoria`, `lotes` |
 | [Estoque](#estoque) | `docs/memoria/estoque.md` | `estoque`, `ajustes`, `reprocessar`, `inventario_filtros`, `transferencias`, `alertas`, `lotes` |

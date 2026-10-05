@@ -643,6 +643,9 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
         raise HTTPException(status_code=400, detail="Nada a lançar: todos os itens foram ignorados.")
 
     lancados, valor = 0, Decimal(0)
+    # Os produtos que já tinham movimento DEPOIS da data desta nota — a nota
+    # atrasada, que é o caso comum. Quem lança fica sabendo que falta reprocessar.
+    fora_de_ordem: set[int] = set()
     for item in itens:
         r = motor.lancar(
             cur,
@@ -663,6 +666,8 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
         )
         lancados += 1
         valor += dec(r["custo_total"])
+        if r.get("fora_de_ordem"):
+            fora_de_ordem.add(item["id_produto"])
 
         # O preço do fornecedor passa a valer para a próxima ficha e cotação.
         # É INSERT quando ainda não havia vínculo: um UPDATE só não pegava nada
@@ -688,7 +693,8 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
             WHERE id = %s""",
         (id_usuario, id_local, id_nota),
     )
-    return {"itens_lancados": lancados, "valor": float(valor)}
+    return {"itens_lancados": lancados, "valor": float(valor),
+            "fora_de_ordem": sorted(fora_de_ordem)}
 
 
 # ---------------------------------------------------------------- sincronização

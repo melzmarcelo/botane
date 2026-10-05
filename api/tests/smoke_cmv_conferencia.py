@@ -131,6 +131,18 @@ checar("a contagem volta ao que era",
        item(depois, "notas_nao_lancadas")["quantidade"] == a["quantidade"],
        item(depois, "notas_nao_lancadas"))
 
+print("\n4b. o PAINEL mostra a mesma lista, no recorte que ele tem na tela")
+st, painel = chamar("GET", f"/cmv/conferencia?inicio={depois['inicio']}&fim={depois['fim']}",
+                    token=token)
+checar("a rota do painel responde", st == 200, (st, painel))
+checar("com as mesmas pendências da janela de fechar, para o mesmo período",
+       [(i["chave"], i["quantidade"]) for i in painel.get("itens", [])]
+       == [(i["chave"], i["quantidade"]) for i in depois.get("itens", [])],
+       (painel.get("itens"), depois.get("itens")))
+st, corrente = chamar("GET", "/cmv/conferencia", token=token)
+checar("sem datas, é o período corrente da loja", st == 200 and corrente.get("fim") == str(HOJE),
+       (st, corrente.get("inicio"), corrente.get("fim")))
+
 print("\n5. quem não fecha período não vê a conferência")
 cozinha = garantir_cozinha(chamar, token)
 st, _ = chamar("GET", f"/cmv/fechamentos/conferencia?competencia={HOJE}", token=cozinha)

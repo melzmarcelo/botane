@@ -70,7 +70,13 @@ export default function PaginaProdutos() {
       if (ativacao === "sim") q.set("ativo", "true");
       else if (ativacao === "nao") q.set("ativo", "false");
       else if (ativacao === "todos") q.set("incluir_inativos", "true");
-      if (situacao) q.set("status", situacao);
+      // 🔑 "Rascunho em uso" é o recorte do alerta da tela inicial: rascunho que
+      // já aparece em nota aberta, venda recente ou estoque. Quem decide o que é
+      // "em uso" é o servidor (`em_uso`), o mesmo que conta o alerta.
+      if (situacao === "RASCUNHO_EM_USO") {
+        q.set("status", "RASCUNHO");
+        q.set("em_uso", "true");
+      } else if (situacao) q.set("status", situacao);
       const r = await api.listar<ProdutoResumo>(`/produtos?${q}`);
       setLista(r.itens);
       pag.setTotal(r.total);
@@ -261,6 +267,7 @@ export default function PaginaProdutos() {
               <option value="">Todas</option>
               <option value="ATIVO">Aprovado</option>
               <option value="RASCUNHO">Rascunho</option>
+              <option value="RASCUNHO_EM_USO">Rascunho em uso</option>
               {/* ⚠️ ARQUIVADO nao foi pedido, mas existe e e para onde vai o
                   cadastro absorvido numa fusao: sem ele, "Todas" mostraria uma
                   situacao que o filtro nao sabe nomear. */}
