@@ -144,7 +144,7 @@ def main() -> int:
     checar("a tela de login carrega", st == 200, st)
     st, corpo, _ = pedir(f"{base}/ajuda.html")
     checar("o manual é servido de public/",
-           st == 200 and "Botané por dentro" in str(corpo), st)
+           st == 200 and "O sistema por dentro" in str(corpo), st)
     st, _, _ = pedir(f"{base}/manifest.webmanifest")
     checar("o manifest do PWA é servido", st == 200, st)
 
