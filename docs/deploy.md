@@ -37,9 +37,12 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 abaixo descrevem o que ele faz — leia-as para entender, execute o `app.yaml`.
 
 ```bash
-doctl apps create --spec .do/app.yaml        # primeira vez
-doctl apps update <id> --spec .do/app.yaml   # depois
+doctl apps create --spec .do/app.yaml        # primeira vez, e só ela
 ```
+
+⚠️ **Depois da primeira vez, NÃO se aplica este arquivo de novo** (`doctl apps update
+--spec .do/app.yaml`): os segredos nele valem `DEFINA_NO_PAINEL`, e aplicá-lo sobrescreve os
+do painel — ver a seção 6c. Para promover uma versão basta o push em `producao` (seção 6).
 
 ### A decisão que simplifica tudo: um domínio só
 
@@ -283,19 +286,27 @@ pergunta que se faz quando algo não bate. Mesma razão da `impressao`.
 
 ```bash
 git checkout producao && git merge main
+git push origin producao        # 🔴 ISTO põe no ar
 ```
 
-Do lado do servidor:
+🔴 **O push em `producao` É o deploy.** O app no DigitalOcean implanta sozinho a cada push:
+medido em 05/10/2026, a migração rodou no banco real e a versão virou em cerca de quatro
+minutos, sem ninguém disparar nada. ⚠️ O `.do/app.yaml` do repositório diz
+`deploy_on_push: false`, mas ele não é reaplicado a cada promoção — o que vale é a
+configuração do painel, que hoje é *Autodeploy* ligado nos dois componentes. Para voltar à
+promoção manual, desligue ali.
 
-```bash
-git pull                       # já em producao
-# API:  pip install -r requirements.txt  →  reiniciar o serviço (migrações rodam no start)
-# Web:  npm ci && npm run build          →  reiniciar
-```
+Por isso a ordem é:
 
-⚠️ **Backup ANTES de promover**, sempre que a versão traz migração nova. Migração roda no
-start e reescreve dado: as 024 e 025 desta base consertaram R$ 74 de frete contado em dobro —
-se estivessem erradas, teriam feito o contrário, e sem backup não haveria volta.
+1. Bateria inteira verde na base local (API + navegador).
+2. **Backup do banco**, sempre que a versão traz migração nova — ANTES do push, porque
+   depois dele não há intervalo. Migração roda no start e reescreve dado: as 024 e 025
+   consertaram R$ 74 de frete contado em dobro — se estivessem erradas, teriam feito o
+   contrário, e sem backup não haveria volta.
+3. Subir a `VERSAO`, merge, push.
+4. Acompanhar `curl https://sistema.botanedeliecafe.com.br/api/saude` até a versão virar
+   (a migração aparece um ou dois minutos antes da versão) e rodar
+   `python api/verificar_deploy.py https://sistema.botanedeliecafe.com.br`.
 
 ### Voltar atrás
 Código volta com `git checkout <commit anterior>` e novo build. **Migração não volta** — ela

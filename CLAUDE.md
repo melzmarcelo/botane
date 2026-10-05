@@ -42,18 +42,27 @@ Há remoto (`github.com/melzmarcelo/botane`) e os dois branches estão publicado
 `producao` é quem alimenta o que está no ar: **https://sistema.botanedeliecafe.com.br**,
 um app no DigitalOcean App Platform.
 
-⚠️ **Push em `producao` NÃO põe no ar.** `deploy_on_push: false` nos dois componentes do
-`.do/app.yaml`, de propósito: cada promoção é um ato consciente, feito à mão
-(`doctl apps update <id> --spec .do/app.yaml`, ou o botão do painel). O efeito colateral é
-que o branch e o ar andam separados, e é normal o segundo ficar para trás sem que nada
-avise — conferir sempre com `curl https://sistema.botanedeliecafe.com.br/api/saude`, que
-devolve a versão e a última migração aplicada.
-⚠️ Já aconteceu de a defasagem passar despercebida: em 08/09/2026 o ar estava em
-**1.1.13 / migração 054** enquanto `producao` já tinha 1.1.14 / 057 — as três entregas de
-setembro (pessoas, cupom cheio, período de consumo) estavam commitadas e empurradas, mas
-não implantadas. Em 10/09/2026 o ar foi para **1.1.15 / migração 061**, alinhado com
-`producao`. O id do app, para o `doctl`, sai do cabeçalho `x-do-app-origin` de qualquer
-resposta: `0daa9b68-87b6-4d47-8433-77c32e4b9d20`.
+🔴 **Push em `producao` PÕE NO AR, sozinho, em cerca de quatro minutos — com migração e
+tudo.** Medido duas vezes em 05/10/2026: a 1.1.67 apareceu no ar logo depois do push, e na
+1.1.68 o `/api/saude` foi acompanhado minuto a minuto — a migração 104 rodou no banco real
+e a versão virou sem ninguém disparar nada. **Empurrar `producao` É o deploy.**
+⚠️ **O `.do/app.yaml` deste repositório diz `deploy_on_push: false`, e o app no ar NÃO se
+comporta assim.** O arquivo não é aplicado a cada promoção (e não deve ser — os segredos
+dele valem `DEFINA_NO_PAINEL`), então o que manda é o que está configurado no painel da
+DigitalOcean, e ele diverge do arquivo. Quem quiser a promoção manual de volta desliga o
+*Autodeploy* dos dois componentes no painel; até lá, vale o que foi medido.
+⚠️ **O que isso muda no roteiro:** o ponto de não retorno é o `git push origin producao`,
+não um passo depois dele. **Backup do banco ANTES do push** quando a versão traz migração
+nova, e a bateria inteira (API + navegador) verde antes do merge.
+⚠️ Conferir sempre o que subiu com `curl https://sistema.botanedeliecafe.com.br/api/saude`,
+que devolve a versão e a última migração aplicada. ⚠️ A migração aparece ANTES da versão:
+o contêiner novo roda a migração ao subir, enquanto o antigo ainda atende — por um ou dois
+minutos o `/saude` responde a versão antiga com a migração nova.
+⚠️ **Nem sempre foi assim**: em 08/09/2026 o ar estava em **1.1.13 / migração 054** enquanto
+`producao` já tinha 1.1.14 / 057 — três entregas commitadas e empurradas, sem implantar —,
+e só foi alinhado em 10/09/2026. A configuração do painel mudou em algum momento depois
+disso; não está registrado quando. O id do app, para o `doctl`, sai do cabeçalho
+`x-do-app-origin` de qualquer resposta: `0daa9b68-87b6-4d47-8433-77c32e4b9d20`.
 ⚠️ **`api/verificar_deploy.py` compara a `impressao` do ar com os arquivos DESTE repositório** —
 é o que prova que o deploy carregou o commit certo, e não só que o app subiu. As checagens 4 a 7
 pedem `--com-login` e senha digitada, então ficam fora de uma rodada automática.

@@ -73,6 +73,9 @@ services:
       # ⚠️ Falso de propósito na primeira subida: deploy automático a cada push
       # é bom quando existe rotina de verificação. Enquanto não existe, cada
       # promoção é um ato consciente.
+      # 🔴 **O APP NO AR NÃO ESTÁ ASSIM** (medido em 05/10/2026): ele implanta
+      # sozinho a cada push em `producao`. Este arquivo não é reaplicado a cada
+      # promoção, então quem manda é o painel — ver `docs/deploy.md`, seção 6.
       deploy_on_push: false
     environment_slug: python
     # ⚠️ Um worker no começo. As migrações rodam no START de cada worker — são
