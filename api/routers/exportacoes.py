@@ -475,7 +475,8 @@ def ficha(nome: str, formato: str | None = None,
         f = cur.fetchone()
         if not f:
             raise HTTPException(status_code=404, detail="Ficha não encontrada")
-        calculo = custos.custo_da_ficha(cur, id_ficha)
+        # O papel diz o mesmo custo que a tela: o da loja do seletor.
+        calculo = custos.custo_da_ficha(cur, id_ficha, id_unidade=unidade_atual(cur, ctx))
         timbre = catalogo_motor.papel_timbrado(cur)
         # 🔑 **A foto do prato vai no PAPEL, que é onde a ficha serve.** Quem
         # segue a receita está de pé na cozinha, e "está pronto?" é uma

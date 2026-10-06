@@ -5,6 +5,21 @@
 
 ## O que já existe
 
+- 🔑 **O local do movimento tem de ser da loja que lança** (05/10/2026, achado pela bateria de
+  duas lojas, `tests/smoke_duas_lojas.py`). Ninguém conferia: com a matriz no seletor e o id de
+  uma prateleira da filial no corpo, `POST /estoque/entradas` devolvia 201 e o movimento nascia
+  como da MATRIZ, num local que não é dela. O saldo da matriz subia, o custo médio dela se
+  misturava com a compra alheia, e a prateleira da filial ganhava uma linha de saldo de outra
+  loja — que nenhuma tela das duas mostra inteira. Uma única entrada errada derrubou 28
+  checagens em cascata (custo, ficha, produção, remessa, CMV das duas e da empresa).
+  ⚠️ **A trava mora em `estoque.lancar`, não em cada rota**: todo movimento passa por ali
+  (entrada, saída, ajuste, produção, venda, inventário, as duas pontas da remessa — cada ponta
+  com a loja dela). Uma checagem por rota deixaria a próxima rota nova de fora. 400 com a frase
+  que manda usar a transferência entre lojas.
+  ⚠️ **A história inteira das duas lojas tem suíte própria** (`smoke_duas_lojas.py`): compra,
+  ficha, produção, venda, remessa, CMV por loja e da empresa, fechamento, inventário, nota e
+  precificação, com os números conferidos à mão no cabeçalho. Mede a matriz por DIFERENÇA.
+
 - 🔑 **Perda com `origem_tipo = 'ETIQUETA'`** (28/09/2026): o descarte pela etiqueta lança
   `SAIDA_PERDA` pelo `lancar`, saindo do lote da produção quando ele cobre a quantidade. Ver
   [`etiquetas.md`](etiquetas.md).

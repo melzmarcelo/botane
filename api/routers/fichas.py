@@ -160,12 +160,18 @@ def listar(
             )
         fichas = [dict(r) for r in cur.fetchall()]
         com_total(fichas, resposta, offset)
+        id_unidade = unidade_atual(cur, ctx)
 
         for f in fichas:
             f["rendimento_qtd"] = _num(f["rendimento_qtd"])
             f["porcoes"] = _num(f["porcoes"])
             if ve_custo:
-                c = custos.custo_da_ficha(cur, f["id"])
+                # 🔑 **Pelo custo da loja do seletor** (05/10/2026, bateria de duas
+                # lojas). A lista e a ficha aberta custeavam pela média da REDE,
+                # enquanto a produção e a venda da mesma loja congelavam o custo
+                # DELA: farinha a 4,00 na matriz e 6,00 na filial davam um bolo de
+                # 2,50 nas duas telas, 2,00 no cupom de uma e 3,00 no da outra.
+                c = custos.custo_da_ficha(cur, f["id"], id_unidade=id_unidade)
                 f["custo_total"] = _num(c["custo_total"])
                 f["custo_por_porcao"] = _num(c["custo_por_porcao"])
                 f["custo_completo"] = c["completo"]
@@ -224,7 +230,7 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
                   "porcoes": _num(r["porcoes"]), "porcao_qtd": _num(r["porcao_qtd"]),
                   "quantidade_sugerida": _num(r["quantidade_sugerida"])}
                  for r in cur.fetchall()]
-        calculo = custos.custo_da_ficha(cur, id_ficha)
+        calculo = custos.custo_da_ficha(cur, id_ficha, id_unidade=unidade_atual(cur, ctx))
 
     itens = []
     for i in calculo["itens"]:

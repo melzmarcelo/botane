@@ -333,6 +333,12 @@
   ⚠️ **Sem `id_unidade` a conta continua sendo a da REDE, e é proposital**: há caminhos que
   perguntam o custo fora de uma operação de loja — prévia de ficha, relatório consolidado — e
   para eles a média geral é a melhor resposta disponível.
+  🔑 **A TELA da ficha deixou de ser exceção** (05/10/2026, bateria de duas lojas). A lista
+  (`GET /fichas`), a ficha aberta (`GET /fichas/{id}`) e o papel exportado custeavam pela média
+  da REDE — era o "prévia de ficha" da linha acima. Com farinha a R$ 4,00 na matriz e R$ 6,00 na
+  filial, o bolo aparecia a R$ 2,50 nas duas telas, saía a R$ 2,00 no cupom de uma e a R$ 3,00
+  no da outra. A tela sempre tem uma loja (a do seletor), então passou a usar a dela. Com uma
+  loja só o número é o mesmo. ⚠️ Continuam na rede só os caminhos que de fato não têm loja.
   ⚠️ **A reserva é o último preço do FORNECEDOR, e ela é da rede** (decisão do dono): preço
   negociado vale para as duas lojas, e é o que deixa a filial nova calcular ficha e CMV antes de
   ter recebido o insumo. Cair no médio da OUTRA loja seria voltar a misturar o que o filtro

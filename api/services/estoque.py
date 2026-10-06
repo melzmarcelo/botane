@@ -340,6 +340,27 @@ def lancar(
     par = _parametros(cur, id_unidade)
     if id_local is None:
         id_local = local_padrao(cur, id_unidade)
+    else:
+        # 🔑 **O local tem de ser DESTA loja** (05/10/2026, achado pela bateria de
+        # duas lojas). Ninguém conferia: com a matriz no seletor e o id de uma
+        # prateleira da filial no corpo, a entrada era aceita e o movimento
+        # nascia como da matriz, num local que não é dela. O saldo da matriz
+        # subia, o custo médio dela se misturava com o da compra alheia, e a
+        # prateleira da filial ganhava uma linha de saldo de outra loja — que
+        # nenhuma tela das duas mostra inteira.
+        # ⚠️ **Aqui, e não em cada rota**: todo movimento passa por este motor
+        # (entrada, saída, ajuste, produção, venda, inventário, as duas pontas da
+        # remessa). Uma checagem por rota deixaria a próxima rota nova de fora.
+        cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
+        do_local = cur.fetchone()
+        if not do_local:
+            raise HTTPException(status_code=404, detail="Local de estoque não encontrado.")
+        if do_local["id_unidade"] != id_unidade:
+            raise HTTPException(
+                status_code=400,
+                detail="Este local de estoque é de outra loja. Para levar mercadoria de "
+                       "uma loja a outra, use a transferência entre lojas.",
+            )
     if data_movimento is not None:
         # ⚠️ **Movimento no futuro não aconteceu.** A trava do período fechado
         # olha para trás; para a frente não olhava ninguém, e uma data errada
