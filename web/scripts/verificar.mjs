@@ -2868,7 +2868,14 @@ try {
   const nosRecentes = await p.evaluate(() => document.body.innerText.includes("Últimos ajustes"));
   checar("e o ajuste aparece na lista dos últimos", nosRecentes);
 
-  const { dados: saldos } = await api("GET", `/estoque/saldos?busca=${m4}`, null, token);
+  // ⚠️ **Pelo NOME inteiro, não só pela marca.** A marca são cinco dígitos do
+  // relógio, e em 05/10/2026 ela caiu dentro do código de um produto de outra
+  // suíte ("BX-OMIE-750000"): a busca devolveu dois, e a checagem acusou a tela
+  // de não ter gravado um saldo que estava lá.
+  const { dados: saldosDaBusca } = await api(
+    "GET", `/estoque/saldos?busca=${encodeURIComponent(`Est tela ${m4}`)}`, null, token);
+  const saldos = (saldosDaBusca ?? []).filter(
+    (x) => x.produto === `Est tela ${m4}`.toUpperCase());
   checar("saldo gravado pela tela", saldos.length === 1 && Number(saldos[0].quantidade) === 10,
     saldos);
 
