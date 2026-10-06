@@ -17,12 +17,14 @@ from fastapi import APIRouter, Depends, Query
 import auditoria
 from database import get_cursor
 from models.ajustes import (
+    CustoReferenciaRequest,
     AjusteCustoRequest,
     AjusteSaldoRequest,
     PreviaCustoRequest,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import ajustes as servico
+from services import custo_referencia
 
 router = APIRouter(prefix="/ajustes", tags=["ajustes"])
 
@@ -172,6 +174,31 @@ def unificar_custo_geral(
                 id_unidade=id_unidade,
             )
     return r
+
+
+@router.get("/custo-referencia/previa")
+def previa_do_custo_de_referencia(
+    ctx: Contexto = Depends(requer_permissao("estoque.custo")),
+) -> dict:
+    """Os produtos cujo custo de referência não bate com o razão nem com o preço.
+
+    Só leitura. A correção é `POST /ajustes/custo-referencia`, com os números
+    que a pessoa conferiu.
+    """
+    with get_cursor() as cur:
+        return custo_referencia.suspeitos(cur, unidade_atual(cur, ctx))
+
+
+@router.post("/custo-referencia")
+def corrigir_custo_de_referencia(
+    body: CustoReferenciaRequest,
+    ctx: Contexto = Depends(requer_permissao("estoque.custo")),
+) -> dict:
+    """Grava o custo de referência conferido — cadastro, não razão."""
+    with get_cursor() as cur:
+        return custo_referencia.corrigir(
+            cur, [i.model_dump() for i in body.itens], ctx.id_usuario,
+            unidade_atual(cur, ctx))
 
 
 @router.get("/lotes")

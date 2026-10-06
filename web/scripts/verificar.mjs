@@ -2710,6 +2710,37 @@ try {
     /quantidade n[ãa]o\s+muda/i.test(formCusto.texto),
     formCusto.texto.slice(0, 400));
 
+  // 🔑 **A conferência do custo de REFERÊNCIA mora na mesma aba** (05/10/2026):
+  // o custo que veio do Omie não tinha tela de edição, e um vinho vendido a
+  // R$ 109,00 aparecia custando os R$ 264,00 da caixa. Aqui só se prova que a
+  // prévia responde e que NADA é gravado sem alguém marcar — a conta em si é
+  // da `smoke_custo_referencia`.
+  checar("a aba de custo oferece a conferência do custo de referência",
+    /custo de refer[êe]ncia a conferir/i.test(formCusto.texto), formCusto.texto.slice(0, 400));
+  await p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      /conferir os custos de refer/i.test(x.textContent ?? ""));
+    b?.click();
+  });
+  await p.waitForFunction(
+    () => /nada a conferir|refer[êe]ncia suspeita/i.test(document.body.innerText),
+    { timeout: 20000 }).catch(() => {});
+  const conferenciaRef = await p.evaluate(() => {
+    const texto = document.body.innerText;
+    return {
+      respondeu: /nada a conferir|refer[êe]ncia suspeita/i.test(texto),
+      temLista: /refer[êe]ncia suspeita/i.test(texto),
+      colunas: [...document.querySelectorAll("th")].map((t) => t.textContent?.trim() ?? ""),
+    };
+  });
+  checar("e a prévia responde, com lista ou dizendo que não há nada",
+    conferenciaRef.respondeu, conferenciaRef);
+  checar("quando há lista, ela mostra a referência, o estoque e o que passa a ser",
+    !conferenciaRef.temLista
+      || ["Referência hoje", "No estoque", "Passa a ser"].every((c) =>
+        conferenciaRef.colunas.includes(c)),
+    conferenciaRef.colunas);
+
   // ⚠️ **Voltar para /ajustes antes de seguir.** O bloco abaixo continua o
   // lançamento avulso e supõe estar nessa tela — sem isto ele procura os
   // campos numa página que não os tem e a suíte MORRE, longe da causa. Mesma

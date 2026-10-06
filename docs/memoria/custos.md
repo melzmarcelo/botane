@@ -281,6 +281,44 @@
   discordando — no modo geral esse cenário não pode existir — e desliga logo depois: a base é
   compartilhada.
 
+- 🔑 **A conferência do custo de REFERÊNCIA** (`services/custo_referencia.py`,
+  `GET /ajustes/custo-referencia/previa` e `POST /ajustes/custo-referencia`, cartão na aba
+  "Ajuste de custo", 05/10/2026, relatado pelo dono). O ANA & GRAZI VINHO ROSÉ era vendido a
+  R$ 109,00 e aparecia custando **R$ 264,00 — o preço da caixa de seis** —, enquanto o razão do
+  mesmo produto saía a R$ 44,00. A referência **não tinha tela de edição**: o número errado
+  ficava até a primeira nota chegar, alimentando ficha, CMV teórico, margem e a Precificação.
+  ⚠️ **Por que o razão dizia 44 e o cadastro 264**: a saída sem saldo grava o custo do dia na
+  prateleira, e `_ultimo_medio_conhecido` lê a prateleira ANTES da cascata. Já
+  `custo_do_insumo` ignora prateleira sem saldo positivo e cai na referência. Quando a
+  referência muda depois da primeira venda, os dois passam a dar respostas diferentes — e é
+  essa discordância que a conferência usa como testemunha.
+  ⚠️ **Não se descobriu o que levou a referência de 44 para 264 naquele produto** (a data
+  `custo_referencia_em` não mudou, então não foi nova carga do Omie; troca de unidade e fusão
+  são os caminhos que reescrevem o valor sem mexer na data). A conferência não depende da
+  causa: compara o número com o que o resto do sistema sabe.
+  ⚠️ **Só entra quem HOJE é custeado pela referência** — sem prateleira valorada com saldo e sem
+  preço de fornecedor. Nos outros a referência está parada, sem efeito.
+  ⚠️ **Duas testemunhas: o razão e o preço de venda.** Discordância de uma vez e meia com o
+  razão sugere o valor do razão; custo acima do preço de venda sugere a divisão pela embalagem,
+  se ela trouxer o custo para baixo do preço. **`confianca: "alta"` só quando duas coisas
+  independentes concordam** (razão + fator da embalagem, ou razão + preço) — é o que a tela traz
+  marcado. O resto vem desmarcado, com o campo editável: é palpite.
+  ⚠️ **Insumo sem razão e sem preço de venda fica de fora**: não há contra o que comparar. Esse
+  só se acerta pela nota.
+  ⚠️ **É `UPDATE` no cadastro, não movimento** — a referência não é razão. A origem vira
+  `CORRECAO`, e cada produto ganha a linha dele na auditoria (`custo_referencia_corrigido`) com
+  o antes e o depois.
+  ⚠️ **As vendas que congelaram a referência errada são recalculadas** (`origem_custo =
+  'referencia'`, só dos produtos corrigidos, só em período ABERTO — a mesma fronteira de
+  `_custear_vendas_sem_custo`). ⚠️ O prato que usa o produto como INSUMO de ficha não é
+  recalculado: o custo de ficha congelado no item fica como estava.
+  ⚠️ **A prateleira não é tocada.** Se o valor confirmado for diferente do que o razão guarda,
+  a próxima saída sem saldo ainda sai pelo custo da prateleira — o caminho para isso é o
+  Ajuste de custo, ao lado.
+  O conector tem a leitura (`custos_de_referencia_suspeitos`); gravar é só pela tela.
+  Cobertura: `tests/smoke_custo_referencia.py` (32 checagens) e o bloco de Ajustes no
+  `verificar.mjs`.
+
 ## O custo unitário da ficha é o da PORÇÃO — em todo lugar (migração 094, 26/09/2026)
 
 🔑 **Pedido do dono:** *"na venda o custo da ficha técnica está indo por KG, não por

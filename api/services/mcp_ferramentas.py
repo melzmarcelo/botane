@@ -171,6 +171,11 @@ FERRAMENTAS: list[Ferramenta] = [
         "/produtos/{id_produto}/custo",
         {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)}),
     Ferramenta(
+        "custos_de_referencia_suspeitos", "Custos de referência suspeitos",
+        "Produtos custeados pela referência (a que veio do Omie) cujo número não bate com "
+        "o custo registrado no estoque ou passa do preço de venda — com o custo sugerido.",
+        "/ajustes/custo-referencia/previa", {}),
+    Ferramenta(
         "fichas_tecnicas", "Fichas técnicas",
         "Lista as fichas técnicas — uma linha por produto, a versão que vale.",
         "/fichas",

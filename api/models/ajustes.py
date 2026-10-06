@@ -34,3 +34,15 @@ class AjusteCustoRequest(BaseModel):
 
 class PreviaCustoRequest(BaseModel):
     linhas: list[LinhaAjusteCusto] = Field(min_length=1, max_length=200)
+
+
+class CustoReferenciaLinha(BaseModel):
+    id_produto: int
+    # ⚠️ Maior que zero: zero não é um custo, é "ninguém sabe" — e gravá-lo
+    # faria o produto sumir do aviso de "sem custo".
+    custo: float = Field(gt=0, le=9999999)
+
+
+class CustoReferenciaRequest(BaseModel):
+    """Os custos de referência que a pessoa conferiu e aceitou."""
+    itens: list[CustoReferenciaLinha] = Field(min_length=1, max_length=500)
