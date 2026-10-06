@@ -5,6 +5,24 @@
 
 ## O que já existe
 
+- 🔑 **O pool de conexões não tinha FILA, e a rajada do conector estourava em 500**
+  (06/10/2026, log de produção colado pelo dono: `psycopg2.pool.PoolError: connection pool
+  exhausted`). O `ThreadedConnectionPool` tem dez conexões e, com as dez em uso, a décima
+  primeira leva erro NA HORA. O conector do Claude dispara consultas em rajadas de cinco a dez
+  (a prévia de fusão de vários cadastros de uma vez), e parte voltava 500 sem nada estar
+  quebrado — só ocupado por meio segundo. Cada chamada do `/mcp` usa a conexão duas vezes (a
+  credencial, depois a rota por dentro), o que dobra a disputa.
+  **A correção** (`database.get_conn`): um semáforo com as MESMAS vagas do pool faz o pedido
+  esperar a vez (até 20 s); quem não consegue recebe **503 com frase e `Retry-After`**
+  (`BancoOcupado`, tratado em `main.py`), não um traceback.
+  ⚠️ **Aumentar o pool não é a saída**: o Postgres gerenciado tem teto de conexões por plano, e
+  durante o deploy dois contêineres dividem esse teto.
+  ⚠️ **Quem segura um cursor e abre OUTRO na mesma thread ocupa duas vagas.** Sob rajada isso
+  vira espera longa em vez do erro imediato de antes — função que recebe `cur` usa o que
+  recebeu, não abre o seu.
+  ⚠️ Cobertura: bloco 5 do `smoke_concorrencia.py` — trinta pedidos juntos, três vezes o pool,
+  nenhum 5xx. Sem a correção ele devolve `[200, 500]`.
+
 - 🔑 **A logo sumia a cada deploy, e agora mora no BANCO** (migração 046, 31/08/2026). O
   filesystem do App Platform é EFÊMERO: `api/uploads/` some a cada publicação. O risco estava
   anotado desde o preparo da subida, com o Spaces como saída — mas para UMA imagem de até 2 MB

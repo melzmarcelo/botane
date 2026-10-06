@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
@@ -35,7 +36,7 @@ from config import (
     PORT,
     SENHA_MINIMA,
 )
-from database import close_pool, get_cursor, init_pool
+from database import BancoOcupado, close_pool, get_cursor, init_pool
 from db_updater import run_migrations
 from routers import (
     ajustes,
@@ -355,6 +356,17 @@ _CABECALHOS_DE_SEGURANCA = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Strict-Transport-Security": "max-age=31536000",
 }
+
+
+@app.exception_handler(BancoOcupado)
+async def _banco_ocupado(_request, erro: BancoOcupado):
+    """Sem conexão livre dentro da espera: 503 com frase, não 500 com traceback.
+
+    ⚠️ `Retry-After` curto: quem chama (o navegador, o conector do Claude) tem de
+    saber que é para tentar de novo, e logo — o sistema não caiu, só encheu.
+    """
+    return JSONResponse(status_code=503, content={"detail": str(erro)},
+                        headers={"Retry-After": "2"})
 
 
 @app.middleware("http")

@@ -220,6 +220,30 @@ for id_produto in criados["produtos"]:
     chamar("DELETE", f"/produtos/{id_produto}", token=token)
 checar("produtos de teste saíram da lista ativa", True)
 
+print("\n5. uma rajada maior que o pool espera a vez, não estoura")
+# 🔑 **O pool tem dez conexões e não tinha fila** (06/10/2026, log de produção):
+# o conector do Claude dispara consultas em rajadas, e a décima primeira levava
+# `PoolError: connection pool exhausted` — um 500 sem nada estar quebrado. Agora
+# quem não acha conexão espera a vez. Trinta pedidos juntos, três vezes o pool:
+# nenhum pode voltar 5xx.
+rajada = []
+
+
+def _pedir():
+    barreira.wait()
+    rajada.append(chamar("GET", "/produtos?limite=200", token=token)[0])
+
+
+barreira = threading.Barrier(30)
+fios = [threading.Thread(target=_pedir) for _ in range(30)]
+for f in fios:
+    f.start()
+for f in fios:
+    f.join()
+checar("trinta pedidos ao mesmo tempo, todos respondidos", len(rajada) == 30, len(rajada))
+checar("e nenhum com erro do servidor", all(c == 200 for c in rajada),
+       sorted(set(rajada)))
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 raise SystemExit(1 if falhas else 0)
