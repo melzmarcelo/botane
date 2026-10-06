@@ -236,10 +236,16 @@ def _ultimo_medio_conhecido(cur, id_produto: int, id_unidade: int) -> Decimal:
     linha = cur.fetchone()
     if linha:
         return dec(linha["custo_medio"])
+    # ⚠️ **Só movimento gravado na unidade de HOJE** (`um`, migração 076). O custo
+    # de um movimento antigo é por KG se o produto era estocado em KG; lido
+    # depois de uma troca para UN, ele entraria como custo do pacote. Linha sem
+    # `um` é anterior à 076, de quando a unidade não mudava — continua valendo.
     cur.execute(
-        """SELECT custo_medio_apos FROM estoque_movimentos
-            WHERE id_produto = %s AND custo_medio_apos > 0
-            ORDER BY id DESC LIMIT 1""",
+        """SELECT m.custo_medio_apos FROM estoque_movimentos m
+             JOIN produtos p ON p.id = m.id_produto
+            WHERE m.id_produto = %s AND m.custo_medio_apos > 0
+              AND (m.um IS NULL OR p.um_estoque IS NULL OR upper(m.um) = upper(p.um_estoque))
+            ORDER BY m.id DESC LIMIT 1""",
         (id_produto,),
     )
     linha = cur.fetchone()
@@ -966,6 +972,33 @@ def reprocessar(cur, *, id_unidade: int, id_produto: int, aplicar: bool = False,
             if mudancas else f"{produto['nome']} já está em ordem — nada mudaria."
         ),
     }
+
+
+def converter_custo_guardado(cur, *, id_produto: int, fator) -> int:
+    """Leva para a unidade nova o custo médio guardado em prateleira VAZIA.
+
+    🔑 **Por que existe (05/10/2026).** `converter_unidade` vira o saldo por um
+    par de movimentos — e por isso só passa pela prateleira que TEM mercadoria.
+    A vazia fica com o `custo_medio` de antes, que é a memória do último custo
+    (é dele que sai o custo provisório de uma saída sem saldo, e o que a tela
+    mostra). Trocando de KG para UN com o estoque zerado, o pacote de 250 g
+    passava a "custar" o quilo inteiro.
+    ⚠️ **Não é movimento, e não precisa ser**: não há quantidade nem valor
+    mudando de lugar — zero vezes qualquer custo é zero. O que muda é em que
+    unidade o custo guardado está escrito.
+    ⚠️ **O custo DIVIDE pelo fator** (quantas da unidade nova valem 1 da antiga).
+    Devolve quantas prateleiras foram acertadas.
+    """
+    fator = dec(fator)
+    if fator <= 0 or fator == 1:
+        return 0
+    cur.execute(
+        """UPDATE estoque_saldos
+              SET custo_medio = round(custo_medio / %s, 6), atualizado_em = now()
+            WHERE id_produto = %s AND quantidade = 0 AND custo_medio > 0""",
+        (fator, id_produto),
+    )
+    return cur.rowcount
 
 
 def saldo_a_converter(cur, id_produto: int) -> list[dict]:

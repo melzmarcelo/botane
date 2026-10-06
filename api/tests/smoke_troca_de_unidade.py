@@ -462,6 +462,74 @@ checar("e a recusa diz que nao sabe quantos KG cabem num UN",
        "quantos KG cabem" in str(r.get("detail", "")), r.get("detail"))
 
 
+print("\n10. o cafe de 250 g: trocar a unidade com o estoque ZERADO")
+# 🔑 **O caso real (05/10/2026).** O café vem em pacote de 250 g, era estocado em
+# KG (o pacote custa R$ 33,365, então o quilo custa R$ 133,46) e foi passado para
+# UN com a nota ESTORNADA — ou seja, sem saldo. A troca converteu o custo de
+# referência e deixou na unidade antiga os dois custos guardados FORA do
+# cadastro: o médio da prateleira vazia e o último preço do fornecedor. O pacote
+# passou a "custar" R$ 133,46, quatro vezes o certo, até a nota seguinte entrar.
+# ⚠️ Com saldo o defeito não aparecia: o par de movimentos da conversão acerta o
+# médio da prateleira — e era o único caso que a suíte media.
+st, _f = chamar("GET", "/fornecedores?limite=1", token=token)
+fornecedor_cafe = (_f or [{}])[0].get("id")
+cafe = criar("CAFE 250G", "KG", tipo="REVENDA", um_compra="UN", fator_compra=0.25)
+st, nota_cafe = chamar("POST", "/notas", {
+    "id_fornecedor": fornecedor_cafe, "numero": f"CF{marca}", "serie": "1",
+    "id_local": local["id"],
+    "itens": [{"id_produto": cafe, "quantidade": 2, "um": "UN", "valor_unitario": 33.365}],
+}, token=token)
+checar("a nota de 2 pacotes e digitada", st == 200, (st, nota_cafe))
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/lancar", {"id_local": local["id"]}, token=token)
+checar("e lancada: 2 pacotes viram 0,5 KG", st == 200, (st, r))
+
+
+def custos_guardados(id_produto):
+    with get_cursor() as cur:
+        cur.execute("""SELECT quantidade, custo_medio FROM estoque_saldos
+                        WHERE id_produto = %s ORDER BY id_local""", (id_produto,))
+        prateleiras = [dict(x) for x in cur.fetchall()]
+        cur.execute("SELECT ultimo_preco FROM produto_fornecedor WHERE id_produto = %s",
+                    (id_produto,))
+        precos = [x["ultimo_preco"] for x in cur.fetchall()]
+    return prateleiras, precos
+
+
+prateleiras, precos = custos_guardados(cafe)
+checar("em KG, o medio e o preco do fornecedor sao R$ 133,46 por quilo",
+       all(perto(x["custo_medio"], 133.46, 2) for x in prateleiras)
+       and all(perto(x, 133.46, 2) for x in precos) and precos, (prateleiras, precos))
+st, r = chamar("POST", f"/notas/{nota_cafe['id']}/estornar", {}, token=token)
+checar("a nota e estornada: o estoque zera", st == 200, (st, r))
+prateleiras, _p = custos_guardados(cafe)
+checar("e a prateleira vazia GUARDA o custo do quilo",
+       all(float(x["quantidade"]) == 0 and perto(x["custo_medio"], 133.46, 2) for x in prateleiras),
+       prateleiras)
+
+st, r = chamar("PUT", f"/produtos/{cafe}",
+               {"um_estoque": "UN", "fator_troca_unidade": 4,
+                "confirmar_troca_de_unidade": True}, token=token)
+checar("a troca KG -> UN (1 KG = 4 UN) acontece sem saldo", st == 200, (st, r))
+prateleiras, precos = custos_guardados(cafe)
+checar("o custo guardado na prateleira vazia vira o do PACOTE: 133,46 / 4 = 33,365",
+       all(perto(x["custo_medio"], 33.365, 3) for x in prateleiras), prateleiras)
+checar("e o ultimo preco do fornecedor tambem", all(perto(x, 33.365, 3) for x in precos),
+       precos)
+st, c = chamar("GET", f"/produtos/{cafe}/custo", token=token)
+checar("o custo que o sistema responde para o produto e o do pacote",
+       perto((c or {}).get("atual"), 33.365, 3), (c or {}).get("atual"))
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": local["id"]}, token=token)
+checar("uma saida sem saldo custa o pacote (33,365), nao o quilo",
+       st == 201 and perto(r.get("custo_unitario"), 33.365, 3), (st, r))
+# limpeza: devolve a saida e descarta a nota
+st, movs = chamar("GET", f"/estoque/movimentos?id_produto={cafe}&limite=20", token=token)
+for m in (movs or []):
+    if m.get("tipo") == "SAIDA_CONSUMO_INTERNO" and not m.get("estornado"):
+        chamar("POST", f"/estoque/movimentos/{m['id']}/estornar", {"motivo": "limpeza"}, token=token)
+chamar("DELETE", f"/notas/{nota_cafe['id']}", token=token)
+
 for pid in criados:
     chamar("DELETE", f"/produtos/{pid}", token=token)
 

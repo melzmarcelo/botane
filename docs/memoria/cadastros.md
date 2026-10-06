@@ -923,6 +923,31 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
   ⚠️ **O link do alerta estava QUEBRADO desde sempre**: apontava `/produtos?status=RASCUNHO`,
   e a tela lê `situacao` — abria a lista sem filtro nenhum.
 
+- 🔑 **Trocar a unidade com o estoque ZERADO deixava o custo na unidade antiga** (05/10/2026,
+  achado no café de 250 g do Botané). O pacote era estocado em KG (R$ 133,46 o quilo) e foi
+  passado para UN com a nota estornada. A troca converteu `custo_referencia`, mas há dois custos
+  por unidade de estoque guardados FORA de `produtos`, e os dois ficaram como estavam: o
+  `custo_medio` da prateleira VAZIA (a memória do último custo, de onde sai o custo provisório
+  da saída sem saldo) e o `produto_fornecedor.ultimo_preco` (o segundo degrau da cascata). O
+  pacote passou a "custar" R$ 133,46 — quatro vezes o certo — até a nota seguinte entrar.
+  ⚠️ **Com saldo o defeito não aparecia**: o par de movimentos da conversão acerta o médio da
+  prateleira que tem mercadoria, e era o único caso que a suíte media.
+  Agora `troca_de_unidade.aplicar` leva os dois (`estoque.converter_custo_guardado` + o
+  `UPDATE` do preço do fornecedor), o levantamento os conta como "algo a converter" (então o
+  fator é exigido), e a auditoria diz quantos foram levados.
+  ⚠️ **`_ultimo_medio_conhecido` só lê movimento gravado na unidade de HOJE** (`um`, migração
+  076): o custo de um movimento antigo é por KG se o produto era KG.
+  ⚠️ **A prateleira vazia não vira movimento**: não há quantidade nem valor mudando de lugar —
+  zero vezes qualquer custo é zero. Muda só em que unidade o custo guardado está escrito.
+  Cobertura: bloco 10 do `smoke_troca_de_unidade` — sem a correção, 4 das checagens falham.
+
+- 🔑 **Produto comprado e vendido em PACOTE, e usado em receita por PESO** (o mesmo café).
+  A venda baixa a quantidade vendida na unidade de ESTOQUE e congela o custo dessa unidade:
+  estocado em KG, vender 1 pacote tirava 1 kg e custava o quilo. O cadastro certo é estoque em
+  **UN** (o pacote) com a equivalência de peso no cartão de unidades — `1 UN = 250 G` (e
+  `1 UN = 0,25 KG` se alguma ficha usa quilo). A ficha continua pedindo gramas: 18 g baixam
+  0,072 UN. Conferido na base local antes de aplicar nos dois cafés do ar.
+
 ## Armadilhas já pagas
 
 - ⚠️ **Teste de tela que procura "o produto que contém X" cai no produto de outra rodada.**

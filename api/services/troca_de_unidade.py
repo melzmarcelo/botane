@@ -234,7 +234,25 @@ def avaliar(cur, id_produto: int, antiga: str | None, nova: str | None,
     cur.execute(
         "SELECT count(*) AS n FROM produto_unidades WHERE id_produto = %s", (id_produto,))
     embalagens = cur.fetchone()["n"]
-    tem_o_que_converter = embalagens > 0 or any(
+    # 🔑 **Os custos GUARDADOS fora do cadastro** (05/10/2026, achado no café de
+    # 250 g do Botané). Há dois números por unidade de estoque que não moram em
+    # `produtos` nem são saldo: o custo médio de prateleira VAZIA (a memória do
+    # último custo, que a saída sem saldo usa) e o último preço de cada
+    # fornecedor (o segundo degrau da cascata de custo). Trocar de KG para UN
+    # com o estoque zerado deixava os dois na unidade antiga: o produto passava
+    # a "custar" R$ 133,46 por PACOTE, quatro vezes o certo, até a nota seguinte
+    # entrar. Com saldo o defeito não aparecia — o par de movimentos da
+    # conversão acerta o médio da prateleira, e era o único caso testado.
+    cur.execute(
+        """SELECT (SELECT count(*) FROM estoque_saldos
+                    WHERE id_produto = %(p)s AND quantidade = 0 AND custo_medio > 0) AS prateleiras,
+                  (SELECT count(*) FROM produto_fornecedor
+                    WHERE id_produto = %(p)s AND ultimo_preco IS NOT NULL) AS fornecedores""",
+        {"p": id_produto},
+    )
+    guardados = dict(cur.fetchone() or {})
+    tem_custo_guardado = bool(guardados.get("prateleiras") or guardados.get("fornecedores"))
+    tem_o_que_converter = embalagens > 0 or tem_custo_guardado or any(
         p.get(campo) is not None
         for campo in ("custo_referencia", "estoque_minimo", "estoque_maximo"))
 
@@ -439,6 +457,19 @@ def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) ->
             fator=fator, id_usuario=id_usuario,
         )
 
+    # 🔑 **Os custos guardados acompanham** — ver o levantamento em `planejar`. O
+    # custo DIVIDE pelo fator, como o de referência. ⚠️ Depois do saldo: a
+    # prateleira que TINHA mercadoria já foi acertada pelo par de movimentos, e
+    # aqui só entram as vazias. ⚠️ A prateleira é do service de estoque (regra da
+    # casa: só ele escreve em `estoque_saldos`); o preço do fornecedor é cadastro.
+    vazias = estoque_motor.converter_custo_guardado(cur, id_produto=id_produto, fator=fator)
+    cur.execute(
+        """UPDATE produto_fornecedor SET ultimo_preco = round(ultimo_preco / %s, 6)
+            WHERE id_produto = %s AND ultimo_preco IS NOT NULL""",
+        (fator, id_produto),
+    )
+    fornecedores = cur.rowcount
+
     for c in plano["conversoes"]:
         cur.execute(
             f"UPDATE produtos SET {c['campo']} = %s WHERE id = %s",
@@ -480,5 +511,7 @@ def aplicar(cur, id_produto: int, plano: dict, id_usuario: int | None = None) ->
             **{c["campo"]: c["para"] for c in plano["conversoes"]},
             "de": plano.get("de"), "para": plano.get("para"),
             "fator": plano.get("fator"),
+            # Quantos custos guardados foram levados para a unidade nova.
+            "custo_de_prateleira_vazia": vazias, "preco_de_fornecedor": fornecedores,
         },
     )
