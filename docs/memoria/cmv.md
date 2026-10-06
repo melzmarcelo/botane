@@ -5,6 +5,14 @@
 
 ## O que já existe
 
+- 🔑 **O painel da EMPRESA morria em 500 em todo período sem venda** (06/10/2026, bateria de
+  duas lojas). `_apurar_escopo` devolvia `cobertura_ficha_pct = None` quando a receita somada
+  era zero; `motor.apurar`, para uma loja só, devolve 0 — e o modelo de resposta exige número.
+  Acontecia no primeiro minuto de cada dia e de cada semana, e sempre que se abria uma loja
+  nova. ⚠️ **Passou despercebido porque só aparece com MAIS de uma loja ativa**, e a base de
+  trabalho tem uma. ⚠️ Na suíte, a apuração que falhava virava `{}` calado e as diferenças
+  fechavam por acaso: uma leitura que não responde tem de ser falha, não dicionário vazio.
+
 - **Movimentação do estoque por produto** (`cmv.movimentacao_por_produto`, migração 018,
   21/08/2026): estoque inicial, entradas, saídas e estoque final de cada produto — a conta que
   EXPLICA o CMV, que é uma linha só. Aba em `/cmv` e planilha em `/exportar/movimentacao.csv`.

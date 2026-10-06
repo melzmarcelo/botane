@@ -410,7 +410,12 @@ def listar(status: str | None = None,
                           AS pendentes
                  FROM notas_entrada n
                  LEFT JOIN fornecedores f ON f.id = n.id_fornecedor
-                WHERE (%s::varchar IS NULL OR n.status = %s)
+                -- 🔑 **Só as notas DESTA loja** (06/10/2026, bateria de duas lojas).
+                -- A lista não filtrava: quem enxerga as duas via as notas das duas
+                -- misturadas, enquanto o alerta e o Início já contavam por loja —
+                -- a tela dizia "3 notas a lançar" e mostrava sete.
+                WHERE n.id_unidade = %s
+                  AND (%s::varchar IS NULL OR n.status = %s)
                   AND (%s::varchar IS NULL OR n.origem = %s)
                   AND (%s::date IS NULL
                        OR coalesce(n.data_entrada, n.data_emissao) >= %s)
@@ -420,8 +425,8 @@ def listar(status: str | None = None,
                        OR n.numero ILIKE %s OR n.nome_emitente ILIKE %s
                        OR f.nome ILIKE %s OR n.chave_nfe ILIKE %s)
                 ORDER BY n.data_emissao DESC NULLS LAST, n.id DESC""",
-            (status, status, origem, origem, inicio, inicio, fim, fim,
-             like, like, like, like, like),
+            (unidade_atual(cur, ctx), status, status, origem, origem, inicio, inicio,
+             fim, fim, like, like, like, like, like),
             limite=limite, offset=offset, resposta=resposta,
         )
     return linhas
@@ -440,8 +445,11 @@ def pendencias(ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> li
                  JOIN notas_entrada n ON n.id = i.id_nota
                  LEFT JOIN produtos s ON s.id = i.sugestao_produto
                 WHERE i.id_produto IS NULL AND NOT i.ignorado AND n.status <> 'CANCELADA'
+                  -- A fila é a da loja do seletor, como o alerta que aponta para ela.
+                  AND n.id_unidade = %s
                 ORDER BY n.data_emissao DESC NULLS LAST, i.seq
-                LIMIT 200"""
+                LIMIT 200""",
+            (unidade_atual(cur, ctx),),
         )
         return [dict(r) for r in cur.fetchall()]
 

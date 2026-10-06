@@ -5,6 +5,15 @@
 
 ## O que já existe
 
+- 🔑 **A lista de notas e a fila de conciliação são da LOJA do seletor** (06/10/2026, bateria
+  de duas lojas). `GET /notas` e `GET /notas/pendencias` não filtravam `id_unidade`: quem
+  enxerga as duas lojas via as notas das duas misturadas, enquanto o alerta e o Início já
+  contavam por loja — a tela dizia "3 notas a lançar" e listava sete.
+  ⚠️ **Pelo NÚMERO a regra continua a de 29/09/2026**: abre quem ENXERGA a loja da nota
+  (`_conferir_loja_da_nota`, 404 para os outros). O administrador das duas abre a nota da
+  filial estando na matriz, e o lançamento acontece na loja DA NOTA — com o local tendo de
+  ser dela (a trava de `estoque.lancar`).
+
 - **Cada nota tem endereço** (25/08/2026): `/compras` é só a LISTA, `/compras/nova` digita e
   `/compras/[id]` mostra — com **cabeçalho, itens e total**, no mesmo modelo do formulário de
   digitação. Antes as três coisas dividiam a mesma tela: o formulário empurrava as notas para

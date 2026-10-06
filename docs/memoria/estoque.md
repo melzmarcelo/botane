@@ -5,6 +5,12 @@
 
 ## O que já existe
 
+- 🔑 **A contagem só nasce em local DA LOJA** (06/10/2026, bateria de duas lojas).
+  `POST /inventarios` conferia só se o local existia: com a matriz no seletor e uma prateleira
+  da filial no filtro, a contagem nascia como da matriz apontando para um local alheio. Agora é
+  404, como local que não existe. ⚠️ Pelo número, vale a regra de 29/09: abre e fecha quem
+  enxerga a loja da contagem, e o ajuste é lançado na loja DELA.
+
 - 🔑 **O local do movimento tem de ser da loja que lança** (05/10/2026, achado pela bateria de
   duas lojas, `tests/smoke_duas_lojas.py`). Ninguém conferia: com a matriz no seletor e o id de
   uma prateleira da filial no corpo, `POST /estoque/entradas` devolvia 201 e o movimento nascia

@@ -84,8 +84,12 @@ def _apurar_escopo(cur, lojas: list[int], inicio: date, fim: date) -> dict:
         float(total["cmv_real"] / receita * 100) if receita else None)
     # ⚠️ A cobertura é por RECEITA, não por contagem de itens: um prato de
     # R$ 80 sem ficha pesa mais do que dez cafezinhos com ela.
+    # 🔑 **Sem receita a cobertura é ZERO, não nula** (06/10/2026, bateria de duas
+    # lojas). É o que `motor.apurar` devolve para uma loja só; aqui saía `None`, o
+    # modelo de resposta exige número, e o painel da EMPRESA morria em 500 em
+    # todo período sem venda — o primeiro minuto de cada dia, de cada semana.
     total["cobertura_ficha_pct"] = (
-        float((total.get("receita_com_custo") or 0) / receita * 100) if receita else None)
+        float((total.get("receita_com_custo") or 0) / receita * 100) if receita else 0.0)
     return total
 
 

@@ -21,6 +21,10 @@ A história, com os números:
                filial: 12 KG a 5,333333 + 2 bolos a 3,00     = 70,00 em estoque
                CMV     matriz 6,00 (3 x 2,00) | filial 6,00 (2 x 3,00) | empresa 12,00
 
+Depois, na mesma rodada: uma nota de compra em cada loja (matriz 6 KG a 5,00,
+filial 4 KG a 7,00), a contagem da filial (15 -> 14 KG), a precificação de cada
+uma e o fechamento do dia SÓ da filial — com a matriz seguindo aberta.
+
 ⚠️ **Mede por DIFERENÇA.** A matriz é a loja 1 da base de trabalho, cheia de
 movimento de outras suítes; a apuração dela é lida antes e depois, e o que se
 cobra é o quanto andou.
@@ -109,7 +113,13 @@ atexit.register(_desativar_filiais_de_teste)
 def apuracao(unidade=None, escopo="loja"):
     _st, a = chamar("GET", f"/cmv/apuracao?inicio={HOJE}&fim={HOJE}&escopo={escopo}",
                     token=token, unidade=unidade)
-    return a if _st == 200 else {}
+    if _st != 200:
+        # ⚠️ Uma apuração que não responde NÃO pode virar `{}` calado: foi assim que
+        # o 500 do painel da empresa passou despercebido — o "antes" vazio fazia a
+        # diferença ser o total do dia, e quase todas as contas fechavam por acaso.
+        checar(f"a apuração responde (escopo {escopo}, loja {unidade})", False, (_st, a))
+        return {}
+    return a
 
 
 def andou(antes: dict, depois: dict, campo: str) -> float:
@@ -137,6 +147,7 @@ def custo(id_produto, unidade) -> dict:
 
 produtos: list[int] = []
 usuario_criado = None
+usuarios_criados: list = []
 
 try:
     print("1. as duas lojas, cada uma com a sua configuração")
@@ -172,6 +183,20 @@ try:
            par_m2.get("custo_por_local") == par_f2.get("custo_por_local"),
            (par_m2.get("custo_por_local"), par_f2.get("custo_por_local")))
 
+    # ⚠️ Usuário PRÓPRIO, lotado na matriz: o de cozinha das outras suítes não tem
+    # loja marcada, e sem loja marcada a pessoa enxerga todas.
+    st, papeis = chamar("GET", "/papeis", token=token)
+    papel = next((x for x in (papeis or []) if x["nome"] == "Conferente / Estoque"), None)
+    email = f"duas.lojas.{marca}@botane.com.br"
+    st, novo = chamar("POST", "/usuarios", {
+        "nome": f"Conferente da matriz {marca}", "email": email, "senha": "smoke12345",
+        "papeis": [{"id_papel": (papel or {}).get("id"), "id_unidade": MATRIZ}]}, token=token)
+    usuario_criado = (novo or {}).get("id")
+    checar("um conferente nasce lotado só na matriz", st == 201 and bool(usuario_criado),
+           (st, novo))
+    st, entrou = chamar("POST", "/auth/login", {"email": email, "senha": "smoke12345"})
+    so_matriz = (entrou or {}).get("access_token")
+
     print("\n2. o cadastro é da CASA: produto, ficha e preço valem nas duas")
     st, p = chamar("POST", "/produtos", {
         "codigo": f"DLF{marca}", "nome": f"FARINHA DUAS LOJAS {marca}", "tipo": "INSUMO",
@@ -197,7 +222,11 @@ try:
     checar("na matriz continua 20,00", perto(d_m.get("preco_venda"), 20), d_m.get("preco_venda"))
 
     antes_m = apuracao(MATRIZ)
+    # 🔑 Loja nova, dia sem venda: é o caso em que o painel da empresa dava 500.
     antes_e = apuracao(MATRIZ, "empresa")
+    checar("o painel da EMPRESA responde mesmo com uma loja sem venda no período",
+           bool(antes_e) and antes_e.get("cobertura_ficha_pct") is not None,
+           antes_e.get("cobertura_ficha_pct"))
 
     print("\n3. cada loja compra pelo seu preço — e o custo é o DELA")
     st, r = chamar("POST", "/estoque/entradas", {
@@ -439,6 +468,208 @@ try:
     checar("e a identidade da filial continua fechando",
            perto(conta, fim_f.get("cmv_real"), 0.05), (conta, fim_f.get("cmv_real")))
 
+    print("\n11a. cada loja lança a sua nota de compra")
+    # Estado de partida: matriz 4 KG a 4,00 | filial 11 KG a 5,333333.
+    st, forns = chamar("GET", "/fornecedores?limite=1", token=token)
+    fornecedor = (forns or [{}])[0].get("id")
+    st, nota_m = chamar("POST", "/notas", {
+        "id_fornecedor": fornecedor, "numero": f"DM{marca}", "serie": "1",
+        "id_local": local_m["id"],
+        "itens": [{"id_produto": farinha, "quantidade": 6, "valor_unitario": 5}]},
+        token=token, unidade=MATRIZ)
+    checar("a matriz digita uma nota de 6 KG a 5,00", st == 200 and nota_m.get("id"),
+           (st, nota_m))
+    st, nota_f = chamar("POST", "/notas", {
+        "id_fornecedor": fornecedor, "numero": f"DF{marca}", "serie": "1",
+        "id_local": local_f["id"],
+        "itens": [{"id_produto": farinha, "quantidade": 4, "valor_unitario": 7}]},
+        token=token, unidade=FILIAL)
+    checar("a filial digita uma nota de 4 KG a 7,00", st == 200 and nota_f.get("id"),
+           (st, nota_f))
+    st, lista_m = chamar("GET", f"/notas?busca=D{'M'}{marca}", token=token, unidade=MATRIZ)
+    st, lista_fm = chamar("GET", f"/notas?busca=DF{marca}", token=token, unidade=MATRIZ)
+    st, lista_f = chamar("GET", f"/notas?busca=DF{marca}", token=token, unidade=FILIAL)
+    checar("a matriz lista a nota dela", any(n["id"] == nota_m["id"] for n in (lista_m or [])))
+    checar("e NÃO lista a da filial", not (lista_fm or []), lista_fm)
+    checar("a filial lista a dela", any(n["id"] == nota_f["id"] for n in (lista_f or [])))
+    st, r = chamar("POST", f"/notas/{nota_f['id']}/lancar", {"id_local": local_m["id"]},
+                   token=token, unidade=MATRIZ)
+    checar("a matriz não lança a nota da filial num local dela", st == 400, (st, r))
+    st, r = chamar("GET", f"/notas/{nota_f['id']}", token=so_matriz, unidade=MATRIZ)
+    checar("quem é só da matriz não abre a nota da filial pelo número (404)", st == 404, st)
+    st, r = chamar("POST", f"/notas/{nota_f['id']}/lancar", {"id_local": local_m["id"]},
+                   token=token, unidade=FILIAL)
+    checar("nem a filial lança a nota dela no local da matriz", st == 400, (st, r))
+    checar("depois das recusas, nenhum saldo andou",
+           perto(qtd(farinha, MATRIZ), 4) and perto(qtd(farinha, FILIAL), 11),
+           (qtd(farinha, MATRIZ), qtd(farinha, FILIAL)))
+    st, r = chamar("POST", f"/notas/{nota_m['id']}/lancar", {"id_local": local_m["id"]},
+                   token=token, unidade=MATRIZ)
+    checar("a matriz lança a nota dela", st in (200, 201), (st, r))
+    st, r = chamar("POST", f"/notas/{nota_f['id']}/lancar", {"id_local": local_f["id"]},
+                   token=token, unidade=FILIAL)
+    checar("a filial lança a dela", st in (200, 201), (st, r))
+    # matriz: (4 x 4,00 + 6 x 5,00) / 10 = 4,60
+    checar("a matriz fica com 10 KG a 4,60",
+           perto(qtd(farinha, MATRIZ), 10) and perto(custo(farinha, MATRIZ).get("atual"), 4.6),
+           (qtd(farinha, MATRIZ), custo(farinha, MATRIZ).get("atual")))
+    # filial: (11 x 5,333333 + 4 x 7,00) / 15 = 5,777778
+    checar("a filial fica com 15 KG a 5,7778",
+           perto(qtd(farinha, FILIAL), 15)
+           and perto(custo(farinha, FILIAL).get("atual"), (11 * 64 / 12 + 28) / 15, 0.0001),
+           (qtd(farinha, FILIAL), custo(farinha, FILIAL).get("atual")))
+
+    print("\n11b. a contagem de uma loja só enxerga e só acerta a dela")
+    st, r = chamar("POST", "/inventarios", {
+        "nome": f"Cruzada {marca}", "produtos": [farinha], "locais": [local_f["id"]],
+        "cega": False}, token=token, unidade=MATRIZ)
+    cruzada = (r or {}).get("id") if st == 201 else None
+    checar("a matriz não abre contagem em local da filial (404)", st == 404, (st, r))
+    if cruzada:
+        chamar("DELETE", f"/inventarios/{cruzada}", token=token, unidade=MATRIZ)
+    st, inv = chamar("POST", "/inventarios", {
+        "nome": f"Filial {marca}", "produtos": [farinha], "locais": [local_f["id"]],
+        "cega": False}, token=token, unidade=FILIAL)
+    id_inv = (inv or {}).get("id")
+    checar("a filial abre a contagem da farinha", st == 201 and bool(id_inv), (st, inv))
+    linha_inv = ((inv or {}).get("itens") or [{}])[0]
+    checar("e o sistema espera 15 KG — o saldo DELA, não os 25 da rede",
+           perto(linha_inv.get("qtd_sistema"), 15), linha_inv)
+    st, lista_inv = chamar("GET", "/inventarios", token=token, unidade=MATRIZ)
+    checar("a contagem da filial não aparece na matriz",
+           not any(i["id"] == id_inv for i in (lista_inv or [])))
+    # ⚠️ Pelo NÚMERO, a regra da casa é "quem enxerga a loja abre" (validação de
+    # 29/09/2026): o admin vê as duas. Quem prova o muro é quem só vê a matriz.
+    st, r = chamar("GET", f"/inventarios/{id_inv}", token=so_matriz, unidade=MATRIZ)
+    checar("quem é só da matriz não abre a contagem da filial pelo número (404)",
+           st == 404, st)
+    st, r = chamar("PUT", f"/inventarios/{id_inv}/contagem", {"itens": [
+        {"id_produto": farinha, "id_local": local_f["id"], "qtd_contada": 14}]},
+        token=token, unidade=FILIAL)
+    checar("a filial conta 14 KG", st == 200, (st, r))
+    st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=so_matriz, unidade=MATRIZ)
+    checar("nem a fecha", st in (403, 404), (st, r))
+    st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=token, unidade=FILIAL)
+    checar("a filial fecha, com um ajuste", st == 200 and r.get("ajustes") == 1, (st, r))
+    checar("a filial passa a ter 14 KG", perto(qtd(farinha, FILIAL), 14), qtd(farinha, FILIAL))
+    checar("e a matriz continua com os 10 dela", perto(qtd(farinha, MATRIZ), 10),
+           qtd(farinha, MATRIZ))
+
+    print("\n11c. a precificação é de cada loja")
+    st, cfg_m_antes = chamar("GET", "/precificacao/config", token=token, unidade=MATRIZ)
+    st, r = chamar("PUT", "/precificacao/config", {"arredondamento": "NENHUM", "linhas": [
+        {"nome": "Impostos", "tipo": "PERCENTUAL", "valor": 10, "alcance": "TUDO"},
+        {"nome": "Margem", "tipo": "MARGEM", "valor": 40, "alcance": "TUDO"}]},
+        token=token, unidade=FILIAL)
+    checar("a filial grava a configuração dela", st == 200 and r.get("id_unidade") == FILIAL,
+           (st, r))
+    st, cfg_m_depois = chamar("GET", "/precificacao/config", token=token, unidade=MATRIZ)
+    checar("e a da matriz não muda",
+           [(l["nome"], l["valor"]) for l in cfg_m_antes.get("linhas", [])]
+           == [(l["nome"], l["valor"]) for l in cfg_m_depois.get("linhas", [])])
+    st, an = chamar("GET", f"/precificacao/analise?dias=30&id_produto={bolo}", token=token,
+                    unidade=FILIAL)
+    x = next((i for i in (an or {}).get("itens", []) if i["id_produto"] == bolo), None)
+    st, sim = chamar("POST", "/precificacao/simular", {"id_produto": bolo, "preco": 22},
+                     token=token, unidade=FILIAL)
+    # O bolo da filial custa 0,5 KG x 5,777778 = 2,888889; com 50% sobre a venda,
+    # o piso é 2,888889 / 0,5 = 5,78.
+    custo_bolo_f = 0.5 * (11 * 64 / 12 + 28) / 15
+    checar("a simulação na filial usa o custo DELA (2,89)",
+           st == 200 and perto(sim.get("custo_direto"), custo_bolo_f), (st, sim))
+    checar("e as partes somam o preço de 22,00",
+           st == 200 and perto(sum(p_["valor"] for p_ in sim["partes"]), 22, 0.011),
+           sim.get("partes") if isinstance(sim, dict) else sim)
+    st, sim_m = chamar("POST", "/precificacao/simular", {"id_produto": bolo, "preco": 20},
+                       token=token, unidade=MATRIZ)
+    # Na matriz: 0,5 KG x 4,60 = 2,30.
+    checar("na matriz a mesma simulação usa 2,30",
+           st == 200 and perto(sim_m.get("custo_direto"), 2.3), (st, sim_m))
+
+    print("\n11d. cada loja fecha o seu período")
+    antes_fech_m = apuracao(MATRIZ)
+    ap_f = apuracao(FILIAL)
+    st, r = chamar("PUT", f"/unidades/{FILIAL}/parametros", {"ciclo_fechamento": "DIARIO"},
+                   token=token)
+    checar("a filial passa a fechar por dia", st == 200, (st, r))
+    st, per_m = chamar("GET", "/cmv/periodos?quantos=1", token=token, unidade=MATRIZ)
+    checar("sem mudar o ciclo da matriz", per_m.get("ciclo") == antes_fech_m.get("ciclo"),
+           (per_m.get("ciclo"), antes_fech_m.get("ciclo")))
+    st, conf = chamar("GET", f"/cmv/fechamentos/conferencia?competencia={HOJE}", token=token,
+                      unidade=FILIAL)
+    checar("a conferência antes de fechar responde na filial", st == 200, (st, conf))
+    st, fech = chamar("POST", "/cmv/fechamentos", {"competencia": HOJE}, token=token,
+                      unidade=FILIAL)
+    id_fech = (fech or {}).get("id")
+    checar("a filial fecha o dia", st == 201 and bool(id_fech), (st, fech))
+    st, lista_fech_f = chamar("GET", "/cmv/fechamentos", token=token, unidade=FILIAL)
+    fech = next((f for f in (lista_fech_f or []) if f["id"] == id_fech), {})
+    checar("o fechamento aparece na lista da filial, como FECHADO",
+           fech.get("status") == "FECHADO", fech)
+    checar("e congela o CMV e o estoque que a apuração mostrava",
+           perto(fech.get("cmv_real"), ap_f.get("cmv_real"))
+           and perto(fech.get("estoque_final"), ap_f.get("estoque_final")),
+           ({k: fech.get(k) for k in ("cmv_real", "estoque_final")},
+            {k: ap_f.get(k) for k in ("cmv_real", "estoque_final")}))
+    conta = (float(fech.get("estoque_inicial", 0)) + float(fech.get("compras", 0))
+             - float(fech.get("estoque_final", 0)))
+    checar("e o congelado fecha a identidade", perto(conta, fech.get("cmv_real"), 0.05),
+           (conta, fech.get("cmv_real")))
+    checar("a apuração da filial passa a dizer fechado", apuracao(FILIAL).get("fechado") is True)
+    checar("a da matriz não", apuracao(MATRIZ).get("fechado") == antes_fech_m.get("fechado"),
+           apuracao(MATRIZ).get("fechado"))
+    st, lista_fech = chamar("GET", "/cmv/fechamentos", token=token, unidade=MATRIZ)
+    checar("o fechamento da filial não aparece na matriz",
+           not any(f["id"] == id_fech for f in (lista_fech or [])))
+    st, r = chamar("POST", f"/cmv/fechamentos/{id_fech}/reabrir", token=token, unidade=MATRIZ)
+    checar("e a matriz não o reabre", st in (403, 404), (st, r))
+    # ⚠️ Quem prova a trava é quem NÃO tem `estoque.retroativo`: o conferente
+    # lotado na filial. O admin passa por cima dela de propósito.
+    st, papeis_f = chamar("GET", "/papeis", token=token)
+    papel_f = next((x for x in (papeis_f or []) if x["nome"] == "Conferente / Estoque"), None)
+    email_f = f"duas.lojas.f{marca}@botane.com.br"
+    st, novo_f = chamar("POST", "/usuarios", {
+        "nome": f"Conferente da filial {marca}", "email": email_f, "senha": "smoke12345",
+        "papeis": [{"id_papel": (papel_f or {}).get("id"), "id_unidade": FILIAL}]}, token=token)
+    usuarios_criados.append((novo_f or {}).get("id"))
+    st, entrou_f = chamar("POST", "/auth/login", {"email": email_f, "senha": "smoke12345"})
+    so_filial = (entrou_f or {}).get("access_token")
+    st, r = chamar("POST", "/estoque/entradas", {
+        "id_produto": farinha, "quantidade": 1, "custo_unitario": 5,
+        "id_local": local_f["id"], "data_movimento": HOJE}, token=so_filial, unidade=FILIAL)
+    checar("com o dia fechado, o conferente da filial não lança nele", st in (400, 403, 409),
+           (st, r))
+    st, r = chamar("POST", "/estoque/entradas", {
+        "id_produto": farinha, "quantidade": 1, "custo_unitario": 4.6,
+        "id_local": local_m["id"], "data_movimento": HOJE}, token=token, unidade=MATRIZ)
+    checar("a matriz, que não fechou, continua lançando", st == 201, (st, r))
+    checar("e o saldo da filial não se mexeu com isso", perto(qtd(farinha, FILIAL), 14),
+           qtd(farinha, FILIAL))
+    st, r = chamar("POST", f"/cmv/fechamentos/{id_fech}/reabrir", token=token, unidade=FILIAL)
+    checar("a filial reabre o período dela", st == 200, (st, r))
+    checar("e a apuração volta a dizer aberto", apuracao(FILIAL).get("fechado") is False)
+
+    print("\n11e. no fim de tudo, as contas ainda fecham")
+    fim_m, fim_f, fim_e = apuracao(MATRIZ), apuracao(FILIAL), apuracao(MATRIZ, "empresa")
+    for nome, ap in (("matriz", fim_m), ("filial", fim_f), ("empresa", fim_e)):
+        conta = (float(ap.get("estoque_inicial", 0)) + float(ap.get("compras", 0))
+                 - float(ap.get("estoque_final", 0)))
+        checar(f"inicial + compras - final = CMV na {nome}, depois de nota, contagem e fechamento",
+               bool(ap) and perto(conta, ap.get("cmv_real"), 0.05), (conta, ap.get("cmv_real")))
+    for campo in ("compras", "estoque_final", "cmv_real", "receita"):
+        soma = float(fim_m.get(campo) or 0) + float(fim_f.get(campo) or 0)
+        checar(f"e a empresa continua sendo matriz + filial em {campo}",
+               perto(fim_e.get(campo), soma, 0.05), (fim_e.get(campo), soma))
+    # filial: 14 KG a 5,777778 + 4 bolos a 3,00 (a venda foi cancelada).
+    checar("o estoque da filial vale 14 x 5,7778 + 4 x 3,00 = 92,89",
+           perto(fim_f.get("estoque_final"), 14 * (11 * 64 / 12 + 28) / 15 + 12, 0.02),
+           fim_f.get("estoque_final"))
+    st, rede = chamar("GET", f"/estoque/saldos-rede?id_produto={farinha}", token=token)
+    linha = next((x for x in (rede or []) if x["id_produto"] == farinha), None)
+    # matriz 11 KG (10 + 1 lançado no 11d) | filial 14 KG
+    checar("e a rede soma 25 KG de farinha",
+           linha and perto(linha["quantidade"], 25), linha)
+
     print("\n12. as telas de apoio respondem nas duas lojas")
     for caminho in ("/alertas", "/inicio", "/cmv/conferencia", "/cmv/periodos",
                     "/estoque/saldos-agrupados", "/ajustes/custo-referencia/previa",
@@ -449,19 +680,6 @@ try:
                (st_m, st_f))
 
     print("\n13. quem é só de uma loja não entra na outra")
-    # ⚠️ Usuário PRÓPRIO, lotado na matriz: o de cozinha das outras suítes não tem
-    # loja marcada, e sem loja marcada a pessoa enxerga todas.
-    st, papeis = chamar("GET", "/papeis", token=token)
-    papel = next((x for x in (papeis or []) if x["nome"] == "Conferente / Estoque"), None)
-    email = f"duas.lojas.{marca}@botane.com.br"
-    st, novo = chamar("POST", "/usuarios", {
-        "nome": f"Conferente da matriz {marca}", "email": email, "senha": "smoke12345",
-        "papeis": [{"id_papel": (papel or {}).get("id"), "id_unidade": MATRIZ}]}, token=token)
-    usuario_criado = (novo or {}).get("id")
-    checar("um conferente nasce lotado só na matriz", st == 201 and bool(usuario_criado),
-           (st, novo))
-    st, entrou = chamar("POST", "/auth/login", {"email": email, "senha": "smoke12345"})
-    so_matriz = (entrou or {}).get("access_token")
     st, _ = chamar("GET", "/estoque/saldos?limite=1", token=so_matriz, unidade=MATRIZ)
     checar("ele lê o estoque da matriz", st == 200, st)
     st, _ = chamar("GET", "/estoque/saldos?limite=1", token=so_matriz, unidade=FILIAL)
@@ -484,8 +702,9 @@ finally:
             chamar("DELETE", f"/vendas/{v['id']}", token=token, unidade=MATRIZ)
     for id_produto in produtos:
         chamar("DELETE", f"/produtos/{id_produto}", token=token)
-    if usuario_criado:
-        chamar("DELETE", f"/usuarios/{usuario_criado}", token=token)
+    for id_usuario in [usuario_criado, *usuarios_criados]:
+        if id_usuario:
+            chamar("DELETE", f"/usuarios/{id_usuario}", token=token)
     _desativar_filiais_de_teste()
     st, lista = chamar("GET", "/unidades", token=token)
     checar("nenhuma filial de teste fica ativa",

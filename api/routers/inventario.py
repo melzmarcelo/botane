@@ -350,8 +350,13 @@ def abrir(body: InventarioCreate, ctx: Contexto = Depends(_perm_criar)) -> dict:
         if body.id_local and body.id_local not in locais:
             locais.append(body.id_local)
         if locais:
+            # 🔑 **Só local DESTA loja** (06/10/2026, bateria de duas lojas). Bastava
+            # o local existir: com a matriz no seletor e uma prateleira da filial
+            # no filtro, a contagem nascia como da matriz apontando para um local
+            # que não é dela — e fechar lançaria o ajuste por lá.
             cur.execute(
-                "SELECT id FROM locais_estoque WHERE id = ANY(%s) AND ativo", (locais,)
+                "SELECT id FROM locais_estoque WHERE id = ANY(%s) AND ativo AND id_unidade = %s",
+                (locais, id_unidade),
             )
             achados = {r["id"] for r in cur.fetchall()}
             faltando = [l for l in locais if l not in achados]
