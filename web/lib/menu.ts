@@ -135,15 +135,25 @@ export const MENU: GrupoMenu[] = [
     ],
   },
   {
-    // 🔑 **Preços — o começo da Precificação** (05/10/2026, `docs/precificacao-estudo.md`).
-    // Nasce com uma tela só (a que só lê), e por isso aparece direto na lateral — grupo de
-    // um item vira item em `montarMenu`. Configuração e Precificação entram aqui depois.
+    // 🔑 **Precificação** (05/10/2026, `docs/precificacao-estudo.md`; o grupo se chamou
+    // "Preços" por um dia — o dono pediu o nome do módulo). Três telas: a que analisa e
+    // aplica, a evolução de preço × custo e a configuração da loja.
     // ⚠️ Fora do grupo do CMV de propósito: o dono pediu o CMV direto no menu, e um segundo
     // item ali o transformaria de volta numa pasta.
-    grupo: "Preços",
+    // ⚠️ "Preço × custo" continua aceitando as chaves do CMV: a tela nasceu com elas, e quem
+    // a usava não pode perdê-la no deploy.
+    grupo: "Precificação",
     icone: "preco",
     itens: [
-      { href: "/precos", nome: "Preço × custo", icone: "preco", chave: ["cmv.painel", "cmv.relatorios"] },
+      { href: "/precificacao", nome: "Precificação", icone: "preco", chave: "precificacao.analisar" },
+      {
+        href: "/precos", nome: "Preço × custo", icone: "grafico",
+        chave: ["precificacao.analisar", "cmv.painel", "cmv.relatorios"],
+      },
+      {
+        href: "/precificacao/configuracao", nome: "Configuração", icone: "config",
+        chave: ["precificacao.configurar", "precificacao.analisar"],
+      },
     ],
   },
   {

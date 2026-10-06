@@ -26,6 +26,7 @@ entregue.
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
 | [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
+| [Precificação](#precificação) | `docs/memoria/precificacao.md` | `precificacao`, `preco_custo` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
 
 ---
@@ -246,6 +247,23 @@ para consultar, dar baixa e descartar como perda. Estudo em
 - **Migração:** `100_etiquetas.sql`
 
 ⚠️ **Descartar é perda no razão** (`SAIDA_PERDA`, `origem_tipo = 'ETIQUETA'`), nunca apagar.
+
+## Precificação
+
+Quanto cada produto DEVERIA custar ao cliente, e como preço e custo andaram. Estudo e protótipo
+em [`docs/precificacao-estudo.md`](docs/precificacao-estudo.md).
+
+- **Rotas:** `precificacao.py`; a evolução de preço × custo mora em `cmv.py` (`/cmv/preco-custo/{id}`)
+- **Serviços:** `precificacao.py` (**o único lugar que sabe a conta do preço**), `preco_custo.py`
+- **Telas:** `precificacao/` (analisar e aplicar), `precificacao/configuracao/`, `precos/`
+- **Permissões:** `precificacao.analisar`, `precificacao.aplicar`, `precificacao.configurar`
+- **Migração:** `105_precificacao.sql`
+
+🔑 **A conta é o markup divisor**: `preço = custo direto ÷ (1 − soma dos percentuais sobre a
+venda)`, com a margem dentro da soma. ⚠️ O sugerido é o PISO, não o alvo.
+
+⚠️ **Por loja, podendo seguir outra** — e cada linha vale para tudo, para uma categoria ou
+para um setor; a mais específica de mesmo nome substitui a geral.
 
 ## Transversal
 

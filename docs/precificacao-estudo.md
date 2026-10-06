@@ -10,7 +10,7 @@ base nos estudos, podemos ter algo até relacionado a impostos, bacana seria bol
 para vermos. E também uma tela de preços, exemplo, selecionar um produto e ver em forma de
 gráfico de linhas a evolução de preço × custo."*
 
-Estado: **a tela de Preços (seção 5) foi construída em 05/10/2026** — `/precos`, só leitura, decisões em `docs/memoria/custos.md`. Configuração e Precificação continuam em análise, esperando as decisões da seção 7. Protótipo navegável em
+Estado: **a tela de Preços (seção 5) foi construída em 05/10/2026** — `/precos`, só leitura, decisões em `docs/memoria/custos.md`. **Configuração e Precificação foram construídas no mesmo dia** (migração 105), com as decisões do dono: por loja podendo seguir outra; preço aplicado vale na hora e o envio ao PDV segue o parâmetro da loja; cada linha vale para tudo, por categoria ou por setor. O que foi decidido e o que ficou de fora está em `docs/memoria/precificacao.md`. Protótipo navegável em
 [`apresentacao/precificacao-prototipo.html`](../apresentacao/precificacao-prototipo.html), com
 dados inventados e a conta de verdade rodando na página.
 

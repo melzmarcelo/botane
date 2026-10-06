@@ -140,6 +140,7 @@ arquivo por módulo**. **Antes de mexer num módulo, leia o arquivo dele.**
 | Catálogos | [`catalogos.md`](docs/memoria/catalogos.md) | o que o site do cliente apresenta, e os pedidos pelo cardápio (dentro do Portal de Clientes) |
 | Portal de Clientes (ex-Reservas) | [`reservas.md`](docs/memoria/reservas.md) | site do cliente, cadastro, reserva de mesa: parâmetro da loja, configuração, salões e mesas |
 | Etiquetas | [`etiquetas.md`](docs/memoria/etiquetas.md) | etiquetas de validade de produzidos, abertos e descongelados; QR, baixa e descarte |
+| Precificação | [`precificacao.md`](docs/memoria/precificacao.md) | configuração por loja (impostos, taxas, margem), análise e aplicação de preços, preço × custo |
 
 E o que atravessa todos, em [`docs/memoria/_transversais/`](docs/memoria/_transversais/):
 `padroes-de-ui.md`, `exportacao-e-relatorios.md`, `infra-e-deploy.md` e `geral.md`.

@@ -47,6 +47,7 @@ from routers import (
     fidelidade,
     pedidos,
     traducao,
+    precificacao,
     qrcodes,
     whatsapp,
     cmv,
@@ -443,6 +444,7 @@ app.include_router(fidelidade.router)
 app.include_router(etiquetas.router)
 app.include_router(pedidos.router)
 app.include_router(traducao.router)
+app.include_router(precificacao.router)
 
 
 @app.get("/saude", tags=["infra"])

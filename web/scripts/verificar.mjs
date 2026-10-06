@@ -7708,6 +7708,43 @@ try {
   }
   await foto(p, "36d-precos");
 
+  // ---- Precificação: configuração da loja e a análise (05/10/2026) ----
+  // 🔑 A conta é da suíte da API (`smoke_precificacao`, 62 checagens). Aqui se mede
+  // o que é da TELA: o grupo do menu com os três itens, as duas telas abrindo sem
+  // erro e a análise dizendo quando falta configurar, em vez de mostrar zeros.
+  const grupoPrecificacao = await p.evaluate(() =>
+    [...document.querySelectorAll("aside a")].map((a) => a.getAttribute("href"))
+      .filter((h) => h === "/precificacao" || h === "/precos" || h === "/precificacao/configuracao"));
+  checar("o menu Precificação tem a análise, o preço × custo e a configuração",
+    grupoPrecificacao.length === 3, grupoPrecificacao);
+  await irPara(p, `${WEB}/precificacao/configuracao`);
+  await p.waitForFunction(() => /O que sai de cada real vendido/.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+  const telaConfig = await p.evaluate(() => ({
+    secoes: ["O que sai de cada real vendido", "Quanto a casa quer que sobre", "Custos por unidade vendida"]
+      .filter((t) => document.body.innerText.includes(t)).length,
+    salvar: [...document.querySelectorAll("main button")].some((b) => /Salvar configura/.test(b.innerText)),
+    // Uma linha vale para tudo, uma categoria ou um setor — num seletor só.
+    alcances: [...document.querySelectorAll("main select optgroup")].map((o) => o.label).slice(0, 2),
+    erro: /Falha ao carregar/.test(document.body.innerText),
+  }));
+  checar("a configuração abre com percentuais, margem e custos por unidade",
+    telaConfig.secoes === 3 && !telaConfig.erro, telaConfig);
+  checar("e quem pode configurar tem o botão de salvar", telaConfig.salvar, telaConfig);
+  await irPara(p, `${WEB}/precificacao`);
+  await p.waitForFunction(() => /O que rever primeiro/.test(document.body.innerText),
+    { timeout: 20000 }).catch(() => {});
+  const telaAnalise = await p.evaluate(() => ({
+    abriu: /O que rever primeiro/.test(document.body.innerText),
+    ladrilhos: document.querySelectorAll("main .cartao .rotulo").length,
+    avisaSemConfig: /ainda não foi configurada/.test(document.body.innerText),
+    sugeridos: [...document.querySelectorAll("main table tbody tr")].length,
+    erro: /Falha ao carregar/.test(document.body.innerText),
+  }));
+  checar("a análise abre com o resumo e a lista", telaAnalise.abriu && telaAnalise.ladrilhos >= 4
+    && !telaAnalise.erro, telaAnalise);
+  await foto(p, "36e-precificacao");
+
   // 🔑 **As peças de formulário, redesenhadas** (15/09/2026, protótipo aprovado
   // pelo dono: `apresentacao/pecas-prototipo.html`). Três coisas que a norma
   // mede e uma que ela não mede, mas que era o pior defeito da tela.

@@ -85,7 +85,7 @@ export default function PaginaPrecos() {
   return (
     <div className="flex flex-col gap-6">
       <CabecalhoTela
-        caminho="Preços"
+        caminho="Precificação"
         titulo="Preço × custo"
         explica={
           <>

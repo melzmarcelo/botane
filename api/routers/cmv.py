@@ -321,7 +321,10 @@ def preco_do_produto(
 def preco_e_custo(
     id_produto: int,
     meses: int = Query(default=12, ge=1, le=36),
-    ctx: Contexto = Depends(requer_permissao("cmv.relatorios", "cmv.painel")),
+    # ⚠️ `precificacao.analisar` é a chave da tela desde a migração 105; as do CMV
+    # ficam porque a tela nasceu com elas, e quem a usava não pode perdê-la.
+    ctx: Contexto = Depends(requer_permissao("precificacao.analisar", "cmv.relatorios",
+                                             "cmv.painel")),
 ) -> dict:
     """A evolução do preço de venda e do custo de UM produto, em degraus.
 
