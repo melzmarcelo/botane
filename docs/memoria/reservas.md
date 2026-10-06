@@ -220,6 +220,50 @@ por salão."*
   livre tem teto — sem ele, um prefixo que colidisse com tudo faria o laço rodar para
   sempre segurando a transação, e o sintoma seria a tela pendurada, não um erro.
 
+## O ajuste do cadastro — primeira entrega (migração 106, 06/10/2026)
+
+🔑 **Pedido do dono:** *"fazer um protótipo e análise para ajustar o cadastro de Salão"*. O
+estudo é [`docs/salao-estudo.md`](../salao-estudo.md) e o protótipo
+`apresentacao/salao-prototipo.html` — seis mudanças em três entregas. Esta é a primeira: as
+três que **não mexem na regra de disponibilidade**.
+
+- 🔑 **A mesa se edita num PAINEL, com Salvar e Desfazer.** Cada campo da tabela gravava ao
+  perder o foco: um número digitado errado já valia para a disponibilidade no instante em que o
+  cursor saía, e nada dizia que tinha gravado. Agora a tabela só mostra; clicar na linha abre a
+  mesa ao lado, numa CÓPIA, e nada vale antes do Salvar.
+  ⚠️ **Só vai no corpo o que MUDOU** — e a junta só se foi mexida: ausente é "não falei dela",
+  nulo é "desfaça" (a regra de `model_fields_set` do router continua valendo).
+  ⚠️ **Lugares e máximo são botões de − / +**, e um arrasta o outro: subir os lugares acima do
+  máximo sobe o máximo junto. A coerência é a do banco, resolvida antes de virar erro.
+  ⚠️ **Recusa do servidor mantém o rascunho na tela**, para a pessoa corrigir sem redigitar.
+  ⚠️ O nome do salão também ganhou Salvar; "Atende" continua imediato — é interruptor.
+  ⚠️ **Excluir mesa passou a pedir confirmação** (era um clique na linha).
+
+- 🔑 **Características da mesa** (`mesas.caracteristicas text[]`): JANELA, SOFA, ACESSIVEL,
+  CADEIRAO, TOMADA, COBERTA. ⚠️ **Lista FIXA, conferida pelo banco e pelo Pydantic** — texto
+  livre viraria três grafias para a mesma janela, e um filtro que não acha nenhuma. Acrescentar
+  uma é migração de uma linha. ⚠️ **Só INFORMA**: a disponibilidade não lê a coluna.
+  ⚠️ O dono não respondeu se as seis servem — foram as do protótipo. Trocar a lista é barato.
+  ⚠️ Gravadas sem repetição e em ordem, para a mesa não "mudar" pela sequência dos cliques.
+
+- 🔑 **A tela confere o próprio cadastro.** `GET /reservas/salao` passou a devolver
+  `teto_online`, e a tela avisa quando o site aceita mais gente do que cabe — o aviso só
+  existia na Configuração, e quem cria o problema é quem mexe nas mesas.
+  `GET /reservas/salao/simular?pessoas=N` (`services/reservas.onde_sentaria`) responde onde o
+  grupo sentaria com o salão VAZIO.
+  ⚠️ **É a `alocar` da agenda chamada com nenhuma mesa presa**, não uma segunda conta: duas
+  versões divergiriam na primeira mudança, e a conferência prometeria o que a agenda não
+  entrega. A tela também não refaz — cada posição do controle consulta o servidor.
+  ⚠️ Confere o CADASTRO, não o dia: "há mesa às 20h de sábado" é da disponibilidade.
+
+- **Ficou para as próximas entregas** (ver o estudo): a planta do salão (`pos_x`/`pos_y`
+  continuam sem uso), a junta como CONJUNTO de N mesas com capacidade própria, e os dias em que
+  o salão abre / "aceita reserva pelo site". ⚠️ As duas últimas mudam `_mesas_vivas` e
+  `alocar` — a suíte de disponibilidade ganha os casos ANTES de a regra mudar.
+
+- Cobertura: bloco `9b` do `smoke_reservas_salao.py` (o salão A/B/C/D conferido à mão) e as
+  checagens do painel no `verificar.mjs`.
+
 ### Três armadilhas de TESTE que esta fatia pagou
 
 Nenhuma era defeito de produto, e as três são da mesma família — **o teste afirmando ter

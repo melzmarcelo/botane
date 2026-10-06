@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salão — protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+  /* As cores e as fontes são as REAIS do sistema (web/app/globals.css): o que se
+     aprova aqui é o que sai na tela. Os dados são de exemplo — o "Externo" com
+     duas mesas de 6 é o que a casa tem hoje; o resto é para mostrar o recurso. */
+  :root {
+    color-scheme: light;
+    --papel: #dee6d3; --superficie: #fcfdfa; --superficie2: #edf0e7;
+    --tinta: #14201a; --suave: #5d6c61; --linha: #d8ded0; --linha2: #748069;
+    --erva: #2c6a4a; --erva-claro: #e3efe7; --latao: #7d5a1c;
+    --alerta: #8a5d12; --alerta-claro: #f6ecd9; --erro: #95332a; --erro-claro: #f7e7e4;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --leitura: "Inter", "Segoe UI", system-ui, sans-serif;
+    --corpo: "Newsreader", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font-family: var(--leitura);
+         font-size: 15px; -webkit-font-smoothing: antialiased; }
+  .folha { max-width: 1180px; margin: 0 auto; padding: 28px 16px 96px; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; }
+  .rotulo { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--suave); margin: 0; }
+  .titulo { font-size: 30px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; }
+  .prosa { font-family: var(--corpo); font-size: 1.05em; line-height: 1.55; color: var(--suave); max-width: 72ch; margin: 8px 0 0; }
+  .prosa b { color: var(--tinta); font-weight: 500; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .cartao { background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px; }
+  .miolo { padding: 18px 20px; }
+  .btn { font: inherit; font-size: 13.5px; font-weight: 500; border-radius: 9px; padding: 8px 14px;
+         border: 1px solid var(--linha2); background: var(--superficie); color: var(--tinta); cursor: pointer; }
+  .btn:hover { border-color: var(--erva); }
+  .btn-primario { background: var(--erva); border-color: var(--erva); color: #fff; }
+  .btn-primario:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .link { background: none; border: 0; padding: 0; font: inherit; font-size: 13.5px; color: var(--erva);
+          text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .link.erro { color: var(--erro); }
+  .campo { font: inherit; width: 100%; border: 1px solid var(--linha2); border-radius: 9px; padding: 8px 10px;
+           background: var(--superficie); color: var(--tinta); }
+  .campo:focus-visible, .btn:focus-visible, .aba:focus-visible, .chip:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+  label.c { display: block; }
+  label.c > span { display: block; font-size: 12.5px; color: var(--suave); margin-bottom: 5px; }
+
+  .resumo { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); margin-top: 20px; }
+  .resumo .cartao { padding: 12px 16px; }
+  .resumo b { display: block; font-family: var(--mono); font-size: 26px; line-height: 1; font-weight: 500; }
+  .resumo span { font-size: 12.5px; color: var(--suave); }
+  .aviso { border-radius: 12px; padding: 12px 16px; font-size: 14px; line-height: 1.5; margin-top: 14px; }
+  .aviso.alerta { background: var(--alerta-claro); border: 1px solid #e2cf9f; color: #5f400b; }
+  .aviso.info { background: var(--erva-claro); border: 1px solid #c4dccc; color: #1f4a34; }
+  .aviso[hidden] { display: none; }
+
+  .abas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 22px; }
+  .aba { font: inherit; font-size: 13.5px; border-radius: 999px; border: 1px solid var(--linha2); background: transparent;
+         color: var(--suave); padding: 6px 14px; cursor: pointer; }
+  .aba[aria-selected="true"] { border-color: var(--erva); background: var(--erva-claro); color: var(--erva); font-weight: 500; }
+  .aba small { font-family: var(--mono); font-size: 11.5px; opacity: .75; margin-left: 6px; }
+  .aba.nova { border-style: dashed; }
+
+  .cab { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; justify-content: space-between; }
+  .cab h2 { font-size: 21px; }
+  .etq { display: inline-block; font-family: var(--mono); font-size: 11px; border-radius: 999px; padding: 3px 9px;
+         border: 1px solid var(--linha2); color: var(--suave); }
+  .etq.ok { border-color: #a9cdb8; background: var(--erva-claro); color: var(--erva); }
+  .etq.alerta { border-color: #dcc48d; color: var(--alerta); }
+  .dados-salao { display: grid; gap: 14px 18px; grid-template-columns: 1.1fr 1.6fr; margin-top: 16px;
+                 padding-top: 16px; border-top: 1px solid var(--linha); }
+  .chaves { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+  .chave { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+  .chave input { width: 16px; height: 16px; accent-color: var(--erva); }
+  .dias { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font: inherit; font-size: 12.5px; border-radius: 8px; border: 1px solid var(--linha2); background: transparent;
+          color: var(--suave); padding: 5px 9px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--erva); border-color: var(--erva); color: #fff; }
+  .chip.marca[aria-pressed="true"] { background: var(--erva-claro); color: var(--erva); border-color: #a9cdb8; }
+
+  .barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 18px; }
+  .seg { display: inline-flex; border: 1px solid var(--linha2); border-radius: 9px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 13.5px; border: 0; background: transparent; padding: 7px 14px; cursor: pointer; color: var(--suave); }
+  .seg button[aria-pressed="true"] { background: var(--erva); color: #fff; }
+
+  .dois { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; margin-top: 14px; align-items: start; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+       color: var(--suave); font-weight: 500; padding: 9px 12px; border-bottom: 1px solid var(--linha); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--linha); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--superficie2); }
+  tbody tr.sel { background: var(--erva-claro); }
+  tbody tr.off { color: var(--suave); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .nome-mesa { font-family: var(--mono); font-weight: 500; font-size: 15px; }
+  .marcas { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  /* A planta */
+  .planta { position: relative; height: 430px; border-radius: 12px; border: 1px solid var(--linha);
+            background-color: var(--superficie);
+            background-image: linear-gradient(var(--linha) 1px, transparent 1px), linear-gradient(90deg, var(--linha) 1px, transparent 1px);
+            background-size: 30px 30px; overflow: hidden; touch-action: none; }
+  .planta svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .mesa { position: absolute; display: grid; place-items: center; border: 2px solid var(--linha2); background: var(--superficie);
+          color: var(--tinta); cursor: grab; user-select: none; text-align: center; line-height: 1.1;
+          box-shadow: 0 1px 0 rgba(20,32,26,.06); }
+  .mesa b { font-family: var(--mono); font-size: 14px; font-weight: 500; display: block; }
+  .mesa i { font-style: normal; font-size: 11px; color: var(--suave); }
+  .mesa.redonda { border-radius: 50%; }
+  .mesa.quadrada, .mesa.retangular { border-radius: 9px; }
+  .mesa.sel { border-color: var(--erva); background: var(--erva-claro); }
+  .mesa.off { border-style: dashed; opacity: .55; }
+  .mesa.escolhida { border-color: var(--latao); background: #f3e9d2; box-shadow: 0 0 0 4px rgba(125,90,28,.18); }
+  .mesa:active { cursor: grabbing; }
+  .legenda { font-size: 12.5px; color: var(--suave); margin-top: 8px; }
+
+  .painel h3 { font-size: 16px; }
+  .painel .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .painel .cheio { grid-column: 1 / -1; }
+  .passo { display: flex; align-items: center; border: 1px solid var(--linha2); border-radius: 9px; overflow: hidden; background: var(--superficie); }
+  .passo button { font: inherit; width: 34px; height: 36px; border: 0; background: var(--superficie2); cursor: pointer; font-size: 17px; color: var(--tinta); }
+  .passo output { flex: 1; text-align: center; font-family: var(--mono); }
+  .rodape-painel { display: flex; gap: 8px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
+  .sujo { font-size: 12.5px; color: var(--alerta); }
+
+  .conj { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linha); }
+  .conj:last-child { border-bottom: 0; }
+  .conj .mono { font-size: 14px; }
+
+  .simula { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 12px; }
+  .simula input[type=range] { accent-color: var(--erva); width: 260px; }
+  .resposta { font-size: 14.5px; }
+  .resposta b { font-weight: 600; }
+
+  .muda { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .muda .cartao { padding: 14px 16px; }
+  .muda h3 { font-size: 15px; }
+  .muda p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--suave); }
+  .n { font-family: var(--mono); font-size: 11px; color: var(--latao); }
+
+  #area-lista { overflow-x: auto; }
+  .planta { overflow: auto; }
+  @media (max-width: 900px) {
+    .resumo { grid-template-columns: repeat(2, 1fr); }
+    .dois, .dados-salao, .muda { grid-template-columns: 1fr; }
+    .simula input[type=range] { width: 100%; }
+    .simula label.c { width: 100%; }
+    .conj { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="folha">
+  <p class="rotulo">Portal de clientes · protótipo para aprovação</p>
+  <h1 class="titulo">Salão</h1>
+  <p class="prosa">Onde as pessoas sentam. A tela de hoje funciona, mas <b>grava cada campo ao sair dele</b>,
+    <b>só junta mesas em pares</b> e <b>não mostra o salão</b> — só uma tabela. Este protótipo junta as seis
+    mudanças propostas; clique, arraste as mesas e mude os números à vontade: nada aqui é gravado.</p>
+
+  <div class="muda" id="o-que-muda"></div>
+
+  <div class="resumo" id="resumo"></div>
+  <div class="aviso alerta" id="aviso-teto" hidden></div>
+
+  <div class="abas" role="tablist" id="abas"></div>
+
+  <section class="cartao" style="margin-top:14px">
+    <div class="miolo">
+      <div class="cab">
+        <div>
+          <h2 id="nome-salao"></h2>
+          <p class="prosa" style="margin-top:4px" id="resumo-salao"></p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="mais-varias">+ várias mesas</button>
+          <button class="btn" id="mais-mesa">+ mesa</button>
+        </div>
+      </div>
+
+      <div class="dados-salao">
+        <div>
+          <label class="c"><span>Nome do salão</span><input class="campo" id="s-nome"></label>
+          <div class="chaves" style="margin-top:12px">
+            <label class="chave"><input type="checkbox" id="s-ativo"> Atende</label>
+            <label class="chave"><input type="checkbox" id="s-site"> Aceita reserva pelo site</label>
+          </div>
+          <p class="legenda" id="s-explica"></p>
+        </div>
+        <div>
+          <label class="c"><span>Como o cliente vê este salão no site (opcional)</span>
+            <input class="campo" id="s-descricao" placeholder="Ex.: Área externa coberta, aceita pets"></label>
+          <label class="c" style="margin-top:12px"><span>Dias em que este salão abre</span></label>
+          <div class="dias" id="s-dias"></div>
+        </div>
+      </div>
+
+      <div class="barra">
+        <div class="seg" role="group" aria-label="modo de ver as mesas">
+          <button id="ver-planta" aria-pressed="true">Planta</button>
+          <button id="ver-lista" aria-pressed="false">Lista</button>
+        </div>
+        <span class="legenda" id="dica-modo"></span>
+      </div>
+
+      <div class="dois">
+        <div>
+          <div id="area-planta">
+            <div class="planta" id="planta"><svg id="linhas"></svg></div>
+            <p class="legenda">Arraste para posicionar. A linha liga mesas que podem ser juntadas.
+              Tamanho e formato seguem o cadastro; tracejada é mesa desligada.</p>
+          </div>
+          <div id="area-lista" hidden>
+            <table>
+              <thead><tr><th>Mesa</th><th class="num">Lugares</th><th class="num">Máximo</th>
+                <th>Características</th><th>Junta com</th><th>Situação</th></tr></thead>
+              <tbody id="linhas-mesas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="cartao painel"><div class="miolo" id="painel"></div></aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="cartao" style="margin-top:16px">
+    <div class="miolo">
+      <p class="rotulo">Juntas</p>
+      <h2 style="font-size:19px;margin-top:4px">Mesas que podem virar uma só</h2>
+      <p class="prosa">Hoje cada mesa só encosta em <b>uma</b> vizinha — o maior grupo é o de duas mesas.
+        Aqui a junta é um <b>conjunto</b>: duas, três ou quatro mesas, com a capacidade que a casa disser
+        (juntar duas de 4 nem sempre dá 8).</p>
+      <div id="conjuntos" style="margin-top:10px"></div>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn" id="novo-conjunto">+ conjunto com as mesas marcadas</button>
+        <span class="legenda" id="dica-conjunto"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="cartao" style="margin-top:16px">
+    <div class="miolo">
+      <p class="rotulo">Conferir o cadastro</p>
+      <h2 style="font-size:19px;margin-top:4px">Onde um grupo sentaria?</h2>
+      <p class="prosa">A mesma regra da disponibilidade: <b>a menor mesa que serve</b>, e
+        <b>mesa inteira antes de junta</b>. Serve para ver, antes de abrir a casa, se o cadastro responde o que se espera.</p>
+      <div class="simula">
+        <label class="c" style="margin:0"><span>Pessoas no grupo</span>
+          <input type="range" id="grupo" min="1" max="20" value="4"></label>
+        <b class="mono" id="grupo-n" style="font-size:22px"></b>
+        <span class="resposta" id="resposta"></span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+const MARCAS = ["janela", "sofá", "acessível", "cadeirão", "tomada", "coberta"];
+const TETO_ONLINE = 12; // o maior grupo que o site aceita (vem da Configuração)
+
+// "Externo" com duas mesas de 6 é o cadastro real de hoje; o resto é exemplo.
+const estado = {
+  aberto: 1, modo: "planta", sel: null, marcadas: new Set(), sujo: false,
+  saloes: [
+    { id: 1, nome: "Externo", ativo: true, site: true, descricao: "Área externa coberta",
+      dias: [1, 1, 1, 1, 1, 1, 1] },
+    { id: 2, nome: "Salão principal", ativo: true, site: true, descricao: "",
+      dias: [1, 1, 1, 1, 1, 1, 1] },
+    { id: 3, nome: "Mezanino", ativo: true, site: false, descricao: "Só para eventos",
+      dias: [0, 0, 0, 0, 1, 1, 1] },
+  ],
+  mesas: [
+    { id: 1, salao: 1, nome: "01", lugares: 6, max: 6, formato: "retangular", marcas: ["coberta"], ativo: true, x: 60, y: 60 },
+    { id: 2, salao: 1, nome: "02", lugares: 6, max: 6, formato: "retangular", marcas: ["coberta"], ativo: true, x: 240, y: 60 },
+    { id: 3, salao: 2, nome: "03", lugares: 2, max: 2, formato: "redonda", marcas: ["janela"], ativo: true, x: 60, y: 60 },
+    { id: 4, salao: 2, nome: "04", lugares: 2, max: 3, formato: "redonda", marcas: ["janela"], ativo: true, x: 60, y: 180 },
+    { id: 5, salao: 2, nome: "05", lugares: 4, max: 5, formato: "quadrada", marcas: [], ativo: true, x: 210, y: 60 },
+    { id: 6, salao: 2, nome: "06", lugares: 4, max: 5, formato: "quadrada", marcas: [], ativo: true, x: 330, y: 60 },
+    { id: 7, salao: 2, nome: "07", lugares: 4, max: 4, formato: "quadrada", marcas: ["sofá"], ativo: true, x: 450, y: 60 },
+    { id: 8, salao: 2, nome: "08", lugares: 6, max: 8, formato: "retangular", marcas: ["acessível"], ativo: true, x: 210, y: 240 },
+    { id: 9, salao: 2, nome: "09", lugares: 4, max: 4, formato: "quadrada", marcas: [], ativo: false, x: 450, y: 240 },
+    { id: 10, salao: 3, nome: "M1", lugares: 8, max: 10, formato: "retangular", marcas: [], ativo: true, x: 90, y: 90 },
+    { id: 11, salao: 3, nome: "M2", lugares: 8, max: 10, formato: "retangular", marcas: [], ativo: true, x: 330, y: 90 },
+  ],
+  conjuntos: [
+    { id: 1, mesas: [5, 6], capacidade: 8 },
+    { id: 2, mesas: [5, 6, 7], capacidade: 12 },
+    { id: 3, mesas: [10, 11], capacidade: 18 },
+  ],
+};
+let proximoId = 100;
+const $ = (id) => document.getElementById(id);
+const mesaDe = (id) => estado.mesas.find((m) => m.id === id);
+const salaoAberto = () => estado.saloes.find((s) => s.id === estado.aberto);
+const doSalao = (id) => estado.mesas.filter((m) => m.salao === id);
+const hoje = (new Date().getDay() + 6) % 7;
+// Mesa que recebe reserva: ela ligada, o salão ligado e aberto hoje.
+const viva = (m) => { const s = estado.saloes.find((x) => x.id === m.salao); return m.ativo && s.ativo && s.dias[hoje]; };
+const conjuntoVivo = (c) => c.mesas.every((id) => mesaDe(id) && viva(mesaDe(id)));
+const maiorGrupo = () => Math.max(0, ...estado.mesas.filter(viva).map((m) => m.max),
+  ...estado.conjuntos.filter(conjuntoVivo).map((c) => c.capacidade));
+
+function desenhar() {
+  const s = salaoAberto();
+  const vivas = estado.mesas.filter(viva);
+  $("resumo").innerHTML = [
+    [vivas.length, "mesas atendendo hoje"],
+    [vivas.reduce((t, m) => t + m.lugares, 0), "lugares confortáveis"],
+    [vivas.reduce((t, m) => t + m.max, 0), "com a cadeira extra"],
+    [maiorGrupo(), "maior grupo que cabe"],
+  ].map(([n, r]) => `<div class="cartao"><b>${n}</b><span>${r}</span></div>`).join("");
+
+  const aviso = $("aviso-teto");
+  aviso.hidden = maiorGrupo() >= TETO_ONLINE;
+  aviso.innerHTML = `O site aceita grupos de até <b>${TETO_ONLINE}</b> pessoas, mas hoje o maior que cabe é <b>${maiorGrupo()}</b>.
+    Quem pedir mais não acha horário nenhum — e não sabe por quê. Crie um conjunto maior ou baixe o teto na Configuração.`;
+
+  $("abas").innerHTML = estado.saloes.map((x) => {
+    const n = doSalao(x.id).length;
+    const obs = !x.ativo ? " · desligado" : !x.dias[hoje] ? " · fechado hoje" : "";
+    return `<button class="aba" role="tab" aria-selected="${x.id === s.id}" data-salao="${x.id}">${x.nome}<small>${n}${obs}</small></button>`;
+  }).join("") + `<button class="aba nova" id="novo-salao">+ salão</button>`;
+
+  const minhas = doSalao(s.id);
+  $("nome-salao").textContent = s.nome;
+  $("resumo-salao").innerHTML = `<b>${minhas.filter((m) => m.ativo).length}</b> mesas ativas ·
+    <b>${minhas.filter((m) => m.ativo).reduce((t, m) => t + m.lugares, 0)}</b> lugares ·
+    até <b>${minhas.filter((m) => m.ativo).reduce((t, m) => t + m.max, 0)}</b> com a cadeira extra`;
+  $("s-nome").value = s.nome;
+  $("s-ativo").checked = s.ativo;
+  $("s-site").checked = s.site;
+  $("s-site").disabled = !s.ativo;
+  $("s-descricao").value = s.descricao;
+  $("s-explica").textContent = !s.ativo
+    ? "Desligado: as mesas saem da disponibilidade, e o cadastro fica."
+    : s.site ? "Recebe reserva pelo site e pela recepção."
+             : "Só a recepção reserva aqui — o site não oferece este salão.";
+  $("s-dias").innerHTML = DIAS.map((d, i) =>
+    `<button class="chip" aria-pressed="${!!s.dias[i]}" data-dia="${i}">${d}</button>`).join("");
+
+  $("ver-planta").setAttribute("aria-pressed", estado.modo === "planta");
+  $("ver-lista").setAttribute("aria-pressed", estado.modo === "lista");
+  $("area-planta").hidden = estado.modo !== "planta";
+  $("area-lista").hidden = estado.modo !== "lista";
+  $("dica-modo").textContent = estado.modo === "planta"
+    ? "Clique numa mesa para editar; Ctrl+clique marca várias para um conjunto."
+    : "Clique na linha para editar a mesa no painel ao lado.";
+
+  desenharPlanta(minhas);
+  desenharLista(minhas);
+  desenharPainel();
+  desenharConjuntos();
+  simular();
+}
+
+const tamanho = (m) => {
+  const base = 46 + Math.min(m.lugares, 10) * 6;
+  return m.formato === "retangular" ? [base + 34, base - 8] : [base, base];
+};
+
+function desenharPlanta(minhas) {
+  const planta = $("planta");
+  planta.querySelectorAll(".mesa").forEach((e) => e.remove());
+  for (const m of minhas) {
+    const [w, h] = tamanho(m);
+    const d = document.createElement("div");
+    d.className = `mesa ${m.formato}${estado.sel === m.id ? " sel" : ""}${m.ativo ? "" : " off"}${estado.marcadas.has(m.id) ? " sel" : ""}`;
+    d.dataset.mesa = m.id;
+    d.style.cssText = `left:${m.x}px;top:${m.y}px;width:${w}px;height:${h}px`;
+    d.innerHTML = `<span><b>${m.nome}</b><i>${m.lugares}${m.max > m.lugares ? "–" + m.max : ""} lug.</i></span>`;
+    d.tabIndex = 0;
+    planta.appendChild(d);
+  }
+  const ids = new Set(minhas.map((m) => m.id));
+  $("linhas").innerHTML = estado.conjuntos.filter((c) => c.mesas.every((id) => ids.has(id))).map((c) => {
+    const pontos = c.mesas.map((id) => { const m = mesaDe(id); const [w, h] = tamanho(m); return [m.x + w / 2, m.y + h / 2]; });
+    return pontos.slice(1).map((p, i) =>
+      `<line x1="${pontos[i][0]}" y1="${pontos[i][1]}" x2="${p[0]}" y2="${p[1]}" stroke="#7d5a1c" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>`).join("");
+  }).join("");
+}
+
+function desenharLista(minhas) {
+  $("linhas-mesas").innerHTML = minhas.map((m) => {
+    const juntas = estado.conjuntos.filter((c) => c.mesas.includes(m.id))
+      .map((c) => c.mesas.filter((id) => id !== m.id).map((id) => mesaDe(id).nome).join(" + ")).join(" · ");
+    return `<tr data-mesa="${m.id}" class="${estado.sel === m.id ? "sel" : ""}${m.ativo ? "" : " off"}">
+      <td><span class="nome-mesa">${m.nome}</span> <span class="legenda">${m.formato}</span></td>
+      <td class="num mono">${m.lugares}</td><td class="num mono">${m.max}</td>
+      <td><div class="marcas">${m.marcas.map((x) => `<span class="etq">${x}</span>`).join("") || '<span class="legenda">—</span>'}</div></td>
+      <td class="mono">${juntas || '<span class="legenda">—</span>'}</td>
+      <td>${m.ativo ? '<span class="etq ok">ativa</span>' : '<span class="etq alerta">desligada</span>'}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="legenda" style="text-align:center;padding:26px">Nenhuma mesa neste salão ainda. Use <b>+ várias mesas</b> para montar de uma vez.</td></tr>`;
+}
+
+// 🔑 O painel edita uma CÓPIA: só o "Salvar" grava. Hoje cada campo grava ao sair dele.
+let rascunho = null;
+function desenharPainel() {
+  const m = estado.sel ? mesaDe(estado.sel) : null;
+  if (!m) {
+    rascunho = null;
+    $("painel").innerHTML = `<p class="rotulo">Mesa</p><h3 style="margin-top:4px">Nenhuma selecionada</h3>
+      <p class="legenda" style="margin-top:8px">Clique numa mesa para ver e editar. As mudanças só valem depois de <b>Salvar</b>.</p>`;
+    return;
+  }
+  if (!rascunho || rascunho.id !== m.id) { rascunho = { ...m, marcas: [...m.marcas] }; estado.sujo = false; }
+  const r = rascunho;
+  $("painel").innerHTML = `
+    <p class="rotulo">Mesa</p>
+    <div class="grade">
+      <label class="c"><span>Nome</span><input class="campo mono" id="p-nome" value="${r.nome}" maxlength="20"></label>
+      <label class="c"><span>Formato</span><select class="campo" id="p-formato">
+        ${["redonda", "quadrada", "retangular"].map((f) => `<option ${f === r.formato ? "selected" : ""}>${f}</option>`).join("")}</select></label>
+      <label class="c"><span>Lugares (confortável)</span><div class="passo">
+        <button data-passo="lugares" data-d="-1" aria-label="menos lugares">−</button><output>${r.lugares}</output>
+        <button data-passo="lugares" data-d="1" aria-label="mais lugares">+</button></div></label>
+      <label class="c"><span>Máximo (cadeira extra)</span><div class="passo">
+        <button data-passo="max" data-d="-1" aria-label="menos no máximo">−</button><output>${r.max}</output>
+        <button data-passo="max" data-d="1" aria-label="mais no máximo">+</button></div></label>
+      <div class="cheio"><label class="c"><span>Características — a recepção filtra por elas</span></label>
+        <div class="dias">${MARCAS.map((x) => `<button class="chip marca" aria-pressed="${r.marcas.includes(x)}" data-marca="${x}">${x}</button>`).join("")}</div></div>
+      <label class="chave cheio"><input type="checkbox" id="p-ativo" ${r.ativo ? "checked" : ""}> Mesa ativa</label>
+    </div>
+    <div class="rodape-painel">
+      <button class="btn btn-primario" id="p-salvar" ${estado.sujo ? "" : "disabled"}>Salvar</button>
+      <button class="btn" id="p-desfazer" ${estado.sujo ? "" : "disabled"}>Desfazer</button>
+      <span class="sujo">${estado.sujo ? "alterações não salvas" : ""}</span>
+    </div>
+    <p style="margin-top:14px"><button class="link erro" id="p-excluir">excluir mesa</button>
+      <span class="legenda"> — só enquanto ninguém sentou nela</span></p>`;
+}
+
+function desenharConjuntos() {
+  const nomes = (c) => c.mesas.map((id) => mesaDe(id).nome).join(" + ");
+  const soma = (c) => c.mesas.reduce((t, id) => t + mesaDe(id).max, 0);
+  $("conjuntos").innerHTML = estado.conjuntos.map((c) => `
+    <div class="conj"><div><span class="mono">${nomes(c)}</span>
+      <span class="legenda"> · ${estado.saloes.find((s) => s.id === mesaDe(c.mesas[0]).salao).nome}
+      · soma das mesas: ${soma(c)}${conjuntoVivo(c) ? "" : " · fora hoje"}</span></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="passo" style="width:130px"><button data-conj="${c.id}" data-d="-1" aria-label="menos capacidade">−</button>
+          <output>${c.capacidade}</output><button data-conj="${c.id}" data-d="1" aria-label="mais capacidade">+</button></div>
+        <button class="link erro" data-desfaz="${c.id}">desfazer</button></div></div>`).join("")
+    || `<p class="legenda">Nenhum conjunto. Marque duas ou mais mesas na planta (Ctrl+clique) e crie.</p>`;
+  const n = estado.marcadas.size;
+  $("novo-conjunto").disabled = n < 2;
+  $("dica-conjunto").textContent = n < 2 ? "Marque duas ou mais mesas na planta com Ctrl+clique."
+    : `${n} mesas marcadas: ${[...estado.marcadas].map((id) => mesaDe(id).nome).join(" + ")}`;
+}
+
+function simular() {
+  const n = Number($("grupo").value);
+  $("grupo-n").textContent = n;
+  document.querySelectorAll(".mesa.escolhida").forEach((e) => e.classList.remove("escolhida"));
+  const mesas = estado.mesas.filter((m) => viva(m) && m.max >= n).sort((a, b) => a.max - b.max || a.lugares - b.lugares);
+  const conj = estado.conjuntos.filter((c) => conjuntoVivo(c) && c.capacidade >= n).sort((a, b) => a.capacidade - b.capacidade);
+  let ids = [], texto;
+  const onde = (id) => estado.saloes.find((s) => s.id === mesaDe(id).salao).nome;
+  if (mesas.length) {
+    ids = [mesas[0].id];
+    texto = `Senta na mesa <b>${mesas[0].nome}</b> (${onde(mesas[0].id)}) — a menor que serve, para até ${mesas[0].max}.`;
+  } else if (conj.length) {
+    ids = conj[0].mesas;
+    texto = `Nenhuma mesa sozinha serve. Junta <b>${ids.map((i) => mesaDe(i).nome).join(" + ")}</b> (${onde(ids[0])}), que acomoda ${conj[0].capacidade}.`;
+  } else {
+    texto = `<span style="color:var(--erro)">Não cabe.</span> O maior grupo hoje é de <b>${maiorGrupo()}</b>${n <= TETO_ONLINE ? " — e o site aceita pedir até " + TETO_ONLINE : ""}.`;
+  }
+  $("resposta").innerHTML = texto;
+  ids.forEach((id) => document.querySelector(`.mesa[data-mesa="${id}"]`)?.classList.add("escolhida"));
+}
+
+// ---------------------------------------------------------------- interação
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, tr[data-mesa], .mesa") ?? e.target;
+  const s = salaoAberto();
+  if (t.dataset?.salao) { estado.aberto = Number(t.dataset.salao); estado.sel = null; estado.marcadas.clear(); return desenhar(); }
+  if (t.id === "novo-salao") {
+    const novo = { id: proximoId++, nome: `Salão ${estado.saloes.length + 1}`, ativo: true, site: true, descricao: "", dias: [1, 1, 1, 1, 1, 1, 1] };
+    estado.saloes.push(novo); estado.aberto = novo.id; estado.sel = null; return desenhar();
+  }
+  if (t.dataset?.dia !== undefined) { s.dias[t.dataset.dia] = s.dias[t.dataset.dia] ? 0 : 1; return desenhar(); }
+  if (t.id === "ver-planta" || t.id === "ver-lista") { estado.modo = t.id === "ver-planta" ? "planta" : "lista"; return desenhar(); }
+  if (t.id === "mais-mesa" || t.id === "mais-varias") {
+    const quantas = t.id === "mais-mesa" ? 1 : 6;
+    const minhas = doSalao(s.id);
+    for (let i = 0; i < quantas; i++) {
+      const k = minhas.length + i;
+      const n = estado.mesas.length + 1;
+      estado.mesas.push({ id: proximoId++, salao: s.id, nome: String(n).padStart(2, "0"), lugares: 4, max: 4,
+        formato: "quadrada", marcas: [], ativo: true, x: 60 + (k % 5) * 120, y: 60 + Math.floor(k / 5) * 120 });
+    }
+    return desenhar();
+  }
+  if (t.matches?.("tr[data-mesa]")) { estado.sel = Number(t.dataset.mesa); return desenhar(); }
+  if (t.dataset?.passo && rascunho) {
+    const c = t.dataset.passo, d = Number(t.dataset.d);
+    rascunho[c] = Math.max(1, Math.min(c === "max" ? 60 : 40, rascunho[c] + d));
+    // O máximo nunca fica abaixo do confortável — a mesma regra do banco.
+    if (rascunho.max < rascunho.lugares) c === "lugares" ? (rascunho.max = rascunho.lugares) : (rascunho.lugares = rascunho.max);
+    estado.sujo = true; return desenharPainel();
+  }
+  if (t.dataset?.marca && rascunho) {
+    const x = t.dataset.marca;
+    rascunho.marcas = rascunho.marcas.includes(x) ? rascunho.marcas.filter((y) => y !== x) : [...rascunho.marcas, x];
+    estado.sujo = true; return desenharPainel();
+  }
+  if (t.id === "p-salvar" && rascunho) { Object.assign(mesaDe(rascunho.id), rascunho, { marcas: [...rascunho.marcas] }); estado.sujo = false; rascunho = null; return desenhar(); }
+  if (t.id === "p-desfazer") { rascunho = null; estado.sujo = false; return desenharPainel(); }
+  if (t.id === "p-excluir" && estado.sel) {
+    estado.conjuntos = estado.conjuntos.filter((c) => !c.mesas.includes(estado.sel));
+    estado.mesas = estado.mesas.filter((m) => m.id !== estado.sel); estado.sel = null; return desenhar();
+  }
+  if (t.dataset?.conj) { const c = estado.conjuntos.find((x) => x.id === Number(t.dataset.conj)); c.capacidade = Math.max(2, c.capacidade + Number(t.dataset.d)); return desenhar(); }
+  if (t.dataset?.desfaz) { estado.conjuntos = estado.conjuntos.filter((c) => c.id !== Number(t.dataset.desfaz)); return desenhar(); }
+  if (t.id === "novo-conjunto" && estado.marcadas.size >= 2) {
+    const mesas = [...estado.marcadas];
+    estado.conjuntos.push({ id: proximoId++, mesas, capacidade: mesas.reduce((x, id) => x + mesaDe(id).max, 0) });
+    estado.marcadas.clear(); return desenhar();
+  }
+});
+document.addEventListener("input", (e) => {
+  const s = salaoAberto();
+  if (e.target.id === "grupo") return simular();
+  if (e.target.id === "s-nome") { s.nome = e.target.value; $("nome-salao").textContent = s.nome; return; }
+  if (e.target.id === "s-descricao") { s.descricao = e.target.value; return; }
+  if (e.target.id === "s-ativo") { s.ativo = e.target.checked; return desenhar(); }
+  if (e.target.id === "s-site") { s.site = e.target.checked; return desenhar(); }
+  if (rascunho && e.target.id === "p-nome") { rascunho.nome = e.target.value; estado.sujo = true; $("p-salvar").disabled = false; $("p-desfazer").disabled = false; return; }
+  if (rascunho && e.target.id === "p-formato") { rascunho.formato = e.target.value; estado.sujo = true; return desenharPainel(); }
+  if (rascunho && e.target.id === "p-ativo") { rascunho.ativo = e.target.checked; estado.sujo = true; return desenharPainel(); }
+});
+
+// Arrastar na planta: posiciona de 30 em 30, que é a grade do fundo.
+let arrasto = null;
+$("planta").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".mesa");
+  if (!el) { if (!e.ctrlKey) { estado.sel = null; estado.marcadas.clear(); desenhar(); } return; }
+  const m = mesaDe(Number(el.dataset.mesa));
+  if (e.ctrlKey || e.metaKey) {
+    estado.marcadas.has(m.id) ? estado.marcadas.delete(m.id) : estado.marcadas.add(m.id);
+    return desenhar();
+  }
+  arrasto = { m, dx: e.clientX - m.x, dy: e.clientY - m.y, moveu: false };
+  $("planta").setPointerCapture(e.pointerId);
+});
+$("planta").addEventListener("pointermove", (e) => {
+  if (!arrasto) return;
+  const caixa = $("planta").getBoundingClientRect();
+  const [w, h] = tamanho(arrasto.m);
+  const x = Math.round((e.clientX - arrasto.dx) / 30) * 30, y = Math.round((e.clientY - arrasto.dy) / 30) * 30;
+  const nx = Math.max(0, Math.min(caixa.width - w, x)), ny = Math.max(0, Math.min(caixa.height - h, y));
+  if (nx !== arrasto.m.x || ny !== arrasto.m.y) { arrasto.m.x = nx; arrasto.m.y = ny; arrasto.moveu = true; desenharPlanta(doSalao(estado.aberto)); }
+});
+$("planta").addEventListener("pointerup", () => {
+  if (!arrasto) return;
+  estado.sel = arrasto.m.id; arrasto = null; desenhar();
+});
+
+$("o-que-muda").innerHTML = [
+  ["1", "Salvar é um botão", "A mesa abre num painel, com Salvar e Desfazer. Hoje cada campo grava sozinho ao sair dele, e um número digitado errado já vale."],
+  ["2", "A planta do salão", "As mesas na posição em que estão, arrastáveis. A lista continua, para quem prefere tabela."],
+  ["3", "Junta de 2, 3 ou 4 mesas", "O conjunto tem capacidade própria. Hoje só existe o par, e o maior grupo é o de duas mesas."],
+  ["4", "O salão diz quando abre", "Dias da semana e “aceita reserva pelo site”. Hoje é só ligado ou desligado, lembrado à mão."],
+  ["5", "Características da mesa", "Janela, sofá, acessível, cadeirão — para a recepção achar a mesa certa para o pedido."],
+  ["6", "Conferir antes de abrir", "“Onde um grupo de N sentaria?”, pela mesma regra da disponibilidade, e o aviso quando o site aceita mais do que cabe."],
+].map(([n, t, p]) => `<div class="cartao"><span class="n">${n}</span><h3>${t}</h3><p>${p}</p></div>`).join("");
+
+desenhar();
+</script>
+</body>
+</html>

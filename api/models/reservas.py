@@ -156,6 +156,11 @@ class SalaoUpdate(BaseModel):
     ordem: int | None = Field(default=None, ge=0, le=999)
 
 
+# 🔑 **As características da mesa são uma lista FIXA** (migração 106): é o que a
+# recepção filtra, e texto livre viraria três grafias para a mesma janela.
+Caracteristica = Literal["JANELA", "SOFA", "ACESSIVEL", "CADEIRAO", "TOMADA", "COBERTA"]
+
+
 class MesaCreate(BaseModel):
     id_salao: int
     nome: str = Field(min_length=1, max_length=20)
@@ -165,6 +170,7 @@ class MesaCreate(BaseModel):
     lugares: int = Field(default=2, ge=1, le=40)
     capacidade_max: int | None = Field(default=None, ge=1, le=60)
     ativo: bool = True
+    caracteristicas: list[Caracteristica] = Field(default_factory=list, max_length=6)
 
     @model_validator(mode="after")
     def _capacidade(self):
@@ -211,6 +217,7 @@ class MesaUpdate(BaseModel):
     lugares: int | None = Field(default=None, ge=1, le=40)
     capacidade_max: int | None = Field(default=None, ge=1, le=60)
     ativo: bool | None = None
+    caracteristicas: list[Caracteristica] | None = Field(default=None, max_length=6)
     # 🔑 A mesa vizinha que encosta nesta. `null` desfaz a junta — nos DOIS
     # lados, e quem grava é `services/reservas.casar_junta`.
     # ⚠️ **"Não mandou" e "mandou nulo" são coisas diferentes aqui**, e o router

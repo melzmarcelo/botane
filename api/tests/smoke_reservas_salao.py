@@ -297,6 +297,99 @@ st, r = chamar("POST", "/reservas/mesas/em-lote",
                {"id_salao": varanda, "quantidade": 99, "lugares": 2}, token)
 checar("pedir mais que o teto de 50 e recusado", st == 422, st)
 
+print("\n9b. as caracteristicas da mesa e a conferencia do cadastro (migracao 106)")
+# 🔑 Primeira entrega do estudo `docs/salao-estudo.md` (06/10/2026). Um salao
+# MONTADO do zero, para as respostas serem conferidas a mao:
+#     A 2/2 · B 4/5 · C 4/4 · D 6/8, com C e D juntas (4 + 8 = 12)
+with get_cursor() as cur:
+    cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
+                     (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
+    cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
+st, r = chamar("POST", "/reservas/saloes", {"nome": f"Conferencia {marca}"}, token)
+conferencia = r.get("id")
+ids = {}
+for nome, lugares, maximo, marcas in (("A", 2, 2, ["JANELA"]), ("B", 4, 5, []),
+                                      ("C", 4, 4, []), ("D", 6, 8, [])):
+    st, r = chamar("POST", "/reservas/mesas", {
+        "id_salao": conferencia, "nome": f"{marca}{nome}", "lugares": lugares,
+        "capacidade_max": maximo, "caracteristicas": marcas}, token)
+    ids[nome] = r.get("id")
+checar("as quatro mesas da conferencia nascem", all(ids.values()), ids)
+dados = olhar()
+checar("a mesa criada com caracteristica a devolve",
+       mesa_chamada(dados, f"{marca}A")["caracteristicas"] == ["JANELA"],
+       mesa_chamada(dados, f"{marca}A"))
+checar("e quem nasceu sem nenhuma devolve lista vazia, nao nulo",
+       mesa_chamada(dados, f"{marca}B")["caracteristicas"] == [],
+       mesa_chamada(dados, f"{marca}B"))
+
+st, r = chamar("PUT", f"/reservas/mesas/{ids['B']}",
+               {"caracteristicas": ["SOFA", "ACESSIVEL", "SOFA"]}, token)
+checar("gravar caracteristicas e aceito", st == 200, (st, r))
+checar("sem repeticao e em ordem",
+       mesa_chamada(olhar(), f"{marca}B")["caracteristicas"] == ["ACESSIVEL", "SOFA"],
+       mesa_chamada(olhar(), f"{marca}B"))
+st, r = chamar("PUT", f"/reservas/mesas/{ids['B']}", {"lugares": 4}, token)
+checar("mudar outra coisa NAO apaga as caracteristicas",
+       mesa_chamada(olhar(), f"{marca}B")["caracteristicas"] == ["ACESSIVEL", "SOFA"])
+st, r = chamar("PUT", f"/reservas/mesas/{ids['B']}", {"caracteristicas": ["PISCINA"]}, token)
+checar("caracteristica fora da lista e recusada (422)", st == 422, (st, r))
+st, r = chamar("PUT", f"/reservas/mesas/{ids['B']}", {"caracteristicas": []}, token)
+checar("lista vazia limpa as caracteristicas",
+       st == 200 and mesa_chamada(olhar(), f"{marca}B")["caracteristicas"] == [], (st, r))
+
+chamar("PUT", f"/reservas/mesas/{ids['C']}", {"junta_com": ids["D"]}, token)
+_st, cfg = chamar("GET", "/reservas/configuracao", token=token)
+dados = olhar()
+checar("o salao devolve o teto do site, o mesmo da configuracao",
+       "teto_online" in dados and dados["teto_online"] == cfg.get("teto_online"),
+       (dados.get("teto_online"), cfg.get("teto_online")))
+
+
+def senta(pessoas):
+    _st, x = chamar("GET", f"/reservas/salao/simular?pessoas={pessoas}", token=token)
+    return x
+
+
+x = senta(2)
+checar("grupo de 2 senta na A — a menor que serve",
+       x["cabe"] and x["como"] == "mesa" and [m["nome"] for m in x["mesas"]] == [f"{marca}A"], x)
+x = senta(5)
+checar("grupo de 5 senta na B, pelo MAXIMO dela (5), nao pelos lugares (4)",
+       x["cabe"] and [m["nome"] for m in x["mesas"]] == [f"{marca}B"], x)
+x = senta(6)
+checar("grupo de 6 senta na D sozinha — mesa inteira ganha da junta",
+       x["como"] == "mesa" and [m["nome"] for m in x["mesas"]] == [f"{marca}D"], x)
+x = senta(9)
+checar("grupo de 9 so cabe na junta C + D",
+       x["como"] == "junta" and sorted(m["nome"] for m in x["mesas"]) == [f"{marca}C", f"{marca}D"]
+       and x["capacidade"] == 12, x)
+checar("e a resposta diz o salao de cada mesa",
+       all(m["salao"] == f"Conferencia {marca}" for m in x["mesas"]), x["mesas"])
+x = senta(13)
+checar("grupo de 13 nao cabe, e a resposta diz o maior que cabe (12)",
+       x["cabe"] is False and x["como"] is None and x["mesas"] == [] and x["maior_grupo"] == 12, x)
+checar("a conferencia concorda com o maior_grupo do salao",
+       x["maior_grupo"] == olhar()["maior_grupo"], (x["maior_grupo"], olhar()["maior_grupo"]))
+
+# Desligar a D tira a mesa E a junta dela da conta.
+chamar("PUT", f"/reservas/mesas/{ids['D']}", {"ativo": False}, token)
+x = senta(6)
+checar("com a D desligada, grupo de 6 deixa de caber", x["cabe"] is False, x)
+checar("e o maior grupo cai para 5", x["maior_grupo"] == 5, x["maior_grupo"])
+chamar("PUT", f"/reservas/mesas/{ids['D']}", {"ativo": True}, token)
+chamar("PUT", f"/reservas/saloes/{conferencia}", {"ativo": False}, token)
+x = senta(2)
+checar("com o salao desligado, ninguem senta", x["cabe"] is False and x["maior_grupo"] == 0, x)
+chamar("PUT", f"/reservas/saloes/{conferencia}", {"ativo": True}, token)
+
+st, r = chamar("GET", "/reservas/salao/simular?pessoas=0", token=token)
+checar("grupo de zero pessoas e recusado (422)", st == 422, st)
+st, r = chamar("GET", "/reservas/salao/simular", token=token)
+checar("e sem dizer quantas pessoas tambem", st == 422, st)
+
 print("\n10. limpeza")
 with get_cursor() as cur:
     # ⚠️ **Mesa com reserva pendurada NÃO se apaga** — `reserva_mesas_id_mesa_fkey`

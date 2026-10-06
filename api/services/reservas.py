@@ -165,7 +165,7 @@ def salao(cur, id_unidade: int) -> dict:
 
     cur.execute(
         """SELECT m.id, m.id_salao, m.nome, m.lugares, m.capacidade_max, m.ativo,
-                  m.junta_com, j.nome AS junta_com_nome
+                  m.caracteristicas, m.junta_com, j.nome AS junta_com_nome
              FROM mesas m LEFT JOIN mesas j ON j.id = m.junta_com
             WHERE m.id_unidade = %s ORDER BY m.nome""",
         (id_unidade,),
@@ -186,6 +186,59 @@ def salao(cur, id_unidade: int) -> dict:
         "lugares": sum(m["lugares"] for m in vivas),
         "capacidade_max": sum(m["capacidade_max"] for m in vivas),
         "maior_grupo": maior_grupo(cur, id_unidade),
+        # 🔑 **O teto do site viaja junto** (06/10/2026): é a tela do SALÃO que
+        # precisa dizer "o site aceita 12 e aqui cabem 6" — quem mexe nas mesas é
+        # quem cria o problema, e o aviso só existia na Configuração.
+        "teto_online": _teto_online(cur, id_unidade),
+    }
+
+
+def _teto_online(cur, id_unidade: int) -> int | None:
+    """O maior grupo que o site aceita, ou nulo se a loja ainda não configurou."""
+    cur.execute("SELECT teto_online FROM reserva_config WHERE id_unidade = %s", (id_unidade,))
+    linha = cur.fetchone()
+    return linha["teto_online"] if linha else None
+
+
+def onde_sentaria(cur, id_unidade: int, pessoas: int) -> dict:
+    """Onde um grupo de `pessoas` sentaria com o salão VAZIO — a conferência do cadastro.
+
+    🔑 **Pedido do dono (06/10/2026)**, do estudo `docs/salao-estudo.md`: não
+    havia como perguntar "onde um grupo de 7 sentaria?" sem criar uma reserva de
+    teste. A resposta diz se o cadastro acomoda o grupo e COMO (mesa inteira ou
+    junta), que é o que se quer ver antes de abrir a casa.
+
+    ⚠️ **A regra é a `alocar` da agenda, chamada com nenhuma mesa presa** — e não
+    uma segunda conta escrita aqui. Duas versões divergiriam na primeira mudança,
+    e a conferência passaria a prometer o que a disponibilidade não entrega.
+
+    ⚠️ **Salão vazio, de propósito.** Isto confere o CADASTRO, não o dia: se há
+    mesa às 20h de sábado é pergunta para a disponibilidade, que sabe das
+    reservas.
+    """
+    # Importado aqui: `reservas_agenda` já importa este módulo.
+    from services import reservas_agenda
+
+    vivas = _mesas_vivas(cur, id_unidade)
+    escolhidas = reservas_agenda.alocar(vivas, set(), pessoas)
+    por_id = {m["id"]: m for m in vivas}
+    cur.execute(
+        """SELECT m.id, s.nome AS salao FROM mesas m JOIN saloes s ON s.id = m.id_salao
+            WHERE m.id_unidade = %s""",
+        (id_unidade,),
+    )
+    salao_de = {r["id"]: r["salao"] for r in cur.fetchall()}
+    mesas = [{"id": i, "nome": por_id[i]["nome"], "salao": salao_de.get(i),
+              "capacidade_max": por_id[i]["capacidade_max"]} for i in (escolhidas or [])]
+    return {
+        "pessoas": pessoas,
+        "cabe": escolhidas is not None,
+        # "mesa" quando uma só serve, "junta" quando precisou encostar duas.
+        "como": None if escolhidas is None else ("mesa" if len(escolhidas) == 1 else "junta"),
+        "mesas": mesas,
+        "capacidade": sum(m["capacidade_max"] for m in mesas),
+        "maior_grupo": maior_grupo(cur, id_unidade),
+        "teto_online": _teto_online(cur, id_unidade),
     }
 
 

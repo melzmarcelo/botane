@@ -9188,6 +9188,76 @@ try {
   checar("salao com mesa manda desligar em vez de oferecer excluir",
     /desligue em vez de excluir/i.test(semExcluir), semExcluir.slice(0, 400));
 
+  // 🔑 **A mesa se edita num PAINEL, com Salvar e Desfazer** (06/10/2026, primeira
+  // entrega do estudo `docs/salao-estudo.md`). Ate aqui cada campo da tabela
+  // gravava ao perder o foco. O que se prova: a tabela so mostra, mexer nao
+  // grava, Desfazer devolve, e Salvar grava — inclusive a caracteristica.
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  await new Promise((r) => setTimeout(r, 1200));
+  const salaoSoMostra = await p.evaluate(() => ({
+    linhas: document.querySelectorAll("table tbody tr").length,
+    campos: document.querySelectorAll("table tbody input, table tbody select").length,
+    painel: document.querySelector('aside[aria-label="mesa aberta"]')?.innerText ?? "",
+  }));
+  checar("a tabela de mesas nao tem mais campo de edicao",
+    salaoSoMostra.linhas > 0 && salaoSoMostra.campos === 0, salaoSoMostra);
+  checar("e o painel comeca sem mesa selecionada",
+    /nenhuma selecionada/i.test(salaoSoMostra.painel), salaoSoMostra.painel.slice(0, 80));
+  const mesaDoPainel = daVaranda[0];
+  await p.evaluate((nome) =>
+    document.querySelector(`tr[aria-label="mesa ${nome}"]`)?.click(), mesaDoPainel.nome);
+  await new Promise((r) => setTimeout(r, 400));
+  const noPainelDaMesa = () => p.evaluate(() => ({
+    nome: document.querySelector('input[aria-label="nome da mesa"]')?.value ?? null,
+    lugares: document.querySelector('output[aria-label="lugares"]')?.textContent ?? null,
+    salvarDesligado: [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Salvar")?.disabled ?? null,
+    avisa: /altera[çc][õo]es n[ãa]o salvas/i.test(document.body.innerText),
+  }));
+  const painelDaMesaAberto = await noPainelDaMesa();
+  checar("clicar na linha abre a mesa no painel, com o Salvar desligado",
+    painelDaMesaAberto.nome === mesaDoPainel.nome && painelDaMesaAberto.salvarDesligado === true,
+    painelDaMesaAberto);
+  await p.evaluate(() => document.querySelector('button[aria-label="mais lugares"]')?.click());
+  await new Promise((r) => setTimeout(r, 300));
+  const painelDaMesaMexido = await noPainelDaMesa();
+  checar("mexer liga o Salvar e avisa que ha alteracao nao salva",
+    painelDaMesaMexido.salvarDesligado === false && painelDaMesaMexido.avisa, painelDaMesaMexido);
+  const { dados: salaoSemGravar } = await api("GET", "/reservas/salao", null, token);
+  checar("e NADA e gravado antes do Salvar",
+    salaoSemGravar.mesas.find((m) => m.id === mesaDoPainel.id)?.lugares === mesaDoPainel.lugares,
+    salaoSemGravar.mesas.find((m) => m.id === mesaDoPainel.id));
+  await clicarQuando(p, "Desfazer", { exato: true });
+  await new Promise((r) => setTimeout(r, 300));
+  checar("Desfazer devolve o valor gravado",
+    (await noPainelDaMesa()).lugares === String(mesaDoPainel.lugares), await noPainelDaMesa());
+  await p.evaluate(() => [...document.querySelectorAll("button[aria-pressed]")]
+    .find((b) => b.textContent?.trim() === "janela")?.click());
+  await clicarQuando(p, "Salvar", { exato: true });
+  await p.waitForFunction(() => /mesa atualizada/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const { dados: comMarca } = await api("GET", "/reservas/salao", null, token);
+  const mesaMarcada = comMarca.mesas.find((m) => m.id === mesaDoPainel.id);
+  checar("Salvar grava a caracteristica marcada",
+    (mesaMarcada?.caracteristicas ?? []).join() === "JANELA", mesaMarcada);
+  checar("sem mexer no resto: os lugares e a junta continuam os mesmos",
+    mesaMarcada?.lugares === mesaDoPainel.lugares && mesaMarcada?.junta_com !== null
+      && comMarca.maior_grupo === 16, mesaMarcada);
+  // 🔑 A conferencia do cadastro: a resposta vem do servidor, pela mesma regra
+  // da disponibilidade — a tela nao refaz a conta.
+  await p.waitForFunction(
+    () => /senta na mesa|nenhuma mesa sozinha|n[ãa]o cabe/i
+      .test(document.querySelector('[aria-live="polite"]')?.textContent ?? ""),
+    { timeout: 10000 }).catch(() => {});
+  const conferenciaDoSalao = await p.evaluate(() => ({
+    titulo: /onde um grupo sentaria/i.test(document.body.innerText),
+    resposta: document.querySelector('[aria-live="polite"]')?.textContent ?? "",
+  }));
+  checar("a tela responde onde um grupo sentaria",
+    conferenciaDoSalao.titulo
+      && /senta na mesa|nenhuma mesa sozinha|n[ãa]o cabe/i.test(conferenciaDoSalao.resposta),
+    conferenciaDoSalao);
+
   // ---- a agenda do dia: marcar, e o ciclo da reserva ----
   // 🔑 **A regra de disponibilidade e a peca que tudo consome**, e a tela nao a
   // reimplementa: os horarios vem de `/reservas/disponibilidade`, que roda a

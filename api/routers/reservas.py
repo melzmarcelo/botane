@@ -135,6 +135,19 @@ def obter_salao(ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> di
         return servico.salao(cur, _unidade(cur, ctx))
 
 
+@router.get("/salao/simular")
+def simular_grupo(pessoas: int = Query(ge=1, le=60),
+                  ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
+    """Onde um grupo deste tamanho sentaria, com o salão vazio.
+
+    🔑 **É a conferência do CADASTRO**, não uma consulta de horário: responde
+    "o que eu cadastrei acomoda um grupo de 7?" sem ninguém criar reserva de
+    teste. Usa a mesma `alocar` da disponibilidade — ver o service.
+    """
+    with get_cursor() as cur:
+        return servico.onde_sentaria(cur, _unidade(cur, ctx), pessoas)
+
+
 @router.post("/saloes", status_code=201)
 def criar_salao(body: SalaoCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
     with get_cursor() as cur:
@@ -210,10 +223,11 @@ def criar_mesa(body: MesaCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
         _exige(cur, "saloes", body.id_salao, id_unidade, "Salão não encontrado")
         _recusar_nome_repetido(cur, "mesas", id_unidade, body.nome)
         cur.execute(
-            """INSERT INTO mesas (id_unidade, id_salao, nome, lugares, capacidade_max, ativo)
-               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            """INSERT INTO mesas (id_unidade, id_salao, nome, lugares, capacidade_max, ativo,
+                                  caracteristicas)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (id_unidade, body.id_salao, body.nome.strip(), body.lugares,
-             body.capacidade_max, body.ativo),
+             body.capacidade_max, body.ativo, sorted(set(body.caracteristicas))),
         )
         id_mesa = cur.fetchone()["id"]
         auditoria.registrar(cur, ctx.id_usuario, "mesa", id_mesa, "criar",
@@ -551,6 +565,12 @@ def atualizar_mesa(id_mesa: int, body: MesaUpdate,
         if "nome" in dados:
             _recusar_nome_repetido(cur, "mesas", id_unidade, dados["nome"], id_mesa)
             dados["nome"] = dados["nome"].strip()
+        if dados.get("caracteristicas") is not None:
+            # Sem repetição e em ordem: a mesma mesa não pode "mudar" só porque
+            # alguém marcou as caixas noutra sequência.
+            dados["caracteristicas"] = sorted(set(dados["caracteristicas"]))
+        elif "caracteristicas" in dados:
+            dados.pop("caracteristicas")
 
         # ⚠️ **A coerência é entre o valor NOVO e o que FICA**, não entre os dois
         # novos: quem manda só `lugares` tem de ser comparado ao máximo que já
