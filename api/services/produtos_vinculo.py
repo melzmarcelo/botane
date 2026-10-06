@@ -882,3 +882,162 @@ def fundir(cur, id_tela: int, id_escolhido: int, id_usuario: int,
                        f"estoque agora — saldo {movidos['saldo_depois']:g}"
                        if movidos.get("baixa_de_estoque") else "")),
     }
+
+
+# ---------------------------------------------------------------- desvincular
+#
+# 🔑 **Pedido do dono (06/10/2026):** *"cria a opção para desvincular um produto
+# vinculado. Na linha do produto vinculado ter a opção de desvincular."* A tela
+# do produto lista os códigos de fora que caem nele — o que veio de uma nota
+# vinculada à mão, o que foi reconhecido sozinho e o que veio de uma FUSÃO de
+# cadastros — e não havia como tirar uma linha dali. Vínculo errado ficava para
+# sempre: toda nota com aquele código continuava entrando no produto errado.
+#
+# ⚠️ **Desvincular vale DAQUI PARA A FRENTE, e não é desfazer a fusão.** A fusão
+# moveu ponteiros (itens de nota, itens de venda, fornecedor, linhas de ficha) e
+# completou campos em branco; nada disso guarda de qual dos dois cadastros veio,
+# então não há como separar de volta. O que se devolve é o que ainda se sabe de
+# quem era: o CÓDIGO. O que já entrou no estoque e no CMV fica onde está.
+
+# Em que coluna do cadastro cada sistema guarda o código principal. Os que não
+# estão aqui (o de-para por fornecedor) só existem como linha de apelido.
+_COLUNA_DO_CODIGO = {"OMIE_PRODUTO": "codigo_omie", "PDV_LEGAL": "codigo_pdv",
+                     "EAN": "codigo_barras"}
+
+
+def _linha_do_codigo(cur, id_produto: int, sistema: str, codigo: str,
+                     id_fornecedor: int | None) -> dict:
+    cur.execute(
+        """SELECT c.sistema, c.codigo, c.descricao_externa, c.origem_vinculo,
+                  c.id_fornecedor, f.nome AS fornecedor
+             FROM codigos_externos c LEFT JOIN fornecedores f ON f.id = c.id_fornecedor
+            WHERE c.id_produto = %s AND c.sistema = %s AND c.codigo = %s
+              AND coalesce(c.id_fornecedor, 0) = coalesce(%s, 0)""",
+        (id_produto, sistema.upper(), codigo, id_fornecedor),
+    )
+    linha = cur.fetchone()
+    if not linha:
+        # ⚠️ Só os códigos DESTE produto: o `id_produto` no WHERE é o que impede
+        # de soltar, por engano de URL, o vínculo de outro cadastro.
+        raise LookupError("Este código não aponta para este produto.")
+    return dict(linha)
+
+
+def _absorvido_do_codigo(cur, id_produto: int, linha: dict) -> dict | None:
+    """O cadastro arquivado de onde este código veio, quando dá para saber.
+
+    ⚠️ **Só com UMA resposta possível.** A fusão grava o nome do absorvido em
+    `descricao_externa` e aponta `fundido_em` para o sobrevivente; casando os
+    dois se chega ao dono antigo. Dois absorvidos com o mesmo nome, ou nenhum,
+    e a função devolve nada — devolver o código ao cadastro errado seria trocar
+    um vínculo errado por outro.
+    """
+    if linha["origem_vinculo"] != "FUSAO" or not linha["descricao_externa"]:
+        return None
+    cur.execute(
+        """SELECT id, codigo, nome, um_estoque, codigo_omie, codigo_pdv, codigo_barras
+             FROM produtos
+            WHERE fundido_em = %s AND NOT ativo
+              AND lower(nome) = lower(%s)""",
+        (id_produto, linha["descricao_externa"]),
+    )
+    achados = [dict(r) for r in cur.fetchall()]
+    return achados[0] if len(achados) == 1 else None
+
+
+def previa_do_desvinculo(cur, id_produto: int, sistema: str, codigo: str,
+                         id_fornecedor: int | None = None) -> dict:
+    """O que desvincular este código faria — sem fazer."""
+    linha = _linha_do_codigo(cur, id_produto, sistema, codigo, id_fornecedor)
+    absorvido = _absorvido_do_codigo(cur, id_produto, linha)
+    coluna = _COLUNA_DO_CODIGO.get(linha["sistema"])
+    # O absorvido só recebe o código de volta na coluna se ela estiver vazia.
+    pode_devolver = bool(absorvido) and not (coluna and absorvido.get(coluna))
+    cur.execute(
+        """SELECT count(*) AS n FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
+            WHERE i.id_produto = %s AND n.status <> 'LANCADA' AND NOT i.ignorado""",
+        (id_produto,),
+    )
+    abertas = cur.fetchone()["n"]
+    return {
+        "sistema": linha["sistema"],
+        "codigo": linha["codigo"],
+        "descricao": linha["descricao_externa"],
+        "fornecedor": linha["fornecedor"],
+        "id_fornecedor": linha["id_fornecedor"],
+        "origem": linha["origem_vinculo"],
+        # O cadastro que volta a existir com este código, se a pessoa quiser.
+        "devolve_para": ({"id": absorvido["id"], "codigo": absorvido["codigo"],
+                          "nome": absorvido["nome"]} if pode_devolver else None),
+        # Itens de nota ainda não lançada apontando para este produto: eles NÃO
+        # mudam sozinhos, e a tela avisa para conferir.
+        "itens_de_nota_abertos": abertas,
+    }
+
+
+def desvincular_codigo(cur, id_produto: int, sistema: str, codigo: str,
+                       id_fornecedor: int | None, id_usuario: int | None,
+                       devolver: bool = True) -> dict:
+    """Tira um código de fora deste produto.
+
+    Com `devolver` e havendo o cadastro absorvido (ver `_absorvido_do_codigo`),
+    o código volta para ele e o cadastro é reativado. Sem isso, a linha só some:
+    a próxima nota com aquele código não acha produto e cai na conciliação.
+
+    ⚠️ **O absorvido volta como RASCUNHO quando não tem unidade de estoque**, e
+    ATIVO quando tem: é a mesma régua do cadastro — produto ativo precisa de
+    unidade para entrar em nota e ficha.
+    ⚠️ **`fundido_em` é zerado**: ele deixou de ser "o mesmo produto com outro
+    cadastro", e mantê-lo faria a reativação pedir confirmação para sempre.
+    """
+    conferido = previa_do_desvinculo(cur, id_produto, sistema, codigo, id_fornecedor)
+    linha_sistema, linha_codigo = conferido["sistema"], conferido["codigo"]
+    alvo = conferido["devolve_para"] if devolver else None
+
+    cur.execute(
+        """DELETE FROM codigos_externos
+            WHERE id_produto = %s AND sistema = %s AND codigo = %s
+              AND coalesce(id_fornecedor, 0) = coalesce(%s, 0)""",
+        (id_produto, linha_sistema, linha_codigo, id_fornecedor),
+    )
+
+    devolvido = None
+    if alvo:
+        coluna = _COLUNA_DO_CODIGO.get(linha_sistema)
+        if coluna:
+            cur.execute(f"UPDATE produtos SET {coluna} = %s WHERE id = %s",
+                        (linha_codigo, alvo["id"]))
+        else:
+            # De-para por fornecedor: não há coluna — a linha de apelido muda de dono.
+            cur.execute(
+                """INSERT INTO codigos_externos (sistema, codigo, id_produto, descricao_externa,
+                                                 id_fornecedor, origem_vinculo, confirmado_por)
+                   VALUES (%s, %s, %s, %s, %s, 'MANUAL', %s)""",
+                (linha_sistema, linha_codigo, alvo["id"], conferido["descricao"],
+                 id_fornecedor, id_usuario),
+            )
+        cur.execute("SELECT codigo, nome FROM produtos WHERE id = %s", (id_produto,))
+        de = cur.fetchone() or {}
+        nota = (f"Desvinculado de {de.get('codigo', '?')} — {de.get('nome', '')} "
+                "e reativado com o código dele.")
+        cur.execute(
+            """UPDATE produtos
+                  SET ativo = true, fundido_em = NULL,
+                      status = CASE WHEN um_estoque IS NULL THEN 'RASCUNHO' ELSE 'ATIVO' END,
+                      observacao = trim(both E'\\n' from coalesce(observacao, '') || E'\\n' || %s)
+                WHERE id = %s""",
+            (nota, alvo["id"]),
+        )
+        devolvido = alvo
+
+    return {
+        "sistema": linha_sistema, "codigo": linha_codigo,
+        "devolvido_para": devolvido,
+        "message": (
+            f"O código {linha_codigo} voltou para “{devolvido['nome']}”, que foi reativado. "
+            "Vale da próxima nota em diante."
+            if devolvido else
+            f"O código {linha_codigo} deixou de apontar para este produto. A próxima nota "
+            "com ele vai pedir conciliação."),
+    }
+

@@ -936,6 +936,85 @@ checar("com o do cardápio sobrevivendo e controlando estoque",
 
 
 
+print("\n10. desvincular um código — a fusão errada tem saída")
+# 🔑 **Pedido do dono (06/10/2026):** "na linha do produto vinculado ter a opção
+# de desvincular". Usa o ABACATE do bloco 7: o principal responde pelo código
+# do duplicado (OM2…), que virou apelido na fusão.
+alias = f"OM2{marca}"
+st, pv = chamar("GET", f"/produtos/{abacate}/codigos/desvinculo/previa"
+                       f"?sistema=OMIE_PRODUTO&codigo={alias}", token=token)
+checar("a prévia do desvínculo responde", st == 200, (st, pv))
+checar("e reconhece o cadastro absorvido de onde o código veio",
+       (pv.get("devolve_para") or {}).get("id") == abacate_dup, pv)
+st, fica = chamar("GET", f"/produtos/{abacate}", token=token)
+checar("a prévia NÃO desfaz nada: o código continua no principal",
+       ("OMIE_PRODUTO", alias) in {(c["sistema"], c["codigo"])
+                                   for c in fica.get("codigos_externos") or []})
+checar("e a lista de códigos diz o fornecedor de cada linha (ou nulo)",
+       all("id_fornecedor" in c for c in fica.get("codigos_externos") or []))
+
+st, r = chamar("GET", f"/produtos/{abacate}/codigos/desvinculo/previa"
+                      f"?sistema=OMIE_PRODUTO&codigo=NAOEXISTE{marca}", token=token)
+checar("código que não é deste produto devolve 404", st == 404, (st, r))
+st, r = chamar("POST", f"/produtos/{abacate_dup}/codigos/desvincular",
+               {"sistema": "OMIE_PRODUTO", "codigo": alias}, token=token)
+checar("nem dá para desvincular pelo cadastro errado (404)", st == 404, (st, r))
+
+st, r = chamar("POST", f"/produtos/{abacate}/codigos/desvincular",
+               {"sistema": "OMIE_PRODUTO", "codigo": alias}, token=token)
+checar("desvincular é aceito", st == 200, (st, r))
+checar("e diz que o código voltou para o absorvido",
+       (r.get("devolvido_para") or {}).get("id") == abacate_dup, r)
+st, fica = chamar("GET", f"/produtos/{abacate}", token=token)
+checar("o principal deixa de responder pelo código",
+       ("OMIE_PRODUTO", alias) not in {(c["sistema"], c["codigo"])
+                                       for c in fica.get("codigos_externos") or []},
+       fica.get("codigos_externos"))
+checar("e continua com o código DELE", fica.get("codigo_omie") == f"OM1{marca}",
+       fica.get("codigo_omie"))
+st, volta = chamar("GET", f"/produtos/{abacate_dup}", token=token)
+checar("o absorvido volta ATIVO, com o código de volta",
+       volta.get("ativo") is True and volta.get("status") == "ATIVO"
+       and volta.get("codigo_omie") == alias,
+       {k: volta.get(k) for k in ("ativo", "status", "codigo_omie")})
+checar("e deixa de apontar para quem o tinha absorvido",
+       volta.get("fundido_em") is None, volta.get("fundido_em"))
+with _cursor() as _cur:
+    _depois = conciliar_item(_cur, {"codigo_omie": alias}, None)
+checar("a próxima nota com aquele código cai no cadastro REATIVADO",
+       _depois[0] == abacate_dup, (_depois[0], abacate_dup))
+with _cursor() as _cur:
+    _cur.execute("""SELECT 1 FROM auditoria WHERE entidade = 'produto'
+                     AND id_entidade::text = %s AND acao = 'desvincular_codigo'""",
+                 (str(abacate),))
+    checar("o desvínculo fica na auditoria", _cur.fetchone() is not None)
+st, r = chamar("POST", f"/produtos/{abacate}/codigos/desvincular",
+               {"sistema": "OMIE_PRODUTO", "codigo": alias}, token=token)
+checar("desvincular de novo o que já saiu devolve 404", st == 404, (st, r))
+
+# Sem devolver: a linha só some, e o absorvido continua arquivado.
+st, r = chamar("POST", f"/produtos/{abacate}/vincular", {"id_sai": abacate_dup}, token=token)
+checar("os dois são fundidos de novo", st == 200, (st, r))
+st, r = chamar("POST", f"/produtos/{abacate}/codigos/desvincular",
+               {"sistema": "OMIE_PRODUTO", "codigo": alias, "devolver": False}, token=token)
+checar("desvincular SEM devolver é aceito", st == 200 and r.get("devolvido_para") is None,
+       (st, r))
+st, volta = chamar("GET", f"/produtos/{abacate_dup}", token=token)
+checar("o absorvido continua arquivado e sem o código",
+       volta.get("ativo") is False and volta.get("codigo_omie") is None,
+       {k: volta.get(k) for k in ("ativo", "codigo_omie")})
+with _cursor() as _cur:
+    _solto = conciliar_item(_cur, {"codigo_omie": alias}, None)
+checar("e a nota com aquele código não acha mais produto — vai para a conciliação",
+       _solto[0] is None, _solto)
+
+# Quem não cadastra produto não desvincula.
+from comum import garantir_cozinha  # noqa: E402
+_cozinha = garantir_cozinha(chamar, token)
+st, r = chamar("POST", f"/produtos/{abacate}/codigos/desvincular",
+               {"sistema": "OMIE_PRODUTO", "codigo": f"OM1{marca}"}, token=_cozinha)
+checar("a cozinha não desvincula código (403)", st == 403, st)
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")

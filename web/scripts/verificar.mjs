@@ -2642,6 +2642,70 @@ try {
     saldosSemForm.antigos.length === 0, saldosSemForm.antigos);
   checar("e ganhou o atalho para os ajustes", saldosSemForm.lancar === true, saldosSemForm);
 
+  // 🔑 **Desvincular um código de fora, na linha dele** (06/10/2026, pedido do
+  // dono: *"na linha do produto vinculado ter a opção de desvincular"*). Dois
+  // cadastros são fundidos pela API e a tela desfaz o vínculo: a janela diz qual
+  // cadastro volta, e só o Desvincular grava. A conta toda está na
+  // `smoke_vinculo` (bloco 10); aqui se prova o caminho da tela.
+  const marcaDesv = Date.now().toString().slice(-5);
+  const novoParaDesvincular = async (sufixo, omie) => (await api("POST", "/produtos", {
+    codigo: `DV${sufixo}-${marcaDesv}`, nome: `DESVINCULO ${sufixo} ${marcaDesv}`,
+    tipo: "INSUMO", um_estoque: "KG", controla_estoque: true, codigo_omie: omie,
+  }, token)).dados.id;
+  const desvPrincipal = await novoParaDesvincular("PRINCIPAL", `DVA${marcaDesv}`);
+  const desvDuplicado = await novoParaDesvincular("DUPLICADO", `DVB${marcaDesv}`);
+  await api("POST", `/produtos/${desvPrincipal}/vincular`, { id_sai: desvDuplicado }, token);
+  await irPara(p, `${WEB}/produtos/${desvPrincipal}`);
+  // A tela do produto tem abas, e o cartão de códigos mora numa delas.
+  const botaoDesvincular = `button[aria-label="desvincular DVB${marcaDesv}"]`;
+  await p.waitForSelector(botaoDesvincular, { timeout: 20000 }).catch(() => {});
+  for (const aba of ["Fornecedores", "Estoque", "Principal", "Movimentação"]) {
+    const jaVisivel = await p.evaluate((sel) => {
+      const b = document.querySelector(sel);
+      return !!b && b.offsetParent !== null;
+    }, botaoDesvincular);
+    if (jaVisivel) break;
+    await p.evaluate((n) => [...document.querySelectorAll("button, [role=tab]")]
+      .find((b) => b.textContent?.trim() === n)?.click(), aba);
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  checar("a linha do código vinculado oferece desvincular",
+    await p.evaluate((sel) => {
+      const b = document.querySelector(sel);
+      return !!b && b.offsetParent !== null;
+    }, botaoDesvincular));
+  await p.evaluate((sel) => document.querySelector(sel)?.click(), botaoDesvincular);
+  await p.waitForFunction(() => /desvincular este c.digo/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const janelaDoDesvinculo = await p.evaluate(() => {
+    const t = document.body.innerText;
+    return {
+      abriu: /desvincular este c.digo/i.test(t),
+      nomeia: /reativar\s+desvinculo duplicado/i.test(t),
+      avisa: /daqui para a frente/i.test(t),
+    };
+  });
+  checar("a janela diz qual cadastro volta e que vale daqui para a frente",
+    janelaDoDesvinculo.abriu && janelaDoDesvinculo.nomeia && janelaDoDesvinculo.avisa,
+    janelaDoDesvinculo);
+  const { dados: semDesvincular } = await api("GET", `/produtos/${desvPrincipal}`, null, token);
+  checar("abrir a janela não desvincula nada",
+    (semDesvincular.codigos_externos ?? []).some((c) => c.codigo === `DVB${marcaDesv}`));
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .filter((b) => b.textContent?.trim() === "Desvincular").at(-1)?.click());
+  await p.waitForFunction((sel) => !document.querySelector(sel), { timeout: 15000 },
+    botaoDesvincular).catch(() => {});
+  const { dados: jaDesvinculado } = await api("GET", `/produtos/${desvPrincipal}`, null, token);
+  const { dados: voltouAExistir } = await api("GET", `/produtos/${desvDuplicado}`, null, token);
+  checar("confirmar tira o código do produto, e a linha some da tela sem F5",
+    !(jaDesvinculado.codigos_externos ?? []).some((c) => c.codigo === `DVB${marcaDesv}`)
+      && !(await p.$(botaoDesvincular)),
+    jaDesvinculado.codigos_externos);
+  checar("e o cadastro absorvido volta ativo, com o código dele",
+    voltouAExistir.ativo === true && voltouAExistir.codigo_omie === `DVB${marcaDesv}`,
+    { ativo: voltouAExistir.ativo, codigo_omie: voltouAExistir.codigo_omie });
+  for (const id of [desvPrincipal, desvDuplicado]) await api("DELETE", `/produtos/${id}`, null, token);
+
   // 🔑 **Ir a um registro e VOLTAR ao mesmo ponto** (06/10/2026, pedido do dono:
   // *"estou na precificação e quero ver o cadastro de produto, tenho que copiar o
   // nome, ir lá, voltar, buscar"*). Três peças, cada uma com a sua prova:

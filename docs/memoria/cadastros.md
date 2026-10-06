@@ -5,6 +5,33 @@
 
 ## O que já existe
 
+- 🔑 **Desvincular um código de fora, na linha dele** (`produtos_vinculo.desvincular_codigo`,
+  `GET /produtos/{id}/codigos/desvinculo/previa` e `POST /produtos/{id}/codigos/desvincular`,
+  06/10/2026, pedido do dono: *"cria a opção para desvincular um produto vinculado. Na linha do
+  produto vinculado ter a opção de desvincular"*). O cartão "Códigos de fora" lista o que cai
+  no produto — vinculado à mão, reconhecido sozinho ou vindo de FUSÃO — e não havia como tirar
+  uma linha: vínculo errado ficava para sempre, com toda nota daquele código entrando no
+  produto errado.
+  ⚠️ **Vale DAQUI PARA A FRENTE, e não é "desfazer a fusão".** A fusão moveu ponteiros (itens
+  de nota, itens de venda, fornecedor, linhas de ficha) e completou campos em branco, e nada
+  disso guarda de qual dos dois cadastros veio — não há como separar de volta. O que se devolve
+  é o que ainda se sabe de quem era: o CÓDIGO. O que já entrou no estoque e no CMV fica.
+  🔑 **Quando o código veio de uma fusão e o absorvido ainda existe, ele VOLTA** (`devolver`,
+  ligado por padrão): recebe o código de volta na coluna dele (`codigo_omie`, `codigo_pdv` ou
+  `codigo_barras`), é reativado e `fundido_em` é zerado. É isso que "desvincular um produto"
+  quer dizer — os dois voltam a ser cadastros separados.
+  ⚠️ **Só com UMA resposta possível**: o absorvido é quem tem `fundido_em` apontando para este
+  produto E o nome igual ao `descricao_externa` que a fusão gravou. Dois candidatos, ou nenhum,
+  e a linha só é removida — devolver ao cadastro errado seria trocar um vínculo errado por
+  outro. ⚠️ Volta ATIVO se tem unidade de estoque, senão RASCUNHO.
+  ⚠️ **Sem devolver, a próxima nota com aquele código cai na conciliação** — é o esperado, e a
+  janela diz isso antes do botão.
+  ⚠️ **`id_fornecedor` é parte da identidade da linha** (migração 067): passou a sair na lista
+  de códigos do produto, porque é o que a tela manda de volta para soltar a linha certa.
+  ⚠️ O código PRINCIPAL do produto (o que mora na coluna) não aparece nesse cartão e não se
+  desvincula por aqui — edita-se no campo dele.
+  Cobertura: bloco 10 do `smoke_vinculo.py` e o bloco "desvincular" do `verificar.mjs`.
+
 - `api/db_scripts/`: 004 cadastros (setores, locais, categorias, UM, fornecedores, produtos,
   preços e produto×fornecedor), 005 semente dos cadastros.
 

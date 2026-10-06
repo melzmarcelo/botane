@@ -207,6 +207,20 @@ class FundirGrupoRequest(BaseModel):
     baixar_vendas: bool = True
 
 
+class DesvincularCodigoRequest(BaseModel):
+    """Qual código de fora deixa de apontar para este produto.
+
+    ⚠️ `id_fornecedor` faz parte da identidade da linha: o mesmo código pode
+    existir uma vez por fornecedor (migração 067).
+    """
+    sistema: str = Field(min_length=1, max_length=20)
+    codigo: str = Field(min_length=1, max_length=60)
+    id_fornecedor: int | None = None
+    # Quando o código veio de uma fusão e o cadastro absorvido ainda existe:
+    # devolver o código a ele e reativá-lo. Desligado, a linha só é removida.
+    devolver: bool = True
+
+
 class ConversaoDoCodigoRequest(BaseModel):
     """Quantas unidades de ESTOQUE vêm em uma unidade daquele código de fora.
 
@@ -270,6 +284,9 @@ class CodigoExterno(BaseModel):
     # encobriria o fator de compra do produto. Digitada por gente na tela, a
     # conversão vale seja qual for o número, inclusive 1.
     fator_confirmado: bool = False
+    # Parte da identidade da linha (o mesmo código pode existir por fornecedor):
+    # é o que a tela manda de volta para desvincular a linha certa.
+    id_fornecedor: int | None = None
     origem_vinculo: str | None = None
     confirmado_em: datetime | None = None
     fornecedor: str | None = None

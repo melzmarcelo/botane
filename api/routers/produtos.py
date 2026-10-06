@@ -15,6 +15,7 @@ from models.produtos import (
     AlteracaoMultiplaRequest,
     ColherEanRequest,
     ConversaoDoCodigoRequest,
+    DesvincularCodigoRequest,
     FundirGrupoRequest,
     LocalDoProduto,
     LocalDoProdutoRequest,
@@ -447,6 +448,42 @@ def fundir_duplicados(body: FundirGrupoRequest,
     return {**r, "message": f"{len(r['juntados'])} cadastro(s) juntado(s) num só."}
 
 
+@router.get("/{id_produto}/codigos/desvinculo/previa")
+def previa_do_desvinculo(id_produto: int, sistema: str = Query(max_length=20),
+                         codigo: str = Query(max_length=60),
+                         id_fornecedor: int | None = None,
+                         ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """O que desvincular este código faria — sem fazer."""
+    with get_cursor() as cur:
+        try:
+            return produtos_vinculo.previa_do_desvinculo(cur, id_produto, sistema, codigo,
+                                                         id_fornecedor)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{id_produto}/codigos/desvincular")
+def desvincular_codigo(id_produto: int, body: DesvincularCodigoRequest,
+                       ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
+    """Tira um código de fora deste produto — ver o service.
+
+    ⚠️ **Vale daqui para a frente.** O que já entrou no estoque por aquele código
+    fica onde está: o razão é append-only, e a fusão não guarda de qual cadastro
+    veio cada linha que ela moveu.
+    """
+    with get_cursor() as cur:
+        try:
+            r = produtos_vinculo.desvincular_codigo(
+                cur, id_produto, body.sistema, body.codigo, body.id_fornecedor,
+                ctx.id_usuario, body.devolver)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        auditoria.registrar(cur, ctx.id_usuario, "produto", id_produto, "desvincular_codigo",
+                            antes={"sistema": r["sistema"], "codigo": r["codigo"]},
+                            depois={"devolvido_para": r["devolvido_para"]})
+    return r
+
+
 @router.put("/{id_produto}/codigos/conversao")
 def conversao_do_codigo(id_produto: int, body: ConversaoDoCodigoRequest,
                         ctx: Contexto = Depends(requer_permissao("cadastros.produtos"))) -> dict:
@@ -816,7 +853,7 @@ def obter(id_produto: int, ctx: Contexto = Depends(contexto_atual)) -> dict:
         # diz nada; "8821 — Hortifruti Silva" diz de quem é.
         cur.execute(
             """SELECT c.sistema, c.codigo, c.descricao_externa, c.fator,
-                      c.fator_confirmado,
+                      c.fator_confirmado, c.id_fornecedor,
                       c.origem_vinculo, c.confirmado_em,
                       f.nome AS fornecedor, u.nome AS confirmado_por
                  FROM codigos_externos c

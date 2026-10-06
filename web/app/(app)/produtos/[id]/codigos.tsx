@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Aviso, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
+import {
+  desvincularCodigo,
+  previaDoDesvinculo,
+  type PreviaDoDesvinculo,
+} from "@/lib/produto-codigos";
 
 /**
  * Os códigos de fora que caem neste produto — e quanto cada um vale.
@@ -23,6 +28,16 @@ import { Aviso, Etiqueta, Vazio } from "@/components/ui";
  * ⚠️ **Vale da próxima nota em diante.** Nota já lançada não se recalcula — o
  * razão é append-only, e a entrada antiga ficou com a quantidade que se
  * acreditava na época. Corrigir o passado é estorno, à mão.
+ *
+ * 🔑 **Cada linha se DESVINCULA** (06/10/2026, pedido do dono: *"na linha do
+ * produto vinculado ter a opção de desvincular"*). Vínculo errado ficava para
+ * sempre: toda nota com aquele código seguia entrando no produto errado.
+ * ⚠️ **A prévia vem antes**, e diz o que o servidor achou: se o código veio de
+ * uma fusão e o cadastro absorvido ainda existe, oferece devolver o código a
+ * ele e reativá-lo — marcado por padrão, porque é o que "desvincular um produto"
+ * quer dizer. Sem isso, a linha só sai, e a próxima nota pede conciliação.
+ * ⚠️ **Não desfaz o que já aconteceu**: o que entrou no estoque por aquele
+ * código fica onde está, e a janela diz isso antes do botão.
  */
 
 export type CodigoExterno = {
@@ -33,6 +48,8 @@ export type CodigoExterno = {
   fator_confirmado: boolean;
   origem_vinculo: string | null;
   fornecedor: string | null;
+  /** Parte da identidade da linha: o mesmo código pode existir por fornecedor. */
+  id_fornecedor?: number | null;
 };
 
 const ORIGEM: Record<string, string> = {
@@ -57,6 +74,42 @@ export default function CodigosDoProduto({
   const aviso = useAviso();
   const [rascunho, setRascunho] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState("");
+  // O desvínculo em andamento: a linha, o que o servidor disse que faria e a
+  // escolha de devolver o código ao cadastro absorvido.
+  const [soltando, setSoltando] = useState<{ c: CodigoExterno; previa: PreviaDoDesvinculo } | null>(
+    null,
+  );
+  const [devolver, setDevolver] = useState(true);
+  const [ocupado, setOcupado] = useState("");
+
+  async function pedirDesvinculo(c: CodigoExterno) {
+    setOcupado(`${c.sistema}|${c.codigo}`);
+    try {
+      const previa = await previaDoDesvinculo(idProduto, c);
+      setDevolver(true);
+      setSoltando({ c, previa });
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível conferir o vínculo");
+    } finally {
+      setOcupado("");
+    }
+  }
+
+  async function desvincular() {
+    if (!soltando) return;
+    const { c, previa } = soltando;
+    setOcupado(`${c.sistema}|${c.codigo}`);
+    try {
+      const r = await desvincularCodigo(idProduto, c, devolver && !!previa.devolve_para);
+      aviso.sucesso(r.message);
+      setSoltando(null);
+      aoMudar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível desvincular");
+    } finally {
+      setOcupado("");
+    }
+  }
 
   const chave = (c: CodigoExterno) => `${c.sistema}|${c.codigo}`;
 
@@ -164,7 +217,7 @@ export default function CodigosDoProduto({
                     )}
                   </td>
                   {podeEditar && (
-                    <td>
+                    <td className="whitespace-nowrap">
                       <button
                         type="button"
                         className="btn btn-secundario"
@@ -178,6 +231,15 @@ export default function CodigosDoProduto({
                       >
                         {salvando === k ? "…" : "Gravar"}
                       </button>
+                      <button
+                        type="button"
+                        className="link-acao link-acao-erro ml-3"
+                        aria-label={`desvincular ${c.codigo}`}
+                        disabled={ocupado === k}
+                        onClick={() => void pedirDesvinculo(c)}
+                      >
+                        {ocupado === k ? "…" : "desvincular"}
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -186,6 +248,59 @@ export default function CodigosDoProduto({
           </tbody>
         </table>
       </div>
+
+      {soltando && (
+        <Confirmacao
+          titulo="Desvincular este código?"
+          rotuloConfirmar="Desvincular"
+          perigo
+          ocupado={!!ocupado}
+          aoCancelar={() => setSoltando(null)}
+          aoConfirmar={() => void desvincular()}
+        >
+          <p>
+            O código <b className="mono">{soltando.previa.codigo}</b>
+            {soltando.previa.descricao && <> ({soltando.previa.descricao})</>} deixa de apontar
+            para este produto.
+          </p>
+          {soltando.previa.devolve_para ? (
+            <label className="mt-3 flex items-start gap-2 rounded-[10px] border border-linha p-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-erva"
+                checked={devolver}
+                onChange={(e) => setDevolver(e.target.checked)}
+              />
+              <span className="text-[13.5px] leading-snug">
+                Reativar <b>{soltando.previa.devolve_para.nome}</b> e devolver este código a
+                ele — os dois voltam a ser produtos separados.
+                {!devolver && (
+                  <span className="mt-1 block text-suave">
+                    Desmarcado, o cadastro continua arquivado e a próxima nota com este código
+                    vai pedir conciliação.
+                  </span>
+                )}
+              </span>
+            </label>
+          ) : (
+            <p className="mt-3 text-[13.5px] text-suave">
+              A próxima nota que trouxer este código não vai achar produto e cairá na
+              conciliação, para alguém dizer de quem é.
+            </p>
+          )}
+          <p className="mt-3 text-[13.5px] text-suave">
+            Vale daqui para a frente: o que já entrou no estoque por este código continua
+            neste produto.
+            {soltando.previa.itens_de_nota_abertos > 0 && (
+              <>
+                {" "}
+                Há <b>{soltando.previa.itens_de_nota_abertos}</b> item(ns) de nota ainda não
+                lançada ligados a este produto — confira se algum era deste código.
+              </>
+            )}
+          </p>
+        </Confirmacao>
+      )}
     </>
   );
 }
