@@ -30,6 +30,12 @@
   de códigos do produto, porque é o que a tela manda de volta para soltar a linha certa.
   ⚠️ O código PRINCIPAL do produto (o que mora na coluna) não aparece nesse cartão e não se
   desvincula por aqui — edita-se no campo dele.
+  🔑 **O cartão ganhou aba própria, "Vinculados", logo depois de Fornecedores** (mesmo dia,
+  pedido do dono: *"colocar os produtos vinculados em uma nova página após os
+  fornecedores"*). Morava no pé da aba Fornecedores, e é outra pergunta: ali se negocia; aqui
+  se confere por quais códigos e cadastros o produto responde. A aba mostra a contagem ao lado
+  do nome. ⚠️ O cartão aparece SEMPRE dentro dela, mesmo sem código (antes só aparecia havendo
+  algum): aba aberta e vazia sem explicação seria pior que a frase dizendo por quê.
   Cobertura: bloco 10 do `smoke_vinculo.py` e o bloco "desvincular" do `verificar.mjs`.
 
 - `api/db_scripts/`: 004 cadastros (setores, locais, categorias, UM, fornecedores, produtos,

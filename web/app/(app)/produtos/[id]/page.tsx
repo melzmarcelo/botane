@@ -116,7 +116,8 @@ export default function FormularioProduto() {
   const variasLojas = (eu?.unidades.length ?? 0) > 1;
   /** Qual aba está aberta. Ver a nota do seletor lá embaixo. */
   const [aba, setAba] = useState<
-    "principal" | "fornecedores" | "estoque" | "movimentacao" | "catalogo">("principal");
+    "principal" | "fornecedores" | "vinculados" | "estoque" | "movimentacao" | "catalogo"
+  >("principal");
   /**
    * A foto fica FORA do formulário, e não é descuido.
    *
@@ -935,6 +936,12 @@ export default function FormularioProduto() {
             : ([
             ["principal", "Principal"],
             ["fornecedores", "Fornecedores"],
+            // 🔑 **Os vinculados ganharam aba própria, logo depois dos fornecedores**
+            // (06/10/2026, pedido do dono). O cartão de códigos de fora morava no
+            // pé da aba Fornecedores, e é outra pergunta: ali se negocia; aqui se
+            // confere por quais códigos e cadastros este produto responde — e se
+            // desvincula o que estiver errado.
+            ["vinculados", "Vinculados"],
             ["estoque", "Estoque"],
             ["movimentacao", "Movimentação"],
             // 🔑 **Só na casa que usa Reservas**, e só em produto que já
@@ -954,6 +961,12 @@ export default function FormularioProduto() {
               onClick={() => setAba(chave)}
             >
               {texto}
+              {/* Quantos são, para a aba dizer se há o que ver sem precisar abrir. */}
+              {chave === "vinculados" && codigos.length > 0 && (
+                <span className="mono ml-1.5 text-[11.5px] font-normal opacity-70">
+                  {codigos.length}
+                </span>
+              )}
             </button>
           ))}
       </div>
@@ -1626,10 +1639,13 @@ export default function FormularioProduto() {
           fornecedor manda o pacote de 1 kg e o de 500 g como produtos
           diferentes, e aqui os dois são o mesmo. Depois da fusão, a nota do de
           500 g entrava como 1 kg por unidade — o estoque dobrava calado.
-          ⚠️ Só quando HÁ código: um produto cadastrado à mão e nunca vinculado
-          não tem o que mostrar, e um cartão vazio em toda tela de produto seria
-          ruído em troca de nada. */}
-      {!novo && !!codigos.length && (
+          ⚠️ O cartão aparece SEMPRE dentro da aba dele, mesmo sem código: aba
+          aberta e vazia sem explicação seria pior que o cartão dizendo por quê —
+          e o componente já tem a frase de quando não há nada. */}
+      </div>
+
+      <div hidden={aba !== "vinculados"} className="flex flex-col gap-6">
+      {!novo && (
         <Cartao
           titulo="Códigos de fora, e quanto cada um vale"
           descricao="O que o Omie, o PDV e os fornecedores chamam deste produto — e quantas unidades de estoque vêm em cada um."

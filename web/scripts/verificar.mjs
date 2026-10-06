@@ -740,6 +740,13 @@ try {
   checar("o cadastro do produto abre em abas",
     ["Principal", "Fornecedores", "Estoque", "Movimentação"].every(
       (x) => abasProduto.abas.includes(x)), abasProduto.abas);
+  // 🔑 **Os vinculados têm aba própria, logo depois dos fornecedores**
+  // (06/10/2026, pedido do dono). ⚠️ `startsWith`: a aba mostra a contagem ao
+  // lado do nome quando o produto responde por algum código.
+  const ordemDasAbas = abasProduto.abas.map((x) => x.replace(/\d+$/, "").trim());
+  checar("com a aba Vinculados logo depois de Fornecedores",
+    ordemDasAbas.indexOf("Vinculados") === ordemDasAbas.indexOf("Fornecedores") + 1
+      && ordemDasAbas.indexOf("Fornecedores") >= 0, ordemDasAbas);
   // 🔑 Preco e custo no MESMO bloco, porque a pergunta e uma so: da margem?
   checar("com preço e custo no mesmo bloco, na Principal",
     abasProduto.naPrincipal.includes("Valores")
@@ -2659,16 +2666,23 @@ try {
   // A tela do produto tem abas, e o cartão de códigos mora numa delas.
   const botaoDesvincular = `button[aria-label="desvincular DVB${marcaDesv}"]`;
   await p.waitForSelector(botaoDesvincular, { timeout: 20000 }).catch(() => {});
-  for (const aba of ["Fornecedores", "Estoque", "Principal", "Movimentação"]) {
+  for (const aba of ["Vinculados", "Fornecedores", "Estoque", "Principal", "Movimentação"]) {
     const jaVisivel = await p.evaluate((sel) => {
       const b = document.querySelector(sel);
       return !!b && b.offsetParent !== null;
     }, botaoDesvincular);
     if (jaVisivel) break;
+    // ⚠️ A aba Vinculados traz a contagem colada no nome ("Vinculados1"): comparar
+    // o texto exato não a achava, e o roteiro passava direto por ela.
     await p.evaluate((n) => [...document.querySelectorAll("button, [role=tab]")]
-      .find((b) => b.textContent?.trim() === n)?.click(), aba);
+      .find((b) => (b.textContent ?? "").replace(/\d+$/, "").trim() === n)?.click(), aba);
     await new Promise((r) => setTimeout(r, 400));
   }
+  const abaDoDesvincular = await p.evaluate(() =>
+    document.querySelector('[role="tab"][aria-selected="true"]')?.textContent
+      ?.replace(/\d+$/, "").trim() ?? null);
+  checar("o cartão de códigos mora na aba Vinculados, não mais em Fornecedores",
+    abaDoDesvincular === "Vinculados", abaDoDesvincular);
   checar("a linha do código vinculado oferece desvincular",
     await p.evaluate((sel) => {
       const b = document.querySelector(sel);
