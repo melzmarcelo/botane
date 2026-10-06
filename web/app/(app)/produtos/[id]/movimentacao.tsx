@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
 import { custo, qtd } from "@/lib/numeros";
+import LinkOrigem from "@/components/link-origem";
 
 /**
  * O razão DESTE produto, dentro do cadastro dele.
@@ -36,6 +37,8 @@ type Movimento = {
   saldo_apos: number;
   local: string | null;
   documento: string | null;
+  origem_tipo?: string | null;
+  origem_id?: number | null;
   motivo: string | null;
   estornado: boolean;
   id_estorno_de: number | null;
@@ -173,7 +176,8 @@ export default function MovimentacaoDoProduto({
                       )}
                     </td>
                     <td className="mono text-[12.5px]">
-                      {m.documento || <span className="text-suave">—</span>}
+                      <LinkOrigem tipo={m.origem_tipo} id={m.origem_id}
+                                  documento={m.documento} />
                     </td>
                     <td className="text-[13.5px]">{m.local ?? "—"}</td>
                     <td

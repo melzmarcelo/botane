@@ -8,6 +8,7 @@ import { reais } from "@/lib/cadastros";
 import BotaoExportar from "@/components/exportar";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import ExplicaTela from "@/components/explica-tela";
+import LinkProduto from "@/components/link-produto";
 
 type Alerta = {
   chave: string;
@@ -22,6 +23,7 @@ type Alerta = {
 
 type Vencimento = {
   id: number;
+  id_produto?: number;
   validade: string;
   dias_restantes: number;
   produto: string;
@@ -181,7 +183,7 @@ export default function PaginaAlertas() {
                       </span>
                     </td>
                     <td>
-                      <span className="font-semibold">{v.produto}</span>
+                      <LinkProduto id={v.id_produto} className="font-semibold">{v.produto}</LinkProduto>
                       <span className="mono ml-2 text-[12px] text-suave">{v.codigo}</span>
                     </td>
                     <td className="mono text-[13px]">{v.lote ?? "—"}</td>
@@ -225,7 +227,7 @@ export default function PaginaAlertas() {
                 {minimos.map((m) => (
                   <tr key={m.id}>
                     <td>
-                      <span className="font-semibold">{m.produto}</span>
+                      <LinkProduto id={m.id} className="font-semibold">{m.produto}</LinkProduto>
                       <span className="mono ml-2 text-[12px] text-suave">{m.codigo}</span>
                     </td>
                     <td className={`num ${Number(m.saldo) <= 0 ? "text-erro" : ""}`}>

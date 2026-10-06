@@ -19,6 +19,7 @@ import ConferenciaDoFechamentoLista, { ListaDePendencias } from "./conferencia";
 import { conferirPeriodo, type PendenciaDoFechamento } from "@/lib/cmv";
 
 import { pct, qtd } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 type Apuracao = {
   inicio: string;
   fim: string;
@@ -647,7 +648,7 @@ export default function PaginaCmv() {
                       {abc.map((l) => (
                         <tr key={l.id_produto}>
                           <td>
-                            <span className="font-semibold">{l.produto}</span>
+                            <LinkProduto id={l.id_produto} className="font-semibold">{l.produto}</LinkProduto>
                             <span className="mono ml-2 text-[12px] text-suave">{l.codigo}</span>
                           </td>
                           <td className="num text-suave">
@@ -696,7 +697,7 @@ export default function PaginaCmv() {
                       {margem.map((l, i) => (
                         <tr key={l.id_produto ?? `sem-${i}`}>
                           <td>
-                            <span className="font-semibold">{l.produto}</span>
+                            <LinkProduto id={l.id_produto} className="font-semibold">{l.produto}</LinkProduto>
                             {l.sem_custo && (
                               <span className="ml-2">
                                 <Etiqueta cor="alerta">sem custo</Etiqueta>

@@ -980,8 +980,8 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
                    SELECT id FROM estoque_movimentos
                     WHERE origem_tipo = 'VENDA' AND origem_id = %s
                )
-               SELECT m.id, m.tipo, m.quantidade, m.custo_total, m.data_movimento,
-                      m.id_estorno_de, p.nome AS produto, l.nome AS local
+               SELECT m.id, m.id_produto, m.tipo, m.quantidade, m.custo_total,
+                      m.data_movimento, m.id_estorno_de, p.nome AS produto, l.nome AS local
                  FROM estoque_movimentos m
                  JOIN produtos p ON p.id = m.id_produto
                  LEFT JOIN locais_estoque l ON l.id = m.id_local

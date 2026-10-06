@@ -15,6 +15,7 @@ import BarraSuperior from "@/components/barra-superior";
 import BarraInferior from "@/components/barra-inferior";
 import BarraNavegacao from "@/components/barra-navegacao";
 import PaletaTelas from "@/components/paleta-telas";
+import Rolagem from "@/components/rolagem";
 import Icone from "@/components/icone";
 
 /**
@@ -285,6 +286,12 @@ function Casca({ children }: { children: React.ReactNode }) {
           não dentro do menu: o atalho de teclado tem de valer com a gaveta
           fechada, que é o estado normal no computador. */}
       <PaletaTelas />
+      {/* Voltar devolve a tela onde a pessoa estava. ⚠️ Dentro de `Suspense`: o
+          componente lê a query da URL, e sem a fronteira o Next recusa compilar
+          as páginas estáticas da casca. */}
+      <Suspense fallback={null}>
+        <Rolagem />
+      </Suspense>
     </div>
   );
 }

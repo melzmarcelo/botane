@@ -8,6 +8,7 @@ import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 import { custo, qtd } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 /**
  * A movimentação do período, produto a produto.
  *
@@ -207,7 +208,7 @@ export default function Movimentacao({ inicio, fim }: { inicio: string; fim: str
               {linhas.map((l) => (
                 <tr key={l.id_produto}>
                   <td>
-                    <span className="font-medium">{l.produto}</span>
+                    <LinkProduto id={l.id_produto} className="font-medium">{l.produto}</LinkProduto>
                     <span className="block text-[12.5px] text-suave">
                       <span className="mono">{l.codigo}</span>
                       {l.categoria ? ` · ${l.categoria}` : ""}

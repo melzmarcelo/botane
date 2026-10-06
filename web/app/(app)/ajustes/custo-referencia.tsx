@@ -9,6 +9,7 @@ import {
   type ConferenciaDeReferencia,
 } from "@/lib/custo-referencia";
 import { custo, numeroParaCusto, reais, textoParaNumero } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 
 /**
  * Conferir e corrigir o custo de REFERÊNCIA — o que veio do Omie.
@@ -157,7 +158,7 @@ export default function CustoReferencia() {
                              onChange={() => alternar(l.id_produto)} />
                     </td>
                     <td>
-                      {l.produto}
+                      <LinkProduto id={l.id_produto}>{l.produto}</LinkProduto>
                       {l.codigo && (
                         <span className="mono ml-2 text-[12px] text-suave">{l.codigo}</span>
                       )}

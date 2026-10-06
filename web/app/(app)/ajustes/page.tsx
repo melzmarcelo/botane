@@ -15,6 +15,7 @@ import { custo, qtd, textoParaNumero } from "@/lib/numeros";
 import CustoGeral from "./custo-geral";
 import CustoReferencia from "./custo-referencia";
 import ExplicaTela from "@/components/explica-tela";
+import LinkProduto from "@/components/link-produto";
 
 /**
  * Ajuste de estoque — o lançamento feito À MÃO.
@@ -68,6 +69,7 @@ type Movimento = {
   data_movimento: string;
   tipo: string;
   rotulo: string;
+  id_produto?: number;
   produto: string;
   local: string;
   quantidade: number;
@@ -809,7 +811,7 @@ export default function PaginaAjustes() {
                       )}
                     </td>
                     <td>
-                      {m.produto}
+                      <LinkProduto id={m.id_produto}>{m.produto}</LinkProduto>
                       <span className="block text-[12.5px] text-suave">{m.local}</span>
                     </td>
                     <td className={`num ${Number(m.quantidade) < 0 ? "text-erro" : "text-erva"}`}>

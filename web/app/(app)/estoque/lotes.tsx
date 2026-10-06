@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 
 import { qtd } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 /**
  * Os lotes em estoque, **na ordem em que vão sair**.
  *
@@ -16,6 +17,7 @@ import { qtd } from "@/lib/numeros";
 
 type Lote = {
   id: number;
+  id_produto?: number;
   lote: string | null;
   validade: string | null;
   quantidade: number;
@@ -59,7 +61,7 @@ export default function LotesEmEstoque() {
               const dias = l.dias_restantes;
               return (
                 <tr key={l.id}>
-                  <td className="font-semibold">{l.produto}</td>
+                  <td><LinkProduto id={l.id_produto} className="font-semibold">{l.produto}</LinkProduto></td>
                   <td className="mono text-[13px]">{l.lote ?? "—"}</td>
                   <td>
                     {l.validade ? (

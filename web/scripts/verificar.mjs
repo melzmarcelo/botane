@@ -2642,6 +2642,111 @@ try {
     saldosSemForm.antigos.length === 0, saldosSemForm.antigos);
   checar("e ganhou o atalho para os ajustes", saldosSemForm.lancar === true, saldosSemForm);
 
+  // 🔑 **Ir a um registro e VOLTAR ao mesmo ponto** (06/10/2026, pedido do dono:
+  // *"estou na precificação e quero ver o cadastro de produto, tenho que copiar o
+  // nome, ir lá, voltar, buscar"*). Três peças, cada uma com a sua prova:
+  //   1. o nome do produto é link para o cadastro (`LinkProduto`);
+  //   2. o documento do movimento leva à nota/venda/contagem (`LinkOrigem`);
+  //   3. o voltar devolve a ROLAGEM (`components/rolagem.tsx`) — o filtro e a
+  //      página já voltavam pela URL.
+  await irPara(p, `${WEB}/produtos`);
+  await new Promise((r) => setTimeout(r, 900));
+  await p.evaluate(() => window.scrollTo(0, 900));
+  await new Promise((r) => setTimeout(r, 500));
+  const navRolagemAntes = await p.evaluate(() => window.scrollY);
+  const navProdutoAberto = await p.evaluate(() => {
+    const links = [...document.querySelectorAll('a.link-registro[href^="/produtos/"]')];
+    const alvo = links.find((a) => a.getBoundingClientRect().top > 200) ?? links[0];
+    alvo?.click();
+    return alvo?.getAttribute("href") ?? null;
+  });
+  await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 }, navProdutoAberto)
+    .catch(() => {});
+  await p.waitForSelector("a.link-voltar", { timeout: 20000 }).catch(() => {});
+  await p.goBack();
+  await p.waitForFunction(() => location.pathname === "/produtos", { timeout: 20000 })
+    .catch(() => {});
+  await new Promise((r) => setTimeout(r, 2800));
+  const navRolagemDepois = await p.evaluate(() => window.scrollY);
+  // ⚠️ Só vale quando a lista é longa o bastante para rolar: numa base vazia a
+  // rolagem é zero dos dois lados, e a checagem não mediria nada.
+  checar("voltar de um produto devolve a rolagem da lista",
+    navRolagemAntes < 50 || Math.abs(navRolagemDepois - navRolagemAntes) < 60,
+    { navRolagemAntes, navRolagemDepois });
+
+  await irPara(p, `${WEB}/precificacao`);
+  await new Promise((r) => setTimeout(r, 1500));
+  const linhaDaPrecificacao = await p.evaluate(() => {
+    const linha = document.querySelector("tbody tr");
+    const link = linha?.querySelector('a.link-registro[href^="/produtos/"]');
+    // Abre a simulação pela célula do custo — o NOME é o link para o cadastro.
+    [...(linha?.querySelectorAll("td") ?? [])].at(-2)?.click();
+    return { temLinha: !!linha, href: link?.getAttribute("href") ?? null };
+  });
+  if (linhaDaPrecificacao.temLinha) {
+    checar("na precificação o nome do produto é link para o cadastro",
+      !!linhaDaPrecificacao.href, linhaDaPrecificacao);
+    await new Promise((r) => setTimeout(r, 900));
+    checar("abrir a simulação grava o produto aberto na URL",
+      /aberto=\d+/.test(await p.evaluate(() => location.search)),
+      await p.evaluate(() => location.search));
+    await p.evaluate((h) => document.querySelector(`a.link-registro[href="${h}"]`)?.click(),
+      linhaDaPrecificacao.href);
+    await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 },
+      linhaDaPrecificacao.href).catch(() => {});
+    await p.waitForSelector("a.link-voltar", { timeout: 20000 }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 600));
+    checar("o clique no nome vai ao cadastro, sem só abrir a simulação",
+      (await p.evaluate(() => location.pathname)) === linhaDaPrecificacao.href);
+    await p.evaluate(() => document.querySelector("a.link-voltar")?.click());
+    await p.waitForFunction(() => location.pathname === "/precificacao", { timeout: 20000 })
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 2200));
+    const voltaDaPrecificacao = await p.evaluate(() => ({
+      url: location.pathname + location.search,
+      aberta: !!document.querySelector("tbody tr.bg-erva-claro"),
+    }));
+    checar("e o Voltar do cadastro devolve à precificação com a mesma linha aberta",
+      /aberto=\d+/.test(voltaDaPrecificacao.url) && voltaDaPrecificacao.aberta,
+      voltaDaPrecificacao);
+  }
+
+  await irPara(p, `${WEB}/estoque`);
+  await new Promise((r) => setTimeout(r, 1000));
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => /^movimentos/i.test(b.textContent?.trim() ?? ""))?.click());
+  await new Promise((r) => setTimeout(r, 1800));
+  const razaoComLinks = await p.evaluate(() => ({
+    url: location.pathname + location.search,
+    origem: [...document.querySelectorAll("a.link-registro")]
+      .map((a) => a.getAttribute("href"))
+      .filter((h) => /^\/(compras|vendas|inventario|transferencias)\/\d+/.test(h ?? "")),
+    produtos: document.querySelectorAll('a.link-registro[href^="/produtos/"]').length,
+  }));
+  checar("no razão o produto do movimento é link para o cadastro",
+    razaoComLinks.produtos > 0, razaoComLinks);
+  checar("e o documento leva à origem (nota, venda, contagem ou remessa)",
+    razaoComLinks.origem.length > 0, razaoComLinks);
+  if (razaoComLinks.origem[0]) {
+    await p.evaluate((h) => document.querySelector(`a.link-registro[href="${h}"]`)?.click(),
+      razaoComLinks.origem[0]);
+    await p.waitForFunction((h) => location.pathname === h, { timeout: 20000 },
+      razaoComLinks.origem[0]).catch(() => {});
+    await new Promise((r) => setTimeout(r, 1500));
+    const navDocumentoAberto = await p.evaluate(() => ({
+      caminho: location.pathname, texto: document.body.innerText.slice(0, 400) }));
+    checar("o documento abre, e existe",
+      navDocumentoAberto.caminho === razaoComLinks.origem[0]
+        && !/n[ãa]o encontrad/i.test(navDocumentoAberto.texto), navDocumentoAberto);
+    await p.goBack();
+    await p.waitForFunction(() => location.pathname === "/estoque", { timeout: 20000 })
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 1500));
+    checar("e voltar devolve ao razão, na mesma aba",
+      (await p.evaluate(() => location.pathname + location.search)) === razaoComLinks.url,
+      await p.evaluate(() => location.pathname + location.search));
+  }
+
   await irPara(p, `${WEB}/ajustes`);
   await new Promise((r) => setTimeout(r, 1200));
   const telaAjustes = await p.evaluate(() => {
@@ -6960,6 +7065,12 @@ try {
   // linhas — dá a impressão de que nada aconteceu.
   // ⚠️ A checagem rola a página até o FIM antes de clicar: partindo do topo,
   // "voltou ao topo" seria verdade sem o recurso existir.
+  // ⚠️ **Espera a rolagem do VOLTAR assentar antes de rolar à mão** (06/10/2026).
+  // Desde que o voltar devolve a posição da tela, ela é reposta assim que a lista
+  // chega — e esta checagem rolava ao fim no mesmo instante: a reposição vinha
+  // logo depois e a medida "antes" saía igual à "depois" ([342, 342]). Uma pessoa
+  // não rola em 80 ms; o roteiro rola, e por isso espera.
+  await new Promise((r) => setTimeout(r, 900));
   await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await new Promise((r) => setTimeout(r, 300));
   const rolagemAntes = await p.evaluate(() => window.scrollY);

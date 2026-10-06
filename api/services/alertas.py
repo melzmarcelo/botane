@@ -234,7 +234,7 @@ def vencimentos(cur, id_unidade: int, dias: int | None = None) -> list[dict]:
         dias = _um(cur, "SELECT alerta_validade_dias FROM parametros WHERE id_unidade = %s",
                    (id_unidade,)).get("alerta_validade_dias", 15)
     cur.execute(
-        """SELECT el.id, el.lote, el.validade, el.quantidade,
+        """SELECT el.id, el.id_produto, el.lote, el.validade, el.quantidade,
                   (el.validade - current_date) AS dias_restantes,
                   p.nome AS produto, p.codigo, p.um_estoque, l.nome AS local,
                   coalesce(s.custo_medio, 0) AS custo_medio,

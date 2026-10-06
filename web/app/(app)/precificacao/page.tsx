@@ -8,6 +8,7 @@ import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/compo
 import { reais } from "@/lib/cadastros";
 import { pct, qtd } from "@/lib/numeros";
 import { useSessao } from "@/lib/sessao";
+import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import {
   analisar,
   aplicarPrecos,
@@ -17,6 +18,7 @@ import {
   type Simulacao,
   type Situacao,
 } from "@/lib/precificacao";
+import LinkProduto from "@/components/link-produto";
 
 /**
  * Precificação — o que rever primeiro, e aplicar.
@@ -53,13 +55,42 @@ const COR_DA_PARTE: Record<string, string> = {
 // leitura é o custo (azul) e o lucro (verde) — as mesmas cores da tela de Preços.
 const TONS = ["#7b6a8c", "#8d8468", "#a08a5a", "#9a9d92", "#6f7f86", "#8a7772"];
 
+const CHAVE_MARCADOS = "botane:precificacao:marcados";
+
 export default function PaginaPrecificacao() {
   const { pode } = useSessao();
   const aviso = useAviso();
   const [dados, setDados] = useState<Analise | null>(null);
   const [erro, setErro] = useState("");
   const [marcados, setMarcados] = useState<Set<number>>(new Set());
-  const [aberto, setAberto] = useState<number | null>(null);
+  // 🔑 **O produto aberto mora na URL** (06/10/2026, pedido do dono: ir ao cadastro
+  // e voltar *"continuando no mesmo contexto"*). Quem abre a simulação de um
+  // prato, vai ao cadastro dele e volta encontra a mesma linha aberta — e não a
+  // lista fechada, tendo de achar o prato de novo.
+  const [abertoNaUrl, setAbertoNaUrl] = useEstadoNaUrl<string>("aberto", "");
+  const aberto = abertoNaUrl ? Number(abertoNaUrl) : null;
+  const setAberto = (id: number | null) => setAbertoNaUrl(id ? String(id) : "");
+  // ⚠️ **As caixas marcadas ficam na ABA, não na URL**: podem ser centenas, e uma
+  // URL com trezentos ids não é link que se mande a ninguém. Sobrevivem à ida ao
+  // cadastro e somem ao aplicar ou ao fechar a aba.
+  const marcadosLidos = useRef(false);
+  useEffect(() => {
+    try {
+      const guardados = JSON.parse(sessionStorage.getItem(CHAVE_MARCADOS) || "[]");
+      if (Array.isArray(guardados) && guardados.length) setMarcados(new Set(guardados));
+    } catch {
+      // Armazenamento bloqueado: a tela só volta sem as marcas, como antes.
+    }
+    marcadosLidos.current = true;
+  }, []);
+  useEffect(() => {
+    if (!marcadosLidos.current) return;
+    try {
+      sessionStorage.setItem(CHAVE_MARCADOS, JSON.stringify([...marcados]));
+    } catch {
+      // idem
+    }
+  }, [marcados]);
   const [confirmando, setConfirmando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const podeAplicar = pode("precificacao.aplicar");
@@ -202,7 +233,7 @@ export default function PaginaPrecificacao() {
                         </td>
                       )}
                       <td>
-                        <span className="font-semibold">{i.nome}</span>
+                        <LinkProduto id={i.id_produto} className="font-semibold">{i.nome}</LinkProduto>
                         <span className="block text-[12.5px] text-suave">
                           {[i.categoria, i.setor].filter(Boolean).join(" · ") || "sem categoria"}
                           {i.margem_alvo_pct !== null && ` · margem alvo ${pct(i.margem_alvo_pct)}`}

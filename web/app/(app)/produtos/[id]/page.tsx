@@ -1239,7 +1239,14 @@ export default function FormularioProduto() {
 
       {/* A conversão também só existe depois do produto: ela aponta para ele. */}
       {!novo && f.controla_estoque && (
+        // 🔑 **`key` na recarga: salvar o produto refaz TODOS os cartões que leem do
+        // servidor** (06/10/2026, pedido do dono: *"salvei o produto, pode atualizar
+        // toda a tela"*). O custo já relia; a conversão, as prateleiras e a
+        // movimentação não — e são justamente os que mudam quando a unidade ou a
+        // embalagem de compra muda: a tabela de conversão ganha a linha nova e o
+        // saldo de cada prateleira é convertido. Só o F5 mostrava.
         <UnidadesDeCompra
+          key={`unidades-${recarga}`}
           idProduto={Number(id)}
           umEstoque={f.um_estoque || null}
           podeEditar={podeEditar}
@@ -1644,6 +1651,7 @@ export default function FormularioProduto() {
           quem controla estoque: produto que não controla não tem prateleira. */}
       {f.controla_estoque && (
         <LocaisDoProduto
+          key={`locais-${recarga}`}
           idProduto={novo ? null : Number(id)}
           podeEditar={podeEditar}
           podeVerCusto={pode("estoque.saldos")}
@@ -1865,6 +1873,7 @@ export default function FormularioProduto() {
       <div hidden={aba !== "movimentacao"} className="flex flex-col gap-6">
       {!novo && f.controla_estoque ? (
         <MovimentacaoDoProduto
+          key={`movimentacao-${recarga}`}
           idProduto={Number(id)}
           umEstoque={f.um_estoque || null}
           podeVerCusto={pode("estoque.saldos")}

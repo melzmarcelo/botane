@@ -6,6 +6,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Aviso, Carregando, Cartao, Confirmacao, Vazio } from "@/components/ui";
 import { reais } from "@/lib/cadastros";
 import { custo, qtd } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 
 /**
  * Unificar o custo médio das prateleiras — prévia e botão único.
@@ -146,7 +147,7 @@ export default function CustoGeral({ aoLancar }: { aoLancar: () => void }) {
                 {previa.linhas.slice(0, 200).map((l) => (
                   <tr key={`${l.id_produto}-${l.local}`}>
                     <td>
-                      {l.produto}
+                      <LinkProduto id={l.id_produto}>{l.produto}</LinkProduto>
                       {l.codigo && (
                         <span className="mono ml-2 text-[12px] text-suave">{l.codigo}</span>
                       )}

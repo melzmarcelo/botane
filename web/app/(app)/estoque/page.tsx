@@ -18,6 +18,8 @@ import ReprocessarEstoque from "./reprocessar";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 
 import { custo, qtd } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
+import LinkOrigem from "@/components/link-origem";
 /** Uma linha por PRODUTO somando os locais desta loja. */
 type SaldoAgrupado = {
   id_produto: number;
@@ -70,9 +72,13 @@ type Movimento = {
   data_movimento: string;
   tipo: string;
   rotulo: string;
+  id_produto: number;
   produto: string;
   codigo: string;
   local: string;
+  /** De onde o movimento veio — é o que leva ao documento (`LinkOrigem`). */
+  origem_tipo?: string | null;
+  origem_id?: number | null;
   quantidade: number;
   custo_unitario: number;
   custo_total: number;
@@ -499,7 +505,7 @@ export default function PaginaEstoque() {
                       {saldosAgrupados.map((s) => (
                         <tr key={s.id_produto}>
                           <td>
-                            <span className="font-semibold">{s.produto}</span>
+                            <LinkProduto id={s.id_produto} className="font-semibold">{s.produto}</LinkProduto>
                             <span className="mono ml-2 text-[12px] text-suave">{s.codigo}</span>
                             {s.abaixo_do_minimo && (
                               <span className="ml-2">
@@ -573,7 +579,7 @@ export default function PaginaEstoque() {
                       {saldosRede.map((s) => (
                         <tr key={s.id_produto}>
                           <td>
-                            <span className="font-semibold">{s.produto}</span>
+                            <LinkProduto id={s.id_produto} className="font-semibold">{s.produto}</LinkProduto>
                             <span className="mono ml-2 text-[12px] text-suave">{s.codigo}</span>
                             {s.abaixo_do_minimo && (
                               <span className="ml-2">
@@ -640,7 +646,7 @@ export default function PaginaEstoque() {
                     {saldos.map((s) => (
                       <tr key={`${s.id_produto}-${s.id_local}`}>
                         <td>
-                          <span className="font-semibold">{s.produto}</span>
+                          <LinkProduto id={s.id_produto} className="font-semibold">{s.produto}</LinkProduto>
                           <span className="mono ml-2 text-[12px] text-suave">{s.codigo}</span>
                           {s.abaixo_do_minimo && (
                             <span className="ml-2">
@@ -882,10 +888,11 @@ export default function PaginaEstoque() {
                         )}
                       </td>
                       <td className="mono text-[12.5px]">
-                        {m.documento || <span className="text-suave">—</span>}
+                        <LinkOrigem tipo={m.origem_tipo} id={m.origem_id}
+                                    documento={m.documento} />
                       </td>
                       <td>
-                        {m.produto}
+                        <LinkProduto id={m.id_produto}>{m.produto}</LinkProduto>
                         <span className="block text-[12.5px] text-suave">{m.local}</span>
                       </td>
                       <td

@@ -12,6 +12,7 @@ import { CANAIS, dataBr, ORIGEM_CUSTO, ORIGENS, VendaDetalhe } from "../tipos";
 import Voltar from "@/components/voltar";
 
 import { custo } from "@/lib/numeros";
+import LinkProduto from "@/components/link-produto";
 /**
  * Uma venda, inteira, numa página só.
  *
@@ -311,7 +312,7 @@ export default function PaginaVenda() {
               <tbody>
                 {venda.movimentos.map((m) => (
                   <tr key={m.id} className={m.id_estorno_de ? "text-suave" : ""}>
-                    <td>{m.produto}</td>
+                    <td><LinkProduto id={m.id_produto}>{m.produto}</LinkProduto></td>
                     <td className="text-[13px]">
                       {m.tipo.toLowerCase().replace(/_/g, " ")}
                       {m.id_estorno_de && (

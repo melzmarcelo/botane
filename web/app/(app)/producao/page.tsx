@@ -14,6 +14,7 @@ import AgendaProducao from "./agenda";
 
 import { custo, qtd } from "@/lib/numeros";
 import ExplicaTela from "@/components/explica-tela";
+import LinkProduto from "@/components/link-produto";
 
 type Ficha = {
   id: number;
@@ -27,6 +28,7 @@ type Ficha = {
 
 type Producao = {
   id: number;
+  id_produto?: number;
   data: string;
   produto: string;
   codigo: string;
@@ -553,7 +555,7 @@ export default function PaginaProducao() {
                         minute: "2-digit",
                       })}
                     </td>
-                    <td className="font-semibold">{h.produto}</td>
+                    <td><LinkProduto id={h.id_produto} className="font-semibold">{h.produto}</LinkProduto></td>
                     <td className="text-suave">{h.local}</td>
                     <td className="num">{qtd(h.quantidade)}</td>
                     {veCusto && <td className="num">{reais(Number(h.custo_total))}</td>}

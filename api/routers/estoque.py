@@ -778,7 +778,8 @@ def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
     with get_cursor() as cur:
         return pagina(
             cur,
-            """SELECT pr.id, pr.data, pr.quantidade, pr.custo_total, pr.custo_unitario,
+            """SELECT pr.id, pr.id_produto, pr.data, pr.quantidade, pr.custo_total,
+                      pr.custo_unitario,
                       pr.versao_ficha, p.nome AS produto, p.codigo, l.nome AS local,
                       u.nome AS usuario
                  FROM producoes pr

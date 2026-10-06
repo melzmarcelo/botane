@@ -5,6 +5,41 @@
 
 ## O que já existe
 
+- 🔑 **Ir a um registro e voltar ao MESMO ponto** (06/10/2026, pedido do dono: *"estou na
+  precificação e quero ver o cadastro de produto, tenho que copiar o nome, ir lá, voltar,
+  buscar. Da movimentação, com o número do documento, a partir dali ir lá, ver, e voltar,
+  continuando no mesmo contexto"*). Quatro peças:
+  1. **`LinkProduto`** (`components/link-produto.tsx`): o nome do produto é o caminho para o
+     cadastro. O `id` já vinha em quase toda linha; em dezesseis grades o nome era texto.
+     ⚠️ Sem `id` vira texto (item de nota não conciliado não tem cadastro para abrir).
+     ⚠️ Para o clique não propagar: há grade em que a LINHA é clicável (a precificação).
+     ⚠️ Grade nova com nome de produto usa este componente, não um `<Link>` escrito à mão.
+  2. **`LinkOrigem`** (`components/link-origem.tsx`): o documento do movimento leva à nota,
+     venda, contagem ou remessa, por `origem_tipo`/`origem_id`. ⚠️ Só os tipos que TÊM tela:
+     transferência entre prateleiras, estorno e lote de ajuste não têm página por número, e
+     a produção fica de fora porque `/producao/[id]` é o item da AGENDA, não a produção feita.
+  3. **A rolagem volta** (`components/rolagem.tsx`, montado na casca). O filtro e a página já
+     voltavam pela URL; a rolagem não, porque o navegador restaura cedo demais — a tela ainda
+     está no "carregando" e não há para onde rolar. O componente anota a posição por endereço
+     e, no voltar, espera a página crescer (até 3 s).
+     ⚠️ **Quem arma é o `popstate`, não o efeito de `usePathname`**: o Next conclui a troca de
+     tela DENTRO do tratador dele, que roda antes do nosso, e o efeito já passou quando a
+     marca chega. A primeira versão nunca restaurou por isso.
+     ⚠️ Só no voltar/avançar; por link ou menu a tela começa do topo.
+  4. **O que estava aberto volta**: na precificação o produto aberto mora na URL
+     (`?aberto=`) e as caixas marcadas na aba (`sessionStorage`) — podem ser centenas, e URL
+     com trezentos ids não é link.
+  ⚠️ **`cacheComponents` (o `Activity` do Next 16) faria isso sozinho e NÃO foi ligado**: ele
+  preserva a tela inteira ao voltar, inclusive os DADOS — e o outro pedido do mesmo dia era o
+  contrário, tela que se atualiza sem F5. Aqui a tela volta remontada e relê do servidor.
+  Cobertura: bloco "ir a um registro e voltar" no `verificar.mjs`.
+
+- 🔑 **Salvar o produto refaz TODOS os cartões que leem do servidor** (06/10/2026, pedido do
+  dono: *"salvei o produto, pode atualizar toda a tela"*). O `recarga` já relia o formulário e
+  o custo (09/09); a conversão, as prateleiras e a movimentação não — e são os que mudam
+  quando a unidade ou a embalagem muda. `key` na recarga remonta os três. ⚠️ O kit fica de
+  fora: tem gravação própria, e remontar apagaria o que estivesse sendo editado nele.
+
 - **Paginação**: as listas grandes devolvem o total em **`X-Total`** (via `count(*) OVER ()`,
   na mesma varredura) e o front usa `api.listar()`. ⚠️ O header precisa estar em
   `expose_headers` do CORS, senão o navegador não o entrega à tela.

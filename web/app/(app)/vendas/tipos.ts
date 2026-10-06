@@ -61,6 +61,7 @@ export type ItemVenda = {
 /** O movimento de estoque que a venda causou — e o que o estorno devolveu. */
 export type MovimentoDaVenda = {
   id: number;
+  id_produto?: number;
   tipo: string;
   quantidade: number;
   custo_total: number | null;
