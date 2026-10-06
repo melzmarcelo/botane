@@ -703,6 +703,43 @@ FERRAMENTAS: list[Ferramenta] = [
         "para quem pode ver). Um produto pode morar em várias.",
         "/produtos/{id_produto}/locais",
         {"id_produto": Param("integer", "Id do produto.", obrigatorio=True)}),
+    # 🔑 **Pedido do dono (05/10/2026):** *"adicionar reprocessar e transferência ao
+    # conector"*. Depois da nota 6947 lançada com data retroativa, o acerto era
+    # reprocessar quatro produtos e devolver 6 KG a uma prateleira — e o conector
+    # só sabia LER as duas coisas.
+    # ⚠️ **São as rotas da tela, com as travas dela**: permissão
+    # (`estoque.transferencias`, `estoque.custo`), período fechado e o razão
+    # append-only continuam sendo decididos pelo servidor.
+    Ferramenta(
+        "transferir_estoque", "Transferir entre prateleiras",
+        "Move uma quantidade de um produto de uma prateleira para outra (de `locais`). "
+        "Na MESMA loja entra na hora: dois movimentos no razão, saída e entrada pelo mesmo "
+        "custo, sem mudar o valor do estoque. Entre LOJAS vira remessa, que o destino "
+        "precisa receber. ⚠️ O razão não se apaga: desfazer é outra transferência no "
+        "sentido contrário. Confira o saldo antes em `saldos_estoque`.",
+        "/estoque/transferencias",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "quantidade": Param("number", "Quanto mover, na unidade de estoque do produto. "
+                                       "Maior que zero.", obrigatorio=True, no_corpo=True),
+         "id_local_origem": Param("integer", "De onde sai (de `locais`).",
+                                  obrigatorio=True, no_corpo=True),
+         "id_local_destino": Param("integer", "Para onde vai (de `locais`).",
+                                   obrigatorio=True, no_corpo=True),
+         "observacao": Param("string", "Por que está sendo movido.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "reprocessar_estoque", "Reprocessar o estoque de um produto",
+        "Relê o razão de UM produto em ordem de data e refaz o que é derivado: saldo e "
+        "custo médio de cada prateleira e o custo das saídas. É o acerto para lançamento "
+        "retroativo (a nota do dia 9 que entrou depois da venda do dia 12). "
+        "⚠️ **Sempre em dois passos**: chame primeiro SEM `aplicar` — é a prévia, não grava "
+        "nada e mostra o que mudaria —, apresente à pessoa e só então chame com "
+        "`aplicar: true`. Reescreve número que alguém já leu.",
+        "/estoque/reprocessar",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "aplicar": Param("boolean", "false (padrão) = só a prévia. true = grava.",
+                          padrao=False, no_corpo=True)},
+        metodo="POST"),
     Ferramenta(
         "incluir_local_do_produto", "Pôr o produto em mais uma prateleira",
         "Diz que o produto também mora nesta prateleira (de `locais`), na loja. Não lança "

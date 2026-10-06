@@ -425,6 +425,24 @@ da tela de produto (regra, trava e auditoria vêm junto):
   de gravação; agora dizem que grava só com chave que permite alterar, confirmando antes.
 - Cobertura: bloco `7h` do `smoke_conector_claude.py`.
 
+## Transferir e reprocessar pelo Claude (05/10/2026)
+
+🔑 **Pedido do dono:** *"adicionar reprocessar e transferência ao conector"*. Depois da nota
+6947 lançada com data retroativa, o acerto era reprocessar quatro produtos e devolver 6 KG a
+uma prateleira — e o conector só sabia LER as duas coisas.
+- `transferir_estoque` — `POST /estoque/transferencias`. Na mesma loja entra na hora; entre
+  lojas vira remessa. Permissão `estoque.transferencias`, como na tela.
+- `reprocessar_estoque` — `POST /estoque/reprocessar`. ⚠️ **Uma ferramenta só, com `aplicar`
+  nascendo falso**: sem ele é a prévia e não grava. A descrição manda chamar a prévia, mostrar
+  e só então aplicar. Duas ferramentas (prévia e aplicar) deixariam o Claude pular a primeira.
+  ⚠️ **A prévia é POST, então só aparece para chave que altera** — mesmo sem gravar nada.
+- ⚠️ **O reprocessamento RECUSA produto com movimento em duas prateleiras quando a loja usa
+  custo único** (400 com a frase que manda ao Ajuste de custo). É regra do motor, não do
+  conector: ele devolve a recusa com o motivo, e a suíte cobra isso.
+- ⚠️ **Suíte que estoura no meio deixa a chave "Claude (suíte)" viva**, e a rodada seguinte
+  falha em "continua sendo UMA linha" — longe da causa. Revogar a que sobrou resolve.
+- Cobertura: fim do bloco `7c` do `smoke_conector_claude.py`.
+
 ## Armadilhas já pagas
 
 - 🔑 **O bloqueio por tentativas de login NUNCA funcionou até 19/09/2026.** O `UPDATE

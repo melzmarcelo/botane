@@ -354,7 +354,7 @@ gravam = [t for t in r["result"]["tools"] if not t["annotations"]["readOnlyHint"
 nomes_gravam = {t["name"] for t in gravam}
 checar("a chave que altera enxerga as ferramentas de gravação",
        {"vincular_item_de_nota", "criar_produto", "atualizar_produto", "lancar_nota",
-        "fundir_produtos"} <= nomes_gravam, sorted(nomes_gravam))
+        "fundir_produtos", "transferir_estoque", "reprocessar_estoque"} <= nomes_gravam, sorted(nomes_gravam))
 checar("e todas vêm marcadas como destrutivas, para o Claude perguntar antes",
        all(t["annotations"]["destructiveHint"] for t in gravam))
 
@@ -417,6 +417,69 @@ with get_cursor() as cur:
                     AND id_entidade = %s ORDER BY em DESC LIMIT 1""", (str(id_novo),))
     linha = cur.fetchone()
 checar("a auditoria marca que veio do Claude", (linha or {}).get("origem") == "claude", linha)
+
+# 🔑 **Transferir e reprocessar pelo conector** (pedido do dono, 05/10/2026). São
+# as rotas da tela chamadas por dentro; o que se prova aqui é que o corpo chega
+# inteiro e que a prévia do reprocessamento não grava.
+st, _, locais_c = pedir("GET", "/locais", token=admin)
+ativos_c = [l for l in (locais_c or []) if l.get("ativo", True) and l.get("id_unidade", 1) == 1]
+if len(ativos_c) < 2:
+    st, _, extra = pedir("POST", "/locais", {"nome": f"Conector {marca_p}", "tipo": "BAR"},
+                         token=admin)
+    ativos_c.append(extra)
+origem_c, destino_c = ativos_c[0]["id"], ativos_c[1]["id"]
+st, _, r = rpc(escrita, "tools/call", {"name": "criar_produto", "arguments": {
+    "nome": f"Transferido pelo Claude {marca_p}", "tipo": "INSUMO", "um_estoque": "KG"}})
+id_transf = json.loads(r["result"]["content"][0]["text"])["id"]
+st, _, r = pedir("POST", "/estoque/entradas", {
+    "id_produto": id_transf, "quantidade": 10, "custo_unitario": 4, "id_local": origem_c},
+    token=admin)
+checar("um produto recebe 10 KG numa prateleira", st == 201, (st, r))
+st, _, r = rpc(escrita, "tools/call", {"name": "transferir_estoque", "arguments": {
+    "id_produto": id_transf, "quantidade": 6, "id_local_origem": origem_c,
+    "id_local_destino": destino_c, "observacao": "pelo conector"}})
+checar("transferir_estoque move pelo conector", not r["result"]["isError"], r["result"])
+st, _, saldos_c = pedir("GET", f"/estoque/saldos?id_produto={id_transf}", token=admin)
+por_local = {x["id_local"]: float(x["quantidade"]) for x in (saldos_c or [])}
+checar("ficam 4 KG na origem e 6 KG no destino",
+       por_local.get(origem_c) == 4 and por_local.get(destino_c) == 6, por_local)
+st, _, r = rpc(escrita, "tools/call", {"name": "transferir_estoque", "arguments": {
+    "id_produto": id_transf, "quantidade": 0, "id_local_origem": origem_c,
+    "id_local_destino": destino_c}})
+checar("quantidade zero é recusada pelo servidor", r["result"]["isError"], r["result"])
+# ⚠️ **Com movimento em DUAS prateleiras e custo único por loja, o servidor
+# recusa o reprocessamento** — refazer a redistribuição exigiria criar e apagar
+# linhas do razão. O conector tem de devolver a recusa com o motivo, não um
+# erro mudo: é a frase que diz à pessoa para ir ao Ajuste de custo.
+st, _, r = rpc(escrita, "tools/call", {"name": "reprocessar_estoque",
+                                       "arguments": {"id_produto": id_transf}})
+checar("reprocessar produto com duas prateleiras devolve a recusa com o motivo",
+       r["result"]["isError"] and "prateleiras" in r["result"]["content"][0]["text"],
+       r["result"])
+st, _, r = rpc(escrita, "tools/call", {"name": "criar_produto", "arguments": {
+    "nome": f"Reprocessado pelo Claude {marca_p}", "tipo": "INSUMO", "um_estoque": "KG"}})
+id_reproc = json.loads(r["result"]["content"][0]["text"])["id"]
+st, _, r = pedir("POST", "/estoque/entradas", {
+    "id_produto": id_reproc, "quantidade": 5, "custo_unitario": 3, "id_local": origem_c},
+    token=admin)
+st, _, r = rpc(escrita, "tools/call", {"name": "reprocessar_estoque",
+                                       "arguments": {"id_produto": id_reproc}})
+previa_r = json.loads(r["result"]["content"][0]["text"]) if not r["result"]["isError"] else {}
+checar("reprocessar_estoque sem `aplicar` é só a prévia",
+       not r["result"]["isError"] and previa_r.get("aplicado") is False, r["result"])
+st, _, r = rpc(escrita, "tools/call", {"name": "reprocessar_estoque", "arguments": {
+    "id_produto": id_reproc, "aplicar": True}})
+feito_r = json.loads(r["result"]["content"][0]["text"]) if not r["result"]["isError"] else {}
+checar("e com `aplicar` passa pela gravação", not r["result"]["isError"]
+       and "aplicado" in feito_r, r["result"])
+st, _, saldos_c = pedir("GET", f"/estoque/saldos?id_produto={id_reproc}", token=admin)
+checar("sem mudar o saldo de uma cadeia que já estava em ordem",
+       saldos_c and float(saldos_c[0]["quantidade"]) == 5, saldos_c)
+st, _, r = rpc(chave, "tools/call", {"name": "transferir_estoque", "arguments": {
+    "id_produto": id_transf, "quantidade": 1, "id_local_origem": origem_c,
+    "id_local_destino": destino_c}})
+checar("a chave de leitura não transfere", r["result"]["isError"], r["result"])
+
 st, _, r = pedir("PUT", f"/produtos/{id_novo}", {"marca": "pela tela"}, token=admin)
 with get_cursor() as cur:
     cur.execute("""SELECT origem FROM auditoria WHERE entidade = 'produto'
