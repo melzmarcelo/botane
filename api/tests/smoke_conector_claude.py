@@ -549,10 +549,15 @@ checar("preparo: dois cadastros com o mesmo nome", len(ids_iguais) == 2, ids_igu
 
 st, _, r = rpc(escrita, "tools/call", {"name": "produtos_duplicados",
                                        "arguments": {"limite": 1000}})
-duplicados = json.loads(r["result"]["content"][0]["text"])
-grupo = next((g for g in duplicados if g.get("nome") == nome_igual), None)
-checar("produtos_duplicados acha o par", grupo is not None,
-       [g.get("nome") for g in duplicados[:3]])
+# ⚠️ **O texto é procurado, não decodificado** (06/10/2026). A base de trabalho
+# acumula cadastros repetidos de outras suítes (115 "PAO DE QUEIJO" naquele dia), a
+# resposta passou do `LIMITE_CARACTERES` do conector e veio CORTADA com o aviso —
+# que é o comportamento certo, mas deixa de ser JSON. O `json.loads` estourava e
+# a suíte morria sem resumo, por causa do tamanho da base e não do conector.
+lista_de_repetidos = r["result"]["content"][0]["text"]
+checar("produtos_duplicados acha o par",
+       not r["result"]["isError"] and nome_igual in lista_de_repetidos,
+       lista_de_repetidos[:200])
 
 fica, sai = ids_iguais
 st, _, r = rpc(escrita, "tools/call", {"name": "previa_de_fusao",

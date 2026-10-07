@@ -82,3 +82,9 @@ class DescarteDeEtiqueta(BaseModel):
 
 class BaixaDeEtiqueta(BaseModel):
     observacao: str | None = Field(default=None, max_length=200)
+
+
+class UsoParcialDeEtiqueta(BaseModel):
+    """Quanto SAIU do pote — na unidade da etiqueta. O que sobra continua ativo."""
+    quantidade: float = Field(gt=0, le=9999999)
+    observacao: str | None = Field(default=None, max_length=200)

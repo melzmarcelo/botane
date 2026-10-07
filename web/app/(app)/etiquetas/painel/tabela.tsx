@@ -10,11 +10,12 @@ import {
 
 /** A grade do painel. Ações só nas ativas: a baixada já disse o que aconteceu. */
 export default function TabelaDeEtiquetas({
-  lista, podeDescartar, aoUsar, aoDescartar, aoReimprimir,
+  lista, podeDescartar, aoUsar, aoUsarParte, aoDescartar, aoReimprimir,
 }: {
   lista: Etiqueta[] | null;
   podeDescartar: boolean;
   aoUsar: (e: Etiqueta) => void;
+  aoUsarParte: (e: Etiqueta) => void;
   aoDescartar: (e: Etiqueta) => void;
   aoReimprimir: (e: Etiqueta) => void;
 }) {
@@ -49,7 +50,16 @@ export default function TabelaDeEtiquetas({
               </td>
               <td className="mono text-[13px]">{dataHora(e.vence_em)}</td>
               <td className="text-[13px]">{e.local ?? "—"}</td>
-              <td className="mono text-[13px]">{e.quantidade ? `${numero(e.quantidade)} ${e.um ?? ""}` : "—"}</td>
+              <td className="mono text-[13px]">
+                {e.quantidade ? `${numero(e.quantidade)} ${e.um ?? ""}` : "—"}
+                {/* Pote já mexido: diz de quanto era. */}
+                {e.quantidade && e.quantidade_inicial
+                  && Number(e.quantidade_inicial) !== Number(e.quantidade) && (
+                  <span className="block text-[11.5px] text-suave">
+                    de {numero(e.quantidade_inicial)}
+                  </span>
+                )}
+              </td>
               <td>
                 <Selo cor={COR_SITUACAO[e.situacao]}>{ROTULO_SITUACAO[e.situacao]}</Selo>
                 {e.status !== "ATIVA" && (
@@ -62,6 +72,9 @@ export default function TabelaDeEtiquetas({
               <td className="whitespace-nowrap text-right text-[13px]">
                 {e.status === "ATIVA" && (
                   <span className="inline-flex gap-3">
+                    {e.quantidade && Number(e.quantidade) > 0 && (
+                      <button className="link-acao" onClick={() => aoUsarParte(e)}>usei parte</button>
+                    )}
                     <button className="link-acao" onClick={() => aoUsar(e)}>usei tudo</button>
                     {podeDescartar && (
                       <button className="link-acao" onClick={() => aoDescartar(e)}>descartar</button>

@@ -244,9 +244,11 @@ para consultar, dar baixa e descartar como perda. Estudo em
 - **Telas:** `etiquetas/` (imprimir), `etiquetas/painel/`, `etiquetas/e/[codigo]/` (o QR),
   `etiquetas/configuracao/`; atalho em `producao/`
 - **Permissões:** `etiquetas.imprimir`, `etiquetas.descartar`, `etiquetas.configurar`
-- **Migração:** `100_etiquetas.sql`
+- **Migração:** `100_etiquetas.sql`, `107_etiqueta_uso_parcial.sql`
 
 ⚠️ **Descartar é perda no razão** (`SAIDA_PERDA`, `origem_tipo = 'ETIQUETA'`), nunca apagar.
+⚠️ **"Usei uma parte" NÃO é razão**: diminui a quantidade da etiqueta (`etiqueta_usos`) e não
+toca o estoque — o consumo já entra pela venda ou pela produção.
 
 ## Precificação
 

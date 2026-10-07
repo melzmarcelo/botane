@@ -353,14 +353,19 @@ def emitir(cur, *, id_unidade: int, id_usuario: int, nome_usuario: str, dados: d
     ids = []
     for _ in range(dados["copias"]):
         cur.execute(
+            # ⚠️ `quantidade_inicial` nasce igual à `quantidade` (migração 107): a
+            # primeira é o que a etiqueta tinha ao ser impressa e não muda; a
+            # segunda é o que RESTA, e diminui a cada uso parcial.
             """INSERT INTO etiquetas (codigo, id_unidade, id_produto, evento, conservacao,
-                                      feito_em, vence_em, quantidade, um, id_producao,
+                                      feito_em, vence_em, quantidade, quantidade_inicial, um,
+                                      id_producao,
                                       id_local, lote, validade_lote, validade_fabricante,
                                       id_origem, responsavel, id_usuario, observacao)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING id""",
             (_codigo(cur), id_unidade, id_produto, evento, conservacao, feito_em, vence_em,
-             quantidade, produto["um_estoque"], dados.get("id_producao"), id_local, lote,
+             quantidade, quantidade, produto["um_estoque"], dados.get("id_producao"), id_local,
+             lote,
              validade_lote, fab, origem["id"] if origem else None, responsavel, id_usuario,
              (dados.get("observacao") or "").strip() or None))
         ids.append(cur.fetchone()["id"])
@@ -379,7 +384,8 @@ def emitir(cur, *, id_unidade: int, id_usuario: int, nome_usuario: str, dados: d
 _SELECT = """
     SELECT e.id, e.codigo, e.id_unidade, e.id_produto, p.codigo AS produto_codigo,
            p.nome AS produto, e.evento, e.conservacao, e.feito_em, e.vence_em,
-           e.quantidade, e.um, e.id_producao, e.id_local, l.nome AS local, e.lote,
+           e.quantidade, e.quantidade_inicial, e.um, e.id_producao, e.id_local,
+           l.nome AS local, e.lote,
            e.validade_lote, e.validade_fabricante, e.id_origem, e.responsavel,
            e.observacao, e.status, e.baixada_em, ub.nome AS baixada_por, e.motivo,
            e.id_movimento, e.impressoes, e.criado_em,
@@ -419,7 +425,20 @@ def por_codigo(cur, codigo: str, id_unidade: int | None = None) -> dict:
         raise HTTPException(status_code=404, detail="Etiqueta não encontrada")
     etq = dict(linha)
     etq["alergenos"] = _alergenos(cur, etq["id_produto"])
+    # O histórico do pote: cada retirada, da mais recente para a mais antiga.
+    etq["usos"] = usos(cur, etq["id"])
     return etq
+
+
+def usos(cur, id_etiqueta: int) -> list[dict]:
+    """As retiradas parciais desta etiqueta, a mais recente primeiro."""
+    cur.execute(
+        """SELECT u.id, u.quantidade, u.restante, u.feito_em, u.observacao, us.nome AS quem
+             FROM etiqueta_usos u LEFT JOIN usuarios us ON us.id = u.id_usuario
+            WHERE u.id_etiqueta = %s ORDER BY u.id DESC""",
+        (id_etiqueta,),
+    )
+    return [dict(r) for r in cur.fetchall()]
 
 
 def consulta(cur, id_unidade: int, situacao: str, busca: str | None, id_local: int | None,
@@ -485,6 +504,53 @@ def usar(cur, id_etiqueta: int, id_unidade: int, id_usuario: int,
                   motivo = %s WHERE id = %s""",
         (id_usuario, (observacao or "").strip() or None, id_etiqueta))
     return obter(cur, id_etiqueta)
+
+
+def usar_parte(cur, id_etiqueta: int, id_unidade: int, id_usuario: int,
+               quantidade, observacao: str | None = None) -> dict:
+    """"Usei uma parte": o pote continua ativo, com o que sobrou.
+
+    🔑 **Pedido do dono (06/10/2026):** *"temos somente como descartar ou baixar
+    tudo, tem como consumir partes?"*
+
+    ⚠️ **Não mexe no estoque**, pela mesma razão do "usei tudo": o consumo já entra
+    pela venda ou pela produção que usou o pote, e baixar aqui também contaria duas
+    vezes. O que diminui é a quantidade da ETIQUETA.
+    ⚠️ **A validade não muda.** Tirar uma parte não renova o pote.
+    ⚠️ **Chegando a zero, a etiqueta se encerra como USADA** — um pote vazio ativo
+    ficaria no painel para sempre, vencendo sem ter nada dentro.
+    ⚠️ **Etiqueta sem quantidade não tem do que tirar parte**: o caminho dela é o
+    "usei tudo". Inventar uma quantidade aqui seria registrar um número que ninguém
+    mediu.
+    """
+    etq = _ativa(cur, id_etiqueta, id_unidade)
+    if etq["quantidade"] is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Esta etiqueta não tem quantidade registrada. Use “usei tudo” quando o "
+                   "pote acabar.")
+    saiu = dec(quantidade)
+    tem = dec(etq["quantidade"])
+    if saiu <= 0:
+        raise HTTPException(status_code=400, detail="Informe quanto saiu do pote.")
+    if saiu > tem:
+        raise HTTPException(
+            status_code=400,
+            detail=f"O pote tem {_num(tem)} {etq['um'] or ''} e não dá para tirar "
+                   f"{_num(saiu)}. Confira a quantidade.".replace("  ", " "))
+    resta = tem - saiu
+    cur.execute(
+        """INSERT INTO etiqueta_usos (id_etiqueta, quantidade, restante, id_usuario, observacao)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (id_etiqueta, saiu, resta, id_usuario, (observacao or "").strip() or None))
+    if resta == 0:
+        cur.execute(
+            """UPDATE etiquetas SET quantidade = 0, status = 'USADA', baixada_em = now(),
+                      baixada_por = %s WHERE id = %s""",
+            (id_usuario, id_etiqueta))
+    else:
+        cur.execute("UPDATE etiquetas SET quantidade = %s WHERE id = %s", (resta, id_etiqueta))
+    return obter(cur, id_etiqueta) | {"usos": usos(cur, id_etiqueta)}
 
 
 def descartar(cur, id_etiqueta: int, id_unidade: int, id_usuario: int, dados: dict) -> dict:

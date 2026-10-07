@@ -349,6 +349,90 @@ checar("o alerta de etiqueta vencida aparece no Início",
                                                             else (al or {}).get("alertas", []))),
        str(al)[:300])
 
+print("\n11. usei UMA PARTE: o pote continua ativo com o que sobrou (migração 107)")
+# 🔑 **Pedido do dono (06/10/2026):** "temos somente como descartar ou baixar tudo,
+# tem como consumir partes?". Um pote de 2 do molho: sai 0,5, ficam 1,5.
+st, r = chamar("POST", "/etiquetas", {"evento": "PRODUCAO", "id_produto": molho,
+                                      "quantidade": 2}, token=cozinha)
+pote = ((r or {}).get("etiquetas") or [{}])[0]
+checar("um pote de 2 é etiquetado", st == 201 and float(pote.get("quantidade") or 0) == 2,
+       (st, r))
+checar("e nasce com a quantidade inicial igual à quantidade",
+       float(pote.get("quantidade_inicial") or 0) == 2, pote.get("quantidade_inicial"))
+
+
+def _movimentos_do_molho():
+    with get_cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM estoque_movimentos WHERE id_produto = %s", (molho,))
+        return cur.fetchone()["n"]
+
+
+antes_mov = _movimentos_do_molho()
+st, r = chamar("POST", f"/etiquetas/{pote['id']}/usar-parte",
+               {"quantidade": 0.5, "observacao": "para o almoço"}, token=cozinha)
+checar("tirar 0,5 é aceito", st == 200, (st, r))
+checar("o pote continua ATIVO, com 1,5", r.get("status") == "ATIVA"
+       and float(r.get("quantidade")) == 1.5, {k: r.get(k) for k in ("status", "quantidade")})
+checar("a quantidade inicial continua 2", float(r.get("quantidade_inicial")) == 2,
+       r.get("quantidade_inicial"))
+checar("a validade NÃO muda", r.get("vence_em") == pote.get("vence_em"),
+       (pote.get("vence_em"), r.get("vence_em")))
+checar("e o estoque NÃO é mexido — o consumo entra pela venda ou pela produção",
+       _movimentos_do_molho() == antes_mov, (antes_mov, _movimentos_do_molho()))
+st, pelo_qr = chamar("GET", f"/etiquetas/codigo/{pote['codigo']}", token=cozinha)
+usos = pelo_qr.get("usos") or []
+checar("o QR mostra a retirada: quanto saiu, quanto ficou e por quê",
+       len(usos) == 1 and float(usos[0]["quantidade"]) == 0.5
+       and float(usos[0]["restante"]) == 1.5 and usos[0]["observacao"] == "para o almoço", usos)
+
+st, r = chamar("POST", f"/etiquetas/{pote['id']}/usar-parte", {"quantidade": 5}, token=cozinha)
+checar("tirar mais do que há é recusado, dizendo quanto o pote tem",
+       st == 400 and "1,5" in str(r.get("detail", "")), (st, r))
+st, r = chamar("POST", f"/etiquetas/{pote['id']}/usar-parte", {"quantidade": 0}, token=cozinha)
+checar("tirar zero é recusado (422)", st == 422, st)
+st, pelo_qr = chamar("GET", f"/etiquetas/codigo/{pote['codigo']}", token=cozinha)
+checar("as recusas não registram nada",
+       len(pelo_qr.get("usos") or []) == 1 and float(pelo_qr.get("quantidade")) == 1.5, pelo_qr)
+
+# Descartar o que SOBROU: a perda é de 1,5, não dos 2 com que o pote nasceu.
+st, r = chamar("POST", f"/etiquetas/{pote['id']}/descartar",
+               {"id_motivo_perda": id_motivo}, token=cozinha)
+with get_cursor() as cur:
+    cur.execute("SELECT quantidade FROM estoque_movimentos WHERE id = %s",
+                ((r or {}).get("id_movimento"),))
+    perda = float((cur.fetchone() or {}).get("quantidade") or 0)
+checar("descartar o pote meio usado lança como perda só o que SOBROU (1,5)",
+       st == 200 and perda == -1.5, (st, perda))
+
+# Tirar tudo de uma vez encerra a etiqueta.
+st, r = chamar("POST", "/etiquetas", {"evento": "PRODUCAO", "id_produto": molho,
+                                      "quantidade": 1}, token=cozinha)
+potinho = ((r or {}).get("etiquetas") or [{}])[0]
+st, r = chamar("POST", f"/etiquetas/{potinho['id']}/usar-parte", {"quantidade": 0.4},
+               token=cozinha)
+st, r = chamar("POST", f"/etiquetas/{potinho['id']}/usar-parte", {"quantidade": 0.6},
+               token=cozinha)
+checar("tirar o que restava ENCERRA a etiqueta como usada",
+       st == 200 and r.get("status") == "USADA" and float(r.get("quantidade")) == 0
+       and "acabou" in str(r.get("message", "")).lower(), (st, r))
+checar("com as duas retiradas no histórico", len(r.get("usos") or []) == 2, r.get("usos"))
+st, r = chamar("POST", f"/etiquetas/{potinho['id']}/usar-parte", {"quantidade": 0.1},
+               token=cozinha)
+checar("e pote encerrado não aceita mais retirada", st == 400, (st, r))
+
+# Etiqueta sem quantidade não tem do que tirar parte.
+st, r = chamar("POST", "/etiquetas", {"evento": "ABERTURA", "id_produto": creme},
+               token=cozinha)
+sem_qtd = ((r or {}).get("etiquetas") or [{}])[0]
+if sem_qtd.get("id") and sem_qtd.get("quantidade") is None:
+    st, r = chamar("POST", f"/etiquetas/{sem_qtd['id']}/usar-parte", {"quantidade": 1},
+                   token=cozinha)
+    checar("etiqueta SEM quantidade recusa o uso parcial e aponta o 'usei tudo'",
+           st == 400 and "usei tudo" in str(r.get("detail", "")).lower(), (st, r))
+    chamar("POST", f"/etiquetas/{sem_qtd['id']}/usar", {}, token=cozinha)
+else:
+    checar("a etiqueta de abertura sem quantidade foi emitida para o teste", False, (st, r))
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for x in falhas:
     print("  -", x)

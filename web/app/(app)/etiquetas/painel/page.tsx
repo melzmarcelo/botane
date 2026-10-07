@@ -15,6 +15,7 @@ import {
 import { useSessao } from "@/lib/sessao";
 
 import Descarte from "../descarte";
+import UsoParcial from "../uso-parcial";
 import TabelaDeEtiquetas from "./tabela";
 
 /**
@@ -43,6 +44,7 @@ export default function PainelDeValidades() {
   const [numeros, setNumeros] = useState<PainelEtiquetas | null>(null);
   const [erro, setErro] = useState("");
   const [descartando, setDescartando] = useState<Etiqueta | null>(null);
+  const [usandoParte, setUsandoParte] = useState<Etiqueta | null>(null);
   const pag = usePaginacao("etiquetas-painel", { filtros: [situacao, busca, evento] });
 
   const carregar = useCallback(async () => {
@@ -153,6 +155,7 @@ export default function PainelDeValidades() {
           lista={lista}
           podeDescartar={pode("etiquetas.descartar")}
           aoUsar={(e) => void usarTudo(e)}
+          aoUsarParte={setUsandoParte}
           aoDescartar={setDescartando}
           aoReimprimir={(e) => void imprimir([e.id], true).catch(
             (x) => aviso.erro(x instanceof Error ? x.message : "Falha ao imprimir"))}
@@ -160,6 +163,10 @@ export default function PainelDeValidades() {
         <Paginacao p={pag} rotulo="etiqueta(s)" />
       </Cartao>
 
+      {usandoParte && (
+        <UsoParcial etiqueta={usandoParte} aoFechar={() => setUsandoParte(null)}
+                    aoConcluir={() => { setUsandoParte(null); void carregar(); }} />
+      )}
       {descartando && (
         <Descarte etiqueta={descartando} aoFechar={() => setDescartando(null)}
                   aoConcluir={() => { setDescartando(null); void carregar(); }} />

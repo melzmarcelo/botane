@@ -13,12 +13,16 @@ import {
 } from "@/lib/etiquetas";
 
 import Descarte from "../../descarte";
+import UsoParcial from "../../uso-parcial";
 
 /**
  * O que o QR da etiqueta abre — pensado para o CELULAR, na frente da câmara fria.
  *
- * 🔑 Tudo sobre o pote e as ações que cabem: usei tudo, descartar (lança a perda),
- * descongelar/reetiquetar (nova etiqueta, a antiga deixa de valer) e reimprimir.
+ * 🔑 Tudo sobre o pote e as ações que cabem: usei uma parte (o pote continua
+ * ativo com o que sobrou), usei tudo, descartar (lança a perda), descongelar/
+ * reetiquetar (nova etiqueta, a antiga deixa de valer) e reimprimir.
+ * ⚠️ **"Usei uma parte" vem primeiro**: é o que mais acontece com um pote aberto.
+ * Só aparece em etiqueta que TEM quantidade — sem ela não há do que tirar parte.
  * ⚠️ Precisa de login: a etiqueta não é pública — ela diz o que a casa tem e onde.
  */
 export default function EtiquetaPeloCodigo() {
@@ -27,6 +31,7 @@ export default function EtiquetaPeloCodigo() {
   const [e, setE] = useState<Etiqueta | null>(null);
   const [erro, setErro] = useState("");
   const [descartando, setDescartando] = useState(false);
+  const [usandoParte, setUsandoParte] = useState(false);
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = useCallback(() => {
@@ -58,7 +63,11 @@ export default function EtiquetaPeloCodigo() {
     [rotuloEvento(e.evento), dataHora(e.feito_em)],
     ["Conservação", rotuloConservacao(e.conservacao)],
     ["Onde", e.local ?? "—"],
-    ["Quantidade", e.quantidade ? `${numero(e.quantidade)} ${e.um ?? ""}` : "—"],
+    // Com retirada parcial, a linha diz o que RESTA e de quanto era.
+    ["Quantidade", !e.quantidade ? "—"
+      : e.quantidade_inicial && Number(e.quantidade_inicial) !== Number(e.quantidade)
+        ? `restam ${numero(e.quantidade)} de ${numero(e.quantidade_inicial)} ${e.um ?? ""}`
+        : `${numero(e.quantidade)} ${e.um ?? ""}`],
     ["Lote", e.lote ?? "—"],
     ["Responsável", e.responsavel],
   ];
@@ -95,7 +104,14 @@ export default function EtiquetaPeloCodigo() {
 
       {e.status === "ATIVA" && (
         <div className="grid gap-2 sm:grid-cols-2">
-          <button className="btn btn-primario py-3" disabled={ocupado} onClick={() => void usarTudo()}>
+          {e.quantidade && Number(e.quantidade) > 0 && (
+            <button className="btn btn-primario py-3" disabled={ocupado}
+                    onClick={() => setUsandoParte(true)}>
+              Usei uma parte
+            </button>
+          )}
+          <button className={`btn py-3 ${e.quantidade ? "btn-secundario" : "btn-primario"}`}
+                  disabled={ocupado} onClick={() => void usarTudo()}>
             Usei tudo
           </button>
           {e.pode_descartar && (
@@ -109,6 +125,31 @@ export default function EtiquetaPeloCodigo() {
             Reimprimir
           </button>
         </div>
+      )}
+
+      {/* O histórico do pote: cada retirada, com quanto ficou. */}
+      {!!e.usos?.length && (
+        <Cartao titulo="O que já saiu deste pote">
+          <ul className="flex flex-col gap-2 text-[14px]">
+            {e.usos.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-baseline justify-between gap-x-3">
+                <span>
+                  <b className="mono">{numero(u.quantidade)} {e.um ?? ""}</b>
+                  <span className="text-suave"> · ficaram {numero(u.restante)}</span>
+                  {u.observacao && <span className="text-suave"> · {u.observacao}</span>}
+                </span>
+                <span className="text-[12.5px] text-suave">
+                  {dataHora(u.feito_em)}{u.quem ? ` · ${u.quem}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Cartao>
+      )}
+
+      {usandoParte && (
+        <UsoParcial etiqueta={e} aoFechar={() => setUsandoParte(false)}
+                    aoConcluir={() => { setUsandoParte(false); carregar(); }} />
       )}
 
       {descartando && (

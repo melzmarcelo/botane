@@ -84,11 +84,28 @@
 - 🔑 **A baixa vale na loja DA ETIQUETA**, não na do seletor: quem lê o QR no celular pode estar
   com outra loja escolhida. Quem não enxerga aquela loja recebe 404.
 
+- 🔑 **"Usei uma parte" (06/10/2026, migração 107)** — pedido do dono: *"temos somente como
+  descartar ou baixar tudo, tem como consumir partes?"*. `POST /etiquetas/{id}/usar-parte`
+  (`etiquetas.imprimir`, a mesma do "usei tudo"), no painel e na tela do QR; a janela é uma só
+  (`etiquetas/uso-parcial.tsx`) e aceita **quanto saiu** ou **quanto sobrou** — o servidor
+  recebe sempre o que saiu.
+  - 🔑 **`etiquetas.quantidade` passou a ser o que RESTA**; `quantidade_inicial` guarda o que
+    nasceu. Mudar o sentido da coluna (em vez de criar "restante") foi de propósito: descarte,
+    reimpressão, painel e divisão passam a ver o pote como está AGORA sem mudar uma linha.
+    Descartar pote meio usado lança como perda só o que sobrou.
+  - ⚠️ **NÃO mexe no estoque.** O consumo já entra pela venda ou pela produção que usou o pote;
+    baixar aqui contaria duas vezes. `etiqueta_usos` é o histórico do POTE (quanto saiu, quanto
+    ficou, quem, quando), não razão.
+  - ⚠️ **Não renova a validade.** Tirar tudo encerra a etiqueta como `USADA`.
+  - ⚠️ Etiqueta **sem quantidade** recusa (400) e aponta o "usei tudo" — não há do que tirar parte.
+  - ⚠️ O backfill da 107 só toca `quantidade_inicial IS NULL`: rodar de novo depois de uma
+    retirada não pode copiar o restante por cima do inicial.
+
 - Alertas no Início: `etiquetas.vencidas` (crítico) e `etiquetas.hoje` (atenção), levando ao
   painel já filtrado.
 - Permissões (100): Administrador/Gerente tudo; Cozinha e Conferente imprimem e descartam;
   Salão só imprime. ⚠️ Concedidas na própria 100 (ver 091): a 002 redefine os papéis de sistema.
-- Limpeza: `etiquetas` e `produto_validades` em OPERACAO (apontam para produto e razão);
+- Limpeza: `etiquetas`, `etiqueta_usos` e `produto_validades` em OPERACAO (apontam para produto e razão);
   `etiqueta_config` em PRESERVADAS (é a impressora da loja).
 
 ## ⏳ Decidido sem o dono — validar

@@ -2735,6 +2735,89 @@ try {
     configDeEtiquetas);
   checar("e avisa que a validade fica no cadastro, com o atalho para o produto",
     configDeEtiquetas.avisa && configDeEtiquetas.atalho, configDeEtiquetas);
+
+  // 🔑 **"Usei uma parte"** (06/10/2026, pedido do dono: *"temos somente como
+  // descartar ou baixar tudo, tem como consumir partes?"*). Um pote de 2 kg: pela
+  // tela do QR sai 0,5 dizendo quanto SAIU; pelo painel, dizendo quanto SOBROU. A
+  // conta toda está na `smoke_etiquetas` (bloco 11); aqui se prova o caminho da tela.
+  const { dados: emitidaParcial } = await api("POST", "/etiquetas", {
+    evento: "PRODUCAO", id_produto: prodVal.id, quantidade: 2,
+  }, token);
+  const poteParcial = emitidaParcial?.etiquetas?.[0] ?? {};
+  const lerPoteParcial = async () =>
+    (await api("GET", `/etiquetas/codigo/${poteParcial.codigo}`, null, token)).dados ?? {};
+  const clicarBotaoParcial = (rotulo) => p.evaluate((r) => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === r);
+    b?.click();
+    return !!b;
+  }, rotulo);
+  await irPara(p, `${WEB}/etiquetas/e/${poteParcial.codigo}`);
+  await p.waitForFunction(() => [...document.querySelectorAll("button")]
+    .some((b) => b.textContent?.trim() === "Usei uma parte"), { timeout: 20000 }).catch(() => {});
+  checar("a tela do QR tem o botão Usei uma parte", await clicarBotaoParcial("Usei uma parte"));
+  const campoSaiu = 'input[aria-label="quanto saiu do pote"]';
+  await p.waitForSelector(campoSaiu, { timeout: 10000 }).catch(() => {});
+  await p.type(campoSaiu, "5");
+  const acimaDoPote = await p.evaluate(() => ({
+    texto: document.querySelector('[role="dialog"]')?.innerText ?? "",
+    desligado: [...document.querySelectorAll("button")]
+      .find((x) => x.textContent?.trim() === "Registrar")?.disabled,
+  }));
+  checar("tirar mais do que o pote tem é barrado na janela, antes do servidor",
+    acimaDoPote.desligado === true && /não dá para tirar mais/i.test(acimaDoPote.texto),
+    acimaDoPote);
+  await p.click(campoSaiu, { clickCount: 3 });
+  await p.keyboard.press("Backspace");
+  await p.type(campoSaiu, "0,5");
+  const previaParcial = await p.evaluate(() =>
+    document.querySelector('[role="dialog"] [role="status"]')?.innerText ?? "");
+  checar("a janela diz quanto sai e quanto fica antes de registrar",
+    /0,5/.test(previaParcial) && /1,5/.test(previaParcial), previaParcial);
+  checar("e nada é gravado antes do Registrar", Number((await lerPoteParcial()).quantidade) === 2);
+  await clicarBotaoParcial("Registrar");
+  await p.waitForFunction(() => /o que já saiu deste pote/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const depoisDoQr = await lerPoteParcial();
+  checar("Registrar tira 0,5 e o pote continua ativo com 1,5",
+    depoisDoQr.status === "ATIVA" && Number(depoisDoQr.quantidade) === 1.5, depoisDoQr);
+  const telaDoQr = await p.evaluate(() => document.body.innerText);
+  checar("a tela do QR se atualiza sozinha: restam 1,5 de 2 e a retirada no histórico",
+    /1,5/.test(telaDoQr) && /o que já saiu deste pote/i.test(telaDoQr),
+    telaDoQr.slice(0, 400));
+
+  await irPara(p, `${WEB}/etiquetas/painel?busca=${poteParcial.codigo}`);
+  const naLinhaDoPote = (rotulo) => p.evaluate((cod, r) => {
+    const tr = [...document.querySelectorAll("tr")].find((x) => x.innerText.includes(cod));
+    const b = tr && [...tr.querySelectorAll("button")].find((x) => x.textContent?.trim() === r);
+    b?.click();
+    return { achou: !!tr, clicou: !!b, texto: tr?.innerText ?? "" };
+  }, poteParcial.codigo, rotulo);
+  await p.waitForFunction((cod) => [...document.querySelectorAll("tr")]
+    .some((x) => x.innerText.includes(cod)), { timeout: 20000 }, poteParcial.codigo).catch(() => {});
+  const linhaParcial = await naLinhaDoPote("usei parte");
+  checar("o painel mostra o pote com o que resta e a ação usei parte",
+    linhaParcial.clicou && /1,5/.test(linhaParcial.texto), linhaParcial);
+  await p.waitForSelector(campoSaiu, { timeout: 10000 }).catch(() => {});
+  await clicarBotaoParcial("Quanto sobrou");
+  const campoSobrou = 'input[aria-label="quanto sobrou no pote"]';
+  await p.waitForSelector(campoSobrou, { timeout: 5000 }).catch(() => {});
+  await p.type(campoSobrou, "1");
+  await new Promise((r) => setTimeout(r, 200));
+  await clicarBotaoParcial("Registrar");
+  await p.waitForFunction(() => !document.querySelector('input[aria-label="quanto sobrou no pote"]'),
+    { timeout: 10000 }).catch(() => {});
+  const depoisDoPainel = await lerPoteParcial();
+  checar("informar quanto SOBROU (1) registra a saída de 0,5 e deixa 1 no pote",
+    Number(depoisDoPainel.quantidade) === 1 && (depoisDoPainel.usos ?? []).length === 2
+      && (depoisDoPainel.usos ?? []).some((u) => Number(u.quantidade) === 0.5 && Number(u.restante) === 1),
+    depoisDoPainel);
+  await new Promise((r) => setTimeout(r, 600));
+  const linhaDepois = await p.evaluate((cod) =>
+    [...document.querySelectorAll("tr")].find((x) => x.innerText.includes(cod))?.innerText ?? "",
+    poteParcial.codigo);
+  checar("e a linha do painel se atualiza sem F5", /\b1\b/.test(linhaDepois) && !/1,5/.test(linhaDepois),
+    linhaDepois);
+  await api("POST", `/etiquetas/${poteParcial.id}/usar`, {}, token);
   await api("DELETE", `/produtos/${prodVal.id}`, null, token);
 
   // 🔑 **Desvincular um código de fora, na linha dele** (06/10/2026, pedido do

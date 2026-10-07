@@ -44,7 +44,10 @@ export type Etiqueta = {
   conservacao: Conservacao;
   feito_em: string;
   vence_em: string;
+  /** O que RESTA no pote — diminui a cada uso parcial (migração 107). */
   quantidade: string | null;
+  /** Com quanto a etiqueta nasceu. Não muda. */
+  quantidade_inicial?: string | null;
   um: string | null;
   id_producao: number | null;
   id_local: number | null;
@@ -64,6 +67,17 @@ export type Etiqueta = {
   situacao: Situacao;
   alergenos?: string | null;
   pode_descartar?: boolean;
+  /** As retiradas parciais, da mais recente para a mais antiga (só na consulta por código). */
+  usos?: UsoDaEtiqueta[];
+};
+
+export type UsoDaEtiqueta = {
+  id: number;
+  quantidade: string;
+  restante: string;
+  feito_em: string;
+  observacao: string | null;
+  quem: string | null;
 };
 
 export type Sugestao = {
@@ -161,6 +175,10 @@ export const porCodigo = (codigo: string) =>
 
 export const usar = (id: number, observacao?: string) =>
   api.post<Etiqueta & { message: string }>(`/etiquetas/${id}/usar`, { observacao });
+
+/** "Usei uma parte": `quantidade` é o que SAIU; o pote continua ativo com o resto. */
+export const usarParte = (id: number, quantidade: number, observacao?: string) =>
+  api.post<Etiqueta & { message: string }>(`/etiquetas/${id}/usar-parte`, { quantidade, observacao });
 
 export const descartar = (id: number, corpo: {
   quantidade?: number | null; id_motivo_perda?: number | null; motivo?: string; lancar_perda: boolean;

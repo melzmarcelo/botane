@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 import auditoria
 from database import get_cursor
 from models.etiquetas import (BaixaDeEtiqueta, DescarteDeEtiqueta, EmitirEtiquetas,
-                              EtiquetaConfig, ValidadesDoProduto)
+                              EtiquetaConfig, UsoParcialDeEtiqueta, ValidadesDoProduto)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import etiquetas as servico
 
@@ -180,6 +180,27 @@ def usar(id_etiqueta: int, body: BaixaDeEtiqueta, ctx: Contexto = Depends(_IMPRI
         auditoria.registrar(cur, ctx.id_usuario, "etiqueta", id_etiqueta, "usar",
                             depois={"codigo": etq["codigo"]}, id_unidade=id_unidade)
         return etq | {"message": "Etiqueta baixada: usado."}
+
+
+@router.post("/{id_etiqueta}/usar-parte")
+def usar_parte(id_etiqueta: int, body: UsoParcialDeEtiqueta,
+               ctx: Contexto = Depends(_IMPRIMIR)) -> dict:
+    """Tira uma parte do pote: a etiqueta continua ativa com o que sobrou.
+
+    ⚠️ Mesma permissão do "usei tudo" (`etiquetas.imprimir`): quem está na bancada
+    com o pote na mão é quem registra o que tirou.
+    """
+    with get_cursor() as cur:
+        id_unidade = _loja_da_etiqueta(cur, ctx, id_etiqueta)
+        etq = servico.usar_parte(cur, id_etiqueta, id_unidade, ctx.id_usuario,
+                                 body.quantidade, body.observacao)
+        auditoria.registrar(cur, ctx.id_usuario, "etiqueta", id_etiqueta, "usar_parte",
+                            depois={"codigo": etq["codigo"], "saiu": body.quantidade,
+                                    "restante": float(etq["quantidade"] or 0)},
+                            id_unidade=id_unidade)
+        acabou = etq["status"] == "USADA"
+        return etq | {"message": ("Acabou: a etiqueta foi baixada como usada." if acabou
+                                  else "Uso registrado. O pote continua ativo com o que sobrou.")}
 
 
 @router.post("/{id_etiqueta}/descartar")
