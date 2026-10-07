@@ -24,8 +24,8 @@ import auditoria
 from database import get_cursor
 from paginacao import pagina
 from models.reservas import (
-    BloqueioCreate, ConfiguracaoReservas, DiaExcecao, MesaCreate, MesasEmLote, MesaUpdate,
-    MudarStatus, PlantaDoSalao, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
+    BloqueioCreate, ConfiguracaoReservas, ConjuntoCreate, ConjuntoUpdate, DiaExcecao,
+    MesaCreate, MesasEmLote, MesaUpdate, MudarStatus, PlantaDoSalao, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reserva_clientes as clientes
@@ -136,7 +136,9 @@ def obter_salao(ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> di
 
 
 @router.get("/salao/simular")
-def simular_grupo(pessoas: int = Query(ge=1, le=60),
+def simular_grupo(pessoas: int = Query(ge=1, le=99),
+                  dia_semana: int | None = Query(default=None, ge=1, le=7),
+                  site: bool = False,
                   ctx: Contexto = Depends(requer_permissao("reservas.ver"))) -> dict:
     """Onde um grupo deste tamanho sentaria, com o salão vazio.
 
@@ -145,7 +147,7 @@ def simular_grupo(pessoas: int = Query(ge=1, le=60),
     teste. Usa a mesma `alocar` da disponibilidade — ver o service.
     """
     with get_cursor() as cur:
-        return servico.onde_sentaria(cur, _unidade(cur, ctx), pessoas)
+        return servico.onde_sentaria(cur, _unidade(cur, ctx), pessoas, dia_semana, site)
 
 
 @router.post("/saloes", status_code=201)
@@ -167,7 +169,7 @@ def criar_salao(body: SalaoCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict
 @router.put("/saloes/{id_salao}")
 def atualizar_salao(id_salao: int, body: SalaoUpdate,
                     ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
-    """Muda nome, ordem ou liga/desliga o salão.
+    """Muda nome, ordem, os dias em que atende, o site — ou liga/desliga o salão.
 
     🔑 **Desligar é o jeito de tirar a Varanda do inverno** sem mexer em mesa por
     mesa, e sem perder o cadastro. As mesas dele saem da disponibilidade na
@@ -539,17 +541,10 @@ def criar_mesas_em_lote(body: MesasEmLote, ctx: Contexto = Depends(_CONFIGURAR))
 @router.put("/mesas/{id_mesa}")
 def atualizar_mesa(id_mesa: int, body: MesaUpdate,
                    ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
-    """Muda a mesa — e a junta, quando ela vier no corpo.
-
-    ⚠️ **`junta_com` só é tocada se veio no corpo** (`model_fields_set`): nulo
-    significa "desfaça a junta", e ausente significa "não falei dela". Sem essa
-    distinção, renomear a mesa 07 soltaria a 08 sem ninguém pedir.
-    """
+    """Muda a mesa. ⚠️ A junta NÃO passa por aqui desde a 109: é `/conjuntos`."""
     dados = body.model_dump(exclude_unset=True)
     if not dados:
         raise HTTPException(status_code=400, detail="Nada para alterar.")
-    mexe_na_junta = "junta_com" in body.model_fields_set
-    id_par = dados.pop("junta_com", None)
 
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
@@ -589,16 +584,55 @@ def atualizar_mesa(id_mesa: int, body: MesaUpdate,
             sets = ", ".join(f"{c} = %s" for c in dados)
             cur.execute(f"UPDATE mesas SET {sets} WHERE id = %s AND id_unidade = %s",
                         (*dados.values(), id_mesa, id_unidade))
-        if mexe_na_junta:
-            if id_par is not None:
-                _exige(cur, "mesas", id_par, id_unidade, "A mesa da junta não existe")
-                if id_par == id_mesa:
-                    raise HTTPException(status_code=422,
-                                        detail="Uma mesa não encosta nela mesma.")
-            servico.casar_junta(cur, id_unidade, id_mesa, id_par)
-        auditoria.registrar(cur, ctx.id_usuario, "mesa", id_mesa, "atualizar",
-                            depois=dados | ({"junta_com": id_par} if mexe_na_junta else {}))
+        auditoria.registrar(cur, ctx.id_usuario, "mesa", id_mesa, "atualizar", depois=dados)
     return {"message": "Mesa atualizada"}
+
+
+@router.post("/conjuntos", status_code=201)
+def criar_conjunto(body: ConjuntoCreate, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """Junta de 2 a 4 mesas num conjunto, com capacidade própria.
+
+    🔑 **A junta deixou de ser par** (migração 109, `docs/salao-estudo.md`): três
+    mesas de 4 em fila viram uma de 12, e a capacidade é a que a casa informa —
+    não necessariamente a soma. Uma mesa pode estar em mais de um conjunto.
+    """
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = servico.criar_conjunto(cur, id_unidade, body.mesas, body.capacidade)
+        auditoria.registrar(cur, ctx.id_usuario, "mesa_conjunto", r["id"], "criar", depois=r)
+    return {"id": r["id"], "capacidade": r["capacidade"],
+            "message": f"Conjunto criado — acomoda {r['capacidade']}"}
+
+
+@router.put("/conjuntos/{id_conjunto}")
+def atualizar_conjunto(id_conjunto: int, body: ConjuntoUpdate,
+                       ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """Muda quantas pessoas o conjunto acomoda. As mesas não mudam: outro grupo
+    de mesas é outro conjunto."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cur.execute(
+            "UPDATE mesa_conjuntos SET capacidade = %s WHERE id = %s AND id_unidade = %s",
+            (body.capacidade, id_conjunto, id_unidade))
+        if not cur.rowcount:
+            raise HTTPException(status_code=404, detail="Conjunto não encontrado")
+        auditoria.registrar(cur, ctx.id_usuario, "mesa_conjunto", id_conjunto, "atualizar",
+                            depois={"capacidade": body.capacidade})
+    return {"message": f"Conjunto atualizado — acomoda {body.capacidade}"}
+
+
+@router.delete("/conjuntos/{id_conjunto}")
+def excluir_conjunto(id_conjunto: int, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """Desfaz o conjunto. As mesas ficam; reserva já marcada nele não muda (ela
+    aponta para as MESAS, não para o conjunto)."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cur.execute("DELETE FROM mesa_conjuntos WHERE id = %s AND id_unidade = %s",
+                    (id_conjunto, id_unidade))
+        if not cur.rowcount:
+            raise HTTPException(status_code=404, detail="Conjunto não encontrado")
+        auditoria.registrar(cur, ctx.id_usuario, "mesa_conjunto", id_conjunto, "excluir")
+    return {"message": "Conjunto desfeito"}
 
 
 @router.put("/salao/planta")
@@ -661,10 +695,14 @@ def excluir_mesa(id_mesa: int, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
                         "sentaram — desative a mesa: ela sai da disponibilidade e o "
                         "histórico fica."),
             )
-        # A junta é simétrica: soltar a vizinha ANTES evita deixá-la apontando
-        # para o vazio (o `ON DELETE SET NULL` faria isso, mas depois — e o
-        # `salao()` já teria devolvido a resposta velha nesta transação).
-        cur.execute("UPDATE mesas SET junta_com = NULL WHERE junta_com = %s", (id_mesa,))
+        # ⚠️ **O conjunto que perde uma mesa deixa de existir**: "05 + 06 + 07
+        # acomoda 12" sem a 07 não é um conjunto de 8 — é um número que ninguém
+        # informou. O `ON DELETE CASCADE` tiraria só o item e deixaria o resto
+        # valendo 12 com duas mesas.
+        cur.execute(
+            """DELETE FROM mesa_conjuntos WHERE id IN
+                 (SELECT id_conjunto FROM mesa_conjunto_itens WHERE id_mesa = %s)""",
+            (id_mesa,))
         cur.execute("DELETE FROM mesas WHERE id = %s AND id_unidade = %s",
                     (id_mesa, id_unidade))
         auditoria.registrar(cur, ctx.id_usuario, "mesa", id_mesa, "excluir")

@@ -19,6 +19,8 @@ o `Date.getDay()` do JavaScript. Duas convenções de dia da semana no mesmo
 sistema não dão erro em lugar nenhum: só marcam no dia errado.
 """
 
+from datetime import date
+
 from fastapi import HTTPException
 
 from database import get_cursor  # noqa: F401  (re-exportado para quem importa daqui)
@@ -114,26 +116,65 @@ def _hm(valor) -> str | None:
 # ---------------------------------------------------------------- o salão
 
 
-def _mesas_vivas(cur, id_unidade: int) -> list[dict]:
-    """As mesas que contam: ativas, em salão ativo.
+def _mesas_vivas(cur, id_unidade: int, dia: date | None = None,
+                 origem: str | None = None) -> list[dict]:
+    """As mesas que contam: ativas, em salão ativo — e que atende NESTE dia.
 
     ⚠️ **As duas condições, e não só a da mesa.** Desligar o salão é o jeito de
     tirar a Varanda do inverno sem mexer em mesa por mesa — se a consulta
     olhasse só `mesas.ativo`, o salão desligado continuaria recebendo reserva e
     ninguém entenderia por quê.
+
+    🔑 **`dia` e `origem` (migração 109).** Com `dia`, só entram os salões que
+    atendem naquele dia da semana — o mezanino de sexta a domingo deixa de
+    depender de alguém ligar na sexta. Com `origem="SITE"`, saem os salões que a
+    recepção usa mas o site não oferece.
+    ⚠️ **Sem `dia`, a pergunta é sobre o CADASTRO** ("quantas mesas a casa
+    tem"), e todos os salões ativos contam. Quem pergunta sobre um dia —
+    disponibilidade, marcar, remarcar — passa o dia, sempre.
     """
     cur.execute(
-        """SELECT m.id, m.nome, m.lugares, m.capacidade_max, m.junta_com
+        """SELECT m.id, m.nome, m.lugares, m.capacidade_max
              FROM mesas m JOIN saloes s ON s.id = m.id_salao
-            WHERE m.id_unidade = %s AND m.ativo AND s.ativo
+            WHERE m.id_unidade = %(u)s AND m.ativo AND s.ativo
+              AND (%(dow)s::int IS NULL OR %(dow)s::int = ANY(s.dias_semana))
+              AND (NOT %(site)s OR s.aceita_site)
             ORDER BY s.ordem, s.nome, m.nome""",
-        (id_unidade,),
+        {"u": id_unidade, "dow": dia.isoweekday() if dia else None,
+         "site": origem == "SITE"},
     )
     return [dict(r) for r in cur.fetchall()]
 
 
-def maior_grupo(cur, id_unidade: int) -> int:
-    """Quantas pessoas a maior mesa — ou a maior junta — acomoda.
+def conjuntos_vivos(cur, id_unidade: int, mesas: list[dict]) -> list[dict]:
+    """Os conjuntos que podem ser usados com ESTAS mesas: todas as dele vivas.
+
+    🔑 **O conjunto vale inteiro ou não vale.** Se uma das mesas está desligada,
+    num salão que não abre hoje ou fora do site, o conjunto não existe para esta
+    pergunta — sentar oito em "05 + 06" com a 06 fora seria sentar oito na 05.
+    Por isso recebe as mesas JÁ filtradas, em vez de refazer o filtro: as duas
+    listas não têm como divergir.
+    """
+    vivas = {m["id"] for m in mesas}
+    if not vivas:
+        return []
+    cur.execute(
+        """SELECT c.id, c.capacidade, array_agg(i.id_mesa ORDER BY i.id_mesa) AS mesas
+             FROM mesa_conjuntos c JOIN mesa_conjunto_itens i ON i.id_conjunto = c.id
+            WHERE c.id_unidade = %s
+            GROUP BY c.id, c.capacidade
+           -- ⚠️ Conjunto que ficou com UMA mesa (apagada por fora da rota) não
+           -- vale: seria uma mesa sozinha respondendo pela capacidade do grupo.
+           HAVING count(*) >= 2
+            ORDER BY c.id""",
+        (id_unidade,),
+    )
+    return [dict(r) for r in cur.fetchall() if set(r["mesas"]) <= vivas]
+
+
+def maior_grupo(cur, id_unidade: int, dia: date | None = None,
+                origem: str | None = None) -> int:
+    """Quantas pessoas a maior mesa — ou o maior conjunto — acomoda.
 
     🔑 **É o número que diz se o teto do site cabe no salão.** Se
     `reserva_config.teto_online` passar dele, quem pedir mais não vai achar
@@ -142,33 +183,88 @@ def maior_grupo(cur, id_unidade: int) -> int:
     do protótipo, e por isso o servidor devolve este número às duas telas que
     mexem nos termos do problema.
 
-    ⚠️ Usa `capacidade_max`, não `lugares`: é o que a alocação vai usar.
+    ⚠️ Usa `capacidade_max`, não `lugares`: é o que a alocação vai usar. Do
+    conjunto, a capacidade que a casa INFORMOU — não a soma das mesas.
     """
-    vivas = _mesas_vivas(cur, id_unidade)
-    por_id = {m["id"]: m for m in vivas}
-    maior = 0
-    for m in vivas:
-        maior = max(maior, m["capacidade_max"])
-        par = por_id.get(m["junta_com"])
-        if par:
-            maior = max(maior, m["capacidade_max"] + par["capacidade_max"])
-    return maior
+    vivas = _mesas_vivas(cur, id_unidade, dia, origem)
+    return max([m["capacidade_max"] for m in vivas]
+               + [c["capacidade"] for c in conjuntos_vivos(cur, id_unidade, vivas)],
+               default=0)
+
+
+def conjuntos(cur, id_unidade: int) -> list[dict]:
+    """Todos os conjuntos da loja, com as mesas de cada um — para a tela."""
+    cur.execute(
+        """SELECT c.id, c.capacidade, m.id AS id_mesa, m.nome, m.id_salao, m.capacidade_max
+             FROM mesa_conjuntos c
+             JOIN mesa_conjunto_itens i ON i.id_conjunto = c.id
+             JOIN mesas m ON m.id = i.id_mesa
+            WHERE c.id_unidade = %s ORDER BY c.id, m.nome""",
+        (id_unidade,),
+    )
+    por_id: dict[int, dict] = {}
+    for r in cur.fetchall():
+        c = por_id.setdefault(r["id"], {"id": r["id"], "capacidade": r["capacidade"],
+                                        "mesas": [], "soma_maximos": 0})
+        c["mesas"].append({"id": r["id_mesa"], "nome": r["nome"], "id_salao": r["id_salao"]})
+        # A soma viaja junto: a tela mostra "acomoda 8 (as mesas somam 10)".
+        c["soma_maximos"] += r["capacidade_max"]
+    return list(por_id.values())
+
+
+def criar_conjunto(cur, id_unidade: int, ids_mesas: list[int],
+                   capacidade: int | None) -> dict:
+    """Junta de 2 a 4 mesas num conjunto, com a capacidade que a casa informar.
+
+    ⚠️ **Sem capacidade, vale a soma dos máximos** — o que a junta em par sempre
+    fez. A casa baixa quando sabe que na prática cabem menos.
+    ⚠️ **O mesmo grupo de mesas não vira dois conjuntos** (409): com capacidades
+    diferentes, qual das duas vale dependeria da ordem em que a consulta os lê.
+    """
+    ids = sorted(set(ids_mesas))
+    cur.execute(
+        "SELECT id, capacidade_max FROM mesas WHERE id_unidade = %s AND id = ANY(%s)",
+        (id_unidade, ids),
+    )
+    achadas = cur.fetchall()
+    if len(achadas) != len(ids):
+        raise HTTPException(status_code=404, detail="Mesa não encontrada")
+    cur.execute(
+        """SELECT c.id FROM mesa_conjuntos c JOIN mesa_conjunto_itens i ON i.id_conjunto = c.id
+            WHERE c.id_unidade = %s
+            GROUP BY c.id HAVING array_agg(i.id_mesa ORDER BY i.id_mesa) = %s::int[]""",
+        (id_unidade, ids),
+    )
+    if cur.fetchone():
+        raise HTTPException(
+            status_code=409,
+            detail="Já existe um conjunto com exatamente estas mesas — ajuste a capacidade dele.")
+    if capacidade is None:
+        capacidade = min(sum(m["capacidade_max"] for m in achadas), 99)
+    cur.execute(
+        "INSERT INTO mesa_conjuntos (id_unidade, capacidade) VALUES (%s, %s) RETURNING id",
+        (id_unidade, capacidade),
+    )
+    id_conjunto = cur.fetchone()["id"]
+    for id_mesa in ids:
+        cur.execute("INSERT INTO mesa_conjunto_itens (id_conjunto, id_mesa) VALUES (%s, %s)",
+                    (id_conjunto, id_mesa))
+    return {"id": id_conjunto, "capacidade": capacidade, "mesas": ids}
 
 
 def salao(cur, id_unidade: int) -> dict:
     """Os salões desta loja, com as mesas de cada um e os totais."""
     cur.execute(
-        "SELECT id, nome, ativo, ordem FROM saloes WHERE id_unidade = %s ORDER BY ordem, nome",
+        """SELECT id, nome, ativo, ordem, dias_semana, aceita_site
+             FROM saloes WHERE id_unidade = %s ORDER BY ordem, nome""",
         (id_unidade,),
     )
     saloes = [dict(r) for r in cur.fetchall()]
 
     cur.execute(
         """SELECT m.id, m.id_salao, m.nome, m.lugares, m.capacidade_max, m.ativo,
-                  m.caracteristicas, m.formato, m.pos_x, m.pos_y,
-                  m.junta_com, j.nome AS junta_com_nome
-             FROM mesas m LEFT JOIN mesas j ON j.id = m.junta_com
-            WHERE m.id_unidade = %s ORDER BY m.nome""",
+                  m.caracteristicas, m.formato, m.pos_x, m.pos_y
+             FROM mesas m WHERE m.id_unidade = %s ORDER BY m.nome""",
         (id_unidade,),
     )
     mesas = [dict(r) for r in cur.fetchall()]
@@ -183,10 +279,15 @@ def salao(cur, id_unidade: int) -> dict:
     return {
         "saloes": saloes,
         "mesas": mesas,
+        "conjuntos": conjuntos(cur, id_unidade),
         "mesas_ativas": len(vivas),
         "lugares": sum(m["lugares"] for m in vivas),
         "capacidade_max": sum(m["capacidade_max"] for m in vivas),
         "maior_grupo": maior_grupo(cur, id_unidade),
+        # 🔑 **O que o SITE consegue sentar** (109): salão fora do site não conta
+        # para o aviso do teto — "o site aceita 12 e aqui cabem 6" é sobre as
+        # mesas que o site enxerga, não sobre as da casa toda.
+        "maior_grupo_site": maior_grupo(cur, id_unidade, origem="SITE"),
         # 🔑 **O teto do site viaja junto** (06/10/2026): é a tela do SALÃO que
         # precisa dizer "o site aceita 12 e aqui cabem 6" — quem mexe nas mesas é
         # quem cria o problema, e o aviso só existia na Configuração.
@@ -201,13 +302,14 @@ def _teto_online(cur, id_unidade: int) -> int | None:
     return linha["teto_online"] if linha else None
 
 
-def onde_sentaria(cur, id_unidade: int, pessoas: int) -> dict:
+def onde_sentaria(cur, id_unidade: int, pessoas: int, dia_semana: int | None = None,
+                  site: bool = False) -> dict:
     """Onde um grupo de `pessoas` sentaria com o salão VAZIO — a conferência do cadastro.
 
     🔑 **Pedido do dono (06/10/2026)**, do estudo `docs/salao-estudo.md`: não
     havia como perguntar "onde um grupo de 7 sentaria?" sem criar uma reserva de
     teste. A resposta diz se o cadastro acomoda o grupo e COMO (mesa inteira ou
-    junta), que é o que se quer ver antes de abrir a casa.
+    conjunto), que é o que se quer ver antes de abrir a casa.
 
     ⚠️ **A regra é a `alocar` da agenda, chamada com nenhuma mesa presa** — e não
     uma segunda conta escrita aqui. Duas versões divergiriam na primeira mudança,
@@ -215,13 +317,18 @@ def onde_sentaria(cur, id_unidade: int, pessoas: int) -> dict:
 
     ⚠️ **Salão vazio, de propósito.** Isto confere o CADASTRO, não o dia: se há
     mesa às 20h de sábado é pergunta para a disponibilidade, que sabe das
-    reservas.
+    reservas. `dia_semana` e `site` (109) escolhem QUAIS salões entram — "e numa
+    terça?", "e pelo site?" —, pelo mesmo filtro da disponibilidade.
     """
     # Importado aqui: `reservas_agenda` já importa este módulo.
     from services import reservas_agenda
 
-    vivas = _mesas_vivas(cur, id_unidade)
-    escolhidas = reservas_agenda.alocar(vivas, set(), pessoas)
+    # Um dia qualquer com aquele dia da semana: o filtro só olha o `isoweekday`.
+    dia = date(2024, 1, dia_semana) if dia_semana else None  # 01/01/2024 foi segunda
+    origem = "SITE" if site else None
+    vivas = _mesas_vivas(cur, id_unidade, dia, origem)
+    grupos = conjuntos_vivos(cur, id_unidade, vivas)
+    escolhidas = reservas_agenda.alocar(vivas, set(), pessoas, grupos)
     por_id = {m["id"]: m for m in vivas}
     cur.execute(
         """SELECT m.id, s.nome AS salao FROM mesas m JOIN saloes s ON s.id = m.id_salao
@@ -231,49 +338,22 @@ def onde_sentaria(cur, id_unidade: int, pessoas: int) -> dict:
     salao_de = {r["id"]: r["salao"] for r in cur.fetchall()}
     mesas = [{"id": i, "nome": por_id[i]["nome"], "salao": salao_de.get(i),
               "capacidade_max": por_id[i]["capacidade_max"]} for i in (escolhidas or [])]
+    if escolhidas and len(escolhidas) > 1:
+        # A capacidade é a do CONJUNTO escolhido, não a soma das mesas dele.
+        capacidade = min(c["capacidade"] for c in grupos
+                         if c["mesas"] == sorted(escolhidas) and c["capacidade"] >= pessoas)
+    else:
+        capacidade = sum(m["capacidade_max"] for m in mesas)
     return {
         "pessoas": pessoas,
         "cabe": escolhidas is not None,
-        # "mesa" quando uma só serve, "junta" quando precisou encostar duas.
+        # "mesa" quando uma só serve, "junta" quando precisou de um conjunto.
         "como": None if escolhidas is None else ("mesa" if len(escolhidas) == 1 else "junta"),
         "mesas": mesas,
-        "capacidade": sum(m["capacidade_max"] for m in mesas),
-        "maior_grupo": maior_grupo(cur, id_unidade),
+        "capacidade": capacidade,
+        "maior_grupo": maior_grupo(cur, id_unidade, dia, origem),
         "teto_online": _teto_online(cur, id_unidade),
     }
-
-
-def casar_junta(cur, id_unidade: int, id_mesa: int, id_par: int | None) -> None:
-    """Grava a junta **nos dois sentidos**, desfazendo a anterior.
-
-    🔑 **Juntar mesa é relação, não atributo.** Gravar só de um lado deixaria a
-    alocação achando um par que a outra mesa não conhece: a 07 diria "encosto na
-    08" e a 08 diria "não encosto em ninguém", e qual das duas vale dependeria de
-    por onde a consulta entrou.
-
-    ⚠️ **Desfaz a junta ANTERIOR dos dois lados antes de criar a nova**, senão
-    trocar o par da 07 da 08 para a 09 deixaria a 08 apontando para a 07 e a 07
-    para a 09 — um triângulo que nenhuma das três descreve.
-    """
-    cur.execute(
-        "SELECT junta_com FROM mesas WHERE id = %s AND id_unidade = %s",
-        (id_mesa, id_unidade),
-    )
-    atual = cur.fetchone()
-    if atual is None:
-        raise HTTPException(status_code=404, detail="Mesa não encontrada")
-
-    # Solta quem estava preso: o par antigo desta mesa, e o par antigo do novo.
-    for solta in (atual["junta_com"], id_par):
-        if solta:
-            cur.execute(
-                "UPDATE mesas SET junta_com = NULL WHERE junta_com = %s OR id = %s",
-                (solta, solta),
-            )
-    cur.execute("UPDATE mesas SET junta_com = NULL WHERE junta_com = %s", (id_mesa,))
-    cur.execute("UPDATE mesas SET junta_com = %s WHERE id = %s", (id_par, id_mesa))
-    if id_par:
-        cur.execute("UPDATE mesas SET junta_com = %s WHERE id = %s", (id_mesa, id_par))
 
 
 def obter(cur, id_unidade: int) -> dict:

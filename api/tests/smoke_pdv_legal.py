@@ -1555,6 +1555,13 @@ chamar("DELETE", f"/produtos/{id_inat}", token=token)
 
 
 print("\n9. limpeza")
+# ⚠️ **Os dois cadastros da checagem do nome identico saem de cena** (07/10/2026).
+# Ficavam ATIVOS a cada rodada: 117 "PAO DE QUEIJO" na base de trabalho, e a lista
+# de duplicados do conector estourava o limite de tamanho por causa deles — a
+# suite `smoke_conector_claude` quebrava sem ter nada a ver com isto.
+for _sobra in (parecido, identico):
+    if _sobra:
+        chamar("DELETE", f"/produtos/{_sobra}", token=token)
 devolver_simulado()
 st, c = chamar("GET", "/pdv/config", token=token)
 checar("a integração volta para simulado", c.get("modo") == "simulado", c.get("modo"))

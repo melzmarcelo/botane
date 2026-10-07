@@ -297,6 +297,57 @@ confere que "onde o grupo senta" responde igual antes e depois).
   não respondeu se quer ver na agenda as mesas ocupadas.
 - Cobertura: bloco `9c` do `smoke_reservas_salao.py` e o bloco da planta no `verificar.mjs`.
 
+## Conjuntos de mesas e os dias do salão — terceira entrega (migração 109, 07/10/2026)
+
+🔑 **As duas mudanças que mexem na regra que responde "tem mesa?"**, com as duas decisões do
+dono (07/10/2026, respondidas com *"segue"* às propostas): **(1)** o conjunto vale pela
+capacidade que a casa INFORMA, mesmo abaixo da soma dos máximos; **(2)** os dias do salão são
+por dia da semana, sem horário por ora.
+
+- 🔑 **A junta virou CONJUNTO**: `mesa_conjuntos` (capacidade própria) + `mesa_conjunto_itens`.
+  De 2 a 4 mesas; a mesma mesa pode estar em mais de um (05+06 e 05+06+07); pode atravessar
+  salões. Rotas `POST/PUT/DELETE /reservas/conjuntos`. ⚠️ O PUT muda só a CAPACIDADE: outro
+  grupo de mesas é outro conjunto.
+  - ⚠️ **`mesas.junta_com` foi descontinuada**: a 109 converte cada par num conjunto de duas
+    (capacidade = soma, como era) e zera a coluna — o que a faz idempotente pelo próprio dado.
+    A coluna fica, vazia; nenhum código a lê. `casar_junta` e o campo no `MesaUpdate` saíram
+    (um PUT só com `junta_com` responde 400, "nada para alterar").
+  - ⚠️ **O mesmo grupo de mesas não vira dois conjuntos** (409): com capacidades diferentes,
+    qual valeria dependeria da ordem da consulta.
+  - ⚠️ **Apagar a mesa apaga o conjunto INTEIRO**: "05+06+07 acomoda 12" sem a 07 não é um
+    conjunto de 8, é um número que ninguém informou. E conjunto que ficou com UMA mesa (apagada
+    por SQL cru, como fazem as suítes) não vale — `HAVING count(*) >= 2` em `conjuntos_vivos`.
+- 🔑 **`alocar(mesas, presas, pessoas, conjuntos)`**: mesa sozinha primeiro (a menor que
+  serve); depois o MENOR conjunto que serve, com todas as mesas livres — no empate, o que
+  prende menos mesas. ⚠️ **O conjunto vale inteiro ou não vale**: `conjuntos_vivos` recebe as
+  mesas JÁ filtradas e descarta o que tem mesa desligada, em salão fechado naquele dia ou fora
+  do site. As duas listas não têm como divergir.
+- 🔑 **`saloes.dias_semana`** (ISO, nunca vazio — salão sem dia é salão DESLIGADO, e para isso
+  existe o `ativo`) e **`saloes.aceita_site`**. Quem lê é `_mesas_vivas(cur, id, dia, origem)`:
+  - **com `dia`** (disponibilidade, marcar, remarcar, lugares da agenda) só entram os salões
+    daquele dia da semana; **sem `dia`** a pergunta é sobre o CADASTRO e todos os ativos contam;
+  - **com `origem="SITE"`** saem os salões fora do site. `routers/publico.py` passa a origem
+    na disponibilidade; `criar` usa a do corpo. ⚠️ **Remarcar é sempre do balcão**: vale o dia
+    novo e todos os salões dele, inclusive os fora do site.
+  - ⚠️ A lista vazia tem DOIS motivos, e a mensagem separa: "Nenhuma mesa ativa cadastrada" ×
+    "Nenhum salão atende neste dia da semana".
+- 🔑 **`maior_grupo_site`** em `GET /reservas/salao`: o aviso do teto compara com o que o SITE
+  consegue sentar. `simular` ganhou `dia_semana` e `site` ("e numa terça?", "e pelo site?").
+- ⚠️ **O texto do salão para o cliente, previsto no estudo, ficou FORA**: o site não deixa
+  escolher salão, e campo que ninguém lê é cadastro que envelhece.
+- **Tela**: `conjuntos.tsx` dentro do cartão do salão — "+ conjunto" liga o modo de marcar, e
+  aí clicar numa mesa da PLANTA a marca em vez de abrir (e ela não arrasta nesse modo); os
+  mesmos botões existem na seção, para a lista, o celular e as mesas de outro salão. A
+  capacidade de um conjunto já criado tem o próprio "Salvar"; desfazer pede confirmação.
+  Nome, dias e site do salão têm um "Salvar salão" só ("Atende" continua imediato). O
+  "junta com" saiu do painel da mesa, que agora lista os conjuntos dela. `Passo` foi para
+  `passo.tsx`.
+- Cobertura: `smoke_reservas_salao` (3, 4, 5, 9d), `smoke_reservas_disponibilidade` (13d — a
+  regra num dia real: capacidade informada, menor conjunto, dias, remarcar, site e a página
+  pública) e o bloco de conjuntos no `verificar.mjs`.
+- **Ainda fora** (ver o estudo): horário por salão, o cliente escolher o salão no site, e a
+  planta na operação (mesas ocupadas às 20h).
+
 ### Três armadilhas de TESTE que esta fatia pagou
 
 Nenhuma era defeito de produto, e as três são da mesma família — **o teste afirmando ter

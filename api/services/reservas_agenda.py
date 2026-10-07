@@ -7,13 +7,14 @@ serviu de especificação executável para este arquivo.
 
 A regra, escrita:
 
-1. As mesas candidatas são as **ativas, de salões ativos**.
+1. As mesas candidatas são as **ativas, de salões ativos que atendem naquele dia
+   da semana** — e, para o site, só os salões que aceitam reserva pelo site.
 2. Uma mesa está **presa** no horário `H` se existe reserva `R` viva cujo
    intervalo `[R.hora, R.hora + permanência(R.hora) + folga)` cruza
    `[H, H + permanência(H) + folga)`.
 3. **Cabe** o grupo de `P` pessoas se houver mesa livre com `capacidade_max >= P`
-   — **a menor que serve** — ou um par `junta_com` com as duas livres e a soma
-   dos máximos `>= P`.
+   — **a menor que serve** — ou um CONJUNTO (2 a 4 mesas, migração 109) com
+   todas livres e a capacidade informada pela casa `>= P`.
 
 ⚠️ **"Esgotado" depende do TAMANHO DO GRUPO.** No mesmo sábado às 12h pode não
 haver mesa para 6 e haver para 2. Por isso a lista de horários só se calcula
@@ -286,8 +287,14 @@ def _presas(reservas: list[dict], faixas: list[dict], inicio: int, folga: int) -
     return presas
 
 
-def alocar(mesas: list[dict], presas: set[int], pessoas: int) -> list[int] | None:
+def alocar(mesas: list[dict], presas: set[int], pessoas: int,
+           conjuntos: list[dict] | tuple = ()) -> list[int] | None:
     """A alocação que atende o grupo, ou None. **A menor mesa que serve primeiro.**
+
+    🔑 **Conjunto é o ÚLTIMO recurso, e também o menor que serve** (109). Juntar
+    mesas é trabalho no salão e tira duas ou três de circulação de uma vez; só
+    se faz quando nenhuma sozinha resolve. `conjuntos` vem de
+    `cadastro.conjuntos_vivos`, já sem os que têm mesa fora de circulação.
 
     🔑 **A menor, e não a primeira que couber.** Pôr um casal na mesa de oito às
     12h é o que faz o grupo de oito não caber às 12h30 — e a recusa apareceria
@@ -302,24 +309,25 @@ def alocar(mesas: list[dict], presas: set[int], pessoas: int) -> list[int] | Non
     if servem:
         return [servem[0]["id"]]
 
-    # A junta: duas mesas vizinhas, as duas livres.
-    por_id = {m["id"]: m for m in livres}
-    pares = []
-    for m in livres:
-        par = por_id.get(m["junta_com"])
-        if par and m["capacidade_max"] + par["capacidade_max"] >= pessoas:
-            pares.append((m["capacidade_max"] + par["capacidade_max"],
-                          sorted([m["id"], par["id"]])))
-    if pares:
-        # Também a menor junta que serve, pela mesma razão de cima.
-        pares.sort(key=lambda x: (x[0], x[1]))
-        return pares[0][1]
+    # O conjunto: todas as mesas dele livres, e a capacidade que a casa INFORMOU
+    # (não a soma) cobrindo o grupo.
+    ids_livres = {m["id"] for m in livres}
+    cabem = [c for c in conjuntos
+             if c["capacidade"] >= pessoas and set(c["mesas"]) <= ids_livres]
+    if cabem:
+        # O menor que serve, pela mesma razão de cima; no empate, o que prende
+        # MENOS mesas — três mesas para o que duas resolvem é desperdício.
+        cabem.sort(key=lambda c: (c["capacidade"], len(c["mesas"]), sorted(c["mesas"])))
+        return sorted(cabem[0]["mesas"])
     return None
 
 
 def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
-                    ignorar: int | None = None) -> dict:
+                    ignorar: int | None = None, origem: str | None = None) -> dict:
     """Os horários que aceitam um grupo de `pessoas` neste dia.
+
+    `origem="SITE"` é a pergunta do site do cliente: só entram os salões que
+    aceitam reserva pelo site (109). O balcão pergunta sem origem e vê todos.
 
     `ignorar` é a reserva que está sendo REMARCADA: ela não pode disputar mesa
     consigo mesma, senão remarcar das 12h para as 12h30 esbarraria na própria
@@ -348,10 +356,17 @@ def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
         return {"data": dia.isoformat(), "pessoas": pessoas, "horarios": [],
                 "motivo": "A casa não atende neste dia da semana."}
 
-    mesas = cadastro._mesas_vivas(cur, id_unidade)
+    mesas = cadastro._mesas_vivas(cur, id_unidade, dia, origem)
     if not mesas:
-        return {"data": dia.isoformat(), "pessoas": pessoas, "horarios": [],
-                "motivo": "Nenhuma mesa ativa cadastrada."}
+        # ⚠️ Dois motivos diferentes para a mesma lista vazia: não há mesa
+        # NENHUMA, ou há e nenhum salão atende hoje (ou pelo site). O segundo se
+        # resolve nos dias do salão, e dizer "nenhuma mesa" mandaria a pessoa
+        # procurar o problema no lugar errado.
+        motivo = ("Nenhum salão atende neste dia da semana."
+                  if cadastro._mesas_vivas(cur, id_unidade)
+                  else "Nenhuma mesa ativa cadastrada.")
+        return {"data": dia.isoformat(), "pessoas": pessoas, "horarios": [], "motivo": motivo}
+    conjuntos = cadastro.conjuntos_vivos(cur, id_unidade, mesas)
 
     faixas = _faixas(cur, id_unidade)
     reservas = _reservas_do_dia(cur, id_unidade, dia, ignorar)
@@ -363,7 +378,7 @@ def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
     ultimo = _min(janela["ultima_reserva"])
     while minuto <= ultimo:
         presas = _presas(reservas, faixas, minuto, folga)
-        onde = alocar(mesas, presas, pessoas)
+        onde = alocar(mesas, presas, pessoas, conjuntos)
         horarios.append({
             "hora": _hm(_hora(minuto)),
             "livre": onde is not None,
@@ -385,7 +400,7 @@ def disponibilidade(cur, id_unidade: int, dia: date, pessoas: int,
         # ("Feriado — abrimos em horário de sábado").
         "aviso": janela["motivo"] if janela["especial"] else None,
         "teto_online": int(cfg["teto_online"]),
-        "maior_grupo": cadastro.maior_grupo(cur, id_unidade),
+        "maior_grupo": cadastro.maior_grupo(cur, id_unidade, dia, origem),
         "horarios": horarios,
         "motivo": None if any(h["livre"] for h in horarios) else
                   f"Não há mesa para {pessoas} pessoa(s) neste dia.",
@@ -480,11 +495,15 @@ def criar(cur, id_unidade: int, corpo, id_usuario: int | None) -> dict:
                 detail=f"A agenda vai até {cfg['antecedencia_max_dias']} dias à frente.",
             )
 
-    mesas = cadastro._mesas_vivas(cur, id_unidade)
+    # 🔑 O dia e a origem escolhem os salões (109): o mezanino que só abre no fim
+    # de semana não recebe a reserva de terça, e o salão fora do site não recebe
+    # a que veio do site — a MESMA lista que a disponibilidade mostrou.
+    mesas = cadastro._mesas_vivas(cur, id_unidade, corpo.data, corpo.origem)
     faixas = _faixas(cur, id_unidade)
     reservas = _reservas_do_dia(cur, id_unidade, corpo.data)
     presas = _presas(reservas, faixas, _min(corpo.hora), int(cfg["folga_min"]))
-    onde = alocar(mesas, presas, corpo.pessoas)
+    onde = alocar(mesas, presas, corpo.pessoas,
+                  cadastro.conjuntos_vivos(cur, id_unidade, mesas))
     if onde is None:
         raise HTTPException(
             status_code=409,
@@ -584,13 +603,16 @@ def remarcar(cur, id_unidade: int, id_reserva: int, corpo) -> dict:
                     f"{_hm(janela['ultima_reserva'])}."),
         )
 
-    mesas = cadastro._mesas_vivas(cur, id_unidade)
+    # ⚠️ Remarcar é sempre do BALCÃO: vale o dia novo, e todos os salões que
+    # atendem nele — inclusive os que o site não oferece.
+    mesas = cadastro._mesas_vivas(cur, id_unidade, nova_data)
     faixas = _faixas(cur, id_unidade)
     # 🔑 `ignorar=id_reserva`: ela sai da conta de quem ocupa mesa, senão
     # disputaria com a versão antiga de si mesma.
     reservas = _reservas_do_dia(cur, id_unidade, nova_data, ignorar=id_reserva)
     presas = _presas(reservas, faixas, _min(nova_hora), int(cfg["folga_min"]))
-    onde = alocar(mesas, presas, novas_pessoas)
+    onde = alocar(mesas, presas, novas_pessoas,
+                  cadastro.conjuntos_vivos(cur, id_unidade, mesas))
     if onde is None:
         raise HTTPException(
             status_code=409,
@@ -671,7 +693,8 @@ def agenda(cur, id_unidade: int, dia: date) -> dict:
         "ativas": len(vivas),
         "aberta": janela is not None,
         "bloqueio": bloqueio_do_dia(cur, id_unidade, dia),
-        "lugares": sum(m["lugares"] for m in cadastro._mesas_vivas(cur, id_unidade)),
+        # Os lugares DESTE dia: salão que não abre hoje não entra na ocupação.
+        "lugares": sum(m["lugares"] for m in cadastro._mesas_vivas(cur, id_unidade, dia)),
         # 🔑 **A janela do dia, para a linha do tempo** (24/09/2026): a visão
         # macro desenha a ocupação de `abre` a `fecha`, de passo em passo. Nulos
         # quando a casa não atende no dia — aí a linha do tempo não se desenha.

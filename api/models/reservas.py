@@ -154,6 +154,19 @@ class SalaoUpdate(BaseModel):
     nome: str | None = Field(default=None, min_length=1, max_length=60)
     ativo: bool | None = None
     ordem: int | None = Field(default=None, ge=0, le=999)
+    # 🔑 Os dias em que o salão atende (ISO, 1 = segunda) e se o site o oferece
+    # (migração 109). ⚠️ Nunca vazio: salão que não abre dia nenhum é salão
+    # DESLIGADO, e para isso existe o `ativo`.
+    dias_semana: list[int] | None = Field(default=None, min_length=1, max_length=7)
+    aceita_site: bool | None = None
+
+    @model_validator(mode="after")
+    def _dias(self):
+        if self.dias_semana is not None:
+            if any(d < 1 or d > 7 for d in self.dias_semana):
+                raise ValueError("Dia da semana vai de 1 (segunda) a 7 (domingo).")
+            self.dias_semana = sorted(set(self.dias_semana))
+        return self
 
 
 # 🔑 **As características da mesa são uma lista FIXA** (migração 106): é o que a
@@ -225,12 +238,26 @@ class MesaUpdate(BaseModel):
     ativo: bool | None = None
     caracteristicas: list[Caracteristica] | None = Field(default=None, max_length=6)
     formato: FormatoDaMesa | None = None
-    # 🔑 A mesa vizinha que encosta nesta. `null` desfaz a junta — nos DOIS
-    # lados, e quem grava é `services/reservas.casar_junta`.
-    # ⚠️ **"Não mandou" e "mandou nulo" são coisas diferentes aqui**, e o router
-    # separa as duas por `model_fields_set`. Sem isso, qualquer PUT que não
-    # falasse da junta a desfaria — trocar o nome da mesa 07 soltaria a 08.
-    junta_com: int | None = None
+
+
+class ConjuntoCreate(BaseModel):
+    """De 2 a 4 mesas que se juntam, com capacidade PRÓPRIA (migração 109).
+
+    ⚠️ **Sem `capacidade`, vale a soma dos máximos.** A casa baixa quando sabe
+    que na prática cabem menos — juntar duas de 4 nem sempre dá 8.
+    """
+    mesas: list[int] = Field(min_length=2, max_length=4)
+    capacidade: int | None = Field(default=None, ge=1, le=99)
+
+    @model_validator(mode="after")
+    def _distintas(self):
+        if len(set(self.mesas)) != len(self.mesas):
+            raise ValueError("Uma mesa não se junta com ela mesma.")
+        return self
+
+
+class ConjuntoUpdate(BaseModel):
+    capacidade: int = Field(ge=1, le=99)
 
 
 class PosicaoDaMesa(BaseModel):

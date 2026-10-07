@@ -116,7 +116,9 @@ OPERACAO = [
 # ⚠️ **`mesas` e `saloes` são APOIO, não operação**: são o desenho físico da
 # casa — como os locais de estoque —, e não a reserva de terça às 20h. Quem
 # limpa a operação para testar reserva quer o salão de pé do outro lado.
-APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores", "mesas", "saloes"]
+# Os conjuntos de mesas (109) vão junto: são o desenho do salão, e apontam para `mesas`.
+APOIO = ["locais_estoque", "categorias", "usuario_setores", "setores",
+         "mesa_conjunto_itens", "mesa_conjuntos", "mesas", "saloes"]
 
 # ---------------------------------------------------------------------------
 # Filiais de teste
@@ -256,7 +258,7 @@ def _quem_referencia(cur, tabela: str) -> list[tuple[str, str]]:
 # papel — todo papel tem as dela, e tratá-la como "alguém usa isto" fazia a
 # varredura devolver ZERO papéis: cada um estava preso pelas próprias
 # permissões. A lista aqui é de tabelas que PERTENCEM à linha e saem com ela.
-_PROPRIAS = {"papeis": {"papel_permissoes"}, "saloes": {"mesas", "reserva_mesas"}}
+_PROPRIAS = {"papeis": {"papel_permissoes"}, "saloes": {"mesas", "reserva_mesas", "mesa_conjuntos", "mesa_conjunto_itens"}}
 
 
 def residuo_de_teste(cur, tabela: str, ignorar: set[str] | None = None,

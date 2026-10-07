@@ -9409,19 +9409,20 @@ try {
     && abasDaRodada.some((x) => x.nome.startsWith("Varanda") && x.contagem === "2"),
     abasDaRodada);
 
-  // A junta: duas de 6/8 juntas sentam 16, e vale nos dois sentidos.
+  // O conjunto (a junta, ate a 109): duas de 6/8 juntas sentam 16.
   const naVarandaMesas = minhasMesas.length;
   const { dados: comOutro } = await api("GET", "/reservas/salao", null, token);
   const daVaranda = comOutro.mesas.filter((m) => m.id_salao === outro.id);
-  await api("PUT", `/reservas/mesas/${daVaranda[0].id}`,
-    { junta_com: daVaranda[1].id }, token);
+  await api("POST", "/reservas/conjuntos",
+    { mesas: [daVaranda[0].id, daVaranda[1].id] }, token);
   const { dados: comJunta } = await api("GET", "/reservas/salao", null, token);
-  // ⚠️ So as mesas DESTA rodada: as de rodadas anteriores continuam cadastradas
-  // (desligadas, nao apagadas) e carregam as juntas delas.
-  const juntadasAgora = comJunta.mesas.filter(
-    (m) => m.id_salao === outro.id && m.junta_com !== null);
-  checar("a junta e gravada nos dois sentidos", juntadasAgora.length === 2,
-    juntadasAgora.map((m) => `${m.nome}->${m.junta_com_nome}`));
+  // ⚠️ So os conjuntos DESTA rodada: os de rodadas anteriores continuam
+  // cadastrados com as mesas deles (desligadas, nao apagadas).
+  const conjuntosDaVaranda = (d) => (d.conjuntos ?? []).filter(
+    (c) => c.mesas.some((m) => m.id_salao === outro.id));
+  checar("o conjunto das duas mesas e gravado, valendo a soma delas",
+    conjuntosDaVaranda(comJunta).length === 1 && conjuntosDaVaranda(comJunta)[0].capacidade === 16,
+    conjuntosDaVaranda(comJunta));
   checar("e o maior grupo passa a ser a soma das duas: 16",
     comJunta.maior_grupo === 16, comJunta.maior_grupo);
   checar("as seis do principal continuam la", naVarandaMesas === 6);
@@ -9489,8 +9490,8 @@ try {
   const mesaMarcada = comMarca.mesas.find((m) => m.id === mesaDoPainel.id);
   checar("Salvar grava a caracteristica marcada",
     (mesaMarcada?.caracteristicas ?? []).join() === "JANELA", mesaMarcada);
-  checar("sem mexer no resto: os lugares e a junta continuam os mesmos",
-    mesaMarcada?.lugares === mesaDoPainel.lugares && mesaMarcada?.junta_com !== null
+  checar("sem mexer no resto: os lugares e o conjunto continuam os mesmos",
+    mesaMarcada?.lugares === mesaDoPainel.lugares && conjuntosDaVaranda(comMarca).length === 1
       && comMarca.maior_grupo === 16, mesaMarcada);
   // 🔑 A conferencia do cadastro: a resposta vem do servidor, pela mesma regra
   // da disponibilidade — a tela nao refaz a conta.
@@ -9617,6 +9618,135 @@ try {
   }));
   checar("a Lista continua a um clique, e a escolha fica no endereço",
     plantaNaLista.linhas === 2 && /ver=lista/.test(plantaNaLista.endereco), plantaNaLista);
+
+  // 🔑 **Conjuntos de mesas e os dias do salão** (07/10/2026, terceira entrega do
+  // estudo — as duas que mexem na regra). A conta toda está nas suítes
+  // `smoke_reservas_salao` (9d) e `_disponibilidade` (13d); aqui se prova o
+  // caminho da tela: nada vale antes do botão, e a planta serve para marcar.
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  const linhaDoConjunto = 'section[aria-label="conjuntos de mesas"] li[aria-label^="conjunto "]';
+  await p.waitForSelector(linhaDoConjunto, { timeout: 15000 }).catch(() => {});
+  const lerSalaoCj = async () => (await api("GET", "/reservas/salao", null, token)).dados;
+  const telaDosConjuntos = () => p.evaluate((sel) => ({
+    linhas: [...document.querySelectorAll(sel)].map((li) => ({
+      rotulo: li.getAttribute("aria-label"),
+      capacidade: li.querySelector("output")?.textContent?.trim(),
+      texto: li.innerText,
+    })),
+    riscos: document.querySelectorAll('[aria-label="planta do salão"] svg line').length,
+  }), linhaDoConjunto);
+  const cjDeInicio = await telaDosConjuntos();
+  checar("o salão lista o conjunto das duas mesas, com o que acomoda e a soma delas",
+    cjDeInicio.linhas.length === 1 && cjDeInicio.linhas[0].capacidade === "16"
+      && /somam 16/.test(cjDeInicio.linhas[0].texto), cjDeInicio);
+  checar("e a planta liga as mesas do conjunto com uma linha", cjDeInicio.riscos === 1,
+    cjDeInicio.riscos);
+
+  // A capacidade é a que a casa informa — e só vale no Salvar.
+  await p.click(`${linhaDoConjunto} button[aria-label^="menos capacidade do conjunto"]`);
+  await new Promise((r) => setTimeout(r, 200));
+  const cjMexido = await telaDosConjuntos();
+  checar("baixar a capacidade mostra 15 e avisa que não está salvo",
+    cjMexido.linhas[0].capacidade === "15" && /n[ãa]o salvo/i.test(cjMexido.linhas[0].texto),
+    cjMexido.linhas[0]);
+  checar("e nada é gravado antes do Salvar",
+    conjuntosDaVaranda(await lerSalaoCj())[0]?.capacidade === 16);
+  await p.evaluate((sel) => [...document.querySelector(sel).querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "Salvar")?.click(), linhaDoConjunto);
+  await p.waitForFunction(() => /conjunto atualizado/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const cjGravado = await lerSalaoCj();
+  checar("Salvar grava a capacidade informada (15), abaixo da soma das mesas (16)",
+    conjuntosDaVaranda(cjGravado)[0]?.capacidade === 15
+      && conjuntosDaVaranda(cjGravado)[0]?.soma_maximos === 16, conjuntosDaVaranda(cjGravado));
+  checar("e o maior grupo da casa acompanha: 15", cjGravado.maior_grupo === 15,
+    cjGravado.maior_grupo);
+
+  // Desfazer pergunta antes — muda a disponibilidade.
+  await p.evaluate((sel) => [...document.querySelector(sel).querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "desfazer conjunto")?.click(), linhaDoConjunto);
+  await p.waitForFunction(() => /desfazer o conjunto\?/i.test(document.body.innerText),
+    { timeout: 8000 }).catch(() => {});
+  checar("desfazer o conjunto pergunta antes",
+    conjuntosDaVaranda(await lerSalaoCj()).length === 1
+      && /desfazer o conjunto\?/i.test(await p.evaluate(() => document.body.innerText)));
+  await p.evaluate(() => [...document.querySelectorAll('[role="dialog"] button, [role="alertdialog"] button')]
+    .find((b) => b.textContent?.trim() === "Desfazer")?.click());
+  await p.waitForFunction(() => /conjunto desfeito/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const cjDesfeito = await lerSalaoCj();
+  checar("confirmado, o conjunto some e as mesas ficam",
+    conjuntosDaVaranda(cjDesfeito).length === 0
+      && cjDesfeito.mesas.filter((m) => m.id_salao === outro.id).length === 2,
+    conjuntosDaVaranda(cjDesfeito));
+  checar("e o maior grupo volta a ser o da maior mesa: 8", cjDesfeito.maior_grupo === 8,
+    cjDesfeito.maior_grupo);
+
+  // Criar marcando NA PLANTA: clicar marca em vez de abrir a mesa.
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "+ conjunto")?.click());
+  await p.waitForSelector('[aria-label="novo conjunto"]', { timeout: 8000 }).catch(() => {});
+  const criarCj = () => p.evaluate(() => {
+    const b = [...document.querySelectorAll("button")]
+      .find((x) => x.textContent?.trim() === "Criar conjunto");
+    return b ? b.disabled : null;
+  });
+  checar("o conjunto novo não se cria sem mesas marcadas", (await criarCj()) === true);
+  for (const figura of await p.$$(seletorDaPlanta)) await figura.click();
+  await new Promise((r) => setTimeout(r, 300));
+  const cjMarcando = await p.evaluate((sel) => ({
+    naPlanta: [...document.querySelectorAll(sel)]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").length,
+    nosBotoes: [...document.querySelectorAll('[aria-label="novo conjunto"] button[aria-label^="marcar mesa"]')]
+      .filter((b) => b.getAttribute("aria-pressed") === "true").length,
+    painelAbriu: !!document.querySelector('select[aria-label="formato da mesa"]'),
+    capacidade: document.querySelector('[aria-label="novo conjunto"] output')?.textContent?.trim(),
+  }), seletorDaPlanta);
+  checar("clicar nas mesas da planta as MARCA, na planta e na lista de botões, sem abrir o painel",
+    cjMarcando.naPlanta === 2 && cjMarcando.nosBotoes === 2 && !cjMarcando.painelAbriu, cjMarcando);
+  checar("e a capacidade sugerida é a soma dos máximos: 16", cjMarcando.capacidade === "16",
+    cjMarcando.capacidade);
+  checar("nada é criado antes do botão",
+    conjuntosDaVaranda(await lerSalaoCj()).length === 0 && (await criarCj()) === false);
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "Criar conjunto")?.click());
+  await p.waitForFunction(() => /conjunto criado/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const cjCriado = await lerSalaoCj();
+  checar("Criar conjunto grava as duas mesas, acomodando 16",
+    conjuntosDaVaranda(cjCriado).length === 1 && conjuntosDaVaranda(cjCriado)[0].capacidade === 16
+      && conjuntosDaVaranda(cjCriado)[0].mesas.length === 2, conjuntosDaVaranda(cjCriado));
+
+  // Os dias do salão e o site: um Salvar só, e nada vale antes dele.
+  const doSalaoCj = (d) => d.saloes.find((x) => x.id === outro.id);
+  const diasDoSalao = '[aria-label="dias em que o salão atende"] button';
+  const diasNaTela = () => p.evaluate((sel) => [...document.querySelectorAll(sel)]
+    .filter((b) => b.getAttribute("aria-pressed") === "true").length, diasDoSalao);
+  checar("o salão nasce atendendo os sete dias, e a tela mostra", (await diasNaTela()) === 7
+    && doSalaoCj(cjCriado).dias_semana.length === 7 && doSalaoCj(cjCriado).aceita_site === true,
+    doSalaoCj(cjCriado));
+  await p.click(`${diasDoSalao}[aria-label="segunda"]`);
+  await p.click('input[aria-label="aceita reserva pelo site"]');
+  await new Promise((r) => setTimeout(r, 200));
+  const salaoMexido = doSalaoCj(await lerSalaoCj());
+  checar("desmarcar a segunda e tirar do site NÃO grava sozinho",
+    (await diasNaTela()) === 6 && salaoMexido.dias_semana.length === 7
+      && salaoMexido.aceita_site === true, salaoMexido);
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "Salvar salão")?.click());
+  await p.waitForFunction(() => /sal[ãa]o atualizado/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const salaoGravado = await lerSalaoCj();
+  checar("Salvar salão grava os dias (sem a segunda) e que o site não o oferece",
+    doSalaoCj(salaoGravado).dias_semana.join() === "2,3,4,5,6,7"
+      && doSalaoCj(salaoGravado).aceita_site === false, doSalaoCj(salaoGravado));
+  // 🔑 O aviso do teto olha o que o SITE senta: com o único salão fora do site,
+  // o site não senta ninguém — e a casa continua sentando 16.
+  checar("a casa continua sentando 16, mas o site não enxerga este salão",
+    salaoGravado.maior_grupo === 16 && salaoGravado.maior_grupo_site < 16,
+    [salaoGravado.maior_grupo, salaoGravado.maior_grupo_site]);
+  await api("PUT", `/reservas/saloes/${outro.id}`,
+    { dias_semana: [1, 2, 3, 4, 5, 6, 7], aceita_site: true }, token);
 
   // ---- a agenda do dia: marcar, e o ciclo da reserva ----
   // 🔑 **A regra de disponibilidade e a peca que tudo consome**, e a tela nao a

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import type { Mesa } from "@/lib/salao";
+import type { Conjunto, Mesa } from "@/lib/salao";
 
 /**
  * A planta do salão: as mesas desenhadas onde estão.
@@ -29,7 +29,12 @@ import type { Mesa } from "@/lib/salao";
  * fundo rola a planta — no celular ela é mais larga que a tela.
  *
  * ⚠️ **É desenho, não regra**: a disponibilidade não lê formato nem posição. A
- * linha entre duas mesas mostra a junta JÁ cadastrada; ela não cria junta.
+ * linha liga as mesas de cada CONJUNTO já cadastrado (migração 109).
+ *
+ * 🔑 **Marcar para um conjunto novo**: com `aoMarcar`, clicar numa mesa a marca
+ * em vez de abrir — é o "+ conjunto" de `conjuntos.tsx`. ⚠️ Nesse modo a mesa não
+ * se arrasta: marcar e mover no mesmo gesto faria um escorregão do dedo mudar a
+ * planta sem ninguém querer.
  */
 
 const GRADE = 30;
@@ -51,14 +56,21 @@ const naGrade = (n: number) => Math.round(n / GRADE) * GRADE;
 
 export default function PlantaDoSalao({
   mesas,
+  conjuntos,
   idAberta,
   salaoAtivo,
   podeEditar,
   ocupado,
+  marcadas,
+  aoMarcar,
   aoAbrir,
   aoSalvar,
 }: {
   mesas: Mesa[];
+  conjuntos: Conjunto[];
+  /** Com `aoMarcar`, a planta está escolhendo mesas para um conjunto novo. */
+  marcadas?: number[];
+  aoMarcar?: (id: number) => void;
   idAberta: number | null;
   salaoAtivo: boolean;
   podeEditar: boolean;
@@ -113,18 +125,24 @@ export default function PlantaDoSalao({
     if (deu) setMexidas({});
   }
 
-  // A junta já cadastrada, entre mesas DESTE salão — cada par uma vez.
-  const juntas = mesas
-    .filter((m) => m.junta_com !== null && m.id < (m.junta_com ?? 0) && lugares.has(m.junta_com ?? 0))
-    .map((m) => {
-      const par = mesas.find((x) => x.id === m.junta_com)!;
-      const [a, b] = [lugares.get(m.id)!, lugares.get(par.id)!];
-      const [[wa, ha], [wb, hb]] = [tamanhoDaMesa(m), tamanhoDaMesa(par)];
-      return { chave: `${m.id}-${par.id}`, x1: a.x + wa / 2, y1: a.y + ha / 2,
-               x2: b.x + wb / 2, y2: b.y + hb / 2 };
-    });
+  // Os conjuntos já cadastrados: uma linha ligando as mesas DESTE salão, da
+  // esquerda para a direita. (Mesa de outro salão não tem onde aparecer aqui.)
+  const centro = (m: Mesa) => {
+    const [p, [w, h]] = [lugares.get(m.id)!, tamanhoDaMesa(m)];
+    return { x: p.x + w / 2, y: p.y + h / 2 };
+  };
+  const juntas = conjuntos.flatMap((c) => {
+    const pontos = mesas
+      .filter((m) => c.mesas.some((x) => x.id === m.id))
+      .map(centro)
+      .sort((a, b) => a.x - b.x || a.y - b.y);
+    return pontos.slice(1).map((p, i) => ({
+      chave: `${c.id}-${i}`, x1: pontos[i].x, y1: pontos[i].y, x2: p.x, y2: p.y,
+    }));
+  });
 
-  const podeMover = podeEditar && !ocupado;
+  const marcando = !!aoMarcar;
+  const podeMover = podeEditar && !ocupado && !marcando;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -153,7 +171,7 @@ export default function PlantaDoSalao({
             const p = lugares.get(m.id)!;
             const [w, h] = tamanhoDaMesa(m);
             const ligada = m.ativo && salaoAtivo;
-            const aberta = idAberta === m.id;
+            const aberta = marcando ? (marcadas ?? []).includes(m.id) : idAberta === m.id;
             return (
               <button
                 key={m.id}
@@ -194,11 +212,15 @@ export default function PlantaDoSalao({
                   if (a && !a.moveu) aoAbrir(m.id);
                 }}
                 onPointerCancel={() => { arrasto.current = null; }}
-                onClick={() => { if (!podeMover) aoAbrir(m.id); }}
+                onClick={() => {
+                  if (aoMarcar) aoMarcar(m.id);
+                  else if (!podeMover) aoAbrir(m.id);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    aoAbrir(m.id);
+                    if (aoMarcar) aoMarcar(m.id);
+                    else aoAbrir(m.id);
                     return;
                   }
                   const passo: Record<string, [number, number]> = {
@@ -223,10 +245,15 @@ export default function PlantaDoSalao({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12.5px] text-suave">
-          {podeEditar
-            ? "Arraste para posicionar (ou use as setas). "
-            : ""}
-          Clique numa mesa para abrir. A linha liga mesas que juntam; tracejada é mesa desligada.
+          {marcando ? (
+            "Clique nas mesas do conjunto novo. "
+          ) : (
+            <>
+              {podeEditar ? "Arraste para posicionar (ou use as setas). " : ""}
+              Clique numa mesa para abrir.{" "}
+            </>
+          )}
+          A linha liga as mesas de um conjunto; tracejada é mesa desligada.
         </p>
         {podeEditar && (
           <span className="flex items-center gap-2">

@@ -1,4 +1,4 @@
-"""Saloes, mesas e lugares — e a junta, que vale nos DOIS sentidos.
+"""Saloes, mesas e lugares — e os conjuntos de mesas que se juntam.
 
 🔑 **Pedido do dono (14/09/2026):** *"para controle interno, ter o cadastro de
 saloes, cadastro de mesas, lugares por mesas."*
@@ -109,6 +109,7 @@ with get_cursor() as cur:
     cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
                      (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesa_conjuntos WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 st, vazio = chamar("GET", "/reservas/salao", token=token)
@@ -166,51 +167,80 @@ checar("subir so os lugares acima do maximo gravado tambem e recusado",
 checar("e a mensagem mostra os dois numeros",
        "5" in (r.get("detail") or "") and "3" in (r.get("detail") or ""), r.get("detail"))
 
-print("\n3. a junta vale nos DOIS sentidos")
-st, r = chamar("PUT", f"/reservas/mesas/{m07}", {"junta_com": m08}, token)
-checar("juntar a 07 com a 08 responde 200", st == 200, (st, r))
-dados = olhar()
-a07, a08 = mesa_chamada(dados, f"{marca}-07"), mesa_chamada(dados, f"{marca}-08")
-checar("a 07 aponta para a 08", a07["junta_com"] == m08, a07)
-# 🔑 O ponto do teste: gravar de um lado so deixaria a alocacao achando um par
-# que a outra mesa nao conhece.
-checar("e a 08 aponta de volta para a 07, sem ninguem ter pedido",
-       a08["junta_com"] == m07, a08)
-checar("a tela recebe o NOME do par, nao so o id",
-       a07["junta_com_nome"] == f"{marca}-08", a07)
-# Agora a junta 6+6 = 12 passa a ser o maior grupo, acima da mesa de 8.
-checar("o maior grupo passa a ser a JUNTA: 6+6 = 12", olhar()["maior_grupo"] == 12)
+print("\n3. o CONJUNTO: mesas que se juntam, com capacidade propria (migracao 109)")
+# 🔑 A junta era so em PAR (`mesas.junta_com`) e valia sempre a soma. Agora e um
+# conjunto de 2 a 4 mesas, e a capacidade e a que a casa informa.
 
-print("\n4. trocar o par nao deixa triangulo")
-# ⚠️ Sem desfazer a junta anterior dos dois lados, a 08 ficaria apontando para a
-# 07 enquanto a 07 aponta para a 01 — um triangulo que nenhuma das tres descreve.
+
+def conjunto_de(dados, *ids_mesas):
+    alvo = sorted(ids_mesas)
+    return next((c for c in dados["conjuntos"]
+                 if sorted(m["id"] for m in c["mesas"]) == alvo), None)
+
+
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m07, m08]}, token)
+c78 = r.get("id")
+checar("juntar a 07 com a 08 responde 201", st == 201 and c78, (st, r))
+checar("sem dizer a capacidade, vale a soma dos maximos: 6 + 6 = 12",
+       r.get("capacidade") == 12, r)
+dados = olhar()
+c = conjunto_de(dados, m07, m08)
+checar("o salao devolve o conjunto com o NOME das mesas e a soma delas",
+       c and sorted(m["nome"] for m in c["mesas"]) == [f"{marca}-07", f"{marca}-08"]
+       and c["soma_maximos"] == 12, dados["conjuntos"])
+checar("a mesa deixou de carregar a junta — ela mora no conjunto",
+       "junta_com" not in mesa_chamada(dados, f"{marca}-07"), mesa_chamada(dados, f"{marca}-07"))
+checar("o maior grupo passa a ser o CONJUNTO: 12", dados["maior_grupo"] == 12,
+       dados["maior_grupo"])
+# 🔑 Decisao do dono (07/10/2026): vale o numero que a casa informou, mesmo
+# abaixo da soma — a casa sabe quantos cabem.
+st, r = chamar("PUT", f"/reservas/conjuntos/{c78}", {"capacidade": 10}, token)
+checar("baixar a capacidade do conjunto para 10 responde 200", st == 200, (st, r))
+dados = olhar()
+checar("e o maior grupo acompanha a capacidade INFORMADA (10), nao a soma (12)",
+       dados["maior_grupo"] == 10 and conjunto_de(dados, m07, m08)["soma_maximos"] == 12,
+       (dados["maior_grupo"], dados["conjuntos"]))
+
+print("\n4. tres mesas, e a mesma mesa em mais de um conjunto")
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m01, m07, m08], "capacidade": 13}, token)
+c178 = r.get("id")
+checar("tres mesas viram um conjunto (o par nao deixava)", st == 201 and c178, (st, r))
+dados = olhar()
+checar("a 07 esta em DOIS conjuntos",
+       sum(1 for c in dados["conjuntos"] if any(m["id"] == m07 for m in c["mesas"])) == 2,
+       dados["conjuntos"])
+checar("e o maior grupo passa a 13", dados["maior_grupo"] == 13, dados["maior_grupo"])
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m08, m07]}, token)
+checar("o mesmo grupo de mesas nao vira dois conjuntos (409), em qualquer ordem",
+       st == 409 and "capacidade" in (r.get("detail") or ""), (st, r))
+
+print("\n5. o que o conjunto recusa")
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m07]}, token)
+checar("uma mesa so nao e conjunto (422)", st == 422, st)
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m07, m07]}, token)
+checar("uma mesa nao se junta com ela mesma (422)", st == 422, st)
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m01, m02, m07, m08, m12]}, token)
+checar("cinco mesas passam do limite de quatro (422)", st == 422, st)
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m07, 99999999]}, token)
+checar("mesa inexistente recusa o conjunto (404)", st == 404, (st, r))
+st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [m01, m02], "capacidade": 0}, token)
+checar("capacidade zero e recusada (422)", st == 422, st)
+st, r = chamar("PUT", "/reservas/conjuntos/99999999", {"capacidade": 4}, token)
+checar("mudar conjunto que nao existe da 404", st == 404, st)
 st, r = chamar("PUT", f"/reservas/mesas/{m07}", {"junta_com": m01}, token)
-checar("mudar o par da 07 para a 01 responde 200", st == 200, (st, r))
-dados = olhar()
-checar("a 07 agora aponta para a 01",
-       mesa_chamada(dados, f"{marca}-07")["junta_com"] == m01)
-checar("a 01 aponta de volta para a 07",
-       mesa_chamada(dados, f"{marca}-01")["junta_com"] == m07)
-checar("e a 08 foi SOLTA, nao ficou apontando para a 07",
-       mesa_chamada(dados, f"{marca}-08")["junta_com"] is None,
-       mesa_chamada(dados, f"{marca}-08"))
-
-print("\n5. o que a junta recusa")
-st, r = chamar("PUT", f"/reservas/mesas/{m07}", {"junta_com": m07}, token)
-checar("uma mesa nao encosta nela mesma", st == 422, (st, r))
-st, r = chamar("PUT", f"/reservas/mesas/{m07}", {"junta_com": 99999999}, token)
-checar("junta com mesa inexistente e recusada", st == 404, (st, r))
-# ⚠️ "Nao mandou" e "mandou nulo" sao coisas diferentes: renomear a mesa NAO
-# pode soltar o par dela.
+checar("o campo antigo da junta nao faz mais nada (400: nada para alterar)", st == 400, (st, r))
 st, _r = chamar("PUT", f"/reservas/mesas/{m07}", {"nome": f"{marca}-07b"}, token)
+checar("renomear a mesa NAO desfaz os conjuntos dela",
+       len(olhar()["conjuntos"]) == 2, olhar()["conjuntos"])
+st, r = chamar("DELETE", f"/reservas/conjuntos/{c178}", token=token)
+checar("desfazer o conjunto responde 200", st == 200, (st, r))
+st, r = chamar("DELETE", f"/reservas/conjuntos/{c178}", token=token)
+checar("e desfazer de novo da 404", st == 404, st)
+chamar("DELETE", f"/reservas/conjuntos/{c78}", token=token)
 dados = olhar()
-checar("renomear a mesa NAO desfaz a junta",
-       mesa_chamada(dados, f"{marca}-07b")["junta_com"] == m01, dados["mesas"])
-st, _r = chamar("PUT", f"/reservas/mesas/{m07}", {"junta_com": None}, token)
-dados = olhar()
-checar("mas mandar nulo DESFAZ, nos dois lados",
-       mesa_chamada(dados, f"{marca}-07b")["junta_com"] is None
-       and mesa_chamada(dados, f"{marca}-01")["junta_com"] is None, dados["mesas"])
+checar("sem conjunto nenhum, as mesas continuam e o maior grupo volta a 8",
+       dados["conjuntos"] == [] and dados["maior_grupo"] == 8
+       and mesa_chamada(dados, f"{marca}-07b") is not None, dados["maior_grupo"])
 
 print("\n6. desligar o salao tira as mesas da conta")
 # 🔑 E a Varanda no inverno: sai da disponibilidade sem perder cadastro.
@@ -244,14 +274,18 @@ st, r = chamar("DELETE", f"/reservas/saloes/{principal}", token=token)
 checar("excluir salao com mesas e recusado", st == 409, (st, r))
 checar("e a mensagem manda DESLIGAR em vez de apagar",
        "deslig" in (r.get("detail") or "").lower(), r.get("detail"))
-# Mesa se apaga enquanto ninguem sentou nela — e apagar solta a vizinha.
-chamar("PUT", f"/reservas/mesas/{m01}", {"junta_com": m02}, token)
+# Mesa se apaga enquanto ninguem sentou nela — e leva junto os conjuntos dela.
+# ⚠️ "01 + 02 + 07 acomoda 9" sem a 01 nao e um conjunto de 6: e um numero que
+# ninguem informou. O conjunto inteiro deixa de existir.
+chamar("POST", "/reservas/conjuntos", {"mesas": [m01, m02, m07], "capacidade": 9}, token)
+chamar("POST", "/reservas/conjuntos", {"mesas": [m02, m08]}, token)
 st, r = chamar("DELETE", f"/reservas/mesas/{m01}", token=token)
 checar("a mesa se exclui", st == 200, (st, r))
 dados = olhar()
-checar("e a vizinha dela fica solta, nao apontando para o vazio",
-       mesa_chamada(dados, f"{marca}-02")["junta_com"] is None,
-       mesa_chamada(dados, f"{marca}-02"))
+checar("o conjunto de que ela fazia parte some INTEIRO, e o outro fica",
+       len(dados["conjuntos"]) == 1 and conjunto_de(dados, m02, m08) is not None,
+       dados["conjuntos"])
+chamar("DELETE", f"/reservas/conjuntos/{conjunto_de(dados, m02, m08)['id']}", token=token)
 
 print("\n9. montar o salao em LOTE")
 # 🔑 Pedido do dono depois de ver a tela: montar um salao de doze mesas era
@@ -305,6 +339,7 @@ with get_cursor() as cur:
     cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
                      (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesa_conjuntos WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 st, r = chamar("POST", "/reservas/saloes", {"nome": f"Conferencia {marca}"}, token)
@@ -340,7 +375,8 @@ st, r = chamar("PUT", f"/reservas/mesas/{ids['B']}", {"caracteristicas": []}, to
 checar("lista vazia limpa as caracteristicas",
        st == 200 and mesa_chamada(olhar(), f"{marca}B")["caracteristicas"] == [], (st, r))
 
-chamar("PUT", f"/reservas/mesas/{ids['C']}", {"junta_com": ids["D"]}, token)
+_st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [ids["C"], ids["D"]]}, token)
+conjunto_cd = r.get("id")
 _st, cfg = chamar("GET", "/reservas/configuracao", token=token)
 dados = olhar()
 checar("o salao devolve o teto do site, o mesmo da configuracao",
@@ -389,6 +425,86 @@ st, r = chamar("GET", "/reservas/salao/simular?pessoas=0", token=token)
 checar("grupo de zero pessoas e recusado (422)", st == 422, st)
 st, r = chamar("GET", "/reservas/salao/simular", token=token)
 checar("e sem dizer quantas pessoas tambem", st == 422, st)
+
+print("\n9d. a capacidade do conjunto, os dias do salao e o site (migracao 109)")
+# 🔑 Terceira entrega do estudo (07/10/2026) — as duas que mexem na regra.
+chamar("PUT", f"/reservas/conjuntos/{conjunto_cd}", {"capacidade": 10}, token)
+x = senta(10)
+checar("o conjunto C + D informado como 10 senta um grupo de 10",
+       x["como"] == "junta" and x["capacidade"] == 10, x)
+x = senta(11)
+checar("mas nao um de 11, mesmo com as mesas somando 12 — vale o que a casa informou",
+       x["cabe"] is False and x["maior_grupo"] == 10, x)
+chamar("PUT", f"/reservas/conjuntos/{conjunto_cd}", {"capacidade": 12}, token)
+
+dados = olhar()
+do_salao = next(s_ for s_ in dados["saloes"] if s_["id"] == conferencia)
+checar("salao nasce atendendo os sete dias e aceitando o site",
+       do_salao["dias_semana"] == [1, 2, 3, 4, 5, 6, 7] and do_salao["aceita_site"] is True,
+       do_salao)
+
+# O Mezanino: uma mesa de 10, so de sexta a domingo — e um conjunto dela com a D.
+_st, r = chamar("POST", "/reservas/saloes", {"nome": f"Mezanino {marca}", "ordem": 9}, token)
+mezanino = r.get("id")
+_st, r = chamar("POST", "/reservas/mesas", {"id_salao": mezanino, "nome": f"{marca}E",
+                                           "lugares": 10, "capacidade_max": 10}, token)
+ids["E"] = r.get("id")
+_st, r = chamar("POST", "/reservas/conjuntos", {"mesas": [ids["D"], ids["E"]], "capacidade": 16},
+                token)
+checar("um conjunto pode ter mesas de saloes diferentes", _st == 201, (_st, r))
+st, r = chamar("PUT", f"/reservas/saloes/{mezanino}", {"dias_semana": [7, 5, 6, 5]}, token)
+checar("os dias do salao se gravam", st == 200, (st, r))
+checar("sem repeticao e em ordem",
+       next(s_ for s_ in olhar()["saloes"] if s_["id"] == mezanino)["dias_semana"] == [5, 6, 7])
+
+
+def senta_em(pessoas, dia_semana=None, site=False):
+    caminho = f"/reservas/salao/simular?pessoas={pessoas}"
+    if dia_semana:
+        caminho += f"&dia_semana={dia_semana}"
+    if site:
+        caminho += "&site=true"
+    _st, x = chamar("GET", caminho, token=token)
+    return x
+
+
+nomes = lambda x: sorted(m["nome"] for m in x["mesas"])  # noqa: E731
+x = senta_em(10, dia_semana=6)
+checar("no sabado, o grupo de 10 senta na mesa do Mezanino", nomes(x) == [f"{marca}E"], x)
+x = senta_em(10, dia_semana=2)
+checar("na terca o Mezanino nao abre: o grupo de 10 vai para o conjunto C + D",
+       nomes(x) == [f"{marca}C", f"{marca}D"], x)
+x = senta_em(14, dia_semana=6)
+checar("no sabado, 14 pessoas sentam no conjunto D + E, pela capacidade dele (16)",
+       nomes(x) == [f"{marca}D", f"{marca}E"] and x["capacidade"] == 16, x)
+x = senta_em(14, dia_semana=2)
+checar("na terca esse conjunto NAO existe — uma das mesas dele esta fechada",
+       x["cabe"] is False and x["maior_grupo"] == 12, x)
+x = senta_em(14)
+checar("sem dizer o dia, a pergunta e sobre o cadastro inteiro", x["cabe"] is True, x)
+
+st, r = chamar("PUT", f"/reservas/saloes/{mezanino}", {"dias_semana": []}, token)
+checar("salao sem dia nenhum e recusado (422) — para isso existe desligar", st == 422, st)
+st, r = chamar("PUT", f"/reservas/saloes/{mezanino}", {"dias_semana": [8]}, token)
+checar("dia da semana fora de 1 a 7 e recusado (422)", st == 422, st)
+
+st, r = chamar("PUT", f"/reservas/saloes/{mezanino}", {"aceita_site": False}, token)
+checar("tirar o salao do site responde 200", st == 200, (st, r))
+x = senta_em(10, dia_semana=6, site=True)
+checar("pelo site, no sabado, o grupo de 10 NAO ve o Mezanino: vai para C + D",
+       nomes(x) == [f"{marca}C", f"{marca}D"], x)
+x = senta_em(10, dia_semana=6)
+checar("mas o balcao continua vendo", nomes(x) == [f"{marca}E"], x)
+dados = olhar()
+checar("o salao separa o maior grupo da CASA (16) do que o SITE senta (12)",
+       dados["maior_grupo"] == 16 and dados["maior_grupo_site"] == 12,
+       (dados["maior_grupo"], dados.get("maior_grupo_site")))
+checar("renomear o salao NAO mexe nos dias nem no site",
+       chamar("PUT", f"/reservas/saloes/{mezanino}", {"nome": f"Mez {marca}"}, token)[0] == 200
+       and next(s_ for s_ in olhar()["saloes"] if s_["id"] == mezanino)["dias_semana"] == [5, 6, 7]
+       and next(s_ for s_ in olhar()["saloes"] if s_["id"] == mezanino)["aceita_site"] is False)
+# O Mezanino sai de cena: a planta, a seguir, mede o salao A/B/C/D.
+chamar("PUT", f"/reservas/saloes/{mezanino}", {"ativo": False}, token)
 
 print("\n9c. a planta do salao: formato e posicao (migracao 108)")
 # 🔑 Segunda entrega do estudo (07/10/2026). So DESENHO: nada aqui pode mudar a
@@ -452,6 +568,7 @@ with get_cursor() as cur:
     cur.execute("""DELETE FROM reserva_mesas WHERE id_reserva IN
                      (SELECT id FROM reservas WHERE id_unidade = %s)""", (UNIDADE,))
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesa_conjuntos WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 # 🔑 E a loja volta ao que era ANTES desta suite — inclusive o interruptor.

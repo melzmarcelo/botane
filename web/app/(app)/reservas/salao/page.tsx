@@ -7,11 +7,17 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/compo
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
+import ConjuntosDoSalao from "./conjuntos";
+import Passo from "./passo";
 import PlantaDoSalao from "./planta";
 import {
   CARACTERISTICAS,
+  DIAS_DA_SEMANA,
   FORMATOS,
+  criarConjunto,
+  excluirConjunto,
   gravarPlanta,
+  mudarConjunto,
   criarMesasEmLote,
   criarSalao,
   excluirMesa,
@@ -22,6 +28,7 @@ import {
   rotuloDaCaracteristica,
   simularGrupo,
   type Caracteristica,
+  type Conjunto,
   type DadosDoSalao,
   type Formato,
   type Mesa,
@@ -50,8 +57,13 @@ import {
  * 🔑 **`Lugares` e `máximo` são dois números de propósito.** Lugares é o
  * confortável; máximo é com a cadeira extra. A alocação usa o máximo.
  *
- * 🔑 **"Junta com" é a mesa vizinha que encosta nesta**, e vale nos dois
- * sentidos: o servidor grava dos dois lados e solta o par antigo.
+ * 🔑 **A junta virou CONJUNTO** (07/10/2026, terceira entrega): de 2 a 4 mesas
+ * com capacidade própria — `conjuntos.tsx`. O "junta com" da mesa, que só fazia
+ * par e valia sempre a soma, saiu do painel.
+ *
+ * 🔑 **O salão diz QUANDO atende**: os dias da semana e se o site o oferece.
+ * Antes era só ligado/desligado, e o mezanino de sexta a domingo dependia de
+ * alguém lembrar de ligar na sexta.
  *
  * 🔑 **A tela confere o próprio cadastro**: avisa quando o site aceita mais
  * gente do que cabe, e responde "onde um grupo de N sentaria?" pela MESMA regra
@@ -76,7 +88,6 @@ type Rascunho = {
   ativo: boolean;
   caracteristicas: Caracteristica[];
   formato: Formato;
-  junta_com: number | null;
 };
 
 const rascunhoDe = (m: Mesa): Rascunho => ({
@@ -86,7 +97,6 @@ const rascunhoDe = (m: Mesa): Rascunho => ({
   ativo: m.ativo,
   caracteristicas: [...(m.caracteristicas ?? [])],
   formato: m.formato ?? "QUADRADA",
-  junta_com: m.junta_com,
 });
 
 const iguais = (a: Rascunho, b: Rascunho) =>
@@ -95,7 +105,6 @@ const iguais = (a: Rascunho, b: Rascunho) =>
   a.capacidade_max === b.capacidade_max &&
   a.ativo === b.ativo &&
   a.formato === b.formato &&
-  a.junta_com === b.junta_com &&
   [...a.caracteristicas].sort().join() === [...b.caracteristicas].sort().join();
 
 export default function SalaoDaCasa() {
@@ -111,6 +120,9 @@ export default function SalaoDaCasa() {
   const [idAberta, setIdAberta] = useState<number | null>(null);
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [excluindo, setExcluindo] = useState<Mesa | null>(null);
+  // O conjunto novo: `null` = não está marcando; lista = as mesas marcadas.
+  const [marcadas, setMarcadas] = useState<number[] | null>(null);
+  const [desfazendo, setDesfazendo] = useState<Conjunto | null>(null);
   // ⚠️ Sem atraso: aba é clique, não digitação.
   const [abaUrl, setAbaUrl] = useEstadoNaUrl<string>("salao", "", { atraso: 0 });
   const [ver, setVer] = useEstadoNaUrl<string>("ver", "planta", { atraso: 0 });
@@ -165,7 +177,7 @@ export default function SalaoDaCasa() {
 
   async function salvarMesa() {
     if (!mesaAberta || !rascunho || !original) return;
-    // Só o que MUDOU vai no corpo — e a junta só se foi mexida (ver `mudarMesa`).
+    // Só o que MUDOU vai no corpo.
     const corpo: Parameters<typeof mudarMesa>[1] = {};
     if (rascunho.nome.trim() !== original.nome) corpo.nome = rascunho.nome.trim();
     if (rascunho.lugares !== original.lugares) corpo.lugares = rascunho.lugares;
@@ -177,7 +189,6 @@ export default function SalaoDaCasa() {
       corpo.caracteristicas = rascunho.caracteristicas;
     }
     if (rascunho.formato !== original.formato) corpo.formato = rascunho.formato;
-    if (rascunho.junta_com !== original.junta_com) corpo.junta_com = rascunho.junta_com;
     const id = mesaAberta.id;
     const deu = await agir(() => mudarMesa(id, corpo));
     // Gravou: o painel passa a mostrar o que ficou. Recusou: o rascunho continua
@@ -197,8 +208,19 @@ export default function SalaoDaCasa() {
   );
   const naPlanta = ver !== "lista";
 
+  const marcar = (id: number) =>
+    setMarcadas((antes) => {
+      const lista = antes ?? [];
+      if (lista.includes(id)) return lista.filter((x) => x !== id);
+      return lista.length >= 4 ? lista : [...lista, id];
+    });
+  const conjuntosDe = (id: number) =>
+    dados.conjuntos.filter((c) => c.mesas.some((x) => x.id === id));
+
+  // 🔑 Contra o que o SITE consegue sentar: salão fora do site não conta.
   const tetoPassa =
-    dados.teto_online !== null && dados.mesas_ativas > 0 && dados.teto_online > dados.maior_grupo;
+    dados.teto_online !== null && dados.mesas_ativas > 0
+    && dados.teto_online > dados.maior_grupo_site;
 
   return (
     <div className="flex flex-col gap-5">
@@ -228,9 +250,9 @@ export default function SalaoDaCasa() {
       {tetoPassa && (
         <Aviso tipo="info">
           O site aceita grupos de até <b>{dados.teto_online}</b> pessoas, mas o maior que
-          cabe hoje é <b>{dados.maior_grupo}</b>. Quem pedir mais não acha horário nenhum —
-          e não sabe por quê. Junte mesas, aumente o máximo de uma delas ou baixe o teto em
-          Configurações.
+          o site consegue sentar é <b>{dados.maior_grupo_site}</b>. Quem pedir mais não acha
+          horário nenhum — e não sabe por quê. Crie um conjunto de mesas, aumente o máximo de
+          uma delas ou baixe o teto em Configurações.
         </Aviso>
       )}
 
@@ -250,6 +272,7 @@ export default function SalaoDaCasa() {
             onClick={() => {
               setAbaUrl(String(s.id));
               abrirMesa(null);
+              setMarcadas(null);
             }}
           >
             {s.nome}
@@ -339,12 +362,14 @@ export default function SalaoDaCasa() {
         >
           {podeEditar && (
             <DadosDoSalaoAberto
-              key={`salao-${aberto.id}-${aberto.nome}`}
+              key={`salao-${aberto.id}-${aberto.nome}-${aberto.dias_semana.join("")}-${aberto.aceita_site}`}
               nome={aberto.nome}
               ativo={aberto.ativo}
+              dias={aberto.dias_semana}
+              aceitaSite={aberto.aceita_site}
               temMesas={minhas.length > 0}
               ocupado={ocupado}
-              aoRenomear={(nome) => void agir(() => mudarSalao(aberto.id, { nome }))}
+              aoSalvar={(corpo) => void agir(() => mudarSalao(aberto.id, corpo))}
               aoLigar={(ativo) => void agir(() => mudarSalao(aberto.id, { ativo }))}
               aoExcluir={() =>
                 void agir(async () => {
@@ -394,6 +419,9 @@ export default function SalaoDaCasa() {
                 <PlantaDoSalao
                   key={`planta-${aberto.id}`}
                   mesas={desenhadas}
+                  conjuntos={dados.conjuntos}
+                  marcadas={marcadas ?? undefined}
+                  aoMarcar={marcadas ? marcar : undefined}
                   idAberta={idAberta}
                   salaoAtivo={aberto.ativo}
                   podeEditar={podeEditar}
@@ -410,7 +438,7 @@ export default function SalaoDaCasa() {
                       <th className="num w-[90px]">Lugares</th>
                       <th className="num w-[90px]">Máximo</th>
                       <th className="min-w-[140px]">Características</th>
-                      <th className="min-w-[110px]">Junta com</th>
+                      <th className="min-w-[110px]">Conjuntos</th>
                       <th className="w-[100px]">Situação</th>
                     </tr>
                   </thead>
@@ -446,8 +474,14 @@ export default function SalaoDaCasa() {
                             <span className="text-suave">—</span>
                           )}
                         </td>
-                        <td className="mono">
-                          {m.junta_com_nome ?? <span className="text-suave">—</span>}
+                        <td className="mono text-[12.5px]">
+                          {conjuntosDe(m.id).length ? (
+                            conjuntosDe(m.id)
+                              .map((c) => c.mesas.map((x) => x.nome).join(" + "))
+                              .join(" · ")
+                          ) : (
+                            <span className="text-suave">—</span>
+                          )}
                         </td>
                         <td>
                           {m.ativo ? (
@@ -481,18 +515,7 @@ export default function SalaoDaCasa() {
                     mexido={mexido}
                     ocupado={ocupado}
                     podeEditar={podeEditar}
-                    outras={dados.mesas
-                      .filter((x) => x.id !== mesaAberta.id)
-                      .map((x) => ({
-                        id: x.id,
-                        // ⚠️ A junta NÃO se limita ao salão (a da porta da varanda
-                        // encosta na do canto do principal), mas o nome do salão
-                        // viaja junto: "03" sozinho não diz de onde é.
-                        rotulo:
-                          x.id_salao !== mesaAberta.id_salao
-                            ? `${x.nome} · ${dados.saloes.find((s) => s.id === x.id_salao)?.nome ?? ""}`
-                            : x.nome,
-                      }))}
+                    conjuntos={conjuntosDe(mesaAberta.id)}
                     aoMudar={(parte) => setRascunho({ ...emEdicao, ...parte })}
                     aoSalvar={() => void salvarMesa()}
                     aoDesfazer={() => setRascunho(null)}
@@ -502,16 +525,65 @@ export default function SalaoDaCasa() {
               </aside>
             </div>
           )}
+
+          {minhas.length > 0 && (
+            <ConjuntosDoSalao
+              key={`conjuntos-${aberto.id}`}
+              idSalao={aberto.id}
+              saloes={dados.saloes}
+              mesas={dados.mesas}
+              conjuntos={dados.conjuntos}
+              podeEditar={podeEditar}
+              ocupado={ocupado}
+              marcando={marcadas !== null}
+              marcadas={marcadas ?? []}
+              aoComecar={() => { abrirMesa(null); setMarcadas([]); }}
+              aoCancelar={() => setMarcadas(null)}
+              aoMarcar={marcar}
+              aoCriar={(ids, capacidade) =>
+                void agir(async () => {
+                  const r = await criarConjunto(ids, capacidade);
+                  setMarcadas(null);
+                  return r;
+                })
+              }
+              aoMudar={(id, capacidade) => void agir(() => mudarConjunto(id, capacidade))}
+              aoExcluir={setDesfazendo}
+            />
+          )}
         </Cartao>
       )}
 
       {dados.mesas_ativas > 0 && (
         <ConferenciaDoCadastro
           // ⚠️ `key` no que muda a resposta: mexer numa mesa refaz a pergunta.
-          key={`${dados.maior_grupo}-${dados.capacidade_max}-${dados.mesas_ativas}`}
+          key={`${dados.maior_grupo}-${dados.maior_grupo_site}-${dados.capacidade_max}-${dados.mesas_ativas}-${
+            dados.conjuntos.map((c) => `${c.id}:${c.capacidade}`).join()}-${
+            dados.saloes.map((s) => `${s.ativo}${s.dias_semana.join("")}${s.aceita_site}`).join()}`}
           maiorGrupo={dados.maior_grupo}
           teto={dados.teto_online}
         />
+      )}
+
+      {desfazendo && (
+        <Confirmacao
+          titulo="Desfazer o conjunto?"
+          rotuloConfirmar="Desfazer"
+          perigo
+          ocupado={ocupado}
+          aoCancelar={() => setDesfazendo(null)}
+          aoConfirmar={() => {
+            const c = desfazendo;
+            setDesfazendo(null);
+            void agir(() => excluirConjunto(c.id));
+          }}
+        >
+          <p>
+            As mesas <b>{desfazendo.mesas.map((m) => m.nome).join(" + ")}</b> deixam de se juntar
+            para acomodar {desfazendo.capacidade}. As mesas continuam no cadastro, e as reservas
+            já marcadas nelas não mudam.
+          </p>
+        </Confirmacao>
       )}
 
       {excluindo && (
@@ -539,111 +611,143 @@ export default function SalaoDaCasa() {
 }
 
 /**
- * O nome e a situação do salão aberto.
+ * O nome do salão aberto, QUANDO ele atende e se o site o oferece.
  *
- * ⚠️ **O nome também tem Salvar** — pela mesma razão das mesas: gravar ao sair
- * do campo não deixava ver que gravou. "Atende" continua imediato: é um
- * interruptor, e interruptor que pede confirmação deixa de ser um.
+ * ⚠️ **Nome, dias e site têm um Salvar só** — pela mesma razão das mesas: gravar
+ * ao sair do campo não deixava ver que gravou, e os dias decidem disponibilidade.
+ * "Atende" continua imediato: é um interruptor, e interruptor que pede
+ * confirmação deixa de ser um.
+ * ⚠️ **O último dia marcado não se desmarca**: salão que não abre dia nenhum é
+ * salão DESLIGADO, e para isso existe o "Atende" (o servidor também recusa).
  */
 function DadosDoSalaoAberto({
   nome,
   ativo,
+  dias,
+  aceitaSite,
   temMesas,
   ocupado,
-  aoRenomear,
+  aoSalvar,
   aoLigar,
   aoExcluir,
 }: {
   nome: string;
   ativo: boolean;
+  dias: number[];
+  aceitaSite: boolean;
   temMesas: boolean;
   ocupado: boolean;
-  aoRenomear: (nome: string) => void;
+  aoSalvar: (corpo: { nome?: string; dias_semana?: number[]; aceita_site?: boolean }) => void;
   aoLigar: (ativo: boolean) => void;
   aoExcluir: () => void;
 }) {
   const [texto, setTexto] = useState(nome);
-  const mudou = texto.trim() !== nome && texto.trim().length > 0;
+  const [marcados, setMarcados] = useState<number[]>(dias);
+  const [site, setSite] = useState(aceitaSite);
+  const nomeMudou = texto.trim() !== nome && texto.trim().length > 0;
+  const diasMudaram = [...marcados].sort().join() !== [...dias].sort().join();
+  const siteMudou = site !== aceitaSite;
+  const mudou = nomeMudou || diasMudaram || siteMudou;
+
+  function salvar() {
+    if (!mudou || !texto.trim()) return;
+    aoSalvar({
+      ...(nomeMudou ? { nome: texto.trim() } : {}),
+      ...(diasMudaram ? { dias_semana: [...marcados].sort() } : {}),
+      ...(siteMudou ? { aceita_site: site } : {}),
+    });
+  }
+
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-4 border-b border-linha2 pb-4">
-      <Campo rotulo="Nome do salão" className="min-w-[220px] flex-1">
-        <input
-          className="campo"
-          aria-label={`nome do salão ${nome}`}
-          value={texto}
-          maxLength={60}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && mudou) aoRenomear(texto.trim());
-          }}
-        />
-      </Campo>
-      {mudou && (
-        <div className="flex items-center gap-2 pb-0.5">
-          <button className="btn btn-primario" aria-busy={ocupado} disabled={ocupado}
-                  onClick={() => aoRenomear(texto.trim())}>
-            Salvar nome
-          </button>
-          <button className="link-acao" onClick={() => setTexto(nome)}>
-            desfazer
-          </button>
+    <div className="mb-4 flex flex-col gap-3 border-b border-linha2 pb-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <Campo rotulo="Nome do salão" className="min-w-[220px] flex-1">
+          <input
+            className="campo"
+            aria-label={`nome do salão ${nome}`}
+            value={texto}
+            maxLength={60}
+            onChange={(e) => setTexto(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") salvar();
+            }}
+          />
+        </Campo>
+        <label className="flex items-center gap-2 pb-2 text-[14px]">
+          <input
+            type="checkbox"
+            aria-label={`salão ${nome} ativo`}
+            checked={ativo}
+            disabled={ocupado}
+            onChange={(e) => aoLigar(e.target.checked)}
+          />
+          Atende
+        </label>
+        <div className="pb-2">
+          {/* Salão com mesa não se exclui: o servidor recusa de qualquer jeito, e
+              oferecer o botão só para dar erro seria armadilha. */}
+          {!temMesas ? (
+            <button className="link-acao link-acao-erro" aria-label={`excluir salão ${nome}`}
+                    onClick={aoExcluir}>
+              excluir salão
+            </button>
+          ) : (
+            <span className="text-[12.5px] text-suave">tem mesas — desligue em vez de excluir</span>
+          )}
         </div>
-      )}
-      <label className="flex items-center gap-2 pb-2 text-[14px]">
-        <input
-          type="checkbox"
-          aria-label={`salão ${nome} ativo`}
-          checked={ativo}
-          disabled={ocupado}
-          onChange={(e) => aoLigar(e.target.checked)}
-        />
-        Atende
-      </label>
-      <div className="pb-2">
-        {/* Salão com mesa não se exclui: o servidor recusa de qualquer jeito, e
-            oferecer o botão só para dar erro seria armadilha. */}
-        {!temMesas ? (
-          <button className="link-acao link-acao-erro" aria-label={`excluir salão ${nome}`}
-                  onClick={aoExcluir}>
-            excluir salão
-          </button>
-        ) : (
-          <span className="text-[12.5px] text-suave">tem mesas — desligue em vez de excluir</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div role="group" aria-label="dias em que o salão atende" className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[13px] text-suave">Atende em</span>
+          {DIAS_DA_SEMANA.map((d) => {
+            const marcado = marcados.includes(d.n);
+            return (
+              <button
+                key={d.n}
+                type="button"
+                aria-pressed={marcado}
+                aria-label={d.longo}
+                disabled={ocupado || (marcado && marcados.length === 1)}
+                className={`rounded-lg border px-2.5 py-1 text-[12.5px] ${
+                  marcado
+                    ? "border-erva bg-erva-claro font-medium text-erva"
+                    : "border-linha2 text-suave hover:border-erva"
+                }`}
+                onClick={() =>
+                  setMarcados(marcado ? marcados.filter((x) => x !== d.n) : [...marcados, d.n])
+                }
+              >
+                {d.curto}
+              </button>
+            );
+          })}
+        </div>
+        <label className="flex items-center gap-2 text-[14px]">
+          <input type="checkbox" aria-label="aceita reserva pelo site" checked={site}
+                 disabled={ocupado} onChange={(e) => setSite(e.target.checked)} />
+          Aceita reserva pelo site
+        </label>
+        {mudou && (
+          <span className="flex items-center gap-2">
+            <button className="btn btn-primario" aria-busy={ocupado}
+                    disabled={ocupado || !texto.trim()} onClick={salvar}>
+              Salvar salão
+            </button>
+            <button className="link-acao"
+                    onClick={() => { setTexto(nome); setMarcados(dias); setSite(aceitaSite); }}>
+              desfazer
+            </button>
+            <span className="text-[12.5px] text-alerta">alterações não salvas</span>
+          </span>
         )}
       </div>
-    </div>
-  );
-}
-
-/** Um número que se muda de um em um — sem campo para digitar errado. */
-function Passo({
-  rotulo,
-  valor,
-  minimo,
-  maximo,
-  desabilitado,
-  aoMudar,
-}: {
-  rotulo: string;
-  valor: number;
-  minimo: number;
-  maximo: number;
-  desabilitado: boolean;
-  aoMudar: (n: number) => void;
-}) {
-  return (
-    <div className="flex items-center overflow-hidden rounded-[9px] border border-linha2">
-      <button type="button" className="h-9 w-9 bg-superficie2 text-[17px] disabled:opacity-40"
-              aria-label={`menos ${rotulo}`} disabled={desabilitado || valor <= minimo}
-              onClick={() => aoMudar(valor - 1)}>
-        −
-      </button>
-      <output className="mono flex-1 text-center" aria-label={rotulo}>{valor}</output>
-      <button type="button" className="h-9 w-9 bg-superficie2 text-[17px] disabled:opacity-40"
-              aria-label={`mais ${rotulo}`} disabled={desabilitado || valor >= maximo}
-              onClick={() => aoMudar(valor + 1)}>
-        +
-      </button>
+      {(marcados.length < 7 || !site) && (
+        <p className="text-[12.5px] text-suave">
+          {marcados.length < 7 && "Nos outros dias, as mesas deste salão não entram na disponibilidade. "}
+          {!site && "A recepção marca aqui normalmente; o site do cliente não oferece estas mesas."}
+        </p>
+      )}
     </div>
   );
 }
@@ -654,7 +758,7 @@ function PainelDaMesa({
   mexido,
   ocupado,
   podeEditar,
-  outras,
+  conjuntos,
   aoMudar,
   aoSalvar,
   aoDesfazer,
@@ -665,7 +769,7 @@ function PainelDaMesa({
   mexido: boolean;
   ocupado: boolean;
   podeEditar: boolean;
-  outras: { id: number; rotulo: string }[];
+  conjuntos: Conjunto[];
   aoMudar: (parte: Partial<Rascunho>) => void;
   aoSalvar: () => void;
   aoDesfazer: () => void;
@@ -740,18 +844,16 @@ function PainelDaMesa({
             ))}
           </select>
         </Campo>
-        <Campo rotulo="Junta com" dica="a vizinha que encosta nesta" className="col-span-2">
-          <select className="campo" aria-label="mesa que junta com esta" disabled={travado}
-                  value={valor.junta_com ?? ""}
-                  onChange={(e) =>
-                    aoMudar({ junta_com: e.target.value ? Number(e.target.value) : null })
-                  }>
-            <option value="">—</option>
-            {outras.map((x) => (
-              <option key={x.id} value={x.id}>{x.rotulo}</option>
-            ))}
-          </select>
-        </Campo>
+        <div className="col-span-2 text-[13px]">
+          <span className="rotulo-campo">Conjuntos</span>
+          <p className="mt-1 text-suave">
+            {conjuntos.length
+              ? conjuntos
+                  .map((c) => `${c.mesas.map((x) => x.nome).join(" + ")} (acomoda ${c.capacidade})`)
+                  .join(" · ")
+              : "Não faz parte de nenhum conjunto."}
+          </p>
+        </div>
         <label className="col-span-2 flex items-center gap-2 text-[14px]">
           <input type="checkbox" aria-label="mesa ativa" disabled={travado}
                  checked={valor.ativo} onChange={(e) => aoMudar({ ativo: e.target.checked })} />
@@ -772,10 +874,6 @@ function PainelDaMesa({
             </button>
             {mexido && <span className="text-[12.5px] text-alerta">alterações não salvas</span>}
           </div>
-          <p className="mt-2 text-[12.5px] text-suave">
-            A junta vale nos dois sentidos: salvar grava dos dois lados e solta o par
-            anterior.
-          </p>
           <p className="mt-3">
             <button type="button" className="link-acao link-acao-erro"
                     aria-label={`excluir mesa ${mesa.nome}`} disabled={ocupado}
@@ -800,6 +898,9 @@ function PainelDaMesa({
 function ConferenciaDoCadastro({ maiorGrupo, teto }: { maiorGrupo: number; teto: number | null }) {
   const limite = Math.max(maiorGrupo, teto ?? 0, 2) + 2;
   const [pessoas, setPessoas] = useState(Math.min(4, limite));
+  // Quais salões entram: os de um dia da semana, e só os que o site oferece.
+  const [dia, setDia] = useState(0);
+  const [site, setSite] = useState(false);
   const [r, setR] = useState<Simulacao | null>(null);
   const [falhou, setFalhou] = useState(false);
 
@@ -807,7 +908,7 @@ function ConferenciaDoCadastro({ maiorGrupo, teto }: { maiorGrupo: number; teto:
     let vivo = true;
     // Um respiro: arrastar o controle não deve disparar um pedido por pixel.
     const espera = setTimeout(() => {
-      simularGrupo(pessoas)
+      simularGrupo(pessoas, dia || null, site)
         .then((x) => vivo && (setR(x), setFalhou(false)))
         .catch(() => vivo && setFalhou(true));
     }, 150);
@@ -815,12 +916,12 @@ function ConferenciaDoCadastro({ maiorGrupo, teto }: { maiorGrupo: number; teto:
       vivo = false;
       clearTimeout(espera);
     };
-  }, [pessoas]);
+  }, [pessoas, dia, site]);
 
   return (
     <Cartao
       titulo="Onde um grupo sentaria?"
-      descricao="A mesma regra da disponibilidade, com o salão vazio: a menor mesa que serve, e mesa inteira antes de junta."
+      descricao="A mesma regra da disponibilidade, com o salão vazio: a menor mesa que serve, e mesa inteira antes de conjunto."
     >
       <div className="flex flex-wrap items-center gap-4">
         <Campo rotulo="Pessoas no grupo" className="w-full sm:w-[280px]">
@@ -829,6 +930,20 @@ function ConferenciaDoCadastro({ maiorGrupo, teto }: { maiorGrupo: number; teto:
                  onChange={(e) => setPessoas(Number(e.target.value))} />
         </Campo>
         <b className="mono text-[24px] leading-none">{pessoas}</b>
+        <Campo rotulo="Em que dia" className="w-[150px]">
+          <select className="campo" aria-label="dia da semana da conferência" value={dia}
+                  onChange={(e) => setDia(Number(e.target.value))}>
+            <option value={0}>qualquer dia</option>
+            {DIAS_DA_SEMANA.map((d) => (
+              <option key={d.n} value={d.n}>{d.longo}</option>
+            ))}
+          </select>
+        </Campo>
+        <label className="flex items-center gap-2 text-[14px]">
+          <input type="checkbox" aria-label="conferir como o site" checked={site}
+                 onChange={(e) => setSite(e.target.checked)} />
+          pelo site
+        </label>
         <p className="min-w-[220px] flex-1 text-[14.5px]" role="status" aria-live="polite">
           {falhou ? (
             <span className="text-erro">Não foi possível consultar.</span>
@@ -852,7 +967,8 @@ function ConferenciaDoCadastro({ maiorGrupo, teto }: { maiorGrupo: number; teto:
           ) : (
             <>
               Nenhuma mesa sozinha serve. Junta{" "}
-              <b>{r.mesas.map((m) => m.nome).join(" + ")}</b>, que acomodam {r.capacidade}.
+              <b>{r.mesas.map((m) => m.nome).join(" + ")}</b>, conjunto que acomoda{" "}
+              {r.capacidade}.
             </>
           )}
         </p>

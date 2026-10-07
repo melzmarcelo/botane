@@ -93,6 +93,7 @@ with get_cursor() as cur:
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesa_conjuntos WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
 
@@ -131,7 +132,8 @@ m01 = nova_mesa("01", 2, 2)
 m02 = nova_mesa("02", 2, 2)
 m04 = nova_mesa("04", 4, 4)
 m06 = nova_mesa("06", 6, 6)
-chamar("PUT", f"/reservas/mesas/{m01}", {"junta_com": m02}, token)
+# 🔑 A junta e um CONJUNTO desde a 109; sem capacidade, vale a soma (2 + 2 = 4).
+chamar("POST", "/reservas/conjuntos", {"mesas": [m01, m02]}, token)
 checar("o salao do teste tem quatro mesas", all([m01, m02, m04, m06]))
 
 
@@ -417,6 +419,91 @@ checar("dizendo o porque", "sentou" in (r.get("detail") or "").lower(), r.get("d
 chamar("PUT", f"/reservas/{rem['id']}/status", {"status": "ENCERRADA"}, token)
 
 
+print("\n13d. CONJUNTOS e os DIAS do salao decidem a mesa (migracao 109)")
+# 🔑 Terceira entrega do estudo do salao (07/10/2026): as duas mudancas que mexem
+# na regra. Num sabado LIMPO, com um salao novo so para isto — os outros saem de
+# cena desligados, porque mesa com reserva nao se apaga.
+LIMPO = DIA + timedelta(days=28)
+chamar("PUT", f"/reservas/saloes/{SALAO}", {"ativo": False}, token)
+_st, r = chamar("POST", "/reservas/saloes", {"nome": f"Conjuntos {marca}"}, token)
+S2 = r["id"]
+
+
+def mesa_em(salao, nome, maximo):
+    _st, r = chamar("POST", "/reservas/mesas", {"id_salao": salao, "nome": f"{marca}{nome}",
+                                               "lugares": maximo, "capacidade_max": maximo}, token)
+    return r.get("id")
+
+
+# Tres de 4 em fila, e uma de 8.
+f1, f2, f3, g8 = (mesa_em(S2, "F1", 4), mesa_em(S2, "F2", 4), mesa_em(S2, "F3", 4),
+                  mesa_em(S2, "G8", 8))
+_st, par = chamar("POST", "/reservas/conjuntos", {"mesas": [f1, f2], "capacidade": 6}, token)
+_st, trio = chamar("POST", "/reservas/conjuntos", {"mesas": [f1, f2, f3]}, token)
+checar("o salao dos conjuntos esta montado", all([f1, f2, f3, g8, par.get("id"), trio.get("id")]))
+
+
+def livre_as(pessoas, hora="12:00", dia=None):
+    d = livres(pessoas, dia=dia or LIMPO)
+    return next((h["livre"] for h in d.get("horarios") or [] if h["hora"] == hora), None)
+
+
+checar("o maior grupo do dia e o trio: 4 + 4 + 4 = 12", livres(2, dia=LIMPO)["maior_grupo"] == 12,
+       livres(2, dia=LIMPO).get("maior_grupo"))
+st, r = reservar("12:00", 8, nome=f"Oito {marca}", dia=LIMPO)
+checar("grupo de 8 senta na mesa de 8 — mesa inteira antes de conjunto",
+       st == 201 and r.get("mesas") == [f"{marca}G8"], (st, r.get("mesas")))
+# 🔑 A capacidade INFORMADA decide: o par F1 + F2 soma 8, mas a casa disse 6.
+st, r = reservar("12:00", 7, nome=f"Sete {marca}", dia=LIMPO)
+checar("grupo de 7 NAO cabe no par informado como 6: vai para o trio",
+       st == 201 and sorted(r.get("mesas") or []) == [f"{marca}F1", f"{marca}F2", f"{marca}F3"],
+       (st, r.get("mesas")))
+checar("e depois dele nao sobra mesa nem para um casal as 12:00", livre_as(2) is False)
+ag = chamar("GET", f"/reservas/agenda?data={LIMPO}", token=token)[1]
+sete = next(x for x in ag["reservas"] if x["nome"] == f"Sete {marca}")
+chamar("PUT", f"/reservas/{sete['id']}/status", {"status": "CANCELADA"}, token)
+st, r = reservar("12:00", 6, nome=f"Seis {marca}", dia=LIMPO)
+checar("grupo de 6 usa o MENOR conjunto que serve: o par, nao o trio",
+       st == 201 and sorted(r.get("mesas") or []) == [f"{marca}F1", f"{marca}F2"],
+       (st, r.get("mesas")))
+checar("e a F3, que ficou de fora, continua livre para um casal", livre_as(2) is True)
+# ⚠️ Conjunto com UMA mesa presa nao vale: o trio tem a F1 e a F2 ocupadas.
+checar("o trio nao serve mais: duas das mesas dele estao ocupadas", livre_as(10) is False)
+
+# --- os dias do salao: o que so abre no domingo nao recebe o sabado ---
+chamar("PUT", f"/reservas/saloes/{S2}", {"dias_semana": [7]}, token)
+d = livres(2, dia=LIMPO + timedelta(days=7))
+checar("no sabado, sem salao que atenda, a resposta diz POR QUE",
+       not d.get("horarios") and "salão atende" in (d.get("motivo") or ""), d.get("motivo"))
+st, r = reservar("13:00", 2, dia=LIMPO + timedelta(days=7))
+checar("e marcar nesse dia e recusado (409)", st == 409, (st, r))
+chamar("PUT", f"/reservas/saloes/{S2}", {"dias_semana": [6, 7]}, token)
+checar("com o sabado de volta nos dias do salao, ha horario",
+       livre_as(2, dia=LIMPO + timedelta(days=7)) is True)
+st, rem2 = reservar("13:00", 2, nome=f"Remarca {marca}", dia=LIMPO + timedelta(days=7))
+chamar("PUT", f"/reservas/saloes/{S2}", {"dias_semana": [7]}, token)
+st, r = chamar("PUT", f"/reservas/{rem2['id']}", {"data": str(LIMPO + timedelta(days=14))}, token)
+checar("remarcar para um dia em que o salao nao abre e recusado, e a reserva fica",
+       st == 409, (st, r))
+chamar("PUT", f"/reservas/saloes/{S2}", {"dias_semana": [1, 2, 3, 4, 5, 6, 7]}, token)
+
+# --- o site: salao que a recepcao usa e o site nao oferece ---
+chamar("PUT", f"/reservas/saloes/{S2}", {"aceita_site": False}, token)
+SITE = LIMPO + timedelta(days=21)
+st, r = reservar("12:00", 2, origem="SITE", dia=SITE)
+checar("pelo SITE, o salao fora do site nao recebe reserva (409)", st == 409, (st, r))
+st, r = reservar("12:00", 2, dia=SITE)
+checar("mas o BALCAO marca no mesmo salao, no mesmo horario", st == 201, (st, r))
+checar("e a disponibilidade do balcao continua oferecendo", livre_as(2, dia=SITE) is True)
+st, pub = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={SITE}&pessoas=2")
+checar("a pagina publica nao oferece horario nenhum nesse dia",
+       st == 200 and not (pub.get("horarios") or []), (st, pub))
+chamar("PUT", f"/reservas/saloes/{S2}", {"aceita_site": True}, token)
+st, pub = chamar("GET", f"/publico/{UNIDADE}/horarios?dia={SITE}&pessoas=2")
+checar("e volta a oferecer quando o salao aceita o site",
+       st == 200 and bool(pub.get("horarios")), (st, pub))
+
+
 print("\n14. limpeza")
 with get_cursor() as cur:
     cur.execute("DELETE FROM reserva_mesas WHERE id_reserva IN "
@@ -424,6 +511,7 @@ with get_cursor() as cur:
     cur.execute("DELETE FROM reservas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_bloqueios WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM reserva_dias_especiais WHERE id_unidade = %s", (UNIDADE,))
+    cur.execute("DELETE FROM mesa_conjuntos WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM mesas WHERE id_unidade = %s", (UNIDADE,))
     cur.execute("DELETE FROM saloes WHERE id_unidade = %s", (UNIDADE,))
     for tabela in ("reserva_permanencias", "reserva_horarios", "reserva_config"):

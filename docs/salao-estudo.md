@@ -84,7 +84,7 @@ junta gravada, então ela não converte nada — mas tem de estar certa para a b
   teto) e 5 (características). Resolve o que mais incomoda no uso e não tem risco. ✅ **Feita em 06/10/2026** (migração 106).
 - **Segunda:** 2 (planta), com a lista mantida. ✅ **Feita em 07/10/2026** (migração 108).
 - **Terceira:** 3 (conjuntos) e 4 (dias e site), juntas, com a suíte de disponibilidade
-  estendida primeiro.
+  estendida primeiro. ✅ **Feita em 07/10/2026** (migração 109) — com as decisões 1 e 3 respondidas: vale a capacidade informada, e por dia da semana basta.
 
 ## 7. O que fica de fora, de propósito
 

@@ -110,9 +110,9 @@ export default function EscolherHorario({
             vez de parecer defeito. */}
         {disp?.maior_grupo !== undefined && pessoas > disp.maior_grupo && (
           <p className="mt-2 text-[13px] text-alerta">
-            A maior mesa (ou junta) da casa acomoda {disp.maior_grupo}. Para um grupo maior,
-            junte mesas na mão e marque duas reservas — ou acrescente a junta no cadastro do
-            Salão.
+            A maior mesa (ou conjunto de mesas) que atende neste dia acomoda {disp.maior_grupo}.
+            Para um grupo maior, junte mesas na mão e marque duas reservas — ou crie o conjunto
+            no cadastro do Salão.
           </p>
         )}
       </div>

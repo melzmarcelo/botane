@@ -645,7 +645,8 @@ def horarios(
     """
     with get_cursor() as cur:
         _casa_aberta(cur, id_unidade)
-        r = agenda.disponibilidade(cur, id_unidade, dia, pessoas)
+        # 🔑 `origem="SITE"`: só os salões que aceitam reserva pelo site (109).
+        r = agenda.disponibilidade(cur, id_unidade, dia, pessoas, origem="SITE")
         livres = [h["hora"] for h in (r.get("horarios") or []) if h["livre"]]
         motivo = r.get("motivo")
 
