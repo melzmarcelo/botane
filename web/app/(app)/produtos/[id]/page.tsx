@@ -36,6 +36,7 @@ import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
 import UnidadesDeCompra from "./unidades";
 import MovimentacaoDoProduto from "./movimentacao";
+import ValidadesDoProduto from "./validades";
 import Vincular from "./vincular";
 import Voltar from "@/components/voltar";
 
@@ -118,6 +119,17 @@ export default function FormularioProduto() {
   const [aba, setAba] = useState<
     "principal" | "fornecedores" | "vinculados" | "estoque" | "movimentacao" | "catalogo"
   >("principal");
+  // 🔑 **O endereço pode pedir a aba** (`?aba=estoque`): é como Etiquetas →
+  // Configuração leva direto às validades do produto, sem a pessoa procurar em
+  // qual aba elas ficaram. ⚠️ Lido uma vez, na montagem — depois quem manda é o
+  // clique; e só aceita aba que existe.
+  useEffect(() => {
+    const pedida = new URLSearchParams(window.location.search).get("aba");
+    if (pedida === "fornecedores" || pedida === "vinculados" || pedida === "estoque"
+        || pedida === "movimentacao") {
+      setAba(pedida);
+    }
+  }, []);
   /**
    * A foto fica FORA do formulário, e não é descuido.
    *
@@ -1754,6 +1766,18 @@ export default function FormularioProduto() {
             </Campo>
         </div>
       </Cartao>
+
+      {/* 🔑 **As validades por situação moram aqui, junto do "Validade (dias)"**
+          (06/10/2026, pedido do dono). Estavam em Etiquetas → Configuração, com
+          uma busca para escolher o produto. ⚠️ Só em produto que já existe: as
+          regras apontam para um id. */}
+      {!novo && (
+        <ValidadesDoProduto
+          idProduto={Number(id)}
+          validadeDias={f.validade_dias}
+          podeEditar={podeEditar || pode("etiquetas.configurar")}
+        />
+      )}
       </div>
 
       {/* 🔑 **A aba CATÁLOGO** (pedido do dono, 22/09/2026: *"no cadastro de

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Paginacao, usePaginacao } from "@/components/paginacao";
@@ -8,13 +9,13 @@ import {
   produtosComValidade, rotuloConservacao, rotuloEvento, type ProdutoComValidade,
 } from "@/lib/etiquetas";
 
-/** Os produtos que já têm validade cadastrada — clicar abre para editar. */
-export default function ProdutosComValidade({
-  versao, aoEscolher,
-}: {
-  versao: number;
-  aoEscolher: (p: { id: number; rotulo: string }) => void;
-}) {
+/**
+ * Os produtos que já têm regra de validade — o panorama, só de leitura.
+ *
+ * ⚠️ **Clicar leva ao CADASTRO do produto, já na aba Estoque** (`?aba=estoque`):
+ * é lá que as regras se editam desde 06/10/2026.
+ */
+export default function ProdutosComValidade() {
   const [busca, setBusca] = useState("");
   const [lista, setLista] = useState<ProdutoComValidade[] | null>(null);
   const [erro, setErro] = useState("");
@@ -31,7 +32,7 @@ export default function ProdutosComValidade({
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, pag.offset, pag.porPagina, versao]);
+  }, [pag.pronto, busca, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);
@@ -39,12 +40,15 @@ export default function ProdutosComValidade({
   }, [carregar, busca]);
 
   return (
-    <Cartao titulo="Produtos com validade cadastrada"
+    <Cartao titulo="Produtos com regra de validade"
             acao={<input className="campo w-[220px] text-[13px]" placeholder="buscar" value={busca}
                          onChange={(e) => setBusca(e.target.value)} />}>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {!lista ? <Carregando /> : !lista.length ? (
-        <Vazio>Nenhum produto com validade ainda. Escolha um acima e cadastre as regras.</Vazio>
+        <Vazio>
+          Nenhum produto com regra de validade ainda. Elas se cadastram no próprio produto, na
+          aba Estoque.
+        </Vazio>
       ) : (
         <div className="grid-rolante">
           <table className="tabela">
@@ -53,9 +57,10 @@ export default function ProdutosComValidade({
               {lista.map((p) => (
                 <tr key={p.id}>
                   <td>
-                    <button className="link-acao text-left" onClick={() => aoEscolher({ id: p.id, rotulo: p.nome })}>
+                    <Link href={`/produtos/${p.id}?aba=estoque`} className="link-registro"
+                          title="abrir as validades no cadastro do produto">
                       {p.nome}
-                    </button>
+                    </Link>
                     <span className="mono block text-[12px] text-suave">{p.codigo}</span>
                   </td>
                   <td className="text-[13px]">

@@ -5,6 +5,11 @@
 
 ## O que já existe
 
+- 🔑 **As validades por situação moram no cadastro do produto** (aba Estoque, cartão "Validade
+  por situação", 06/10/2026) — vieram de Etiquetas → Configuração. A decisão e as armadilhas
+  estão na memória do módulo dono da regra: [`etiquetas.md`](etiquetas.md). ⚠️ A tela do produto
+  aceita `?aba=` no endereço para abrir direto numa aba.
+
 - 🔑 **Desvincular um código de fora, na linha dele** (`produtos_vinculo.desvincular_codigo`,
   `GET /produtos/{id}/codigos/desvinculo/previa` e `POST /produtos/{id}/codigos/desvincular`,
   06/10/2026, pedido do dono: *"cria a opção para desvincular um produto vinculado. Na linha do

@@ -11,6 +11,32 @@
   *"pode implementar"*). Migração `100_etiquetas.sql`, `services/etiquetas.py`,
   `routers/etiquetas.py`, telas em `web/app/(app)/etiquetas/`, suíte `smoke_etiquetas` (58).
 
+- 🔑 **As validades do produto se cadastram no PRODUTO, não em Etiquetas** (06/10/2026, pedido
+  do dono: *"a configuração da validade dos produtos está nas configurações em etiquetas. Hoje
+  já temos os dias de validade no cadastro de produto. Podemos transferir esta configuração
+  para o cadastro de produto, aí deixamos tudo centralizado no produto, utilizando o que já
+  temos hoje"*). O editor das regras (`produto_validades`) saiu de Etiquetas → Configuração e
+  virou o cartão **"Validade por situação"** na aba Estoque do cadastro
+  (`web/app/(app)/produtos/[id]/validades.tsx`), logo abaixo do "Validade (dias)".
+  ⚠️ **A tabela e a regra NÃO mudaram** — é a mesma `produto_validades`, a mesma rota
+  (`/etiquetas/validades/{id}`) e a mesma ordem de quem responde. O que mudou foi ONDE se
+  edita. O cartão diz a ordem ali mesmo: com regra de produção vale ela; sem regra, os dias do
+  campo; sem nenhum, a etiqueta pede a data.
+  ⚠️ **O "Validade (dias)" NÃO substituiu as regras.** Um número só não diz que o molho dura 3
+  dias refrigerado e 60 congelado, nem que o creme dura 3 dias depois de aberto — por isso as
+  duas coisas ficam lado a lado, e não uma no lugar da outra.
+  ⚠️ **Salvar próprio**: as regras são outra tabela e outra rota; o Salvar do produto não as
+  toca. O botão só liga quando há mudança, e a tela avisa "alterações não salvas".
+  🔑 **Quem cadastra produto passou a gravar as regras** (`cadastros.produtos`, além de
+  `etiquetas.configurar`): senão o cartão apareceria travado para quem edita todo o resto
+  daquela tela. ⚠️ O MODELO da etiqueta continua só de `etiquetas.configurar` — é a impressora
+  da loja, não dado do produto.
+  ⚠️ **Em Etiquetas → Configuração ficou o modelo e a LISTA de quem tem regra**, só de leitura:
+  é o panorama que o cadastro, produto a produto, não dá. Cada linha leva ao cadastro já na aba
+  certa (`/produtos/{id}?aba=estoque` — a tela do produto passou a aceitar `?aba=`).
+  Cobertura: `smoke_etiquetas` (o conferente grava a validade e não mexe no modelo) e o bloco
+  de validades do `verificar.mjs`.
+
 - 🔑 **A PRODUÇÃO passou a nascer com lote e validade** (`estoque.produzir`). Era o furo que o
   estudo achou: o que a cozinha fazia entrava sem data, e o FEFO e o alerta de vencimento só
   enxergavam o que veio de nota. O lote é `P<id da produção>`; a validade sai da regra de

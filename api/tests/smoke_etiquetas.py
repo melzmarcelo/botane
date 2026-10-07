@@ -122,6 +122,30 @@ st, r = chamar("PUT", f"/etiquetas/validades/{creme}", {"regras": []}, token=coz
 checar("a cozinha NÃO configura validade (403)", st == 403, (st, r))
 st, r = chamar("GET", f"/etiquetas/validades/{molho}", token=cozinha)
 checar("mas lê a validade para imprimir", st == 200 and len(r) == 3, (st, r))
+
+# 🔑 **As validades moram no cadastro do PRODUTO** (06/10/2026, pedido do dono):
+# quem cadastra produto grava as regras, mesmo sem `etiquetas.configurar` — é a
+# pessoa que edita todo o resto daquela tela. O MODELO da etiqueta continua só de
+# quem configura etiquetas: é a impressora da loja, não um dado do produto.
+_st, _papeis = chamar("GET", "/papeis", token=token)
+_conferente = next((x for x in (_papeis or []) if x["nome"] == "Conferente / Estoque"), None)
+_email = f"etq.conferente.{marca}@botane.com.br"
+_st, _novo = chamar("POST", "/usuarios", {
+    "nome": f"Conferente etiquetas {marca}", "email": _email, "senha": "smoke12345",
+    "papeis": [{"id_papel": (_conferente or {}).get("id")}]}, token=token)
+_st, _entrou = chamar("POST", "/auth/login", {"email": _email, "senha": "smoke12345"})
+cadastra = (_entrou or {}).get("access_token")
+st, r = chamar("PUT", f"/etiquetas/validades/{creme}", {"regras": [
+    {"evento": "ABERTURA", "conservacao": "REFRIGERADO", "prazo": 3, "unidade": "DIAS"}]},
+    token=cadastra)
+checar("quem cadastra produto GRAVA as validades dele", st == 200, (st, r))
+st, r = chamar("GET", f"/etiquetas/validades/{creme}", token=cadastra)
+checar("e as lê", st == 200 and len(r) == 1, (st, r))
+st, cfg_atual = chamar("GET", "/etiquetas/configuracao", token=token)
+st, r = chamar("PUT", "/etiquetas/configuracao", cfg_atual, token=cadastra)
+checar("mas NÃO mexe no modelo da etiqueta da loja (403)", st == 403, (st, r))
+if (_novo or {}).get("id"):
+    chamar("DELETE", f"/usuarios/{_novo['id']}", token=token)
 st, lista = chamar("GET", f"/etiquetas/produtos-com-validade?busca=Etq%20molho%20{marca}",
                    token=token)
 checar("o molho aparece na lista de produtos com validade",

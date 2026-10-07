@@ -21,6 +21,15 @@ _DESCARTAR = requer_permissao("etiquetas.descartar")
 _CONFIGURAR = requer_permissao("etiquetas.configurar")
 # Ler a validade de um produto serve a quem imprime E a quem configura.
 _VER_VALIDADE = requer_permissao("etiquetas.imprimir", "etiquetas.configurar")
+# 🔑 **As validades do PRODUTO moram no cadastro dele** (06/10/2026, pedido do dono:
+# *"deixamos tudo centralizado no produto"*). Quem cadastra produto passa a ver e
+# gravar as regras — eram só de quem configurava etiquetas, e o cartão no cadastro
+# apareceria travado para a pessoa que edita todo o resto daquela tela.
+# ⚠️ O MODELO da etiqueta (rolo, o que imprime) continua só de `etiquetas.configurar`:
+# é a impressora da loja, não um dado do produto.
+_VER_VALIDADE_DO_PRODUTO = requer_permissao(
+    "etiquetas.imprimir", "etiquetas.configurar", "cadastros.produtos")
+_GRAVAR_VALIDADE_DO_PRODUTO = requer_permissao("etiquetas.configurar", "cadastros.produtos")
 
 
 def _loja_da_etiqueta(cur, ctx: Contexto, id_etiqueta: int) -> int:
@@ -53,14 +62,15 @@ def salvar_config(body: EtiquetaConfig, ctx: Contexto = Depends(_CONFIGURAR)) ->
 
 
 @router.get("/validades/{id_produto}")
-def obter_validades(id_produto: int, ctx: Contexto = Depends(_VER_VALIDADE)) -> list[dict]:
+def obter_validades(id_produto: int,
+                    ctx: Contexto = Depends(_VER_VALIDADE_DO_PRODUTO)) -> list[dict]:
     with get_cursor() as cur:
         return servico.validades(cur, id_produto)
 
 
 @router.put("/validades/{id_produto}")
 def salvar_validades(id_produto: int, body: ValidadesDoProduto,
-                     ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+                     ctx: Contexto = Depends(_GRAVAR_VALIDADE_DO_PRODUTO)) -> dict:
     with get_cursor() as cur:
         antes = servico.validades(cur, id_produto)
         regras = servico.salvar_validades(cur, id_produto,

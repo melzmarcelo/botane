@@ -2649,6 +2649,94 @@ try {
     saldosSemForm.antigos.length === 0, saldosSemForm.antigos);
   checar("e ganhou o atalho para os ajustes", saldosSemForm.lancar === true, saldosSemForm);
 
+  // 🔑 **As validades do produto moram no CADASTRO dele** (06/10/2026, pedido do
+  // dono: *"transferir esta configuração para o cadastro de produto, aí deixamos
+  // tudo centralizado no produto"*). Estavam em Etiquetas → Configuração, com uma
+  // busca para escolher o produto, enquanto o "Validade (dias)" morava no
+  // cadastro. Aqui se prova o caminho da tela; a regra está na `smoke_etiquetas`.
+  const marcaVal = Date.now().toString().slice(-5);
+  const { dados: prodVal } = await api("POST", "/produtos", {
+    codigo: `VAL-${marcaVal}`, nome: `VALIDADE NA TELA ${marcaVal}`, tipo: "PRODUZIDO",
+    um_estoque: "KG", controla_estoque: true, producao_propria: true, validade_dias: 5,
+  }, token);
+  await irPara(p, `${WEB}/produtos/${prodVal.id}?aba=estoque`);
+  const cartaoDeValidade = () => p.evaluate(() => {
+    const c = [...document.querySelectorAll("section.cartao")]
+      .find((x) => /validade por situa/i.test(x.querySelector("h2")?.textContent ?? ""));
+    return {
+      visivel: !!c && c.offsetParent !== null,
+      texto: c?.innerText ?? "",
+      aba: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent
+        ?.replace(/\d+$/, "").trim() ?? null,
+    };
+  });
+  await p.waitForFunction(() => [...document.querySelectorAll("section.cartao")]
+    .some((x) => /validade por situa/i.test(x.querySelector("h2")?.textContent ?? "")
+      && x.offsetParent !== null && !/carregando/i.test(x.innerText)),
+    { timeout: 20000 }).catch(() => {});
+  const validadeNoProduto = await cartaoDeValidade();
+  checar("o endereço ?aba=estoque abre o produto já na aba Estoque",
+    validadeNoProduto.aba === "Estoque", validadeNoProduto.aba);
+  checar("o cadastro do produto tem o cartão de validade por situação",
+    validadeNoProduto.visivel, validadeNoProduto);
+  checar("e ele diz que, sem regra, valem os dias do campo do cadastro",
+    /5 dia/i.test(validadeNoProduto.texto) && /validade \(dias\)/i.test(validadeNoProduto.texto),
+    validadeNoProduto.texto.slice(0, 300));
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "+ Regra")?.click());
+  await new Promise((r) => setTimeout(r, 400));
+  checar("acrescentar uma regra avisa que há alteração não salva",
+    /altera[çc][õo]es n[ãa]o salvas/i.test((await cartaoDeValidade()).texto));
+  // 🔑 **O campo "Dura" aceita ficar vazio enquanto se digita** (06/10/2026, relato
+  // do dono: *"ao apagar para informar outro valor, vira 1 e não deixa apagar"*).
+  // A primeira versão forçava o mínimo a cada tecla.
+  const campoDura = 'input[aria-label="prazo da regra"]';
+  await p.click(campoDura, { clickCount: 3 });
+  await p.keyboard.press("Backspace");
+  const duraApagado = await p.evaluate((sel) => ({
+    valor: document.querySelector(sel)?.value,
+    salvarDesligado: [...document.querySelectorAll("button")]
+      .find((x) => x.textContent?.trim() === "Salvar validades")?.disabled,
+  }), campoDura);
+  checar("apagar o prazo deixa o campo VAZIO, sem virar 1 sozinho",
+    duraApagado.valor === "", duraApagado);
+  checar("e o Salvar espera o número ser informado", duraApagado.salvarDesligado === true,
+    duraApagado);
+  await p.type(campoDura, "15");
+  checar("digitar o prazo novo fica como foi digitado",
+    (await p.evaluate((sel) => document.querySelector(sel)?.value, campoDura)) === "15");
+  const { dados: regrasAntes } = await api("GET", `/etiquetas/validades/${prodVal.id}`, null, token);
+  checar("e nada é gravado antes do Salvar validades", (regrasAntes ?? []).length === 0, regrasAntes);
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "Salvar validades")?.click());
+  await p.waitForFunction(() => /validades salvas/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const { dados: regrasDepois } = await api("GET", `/etiquetas/validades/${prodVal.id}`, null, token);
+  checar("Salvar validades grava a regra pelo cadastro do produto, com o prazo digitado",
+    (regrasDepois ?? []).length === 1 && regrasDepois[0].evento === "PRODUCAO"
+      && Number(regrasDepois[0].prazo) === 15, regrasDepois);
+
+  await irPara(p, `${WEB}/etiquetas/configuracao`);
+  // ⚠️ A lista é paginada e a base de trabalho tem dezenas de produtos com regra:
+  // o desta rodada pode não estar na primeira página. O que se prova é que as
+  // linhas levam ao cadastro, na aba Estoque — qualquer uma delas.
+  await p.waitForFunction(
+    () => !!document.querySelector('a[href^="/produtos/"][href$="?aba=estoque"]'),
+    { timeout: 20000 }).catch(() => {});
+  const configDeEtiquetas = await p.evaluate(() => ({
+    titulos: [...document.querySelectorAll("section.cartao h2")].map((h) => h.textContent?.trim()),
+    avisa: /agora fica no cadastro/i.test(document.body.innerText),
+    atalho: !!document.querySelector('a[href^="/produtos/"][href$="?aba=estoque"]'),
+    editor: !!document.querySelector('input[aria-label="prazo da regra"]')
+      || [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Salvar validades"),
+  }));
+  checar("a Configuração de etiquetas deixou de ter o editor de validades",
+    !configDeEtiquetas.editor && !configDeEtiquetas.titulos.includes("Validade por produto"),
+    configDeEtiquetas);
+  checar("e avisa que a validade fica no cadastro, com o atalho para o produto",
+    configDeEtiquetas.avisa && configDeEtiquetas.atalho, configDeEtiquetas);
+  await api("DELETE", `/produtos/${prodVal.id}`, null, token);
+
   // 🔑 **Desvincular um código de fora, na linha dele** (06/10/2026, pedido do
   // dono: *"na linha do produto vinculado ter a opção de desvincular"*). Dois
   // cadastros são fundidos pela API e a tela desfaz o vínculo: a janela diz qual
