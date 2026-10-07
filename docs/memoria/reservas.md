@@ -264,6 +264,39 @@ três que **não mexem na regra de disponibilidade**.
 - Cobertura: bloco `9b` do `smoke_reservas_salao.py` (o salão A/B/C/D conferido à mão) e as
   checagens do painel no `verificar.mjs`.
 
+## A planta do salão — segunda entrega (migração 108, 07/10/2026)
+
+🔑 **Pedido do dono:** *"vamos iniciar pelo salão"* — a segunda entrega do estudo: as mesas
+desenhadas onde estão. Só DESENHO: a disponibilidade não lê formato nem posição (a suíte
+confere que "onde o grupo senta" responde igual antes e depois).
+
+- 🔑 **`mesas.formato`** (REDONDA, QUADRADA, RETANGULAR; padrão QUADRADA) e o uso, enfim, de
+  `pos_x`/`pos_y`, que existiam desde a 069. O formato se edita no painel da mesa, com o
+  Salvar dela; ⚠️ a planta desenha o RASCUNHO da mesa aberta — mudar o formato já muda o
+  desenho antes de gravar.
+- 🔑 **Arrastar é RASCUNHO; quem grava é o "Salvar planta"** — `PUT /reservas/salao/planta`,
+  com todas as mesas no mesmo corpo. Um PUT a cada soltar do mouse seria o "grava ao sair do
+  campo" que a primeira entrega tirou. ⚠️ **Tudo ou nada**: mesa de outra loja recusa o corpo
+  inteiro (404).
+- ⚠️ **Mesa sem posição é arrumada em fileiras**, abaixo das posicionadas, e o Salvar grava
+  TODAS as do salão, inclusive as arrumadas: senão a fileira mudaria de lugar a cada mesa
+  fixada.
+- ⚠️ **Clique abre, arrasto move**, separados pela DISTÂNCIA (5 px), não pelo tempo. As setas
+  movem a mesa em foco de um passo da grade (30) — arrastar não pode ser o único jeito.
+  `touch-action: none` só NA MESA: o dedo no fundo rola a planta, que no celular é mais larga
+  que a tela.
+- ⚠️ **A linha entre duas mesas MOSTRA a junta já cadastrada**; não cria junta. Criar pela
+  planta vem com os conjuntos, na terceira entrega.
+- 🔑 **A tela abre na PLANTA; a Lista fica num botão**, e a escolha mora no endereço
+  (`?ver=lista`). ⚠️ As fases antigas do `verificar.mjs` falam da tabela e passaram a abrir com
+  `ver=lista`.
+- ⚠️ **`bg-fundo2` não existe no tema** — a primeira entrega usou a classe nos botões de −/+ e
+  no formulário de lote, e eles ficaram sem fundo sem ninguém notar. É `bg-superficie2`.
+- **Fora, de propósito** (ver o estudo): paredes e escala real, ocupação ao vivo na planta,
+  mesa que muda de salão arrastando. A planta é do CADASTRO, não da operação — o dono ainda
+  não respondeu se quer ver na agenda as mesas ocupadas.
+- Cobertura: bloco `9c` do `smoke_reservas_salao.py` e o bloco da planta no `verificar.mjs`.
+
 ### Três armadilhas de TESTE que esta fatia pagou
 
 Nenhuma era defeito de produto, e as três são da mesma família — **o teste afirmando ter

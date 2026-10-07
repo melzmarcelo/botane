@@ -9297,7 +9297,7 @@ try {
     }
   });
 
-  await irPara(p, `${WEB}/reservas/salao`);
+  await irPara(p, `${WEB}/reservas/salao?ver=lista`);
   await esperarTexto(p, "maior grupo que cabe", 9000);
   const salaoVazio = await p.evaluate(() => document.body.innerText);
   checar("a tela do salao mostra os quatro numeros desde o inicio",
@@ -9383,7 +9383,7 @@ try {
     { nome: `Varanda ${marcaNota}`, ordem: 1 }, token);
   await api("POST", "/reservas/mesas/em-lote",
     { id_salao: outro.id, quantidade: 2, lugares: 6, capacidade_max: 8, prefixo: "V" }, token);
-  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}&ver=lista`);
   await esperarTexto(p, `Varanda ${marcaNota}`, 9000);
   const naVaranda = await p.evaluate(() => ({
     linhas: document.querySelectorAll("table tbody tr").length,
@@ -9441,7 +9441,7 @@ try {
   // entrega do estudo `docs/salao-estudo.md`). Ate aqui cada campo da tabela
   // gravava ao perder o foco. O que se prova: a tabela so mostra, mexer nao
   // grava, Desfazer devolve, e Salvar grava — inclusive a caracteristica.
-  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}&ver=lista`);
   await new Promise((r) => setTimeout(r, 1200));
   const salaoSoMostra = await p.evaluate(() => ({
     linhas: document.querySelectorAll("table tbody tr").length,
@@ -9506,6 +9506,117 @@ try {
     conferenciaDoSalao.titulo
       && /senta na mesa|nenhuma mesa sozinha|n[ãa]o cabe/i.test(conferenciaDoSalao.resposta),
     conferenciaDoSalao);
+
+  // 🔑 **A planta do salão** (07/10/2026, segunda entrega do estudo): as mesas
+  // desenhadas onde estão. O que se prova: a tela abre na planta, arrastar é
+  // RASCUNHO (nada grava antes do Salvar planta), Desfazer devolve, clicar sem
+  // arrastar abre a mesa, e o formato do painel já muda o desenho.
+  await irPara(p, `${WEB}/reservas/salao?salao=${outro.id}`);
+  const seletorDaPlanta = '[aria-label="planta do salão"] button[aria-label^="mesa "]';
+  await p.waitForSelector(seletorDaPlanta, { timeout: 15000 }).catch(() => {});
+  const mesasNaPlanta = () => p.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => ({
+    rotulo: b.getAttribute("aria-label"), x: Number(b.dataset.x), y: Number(b.dataset.y),
+    redonda: b.classList.contains("rounded-full"), aberta: b.getAttribute("aria-pressed") === "true",
+  })), seletorDaPlanta);
+  const plantaDeInicio = await mesasNaPlanta();
+  checar("sem dizer nada, o salão abre na PLANTA, com uma figura por mesa",
+    plantaDeInicio.length === 2
+      && !(await p.evaluate(() => !!document.querySelector("table tbody tr"))), plantaDeInicio);
+  checar("mesas ainda sem posição aparecem arrumadas em fileira, sem empilhar",
+    plantaDeInicio.length === 2 && plantaDeInicio[0].x !== plantaDeInicio[1].x, plantaDeInicio);
+  const botaoDaPlanta = async (rotulo) => p.evaluate((r) => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === r);
+    return b ? { existe: true, desligado: b.disabled } : { existe: false };
+  }, rotulo);
+  checar("Salvar planta começa desligado: nada foi mexido",
+    (await botaoDaPlanta("Salvar planta")).desligado === true);
+
+  const arrastarNaPlanta = async (indice, dx, dy) => {
+    const alvos = await p.$$(seletorDaPlanta);
+    const caixa = await alvos[indice].boundingBox();
+    const [cx, cy] = [caixa.x + caixa.width / 2, caixa.y + caixa.height / 2];
+    await p.mouse.move(cx, cy);
+    await p.mouse.down();
+    await p.mouse.move(cx + dx / 2, cy + dy / 2, { steps: 4 });
+    await p.mouse.move(cx + dx, cy + dy, { steps: 4 });
+    await p.mouse.up();
+    await new Promise((r) => setTimeout(r, 250));
+  };
+  await arrastarNaPlanta(0, 0, 120);
+  const plantaArrastada = await mesasNaPlanta();
+  checar("arrastar move a mesa, presa à grade de 30",
+    plantaArrastada[0].y === plantaDeInicio[0].y + 120 && plantaArrastada[0].x % 30 === 0,
+    [plantaDeInicio[0], plantaArrastada[0]]);
+  checar("e avisa que há posição não salva",
+    /posi[çc][õo]es n[ãa]o salvas/i.test(await p.evaluate(() => document.body.innerText)));
+  checar("arrastar NÃO abre a mesa", plantaArrastada.every((m) => !m.aberta), plantaArrastada);
+  const { dados: plantaSemGravar } = await api("GET", "/reservas/salao", null, token);
+  const daPlanta = (d) => d.mesas.filter((m) => m.id_salao === outro.id);
+  checar("nada é gravado antes do Salvar planta",
+    daPlanta(plantaSemGravar).every((m) => m.pos_x === null), daPlanta(plantaSemGravar));
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .filter((b) => b.textContent?.trim() === "Desfazer")
+    .find((b) => !b.closest("form"))?.click());
+  await new Promise((r) => setTimeout(r, 250));
+  checar("Desfazer devolve a mesa ao lugar",
+    (await mesasNaPlanta())[0].y === plantaDeInicio[0].y, await mesasNaPlanta());
+
+  await arrastarNaPlanta(0, 0, 120);
+  await p.evaluate(() => [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.trim() === "Salvar planta")?.click());
+  await p.waitForFunction(() => /planta salva/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const { dados: plantaGravada } = await api("GET", "/reservas/salao", null, token);
+  checar("Salvar planta grava a posição de TODAS as mesas do salão, inclusive as arrumadas",
+    daPlanta(plantaGravada).length === 2 && daPlanta(plantaGravada).every((m) => m.pos_x !== null)
+      && daPlanta(plantaGravada).some((m) => m.pos_y === plantaDeInicio[0].y + 120),
+    daPlanta(plantaGravada).map((m) => [m.nome, m.pos_x, m.pos_y]));
+  checar("sem mexer na disponibilidade: o maior grupo continua o mesmo",
+    plantaGravada.maior_grupo === plantaSemGravar.maior_grupo,
+    [plantaSemGravar.maior_grupo, plantaGravada.maior_grupo]);
+
+  // Clique sem arrastar abre a mesa no painel; o formato do rascunho já desenha.
+  const figuras = await p.$$(seletorDaPlanta);
+  await figuras[1].click();
+  await p.waitForSelector('select[aria-label="formato da mesa"]', { timeout: 8000 }).catch(() => {});
+  checar("clicar sem arrastar abre a mesa no painel", (await mesasNaPlanta())[1].aberta === true,
+    await mesasNaPlanta());
+  await p.select('select[aria-label="formato da mesa"]', "REDONDA");
+  await new Promise((r) => setTimeout(r, 250));
+  checar("mudar o formato no painel já muda o desenho, antes do Salvar",
+    (await mesasNaPlanta())[1].redonda === true, await mesasNaPlanta());
+  const { dados: formatoSemGravar } = await api("GET", "/reservas/salao", null, token);
+  checar("mas o formato só é gravado no Salvar da mesa",
+    daPlanta(formatoSemGravar).every((m) => m.formato === "QUADRADA"),
+    daPlanta(formatoSemGravar).map((m) => m.formato));
+  await p.evaluate(() => document.querySelector('aside[aria-label="mesa aberta"] button[type="submit"]')?.click());
+  await p.waitForFunction(() => /mesa atualizada/i.test(document.body.innerText),
+    { timeout: 10000 }).catch(() => {});
+  const { dados: formatoGravado } = await api("GET", "/reservas/salao", null, token);
+  checar("e o Salvar da mesa grava o formato",
+    daPlanta(formatoGravado).filter((m) => m.formato === "REDONDA").length === 1,
+    daPlanta(formatoGravado).map((m) => m.formato));
+
+  // ⚠️ Arrastar não pode ser o único jeito: as setas movem a mesa em foco.
+  const antesDaSeta = await mesasNaPlanta();
+  await (await p.$$(seletorDaPlanta))[1].focus();
+  await p.keyboard.press("ArrowDown");
+  await new Promise((r) => setTimeout(r, 200));
+  checar("a seta move a mesa em foco de um passo da grade",
+    (await mesasNaPlanta())[1].y === antesDaSeta[1].y + 30, [antesDaSeta[1], (await mesasNaPlanta())[1]]);
+
+  await p.evaluate(() => [...document.querySelectorAll('[aria-label="como ver o salão"] button')]
+    .find((b) => b.textContent?.trim() === "Lista")?.click());
+  await p.waitForSelector("table tbody tr", { timeout: 8000 }).catch(() => {});
+  // ⚠️ O endereço chega DEPOIS da tela: o `router.replace` é navegação suave.
+  await p.waitForFunction(() => /ver=lista/.test(location.search), { timeout: 8000 })
+    .catch(() => {});
+  const plantaNaLista = await p.evaluate(() => ({
+    linhas: document.querySelectorAll("table tbody tr").length,
+    endereco: location.search,
+  }));
+  checar("a Lista continua a um clique, e a escolha fica no endereço",
+    plantaNaLista.linhas === 2 && /ver=lista/.test(plantaNaLista.endereco), plantaNaLista);
 
   // ---- a agenda do dia: marcar, e o ciclo da reserva ----
   // 🔑 **A regra de disponibilidade e a peca que tudo consome**, e a tela nao a

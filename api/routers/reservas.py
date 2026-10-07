@@ -25,7 +25,7 @@ from database import get_cursor
 from paginacao import pagina
 from models.reservas import (
     BloqueioCreate, ConfiguracaoReservas, DiaExcecao, MesaCreate, MesasEmLote, MesaUpdate,
-    MudarStatus, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
+    MudarStatus, PlantaDoSalao, ReservaCreate, ReservaRemarcar, SalaoCreate, SalaoUpdate,
 )
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import reserva_clientes as clientes
@@ -599,6 +599,32 @@ def atualizar_mesa(id_mesa: int, body: MesaUpdate,
         auditoria.registrar(cur, ctx.id_usuario, "mesa", id_mesa, "atualizar",
                             depois=dados | ({"junta_com": id_par} if mexe_na_junta else {}))
     return {"message": "Mesa atualizada"}
+
+
+@router.put("/salao/planta")
+def gravar_planta(body: PlantaDoSalao, ctx: Contexto = Depends(_CONFIGURAR)) -> dict:
+    """Grava a posição das mesas na planta — todas as mexidas de uma vez.
+
+    ⚠️ **Só desenho**: não toca lugares, junta nem situação, e a disponibilidade
+    não lê posição. Por isso não passa pela conferência do teto.
+    ⚠️ **Tudo ou nada**: uma mesa que não é desta loja recusa o corpo inteiro
+    (404), em vez de gravar metade da planta e deixar a outra onde estava.
+    """
+    # Repetida no corpo, vale a última — é o que a pessoa viu ao soltar.
+    posicoes = {p.id: p for p in body.posicoes}
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        cur.execute("SELECT id FROM mesas WHERE id_unidade = %s AND id = ANY(%s)",
+                    (id_unidade, list(posicoes)))
+        if len(cur.fetchall()) != len(posicoes):
+            raise HTTPException(status_code=404, detail="Mesa não encontrada")
+        for p in posicoes.values():
+            cur.execute("UPDATE mesas SET pos_x = %s, pos_y = %s WHERE id = %s AND id_unidade = %s",
+                        (p.pos_x, p.pos_y, p.id, id_unidade))
+        auditoria.registrar(cur, ctx.id_usuario, "salao", None, "planta",
+                            depois={"mesas": len(posicoes)})
+    n = len(posicoes)
+    return {"message": f"Planta salva — {n} mesa{'' if n == 1 else 's'} posicionada{'' if n == 1 else 's'}"}
 
 
 @router.delete("/mesas/{id_mesa}")

@@ -81,8 +81,8 @@ junta gravada, então ela não converte nada — mas tem de estar certa para a b
 ## 6. Ordem sugerida
 
 - **Primeira entrega (sem mexer na regra):** 1 (salvar explícito), 6 (conferência e aviso do
-  teto) e 5 (características). Resolve o que mais incomoda no uso e não tem risco.
-- **Segunda:** 2 (planta), com a lista mantida.
+  teto) e 5 (características). Resolve o que mais incomoda no uso e não tem risco. ✅ **Feita em 06/10/2026** (migração 106).
+- **Segunda:** 2 (planta), com a lista mantida. ✅ **Feita em 07/10/2026** (migração 108).
 - **Terceira:** 3 (conjuntos) e 4 (dias e site), juntas, com a suíte de disponibilidade
   estendida primeiro.
 

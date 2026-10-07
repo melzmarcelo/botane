@@ -21,6 +21,15 @@ export type Caracteristica = (typeof CARACTERISTICAS)[number]["chave"];
 export const rotuloDaCaracteristica = (chave: string) =>
   CARACTERISTICAS.find((c) => c.chave === chave)?.rotulo ?? chave.toLowerCase();
 
+/** O formato da mesa (migração 108) — só para desenhar a planta. */
+export const FORMATOS = [
+  { chave: "QUADRADA", rotulo: "quadrada" },
+  { chave: "REDONDA", rotulo: "redonda" },
+  { chave: "RETANGULAR", rotulo: "retangular" },
+] as const;
+
+export type Formato = (typeof FORMATOS)[number]["chave"];
+
 export type Salao = {
   id: number;
   nome: string;
@@ -38,6 +47,10 @@ export type Mesa = {
   capacidade_max: number;
   ativo: boolean;
   caracteristicas: Caracteristica[];
+  formato: Formato;
+  /** Onde a mesa está na planta; nulo enquanto ninguém a posicionou. */
+  pos_x: number | null;
+  pos_y: number | null;
   junta_com: number | null;
   junta_com_nome: string | null;
 };
@@ -92,8 +105,13 @@ export const mudarMesa = (
     capacidade_max?: number;
     ativo?: boolean;
     caracteristicas?: Caracteristica[];
+    formato?: Formato;
     junta_com?: number | null;
   },
 ) => api.put<Recado>(`/reservas/mesas/${id}`, corpo);
+
+/** A planta gravada de uma vez: arrastar é rascunho, e quem grava é o botão. */
+export const gravarPlanta = (posicoes: { id: number; pos_x: number; pos_y: number }[]) =>
+  api.put<Recado>("/reservas/salao/planta", { posicoes });
 
 export const excluirMesa = (id: number) => api.delete<Recado>(`/reservas/mesas/${id}`);

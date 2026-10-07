@@ -165,7 +165,8 @@ def salao(cur, id_unidade: int) -> dict:
 
     cur.execute(
         """SELECT m.id, m.id_salao, m.nome, m.lugares, m.capacidade_max, m.ativo,
-                  m.caracteristicas, m.junta_com, j.nome AS junta_com_nome
+                  m.caracteristicas, m.formato, m.pos_x, m.pos_y,
+                  m.junta_com, j.nome AS junta_com_nome
              FROM mesas m LEFT JOIN mesas j ON j.id = m.junta_com
             WHERE m.id_unidade = %s ORDER BY m.nome""",
         (id_unidade,),

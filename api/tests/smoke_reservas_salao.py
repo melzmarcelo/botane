@@ -390,6 +390,55 @@ checar("grupo de zero pessoas e recusado (422)", st == 422, st)
 st, r = chamar("GET", "/reservas/salao/simular", token=token)
 checar("e sem dizer quantas pessoas tambem", st == 422, st)
 
+print("\n9c. a planta do salao: formato e posicao (migracao 108)")
+# 🔑 Segunda entrega do estudo (07/10/2026). So DESENHO: nada aqui pode mudar a
+# resposta de "onde o grupo senta".
+antes_da_planta = {n: senta(n) for n in (2, 5, 9, 12)}
+dados = olhar()
+a, b = mesa_chamada(dados, f"{marca}A"), mesa_chamada(dados, f"{marca}B")
+checar("mesa nasce QUADRADA e sem posicao",
+       a.get("formato") == "QUADRADA" and a.get("pos_x") is None and a.get("pos_y") is None, a)
+st, r = chamar("PUT", f"/reservas/mesas/{a['id']}", {"formato": "REDONDA"}, token)
+checar("o formato se muda pela mesa", st == 200
+       and mesa_chamada(olhar(), f"{marca}A")["formato"] == "REDONDA", (st, r))
+st, r = chamar("PUT", f"/reservas/mesas/{a['id']}", {"formato": "OVAL"}, token)
+checar("formato fora da lista e recusado (422)", st == 422, st)
+st, r = chamar("PUT", f"/reservas/mesas/{a['id']}", {"lugares": 2}, token)
+checar("mudar outra coisa NAO mexe no formato",
+       mesa_chamada(olhar(), f"{marca}A")["formato"] == "REDONDA")
+
+st, r = chamar("PUT", "/reservas/salao/planta", {"posicoes": [
+    {"id": a["id"], "pos_x": 30, "pos_y": 60},
+    {"id": b["id"], "pos_x": 180, "pos_y": 60},
+]}, token)
+checar("a planta grava as duas mesas de uma vez", st == 200 and "2 mesas" in r.get("message", ""),
+       (st, r))
+dados = olhar()
+checar("e cada uma fica onde foi posta",
+       (mesa_chamada(dados, f"{marca}A")["pos_x"], mesa_chamada(dados, f"{marca}A")["pos_y"]) == (30, 60)
+       and (mesa_chamada(dados, f"{marca}B")["pos_x"], mesa_chamada(dados, f"{marca}B")["pos_y"]) == (180, 60),
+       [(m["nome"], m["pos_x"], m["pos_y"]) for m in dados["mesas"]])
+checar("quem nao foi mexida continua sem posicao",
+       mesa_chamada(dados, f"{marca}C")["pos_x"] is None, mesa_chamada(dados, f"{marca}C"))
+
+st, r = chamar("PUT", "/reservas/salao/planta", {"posicoes": [
+    {"id": a["id"], "pos_x": 90, "pos_y": 90},
+    {"id": 999999999, "pos_x": 10, "pos_y": 10},
+]}, token)
+checar("mesa que nao existe recusa a planta INTEIRA (404)", st == 404, (st, r))
+checar("e nada do corpo recusado foi gravado",
+       mesa_chamada(olhar(), f"{marca}A")["pos_x"] == 30, mesa_chamada(olhar(), f"{marca}A"))
+st, r = chamar("PUT", "/reservas/salao/planta",
+               {"posicoes": [{"id": a["id"], "pos_x": -5, "pos_y": 10}]}, token)
+checar("posicao negativa e recusada (422)", st == 422, st)
+st, r = chamar("PUT", "/reservas/salao/planta",
+               {"posicoes": [{"id": a["id"], "pos_x": 99999, "pos_y": 10}]}, token)
+checar("e fora da planta tambem (422)", st == 422, st)
+st, r = chamar("PUT", "/reservas/salao/planta", {"posicoes": []}, token)
+checar("planta vazia e recusada (422)", st == 422, st)
+checar("formato e posicao NAO mudam onde o grupo senta",
+       {n: senta(n) for n in (2, 5, 9, 12)} == antes_da_planta)
+
 print("\n10. limpeza")
 with get_cursor() as cur:
     # ⚠️ **Mesa com reserva pendurada NÃO se apaga** — `reserva_mesas_id_mesa_fkey`

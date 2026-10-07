@@ -7,8 +7,11 @@ import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta } from "@/compo
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
 import ExplicaTela from "@/components/explica-tela";
+import PlantaDoSalao from "./planta";
 import {
   CARACTERISTICAS,
+  FORMATOS,
+  gravarPlanta,
   criarMesasEmLote,
   criarSalao,
   excluirMesa,
@@ -20,6 +23,7 @@ import {
   simularGrupo,
   type Caracteristica,
   type DadosDoSalao,
+  type Formato,
   type Mesa,
   type Simulacao,
 } from "@/lib/salao";
@@ -54,6 +58,12 @@ import {
  * da disponibilidade (`GET /reservas/salao/simular`) — a conta não é refeita
  * aqui.
  *
+ * 🔑 **A planta** (07/10/2026, segunda entrega do estudo): as mesas desenhadas
+ * onde estão, arrastáveis — `planta.tsx`. A LISTA continua num botão ao lado,
+ * para quem prefere tabela e para o celular; a escolha mora no endereço.
+ * ⚠️ O desenho mostra o RASCUNHO da mesa aberta (formato, lugares, nome): mudar
+ * o formato no painel já muda a planta, antes do Salvar.
+ *
  * ⚠️ **Desligar o salão tira as mesas dele da disponibilidade sem apagar
  * cadastro** — é a Varanda no inverno. Salão com mesa não se exclui.
  */
@@ -65,6 +75,7 @@ type Rascunho = {
   capacidade_max: number;
   ativo: boolean;
   caracteristicas: Caracteristica[];
+  formato: Formato;
   junta_com: number | null;
 };
 
@@ -74,6 +85,7 @@ const rascunhoDe = (m: Mesa): Rascunho => ({
   capacidade_max: m.capacidade_max,
   ativo: m.ativo,
   caracteristicas: [...(m.caracteristicas ?? [])],
+  formato: m.formato ?? "QUADRADA",
   junta_com: m.junta_com,
 });
 
@@ -82,6 +94,7 @@ const iguais = (a: Rascunho, b: Rascunho) =>
   a.lugares === b.lugares &&
   a.capacidade_max === b.capacidade_max &&
   a.ativo === b.ativo &&
+  a.formato === b.formato &&
   a.junta_com === b.junta_com &&
   [...a.caracteristicas].sort().join() === [...b.caracteristicas].sort().join();
 
@@ -100,6 +113,7 @@ export default function SalaoDaCasa() {
   const [excluindo, setExcluindo] = useState<Mesa | null>(null);
   // ⚠️ Sem atraso: aba é clique, não digitação.
   const [abaUrl, setAbaUrl] = useEstadoNaUrl<string>("salao", "", { atraso: 0 });
+  const [ver, setVer] = useEstadoNaUrl<string>("ver", "planta", { atraso: 0 });
 
   const carregar = useCallback(async () => {
     try {
@@ -162,6 +176,7 @@ export default function SalaoDaCasa() {
     if ([...rascunho.caracteristicas].sort().join() !== [...original.caracteristicas].sort().join()) {
       corpo.caracteristicas = rascunho.caracteristicas;
     }
+    if (rascunho.formato !== original.formato) corpo.formato = rascunho.formato;
     if (rascunho.junta_com !== original.junta_com) corpo.junta_com = rascunho.junta_com;
     const id = mesaAberta.id;
     const deu = await agir(() => mudarMesa(id, corpo));
@@ -172,6 +187,15 @@ export default function SalaoDaCasa() {
 
   // Depois de gravar, o painel relê a mesa do que o servidor devolveu.
   const emEdicao = rascunho ?? original;
+
+  // A planta desenha o que está no painel, mesmo antes do Salvar.
+  const desenhadas = minhas.map((m) =>
+    m.id === idAberta && rascunho
+      ? { ...m, nome: rascunho.nome, lugares: rascunho.lugares, ativo: rascunho.ativo,
+          capacidade_max: rascunho.capacidade_max, formato: rascunho.formato }
+      : m,
+  );
+  const naPlanta = ver !== "lista";
 
   const tetoPassa =
     dados.teto_online !== null && dados.mesas_ativas > 0 && dados.teto_online > dados.maior_grupo;
@@ -354,6 +378,30 @@ export default function SalaoDaCasa() {
             </p>
           ) : (
             <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
+              <div className="flex min-w-0 flex-col gap-3">
+              <div className="inline-flex self-start overflow-hidden rounded-[9px] border border-linha2"
+                   role="group" aria-label="como ver o salão">
+                {([["planta", "Planta"], ["lista", "Lista"]] as const).map(([v, r]) => (
+                  <button key={v} type="button" aria-pressed={naPlanta === (v === "planta")}
+                          className={`px-3.5 py-1.5 text-[13.5px] ${
+                            naPlanta === (v === "planta") ? "bg-erva text-white" : "text-suave"}`}
+                          onClick={() => setVer(v)}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              {naPlanta ? (
+                <PlantaDoSalao
+                  key={`planta-${aberto.id}`}
+                  mesas={desenhadas}
+                  idAberta={idAberta}
+                  salaoAtivo={aberto.ativo}
+                  podeEditar={podeEditar}
+                  ocupado={ocupado}
+                  aoAbrir={(id) => abrirMesa(minhas.find((m) => m.id === id) ?? null)}
+                  aoSalvar={(posicoes) => agir(() => gravarPlanta(posicoes))}
+                />
+              ) : (
               <div className="grid-rolante">
                 <table className="tabela">
                   <thead>
@@ -412,6 +460,8 @@ export default function SalaoDaCasa() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              )}
               </div>
 
               <aside className="rounded-xl border border-linha2 p-4" aria-label="mesa aberta">
@@ -583,13 +633,13 @@ function Passo({
 }) {
   return (
     <div className="flex items-center overflow-hidden rounded-[9px] border border-linha2">
-      <button type="button" className="h-9 w-9 bg-fundo2 text-[17px] disabled:opacity-40"
+      <button type="button" className="h-9 w-9 bg-superficie2 text-[17px] disabled:opacity-40"
               aria-label={`menos ${rotulo}`} disabled={desabilitado || valor <= minimo}
               onClick={() => aoMudar(valor - 1)}>
         −
       </button>
       <output className="mono flex-1 text-center" aria-label={rotulo}>{valor}</output>
-      <button type="button" className="h-9 w-9 bg-fundo2 text-[17px] disabled:opacity-40"
+      <button type="button" className="h-9 w-9 bg-superficie2 text-[17px] disabled:opacity-40"
               aria-label={`mais ${rotulo}`} disabled={desabilitado || valor >= maximo}
               onClick={() => aoMudar(valor + 1)}>
         +
@@ -681,6 +731,15 @@ function PainelDaMesa({
             })}
           </div>
         </div>
+        <Campo rotulo="Formato" dica="como aparece na planta" className="col-span-2">
+          <select className="campo" aria-label="formato da mesa" disabled={travado}
+                  value={valor.formato}
+                  onChange={(e) => aoMudar({ formato: e.target.value as Formato })}>
+            {FORMATOS.map((f) => (
+              <option key={f.chave} value={f.chave}>{f.rotulo}</option>
+            ))}
+          </select>
+        </Campo>
         <Campo rotulo="Junta com" dica="a vizinha que encosta nesta" className="col-span-2">
           <select className="campo" aria-label="mesa que junta com esta" disabled={travado}
                   value={valor.junta_com ?? ""}
@@ -827,7 +886,7 @@ function FormularioDeLote({
   const [prefixo, setPrefixo] = useState("");
 
   return (
-    <div className="mb-4 rounded-xl border border-linha2 bg-fundo2 p-4">
+    <div className="mb-4 rounded-xl border border-linha2 bg-superficie2 p-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Campo rotulo="Quantas mesas" dica="até 50 de uma vez">
           <input

@@ -160,6 +160,12 @@ class SalaoUpdate(BaseModel):
 # recepção filtra, e texto livre viraria três grafias para a mesma janela.
 Caracteristica = Literal["JANELA", "SOFA", "ACESSIVEL", "CADEIRAO", "TOMADA", "COBERTA"]
 
+# 🔑 **O formato e a posição são só DESENHO** (migração 108, a planta do salão):
+# a disponibilidade não lê nenhum dos dois.
+FormatoDaMesa = Literal["REDONDA", "QUADRADA", "RETANGULAR"]
+# O mesmo teto do `ck_mesa_posicao`: mesa arrastada não some para fora da planta.
+_POSICAO_MAXIMA = 4000
+
 
 class MesaCreate(BaseModel):
     id_salao: int
@@ -218,12 +224,29 @@ class MesaUpdate(BaseModel):
     capacidade_max: int | None = Field(default=None, ge=1, le=60)
     ativo: bool | None = None
     caracteristicas: list[Caracteristica] | None = Field(default=None, max_length=6)
+    formato: FormatoDaMesa | None = None
     # 🔑 A mesa vizinha que encosta nesta. `null` desfaz a junta — nos DOIS
     # lados, e quem grava é `services/reservas.casar_junta`.
     # ⚠️ **"Não mandou" e "mandou nulo" são coisas diferentes aqui**, e o router
     # separa as duas por `model_fields_set`. Sem isso, qualquer PUT que não
     # falasse da junta a desfaria — trocar o nome da mesa 07 soltaria a 08.
     junta_com: int | None = None
+
+
+class PosicaoDaMesa(BaseModel):
+    id: int
+    pos_x: int = Field(ge=0, le=_POSICAO_MAXIMA)
+    pos_y: int = Field(ge=0, le=_POSICAO_MAXIMA)
+
+
+class PlantaDoSalao(BaseModel):
+    """Onde cada mesa está no desenho — a planta gravada de uma vez.
+
+    🔑 **Arrastar é rascunho; quem grava é o "Salvar planta"**, com todas as
+    mesas mexidas no mesmo corpo. Um PUT por mesa a cada soltar do mouse seria
+    o "grava ao sair do campo" que a primeira entrega tirou da tela.
+    """
+    posicoes: list[PosicaoDaMesa] = Field(min_length=1, max_length=300)
 
 
 class ConfiguracaoReservas(BaseModel):
