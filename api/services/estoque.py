@@ -1757,7 +1757,8 @@ def _de_onde_sai(cur, id_produto: int, id_unidade: int, id_local_producao: int |
 def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int | None,
              id_usuario: int, observacao: str | None = None,
              medida: str | None = None, id_modo: int | None = None,
-             consumos: list[dict] | None = None) -> dict:
+             consumos: list[dict] | None = None,
+             id_venda: int | None = None) -> dict:
     """Consome a ficha homologada e devolve o produzido ao estoque.
 
     O custo do produzido é **o que realmente saiu** — não o custo teórico da
@@ -1845,10 +1846,13 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
 
     cur.execute(
         """INSERT INTO producoes (id_unidade, id_local, id_produto, id_ficha, versao_ficha,
-                                  quantidade, observacao, id_usuario, id_modo)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                  quantidade, observacao, id_usuario, id_venda, id_modo)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (id_unidade, id_local, id_produto, ficha["id"], ficha["versao"], qtd, observacao,
          id_usuario,
+         # 🔑 **A venda que disparou a produção** (110), quando foi uma: é por
+         # aqui que cancelar a venda acha o consumo de insumo a devolver.
+         id_venda,
          # 🔑 **O modo fica congelado junto com a versão da ficha**, e pela
          # mesma razão: o rendimento divide o consumo, e o número tem de se
          # reproduzir daqui a seis meses.

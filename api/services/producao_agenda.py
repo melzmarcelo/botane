@@ -237,7 +237,8 @@ def sugestoes(cur, id_unidade: int) -> list[dict]:
 
 def producao_da_venda(cur, id_unidade: int, id_produto: int, quantidade,
                       id_usuario: int, id_local: int | None = None,
-                      documento: str | None = None) -> dict | None:
+                      documento: str | None = None,
+                      id_venda: int | None = None) -> dict | None:
     """Produz o que é feito NA HORA, disparado pela venda.
 
     O café passado não fica em estoque: a venda e a produção são o mesmo
@@ -247,6 +248,10 @@ def producao_da_venda(cur, id_unidade: int, id_produto: int, quantidade,
     Produz e devolve; a baixa da venda é lançada por quem chamou, para o par
     entrada/saída ficar visível no razão. O saldo volta a zero, que é a
     verdade: o produto não existe parado.
+
+    ⚠️ `id_venda` fica gravado na produção (110): os movimentos dela nascem com
+    origem PRODUCAO, e sem esse vínculo o cancelamento da venda devolvia o
+    produto e deixava o insumo consumido.
     """
     p = _produto(cur, id_produto)
     if p["modo_producao"] != "NA_HORA" or not p["id_ficha"]:
@@ -255,6 +260,7 @@ def producao_da_venda(cur, id_unidade: int, id_produto: int, quantidade,
         cur, id_unidade=id_unidade, id_produto=id_produto, quantidade=float(quantidade),
         id_local=id_local or p["id_local_padrao"], id_usuario=id_usuario,
         observacao=f"Venda {documento}" if documento else "Venda",
+        id_venda=id_venda,
     )
 
 

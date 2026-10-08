@@ -439,7 +439,7 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     if p_venda.get("controla_estoque"):
                         feito = agenda.producao_da_venda(
                             cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
-                            documento=venda.documento)
+                            documento=venda.documento, id_venda=id_venda)
                         if feito:
                             produzidos_na_hora += 1
                         motor_estoque.lancar(
@@ -523,13 +523,24 @@ def cancelar(id_venda: int, ctx: Contexto = Depends(_editar)) -> dict:
         if venda["cancelada"]:
             raise HTTPException(status_code=400, detail="Esta venda já está cancelada.")
 
+        # 🔑 **A produção que a venda disparou volta JUNTO** (110). O produto
+        # NA_HORA produz e baixa no mesmo lançamento; a baixa nasce com origem
+        # VENDA, mas a produção grava os movimentos dela com origem PRODUCAO.
+        # Procurar só por VENDA devolvia o café e deixava o pó consumido — e o
+        # produzido com saldo, que "na hora" nunca tem.
+        # ⚠️ `ORDER BY m.id DESC` é a ordem inversa do que aconteceu: primeiro
+        # volta a saída da venda, depois sai a entrada da produção, por último
+        # voltam os insumos. Em outra ordem o produzido passaria por negativo.
         cur.execute(
             """SELECT m.id FROM estoque_movimentos m
-                WHERE m.origem_tipo = 'VENDA' AND m.origem_id = %s
+                WHERE ((m.origem_tipo = 'VENDA' AND m.origem_id = %s)
+                       OR (m.origem_tipo = 'PRODUCAO'
+                           AND m.origem_id IN (SELECT p.id FROM producoes p
+                                                WHERE p.id_venda = %s)))
                   AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
                                    WHERE e.id_estorno_de = m.id)
                 ORDER BY m.id DESC""",
-            (id_venda,),
+            (id_venda, id_venda),
         )
         movimentos = [r["id"] for r in cur.fetchall()]
         for id_movimento in movimentos:

@@ -884,3 +884,24 @@
   - ⚠️ Fornecedor que nunca consumiu não ganha cartão vazio; quem não é só fornecedor vê
     "nenhum consumo", porque "não deve nada" é informação.
   - Sem ciclo aberto, o cartão diz isso e aponta para Consumo.
+
+- 🔑 **Cancelar a venda devolve também a PRODUÇÃO que ela disparou** (08/10/2026, migração
+  110). Achado do dono em produção: vendeu um Café Passado (NA_HORA, um insumo), cancelou, o
+  café voltou e o pó não. A baixa da venda nasce com `origem_tipo = 'VENDA'`, mas a produção
+  na hora grava os movimentos dela com `origem_tipo = 'PRODUCAO'` apontando para
+  `producoes.id` — e o cancelamento só procurava a primeira. Sobrava a produção inteira: o
+  produzido com saldo e o insumo consumido por uma venda que não existiu.
+  - `producoes.id_venda` liga as duas; `producao_da_venda` e `estoque.produzir` recebem
+    `id_venda`. O cancelamento estorna VENDA + PRODUCAO num `ORDER BY id DESC` só.
+  - ⚠️ A ordem importa: volta a saída da venda, depois sai a entrada da produção, por último
+    voltam os insumos. Em outra ordem o produzido passa por negativo.
+  - ⚠️ O vínculo das produções antigas saiu do instante da transação
+    (`vendas.importada_em = producoes.data`) mais o documento na observação. Venda SEM
+    documento ficou de fora de propósito. Na base local: 483 de 483 ligadas.
+  - ⚠️ **Não coberto: a venda cancelada ANTES desta correção.** Ela já está `cancelada`, o
+    cancelamento recusa repetir, e a produção dela continua de pé (236 na base local, quase
+    tudo rastro de suíte). O conserto é estornar os movimentos da produção em Estoque.
+  - ⚠️ A linha em `producoes` continua existindo depois do estorno — não há "produção
+    cancelada". Quem lista produções vê a que foi desfeita.
+  - Cobertura: `smoke_vendas.py`, seção 6 (três movimentos estornados, insumo de volta,
+    prato em zero).

@@ -253,9 +253,34 @@ checar("a venda deixou rastro no razão", len(movimentos) >= 1, len(movimentos))
 checar("nenhum deles é estorno ainda",
        all(not m["id_estorno_de"] for m in movimentos), movimentos)
 
+
+def saldo_de(id_produto):
+    """A soma em todos os locais: a ficha consome de onde o insumo está."""
+    _st, linhas = chamar("GET", f"/estoque/saldos?id_produto={id_produto}", token=token)
+    return round(sum(float(x["quantidade"]) for x in linhas or []), 4)
+
+
+# ⚠️ Medido ANTES e depois, e não contra os 10 que entraram: a venda com
+# desconto, lá em cima, também produziu deste prato e continua de pé.
+insumo_antes = saldo_de(insumo)
+checar("a venda consumiu o insumo da ficha", insumo_antes < 10.0, insumo_antes)
+checar("e o prato não ficou parado no estoque", saldo_de(prato) == 0.0, saldo_de(prato))
+
 st, r = chamar("DELETE", f"/vendas/{id_venda}", token=token)
 checar("cancelar responde", st == 200, (st, r))
 checar("e devolve o que tinha saído", (r.get("estornados") or 0) >= 1, r)
+# 🔑 **O insumo volta junto** (achado do dono em produção, 08/10/2026: cancelou
+# um Café Passado, o café voltou e o pó não). A baixa da venda nasce com origem
+# VENDA e a produção que ela disparou com origem PRODUCAO — o cancelamento só
+# procurava a primeira. São TRÊS movimentos: a saída do prato, a entrada da
+# produção e o consumo do insumo.
+checar("os três movimentos voltam, não só a saída do prato", r.get("estornados") == 3, r)
+# 3 pratos × 0,5 kg = 1,5 kg de volta.
+checar("o insumo da ficha volta para o estoque",
+       saldo_de(insumo) == insumo_antes + 1.5, (insumo_antes, saldo_de(insumo)))
+# ⚠️ Zero, e não 3: estornar só a saída deixava o prato NA_HORA com saldo — a
+# produção de uma venda que não existiu.
+checar("e o prato continua sem saldo", saldo_de(prato) == 0.0, saldo_de(prato))
 
 st, d2 = chamar("GET", f"/vendas/{id_venda}", token=token)
 checar("a venda continua existindo, cancelada", d2.get("cancelada") is True, d2.get("cancelada"))
