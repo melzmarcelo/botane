@@ -776,17 +776,35 @@ def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
                      resposta: Response = None,
                      ctx: Contexto = Depends(requer_permissao("estoque.saldos"))) -> list[dict]:
     with get_cursor() as cur:
+        # ⚠️ A loja entra na busca: sem ela a lista somava as produções de todas
+        # as lojas — o mesmo buraco que a listagem de vendas já teve.
+        id_unidade = unidade_atual(cur, ctx)
         return pagina(
             cur,
+            # 🔑 **O local é o de onde o produzido ENTROU, não o de onde a produção
+            # foi lançada** (achado do dono em produção, 08/10/2026). `producoes.
+            # id_local` é o local de quem produz — e, sem um informado, o padrão da
+            # loja —, mas o produzido vai para o local DELE (`produzir`: "o molho
+            # vai para a câmara, não para onde por acaso se lançou a produção"). A
+            # ganache entrou na CÂMARA FRIA e a lista dizia "GERAL SEM CATEGORIA",
+            # um lugar por onde ela nunca passou.
+            # ⚠️ O `coalesce` cobre a produção sem movimento de entrada, que não
+            # deveria existir — mas a linha não pode sumir da lista por isso.
             """SELECT pr.id, pr.id_produto, pr.data, pr.quantidade, pr.custo_total,
                       pr.custo_unitario,
                       pr.versao_ficha, p.nome AS produto, p.codigo, l.nome AS local,
                       u.nome AS usuario
                  FROM producoes pr
                  JOIN produtos p ON p.id = pr.id_produto
-                 JOIN locais_estoque l ON l.id = pr.id_local
+                 LEFT JOIN LATERAL (
+                      SELECT m.id_local FROM estoque_movimentos m
+                       WHERE m.origem_tipo = 'PRODUCAO' AND m.origem_id = pr.id
+                         AND m.tipo = 'ENTRADA_PRODUCAO'
+                       ORDER BY m.id LIMIT 1) entrada ON true
+                 JOIN locais_estoque l ON l.id = coalesce(entrada.id_local, pr.id_local)
                  LEFT JOIN usuarios u ON u.id = pr.id_usuario
+                WHERE pr.id_unidade = %s
                 ORDER BY pr.data DESC""",
-            (),
+            (id_unidade,),
             limite=limite, offset=offset, resposta=resposta,
         )

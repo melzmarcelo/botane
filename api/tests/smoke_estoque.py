@@ -817,6 +817,23 @@ checar("faltando no setor, a producao cai no local do produto",
 checar("e o pouco que sobrou no setor fica intacto",
        abs(por_local.get(f"Canto da confeitaria {marca}".upper(), 0) - 1) < 0.0001, por_local)
 
+# 🔑 **A lista de producoes diz onde o produzido ENTROU** (achado do dono em
+# producao, 08/10/2026). Lancada do Central, a producao guarda o Central em
+# `producoes.id_local` — mas o bolo mora no canto da Confeitaria e e la que ele
+# entra. A lista mostrava o local do lancamento: a ganache estava na camara fria
+# e a tela dizia "GERAL SEM CATEGORIA", um lugar por onde ela nunca passou.
+st, pr_central = chamar("POST", "/estoque/producoes", {
+    "id_produto": id_bolo, "quantidade": 1, "id_local": id_central}, token=token)
+st, feitas = chamar("GET", "/estoque/producoes?limite=20", token=token)
+linha_pr = next((x for x in feitas or [] if x["id"] == (pr_central or {}).get("id")), {})
+checar("a lista de producoes mostra o local onde o produzido entrou",
+       linha_pr.get("local") == f"Canto da confeitaria {marca}".upper(), linha_pr)
+# ⚠️ O quilo que esta producao consumiu VOLTA, pelo mesmo custo: as checagens
+# abaixo contam o acucar que sobrou no Central, e nao sabem desta producao.
+chamar("POST", "/estoque/entradas", {
+    "id_produto": id_acucar, "quantidade": 1, "custo_unitario": 5,
+    "id_local": id_central}, token=token)
+
 
 print("9c3. os locais no CADASTRO do produto")
 # 🔑 Ate aqui o cadastro so tinha o local PADRAO — aquele por onde o produto

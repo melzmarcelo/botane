@@ -710,3 +710,18 @@ Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecn
   execução de código do claude.ai para recortar a foto do PDF (PyMuPDF), reduzir (≤ 800 px,
   JPEG ~75) e codificar. A descrição da ferramenta proíbe base64 "de memória" e manda, sem
   execução de código, a pessoa anexar a foto na tela. Cobertura: bloco `7h`.
+
+- 🔑 **A lista de produções mostra onde o produzido ENTROU, e é da loja** (08/10/2026).
+  Achado do dono em produção: a GANACHE DE CHOCOLATE entrou na CÂMARA FRIA (saldo e razão
+  certos) e "Produções recentes" dizia "GERAL SEM CATEGORIA (ESTOQUE ENTRADA)".
+  `producoes.id_local` é o local de onde a produção foi LANÇADA — e, sem um informado, o
+  padrão da loja —, enquanto o produzido entra no local padrão DELE. `GET /estoque/producoes`
+  agora lê o local do movimento `ENTRADA_PRODUCAO`, com `producoes.id_local` de reserva.
+  - ⚠️ `producoes.id_local` NÃO mudou de sentido: continua sendo de onde se produziu, e é
+    por ele que o insumo sai primeiro. Só a lista deixou de mostrá-lo.
+  - ⚠️ A mesma consulta não filtrava por `id_unidade` e somava as lojas. Corrigido junto.
+  - ⚠️ **Não existe "estornar produção".** O caminho é Estoque → Movimentos, estornando cada
+    movimento: primeiro a entrada do produzido, depois cada saída de insumo ("Produção #N").
+    A linha em `producoes` continua na lista depois disso.
+  - Cobertura: `smoke_estoque.py` (produção lançada do Central com o produto morando na
+    Confeitaria) e `smoke_duas_lojas.py` (cada loja lista só as suas).

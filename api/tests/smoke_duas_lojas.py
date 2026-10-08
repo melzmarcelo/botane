@@ -282,11 +282,24 @@ try:
         token=token, unidade=MATRIZ)
     checar("a matriz produz 4 bolos consumindo 8,00",
            st == 201 and perto(r.get("custo_total"), 8), (st, r))
+    producao_m = r.get("id")
     st, r = chamar("POST", "/estoque/producoes", {
         "id_produto": bolo, "quantidade": 4, "id_local": local_f["id"]},
         token=token, unidade=FILIAL)
     checar("a filial produz 4 bolos consumindo 12,00",
            st == 201 and perto(r.get("custo_total"), 12), (st, r))
+    producao_f = r.get("id")
+    # 🔑 **A lista de produções é da LOJA** (08/10/2026). Ela não filtrava por
+    # `id_unidade` e somava as duas — o mesmo buraco que a listagem de vendas já
+    # teve. Com uma loja só no ar ninguém via.
+    st, lista_m = chamar("GET", "/estoque/producoes", token=token, unidade=MATRIZ)
+    st, lista_f = chamar("GET", "/estoque/producoes", token=token, unidade=FILIAL)
+    ids_m = {x["id"] for x in lista_m or []}
+    ids_f = {x["id"] for x in lista_f or []}
+    checar("a matriz lista a produção dela, e não a da filial",
+           producao_m in ids_m and producao_f not in ids_m, (producao_m, producao_f))
+    checar("e a filial lista a dela, e não a da matriz",
+           producao_f in ids_f and producao_m not in ids_f, (producao_m, producao_f))
     checar("sobram 8 KG de farinha em cada loja", perto(qtd(farinha, MATRIZ), 8)
            and perto(qtd(farinha, FILIAL), 8), (qtd(farinha, MATRIZ), qtd(farinha, FILIAL)))
     checar("e 4 bolos em cada: 8,00 na matriz, 12,00 na filial",
