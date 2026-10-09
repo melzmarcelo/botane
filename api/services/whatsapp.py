@@ -503,6 +503,8 @@ async def laco(parar: asyncio.Event) -> None:
         except asyncio.TimeoutError:
             pass
         try:
+            # ⚠️ Aqui o relógio do contêiner serve: é um INTERVALO (passaram dez
+            # minutos?), não uma hora do dia — o fuso some na subtração.
             agora = datetime.now()
             if not _ultima_varredura or agora - _ultima_varredura > timedelta(minutes=10):
                 _ultima_varredura = agora

@@ -14,7 +14,7 @@ avulsos, e a pergunta "de onde veio isto?" não tem resposta.
 gravado é pior que nenhum, porque ninguém sabe qual metade passou.
 """
 
-from datetime import datetime
+import relogio
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -322,7 +322,12 @@ def _ajustar_um(cur, *, id_unidade: int, id_produto: int, id_local: int | None,
     # ⚠️ Mês fechado recusa ajuste de custo como recusa qualquer movimento: ele
     # muda o estoque final, e o estoque final é metade da conta do CMV daquele
     # período. Deixar passar reescreveria um número já entregue.
-    estoque._travar_periodo_fechado(cur, id_unidade, datetime.now(), pode_retroativo)
+    # ⚠️ **O dia da CASA** (09/10/2026). Era a hora do contêiner: no ar, entre 21h e
+    # meia-noite, o contêiner já está no dia seguinte, e a trava conferia o período
+    # de AMANHÃ — ajuste feito na última noite de um período fechado passava, e o
+    # da véspera de um fechado era recusado.
+    estoque._travar_periodo_fechado(cur, id_unidade, relogio.agora_da_casa(),
+                                    pode_retroativo)
 
     diferenca = ((saldo * novo) - (saldo * atual)).quantize(Decimal("0.01"))
     # CASAS_CUSTO já É o passo de arredondamento (Decimal("0.000001")), não a

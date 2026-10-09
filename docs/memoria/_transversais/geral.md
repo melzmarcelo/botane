@@ -397,3 +397,13 @@
     data COM fuso, e misturá-la com data sem fuso numa conta derruba a rota. Sobram
     `services/ajustes.py` (trava de período), `services/email.py`, `services/whatsapp.py` e
     `services/omie/importador.py` — cada um precisa ser olhado, não substituído.
+  - ✅ **Os que sobraram foram olhados um a um** (09/10/2026, na sequência):
+    `services/ajustes.py` — a trava de período fechado do ajuste de custo recebia a hora do
+    contêiner, e no ar, entre 21h e meia-noite, conferia o período de AMANHÃ; agora recebe
+    `agora_da_casa()` (a função só usa a data). `services/email.py` — o cabeçalho `Date` e o
+    nome do `.eml` passaram a sair no fuso da casa (era o mesmo instante, com "+0000").
+    `services/whatsapp.py` — FICA com `datetime.now()` de propósito: é um intervalo ("passaram
+    dez minutos?"), e o fuso some na subtração. O do importador do Omie já tinha sido trocado
+    junto com a religação. Não resta `datetime.now()` nem `date.today()` decidindo dia ou hora
+    em `services/` e `routers/`; `smoke_exportacoes` cobra os módulos de exportação, o ajuste
+    e o e-mail.

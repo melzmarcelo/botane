@@ -523,6 +523,13 @@ _fontes = _inspect.getsource(_exp) + _inspect.getsource(_cat)
 checar("a exportação não pergunta a hora ao servidor",
        "datetime.now()" not in _fontes and "date.today()" not in _fontes)
 import relogio as _relogio  # noqa: E402
+# A trava de período fechado no ajuste de custo e o carimbo do e-mail também
+# perguntavam a hora ao contêiner (09/10/2026).
+from services import ajustes as _ajustes  # noqa: E402
+from services import email as _email  # noqa: E402
+checar("o ajuste de custo e o e-mail usam a hora da casa",
+       "datetime.now()" not in _inspect.getsource(_ajustes)
+       and "datetime.now()" not in _inspect.getsource(_email))
 checar("e a hora da casa vem com fuso, que é o que a separa da do contêiner",
        _relogio.agora_da_casa().utcoffset() is not None)
 checar("nome vazio nao vira arquivo sem nome",

@@ -12,12 +12,12 @@ em `config` (servidor, porta, remetente), e a senha vai cifrada em
 pela API**.
 """
 
+import relogio
 import os
 import re
 import smtplib
 import ssl
 import time
-from datetime import datetime
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
@@ -89,7 +89,9 @@ def _montar(cfg: dict, para: str, assunto: str, texto: str, html: str | None,
     msg["Subject"] = assunto
     msg["From"] = _remetente(cfg, casa)
     msg["To"] = para
-    msg["Date"] = datetime.now().astimezone().strftime("%a, %d %b %Y %H:%M:%S %z")
+    # A hora da casa, com o fuso dela: o instante é o mesmo, mas quem abre o e-mail
+    # lê "-0300" em vez de "+0000".
+    msg["Date"] = relogio.agora_da_casa().strftime("%a, %d %b %Y %H:%M:%S %z")
     msg["Message-ID"] = make_msgid(domain="sistema.local")
     # Sempre as duas versões: o texto puro é o que sobra em cliente antigo, em
     # leitor de tela e no filtro de spam que desconfia de e-mail só com HTML.
@@ -102,7 +104,7 @@ def _montar(cfg: dict, para: str, assunto: str, texto: str, html: str | None,
 def _gravar(msg: EmailMessage, para: str) -> str:
     os.makedirs(PASTA, exist_ok=True)
     seguro = re.sub(r"[^a-z0-9._-]", "_", para.lower())
-    nome = f"{datetime.now():%Y%m%d-%H%M%S}-{seguro}.eml"
+    nome = f"{relogio.agora_da_casa():%Y%m%d-%H%M%S}-{seguro}.eml"
     caminho = os.path.join(PASTA, nome)
     with open(caminho, "wb") as f:
         f.write(bytes(msg))
