@@ -72,6 +72,15 @@ class LancarRequest(BaseModel):
     id_local: int | None = None
 
 
+class AtualizarAbertasRequest(BaseModel):
+    """Uma leva da releitura das notas abertas. `antes_de` é o `proximo` da anterior."""
+
+    antes_de: int | None = None
+    # ⚠️ Teto baixo de propósito: cada nota é uma chamada ao Omie, com 0,6 s de
+    # espera entre elas. Cinquenta já são meio minuto dentro de uma requisição.
+    limite: int = Field(default=30, ge=1, le=50)
+
+
 class LancarLoteRequest(BaseModel):
     # Nulo = todas as prontas. Uma lista só RESTRINGE: o servidor reclassifica.
     ids: list[int] | None = Field(default=None, max_length=2000)
@@ -586,7 +595,19 @@ def obter(id_nota: int,
         nota = dict(nota)
         # O XML e a resposta crua ficam guardados para auditoria, mas pesam
         # centenas de KB — não têm o que fazer no JSON da tela.
-        nota.pop("bruto", None)
+        # 🔑 Antes de descartar a resposta crua, o que ela diz da SITUAÇÃO lá: etapa e
+        # marcas (cancelada, faturada…). É pouco, e é o que explica por que uma nota
+        # está cancelada aqui — ou deveria estar.
+        _bruto = nota.pop("bruto", None)
+        if isinstance(_bruto, str):
+            import json as _json
+            try:
+                _bruto = _json.loads(_bruto)
+            except ValueError:
+                _bruto = None
+        from services.omie import mapeadores as _mapeadores
+        nota["situacao_no_omie"] = (_mapeadores.situacao_no_omie(_bruto)
+                                    if isinstance(_bruto, dict) else None)
         nota["tem_xml"] = bool(nota.pop("xml_bruto", None))
 
         cur.execute(
@@ -913,6 +934,57 @@ def lancar(id_nota: int, body: LancarRequest,
                            + (f". {aviso}" if aviso else "")}
 
 
+@router.post("/atualizar-do-omie")
+def atualizar_abertas_do_omie(
+        body: AtualizarAbertasRequest,
+        ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
+    """Relê do Omie as notas ainda não lançadas — o botão da nota, para todas.
+
+    Ver `importador.atualizar_abertas`: vai em LEVAS, e a resposta diz de onde a
+    próxima continua (`proximo`). A tela repete até ele vir nulo.
+    """
+    from services import segredos
+    from services.omie.cliente import ClienteOmie
+
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT credenciais, modo FROM integracoes
+                WHERE id_unidade = %s AND servico = 'OMIE'""",
+            (id_unidade,),
+        )
+        linha = cur.fetchone()
+        if not linha:
+            raise HTTPException(status_code=400,
+                                detail="A integração com o Omie não está configurada.")
+        cred = segredos.decifrar(linha["credenciais"]) if linha["credenciais"] else {}
+        cliente = ClienteOmie(cred.get("app_key"), cred.get("app_secret"), linha["modo"])
+        r = importador.atualizar_abertas(cur, id_unidade, cliente, body.limite, body.antes_de)
+        if r["conferidas"]:
+            auditoria.registrar(
+                cur, ctx.id_usuario, "nota", 0, "atualizar_abertas_do_omie",
+                depois={"conferidas": r["conferidas"],
+                        "atualizadas": [n["id"] for n in r["atualizadas"]],
+                        "canceladas": [n["id"] for n in r["canceladas"]],
+                        "falhas": len(r["falhas"])},
+                id_unidade=id_unidade)
+
+    partes = [f"{r['conferidas']} nota(s) conferida(s) no Omie"]
+    if r["atualizadas"]:
+        partes.append(f"{len(r['atualizadas'])} com valor diferente")
+    if r["canceladas"]:
+        partes.append(f"{len(r['canceladas'])} cancelada(s) lá")
+    if r["falhas"]:
+        partes.append(f"{len(r['falhas'])} não abriram")
+    return r | {"message": (
+        ", ".join(partes)
+        + (f" — faltam {r['restantes']}" if r["proximo"] else "")
+        # ⚠️ Dito na frase: parar no meio sem dizer faria a pessoa achar que acabou.
+        + (" — parei: o Omie recusou várias notas seguidas, tente daqui a pouco"
+           if r["parou_por_falhas"] else "")
+        if r["conferidas"] else "Não há nota do Omie aberta para atualizar.")}
+
+
 @router.post("/{id_nota}/atualizar-do-omie")
 def atualizar_do_omie(id_nota: int,
                       ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> dict:
@@ -989,8 +1061,15 @@ def atualizar_do_omie(id_nota: int,
                                       detalhe)
         auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "atualizar_do_omie",
                             antes={"valor_total": r["valor_antes"]},
-                            depois={"valor_total": r["valor_depois"], "itens": r["itens"]},
+                            depois={"valor_total": r["valor_depois"], "itens": r["itens"],
+                                    "cancelada": r["cancelada"]},
                             id_unidade=id_unidade)
+
+    # 🔑 Cancelada no Omie: é a única coisa que importa dizer, e vem na frente.
+    if r["cancelada"]:
+        return r | {"mudou": True, "message": (
+            "Esta nota está CANCELADA no Omie. Ela saiu da fila de conciliação e não "
+            "entra no estoque.")}
 
     # ⚠️ A frase DIZ se algo mudou. "Nota atualizada" depois de uma releitura que
     # não mudou nada faria a pessoa procurar a diferença que não existe.

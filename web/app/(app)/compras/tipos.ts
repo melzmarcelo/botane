@@ -87,6 +87,8 @@ export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   LANCADA: "erva",
   CONCILIADA: "alerta",
   IMPORTADA: "neutro",
+  // Cancelada no Omie: fora da fila e fora do estoque.
+  CANCELADA: "neutro",
 };
 
 export const ORIGENS: Record<string, string> = {

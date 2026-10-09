@@ -218,7 +218,7 @@ FERRAMENTAS: list[Ferramenta] = [
         "/notas",
         {"busca": Param("string", "Número da NF ou nome do fornecedor."),
          "status": Param("string", "Situação da nota.",
-                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "LANCADA"]),
+                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "LANCADA", "CANCELADA"]),
          **_PERIODO, "limite": _lim(25, 200), "offset": _OFFSET}),
     Ferramenta(
         "nota_entrada", "Uma nota de compra",
@@ -2061,6 +2061,27 @@ FERRAMENTAS: list[Ferramenta] = [
                                            "ligado: senão a falta aparece depois, sem nome, "
                                            "na primeira contagem.",
                                 padrao=True, no_corpo=True)},
+        metodo="POST"),
+    # 🔑 O "atualizar do Omie" pelo conector (09/10/2026): o da nota e o de todas.
+    Ferramenta(
+        "atualizar_nota_do_omie", "Atualizar uma nota do Omie",
+        "Relê do Omie UMA nota ainda não lançada: traz valor corrigido, item trocado e "
+        "nota cancelada lá. Os produtos já vinculados são mantidos.",
+        "/notas/{id_nota}/atualizar-do-omie",
+        {"id_nota": Param("integer", "Id da nota (de `notas_entrada`).", obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_notas_abertas_do_omie", "Atualizar do Omie as notas não lançadas",
+        "Relê do Omie as notas que ainda NÃO foram lançadas, em LEVAS de até 50: valor "
+        "corrigido, item trocado e nota cancelada lá. ⚠️ Cada nota é uma consulta ao Omie, "
+        "com espera entre elas. A resposta traz `proximo`: chame de novo passando-o em "
+        "`antes_de` até ele vir nulo. Se vier `parou_por_falhas`, PARE — o Omie está "
+        "recusando, e insistir prolonga o bloqueio.",
+        "/notas/atualizar-do-omie",
+        {"antes_de": Param("integer", "O `proximo` da leva anterior. Sem ele, começa da "
+                                      "nota mais recente.", no_corpo=True),
+         "limite": Param("integer", "Quantas notas nesta leva.", padrao=30, no_corpo=True,
+                         minimo=1, maximo=50)},
         metodo="POST"),
     Ferramenta(
         "lancar_nota", "Lançar a nota no estoque",

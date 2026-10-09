@@ -8,7 +8,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
-import { Aviso, Carregando, Cartao, Etiqueta, Modal, Vazio } from "@/components/ui";
+import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Modal, Vazio } from "@/components/ui";
 import { qtd } from "@/lib/numeros";
 import { CORES, dataBr, Nota } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
@@ -136,6 +136,73 @@ export default function PaginaCompras() {
     } finally {
       setOcupado(false);
       if (entradaXml.current) entradaXml.current.value = "";
+    }
+  }
+
+  /**
+   * 🔑 **Atualizar do Omie, para todas as notas abertas** (09/10/2026, pedido do
+   * dono: *"hoje temos o Atualizar do Omie somente quando estamos na nota"*). É o
+   * botão da nota repetido para cada uma que ainda não foi lançada: traz valor
+   * corrigido, item trocado e nota CANCELADA lá.
+   *
+   * ⚠️ **Em levas, e quem pede a próxima é esta tela.** Cada nota é uma consulta ao
+   * Omie com 0,6 s de espera — trinta dão uns vinte segundos. Uma chamada só para
+   * centenas morreria no tempo limite com metade feita. O servidor devolve
+   * `proximo`, e o laço segue até ele vir nulo, mostrando onde está.
+   */
+  const [confirmandoAtualizar, setConfirmandoAtualizar] = useState(false);
+  const [andamento, setAndamento] = useState("");
+
+  async function atualizarTodasDoOmie() {
+    setConfirmandoAtualizar(false);
+    setOcupado(true);
+    setErro("");
+    type Leva = {
+      conferidas: number; iguais: number; restantes: number; proximo: number | null;
+      atualizadas: unknown[]; canceladas: unknown[]; falhas: { motivo: string }[];
+      parou_por_falhas: boolean; modo: string; message: string;
+    };
+    const soma = { conferidas: 0, atualizadas: 0, canceladas: 0, falhas: 0 };
+    let antesDe: number | null = null;
+    let parou = false;
+    let simulado = false;
+    try {
+      // ⚠️ Teto de voltas: se o servidor um dia devolvesse sempre o mesmo `proximo`,
+      // o laço não pode rodar para sempre em cima da cota do Omie.
+      for (let volta = 0; volta < 40; volta++) {
+        const r: Leva = await api.post<Leva>("/notas/atualizar-do-omie", { antes_de: antesDe });
+        soma.conferidas += r.conferidas;
+        soma.atualizadas += r.atualizadas.length;
+        soma.canceladas += r.canceladas.length;
+        soma.falhas += r.falhas.length;
+        simulado = r.modo === "simulado";
+        parou = r.parou_por_falhas;
+        if (!r.proximo) break;
+        antesDe = r.proximo;
+        setAndamento(`${soma.conferidas} conferida(s), faltam ${r.restantes}…`);
+      }
+      const frase =
+        soma.conferidas === 0
+          ? "Não há nota do Omie aberta para atualizar."
+          : `${soma.conferidas} nota(s) conferida(s) no Omie` +
+            (soma.atualizadas ? `, ${soma.atualizadas} com valor diferente` : "") +
+            (soma.canceladas ? `, ${soma.canceladas} cancelada(s) lá` : "") +
+            (soma.falhas ? `, ${soma.falhas} não abriram` : "") +
+            (!soma.atualizadas && !soma.canceladas && !soma.falhas ? " — nada mudou" : "") +
+            (simulado ? " (modo simulado — dados de demonstração)" : "");
+      // ⚠️ Parar no meio é ERRO para quem lê: a frase verde faria parecer que acabou.
+      if (parou) aviso.erro(`${frase}. Parei: o Omie recusou várias notas seguidas — tente daqui a pouco.`);
+      else aviso.sucesso(frase);
+      await carregar();
+    } catch (e) {
+      aviso.erro(
+        (e instanceof Error ? e.message : "Não foi possível atualizar do Omie") +
+          (soma.conferidas ? ` (${soma.conferidas} nota(s) já tinham sido conferidas)` : ""),
+      );
+      await carregar();
+    } finally {
+      setAndamento("");
+      setOcupado(false);
     }
   }
 
@@ -269,6 +336,19 @@ export default function PaginaCompras() {
             {pode("integracao.omie") && (
               <button className="btn btn-secundario" onClick={sincronizar} aria-busy={ocupado} disabled={ocupado}>
                 Buscar no Omie
+              </button>
+            )}
+            {/* ⚠️ `compras.notas`, a mesma chave do botão de dentro da nota — e não a
+                da integração: quem confere nota precisa disto, tenha ou não acesso
+                às credenciais do Omie. */}
+            {pode("compras.notas") && (
+              <button
+                className="btn btn-secundario"
+                onClick={() => setConfirmandoAtualizar(true)}
+                aria-busy={ocupado} disabled={ocupado}
+                title="Relê do Omie todas as notas que ainda não foram lançadas"
+              >
+                {andamento || "Atualizar do Omie"}
               </button>
             )}
             {(arquivados?.itens.length ?? 0) > 0 && (
@@ -408,6 +488,26 @@ export default function PaginaCompras() {
           dezenas de linhas de uma vez, e aprovar uma a uma seria um dia de
           trabalho — mas repontar às cegas é pior. A janela mostra de onde para
           onde cada item vai, e o botão faz tudo o que está listado. */}
+      {confirmandoAtualizar && (
+        <Confirmacao
+          titulo="Atualizar do Omie as notas não lançadas?"
+          rotuloConfirmar="Atualizar"
+          aoConfirmar={() => void atualizarTodasDoOmie()}
+          aoCancelar={() => setConfirmandoAtualizar(false)}
+        >
+          <p>
+            Cada nota do Omie que ainda não foi lançada é relida de lá: valor corrigido, item
+            trocado e nota <b>cancelada</b> chegam aqui. Os produtos que você já vinculou são
+            mantidos.
+          </p>
+          <p className="mt-2 text-[13.5px] text-suave">
+            É uma consulta por nota, com uma pequena espera entre elas para não bloquear a
+            conta no Omie — com muitas notas abertas leva alguns minutos. Nota já lançada
+            não é mexida.
+          </p>
+        </Confirmacao>
+      )}
+
       {vendoLote && (
         <LancarLote aoFechar={() => setVendoLote(false)} aoLancar={() => void carregar()} />
       )}

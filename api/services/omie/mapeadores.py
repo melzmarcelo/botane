@@ -242,8 +242,46 @@ def recebimento_de_nfe(bruto: dict) -> dict:
         # 80 convivendo). Não filtra nada aqui — a nota entra como IMPORTADA e
         # só vira estoque quando alguém lança —, mas fica à vista no bruto.
         "etapa_omie": str(_pega(cab, "cEtapa", padrao="") or "") or None,
+        # 🔑 Cancelada no Omie — ver `situacao_no_omie`. A lista e o detalhe passam
+        # pelo mesmo mapeador, então a busca automática enxerga a marca sem pedir o
+        # detalhe (quando a lista a traz).
+        "cancelada": situacao_no_omie(bruto)["cancelada"],
         "itens": itens,
     }
+
+
+def situacao_no_omie(bruto: dict | None) -> dict:
+    """O que o Omie diz sobre a SITUAÇÃO do recebimento: etapa e marcas (S/N, datas).
+
+    🔑 **Relato do dono (09/10/2026):** *"no Omie esta nota foi cancelada. Esta é uma
+    situação que deve ser tratada também, para não ficar notas pendentes que estão
+    canceladas."* A nota 87313 foi cancelada lá e seguia IMPORTADA aqui, na fila.
+
+    ⚠️ **Sem nome de campo fixo, de propósito.** As fixtures foram montadas à mão e
+    não trazem nota cancelada; o nome exato da marca só se confirma na conta real.
+    Então a leitura é pelo SENTIDO: qualquer marca cujo nome fale em cancelamento
+    (`cCancelada`, `cCancelado`, `dCanc`…) nos blocos de cadastro e de cabeçalho.
+    O que foi lido volta inteiro em `marcas`, e a tela da nota mostra — é assim que
+    se confere, no ar, qual campo o Omie usa de verdade.
+    """
+    bruto = bruto or {}
+    marcas: dict = {}
+    for bloco in ("infoCadastro", "nfInfoCadastro", "cabec", "cabecalho", "infoAdicionais"):
+        dados = bruto.get(bloco)
+        if not isinstance(dados, dict):
+            continue
+        for chave, valor in dados.items():
+            nome = str(chave).lower()
+            # Só marcas (c…) e datas (d…) de situação: valores e ids não são situação.
+            if "canc" in nome or nome in ("cetapa", "cfaturado", "crecebido", "cdevolvido",
+                                          "cbloqueado", "cdenegado", "cautorizado"):
+                marcas[str(chave)] = valor
+    cancelada = any(
+        "canc" in str(chave).lower()
+        and ((str(chave).lower().startswith("d") and str(valor or "").strip())
+             or str(valor).strip().upper() in ("S", "SIM", "TRUE", "1"))
+        for chave, valor in marcas.items())
+    return {"cancelada": bool(cancelada), "marcas": marcas}
 
 
 def item_do_recebimento(bruto: dict, seq: int) -> dict:

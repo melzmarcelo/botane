@@ -329,3 +329,50 @@
   🔑 **O sintoma aparecia longe da causa e crescia sozinho com o tempo**, que é o pior tipo: a
   bateria passou 42/42 duas vezes seguidas hoje antes de começar a falhar, sem ninguém mexer em
   permissão nenhuma.
+
+- 🔑 **A nota cancelada no Omie vira CANCELADA aqui** (09/10/2026). Relato do dono: a NF 87313
+  (VALLE-BLU) foi cancelada no Omie e seguia IMPORTADA, com o item na fila. O status
+  `CANCELADA` existia no schema desde a 009 e as filas já o excluíam — mas nada o aplicava.
+  - `mapeadores.situacao_no_omie(bruto)` lê a marca pelo SENTIDO do nome do campo (qualquer
+    chave com "canc" nos blocos de cadastro e cabeçalho: valor S, ou data preenchida), e
+    devolve as marcas lidas. ⚠️ **O nome real do campo NÃO foi confirmado**: as fixtures não
+    trazem nota cancelada, e a da suíte usa `infoCadastro.cCancelada` por suposição. Por isso
+    `GET /notas/{id}` devolve `situacao_no_omie` (etapa e marcas, tiradas do `bruto` guardado)
+    — é por ali que se confere no ar.
+  - Onde é aplicada: `gravar_nota` (nota que já chega cancelada nasce CANCELADA),
+    `atualizar_nota` (o botão "atualizar do Omie" cancela, e DESFAZ se o cancelamento sumir
+    de lá) e `mudou_no_omie` (a busca automática, pelo cabeçalho da LISTA — só se a lista
+    trouxer a marca; senão, só o botão resolve).
+  - ⚠️ **`calcular_nota` ressuscitava a cancelada**: ele regrava IMPORTADA/CONCILIADA a cada
+    religação. Agora poupa `CANCELADA` como já poupava `LANCADA`. `reconciliar` também não
+    procura produto para item de nota cancelada, e `lancar_nota` recusa com 409.
+  - ⚠️ **Nota LANÇADA e cancelada no Omie NÃO é estornada sozinha.** Ela entra em `travadas`
+    com o campo `cancelada`, e a frase da busca manda estornar. A mercadoria já está no razão.
+  - ⚠️ **Efeito observado na 87313 e não explicado**: depois de cancelada, o Omie devolveu o
+    item com "ignorar item" ligado e sem o id do produto. A regra antiga (item ignorado no
+    Omie entra ignorado aqui, e some da fila) segue valendo; propus ao dono não ignorar sozinho
+    quando o item vem sem produto, e ele ainda não respondeu.
+  - Tela: etiqueta `cancelada`, aviso no topo da nota e sem o botão de lançar. O conector
+    aceita `CANCELADA` no filtro de `notas_entrada`.
+  - Cobertura: `tests/smoke_nota_cancelada.py` (23), em transação desfeita, com Omie de mentira.
+
+- 🔑 **"Atualizar do Omie" para TODAS as notas não lançadas** (`POST /notas/atualizar-do-omie`,
+  `importador.atualizar_abertas`, botão na listagem de notas, 09/10/2026). Pedido do dono:
+  *"hoje temos o Atualizar do Omie somente quando estamos na nota."* É o botão da nota
+  repetido para cada IMPORTADA/CONCILIADA de origem Omie — o mesmo `atualizar_nota`, então os
+  vínculos são mantidos e a cancelada lá vira cancelada aqui.
+  - 🔑 **Em LEVAS, e quem pede a próxima é a tela.** Cada nota é uma chamada ao Omie, com
+    0,6 s entre elas (`INTERVALO_MINIMO` do cliente). A rota faz até 50 por requisição (30 por
+    padrão) e devolve `proximo`; o laço da tela segue até ele vir nulo, mostrando o andamento
+    no próprio botão. Uma requisição só para centenas morreria no tempo limite com metade
+    feita. ⚠️ O laço da tela tem teto de 40 voltas.
+  - ⚠️ **Ponto de retorno por nota** (`SAVEPOINT`): uma que falha é contada em `falhas`, com
+    o motivo, e as outras seguem. ⚠️ **Cinco falhas SEGUIDAS param a leva**
+    (`parou_por_falhas`), e a tela mostra isso como ERRO — conta bloqueada só piora insistindo.
+  - ⚠️ "Com valor diferente" é o que a resposta consegue dizer: item trocado pelo mesmo preço
+    é reescrito e conta como "igual".
+  - ⚠️ Permissão `compras.notas`, a do botão de dentro da nota — NÃO `integracao.omie`.
+  - ⚠️ Nota LANÇADA e nota CANCELADA ficam de fora da leva; a lançada nem é consultada.
+  - No conector: `atualizar_nota_do_omie` e `atualizar_notas_abertas_do_omie`.
+  - Cobertura: `smoke_nota_cancelada.py`, seção 6 (36 no total), e o botão no `verificar.mjs`.
+    ⚠️ O navegador NÃO confirma a releitura: a base local tem centenas de notas abertas.

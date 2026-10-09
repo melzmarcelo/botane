@@ -227,6 +227,12 @@ export default function PaginaNota() {
   const pendentes = nota.itens.filter((i) => !i.id_produto && !i.ignorado);
   const localDaNota = locais.find((l) => l.id === nota.id_local)?.nome ?? "";
   const lancada = nota.status === "LANCADA";
+  /**
+   * 🔑 **Cancelada no Omie** (09/10/2026, relato do dono: a nota 87313 foi
+   * cancelada lá e seguia pendente aqui). Quem marca é o servidor, ao importar ou
+   * ao "atualizar do Omie"; a tela só deixa de oferecer o que não cabe mais.
+   */
+  const cancelada = nota.status === "CANCELADA";
   // A soma dos itens, como ela aparece na nota — antes de frete, desconto e
   // IPI/ST. É esta linha que se bate contra o papel do fornecedor.
   const somaItens = nota.itens.reduce(
@@ -259,9 +265,15 @@ export default function PaginaNota() {
           {nota.fornecedor ?? nota.nome_emitente ?? "sem fornecedor"}
           {nota.cnpj_emitente && ` · ${nota.cnpj_emitente}`}
         </p>
+        {cancelada && (
+          <p className="mt-3 max-w-[70ch] rounded border border-linha bg-superficie px-3 py-2 text-[14px]">
+            Esta nota foi <b>cancelada no Omie</b>. Ela não entra no estoque e saiu da fila
+            de conciliação. Se o cancelamento for desfeito lá, use “atualizar do Omie”.
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {!lancada && pode("compras.lancar") && (
+          {!lancada && !cancelada && pode("compras.lancar") && (
             <button
               className="btn btn-primario"
               onClick={lancar}

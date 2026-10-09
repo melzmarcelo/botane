@@ -4060,6 +4060,35 @@ try {
   });
   await new Promise((r) => setTimeout(r, 2500));
   const textoCompras = await p.evaluate(() => document.body.innerText);
+  // 🔑 **Atualizar do Omie, para todas as notas abertas** (pedido do dono,
+  // 09/10/2026: *"hoje temos o Atualizar do Omie somente quando estamos na nota"*).
+  // A regra é da suíte da API (`smoke_nota_cancelada`). Aqui se mede que o botão
+  // está na LISTAGEM e que ele PERGUNTA antes — é uma consulta por nota ao Omie.
+  // ⚠️ Não se confirma: a base local tem centenas de notas abertas de rodadas
+  // anteriores, e a releitura de todas não é o que esta checagem veio provar.
+  await p.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === "Atualizar do Omie")?.click();
+  });
+  await p.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+  const perguntaDoOmie = await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return {
+      abriu: !!d,
+      titulo: d?.querySelector("h2")?.textContent ?? "",
+      falaDeCancelada: /cancelada/i.test(d?.innerText ?? ""),
+    };
+  });
+  checar("a listagem de notas oferece Atualizar do Omie, e pergunta antes",
+    perguntaDoOmie.abriu && /não lançadas/i.test(perguntaDoOmie.titulo)
+      && perguntaDoOmie.falaDeCancelada, perguntaDoOmie);
+  await p.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    [...(d?.querySelectorAll("button") ?? [])]
+      .find((b) => /cancelar/i.test(b.textContent ?? ""))?.click();
+  });
+  await p.waitForFunction(() => !document.querySelector('[role="dialog"]'), { timeout: 5000 })
+    .catch(() => {});
   checar("sincroniza pela tela", /nota\(s\) nova\(s\)/i.test(textoCompras),
     textoCompras.slice(0, 120));
   // ⚠️ A fila de conciliação é da CASA INTEIRA e vem do servidor — antes a tela
@@ -9395,6 +9424,13 @@ try {
   checar("o salao recem-criado abre sozinho, e o endereco guarda qual e",
     virouEndereco, p.url());
 
+  // ⚠️ **Espera a frase, e não só o endereço** (09/10/2026). O endereço muda assim
+  // que o salão é criado; o conteúdo dele chega um instante depois. Lido no mesmo
+  // instante, o texto ainda era o da tela anterior — passou dezenas de vezes e
+  // falhou numa, com a lista de salões da base local mais comprida a cada rodada.
+  // Se a frase NÃO vier, a checagem falha do mesmo jeito: a espera não a enfraquece.
+  await p.waitForFunction(() => /Nenhuma mesa neste salão ainda/i.test(document.body.innerText),
+    { timeout: 9000 }).catch(() => {});
   const soDoSalao = await p.evaluate(() => document.body.innerText);
   checar("e o salao recem-criado avisa que nao tem mesa nenhuma",
     /Nenhuma mesa neste salão ainda/i.test(soDoSalao), soDoSalao.slice(0, 400));

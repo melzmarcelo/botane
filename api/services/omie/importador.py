@@ -388,8 +388,12 @@ def calcular_nota(cur, id_nota: int) -> dict:
             (frete_item, outros_item, convertida, custo_unitario, variacao, item["id"]),
         )
 
+    # ⚠️ **A CANCELADA não é ressuscitada pelo recálculo** (09/10/2026). Esta conta
+    # roda em toda religação e em toda correção de cadastro, e devolvia a nota para
+    # IMPORTADA/CONCILIADA — de volta à fila de onde o cancelamento a tirou.
     cur.execute(
-        """UPDATE notas_entrada SET status = %s WHERE id = %s AND status <> 'LANCADA'""",
+        """UPDATE notas_entrada SET status = %s
+            WHERE id = %s AND status NOT IN ('LANCADA', 'CANCELADA')""",
         ("IMPORTADA" if pendentes else "CONCILIADA", id_nota),
     )
     return {"itens": len(itens), "pendentes": pendentes}
@@ -532,7 +536,7 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None,
                    i.ncm, i.descricao_fornecedor, n.id_fornecedor
               FROM nota_itens i
               JOIN notas_entrada n ON n.id = i.id_nota
-             WHERE n.id_unidade = %s AND n.status <> 'LANCADA'
+             WHERE n.id_unidade = %s AND n.status NOT IN ('LANCADA', 'CANCELADA')
                AND i.id_produto IS NULL AND NOT i.ignorado {onde}
              ORDER BY i.id_nota, i.seq""",
         parametros,
@@ -600,6 +604,11 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
         raise HTTPException(status_code=404, detail="Nota não encontrada")
     if nota["status"] == "LANCADA":
         raise HTTPException(status_code=400, detail="Esta nota já foi lançada no estoque.")
+    if nota["status"] == "CANCELADA":
+        raise HTTPException(
+            status_code=409,
+            detail=("Esta nota foi cancelada no Omie e não entra no estoque. Se o "
+                    "cancelamento foi desfeito lá, use 'atualizar do Omie'."))
 
     calcular_nota(cur, id_nota)
 
@@ -814,6 +823,11 @@ def gravar_nota(cur, id_unidade: int, nota: dict, bruto: dict | None = None,
         )
 
     calcular_nota(cur, id_nota)
+    # 🔑 **Nota que já chega CANCELADA do Omie nasce cancelada aqui.** Ela é gravada
+    # — a conferência "no Omie × aqui" continua fechando, e o documento fica à vista
+    # para quem procurar —, mas não entra na fila, não se religa e não se lança.
+    if nota.get("cancelada"):
+        cur.execute("UPDATE notas_entrada SET status = 'CANCELADA' WHERE id = %s", (id_nota,))
     return id_nota, True
 
 
@@ -892,6 +906,11 @@ def mudou_no_omie(cur, id_unidade: int, cabecalho: dict) -> dict | None:
               # lado contra um valor do outro diria "mudou" em toda nota.
               if cabecalho.get(c) is not None
               and _comparavel(aqui[c]) != _comparavel(cabecalho.get(c))}
+    # 🔑 A nota cancelada no Omie depois de importada: o valor não muda, então os
+    # campos acima não a pegam. ⚠️ Só quando a LISTA traz a marca — se não trouxer,
+    # quem resolve é o botão "atualizar do Omie", que pede o detalhe.
+    if cabecalho.get("cancelada") and aqui["status"] != "CANCELADA":
+        difere["cancelada"] = (False, True)
     if not difere:
         return None
     return {"id": aqui["id"], "status": aqui["status"], "campos": difere}
@@ -1003,16 +1022,106 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
              item.get("fator_declarado")),
         )
 
+    # 🔑 **O cancelamento do Omie chega aqui** (09/10/2026). A nota 87313 foi
+    # cancelada lá e continuava IMPORTADA: "atualizar do Omie" reescrevia os itens
+    # e a devolvia à fila. ⚠️ E o caminho de volta existe: cancelamento desfeito no
+    # Omie tira a marca daqui, senão a nota ficaria presa para sempre.
+    if nota.get("cancelada"):
+        cur.execute("UPDATE notas_entrada SET status = 'CANCELADA' WHERE id = %s", (id_nota,))
+    elif atual["status"] == "CANCELADA":
+        cur.execute("UPDATE notas_entrada SET status = 'IMPORTADA' WHERE id = %s", (id_nota,))
     calcular_nota(cur, id_nota)
 
     cur.execute("SELECT valor_total FROM notas_entrada WHERE id = %s", (id_nota,))
     depois = cur.fetchone()
     return {
         "id": id_nota,
+        "cancelada": bool(nota.get("cancelada")),
         "itens": len(nota.get("itens", [])),
         "vinculos_preservados": reconhecidos,
         "valor_antes": float(antes.get("valor_total") or 0),
         "valor_depois": float(depois["valor_total"] or 0),
+    }
+
+
+def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 30,
+                      antes_de: int | None = None) -> dict:
+    """Relê do Omie as notas que ainda NÃO foram lançadas, uma leva por vez.
+
+    🔑 **Pedido do dono (09/10/2026):** *"hoje temos o Atualizar do Omie somente
+    quando estamos na nota. Tem como … atualizar todas que não estão lançadas
+    ainda? Exemplo: atualizar do Omie na tela de listagem de notas."* É o botão da
+    nota, repetido para cada nota aberta — o mesmo `atualizar_nota`, com os
+    vínculos preservados e o cancelamento reconhecido.
+
+    ⚠️ **Em LEVAS, e quem pede a próxima é a tela.** Cada nota é uma chamada ao
+    Omie, e o cliente espera 0,6 s entre elas para não bloquear a conta: trinta
+    notas são uns vinte segundos. Uma requisição só, para centenas de notas,
+    morreria no tempo limite do servidor com metade do trabalho feito e nada
+    dizendo qual metade. `proximo` é de onde a leva seguinte continua.
+
+    ⚠️ **Só IMPORTADA e CONCILIADA.** A lançada não se reescreve (o razão é
+    append-only), e a cancelada já saiu da fila — para ela existe o botão da nota.
+
+    ⚠️ **Uma nota que falha não leva as outras**: cada uma tem o seu ponto de
+    retorno. Mas falhas SEGUIDAS param a leva — conta bloqueada no Omie só piora
+    com mais tentativas.
+    """
+    cur.execute(
+        """SELECT id, id_omie, numero, nome_emitente FROM notas_entrada
+            WHERE id_unidade = %s AND origem = 'OMIE' AND id_omie IS NOT NULL
+              AND status IN ('IMPORTADA', 'CONCILIADA')
+              AND (%s::bigint IS NULL OR id < %s)
+            ORDER BY id DESC LIMIT %s""",
+        (id_unidade, antes_de, antes_de, limite),
+    )
+    notas = [dict(r) for r in cur.fetchall()]
+
+    atualizadas, canceladas, iguais, falhas, seguidas = [], [], 0, [], 0
+    ultima = None
+    for n in notas:
+        ultima = n["id"]
+        rotulo = {"id": n["id"], "numero": n["numero"], "fornecedor": n["nome_emitente"]}
+        cur.execute("SAVEPOINT atualizar_aberta")
+        try:
+            detalhe = cliente.chamar(MODULO_NOTAS, ITENS_DA_NOTA,
+                                     {"nIdReceb": int(n["id_omie"])})
+            r = atualizar_nota(cur, n["id"], mapeadores.recebimento_de_nfe(detalhe), detalhe)
+            cur.execute("RELEASE SAVEPOINT atualizar_aberta")
+            seguidas = 0
+        except Exception as e:  # noqa: BLE001 — uma nota não derruba a leva
+            cur.execute("ROLLBACK TO SAVEPOINT atualizar_aberta")
+            motivo = (getattr(e, "mensagem", None) or getattr(e, "detail", None)
+                      or f"{type(e).__name__}: {e}")
+            falhas.append(rotulo | {"motivo": str(motivo)[:200]})
+            seguidas += 1
+            if seguidas >= FALHAS_SEGUIDAS:
+                break
+            continue
+        if r.get("cancelada"):
+            canceladas.append(rotulo)
+        elif abs(r["valor_depois"] - r["valor_antes"]) >= 0.01:
+            atualizadas.append(rotulo | {"de": r["valor_antes"], "para": r["valor_depois"]})
+        else:
+            iguais += 1
+
+    restantes = 0
+    if ultima is not None:
+        cur.execute(
+            """SELECT count(*) AS n FROM notas_entrada
+                WHERE id_unidade = %s AND origem = 'OMIE' AND id_omie IS NOT NULL
+                  AND status IN ('IMPORTADA', 'CONCILIADA') AND id < %s""",
+            (id_unidade, ultima),
+        )
+        restantes = cur.fetchone()["n"]
+    parou = seguidas >= FALHAS_SEGUIDAS
+    return {
+        "conferidas": len(atualizadas) + len(canceladas) + iguais + len(falhas),
+        "atualizadas": atualizadas, "canceladas": canceladas, "iguais": iguais,
+        "falhas": falhas, "restantes": restantes,
+        # De onde a leva seguinte continua. Nulo = acabou, ou parou por falha.
+        "proximo": ultima if (restantes and not parou) else None,
+        "parou_por_falhas": parou, "modo": cliente.modo,
     }
 
 
@@ -1192,6 +1301,12 @@ def sincronizar(cur, id_unidade: int, cliente: ClienteOmie, dias: int | None = N
         recado += f"; {atualizadas} atualizada(s) com o ajuste do Omie"
     # ⚠️ A travada entra na frase mesmo sendo "nada aconteceu": é justamente o
     # caso em que alguém precisa agir, e um silêncio aqui o esconderia.
+    canceladas_lancadas = [t for t in travadas if "cancelada" in t["campos"]]
+    if canceladas_lancadas:
+        # ⚠️ O caso que mais pede ação: a mercadoria está no estoque daqui e a nota
+        # não vale mais lá. Nada é estornado sozinho — o razão é de quem decide.
+        recado += (f"; {len(canceladas_lancadas)} CANCELADA(S) no Omie e já lançada(s) "
+                   "aqui — estorne a nota")
     if travadas:
         recado += f"; {len(travadas)} mudaram no Omie mas já estão lançadas"
     if falhas:
