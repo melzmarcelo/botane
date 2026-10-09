@@ -732,6 +732,340 @@ FERRAMENTAS: list[Ferramenta] = [
                                    obrigatorio=True, no_corpo=True),
          "observacao": Param("string", "Por que está sendo movido.", no_corpo=True)},
         metodo="POST"),
+    # ------------------------------------------- lote 1: estoque e produção
+    # 🔑 **"Disponibilizar as maiores opções possíveis para o conector, pois o cliente
+    # está utilizando muito por lá"** (pedido do dono, 09/10/2026). Cada ferramenta é
+    # a MESMA rota da tela — a permissão, a trava de período fechado e o razão
+    # append-only continuam sendo decididos pelo servidor. Ficaram de fora, de
+    # propósito: usuários, papéis, credenciais de integração e envio ao PDV.
+    Ferramenta(
+        "motivos_de_perda", "Motivos de perda",
+        "Os motivos cadastrados para lançar uma perda ou descartar uma etiqueta.",
+        "/estoque/motivos-perda"),
+    Ferramenta(
+        "etiquetas", "Etiquetas de validade",
+        "As etiquetas de validade da loja: ativas, a vencer, vencidas ou já baixadas.",
+        "/etiquetas",
+        {"situacao": Param("string", "Quais trazer.", padrao="ativas",
+                           enum=["ativas", "vencendo", "vencidas", "baixadas"]),
+         "busca": Param("string", "Nome do produto, código da etiqueta ou lote."),
+         "id_local": Param("integer", "Só desta prateleira."),
+         "limite": _lim(50, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "painel_de_etiquetas", "Painel das etiquetas",
+        "Quantas etiquetas estão ativas, vencendo e vencidas, e quanto foi descartado.",
+        "/etiquetas/painel"),
+
+    Ferramenta(
+        "previa_ajuste_de_saldo", "Prévia do acerto de saldo",
+        "O que o acerto de saldo faria, SEM fazer: o saldo de hoje, a diferença e o valor. "
+        "Chame antes de `ajustar_saldo` e mostre à pessoa.",
+        "/ajustes/estoque/previa",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "quantidade_certa": Param("number", "Quanto a prateleira TEM (a contagem), não a "
+                                             "diferença.", obrigatorio=True, no_corpo=True),
+         "id_local": Param("integer", "Prateleira (de `locais`). Sem ela, a padrão.",
+                           no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "ajustar_saldo", "Acertar o saldo de um produto",
+        "Acerta o saldo de UM produto numa prateleira para a quantidade contada: a diferença "
+        "vira um movimento de ajuste no razão. ⚠️ O razão não se apaga — desfazer é outro "
+        "ajuste. Mostre antes a `previa_ajuste_de_saldo` e espere o sim. Para contar vários "
+        "produtos de uma vez, o caminho é o inventário (`abrir_inventario`).",
+        "/ajustes/estoque",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "quantidade_certa": Param("number", "Quanto a prateleira TEM (a contagem), não a "
+                                             "diferença.", obrigatorio=True, no_corpo=True),
+         "id_local": Param("integer", "Prateleira (de `locais`). Sem ela, a padrão.",
+                           no_corpo=True),
+         "observacao": Param("string", "Por que está sendo acertado.", no_corpo=True),
+         "documento": Param("string", "Documento de referência, se houver.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "previa_ajuste_de_custo", "Prévia do ajuste de custo",
+        "O que o ajuste de custo médio faria, SEM fazer: o custo de hoje, o novo e quanto "
+        "muda o valor do estoque. Chame antes de `ajustar_custo`.",
+        "/ajustes/custo/previa",
+        {"linhas": Param(
+            "array", "Um item por produto.", obrigatorio=True, no_corpo=True,
+            itens={"type": "object",
+                   "properties": {
+                       "id_produto": {"type": "integer"},
+                       "custo_novo": {"type": "number",
+                                      "description": "O custo CERTO por unidade de estoque, "
+                                                     "não a diferença."},
+                       "id_local": {"type": "integer",
+                                    "description": "Só nesta prateleira; sem ela, em todas."}},
+                   "required": ["id_produto", "custo_novo"]})},
+        metodo="POST"),
+    Ferramenta(
+        "ajustar_custo", "Ajustar o custo médio",
+        "Corrige o custo médio do estoque de um ou mais produtos. Não move mercadoria: muda "
+        "o VALOR do estoque, e com ele o custo de toda ficha que usa o insumo. ⚠️ Mostre "
+        "antes a `previa_ajuste_de_custo` e espere o sim. Produto SEM estoque não tem custo "
+        "médio — para ele, o custo se informa no cadastro.",
+        "/ajustes/custo",
+        {"linhas": Param(
+            "array", "Um item por produto.", obrigatorio=True, no_corpo=True,
+            itens={"type": "object",
+                   "properties": {
+                       "id_produto": {"type": "integer"},
+                       "custo_novo": {"type": "number",
+                                      "description": "O custo CERTO por unidade de estoque."},
+                       "id_local": {"type": "integer"},
+                       "observacao": {"type": "string"}},
+                   "required": ["id_produto", "custo_novo"]}),
+         "observacao": Param("string", "Por que o custo está sendo corrigido.", no_corpo=True),
+         "documento": Param("string", "Documento de referência, se houver.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "entrada_de_estoque", "Entrada avulsa no estoque",
+        "Dá entrada de um produto SEM nota: bonificação, sobra, acerto de implantação. "
+        "⚠️ Compra com nota NÃO é aqui — é `lancar_nota`, senão a mercadoria entra duas "
+        "vezes. O custo informado entra no custo médio.",
+        "/estoque/entradas",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "quantidade": Param("number", "Quanto entra, na unidade de estoque. Maior que zero.",
+                             obrigatorio=True, no_corpo=True),
+         "custo_unitario": Param("number", "Custo de UMA unidade de estoque, em reais.",
+                                 obrigatorio=True, no_corpo=True),
+         "id_local": Param("integer", "Prateleira (de `locais`). Sem ela, a do produto.",
+                           no_corpo=True),
+         "documento": Param("string", "Documento de referência.", no_corpo=True),
+         "observacao": Param("string", "De onde veio.", no_corpo=True),
+         "lote": Param("string", "Lote, para produto que controla lote.", no_corpo=True),
+         "validade": Param("string", "Validade AAAA-MM-DD.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "saida_de_estoque", "Saída do estoque: perda ou consumo",
+        "Baixa uma quantidade do estoque fora de venda e de produção: PERDA (quebra, "
+        "vencimento — peça o motivo, de `motivos_de_perda`) ou CONSUMO INTERNO (uso da "
+        "casa). ⚠️ Venda entra por Vendas e ingrediente de receita sai por `produzir`; "
+        "lançar aqui também baixaria em dobro.",
+        "/estoque/saidas",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "quantidade": Param("number", "Quanto sai, na unidade de estoque. Maior que zero.",
+                             obrigatorio=True, no_corpo=True),
+         "tipo": Param("string", "O que foi.", padrao="SAIDA_CONSUMO_INTERNO", no_corpo=True,
+                       enum=["SAIDA_PERDA", "SAIDA_CONSUMO_INTERNO"]),
+         "id_motivo_perda": Param("integer", "Motivo, quando é perda.", no_corpo=True),
+         "id_local": Param("integer", "De que prateleira sai. Sem ela, a do produto.",
+                           no_corpo=True),
+         "observacao": Param("string", "O que aconteceu.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "estornar_movimento", "Estornar um movimento do estoque",
+        "Desfaz UM movimento do razão criando o contrário dele (o original continua lá). "
+        "O id vem de `movimentos_estoque`. ⚠️ Produção inteira é `estornar_producao`; nota "
+        "lançada e venda têm o próprio cancelamento, que desfaz tudo junto.",
+        "/estoque/movimentos/{id_movimento}/estornar",
+        {"id_movimento": Param("integer", "Id do movimento.", obrigatorio=True),
+         "motivo": Param("string", "Por que está sendo estornado.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "estornar_producao", "Estornar uma produção",
+        "Desfaz uma produção inteira: o produzido sai da prateleira e os insumos voltam. O "
+        "id vem de `producoes_feitas`. Recusa quando o produzido já foi usado ou vendido "
+        "(acerte por `ajustar_saldo`) e quando a produção nasceu de uma venda ainda de pé.",
+        "/estoque/producoes/{id_producao}/estornar",
+        {"id_producao": Param("integer", "Id da produção.", obrigatorio=True),
+         "motivo": Param("string", "Por que está sendo estornada.", no_corpo=True)},
+        metodo="POST"),
+
+    Ferramenta(
+        "agendar_producao", "Agendar uma produção",
+        "Põe uma produção na agenda de um dia. NÃO mexe no estoque — isso acontece quando "
+        "a linha é cumprida (`produzir_da_agenda`). O mesmo produto no mesmo dia soma na "
+        "mesma linha.",
+        "/producao-agenda",
+        {"id_produto": Param("integer", "Produto a produzir.", obrigatorio=True, no_corpo=True),
+         "quantidade": Param("number", "Quanto, na `medida` escolhida.", obrigatorio=True,
+                             no_corpo=True),
+         "medida": Param("string", "PORCOES = unidade de estoque do produto; RECEITAS = "
+                                   "voltas inteiras da ficha; RENDIMENTO = unidade em que a "
+                                   "receita rende.", padrao="PORCOES", no_corpo=True,
+                         enum=["PORCOES", "RECEITAS", "RENDIMENTO"]),
+         "data_prevista": Param("string", "Dia AAAA-MM-DD. Sem ele, amanhã.", no_corpo=True),
+         "id_local": Param("integer", "Prateleira de quem produz.", no_corpo=True),
+         "id_modo": Param("integer", "Modo de rendimento da ficha.", no_corpo=True),
+         "observacao": Param("string", "Recado para a cozinha.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "produzir_da_agenda", "Cumprir uma linha da agenda",
+        "Produz o que estava agendado: baixa os insumos e dá entrada no produzido. O id vem "
+        "de `agenda_producao`. ⚠️ Mexe no estoque — mostre `item_da_agenda` antes.",
+        "/producao-agenda/{id_agenda}/produzir",
+        {"id_agenda": Param("integer", "Id da linha da agenda.", obrigatorio=True),
+         "quantidade": Param("number", "Quanto saiu de fato, na unidade de estoque. Sem "
+                                       "ela, o planejado.", no_corpo=True),
+         "id_local": Param("integer", "Prateleira de quem produziu.", no_corpo=True),
+         "consumos": Param(
+             "array", "Só quando o que SAIU foi diferente da receita.", no_corpo=True,
+             itens={"type": "object",
+                    "properties": {"id_item": {"type": "integer",
+                                               "description": "A linha da receita."},
+                                   "quantidade": {"type": "number"},
+                                   "um": {"type": "string"}},
+                    "required": ["id_item", "quantidade"]})},
+        metodo="POST"),
+    Ferramenta(
+        "cancelar_agenda", "Tirar uma linha da agenda",
+        "Cancela uma produção agendada que ainda não foi feita. Não mexe no estoque.",
+        "/producao-agenda/{id_agenda}",
+        {"id_agenda": Param("integer", "Id da linha da agenda.", obrigatorio=True)},
+        metodo="DELETE"),
+    # ⚠️ **Homologar NÃO entra, e a ausência é decisão antiga** (ver
+    # `criar_ficha_tecnica`, mais abaixo): a ficha lida de arquivo nasce RASCUNHO, e
+    # é na tela, com o custo do lado, que alguém confere antes de liberar a produção.
+    # O lote de 09/10/2026 abriu quase tudo de estoque e produção; isto ficou de fora
+    # até o dono dizer o contrário.
+    Ferramenta(
+        "duplicar_ficha", "Copiar uma ficha para outro produto",
+        "Cria, em RASCUNHO, uma ficha para outro produto com a mesma receita desta.",
+        "/fichas/{id_ficha}/duplicar",
+        {"id_ficha": Param("integer", "A ficha a copiar.", obrigatorio=True),
+         "id_produto": Param("integer", "O produto que recebe a cópia.", obrigatorio=True,
+                             no_corpo=True)},
+        metodo="POST"),
+
+    Ferramenta(
+        "abrir_inventario", "Abrir uma contagem de estoque",
+        "Abre um inventário congelando o saldo de agora. Os filtros combinam com E, e vazio "
+        "quer dizer todos. Nada muda no estoque até `fechar_inventario`.",
+        "/inventarios",
+        {"nome": Param("string", "Nome da contagem.", no_corpo=True),
+         "cega": Param("boolean", "Contagem cega: quem conta não vê o saldo do sistema.",
+                       padrao=False, no_corpo=True),
+         "locais": Param("array", "Ids das prateleiras.", no_corpo=True,
+                         itens={"type": "integer"}),
+         "setores": Param("array", "Ids dos setores.", no_corpo=True,
+                          itens={"type": "integer"}),
+         "categorias": Param("array", "Ids das categorias.", no_corpo=True,
+                             itens={"type": "integer"}),
+         "produtos": Param("array", "Ids dos produtos, para contar só alguns.", no_corpo=True,
+                           itens={"type": "integer"}),
+         "observacao": Param("string", "Recado sobre esta contagem.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "contar_inventario", "Lançar a contagem",
+        "Grava o que foi contado em um inventário aberto. Pode ser chamado várias vezes; "
+        "ainda não mexe no razão.",
+        "/inventarios/{id_inventario}/contagem",
+        {"id_inventario": Param("integer", "Id da contagem.", obrigatorio=True),
+         "itens": Param(
+             "array", "O que foi contado.", obrigatorio=True, no_corpo=True,
+             itens={"type": "object",
+                    "properties": {
+                        "id_produto": {"type": "integer"},
+                        "id_local": {"type": "integer",
+                                     "description": "Prateleira da linha (de `inventario`)."},
+                        "qtd_contada": {"type": "number"},
+                        "um": {"type": "string",
+                               "description": "Unidade do que foi contado; sem ela, a de "
+                                              "estoque."},
+                        "observacao": {"type": "string"}},
+                    "required": ["id_produto"]})},
+        metodo="PUT"),
+    Ferramenta(
+        "incluir_no_inventario", "Incluir um produto na contagem",
+        "Acrescenta à contagem um produto achado na prateleira que não estava na lista.",
+        "/inventarios/{id_inventario}/incluir",
+        {"id_inventario": Param("integer", "Id da contagem.", obrigatorio=True),
+         "id_produto": Param("integer", "Produto achado.", obrigatorio=True, no_corpo=True),
+         "id_local": Param("integer", "Em que prateleira.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "fechar_inventario", "Fechar a contagem",
+        "Fecha o inventário e ACERTA O ESTOQUE: cada diferença vira um movimento de ajuste. "
+        "⚠️ Não se desfaz. Mostre antes as divergências (`inventario`) e espere o sim.",
+        "/inventarios/{id_inventario}/fechar",
+        {"id_inventario": Param("integer", "Id da contagem.", obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "cancelar_inventario", "Cancelar a contagem",
+        "Cancela um inventário aberto, sem acertar nada no estoque.",
+        "/inventarios/{id_inventario}",
+        {"id_inventario": Param("integer", "Id da contagem.", obrigatorio=True)},
+        metodo="DELETE"),
+
+    Ferramenta(
+        "emitir_etiquetas", "Emitir etiquetas de validade",
+        "Gera etiquetas de validade: do que foi PRODUZIDO, do que foi ABERTO ou do que foi "
+        "posto para DESCONGELAR. A validade sai da regra do produto. Reetiquetar um pote "
+        "(abrir, descongelar, dividir) é passar `id_origem`.",
+        "/etiquetas",
+        {"evento": Param("string", "O que aconteceu com o produto.", obrigatorio=True,
+                         no_corpo=True, enum=["PRODUCAO", "ABERTURA", "DESCONGELAMENTO"]),
+         "id_produto": Param("integer", "Produto (dispensado com `id_origem`).", no_corpo=True),
+         "id_origem": Param("integer", "Etiqueta que está sendo reetiquetada.", no_corpo=True),
+         "id_producao": Param("integer", "Produção de onde saiu (de `producoes_feitas`).",
+                              no_corpo=True),
+         "copias": Param("integer", "Quantas etiquetas.", padrao=1, no_corpo=True, minimo=1),
+         "quantidade": Param("number", "Quanto há em cada pote, na unidade de estoque.",
+                             no_corpo=True),
+         "conservacao": Param("string", "Como vai ser guardado (a regra do produto diz as "
+                                        "que existem).", no_corpo=True),
+         "id_local": Param("integer", "Onde fica guardado.", no_corpo=True),
+         "validade_fabricante": Param("string", "Validade da embalagem, AAAA-MM-DD.",
+                                      no_corpo=True),
+         "observacao": Param("string", "Recado na etiqueta.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "usar_etiqueta", "Dar baixa em uma etiqueta: usei tudo",
+        "Marca o pote como usado por inteiro. A etiqueta sai da lista das ativas.",
+        "/etiquetas/{id_etiqueta}/usar",
+        {"id_etiqueta": Param("integer", "Id da etiqueta (de `etiquetas`).", obrigatorio=True),
+         "observacao": Param("string", "Recado.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "usar_parte_da_etiqueta", "Usar uma parte do pote",
+        "Tira uma parte do pote: a etiqueta continua ativa com o que sobrou.",
+        "/etiquetas/{id_etiqueta}/usar-parte",
+        {"id_etiqueta": Param("integer", "Id da etiqueta.", obrigatorio=True),
+         "quantidade": Param("number", "Quanto foi usado, na unidade da etiqueta.",
+                             obrigatorio=True, no_corpo=True),
+         "observacao": Param("string", "Recado.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "descartar_etiqueta", "Descartar um pote",
+        "Descarta o que resta no pote. Com `lancar_perda`, a quantidade sai do estoque como "
+        "perda, pelo motivo informado.",
+        "/etiquetas/{id_etiqueta}/descartar",
+        {"id_etiqueta": Param("integer", "Id da etiqueta.", obrigatorio=True),
+         "lancar_perda": Param("boolean", "Baixar do estoque como perda.", no_corpo=True),
+         "id_motivo_perda": Param("integer", "Motivo (de `motivos_de_perda`).", no_corpo=True),
+         "motivo": Param("string", "O que aconteceu.", no_corpo=True),
+         "quantidade": Param("number", "Quanto descartar; sem ela, o que resta no pote.",
+                             no_corpo=True)},
+        metodo="POST"),
+
+    Ferramenta(
+        "receber_transferencia", "Receber uma remessa de outra loja",
+        "Confirma o recebimento de uma remessa: o estoque entra na loja de destino. Sem "
+        "`itens`, recebe tudo como foi enviado.",
+        "/transferencias/{id_transferencia}/receber",
+        {"id_transferencia": Param("integer", "Id da remessa (de `transferencias`).",
+                                   obrigatorio=True),
+         "itens": Param(
+             "array", "Só quando chegou diferente do enviado.", no_corpo=True,
+             itens={"type": "object",
+                    "properties": {
+                        "id_item": {"type": "integer",
+                                    "description": "A linha da remessa (de `transferencia`)."},
+                        "qtd_recebida": {"type": "number"},
+                        "id_motivo_perda": {"type": "integer"},
+                        "observacao": {"type": "string"}},
+                    "required": ["id_item"]}),
+         "observacao": Param("string", "Recado sobre o recebimento.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "cancelar_transferencia", "Cancelar uma remessa",
+        "Cancela uma remessa que ainda não foi recebida: a mercadoria volta para a origem.",
+        "/transferencias/{id_transferencia}/cancelar",
+        {"id_transferencia": Param("integer", "Id da remessa.", obrigatorio=True)},
+        metodo="POST"),
+
     # 🔑 **Produzir pelo conector** (pedido do dono, 08/10/2026). É a mesma rota da
     # tela: exige ficha homologada e a permissão `estoque.saidas`.
     Ferramenta(
@@ -993,8 +1327,10 @@ POR_NOME = {f.nome: f for f in FERRAMENTAS}
 INSTRUCOES = (
     "Sistema de gestão de {casa}: produtos, fichas técnicas, estoque, compras "
     "(notas do Omie), vendas e CMV. Com as permissões do usuário conectado: consulta "
-    "sempre; grava (cadastro, fichas, notas) só com chave que permite alterar — e toda "
-    "gravação deve ser confirmada com a pessoa antes. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "
+    "sempre; grava (cadastro, fichas, notas, estoque, produção, inventário, etiquetas) só "
+    "com chave que permite alterar — e toda gravação deve ser confirmada com a pessoa antes. "
+    "O que mexe no estoque não se apaga: desfazer é estornar. Onde houver ferramenta de "
+    "prévia, mostre a prévia antes de gravar. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "
     "AAAA-MM-DD. Comece por `quem_sou` para saber lojas e permissões. Um erro 403 quer "
     "dizer que o usuário não tem aquela permissão, não que o dado não existe. O CMV "
     "trabalha no PERÍODO da casa: use `cmv_periodos` antes de escolher datas."

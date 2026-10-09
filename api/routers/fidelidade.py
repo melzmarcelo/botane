@@ -18,6 +18,7 @@ from database import get_cursor
 from models.fidelidade import (DarSelos, EntregaPremio, FidelidadeConfig, LocalDaLoja,
                                NovoVencimento, SelosDoPedido)
 from paginacao import pagina
+import relogio
 from relogio import agora_da_casa
 from routers.reservas import _unidade
 from seguranca import Contexto, requer_permissao
@@ -121,7 +122,7 @@ def qrcodes(quantidade: int = Query(1, ge=1, le=200),
     )
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'attachment; filename="qrcodes-fidelidade-{date.today():%Y%m%d}.pdf"'})
+                             f'attachment; filename="qrcodes-fidelidade-{relogio.hoje_da_casa():%Y%m%d}.pdf"'})
 
 
 @router.get("/premios")

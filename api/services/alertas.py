@@ -8,6 +8,7 @@ dono abrir uma tela e ver o que fazer, em vez de descobrir no fim do mês.
 Cada alerta responde três coisas: **o que é**, **quanto é** e **o que fazer**.
 """
 
+import relogio
 from datetime import date, timedelta
 
 from services import periodos, produtos_em_uso
@@ -200,7 +201,7 @@ def levantar(cur, id_unidade: int) -> list[dict]:
     # período é `periodos`, o mesmo lugar que o fechamento consulta.
     c = periodos.config(cur, id_unidade)
     inicio_atual, _fim = periodos.periodo_do_dia(
-        date.today(), c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
+        relogio.hoje_da_casa(), c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
     anterior, fim_anterior = periodos.periodo_do_dia(
         inicio_atual - timedelta(days=1), c["ciclo"],
         dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])

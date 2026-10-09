@@ -14,6 +14,7 @@ chave chegar — e serve de demonstração para o cliente.
 real**. Por isso a tradução vive em `mapeadores.py`, e não aqui.
 """
 
+import relogio
 import json
 import re
 import time
@@ -117,7 +118,7 @@ def _aproximar_datas(dados: Any) -> Any:
     varrer(dados)
     if not achadas:
         return dados
-    deslocamento = (date.today() - max(achadas)).days
+    deslocamento = (relogio.hoje_da_casa() - max(achadas)).days
     if deslocamento == 0:
         return dados
 

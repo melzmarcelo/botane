@@ -23,6 +23,7 @@ mensal com dia 1, ela continua sendo o primeiro dia do mês, exatamente como
 antes desta virada.
 """
 
+import relogio
 from calendar import monthrange
 from datetime import date, timedelta
 
@@ -105,7 +106,7 @@ def periodos_ate_hoje(ciclo: str, quantos: int, *, dia_semana: int = 7,
     não terminou e não pode ser fechado, mas precisa aparecer: é o que a pessoa
     está olhando, e uma lista que começa no período passado parece atrasada.
     """
-    hoje = hoje or date.today()
+    hoje = hoje or relogio.hoje_da_casa()
     atual = periodo_do_dia(hoje, ciclo, dia_semana=dia_semana, dia_mes=dia_mes)
     lista = [atual]
     while len(lista) < quantos:

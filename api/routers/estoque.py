@@ -770,6 +770,26 @@ def produzir(body: ProducaoRequest,
     return r
 
 
+@router.post("/producoes/{id_producao}/estornar", status_code=201)
+def estornar_producao(id_producao: int, body: EstornoRequest,
+                      ctx: Contexto = Depends(requer_permissao("estoque.ajuste"))) -> dict:
+    """Desfaz a produção inteira — ver `services.estoque.estornar_producao`.
+
+    ⚠️ `estoque.ajuste`, a mesma chave do estorno de um movimento: é a mesma
+    operação, feita de uma vez. Quem produz (`estoque.saidas`) não desfaz.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        r = motor.estornar_producao(cur, id_producao, id_unidade, ctx.id_usuario,
+                                    body.motivo)
+        auditoria.registrar(cur, ctx.id_usuario, "producao", id_producao, "estornar",
+                            depois={"movimentos_estornados": r["estornados"],
+                                    "motivo": body.motivo},
+                            id_unidade=id_unidade)
+    return r | {"message": f"Produção de {r['produto']} estornada — "
+                           f"{r['estornados']} movimento(s) devolvido(s)"}
+
+
 @router.get("/producoes")
 def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
                      offset: int = Query(default=0, ge=0),
@@ -790,10 +810,22 @@ def listar_producoes(limite: int = Query(default=50, ge=1, le=200),
             # um lugar por onde ela nunca passou.
             # ⚠️ O `coalesce` cobre a produção sem movimento de entrada, que não
             # deveria existir — mas a linha não pode sumir da lista por isso.
+            # 🔑 **"Estornada" é o que o RAZÃO diz** (09/10/2026): a produção cujos
+            # movimentos já têm todos o seu estorno. Não é coluna — a desfeita à
+            # mão, linha por linha, e a desfeita pelo cancelamento da venda
+            # aparecem do mesmo jeito que a do botão.
             """SELECT pr.id, pr.id_produto, pr.data, pr.quantidade, pr.custo_total,
                       pr.custo_unitario,
                       pr.versao_ficha, p.nome AS produto, p.codigo, l.nome AS local,
-                      u.nome AS usuario
+                      u.nome AS usuario, pr.id_venda,
+                      (EXISTS (SELECT 1 FROM estoque_movimentos m
+                                WHERE m.origem_tipo = 'PRODUCAO' AND m.origem_id = pr.id)
+                       AND NOT EXISTS (
+                           SELECT 1 FROM estoque_movimentos m
+                            WHERE m.origem_tipo = 'PRODUCAO' AND m.origem_id = pr.id
+                              AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                                               WHERE e.id_estorno_de = m.id))
+                      ) AS estornada
                  FROM producoes pr
                  JOIN produtos p ON p.id = pr.id_produto
                  LEFT JOIN LATERAL (

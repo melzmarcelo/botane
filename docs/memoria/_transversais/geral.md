@@ -383,3 +383,17 @@
   usuário de teste passaram a repetir: `smoke_exportacoes`, `smoke_cmv`, `smoke_notas` e
   `smoke_inventario_filtros` caíram por isso (este último deixando uma contagem ABERTA que
   derrubou a rodada seguinte). Agora é `str(time.time_ns() // 100)[-6:]` em todas.
+
+- 🔑 **A hora da casa, pela TERCEIRA vez** (09/10/2026, relato do dono: *"a hora no rodapé dos
+  relatórios está saindo incorreta"*). `services/exportacao.py` carimbava o CSV e o PDF com
+  `datetime.now()` — a hora do contêiner, UTC, três horas à frente. Trocado por
+  `relogio.agora_da_casa()`, e `smoke_exportacoes` passou a cobrar que os dois módulos de
+  exportação não perguntem a hora por conta própria (a checagem é sobre o CÓDIGO: o defeito é
+  invisível na máquina de casa).
+  - 🔑 **Na mesma passada, todo `date.today()` de `services/` e `routers/` virou
+    `relogio.hoje_da_casa()`** (17 arquivos): painel do início, CMV, períodos, agenda, Omie,
+    PDV, alertas. No ar, entre 21h e meia-noite, "hoje" era amanhã.
+  - ⚠️ **`datetime.now()` fora da exportação NÃO foi trocado**: `agora_da_casa()` devolve
+    data COM fuso, e misturá-la com data sem fuso numa conta derruba a rota. Sobram
+    `services/ajustes.py` (trava de período), `services/email.py`, `services/whatsapp.py` e
+    `services/omie/importador.py` — cada um precisa ser olhado, não substituído.

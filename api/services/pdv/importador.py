@@ -14,6 +14,7 @@ seria silencioso: 100 é um número plausível, ninguém veria falta nenhuma, e 
 CMV do período sairia com receita a menos.
 """
 
+import relogio
 from datetime import date, timedelta
 
 from services.pdv import mapeadores, vinculo
@@ -35,7 +36,7 @@ def janela(cur, id_unidade: int, dias: int | None, desde: date | None) -> tuple[
     só fechou hoje) cairia fora se a janela começasse onde a anterior parou — e
     ninguém veria, porque o resultado seria "0 novas".
     """
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     if desde:
         return desde, hoje
     if dias:

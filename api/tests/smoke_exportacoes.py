@@ -512,6 +512,19 @@ checar("o acento vira letra sem acento",
 checar("e o resto vira hifen, sem repetir",
        _exp.slug("//CACAROLA  REDONDA 3/4") == "cacarola-redonda-3-4",
        _exp.slug("//CACAROLA  REDONDA 3/4"))
+# 🔑 **A hora do relatório é a da CASA, não a do contêiner** (relato do dono,
+# 09/10/2026: *"a hora no rodapé dos relatórios está saindo incorreta"*). O rodapé
+# perguntava a hora ao sistema operacional, que no ar está em UTC — três horas à
+# frente. ⚠️ É INVISÍVEL aqui: a máquina de casa está no fuso que o código presume.
+# Por isso a checagem é sobre o CÓDIGO, e não sobre o relógio: nenhum dos dois
+# módulos de exportação pode voltar a perguntar a hora por conta própria.
+import inspect as _inspect  # noqa: E402
+_fontes = _inspect.getsource(_exp) + _inspect.getsource(_cat)
+checar("a exportação não pergunta a hora ao servidor",
+       "datetime.now()" not in _fontes and "date.today()" not in _fontes)
+import relogio as _relogio  # noqa: E402
+checar("e a hora da casa vem com fuso, que é o que a separa da do contêiner",
+       _relogio.agora_da_casa().utcoffset() is not None)
 checar("nome vazio nao vira arquivo sem nome",
        _exp.slug(None) == "" and _exp.slug("   ") == "")
 checar("e o nome tem teto", len(_exp.slug("a" * 200)) <= 45)

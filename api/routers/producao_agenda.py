@@ -4,6 +4,7 @@ Produzir já existia — mas só depois do fato. Aqui fica o passo anterior, que
 onde o estoque mínimo vira decisão em vez de susto.
 """
 
+import relogio
 from datetime import date
 from typing import Literal
 
@@ -85,7 +86,7 @@ def listar(inicio: date | None = None, fim: date | None = None, status: str | No
         if inicio is None and fim is None and status is None:
             linhas = [l for l in linhas
                       if l["status"] == "PLANEJADA"
-                      and (l["data_prevista"] >= date.today() or l["atrasada"])]
+                      and (l["data_prevista"] >= relogio.hoje_da_casa() or l["atrasada"])]
         return {
             "linhas": linhas,
             "resumo": motor.resumo(cur, id_unidade),

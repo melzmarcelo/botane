@@ -21,6 +21,7 @@ sintoma seria a memória de cálculo discordando do número que ela existe para
 explicar: pior que não ter memória nenhuma.
 """
 
+import relogio
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -58,7 +59,7 @@ def estoque_em(cur, id_unidade: int, ate: date | None,
     """
     p = {"u": id_unidade, "fora": fora or None}
 
-    if ate is None or ate >= date.today():
+    if ate is None or ate >= relogio.hoje_da_casa():
         cur.execute(
             """SELECT s.id_produto, pr.codigo, pr.nome AS produto, pr.um_estoque,
                       c.nome AS categoria, g.nome AS setor,

@@ -1,5 +1,6 @@
 """Painel de CMV, curva ABC, margem por prato e fechamento de período."""
 
+import relogio
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -38,9 +39,9 @@ def _periodo(cur, id_unidade: int, inicio: date | None,
     if not inicio or not fim:
         c = periodos.config(cur, id_unidade)
         p_inicio, p_fim = periodos.periodo_do_dia(
-            date.today(), c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
+            relogio.hoje_da_casa(), c["ciclo"], dia_semana=c["dia_semana"], dia_mes=c["dia_mes"])
         inicio = inicio or p_inicio
-        fim = fim or min(p_fim, date.today())
+        fim = fim or min(p_fim, relogio.hoje_da_casa())
     if fim < inicio:
         raise HTTPException(status_code=400, detail="A data final é anterior à inicial.")
     return inicio, fim
@@ -504,7 +505,7 @@ def listar_periodos(
     ⚠️ O período corrente vem na lista com `fechavel: false`: ele é o que a
     pessoa está olhando, mas ainda não terminou.
     """
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
         c = periodos.config(cur, id_unidade)
@@ -648,7 +649,7 @@ def fechar(body: FechamentoRequest,
         # pertence ao período que ele encerra, e é justamente à noite do
         # domingo — ou do próprio dia, no ciclo diário — que se fecha. Recusar
         # o último dia deixaria a casa sempre um período atrasada.
-        if fim > date.today():
+        if fim > relogio.hoje_da_casa():
             raise HTTPException(
                 status_code=400,
                 detail=(f"O período de {nome} só termina em "

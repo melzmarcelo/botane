@@ -720,9 +720,8 @@ Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecn
   - ⚠️ `producoes.id_local` NÃO mudou de sentido: continua sendo de onde se produziu, e é
     por ele que o insumo sai primeiro. Só a lista deixou de mostrá-lo.
   - ⚠️ A mesma consulta não filtrava por `id_unidade` e somava as lojas. Corrigido junto.
-  - ⚠️ **Não existe "estornar produção".** O caminho é Estoque → Movimentos, estornando cada
-    movimento: primeiro a entrada do produzido, depois cada saída de insumo ("Produção #N").
-    A linha em `producoes` continua na lista depois disso.
+  - ⚠️ ~~Não existe "estornar produção"~~ — passou a existir em 09/10/2026, ver o fim deste
+    arquivo. A linha em `producoes` continua na lista depois do estorno.
   - Cobertura: `smoke_estoque.py` (produção lançada do Central com o produto morando na
     Confeitaria) e `smoke_duas_lojas.py` (cada loja lista só as suas).
 
@@ -757,3 +756,22 @@ Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecn
   - ⚠️ A escolha das linhas do quadro foi MINHA (Claude), não do dono — ele pediu "somente os
     dados pertinentes à ficha". Se ele quiser outra seleção, é a lista `resumo` da rota.
   - Cobertura: `smoke_exportacoes.py` e o botão no `verificar.mjs`.
+
+- 🔑 **Estornar a produção inteira** (`POST /estoque/producoes/{id}/estornar`,
+  `estoque.estornar_producao`, botão "estornar" em Produções recentes, 09/10/2026, pedido do
+  dono). Estorna todos os movimentos de origem `PRODUCAO` daquela produção, em `ORDER BY id
+  DESC`: sai a entrada do produzido, voltam os insumos. Permissão `estoque.ajuste` — a mesma do
+  estorno de um movimento; quem produz (`estoque.saidas`) não desfaz.
+  - 🔑 **"Estornada" NÃO é coluna: é o que o razão diz.** A lista calcula `estornada` = todos
+    os movimentos da produção já têm estorno. Sem migração, e a produção desfeita à mão
+    (linha por linha) ou pelo cancelamento da venda aparece do mesmo jeito que a do botão.
+  - ⚠️ **Produção nascida de VENDA de pé é recusada (409)**, mandando cancelar a venda — que
+    desfaz as duas juntas (110). Estornar só a produção deixaria a saída da venda sem a
+    entrada que a sustenta. Com a venda JÁ cancelada (o caso anterior à 110), estorna.
+  - ⚠️ **O que já foi usado não volta (409).** Se o saldo do produzido na prateleira onde
+    entrou é menor que a entrada, a recusa diz os dois números e manda para o ajuste: tirar a
+    entrada deixaria saldo negativo e custo provisório.
+  - ⚠️ `FOR UPDATE` na linha de `producoes`: o segundo clique espera e lê "já foi estornada".
+  - ⚠️ Não coberto: etiquetas impressas dessa produção continuam existindo, e a linha da
+    agenda cumprida continua FEITA. O conector não ganhou a ferramenta — não foi pedido.
+  - Cobertura: `tests/smoke_estorno_producao.py` (22) e o botão no `verificar.mjs`.

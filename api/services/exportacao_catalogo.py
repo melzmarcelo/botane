@@ -30,6 +30,7 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Callable
 
+import relogio
 from fastapi import HTTPException
 
 import arquivos
@@ -149,7 +150,7 @@ def _opcoes_periodo_cmv(cur, id_unidade: int) -> list[dict]:
     ⚠️ **O corrente é truncado em HOJE.** Ele ainda não terminou, e oferecer o
     fim que vai acontecer faria o arquivo prometer dias que não existem.
     """
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     c = periodos_motor.config(cur, id_unidade)
     lista = periodos_motor.periodos_ate_hoje(
         c["ciclo"], 12, dia_semana=c["dia_semana"], dia_mes=c["dia_mes"], hoje=hoje)
@@ -264,7 +265,7 @@ def _lista(valores) -> list | None:
 
 
 def _periodo(f: dict) -> tuple[date, date]:
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     return (f.get("inicio") or hoje.replace(day=1)), (f.get("fim") or hoje)
 
 
@@ -998,7 +999,7 @@ def _inventario(cur, id_unidade: int, f: dict) -> Saida:
     esta lista somasse diferente da linha "Estoque final", o documento estaria
     contradizendo o número que ele existe para compor.
     """
-    ate = f.get("data") or date.today()
+    ate = f.get("data") or relogio.hoje_da_casa()
     # ⚠️ **SEM tirar os tipos fora do CMV.** Aquele filtro é da conta do custo da
     # comida; o inventário do balanço é o que a casa POSSUI, e detergente em
     # estoque é patrimônio igual. Misturar as duas perguntas faria o balanço

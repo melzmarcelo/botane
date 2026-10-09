@@ -14,6 +14,7 @@ Três regras que valem para tudo o que sai daqui:
   operacional e mais nada — não um zero no lugar do valor.
 """
 
+import relogio
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
@@ -139,7 +140,7 @@ def _dia_de_vendas(cur, id_unidade: int, data: date | None = None) -> dict | Non
     # comparar com a terça passada INTEIRA faria todo dia parecer ruim de manhã.
     cur.execute("SELECT max(hora) AS h FROM vendas WHERE id_unidade = %s AND data = %s "
                 "AND NOT cancelada AND NOT consumo_interno", (id_unidade, data))
-    ate_hora = (cur.fetchone() or {}).get("h") if data == date.today() else None
+    ate_hora = (cur.fetchone() or {}).get("h") if data == relogio.hoje_da_casa() else None
     semana_antes = data - timedelta(days=7)
     cur.execute(
         """SELECT coalesce(sum(vi.valor_total), 0)
@@ -224,7 +225,7 @@ def _producao_do_setor(cur, id_unidade: int, ctx: Contexto) -> dict:
          "setores": list(ctx.setores) or [0]},
     )
     linhas = [dict(r) for r in cur.fetchall()]
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     return {
         "linhas": [{**l, "quantidade": float(l["quantidade"])} for l in linhas[:8]],
         "total": len(linhas),
@@ -265,7 +266,7 @@ def _reservas_marcadas(cur, id_unidade: int) -> dict:
         (id_unidade,),
     )
     linhas = [dict(r) for r in cur.fetchall()]
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     return {
         # ⚠️ **Vinte, não cinco.** A tela mostra cinco e rola para ver o resto —
         # cortar em cinco aqui faria a rolagem não ter para onde ir.
@@ -295,7 +296,7 @@ def dia(data: date | None = None,
 
 @router.get("")
 def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
@@ -440,7 +441,7 @@ def rede(ctx: Contexto = Depends(requer_permissao("cmv.painel"))) -> dict:
     ⚠️ **Só as lojas que a pessoa ENXERGA.** Gerente de uma loja que abrir esta
     tela vê a dele, e o total é o dela — não um consolidado que ele não pode ver.
     """
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     linhas: list[dict] = []
     total_cmv = total_receita = total_estoque = total_perdas = 0.0
 

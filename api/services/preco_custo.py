@@ -26,6 +26,8 @@ em 100%.
 """
 from __future__ import annotations
 
+import relogio
+
 from datetime import date, timedelta
 
 from fastapi import HTTPException
@@ -115,7 +117,7 @@ def evolucao(cur, id_unidade: int, id_produto: int, meses: int = 12,
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    fim = hoje or date.today()
+    fim = hoje or relogio.hoje_da_casa()
     inicio = fim - timedelta(days=round(meses * 30.44))
 
     vigencias = _precos(cur, id_produto, id_unidade)

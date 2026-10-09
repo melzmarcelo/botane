@@ -22,6 +22,7 @@ import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 
+import relogio
 from services import marca
 
 from reportlab.lib import colors
@@ -90,7 +91,7 @@ def csv_de(linhas: list[dict], colunas: list[tuple[str, str]],
         # a folha de um produto ficava com a mesma linha três vezes.
         if com_carimbo:
             escritor.writerow([f"{marca.casa()} — gerado em "
-                               f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"])
+                               f"{relogio.agora_da_casa().strftime('%d/%m/%Y %H:%M')}"])
         escritor.writerow([])
     if resumo:
         for rotulo, valor in resumo:
@@ -150,7 +151,7 @@ def nome_arquivo(base: str, inicio: date | None = None, fim: date | None = None,
         pedaco = f"-{inicio.strftime('%Y%m%d')}-a-{fim.strftime('%Y%m%d')}"
     elif inicio:
         pedaco = f"-{inicio.strftime('%Y%m%d')}"
-    return f"botane-{base}{pedaco}-{date.today().strftime('%Y%m%d')}.{ext}"
+    return f"botane-{base}{pedaco}-{relogio.hoje_da_casa().strftime('%Y%m%d')}.{ext}"
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +279,7 @@ def _larguras(linhas: list[dict], colunas: list[tuple[str, str]],
 
 def _junta_rodape(emitido_por: str | None) -> str:
     """"emitido por Fulano em 29/08/2026 11:52" — ou só a data, sem o nome."""
-    quando = datetime.now().strftime("%d/%m/%Y %H:%M")
+    quando = relogio.agora_da_casa().strftime("%d/%m/%Y %H:%M")
     return f"emitido por {emitido_por} em {quando}" if emitido_por else f"emitido em {quando}"
 
 
@@ -426,7 +427,7 @@ def pdf_de(linhas: list[dict], colunas: list[tuple[str, str]],
             # emitiu. Repetido em dois lugares, o dado envelhece num deles.
             padrao = None if empresa else (
                 f"{marca.casa()} — gerado em "
-                f"{datetime.now().strftime('%d/%m/%Y às %H:%M')}")
+                f"{relogio.agora_da_casa().strftime('%d/%m/%Y às %H:%M')}")
             if subtitulo or padrao:
                 historia.append(Paragraph(_escapar(subtitulo or padrao), ParagraphStyle(
                     "sub", fontName="Helvetica", fontSize=8, leading=11,

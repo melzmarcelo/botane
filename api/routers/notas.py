@@ -13,6 +13,7 @@ A casa opera inteira sem integração nenhuma: o XML chega por e-mail do
 fornecedor e a nota do açougue da esquina se digita em um minuto.
 """
 
+import relogio
 from datetime import date
 from decimal import Decimal
 
@@ -238,7 +239,7 @@ def _montar(cur, body: "NotaManual") -> dict:
             "id_produto": item.id_produto,
         })
 
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     return {
         "numero": body.numero,
         "serie": body.serie,

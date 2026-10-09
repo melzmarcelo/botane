@@ -387,6 +387,107 @@ checar("e grava SÓ o que foi mandado",
        depois["marca"] == "Marca do Claude" and float(depois["estoque_minimo"]) == 2
        and float(depois["estoque_maximo"]) == 9,
        {k: depois.get(k) for k in ("marca", "estoque_minimo", "estoque_maximo")})
+
+# 🔑 **O lote 1: estoque e produção pelo conector** (pedido do dono, 09/10/2026:
+# *"disponibilizar as maiores opções possíveis para o conector, pois o cliente está
+# utilizando muito por lá"*).
+checar("a chave que altera enxerga o lote de estoque e produção",
+       {"previa_ajuste_de_saldo", "ajustar_saldo", "previa_ajuste_de_custo", "ajustar_custo",
+        "entrada_de_estoque", "saida_de_estoque", "estornar_movimento", "estornar_producao",
+        "agendar_producao", "produzir_da_agenda", "cancelar_agenda", "duplicar_ficha", "abrir_inventario", "contar_inventario", "incluir_no_inventario",
+        "fechar_inventario", "cancelar_inventario", "emitir_etiquetas", "usar_etiqueta",
+        "usar_parte_da_etiqueta", "descartar_etiqueta", "receber_transferencia",
+        "cancelar_transferencia"} <= nomes_gravam, sorted(nomes_gravam))
+
+
+def chamar_ferramenta(_ferramenta, /, **argumentos):
+    """`(deu_erro, resposta)` de uma ferramenta, com a chave que altera."""
+    _st, _, resp = rpc(escrita, "tools/call", {"name": _ferramenta, "arguments": argumentos})
+    texto = resp["result"]["content"][0]["text"]
+    try:
+        return resp["result"]["isError"], json.loads(texto)
+    except json.JSONDecodeError:
+        return resp["result"]["isError"], texto
+
+
+# 🔑 **O catálogo NÃO pode prometer o que a rota não aceita.** Cada ferramenta é
+# conferida contra o esquema da API de verdade: a rota existe, o parâmetro de caminho
+# está na ferramenta, e todo campo de corpo que ela anuncia é um campo que a rota lê.
+# ⚠️ É o defeito que já aconteceu: `necessario_para_produzir` anunciava a medida
+# `RENDIMENTO` antes de a rota entendê-la, e ela caía calada no ramo de porções.
+import main as _api  # noqa: E402
+from services import mcp_ferramentas as _cat  # noqa: E402
+
+_esq = _api.app.openapi()
+_tortas = []
+for _f in _cat.FERRAMENTAS:
+    _op = _esq["paths"].get(_f.caminho, {}).get(_f.metodo.lower())
+    if not _op:
+        _tortas.append(f"{_f.nome}: a rota {_f.metodo} {_f.caminho} não existe")
+        continue
+    for _v in re.findall(r"{(\w+)}", _f.caminho):
+        if _v not in _f.params:
+            _tortas.append(f"{_f.nome}: falta o parâmetro de caminho {_v}")
+    _s = ((_op.get("requestBody") or {}).get("content", {})
+          .get("application/json", {}).get("schema", {}))
+    # Corpo opcional vem como `anyOf [modelo, null]`.
+    _s = next((x for x in _s.get("anyOf", []) if "$ref" in x), _s)
+    if "$ref" in _s:
+        _s = _esq["components"]["schemas"][_s["$ref"].split("/")[-1]]
+    _campos = set(_s.get("properties") or {})
+    _meus = {k for k, p in _f.params.items() if p.no_corpo}
+    if _campos and _meus - _campos:
+        _tortas.append(f"{_f.nome}: a rota não lê {sorted(_meus - _campos)}")
+    if set(_s.get("required") or []) - _meus:
+        _tortas.append(f"{_f.nome}: a rota exige {sorted(set(_s['required']) - _meus)}")
+checar("toda ferramenta bate com a rota que ela chama", not _tortas, _tortas)
+
+# O caminho inteiro de um acerto. ⚠️ Num produto PRÓPRIO: o `id_novo` lá de cima é
+# o que as checagens seguintes usam para trocar de unidade, e saldo nele mudaria o
+# que elas medem.
+erro, _do_estoque = chamar_ferramenta("criar_produto", nome=f"Estoque do Claude {marca_p}",
+                                      tipo="INSUMO", um_estoque="KG")
+id_guardado, id_novo = id_novo, _do_estoque["id"]
+erro, r = chamar_ferramenta("entrada_de_estoque", id_produto=id_novo, quantidade=10,
+                            custo_unitario=4, observacao="entrada pelo conector")
+checar("entrada_de_estoque dá entrada de verdade", not erro, r)
+erro, previa = chamar_ferramenta("previa_ajuste_de_saldo", id_produto=id_novo,
+                                 quantidade_certa=7)
+checar("previa_ajuste_de_saldo mostra a diferença sem gravar", not erro, previa)
+erro, r = chamar_ferramenta("saldos_estoque", id_produto=id_novo)
+checar("e o saldo continua 10 depois da prévia",
+       not erro and sum(float(x["quantidade"]) for x in r.get("itens", r)) == 10, r)
+erro, r = chamar_ferramenta("ajustar_saldo", id_produto=id_novo, quantidade_certa=7,
+                            observacao="contagem pelo conector")
+checar("ajustar_saldo acerta para a quantidade contada", not erro, r)
+erro, r = chamar_ferramenta("saida_de_estoque", id_produto=id_novo, quantidade=2,
+                            tipo="SAIDA_CONSUMO_INTERNO", observacao="uso da casa")
+checar("saida_de_estoque baixa o consumo interno", not erro, r)
+erro, r = chamar_ferramenta("saldos_estoque", id_produto=id_novo)
+checar("o saldo fica em 5: 10 − 3 do acerto − 2 da saída",
+       not erro and sum(float(x["quantidade"]) for x in r.get("itens", r)) == 5, r)
+erro, movs = chamar_ferramenta("movimentos_estoque", id_produto=id_novo)
+_saida = next((m_ for m_ in movs.get("itens", movs)
+               if m_["tipo"] == "SAIDA_CONSUMO_INTERNO"), {})
+erro, r = chamar_ferramenta("estornar_movimento", id_movimento=_saida.get("id"),
+                            motivo="lançado por engano")
+checar("estornar_movimento devolve a saída", not erro, r)
+erro, r = chamar_ferramenta("saldos_estoque", id_produto=id_novo)
+checar("e o saldo volta para 7",
+       not erro and sum(float(x["quantidade"]) for x in r.get("itens", r)) == 7, r)
+# ⚠️ A recusa da ROTA chega como erro com a frase dela, e não como gravação.
+erro, r = chamar_ferramenta("estornar_producao", id_producao=99999999)
+checar("estornar_producao do que não existe vira isError", erro, r)
+erro, r = chamar_ferramenta("ajustar_saldo", id_produto=id_novo, quantidade_certa=-1)
+checar("quantidade negativa no acerto é recusada pela rota", erro, r)
+erro, r = chamar_ferramenta("motivos_de_perda")
+checar("motivos_de_perda lista os motivos", not erro and isinstance(r, (list, dict)), r)
+erro, r = chamar_ferramenta("etiquetas", situacao="vencidas", limite=5)
+checar("etiquetas lista por situação", not erro, r)
+erro, r = chamar_ferramenta("painel_de_etiquetas")
+checar("painel_de_etiquetas responde os contadores", not erro and "vencidas" in r, r)
+chamar_ferramenta("desativar_produto", id_produto=id_novo)
+id_novo = id_guardado
 # 🔑 **Todos os campos que a tela edita** (pedido do dono, 23/09/2026). Até ali a
 # unidade e o fator ficavam fora; entram porque a ROTA segura a conversão com 409.
 campos_update = next(t for t in gravam

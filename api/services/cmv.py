@@ -14,6 +14,7 @@ o último movimento antes do corte já carrega `saldo_apos` e `custo_medio_apos`
 Não se recalcula série nenhuma — é para isso que a fotografia existe.
 """
 
+import relogio
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -66,7 +67,7 @@ def valor_do_estoque(cur, id_unidade: int, ate: date | None = None,
     # pergunta divergem no primeiro ajuste que alguém faz só numa delas.
     p = {"u": id_unidade, "fora": fora or None}
 
-    if ate is None or ate >= date.today():
+    if ate is None or ate >= relogio.hoje_da_casa():
         cur.execute(
             """SELECT coalesce(sum(s.quantidade * s.custo_medio), 0) AS valor
                  FROM estoque_saldos s
@@ -216,7 +217,7 @@ def movimentacao_por_produto(cur, id_unidade: int, inicio: date, fim: date) -> l
          ORDER BY lower(p.nome)
         """,
         {"u": id_unidade, "inicio": inicio, "limite": limite,
-         "fim_e_hoje": fim >= date.today()},
+         "fim_e_hoje": fim >= relogio.hoje_da_casa()},
     )
     return [dict(r) for r in cur.fetchall()]
 

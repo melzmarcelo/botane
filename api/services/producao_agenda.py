@@ -13,6 +13,7 @@ ficou para trás.
 ele nasce e morre na venda (ver `producao_da_venda`).
 """
 
+import relogio
 from datetime import date, timedelta
 
 from fastapi import HTTPException
@@ -283,4 +284,4 @@ def resumo(cur, id_unidade: int) -> dict:
 
 def proximo_dia_util(base: date | None = None) -> date:
     """Amanhã — o dia que a cozinha pensa quando pensa em agenda."""
-    return (base or date.today()) + timedelta(days=1)
+    return (base or relogio.hoje_da_casa()) + timedelta(days=1)

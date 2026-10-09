@@ -8,6 +8,7 @@ gravadas em arquivo — o que permite construir, testar e demonstrar o importado
 inteiro. Ao configurar a chave, o mesmo código passa a falar com a conta real.
 """
 
+import relogio
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -237,11 +238,18 @@ def sincronizar(dias: int | None = Query(default=None, ge=1, le=365),
     # depois de uma busca que criou 12 produtos parece que nada aconteceu.
     criados = (cadastros or {}).get("criados") or 0
     erro_catalogo = (cadastros or {}).get("erro")
+    religados = r.get("religados") or 0
+    faltou = (cadastros or {}).get("faltou_varrer") or {}
     return r | {"message": (
         (f"{criados} produto(s) novo(s) do catálogo. " if criados else "")
         + f"{r['novas']} nota(s) nova(s) importada(s) — "
           f"{r['janela']}, {r['repetidas']} já existiam"
-        + (f". ⚠️ O catálogo não veio: {erro_catalogo}" if erro_catalogo else ""))}
+        # O que a fila ganhou sem ninguém clicar em nada.
+        + (f". {religados} item(ns) pendente(s) encontraram o produto" if religados else "")
+        + (f". ⚠️ O catálogo não veio: {erro_catalogo}" if erro_catalogo else "")
+        # ⚠️ Dito na frase: catálogo cortado é produto novo que não chega, calado.
+        + (f". ⚠️ O catálogo do Omie tem {faltou.get('total_no_omie')} produtos e só "
+           f"{faltou.get('trazidos')} foram lidos" if faltou else ""))}
 
 
 @router.post("/importar-catalogo")
@@ -304,7 +312,7 @@ def conferencia_notas(
     por cima de uma nota lançada com atraso. Isto responde a pergunta certa:
     **quais** faltam.
     """
-    hoje = date.today()
+    hoje = relogio.hoje_da_casa()
     fim = fim or hoje
     inicio = inicio or (fim - timedelta(days=30))
     if inicio > fim:

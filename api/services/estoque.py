@@ -1213,6 +1213,94 @@ def estornar(cur, id_movimento: int, id_usuario: int, motivo: str | None = None)
     )
 
 
+def estornar_producao(cur, id_producao: int, id_unidade: int, id_usuario: int,
+                      motivo: str | None = None) -> dict:
+    """Desfaz uma produção inteira: sai o produzido, voltam os insumos.
+
+    🔑 **Pedido do dono (09/10/2026):** *"faz o botão de estornar produção."* Até
+    aqui o caminho era Estoque ▸ Movimentos, um estorno por linha — a entrada do
+    produzido e depois cada insumo —, e quem esquecia um deixava o custo do lote
+    solto no razão. É a mesma operação, de uma vez e na ordem certa.
+
+    ⚠️ **Nada novo no razão além dos estornos de sempre** (`estornar`): cada
+    movimento ganha o seu contrário, apontando para ele. Por isso "estornada" não
+    é coluna em `producoes` — é o que os movimentos já dizem, e a produção
+    desfeita à mão, linha por linha, aparece estornada do mesmo jeito.
+
+    ⚠️ **A produção que nasceu de uma VENDA se desfaz cancelando a venda**
+    (110). Estornar só a produção deixaria a saída da venda sem a entrada que a
+    sustenta, e o produto "na hora" com saldo negativo. Com a venda JÁ cancelada
+    e a produção ainda de pé — o caso anterior à 110 — o estorno é este.
+
+    ⚠️ **O que já foi usado não volta.** Se o produzido não está mais na
+    prateleira onde entrou, tirar a entrada deixaria saldo negativo e custo
+    provisório — recusa com os dois números, e o acerto é um ajuste.
+    """
+    # 🔑 `FOR UPDATE` na produção: dois cliques não podem estornar em dobro. O
+    # `estornar` de cada movimento já recusa o segundo, mas a trava faz o segundo
+    # pedido esperar e ler "já estornada" em vez de morrer no meio.
+    cur.execute(
+        """SELECT pr.id, pr.id_venda, pr.quantidade, p.nome AS produto, p.um_estoque,
+                  v.cancelada AS venda_cancelada, v.documento AS venda_documento
+             FROM producoes pr
+             JOIN produtos p ON p.id = pr.id_produto
+             LEFT JOIN vendas v ON v.id = pr.id_venda
+            WHERE pr.id = %s AND pr.id_unidade = %s
+              FOR UPDATE OF pr""",
+        (id_producao, id_unidade),
+    )
+    producao = cur.fetchone()
+    if not producao:
+        raise HTTPException(status_code=404, detail="Produção não encontrada")
+    if producao["id_venda"] and not producao["venda_cancelada"]:
+        raise HTTPException(
+            status_code=409,
+            detail=("Esta produção nasceu da venda "
+                    f"{producao['venda_documento'] or '#' + str(producao['id_venda'])} — "
+                    "cancele a venda, que ela desfaz a produção junto."))
+
+    cur.execute(
+        """SELECT m.id, m.tipo, m.id_local, m.id_produto, m.quantidade
+             FROM estoque_movimentos m
+            WHERE m.origem_tipo = 'PRODUCAO' AND m.origem_id = %s
+              AND NOT EXISTS (SELECT 1 FROM estoque_movimentos e
+                               WHERE e.id_estorno_de = m.id)
+            ORDER BY m.id DESC""",
+        (id_producao,),
+    )
+    movimentos = [dict(r) for r in cur.fetchall()]
+    if not movimentos:
+        raise HTTPException(status_code=400, detail="Esta produção já foi estornada.")
+
+    for m in movimentos:
+        if m["tipo"] != "ENTRADA_PRODUCAO":
+            continue
+        cur.execute(
+            """SELECT quantidade FROM estoque_saldos
+                WHERE id_unidade = %s AND id_local = %s AND id_produto = %s""",
+            (id_unidade, m["id_local"], m["id_produto"]),
+        )
+        saldo = dec((cur.fetchone() or {}).get("quantidade"))
+        if saldo < abs(dec(m["quantidade"])):
+            um = producao["um_estoque"] or ""
+            raise HTTPException(
+                status_code=409,
+                detail=(f"{producao['produto']}: a produção deu entrada em "
+                        f"{abs(dec(m['quantidade'])).normalize():f} {um} e só há "
+                        f"{saldo.normalize():f} {um} na prateleira — parte já foi usada "
+                        "ou vendida. Estornar deixaria o saldo negativo; acerte por um "
+                        "ajuste de estoque.").replace("  ", " "))
+
+    # ⚠️ `ORDER BY m.id DESC`: a entrada do produzido é o último movimento da
+    # produção e sai primeiro; os insumos voltam depois. É a ordem inversa do que
+    # aconteceu — a mesma do cancelamento da venda.
+    texto = motivo or f"Estorno da produção #{id_producao}"
+    for m in movimentos:
+        estornar(cur, m["id"], id_usuario, texto)
+    return {"id": id_producao, "produto": producao["produto"],
+            "estornados": len(movimentos)}
+
+
 def _unidade_do_local(cur, id_local: int, padrao: int) -> int:
     cur.execute("SELECT id_unidade FROM locais_estoque WHERE id = %s", (id_local,))
     linha = cur.fetchone()

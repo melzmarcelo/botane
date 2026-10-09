@@ -25,6 +25,7 @@ do produto: `valor`, preenchido em 629 dos 630 na conta real. Sem ela os pratos
 nasciam sem preço nenhum, com o número a uma chamada de distância.
 """
 
+import relogio
 import re
 
 from datetime import date
@@ -594,7 +595,7 @@ def cadastros_de_hoje(cur, id_unidade: int) -> bool:
     )
     linha = cur.fetchone()
     quando = (linha or {}).get("cardapio_em")
-    return bool(quando and quando.date() == date.today())
+    return bool(quando and quando.date() == relogio.hoje_da_casa())
 
 
 def sincronizar_cadastros(cur, cliente: ClientePdv, id_usuario: int, filial: str,

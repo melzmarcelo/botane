@@ -333,7 +333,13 @@ checar("pote vencido não se reetiqueta: descarta", st == 400 and "descartar" in
 st, p = chamar("GET", "/etiquetas/painel", token=cozinha)
 checar("o painel conta a vencida", st == 200 and p.get("vencidas", 0) >= 1, (st, p))
 checar("e o valor descartado nos últimos 30 dias", p.get("valor_descartado_30d", 0) > 0, p)
-st, lista = chamar("GET", "/etiquetas?situacao=vencidas&limite=200", token=cozinha)
+# ⚠️ **Pergunta pelo pote DESTA rodada** (09/10/2026). A lista vem por vencimento,
+# a mais antiga primeiro, e o pote que acabou de vencer é o ÚLTIMO dela: quando a
+# base local passou de 200 etiquetas vencidas acumuladas de rodadas anteriores, ele
+# caiu para fora da página e a checagem acusava a lista de perder um pote que
+# estava lá. É a mesma armadilha da fila de de-para em `smoke_vendas`.
+st, lista = chamar("GET", f"/etiquetas?situacao=vencidas&limite=200&busca={etqs[3]['codigo']}",
+                   token=cozinha)
 checar("a lista de vencidas traz o pote", any(x["id"] == etqs[3]["id"] and
                                               x["situacao"] == "VENCIDA" for x in lista or []),
        (st, len(lista or [])))

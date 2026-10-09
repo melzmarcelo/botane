@@ -14,6 +14,7 @@ Cada QR é só um ENDEREÇO do site do cliente, com a loja dentro:
 casa o ajusta sem deploy. Esta tela passa a ser o lugar dele.
 """
 
+import relogio
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -136,4 +137,4 @@ def pdf(tipo: str = Query(pattern="^(site|reserva|cardapio|fidelidade)$"),
     )
     return Response(conteudo, media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'attachment; filename="qrcodes-{tipo}-{date.today():%Y%m%d}.pdf"'})
+                             f'attachment; filename="qrcodes-{tipo}-{relogio.hoje_da_casa():%Y%m%d}.pdf"'})

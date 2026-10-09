@@ -12,6 +12,7 @@ O caminho, e o que cada passo garante:
 aparece na fila de pendências — importar errado é pior que não importar.
 """
 
+import relogio
 import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -62,8 +63,8 @@ def _registrar(cur, servico: str, chamada: str, status: str, registros: int = 0,
 # ---------------------------------------------------------------- conciliação
 
 
-def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | None, int | None,
-                                                                        float | None, str]:
+def conciliar_item(cur, item: dict, id_fornecedor: int | None,
+                   sugerir: bool = True) -> tuple[int | None, int | None, float | None, str]:
     """A cascata do de-para. Devolve (id_produto, sugestão, score, como).
 
     Só os três primeiros níveis vinculam sozinhos. Semelhança de texto **sugere**:
@@ -138,6 +139,13 @@ def conciliar_item(cur, item: dict, id_fornecedor: int | None) -> tuple[int | No
             return achado["id_produto"], None, 100.0, "fornecedor"
 
     # 5. semelhança de descrição (+ NCM igual) → só sugestão
+    # ⚠️ **`sugerir=False` para aqui** (09/10/2026): é o passo CARO — compara o texto
+    # do item com até dois mil nomes — e não vincula nada, só sugere. A religação
+    # automática de toda busca quer os quatro degraus exatos acima; a sugestão já
+    # foi calculada quando a nota entrou, e refazê-la a cada hora para os mesmos
+    # itens custava dois segundos por busca na base local.
+    if not sugerir:
+        return None, None, None, "pendente"
     descricao = item.get("descricao_fornecedor") or ""
     cur.execute(
         "SELECT id, nome, ncm FROM produtos WHERE ativo AND controla_estoque LIMIT 2000"
@@ -501,7 +509,8 @@ def vincular_fornecedores(cur, id_unidade: int) -> dict:
             "fornecedores": r["fornecedores"]}
 
 
-def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
+def reconciliar(cur, id_unidade: int, id_nota: int | None = None,
+                so_as_mexidas: bool = False) -> dict:
     """Passa a cascata de novo nos itens que ficaram sem produto.
 
     Existe por causa da ordem em que as coisas acontecem de verdade: é a NOTA
@@ -532,7 +541,8 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
 
     vinculados, sugeridos, notas_mexidas = 0, 0, set()
     for item in pendentes:
-        achado, sugestao, score, _como = conciliar_item(cur, item, item["id_fornecedor"])
+        achado, sugestao, score, _como = conciliar_item(cur, item, item["id_fornecedor"],
+                                                        sugerir=not so_as_mexidas)
         if not achado and not sugestao:
             continue
         cur.execute(
@@ -551,13 +561,21 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None) -> dict:
     # faltava, ou o fator da embalagem. Sem passar tudo a limpo, a tela
     # continuaria mostrando o número velho até o lançamento, que recalcula.
     # A conta é barata e o conjunto é pequeno: nota lançada não entra.
-    cur.execute(
-        """SELECT id FROM notas_entrada
-            WHERE id_unidade = %s AND status <> 'LANCADA'"""
-        + (" AND id = %s" if id_nota else ""),
-        parametros,
-    )
-    recalculadas = [r["id"] for r in cur.fetchall()]
+    # 🔑 **`so_as_mexidas` é o modo da BUSCA automática** (09/10/2026). Passar tudo a
+    # limpo é certo para o botão, que alguém aperta depois de arrumar o cadastro;
+    # rodando a cada busca de notas, recalculava centenas de notas abertas para
+    # religar três itens — e a busca pela tela passou de instantânea a segundos.
+    # Ali só se refaz a conta das notas que GANHARAM vínculo agora.
+    if so_as_mexidas:
+        recalculadas = sorted(notas_mexidas)
+    else:
+        cur.execute(
+            """SELECT id FROM notas_entrada
+                WHERE id_unidade = %s AND status <> 'LANCADA'"""
+            + (" AND id = %s" if id_nota else ""),
+            parametros,
+        )
+        recalculadas = [r["id"] for r in cur.fetchall()]
     for nota in recalculadas:
         calcular_nota(cur, nota)
 
@@ -684,7 +702,7 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
                        SET ultimo_preco = EXCLUDED.ultimo_preco,
                            ultima_compra = EXCLUDED.ultima_compra""",
                 (item["id_produto"], nota["id_fornecedor"],
-                 item["custo_aquisicao_unitario"], nota["data_entrada"] or date.today()),
+                 item["custo_aquisicao_unitario"], nota["data_entrada"] or relogio.hoje_da_casa()),
             )
 
     cur.execute(
@@ -1022,7 +1040,7 @@ def janela(cur, id_unidade: int, desde: date | None = None,
     if desde:
         return desde, f"desde {desde.strftime('%d/%m/%Y')}"
     if dias:
-        return date.today() - timedelta(days=dias), f"últimos {dias} dias"
+        return relogio.hoje_da_casa() - timedelta(days=dias), f"últimos {dias} dias"
 
     cur.execute(
         """SELECT ultima_sincronizacao FROM integracoes
@@ -1032,7 +1050,7 @@ def janela(cur, id_unidade: int, desde: date | None = None,
     linha = cur.fetchone()
     ultima = linha["ultima_sincronizacao"] if linha else None
     if not ultima:
-        return (date.today() - timedelta(days=JANELA_PADRAO),
+        return (relogio.hoje_da_casa() - timedelta(days=JANELA_PADRAO),
                 f"primeira vez: últimos {JANELA_PADRAO} dias")
     inicio = ultima.date() - timedelta(days=FOLGA_DIAS)
     return inicio, (f"desde a última sincronização ({ultima.strftime('%d/%m/%Y')}), "
@@ -1366,6 +1384,9 @@ def _completar_produto(cur, id_produto: int, p: dict, id_categoria: int | None,
     return cur.rowcount > 0
 
 
+TETO_DO_CATALOGO = 200   # páginas de 50: 10.000 produtos
+
+
 def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
     """Traz o catálogo do Omie como **rascunho**.
 
@@ -1392,6 +1413,12 @@ def importar_catalogo(cur, cliente: ClienteOmie, id_usuario: int) -> dict:
         for _dados, registros in cliente.paginar(
             "geral/produtos", "ListarProdutos", "produto_servico_cadastro",
             param={"apenas_importado_api": "N", "filtrar_apenas_omiepdv": "N"},
+            # ⚠️ **O teto padrão (60 páginas de 50) são 3.000 produtos**, e o
+            # catálogo do cliente já passava de 2.200 em setembro: no dia em que
+            # cruzar, os cadastros MAIS NOVOS — os das últimas páginas — deixam de
+            # vir, que é exatamente o produto que a nota de hoje traz. 200 páginas
+            # dão 10.000, e `faltou_varrer` continua dizendo se nem isso bastou.
+            maximo=TETO_DO_CATALOGO,
             ao_truncar=parou_no_teto,
         ):
             paginas += 1
@@ -2038,7 +2065,9 @@ def catalogo_de_hoje(cur, id_unidade: int) -> bool:
     )
     linha = cur.fetchone()
     quando = linha["catalogo_em"] if linha else None
-    return quando is not None and quando.date() >= datetime.now().astimezone().date()
+    # ⚠️ A data da CASA: o relógio do contêiner (UTC) vira o dia às 21h daqui, e a
+    # busca das 21h refazia a varredura do catálogo todas as noites.
+    return quando is not None and quando.date() >= relogio.hoje_da_casa()
 
 
 def marcar_catalogo(cur, id_unidade: int) -> None:
@@ -2092,5 +2121,68 @@ def sincronizar_completo(cur, id_unidade: int, cliente: ClienteOmie,
             cadastros = {"erro": f"{type(e).__name__}: {e}"}
 
     r = sincronizar(cur, id_unidade, cliente, dias, desde)
+
+    # 🔑 **O catálogo vem quando a NOTA pede** (relato do dono, 09/10/2026: *"sobre
+    # novos produtos que são cadastrados no Omie e vêm na nota … alguns não vem o
+    # cadastro novo de lá"*). A agenda traz o catálogo só na primeira busca do dia,
+    # para não varrer milhares de produtos a cada hora: o produto cadastrado no Omie
+    # às dez e comprado no mesmo dia chegava na nota da tarde sem cadastro, e ficava
+    # na fila até a madrugada seguinte.
+    # ⚠️ **Só quando há o que buscar**: nota que entrou NESTA busca, com item cujo
+    # código do Omie ninguém aqui conhece. Uma nota velha com código que o Omie já
+    # apagou não dispara a varredura de novo a cada hora, para sempre.
+    r["catalogo_pela_nota"] = False
+    if not catalogo and _nota_nova_com_produto_desconhecido(cur, id_unidade):
+        r["catalogo_pela_nota"] = True
+        try:
+            cadastros = importar_catalogo(cur, cliente, id_usuario)
+        except HTTPException as e:
+            cadastros = {"erro": str(e.detail)}
+        except Exception as e:  # noqa: BLE001 — o catálogo não derruba as notas
+            cadastros = {"erro": f"{type(e).__name__}: {e}"}
+
+    # 🔑 **E o item pendente é RELIGADO sozinho, em toda busca.** A religação existia
+    # e só rodava pelo botão da tela de notas: o cadastro chegava de madrugada e o
+    # item da nota de ontem continuava sem produto até alguém lembrar de clicar.
+    # Medido no ar em 09/10/2026: quase cinquenta itens na fila, vários com um
+    # cadastro de nome IDÊNTICO já existindo — o produto tinha vindo, depois da nota.
+    # ⚠️ Roda mesmo sem catálogo novo: quem cadastrou à mão, vinculou outro item ou
+    # juntou dois produtos também mudou a resposta da cascata.
+    # ⚠️ Falhar aqui não desfaz a busca: nota importada e não religada é a fila de
+    # sempre; nota perdida por causa da religação seria compra faltando.
+    # 🔑 **Com PONTO DE RETORNO.** Um erro de banco no meio (um impasse com alguém
+    # vinculando item na tela, por exemplo) deixa a transação inteira abortada: sem
+    # o `SAVEPOINT`, o `except` engoliria o erro e a gravação seguinte — a das
+    # próprias notas — falharia em "transação abortada". Medido na bateria: a
+    # religação disputando linha com outra operação devolve impasse.
+    cur.execute("SAVEPOINT religar_pendentes")
+    try:
+        religar = reconciliar(cur, id_unidade, so_as_mexidas=True)
+        r["religados"] = religar["vinculados"]
+        cur.execute("RELEASE SAVEPOINT religar_pendentes")
+    except Exception as e:  # noqa: BLE001
+        cur.execute("ROLLBACK TO SAVEPOINT religar_pendentes")
+        r["religados"] = 0
+        r["erro_ao_religar"] = f"{type(e).__name__}: {e}"
+
     r["cadastros"] = cadastros
     return r
+
+
+def _nota_nova_com_produto_desconhecido(cur, id_unidade: int) -> bool:
+    """A busca DESTA transação trouxe item com código do Omie que não existe aqui?
+
+    ⚠️ `importada_em = now()`: `now()` é o instante em que a transação começou, e é
+    o padrão da coluna — então só as notas gravadas nesta mesma busca casam.
+    """
+    cur.execute(
+        """SELECT DISTINCT i.codigo_omie
+             FROM nota_itens i
+             JOIN notas_entrada n ON n.id = i.id_nota
+            WHERE n.id_unidade = %s AND n.importada_em = now()
+              AND i.id_produto IS NULL AND NOT i.ignorado
+              AND i.codigo_omie IS NOT NULL AND i.codigo_omie <> ''""",
+        (id_unidade,),
+    )
+    return any(not vinculo.por_codigo_omie(cur, linha["codigo_omie"])
+               for linha in cur.fetchall())

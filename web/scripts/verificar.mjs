@@ -2357,6 +2357,41 @@ try {
     agenda.agendaPrimeiro && agenda.naoMexe, agenda);
   await foto(p, "19b-agenda-producao");
 
+  // 🔑 **Estornar a produção inteira** (pedido do dono, 09/10/2026). O caminho
+  // era um estorno por movimento, em Estoque. A regra é da suíte da API
+  // (`smoke_estorno_producao`); aqui se mede que a lista oferece o botão — ou
+  // diz que a linha já foi estornada, que é o que ele vira depois.
+  const clicarAba = (nome) => p.evaluate((n) => {
+    [...document.querySelectorAll("nav button")]
+      .find((b) => b.textContent?.trim() === n)?.click();
+  }, nome);
+  await clicarAba("Registrar o que foi feito");
+  await p.waitForFunction(() => /Produções recentes/.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+  await p.waitForFunction(() => {
+    const c = [...document.querySelectorAll("section.cartao")]
+      .find((x) => (x.querySelector("h2")?.textContent ?? "").trim() === "Produções recentes");
+    return !!c?.querySelector("table tbody tr");
+  }, { timeout: 15000 }).catch(() => {});
+  const recentes = await p.evaluate(() => {
+    const c = [...document.querySelectorAll("section.cartao")]
+      .find((x) => (x.querySelector("h2")?.textContent ?? "").trim() === "Produções recentes");
+    const linhas = [...(c?.querySelectorAll("table tbody tr") ?? [])];
+    return {
+      linhas: linhas.length,
+      // Toda linha diz uma das duas coisas: dá para estornar, ou já foi.
+      resolvidas: linhas.filter((tr) =>
+        [...tr.querySelectorAll("button")].some((b) => b.textContent?.trim() === "estornar")
+        || /estornada/.test(tr.textContent ?? "")).length,
+    };
+  });
+  checar("as produções recentes oferecem estornar, ou dizem que já foi estornada",
+    recentes.linhas > 0 && recentes.resolvidas === recentes.linhas, recentes);
+  // ⚠️ Quem navega, devolve a tela onde a achou: o bloco seguinte lê a agenda.
+  await clicarAba("Agenda");
+  await p.waitForFunction(() => /Agendar produção/i.test(document.body.innerText),
+    { timeout: 15000 }).catch(() => {});
+
   // O nome da linha abre a FOLHA da produção: quanto de cada insumo, quanto
   // existe no local e o que falta — antes de ligar o forno.
   // ⚠️ **Espera limitada pelo link, não um sono fixo.** A agenda vem do
@@ -9564,6 +9599,13 @@ try {
 
   const arrastarNaPlanta = async (indice, dx, dy) => {
     const alvos = await p.$$(seletorDaPlanta);
+    // ⚠️ **Rola até a mesa ANTES de medir** (09/10/2026). O mouse do navegador de
+    // teste só alcança o que está na janela (1440×1000), e a lista de salões fica
+    // ACIMA da planta: a base local acumulou 36 salões desligados de rodadas
+    // anteriores — oito linhas —, a planta desceu para baixo da dobra e o arraste
+    // caía no vazio. Três checagens falhavam acusando a tela de não arrastar.
+    await alvos[indice].evaluate((e) => e.scrollIntoView({ block: "center" }));
+    await new Promise((r) => setTimeout(r, 200));
     const caixa = await alvos[indice].boundingBox();
     const [cx, cy] = [caixa.x + caixa.width / 2, caixa.y + caixa.height / 2];
     await p.mouse.move(cx, cy);

@@ -7,7 +7,7 @@ import { Paginacao, usePaginacao } from "@/components/paginacao";
 import { useAviso } from "@/components/aviso-flutuante";
 import { useSessao } from "@/lib/sessao";
 import { Local, reais } from "@/lib/cadastros";
-import { Aviso, Campo, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { Aviso, Campo, Carregando, Cartao, Confirmacao, Etiqueta, Vazio } from "@/components/ui";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteDaLista, ItemBusca } from "@/lib/busca-cadastro";
 import AgendaProducao from "./agenda";
@@ -38,6 +38,10 @@ type Producao = {
   custo_unitario: number;
   versao_ficha: number;
   usuario: string | null;
+  /** Todos os movimentos desta produção já têm o seu estorno. Quem diz é o razão. */
+  estornada?: boolean;
+  /** A venda que disparou a produção (produto feito na hora). */
+  id_venda?: number | null;
 };
 
 type Resultado = {
@@ -60,6 +64,15 @@ export default function PaginaProducao() {
   const [fichas, setFichas] = useState<Ficha[]>([]);
   const [locais, setLocais] = useState<Local[]>([]);
   const [historico, setHistorico] = useState<Producao[] | null>(null);
+  /**
+   * 🔑 **Estornar a produção inteira** (09/10/2026, pedido do dono). O caminho
+   * era Estoque ▸ Movimentos, um estorno por linha: a entrada do produzido e
+   * depois cada insumo. ⚠️ `estoque.ajuste`, a mesma chave do estorno de um
+   * movimento — quem produz não desfaz.
+   */
+  const podeEstornar = pode("estoque.ajuste");
+  const [estornando, setEstornando] = useState<Producao | null>(null);
+  const [desfazendo, setDesfazendo] = useState(false);
   const [f, setF] = useState({
     id_produto: "",
     quantidade: "",
@@ -231,6 +244,24 @@ export default function PaginaProducao() {
   );
 
   const escolhida = fichas.find((x) => String(x.id_produto) === f.id_produto);
+
+  async function estornarProducao(h: Producao) {
+    setDesfazendo(true);
+    try {
+      const r = await api.post<{ message: string }>(
+        `/estoque/producoes/${h.id}/estornar`, { motivo: "estorno pela tela de produção" });
+      aviso.sucesso(r.message);
+      setEstornando(null);
+      await carregar();
+    } catch (err) {
+      // ⚠️ A recusa é a parte útil: "parte já foi usada" e "cancele a venda" dizem
+      // o que fazer no lugar. A janela fecha para a frase ficar à vista.
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível estornar");
+      setEstornando(null);
+    } finally {
+      setDesfazendo(false);
+    }
+  }
 
   async function produzir(e: FormEvent) {
     e.preventDefault();
@@ -553,11 +584,12 @@ export default function PaginaProducao() {
                   {veCusto && <th className="num">Custo total</th>}
                   {veCusto && <th className="num">Por unidade</th>}
                   <th>Ficha</th>
+                  {podeEstornar && <th />}
                 </tr>
               </thead>
               <tbody>
                 {historico.map((h) => (
-                  <tr key={h.id}>
+                  <tr key={h.id} className={h.estornada ? "text-suave" : ""}>
                     <td className="mono whitespace-nowrap text-[13px]">
                       {new Date(h.data).toLocaleString("pt-BR", {
                         day: "2-digit",
@@ -575,7 +607,25 @@ export default function PaginaProducao() {
                     )}
                     <td>
                       <Etiqueta>v{h.versao_ficha}</Etiqueta>
+                      {/* ⚠️ A linha FICA na lista: produção desfeita continua sendo
+                          história, e sumir com ela esconderia o que aconteceu. */}
+                      {h.estornada && (
+                        <span className="ml-2"><Etiqueta cor="alerta">estornada</Etiqueta></span>
+                      )}
                     </td>
+                    {podeEstornar && (
+                      <td className="text-right">
+                        {!h.estornada && (
+                          <button
+                            type="button"
+                            className="link-acao link-acao-erro"
+                            onClick={() => setEstornando(h)}
+                          >
+                            estornar
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -584,6 +634,26 @@ export default function PaginaProducao() {
         )}
         <Paginacao p={pag} rotulo="produção(ões)" />
       </Cartao>}
+
+      {estornando && (
+        <Confirmacao
+          titulo="Estornar esta produção?"
+          perigo
+          rotuloConfirmar="Estornar"
+          ocupado={desfazendo}
+          aoConfirmar={() => void estornarProducao(estornando)}
+          aoCancelar={() => setEstornando(null)}
+        >
+          <p>
+            <b>{qtd(estornando.quantidade)}</b> de <b>{estornando.produto}</b> saem de{" "}
+            {estornando.local} e os insumos que a receita consumiu voltam para o estoque.
+          </p>
+          <p className="mt-2 text-[13.5px] text-suave">
+            Nada é apagado: cada movimento ganha o seu estorno, e a produção continua na
+            lista, marcada como estornada.
+          </p>
+        </Confirmacao>
+      )}
     </div>
   );
 }

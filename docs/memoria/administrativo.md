@@ -689,3 +689,68 @@ uma prateleira — e o conector só sabia LER as duas coisas.
   Roteiro em `docs/deploy.md` seção 6b; regressão em `api/tests/smoke_rotacao_segredo.py`.
   ⚠️ A suíte mede as perdidas por **delta**: a base local tem credenciais reais cifradas com o
   segredo DESTE ambiente, que caem na contagem sem que nada esteja errado.
+
+- 🔑 **O conector abriu estoque e produção — lote 1** (09/10/2026, pedido do dono:
+  *"disponibilizar as maiores opções possíveis para o conector, pois o cliente está utilizando
+  muito por lá"*). De 84 para 110 ferramentas, de 19 para 42 que gravam. Entraram: acerto de
+  saldo e de custo (cada um com a sua PRÉVIA), entrada avulsa, saída (perda/consumo interno),
+  estorno de movimento e de produção, agenda (agendar, cumprir, cancelar), duplicar ficha,
+  inventário (abrir, contar, incluir, fechar, cancelar), etiquetas (emitir, usar, usar parte,
+  descartar) e remessa entre lojas (receber, cancelar). De leitura: `motivos_de_perda`,
+  `etiquetas`, `painel_de_etiquetas`.
+  - ⚠️ **Nenhuma regra nova**: cada ferramenta é a rota da tela, com a permissão dela.
+  - ⚠️ **Homologar ficha NÃO entrou**, e eu (Claude) quase a incluí por engano: a decisão
+    antiga é que a homologação fica na tela, e `smoke_conector_claude` cobra a ausência. Fica
+    de fora até o dono dizer o contrário.
+  - ⚠️ **As prévias são ferramentas de ESCRITA** para o catálogo (são POST): chave só de
+    leitura não as vê, e o Claude pergunta antes de chamá-las. É o preço de não criar uma
+    segunda regra de "POST que não grava".
+  - ⚠️ `saida_de_estoque` só oferece PERDA e CONSUMO INTERNO. A rota aceita `SAIDA_VENDA`, mas
+    venda entra por Vendas — pelo conector seria baixa em dobro.
+  - 🔑 **O catálogo é conferido contra o esquema da API** (`smoke_conector_claude`): a rota
+    existe, o parâmetro de caminho está na ferramenta e todo campo de corpo anunciado é lido
+    pela rota. É o defeito de `necessario_para_produzir`, que anunciava `RENDIMENTO` antes de
+    a rota entender.
+  - **Ficou de fora de propósito**: usuários, papéis, senhas e chaves; credenciais e
+    configuração das integrações; envio ao PDV e cargas do Omie; dados da empresa e das lojas.
+  - **Próximos lotes combinados com o dono**: 2 — cadastros de apoio (categorias, setores,
+    locais, fornecedores, unidades; custo informado, preço da loja, kit); 3 — vendas,
+    precificação e CMV; 4 — portal de clientes (reservas, pedidos, catálogos, fidelidade).
+  - ⚠️ **Suíte abortada no meio deixa a conexão "Claude (suíte)" VIVA**, e a rodada seguinte
+    falha em "continua sendo UMA linha". Aconteceu comigo ao quebrar a suíte com um erro de
+    Python; o conserto é revogar a linha em `tokens_api`.
+
+- 🔑 **O produto novo do Omie que chega na nota: três furos, fechados em 09/10/2026.** Relato
+  do dono: *"alguns não vem o cadastro novo de lá."* Medido no ar: ~48 itens na fila de
+  conciliação, vários com um cadastro de nome IDÊNTICO já existindo — o produto tinha vindo,
+  depois da nota. Tudo em `importador.sincronizar_completo`, que é o caminho do botão E da
+  agenda:
+  1. **O item pendente é RELIGADO em toda busca** (`reconciliar` no fim). Existia e só rodava
+     pelo botão da tela de notas: o cadastro chegava de madrugada e o item de ontem seguia sem
+     produto. Roda mesmo sem catálogo novo; falhar ali não desfaz a busca (`erro_ao_religar`).
+  2. **A nota nova com código do Omie desconhecido traz o catálogo NAQUELA busca**
+     (`catalogo_pela_nota`), mesmo a agenda já tendo ido hoje. A trava de "uma vez por dia"
+     continua, e só cede quando há produto novo de verdade.
+     ⚠️ Só nota DESTA busca (`importada_em = now()`, o instante da transação): nota velha com
+     código que o Omie apagou não dispara a varredura a cada hora, para sempre.
+  3. **O teto do catálogo subiu de 3.000 para 10.000 produtos** (`TETO_DO_CATALOGO`, 200
+     páginas de 50). O cliente tinha ~2.200 em setembro; ao cruzar 3.000, os cadastros mais
+     novos — as últimas páginas — parariam de vir. A frase da busca agora diz quando a
+     varredura foi cortada. ⚠️ NÃO medi quantos produtos há no Omie hoje.
+  - ⚠️ `catalogo_de_hoje` comparava com a data do CONTÊINER (UTC): a busca das 21h refazia a
+    varredura do catálogo toda noite. Agora é `relogio.hoje_da_casa()`.
+  - ⚠️ Nota já LANÇADA continua não sendo religada — regra antiga do `reconciliar`.
+  - ⚠️ Parte da fila não se resolve com isto: equipamento e material que não é de estoque
+    (vitrine, adega, resistência) fica até alguém marcar como ignorado.
+  - Cobertura: `tests/smoke_omie_religar.py` (15) — Omie de mentira, e tudo numa transação
+    DESFEITA no fim; não precisa da API de pé e não deixa rastro.
+  - ⚠️ **A religação automática é o modo LEVE do `reconciliar`** (`so_as_mexidas=True`): só os
+    quatro degraus exatos da cascata (vínculo aprendido, código do Omie, EAN, código no
+    fornecedor), sem a sugestão por nome, e recalculando só as notas que ganharam vínculo. A
+    primeira versão rodava o `reconciliar` inteiro a cada busca: 2 s na base local (9 itens
+    comparados com 2.000 nomes, 954 notas abertas recalculadas), e a bateria do navegador
+    acusou — "sincroniza pela tela" espera 2,5 s pela resposta. Ficou em 0,015 s. O botão de
+    reconciliar da tela de notas continua completo.
+  - ⚠️ Com `SAVEPOINT`: erro de banco na religação (impasse com alguém vinculando na tela)
+    não aborta a transação da busca. ⚠️ Rodar a suíte ao mesmo tempo que a bateria PRODUZ esse
+    impasse — foi como apareceu.
