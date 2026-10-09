@@ -675,6 +675,14 @@ def custo_teorico_do_produto(cur, id_produto: int, _nivel: int = 0,
         if calculo["completo"] or calculo["custo_total"] > 0:
             if calculo["completo"]:
                 origem = "ficha_rascunho" if rascunho else "ficha"
+                # 🔑 **A receita completa que depende de uma PREVISÃO diz isso**
+                # (08/10/2026): um ingrediente é produzido e ainda não foi feito,
+                # então vale o que a ficha dele prevê (`custos._custos_das_linhas`).
+                # O número serve para precificar, e a origem avisa que ele muda
+                # na primeira produção. ⚠️ O rascunho não ganha rótulo novo: ele
+                # já diz que o custo é provisório.
+                if not rascunho and calculo.get("itens_provisorios"):
+                    origem = "ficha_provisoria"
             else:
                 origem = "ficha_rascunho_parcial" if rascunho else "ficha_parcial"
             # 🔑 **Por UNIDADE VENDIDA, pela ponte da produção** (26/09/2026, pedido do

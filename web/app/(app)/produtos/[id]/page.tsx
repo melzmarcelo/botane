@@ -1141,7 +1141,11 @@ export default function FormularioProduto() {
                 é dado de estoque e não vira dado de cadastro por estar nesta tela. */}
             {/* ⚠️ **Sem cartão próprio**: aqui ele é METADE de "Valores", e um
                 cartão dentro de outro faz o olho ler dois blocos onde há um. */}
-            {!novo && f.controla_estoque && pode("estoque.saldos") ? (
+            {/* 🔑 **Quem NÃO controla estoque também tem custo** (08/10/2026): a
+                Água entra em ficha e nunca entra por nota. O bloco só aparecia com
+                a caixinha de estoque marcada, e era o único lugar para ver — e,
+                agora, informar — quanto ela custa. */}
+            {!novo && pode("estoque.saldos") ? (
               <>
                 <span className="rotulo-campo">Custo</span>
                 <div className="mt-1.5">
@@ -1152,6 +1156,7 @@ export default function FormularioProduto() {
                     idProduto={Number(id)}
                     um={f.um_estoque || null}
                     recarga={recarga}
+                    podeInformar={pode("estoque.custo")}
                   />
                 </div>
               </>

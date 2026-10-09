@@ -92,3 +92,28 @@
 - **Aprovação antes de aplicar**: o dono decidiu que vale na hora.
 - **Produto sem preço cadastrado** não ganha caixa de marcar, mesmo com sugestão: aplicar ali
   seria CRIAR um preço, não corrigir um.
+
+## Preços a acertar no PDV (08/10/2026)
+
+- 🔑 **O relatório `precos-pdv`** (catálogo de exportação, botão na tela de Precificação,
+  permissão `precificacao.analisar`). Pedido do dono: *"podemos ajustar a precificação no
+  Botané, mas ele não está enviando nada para o PDV … posso emitir um relatório com as
+  diferenças para que assim que possível estes sejam ajustados no PDV."*
+  Aplicar grava em `produto_precos` e vale na hora AQUI; a pendência nasce pelo gatilho, mas só
+  é enviada com `integracoes.enviar_ao_pdv` ligado — e a tela de Exportação, que mostra os dois
+  preços, só abre com o envio ligado. Este relatório é a mesma comparação, só de LEITURA.
+  - `services/pdv/envio.diferencas_de_preco`: lê `tabelapreco/get/{filial}` e compara com o
+    preço vigente de cada produto com `codigo_pdv`, **em centavos**. Colunas: código no PDV,
+    produto, categoria, preço no PDV hoje, preço certo, diferença.
+  - ⚠️ **Compara com o que o PDV diz AGORA**, não com o histórico daqui: a pergunta é o que
+    está errado no caixa.
+  - ⚠️ Sem preço de um dos lados não é divergência (mesma regra de `_preco_difere`), mas o
+    resumo CONTA os "sem preço na tabela do PDV" — lista vazia não pode parecer "tudo igual".
+  - ⚠️ Sem UMA filial configurada é 409 com frase; PDV fora do ar é 502. Em modo simulado o
+    resumo avisa que os preços de lá são de teste.
+  - Cobertura: `tests/smoke_precos_pdv.py` (13), com um PDV de mentira montado na suíte — o
+    que o PDV da máquina devolve não é assunto dela.
+
+- ⚠️ **Sugestão que nasce de custo previsto leva a etiqueta "custo provisório"** na lista:
+  ficha em rascunho, ou ficha com ingrediente produzido que ainda não foi feito
+  (`ficha_provisoria`, ver `custos.md`).

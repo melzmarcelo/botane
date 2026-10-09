@@ -150,7 +150,7 @@ checar("o servidor publica o catálogo", st == 200 and isinstance(catalogo, list
 chaves = {c["chave"] for c in catalogo}
 checar("com os oito relatórios da casa",
        {"saldos", "movimentos", "produtos", "vencimentos",
-        "cmv", "abc", "movimentacao", "precos"} <= chaves, sorted(chaves))
+        "cmv", "abc", "movimentacao", "precos", "precos-pdv"} <= chaves, sorted(chaves))
 
 porchave = {c["chave"]: c for c in catalogo}
 filtros_de = lambda k: [f["nome"] for f in porchave[k]["filtros"]]  # noqa: E731
@@ -397,6 +397,35 @@ checar("coluna vazia não entra na ficha", "Qtd líquida" not in folha_csv, folh
 st, folha_pdf, _ = chamar(f"GET", f"/exportar/ficha/{id_ficha}.pdf", token=token, bruto=True)
 checar("e sai em PDF, que é o formato de quem vai IMPRIMIR",
        st == 200 and folha_pdf[:4] == b"%PDF", st)
+
+# 🔑 **A folha OPERACIONAL, que fica na cozinha** (pedido do dono, 08/10/2026:
+# *"onde ficará o papel na cozinha, não precisa ter custos, e aquela tabela ao
+# lado da foto, somente os dados pertinentes à ficha mesmo"*). ⚠️ Pedida pelo
+# ADMINISTRADOR, que pode ver custo: é justamente quem imprime, e o papel não
+# pode levar a margem do prato para a parede.
+st, oper, cab_op = chamar("GET", f"/exportar/ficha/{id_ficha}.csv?operacional=true",
+                          token=token, bruto=True)
+oper = oper.decode("utf-8")
+checar("a ficha operacional sai", st == 200, st)
+checar("com a receita e o preparo",
+       f"Fic insumo {marca}".upper() in oper and "Asse por 40 minutos" in oper, oper[:300])
+checar("e o que se usa na bancada: rendimento e porções",
+       "Rendimento;2 UN" in oper and "Porções;4" in oper, oper[:300])
+checar("sem custo NENHUM, mesmo para quem pode ver custo",
+       "Custo" not in oper, oper[:500])
+checar("e sem os dados de escritório",
+       "Código do produto" not in oper and "Situação" not in oper
+       and "Homologada" not in oper, oper[:400])
+checar("o arquivo se chama operacional, para não se confundir com o outro",
+       "-operacional" in cab_op.get("content-disposition", ""),
+       cab_op.get("content-disposition"))
+st, oper_pdf, _ = chamar("GET", f"/exportar/ficha/{id_ficha}.pdf?operacional=true",
+                         token=token, bruto=True)
+checar("e sai em PDF também", st == 200 and oper_pdf[:4] == b"%PDF", st)
+# ⚠️ A ficha normal continua levando o custo para quem pode vê-lo: a opção
+# TIRA, e só quando pedida.
+checar("a ficha completa continua com o custo", "Custo da receita" in folha_csv,
+       folha_csv[:400])
 # ⚠️ Ficha técnica é um CARTÃO DE RECEITA: sai em RETRATO, que é a forma do
 # papel que se prende no armário da cozinha. Com o corte automático de largura
 # ela caía em paisagem assim que a receita usava fator de correção.

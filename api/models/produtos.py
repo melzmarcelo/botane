@@ -107,6 +107,13 @@ class UnidadesCompraRequest(BaseModel):
     itens: list[UnidadeCompra] = Field(default_factory=list)
 
 
+class CustoInformadoRequest(BaseModel):
+    """O custo de uma unidade de estoque, digitado por quem conhece o produto."""
+    # ⚠️ Maior que zero: zero não é um custo, é "ninguém sabe" — e gravá-lo faria
+    # a ficha calcular com um número inventado e o aviso de "sem custo" sumir.
+    custo: float = Field(gt=0, le=9999999)
+
+
 class VincularRequest(BaseModel):
     """Qual cadastro SAI. O que fica é o da tela, no caminho da rota.
 

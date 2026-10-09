@@ -395,6 +395,59 @@ checar("sem medida, 65 continua querendo dizer 65 unidades",
 
 
 print()
+print("10b. pedir no RENDIMENTO: os quilos da receita")
+# 🔑 **Pedido do dono (08/10/2026):** *"a receita rende 10 kg, em 20 porcoes.
+# Gostaria de ter a opcao de produzir 5 kg."* E a terceira forma de dizer
+# quanto: nem voltas inteiras da ficha, nem a unidade do produto -- a unidade em
+# que a RECEITA rende. Aqui a massa rende 8,535 KG em 65 cookies: pedir 4,2675 KG
+# e pedir meia receita, e meia receita sao 32,5 cookies na prateleira.
+st, meia = chamar(
+    "GET",
+    f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=4.2675&medida=RENDIMENTO",
+    token=token)
+checar("a previsao aceita o pedido no rendimento", st == 200, (st, meia))
+checar("4,2675 KG de uma receita de 8,535 KG e meia receita",
+       perto(meia.get("lotes"), 0.5, 0.0001), meia.get("lotes"))
+# ⚠️ A afirmacao central, a mesma das receitas: o que ENTRA e na unidade de estoque.
+checar("e vira 32,5 unidades de estoque", perto(meia.get("quantidade"), 32.5, 0.0001),
+       meia.get("quantidade"))
+st, trinta = chamar(
+    "GET", f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=32.5", token=token)
+checar("e pedir 32,5 porcoes da exatamente o mesmo",
+       perto(trinta.get("lotes"), meia.get("lotes"), 0.0001)
+       and perto(trinta.get("custo_total"), meia.get("custo_total")), (trinta, meia))
+
+st, antes_saldo = chamar("GET", f"/estoque/saldos?id_produto={manteiga}", token=token)
+tinha = float((antes_saldo or [{}])[0].get("quantidade") or 0)
+st, r = chamar("POST", "/estoque/producoes", {
+    "id_produto": biscoito, "quantidade": 4.2675, "medida": "RENDIMENTO",
+    "id_local": local["id"]}, token=token)
+checar("produzir 4,2675 KG da receita grava", st == 201, (st, r))
+checar("e o que entrou no estoque sao 32,5 unidades",
+       perto((r or {}).get("quantidade"), 32.5, 0.0001), r)
+st, depois_saldo = chamar("GET", f"/estoque/saldos?id_produto={manteiga}", token=token)
+ficou = float((depois_saldo or [{}])[0].get("quantidade") or 0)
+# Meia receita x 1,3 KG = 0,65 KG de manteiga.
+checar("e saiu a manteiga de meia receita", perto(tinha - ficou, 0.65, 0.0001), (tinha, ficou))
+
+# ⚠️ Somado ao que já está na agenda de amanhã: o mesmo produto no mesmo dia é
+# UMA linha, e as 130 das duas receitas agendadas acima continuam lá.
+st, r = chamar("POST", "/producao-agenda", {
+    "id_produto": biscoito, "quantidade": 8.535, "medida": "RENDIMENTO",
+    "data_prevista": str(amanha), "id_local": local["id"]}, token=token)
+checar("agendar no rendimento soma a unidade de estoque: 130 + 65",
+       st == 201 and perto((r or {}).get("quantidade"), 195, 0.0001), (st, r))
+
+# ⚠️ **Medida que nao existe e RECUSADA.** A previsao aceitava qualquer texto e
+# caia calada no ramo de porcoes: o conector ja anunciava `RENDIMENTO` antes de
+# ele existir, e a folha saia para outra quantidade sem ninguem ver.
+st, r = chamar(
+    "GET", f"/producao-agenda/necessario?id_produto={biscoito}&quantidade=2&medida=QUILOS",
+    token=token)
+checar("medida desconhecida e recusada, nao lida como porcoes", st == 422, st)
+
+
+print()
 print("11. o que REALMENTE foi usado")
 # 🔑 **Pedido do dono (16/09/2026):** *"na lista de insumos, ter uma nova
 # coluna com o que realmente foi usado. Por padrao e a mesma quantidade, mas o

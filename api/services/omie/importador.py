@@ -1813,9 +1813,17 @@ def custos_iniciais(cur, cliente: ClienteOmie, id_usuario: int | None = None,
                     ja_tem_custo += 1
                     continue
 
-                cur.execute("SELECT codigo, nome, um_estoque, um_omie FROM produtos "
+                cur.execute("SELECT codigo, nome, um_estoque, um_omie, "
+                            "custo_referencia_origem FROM produtos "
                             "WHERE id = %s", (id_produto,))
                 p = cur.fetchone()
+                # ⚠️ **Referência sobrescreve referência — menos a DIGITADA.** O
+                # custo que alguém informou à mão no cadastro (`MANUAL`) é uma
+                # afirmação de quem conhece o produto; o CMC é o que outro sistema
+                # acha. É para isto que `custo_referencia_origem` existe.
+                if atual is not None and p["custo_referencia_origem"] == "MANUAL":
+                    ja_tem_custo += 1
+                    continue
                 custo, como = _cmc_na_unidade_daqui(cur, id_produto, p, dec(pos["cmc"]),
                                                     ums, trocaram)
                 if custo is None:

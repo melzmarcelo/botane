@@ -282,8 +282,13 @@ FERRAMENTAS: list[Ferramenta] = [
         "/producao-agenda/necessario",
         {"id_produto": Param("integer", "Produto a produzir.", obrigatorio=True),
          "quantidade": Param("number", "Quanto produzir.", obrigatorio=True),
-         "medida": Param("string", "A quantidade está em quê.", padrao="PORCOES",
-                         enum=["PORCOES", "RENDIMENTO"]),
+         # ⚠️ O enum dizia `PORCOES`/`RENDIMENTO` e a rota só entendia
+         # `PORCOES`/`RECEITAS`: `RENDIMENTO` caía calado no ramo de porções.
+         "medida": Param("string", "A quantidade está em quê: PORCOES é a unidade de "
+                                   "estoque do produto, RECEITAS são voltas inteiras da "
+                                   "ficha, RENDIMENTO é a unidade em que a receita rende "
+                                   "(5 KG de uma receita de 10 KG).", padrao="PORCOES",
+                         enum=["PORCOES", "RECEITAS", "RENDIMENTO"]),
          "id_local": Param("integer", "Prateleira de onde sairiam os insumos."),
          "id_modo": Param("integer", "Modo de rendimento da ficha, se houver mais de um.")}),
     Ferramenta(
@@ -726,6 +731,51 @@ FERRAMENTAS: list[Ferramenta] = [
          "id_local_destino": Param("integer", "Para onde vai (de `locais`).",
                                    obrigatorio=True, no_corpo=True),
          "observacao": Param("string", "Por que está sendo movido.", no_corpo=True)},
+        metodo="POST"),
+    # 🔑 **Produzir pelo conector** (pedido do dono, 08/10/2026). É a mesma rota da
+    # tela: exige ficha homologada e a permissão `estoque.saidas`.
+    Ferramenta(
+        "produzir", "Lançar uma produção",
+        "Produz pela ficha técnica HOMOLOGADA do produto: baixa os insumos do estoque e dá "
+        "entrada no produzido, pelo custo do que realmente saiu. ⚠️ **Mexe no estoque e o "
+        "razão não se apaga** — desfazer é estornar movimento por movimento. Antes de "
+        "chamar: mostre à pessoa a prévia de `necessario_para_produzir` (o que vai sair e o "
+        "que falta) com a MESMA quantidade e medida, e só produza depois do sim.",
+        "/estoque/producoes",
+        {"id_produto": Param("integer", "Produto a produzir (precisa ter ficha homologada).",
+                             obrigatorio=True, no_corpo=True),
+         "quantidade": Param("number", "Quanto produzir, na `medida` escolhida. Maior que "
+                                       "zero.", obrigatorio=True, no_corpo=True),
+         "medida": Param("string", "A quantidade está em quê: PORCOES é a unidade de estoque "
+                                   "do produto, RECEITAS são voltas inteiras da ficha, "
+                                   "RENDIMENTO é a unidade em que a receita rende (5 KG de "
+                                   "uma receita de 10 KG). ⚠️ Pergunte quando a pessoa não "
+                                   "disser: \"2\" pode ser dois cookies ou duas receitas "
+                                   "de 65.", padrao="PORCOES", no_corpo=True,
+                         enum=["PORCOES", "RECEITAS", "RENDIMENTO"]),
+         "id_local": Param("integer", "Prateleira de quem produz (de `locais`): os insumos "
+                                      "saem dela primeiro. Sem ele, a padrão da loja.",
+                           no_corpo=True),
+         "id_modo": Param("integer", "Modo de rendimento da ficha, se houver mais de um.",
+                          no_corpo=True),
+         "observacao": Param("string", "Recado sobre esta produção.", no_corpo=True),
+         "consumos": Param(
+             "array", "Só quando o que SAIU foi diferente da receita (usou 6 ovos em vez "
+                      "de 5). Uma linha por item corrigido; o resto segue a ficha.",
+             no_corpo=True,
+             itens={"type": "object",
+                    "properties": {
+                        "id_item": {"type": "integer",
+                                    "description": "A LINHA da receita (`id_item` em "
+                                                   "`necessario_para_produzir`), não o "
+                                                   "produto."},
+                        "quantidade": {"type": "number",
+                                       "description": "Quanto realmente saiu. Zero = não "
+                                                      "usei."},
+                        "um": {"type": "string",
+                               "description": "Unidade do que foi digitado; sem ela, a de "
+                                              "estoque do insumo."}},
+                    "required": ["id_item", "quantidade"]})},
         metodo="POST"),
     Ferramenta(
         "reprocessar_estoque", "Reprocessar o estoque de um produto",

@@ -73,6 +73,7 @@ type Ficha = {
   custo_total: number | null;
   custo_por_porcao: number | null;
   itens_sem_custo: number | null;
+  itens_provisorios?: number | null;
   custo_completo: boolean | null;
   ve_custo: boolean;
 };
@@ -367,6 +368,7 @@ export default function EditorFicha() {
     custo_total: number | null;
     custo_por_porcao: number | null;
     itens_sem_custo: number;
+    itens_provisorios?: number;
     completo: boolean;
   } | null>(null);
 
@@ -399,7 +401,8 @@ export default function EditorFicha() {
                          aviso: string | null; qtd_estoque: number | null;
                          um_estoque: string | null }[];
                 custo_total: number | null; custo_por_porcao: number | null;
-                itens_sem_custo: number; completo: boolean }>(
+                itens_sem_custo: number; itens_provisorios?: number;
+                completo: boolean }>(
           "/fichas/previa-de-custo",
           {
             itens: corpo,
@@ -735,6 +738,23 @@ export default function EditorFicha() {
                 rotulo: `Ficha técnica — ${ficha.produto}`,
                 descricao:
                   "O cartão da receita, para pendurar na cozinha. Em PDF sai pronto para imprimir.",
+              }}
+            />
+          )}
+          {/* 🔑 **A folha que fica NA COZINHA** (08/10/2026, pedido do dono): sem
+              custo nenhum — mesmo para quem pode ver, que é quem imprime — e com o
+              quadro ao lado da foto reduzido ao que se usa na bancada. É o
+              servidor que tira, não a tela. */}
+          {!nova && ficha && (
+            <BotaoExportar
+              relatorio={`ficha/${ficha.id}`}
+              rotulo="Imprimir operacional"
+              formatoPadrao="pdf"
+              iniciais={{ operacional: true }}
+              avulso={{
+                rotulo: `Ficha operacional — ${ficha.produto}`,
+                descricao:
+                  "A folha da cozinha: ingredientes, quantidades e preparo. Sem custos e sem os dados de cadastro.",
               }}
             />
           )}
@@ -1117,6 +1137,15 @@ export default function EditorFicha() {
                     === "subficha_incompleta" && (
                     <span className="text-alerta">a sub-ficha tem item sem preço</span>
                   )}
+                  {/* 🔑 **O produzido que ainda não foi produzido** (08/10/2026): o
+                      custo da linha é o que a ficha DELE prevê. O número aparece,
+                      e a etiqueta impede que ele seja lido como apurado. */}
+                  {veCusto && (custoAoVivo?.itens[i]?.origem_custo ?? item.origem_custo)
+                    === "ficha_provisoria" && (
+                    <span className="text-alerta">
+                      custo provisório — pela ficha dele, ainda não produzida
+                    </span>
+                  )}
                   {(custoAoVivo?.itens[i]?.aviso ?? item.aviso) && (
                     <span className="text-erro">
                       {custoAoVivo?.itens[i]?.aviso ?? item.aviso}
@@ -1185,6 +1214,8 @@ export default function EditorFicha() {
           const rendimentoAtual = num(cabecalho.rendimento_qtd) ?? ficha.rendimento_qtd;
           const semCusto = custoAoVivo?.itens_sem_custo ?? ficha.itens_sem_custo;
           const completo = custoAoVivo ? custoAoVivo.completo : ficha.custo_completo;
+          const provisorios =
+            (custoAoVivo ? custoAoVivo.itens_provisorios : ficha.itens_provisorios) ?? 0;
           return (
           <div className="mt-5 grid gap-px overflow-hidden rounded border border-linha bg-linha sm:grid-cols-3">
             {[
@@ -1211,6 +1242,12 @@ export default function EditorFicha() {
               <p className="bg-superficie px-4 pb-4 text-[13px] text-alerta sm:col-span-3">
                 {semCusto} item(ns) sem preço conhecido — o total acima é parcial.
                 O preço vem da última compra registrada no fornecedor.
+              </p>
+            )}
+            {provisorios > 0 && (
+              <p className="bg-superficie px-4 pb-4 text-[13px] text-alerta sm:col-span-3">
+                {provisorios} item(ns) com custo provisório, previsto pela ficha de um
+                produto que ainda não foi produzido — o total muda quando ele for feito.
               </p>
             )}
           </div>

@@ -32,7 +32,8 @@ class AgendarRequest(BaseModel):
     # `PORCOES` é a unidade de estoque do produto (130 cookies) e `RECEITAS`
     # são voltas inteiras da ficha (2 receitas de 65). O padrão é `PORCOES`,
     # que é como sempre foi. Ver `services.estoque._quanto_produzir`.
-    medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
+    # `RENDIMENTO` é a unidade em que a receita rende (5 KG de uma de 10 KG).
+    medida: Literal["PORCOES", "RECEITAS", "RENDIMENTO"] = "PORCOES"
     # 🔑 O modo de rendimento planejado. Nulo é o padrão (ou o que a prateleira
     # herda). Ele fica GRAVADO na linha: cumprir a agenda três dias depois pelo
     # rendimento padrão seria a quantidade certa saindo da receita errada.
@@ -94,7 +95,10 @@ def listar(inicio: date | None = None, fim: date | None = None, status: str | No
 
 @router.get("/necessario")
 def necessario(id_produto: int, quantidade: float, id_local: int | None = None,
-               medida: str = "PORCOES", id_modo: int | None = None,
+               # ⚠️ Era `str` solto: `RENDIMENTO` (que o conector já anunciava) caía
+               # calado no ramo de porções e a folha saía para outra quantidade.
+               medida: Literal["PORCOES", "RECEITAS", "RENDIMENTO"] = "PORCOES",
+               id_modo: int | None = None,
                ctx: Contexto = Depends(_ver)) -> dict:
     """O que vai ser preciso para produzir tanto — sem produzir nada.
 

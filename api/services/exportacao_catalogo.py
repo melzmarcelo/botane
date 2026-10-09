@@ -747,6 +747,40 @@ def _precos(cur, id_unidade: int, f: dict) -> Saida:
     )
 
 
+def _precos_pdv(cur, id_unidade: int, _f: dict) -> Saida:
+    """O que está com um preço aqui e outro no caixa — para acertar no PDV."""
+    from services.pdv import envio  # só aqui: o catálogo não depende do PDV
+
+    cliente, filial = envio.cliente_e_filial(cur, id_unidade)
+    r = envio.diferencas_de_preco(cur, id_unidade, cliente, filial)
+    # ⚠️ Dinheiro em CENTAVOS no papel: como `float` a coluna saía "4,0" e "3,0",
+    # que não é como se escreve um preço — e é uma lista que alguém digita no PDV.
+    centavos = Decimal("0.01")
+    linhas = [{**l, **{c: Decimal(str(l[c])).quantize(centavos, ROUND_HALF_UP)
+                       for c in ("preco_botane", "preco_pdv", "diferenca")}}
+              for l in r["linhas"]]
+    resumo: list[tuple[str, object]] = [
+        ("Preços conferidos", r["conferidos"]),
+        ("Diferentes do PDV", len(linhas)),
+        ("A subir no PDV", sum(1 for l in linhas if l["diferenca"] > 0)),
+        ("A baixar no PDV", sum(1 for l in linhas if l["diferenca"] < 0)),
+    ]
+    if r["sem_preco_no_pdv"]:
+        # ⚠️ Dito no resumo: sem linha na tabela de lá não há o que comparar, e
+        # eles NÃO estão na lista — que não pode passar por "tudo conferido".
+        resumo.append(("⚠ Sem preço na tabela do PDV", f"{r['sem_preco_no_pdv']} — fora da lista"))
+    if r["simulado"]:
+        resumo.append(("⚠ PDV em modo simulado", "sem credencial: os preços de lá são de teste"))
+    return Saida(
+        linhas,
+        [("codigo_pdv", "Código no PDV"), ("produto", "Produto"), ("categoria", "Categoria"),
+         ("preco_pdv", "Preço no PDV (hoje)"), ("preco_botane", "Preço certo (Botané)"),
+         ("diferenca", "Diferença")],
+        "Preços a acertar no PDV",
+        resumo,
+    )
+
+
 def _saldos_rede(cur, id_unidade: int, f: dict) -> Saida:
     """O estoque da EMPRESA, somando as lojas — uma linha por produto.
 
@@ -1183,6 +1217,14 @@ RELATORIOS: dict[str, Relatorio] = {
         "Evolução de preço",
         "O que subiu, quanto pesou e com quem sai mais barato, com o peso por setor junto.",
         "cmv.relatorios", "precos", ("periodo",), _precos),
+    # 🔑 **O que mudou de preço aqui e ainda não mudou no caixa** (08/10/2026,
+    # pedido do dono). Só leitura do PDV — funciona com o envio desligado, que é
+    # justamente quando a lista importa.
+    "precos-pdv": Relatorio(
+        "Preços a acertar no PDV",
+        "Os produtos com um preço aqui e outro na tabela do PDV: o código de lá, o "
+        "preço que está no caixa e o que deveria estar.",
+        "precificacao.analisar", "precos-pdv", (), _precos_pdv),
 }
 
 

@@ -354,7 +354,19 @@ gravam = [t for t in r["result"]["tools"] if not t["annotations"]["readOnlyHint"
 nomes_gravam = {t["name"] for t in gravam}
 checar("a chave que altera enxerga as ferramentas de gravação",
        {"vincular_item_de_nota", "criar_produto", "atualizar_produto", "lancar_nota",
-        "fundir_produtos", "transferir_estoque", "reprocessar_estoque"} <= nomes_gravam, sorted(nomes_gravam))
+        "fundir_produtos", "transferir_estoque", "reprocessar_estoque",
+        # 🔑 Produzir pelo conector (pedido do dono, 08/10/2026).
+        "produzir"} <= nomes_gravam, sorted(nomes_gravam))
+_produzir = next((t for t in gravam if t["name"] == "produzir"), {})
+checar("produzir aceita as três medidas",
+       _produzir.get("inputSchema", {}).get("properties", {}).get("medida", {}).get("enum")
+       == ["PORCOES", "RECEITAS", "RENDIMENTO"], _produzir.get("inputSchema"))
+# ⚠️ A recusa da ROTA chega ao Claude como erro, e não como produção: produto sem
+# ficha homologada não produz por nenhum caminho.
+st, _, r = rpc(escrita, "tools/call", {"name": "produzir", "arguments": {
+    "id_produto": 99999999, "quantidade": 1}})
+checar("produzir o que não tem ficha vira isError, não produção",
+       r["result"]["isError"], r)
 checar("e todas vêm marcadas como destrutivas, para o Claude perguntar antes",
        all(t["annotations"]["destructiveHint"] for t in gravam))
 

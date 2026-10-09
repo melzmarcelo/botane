@@ -204,6 +204,8 @@ class FichaResponse(BaseModel):
     custo_por_porcao: float | None = None
     custo_por_unidade_rendimento: float | None = None
     itens_sem_custo: int | None = None
+    # Linhas que valem pela previsão de uma ficha ainda não produzida.
+    itens_provisorios: int | None = None
     custo_completo: bool | None = None
     ve_custo: bool = False
 

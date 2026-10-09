@@ -725,3 +725,35 @@ Três ferramentas no conector (`services/mcp_ferramentas.py`): `criar_ficha_tecn
     A linha em `producoes` continua na lista depois disso.
   - Cobertura: `smoke_estoque.py` (produção lançada do Central com o produto morando na
     Confeitaria) e `smoke_duas_lojas.py` (cada loja lista só as suas).
+
+- 🔑 **A terceira medida: produzir no RENDIMENTO da receita** (`medida = RENDIMENTO`,
+  08/10/2026). Pedido do dono: *"a receita rende 10 kg, em 20 porções. Gostaria de ter a opção
+  de produzir 5 kg."* `_quanto_produzir` divide o pedido pelo rendimento (5 ÷ 10 = meia
+  receita) e devolve a unidade de ESTOQUE, como as outras duas — o razão continua falando uma
+  unidade só. Vale em `POST /estoque/producoes`, na agenda e em `/producao-agenda/necessario`;
+  as duas telas ganharam a opção "no rendimento (KG)".
+  - ⚠️ **`/producao-agenda/necessario` aceitava QUALQUER texto em `medida`** e caía calado no
+    ramo de porções. O conector já anunciava `RENDIMENTO` no enum antes de ele existir — quem
+    pedisse a folha assim recebia outra quantidade. Agora é `Literal` (422 para o resto).
+  - ⚠️ Quando a receita rende na unidade do produto, `RENDIMENTO` e `PORCOES` dão o mesmo
+    número, e está certo. ⚠️ Rendimento zero é recusa com frase, não divisão por zero.
+  - Cobertura: `smoke_producao.py`, seção 10b.
+
+- 🔑 **Produzir pelo conector do Claude** (ferramenta `produzir`, 08/10/2026, pedido do dono).
+  É a MESMA rota da tela (`POST /estoque/producoes`): ficha homologada, `estoque.saidas`, as
+  três medidas e a correção de consumo (`consumos`). A descrição manda mostrar a prévia de
+  `necessario_para_produzir` e esperar o sim — o razão não se apaga.
+  - Cobertura: `smoke_conector_claude.py` (a chave que altera enxerga, o enum das medidas, e
+    a recusa da rota chega como `isError`).
+
+- 🔑 **A ficha OPERACIONAL** (`GET /exportar/ficha/{id}.pdf?operacional=true`, botão "Imprimir
+  operacional" em `/fichas/[id]`, 08/10/2026). Pedido do dono: *"onde ficará o papel na cozinha,
+  não precisa ter custos, e aquela tabela ao lado da foto, somente os dados pertinentes à ficha
+  mesmo."* Sai SEM dinheiro mesmo para quem tem `fichas.custos` — é justamente quem imprime — e
+  o quadro fica com rendimento, porções, tempo e alérgenos.
+  - ⚠️ Saem código do produto, situação e quem homologou (dados de escritório). **A versão
+    FICA**, no subtítulo: é o que diz se o papel na parede ainda é a receita que vale.
+  - ⚠️ A opção só TIRA: quem não vê custo continua sem ver, com ou sem ela.
+  - ⚠️ A escolha das linhas do quadro foi MINHA (Claude), não do dono — ele pediu "somente os
+    dados pertinentes à ficha". Se ele quiser outra seleção, é a lista `resumo` da rota.
+  - Cobertura: `smoke_exportacoes.py` e o botão no `verificar.mjs`.

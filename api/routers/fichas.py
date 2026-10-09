@@ -300,6 +300,7 @@ def obter(id_ficha: int, ctx: Contexto = Depends(_ver)) -> dict:
             "custo_por_porcao": _num(calculo["custo_por_porcao"]),
             "custo_por_unidade_rendimento": _num(calculo["custo_por_unidade_rendimento"]),
             "itens_sem_custo": calculo["itens_sem_custo"],
+            "itens_provisorios": calculo["itens_provisorios"],
             "custo_completo": calculo["completo"],
         }
     return resposta
@@ -628,6 +629,7 @@ def previa_de_custo(body: CustoPrevisto,
         "custo_por_porcao": _num(r["custo_por_porcao"]),
         "custo_por_unidade_rendimento": _num(r["custo_por_unidade_rendimento"]),
         "itens_sem_custo": r["itens_sem_custo"],
+        "itens_provisorios": r["itens_provisorios"],
         "completo": r["completo"],
         # ⚠️ Uma linha por item, na MESMA ordem em que chegaram: a tela casa
         # pelo índice, e devolver um subconjunto faria o custo aparecer na linha

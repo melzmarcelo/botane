@@ -634,6 +634,90 @@ def _remoto(la: dict, linha: dict) -> tuple[dict | None, bool]:
     return la[tipo]["por_nome"].get((linha["nome"] or "").strip().upper()), False
 
 
+def cliente_e_filial(cur, id_unidade: int) -> tuple[ClientePdv, int | None]:
+    """O cliente do PDV desta loja e a filial da tabela de preços — ou nulo.
+
+    ⚠️ Preço é POR filial: com mais de uma configurada não se compara com
+    nenhuma, que é melhor do que comparar com a loja errada.
+    """
+    from services import segredos  # só aqui: o resto do módulo não lê credencial
+
+    cur.execute(
+        "SELECT credenciais, modo FROM integracoes WHERE id_unidade = %s AND servico = %s",
+        (id_unidade, "PDV_LEGAL"))
+    linha = cur.fetchone()
+    if not linha:
+        return ClientePdv(modo="simulado"), None
+    c = segredos.decifrar(linha["credenciais"])
+    so = [f.strip() for f in str(c.get("filiais") or "").split(",") if f.strip()]
+    return (ClientePdv(c.get("username"), c.get("password"), c.get("client_id"),
+                       c.get("client_secret"), linha["modo"]),
+            int(so[0]) if len(so) == 1 else None)
+
+
+def diferencas_de_preco(cur, id_unidade: int, cliente: ClientePdv,
+                        filial: int | None) -> dict:
+    """Os preços daqui que não batem com a tabela do PDV — para alguém acertar lá.
+
+    🔑 **Pedido do dono (08/10/2026):** *"podemos ajustar a precificação no
+    Botané, mas ele não está enviando nada para o PDV … posso emitir um relatório
+    com as diferenças para que assim que possível estes sejam ajustados no PDV"*.
+    Com o envio DESLIGADO, o preço novo vale aqui e o caixa segue cobrando o
+    antigo; a tela de Exportação mostra os dois lados, mas só abre com o envio
+    ligado. Isto é a mesma comparação, só de LEITURA, e funciona nos dois casos.
+
+    ⚠️ **Compara com o que o PDV diz AGORA**, e não com o último preço daqui: a
+    pergunta é "o que está errado no caixa", e quem sabe é a tabela de lá.
+    ⚠️ Mesma regra de `_preco_difere`: em centavos, e sem preço de um dos lados
+    não é divergência — vai contado à parte (`sem_preco_no_pdv`), para ninguém
+    achar que a lista vazia quer dizer "tudo igual".
+    """
+    if not filial:
+        raise HTTPException(
+            status_code=409,
+            detail=("Não há UMA filial do PDV configurada para esta loja — o preço é por "
+                    "filial, e sem ela não há com o que comparar. Confira em Integrações ▸ "
+                    "PDV Legal."))
+    try:
+        tabela = cliente.get(f"/tabelapreco/get/{filial}") or []
+    except ErroPdv as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Não deu para ler a tabela de preços do PDV: {e}")
+    la = {str(l.get("codProduto")): l.get("valor") for l in tabela}
+
+    cur.execute(
+        """SELECT p.id, p.codigo, p.codigo_pdv, p.nome, c.nome AS categoria,
+                  (SELECT pp.preco_venda FROM produto_precos pp
+                    WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
+                      AND (pp.id_unidade = %(uni)s OR pp.id_unidade IS NULL)
+                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
+             FROM produtos p
+             LEFT JOIN categorias c ON c.id = p.id_categoria
+            WHERE p.ativo AND p.codigo_pdv IS NOT NULL AND p.codigo_pdv <> ''
+            ORDER BY c.nome NULLS LAST, p.nome""", {"uni": id_unidade})
+    linhas, sem_la, conferidos = [], 0, 0
+    for p in cur.fetchall():
+        if p["preco_venda"] is None:
+            continue
+        preco_la = la.get(str(p["codigo_pdv"]))
+        if preco_la is None:
+            sem_la += 1
+            continue
+        conferidos += 1
+        aqui, no_pdv = float(p["preco_venda"]), float(preco_la)
+        if round(aqui * 100) == round(no_pdv * 100):
+            continue
+        linhas.append({
+            "id_produto": p["id"], "codigo_pdv": p["codigo_pdv"], "codigo": p["codigo"],
+            "produto": p["nome"], "categoria": p["categoria"],
+            "preco_botane": round(aqui, 2), "preco_pdv": round(no_pdv, 2),
+            "diferenca": round(aqui - no_pdv, 2),
+        })
+    return {"linhas": linhas, "conferidos": conferidos, "sem_preco_no_pdv": sem_la,
+            "simulado": cliente.modo == "simulado"}
+
+
 def _preco_difere(linha: dict, preco_la) -> bool:
     """Preço daqui contra o da tabela do PDV, em centavos.
 

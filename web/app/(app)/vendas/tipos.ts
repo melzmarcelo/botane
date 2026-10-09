@@ -126,6 +126,8 @@ export const CANAIS: Record<string, string> = {
 export const ORIGEM_CUSTO: Record<string, string> = {
   ficha: "ficha técnica",
   ficha_parcial: "ficha com insumo sem custo",
+  // Um ingrediente é produzido e ainda não foi feito: vale a previsão da ficha dele.
+  ficha_provisoria: "ficha técnica, com ingrediente de custo provisório",
   ficha_sem_custo: "a ficha existe, mas nenhum insumo tem custo",
   // 🔑 A ficha em rascunho custeia a venda — antes o item entrava com custo
   // zero e a margem saía alta demais. O rótulo diz que o número ainda pode

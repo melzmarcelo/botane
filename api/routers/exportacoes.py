@@ -445,7 +445,7 @@ def produto(nome: str, formato: str | None = None,
 
 
 @router.get("/ficha/{nome}")
-def ficha(nome: str, formato: str | None = None,
+def ficha(nome: str, formato: str | None = None, operacional: bool = False,
           ctx: Contexto = Depends(contexto_atual)) -> Response:
     """A ficha técnica para IMPRIMIR — o cartão que fica pendurado na cozinha.
 
@@ -457,11 +457,21 @@ def ficha(nome: str, formato: str | None = None,
 
     ⚠️ **O modo de preparo não é tabela** — é o texto que a cozinha lê enquanto
     faz. Vai como NOTA, depois dos ingredientes, que é a ordem em que se usa.
+
+    🔑 **`operacional` é a folha que fica NA COZINHA** (pedido do dono,
+    08/10/2026: *"onde ficará o papel na cozinha, não precisa ter custos, e
+    aquela tabela ao lado da foto, somente os dados pertinentes à ficha
+    mesmo"*). Sai sem dinheiro NENHUM — mesmo para quem pode ver custo, que é
+    justamente quem imprime — e o quadro ao lado da foto fica só com o que se
+    usa de pé na bancada: rendimento, porções, tempo e alérgenos. Código,
+    situação e quem homologou são dados de escritório.
     """
     _exige_alguma(ctx, "fichas.visualizar", "fichas.editar")
     bruto, ext = _partir(nome, formato)
     id_ficha = _id_do_caminho(bruto, "Ficha")
-    ve_custo = ctx.pode("fichas.custos")
+    # ⚠️ O operacional só TIRA: quem não pode ver custo continua sem ver, com ou
+    # sem a opção.
+    ve_custo = ctx.pode("fichas.custos") and not operacional
 
     with get_cursor() as cur:
         cur.execute(
@@ -485,7 +495,8 @@ def ficha(nome: str, formato: str | None = None,
         # por HTTP, e é gerado sem navegador nenhum.
         foto = (arquivos.ler(f["foto_url"]) or (None,))[0]
         auditoria.registrar(cur, ctx.id_usuario, "exportacao", f"ficha-{id_ficha}",
-                            "exportar", depois={"formato": ext, "com_custo": ve_custo})
+                            "exportar", depois={"formato": ext, "com_custo": ve_custo,
+                                                "operacional": operacional})
 
     linhas = []
     for i in calculo["itens"]:
@@ -549,10 +560,14 @@ def ficha(nome: str, formato: str | None = None,
 
     colunas = [(c, cab) for c, cab in colunas if _tem_informacao(c)]
 
-    resumo: list[tuple[str, object]] = [
-        ("Código do produto", f["codigo"]),
-        ("Versão", f["versao"]),
-        ("Situação", f["status"]),
+    resumo: list[tuple[str, object]] = []
+    if not operacional:
+        resumo += [
+            ("Código do produto", f["codigo"]),
+            ("Versão", f["versao"]),
+            ("Situação", f["status"]),
+        ]
+    resumo += [
         ("Rendimento", exportacao.quantidade_br(f["rendimento_qtd"], f["rendimento_um"])),
         ("Porções", exportacao.quantidade_br(f["porcoes"])),
     ]
@@ -560,7 +575,7 @@ def ficha(nome: str, formato: str | None = None,
         resumo.append(("Tempo de preparo", f"{f['tempo_preparo_min']} min"))
     if f["alergenos"]:
         resumo.append(("Alérgenos", f["alergenos"]))
-    if f["homologada_em"]:
+    if f["homologada_em"] and not operacional:
         resumo.append(("Homologada em", f["homologada_em"]))
         resumo.append(("Homologada por", f["homologada_por_nome"] or "—"))
     if ve_custo:
@@ -587,7 +602,8 @@ def ficha(nome: str, formato: str | None = None,
     # baixa cinco fichas seguidas fica com cinco números. A VERSÃO entra junto
     # porque duas versões do mesmo prato são dois documentos diferentes.
     apelido = exportacao.slug(f["produto"]) or str(id_ficha)
-    nome_arq = exportacao.nome_arquivo(f"ficha-{apelido}-v{f['versao']}", ext=ext)
+    nome_arq = exportacao.nome_arquivo(
+        f"ficha-{apelido}-v{f['versao']}" + ("-operacional" if operacional else ""), ext=ext)
     notas = [("Modo de preparo", f["modo_preparo"] or ""),
              ("Observações", f["observacao"] or "")]
     if ext == "pdf":
@@ -596,8 +612,11 @@ def ficha(nome: str, formato: str | None = None,
             exportacao.pdf_de(saida.linhas, saida.colunas, saida.titulo, saida.resumo,
                               # ⚠️ Sem o nome da casa: ele está no timbre, logo
                               # acima. Repetido, envelhece num dos dois lugares.
-                              subtitulo=(f"versão {f['versao']}"
-                                         f" · {str(f['status']).lower()}"),
+                              # ⚠️ A versão FICA no operacional: é o que diz se
+                              # o papel na parede ainda é a receita que vale.
+                              subtitulo=(f"versão {f['versao']}" if operacional
+                                         else f"versão {f['versao']}"
+                                              f" · {str(f['status']).lower()}"),
                               notas=notas, empresa=timbre, emitido_por=ctx.nome,
                               imagem=foto,
                               # A ficha é um CARTÃO DE RECEITA: sai em retrato,

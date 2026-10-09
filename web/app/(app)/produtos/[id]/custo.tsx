@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { custo, qtd } from "@/lib/numeros";
-import { Aviso, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
+import { custo, numeroParaCusto, qtd, textoParaNumero } from "@/lib/numeros";
+import { useAviso } from "@/components/aviso-flutuante";
+import { Aviso, CampoCusto, Carregando, Etiqueta, Modal, Vazio } from "@/components/ui";
 
 /**
  * Quanto este produto custa hoje — e o que mudou isso.
@@ -42,6 +43,10 @@ type Custo = {
   atual: number | null;
   origem: string;
   origem_texto: string;
+  /** O custo de referência foi DIGITADO no cadastro, e não trazido de fora. */
+  informado_a_mao?: boolean;
+  /** O que está guardado na referência, mesmo quando outro degrau responde. */
+  custo_informado?: number | null;
   /** 🔑 **O que a FICHA prevê, quando ninguém mais sabe** (13/09/2026, pedido do
    *  dono: "caso a ficha não tenha sido produzida, a ficha está sem custo, levar
    *  este custo provisório para a tela do cadastro de produto"). Vem só quando o
@@ -90,9 +95,18 @@ export default function CustoDoProduto({
   idProduto,
   um,
   recarga = 0,
+  podeInformar = false,
 }: {
   idProduto: number;
   um: string | null;
+  /**
+   * 🔑 **Quem pode DIGITAR o custo** (08/10/2026, pedido do dono: *"temos o
+   * produto Água, que é água encanada, não tem estoque, mas precisa ter custo, e
+   * não conseguimos informar este custo em local nenhum"*). Vem de `estoque.custo`
+   * — a mesma chave de quem ajusta custo, porque é dinheiro mudando sem
+   * mercadoria se mover.
+   */
+  podeInformar?: boolean;
   /**
    * ⚠️ **Muda quando a tela salva.** Este cartao busca sozinho, e o custo e
    * um dos numeros que o SERVIDOR reescreve: trocar a unidade de estoque
@@ -104,6 +118,10 @@ export default function CustoDoProduto({
   const [c, setC] = useState<Custo | null>(null);
   const [erro, setErro] = useState("");
   const [aberto, setAberto] = useState(false);
+  const aviso = useAviso();
+  const [informando, setInformando] = useState(false);
+  const [valor, setValor] = useState("");
+  const [gravando, setGravando] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -116,6 +134,26 @@ export default function CustoDoProduto({
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  async function informar() {
+    const n = textoParaNumero(valor);
+    if (n === null || n <= 0) {
+      aviso.erro("Informe um custo maior que zero.");
+      return;
+    }
+    setGravando(true);
+    try {
+      const r = await api.put<{ message: string }>(
+        `/produtos/${idProduto}/custo-informado`, { custo: n });
+      aviso.sucesso(r.message);
+      setInformando(false);
+      await carregar();
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar o custo");
+    } finally {
+      setGravando(false);
+    }
+  }
 
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!c) return <Carregando />;
@@ -150,9 +188,23 @@ export default function CustoDoProduto({
                 : "Ninguém sabe quanto custa: não há entrada no estoque, preço de fornecedor nem referência."}
           </p>
         </div>
-        <button type="button" className="btn btn-secundario" onClick={() => setAberto(true)}>
-          Histórico
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {podeInformar && (
+            <button
+              type="button"
+              className="btn btn-secundario"
+              onClick={() => {
+                setValor(c.custo_informado ? numeroParaCusto(c.custo_informado) : "");
+                setInformando(true);
+              }}
+            >
+              Informar custo
+            </button>
+          )}
+          <button type="button" className="btn btn-secundario" onClick={() => setAberto(true)}>
+            Histórico
+          </button>
+        </div>
       </div>
 
       {/* ⚠️ **A referência é o degrau mais fraco, e a tela diz isso.** O médio
@@ -194,11 +246,50 @@ export default function CustoDoProduto({
       {c.origem === "referencia" && (
         <div className="mt-3">
           <Aviso tipo="info">
-            Este custo veio de fora e vale enquanto não houver melhor: assim que entrar a
-            primeira nota deste produto, o custo médio do estoque passa a responder no lugar
-            dele.
+            {c.informado_a_mao
+              ? "Este custo foi informado à mão e vale enquanto não houver melhor: "
+              : "Este custo veio de fora e vale enquanto não houver melhor: "}
+            assim que entrar a primeira nota deste produto, o custo médio do estoque passa a
+            responder no lugar dele.
           </Aviso>
         </div>
+      )}
+
+      {informando && (
+        <Modal
+          titulo="Informar o custo"
+          descricao={`Quanto custa ${um || "uma unidade"} deste produto.`}
+          aoFechar={() => setInformando(false)}
+          largura="460px"
+        >
+          <CampoCusto valor={valor} aoMudar={setValor} placeholder="0,00" />
+          {/* ⚠️ A frase que evita a surpresa: o número digitado é o ÚLTIMO degrau.
+              Em produto com estoque ele fica guardado e quem responde é o médio —
+              e para corrigir o médio a tela é outra. */}
+          <p className="mt-3 text-[13px] leading-snug text-suave">
+            Serve para o que tem custo e não entra por nota — a água encanada, por exemplo.
+            Vale enquanto não houver custo médio no estoque nem preço de fornecedor; para
+            corrigir o custo médio, use Ajustes.
+          </p>
+          {c.atual !== null && c.origem !== "referencia" && (
+            <div className="mt-3">
+              <Aviso tipo="info">
+                Hoje quem responde é o {c.origem_texto}: o número daqui fica guardado, mas
+                não é usado enquanto isso valer.
+              </Aviso>
+            </div>
+          )}
+          <div className="mt-5 flex justify-end gap-2">
+            <button type="button" className="btn btn-secundario"
+                    onClick={() => setInformando(false)}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-primario" disabled={gravando}
+                    onClick={() => void informar()}>
+              {gravando ? "Gravando…" : "Gravar"}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {aberto && (

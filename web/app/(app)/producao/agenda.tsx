@@ -98,7 +98,7 @@ export default function AgendaProducao({
         ⚠️ Nasce em RECEITAS, como na aba de registrar: é assim que a cozinha
         pensa, e um padrão diferente por aba seria uma armadilha. O servidor
         segue com `PORCOES`, e a tela manda o campo sempre. */
-    medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    medida: "RECEITAS" as "PORCOES" | "RECEITAS" | "RENDIMENTO",
     /** Qual MODO de rendimento. Vazio = o padrão, ou o que a prateleira herda. */
     id_modo: "",
     data: amanha(), rotulo: "", id_local: "",
@@ -441,15 +441,18 @@ export default function AgendaProducao({
               linha, sobrando meia dúzia de caracteres para a quantidade. */}
           <Campo
             rotulo="Medida"
-            dica={f.medida === "RECEITAS" ? "voltas inteiras da ficha" : "na unidade do produto"}
+            dica={f.medida === "RECEITAS" ? "voltas inteiras da ficha"
+              : f.medida === "RENDIMENTO" ? "na unidade em que a receita rende"
+                : "na unidade do produto"}
           >
             <select
               className="campo"
               value={f.medida}
-              onChange={(e) => setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" })}
+              onChange={(e) => setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" | "RENDIMENTO" })}
             >
               <option value="PORCOES">porções</option>
               <option value="RECEITAS">receitas</option>
+              <option value="RENDIMENTO">no rendimento</option>
             </select>
           </Campo>
           <Campo rotulo="Para quando">

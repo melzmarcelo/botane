@@ -347,3 +347,42 @@ ficha técnica."* (Repete a decisão de 13/09, que só tinha chegado à tela do 
   no PDV baixa 1 KG por venda. O custo agora é o da porção, mas a BAIXA segue a unidade de
   estoque — produto vendido em porção deve ser contado em UN.
 - Cobertura: `smoke_custo_por_porcao.py` (19) e `smoke_rascunho_e_provisorio.py`.
+
+- 🔑 **O custo que alguém DIGITA no cadastro** (`PUT /produtos/{id}/custo-informado`, botão
+  "Informar custo" no bloco de custo do produto, 08/10/2026). Pedido do dono: *"temos o produto
+  Água, que é água encanada, não tem estoque, mas precisa ter custo, e não conseguimos informar
+  este custo em local nenhum."* Vai para `custo_referencia` com a origem **`MANUAL`** — o mesmo
+  ÚLTIMO degrau, que só responde sem médio e sem fornecedor. Permissão `estoque.custo`.
+  - ⚠️ **Não é ajuste de custo médio.** Em produto com estoque o número fica guardado e não
+    responde; a rota devolve `responde: false` e a janela avisa antes de gravar.
+  - ⚠️ **A carga do Omie não passa por cima do `MANUAL`** (`importador.custos_iniciais`).
+    `CORRECAO` continua podendo ser sobrescrita, como antes — não mexi nessa regra.
+  - ⚠️ O bloco de custo da tela do produto só aparecia com `controla_estoque`; agora aparece
+    para todos (com `estoque.saldos`), senão a Água não teria onde mostrar nem informar.
+  - ⚠️ `corrigir` pulava quando o número era igual; agora só pula se a ORIGEM também for a
+    mesma — confirmar à mão o que veio do Omie é o que protege da próxima carga.
+
+- 🔑 **Dentro de uma receita, o produzido sem custo apurado vale o que a ficha DELE prevê**
+  (`_custo_pela_ficha_do_produto`, origem `ficha_provisoria`, 08/10/2026). Pedido do dono:
+  *"tenho uma ficha que não foi produzida ainda … caso utilize ela em outra ficha, o custo
+  desta nova ficha não consegue demonstrar."* O produto produzido usado como INSUMO comum (não
+  como sub-ficha) caía em "sem preço" até a primeira produção.
+  - ⚠️ **Mora em `_custos_das_linhas`, NÃO em `custo_do_insumo`** — a decisão de 13/09 continua
+    de pé: aquela cascata também valoriza estoque e baixa por vínculo. Aqui o teórico só
+    responde dentro de outra receita, e marcado.
+  - ⚠️ **Por unidade de ESTOQUE** (`unidades_por_receita`), não por porção: a linha já foi
+    convertida para a unidade de estoque do insumo. Sem ponte, ou com a ficha de baixo
+    incompleta, não há número.
+  - `custo_da_ficha` e `custo_previsto` devolvem `itens_provisorios`; a tela da ficha avisa na
+    linha e no total. `custo_teorico_do_produto` devolve a origem **`ficha_provisoria`** para a
+    receita homologada e completa que depende de uma previsão — é o que a venda congela e o que
+    a Precificação etiqueta como "custo provisório" (junto com as de rascunho).
+  - Produziu uma vez, o médio volta a responder e a marca some.
+
+- 🔑 **Ingrediente que não controla estoque entra no CUSTO da produção e não sai de lugar
+  nenhum** (`estoque.produzir`, 08/10/2026). `lancar` recusa esse produto, e a recusa derrubava
+  a produção INTEIRA de qualquer receita com água — achado pela suíte, não pelo dono. Agora a
+  linha soma `quantidade × custo_do_insumo` no custo do lote, aparece em `consumos` com
+  `sem_estoque: true`, e a folha de produção (`previsao_producao`) não diz que falta.
+  - ⚠️ Sem custo conhecido soma ZERO, calado: a ficha já avisa "sem preço" antes.
+  - Cobertura dos três: `tests/smoke_custo_informado.py` (37).

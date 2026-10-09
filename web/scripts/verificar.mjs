@@ -1658,6 +1658,15 @@ try {
     await irPara(p, `${WEB}/fichas/${idFicha}`);
     await new Promise((r) => setTimeout(r, 1300));
 
+    // 🔑 **A folha OPERACIONAL** (pedido do dono, 08/10/2026): a que fica na
+    // cozinha, sem custo e sem os dados de cadastro. Quem tira é o servidor
+    // (`smoke_exportacoes`); aqui se mede só que a opção está à mão.
+    const temOperacional = await p.evaluate(() =>
+      [...document.querySelectorAll("button")]
+        .some((b) => /Imprimir operacional/i.test(b.textContent ?? "")));
+    checar("a ficha oferece a impressão operacional, ao lado da completa",
+      temOperacional, temOperacional);
+
     // A ficha existe para ser SEGUIDA, e quem segue está de pé na cozinha —
     // não na frente do monitor. Sem o papel, a receita fica presa numa tela
     // que ninguém leva para perto do fogão.
@@ -2337,6 +2346,12 @@ try {
       naoMexe: /não mexe no estoque/i.test(texto),
     };
   });
+  // 🔑 Pedido do dono (08/10/2026): produzir 5 kg de uma receita de 10 kg.
+  const medidas = await p.evaluate(() =>
+    [...document.querySelectorAll("select option")].map((o) => o.getAttribute("value")));
+  checar("a agenda aceita o pedido no rendimento da receita",
+    medidas.includes("RENDIMENTO") && medidas.includes("RECEITAS")
+      && medidas.includes("PORCOES"), medidas.filter(Boolean).slice(0, 12));
   checar("produção separa agenda de registro", agenda.temAbas, agenda);
   checar("e a agenda abre primeiro, com o plano à vista",
     agenda.agendaPrimeiro && agenda.naoMexe, agenda);
@@ -4511,8 +4526,13 @@ try {
         .test(cartao?.innerText ?? ""),
       botao: [...(cartao?.querySelectorAll("button") ?? [])]
         .some((b) => b.textContent?.trim() === "Histórico"),
+      // 🔑 Pedido do dono (08/10/2026): a Água tem custo e não tem estoque, e
+      // não havia onde informar. O admin tem `estoque.custo`.
+      informar: [...(cartao?.querySelectorAll("button") ?? [])]
+        .some((b) => b.textContent?.trim() === "Informar custo"),
     };
   });
+  checar("e oferece informar o custo a quem pode", custoNaTela.informar, custoNaTela);
   checar("a tela do produto mostra o custo", custoNaTela.temCartao, custoNaTela);
   checar("dizendo de ONDE o numero veio", custoNaTela.dizAOrigem, custoNaTela);
   checar("com o botao de historico", custoNaTela.botao, custoNaTela);
@@ -8141,6 +8161,16 @@ try {
   }));
   checar("a análise abre com o resumo e a lista", telaAnalise.abriu && telaAnalise.ladrilhos >= 4
     && !telaAnalise.erro, telaAnalise);
+  // 🔑 Pedido do dono (08/10/2026): aplicar vale na hora aqui, e o PDV só recebe
+  // se o envio estiver ligado — esta é a lista que alguém leva para acertar lá.
+  // ⚠️ O botão depende do catálogo de exportação, que chega um instante depois.
+  await p.waitForFunction(() => [...document.querySelectorAll("button")]
+    .some((b) => /Preços a acertar no PDV/.test(b.textContent ?? "")), { timeout: 10000 })
+    .catch(() => {});
+  const temRelatorioPdv = await p.evaluate(() => [...document.querySelectorAll("button")]
+    .some((b) => /Preços a acertar no PDV/.test(b.textContent ?? "")));
+  checar("a precificação oferece a lista de preços a acertar no PDV",
+    temRelatorioPdv, temRelatorioPdv);
   await foto(p, "36e-precificacao");
 
   // 🔑 **As peças de formulário, redesenhadas** (15/09/2026, protótipo aprovado

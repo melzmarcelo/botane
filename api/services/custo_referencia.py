@@ -35,6 +35,13 @@ DISCORDA = Decimal("1.5")
 FOLGA_DO_FATOR = Decimal("0.03")
 
 ORIGEM = "CORRECAO"
+# 🔑 **O custo que alguém DIGITOU no cadastro** (08/10/2026, pedido do dono: *"temos
+# o produto Água, que é água encanada, não tem estoque, mas precisa ter custo, e
+# não conseguimos informar este custo em local nenhum"*). É o mesmo degrau da
+# referência — o último, só responde quando não há médio nem fornecedor —, com a
+# origem dizendo que foi uma pessoa, e não outro sistema, quem afirmou o número.
+# ⚠️ A carga do Omie NÃO passa por cima dele (`importador.custos_iniciais`).
+ORIGEM_MANUAL = "MANUAL"
 
 
 def _fatores(cur, ids: list[int]) -> dict[int, list[tuple[str, Decimal]]]:
@@ -232,7 +239,8 @@ def _recustear_vendas(cur, ids: list[int]) -> int:
     return feitos
 
 
-def corrigir(cur, itens: list[dict], id_usuario: int | None, id_unidade: int) -> dict:
+def corrigir(cur, itens: list[dict], id_usuario: int | None, id_unidade: int,
+             origem: str = ORIGEM) -> dict:
     """Grava o custo de referência informado em cada produto.
 
     ⚠️ **O número vem de quem confirmou, não da prévia refeita aqui.** A tela
@@ -253,20 +261,22 @@ def corrigir(cur, itens: list[dict], id_usuario: int | None, id_unidade: int) ->
             raise HTTPException(status_code=404,
                                 detail=f"Produto {item['id_produto']} não encontrado")
         antes = dec(p["custo_referencia"]) if p["custo_referencia"] is not None else None
-        if antes == novo:
+        # ⚠️ Mesmo número com OUTRA origem ainda é mudança: confirmar à mão o que
+        # veio do Omie é o que impede a próxima carga de passar por cima.
+        if antes == novo and p["custo_referencia_origem"] == origem:
             continue
         cur.execute(
             """UPDATE produtos
                   SET custo_referencia = %s, custo_referencia_em = now(),
                       custo_referencia_origem = %s
                 WHERE id = %s""",
-            (novo, ORIGEM, p["id"]),
+            (novo, origem, p["id"]),
         )
         auditoria.registrar(
             cur, id_usuario, "produto", p["id"], "custo_referencia_corrigido",
             antes={"custo_referencia": float(antes) if antes is not None else None,
                    "origem": p["custo_referencia_origem"]},
-            depois={"custo_referencia": float(novo), "origem": ORIGEM},
+            depois={"custo_referencia": float(novo), "origem": origem},
             id_unidade=id_unidade,
         )
         corrigidos.append({"id_produto": p["id"], "produto": p["nome"],

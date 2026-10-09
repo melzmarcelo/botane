@@ -1342,10 +1342,27 @@ def _quanto_produzir(quantidade, medida: str | None, rendimento, porcoes,
     """
     por_receita = _rendimento_em_estoque(rendimento, porcoes, rendimento_um, um_estoque, ums)
     pedida = dec(quantidade)
-    if (medida or "PORCOES").upper() == "RECEITAS":
+    como = (medida or "PORCOES").upper()
+    if como == "RECEITAS":
         lotes = pedida
         # 4 casas: é a escala de `estoque_movimentos.quantidade`. Arredondar aqui
         # e não lá embaixo mantém o que a tela mostrou igual ao que entrou.
+        qtd = (lotes * por_receita).quantize(Decimal("0.0001"))
+    elif como == "RENDIMENTO":
+        # 🔑 **Na unidade em que a RECEITA rende** (pedido do dono, 08/10/2026:
+        # *"a receita rende 10 kg, em 20 porções. Gostaria de ter a opção de
+        # produzir 5 kg"*). É a terceira forma de dizer quanto: 5 KG de uma
+        # receita de 10 KG é meia receita — e meia receita são 10 porções na
+        # prateleira. O razão continua gravando só a unidade de estoque.
+        # ⚠️ Quando a receita já rende na unidade do produto, isto e `PORCOES`
+        # dão o mesmo número — e está certo, são a mesma pergunta.
+        rende = dec(rendimento)
+        if rende <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="A ficha não diz quanto a receita rende — informe o rendimento "
+                       "ou peça em porções.")
+        lotes = pedida / rende
         qtd = (lotes * por_receita).quantize(Decimal("0.0001"))
     else:
         qtd = pedida
@@ -1569,7 +1586,8 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
 
     cur.execute(
         """SELECT fi.id AS id_item, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um,
-                  fi.observacao, p.um_estoque, p.nome, p.codigo, p.id_local_padrao
+                  fi.observacao, p.um_estoque, p.nome, p.codigo, p.id_local_padrao,
+                  p.controla_estoque
              FROM ficha_itens fi
              LEFT JOIN produtos p ON p.id = fi.id_insumo
             WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
@@ -1581,7 +1599,8 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
     for item in itens:
         if item["id_subficha"]:
             cur.execute(
-                """SELECT p.id, p.nome, p.codigo, p.um_estoque, p.id_local_padrao
+                """SELECT p.id, p.nome, p.codigo, p.um_estoque, p.id_local_padrao,
+                          p.controla_estoque
                      FROM fichas_tecnicas f JOIN produtos p ON p.id = f.id_produto
                     WHERE f.id = %s""",
                 (item["id_subficha"],),
@@ -1592,10 +1611,12 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
             id_alvo, nome, codigo = alvo["id"], alvo["nome"], alvo["codigo"]
             um_destino, local_item = alvo["um_estoque"], alvo["id_local_padrao"]
             eh_preparo = True
+            sem_estoque = not alvo["controla_estoque"]
         else:
             id_alvo, nome, codigo = item["id_insumo"], item["nome"], item["codigo"]
             um_destino, local_item = item["um_estoque"], item["id_local_padrao"]
             eh_preparo = False
+            sem_estoque = not item["controla_estoque"]
 
         por_lote = dec(item["qtd_bruta"])
         bruta = por_lote * lotes
@@ -1625,6 +1646,10 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
         # Falta é sobre o LOCAL de onde a produção vai tirar — ter no depósito
         # não ajuda quem está na bancada da cozinha.
         falta = (necessario - dec(saldo["no_local"])) if necessario is not None else None
+        # ⚠️ **O que não controla estoque nunca "falta"** (08/10/2026): a água
+        # encanada não tem saldo para conferir, e a folha dizia que faltava.
+        if sem_estoque:
+            falta = None
         if falta is not None and falta > 0:
             faltam += 1
 
@@ -1660,6 +1685,8 @@ def previsao_producao(cur, id_unidade: int, id_produto: int, quantidade,
             "saldo_no_local": float(saldo["no_local"]),
             "saldo_total": float(saldo["aqui"]),
             "falta": float(falta) if falta is not None and falta > 0 else 0.0,
+            # Entra na receita e no custo, e não sai de prateleira nenhuma.
+            "sem_estoque": sem_estoque,
             "custo_unitario": float(unitario) if unitario is not None else None,
             "custo": float(custo_linha) if custo_linha is not None else None,
             "observacao": item["observacao"],
@@ -1829,7 +1856,7 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
 
     cur.execute(
         """SELECT fi.id AS id_item, fi.id_insumo, fi.id_subficha, fi.qtd_bruta, fi.um,
-                  p.um_estoque, p.nome, p.id_local_padrao
+                  p.um_estoque, p.nome, p.id_local_padrao, p.controla_estoque
              FROM ficha_itens fi
              LEFT JOIN produtos p ON p.id = fi.id_insumo
             WHERE fi.id_ficha = %s ORDER BY fi.ordem, fi.id""",
@@ -1875,15 +1902,17 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             if not alvo:
                 continue
             id_alvo, um_origem, um_destino = alvo["id_produto"], item["um"], None
-            cur.execute("SELECT um_estoque, nome, id_local_padrao FROM produtos WHERE id = %s",
-                        (id_alvo,))
+            cur.execute("SELECT um_estoque, nome, id_local_padrao, controla_estoque "
+                        "FROM produtos WHERE id = %s", (id_alvo,))
             p = cur.fetchone()
             um_destino, nome, local_do_item = p["um_estoque"], p["nome"], p["id_local_padrao"]
+            sem_estoque = not p["controla_estoque"]
         else:
             id_alvo, um_origem, um_destino, nome = (
                 item["id_insumo"], item["um"], item["um_estoque"], item["nome"]
             )
             local_do_item = item.get("id_local_padrao")
+            sem_estoque = not item.get("controla_estoque")
 
         bruta = dec(item["qtd_bruta"]) * lotes
         # A MESMA regra da ficha e da nota de entrada: embalagem do produto
@@ -1925,6 +1954,24 @@ def produzir(cur, *, id_unidade: int, id_produto: int, quantidade, id_local: int
             linhas_consumo.append({"id_item": item["id_item"], "id_produto": id_alvo,
                                    "nome": nome, "quantidade": 0.0, "custo": 0.0,
                                    "pedida": float(pedida)})
+            continue
+        # 🔑 **O que NÃO controla estoque entra no custo e não sai de lugar
+        # nenhum** (08/10/2026, pedido do dono: a Água, que é encanada — "não tem
+        # estoque, mas precisa ter custo"). `lancar` recusa esse produto, e está
+        # certo: não há saldo para baixar. Mas a recusa derrubava a PRODUÇÃO
+        # inteira de qualquer receita que levasse água.
+        # ⚠️ O custo é o da cascata (`custo_do_insumo` — na prática, o que alguém
+        # informou no cadastro), e soma no custo do produzido: é o que faz o lote
+        # custar o que a ficha previu. Sem custo conhecido, soma zero — a ficha já
+        # avisa "sem preço" antes de alguém chegar aqui.
+        if sem_estoque:
+            unitario_livre, _origem = custos.custo_do_insumo(cur, id_alvo, id_unidade)
+            custo_livre = (convertida * unitario_livre) if unitario_livre else Decimal(0)
+            custo_consumido += custo_livre
+            linhas_consumo.append({"id_item": item["id_item"], "id_produto": id_alvo,
+                                   "nome": nome, "quantidade": float(convertida),
+                                   "custo": float(custo_livre.quantize(Decimal("0.01"))),
+                                   "pedida": float(pedida), "sem_estoque": True})
             continue
         # 🔑 **O insumo sai de ONDE SE PRODUZ, quando ele está lá.** A casa
         # trabalha assim: o açúcar entra no Estoque Central e de manhã cada

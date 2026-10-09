@@ -225,7 +225,9 @@ class ProducaoRequest(BaseModel):
     # — e `RECEITAS` são voltas inteiras da ficha — 2 receitas de 65. O padrão
     # é `PORCOES`, que é como sempre foi, e o razão continua gravando só a
     # unidade de estoque. Ver `services.estoque._quanto_produzir`.
-    medida: Literal["PORCOES", "RECEITAS"] = "PORCOES"
+    # `RENDIMENTO` (08/10/2026) é a unidade em que a receita rende — 5 KG de uma
+    # receita de 10 KG.
+    medida: Literal["PORCOES", "RECEITAS", "RENDIMENTO"] = "PORCOES"
     # 🔑 **Qual MODO de rendimento** (16/09/2026). Nulo é o Modo padrão — ou o
     # modo que a prateleira/o setor de destino herdam, que é o comportamento da
     # migração 066. Ver `services.estoque.modo_da_producao`.

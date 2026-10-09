@@ -79,7 +79,7 @@ export default function PaginaProducao() {
      * padrão de lá reinterpretaria todos eles de uma vez, calado. A tela manda
      * o campo sempre.
      */
-    medida: "RECEITAS" as "PORCOES" | "RECEITAS",
+    medida: "RECEITAS" as "PORCOES" | "RECEITAS" | "RENDIMENTO",
     /**
      * 🔑 **Qual MODO de rendimento** (16/09/2026, pedido do dono). Vazio é o
      * Modo padrão — ou o que a prateleira/o setor de destino herdam, que é o
@@ -394,7 +394,7 @@ export default function PaginaProducao() {
                         servidor, da mesma conta que a produção roda. */}
                     {vigente?.lotes !== undefined && vigente.lotes > 0 && (
                       <b className="block text-tinta">
-                        {f.medida === "RECEITAS"
+                        {f.medida !== "PORCOES"
                           ? `${qtd(vigente.lotes)} receita(s) = ${qtd(vigente.quantidade ?? 0)} ${
                               vigente.um_estoque ?? "un"
                             }`
@@ -492,20 +492,31 @@ export default function PaginaProducao() {
                 dica={
                   f.medida === "RECEITAS"
                     ? "voltas inteiras da ficha"
-                    : `na unidade do produto${
-                        vigente?.um_estoque ? ` (${vigente.um_estoque})` : ""
-                      }`
+                    : f.medida === "RENDIMENTO"
+                      ? `na unidade em que a receita rende${
+                          escolhida?.rendimento_um ? ` (${escolhida.rendimento_um})` : ""
+                        }`
+                      : `na unidade do produto${
+                          vigente?.um_estoque ? ` (${vigente.um_estoque})` : ""
+                        }`
                 }
               >
                 <select
                   className="campo"
                   value={f.medida}
                   onChange={(e) =>
-                    setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" })
+                    setF({ ...f, medida: e.target.value as "PORCOES" | "RECEITAS" | "RENDIMENTO" })
                   }
                 >
                   <option value="PORCOES">porções</option>
                   <option value="RECEITAS">receitas</option>
+                  {/* 🔑 **A terceira forma de dizer quanto** (08/10/2026, pedido do
+                      dono: *"a receita rende 10 kg, em 20 porções. Gostaria de ter
+                      a opção de produzir 5 kg"*). O rótulo leva a unidade da
+                      receita, que é o que a pessoa vai digitar. */}
+                  <option value="RENDIMENTO">
+                    no rendimento{escolhida?.rendimento_um ? ` (${escolhida.rendimento_um})` : ""}
+                  </option>
                 </select>
               </Campo>
               <Campo rotulo="Observação" className="sm:col-span-2">

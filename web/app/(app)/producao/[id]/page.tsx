@@ -64,6 +64,8 @@ type ItemPrevisto = {
   saldo_no_local: number;
   saldo_total: number;
   falta: number;
+  /** Entra na receita e no custo, e não sai de prateleira nenhuma (a água). */
+  sem_estoque?: boolean;
   custo_unitario: number | null;
   custo: number | null;
   observacao: string | null;
@@ -355,7 +357,10 @@ export default function PaginaOrdemProducao() {
                         i.falta > 0 ? "text-erro" : "text-suave"
                       }`}
                     >
-                      {qtd(i.saldo_no_local)} {i.um_estoque}
+                      {/* ⚠️ "0 L" seria mentira para a água encanada: ela não tem
+                          saldo, e não é isso que falta. */}
+                      {i.sem_estoque ? "não controla estoque"
+                        : <>{qtd(i.saldo_no_local)} {i.um_estoque}</>}
                       {i.falta > 0 && (
                         <span className="block text-[12px]">
                           faltam {qtd(i.falta)}

@@ -19,6 +19,7 @@ import {
   type Situacao,
 } from "@/lib/precificacao";
 import LinkProduto from "@/components/link-produto";
+import BotaoExportar from "@/components/exportar";
 
 /**
  * Precificação — o que rever primeiro, e aplicar.
@@ -150,9 +151,18 @@ export default function PaginaPrecificacao() {
           </>
         }
         acoes={
-          <Link href="/precificacao/configuracao" className="btn btn-secundario">
-            Configuração
-          </Link>
+          <>
+            {/* 🔑 **O que mudou de preço aqui e ainda não mudou no caixa**
+                (08/10/2026, pedido do dono): aplicar vale na hora no Botané, e o
+                PDV só recebe se o envio estiver ligado. Esta lista é o que alguém
+                leva para acertar lá — e o botão só existe para quem o catálogo
+                de exportação autoriza. */}
+            <BotaoExportar relatorio="precos-pdv" rotulo="Preços a acertar no PDV"
+                           formatoPadrao="pdf" />
+            <Link href="/precificacao/configuracao" className="btn btn-secundario">
+              Configuração
+            </Link>
+          </>
         }
       />
 
@@ -239,7 +249,18 @@ export default function PaginaPrecificacao() {
                           {i.margem_alvo_pct !== null && ` · margem alvo ${pct(i.margem_alvo_pct)}`}
                         </span>
                       </td>
-                      <td className="num whitespace-nowrap tabular-nums">{reais(i.custo_direto)}</td>
+                      <td className="num whitespace-nowrap tabular-nums">
+                        {reais(i.custo_direto)}
+                        {/* 🔑 **A sugestão que nasce de custo PREVISTO diz isso**
+                            (08/10/2026): ficha em rascunho, ou ingrediente produzido
+                            que ainda não foi feito. O preço sugerido aparece — é para
+                            isso que serve —, e a etiqueta avisa que o custo muda. */}
+                        {i.custo_direto !== null && i.origem_custo
+                          && (i.origem_custo === "ficha_provisoria"
+                              || i.origem_custo.startsWith("ficha_rascunho")) && (
+                          <span className="block"><Etiqueta cor="alerta">custo provisório</Etiqueta></span>
+                        )}
+                      </td>
                       <td className="num whitespace-nowrap tabular-nums">{reais(i.preco)}</td>
                       <td className="num">
                         <span className="tabular-nums">{pct(i.lucro_pct)}</span>

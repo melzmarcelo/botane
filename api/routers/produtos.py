@@ -23,6 +23,7 @@ from models.produtos import (
     KitRequest,
     UnidadesCompraRequest,
     ContagemProdutos,
+    CustoInformadoRequest,
     ProdutoCreate,
     ProdutoResponse,
     ProdutoResumo,
@@ -33,6 +34,7 @@ from models.produtos import (
 )
 from paginacao import pagina
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
+from services import custo_referencia
 from services import custos as motor_custos
 from services import alteracao_multipla as alteracao_multipla_motor
 from services import ean_das_notas, kits, openfoodfacts, precos, produtos_vinculo, traducao
@@ -554,6 +556,42 @@ def custo_do_produto(id_produto: int,
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         return motor_custos.historico(cur, id_produto, unidade_atual(cur, ctx))
+
+
+@router.put("/{id_produto}/custo-informado")
+def informar_custo(id_produto: int, body: CustoInformadoRequest,
+                   ctx: Contexto = Depends(requer_permissao("estoque.custo"))) -> dict:
+    """Grava o custo que alguém DIGITOU para este produto.
+
+    🔑 **O produto que tem custo e não tem estoque não tinha onde dizer quanto
+    custa** (pedido do dono, 08/10/2026: a Água, que é encanada — não entra por
+    nota, não tem fornecedor, e precisa custar na ficha). O número vai para o
+    custo de REFERÊNCIA, com a origem `MANUAL`: é o último degrau da cascata e só
+    responde quando não há médio no razão nem preço de fornecedor.
+
+    ⚠️ **Não é ajuste de custo médio.** Nada entra no razão e nenhum saldo muda —
+    quem tem estoque e quer corrigir o médio usa Ajustes. Para esse produto o
+    número fica guardado e não responde, e a resposta diz (`responde`).
+    ⚠️ `estoque.custo`, a mesma chave de quem ajusta custo: é dinheiro mudando
+    sem mercadoria se mover.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        custo_referencia.corrigir(
+            cur, [{"id_produto": id_produto, "custo": body.custo}], ctx.id_usuario,
+            id_unidade, origem=custo_referencia.ORIGEM_MANUAL)
+        _valor, origem = motor_custos.custo_do_insumo(cur, id_produto, id_unidade)
+    return {
+        "custo": body.custo,
+        # Outro degrau na frente (médio ou fornecedor): o número está guardado,
+        # mas não é ele que a ficha vai usar agora.
+        "responde": origem == "referencia",
+        "message": ("Custo informado"
+                    if origem == "referencia"
+                    else "Custo guardado — hoje quem responde é "
+                         + ("o custo médio do estoque" if origem == "custo_medio"
+                            else "o preço do fornecedor")),
+    }
 
 
 @router.get("/{id_produto}/openfoodfacts")

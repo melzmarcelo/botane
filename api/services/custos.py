@@ -361,7 +361,8 @@ def _carregar_ums(cur) -> dict:
 
 
 def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | None,
-                       visitadas: set[int], _nivel: int) -> tuple[list[dict], Decimal, int]:
+                       visitadas: set[int], _nivel: int
+                       ) -> tuple[list[dict], Decimal, int, int]:
     """O custo de cada linha da receita — o miolo, sem saber de onde ela veio.
 
     🔑 **Extraído em 15/09/2026** (pedido do dono: *"na ficha técnica, ao ir
@@ -376,7 +377,7 @@ def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | Non
     `linhas` vem do banco (`custo_da_ficha`) ou da tela (`custo_previsto`), com
     as mesmas chaves: o que muda é a origem, não o cálculo.
     """
-    itens, total, sem_custo = [], Decimal(0), 0
+    itens, total, sem_custo, provisorios = [], Decimal(0), 0, 0
 
     for l in linhas:
         qtd = dec(l["qtd_bruta"])
@@ -406,6 +407,20 @@ def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | Non
 
         if l["id_insumo"]:
             unitario, origem = custo_do_insumo(cur, l["id_insumo"], id_unidade)
+            if unitario is None:
+                # 🔑 **O produzido que ainda não foi produzido custa o que a
+                # ficha DELE prevê** (pedido do dono, 08/10/2026: *"tenho uma
+                # ficha que não foi produzida ainda … caso utilize ela em outra
+                # ficha, o custo desta nova ficha não consegue demonstrar"*).
+                # Sem médio, sem fornecedor e sem referência a linha saía "sem
+                # preço", e a receita de cima ficava parcial — e sem sugestão na
+                # precificação — até alguém produzir a de baixo.
+                # ⚠️ Só quando NINGUÉM mais sabe: produziu uma vez, o médio do
+                # razão volta a responder, que é o custo de verdade.
+                previsto = _custo_pela_ficha_do_produto(
+                    cur, l["id_insumo"], l["um_estoque"], id_unidade, visitadas, ums, _nivel)
+                if previsto is not None:
+                    unitario, origem = previsto, "ficha_provisoria"
             detalhe["origem_custo"] = origem
             # A receita pode estar em grama e o estoque em quilo — ou em caixa,
             # e aí quem sabe o tamanho da caixa é o cadastro do produto.
@@ -444,6 +459,9 @@ def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | Non
                 detalhe["custo_unitario"] = unitario
                 detalhe["custo_total"] = (convertida * unitario).quantize(CASAS_CUSTO)
                 detalhe["origem_custo"] = "subficha"
+                # O provisório de baixo sobe: a receita de cima também depende dele.
+                if sub.get("itens_provisorios"):
+                    provisorios += 1
             else:
                 detalhe["origem_custo"] = "subficha_incompleta"
 
@@ -451,8 +469,52 @@ def _custos_das_linhas(cur, linhas: list[dict], ums: dict, id_unidade: int | Non
             sem_custo += 1
         else:
             total += detalhe["custo_total"]
+            if detalhe["origem_custo"] == "ficha_provisoria":
+                provisorios += 1
         itens.append(detalhe)
-    return itens, total, sem_custo
+    return itens, total, sem_custo, provisorios
+
+
+def _custo_pela_ficha_do_produto(cur, id_produto: int, um_estoque: str | None,
+                                 id_unidade: int | None, visitadas: set[int],
+                                 ums: dict, _nivel: int) -> Decimal | None:
+    """O custo de UMA unidade de estoque do produto, pelo que a ficha dele prevê.
+
+    ⚠️ **Mora aqui, e não em `custo_do_insumo`**, pela razão que
+    `custo_provisorio_da_ficha` já registra: aquela cascata responde também por
+    quanto vale o estoque e a baixa por vínculo, e um teórico entrando lá mudaria
+    tudo de uma vez. Aqui ele só responde dentro de OUTRA receita, e sai marcado
+    (`ficha_provisoria`) para a tela dizer que o número é previsão.
+
+    ⚠️ **Por unidade de ESTOQUE, pela ponte da produção** (`unidades_por_receita`),
+    e não por porção: a linha da receita já foi convertida para a unidade de
+    estoque do insumo, e é nessa unidade que o médio vai nascer quando ele for
+    produzido. Sem ponte, não há número — melhor "sem preço" do que um chute.
+
+    ⚠️ **Ficha incompleta não responde.** Meio custo passado adiante viraria um
+    total inteiro com cara de certo na receita de cima.
+    """
+    cur.execute(
+        """SELECT id, rendimento_qtd, rendimento_um, porcoes
+             FROM fichas_tecnicas
+            WHERE id_produto = %s AND status <> 'ARQUIVADA'
+            ORDER BY (status = 'HOMOLOGADA') DESC, versao DESC
+            LIMIT 1""",
+        (id_produto,),
+    )
+    ficha = cur.fetchone()
+    if not ficha:
+        return None
+    # ⚠️ `visitadas` desce junto: o produto pode ser ingrediente da própria
+    # receita, direto ou por uma volta — e é esse conjunto que para o laço.
+    calculo = custo_da_ficha(cur, ficha["id"], visitadas, ums, _nivel + 1, id_unidade)
+    if calculo.get("ciclo") or not calculo["completo"] or calculo["custo_total"] <= 0:
+        return None
+    unidades = unidades_por_receita(ficha["rendimento_qtd"], ficha["porcoes"],
+                                    ficha["rendimento_um"], um_estoque, ums)
+    if not unidades:
+        return None
+    return (dec(calculo["custo_total"]) / unidades).quantize(CASAS_CUSTO)
 
 
 def unidades_por_receita(rendimento, porcoes, rendimento_um: str | None,
@@ -533,7 +595,7 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
         return {
             "custo_total": Decimal(0), "custo_por_porcao": Decimal(0),
             "custo_por_unidade_rendimento": Decimal(0), "itens": [],
-            "itens_sem_custo": 0, "completo": False, "ciclo": True,
+            "itens_sem_custo": 0, "itens_provisorios": 0, "completo": False, "ciclo": True,
         }
     visitadas.add(id_ficha)
     ums = _ums or _carregar_ums(cur)
@@ -564,7 +626,7 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
     )
     linhas = [dict(r) for r in cur.fetchall()]
 
-    itens, total, sem_custo = _custos_das_linhas(
+    itens, total, sem_custo, provisorios = _custos_das_linhas(
         cur, linhas, ums, id_unidade, visitadas, _nivel)
 
     porcoes = dec(ficha["porcoes"]) or Decimal(1)
@@ -576,6 +638,9 @@ def custo_da_ficha(cur, id_ficha: int, _visitadas: set[int] | None = None,
         "custo_por_unidade_rendimento": (total / rendimento).quantize(CASAS_CUSTO),
         "itens": itens,
         "itens_sem_custo": sem_custo,
+        # Quantas linhas valem pela PREVISÃO de uma ficha ainda não produzida.
+        # O total existe, mas muda quando a de baixo for feita — e a tela diz.
+        "itens_provisorios": provisorios,
         "completo": sem_custo == 0 and bool(itens),
         "ciclo": False,
     }
@@ -829,7 +894,9 @@ def historico(cur, id_produto: int, id_unidade: int | None = None,
             "fonte": "referencia",
             "quando": r["custo_referencia_em"],
             "custo": float(r["custo_referencia"]),
-            "detalhe": f"trazido de {r['custo_referencia_origem'] or 'fora'}",
+            "detalhe": ("informado à mão no cadastro"
+                        if r["custo_referencia_origem"] == "MANUAL"
+                        else f"trazido de {r['custo_referencia_origem'] or 'fora'}"),
             "documento": None, "local": None, "provisorio": False,
             "anterior": None, "custo_do_documento": None,
             "quantidade": None, "saldo_apos": None,
@@ -844,7 +911,16 @@ def historico(cur, id_produto: int, id_unidade: int | None = None,
     return {
         "atual": float(atual) if atual is not None else None,
         "origem": origem,
-        "origem_texto": _ORIGEM_EM_PORTUGUES.get(origem, origem),
+        # ⚠️ "Vindo de fora" seria mentira para o custo que alguém digitou no
+        # cadastro: a origem é a mesma (o último degrau), a frase não.
+        "origem_texto": ("custo informado à mão no cadastro"
+                         if origem == "referencia" and r
+                         and r["custo_referencia_origem"] == "MANUAL"
+                         else _ORIGEM_EM_PORTUGUES.get(origem, origem)),
+        "informado_a_mao": bool(r and r["custo_referencia_origem"] == "MANUAL"),
+        # O número digitado, mesmo quando outro degrau responde na frente dele: a
+        # tela precisa mostrar o que está guardado para quem for corrigir.
+        "custo_informado": float(r["custo_referencia"]) if r else None,
         # 🔑 **O que a FICHA prevê, quando ninguém mais sabe** (13/09/2026, pedido
         # do dono). Só quando a cascata não respondeu: com custo apurado, oferecer
         # um teórico ao lado seria dar dois números para a mesma pergunta.
@@ -915,7 +991,7 @@ def custo_previsto(cur, itens: list[dict], rendimento_qtd, rendimento_um: str | 
                               "sub_rendimento_um": sf["rendimento_um"]})
         linhas.append(linha)
 
-    itens_calculados, total, sem_custo = _custos_das_linhas(
+    itens_calculados, total, sem_custo, provisorios = _custos_das_linhas(
         cur, linhas, ums, id_unidade, set(), 0)
 
     # ⚠️ Zero vira UM nas divisões, como na ficha gravada: a receita em rascunho
@@ -929,6 +1005,7 @@ def custo_previsto(cur, itens: list[dict], rendimento_qtd, rendimento_um: str | 
         "custo_por_unidade_rendimento": (total / r_qtd).quantize(CASAS_CUSTO),
         "itens": itens_calculados,
         "itens_sem_custo": sem_custo,
+        "itens_provisorios": provisorios,
         "completo": sem_custo == 0 and bool(itens_calculados),
         "rendimento_um": (rendimento_um or "").strip().upper() or None,
     }
