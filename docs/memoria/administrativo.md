@@ -754,3 +754,45 @@ uma prateleira — e o conector só sabia LER as duas coisas.
   - ⚠️ Com `SAVEPOINT`: erro de banco na religação (impasse com alguém vinculando na tela)
     não aborta a transação da busca. ⚠️ Rodar a suíte ao mesmo tempo que a bateria PRODUZ esse
     impasse — foi como apareceu.
+
+- 🔑 **O conector, lote 2: cadastros de apoio** (09/10/2026). De 110 para 129 ferramentas, de
+  42 para 60 que gravam: categorias, setores, prateleiras, fornecedores/pessoas e unidades de
+  medida (criar, corrigir, tirar; apelido de unidade), e no produto `informar_custo_do_produto`,
+  `definir_preco_da_loja`, `kit_do_produto` (leitura) e `gravar_kit`.
+  - ⚠️ **`integrado_pdv` não é oferecido** em categoria nem setor: marcar ali cria pendência de
+    envio ao PDV, e o que vai ao caixa continua sendo decidido na tela.
+  - ⚠️ Todos os `PUT` daqui usam `exclude_unset` na rota, e o conector só manda o que o modelo
+    mandou: corrigir o telefone do fornecedor não apaga a cidade (a suíte cobra).
+  - ⚠️ "Remover" categoria/setor é a regra da rota: o que está em uso é DESATIVADO, o vazio é
+    apagado. Unidade de medida não se apaga — só `ativo: false`.
+  - 🔑 **Texto no CAMINHO da rota, com regra estreita** (`_caminho`). Só inteiro entrava no
+    caminho — string abriria `../` para outra rota —, e a unidade de medida não tem id: a
+    chave é a sigla. Agora parâmetro DECLARADO como texto entra se for só letra e número (até
+    20). Barra, ponto e espaço continuam recusados antes de virar caminho; a suíte cobra as
+    duas guardas.
+
+- 🔑 **O conector, lotes 3 e 4** (09/10/2026). De 129 para 190 ferramentas, de 60 para 104
+  que gravam. Lote 3: vendas (lançar, cancelar, baixar as sem baixa), precificação (config,
+  análise, simular, aplicar), CMV (grupos, fechar, reabrir) e períodos de consumo. Lote 4:
+  reservas (criar, remarcar, status, bloquear dias, horário de um dia, calendário, clientes),
+  salão e mesas, pedidos do cardápio, fidelidade (selos, prêmios) e catálogos do site
+  (catálogo, seções, subseções, produtos).
+  - **Fora de propósito**, e `smoke_conector_claude` cobra a ausência pelos nomes: usuários,
+    papéis, senhas, chaves, credenciais, homologar ficha, envio ao PDV. Também ficaram fora
+    as CONFIGURAÇÕES de módulo (reserva, fidelidade, pedidos), QR codes, a planta do salão e o
+    upload de arquivo/foto do catálogo (rota multipart, que o conector não fala).
+  - ⚠️ **`padrao` no esquema NÃO vai no corpo** — é só um aviso ao modelo. `criar_catalogo`
+    anunciava "padrão PRODUTOS" e a rota, sem o campo, criava PDF (que não aceita seção nem
+    produto). Onde o padrão da ROTA é outro, o campo tem de ser OBRIGATÓRIO.
+  - ⚠️ **O esquema da API não distingue data de data-e-hora pelo TIPO** (os dois são
+    "string"); quem distingue é o `format`. `bloquear_reservas` descrevia `de`/`ate` como
+    data e hora e a rota quer DIAS. Conferi todas as ferramentas contra o `format` das rotas
+    depois disso — essa conferência não ficou na suíte.
+  - ⚠️ O hífen passou a ser aceito em texto de CAMINHO, por causa da data
+    (`/reservas/dias/2030-01-01`). Barra e ponto continuam recusados.
+  - ⚠️ A conferência do catálogo contra a API agora cobre também os filtros de CONSULTA.
+  - ⚠️ O auxiliar `chamar_ferramenta` da suíte devolve sempre algo com `.get`: uma recusa em
+    texto derrubava a suíte no meio e deixava a conexão "Claude (suíte)" viva na base.
+  - ⚠️ A suíte NÃO cria salão nem período de consumo: cada rodada deixaria mais um na base
+    local (salão não se apaga com reserva), que é o acúmulo que já quebrou a bateria do
+    navegador. Essas ferramentas são cobertas só pela conferência contra a API.

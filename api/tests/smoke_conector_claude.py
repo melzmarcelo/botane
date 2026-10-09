@@ -405,9 +405,15 @@ def chamar_ferramenta(_ferramenta, /, **argumentos):
     _st, _, resp = rpc(escrita, "tools/call", {"name": _ferramenta, "arguments": argumentos})
     texto = resp["result"]["content"][0]["text"]
     try:
-        return resp["result"]["isError"], json.loads(texto)
+        dados = json.loads(texto)
     except json.JSONDecodeError:
-        return resp["result"]["isError"], texto
+        dados = texto
+    # ⚠️ Sempre algo com `.get`: a recusa chega como TEXTO, e um `.get` em cima dela
+    # derrubava a suíte no meio — deixando a conexão "Claude (suíte)" viva na base e
+    # a rodada seguinte falhando por causa disso.
+    if not isinstance(dados, (dict, list)):
+        dados = {"recusa": str(dados)}
+    return resp["result"]["isError"], dados
 
 
 # 🔑 **O catálogo NÃO pode prometer o que a rota não aceita.** Cada ferramenta é
@@ -440,6 +446,13 @@ for _f in _cat.FERRAMENTAS:
         _tortas.append(f"{_f.nome}: a rota não lê {sorted(_meus - _campos)}")
     if set(_s.get("required") or []) - _meus:
         _tortas.append(f"{_f.nome}: a rota exige {sorted(set(_s['required']) - _meus)}")
+    # E o que vai na CONSULTA (nem corpo, nem caminho) tem de ser um parâmetro que a
+    # rota declara: filtro que ela não lê é filtro que não filtra, calado.
+    _na_rota = {x["name"] for x in _op.get("parameters", []) if x["in"] == "query"}
+    _consulta = {k for k, p in _f.params.items()
+                 if not p.no_corpo and "{%s}" % k not in _f.caminho}
+    if _consulta - _na_rota:
+        _tortas.append(f"{_f.nome}: a rota não tem o filtro {sorted(_consulta - _na_rota)}")
 checar("toda ferramenta bate com a rota que ela chama", not _tortas, _tortas)
 
 # O caminho inteiro de um acerto. ⚠️ Num produto PRÓPRIO: o `id_novo` lá de cima é
@@ -486,6 +499,183 @@ erro, r = chamar_ferramenta("etiquetas", situacao="vencidas", limite=5)
 checar("etiquetas lista por situação", not erro, r)
 erro, r = chamar_ferramenta("painel_de_etiquetas")
 checar("painel_de_etiquetas responde os contadores", not erro and "vencidas" in r, r)
+
+# 🔑 **O lote 2: cadastros de apoio** (09/10/2026). As tabelas que o produto usa, e três
+# campos do próprio produto que tinham rota e não tinham ferramenta.
+checar("a chave que altera enxerga o lote de cadastros de apoio",
+       {"criar_categoria", "atualizar_categoria", "remover_categoria", "criar_setor",
+        "atualizar_setor", "remover_setor", "criar_local", "atualizar_local",
+        "desativar_local", "criar_fornecedor", "atualizar_fornecedor",
+        "desativar_fornecedor", "criar_unidade_de_medida", "atualizar_unidade_de_medida",
+        "apelidar_unidade_de_medida", "informar_custo_do_produto", "definir_preco_da_loja",
+        "gravar_kit"} <= nomes_gravam, sorted(nomes_gravam))
+# ⚠️ `integrado_pdv` não é oferecido: marcar ali cria pendência de envio ao PDV, e o
+# que vai ao caixa continua sendo decidido na tela.
+_cat_tool = next((t for t in gravam if t["name"] == "criar_categoria"), {})
+checar("criar_categoria não oferece marcar para o PDV",
+       "integrado_pdv" not in _cat_tool.get("inputSchema", {}).get("properties", {}),
+       _cat_tool.get("inputSchema"))
+
+# Cada cadastro: nasce, é corrigido e sai — pelo conector, e sem deixar rastro ativo.
+erro, cat = chamar_ferramenta("criar_categoria", nome=f"Cat do Claude {marca_p}", tipo="INSUMO")
+checar("criar_categoria cria", not erro and cat.get("id"), cat)
+erro, r = chamar_ferramenta("atualizar_categoria", id_categoria=cat.get("id"),
+                            nome=f"Cat certa do Claude {marca_p}")
+checar("atualizar_categoria corrige só o nome", not erro, r)
+erro, r = chamar_ferramenta("remover_categoria", id_categoria=cat.get("id"))
+checar("remover_categoria tira a categoria vazia", not erro, r)
+
+erro, setor = chamar_ferramenta("criar_setor", nome=f"Setor do Claude {marca_p}")
+checar("criar_setor cria", not erro and setor.get("id"), setor)
+erro, local = chamar_ferramenta("criar_local", nome=f"Local do Claude {marca_p}",
+                                tipo="RESFRIADO", id_setor=setor.get("id"))
+checar("criar_local cria a prateleira já no setor", not erro and local.get("id"), local)
+erro, r = chamar_ferramenta("atualizar_local", id_local=local.get("id"), tipo="CONGELADO")
+checar("atualizar_local corrige a conservação", not erro, r)
+erro, r = chamar_ferramenta("desativar_local", id_local=local.get("id"))
+checar("desativar_local desativa", not erro, r)
+erro, r = chamar_ferramenta("atualizar_setor", id_setor=setor.get("id"), ativo=False)
+checar("atualizar_setor desativa o setor", not erro, r)
+
+erro, forn = chamar_ferramenta("criar_fornecedor", nome=f"Fornecedor do Claude {marca_p}",
+                               cidade="Blumenau", uf="SC", prazo_entrega_dias=2)
+checar("criar_fornecedor cadastra", not erro and forn.get("id"), forn)
+erro, r = chamar_ferramenta("atualizar_fornecedor", id_fornecedor=forn.get("id"),
+                            telefone="47 99999-0000")
+checar("atualizar_fornecedor corrige um campo", not erro, r)
+erro, lido = chamar_ferramenta("detalhe_pessoa", id_fornecedor=forn.get("id"))
+lido = lido if isinstance(lido, dict) else {}
+# ⚠️ A prova de que só o campo mandado mudou: a cidade e o prazo continuam lá.
+checar("sem apagar o resto do cadastro",
+       not erro and str(lido.get("cidade") or "").upper() == "BLUMENAU"
+       and lido.get("prazo_entrega_dias") == 2,
+       {k: lido.get(k) for k in ("cidade", "prazo_entrega_dias", "telefone")})
+erro, r = chamar_ferramenta("desativar_fornecedor", id_fornecedor=forn.get("id"))
+checar("desativar_fornecedor desativa", not erro, r)
+
+_sigla = f"Z{marca_p[-4:]}"
+erro, r = chamar_ferramenta("criar_unidade_de_medida", sigla=_sigla, nome="Do Claude",
+                            grandeza="MASSA", fator_base=1)
+checar("criar_unidade_de_medida cria", not erro, r)
+erro, r = chamar_ferramenta("atualizar_unidade_de_medida", sigla=_sigla, ativo=False)
+checar("atualizar_unidade_de_medida desativa", not erro, r)
+# ⚠️ A sigla vai no CAMINHO da rota, e por isso só aceita letra e número: barra ou
+# ponto ali abririam `../` para outra rota. É a guarda que já valia para os ids.
+erro, r = chamar_ferramenta("atualizar_unidade_de_medida", sigla="../usuarios", ativo=False)
+checar("sigla com barra é recusada antes de virar caminho",
+       erro and "letras e números" in str(r), r)
+erro, r = chamar_ferramenta("detalhe_produto", id_produto="../usuarios")
+checar("e id que não é número continua recusado", erro and "inteiro" in str(r), r)
+
+erro, r = chamar_ferramenta("informar_custo_do_produto", id_produto=id_novo, custo=3.5)
+checar("informar_custo_do_produto grava o custo digitado", not erro, r)
+# ⚠️ Este produto TEM custo médio (a entrada lá em cima): o digitado fica guardado e a
+# resposta avisa que não é ele quem responde.
+checar("e avisa quando outro custo responde na frente", r.get("responde") is False, r)
+erro, r = chamar_ferramenta("informar_custo_do_produto", id_produto=id_novo, custo=0)
+checar("custo zero é recusado pela rota", erro, r)
+erro, r = chamar_ferramenta("definir_preco_da_loja", id_produto=id_novo, preco_venda=12.9)
+checar("definir_preco_da_loja grava o preço", not erro, r)
+
+
+# 🔑 **Os lotes 3 e 4: vendas, preços e CMV; portal de clientes** (09/10/2026).
+checar("a chave que altera enxerga o lote de vendas, preços e CMV",
+       {"lancar_vendas", "cancelar_venda", "baixar_vendas_sem_baixa", "simular_preco",
+        "aplicar_precos", "criar_grupo_de_cmv", "atualizar_grupo_de_cmv",
+        "remover_grupo_de_cmv", "fechar_cmv", "reabrir_cmv", "abrir_periodo_de_consumo",
+        "fechar_periodo_de_consumo", "reabrir_periodo_de_consumo",
+        "remover_periodo_de_consumo"} <= nomes_gravam, sorted(nomes_gravam))
+checar("e o do portal de clientes",
+       {"criar_reserva", "alterar_reserva", "mudar_status_da_reserva", "bloquear_reservas",
+        "desbloquear_reservas", "definir_dia_de_reserva", "criar_salao", "atualizar_salao",
+        "criar_mesa", "criar_mesas_em_lote", "atualizar_mesa", "remover_mesa",
+        "confirmar_pedido", "recusar_pedido", "cancelar_pedido", "pedido_lancado_no_pdv",
+        "pedido_pago", "entregar_pedido", "dar_selos", "entregar_premio", "prorrogar_premio",
+        "criar_catalogo", "atualizar_catalogo", "remover_catalogo",
+        "criar_secao_do_catalogo", "atualizar_secao_do_catalogo",
+        "remover_secao_do_catalogo", "criar_subsecao_do_catalogo",
+        "por_produto_no_catalogo", "tirar_produto_do_catalogo"} <= nomes_gravam,
+       sorted(nomes_gravam))
+# ⚠️ O que fica FORA, e a ausência é decisão: quem abre acesso, guarda credencial ou
+# fala com sistema de fora não se opera por conversa.
+_todas = {t["name"] for t in r_lista["result"]["tools"]} if (r_lista := rpc(
+    escrita, "tools/list")[2]) else set()
+_proibido = [n for n in _todas if any(p in n for p in (
+    "usuario", "papel", "senha", "token", "credencial", "homologar", "enviar_ao_pdv"))]
+checar("o conector não oferece usuários, papéis, senhas, credenciais nem homologação",
+       not _proibido, _proibido)
+
+# Leituras novas: respondem, e não como erro.
+for _nome, _args in (("configuracao_de_precificacao", {}),
+                     ("analise_de_precos", {"dias": 30, "limite": 5}),
+                     ("previa_vendas_sem_baixa", {}),
+                     ("calendario_de_reservas", {"mes": time.strftime("%Y-%m")}),
+                     ("clientes_das_reservas", {"limite": 3}),
+                     ("onde_um_grupo_sentaria", {"pessoas": 2}),
+                     ("painel_de_pedidos", {}), ("pedidos", {"limite": 3}),
+                     ("painel_de_fidelidade", {}),
+                     ("participantes_da_fidelidade", {"limite": 3}),
+                     ("premios_da_fidelidade", {"limite": 3}),
+                     ("catalogos", {}), ("produtos_para_o_catalogo", {"busca": "cafe"})):
+    erro, r = chamar_ferramenta(_nome, **_args)
+    checar(f"{_nome} responde", not erro, r if erro else "")
+
+# A venda pelo conector: lança, baixa o estoque, e o cancelamento devolve.
+_doc = f"CLAUDE-{marca_p}"
+erro, r = chamar_ferramenta("lancar_vendas", vendas=[{
+    "data": time.strftime("%Y-%m-%d"), "documento": _doc, "origem": "MANUAL",
+    "itens": [{"id_produto": id_novo, "quantidade": 2, "valor_unitario": 9}]}])
+checar("lancar_vendas lança a venda", not erro and r.get("importadas") == 1, r)
+erro, r = chamar_ferramenta("saldos_estoque", id_produto=id_novo)
+checar("e a venda baixa o estoque: de 7 para 5",
+       not erro and sum(float(x["quantidade"]) for x in r.get("itens", r)) == 5, r)
+erro, r = chamar_ferramenta("vendas", busca=_doc)
+_venda = next((v for v in (r.get("itens", r) if isinstance(r, dict) else r)
+               if v.get("documento") == _doc), {})
+erro, r = chamar_ferramenta("cancelar_venda", id_venda=_venda.get("id"))
+checar("cancelar_venda cancela e devolve o estoque", not erro and r.get("estornados") == 1, r)
+erro, r = chamar_ferramenta("simular_preco", id_produto=id_novo, preco=10)
+checar("simular_preco faz a conta sem gravar", not erro, r)
+
+# O catálogo: nasce em rascunho, ganha seção e produto, e sai sem deixar rastro.
+erro, cat_site = chamar_ferramenta("criar_catalogo", nome=f"Cardapio do Claude {marca_p}",
+                                   origem="PRODUTOS")
+checar("criar_catalogo cria em rascunho",
+       not erro and cat_site.get("id") and cat_site.get("situacao", "RASCUNHO") == "RASCUNHO",
+       cat_site)
+erro, secao = chamar_ferramenta("criar_secao_do_catalogo", id_catalogo=cat_site.get("id"),
+                                nome="Bebidas")
+checar("criar_secao_do_catalogo cria a seção", not erro and secao.get("id"), secao)
+erro, r = chamar_ferramenta("conteudo_do_catalogo", id_catalogo=cat_site.get("id"))
+checar("conteudo_do_catalogo mostra a seção", not erro and "Bebidas" in str(r), r)
+erro, r = chamar_ferramenta("remover_secao_do_catalogo", id_categoria=secao.get("id"))
+checar("remover_secao_do_catalogo tira a seção", not erro, r)
+erro, r = chamar_ferramenta("remover_catalogo", id_catalogo=cat_site.get("id"))
+checar("remover_catalogo apaga o rascunho", not erro, r)
+
+# 🔑 A DATA vai no caminho da rota (`/reservas/dias/2030-01-01`): o hífen passa, a
+# barra e o ponto continuam recusados antes de virar caminho.
+erro, r = chamar_ferramenta("definir_dia_de_reserva", data="2030-01-01", modo="PADRAO")
+checar("definir_dia_de_reserva aceita a data no caminho", not erro, r)
+erro, r = chamar_ferramenta("definir_dia_de_reserva", data="2030-01-01/../x", modo="PADRAO")
+checar("e data com barra é recusada antes de virar caminho",
+       erro and "letras e números" in str(r), r)
+erro, bloqueio = chamar_ferramenta("bloquear_reservas", de="2030-01-02", ate="2030-01-03",
+                                   motivo="teste do conector")
+checar("bloquear_reservas cria o bloqueio", not erro and bloqueio.get("id"), bloqueio)
+erro, r = chamar_ferramenta("desbloquear_reservas", id_bloqueio=bloqueio.get("id"))
+checar("desbloquear_reservas tira o bloqueio", not erro, r)
+# ⚠️ As recusas da rota chegam como erro com a frase dela, e não como gravação.
+erro, r = chamar_ferramenta("mudar_status_da_reserva", id_reserva=99999999,
+                            status="CANCELADA")
+checar("mudar o status de reserva que não existe vira isError", erro, r)
+erro, r = chamar_ferramenta("confirmar_pedido", id_pedido=99999999)
+checar("confirmar pedido que não existe vira isError", erro, r)
+erro, r = chamar_ferramenta("entregar_premio", codigo="NAO-EXISTE")
+checar("entregar prêmio com código que não existe vira isError", erro, r)
+erro, r = chamar_ferramenta("reabrir_cmv", id_fechamento=99999999)
+checar("reabrir fechamento que não existe vira isError", erro, r)
+
 chamar_ferramenta("desativar_produto", id_produto=id_novo)
 id_novo = id_guardado
 # 🔑 **Todos os campos que a tela edita** (pedido do dono, 23/09/2026). Até ali a

@@ -732,6 +732,759 @@ FERRAMENTAS: list[Ferramenta] = [
                                    obrigatorio=True, no_corpo=True),
          "observacao": Param("string", "Por que está sendo movido.", no_corpo=True)},
         metodo="POST"),
+    # ------------------------------------------- lote 3: vendas, preços e CMV
+    # 🔑 Terceiro lote do pedido de 09/10/2026.
+    Ferramenta(
+        "lancar_vendas", "Lançar vendas",
+        "Lança uma ou mais vendas (cupons): cada item baixa o estoque e congela o custo do "
+        "dia; produto feito NA HORA é produzido junto. ⚠️ Venda que vem do PDV entra "
+        "sozinha pela integração — lançar aqui a mesma venda duplica a baixa. O "
+        "`documento` é o que impede a repetição: a mesma loja e origem não aceitam o "
+        "mesmo documento duas vezes. Confirme os itens com a pessoa antes.",
+        "/vendas/importar",
+        {"vendas": Param(
+            "array", "As vendas a lançar.", obrigatorio=True, no_corpo=True,
+            itens={"type": "object",
+                   "properties": {
+                       "data": {"type": "string", "description": "Dia AAAA-MM-DD."},
+                       "hora": {"type": "string", "description": "HH:MM:SS, se souber."},
+                       "documento": {"type": "string",
+                                     "description": "Número do cupom ou da comanda."},
+                       "canal": {"type": "string",
+                                 "description": "SALAO, BALCAO, DELIVERY ou EVENTO."},
+                       "origem": {"type": "string", "description": "Use MANUAL."},
+                       "desconto": {"type": "number", "description": "Desconto do cupom."},
+                       "id_pessoa": {"type": "integer",
+                                     "description": "Quem consumiu (de `buscar_pessoas`), "
+                                                    "quando é consumo de pessoa da casa."},
+                       "consumo_interno": {"type": "boolean",
+                                           "description": "Consumo da casa, não venda."},
+                       "itens": {"type": "array", "items": {
+                           "type": "object",
+                           "properties": {
+                               "id_produto": {"type": "integer"},
+                               "quantidade": {"type": "number"},
+                               "valor_unitario": {"type": "number",
+                                                  "description": "Preço cobrado."}},
+                           "required": ["id_produto", "quantidade"]}}},
+                   "required": ["data", "itens"]})},
+        metodo="POST"),
+    Ferramenta(
+        "cancelar_venda", "Cancelar uma venda",
+        "Cancela a venda: a baixa de estoque volta como estorno e, se ela produziu na hora, "
+        "a produção é desfeita junto. A venda continua no histórico, marcada como "
+        "cancelada. ⚠️ Não se desfaz.",
+        "/vendas/{id_venda}",
+        {"id_venda": Param("integer", "Id da venda (de `vendas`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "previa_vendas_sem_baixa", "Vendas que não saíram do estoque",
+        "As vendas de produto que controla estoque e que nunca foram baixadas (o item "
+        "entrou antes de o código estar vinculado), com o saldo que ficaria depois.",
+        "/vendas/sem-baixa/previa"),
+    Ferramenta(
+        "baixar_vendas_sem_baixa", "Baixar do estoque as vendas atrasadas",
+        "Lança a saída que ficou para trás, na data de cada venda. ⚠️ Mostre antes a "
+        "`previa_vendas_sem_baixa`. Com `id_produto`, só as daquele produto.",
+        "/vendas/sem-baixa/baixar",
+        {"id_produto": Param("integer", "Só este produto.")},
+        metodo="POST"),
+
+    Ferramenta(
+        "configuracao_de_precificacao", "Configuração da precificação",
+        "Os impostos, taxas, custos por unidade e a margem que formam o preço sugerido "
+        "nesta loja.",
+        "/precificacao/config"),
+    Ferramenta(
+        "analise_de_precos", "Análise de preços",
+        "Os produtos vendidos no período comparados com o menor preço que entrega a "
+        "margem: custo, preço atual, sugerido, diferença e impacto no mês. O sugerido é o "
+        "PISO — produto acima dele tem folga, e ninguém manda baixar.",
+        "/precificacao/analise",
+        {"dias": Param("integer", "Janela de vendas, em dias.", padrao=30, minimo=1,
+                       maximo=365),
+         "id_produto": Param("integer", "Só este produto (mesmo que venda pouco)."),
+         "limite": _lim(200, 500)}),
+    Ferramenta(
+        "simular_preco", "Simular um preço",
+        "A conta de UM produto num preço à escolha: para onde vai cada real (imposto, "
+        "taxa, custo, margem). Não grava nada.",
+        "/precificacao/simular",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True, no_corpo=True),
+         "preco": Param("number", "Preço a testar, em reais.", obrigatorio=True,
+                        no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "aplicar_precos", "Aplicar preços de venda",
+        "Grava o preço de venda de um ou mais produtos. Vale NA HORA aqui; o PDV só recebe "
+        "se o envio estiver ligado — a resposta diz. ⚠️ Mostre antes a lista com o preço "
+        "atual e o novo (`analise_de_precos`) e espere o sim.",
+        "/precificacao/aplicar",
+        {"itens": Param(
+            "array", "Um item por produto.", obrigatorio=True, no_corpo=True,
+            itens={"type": "object",
+                   "properties": {"id_produto": {"type": "integer"},
+                                  "preco": {"type": "number",
+                                            "description": "Preço novo, em reais."}},
+                   "required": ["id_produto", "preco"]})},
+        metodo="POST"),
+
+    Ferramenta(
+        "criar_grupo_de_cmv", "Criar grupo de CMV",
+        "Cria um grupo da apuração do CMV (quais tipos de produto ele soma).",
+        "/cmv/grupos",
+        {"nome": Param("string", "Nome do grupo.", obrigatorio=True, no_corpo=True),
+         "tipos": Param("array", "Tipos de produto do grupo.", no_corpo=True,
+                        itens={"type": "string"}),
+         "considerar_no_cmv": Param("boolean", "Entra na conta do CMV.", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_grupo_de_cmv", "Corrigir um grupo de CMV",
+        "Regrava um grupo de CMV. ⚠️ Mande o grupo INTEIRO (nome e tipos): veja antes em "
+        "`grupos_de_cmv`. Muda a apuração dos períodos ainda abertos.",
+        "/cmv/grupos/{id_grupo}",
+        {"id_grupo": Param("integer", "Id (de `grupos_de_cmv`).", obrigatorio=True),
+         "nome": Param("string", "Nome do grupo.", obrigatorio=True, no_corpo=True),
+         "tipos": Param("array", "Tipos de produto do grupo.", no_corpo=True,
+                        itens={"type": "string"}),
+         "considerar_no_cmv": Param("boolean", "Entra na conta do CMV.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_grupo_de_cmv", "Remover um grupo de CMV",
+        "Tira um grupo da apuração do CMV.",
+        "/cmv/grupos/{id_grupo}",
+        {"id_grupo": Param("integer", "Id (de `grupos_de_cmv`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "fechar_cmv", "Fechar um período do CMV",
+        "Fecha a apuração de um período: congela os números e TRAVA o período para "
+        "lançamento retroativo. ⚠️ Mostre antes a apuração (`cmv_apuracao`) e as "
+        "pendências, e espere o sim — reabrir é outra decisão.",
+        "/cmv/fechamentos",
+        {"competencia": Param("string", "O período a fechar: a data de início dele, "
+                                        "AAAA-MM-DD (de `cmv_periodos`).",
+                              obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "reabrir_cmv", "Reabrir um período fechado do CMV",
+        "Reabre um fechamento: o período volta a aceitar lançamento e os números deixam de "
+        "estar congelados. ⚠️ O que já foi mandado para a contabilidade deixa de valer.",
+        "/cmv/fechamentos/{id_fechamento}/reabrir",
+        {"id_fechamento": Param("integer", "Id (de `fechamentos_de_cmv`).",
+                                obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "abrir_periodo_de_consumo", "Abrir um período de consumo",
+        "Abre um ciclo de consumo das pessoas da casa (o que cada um consumiu e vai pagar).",
+        "/consumo/periodos",
+        {"inicio": Param("string", "Primeiro dia, AAAA-MM-DD.", obrigatorio=True,
+                         no_corpo=True),
+         "fim": Param("string", "Último dia, AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
+         "nome": Param("string", "Nome do ciclo.", no_corpo=True),
+         "observacao": Param("string", "Recado.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "fechar_periodo_de_consumo", "Fechar um período de consumo",
+        "Fecha o ciclo de consumo: os valores de cada pessoa ficam congelados para a "
+        "cobrança. ⚠️ Mostre antes o `consumo_periodo`.",
+        "/consumo/periodos/{id_periodo}/fechar",
+        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True),
+         "observacao": Param("string", "Recado do fechamento.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "reabrir_periodo_de_consumo", "Reabrir um período de consumo",
+        "Reabre um ciclo de consumo fechado.",
+        "/consumo/periodos/{id_periodo}/reabrir",
+        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True)},
+        metodo="POST"),
+    Ferramenta(
+        "remover_periodo_de_consumo", "Remover um período de consumo",
+        "Apaga um ciclo de consumo aberto por engano.",
+        "/consumo/periodos/{id_periodo}",
+        {"id_periodo": Param("integer", "Id (de `consumo_periodos`).", obrigatorio=True)},
+        metodo="DELETE"),
+
+    # ------------------------------------------- lote 4: portal de clientes
+    # 🔑 Quarto lote. O que se OPERA no dia: reservas, pedidos do cardápio, selos e o
+    # conteúdo do catálogo. ⚠️ Fora, de propósito: as CONFIGURAÇÕES (reserva,
+    # fidelidade, pedidos), QR codes, arquivo e foto do catálogo, e a planta do salão.
+    Ferramenta(
+        "calendario_de_reservas", "Calendário de reservas",
+        "O mês dia a dia: se a casa abre, o horário e quantas reservas há.",
+        "/reservas/calendario",
+        {"mes": Param("string", "O mês, AAAA-MM.", obrigatorio=True)}),
+    Ferramenta(
+        "clientes_das_reservas", "Clientes do site",
+        "Quem se cadastrou pelo site ou já reservou, com telefone e histórico.",
+        "/reservas/clientes",
+        {"busca": Param("string", "Nome ou telefone."),
+         "limite": _lim(50, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "onde_um_grupo_sentaria", "Onde um grupo sentaria",
+        "Simula a alocação: para tantas pessoas, em que mesa ou conjunto a casa sentaria.",
+        "/reservas/salao/simular",
+        {"pessoas": Param("integer", "Tamanho do grupo.", obrigatorio=True, minimo=1),
+         "dia_semana": Param("integer", "Dia da semana (0 = segunda … 6 = domingo)."),
+         "site": Param("boolean", "Como se fosse uma reserva do site.")}),
+    Ferramenta(
+        "criar_reserva", "Criar uma reserva",
+        "Marca uma reserva de mesa. ⚠️ Confira antes o horário em "
+        "`disponibilidade_de_reserva` e confirme nome, dia, hora e pessoas com quem pediu.",
+        "/reservas",
+        {"data": Param("string", "Dia AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
+         "hora": Param("string", "Hora HH:MM.", obrigatorio=True, no_corpo=True),
+         "pessoas": Param("integer", "Quantas pessoas.", obrigatorio=True, no_corpo=True,
+                          minimo=1),
+         "nome": Param("string", "Em nome de quem.", obrigatorio=True, no_corpo=True),
+         "telefone": Param("string", "Telefone de contato.", no_corpo=True),
+         "objetivo": Param("string", "Ocasião (aniversário, reunião).", no_corpo=True),
+         "observacao_cliente": Param("string", "Pedido do cliente.", no_corpo=True),
+         "observacao_interna": Param("string", "Recado para a equipe.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "alterar_reserva", "Remarcar uma reserva",
+        "Muda o dia, a hora ou o número de pessoas de uma reserva. Só o que for mandado "
+        "muda.",
+        "/reservas/{id_reserva}",
+        {"id_reserva": Param("integer", "Id (de `agenda_de_reservas`).", obrigatorio=True),
+         "data": Param("string", "Novo dia AAAA-MM-DD.", no_corpo=True),
+         "hora": Param("string", "Nova hora HH:MM.", no_corpo=True),
+         "pessoas": Param("integer", "Novo número de pessoas.", no_corpo=True, minimo=1)},
+        metodo="PUT"),
+    Ferramenta(
+        "mudar_status_da_reserva", "Confirmar, encerrar ou cancelar uma reserva",
+        "Muda a situação da reserva: confirmar, marcar que o cliente chegou, encerrar, "
+        "cancelar ou registrar que não compareceu.",
+        "/reservas/{id_reserva}/status",
+        {"id_reserva": Param("integer", "Id (de `agenda_de_reservas`).", obrigatorio=True),
+         "status": Param("string", "A nova situação.", obrigatorio=True, no_corpo=True,
+                         enum=["CONFIRMADA", "CHEGOU", "ENCERRADA", "CANCELADA",
+                               "NAO_COMPARECEU"])},
+        metodo="PUT"),
+    Ferramenta(
+        "bloquear_reservas", "Bloquear dias para reservas",
+        "Fecha um ou mais DIAS inteiros para novas reservas (evento, férias, manutenção). "
+        "Para fechar só um horário, use `definir_dia_de_reserva` no modo ESPECIAL.",
+        "/reservas/bloqueios",
+        {"de": Param("string", "Primeiro dia, AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
+         "ate": Param("string", "Último dia, AAAA-MM-DD.", obrigatorio=True, no_corpo=True),
+         "motivo": Param("string", "Por quê.", obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "desbloquear_reservas", "Tirar um bloqueio de reservas",
+        "Remove um bloqueio: os dias voltam a aceitar reservas.",
+        "/reservas/bloqueios/{id_bloqueio}",
+        {"id_bloqueio": Param("integer", "Id (de `bloqueios_de_reserva`).",
+                              obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "definir_dia_de_reserva", "Definir o horário de um dia",
+        "Diz como a casa atende reservas num dia específico: PADRAO (o horário de sempre), "
+        "ESPECIAL (outro horário) ou FECHADO (feriado, folga).",
+        "/reservas/dias/{data}",
+        {"data": Param("string", "O dia, AAAA-MM-DD.", obrigatorio=True),
+         "modo": Param("string", "Como atende.", obrigatorio=True, no_corpo=True,
+                       enum=["PADRAO", "ESPECIAL", "FECHADO"]),
+         "abre": Param("string", "Abre às HH:MM (modo ESPECIAL).", no_corpo=True),
+         "fecha": Param("string", "Fecha às HH:MM (modo ESPECIAL).", no_corpo=True),
+         "ultima_reserva": Param("string", "Última reserva às HH:MM.", no_corpo=True),
+         "motivo": Param("string", "Por quê.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "criar_salao", "Criar um salão",
+        "Cria um salão (ambiente) para as mesas.",
+        "/reservas/saloes",
+        {"nome": Param("string", "Nome do salão.", obrigatorio=True, no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_salao", "Corrigir um salão",
+        "Corrige um salão: nome, se atende, em que dias da semana e se aceita reserva pelo "
+        "site. Só o que for mandado muda.",
+        "/reservas/saloes/{id_salao}",
+        {"id_salao": Param("integer", "Id (de `saloes_e_mesas`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "ativo": Param("boolean", "Atende.", no_corpo=True),
+         "dias_semana": Param("array", "Dias em que atende (0 = segunda … 6 = domingo).",
+                              no_corpo=True, itens={"type": "integer"}),
+         "aceita_site": Param("boolean", "Aceita reserva pelo site.", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "criar_mesa", "Criar uma mesa",
+        "Cria uma mesa num salão.",
+        "/reservas/mesas",
+        {"id_salao": Param("integer", "Salão (de `saloes_e_mesas`).", obrigatorio=True,
+                           no_corpo=True),
+         "nome": Param("string", "Nome ou número da mesa.", obrigatorio=True, no_corpo=True),
+         "lugares": Param("integer", "Lugares confortáveis.", no_corpo=True, minimo=1),
+         "capacidade_max": Param("integer", "Máximo, com cadeira extra.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "criar_mesas_em_lote", "Criar várias mesas iguais",
+        "Cria várias mesas iguais num salão, numeradas em sequência.",
+        "/reservas/mesas/em-lote",
+        {"id_salao": Param("integer", "Salão.", obrigatorio=True, no_corpo=True),
+         "quantidade": Param("integer", "Quantas mesas.", obrigatorio=True, no_corpo=True,
+                             minimo=1),
+         "lugares": Param("integer", "Lugares confortáveis de cada uma.", no_corpo=True),
+         "capacidade_max": Param("integer", "Máximo de cada uma.", no_corpo=True),
+         "prefixo": Param("string", "Prefixo do nome (M → M01, M02…).", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_mesa", "Corrigir uma mesa",
+        "Corrige uma mesa: nome, lugares, salão ou se está em uso. Só o que for mandado "
+        "muda.",
+        "/reservas/mesas/{id_mesa}",
+        {"id_mesa": Param("integer", "Id (de `saloes_e_mesas`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "lugares": Param("integer", "Lugares confortáveis.", no_corpo=True),
+         "capacidade_max": Param("integer", "Máximo, com cadeira extra.", no_corpo=True),
+         "id_salao": Param("integer", "Mudar de salão.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_mesa", "Remover uma mesa",
+        "Tira uma mesa do salão.",
+        "/reservas/mesas/{id_mesa}",
+        {"id_mesa": Param("integer", "Id (de `saloes_e_mesas`).", obrigatorio=True)},
+        metodo="DELETE"),
+
+    Ferramenta(
+        "painel_de_pedidos", "Painel dos pedidos do cardápio",
+        "Quantos pedidos estão esperando resposta, confirmados e para hoje.",
+        "/pedidos/painel"),
+    Ferramenta(
+        "pedidos", "Pedidos do cardápio",
+        "Os pedidos feitos pelo cardápio do site.",
+        "/pedidos",
+        {"situacao": Param("string", "Situação do pedido."),
+         "dia": Param("string", "Dia de entrega/retirada, AAAA-MM-DD."),
+         "busca": Param("string", "Nome ou telefone do cliente."),
+         "limite": _lim(50, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "pedido", "Um pedido",
+        "Um pedido inteiro: itens, cliente, entrega e pagamento.",
+        "/pedidos/{id_pedido}",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True)}),
+    Ferramenta(
+        "confirmar_pedido", "Confirmar um pedido",
+        "Aceita o pedido do cliente. Ele é avisado.",
+        "/pedidos/{id_pedido}/confirmar",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True),
+         "observacao": Param("string", "Recado para o cliente.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "recusar_pedido", "Recusar um pedido",
+        "Recusa o pedido, com o motivo que o cliente vai ler.",
+        "/pedidos/{id_pedido}/recusar",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True),
+         "motivo": Param("string", "Por quê.", obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "cancelar_pedido", "Cancelar um pedido",
+        "Cancela um pedido já confirmado, com o motivo.",
+        "/pedidos/{id_pedido}/cancelar",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True),
+         "motivo": Param("string", "Por quê.", obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "pedido_lancado_no_pdv", "Marcar o pedido como lançado no PDV",
+        "Registra que o pedido foi digitado no caixa, com o número do cupom.",
+        "/pedidos/{id_pedido}/lancado-pdv",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True),
+         "cupom": Param("string", "Número do cupom do PDV.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "pedido_pago", "Marcar o pedido como pago",
+        "Registra o pagamento do pedido.",
+        "/pedidos/{id_pedido}/pago",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True),
+         "como": Param("string", "Forma de pagamento.", obrigatorio=True, no_corpo=True,
+                       enum=["DINHEIRO", "CARTAO", "PIX", "OUTRO"])},
+        metodo="POST"),
+    Ferramenta(
+        "entregar_pedido", "Marcar o pedido como entregue",
+        "Registra que o pedido foi entregue ou retirado.",
+        "/pedidos/{id_pedido}/entregar",
+        {"id_pedido": Param("integer", "Id do pedido.", obrigatorio=True)},
+        metodo="POST"),
+
+    Ferramenta(
+        "painel_de_fidelidade", "Painel da fidelidade",
+        "Quantos participantes, selos dados e prêmios ganhos e entregues.",
+        "/fidelidade/painel/resumo"),
+    Ferramenta(
+        "participantes_da_fidelidade", "Participantes da fidelidade",
+        "Quem tem cartão de fidelidade, com os selos de cada um.",
+        "/fidelidade/participantes",
+        {"busca": Param("string", "Nome ou telefone."),
+         "limite": _lim(50, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "participante_da_fidelidade", "Um participante da fidelidade",
+        "O cartão de uma pessoa: selos, visitas e prêmios.",
+        "/fidelidade/participantes/{id_cliente}",
+        {"id_cliente": Param("integer", "Id do cliente.", obrigatorio=True)}),
+    Ferramenta(
+        "premios_da_fidelidade", "Prêmios da fidelidade",
+        "Os prêmios ganhos: a entregar, entregues e vencidos.",
+        "/fidelidade/premios",
+        {"status": Param("string", "Situação do prêmio."),
+         "busca": Param("string", "Nome, telefone ou código."),
+         "limite": _lim(50, 200), "offset": _OFFSET}),
+    Ferramenta(
+        "dar_selos", "Dar ou tirar selos de um participante",
+        "Acerta os selos do cartão de alguém à mão (positivo dá, negativo tira), com o "
+        "motivo — fica registrado quem fez.",
+        "/fidelidade/participantes/{id_cliente}/selos",
+        {"id_cliente": Param("integer", "Id do cliente.", obrigatorio=True),
+         "selos": Param("integer", "Quantos selos (negativo tira).", obrigatorio=True,
+                        no_corpo=True),
+         "motivo": Param("string", "Por quê.", obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "entregar_premio", "Entregar um prêmio da fidelidade",
+        "Dá baixa no prêmio pelo código que o cliente mostra.",
+        "/fidelidade/premios/entregar",
+        {"codigo": Param("string", "O código do prêmio.", obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "prorrogar_premio", "Mudar o vencimento de um prêmio",
+        "Altera a data até quando o prêmio pode ser retirado.",
+        "/fidelidade/premios/{id_premio}/vencimento",
+        {"id_premio": Param("integer", "Id (de `premios_da_fidelidade`).", obrigatorio=True),
+         "vence_em": Param("string", "Nova data, AAAA-MM-DD.", obrigatorio=True,
+                           no_corpo=True)},
+        metodo="PUT"),
+
+    Ferramenta(
+        "catalogos", "Catálogos do site",
+        "Os cardápios e catálogos que o site do cliente apresenta.",
+        "/catalogos",
+        {"situacao": Param("string", "RASCUNHO, ATIVO ou INATIVO.")}),
+    Ferramenta(
+        "catalogo", "Um catálogo",
+        "O cadastro de um catálogo: nome, período de publicação e lojas.",
+        "/catalogos/{id_catalogo}",
+        {"id_catalogo": Param("integer", "Id (de `catalogos`).", obrigatorio=True)}),
+    Ferramenta(
+        "conteudo_do_catalogo", "O que um catálogo mostra",
+        "As seções (categorias e subcategorias) de um catálogo e os produtos de cada uma.",
+        "/catalogos/{id_catalogo}/conteudo",
+        {"id_catalogo": Param("integer", "Id (de `catalogos`).", obrigatorio=True)}),
+    Ferramenta(
+        "produtos_para_o_catalogo", "Produtos que podem ir ao catálogo",
+        "Os produtos que podem ser postos num catálogo.",
+        "/catalogos/produtos-disponiveis",
+        {"busca": Param("string", "Nome do produto.")}),
+    Ferramenta(
+        "criar_catalogo", "Criar um catálogo",
+        "Cria um catálogo, em RASCUNHO. Ele só aparece no site quando a situação vira "
+        "ATIVO (`atualizar_catalogo`).",
+        "/catalogos",
+        {"nome": Param("string", "Nome do catálogo.", obrigatorio=True, no_corpo=True),
+         # ⚠️ OBRIGATÓRIO, e não "padrão PRODUTOS": o padrão do esquema é só um aviso
+         # ao modelo, não vai no corpo — e a rota, sem o campo, cria o catálogo como
+         # PDF, que não aceita seção nem produto. Pelo conector o arquivo nem sobe.
+         "origem": Param("string", "PRODUTOS = montado aqui, com seções e produtos (é o "
+                                   "que o conector consegue montar). PDF = um arquivo, "
+                                   "que só se envia pela tela.", obrigatorio=True,
+                         no_corpo=True, enum=["PRODUTOS", "PDF"]),
+         "publica_de": Param("string", "Entra no ar em AAAA-MM-DD.", no_corpo=True),
+         "publica_ate": Param("string", "Sai do ar em AAAA-MM-DD.", no_corpo=True),
+         "observacao": Param("string", "Recado interno.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_catalogo", "Corrigir ou publicar um catálogo",
+        "Corrige um catálogo: nome, período e situação. ⚠️ `situacao: ATIVO` põe o "
+        "catálogo NO SITE, à vista do cliente — confirme antes.",
+        "/catalogos/{id_catalogo}",
+        {"id_catalogo": Param("integer", "Id (de `catalogos`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "situacao": Param("string", "Situação.", no_corpo=True,
+                           enum=["RASCUNHO", "ATIVO", "INATIVO"]),
+         "publica_de": Param("string", "Entra no ar em AAAA-MM-DD.", no_corpo=True),
+         "publica_ate": Param("string", "Sai do ar em AAAA-MM-DD.", no_corpo=True),
+         "observacao": Param("string", "Recado interno.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_catalogo", "Remover um catálogo",
+        "Apaga um catálogo. Só rascunho sai; o que já foi ao ar se inativa.",
+        "/catalogos/{id_catalogo}",
+        {"id_catalogo": Param("integer", "Id (de `catalogos`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_secao_do_catalogo", "Criar uma seção do catálogo",
+        "Cria uma seção (categoria) dentro de um catálogo: Entradas, Bebidas.",
+        "/catalogos/{id_catalogo}/categorias",
+        {"id_catalogo": Param("integer", "Id do catálogo.", obrigatorio=True),
+         "nome": Param("string", "Nome da seção.", obrigatorio=True, no_corpo=True),
+         "descricao": Param("string", "Texto que aparece abaixo do nome.", no_corpo=True),
+         "ordem": Param("integer", "Posição.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_secao_do_catalogo", "Corrigir uma seção do catálogo",
+        "Regrava o nome, o texto e a posição de uma seção.",
+        "/catalogos/categorias/{id_categoria}",
+        {"id_categoria": Param("integer", "Id da seção (de `conteudo_do_catalogo`).",
+                               obrigatorio=True),
+         "nome": Param("string", "Nome da seção.", obrigatorio=True, no_corpo=True),
+         "descricao": Param("string", "Texto abaixo do nome.", no_corpo=True),
+         "ordem": Param("integer", "Posição.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_secao_do_catalogo", "Remover uma seção do catálogo",
+        "Tira uma seção do catálogo, com os itens dela.",
+        "/catalogos/categorias/{id_categoria}",
+        {"id_categoria": Param("integer", "Id da seção.", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_subsecao_do_catalogo", "Criar uma subseção do catálogo",
+        "Cria uma subseção dentro de uma seção do catálogo.",
+        "/catalogos/categorias/{id_categoria}/subcategorias",
+        {"id_categoria": Param("integer", "Id da seção.", obrigatorio=True),
+         "nome": Param("string", "Nome da subseção.", obrigatorio=True, no_corpo=True),
+         "descricao": Param("string", "Texto abaixo do nome.", no_corpo=True),
+         "ordem": Param("integer", "Posição.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "por_produto_no_catalogo", "Pôr um produto no catálogo",
+        "Põe um produto numa seção do catálogo (de `produtos_para_o_catalogo`).",
+        "/catalogos/categorias/{id_categoria}/itens",
+        {"id_categoria": Param("integer", "Id da seção.", obrigatorio=True),
+         "id_produto": Param("integer", "Produto.", obrigatorio=True, no_corpo=True),
+         "id_subcategoria": Param("integer", "Subseção, se houver.", no_corpo=True),
+         "ordem": Param("integer", "Posição.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "tirar_produto_do_catalogo", "Tirar um produto do catálogo",
+        "Tira um item do catálogo. O produto continua no cadastro.",
+        "/catalogos/itens/{id_item}",
+        {"id_item": Param("integer", "Id do item (de `conteudo_do_catalogo`).",
+                          obrigatorio=True)},
+        metodo="DELETE"),
+
+    # ------------------------------------------- lote 2: cadastros de apoio
+    # 🔑 Segundo lote do pedido de 09/10/2026. As tabelas que o produto usa — categoria,
+    # setor, prateleira, fornecedor, unidade — e três campos do próprio produto que
+    # tinham rota e não tinham ferramenta.
+    # ⚠️ `integrado_pdv` fica FORA de categorias e setores: marcar ali cria pendência
+    # de envio ao PDV, e o que vai ao caixa continua sendo decidido na tela.
+    Ferramenta(
+        "criar_categoria", "Criar categoria",
+        "Cria uma categoria de produtos. ⚠️ Confira antes em `categorias` se ela já "
+        "existe com outro nome.",
+        "/categorias",
+        {"nome": Param("string", "Nome da categoria.", obrigatorio=True, no_corpo=True),
+         "tipo": Param("string", "De que tipo de produto ela é.", padrao="INSUMO",
+                       no_corpo=True, enum=["INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM", "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "id_pai": Param("integer", "Categoria-mãe, para criar uma subcategoria.",
+                         no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_categoria", "Corrigir uma categoria",
+        "Corrige uma categoria: só o que for mandado muda. `ativo: false` desativa.",
+        "/categorias/{id_categoria}",
+        {"id_categoria": Param("integer", "Id (de `categorias`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "tipo": Param("string", "Tipo de produto.", no_corpo=True, enum=["INSUMO", "REVENDA", "PRODUZIDO", "EMBALAGEM", "MATERIAL_LIMPEZA", "UTENSILIO"]),
+         "id_pai": Param("integer", "Categoria-mãe.", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_categoria", "Remover uma categoria",
+        "Tira a categoria: a que tem produto é só DESATIVADA, a vazia é apagada. Recusa "
+        "quando há subcategorias.",
+        "/categorias/{id_categoria}",
+        {"id_categoria": Param("integer", "Id (de `categorias`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_setor", "Criar setor",
+        "Cria um setor da casa (Cozinha, Bar, Confeitaria).",
+        "/setores",
+        {"nome": Param("string", "Nome do setor.", obrigatorio=True, no_corpo=True),
+         "cor": Param("string", "Cor em hexadecimal (#2f6b4f).", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_setor", "Corrigir um setor",
+        "Corrige um setor: só o que for mandado muda. `ativo: false` desativa.",
+        "/setores/{id_setor}",
+        {"id_setor": Param("integer", "Id (de `setores`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "cor": Param("string", "Cor em hexadecimal.", no_corpo=True),
+         "ordem": Param("integer", "Posição na lista.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "remover_setor", "Remover um setor",
+        "Tira o setor: o que está em uso é só DESATIVADO, o vazio é apagado.",
+        "/setores/{id_setor}",
+        {"id_setor": Param("integer", "Id (de `setores`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_local", "Criar prateleira de estoque",
+        "Cria um local de estoque (prateleira, câmara, canto de um setor) na loja.",
+        "/locais",
+        {"nome": Param("string", "Nome do local.", obrigatorio=True, no_corpo=True),
+         "tipo": Param("string", "Como conserva.", padrao="SECO", no_corpo=True,
+                       enum=["SECO", "RESFRIADO", "CONGELADO", "BAR"]),
+         "id_setor": Param("integer", "Setor a que pertence (de `setores`); sem ele, é "
+                                      "estoque geral.", no_corpo=True),
+         "principal": Param("boolean", "É o local padrão da loja.", no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_local", "Corrigir uma prateleira",
+        "Corrige um local de estoque: só o que for mandado muda. `ativo: false` desativa.",
+        "/locais/{id_local}",
+        {"id_local": Param("integer", "Id (de `locais`).", obrigatorio=True),
+         "nome": Param("string", "Nome.", no_corpo=True),
+         "tipo": Param("string", "Como conserva.", no_corpo=True,
+                       enum=["SECO", "RESFRIADO", "CONGELADO", "BAR"]),
+         "id_setor": Param("integer", "Setor a que pertence.", no_corpo=True),
+         "principal": Param("boolean", "É o local padrão da loja.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "desativar_local", "Desativar uma prateleira",
+        "Desativa um local de estoque. O saldo e o histórico dele continuam existindo.",
+        "/locais/{id_local}",
+        {"id_local": Param("integer", "Id (de `locais`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_fornecedor", "Cadastrar fornecedor ou pessoa",
+        "Cadastra um fornecedor (ou uma pessoa da casa, com `fornecedor: false`). "
+        "⚠️ Procure antes em `buscar_pessoas`, pelo nome e pelo CNPJ.",
+        "/fornecedores",
+        {"nome": Param("string", "Razão social ou nome.", obrigatorio=True, no_corpo=True),
+         "nome_fantasia": Param("string", "Nome fantasia.", no_corpo=True),
+         "cnpj": Param("string", "CNPJ ou CPF.", no_corpo=True),
+         "email": Param("string", "E-mail.", no_corpo=True),
+         "telefone": Param("string", "Telefone.", no_corpo=True),
+         "whatsapp": Param("string", "WhatsApp.", no_corpo=True),
+         "contato": Param("string", "Com quem falar.", no_corpo=True),
+         "cidade": Param("string", "Cidade.", no_corpo=True),
+         "uf": Param("string", "UF, duas letras.", no_corpo=True),
+         "prazo_entrega_dias": Param("integer", "Dias entre pedir e receber.", no_corpo=True),
+         "dias_entrega": Param("string", "Dias em que entrega (seg,qui).", no_corpo=True),
+         "pedido_minimo": Param("number", "Pedido mínimo, em reais.", no_corpo=True),
+         "observacao": Param("string", "Recado interno.", no_corpo=True),
+         "fornecedor": Param("boolean", "É fornecedor (true) ou só pessoa da casa.",
+                             padrao=True, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_fornecedor", "Corrigir fornecedor ou pessoa",
+        "Corrige o cadastro: só o que for mandado muda. `ativo: false` desativa.",
+        "/fornecedores/{id_fornecedor}",
+        {"id_fornecedor": Param("integer", "Id (de `buscar_pessoas`).", obrigatorio=True),
+         "nome": Param("string", "Razão social ou nome.", no_corpo=True),
+         "nome_fantasia": Param("string", "Nome fantasia.", no_corpo=True),
+         "cnpj": Param("string", "CNPJ ou CPF.", no_corpo=True),
+         "email": Param("string", "E-mail.", no_corpo=True),
+         "telefone": Param("string", "Telefone.", no_corpo=True),
+         "whatsapp": Param("string", "WhatsApp.", no_corpo=True),
+         "contato": Param("string", "Com quem falar.", no_corpo=True),
+         "cidade": Param("string", "Cidade.", no_corpo=True),
+         "uf": Param("string", "UF, duas letras.", no_corpo=True),
+         "prazo_entrega_dias": Param("integer", "Dias entre pedir e receber.", no_corpo=True),
+         "dias_entrega": Param("string", "Dias em que entrega (seg,qui).", no_corpo=True),
+         "pedido_minimo": Param("number", "Pedido mínimo, em reais.", no_corpo=True),
+         "observacao": Param("string", "Recado interno.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "desativar_fornecedor", "Desativar fornecedor ou pessoa",
+        "Desativa o cadastro. As notas e o histórico dele continuam existindo.",
+        "/fornecedores/{id_fornecedor}",
+        {"id_fornecedor": Param("integer", "Id (de `buscar_pessoas`).", obrigatorio=True)},
+        metodo="DELETE"),
+    Ferramenta(
+        "criar_unidade_de_medida", "Criar unidade de medida",
+        "Cria uma unidade (sigla e nome). ⚠️ `fator_base` é quanto ela vale na unidade-base "
+        "da grandeza: G vale 0,001 (a base da massa é KG), ML vale 0,001 (a base do volume "
+        "é L). Para embalagem (caixa, fardo) use grandeza UNIDADE com fator 1 — quantas "
+        "cabem na caixa é do PRODUTO (`gravar_unidades_de_compra`), não da unidade.",
+        "/unidades-medida",
+        {"sigla": Param("string", "Sigla, até 6 letras.", obrigatorio=True, no_corpo=True),
+         "nome": Param("string", "Nome por extenso.", obrigatorio=True, no_corpo=True),
+         "grandeza": Param("string", "O que ela mede.", padrao="UNIDADE", no_corpo=True,
+                           enum=["MASSA", "VOLUME", "UNIDADE"]),
+         "fator_base": Param("number", "Quanto vale na unidade-base da grandeza.",
+                             padrao=1, no_corpo=True)},
+        metodo="POST"),
+    Ferramenta(
+        "atualizar_unidade_de_medida", "Corrigir uma unidade de medida",
+        "Corrige uma unidade: só o que for mandado muda. ⚠️ Mudar `fator_base` ou "
+        "`grandeza` muda a CONVERSÃO de toda ficha e nota que usa a sigla — confirme com a "
+        "pessoa antes.",
+        "/unidades-medida/{sigla}",
+        {"sigla": Param("string", "A sigla (de `unidades_medida`).", obrigatorio=True),
+         "nome": Param("string", "Nome por extenso.", no_corpo=True),
+         "grandeza": Param("string", "O que ela mede.", no_corpo=True,
+                           enum=["MASSA", "VOLUME", "UNIDADE"]),
+         "fator_base": Param("number", "Quanto vale na unidade-base.", no_corpo=True),
+         "ativo": Param("boolean", "Em uso.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "apelidar_unidade_de_medida", "Dar apelido a uma unidade",
+        "Ensina que uma sigla que vem de fora é uma unidade da casa: \"UND\" e \"UNID\" "
+        "são UN, \"BJ\" é BANDEJA. É o que faz a nota do fornecedor casar sozinha.",
+        "/unidades-medida/apelidos",
+        {"apelido": Param("string", "A sigla como vem na nota.", obrigatorio=True,
+                          no_corpo=True),
+         "sigla": Param("string", "A unidade da casa a que ela corresponde.",
+                        obrigatorio=True, no_corpo=True)},
+        metodo="POST"),
+
+    Ferramenta(
+        "informar_custo_do_produto", "Informar o custo de um produto",
+        "Grava o custo de UMA unidade de estoque digitado por quem conhece o produto. "
+        "Serve para o que tem custo e não entra por nota (água encanada, gás). ⚠️ É o "
+        "ÚLTIMO degrau: só vale quando não há custo médio no estoque nem preço de "
+        "fornecedor — a resposta diz (`responde`). Para corrigir custo médio é "
+        "`ajustar_custo`.",
+        "/produtos/{id_produto}/custo-informado",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "custo": Param("number", "Custo de uma unidade de estoque, em reais. Maior que "
+                                  "zero.", obrigatorio=True, no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "definir_preco_da_loja", "Definir o preço de venda nesta loja",
+        "Grava o preço de venda do produto NESTA loja, que sobrepõe o da casa. Sem valor "
+        "(nulo), a loja volta a usar o preço da casa. ⚠️ Vale na hora aqui; o PDV só "
+        "recebe se o envio estiver ligado. Para o preço da casa é `atualizar_produto`.",
+        "/produtos/{id_produto}/preco-loja",
+        {"id_produto": Param("integer", "Id do produto.", obrigatorio=True),
+         "preco_venda": Param("number", "Preço nesta loja, em reais.", no_corpo=True)},
+        metodo="PUT"),
+    Ferramenta(
+        "kit_do_produto", "Composição de um combo",
+        "Os componentes de um produto do tipo KIT e quanto ele custa hoje.",
+        "/produtos/{id_produto}/kit",
+        {"id_produto": Param("integer", "Id do produto (tipo KIT).", obrigatorio=True)}),
+    Ferramenta(
+        "gravar_kit", "Gravar a composição de um combo",
+        "Define os componentes de um produto do tipo KIT. ⚠️ SUBSTITUI a composição "
+        "inteira: mande todos os que ficam (veja antes em `kit_do_produto`).",
+        "/produtos/{id_produto}/kit",
+        {"id_produto": Param("integer", "Id do produto (tipo KIT).", obrigatorio=True),
+         "itens": Param(
+             "array", "Os componentes do combo.", obrigatorio=True, no_corpo=True,
+             itens={"type": "object",
+                    "properties": {
+                        "id_componente": {"type": "integer",
+                                          "description": "Produto que entra no combo."},
+                        "quantidade": {"type": "number",
+                                       "description": "Quantos, na unidade de estoque dele."},
+                        "observacao": {"type": "string"}},
+                    "required": ["id_componente"]})},
+        metodo="PUT"),
+
     # ------------------------------------------- lote 1: estoque e produção
     # 🔑 **"Disponibilizar as maiores opções possíveis para o conector, pois o cliente
     # está utilizando muito por lá"** (pedido do dono, 09/10/2026). Cada ferramenta é
@@ -1327,7 +2080,8 @@ POR_NOME = {f.nome: f for f in FERRAMENTAS}
 INSTRUCOES = (
     "Sistema de gestão de {casa}: produtos, fichas técnicas, estoque, compras "
     "(notas do Omie), vendas e CMV. Com as permissões do usuário conectado: consulta "
-    "sempre; grava (cadastro, fichas, notas, estoque, produção, inventário, etiquetas) só "
+    "sempre; grava (cadastros, fichas, notas, estoque, produção, inventário, etiquetas, "
+    "vendas, preços, CMV, reservas, pedidos, fidelidade e catálogos) só "
     "com chave que permite alterar — e toda gravação deve ser confirmada com a pessoa antes. "
     "O que mexe no estoque não se apaga: desfazer é estornar. Onde houver ferramenta de "
     "prévia, mostre a prévia antes de gravar. Dinheiro em reais; quantidades na unidade de estoque do produto; datas "
@@ -1351,10 +2105,22 @@ def _caminho(f: Ferramenta, args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         raise ErroFerramenta(f"Argumento desconhecido: {', '.join(sorted(desconhecidos))}.")
 
     def trocar(m: re.Match) -> str:
-        valor = resto.pop(m.group(1))
+        nome = m.group(1)
+        valor = resto.pop(nome)
+        # 🔑 **A SIGLA também é chave de caminho** (09/10/2026): a unidade de medida
+        # não tem id, e `atualizar_unidade_de_medida` era recusada aqui antes de
+        # chegar à rota. ⚠️ Só para parâmetro DECLARADO como texto, e só letra e
+        # número: é a mesma guarda de baixo, por outro caminho — barra, ponto ou
+        # espaço abririam `../` para outra rota.
+        if f.params[nome].tipo == "string":
+            # ⚠️ O hífen entra por causa da DATA (`/reservas/dias/2026-10-09`). Ele
+            # não monta `../`: o que abre outra rota é barra e ponto, e esses ficam fora.
+            if not isinstance(valor, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,20}", valor):
+                raise ErroFerramenta(f"`{nome}` precisa ser só letras e números.")
+            return valor
         # ⚠️ Só inteiro entra no caminho: string ali abriria `../` para outra rota.
         if not isinstance(valor, int) or isinstance(valor, bool):
-            raise ErroFerramenta(f"`{m.group(1)}` precisa ser um número inteiro.")
+            raise ErroFerramenta(f"`{nome}` precisa ser um número inteiro.")
         return str(valor)
 
     caminho = re.sub(r"\{(\w+)\}", trocar, f.caminho)
