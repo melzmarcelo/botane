@@ -781,6 +781,23 @@
   medem a identidade da movimentação acusavam — a armadilha que a memória de estoque já registra
   sobre saldo negativo.
 
+- 🔑 **O agendador COMITA os cadastros antes de gravar a venda** (11/10/2026,
+  `services/pdv/agenda.py`). `rota_vendas.importar` abre a conexão dela, e o prato que a
+  passada acabou de criar (ainda não comitado na conexão do agendador) não existia para a
+  gravação: a primeira venda dele derrubava o lote inteiro com
+  `venda_itens_id_produto_fkey`. Reproduzido na base local com sete pratos novos do PDV.
+  ⚠️ O botão "Buscar no PDV" nunca teve isto: ele fecha o bloco dos cadastros antes de
+  importar. **Os dois caminhos chamam a mesma gravação, mas não com a mesma transação.**
+  ⚠️ O relógio (`regra.marcar`) é gravado ANTES desse commit, porque o commit solta o
+  advisory lock e uma segunda instância buscaria junto.
+  ⚠️ Erro genérico agora faz `rollback` antes de registrar o erro: com a transação abortada
+  o `UPDATE` do erro falhava, o relógio não andava e a passada se repetia a cada minuto.
+  ⚠️ **Não há suíte que rode `rodar_uma`** — a prova foi um roteiro avulso (prato e venda
+  cancelada de teste, `PROVA-AG-*`). Falta virar checagem em `smoke_pdv_legal`.
+  ⚠️ **Não ficou provado que era ESTA a causa da parada no ar** (a agendada das 20h não rodou
+  de 09/10 a 11/10/2026): os pratos novos daqueles dias já tinham sido criados à mão antes
+  das 20h de 09/10. O `agenda_ultimo_erro` de produção não foi lido.
+
 ## Armadilhas já pagas
 
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de

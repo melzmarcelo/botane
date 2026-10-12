@@ -150,6 +150,21 @@ def rodar_uma(cur, linha: dict) -> dict:
                                    dias=linha["agenda_janela_dias"], desde=None)
         vendas = r.pop("vendas")
         gravado = {"importadas": 0, "repetidas": 0}
+
+        # 🔑 **Os cadastros são COMITADOS antes de a venda entrar** (11/10/2026).
+        # `rota_vendas.importar` abre a conexão DELA, e conexão nenhuma enxerga
+        # o que outra ainda não comitou: o prato que esta passada acabou de
+        # criar não existia para a gravação, e a primeira venda dele derrubava
+        # o lote inteiro com `venda_itens_id_produto_fkey`. Prato novo vendido
+        # no mesmo dia é o caso COMUM, não o raro — e o botão "Buscar no PDV"
+        # nunca teve isto porque fecha o bloco dos cadastros antes de importar.
+        # ⚠️ **O relógio é marcado ANTES do commit**: o commit solta o advisory
+        # lock, e sem o relógio já avançado uma segunda instância (dois
+        # contêineres dividem o ar durante o deploy) leria a linha como vencida
+        # e buscaria junto. O `marcar` do fim regrava, com o erro se houver.
+        regra.marcar(cur, linha["id"], None)
+        cur.connection.commit()
+
         if vendas:
             gravado = rota_vendas.importar(
                 ImportarVendasRequest(vendas=[VendaImportar(**v) for v in vendas]), ctx
@@ -171,6 +186,10 @@ def rodar_uma(cur, linha: dict) -> dict:
         erro = e.mensagem
     except Exception as e:  # noqa: BLE001 — o agendador não pode morrer por uma loja
         erro = f"{type(e).__name__}: {e}"
+        # ⚠️ Erro de BANCO nesta conexão deixa a transação abortada, e aí nem
+        # o registro do erro logo abaixo gravaria: a exceção subiria, o relógio
+        # não andaria e a passada se repetiria de minuto em minuto, muda.
+        cur.connection.rollback()
 
     if erro:
         cur.execute(
