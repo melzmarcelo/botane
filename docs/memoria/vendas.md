@@ -794,9 +794,22 @@
   o `UPDATE` do erro falhava, o relógio não andava e a passada se repetia a cada minuto.
   ⚠️ **Não há suíte que rode `rodar_uma`** — a prova foi um roteiro avulso (prato e venda
   cancelada de teste, `PROVA-AG-*`). Falta virar checagem em `smoke_pdv_legal`.
-  ⚠️ **Não ficou provado que era ESTA a causa da parada no ar** (a agendada das 20h não rodou
-  de 09/10 a 11/10/2026): os pratos novos daqueles dias já tinham sido criados à mão antes
-  das 20h de 09/10. O `agenda_ultimo_erro` de produção não foi lido.
+  ⚠️ **NÃO era esta a causa da parada no ar** de 09/10 a 11/10/2026 — foi achada procurando
+  por ela. A causa é o item abaixo.
+
+- 🔑 **`venda_itens.origem_custo` tinha 20 caracteres, e dois rótulos não cabiam** (migração
+  111, 11/10/2026). `ficha_rascunho_parcial` (22) e `ficha_rascunho_sem_custo` (24) existem
+  desde 02/09/2026, quando a ficha em rascunho passou a custear a venda. Só aparecem quando
+  se VENDE um prato cuja ficha em rascunho está incompleta ou sem custo — e aí o lote
+  inteiro cai com `StringDataRightTruncation`, porque a transação é uma só.
+  ⚠️ **Parou a agendada E a manual**: as vendas do ar ficaram paradas em 10/10 09:53 (uma
+  manual passou naquela manhã, antes de o prato ser vendido de novo). Reproduzido na base
+  local com o mesmo erro, antes e depois da migração.
+  ⚠️ **Um item ruim derruba TODAS as vendas do período**, e o erro não diz qual item nem
+  qual coluna. Rótulo novo de origem de custo se confere contra o tamanho da coluna (40).
+  ⚠️ **A mensagem de erro da agenda só existe na tela de Integrações** — o conector não a
+  expõe, e ela foi o que fechou o diagnóstico. A bateria passava 85/85 com o defeito de pé:
+  nenhuma suíte vende prato de ficha em rascunho sem custo.
 
 ## Armadilhas já pagas
 
