@@ -31,6 +31,7 @@ import { moedaParaNumero, numeroParaMoeda, qtd } from "@/lib/numeros";
 import BuscaCadastro from "@/components/busca-cadastro";
 import { fonteFornecedores, ItemBusca } from "@/lib/busca-cadastro";
 import CodigosDoProduto, { CodigoExterno } from "./codigos";
+import CardapioVivoDoProduto from "./cardapio-vivo";
 import ComposicaoKit from "./kit";
 import CustoDoProduto from "./custo";
 import LocaisDoProduto from "./locais";
@@ -1912,6 +1913,8 @@ export default function FormularioProduto() {
               </div>
             )}
           </Cartao>
+          {/* 🔑 Cardápio Vivo (113): vídeo, restrições e adicionais — rotas próprias. */}
+          {!novo && <CardapioVivoDoProduto idProduto={Number(id)} podeEditar={podeEditar} />}
         </div>
       )}
 

@@ -130,6 +130,11 @@ export type ItemDoCatalogo = {
   informacao_adicional: string | null;
   um_estoque: string | null;
   ordem: number;
+  /** Cardápio Vivo (113): marcas DESTE cardápio, e o que vem do produto. */
+  destaque: boolean;
+  esgotado: boolean;
+  tem_video: boolean;
+  restricoes: string[];
 };
 
 export type Secao = {
@@ -139,6 +144,11 @@ export type Secao = {
   foto_url: string | null;
   foto_nome: string | null;
   ordem: number;
+  /** Cardápio Vivo (113): quando a seção aparece. Tudo nulo = sempre. */
+  dias: number[] | null;
+  hora_de: string | null;
+  hora_ate: string | null;
+  horario_especial: boolean;
 };
 
 export type Subcategoria = Secao & { id_categoria: number; itens: ItemDoCatalogo[] };

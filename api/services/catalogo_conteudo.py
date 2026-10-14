@@ -88,7 +88,8 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
     _catalogo_de_produtos(cur, id_unidade, id_catalogo)
 
     cur.execute(
-        """SELECT id, nome, descricao, foto_url, foto_nome, ordem
+        """SELECT id, nome, descricao, foto_url, foto_nome, ordem,
+                  dias, hora_de, hora_ate, horario_especial
              FROM catalogo_categorias
             WHERE id_catalogo = %s
             ORDER BY ordem, lower(nome)""",
@@ -100,7 +101,8 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     ids = [c["id"] for c in categorias]
     cur.execute(
-        """SELECT id, id_categoria, nome, descricao, foto_url, foto_nome, ordem
+        """SELECT id, id_categoria, nome, descricao, foto_url, foto_nome, ordem,
+                  dias, hora_de, hora_ate, horario_especial
              FROM catalogo_subcategorias
             WHERE id_categoria = ANY(%s)
             ORDER BY ordem, lower(nome)""",
@@ -110,7 +112,9 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     cur.execute(
         """SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
+                  i.destaque, i.esgotado,
                   p.nome AS produto, p.codigo, p.ativo, p.foto_url,
+                  p.video_url IS NOT NULL AS tem_video, p.restricoes,
                   -- 🔑 O nome que o CLIENTE vai ler, para a tela de
                   -- configuração mostrar o que sai na vitrine — e não só o que
                   -- está no cadastro.
@@ -474,3 +478,48 @@ def desvincular(cur, id_unidade: int, id_item: int) -> dict:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     cur.execute("DELETE FROM catalogo_itens WHERE id = %s", (id_item,))
     return {"message": f'"{achado["nome"]}" saiu do cardápio.'}
+
+
+# ---------------------------------------------------------------------------
+# Cardápio Vivo (113): marcas do item e quando a seção aparece
+# ---------------------------------------------------------------------------
+
+def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
+    """Destaque e esgotado — decisões DESTE cardápio, por isso no item e não no produto.
+
+    ⚠️ Esgotado revoga a decisão 6 de 28/09 ("não haverá pausa"), por pedido do dono
+    em 14/10/2026: o item fica no cardápio, marcado, e não pode ser adicionado.
+    """
+    cur.execute(
+        """SELECT i.id, i.destaque, i.esgotado, p.nome FROM catalogo_itens i
+             JOIN produtos p ON p.id = i.id_produto
+             JOIN catalogo_categorias c ON c.id = i.id_categoria
+             JOIN catalogos k ON k.id = c.id_catalogo
+            WHERE i.id = %s AND k.id_unidade = %s""",
+        (id_item, id_unidade))
+    atual = cur.fetchone()
+    if not atual:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    destaque = atual["destaque"] if dados.get("destaque") is None else dados["destaque"]
+    esgotado = atual["esgotado"] if dados.get("esgotado") is None else dados["esgotado"]
+    cur.execute("UPDATE catalogo_itens SET destaque = %s, esgotado = %s WHERE id = %s",
+                (destaque, esgotado, id_item))
+    return {"id": id_item, "destaque": destaque, "esgotado": esgotado,
+            "antes": {"destaque": atual["destaque"], "esgotado": atual["esgotado"]},
+            "message": f'"{atual["nome"]}": ' + ", ".join(
+                [("em destaque" if destaque else "sem destaque"),
+                 ("esgotado" if esgotado else "disponível")]) + "."}
+
+
+def exibicao_da_secao(cur, id_unidade: int, tipo: str, id_secao: int, dados: dict) -> dict:
+    """Dias da semana, faixa de horário e dia especial — quando a seção aparece no feed."""
+    tabela, buscar = _TABELA_DA_SECAO[tipo]
+    buscar(cur, id_unidade, id_secao)
+    cur.execute(
+        f"""UPDATE {tabela}
+               SET dias = %s, hora_de = %s, hora_ate = %s, horario_especial = %s
+             WHERE id = %s
+         RETURNING id, dias, hora_de, hora_ate, horario_especial""",  # noqa: S608 - do mapa
+        (dados.get("dias"), dados.get("hora_de"), dados.get("hora_ate"),
+         bool(dados.get("horario_especial")), id_secao))
+    return dict(cur.fetchone()) | {"message": "Exibição da seção gravada."}

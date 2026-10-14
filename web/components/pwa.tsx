@@ -13,6 +13,9 @@ import { useEffect, useState } from "react";
 export function RegistroPWA() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+    // ⚠️ O Cardápio Vivo (`/c/...`) é do CLIENTE, no celular dele: nada de instalar o
+    // service worker do sistema num aparelho que não é da casa.
+    if (window.location.pathname.startsWith("/c/")) return;
     const dev = process.env.NODE_ENV !== "production";
     void navigator.serviceWorker.register(`/sw.js${dev ? "?dev=1" : ""}`).catch(() => {
       // Sem service worker o sistema funciona igual — só não instala. Não é

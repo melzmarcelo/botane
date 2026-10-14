@@ -456,3 +456,53 @@ pagamento não será pelo sistema."* Estudo e decisões em [`docs/pedidos-estudo
   argumento mostra a prévia e ESPERA confirmação — não usar para "ver a ajuda".
 - Cobertura: `smoke_pedidos.py` (48), fase 13 da bateria do navegador, e
   `web/scripts/verificar-pedido-site.mjs` (o carrinho no site, 10).
+
+## Cardápio Vivo, fase 1 (migração 113, 14/10/2026)
+
+🔑 **Pedido do dono (14/10/2026):** o cardápio da mesa como feed de rede social — um prato por
+tela, com vídeo ou foto — e, para a gestão, a atenção de cada prato cruzada com venda e margem.
+Estudo, decisões (15 perguntas respondidas) e roteiro por fase em
+[`docs/cardapio-vivo-estudo.md`](../cardapio-vivo-estudo.md). Fase 1 = acesso por mesa, feed,
+modo VITRINE, cadastro e eventos. Fase 2 (PEDIDO, chamados, fidelidade, painel Atenção × Vendas)
+e fase 3 (A/B) não começaram.
+
+- Código: `services/cardapio_vivo.py`, `routers/cardapio_vivo.py` (dois routers: `router` de
+  dentro e `publico`), `routers/produto_cardapio.py`, `models/cardapio_vivo.py`; web em
+  `app/c/[loja]/[[...mesa]]` (público), `app/c/previa/[catalogo]`, `components/cardapio-vivo/`,
+  `app/(app)/cardapio-vivo/`, `catalogos/[id]/cardapio-vivo.tsx`, `produtos/[id]/cardapio-vivo.tsx`.
+- 🔑 **Nada de cadastro novo de prato**: o feed é o catálogo PRODUTOS que `cardapio_config.id_catalogo`
+  aponta (um por loja). Vídeo e restrições no PRODUTO; destaque e esgotado no ITEM; dia/horário na SEÇÃO.
+- ⚠️ **Esgotado revoga a decisão 6 de 28/09** ("não haverá pausa"). O item fica no feed, marcado,
+  sem botão; `esconder_esgotado` da loja o tira. (A resposta do dono veio cortada — confirmar.)
+- 🔑 **A URL da mesa leva TOKEN** (`mesas.token`, DEFAULT na coluna + NOT NULL). ⚠️ O primeiro
+  rascunho só fazia UPDATE nas mesas existentes — a mesa criada depois nascia sem QR; a suíte pegou.
+- ⚠️ **O modo PEDIDO é recusado (409) na fase 1**, na config e nas exceções. A resolução
+  loja ← salão ← mesa e a queda para VITRINE fora do horário já existem e são testadas.
+- 🔑 **Eventos por `sendBeacon` com `text/plain`** (o único tipo sem preflight entre origens —
+  em casa web e API são portas diferentes). A rota lê o JSON à mão e valida no Pydantic. Freios:
+  lote ≤ 64 KB/60 eventos, 3.000 por sessão, 240 lotes/10 min por origem (em memória). O produto é
+  descoberto pelo item, só dentro do catálogo apontado. Hora = a do servidor menos `idade_ms`.
+- 🔑 **Retenção (LGPD)**: `cardapio_vivo.laco` uma vez por dia depois das 3h agrega o dia anterior
+  em `cardapio_agregados_dia` e apaga o bruto além de `retencao_meses` — agregando ANTES, por loja
+  (refazer o dia inteiro depois de apagar o bruto de uma loja zeraria o resumo dela).
+- 🔑 **Mídia**: vídeo convertido no upload por `imageio-ffmpeg` (binário dentro da wheel) para MP4
+  H.264, 720p no lado MENOR, mudo, ≤ 15 s, ~2 MB, `+faststart`; capa WebP do primeiro quadro.
+  `/arquivos/{nome}?w=` devolve a imagem redimensionada em WebP (larguras fechadas, cache em
+  memória). ⚠️ **Vídeo exige `Range`** — o Safari do iPhone não toca sem 206.
+  ⚠️ **Ainda no banco**, não no Spaces: o dono aprovou Spaces + CDN, mas o bucket e as credenciais
+  não existem. A troca é só em `arquivos.py`.
+- ⚠️ `/c/...` pula o service worker e a `MarcaNaAba` (é o celular do cliente, não da casa).
+- ⚠️ O aviso de cookies ficava no rodapé e tapava nome e preço do primeiro prato — foi para
+  baixo da barra de categorias. "Não medir" desliga a medição neste aparelho.
+- ⚠️ Puppeteer não mostra o corpo de um `sendBeacon`: a verificação embrulha
+  `navigator.sendBeacon` na página para guardar cópia dos lotes.
+- Cobertura: `smoke_cardapio_vivo.py` e `web/scripts/verificar-cardapio-vivo.mjs`.
+- 🔑 **Complemento do dono no mesmo dia** (migração 114, ver seção 0b do estudo): Hub (avaliação
+  no Google e Wi-Fi, dados no cadastro da LOJA, botões ligados no Cardápio Vivo), favoritos no
+  aparelho (por loja), nove eventos novos, "sessão engajada" e "atenção estimada" com teto de
+  60 s, e `cardapio_resumo_dia` (sessões abertas/engajadas e cliques do Hub). Objetivo de negócio
+  e margem do item, e o painel, ficaram para a fase 2. Cobertura: 93 na API, 29 no navegador.
+  ⚠️ O botão "♥" do topo tem `aria-label="Meus favoritos"`, igual ao diálogo — a verificação
+  procura `[role="dialog"]`.
+- **Falta na fase 1**: tela das exceções por salão/mesa (a API existe; só fazem sentido com o
+  PEDIDO), Spaces, e medir o Lighthouse ≥ 85 num `next build`.

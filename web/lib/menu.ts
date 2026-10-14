@@ -280,6 +280,16 @@ export const MENU: GrupoMenu[] = [
         manterSubgrupo: true,
       },
       {
+        // 🔑 **Cardápio Vivo** (pedido do dono, 14/10/2026): o cardápio da mesa como feed.
+        // A configuração da loja e o acesso das mesas (QR e NFC).
+        href: "/cardapio-vivo",
+        nome: "Cardápio Vivo",
+        icone: "mesas",
+        chave: ["catalogos.ver", "catalogos.editar"],
+        soComReservas: true,
+        subgrupo: "Catálogos",
+      },
+      {
         // 🔑 **Pedidos pelo catálogo** (pedido do dono, 28/09/2026: *"uma tela com pedidos
         // e um painel para acompanhar"*). O painel primeiro: é a tela que o balcão deixa aberta.
         href: "/pedidos/painel",

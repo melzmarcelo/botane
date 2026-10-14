@@ -47,6 +47,9 @@ type Loja = {
   telefone: string | null;
   email: string | null;
   mesas: number | null;
+  google_avaliacao_url?: string | null;
+  wifi_rede?: string | null;
+  wifi_senha?: string | null;
 };
 
 type Parametros = Record<string, number | boolean | null> & { id_unidade: number };
@@ -167,6 +170,9 @@ export default function PaginaLoja() {
             whatsapp: achada.whatsapp ?? "",
             email: achada.email ?? "",
             mesas: achada.mesas === null || achada.mesas === undefined ? "" : String(achada.mesas),
+            google_avaliacao_url: achada.google_avaliacao_url ?? "",
+            wifi_rede: achada.wifi_rede ?? "",
+            wifi_senha: achada.wifi_senha ?? "",
           });
         }
       })

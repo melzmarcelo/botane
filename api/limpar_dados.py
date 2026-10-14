@@ -48,6 +48,9 @@ OPERACAO = [
     # linha a guarda recusava a limpeza inteira (achado em 28/09/2026). O catálogo em si, as
     # categorias e a configuração de pedidos ficam — são a vitrine, não a operação.
     "catalogo_itens",
+    # O Cardápio Vivo (113): a atenção medida e os adicionais apontam para `produtos`.
+    "cardapio_eventos", "cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_sessoes",
+    "produto_adicionais_opcoes", "produto_adicionais_grupos",
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",
     # ⚠️ `inventario_contadores` aponta para `inventarios`: sem ela aqui, o
@@ -406,6 +409,8 @@ PRESERVADAS = [
     "etiqueta_config",
     # Se o catálogo aceita pedido é configuração dele, como o próprio catálogo.
     "catalogo_pedidos_config",
+    # O modo do Cardápio Vivo e as exceções por salão/mesa (113) descrevem a casa.
+    "cardapio_config", "cardapio_excecoes",
 ]
 
 

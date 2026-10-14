@@ -108,6 +108,15 @@ def _cartao(c: canvas.Canvas, x: float, y: float, w: float, h: float, link: str,
 
 def gerar(link: str, quantidade: int, tamanho: str, titulo: str, chamada: str,
           extra: str, casa: str, numerar: bool, primeira_mesa: int = 1) -> bytes:
+    cartoes = [(link, f"Mesa {primeira_mesa + i}" if numerar else None)
+               for i in range(quantidade)]
+    return gerar_cartoes(cartoes, tamanho, titulo, chamada, extra, casa)
+
+
+def gerar_cartoes(cartoes: list[tuple[str, str | None]], tamanho: str, titulo: str,
+                  chamada: str, extra: str, casa: str) -> bytes:
+    """Um cartão por `(link, mesa)`. 🔑 Cardápio Vivo (113): cada mesa tem o PRÓPRIO
+    link (o token dela), e a numeração deixa de ser só impressa."""
     colunas, linhas = LAYOUTS[tamanho]
     pagina_w, pagina_h = A4
     margem = 10 * mm
@@ -119,14 +128,40 @@ def gerar(link: str, quantidade: int, tamanho: str, titulo: str, chamada: str,
     c = canvas.Canvas(saida, pagesize=A4)
     c.setTitle(f"QR codes de check-in — {casa}")
     por_folha = colunas * linhas
-    for i in range(quantidade):
+    for i, (link, mesa) in enumerate(cartoes):
         if i and i % por_folha == 0:
             c.showPage()
         pos = i % por_folha
         col, lin = pos % colunas, pos // colunas
         x = margem + col * (w + folga)
         y = pagina_h - margem - (lin + 1) * h - lin * folga
-        mesa = f"Mesa {primeira_mesa + i}" if numerar else None
         _cartao(c, x, y, w, h, link, titulo, chamada, extra, casa, mesa)
     c.save()
+    return saida.getvalue()
+
+
+def png(link: str, lado: int = 600) -> bytes:
+    """O QR em PNG, para quem cola num arquivo de arte ou grava no celular.
+
+    ⚠️ O ReportLab só desenha em PDF sem bibliotecas extras; a matriz sai do mesmo
+    codificador (`QrCodeWidget`) e o Pillow pinta — com a margem branca de 4 módulos
+    que os leitores exigem.
+    """
+    from PIL import Image, ImageDraw
+
+    widget = QrCodeWidget(link, barLevel="M")
+    widget.draw()
+    qr = widget.qr
+    n = qr.getModuleCount()
+    total = n + 8
+    modulo = max(1, lado // total)
+    img = Image.new("1", (total * modulo, total * modulo), 1)
+    pinta = ImageDraw.Draw(img)
+    for r in range(n):
+        for c in range(n):
+            if qr.isDark(r, c):
+                x, y = (c + 4) * modulo, (r + 4) * modulo
+                pinta.rectangle([x, y, x + modulo - 1, y + modulo - 1], fill=0)
+    saida = BytesIO()
+    img.save(saida, "PNG", optimize=True)
     return saida.getvalue()

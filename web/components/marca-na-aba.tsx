@@ -24,6 +24,8 @@ export default function MarcaNaAba() {
 
   useEffect(() => {
     if (!marca) return;
+    // O Cardápio Vivo dá o próprio título (o nome do cardápio); não sobrescrever.
+    if (caminho?.startsWith("/c/")) return;
     document.title = marca.nome;
     if (!marca.logo) return;
     document

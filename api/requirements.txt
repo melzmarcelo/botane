@@ -23,6 +23,10 @@ Pillow==12.3.0
 httpx==0.28.1
 cryptography==50.0.1
 reportlab==5.0.1
+# 🔑 O vídeo do Cardápio Vivo (113) é convertido no upload para MP4 H.264 720p de até
+# ~2 MB. O pacote TRAZ o binário do ffmpeg dentro da wheel — o contêiner da DO não tem
+# ffmpeg, e instalar pacote de sistema no buildpack não é opção.
+imageio-ffmpeg==0.6.0
 # ⚠️ **O banco de fusos, e ele NÃO vem no contêiner.** `zoneinfo` lê a base do
 # sistema operacional, e a imagem enxuta do deploy não a traz: sem este pacote,
 # `ZoneInfo("America/Sao_Paulo")` levanta `ZoneInfoNotFoundError` — em produção,

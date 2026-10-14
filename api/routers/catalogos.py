@@ -33,6 +33,7 @@ from models.catalogos import (
     ItemOrdem,
     ORIGENS, SITUACOES, SubcategoriaCreate,
 )
+from models.cardapio_vivo import ExibicaoDaSecao, MarcasDoItem
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import traducao
 from services import catalogo_conteudo as conteudo
@@ -420,3 +421,35 @@ def desvincular_produto(id_item: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item,
                             "desvincular", id_unidade=id_unidade)
         return fora
+
+
+# ---------------------------------------------------------------------------
+# Cardápio Vivo (113)
+# ---------------------------------------------------------------------------
+
+@router.put("/itens/{id_item}/marcas")
+def marcar_item(id_item: int, body: MarcasDoItem, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Destaque e esgotado do item neste cardápio."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = conteudo.marcar_item(cur, id_unidade, id_item, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "marcas",
+                            antes=feito.pop("antes"),
+                            depois={"destaque": feito["destaque"], "esgotado": feito["esgotado"]},
+                            id_unidade=id_unidade)
+        return feito
+
+
+@router.put("/secoes/{tipo}/{id_secao}/exibicao")
+def exibicao_da_secao(tipo: str, id_secao: int, body: ExibicaoDaSecao,
+                      ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Em que dias e horário a seção aparece no Cardápio Vivo."""
+    if tipo not in ("categoria", "subcategoria"):
+        raise HTTPException(status_code=404, detail="Seção desconhecida.")
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = conteudo.exibicao_da_secao(cur, id_unidade, tipo, id_secao, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, f"catalogo_{tipo}", id_secao, "exibicao",
+                            depois={k: str(v) for k, v in body.model_dump().items()},
+                            id_unidade=id_unidade)
+        return feito

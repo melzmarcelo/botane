@@ -63,6 +63,10 @@ class UnidadeCreate(BaseModel):
     # quando o cliente escolhe esta casa. Em branco, vale o da empresa.
     whatsapp: str | None = Field(default=None, max_length=30)
     email: str | None = None
+    # 🔑 Cardápio Vivo (114): os botões do Hub da mesa — "Avaliar no Google" e "Wi-Fi".
+    google_avaliacao_url: str | None = Field(default=None, max_length=300, pattern=r"^https://")
+    wifi_rede: str | None = Field(default=None, max_length=64)
+    wifi_senha: str | None = Field(default=None, max_length=64)
     timezone: str = "America/Sao_Paulo"
     horario_funcionamento: dict | None = None
     mesas: int | None = None

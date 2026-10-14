@@ -270,3 +270,153 @@ def remover(url: str | None, cur=None) -> None:
         return
     with get_cursor() as proprio:
         proprio.execute("DELETE FROM arquivos WHERE nome = %s", (nome,))
+
+
+# ---------------------------------------------------------------------------
+# Cardápio Vivo (113): o vídeo do prato e a imagem no tamanho da tela
+# ---------------------------------------------------------------------------
+
+# 🔑 **O que chega pode ser o vídeo cru do celular**; o que se GUARDA é o convertido.
+# 40 MB cobre um minuto de 1080p de telefone — e só os primeiros 15 s ficam.
+VIDEO_TIPOS = {"video/mp4", "video/quicktime", "video/webm", "video/x-m4v", "video/3gpp"}
+VIDEO_LIMITE_ENVIO = 40 * 1024 * 1024
+VIDEO_SEGUNDOS = 15
+VIDEO_TIPO = "video/mp4"
+
+
+async def ler_video(arquivo: UploadFile) -> bytes:
+    """Confere o vídeo enviado e devolve os bytes crus. Não toca no banco.
+
+    ⚠️ O `content-type` é só o que o navegador diz: quem confere o conteúdo é o
+    ffmpeg, na conversão — um arquivo que não é vídeo para ali com a frase certa.
+    """
+    if (arquivo.content_type or "") not in VIDEO_TIPOS:
+        raise HTTPException(status_code=400,
+                            detail="Formato não aceito. Envie um vídeo MP4, MOV ou WEBM.")
+    conteudo = await arquivo.read()
+    if not conteudo:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    if len(conteudo) > VIDEO_LIMITE_ENVIO:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Vídeo maior que {VIDEO_LIMITE_ENVIO // (1024 * 1024)} MB. "
+                   f"Só os primeiros {VIDEO_SEGUNDOS} segundos são usados — corte antes de enviar.")
+    return conteudo
+
+
+def converter_video(conteudo: bytes) -> tuple[bytes, bytes, float]:
+    """O vídeo como o cardápio serve: `(mp4, capa_webp, segundos)`.
+
+    🔑 **MP4 H.264, 720p no lado MENOR, mudo, até 15 s, ~2 MB** — o que qualquer
+    celular toca sem plugin e o 4G fraco aguenta. `+faststart` põe o índice no
+    começo: sem ele o navegador baixa o arquivo inteiro antes do primeiro quadro.
+    ⚠️ **O lado menor, não a altura**: o vídeo de celular é em pé (1080×1920), e
+    "altura 720" o deixaria com 405 de largura.
+    ⚠️ Passou de 3 MB (cena com muito movimento), refaz com taxa menor em vez de
+    recusar — quem filmou o prato não tem como "comprimir melhor".
+    """
+    import os
+    import re
+    import subprocess
+    import tempfile
+    from io import BytesIO
+
+    import imageio_ffmpeg
+    from PIL import Image
+
+    exe = imageio_ffmpeg.get_ffmpeg_exe()
+    escala = ("scale='if(gt(iw,ih),-2,min(720,iw))':'if(gt(iw,ih),min(720,ih),-2)'")
+    with tempfile.TemporaryDirectory() as pasta:
+        entrada = os.path.join(pasta, "entrada")
+        saida = os.path.join(pasta, "saida.mp4")
+        capa = os.path.join(pasta, "capa.png")
+        with open(entrada, "wb") as f:
+            f.write(conteudo)
+
+        def rodar(taxa: int) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [exe, "-y", "-hide_banner", "-i", entrada, "-t", str(VIDEO_SEGUNDOS), "-an",
+                 "-vf", f"{escala},fps=30", "-c:v", "libx264", "-profile:v", "main",
+                 "-pix_fmt", "yuv420p", "-preset", "veryfast",
+                 "-b:v", f"{taxa}k", "-maxrate", f"{taxa}k", "-bufsize", f"{taxa * 2}k",
+                 "-movflags", "+faststart", saida],
+                capture_output=True, timeout=180)
+
+        try:
+            r = rodar(950)
+            if r.returncode == 0 and os.path.getsize(saida) > 3 * 1024 * 1024:
+                r = rodar(600)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=422, detail="A conversão do vídeo demorou demais.")
+        if r.returncode != 0 or not os.path.exists(saida):
+            raise HTTPException(status_code=400,
+                                detail="Não foi possível ler este arquivo como vídeo.")
+
+        # A duração sai do que o ffmpeg contou ao ler a ENTRADA, limitada aos 15 s.
+        texto = r.stderr.decode("utf-8", "ignore")
+        achado = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", texto)
+        segundos = float(VIDEO_SEGUNDOS)
+        if achado:
+            h, m, s = achado.groups()
+            segundos = min(float(VIDEO_SEGUNDOS), int(h) * 3600 + int(m) * 60 + float(s))
+
+        # 🔑 A CAPA (poster) é o primeiro quadro firme, em WebP: é o que aparece antes do
+        # vídeo carregar e o que fica no lugar dele com economia de dados.
+        subprocess.run([exe, "-y", "-hide_banner", "-ss", "0.3", "-i", saida,
+                        "-frames:v", "1", capa], capture_output=True, timeout=60)
+        if not os.path.exists(capa):
+            subprocess.run([exe, "-y", "-hide_banner", "-i", saida, "-frames:v", "1", capa],
+                           capture_output=True, timeout=60)
+        if not os.path.exists(capa):
+            raise HTTPException(status_code=400, detail="O vídeo não tem um quadro legível.")
+        with open(saida, "rb") as f:
+            mp4 = f.read()
+        with Image.open(capa) as img:
+            buf = BytesIO()
+            img.convert("RGB").save(buf, "WEBP", quality=80, method=4)
+    return mp4, buf.getvalue(), round(segundos, 2)
+
+
+# 🔑 **As larguras que a tela pede**, fechadas: aceitar qualquer número faria cada
+# `?w=` diferente gerar e guardar uma imagem nova — uma porta para encher a memória.
+LARGURAS = (320, 480, 720, 960, 1280)
+
+
+def _largura_permitida(largura: int) -> int:
+    return next((l for l in LARGURAS if l >= largura), LARGURAS[-1])
+
+
+from functools import lru_cache  # noqa: E402
+
+
+@lru_cache(maxsize=256)
+def _redimensionada(nome: str, largura: int) -> bytes | None:
+    """A imagem em WebP com no máximo `largura` px. Guardada em memória.
+
+    ⚠️ **O nome nunca muda de conteúdo** (sufixo aleatório a cada envio), então o
+    cache não envelhece: a foto nova tem outro nome.
+    """
+    from io import BytesIO
+
+    from PIL import Image, ImageOps
+
+    achado = ler(f"{PREFIXO_URL}/{nome}")
+    if not achado or achado[1] not in TIPOS:
+        return None
+    with Image.open(BytesIO(achado[0])) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.width > largura:
+            img = img.resize((largura, round(img.height * largura / img.width)),
+                             Image.Resampling.LANCZOS)
+        buf = BytesIO()
+        img.convert("RGBA" if img.mode in ("RGBA", "LA", "P") else "RGB").save(
+            buf, "WEBP", quality=78, method=4)
+        return buf.getvalue()
+
+
+def redimensionada(url: str | None, largura: int) -> bytes | None:
+    """A imagem no tamanho da tela, em WebP — ou `None` se não é imagem nossa."""
+    nome = _nome_da_url(url)
+    if not nome:
+        return None
+    return _redimensionada(nome, _largura_permitida(largura))

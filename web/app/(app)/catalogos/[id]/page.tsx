@@ -11,6 +11,7 @@ import CabecalhoTela from "@/components/cabecalho-tela";
 import * as cat from "@/lib/catalogos";
 import PedidosDoCatalogo from "./pedidos";
 import { JanelaDeTraducao, TraducoesDoCatalogo } from "./traducoes-do-catalogo";
+import { ExibicaoDaSecao, MarcasDoItem } from "./cardapio-vivo";
 
 /**
  * O cardápio montado aqui dentro: categorias, subcategorias e produtos.
@@ -360,6 +361,7 @@ export default function ConfigurarCatalogo() {
                 {!i.informacao_adicional && (
                   <span className="text-[12.5px] text-suave">sem descrição</span>
                 )}
+                <MarcasDoItem item={i} podeEditar={podeEditar} aoMudar={recarregar} />
                 {podeEditar && (
                   <span className="ml-auto flex items-center gap-3">
                     {/* 🔑 **Subir e descer, não arrastar.** Arrastar é
@@ -651,6 +653,8 @@ export default function ConfigurarCatalogo() {
             {estaFechada("categoria", c.id) ? null : (
             <div className="flex flex-col gap-5">
               <FotoDaSecao tipo="categoria" secao={c} />
+              <ExibicaoDaSecao key={`c${c.id}${c.dias}${c.hora_de}${c.horario_especial}`} tipo="categoria"
+                               secao={c} podeEditar={podeEditar} aoMudar={recarregar} />
 
               {/* 🔑 **Os produtos soltos vêm ANTES das subcategorias.** Eles são
                   da categoria inteira; mostrá-los depois faria parecer que
@@ -717,6 +721,8 @@ export default function ConfigurarCatalogo() {
                   {!estaFechada("subcategoria", s.id) && (
                     <div className="mt-2">
                       <FotoDaSecao tipo="subcategoria" secao={s} />
+                      <ExibicaoDaSecao key={`s${s.id}${s.dias}${s.hora_de}${s.horario_especial}`} tipo="subcategoria"
+                                       secao={s} podeEditar={podeEditar} aoMudar={recarregar} />
                     </div>
                   )}
                   {estaFechada("subcategoria", s.id) ? null : (

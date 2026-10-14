@@ -7,7 +7,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -21,6 +21,7 @@ from services import erros, segredos
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
 from services import whatsapp as whatsapp_servico
+from services import cardapio_vivo as cardapio_vivo_servico
 import impressao
 from config import (
     ADMIN_EMAIL,
@@ -44,6 +45,7 @@ from routers import (
     alertas,
     autenticacao,
     cadastros,
+    cardapio_vivo,
     catalogos,
     etiquetas,
     fidelidade,
@@ -72,6 +74,7 @@ from routers import (
     pdv,
     producao_agenda,
     reservas,
+    produto_cardapio,
     produtos,
     publico,
     transferencias,
@@ -267,7 +270,9 @@ async def lifespan(app: FastAPI):
     tarefas = [asyncio.create_task(agenda_omie.laco(parar)),
                asyncio.create_task(agenda_pdv.laco(parar)),
                # 🔑 A fila do WhatsApp (099): envia o que venceu e varre os avisos de data.
-               asyncio.create_task(whatsapp_servico.laco(parar))]
+               asyncio.create_task(whatsapp_servico.laco(parar)),
+               # 🔑 Cardápio Vivo (113): agrega a atenção do dia e aplica a retenção (LGPD).
+               asyncio.create_task(cardapio_vivo_servico.laco(parar))]
 
     print(f"[botane] API {VERSAO} pronta em http://localhost:{PORT}")
     yield
@@ -398,7 +403,8 @@ async def _cabecalhos_de_seguranca(request, chamar_o_resto):
 
 
 @app.get(arquivos.PREFIXO_URL + "/{nome}", tags=["infra"])
-def servir_arquivo(nome: str):
+def servir_arquivo(nome: str, request: Request,
+                   w: int | None = Query(None, ge=64, le=4000)):
     """A logo e o PDF do catálogo, entregues do BANCO.
 
     🔑 **Era um `StaticFiles` sobre `api/uploads/`, e o disco do App Platform é
@@ -413,7 +419,17 @@ def servir_arquivo(nome: str):
     nova nunca é servida do cache antigo. Sem isto seria uma consulta ao banco
     por tela aberta.
     """
-    achado = arquivos.ler(f"{arquivos.PREFIXO_URL}/{nome}")
+    url = f"{arquivos.PREFIXO_URL}/{nome}"
+    # 🔑 **`?w=` devolve a imagem no tamanho da tela, em WebP** (Cardápio Vivo, 113):
+    # a foto de 2 MB que a casa enviou vira ~60 KB num celular. Só imagem; o resto
+    # ignora o parâmetro e sai como foi gravado.
+    if w:
+        menor = arquivos.redimensionada(url, w)
+        if menor is not None:
+            return Response(content=menor, media_type="image/webp", headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff"})
+    achado = arquivos.ler(url)
     if not achado:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado")
     conteudo, tipo = achado
@@ -434,6 +450,27 @@ def servir_arquivo(nome: str):
         # `attachment` forçaria download, e o site de reservas precisa mostrar o
         # cardápio, não entregá-lo.
         cabecalhos["Content-Disposition"] = "inline"
+    if tipo.startswith("video/"):
+        # ⚠️ **O Safari do iPhone NÃO toca vídeo sem `Range`**: ele pede `bytes=0-1`
+        # primeiro e desiste se a resposta vier inteira com 200.
+        cabecalhos["Accept-Ranges"] = "bytes"
+        faixa = request.headers.get("range", "")
+        if faixa.startswith("bytes="):
+            total = len(conteudo)
+            ini_txt, _, fim_txt = faixa[6:].split(",")[0].partition("-")
+            try:
+                if ini_txt:
+                    ini = int(ini_txt)
+                    fim = min(int(fim_txt), total - 1) if fim_txt else total - 1
+                else:  # `bytes=-500`: os últimos 500
+                    ini, fim = max(0, total - int(fim_txt)), total - 1
+            except ValueError:
+                ini, fim = 0, total - 1
+            if ini >= total or ini > fim:
+                return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+            cabecalhos["Content-Range"] = f"bytes {ini}-{fim}/{total}"
+            return Response(content=conteudo[ini:fim + 1], status_code=206,
+                            media_type=tipo, headers=cabecalhos)
     return Response(content=conteudo, media_type=tipo, headers=cabecalhos)
 
 app.include_router(autenticacao.router)
@@ -449,6 +486,8 @@ app.include_router(historico.router)
 app.include_router(erros_rota.router)
 app.include_router(cadastros.router)
 app.include_router(fornecedores.router)
+# 🔑 Cardápio Vivo (113): vídeo, restrições e adicionais do produto — rotas `/produtos/{id}/…`.
+app.include_router(produto_cardapio.router)
 app.include_router(produtos.router)
 app.include_router(fichas.router)
 app.include_router(estoque.router)
@@ -468,6 +507,9 @@ app.include_router(exportacoes.router)
 app.include_router(catalogos.router)
 # ⚠️ Antes do `publico`: `/publico/whatsapp/webhook` não pode cair em `/publico/{id_unidade}`.
 app.include_router(whatsapp.publico)
+# ⚠️ Antes do `publico` também: `/publico/cardapio/...` é do Cardápio Vivo (113).
+app.include_router(cardapio_vivo.publico)
+app.include_router(cardapio_vivo.router)
 app.include_router(publico.router)
 app.include_router(whatsapp.router)
 # ⚠️ Antes de `reservas`: `/reservas/qrcodes` não pode cair numa rota de reserva.

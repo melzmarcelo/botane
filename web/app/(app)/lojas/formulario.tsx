@@ -37,6 +37,10 @@ export type LojaForm = {
   whatsapp: string;
   email: string;
   mesas: string;
+  /** Os botões do Hub do Cardápio Vivo (114). */
+  google_avaliacao_url: string;
+  wifi_rede: string;
+  wifi_senha: string;
 };
 
 export const LOJA_VAZIA: LojaForm = {
@@ -57,6 +61,9 @@ export const LOJA_VAZIA: LojaForm = {
   whatsapp: "",
   email: "",
   mesas: "",
+  google_avaliacao_url: "",
+  wifi_rede: "",
+  wifi_senha: "",
 };
 
 /** O que vai para a API: campo vazio vira nulo, e `mesas` vira número. */
@@ -80,6 +87,9 @@ export function corpoDaLoja(f: LojaForm) {
     whatsapp: texto(f.whatsapp),
     email: texto(f.email),
     mesas: f.mesas.trim() ? Number(f.mesas) : null,
+    google_avaliacao_url: texto(f.google_avaliacao_url),
+    wifi_rede: texto(f.wifi_rede),
+    wifi_senha: texto(f.wifi_senha),
   };
 }
 
@@ -314,6 +324,26 @@ export default function FormularioLoja({
               value={valor.email}
               onChange={(e) => troca("email", e.target.value)}
             />
+          </Campo>
+        </div>
+      </Cartao>
+
+      {/* 🔑 Cardápio Vivo (114): o que os botões do Hub da mesa mostram. Ligar cada botão é
+          em Portal de Clientes ▸ Catálogos ▸ Cardápio Vivo. */}
+      <Cartao titulo="Cardápio da mesa" descricao="Os botões da tela de entrada do Cardápio Vivo.">
+        <div className="grid gap-4 sm:grid-cols-6">
+          <Campo rotulo="Link de avaliação no Google" className="sm:col-span-6" opcional
+                 dica="No Perfil da Empresa no Google: “Pedir avaliações” → copiar o link (começa com https://).">
+            <input className="campo mono" disabled={!podeEditar} placeholder="https://g.page/r/…/review"
+                   value={valor.google_avaliacao_url} onChange={(e) => troca("google_avaliacao_url", e.target.value)} />
+          </Campo>
+          <Campo rotulo="Wi-Fi: nome da rede" className="sm:col-span-3" opcional>
+            <input className="campo" disabled={!podeEditar} value={valor.wifi_rede}
+                   onChange={(e) => troca("wifi_rede", e.target.value)} />
+          </Campo>
+          <Campo rotulo="Wi-Fi: senha" className="sm:col-span-3" opcional dica="A rede de CLIENTES — o cliente vê e copia.">
+            <input className="campo mono" disabled={!podeEditar} value={valor.wifi_senha}
+                   onChange={(e) => troca("wifi_senha", e.target.value)} />
           </Campo>
         </div>
       </Cartao>

@@ -24,7 +24,7 @@ entregue.
 | [Vendas](#vendas) | `docs/memoria/vendas.md` | `vendas`, `consumo_pessoa`, `consumo_periodo`, `pdv_legal`, `rotulos_cabem` |
 | [Administrativo](#administrativo) | `docs/memoria/administrativo.md` | `fundacao`, `sessao`, `senha`, `bloqueio_login`, `tokens_api`, `conector_claude`, `lojas_do_usuario`, `setor_do_usuario`, `omie`, `agenda_omie`, `agenda_fuso`, `email_prazo`, `erros` |
 | [CMV](#cmv) | `docs/memoria/cmv.md` | `cmv`, `cmv_conferencia`, `grupos_cmv`, `ciclos`, `relatorios` |
-| [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao` |
+| [Portal de Clientes](#portal-de-clientes-ex-reservas) | `docs/memoria/reservas.md`, `catalogos.md` | `reservas_config`, `reservas_disponibilidade`, `reservas_salao`, `reserva_site`, `catalogos`, `catalogo_produtos`, `produto_catalogo`, `publico`, `pedidos`, `traducao`, `cardapio_vivo` |
 | [Etiquetas](#etiquetas) | `docs/memoria/etiquetas.md` | `etiquetas` |
 | [Precificação](#precificação) | `docs/memoria/precificacao.md` | `precificacao`, `preco_custo` |
 | _(transversal)_ | `docs/memoria/_transversais/` | `paginacao`, `exportacoes` |
@@ -170,7 +170,7 @@ as rotas `/reservas/...`, a coluna `parametros.reservas_ligado` e os arquivos
 Configuração · Reservas (Agenda, Salão) · Clientes · Fidelidade (Prêmios,
 Configuração) · Catálogos · Pedidos (Painel, Lista).
 
-- **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `pedidos.py`, `traducao.py` (o cardápio em EN/DE), `publico.py` (o site do cliente)
+- **Rotas:** `reservas.py`, `fidelidade.py`, `catalogos.py`, `pedidos.py`, `traducao.py` (o cardápio em EN/DE), `publico.py` (o site do cliente), `cardapio_vivo.py` (o cardápio da mesa, `/publico/cardapio/...` e `/cardapio-vivo/...`), `produto_cardapio.py` (vídeo, restrições e adicionais do produto)
 - **Serviços:** `reservas.py`, `reservas_agenda.py` (a regra de disponibilidade),
   `reserva_clientes.py` (quem reserva pelo site, e o limite de abuso),
   `catalogos.py` (a capa), `catalogo_conteudo.py` (o cardápio montado por produtos),
