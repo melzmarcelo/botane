@@ -4913,7 +4913,14 @@ try {
   // outra movimentação, e o nome comprido roubava a largura das outras seis.
   checar("a aba Movimentação abre no painel de CMV",
     await clicarQuando(p, "Movimentação", { exato: true }));
-  await new Promise((r) => setTimeout(r, 1800));
+  // ⚠️ **Espera o que só a aba de DESTINO tem, não 1,8 s fixos** (14/10/2026: uma
+  // rodada leu a aba ainda carregando — tudo vazio, `totais: []`). Mesma lição da
+  // checagem do período de consumo: tempo fixo depois de clique é corrida.
+  await p.waitForFunction(() =>
+    [...document.querySelectorAll("th")].some((t) => t.textContent?.trim() === "Inicial")
+      || /período (aberto|fechado)/i.test(document.body.innerText),
+  { timeout: 20000, polling: 300 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 400));
   const mov = await p.evaluate(() => {
     const texto = document.body.innerText;
     const cabecalhos = [...document.querySelectorAll("th")].map((t) => t.textContent?.trim());
