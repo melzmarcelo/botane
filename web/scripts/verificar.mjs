@@ -7174,7 +7174,16 @@ try {
     return !!l;
   });
   if (primeiroPeriodo) {
-    await new Promise((r) => setTimeout(r, 1500));
+    // ⚠️ **Espera o "carregando…" sumir, não um tempo fixo** (14/10/2026). Eram
+    // 1,5 s, e com o `.next` recém-apagado a rota do período compila a frio e
+    // leva mais que isso: a checagem lia "carregando…" e acusava o cabeçalho.
+    await p
+      .waitForFunction(
+        () => !/carregando/i.test(document.querySelector("main")?.innerText ?? "carregando"),
+        { timeout: 20000 },
+      )
+      .catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
     const doPeriodo = await p.evaluate(() => ({
       temBotao: !!document.querySelector('button[aria-controls="explica-tela"]'),
       texto: document.querySelector("main")?.innerText?.slice(0, 200) ?? "",
