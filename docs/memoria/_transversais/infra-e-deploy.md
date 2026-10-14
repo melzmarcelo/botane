@@ -82,6 +82,11 @@
   (`npm audit --omit=dev` limpo, `sharp` junto). Rodar `npm audit --omit=dev` antes de promover.
   ⚠️ Parar o `next dev` no meio deixa `.next/dev/types` cortado e o `next build` seguinte
   falha em TypeScript num arquivo gerado — apagar `.next/dev` e compilar de novo.
+  🔴 **16.3.7 → 16.3.8 em 14/10/2026**: seis avisos altos (SSRF no otimizador de imagem,
+  envenenamento de cache SSG/ISR, vazamento de Draft Mode, entre outros) e `source-map-js` 1.2.2.
+  ⚠️ **`npm audit fix --omit=dev` APAGA as dependências de desenvolvimento do `node_modules`** —
+  o Tailwind é uma delas, e o build seguinte morre com `Cannot find module '@tailwindcss/postcss'`.
+  Depois dele, `npm install`; e se o erro persistir, é cache: apagar `.next` inteiro.
 - ⚠️ **O IP do visitante no App Platform é o `do-connecting-ip`**, não o `X-Forwarded-For`
   (que lá é o servidor de entrada da DO — e o que o visitante escreve vem na frente dele).
   Ponto único: `seguranca.ip_do_cliente`.
