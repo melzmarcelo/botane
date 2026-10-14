@@ -61,3 +61,6 @@ api/.log-api.err
 
 # A foto de resgate do `preservar_reserva`: dado da casa, nunca versionado.
 api/tests/_foto_reserva_*.json
+
+# Registro das baterias que o promover.ps1 confere
+api/.bateria*.txt

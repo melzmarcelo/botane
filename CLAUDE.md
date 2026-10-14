@@ -51,6 +51,7 @@ comporta assim.** O arquivo não é aplicado a cada promoção (e não deve ser 
 dele valem `DEFINA_NO_PAINEL`), então o que manda é o que está configurado no painel da
 DigitalOcean, e ele diverge do arquivo. Quem quiser a promoção manual de volta desliga o
 *Autodeploy* dos dois componentes no painel; até lá, vale o que foi medido.
+🔑 **Para promover, `.\promover.ps1`** (`-Ensaio` para conferir sem empurrar): bateria, versão, backup e push de `main`+`producao` juntos, na ordem de `docs/deploy.md` seção 6.
 ⚠️ **O que isso muda no roteiro:** o ponto de não retorno é o `git push origin producao`,
 não um passo depois dele. **Backup do banco ANTES do push** quando a versão traz migração
 nova, e a bateria inteira (API + navegador) verde antes do merge.

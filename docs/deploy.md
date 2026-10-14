@@ -296,6 +296,8 @@ minutos, sem ninguém disparar nada. ⚠️ O `.do/app.yaml` do repositório diz
 configuração do painel, que hoje é *Autodeploy* ligado nos dois componentes. Para voltar à
 promoção manual, desligue ali.
 
+🔑 **`.\promover.ps1` faz o roteiro abaixo inteiro** (14/10/2026): roda as duas baterias (ou aceita as já rodadas com `-UsarLogs`, se forem mais novas que o último commit), confere que a `VERSAO` passou da do ar e que a API local está nela, cobra o backup quando há migração nova (tira com `pg_dump` se houver `$env:DATABASE_URL_PRODUCAO`; senão exige `-BackupFeito`), empurra `main` e `producao` **juntos** (`--atomic`) e acompanha o `/api/saude` até virar. `-Ensaio` faz tudo menos o push. ⚠️ Nasceu da 1.1.92, promovida sem backup confirmado e com `main` esquecido no GitHub.
+
 Por isso a ordem é:
 
 1. Bateria inteira verde na base local (API + navegador).
