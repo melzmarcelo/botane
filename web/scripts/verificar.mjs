@@ -7168,52 +7168,33 @@ try {
   await irPara(p, `${WEB}/consumo`);
   await p.waitForSelector("h1", { timeout: 15000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, 900));
-  // ⚠️ O que a rede e o console disseram, para a FALHA explicar a si mesma: em
-  // 14/10/2026 esta tela ficou em "carregando…" só dentro da bateria, e isolada
-  // carregava em 2 s — sem isto, cada hipótese custava uma rodada inteira.
-  const rastroPeriodo = [];
-  const anotarResposta = (r) => {
-    if (!/manifest|_next\/static|__nextjs/.test(r.url())) rastroPeriodo.push(`${r.status()} ${r.url().slice(0, 90)}`);
-  };
-  const anotarPedido = (r) => {
-    if (!/manifest|_next\/static|__nextjs/.test(r.url())) rastroPeriodo.push(`pede ${r.url().slice(0, 90)}`);
-  };
-  const anotarFalha = (r) => rastroPeriodo.push(`falhou ${r.url()} ${r.failure()?.errorText}`);
-  const anotarConsole = (m) => {
-    if (m.type() !== "log" && m.type() !== "info") rastroPeriodo.push(`console ${m.type()} ${m.text().slice(0, 200)}`);
-  };
-  p.on("response", anotarResposta);
-  p.on("request", anotarPedido);
-  p.on("requestfailed", anotarFalha);
-  p.on("console", anotarConsole);
   const primeiroPeriodo = await p.evaluate(() => {
     const l = [...document.querySelectorAll("a")].find((a) => /\/consumo\/\d+$/.test(a.getAttribute("href") ?? ""));
     if (l) l.click();
     return !!l;
   });
   if (primeiroPeriodo) {
-    // ⚠️ **Espera o "carregando…" sumir, não um tempo fixo** (14/10/2026; eram
-    // 1,5 s). ⚠️ Isso NÃO resolveu a falha daquele dia, que segue aberta: ver
-    // "Período de consumo preso em carregando" em docs/memoria/vendas.md.
+    // 🔴 **Espera a URL do PERÍODO e o texto, não um tempo fixo** (14/10/2026).
+    // Eram 1,5 s, e com o `.next` recém-apagado a tela levou mais que isso. A
+    // primeira correção esperava só o "carregando" sumir — e a LISTA de onde se
+    // clica não tem "carregando": a espera voltava na hora e a leitura pegava o
+    // período ainda carregando. Isso derrubou sete rodadas seguidas, com a tela
+    // certa o tempo todo (o CDP mostrou os dados chegando em 1,1 s).
     await p
       .waitForFunction(
-        () => !/carregando/i.test(document.querySelector("main")?.innerText ?? "carregando"),
+        () => /\/consumo\/\d+$/.test(location.pathname)
+          && !/carregando/i.test(document.querySelector("main")?.innerText ?? "carregando"),
         { timeout: 20000 },
       )
       .catch(() => {});
-    await new Promise((r) => setTimeout(r, 300));
     const doPeriodo = await p.evaluate(() => ({
       temBotao: !!document.querySelector('button[aria-controls="explica-tela"]'),
       texto: document.querySelector("main")?.innerText?.slice(0, 200) ?? "",
     }));
     checar("o dado do cabecalho continua a vista, e nao virou 'saber mais'",
       doPeriodo.temBotao === false && /\d{2}\/\d{2}\/\d{4}/.test(doPeriodo.texto),
-      { ...doPeriodo, url: p.url(), rastro: rastroPeriodo.slice(-14) });
+      { ...doPeriodo, url: p.url() });
   }
-  p.off("request", anotarPedido);
-  p.off("response", anotarResposta);
-  p.off("requestfailed", anotarFalha);
-  p.off("console", anotarConsole);
 
   console.log("10a3. o periodo se chama pelo nome, nao 'mes' sempre");
   // 🔑 **Relatado pelo dono (14/09/2026):** *"nas telas quando trata de periodo,
