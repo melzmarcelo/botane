@@ -991,6 +991,15 @@ Reservas, e dentro Agenda e Salão; no mesmo nível de Reservas, Catálogos."*
   subgrupo — cada item continua solto para eles. O contador do grupo conta LINHAS visíveis
   (o subgrupo é uma).
 - A barra de baixo do celular continua dizendo "Reservas": ela leva à Agenda, que é reserva.
+- 🔑 **A ordem do Portal, reorganizada pelo dono** (14/10/2026): Clientes · QR codes · Reservas
+  (Agenda, Salão, Configuração) · Fidelidade (Painel, Códigos, Prêmios, Configuração) · Catálogos
+  (Cadastro) · Pedidos (Painel, Lista de pedidos). A Configuração que era solta no grupo é a da
+  reserva (`/reservas/configuracoes`) e foi para dentro de Reservas.
+  ⚠️ **Catálogos é subgrupo com UM item**, contra a regra de `blocosDoGrupo` — o item leva
+  `manterSubgrupo: true`. Sem isso, apareceria "Cadastro" solto no grupo, sem dizer de quê.
+  ⚠️ **A busca (Ctrl+K) passou a saber do subgrupo**: procura nele também e mostra
+  "Portal de Clientes › Catálogos" — senão "catálogo" deixava de achar a tela renomeada, e as
+  várias "Configuração" e "Painel" eram indistinguíveis na lista.
 
 ## A agenda em calendário (24/09/2026)
 

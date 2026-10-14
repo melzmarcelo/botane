@@ -30,6 +30,10 @@ export type ItemMenu = {
       Salão dentro do Portal de Clientes). Itens com o mesmo `subgrupo` aparecem
       sob um título recolhível; a busca continua vendo cada item. */
   subgrupo?: string;
+  /** ⚠️ O subgrupo fica mesmo com UM item só — exceção à regra de
+      `blocosDoGrupo`. Pedido do dono (14/10/2026): "Catálogos › Cadastro" no
+      Portal de Clientes, que deve ganhar telas irmãs. */
+  manterSubgrupo?: boolean;
 };
 
 export type GrupoMenu = { grupo: string; icone: NomeIcone; itens: ItemMenu[] };
@@ -171,10 +175,27 @@ export const MENU: GrupoMenu[] = [
     grupo: "Portal de Clientes",
     icone: "pessoa",
     itens: [
+      // 🔑 **A ordem do Portal** (pedido do dono, 14/10/2026): Clientes, QR codes,
+      // Reservas (Agenda, Salão, Configuração), Fidelidade (Painel, Códigos, Prêmios,
+      // Configuração), Catálogos (Cadastro) e Pedidos (Painel, Lista de pedidos).
+      // A Configuração que era solta é a da reserva e foi para dentro de Reservas.
       {
-        href: "/reservas/configuracoes",
-        nome: "Configuração",
-        icone: "config",
+        // 🔑 **Clientes** (pedido do dono, 24/09/2026: *"dentro do Portal do
+        // Cliente, criar o menu e a página para listar os clientes
+        // cadastrados"*). Mesmo nível de Reservas e Catálogos: o cadastro serve
+        // aos dois. `reservas.ver` basta — a agenda já mostra nome e telefone.
+        href: "/reservas/clientes",
+        nome: "Clientes",
+        icone: "usuarios",
+        chave: "reservas.ver",
+        soComReservas: true,
+      },
+      {
+        // 🔑 **QR codes** (pedido do dono, 27/09/2026): site, reserva, cardápio de mesa e
+        // fidelidade — todos os QR da casa num lugar só, com a impressão.
+        href: "/reservas/qrcodes",
+        nome: "QR codes",
+        icone: "etiqueta",
         chave: "reservas.configurar",
         soComReservas: true,
       },
@@ -200,15 +221,12 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Reservas",
       },
       {
-        // 🔑 **Clientes** (pedido do dono, 24/09/2026: *"dentro do Portal do
-        // Cliente, criar o menu e a página para listar os clientes
-        // cadastrados"*). Mesmo nível de Reservas e Catálogos: o cadastro serve
-        // aos dois. `reservas.ver` basta — a agenda já mostra nome e telefone.
-        href: "/reservas/clientes",
-        nome: "Clientes",
-        icone: "usuarios",
-        chave: "reservas.ver",
+        href: "/reservas/configuracoes",
+        nome: "Configuração",
+        icone: "config",
+        chave: "reservas.configurar",
         soComReservas: true,
+        subgrupo: "Reservas",
       },
       {
         // 🔑 **Painel** (pedido do dono, 27/09/2026: *"visualizar tudo que diz respeito ao
@@ -216,18 +234,6 @@ export const MENU: GrupoMenu[] = [
         href: "/fidelidade/painel",
         nome: "Painel",
         icone: "presente",
-        chave: "fidelidade.operar",
-        soComReservas: true,
-        subgrupo: "Fidelidade",
-      },
-      {
-        // 🔑 **Fidelidade** (pedido do dono, 24/09/2026: *"no menu podemos ter um
-        // Fidelidade — Configuração"*). O cartão de visitas com check-in por QR.
-        // ⚠️ "Prêmios" vem PRIMEIRO, como a Agenda antes do Salão: é o balcão
-        // conferindo código todo dia; a configuração se faz uma vez.
-        href: "/fidelidade/premios",
-        nome: "Prêmios",
-        icone: "etiqueta",
         chave: "fidelidade.operar",
         soComReservas: true,
         subgrupo: "Fidelidade",
@@ -243,6 +249,16 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Fidelidade",
       },
       {
+        // 🔑 **Fidelidade** (pedido do dono, 24/09/2026: *"no menu podemos ter um
+        // Fidelidade — Configuração"*). O cartão de visitas com check-in por QR.
+        href: "/fidelidade/premios",
+        nome: "Prêmios",
+        icone: "etiqueta",
+        chave: "fidelidade.operar",
+        soComReservas: true,
+        subgrupo: "Fidelidade",
+      },
+      {
         href: "/fidelidade/configuracao",
         nome: "Configuração",
         icone: "config",
@@ -251,24 +267,17 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Fidelidade",
       },
       {
-        // 🔑 **QR codes** (pedido do dono, 27/09/2026): site, reserva, cardápio de mesa e
-        // fidelidade — todos os QR da casa num lugar só, com a impressão.
-        href: "/reservas/qrcodes",
-        nome: "QR codes",
-        icone: "etiqueta",
-        chave: "reservas.configurar",
-        soComReservas: true,
-      },
-      {
         // 🔑 Catálogos no MESMO nível de Reservas (pedido do dono): é o que o
         // site apresenta, não uma parte da agenda.
         href: "/catalogos",
-        nome: "Catálogos",
+        nome: "Cadastro",
         icone: "vendas",
         // ⚠️ `ver` basta para OLHAR; criar é que exige `editar`, e quem decide
         // é o servidor — a tela só esconde os controles.
         chave: ["catalogos.ver", "catalogos.editar"],
         soComReservas: true,
+        subgrupo: "Catálogos",
+        manterSubgrupo: true,
       },
       {
         // 🔑 **Pedidos pelo catálogo** (pedido do dono, 28/09/2026: *"uma tela com pedidos
@@ -402,6 +411,6 @@ export function blocosDoGrupo(itens: ItemMenu[]): Bloco[] {
     if (ja && ja.tipo === "sub") ja.itens.push(i);
     else blocos.push({ tipo: "sub", nome: i.subgrupo, icone: i.icone, itens: [i] });
   }
-  return blocos.map((b) => (b.tipo === "sub" && b.itens.length === 1
+  return blocos.map((b) => (b.tipo === "sub" && b.itens.length === 1 && !b.itens[0].manterSubgrupo
     ? { tipo: "item", item: b.itens[0] } : b));
 }

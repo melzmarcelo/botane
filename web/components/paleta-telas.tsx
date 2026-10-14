@@ -79,7 +79,10 @@ export default function PaletaTelas() {
   const achados = useMemo(() => {
     const t = semAcento(termo.trim());
     if (!t) return telas;
-    return telas.filter((i) => semAcento(i.nome).includes(t) || semAcento(i.grupo).includes(t));
+    // ⚠️ O subgrupo também conta (14/10/2026): "Catálogos" virou subgrupo com
+    // "Cadastro" dentro, e quem digitava "catálogo" deixaria de achar a tela.
+    return telas.filter((i) => semAcento(i.nome).includes(t) || semAcento(i.grupo).includes(t)
+      || semAcento(i.subgrupo ?? "").includes(t));
   }, [telas, termo]);
 
   const abrir = useCallback(() => {
@@ -222,7 +225,10 @@ export default function PaletaTelas() {
               <span className="min-w-0 truncate">
                 <Realce texto={i.nome} termo={termo} />
               </span>
-              <span className="paleta-grupo">{i.grupo}</span>
+              {/* Com o subgrupo, as várias "Configuração" e "Painel" se distinguem. */}
+              <span className="paleta-grupo">
+                {i.subgrupo ? `${i.grupo} › ${i.subgrupo}` : i.grupo}
+              </span>
             </li>
           ))}
         </ul>

@@ -9054,6 +9054,22 @@ try {
   checar("e ele fica entre os itens de Reservas",
     hrefs.indexOf("/catalogos") > hrefs.indexOf("/reservas/agenda")
       && hrefs.indexOf("/catalogos") < hrefs.length, hrefs.filter((h) => h?.includes("reserva") || h === "/catalogos"));
+  // 🔑 **A ordem do Portal pedida pelo dono** (14/10/2026): Clientes, QR codes,
+  // Reservas (Agenda, Salão, Configuração), Fidelidade (Painel, Códigos, Prêmios,
+  // Configuração), Catálogos (Cadastro), Pedidos (Painel, Lista de pedidos).
+  const ordemPortal = ["/reservas/clientes", "/reservas/qrcodes", "/reservas/agenda",
+    "/reservas/salao", "/reservas/configuracoes", "/fidelidade/painel", "/fidelidade/codigos",
+    "/fidelidade/premios", "/fidelidade/configuracao", "/catalogos", "/pedidos/painel", "/pedidos"];
+  const posicoes = ordemPortal.map((h) => hrefs.indexOf(h));
+  checar("o Portal de Clientes segue a ordem pedida",
+    posicoes.every((x, i) => x >= 0 && (i === 0 || x > posicoes[i - 1])),
+    ordemPortal.map((h, i) => `${posicoes[i]} ${h}`));
+  // ⚠️ Catálogos é subgrupo mesmo com UM item (`manterSubgrupo`) — a regra geral o
+  // transformaria em "Cadastro" solto no grupo, sem dizer de quê.
+  const subCatalogos = await p.evaluate(() =>
+    [...document.querySelectorAll("aside button.menu-subgrupo")]
+      .some((b) => /^\s*Cat[áa]logos\s*$/i.test(b.textContent ?? "")));
+  checar("e Catálogos é um subgrupo, com Cadastro dentro", subCatalogos);
 
   checar("a tela abre e oferece criar",
     await clicarQuando(p, "Novo catálogo", { exato: true }));
