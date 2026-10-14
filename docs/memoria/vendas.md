@@ -837,6 +837,20 @@
   no esquema. ⚠️ Nome repetido (`status`, `tipo`, `origem`) fica de fora — não há como saber
   para qual tabela vai. Produtor novo de `origem_custo` entra em `PRODUTORES_DO_CUSTO`.
 
+- 🔴 **ABERTO — Período de consumo preso em "carregando…" na bateria do navegador** (14/10/2026).
+  A checagem "o dado do cabecalho continua a vista" (`verificar.mjs`, seção 10) falhou em cinco
+  rodadas seguidas a partir das 10h, depois de passar em duas de manhã. O que já se sabe:
+  - **não é a versão do Next**: falhou com 16.3.8 e com 16.3.7 (este com o clique nem navegando);
+  - **não é compilação a frio**: falhou também com as 74 telas aquecidas antes;
+  - **não é a API lenta**: a rota responde em 0,04 s sozinha e 0,3 s com quatro em paralelo, e o
+    log do uvicorn mostra os `GET /consumo/periodos/{id}` respondidos com 200 na hora;
+  - **o navegador pede e não recebe**: a tela dispara o pedido (duas vezes, modo estrito), o
+    puppeteer vê o `request` e nunca o `response` em 20 s; ao recarregar, chega na hora;
+  - **isolada não acontece**: uma sonda (perfil limpo ou o da bateria, com 6 abas abertas) carrega
+    a tela em menos de 2 s; o service worker deixa passar tudo o que é da API (outra origem).
+  A checagem agora imprime o rastro de rede e console quando falha. ⚠️ Enquanto não fechar, a
+  bateria do navegador fica 985/986 e o `promover.ps1` recusa promover — por regra do projeto.
+
 ## Armadilhas já pagas
 
 - ⚠️ **`toISOString()` é UTC, e depois das 21h em Brasília ele já diz amanhã.** A tela de
