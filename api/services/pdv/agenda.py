@@ -22,13 +22,13 @@ quem assina: ver `agenda_id_usuario` (migração 034) e `_contexto_de`.
 """
 
 import asyncio
-import traceback
 from datetime import datetime
 
 from database import get_cursor
 from models.cmv import ImportarVendasRequest, VendaImportar
 from seguranca import carregar_contexto
 from services import agenda_integracao as regra
+from services import erros
 from services import segredos
 from services.pdv import cardapio
 from services.pdv import importador
@@ -197,6 +197,10 @@ def rodar_uma(cur, linha: dict) -> dict:
         # o registro do erro logo abaixo gravaria: a exceção subiria, o relógio
         # não andaria e a passada se repetiria de minuto em minuto, muda.
         cur.connection.rollback()
+        # 🔑 O inesperado vai para `erros_sistema` (112), com o traceback — foi
+        # a falta disto que fez o incidente de 09 a 11/10 depender de alguém
+        # colar a mensagem da tela de Integrações.
+        erros.registrar("agenda_pdv", e, id_unidade=linha["id_unidade"])
 
     if erro:
         cur.execute(
@@ -247,5 +251,5 @@ async def laco(parar: asyncio.Event) -> None:
                 else:
                     print(f"[botane] agenda PDV (loja {f['id_unidade']}): "
                           f"{f.get('importadas', 0)} venda(s) nova(s)")
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as e:  # noqa: BLE001
+            await asyncio.to_thread(erros.registrar, "agenda_pdv", e)

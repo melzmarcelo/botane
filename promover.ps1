@@ -106,14 +106,17 @@ if (-not $UsarLogs) {
 
 # ATENCAO: na API, "84/85 suites, ..., 0 falharam" tambem e vermelho -- a suite que
 # quebrou antes do resumo nao conta checagem nenhuma. Por isso o par de numeros abaixo.
-foreach ($par in @(@($log_api, '^(\d+)/ su.+, \d+ checagens ok, 0 falharam'),
+foreach ($par in @(@($log_api, '^(\d+)/\1 su.+, \d+ checagens ok, 0 falharam'),
                    @($log_web, '^\d+ passaram, 0 falharam'))) {
     $arquivo, $padrao = $par
     if (-not (Test-Path $arquivo)) { Parar "nao ha registro da bateria em $arquivo. Rode sem -UsarLogs." }
     if ((Get-Item $arquivo).LastWriteTime -lt $hora_commit) {
         Parar "$arquivo e mais velho que o ultimo commit -- a bateria nao testou este codigo."
     }
-    $fim = Get-Content $arquivo -Encoding UTF8 | Where-Object { $_.Trim() } | Select-Object -Last 1
+    # A linha de RESUMO, e nao a ultima: o navegador ainda escreve onde guardou as fotos.
+    $linhas = Get-Content $arquivo -Encoding UTF8
+    $fim = $linhas | Where-Object { $_ -match 'checagens ok|passaram,' } | Select-Object -Last 1
+    if (-not $fim) { $fim = $linhas | Where-Object { $_.Trim() } | Select-Object -Last 1 }
     if ($fim -notmatch $padrao) { Parar "bateria NAO esta verde ($arquivo): $fim" }
     Write-Host "ok  $fim"
 }

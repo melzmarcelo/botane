@@ -10,13 +10,14 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import validate_email
 from pydantic_core import PydanticCustomError
 
 import arquivos
 import auditoria
 import paginacao
-from services import segredos
+from services import erros, segredos
 from services.omie import agenda as agenda_omie
 from services.pdv import agenda as agenda_pdv
 from services import whatsapp as whatsapp_servico
@@ -59,6 +60,7 @@ from routers import (
     exportacoes,
     fichas,
     fornecedores,
+    erros as erros_rota,
     historico,
     inicio,
     inventario,
@@ -245,6 +247,7 @@ async def lifespan(app: FastAPI):
     # ⚠️ **ANTES de tudo**: sem segredo válido nada mais importa, e falhar aqui
     # é mais barato que falhar depois de rodar migração.
     conferir_segredo()
+    erros.VERSAO = VERSAO
     init_pool()
     run_migrations()
     garantir_admin()
@@ -358,6 +361,23 @@ _CABECALHOS_DE_SEGURANCA = {
 }
 
 
+@app.exception_handler(Exception)
+async def _erro_nao_tratado(request, erro: Exception):
+    """Todo erro que estourou sem tratamento vai para `erros_sistema` (112).
+
+    🔑 **A resposta diz o NÚMERO do registro.** É o que a pessoa repete ao pedir
+    ajuda — e com ele quem investiga acha o traceback na tela de Auditoria, sem
+    precisar do log da nuvem.
+    ⚠️ Fora da thread do laço: gravar no banco aqui dentro travaria todas as
+    outras requisições enquanto o INSERT não volta.
+    """
+    numero = await run_in_threadpool(erros.registrar, "api", erro,
+                                     metodo=request.method, rota=request.url.path)
+    return JSONResponse(status_code=500, content={
+        "detail": "Erro interno do sistema"
+                  + (f" (registro {numero} em Auditoria ▸ Erros)" if numero else "") + "."})
+
+
 @app.exception_handler(BancoOcupado)
 async def _banco_ocupado(_request, erro: BancoOcupado):
     """Sem conexão livre dentro da espera: 503 com frase, não 500 com traceback.
@@ -426,6 +446,7 @@ app.include_router(papeis.router)
 app.include_router(empresa.router)
 app.include_router(email_config.router)
 app.include_router(historico.router)
+app.include_router(erros_rota.router)
 app.include_router(cadastros.router)
 app.include_router(fornecedores.router)
 app.include_router(produtos.router)

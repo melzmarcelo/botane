@@ -490,6 +490,17 @@ FERRAMENTAS: list[Ferramenta] = [
         "/auditoria",
         {"entidade": Param("string", "Só desta entidade (ex.: produto, venda, usuario)."),
          "limite": _lim(50, 500), "offset": _OFFSET}),
+    # 🔑 **O erro do ar, sem o log da nuvem** (migração 112, 14/10/2026). No
+    # incidente de 09 a 11/10 a mensagem que fechou o diagnóstico só existia na
+    # tela de Integrações e precisou ser colada por quem a viu.
+    Ferramenta(
+        "erros_do_sistema", "Erros do sistema",
+        "Os erros que estouraram sem tratamento — na API e nos agendadores do PDV, do Omie "
+        "e do WhatsApp —, do mais recente, com rota, mensagem e traceback. É o primeiro "
+        "lugar para olhar quando algo parou de funcionar.",
+        "/erros",
+        {"origem": Param("string", "Só desta origem: api, agenda_pdv, agenda_omie ou whatsapp."),
+         "limite": _lim(20, 500)}),
 
     # ------------------------------------------------------------- reservas
     Ferramenta(

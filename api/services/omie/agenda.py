@@ -24,11 +24,13 @@ de novo a cada minuto numa casa sem nota nova — que é a casa normal de doming
 """
 
 import asyncio
-import traceback
 from datetime import datetime
+
+import psycopg2.extensions
 
 from database import get_cursor
 from services import agenda_integracao as regra
+from services import erros
 from services import segredos
 from services.omie import importador
 from services.omie.cliente import ClienteOmie, ErroOmie
@@ -80,6 +82,16 @@ def rodar_uma(cur, linha: dict) -> dict:
         erro = e.mensagem
     except Exception as e:  # noqa: BLE001 — o agendador não pode morrer por uma loja
         erro = f"{type(e).__name__}: {e}"
+        # 🔑 O inesperado vai para `erros_sistema` (112), com o traceback.
+        erros.registrar("agenda_omie", e, id_unidade=linha["id_unidade"])
+        # ⚠️ **Só desfaz se o BANCO abortou** (o mesmo defeito achado na agenda
+        # do PDV em 11/10/2026): com a transação abortada o `marcar` abaixo
+        # falhava, o relógio não andava e a busca se repetia a cada minuto. Erro
+        # que não é de banco não aborta nada — e desfazer ali jogaria fora as
+        # notas que já tinham entrado nesta passada.
+        if (cur.connection.info.transaction_status
+                == psycopg2.extensions.TRANSACTION_STATUS_INERROR):
+            cur.connection.rollback()
 
     regra.marcar(cur, linha["id"], erro)
     return {"id_unidade": linha["id_unidade"], "erro": erro, **resultado}
@@ -127,5 +139,5 @@ async def laco(parar: asyncio.Event) -> None:
                 else:
                     print(f"[botane] agenda Omie (loja {f['id_unidade']}): "
                           f"{f.get('novas', 0)} nota(s) nova(s)")
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as e:  # noqa: BLE001
+            await asyncio.to_thread(erros.registrar, "agenda_omie", e)

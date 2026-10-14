@@ -1,56 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import { Paginacao, usePaginacao } from "@/components/paginacao";
-import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
+import { useRouter, useSearchParams } from "next/navigation";
 import ExplicaTela from "@/components/explica-tela";
+import Alteracoes from "./alteracoes";
+import ErrosDoSistema from "./erros";
 
-type Linha = {
-  id: number;
-  entidade: string;
-  id_entidade: string | null;
-  acao: string;
-  antes: Record<string, unknown> | null;
-  depois: Record<string, unknown> | null;
-  em: string;
-  usuario: string | null;
-  /** `claude` quando a alteração veio pelo conector; nulo quando veio da tela. */
-  origem: string | null;
-  email: string | null;
-};
-
-function resumo(d: Record<string, unknown> | null) {
-  if (!d) return "—";
-  const partes = Object.entries(d)
-    .slice(0, 4)
-    .map(([k, v]) => `${k}: ${v === null ? "—" : String(v)}`);
-  return partes.join(" · ") || "—";
-}
+/**
+ * Auditoria: o que alguém mudou, e o que o sistema não conseguiu fazer.
+ *
+ * 🔑 **A aba de erros nasceu do incidente de 09 a 11/10/2026** (migração 112):
+ * a busca das vendas do PDV falhou três dias, e a mensagem que fechou o
+ * diagnóstico só existia na tela de Integrações. ⚠️ São abas, e não uma lista
+ * só: misturar faria o histórico de alterações encher de ruído técnico — e o
+ * erro sumir no meio dele.
+ *
+ * ⚠️ **A aba vive na URL** (`?aba=erros`), como em Integrações: é o endereço que
+ * a frase do erro 500 manda abrir ("registro N em Auditoria ▸ Erros").
+ */
+const ABAS = [
+  { id: "alteracoes", nome: "Alterações" },
+  { id: "erros", nome: "Erros" },
+] as const;
 
 export default function PaginaAuditoria() {
-  const [linhas, setLinhas] = useState<Linha[] | null>(null);
-  const [aberta, setAberta] = useState<number | null>(null);
-  const [erro, setErro] = useState("");
-  const pag = usePaginacao("auditoria", { padrao: 50 });
-
-  useEffect(() => {
-    // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
-    // dispara a busca com o tamanho errado, e a resposta atrasada dela
-    // sobrescreve a certa -- era o "seletor em 100, lista com 20".
-    if (!pag.pronto) return;
-    api
-      .listar<Linha>(`/auditoria?${new URLSearchParams(pag.parametros)}`)
-      .then((r) => {
-        setLinhas(r.itens);
-        pag.setTotal(r.total);
-      })
-      .catch((e) => setErro(e.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, pag.offset, pag.porPagina]);
-
-  if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
-  if (!linhas) return <Carregando />;
+  const router = useRouter();
+  const busca = useSearchParams();
+  const aba = busca.get("aba") === "erros" ? "erros" : "alteracoes";
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,101 +34,28 @@ export default function PaginaAuditoria() {
         <h1 className="mt-1 text-[30px] font-bold tracking-tight">Auditoria</h1>
         <ExplicaTela>
           Quem mudou o quê, quando, e o valor antes e depois. Senha e credencial nunca entram
-          aqui — o registro é filtrado antes de gravar.
+          aqui — o registro é filtrado antes de gravar. Na aba Erros, o que o sistema tentou
+          fazer e não conseguiu.
         </ExplicaTela>
       </header>
 
-      <Cartao>
-        {!linhas.length ? (
-          <Vazio>Nada registrado ainda.</Vazio>
-        ) : (
-          <>
-          {/* Celular: cada registro vira um cartão — tabela de 5 colunas não cabe. */}
-          <ul className="flex flex-col gap-px bg-linha md:hidden">
-            {linhas.map((l) => (
-              <li key={l.id} className="bg-superficie py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Etiqueta cor={l.acao === "login" ? "neutro" : "erva"}>{l.acao}</Etiqueta>
-                  {l.origem === "claude" && <Etiqueta cor="alerta">pelo Claude</Etiqueta>}
-                  <span className="mono text-[12.5px]">
-                    {l.entidade}
-                    {l.id_entidade ? ` #${l.id_entidade}` : ""}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[14px]">
-                  {l.usuario ?? "sistema"}
-                  <span className="mono ml-2 text-[12.5px] text-suave">
-                    {new Date(l.em).toLocaleString("pt-BR")}
-                  </span>
-                </p>
-                <p className="mt-1 break-words text-[13px] text-suave">{resumo(l.depois)}</p>
-              </li>
-            ))}
-          </ul>
+      <nav className="flex flex-wrap gap-1 border-b border-linha">
+        {ABAS.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => router.replace(`/auditoria?aba=${a.id}`)}
+            className={`-mb-px border-b-2 px-3 py-2 text-[14.5px] ${
+              aba === a.id
+                ? "border-erva font-semibold text-erva"
+                : "border-transparent text-suave hover:text-tinta"
+            }`}
+          >
+            {a.nome}
+          </button>
+        ))}
+      </nav>
 
-          <div className="hidden grid-rolante md:block">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Quando</th>
-                  <th>Quem</th>
-                  <th>O quê</th>
-                  <th>Ação</th>
-                  <th>Depois</th>
-                </tr>
-              </thead>
-              <tbody>
-                {linhas.map((l) => (
-                  <tr
-                    key={l.id}
-                    className="cursor-pointer align-top"
-                    onClick={() => setAberta(aberta === l.id ? null : l.id)}
-                  >
-                    <td className="mono whitespace-nowrap text-[13px]">
-                      {new Date(l.em).toLocaleString("pt-BR")}
-                    </td>
-                    <td className="whitespace-nowrap">{l.usuario ?? "sistema"}</td>
-                    <td className="mono text-[13px]">
-                      {l.entidade}
-                      {l.id_entidade ? ` #${l.id_entidade}` : ""}
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Etiqueta cor={l.acao === "login" ? "neutro" : "erva"}>{l.acao}</Etiqueta>
-                        {/* 🔑 Quem fez está na coluna "Quem"; isto diz POR ONDE.
-                            É a pergunta de quem procura o que o Claude mexeu. */}
-                        {l.origem === "claude" && <Etiqueta cor="alerta">pelo Claude</Etiqueta>}
-                      </div>
-                    </td>
-                    <td className="max-w-[420px] text-[13px] text-suave">
-                      {aberta === l.id ? (
-                        <div className="flex flex-col gap-2">
-                          <div>
-                            <span className="rotulo">antes</span>
-                            <pre className="mono mt-1 whitespace-pre-wrap break-words text-[12px]">
-                              {JSON.stringify(l.antes, null, 2) ?? "—"}
-                            </pre>
-                          </div>
-                          <div>
-                            <span className="rotulo">depois</span>
-                            <pre className="mono mt-1 whitespace-pre-wrap break-words text-[12px]">
-                              {JSON.stringify(l.depois, null, 2) ?? "—"}
-                            </pre>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="line-clamp-1">{resumo(l.depois)}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </>
-        )}
-        <Paginacao p={pag} rotulo="evento(s)" />
-      </Cartao>
+      {aba === "alteracoes" ? <Alteracoes /> : <ErrosDoSistema />}
     </div>
   );
 }

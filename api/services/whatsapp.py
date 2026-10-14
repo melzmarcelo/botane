@@ -28,7 +28,6 @@ import hmac
 import json
 import re
 import secrets
-import traceback
 from datetime import datetime, timedelta
 
 import httpx
@@ -36,7 +35,7 @@ from fastapi import HTTPException
 
 from database import get_cursor
 from relogio import agora_da_casa
-from services import segredos
+from services import erros, segredos
 
 API_VERSAO_PADRAO = "v21.0"
 INTERVALO_DE_CHECAGEM = 30          # segundos
@@ -510,8 +509,8 @@ async def laco(parar: asyncio.Event) -> None:
                 _ultima_varredura = agora
                 await asyncio.to_thread(_varrer_com_cursor)
             await asyncio.to_thread(processar_fila)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
+        except Exception as e:  # noqa: BLE001
+            await asyncio.to_thread(erros.registrar, "whatsapp", e)
 
 
 def _varrer_com_cursor() -> None:

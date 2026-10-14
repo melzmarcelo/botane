@@ -5,6 +5,22 @@
 
 ## O que já existe
 
+- 🔑 **Erro não tratado fica no BANCO, não só no log da nuvem** (migração 112, 14/10/2026).
+  No incidente das vendas do PDV (09 a 11/10) a mensagem que fechou o diagnóstico só existia na
+  tela de Integrações, e o dono precisou colá-la; o log do App Platform ninguém lê. Agora:
+  `exception_handler(Exception)` em `main.py` grava todo 500 em `erros_sistema` e responde
+  *"Erro interno do sistema (registro N em Auditoria ▸ Erros)"*; os laços e as passadas dos
+  agendadores (PDV, Omie, WhatsApp) gravam também. Lê-se em **Auditoria ▸ Erros** (`GET /erros`,
+  chave `admin.auditoria`) e pelo conector (`erros_do_sistema`).
+  ⚠️ **`erros.registrar` nunca levanta** — roda dentro do tratamento de outro erro, e subir
+  trocaria a exceção que importa pela dele. Também imprime o traceback, para o caso de o banco
+  ser o que caiu. Poda a si mesmo (90 dias) a cada cem registros.
+  ⚠️ **Só o inesperado**: `HTTPException` (4xx) é resposta, não defeito, e não entra.
+  ⚠️ **A agenda do Omie tinha o defeito que a do PDV teve**: erro de banco deixava a transação
+  abortada, o `marcar` falhava e a busca se repetia a cada minuto. Agora ela desfaz — mas só
+  quando o banco abortou (`TRANSACTION_STATUS_INERROR`): erro que não é de banco não aborta
+  nada, e desfazer ali jogaria fora as notas que já tinham entrado na passada.
+
 - 🔑 **O pool de conexões não tinha FILA, e a rajada do conector estourava em 500**
   (06/10/2026, log de produção colado pelo dono: `psycopg2.pool.PoolError: connection pool
   exhausted`). O `ThreadedConnectionPool` tem dez conexões e, com as dez em uso, a décima
