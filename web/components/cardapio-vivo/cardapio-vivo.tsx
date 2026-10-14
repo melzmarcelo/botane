@@ -65,7 +65,10 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
   const previa = idCatalogoPrevia !== undefined;
 
   useEffect(() => {
-    setIdioma(idiomaDoNavegador());
+    // O site de reservas manda o idioma que a pessoa escolheu lá (`?idioma=en`); sem
+    // ele, vale o do navegador.
+    const pedido = new URLSearchParams(window.location.search).get("idioma");
+    setIdioma(pedido === "en" || pedido === "de" || pedido === "pt" ? pedido : idiomaDoNavegador());
     setEconomia(economiaDeDados());
     try {
       setAviso(!previa && !localStorage.getItem(CHAVE_AVISO));
@@ -225,7 +228,14 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
   }
 
   return (
-    <main style={estilo} className="relative h-[100dvh] overflow-hidden bg-black text-white">
+    // 🔑 **No computador, o feed é uma COLUNA de celular no centro** (pedido do dono,
+    // 14/10/2026: "não ficou bem visualmente na web, no mobile sim"). Esticado na
+    // largura do monitor, a foto vertical virava um recorte ampliado e os controles
+    // iam para cantos opostos. ⚠️ O `transform` não é enfeite: ele faz as camadas
+    // `fixed inset-0` (detalhe, favoritos, seleção) ficarem presas DENTRO da coluna.
+    <div className="min-h-[100dvh] bg-[#0f0f0f] md:flex md:justify-center">
+    <main style={estilo}
+          className="relative h-[100dvh] w-full overflow-hidden bg-black text-white md:max-w-[480px] md:shadow-[0_0_80px_rgba(0,0,0,0.7)] md:[transform:translateZ(0)]">
       {fonte.url && <link rel="stylesheet" href={fonte.url} />}
 
       <header className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]">
@@ -379,5 +389,6 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
         />
       )}
     </main>
+    </div>
   );
 }

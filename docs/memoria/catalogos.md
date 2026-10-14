@@ -504,5 +504,21 @@ e fase 3 (A/B) não começaram.
   e margem do item, e o painel, ficaram para a fase 2. Cobertura: 93 na API, 29 no navegador.
   ⚠️ O botão "♥" do topo tem `aria-label="Meus favoritos"`, igual ao diálogo — a verificação
   procura `[role="dialog"]`.
+- 🔑 **O site de reservas abre o FEED** (pedido do dono, 14/10/2026: *"quando coloco um cardápio
+  como cardápio vivo, ao acessar pelo site reservas, ficaríamos naquela mesma estrutura"*). Revoga
+  a decisão 4 do estudo ("o site continua como está e ganha o link"). `GET /publico/{loja}/catalogos`
+  traz `cardapio_vivo` (o catálogo que `cardapio_config` aponta naquela loja), e o `abrirCatalogo` do
+  site leva a `/c/{loja}` em vez da tela de seções. Clique, QR da mesa (`&catalogo=`) e F5 passam
+  todos por ali. O idioma vai junto (`?idioma=en`), e o feed o prefere ao do navegador.
+  ⚠️ **Antes de ir, o site volta a `#inicio` e esquece o catálogo aberto**: sem isso, o "voltar" do
+  celular caía em `#cardapio`, que reabria o feed, e a pessoa ficava presa sem voltar ao site.
+  ⚠️ O endereço do sistema web (`WEB`) segue a mesma regra da `API` no site: decidido pelo hospedeiro.
+- 🔑 **No computador, o feed é uma COLUNA de celular** (até 480 px, laterais escuras; pedido do dono,
+  mesmo dia: *"não ficou bem visualmente na web, no mobile sim"*). Esticado no monitor, a foto
+  vertical virava recorte ampliado e os controles iam para cantos opostos.
+  ⚠️ **O `transform` no `<main>` não é enfeite**: ele faz as camadas `fixed inset-0` (detalhe,
+  favoritos, seleção) ficarem presas DENTRO da coluna, sem mexer em cada uma. A foto passou a pedir
+  `sizes="(min-width: 768px) 480px, 100vw"` — pela largura do monitor, baixava o dobro sem ganho.
+
 - **Falta na fase 1**: tela das exceções por salão/mesa (a API existe; só fazem sentido com o
   PEDIDO), Spaces, e medir o Lighthouse ≥ 85 num `next build`.

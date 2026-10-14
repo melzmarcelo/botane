@@ -193,6 +193,14 @@ st, r = chamar("GET", "/publico/cardapio/mesa/naoexiste123")
 checar("token inventado: 404", st == 404, st)
 st, r = chamar("GET", f"/publico/cardapio/loja/{U}")
 checar("a URL da loja (sem mesa) abre também", st == 200 and r.get("mesa") is None, (st, r))
+# 🔑 **O site de reservas sabe qual catálogo é o Cardápio Vivo** (pedido do dono,
+# 14/10/2026): é por este campo que ele leva ao feed `/c/{loja}` em vez da tela antiga.
+st, lista = chamar("GET", f"/publico/{U}/catalogos")
+vivo = next((c for c in (lista or []) if c.get("id") == ID_CAT), None)
+checar("a lista pública do site marca o Cardápio Vivo",
+       st == 200 and vivo is not None and vivo.get("cardapio_vivo") is True, (st, vivo))
+checar("e só ele", all(c.get("cardapio_vivo") is False for c in (lista or []) if c.get("id") != ID_CAT),
+       [(c.get("id"), c.get("cardapio_vivo")) for c in (lista or [])])
 
 print("\n4. a mídia em cascata: vídeo → foto do item → subcategoria → categoria")
 from base64 import b64decode  # noqa: E402

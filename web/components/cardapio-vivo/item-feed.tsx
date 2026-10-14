@@ -62,7 +62,9 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
           <img
             src={imagem(capa, 720) ?? undefined}
             srcSet={srcSet(capa)}
-            sizes="100vw"
+            // No computador o feed é uma coluna de 480 px (ver `cardapio-vivo.tsx`):
+            // pedir a foto pela largura do monitor baixava o dobro sem ganho nenhum.
+            sizes="(min-width: 768px) 480px, 100vw"
             alt=""
             className="absolute inset-0 h-full w-full object-cover"
             loading={prioridade || perto ? "eager" : "lazy"}

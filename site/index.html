@@ -748,6 +748,10 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 const API = location.hostname === "localhost" || location.hostname === "127.0.0.1"
   ? "http://127.0.0.1:9200"
   : "https://sistema.botanedeliecafe.com.br/api";
+/* O sistema web, onde mora o Cardápio Vivo (`/c/{loja}`). Mesma regra da API. */
+const WEB = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  ? "http://127.0.0.1:3100"
+  : "https://sistema.botanedeliecafe.com.br";
 
 /* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
    (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a
@@ -1422,6 +1426,18 @@ async function carregarCatalogos() {
 /** Abre um catálogo pelo botão da página inicial. */
 async function abrirCatalogo(c) {
   if (c.exige_cadastro && !eu.identificado) return identificarPara(c);
+  // 🔑 **O Cardápio Vivo abre o FEED, não a tela de seções** (pedido do dono,
+  // 14/10/2026: "ao acessar pelo site, ficaríamos naquela mesma estrutura").
+  // ⚠️ Antes de ir, o site volta ao início e esquece o catálogo aberto: senão o
+  // "voltar" do celular traria a pessoa a `#cardapio`, que reabriria o feed — e ela
+  // ficaria presa sem conseguir voltar ao site.
+  if (c.cardapio_vivo) {
+    aberto = null;
+    lembrar();
+    history.replaceState(null, "", location.pathname + "#inicio");
+    location.assign(`${WEB}/c/${LOJA}${IDIOMA === "pt" ? "" : `?idioma=${IDIOMA}`}`);
+    return;
+  }
   if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
   aberto = { id: c.id, secao: null };
   lembrar();
