@@ -11,6 +11,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from psycopg2 import errors as erros_pg
 
 import auditoria
 from database import get_cursor
@@ -229,6 +230,30 @@ def previa(body: PreviaCupomRequest, ctx: Contexto = Depends(_editar)) -> dict:
         }
 
 
+def _motivo(e: Exception) -> str:
+    """O erro numa linha, para a tela e para a agenda.
+
+    ⚠️ Só a primeira linha do erro do banco: o resto é `DETAIL`/`CONTEXT`, útil
+    no log e ilegível numa frase de resultado.
+    """
+    if isinstance(e, HTTPException):
+        return str(e.detail)
+    return f"{type(e).__name__}: {str(e).strip().splitlines()[0] if str(e).strip() else ''}"
+
+
+def frase_das_falhas(falhas: list[dict]) -> str:
+    """" — N NÃO gravada(s): doc (motivo); …", ou nada quando não houve.
+
+    Pública porque a busca do PDV monta a frase dela e precisa dizer o mesmo.
+    """
+    if not falhas:
+        return ""
+    return (f" — {len(falhas)} NÃO gravada(s): "
+            + "; ".join(f"{f['documento'] or 'sem documento'} ({f['erro']})"
+                        for f in falhas[:3])
+            + (f" e mais {len(falhas) - 3}" if len(falhas) > 3 else ""))
+
+
 def _quando(data, hora):
     """A data da venda COM a hora dela, para o razão.
 
@@ -263,6 +288,9 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
     de_rascunho = 0
     produzidos_na_hora, baixados = 0, 0
     custos_cache: dict[int, tuple] = {}
+    # As vendas que o banco recusou — o lote segue sem elas (ver o SAVEPOINT).
+    falhas: list[dict] = []
+    primeira_falha: Exception | None = None
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
@@ -305,170 +333,203 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     repetidas += 1
                     continue
 
-            # 🔑 **A política de cupom da PESSOA** (04/09/2026, pedido do dono).
-            # A venda à mão sempre puxa o preço de venda; informando a pessoa,
-            # o item passa a valer o CUSTO, ou o preço com desconto. É o
-            # desconto de funcionário e o consumo do proprietário com a mesma
-            # mecânica — o que muda é a política no cadastro dela.
-            #
-            # ⚠️ **A conta acontece AQUI, no servidor.** Se a regra vivesse na
-            # tela, uma venda lançada por outro caminho sairia com outro número
-            # — e o custo congelado no item ficaria errado para sempre.
-            # ⚠️ **O que o cliente mandou como preço cheio é DESCARTADO.** Só
-            # `_aplicar_politica` o preenche; aceitá-lo de fora deixaria
-            # qualquer chamador declarar um desconto que nunca houve, e o
-            # relatório de consumo somaria um desconto inventado.
-            for item in venda.itens:
-                item.valor_unitario_cheio = None
-
-            politica = _politica_da_pessoa(cur, venda.id_pessoa)
-            if politica:
-                nao_custeados = _aplicar_politica(
-                    cur, id_unidade, venda, politica, custos_cache)
-                if nao_custeados:
-                    politicas_sem_custo += len(nao_custeados)
-                # 🔑 **A tela precisa DIZER o que aconteceu** (pedido do dono:
-                # "apresente uma mensagem", "demonstrando isto"). Um cupom que
-                # sai por outro valor sem explicar por quê é indistinguível de
-                # erro de digitação.
-                politicas_aplicadas.append(_frase_da_politica(politica))
-
-            bruto = sum(i.quantidade * i.valor_unitario for i in venda.itens)
-            # ⚠️ **`valor_total` guarda o LÍQUIDO**, que é o que a casa recebeu e
-            # o que o PDV informa no cupom. O bruto continua reconstituível pela
-            # soma dos itens, e o desconto vai na coluna própria — assim a
-            # conferência com o PDV fecha sem ninguém precisar refazer a conta.
-            total = bruto - (venda.desconto or 0)
-            cur.execute(
-                """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
-                                       valor_total, desconto, cancelada, id_pessoa,
-                                       consumo_interno,
-                                       cupom_base, cupom_desconto_pct, id_usuario)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   RETURNING id""",
-                (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
-                 venda.documento, total, venda.desconto or 0, venda.cancelada,
-                 venda.id_pessoa, bool(venda.consumo_interno and venda.id_pessoa),
-                 # 🔑 A política CONGELADA, como o custo da ficha: ela muda no
-                 # cadastro, e sem isto o relatório de março passaria a se
-                 # explicar por uma regra de setembro.
-                 (politica or {}).get("cupom_base"),
-                 (politica or {}).get("cupom_desconto_pct"), ctx.id_usuario),
-            )
-            id_venda = cur.fetchone()["id"]
-            if venda.cancelada:
-                canceladas += 1
-            else:
-                importadas += 1
-
-            for item in venda.itens:
-                id_produto = item.id_produto
-                if not id_produto and item.codigo:
-                    cur.execute(
-                        "SELECT id FROM produtos WHERE lower(codigo) = lower(%s)", (item.codigo,)
-                    )
-                    achado = cur.fetchone()
-                    id_produto = achado["id"] if achado else None
-                if not id_produto and item.descricao:
-                    # Último recurso: nome exato. Semelhança só sugere, nunca vincula.
-                    cur.execute(
-                        "SELECT id FROM produtos WHERE lower(nome) = lower(%s) AND ativo",
-                        (item.descricao,),
-                    )
-                    achado = cur.fetchone()
-                    id_produto = achado["id"] if achado else None
-
-                custo, origem = (None, "sem_produto")
-                if id_produto:
-                    if id_produto not in custos_cache:
-                        # 🔑 A loja vai junto: este custo é CONGELADO no item de
-                        # venda. Calculado com o estoque das duas lojas, o erro
-                        # fica gravado no CMV daquele mês, sem conserto.
-                        custos_cache[id_produto] = motor.custo_teorico_do_produto(
-                            cur, id_produto, id_unidade=id_unidade)
-                    custo, origem = custos_cache[id_produto]
-                else:
-                    sem_vinculo += 1
-                if custo is None:
-                    sem_custo += 1
-                if origem.startswith("ficha_rascunho"):
-                    de_rascunho += 1
-
-                cur.execute(
-                    """INSERT INTO venda_itens (id_venda, codigo_pdv, descricao_pdv, id_produto,
-                                                quantidade, valor_unitario, valor_total,
-                                                valor_unitario_cheio,
-                                                custo_ficha_unitario, origem_custo)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (id_venda, item.codigo, item.descricao, id_produto, item.quantidade,
-                     item.valor_unitario, item.quantidade * item.valor_unitario,
-                     item.valor_unitario_cheio, custo, origem),
-                )
-                itens_total += 1
-
-                # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
-                # continuava na prateleira do sistema: o CMV real ficava
-                # subestimado e a primeira contagem cobria o buraco inteiro
-                # como "ajuste de inventário", que é onde a diferença some.
+            # 🔑 **Cada venda num SAVEPOINT** (14/10/2026). O lote era uma transação
+            # só: um item que o banco recusava derrubava TODAS as vendas do período,
+            # e a busca do PDV ficou de 09 a 11/10 sem gravar nada por causa de um
+            # rótulo que não cabia na coluna. Agora a venda que falha volta sozinha,
+            # as outras entram, e a resposta diz qual ficou de fora e por quê.
+            # ⚠️ **Os contadores voltam junto.** A venda desfeita já tinha somado
+            # itens, baixas e frases de política; sem restaurar, a resposta contaria
+            # o que o banco não guardou.
+            # ⚠️ **Falhou TUDO, a exceção sobe como antes.** É o caso da venda única
+            # digitada na tela: quem lança precisa do erro, não de um "0 importadas".
+            fotografia = (importadas, canceladas, itens_total, sem_vinculo, sem_custo,
+                          de_rascunho, produzidos_na_hora, baixados, politicas_sem_custo,
+                          len(politicas_aplicadas))
+            cur.execute("SAVEPOINT uma_venda")
+            try:
+                # 🔑 **A política de cupom da PESSOA** (04/09/2026, pedido do dono).
+                # A venda à mão sempre puxa o preço de venda; informando a pessoa,
+                # o item passa a valer o CUSTO, ou o preço com desconto. É o
+                # desconto de funcionário e o consumo do proprietário com a mesma
+                # mecânica — o que muda é a política no cadastro dela.
                 #
-                # O que é feito NA HORA nasce e morre aqui: produz e baixa no
-                # mesmo lançamento, e o saldo volta a zero. O que é PARA
-                # ESTOQUE só baixa — foi produzido antes.
-                # ⚠️ **Cupom cancelado NÃO baixa estoque**, e é a razão de ele
-                # poder entrar. Ele existe aqui para a conferência com o PDV
-                # fechar e para aparecer no painel — mercadoria que voltou para
-                # a prateleira (ou nunca saiu) não pode sair do razão, que é
-                # append-only e não teria como desfazer.
-                if id_produto and not venda.cancelada:
-                    cur.execute(
-                        # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
-                        # ele existe** (migração 066, pedido do dono). A mesma
-                        # massa de pizza pode estar na câmara como insumo e na
-                        # vitrine para vender: a venda tem de tirar da VITRINE, e
-                        # o consumo da receita da pizza, da câmara.
-                        # ⚠️ `id_local_padrao` continua respondendo por quem não
-                        # configurou nada — que é o caso de todos os produtos de
-                        # hoje. O `coalesce` é o que faz esta mudança não mexer em
-                        # nenhum deles.
-                        """SELECT controla_estoque,
-                                  coalesce(id_local_venda, id_local_padrao) AS id_local_padrao
-                             FROM produtos WHERE id = %s""",
-                        (id_produto,),
-                    )
-                    p_venda = cur.fetchone() or {}
-                    if p_venda.get("controla_estoque"):
-                        feito = agenda.producao_da_venda(
-                            cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
-                            documento=venda.documento, id_venda=id_venda)
-                        if feito:
-                            produzidos_na_hora += 1
-                        motor_estoque.lancar(
-                            cur, id_unidade=id_unidade,
-                            id_local=(feito or {}).get("id_local")
-                                     or p_venda.get("id_local_padrao"),
-                            id_produto=id_produto,
-                            # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
-                            # o que o põe na linha "dos quais: consumo interno" da
-                            # apuração, com o custo dele. ⚠️ A origem continua VENDA:
-                            # é por ela que o cancelamento acha o movimento a estornar.
-                            tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
-                                  else "SAIDA_VENDA"),
-                            quantidade=item.quantidade,
-                            data_movimento=_quando(venda.data, venda.hora),
-                            origem_tipo="VENDA", origem_id=id_venda,
-                            documento=venda.documento, id_usuario=ctx.id_usuario,
-                            observacao=("Consumo interno" if venda.consumo_interno
-                                        else "Produzido e vendido na hora" if feito
-                                        else "Baixa da venda"),
+                # ⚠️ **A conta acontece AQUI, no servidor.** Se a regra vivesse na
+                # tela, uma venda lançada por outro caminho sairia com outro número
+                # — e o custo congelado no item ficaria errado para sempre.
+                # ⚠️ **O que o cliente mandou como preço cheio é DESCARTADO.** Só
+                # `_aplicar_politica` o preenche; aceitá-lo de fora deixaria
+                # qualquer chamador declarar um desconto que nunca houve, e o
+                # relatório de consumo somaria um desconto inventado.
+                for item in venda.itens:
+                    item.valor_unitario_cheio = None
+
+                politica = _politica_da_pessoa(cur, venda.id_pessoa)
+                if politica:
+                    nao_custeados = _aplicar_politica(
+                        cur, id_unidade, venda, politica, custos_cache)
+                    if nao_custeados:
+                        politicas_sem_custo += len(nao_custeados)
+                    # 🔑 **A tela precisa DIZER o que aconteceu** (pedido do dono:
+                    # "apresente uma mensagem", "demonstrando isto"). Um cupom que
+                    # sai por outro valor sem explicar por quê é indistinguível de
+                    # erro de digitação.
+                    politicas_aplicadas.append(_frase_da_politica(politica))
+
+                bruto = sum(i.quantidade * i.valor_unitario for i in venda.itens)
+                # ⚠️ **`valor_total` guarda o LÍQUIDO**, que é o que a casa recebeu e
+                # o que o PDV informa no cupom. O bruto continua reconstituível pela
+                # soma dos itens, e o desconto vai na coluna própria — assim a
+                # conferência com o PDV fecha sem ninguém precisar refazer a conta.
+                total = bruto - (venda.desconto or 0)
+                cur.execute(
+                    """INSERT INTO vendas (id_unidade, data, hora, origem, canal, documento,
+                                           valor_total, desconto, cancelada, id_pessoa,
+                                           consumo_interno,
+                                           cupom_base, cupom_desconto_pct, id_usuario)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       RETURNING id""",
+                    (id_unidade, venda.data, venda.hora, venda.origem, venda.canal,
+                     venda.documento, total, venda.desconto or 0, venda.cancelada,
+                     venda.id_pessoa, bool(venda.consumo_interno and venda.id_pessoa),
+                     # 🔑 A política CONGELADA, como o custo da ficha: ela muda no
+                     # cadastro, e sem isto o relatório de março passaria a se
+                     # explicar por uma regra de setembro.
+                     (politica or {}).get("cupom_base"),
+                     (politica or {}).get("cupom_desconto_pct"), ctx.id_usuario),
+                )
+                id_venda = cur.fetchone()["id"]
+                if venda.cancelada:
+                    canceladas += 1
+                else:
+                    importadas += 1
+
+                for item in venda.itens:
+                    id_produto = item.id_produto
+                    if not id_produto and item.codigo:
+                        cur.execute(
+                            "SELECT id FROM produtos WHERE lower(codigo) = lower(%s)", (item.codigo,)
                         )
-                        baixados += 1
+                        achado = cur.fetchone()
+                        id_produto = achado["id"] if achado else None
+                    if not id_produto and item.descricao:
+                        # Último recurso: nome exato. Semelhança só sugere, nunca vincula.
+                        cur.execute(
+                            "SELECT id FROM produtos WHERE lower(nome) = lower(%s) AND ativo",
+                            (item.descricao,),
+                        )
+                        achado = cur.fetchone()
+                        id_produto = achado["id"] if achado else None
+
+                    custo, origem = (None, "sem_produto")
+                    if id_produto:
+                        if id_produto not in custos_cache:
+                            # 🔑 A loja vai junto: este custo é CONGELADO no item de
+                            # venda. Calculado com o estoque das duas lojas, o erro
+                            # fica gravado no CMV daquele mês, sem conserto.
+                            custos_cache[id_produto] = motor.custo_teorico_do_produto(
+                                cur, id_produto, id_unidade=id_unidade)
+                        custo, origem = custos_cache[id_produto]
+                    else:
+                        sem_vinculo += 1
+                    if custo is None:
+                        sem_custo += 1
+                    if origem.startswith("ficha_rascunho"):
+                        de_rascunho += 1
+
+                    cur.execute(
+                        """INSERT INTO venda_itens (id_venda, codigo_pdv, descricao_pdv, id_produto,
+                                                    quantidade, valor_unitario, valor_total,
+                                                    valor_unitario_cheio,
+                                                    custo_ficha_unitario, origem_custo)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (id_venda, item.codigo, item.descricao, id_produto, item.quantidade,
+                         item.valor_unitario, item.quantidade * item.valor_unitario,
+                         item.valor_unitario_cheio, custo, origem),
+                    )
+                    itens_total += 1
+
+                    # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
+                    # continuava na prateleira do sistema: o CMV real ficava
+                    # subestimado e a primeira contagem cobria o buraco inteiro
+                    # como "ajuste de inventário", que é onde a diferença some.
+                    #
+                    # O que é feito NA HORA nasce e morre aqui: produz e baixa no
+                    # mesmo lançamento, e o saldo volta a zero. O que é PARA
+                    # ESTOQUE só baixa — foi produzido antes.
+                    # ⚠️ **Cupom cancelado NÃO baixa estoque**, e é a razão de ele
+                    # poder entrar. Ele existe aqui para a conferência com o PDV
+                    # fechar e para aparecer no painel — mercadoria que voltou para
+                    # a prateleira (ou nunca saiu) não pode sair do razão, que é
+                    # append-only e não teria como desfazer.
+                    if id_produto and not venda.cancelada:
+                        cur.execute(
+                            # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
+                            # ele existe** (migração 066, pedido do dono). A mesma
+                            # massa de pizza pode estar na câmara como insumo e na
+                            # vitrine para vender: a venda tem de tirar da VITRINE, e
+                            # o consumo da receita da pizza, da câmara.
+                            # ⚠️ `id_local_padrao` continua respondendo por quem não
+                            # configurou nada — que é o caso de todos os produtos de
+                            # hoje. O `coalesce` é o que faz esta mudança não mexer em
+                            # nenhum deles.
+                            """SELECT controla_estoque,
+                                      coalesce(id_local_venda, id_local_padrao) AS id_local_padrao
+                                 FROM produtos WHERE id = %s""",
+                            (id_produto,),
+                        )
+                        p_venda = cur.fetchone() or {}
+                        if p_venda.get("controla_estoque"):
+                            feito = agenda.producao_da_venda(
+                                cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
+                                documento=venda.documento, id_venda=id_venda)
+                            if feito:
+                                produzidos_na_hora += 1
+                            motor_estoque.lancar(
+                                cur, id_unidade=id_unidade,
+                                id_local=(feito or {}).get("id_local")
+                                         or p_venda.get("id_local_padrao"),
+                                id_produto=id_produto,
+                                # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
+                                # o que o põe na linha "dos quais: consumo interno" da
+                                # apuração, com o custo dele. ⚠️ A origem continua VENDA:
+                                # é por ela que o cancelamento acha o movimento a estornar.
+                                tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
+                                      else "SAIDA_VENDA"),
+                                quantidade=item.quantidade,
+                                data_movimento=_quando(venda.data, venda.hora),
+                                origem_tipo="VENDA", origem_id=id_venda,
+                                documento=venda.documento, id_usuario=ctx.id_usuario,
+                                observacao=("Consumo interno" if venda.consumo_interno
+                                            else "Produzido e vendido na hora" if feito
+                                            else "Baixa da venda"),
+                            )
+                            baixados += 1
+                cur.execute("RELEASE SAVEPOINT uma_venda")
+            except Exception as e:  # noqa: BLE001 — uma venda não derruba o lote
+                cur.execute("ROLLBACK TO SAVEPOINT uma_venda")
+                (importadas, canceladas, itens_total, sem_vinculo, sem_custo, de_rascunho,
+                 produzidos_na_hora, baixados, politicas_sem_custo, n_frases) = fotografia
+                del politicas_aplicadas[n_frases:]
+                # ⚠️ O índice único barrou: outra gravação (o agendador e o botão
+                # ao mesmo tempo) chegou primeiro. É a idempotência funcionando,
+                # não falha — conta como repetida, que é o que ela é.
+                if isinstance(e, erros_pg.UniqueViolation):
+                    repetidas += 1
+                    continue
+                primeira_falha = primeira_falha or e
+                falhas.append({"documento": venda.documento, "data": venda.data.isoformat(),
+                               "erro": _motivo(e)})
+
+        if falhas and not (importadas or canceladas or repetidas):
+            raise primeira_falha
 
         auditoria.registrar(cur, ctx.id_usuario, "vendas", None, "importar",
                             depois={"vendas": importadas, "canceladas": canceladas,
                                     "itens": itens_total,
                                     "repetidas": repetidas, "sem_vinculo": sem_vinculo,
                                     "produzidos_na_hora": produzidos_na_hora,
-                                    "baixados": baixados},
+                                    "baixados": baixados, "falhas": falhas},
                             id_unidade=id_unidade)
 
     return {
@@ -483,7 +544,10 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         "itens_ficha_rascunho": de_rascunho,
         "produzidos_na_hora": produzidos_na_hora,
         "itens_baixados": baixados,
+        "falhas": falhas,
         "message": f"{importadas} venda(s) importada(s)"
+        # ⚠️ Logo depois do número: é a parte que pede ação.
+        + frase_das_falhas(falhas)
         + (f", {repetidas} já existiam" if repetidas else "")
         + (f", {baixados} item(ns) baixado(s) do estoque" if baixados else "")
         + (f" ({produzidos_na_hora} produzido[s] na hora)" if produzidos_na_hora else "")

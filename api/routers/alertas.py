@@ -22,6 +22,11 @@ CHAVES = {
     "fichas.faltando": "fichas.visualizar",
     "cmv.sem_vinculo": "cmv.painel",
     "cmv.mes_aberto": "cmv.painel",
+    # ⚠️ A falha vai para quem mexe na integração; a venda parada, para quem lê
+    # o CMV — é o número dele que fica errado.
+    "integracao.pdv": "integracao.pdv",
+    "integracao.omie": "integracao.omie",
+    "vendas.paradas": "cmv.painel",
 }
 
 

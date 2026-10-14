@@ -182,6 +182,13 @@ def rodar_uma(cur, linha: dict) -> dict:
                 if (resultado.get("cadastros") or {}).get("precos") else ""),
              linha["id"]),
         )
+        # 🔑 **Venda que ficou de fora é ERRO da agenda** (14/10/2026). Desde o
+        # SAVEPOINT por venda o lote não cai mais inteiro — e por isso mesmo a
+        # que sobrou precisa gritar: é o `agenda_ultimo_erro` que acende o alerta
+        # do painel. ⚠️ E ela tem prazo: a próxima janela começa dois dias antes
+        # da última venda gravada, e o cupom mais velho que isso não volta sozinho.
+        if gravado.get("falhas"):
+            erro = gravado["message"]
     except ErroPdv as e:
         erro = e.mensagem
     except Exception as e:  # noqa: BLE001 — o agendador não pode morrer por uma loja

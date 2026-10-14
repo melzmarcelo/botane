@@ -122,8 +122,12 @@ export default function PaginaVendas() {
         itens_sem_vinculo: number;
         modo: string;
         message: string;
+        falhas?: unknown[];
       }>("/pdv/sincronizar");
-      aviso.sucesso(
+      // ⚠️ **Venda que ficou de fora não sai em verde.** Desde o savepoint por
+      // venda, o lote grava o que dá e devolve o resto em `falhas`; a frase já
+      // diz quais, e o aviso vermelho é o que faz alguém lê-la.
+      (r.falhas?.length ? aviso.erro : aviso.sucesso)(
         r.message +
           (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
         (r.itens_sem_vinculo ?? 0) > 0

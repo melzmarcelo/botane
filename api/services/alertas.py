@@ -156,6 +156,49 @@ def levantar(cur, id_unidade: int) -> list[dict]:
            "Já está pronta: falta o clique que transforma em estoque.",
            "lançar", "/compras", r.get("valor"))
 
+    # ------------------------------------------------------------- integrações
+    # 🔑 **A busca que falhou aparece aqui, e não só em Integrações** (14/10/2026).
+    # De 09 a 11/10 a busca das vendas do PDV falhou todos os dias com o erro
+    # gravado em `agenda_ultimo_erro` — e ninguém viu, porque a mensagem só
+    # existia na tela de Integrações, que ninguém abre num dia normal. Foram três
+    # dias de receita fora do CMV até alguém notar que a lista de vendas parou.
+    cur.execute(
+        """SELECT servico, coalesce(agenda_ultimo_erro,
+                                    CASE WHEN ultimo_status = 'ERRO' THEN ultima_mensagem END
+                                   ) AS erro
+             FROM integracoes
+            WHERE id_unidade = %s AND ativa AND servico IN ('PDV_LEGAL', 'OMIE')
+              AND (agenda_ultimo_erro IS NOT NULL OR ultimo_status = 'ERRO')""",
+        (id_unidade,))
+    for linha in cur.fetchall():
+        pdv = linha["servico"] == "PDV_LEGAL"
+        erro = (linha["erro"] or "").strip()
+        juntar("integracao.pdv" if pdv else "integracao.omie", CRITICO,
+               "A busca das vendas no PDV falhou" if pdv
+               else "A busca das notas no Omie falhou", 1,
+               (f"Última mensagem: {erro[:160]}. " if erro else "")
+               + ("Enquanto não passar, nenhuma venda nova entra no CMV." if pdv
+                  else "Enquanto não passar, nenhuma nota nova entra no estoque."),
+               "ver a integração", "/integracoes?aba=" + ("pdv" if pdv else "omie"))
+
+    # ⚠️ **E a venda que não chega, com ou sem erro gravado.** O botão "Buscar no
+    # PDV" que estoura no meio da gravação não deixa mensagem em lugar nenhum — só
+    # o efeito: a última venda importada fica parada no tempo. Três dias cobrem a
+    # folga de uma casa que fecha domingo e segunda sem gritar toda terça.
+    hoje = relogio.hoje_da_casa()
+    r = _um(cur, """
+        SELECT max(v.data) AS ultima FROM vendas v
+         WHERE v.id_unidade = %s AND v.origem = 'PDV_LEGAL'
+           AND EXISTS (SELECT 1 FROM integracoes i
+                        WHERE i.id_unidade = v.id_unidade
+                          AND i.servico = 'PDV_LEGAL' AND i.ativa)""", (id_unidade,))
+    ultima = r.get("ultima")
+    if ultima and (hoje - ultima).days >= 3:
+        juntar("vendas.paradas", ATENCAO,
+               f"Sem venda do PDV desde {ultima.strftime('%d/%m')}", (hoje - ultima).days,
+               "A integração está ligada, mas nenhuma venda entrou nesses dias — a receita "
+               "deles falta no CMV.", "buscar no PDV", "/vendas")
+
     # ---------------------------------------------------------------- cadastro
     # 🔑 **Só o rascunho EM USO** (05/10/2026): o que já aparece em nota aberta,
     # em venda recente ou em prateleira. O total — 1.356 no ar — era um alerta que

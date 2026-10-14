@@ -189,8 +189,11 @@ export default function PaginaLancarVenda() {
         itens: number;
         itens_sem_vinculo: number;
         message: string;
+        falhas?: unknown[];
       }>("/vendas/importar", corpo);
-      aviso.sucesso(
+      // ⚠️ Planilha com uma linha recusada grava as outras: o aviso fica vermelho
+      // e a frase diz qual documento faltou.
+      (r.falhas?.length ? aviso.erro : aviso.sucesso)(
         r.message +
           (r.itens_sem_vinculo
             ? ` · ${r.itens_sem_vinculo} item(ns) não acharam produto no cadastro`

@@ -135,10 +135,11 @@ export default function PdvLegal() {
   async function sincronizar() {
     setOcupado(true);
     try {
-      const r = await api.post<{ message: string; sem_vinculo?: number }>(
+      const r = await api.post<{ message: string; sem_vinculo?: number; falhas?: unknown[] }>(
         "/pdv/sincronizar",
       );
-      aviso.sucesso(r.message, (r.sem_vinculo ?? 0) > 0
+      // ⚠️ Venda que ficou de fora não sai em verde (ver Vendas ▸ buscarNoPdv).
+      (r.falhas?.length ? aviso.erro : aviso.sucesso)(r.message, (r.sem_vinculo ?? 0) > 0
         ? { texto: "ver itens sem vínculo", ao: () => router.push("/vendas") }
         : undefined);
       await carregar();

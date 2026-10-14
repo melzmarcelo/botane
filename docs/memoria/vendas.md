@@ -810,6 +810,32 @@
   ⚠️ **A mensagem de erro da agenda só existe na tela de Integrações** — o conector não a
   expõe, e ela foi o que fechou o diagnóstico. A bateria passava 85/85 com o defeito de pé:
   nenhuma suíte vende prato de ficha em rascunho sem custo.
+  ✅ Fechado em 14/10/2026 pelos três itens abaixo e pelas checagens 7b e 7c de
+  `smoke_vendas` (os dois rótulos longos gravados inteiros; lote com uma venda ruim).
+
+- 🔑 **Cada venda da importação num SAVEPOINT** (14/10/2026). `vendas/importar` grava o que
+  dá e devolve o resto em `falhas` (`documento`, `data`, `erro`), com a frase
+  "N NÃO gravada(s): doc (motivo)" na `message` (`frase_das_falhas`, reaproveitada pela
+  busca do PDV). Os contadores da venda desfeita voltam junto.
+  ⚠️ **Falhou TUDO, a exceção sobe como antes** — é a venda única digitada na tela, e quem
+  lança precisa do erro. Violação do índice único conta como **repetida**, não falha (o
+  agendador e o botão gravando o mesmo cupom ao mesmo tempo).
+  ⚠️ **Venda que ficou de fora põe a integração em ERRO** (`ultimo_status` no botão,
+  `agenda_ultimo_erro` na agenda), e a tela mostra o aviso em VERMELHO. É obrigatório, não
+  enfeite: a janela seguinte começa dois dias antes da última venda GRAVADA, e o cupom mais
+  velho que isso não volta sozinho — sai só com `desde=` depois de corrigida a causa.
+
+- 🔑 **A busca que falhou e a venda que parou viram ALERTA** (14/10/2026, `services/alertas`).
+  `integracao.pdv`/`integracao.omie` (crítico, com a última mensagem) para quem tem a chave
+  da integração; `vendas.paradas` (atenção, a partir de 3 dias sem venda do PDV com a
+  integração ligada) para quem tem `cmv.painel`. O segundo existe porque o botão que estoura
+  no meio da gravação não deixa mensagem em lugar nenhum — só a data parada.
+
+- 🔑 **`smoke_rotulos_cabem`** (14/10/2026) confere, sem API, o rótulo gravado pelo código
+  contra o tamanho da coluna no banco: os produtores de `origem_custo` (que viajam por
+  variável e nenhuma varredura genérica acharia) e todo literal de coluna com nome ÚNICO
+  no esquema. ⚠️ Nome repetido (`status`, `tipo`, `origem`) fica de fora — não há como saber
+  para qual tabela vai. Produtor novo de `origem_custo` entra em `PRODUTORES_DO_CUSTO`.
 
 ## Armadilhas já pagas
 

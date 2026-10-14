@@ -201,6 +201,74 @@ for p in (produto, perecivel):
     chamar("DELETE", f"/produtos/{p}", token=token)
 checar("limpeza concluída", True)
 
+print("8. a integração que falhou aparece no painel")
+# 🔑 **O incidente de 09 a 11/10/2026**: a busca do PDV falhou três dias com o
+# erro gravado em `agenda_ultimo_erro`, e só a tela de Integrações o mostrava.
+# ⚠️ Direto no banco, e devolvido como estava: provocar uma falha de verdade
+# pediria derrubar o PDV, e a linha da integração é a mesma que a casa usa.
+sys.path.insert(0, ".")
+import config  # noqa: E402
+import psycopg2  # noqa: E402
+from psycopg2.extras import RealDictCursor  # noqa: E402
+
+banco = psycopg2.connect(host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER,
+                         password=config.DB_PASSWORD, dbname=config.DB_NAME,
+                         cursor_factory=RealDictCursor)
+banco.autocommit = True
+bc = banco.cursor()
+bc.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id LIMIT 1")
+loja = bc.fetchone()["id"]
+bc.execute("""SELECT id, ativa, ultimo_status, ultima_mensagem, agenda_ultimo_erro
+                FROM integracoes WHERE id_unidade = %s AND servico = 'PDV_LEGAL'""", (loja,))
+antes_pdv = bc.fetchone()
+if not antes_pdv:
+    bc.execute("""INSERT INTO integracoes (id_unidade, servico) VALUES (%s, 'PDV_LEGAL')
+                  RETURNING id""", (loja,))
+id_pdv = (antes_pdv or bc.fetchone())["id"]
+try:
+    bc.execute("""UPDATE integracoes SET ativa = true, ultimo_status = 'ERRO',
+                         agenda_ultimo_erro = %s WHERE id = %s""",
+               (f"StringDataRightTruncation teste {marca}", id_pdv))
+    st, lista = chamar("GET", "/alertas", token=token)
+    falha_pdv = alerta(lista, "integracao.pdv")
+    checar("a busca que falhou vira alerta crítico",
+           falha_pdv and falha_pdv["severidade"] == "critico", falha_pdv)
+    checar("o alerta traz a mensagem do erro",
+           falha_pdv and f"teste {marca}" in falha_pdv["detalhe"], falha_pdv)
+    checar("e leva à aba do PDV", falha_pdv and falha_pdv["href"].endswith("aba=pdv"), falha_pdv)
+    st, lista = chamar("GET", "/alertas", token=tk)
+    checar("a cozinha não o recebe (não mexe na integração)",
+           isinstance(lista, list) and not alerta(lista, "integracao.pdv"), lista)
+
+    bc.execute("""UPDATE integracoes SET ultimo_status = 'OK', agenda_ultimo_erro = NULL
+                   WHERE id = %s""", (id_pdv,))
+    st, lista = chamar("GET", "/alertas", token=token)
+    checar("passou a busca, o alerta some", not alerta(lista, "integracao.pdv"),
+           alerta(lista, "integracao.pdv"))
+
+    # ⚠️ A venda parada: o alerta tem de bater com a última venda do PDV na base,
+    # seja ela qual for — a suíte não escolhe a data das vendas da casa.
+    # ⚠️ "Hoje" da casa, não o `current_date` da sessão, que pode estar em UTC.
+    from datetime import date  # noqa: E402
+    bc.execute("""SELECT %s::date - max(data) AS dias FROM vendas
+                   WHERE id_unidade = %s AND origem = 'PDV_LEGAL'""", (date.today(), loja))
+    dias = bc.fetchone()["dias"]
+    parado = alerta(lista, "vendas.paradas")
+    if dias is not None and dias >= 3:
+        checar(f"sem venda do PDV há {dias} dias, o alerta aparece",
+               parado and parado["quantidade"] == dias, parado)
+    else:
+        checar("com venda recente do PDV, não há alerta de venda parada", parado is None, parado)
+finally:
+    if antes_pdv:
+        bc.execute("""UPDATE integracoes SET ativa = %s, ultimo_status = %s,
+                             ultima_mensagem = %s, agenda_ultimo_erro = %s WHERE id = %s""",
+                   (antes_pdv["ativa"], antes_pdv["ultimo_status"],
+                    antes_pdv["ultima_mensagem"], antes_pdv["agenda_ultimo_erro"], id_pdv))
+    else:
+        bc.execute("DELETE FROM integracoes WHERE id = %s", (id_pdv,))
+    banco.close()
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 for f in falhas:

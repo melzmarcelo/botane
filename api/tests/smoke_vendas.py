@@ -490,6 +490,89 @@ for _lista in (lista_r, lista_h):
 chamar("DELETE", f"/produtos/{prato_r}", token=token)
 
 
+print("\n7b. rascunho SEM custo e PARCIAL: os rotulos longos entram inteiros")
+# 🔑 **O incidente de 09 a 11/10/2026.** `origem_custo` era varchar(20), e os dois
+# rotulos abaixo tem 24 e 22 caracteres. Nenhuma suite vendia prato assim: a
+# primeira venda real dele derrubou a busca do PDV por tres dias.
+st, r = chamar("POST", "/produtos", {
+    "codigo": f"VD-SC-{marca}", "nome": f"Insumo sem custo {marca}", "tipo": "INSUMO",
+    "um_estoque": "KG", "status": "ATIVO",
+}, token=token)
+insumo_sc = r.get("id")
+checar("insumo sem custo nenhum criado", st == 201, (st, r))
+pratos_7b = {}
+for chave, itens in (("sem_custo", [insumo_sc]), ("parcial", [insumo, insumo_sc])):
+    st, r = chamar("POST", "/produtos", {
+        "codigo": f"VD-{chave[:3].upper()}-{marca}", "nome": f"Prato {chave} {marca}",
+        "tipo": "PRODUZIDO", "um_estoque": "UN", "producao_propria": True,
+        "controla_estoque": False, "modo_producao": "NA_HORA", "status": "ATIVO",
+    }, token=token)
+    pratos_7b[chave] = r.get("id")
+    st, r = chamar("POST", "/fichas", {
+        "id_produto": pratos_7b[chave], "rendimento_qtd": 1, "rendimento_um": "UN",
+        "porcoes": 1, "itens": [{"id_insumo": i, "qtd_bruta": 0.1, "um": "KG"} for i in itens],
+    }, token=token)
+    checar(f"ficha em rascunho do prato {chave}", st == 201, (st, r))
+
+docs_7b = {c: f"VENDA-{c[:3].upper()}-{marca}" for c in pratos_7b}
+st, r = chamar("POST", "/vendas/importar", {"vendas": [
+    {"documento": docs_7b[c], "data": hoje, "origem": "PDV_LEGAL",
+     "itens": [{"id_produto": pratos_7b[c], "quantidade": 1, "valor_unitario": 20}]}
+    for c in pratos_7b]}, token=token)
+checar("as duas vendas entram", st == 201 and (r or {}).get("importadas") == 2, (st, r))
+checar("e nenhuma ficou de fora", not (r or {}).get("falhas"), r)
+for c, esperado in (("sem_custo", "ficha_rascunho_sem_custo"),
+                    ("parcial", "ficha_rascunho_parcial")):
+    st, lv = chamar("GET", f"/vendas?busca={docs_7b[c]}", token=token)
+    st, dv = chamar("GET", f"/vendas/{(lv or [{}])[0].get('id')}", token=token)
+    checar(f"a origem grava '{esperado}' inteira",
+           (dv.get("itens") or [{}])[0].get("origem_custo") == esperado,
+           (dv.get("itens") or [{}])[0].get("origem_custo"))
+
+print("\n7c. uma venda que o banco recusa nao derruba o lote")
+# 🔑 **Cada venda num SAVEPOINT** (14/10/2026). Antes, a venda ruim levava junto
+# todas as do periodo — que foi o que deixou o CMV tres dias sem receita.
+# Produto inexistente e a recusa mais simples de provocar: a chave estrangeira.
+# ⚠️ Origem PLANILHA, e nao PDV_LEGAL: a venda boa baixa estoque e e cancelada na
+# limpeza, e `smoke_pdv_legal` cobra que NENHUMA venda cancelada do PDV tenha
+# movimento no razao. Na primeira rodada esta suite deixou duas e derrubou aquela.
+doc_boa, doc_ruim = f"VENDA-BOA-{marca}", f"VENDA-RUIM-{marca}"
+st, r = chamar("POST", "/vendas/importar", {"vendas": [
+    {"documento": doc_ruim, "data": hoje, "origem": "PLANILHA",
+     "itens": [{"id_produto": 2_000_000_000, "quantidade": 1, "valor_unitario": 9}]},
+    {"documento": doc_boa, "data": hoje, "origem": "PLANILHA",
+     "itens": [{"id_produto": prato, "quantidade": 1, "valor_unitario": 30}]},
+]}, token=token)
+checar("o lote responde 201", st == 201, (st, r))
+checar("a venda boa entra", (r or {}).get("importadas") == 1, r)
+falhou = (r or {}).get("falhas") or []
+checar("a ruim volta em `falhas`, com o documento",
+       len(falhou) == 1 and falhou[0].get("documento") == doc_ruim, falhou)
+checar("com o motivo", bool(falhou and falhou[0].get("erro")), falhou)
+checar("e a frase diz que ela NAO foi gravada",
+       "NÃO gravada" in ((r or {}).get("message") or ""), (r or {}).get("message"))
+# ⚠️ Os contadores voltam com o savepoint: a venda desfeita nao soma item.
+checar("os itens contam so a venda gravada", (r or {}).get("itens") == 1, r)
+st, lr = chamar("GET", f"/vendas?busca={doc_ruim}", token=token)
+checar("e a ruim nao existe na base", st == 200 and not lr, lr)
+st, lb = chamar("GET", f"/vendas?busca={doc_boa}", token=token)
+checar("a boa existe", st == 200 and len(lb or []) == 1, lb)
+
+# ⚠️ Venda unica que falha continua sendo ERRO: quem digitou precisa saber.
+st, r = chamar("POST", "/vendas/importar", {"vendas": [
+    {"documento": f"{doc_ruim}-2", "data": hoje, "origem": "MANUAL",
+     "itens": [{"id_produto": 2_000_000_000, "quantidade": 1, "valor_unitario": 9}]},
+]}, token=token)
+checar("sozinha, a venda ruim responde erro", st >= 400, (st, r))
+
+for doc in (*docs_7b.values(), doc_boa):
+    st, lv = chamar("GET", f"/vendas?busca={doc}", token=token)
+    for _v in (lv or []):
+        chamar("DELETE", f"/vendas/{_v['id']}", token=token)
+for _p in (*pratos_7b.values(), insumo_sc):
+    chamar("DELETE", f"/produtos/{_p}", token=token)
+
+
 print("\n8. o painel abre no dia da ultima venda, e as setas andam entre dias com venda")
 # 🔑 **Pedido do dono (03/09/2026).** O painel respondia pelo mes inteiro e nao
 # dizia como foi o ultimo dia — que e a primeira coisa que se olha de manha.

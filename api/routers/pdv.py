@@ -357,12 +357,16 @@ def sincronizar(
         cur.execute(
             """INSERT INTO integracoes (id_unidade, servico, modo, ultima_sincronizacao,
                                         ultimo_status, ultima_mensagem)
-               VALUES (%s, %s, %s, now(), 'OK', %s)
+               VALUES (%s, %s, %s, now(), %s, %s)
                ON CONFLICT (id_unidade, servico) DO UPDATE
-                   SET ultima_sincronizacao = now(), ultimo_status = 'OK',
+                   SET ultima_sincronizacao = now(), ultimo_status = EXCLUDED.ultimo_status,
                        ultima_mensagem = EXCLUDED.ultima_mensagem""",
+            # ⚠️ Venda que ficou de fora deixa a integração em ERRO, com a frase
+            # que diz qual — é o que acende o alerta do painel (ver `alertas`).
             (id_unidade, SERVICO, cliente.modo,
-             f"{gravado.get('importadas', 0)} venda(s) nova(s) ({r['janela']})"),
+             "ERRO" if gravado.get("falhas") else "OK",
+             gravado["message"] if gravado.get("falhas")
+             else f"{gravado.get('importadas', 0)} venda(s) nova(s) ({r['janela']})"),
         )
         auditoria.registrar(cur, ctx.id_usuario, "integracao", SERVICO, "sincronizar",
                             depois={**r, **{k: gravado.get(k) for k in
@@ -380,6 +384,7 @@ def sincronizar(
         # número não é zero.
         "message": (f"{gravado.get('importadas', 0)} venda(s) nova(s) de {r['cupons']} "
                     f"cupom(ns) — {r['janela']}"
+                    + rota_vendas.frase_das_falhas(gravado.get("falhas") or [])
                     + (f". {cadastros['criados']} produto(s) novo(s) do PDV"
                        if cadastros.get("criados") else "")
                     + (f", {cadastros['situacao_mudou']} com a situação alterada"
