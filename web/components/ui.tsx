@@ -179,6 +179,44 @@ const _janelasAbertas: symbol[] = [];
  */
 export const haJanelaAberta = () => _janelasAbertas.length > 0;
 
+/**
+ * Entra na pilha enquanto a janela está aberta: Escape fecha só a do topo, e a
+ * página de trás não rola. É do `Modal` e da `Gaveta` — as duas são janelas.
+ */
+function usePilhaDeJanelas(aoFechar: () => void) {
+  // ⚠️ **O `aoFechar` vai num ref, e o efeito roda UMA vez.** Quem chama passa
+  // uma arrow nova a cada render; com ela na dependência, a janela saía e
+  // voltava à pilha a cada render — e, re-renderizando o pai, uma gaveta com uma
+  // confirmação dentro voltava ao TOPO (o efeito do filho roda antes): o Escape
+  // fechava a gaveta em vez da pergunta.
+  const fechar = useRef(aoFechar);
+  useEffect(() => {
+    fechar.current = aoFechar;
+  });
+  useEffect(() => {
+    const eu = Symbol("janela");
+    _janelasAbertas.push(eu);
+    const tecla = (e: KeyboardEvent) => {
+      // Só a janela do TOPO fecha. As de baixo ignoram e continuam abertas.
+      if (e.key === "Escape" && _janelasAbertas[_janelasAbertas.length - 1] === eu) {
+        e.stopPropagation();
+        fechar.current();
+      }
+    };
+    document.addEventListener("keydown", tecla);
+    // Enquanto a janela está aberta a página atrás não rola: rolar o que está
+    // por baixo dá a impressão de que o clique passou direto.
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      const onde = _janelasAbertas.indexOf(eu);
+      if (onde >= 0) _janelasAbertas.splice(onde, 1);
+      document.removeEventListener("keydown", tecla);
+      document.body.style.overflow = antes;
+    };
+  }, []);
+}
+
 export function Modal({
   titulo,
   descricao,
@@ -199,28 +237,7 @@ export function Modal({
   rodape?: ReactNode;
   largura?: string;
 }) {
-  useEffect(() => {
-    const eu = Symbol("janela");
-    _janelasAbertas.push(eu);
-    const tecla = (e: KeyboardEvent) => {
-      // Só a janela do TOPO fecha. As de baixo ignoram e continuam abertas.
-      if (e.key === "Escape" && _janelasAbertas[_janelasAbertas.length - 1] === eu) {
-        e.stopPropagation();
-        aoFechar();
-      }
-    };
-    document.addEventListener("keydown", tecla);
-    // Enquanto a janela está aberta a página atrás não rola: rolar o que está
-    // por baixo dá a impressão de que o clique passou direto.
-    const antes = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      const onde = _janelasAbertas.indexOf(eu);
-      if (onde >= 0) _janelasAbertas.splice(onde, 1);
-      document.removeEventListener("keydown", tecla);
-      document.body.style.overflow = antes;
-    };
-  }, [aoFechar]);
+  usePilhaDeJanelas(aoFechar);
 
   return (
     <div
@@ -457,6 +474,65 @@ export function CampoCusto({
           aoSair?.();
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Painel que desliza da DIREITA, por cima da tela.
+ *
+ * 🔑 **Gaveta, não janela no meio** (15/10/2026, a reforma do cadastro do
+ * cardápio): ela edita UM registro de uma lista que continua à vista do lado —
+ * quem arruma quarenta pratos abre, corrige, fecha e já vê o próximo. No
+ * celular ela ocupa a largura inteira, que é o que uma janela faria.
+ */
+export function Gaveta({
+  titulo,
+  descricao,
+  aoFechar,
+  children,
+  rodape,
+  largura = "480px",
+}: {
+  titulo: string;
+  descricao?: ReactNode;
+  aoFechar: () => void;
+  children: ReactNode;
+  rodape?: ReactNode;
+  largura?: string;
+}) {
+  usePilhaDeJanelas(aoFechar);
+  return (
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-tinta/30"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) aoFechar();
+      }}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        className="flex h-[100dvh] w-full flex-col border-l border-linha bg-superficie shadow-[0_0_48px_rgba(20,32,26,0.28)]"
+        style={{ maxWidth: largura }}
+      >
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-linha px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="text-[17px] font-bold tracking-tight">{titulo}</h2>
+            {descricao && <div className="mt-1 text-[13.5px] text-suave">{descricao}</div>}
+          </div>
+          <button
+            type="button"
+            aria-label="fechar"
+            className="-mt-1 px-1 text-[20px] leading-none text-suave hover:text-tinta"
+            onClick={aoFechar}
+          >
+            ×
+          </button>
+        </header>
+        <div className="modal-miolo min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+        {rodape && <div className="shrink-0 border-t border-linha px-5 py-4">{rodape}</div>}
+      </aside>
     </div>
   );
 }

@@ -138,6 +138,8 @@ export type ItemDoCatalogo = {
   /** Fase 2 (115): o objetivo de negócio e o ajuste manual do nível de margem. */
   objetivo: string | null;
   margem_nivel: string | null;
+  /** O preço que o cliente vê (loja → casa). Nulo = sem preço, nunca zero. */
+  preco: number | null;
 };
 
 export type Secao = {
@@ -239,3 +241,44 @@ export const desvincularProduto = (id: number) =>
  */
 export const reordenarItens = (ordens: { id: number; ordem: number }[]) =>
   api.put<{ message: string }>("/catalogos/itens/ordem", ordens);
+
+/**
+ * A ordem das SEÇÕES, renumerada inteira (10, 20, 30…).
+ *
+ * ⚠️ Não há rota de lote para seção: a ordem viaja na própria gravação dela, que
+ * pede nome e descrição junto. As seções de um cardápio são poucas, e uma chamada
+ * por seção é o preço de não abrir uma rota nova para o que já existe.
+ */
+export async function reordenarSecoes(tipo: TipoDeSecao, secoes: Secao[]) {
+  const gravar = tipo === "categoria" ? atualizarCategoria : atualizarSubcategoria;
+  for (const [n, s] of secoes.entries()) {
+    const ordem = (n + 1) * 10;
+    if (s.ordem !== ordem) await gravar(s.id, { nome: s.nome, descricao: s.descricao, ordem });
+  }
+}
+
+/* ===========================================================================
+   O PRATO — o que é do PRODUTO e se edita de dentro do cardápio
+   ---------------------------------------------------------------------------
+   🔑 **Decisão do dono (15/10/2026):** foto, descrição e nome de vitrine são do
+   PRODUTO, e valem em todo cardápio em que ele estiver. A gaveta do prato só
+   evita a ida e volta ao cadastro; as rotas são as do produto, com a permissão
+   dele (`cadastros.produtos`).
+   =========================================================================== */
+
+/** ⚠️ Só os dois campos: o PUT do produto grava o que VEIO (`exclude_unset`). */
+export const gravarVitrine = (
+  idProduto: number,
+  corpo: { nome_catalogo: string | null; informacao_adicional: string | null },
+) => api.put<{ message: string }>(`/produtos/${idProduto}`, corpo);
+
+export const enviarFotoDoProduto = (idProduto: number, arquivo: File) => {
+  const corpo = new FormData();
+  corpo.append("arquivo", arquivo);
+  return api.upload<{ foto_url: string; foto_nome: string | null }>(
+    `/produtos/${idProduto}/foto`, corpo,
+  );
+};
+
+export const removerFotoDoProduto = (idProduto: number) =>
+  api.delete<{ message: string }>(`/produtos/${idProduto}/foto`);

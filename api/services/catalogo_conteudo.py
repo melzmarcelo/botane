@@ -119,12 +119,19 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
                   -- configuração mostrar o que sai na vitrine — e não só o que
                   -- está no cadastro.
                   nullif(btrim(p.nome_catalogo), '') AS nome_catalogo,
-                  p.informacao_adicional, p.um_estoque
+                  p.informacao_adicional, p.um_estoque,
+                  -- 🔑 O preço que o cliente vê, pela MESMA cascata do site e do
+                  -- feed (loja → casa). A linha do editor mostra o prato como
+                  -- ele sai, e preço errado ali é preço errado no cardápio.
+                  (SELECT pr.preco_venda FROM produto_precos pr
+                    WHERE pr.id_produto = p.id AND pr.vigente_ate IS NULL
+                      AND (pr.id_unidade = %s OR pr.id_unidade IS NULL)
+                    ORDER BY pr.id_unidade NULLS LAST LIMIT 1) AS preco
              FROM catalogo_itens i
              JOIN produtos p ON p.id = i.id_produto
             WHERE i.id_categoria = ANY(%s)
             ORDER BY i.ordem, lower(p.nome)""",
-        (ids,),
+        (id_unidade, ids),
     )
     itens = [dict(r) for r in cur.fetchall()]
 

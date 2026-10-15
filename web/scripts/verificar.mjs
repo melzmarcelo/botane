@@ -10180,17 +10180,77 @@ try {
 
   // 🔑 A tradução do cardápio (103): o cartão conta o que falta e a seção se corrige à mão.
   // Sem ANTHROPIC_API_KEY em casa, a automática está desligada — e a tela precisa dizer.
+  // 🔑 **O editor do catálogo em abas** (reforma de 15/10/2026, pedido do dono: *"o
+  // cadastro de catálogos não está muito intuitivo"*). Abre no CARDÁPIO; pedidos e
+  // idiomas saíram de cima das seções; publicar mora na própria página.
   await irPara(p, `${WEB}/catalogos/${catPed.id}`);
-  checar("o catálogo mostra o cartão 'Inglês e alemão'", await esperarTexto(p, "Inglês e alemão", 10000));
+  const abasCat = await p.evaluate(() =>
+    [...document.querySelectorAll('[role="tab"]')].map((b) => [b.textContent.trim(), b.getAttribute("aria-selected")]));
+  checar("o catálogo abre em abas, com o Cardápio primeiro e escolhido",
+    JSON.stringify(abasCat.map((x) => x[0])) === JSON.stringify(["Cardápio", "Publicação", "Pedidos", "Idiomas"])
+      && abasCat[0]?.[1] === "true", abasCat);
+  checar("e a configuração de pedidos NÃO fica em cima do cardápio",
+    !(await esperarTexto(p, "Pedidos pelo site", 1500)));
+  checar("a coluna das seções mostra a seção com a contagem",
+    await p.evaluate(() => [...document.querySelectorAll('nav[aria-label="seções do cardápio"] button')]
+      .some((b) => /Salgados\s*1/.test(b.textContent ?? ""))));
+  // 🔑 A linha mostra o prato como o cliente o lê: nome, preço e o que falta.
+  const linhaPrato = await p.evaluate((nome) => {
+    const b = [...document.querySelectorAll('button[aria-label^="abrir "]')].find((x) => x.textContent.includes(nome));
+    return b?.textContent ?? null;
+  }, `TELA COXINHA ${marcaNota}`);
+  checar("a linha do prato traz o preço e avisa o que falta",
+    !!linhaPrato && /8,00/.test(linhaPrato) && /sem foto/.test(linhaPrato), linhaPrato);
+  // ⚠️ Enxuta: destaque, esgotado e os seletores saíram da linha para a gaveta.
+  checar("e a linha não tem mais os seletores de objetivo e margem",
+    await p.evaluate(() => !document.querySelector('main select[aria-label="Objetivo de negócio"]')));
+  await p.evaluate((nome) => [...document.querySelectorAll('button[aria-label^="abrir "]')]
+    .find((x) => x.textContent.includes(nome))?.click(), `TELA COXINHA ${marcaNota}`);
+  checar("clicar no prato abre a gaveta com o que é do cardápio e o que é do produto",
+    await esperarTexto(p, "Neste cardápio", 6000) && await esperarTexto(p, "vale em todo", 2000)
+      && !!(await p.$("#prato-descricao")));
+  // 🔑 A descrição se grava DALI, sem ir ao cadastro do produto.
+  await p.type("#prato-descricao", "Massa crocante, recheio de frango.");
+  checar("e grava a descrição do prato pela gaveta", await clicarQuando(p, "Salvar nome e descrição", { exato: true }));
+  await new Promise((r) => setTimeout(r, 1500));
+  const { dados: pDepois } = await api("GET", `/produtos/${pPed.id}`, null, token);
+  checar("e ela vai para o PRODUTO", pDepois?.informacao_adicional === "Massa crocante, recheio de frango.",
+    pDepois?.informacao_adicional);
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 400));
+  // 🔑 Vários de uma vez, e o que já está na seção aparece travado.
+  checar("'+ pratos' abre a busca com seleção múltipla", await clicarQuando(p, "+ pratos", { exato: true }));
+  await p.waitForSelector("#busca-produto", { timeout: 8000 }).catch(() => {});
+  await p.type("#busca-produto", `TELA COXINHA ${marcaNota}`);
+  checar("e o que já está nesta seção aparece como 'já está aqui'", await esperarTexto(p, "já está aqui", 8000));
+  await p.keyboard.press("Escape");
+  await new Promise((r) => setTimeout(r, 400));
+
+  // Publicar mora na própria página.
+  await irPara(p, `${WEB}/catalogos/${catPed.id}?aba=publicacao`);
+  checar("a aba Publicação tem a situação, o botão e a escolha do Cardápio Vivo",
+    await esperarTexto(p, "Tirar do ar", 8000) && !!(await p.$("#catalogo-vivo")) && !!(await p.$("#catalogo-nome")));
+
+  // 🔑 A tradução do cardápio (103): o cartão conta o que falta e a seção se corrige à mão.
+  await irPara(p, `${WEB}/catalogos/${catPed.id}?aba=idiomas`);
+  checar("a aba Idiomas mostra o cartão 'Inglês e alemão'", await esperarTexto(p, "Inglês e alemão", 10000));
   // ⚠️ Com ou sem a chave da casa cadastrada: com ela, o Claude já traduziu ao criar a seção.
   const { dados: estTr } = await api("GET", `/traducao/catalogo/${catPed.id}/pendentes`, null, token);
   checar("e diz quanto falta traduzir", await esperarTexto(p,
     estTr.pendentes ? "sem tradução" : "tudo traduzido", 4000), estTr);
   checar("e se a automática está ligada", estTr.ligada
     || await esperarTexto(p, "está desligada", 4000), estTr);
-  checar("cada seção tem o link 'traduções'", await clicarQuando(p, "traduções"));
-  const campoEn = await p.waitForSelector("dialog input, [role=dialog] input", { timeout: 8000 })
-    .catch(() => null);
+  // As traduções da seção moram agora na janela dela.
+  await irPara(p, `${WEB}/catalogos/${catPed.id}`);
+  checar("a seção abre a janela dela", await clicarQuando(p, "editar seção", { exato: true }));
+  checar("e a janela tem o link 'traduções'", await clicarQuando(p, "traduções", { exato: true }));
+  // ⚠️ A janela de traduções abre POR CIMA da janela da seção: o campo é o da ÚLTIMA.
+  await p.waitForFunction(() => document.querySelectorAll('[role="dialog"]').length >= 2
+    && document.querySelectorAll('[role="dialog"]')[1].querySelector("input"), { timeout: 8000 }).catch(() => {});
+  const campoEn = await p.evaluateHandle(() => {
+    const ds = document.querySelectorAll('[role="dialog"]');
+    return ds[ds.length - 1]?.querySelector("input") ?? null;
+  }).then((h) => h.asElement());
   // O campo pode já vir com a tradução automática: apaga antes de digitar.
   if (campoEn) {
     await campoEn.focus();
@@ -10199,9 +10259,9 @@ try {
     await campoEn.type("Savoury");
   }
   checar("a janela de traduções abre com o inglês", !!campoEn);
-  // ⚠️ DENTRO da janela: o cartão do catálogo, atrás dela, tem outro "Salvar tradução".
   checar("e salva a tradução", await p.evaluate(() => {
-    const b = [...document.querySelectorAll("[role=dialog] button")]
+    const ds = document.querySelectorAll('[role="dialog"]');
+    const b = [...(ds[ds.length - 1]?.querySelectorAll("button") ?? [])]
       .find((x) => x.textContent.trim() === "Salvar tradução");
     b?.click();
     return !!b;

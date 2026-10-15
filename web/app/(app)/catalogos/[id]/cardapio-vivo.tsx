@@ -1,82 +1,24 @@
 "use client";
 
 /**
- * O que o Cardápio Vivo (113) acrescentou à página do catálogo: as marcas de cada item
- * (destaque, esgotado) e quando cada seção aparece (dias, horário, dia especial).
- *
- * ⚠️ Arquivo à parte: a página do catálogo já passa de 800 linhas.
+ * O que o Cardápio Vivo (113) acrescentou ao editor do catálogo: quando cada seção
+ * aparece (dias, horário, dia especial) e o vocabulário das marcas do item.
+ * ⚠️ As marcas em si (destaque, esgotado, objetivo, margem) moram na gaveta do
+ * prato desde a reforma de 15/10/2026 — na linha eram quatro controles a mais.
  */
 
 import { useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
-import { Etiqueta } from "@/components/ui";
 import { CardapioVivoService } from "@/lib/cardapio-vivo";
-import type { ItemDoCatalogo, Secao, TipoDeSecao } from "@/lib/catalogos";
+import type { Secao, TipoDeSecao } from "@/lib/catalogos";
 
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
-const OBJETIVOS: [string, string][] = [["", "sem objetivo"], ["AUMENTAR_VENDA", "aumentar venda"],
+export const OBJETIVOS: [string, string][] = [["", "sem objetivo"], ["AUMENTAR_VENDA", "aumentar venda"],
   ["GIRAR_ESTOQUE", "girar estoque"], ["LANCAMENTO", "lançamento"], ["MANTER", "manter"]];
-const MARGENS: [string, string][] = [["", "margem: da ficha"], ["ALTA", "margem alta"],
+export const MARGENS: [string, string][] = [["", "margem: da ficha"], ["ALTA", "margem alta"],
   ["MEDIA", "margem média"], ["BAIXA", "margem baixa"]];
 
-export function MarcasDoItem({ item, podeEditar, aoMudar }: {
-  item: ItemDoCatalogo; podeEditar: boolean; aoMudar: () => Promise<void>;
-}) {
-  const aviso = useAviso();
-  async function marcar(marcas: Parameters<typeof CardapioVivoService.marcarItem>[1]) {
-    try {
-      const r = await CardapioVivoService.marcarItem(item.id, marcas);
-      await aoMudar();
-      aviso.sucesso(r.message);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível marcar.");
-    }
-  }
-  async function alternar(campo: "destaque" | "esgotado") {
-    try {
-      const r = await CardapioVivoService.marcarItem(item.id, { [campo]: !item[campo] });
-      await aoMudar();
-      aviso.sucesso(r.message);
-    } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível marcar.");
-    }
-  }
-  return (
-    <>
-      {item.tem_video && <Etiqueta cor="erva">vídeo</Etiqueta>}
-      {!item.tem_video && !item.foto_url && <Etiqueta cor="alerta">sem foto e sem vídeo</Etiqueta>}
-      {podeEditar ? (
-        <>
-          <button type="button" className="link-acao text-[13px]" aria-pressed={item.destaque}
-                  onClick={() => void alternar("destaque")}>
-            {item.destaque ? "★ em destaque" : "☆ destaque"}
-          </button>
-          <button type="button" className={`link-acao text-[13px] ${item.esgotado ? "link-acao-erro" : ""}`}
-                  aria-pressed={item.esgotado} onClick={() => void alternar("esgotado")}>
-            {item.esgotado ? "esgotado ✓" : "esgotado"}
-          </button>
-          {/* 🔑 Fase 2 (115): o painel Atenção × Vendas usa os dois para priorizar as sugestões. */}
-          <select className="campo !w-auto !py-0.5 text-[12.5px]" aria-label="Objetivo de negócio"
-                  value={item.objetivo ?? ""} onChange={(e) => void marcar({ objetivo: e.target.value })}>
-            {OBJETIVOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-          </select>
-          <select className="campo !w-auto !py-0.5 text-[12.5px]" aria-label="Nível de margem"
-                  title="Da ficha: calculado pela margem-alvo da Precificação. Escolher um nível o fixa à mão."
-                  value={item.margem_nivel ?? ""} onChange={(e) => void marcar({ margem_nivel: e.target.value })}>
-            {MARGENS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-          </select>
-        </>
-      ) : (
-        <>
-          {item.destaque && <Etiqueta cor="erva">destaque</Etiqueta>}
-          {item.esgotado && <Etiqueta cor="alerta">esgotado</Etiqueta>}
-        </>
-      )}
-    </>
-  );
-}
-
-function resumo(s: Secao): string {
+export function resumoDaExibicao(s: Secao): string {
   const partes: string[] = [];
   if (s.dias?.length) partes.push(s.dias.map((d) => DIAS[d - 1]).join(", "));
   if (s.hora_de && s.hora_ate) partes.push(`${s.hora_de.slice(0, 5)}–${s.hora_ate.slice(0, 5)}`);
@@ -110,7 +52,7 @@ export function ExibicaoDaSecao({ tipo, secao, podeEditar, aoMudar }: {
   return (
     <div className="text-[13px]">
       <span className="text-suave">No Cardápio Vivo: </span>
-      <span className="font-medium">{resumo(secao)}</span>
+      <span className="font-medium">{resumoDaExibicao(secao)}</span>
       {podeEditar && !aberto && (
         <button type="button" className="link-acao ml-2" onClick={() => setAberto(true)}>mudar</button>
       )}

@@ -334,6 +334,9 @@ item = principal["subcategorias"][0]["itens"][0]
 # marcar o que saiu de linha depois de entrar no cardápio.
 checar("o item traz o nome do produto e se ele está ativo",
        item.get("produto") and item.get("ativo") is True, item)
+# 🔑 E com o PREÇO (15/10/2026): a linha do editor mostra o prato como o cliente o
+# lê. Nulo quando não há preço — nunca zero, que seria uma promessa.
+checar("e traz o preço (ou nulo, nunca ausente)", "preco" in item, sorted(item))
 
 print("\n8. a foto da seção")
 st, r = enviar_foto(f"/catalogos/secoes/categoria/{ID_PRINC}/foto", token)
