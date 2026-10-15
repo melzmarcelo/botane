@@ -161,10 +161,16 @@ if (-not $Sim) {
     if ($resposta -ne 'PROMOVER') { Parar 'cancelado. Nada foi empurrado.' }
 }
 # --atomic: main e producao sobem juntos ou nenhum sobe. Na 1.1.92 so producao subiu.
-git push --atomic origin main:main main:producao
-if ($LASTEXITCODE -ne 0) { Parar 'o push falhou. Nada foi para o ar.' }
+# O git escreve o progresso do push no stderr. No PowerShell 5.1 com a saida
+# redirecionada (*>&1), isso vira erro e o 'Stop' derrubava o script logo depois
+# de um push BEM-SUCEDIDO (1.1.96). Quem decide o sucesso e o $LASTEXITCODE.
+$ErrorActionPreference = 'Continue'
+git push --atomic origin main:main main:producao 2>&1 | ForEach-Object { Write-Host "$_" }
+$codigo_push = $LASTEXITCODE
 # A referencia local de producao acompanha (avanco rapido, sem checkout).
-git fetch . main:producao --quiet
+if ($codigo_push -eq 0) { git fetch . main:producao --quiet 2>&1 | ForEach-Object { Write-Host "$_" } }
+$ErrorActionPreference = 'Stop'
+if ($codigo_push -ne 0) { Parar 'o push falhou. Nada foi para o ar.' }
 
 # ------------------------------------------------------------------ 5. conferir
 Passo 'acompanhando o /api/saude (a migracao aparece antes da versao)'
