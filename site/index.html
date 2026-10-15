@@ -54,6 +54,9 @@
   --barro: #9A3B2E;
   --sombra: 0 1px 2px rgba(27,33,28,.05), 0 10px 30px rgba(27,33,28,.08);
   --raio: 13px;
+  /* 🔑 A fonte dos títulos é a da CASA (15/10/2026): a mesma do feed do Cardápio Vivo.
+     O padrão é a do protótipo; `aplicarMarca()` troca pela configurada. */
+  --serif: Fraunces, Georgia, serif;
 }
 /* ⚠️ O tema escuro vem do APARELHO: quem reserva às 22h está com o celular no
    escuro. Só os tokens mudam — os componentes leem sempre daqui. */
@@ -88,7 +91,7 @@ body {
   background:
     radial-gradient(120% 90% at 30% 20%, #D8C9A8 0%, transparent 60%),
     radial-gradient(110% 90% at 80% 30%, #B7C3A6 0%, transparent 55%),
-    linear-gradient(160deg, #6D7A5C, var(--erva));
+    linear-gradient(160deg, color-mix(in srgb, var(--erva) 70%, #B7C3A6), var(--erva));
 }
 /* 🔑 O medalhão: 92px, redondo, descendo 34px por cima da capa — é a marca da
    casa pousando na dobra. Com logo cadastrada ele vira a imagem; sem ela,
@@ -99,7 +102,7 @@ body {
   display: grid; place-content: center; text-align: center; color: #F3EFE4;
   border: 3px solid var(--superficie); overflow: hidden;
 }
-.marca b { display: block; font: 300 21px/1 Fraunces, Georgia, serif; }
+.marca b { display: block; font: 300 21px/1 var(--serif); }
 .marca span {
   font: 400 8px/1.4 "DM Mono", monospace; letter-spacing: .18em;
   text-transform: uppercase; opacity: .8;
@@ -129,7 +132,7 @@ body {
 
 /* ---- o corpo ---- */
 .corpo { padding: 46px 20px 26px; display: flex; flex-direction: column; gap: 14px; }
-.corpo h2 { font: 400 22px/1.2 Fraunces, Georgia, serif; margin: 0; text-align: center; }
+.corpo h2 { font: 400 22px/1.2 var(--serif); margin: 0; text-align: center; }
 .sub { margin: 0; text-align: center; color: var(--tinta-suave); font-size: 14px; }
 .rot { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
 
@@ -212,7 +215,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
    o botão por cima, no canto. */
 .secao { display: flex; flex-direction: column; gap: 6px; }
 .secao h3 {
-  font: 600 21px/1.15 Fraunces, Georgia, serif; color: var(--tinta); margin: 0;
+  font: 600 21px/1.15 var(--serif); color: var(--tinta); margin: 0;
 }
 .secao p { margin: 0; font-size: 14px; color: var(--tinta-suave); }
 .capa-secao {
@@ -227,7 +230,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 /* Sem foto, a moldura não fica vazia: diz o nome, como o medalhão faz. */
 .capa-secao .sem-foto {
   display: flex; height: 100%; align-items: center; justify-content: center;
-  font: 500 15px/1.2 Fraunces, Georgia, serif; color: var(--tinta-suave);
+  font: 500 15px/1.2 var(--serif); color: var(--tinta-suave);
   padding: 0 18px; text-align: center;
 }
 .capa-secao .acessar {
@@ -293,7 +296,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .sub-tela { color: var(--tinta-suave); font-size: 14px; margin: -2px 0 2px; }
 /* A tela de "pronto": o que a casa guardou, em linha, para conferir de relance. */
 .recibo { display: flex; flex-direction: column; gap: 2px; text-align: center; }
-.recibo b { font: 600 22px/1.2 Fraunces, Georgia, serif; }
+.recibo b { font: 600 22px/1.2 var(--serif); }
 
 .horarios { display: flex; flex-wrap: wrap; gap: 8px; }
 .hora {
@@ -362,7 +365,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 .carimbo.feito { background: var(--erva); border: 2px solid var(--erva); color: #F4F0E5; }
 .carimbo.premio { border-style: solid; border-color: var(--ocre, #B8893A); }
 .falta { text-align: center; font-size: 15px; margin: 0; }
-.falta b { font: 400 24px/1.2 Fraunces, Georgia, serif; display: block; }
+.falta b { font: 400 24px/1.2 var(--serif); display: block; }
 .premio-ganho {
   border: 1px solid var(--erva); border-radius: var(--raio); padding: 12px 14px;
   display: flex; flex-direction: column; gap: 4px; font-size: 13.5px;
@@ -392,7 +395,7 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 }
 .termo::backdrop { background: rgba(20, 24, 18, .5); }
 .termo[open] { display: flex; flex-direction: column; }
-.termo h3 { margin: 0; padding: 18px 20px 12px; font: 400 19px/1.25 Fraunces, Georgia, serif; }
+.termo h3 { margin: 0; padding: 18px 20px 12px; font: 400 19px/1.25 var(--serif); }
 .termo .corpo-termo {
   overflow-y: auto; padding: 0 20px; font-size: 13.5px; color: var(--tinta-suave);
 }
@@ -745,13 +748,14 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 
    ⚠️ **O endereço é decidido pelo HOSPEDEIRO**, não escrito no código.
    =========================================================================== */
-const API = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-  ? "http://127.0.0.1:9200"
-  : "https://sistema.botanedeliecafe.com.br/api";
+/* 🔑 **O MESMO arquivo serve dois lugares** (15/10/2026): `reservas.botanedeliecafe.com.br`
+   (a pasta `site/`, publicada como está) e `sistema.../portal` (a cópia em
+   `web/public/portal/`, para o feed do Cardápio Vivo voltar ao site no mesmo endereço). A
+   API e o feed moram no sistema nos dois casos; em casa, nas portas locais. */
+const LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const API = LOCAL ? "http://127.0.0.1:9200" : "https://sistema.botanedeliecafe.com.br/api";
 /* O sistema web, onde mora o Cardápio Vivo (`/c/{loja}`). Mesma regra da API. */
-const WEB = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-  ? "http://127.0.0.1:3100"
-  : "https://sistema.botanedeliecafe.com.br";
+const WEB = LOCAL ? "http://127.0.0.1:3100" : "https://sistema.botanedeliecafe.com.br";
 
 /* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
    (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a
@@ -1263,6 +1267,39 @@ function pintarOIcone(nome, logo) {
   }
 }
 
+/* As fontes que a casa pode escolher (as MESMAS do feed — `FONTES` de cardapio_vivo.py). */
+const FONTES_DA_CASA = {
+  FRAUNCES: ["Fraunces, Georgia, serif", null],
+  NEWSREADER: ["'Newsreader', Georgia, serif", "Newsreader:opsz,wght@6..72,400;6..72,500"],
+  PLAYFAIR: ["'Playfair Display', Georgia, serif", "Playfair+Display:wght@500;600"],
+  LORA: ["'Lora', Georgia, serif", "Lora:wght@500;600"],
+  CORMORANT: ["'Cormorant Garamond', Georgia, serif", "Cormorant+Garamond:wght@500;600"],
+};
+
+/**
+ * 🔑 **A aparência da CASA** (pedido do dono, 15/10/2026: "tudo com o mesmo layout").
+ * Cores, fonte e logo vêm de Cardápio Vivo ▸ Aparência — as mesmas do feed. Sem nada
+ * configurado, fica o protótipo (oliva sobre areia, Fraunces).
+ * ⚠️ A cor de fundo só vale no tema claro: no escuro o papel continua escuro, senão a
+ * casa que escolheu areia deixaria o site claro às 22h.
+ */
+function aplicarMarca(marca) {
+  if (!marca) return;
+  const raiz = document.documentElement.style;
+  if (marca.cor_principal) raiz.setProperty("--erva", marca.cor_principal);
+  if (marca.cor_fundo && !matchMedia("(prefers-color-scheme: dark)").matches) {
+    raiz.setProperty("--papel", marca.cor_fundo);
+  }
+  const [familia, google] = FONTES_DA_CASA[marca.fonte] || FONTES_DA_CASA.FRAUNCES;
+  if (google && !document.querySelector(`link[data-fonte="${marca.fonte}"]`)) {
+    const l = document.createElement("link");
+    l.rel = "stylesheet"; l.dataset.fonte = marca.fonte;
+    l.href = `https://fonts.googleapis.com/css2?family=${google}&display=swap`;
+    document.head.appendChild(l);
+  }
+  raiz.setProperty("--serif", familia);
+}
+
 async function carregarCasa() {
   try {
     casa = await pedir("/casa");
@@ -1271,6 +1308,9 @@ async function carregarCasa() {
     $("#estado").hidden = true;
     return;
   }
+  // A logo da casa (a do Cardápio Vivo, ou a da empresa) é a mesma nos dois lados.
+  if (casa.marca) casa.logo_url = casa.marca.logo || casa.logo_url;
+  aplicarMarca(casa.marca);
   $("#nome-da-casa").textContent = casa.casa;
   // 🔑 **Só o nome da casa** (pedido do dono, 05/10/2026): o site deixou de ser só
   // de reservas — tem cardápio, pedido e fidelidade —, e o "— Reservas" na aba
@@ -1424,14 +1464,16 @@ async function carregarCatalogos() {
 }
 
 /** Abre um catálogo pelo botão da página inicial. */
-async function abrirCatalogo(c) {
+async function abrirCatalogo(c, { semFeed = false } = {}) {
   if (c.exige_cadastro && !eu.identificado) return identificarPara(c);
   // 🔑 **O Cardápio Vivo abre o FEED, não a tela de seções** (pedido do dono,
   // 14/10/2026: "ao acessar pelo site, ficaríamos naquela mesma estrutura").
   // ⚠️ Antes de ir, o site volta ao início e esquece o catálogo aberto: senão o
   // "voltar" do celular traria a pessoa a `#cardapio`, que reabriria o feed — e ela
   // ficaria presa sem conseguir voltar ao site.
-  if (c.cardapio_vivo) {
+  // ⚠️ `semFeed`: a encomenda que veio DO feed precisa do cardápio aqui (o carrinho lê preços
+  // e a configuração do pedido dele) — mandar de volta ao feed seria um laço.
+  if (c.cardapio_vivo && !semFeed) {
     aberto = null;
     lembrar();
     history.replaceState(null, "", location.pathname + "#inicio");
@@ -1443,7 +1485,7 @@ async function abrirCatalogo(c) {
     return;
   }
   if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
-  aberto = { id: c.id, secao: null };
+  aberto = { id: c.id, secao: null, doFeed: semFeed || undefined };
   lembrar();
   if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
   return mostrarCardapio(c.nome, () =>
@@ -1732,7 +1774,12 @@ function escolher(caixa, valor) {
 function abrirCarrinho() {
   const cfg = cardapio.pedidos;
   const c = carrinhoAtual();
-  $("#voltar-carrinho").onclick = () => ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
+  // 🔑 Veio do feed (a encomenda do catering): o "voltar" devolve ao feed, onde a pessoa
+  // estava escolhendo — não a uma tela de seções que ela nunca viu.
+  const c0 = aberto && catalogosDaCasa.find((x) => x.id === aberto.id);
+  $("#voltar-carrinho").onclick = () => (aberto && aberto.doFeed && c0)
+    ? abrirCatalogo(c0)
+    : ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
 
   const lista = $("#itens-carrinho");
   const itens = Object.values(c.itens);
@@ -2277,6 +2324,9 @@ $("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTele
 let checkinToken = null;
 /** O catálogo que veio no QR da mesa (`&catalogo=`), para abrir direto. */
 let catalogoDoQr = null;
+/** 🔑 A ENCOMENDA que veio do feed do Cardápio Vivo (`&encomenda=`, 15/10/2026: o catering).
+ *  O feed já gravou o carrinho nesta aba; o site abre a tela do pedido dele. */
+let encomendaDoFeed = null;
 (function lerQrDaMesa() {
   // 🔑 **Todo QR do Portal diz a loja** (27/09/2026, tela de QR codes): site, reserva,
   // cardápio e fidelidade. O de cardápio diz também QUAL catálogo; o de fidelidade
@@ -2285,10 +2335,12 @@ let catalogoDoQr = null;
   if (!q.get("loja") && !q.get("checkin")) return;
   if (q.get("checkin")) checkinToken = q.get("checkin");
   if (q.get("catalogo")) catalogoDoQr = Number(q.get("catalogo"));
+  if (q.get("encomenda")) encomendaDoFeed = Number(q.get("encomenda"));
   try {
     const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
     if (q.get("loja")) salvo.loja = q.get("loja");
     if (catalogoDoQr) salvo.aberto = { id: catalogoDoQr, secao: null };
+    if (encomendaDoFeed) salvo.aberto = { id: encomendaDoFeed, secao: null, doFeed: true };
     sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
   } catch { /* sem memória: o `data-loja` já resolve */ }
   // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
@@ -2894,11 +2946,16 @@ async function restaurarTela() {
     if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);
     return;
   }
-  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido.
-  if (tela === "carrinho" && carrinho && aberto) {
+  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido. A encomenda que
+  // veio do feed (`?encomenda=`) chega por aqui também, com o carrinho já gravado.
+  if ((tela === "carrinho" || encomendaDoFeed) && carrinho && aberto) {
     const c = catalogosDaCasa.find((x) => x.id === aberto.id);
     if (!c) return ir("inicio");
-    await abrirCatalogo(c);
+    const doFeed = !!aberto.doFeed;
+    if (encomendaDoFeed) history.replaceState(null, "", location.pathname + "#carrinho");
+    encomendaDoFeed = null;
+    await abrirCatalogo(c, { semFeed: doFeed });
+    if (doFeed) aberto.doFeed = true;
     if (podePedir()) return abrirCarrinho();
     return;
   }

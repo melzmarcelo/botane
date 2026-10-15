@@ -637,10 +637,14 @@ O que pegou:
 🔑 **Pedido do dono:** *"mesmo sendo o mesmo sistema, o site de reserva e cardápio ficou
 parecendo dois sistemas separados. Gostaria que tudo estivesse com o mesmo layout, e na mesma
 URL."* Parte (b) de três (ver a seção da 117).
-- 🔑 **O site NÃO foi reescrito em React** (escolha aprovada pelo dono): ele é servido pelo
-  Next como arquivo (`web/public/portal/index.html`), com a API em `/api` do próprio domínio.
-  As 2.900 linhas guardam fluxos que os clientes usam (reserva, fidelidade, carrinho);
-  reescrever arriscava quebrá-los. `site/index.html` fica até a virada do domínio e não se edita.
+- 🔑 **O site NÃO foi reescrito em React** (escolha aprovada pelo dono): as 2.900 linhas guardam
+  fluxos que os clientes usam (reserva, fidelidade, carrinho). 🔑 **`site/index.html` é a FONTE**
+  — o dono confirmou que é a pasta publicada em `reservas.*` — e `web/public/portal/index.html` é
+  uma CÓPIA idêntica que o app do sistema serve em `/portal` (o feed volta para lá e leva a
+  encomenda pelo `sessionStorage`, que é por domínio). `smoke_site_sincronizado.py` recusa as
+  duas diferentes. A API continua `sistema.../api` nos dois lugares (com CORS no `reservas`).
+  ⚠️ A primeira versão desta mudança tinha posto a fonte na cópia e a API em `/api` relativa —
+  desfeito quando o dono lembrou que o `reservas` no ar é a pasta `site/`.
 - `web/proxy.ts` (o "middleware" do Next 16): em `reservas.*`, `/` abre o site, `/c/` passa e o
   resto redireciona a `/`; em qualquer domínio, `/portal` abre o site. ⚠️ O redirecionamento
   monta o destino pelo `Host` pedido — `request.url` é o endereço interno atrás do roteador.
@@ -664,4 +668,5 @@ URL."* Parte (b) de três (ver a seção da 117).
   carrinho devolve ao feed (`aberto.doFeed`). ⚠️ O pedido do site não tem adicionais: as escolhas
   vão na observação do item, e a casa confere o preço delas ao confirmar. Na mesa, o pedido
   continua o da mesa. Cobertura: `web/scripts/verificar-encomenda-feed.mjs` (6).
-- **Falta**: (c) a virada do domínio (painel + DNS, com o dono).
+- **Falta (opcional)**: (c) pôr `reservas.*` no app `botane` — aí o feed e o site ficam no mesmo
+  domínio e a identificação não se perde entre os dois (ver `docs/deploy.md`).

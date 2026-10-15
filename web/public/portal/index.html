@@ -748,14 +748,14 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
 
    ⚠️ **O endereço é decidido pelo HOSPEDEIRO**, não escrito no código.
    =========================================================================== */
-/* 🔑 **Desde 15/10/2026 o site é servido pelo MESMO app do sistema** (pedido do dono:
-   "tudo na mesma URL"): a API é `/api` do próprio domínio — reservas.* ou sistema.* —, e
-   o CORS deixa de existir também aqui. Em casa, o Next (3100) e a API (9200) são portas
-   diferentes, e por isso a regra do localhost continua. */
+/* 🔑 **O MESMO arquivo serve dois lugares** (15/10/2026): `reservas.botanedeliecafe.com.br`
+   (a pasta `site/`, publicada como está) e `sistema.../portal` (a cópia em
+   `web/public/portal/`, para o feed do Cardápio Vivo voltar ao site no mesmo endereço). A
+   API e o feed moram no sistema nos dois casos; em casa, nas portas locais. */
 const LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-const API = LOCAL ? "http://127.0.0.1:9200" : `${location.origin}/api`;
-/* O feed do Cardápio Vivo (`/c/{loja}`) mora no mesmo app — no mesmo domínio. */
-const WEB = location.origin;
+const API = LOCAL ? "http://127.0.0.1:9200" : "https://sistema.botanedeliecafe.com.br/api";
+/* O sistema web, onde mora o Cardápio Vivo (`/c/{loja}`). Mesma regra da API. */
+const WEB = LOCAL ? "http://127.0.0.1:3100" : "https://sistema.botanedeliecafe.com.br";
 
 /* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
    (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a

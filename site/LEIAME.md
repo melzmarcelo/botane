@@ -1,10 +1,11 @@
 # O site do cliente — `reservas.botanedeliecafe.com.br`
 
-> 🔴 **Desde 15/10/2026 a fonte do site é `web/public/portal/index.html`** — servido pelo
-> MESMO app do sistema, com a API em `/api` do próprio domínio (pedido do dono: "tudo na mesma
-> URL e com o mesmo layout"). Este `site/index.html` continua servindo
-> `reservas.botanedeliecafe.com.br` só até a virada do domínio (parte (c), `docs/deploy.md`);
-> **não editar mais aqui** — mudança nova vai em `web/public/portal/index.html`.
+> 🔴 **Este `site/index.html` é a FONTE do site, e existe uma CÓPIA idêntica em
+> `web/public/portal/index.html`** (15/10/2026). A cópia é o mesmo site servido pelo app do
+> sistema em `/portal`: é para onde o feed do Cardápio Vivo volta, e por onde a encomenda do
+> catering chega ao carrinho (no mesmo domínio do feed). Mudou aqui, copie:
+> `cp site/index.html web/public/portal/index.html` — a suíte `smoke_site_sincronizado.py`
+> recusa a bateria se os dois divergirem.
 
 
 > Esboço, 21/09/2026. **Pedido do dono:** *"agora vamos criar o site para o
