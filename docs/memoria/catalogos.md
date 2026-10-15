@@ -522,3 +522,19 @@ e fase 3 (A/B) não começaram.
 
 - **Falta na fase 1**: tela das exceções por salão/mesa (a API existe; só fazem sentido com o
   PEDIDO), Spaces, e medir o Lighthouse ≥ 85 num `next build`.
+
+## Cardápio Vivo, fase 2 (migração 115, 15/10/2026)
+
+Detalhe no estudo, seção 8. O que pegou no caminho:
+- ⚠️ **CHECK sobre coluna com `ON DELETE SET NULL` trava a exclusão do pai.** A primeira
+  versão exigia `id_mesa` no modo MESA; apagar a mesa zeraria o id e estouraria a CHECK. Virou
+  `mesa_nome` congelado.
+- ⚠️ **`preservar_reserva` embrulhava em `Json` só `dict`**; os adicionais são LISTA em jsonb, e
+  lista também é o que volta de `text[]` (`mesas.caracteristicas`). Agora decide pelo TIPO da
+  coluna (`information_schema`), não pelo valor.
+- ⚠️ Na verificação do navegador, "Adicionar ao pedido" existe no prato E no detalhe: clique
+  sem escopo pega o de trás do diálogo.
+- ⚠️ `Textos` do feed era literal (`as const`); o modo PEDIDO troca rótulos e o tipo foi
+  alargado para `string`.
+- Pedido da mesa vai à coluna Mesas e, confirmado, à "lançar no PDV" como os do site. O
+  pedido de teste da verificação FICA (pedido não se apaga pela rota).

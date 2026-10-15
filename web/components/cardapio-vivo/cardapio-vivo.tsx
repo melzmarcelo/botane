@@ -11,12 +11,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buscarFeed, imagem, previaFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
+import Chamados from "./chamados";
 import Detalhe from "./detalhe";
 import { useFavoritos } from "./favoritos";
 import Hub from "./hub";
 import { Medidor, medicaoRecusada, recusarMedicao } from "./eventos";
 import ItemFeed from "./item-feed";
 import { useSelecao, type EscolhaAdicional } from "./selecao";
+import TelaPedido from "./tela-pedido";
 import TelaSelecao from "./tela-selecao";
 import { idiomaDoNavegador, nomeRestricao, textos } from "./textos";
 
@@ -61,8 +63,15 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
   const barra = useRef<HTMLDivElement>(null);
   const medidor = useRef<Medidor | null>(null);
   const selecao = useSelecao(loja, token);
-  const t = textos(idioma);
   const previa = idCatalogoPrevia !== undefined;
+  // 🔑 **No modo PEDIDO** (fase 2, 115), a "minha seleção" vira o carrinho que vai ao painel —
+  // a mesma lista no aparelho, com os rótulos de pedido. Sem mesa, nunca há pedido.
+  const modoPedido = feed?.modo === "PEDIDO" && !!token;
+  const base = textos(idioma);
+  const t = modoPedido
+    ? { ...base, adicionarSelecao: base.adicionarPedido, adicionado: base.noPedido, minhaSelecao: base.meuPedido }
+    : base;
+  const sessao = useCallback(() => medidor.current?.idSessao ?? "", []);
 
   useEffect(() => {
     // O site de reservas manda o idioma que a pessoa escolheu lá (`?idioma=en`); sem
@@ -258,13 +267,17 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
                   className={`rounded-full px-3 py-1 text-xs backdrop-blur ${filtro.length ? "bg-white text-black" : "bg-white/15"}`}>
             {t.filtrar}{filtro.length ? ` (${filtro.length})` : ""}
           </button>
+          {feed.chamar_garcom && token && (
+            <Chamados token={token} sessao={sessao} t={t}
+                      aoChamar={(tipo) => medidor.current?.registrar(tipo === "CONTA" ? "pediu_conta" : "chamou_garcom")} />
+          )}
           <button type="button" onClick={() => setVerFavoritos(true)} aria-label={t.meusFavoritos}
                   className="rounded-full bg-white/15 px-3 py-1 text-xs backdrop-blur">
             ♥ {favoritos.ids.filter((id) => feed.itens.some((i) => i.id === id)).length}
           </button>
           <button type="button" onClick={() => setVerSelecao(true)}
                   className="rounded-full bg-[var(--cv-fundo)] px-3 py-1 text-xs font-semibold text-[var(--cv-tinta)]">
-            ★ {selecao.quantidade}
+            {modoPedido ? "🛒" : "★"} {selecao.quantidade}
           </button>
         </div>
         {filtroAberto && (
@@ -369,7 +382,31 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
           </ul>
         </div>
       )}
-      {verSelecao && (
+      {verSelecao && modoPedido && (
+        <TelaPedido
+          linhas={selecao.linhas}
+          total={selecao.total}
+          algumSemPreco={selecao.algumSemPreco}
+          mesa={feed.mesa ? `${t.mesa} ${feed.mesa.nome}` : null}
+          token={token!}
+          loja={feed.loja.id}
+          sessao={sessao}
+          t={t}
+          aoRemover={(l) => {
+            selecao.remover(l.chave);
+            const item = feed.itens.find((i) => i.id === l.id_item);
+            medidor.current?.registrar("removeu", { item: l.id_item, midia: item?.midia.tipo });
+          }}
+          aoEnviado={() => {
+            // O carrinho que foi vira pedido: esvazia SEM "removeu" (não é desistência).
+            medidor.current?.registrar("enviou_pedido");
+            medidor.current?.enviar();
+            selecao.limpar();
+          }}
+          aoFechar={() => setVerSelecao(false)}
+        />
+      )}
+      {verSelecao && !modoPedido && (
         <TelaSelecao
           linhas={selecao.linhas}
           total={selecao.total}

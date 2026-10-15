@@ -7,6 +7,8 @@
 só sai o que a casa publicou, e só grava evento anônimo com freio.
 """
 
+from datetime import date, time
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import ValidationError
 
@@ -15,11 +17,15 @@ import auditoria
 import relogio
 from config import WEB_URL
 from database import get_cursor
-from models.cardapio_vivo import ConfigCardapio, ExcecaoCardapio, LoteEventos
+from models.cardapio_vivo import ChamadoDaMesa, ConfigCardapio, ExcecaoCardapio, LoteEventos, PedidoDaMesa
+from models.reservas import IdentificacaoDoSite
 from routers.reservas import _unidade
 from seguranca import Contexto, ip_do_cliente, requer_permissao
+from services import cardapio_atencao
+from services import cardapio_pedido
 from services import cardapio_vivo as servico
 from services import fidelidade_qr
+from services import reserva_clientes as clientes
 
 router = APIRouter(prefix="/cardapio-vivo", tags=["Cardápio Vivo"])
 publico = APIRouter(prefix="/publico/cardapio", tags=["site do cliente"])
@@ -28,6 +34,8 @@ _VER = requer_permissao("catalogos.ver")
 _EDITAR = requer_permissao("catalogos.editar")
 # ⚠️ O acesso das mesas (token, QR) é de quem configura o SALÃO, como os outros QR.
 _SALAO = requer_permissao("reservas.configurar")
+# Fase 2 (115): quem atende o chamado é quem opera os pedidos (o salão, o balcão).
+_OPERAR = requer_permissao("pedidos.operar")
 
 
 def _catalogos_produtos(cur, id_unidade: int) -> list[dict]:
@@ -268,3 +276,97 @@ async def eventos(request: Request) -> Response:
     with get_cursor() as cur:
         servico.registrar_eventos(cur, dados, ip_do_cliente(request))
     return Response(status_code=204)
+
+
+# ------------------------------------------------------------------ fase 2 (115)
+
+class IdentificacaoNaMesa(IdentificacaoDoSite):
+    """A identificação do cardápio: a mesma do site, mais a posição (se a fidelidade pedir).
+
+    ⚠️ A posição mede a distância e é DESCARTADA, como no check-in do site (092).
+    """
+    latitude: float | None = None
+    longitude: float | None = None
+    precisao: float | None = None
+
+
+def _mesa(cur, token: str) -> dict:
+    mesa = servico.mesa_por_token(cur, token)
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Este QR code não vale mais. "
+                                                    "Peça o cardápio ao garçom.")
+    return mesa
+
+
+@publico.post("/mesa/{token}/pedido", status_code=201)
+def pedido_da_mesa(token: str, corpo: PedidoDaMesa) -> dict:
+    """O carrinho da mesa vira pedido no painel (coluna Mesas).
+
+    ⚠️ Não vira venda e não vai ao PDV sozinho (decisão 1): a casa lança no PDV.
+    """
+    dados = corpo.model_dump()
+    dados["sessao"] = str(corpo.sessao)
+    with get_cursor() as cur:
+        mesa = _mesa(cur, token)
+        return cardapio_pedido.enviar(cur, mesa, dados, corpo.telefone)
+
+
+@publico.get("/mesa/{token}/pedidos")
+def pedidos_da_sessao(token: str, sessao: str = Query(pattern=r"^[0-9a-f-]{36}$")) -> list[dict]:
+    """Os pedidos desta sessão nesta mesa — para o cliente acompanhar a confirmação."""
+    with get_cursor() as cur:
+        return cardapio_pedido.da_sessao(cur, _mesa(cur, token), sessao)
+
+
+@publico.post("/mesa/{token}/chamado")
+def chamado_da_mesa(token: str, corpo: ChamadoDaMesa) -> dict:
+    """Chamar o garçom ou pedir a conta: um alerta no painel, ligado à mesa."""
+    with get_cursor() as cur:
+        return cardapio_pedido.chamar(cur, _mesa(cur, token), corpo.tipo,
+                                      str(corpo.sessao) if corpo.sessao else None)
+
+
+@publico.post("/mesa/{token}/identificar")
+def identificar_na_mesa(token: str, corpo: IdentificacaoNaMesa, request: Request) -> dict:
+    """O telefone (opcional) para somar na fidelidade — e o cadastro de quem é novo.
+
+    ⚠️ Conta como tentativa, como toda leitura por telefone do site: é o freio contra
+    quem varre números.
+    """
+    with get_cursor() as cur:
+        mesa = _mesa(cur, token)
+        clientes.marcar_tentativa(cur, mesa["id_unidade"], ip_do_cliente(request))
+    with get_cursor() as cur:
+        cur.execute("SELECT cadastro_completo FROM reserva_config WHERE id_unidade = %s",
+                    (mesa["id_unidade"],))
+        cfg = cur.fetchone()
+        posicao = ({"latitude": corpo.latitude, "longitude": corpo.longitude,
+                    "precisao": corpo.precisao} if corpo.latitude is not None else None)
+        return cardapio_pedido.identificar(cur, mesa, corpo, posicao,
+                                           bool(cfg and cfg["cadastro_completo"]))
+
+
+@router.post("/chamados/{id_chamado}/atender")
+def atender_chamado(id_chamado: int, ctx: Contexto = Depends(_OPERAR)) -> dict:
+    with get_cursor() as cur:
+        return cardapio_pedido.atender(cur, _unidade(cur, ctx), id_chamado, ctx.id_usuario)
+
+
+_ATENCAO = requer_permissao("cardapio.atencao")
+
+
+@router.get("/atencao")
+def painel_atencao(de: date, ate: date, id_salao: int | None = None,
+                   dias: str | None = Query(None, pattern=r"^[1-7](,[1-7])*$"),
+                   hora_de: time | None = None, hora_ate: time | None = None,
+                   ctx: Contexto = Depends(_ATENCAO)) -> dict:
+    """O painel Atenção × Vendas: atenção estimada, vendas do PDV e margem por prato.
+
+    ⚠️ As duas pontas do horário vão juntas, ou nenhuma.
+    """
+    if (hora_de is None) != (hora_ate is None):
+        raise HTTPException(status_code=422, detail="Informe as duas pontas do horário, ou nenhuma.")
+    with get_cursor() as cur:
+        return cardapio_atencao.painel(
+            cur, _unidade(cur, ctx), de, ate, id_salao,
+            [int(d) for d in dias.split(",")] if dias else None, hora_de, hora_ate)

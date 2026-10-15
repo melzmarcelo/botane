@@ -27,7 +27,9 @@ from config import FUSO_DA_CASA
 from services.custos import dec
 
 ORIGEM_PRODUTOS = "PRODUTOS"
-MODOS = {"RETIRADA": "Retirar na loja", "ENTREGA": "Entrega"}
+MODOS = {"RETIRADA": "Retirar na loja", "ENTREGA": "Entrega",
+         # 🔑 O pedido da MESA, pelo Cardápio Vivo (115): sem telefone, endereço nem pagamento.
+         "MESA": "Na mesa"}
 PAGAMENTOS = {"RETIRADA": "Na retirada", "ENTREGA": "Na entrega", "WHATSAPP": "Combinar pelo WhatsApp"}
 SITUACOES = ("NOVO", "CONFIRMADO", "ENTREGUE", "RECUSADO", "CANCELADO")
 _CENTAVO = Decimal("0.01")
@@ -290,14 +292,17 @@ def enviar(cur, id_unidade: int, id_catalogo: int, cliente: dict, dados: dict) -
 
 
 def _gravar_itens(cur, id_pedido: int, linhas: list[dict]) -> None:
+    import json
     cur.execute("DELETE FROM pedido_itens WHERE id_pedido = %s", (id_pedido,))
     for l in linhas:
         cur.execute(
             """INSERT INTO pedido_itens (id_pedido, id_produto, nome, quantidade, preco_unitario,
-                                         total, observacao, ordem)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                                         total, observacao, ordem, adicionais)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (id_pedido, l["id_produto"], l["nome"], l["quantidade"], l["preco_unitario"],
-             l["total"], l.get("observacao"), l.get("ordem", 0)),
+             l["total"], l.get("observacao"), l.get("ordem", 0),
+             # Os adicionais congelados (115) — só os pedidos da mesa os têm.
+             json.dumps(l["adicionais"], default=str) if l.get("adicionais") else None),
         )
 
 
@@ -314,7 +319,7 @@ def _historico(cur, id_pedido: int, acao: str, de: str | None, para: str | None,
 
 def _itens(cur, id_pedido: int) -> list[dict]:
     cur.execute(
-        """SELECT id, id_produto, nome, quantidade, preco_unitario, total, observacao
+        """SELECT id, id_produto, nome, quantidade, preco_unitario, total, observacao, adicionais
              FROM pedido_itens WHERE id_pedido = %s ORDER BY ordem, id""", (id_pedido,))
     return [{**dict(r), "quantidade": _num(r["quantidade"]),
              "preco_unitario": _num(r["preco_unitario"]), "total": _num(r["total"])}
@@ -323,20 +328,23 @@ def _itens(cur, id_pedido: int) -> list[dict]:
 
 def publico(cur, id_pedido: int) -> dict:
     """O pedido como o CLIENTE o vê — sem id interno, sem quem confirmou."""
-    cur.execute("SELECT * FROM pedidos WHERE id = %s", (id_pedido,))
+    cur.execute("""SELECT p.*, coalesce(m.nome, p.mesa_nome) AS mesa FROM pedidos p
+                     LEFT JOIN mesas m ON m.id = p.id_mesa WHERE p.id = %s""", (id_pedido,))
     p = dict(cur.fetchone())
     return {
         "numero": p["numero"], "situacao": p["situacao"], "motivo": p["motivo"],
         "alterado": p["alterado"], "modo": p["modo"], "modo_rotulo": MODOS[p["modo"]],
-        "endereco": p["endereco"],
+        "endereco": p["endereco"], "mesa": p["mesa"],
         "para_quando": p["para_quando"].astimezone(_fuso()).isoformat(),
-        "forma_pagamento": PAGAMENTOS[p["forma_pagamento"]],
+        # ⚠️ O pedido da mesa não tem forma de pagamento: paga-se no caixa, pelo fluxo de sempre.
+        "forma_pagamento": PAGAMENTOS.get(p["forma_pagamento"]) if p["forma_pagamento"] else None,
         "subtotal": _num(p["subtotal"]), "taxa_entrega": _num(p["taxa_entrega"]),
         "total": _num(p["total"]), "observacao": p["observacao"],
         "criado_em": p["criado_em"].astimezone(_fuso()).isoformat(),
         "itens": [{"nome": i["nome"], "quantidade": i["quantidade"],
                    "preco_unitario": i["preco_unitario"], "total": i["total"],
-                   "observacao": i["observacao"]} for i in _itens(cur, id_pedido)],
+                   "observacao": i["observacao"], "adicionais": i["adicionais"]}
+                  for i in _itens(cur, id_pedido)],
     }
 
 
@@ -400,10 +408,13 @@ _LISTA = """
     SELECT p.id, p.numero, p.nome, p.telefone, p.modo, p.endereco, p.para_quando,
            p.forma_pagamento, p.total, p.situacao, p.motivo, p.alterado, p.lancado_pdv_em,
            p.cupom_pdv, p.id_venda, p.pago_em, p.pago_como, p.entregue_em, p.criado_em,
+           p.origem, coalesce(m.nome, p.mesa_nome) AS mesa, s.nome AS salao,
            c.nome AS catalogo,
            (SELECT count(*) FROM pedido_itens i WHERE i.id_pedido = p.id) AS itens
       FROM pedidos p
       LEFT JOIN catalogos c ON c.id = p.id_catalogo
+      LEFT JOIN mesas m ON m.id = p.id_mesa
+      LEFT JOIN saloes s ON s.id = m.id_salao
 """
 
 _FILTROS = {
@@ -419,8 +430,10 @@ _FILTROS = {
 
 def _linha(r: dict) -> dict:
     return {**r, "total": _num(r["total"]),
-            "modo_rotulo": MODOS[r["modo"]],
-            "pagamento_rotulo": PAGAMENTOS[r["forma_pagamento"]]}
+            "modo_rotulo": (f"Mesa {r['mesa']}" if r.get("modo") == "MESA" and r.get("mesa")
+                            else MODOS[r["modo"]]),
+            "pagamento_rotulo": (PAGAMENTOS[r["forma_pagamento"]] if r.get("forma_pagamento")
+                                 else "No caixa")}
 
 
 def listar(cur, id_unidade: int, situacao: str, dia: date | None, busca: str | None,
@@ -486,16 +499,20 @@ def confirmar(cur, id_unidade: int, id_pedido: int, id_usuario: int, dados: dict
                 ja = do_pedido.get(c["id_produto"])
                 nome, preco, idp = ((ja["nome"], dec(ja["preco_unitario"]), ja["id_produto"]) if ja
                                     else (c["nome"], dec(c["preco"]), c["id_produto"]))
+                adicionais = ja.get("adicionais") if ja else None
             else:
                 ja = do_pedido.get(int(i["id_produto"]))
                 if not ja:
                     raise HTTPException(status_code=400,
                                         detail="Para pôr um produto novo, escolha-o do cardápio.")
                 nome, preco, idp = ja["nome"], dec(ja["preco_unitario"]), ja["id_produto"]
+                adicionais = ja.get("adicionais")
+            # ⚠️ Os adicionais da mesa (115) acompanham o item que FICA: a troca regrava os
+            # itens, e sem isto o "sem cebola, ponto mal" sumiria do pedido confirmado.
             linhas.append({"id_produto": idp, "nome": nome, "quantidade": qtd,
                            "preco_unitario": preco, "total": (qtd * preco).quantize(_CENTAVO),
                            "observacao": (i.get("observacao") or "").strip() or None,
-                           "ordem": n})
+                           "adicionais": adicionais, "ordem": n})
         def assinatura(ls):
             return sorted((l["id_produto"], float(l["quantidade"])) for l in ls)
         alterado = assinatura(linhas) != assinatura(antes)
@@ -577,13 +594,19 @@ def painel(cur, id_unidade: int) -> dict:
         cur.execute(_LISTA + f" WHERE p.id_unidade = %s AND {onde} ORDER BY {ordem} LIMIT 60",
                     (id_unidade,))
         return [_linha(dict(r)) for r in cur.fetchall()]
-    novos = colunas("p.situacao = 'NOVO'")
+    novos = colunas("p.situacao = 'NOVO' AND p.modo <> 'MESA'")
     sem_pdv = colunas("p.situacao IN ('CONFIRMADO', 'ENTREGUE') AND p.lancado_pdv_em IS NULL")
-    agenda = colunas("p.situacao = 'CONFIRMADO'")
+    agenda = colunas("p.situacao = 'CONFIRMADO' AND p.modo <> 'MESA'")
+    # 🔑 **A coluna Mesas** (decisão 14 do Cardápio Vivo): os pedidos da mesa em aberto —
+    # os novos primeiro (confirmar), depois os confirmados que ainda não foram entregues.
+    mesas = colunas("p.modo = 'MESA' AND p.situacao IN ('NOVO', 'CONFIRMADO')",
+                    "(p.situacao = 'NOVO') DESC, p.criado_em")
     for l in sem_pdv:
         _ligar_venda(cur, {"id": l["id"], "id_unidade": id_unidade, "cupom_pdv": l["cupom_pdv"],
                            "id_venda": l["id_venda"]})
-    return {"novos": novos, "sem_pdv": sem_pdv, "confirmados": agenda,
+    from services import cardapio_pedido
+    return {"novos": novos, "sem_pdv": sem_pdv, "confirmados": agenda, "mesas": mesas,
+            "chamados": cardapio_pedido.chamados_abertos(cur, id_unidade),
             "agora": _agora(cur).isoformat()}
 
 
@@ -641,7 +664,7 @@ def pdf(cur, id_unidade: int, id_pedido: int) -> bytes:
     quando = p["para_quando"].astimezone(_fuso())
     linha(f"PEDIDO {p['numero']}", "Helvetica-Bold", 20, 10)
     linha(f"{p['modo_rotulo']} · {quando:%d/%m/%Y às %H:%M}", "Helvetica-Bold", 13, 8)
-    linha(f"Cliente: {p['nome']} · {p['telefone']}")
+    linha(f"Cliente: {p['nome']}" + (f" · {p['telefone']}" if p["telefone"] else ""))
     if p["endereco"]:
         linha(f"Endereço: {p['endereco']}")
     linha(f"Pagamento: {p['pagamento_rotulo']}" + (f" · pago ({p['pago_como']})" if p["pago_em"] else ""))

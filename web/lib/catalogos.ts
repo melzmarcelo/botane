@@ -135,6 +135,9 @@ export type ItemDoCatalogo = {
   esgotado: boolean;
   tem_video: boolean;
   restricoes: string[];
+  /** Fase 2 (115): o objetivo de negócio e o ajuste manual do nível de margem. */
+  objetivo: string | null;
+  margem_nivel: string | null;
 };
 
 export type Secao = {

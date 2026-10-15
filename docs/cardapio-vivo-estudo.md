@@ -178,3 +178,37 @@ carrinho do 101).
 **Fase 3** — A/B de mídia e ordem, sugestões automáticas de destaque.
 
 **Fora do escopo** — pagamento pelo celular; lançamento automático no PDV.
+
+## 8. Fase 2 — construída em 15/10/2026 (migração 115)
+
+Decisões do dono no início da fase: **esgotado aparece marcado** (confirmação da resposta
+cortada de 14/10); **nível de margem pela margem-alvo da Precificação** (na meta ou acima =
+alta; até 10 pontos abaixo = média; abaixo = baixa; sem meta ou sem custo = sem nível, salvo
+ajuste manual); **cliente sem cadastro se cadastra no próprio cardápio** (nome + termo, e o
+que a loja exigir).
+
+- **Pedido da mesa** = a MESMA tabela `pedidos`: `modo = 'MESA'`, `origem = 'CARDAPIO'`,
+  `id_mesa`, `mesa_nome` (congelado), `id_sessao`. Telefone e pagamento ficaram opcionais SÓ
+  no modo MESA (`ck_pedido_site_completo`). ⚠️ A CHECK do modo MESA é sobre `mesa_nome`, não
+  `id_mesa`: o `ON DELETE SET NULL` zeraria o id e travaria a exclusão da mesa.
+- **Adicionais congelados** em `pedido_itens.adicionais` (jsonb), já somados no
+  `preco_unitario` — total, painel e PDF não mudaram de conta. A troca na confirmação
+  preserva os adicionais do item que fica.
+- **O que a mesa pode pedir é o que o FEED mostra agora** (`cv.feed`): fora do horário da
+  seção, esgotado ou sem preço é recusado. Sem mesa (URL da loja) é sempre VITRINE.
+- **Chamados** em `cardapio_chamados`, um ABERTO por mesa e tipo (índice único parcial);
+  "atendido" no painel mede o tempo de atendimento.
+- **Identificação** reusa `reserva_clientes.identificar`; a fidelidade segue o método:
+  `QRCODE_MESA` marca a visita com o segredo do programa (que nunca vai ao celular),
+  `CODIGO_CAIXA` abre o pedido de código. Falha da fidelidade nunca desfaz a identificação.
+- **Painel Atenção × Vendas** (`cardapio_atencao.py`, permissão `cardapio.atencao`):
+  lê o evento BRUTO (aceita salão, dia da semana e hora); venda do PDV pelo produto (sem
+  salão — o cupom não diz); quadrante pela MEDIANA do cardápio; sugestões com a prioridade
+  do objetivo de negócio (lançamento/girar estoque com pouca atenção sobem para destaque;
+  MANTER não vira "sair"). As definições saem da API e a tela as mostra.
+- Telas: carrinho e acompanhamento na mesa, chamados, identificação; coluna **Mesas** e
+  chamados com som no Painel de pedidos; opções do PEDIDO e **exceções** no Cardápio Vivo;
+  objetivo e margem no item do catálogo; página **Atenção × Vendas**.
+- Cobertura: `smoke_cardapio_pedido.py` (59) e `web/scripts/verificar-cardapio-pedido.mjs` (16).
+
+**Fase 3 (não começou):** testes A/B de mídia e ordem, e sugestões automáticas de destaque.

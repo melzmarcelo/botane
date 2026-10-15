@@ -166,7 +166,9 @@ CFG = {"id_catalogo": ID_CAT, "modo": "VITRINE", "cor_principal": "#3d5a3a",
 st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "id_catalogo": pdf["id"]}, token)
 checar("apontar um PDF é recusado (409)", st == 409, (st, r))
 st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "modo": "PEDIDO"}, token)
-checar("o modo PEDIDO é recusado na fase 1, com a frase", st == 409 and "fase 2" in r["detail"], (st, r))
+# Fase 2 (115): o PEDIDO foi liberado — a suíte dele é `smoke_cardapio_pedido.py`.
+checar("o modo PEDIDO é aceito desde a fase 2", st == 200 and r["config"]["modo"] == "PEDIDO", (st, r))
+chamar("PUT", "/cardapio-vivo/config", CFG, token)
 st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "cor_principal": "verde"}, token)
 checar("cor que não é #RRGGBB é recusada", st == 422, st)
 st, r = chamar("PUT", "/cardapio-vivo/config", CFG, token)

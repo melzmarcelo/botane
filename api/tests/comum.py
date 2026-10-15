@@ -334,6 +334,12 @@ def preservar_reserva(unidade: int):
     def _repor_de_verdade() -> int:
         postas = 0
         with conectar() as conn, conn.cursor() as cur:
+            # ⚠️ **`jsonb` pelo TIPO da coluna, não pelo valor**: os adicionais do pedido da
+            # mesa (115) são uma LISTA em jsonb, e lista também é o que volta de `text[]`
+            # (`mesas.caracteristicas`). Embrulhar toda lista em `Json` quebraria a mesa.
+            cur.execute("""SELECT table_name, column_name FROM information_schema.columns
+                            WHERE data_type = 'jsonb' AND table_schema = 'public'""")
+            jsonb = {(t, c) for t, c in cur.fetchall()}
             for tabela, onde in reversed(TABELAS):
                 cur.execute(f"DELETE FROM {tabela} WHERE {onde}", (unidade,))  # noqa: S608
             for tabela, _onde in TABELAS:
@@ -348,7 +354,7 @@ def preservar_reserva(unidade: int):
                         "ON CONFLICT DO NOTHING",
                         # `jsonb` volta como dict (o histórico do pedido) e o driver não
                         # sabe gravar dict sem o `Json`.
-                        [Json(reg[c]) if isinstance(reg[c], dict) else reg[c]
+                        [Json(reg[c]) if (tabela, c) in jsonb and reg[c] is not None else reg[c]
                          for c in colunas],
                     )
                     postas += 1

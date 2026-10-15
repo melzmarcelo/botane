@@ -8,6 +8,7 @@ import { CardapioVivoService, type RespostaConfig } from "@/lib/cardapio-vivo";
 import { useSessao } from "@/lib/sessao";
 import AcessoMesas from "./acesso-mesas";
 import Configuracao from "./configuracao";
+import Excecoes from "./excecoes";
 
 /**
  * Portal de Clientes → Catálogos → Cardápio Vivo.
@@ -74,6 +75,8 @@ export default function PaginaCardapioVivo() {
           ) : null}
         </Cartao>
       )}
+
+      <Excecoes podeEditar={pode("catalogos.editar")} />
 
       {pode("reservas.configurar") && <AcessoMesas />}
     </div>

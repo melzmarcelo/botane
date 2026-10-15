@@ -14,11 +14,24 @@ import { CardapioVivoService } from "@/lib/cardapio-vivo";
 import type { ItemDoCatalogo, Secao, TipoDeSecao } from "@/lib/catalogos";
 
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+const OBJETIVOS: [string, string][] = [["", "sem objetivo"], ["AUMENTAR_VENDA", "aumentar venda"],
+  ["GIRAR_ESTOQUE", "girar estoque"], ["LANCAMENTO", "lançamento"], ["MANTER", "manter"]];
+const MARGENS: [string, string][] = [["", "margem: da ficha"], ["ALTA", "margem alta"],
+  ["MEDIA", "margem média"], ["BAIXA", "margem baixa"]];
 
 export function MarcasDoItem({ item, podeEditar, aoMudar }: {
   item: ItemDoCatalogo; podeEditar: boolean; aoMudar: () => Promise<void>;
 }) {
   const aviso = useAviso();
+  async function marcar(marcas: Parameters<typeof CardapioVivoService.marcarItem>[1]) {
+    try {
+      const r = await CardapioVivoService.marcarItem(item.id, marcas);
+      await aoMudar();
+      aviso.sucesso(r.message);
+    } catch (e) {
+      aviso.erro(e instanceof Error ? e.message : "Não foi possível marcar.");
+    }
+  }
   async function alternar(campo: "destaque" | "esgotado") {
     try {
       const r = await CardapioVivoService.marcarItem(item.id, { [campo]: !item[campo] });
@@ -42,6 +55,16 @@ export function MarcasDoItem({ item, podeEditar, aoMudar }: {
                   aria-pressed={item.esgotado} onClick={() => void alternar("esgotado")}>
             {item.esgotado ? "esgotado ✓" : "esgotado"}
           </button>
+          {/* 🔑 Fase 2 (115): o painel Atenção × Vendas usa os dois para priorizar as sugestões. */}
+          <select className="campo !w-auto !py-0.5 text-[12.5px]" aria-label="Objetivo de negócio"
+                  value={item.objetivo ?? ""} onChange={(e) => void marcar({ objetivo: e.target.value })}>
+            {OBJETIVOS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+          </select>
+          <select className="campo !w-auto !py-0.5 text-[12.5px]" aria-label="Nível de margem"
+                  title="Da ficha: calculado pela margem-alvo da Precificação. Escolher um nível o fixa à mão."
+                  value={item.margem_nivel ?? ""} onChange={(e) => void marcar({ margem_nivel: e.target.value })}>
+            {MARGENS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
+          </select>
         </>
       ) : (
         <>

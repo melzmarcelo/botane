@@ -112,7 +112,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     cur.execute(
         """SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
-                  i.destaque, i.esgotado,
+                  i.destaque, i.esgotado, i.objetivo, i.margem_nivel,
                   p.nome AS produto, p.codigo, p.ativo, p.foto_url,
                   p.video_url IS NOT NULL AS tem_video, p.restricoes,
                   -- 🔑 O nome que o CLIENTE vai ler, para a tela de
@@ -491,7 +491,8 @@ def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
     em 14/10/2026: o item fica no cardápio, marcado, e não pode ser adicionado.
     """
     cur.execute(
-        """SELECT i.id, i.destaque, i.esgotado, p.nome FROM catalogo_itens i
+        """SELECT i.id, i.destaque, i.esgotado, i.objetivo, i.margem_nivel, p.nome
+             FROM catalogo_itens i
              JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
              JOIN catalogos k ON k.id = c.id_catalogo
@@ -502,10 +503,16 @@ def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     destaque = atual["destaque"] if dados.get("destaque") is None else dados["destaque"]
     esgotado = atual["esgotado"] if dados.get("esgotado") is None else dados["esgotado"]
-    cur.execute("UPDATE catalogo_itens SET destaque = %s, esgotado = %s WHERE id = %s",
-                (destaque, esgotado, id_item))
+    # Fase 2 (115): nulo = não mexe; "" = limpa (sem objetivo / nível calculado).
+    objetivo = atual["objetivo"] if dados.get("objetivo") is None else (dados["objetivo"] or None)
+    nivel = atual["margem_nivel"] if dados.get("margem_nivel") is None else (dados["margem_nivel"] or None)
+    cur.execute("""UPDATE catalogo_itens SET destaque = %s, esgotado = %s, objetivo = %s,
+                          margem_nivel = %s WHERE id = %s""",
+                (destaque, esgotado, objetivo, nivel, id_item))
     return {"id": id_item, "destaque": destaque, "esgotado": esgotado,
-            "antes": {"destaque": atual["destaque"], "esgotado": atual["esgotado"]},
+            "objetivo": objetivo, "margem_nivel": nivel,
+            "antes": {"destaque": atual["destaque"], "esgotado": atual["esgotado"],
+                      "objetivo": atual["objetivo"], "margem_nivel": atual["margem_nivel"]},
             "message": f'"{atual["nome"]}": ' + ", ".join(
                 [("em destaque" if destaque else "sem destaque"),
                  ("esgotado" if esgotado else "disponível")]) + "."}

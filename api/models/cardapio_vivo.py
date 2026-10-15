@@ -77,6 +77,9 @@ class LoteEventos(BaseModel):
 class MarcasDoItem(BaseModel):
     destaque: bool | None = None
     esgotado: bool | None = None
+    # Fase 2 (115). Nulo = não mexe; "" = limpa (volta ao calculado / sem objetivo).
+    objetivo: str | None = Field(None, pattern="^(AUMENTAR_VENDA|GIRAR_ESTOQUE|LANCAMENTO|MANTER|)$")
+    margem_nivel: str | None = Field(None, pattern="^(ALTA|MEDIA|BAIXA|)$")
 
 
 class ExibicaoDaSecao(BaseModel):
@@ -127,3 +130,29 @@ class GrupoAdicional(BaseModel):
         if self.minimo > len([o for o in self.opcoes if o.ativo]):
             raise ValueError("O mínimo pede mais escolhas do que há opções ativas.")
         return self
+
+
+# ------------------------------------------------------------------ fase 2 (115)
+
+class ItemDoPedidoDaMesa(BaseModel):
+    item: int
+    quantidade: int = Field(ge=1, le=50)
+    adicionais: list[int] = Field(default_factory=list, max_length=30)
+    observacao: str | None = Field(None, max_length=200)
+
+
+class PedidoDaMesa(BaseModel):
+    """O carrinho da mesa. ⚠️ O preço NÃO vem daqui: o servidor o tira do cardápio."""
+
+    sessao: UUID
+    # Gerada no aparelho e trocada a cada mudança no carrinho (como o pedido do site, 101).
+    chave: str = Field(min_length=8, max_length=60)
+    itens: list[ItemDoPedidoDaMesa] = Field(min_length=1, max_length=40)
+    observacao: str | None = Field(None, max_length=500)
+    # Só de quem se identificou: liga o pedido ao cadastro. Nunca vai para os eventos.
+    telefone: str | None = Field(None, max_length=30)
+
+
+class ChamadoDaMesa(BaseModel):
+    tipo: str = Field(pattern="^(GARCOM|CONTA)$")
+    sessao: UUID | None = None

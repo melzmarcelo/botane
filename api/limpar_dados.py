@@ -50,6 +50,8 @@ OPERACAO = [
     "catalogo_itens",
     # O Cardápio Vivo (113): a atenção medida e os adicionais apontam para `produtos`.
     "cardapio_eventos", "cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_sessoes",
+    # Os chamados da mesa (115) apontam para mesa e usuário: são operação.
+    "cardapio_chamados",
     "produto_adicionais_opcoes", "produto_adicionais_grupos",
     # razão de estoque e o que pendura nele
     "movimento_lotes", "estoque_lotes", "estoque_movimentos", "estoque_saldos",

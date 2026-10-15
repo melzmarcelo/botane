@@ -107,6 +107,11 @@ export class Medidor {
     this.enviar();
   }
 
+  /** O id anônimo da sessão — o pedido da mesa (115) o leva, para o cliente acompanhar. */
+  get idSessao() {
+    return this.sessao;
+  }
+
   desligar(sim: boolean) {
     this.desligado = sim;
     if (sim) this.fila = [];

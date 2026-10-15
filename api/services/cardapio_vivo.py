@@ -40,9 +40,9 @@ TIPOS_EVENTO = ("abriu_cardapio", "viu_item", "tocou_categoria", "abriu_detalhe"
 ATENCAO_MAX_MS = 60_000
 MIDIAS = ("VIDEO", "FOTO", "NENHUMA")
 
-# ⚠️ O modo PEDIDO é da FASE 2 (carrinho, painel, chamados). Gravá-lo antes faria a mesa
-# prometer um envio que não existe; a configuração recusa com a frase.
-MODOS_LIBERADOS = ("VITRINE",)
+# 🔑 O modo PEDIDO chegou na fase 2 (migração 115): carrinho, coluna Mesas no painel e
+# chamados. A tupla continua existindo para o dia de um terceiro modo.
+MODOS_LIBERADOS = ("VITRINE", "PEDIDO")
 
 _PADRAO = {
     "id_catalogo": None, "modo": "VITRINE", "exige_confirmacao": True,
@@ -179,6 +179,10 @@ def modo_efetivo(cur, id_unidade: int, id_mesa: int | None, agora: datetime | No
                 efetivo["pedido_hora_de"] = exc["pedido_hora_de"]
                 efetivo["pedido_hora_ate"] = exc["pedido_hora_ate"]
     efetivo["aviso"] = None
+    # ⚠️ **Sem mesa não há pedido**: a URL da loja (vitrine, balcão) não diz para onde levar.
+    if not id_mesa:
+        efetivo["modo"] = "VITRINE"
+        return efetivo
     agora = agora or agora_da_casa().replace(tzinfo=None)
     if efetivo["modo"] == "PEDIDO" and not _na_faixa(
             agora.time(), efetivo["pedido_hora_de"], efetivo["pedido_hora_ate"]):
@@ -427,7 +431,8 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         "mesa": {"nome": mesa["nome"], "salao": mesa["salao"]} if mesa else None,
         "cardapio": traducao.escolher(capa["nome"], capa["nome_en"], capa["nome_de"], idioma),
         "modo": modo["modo"], "aviso": modo["aviso"],
-        "chamar_garcom": False,  # fase 2
+        # Fase 2 (115): os botões só aparecem com a opção ligada E numa mesa.
+        "chamar_garcom": bool(cfg["chamar_garcom"] and mesa),
         # 🔑 **O Hub** (114): só o que a loja LIGOU e PREENCHEU. Nenhum dos dois → nulo, e a
         # tela pula direto para o feed.
         "hub": _hub(cfg, loja),

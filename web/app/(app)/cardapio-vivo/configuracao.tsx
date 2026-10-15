@@ -76,11 +76,38 @@ export default function Configuracao({ dados, podeEditar, aoMudar }: Props) {
                   onChange={(e) => mudar("modo", e.target.value as ConfigCardapio["modo"])}>
             {dados.opcoes.modos.map((m) => (
               <option key={m} value={m} disabled={!dados.opcoes.modos_liberados.includes(m)}>
-                {m === "VITRINE" ? "Vitrine — só consulta, com “minha seleção”" : "Pedido — carrinho (fase 2)"}
+                {m === "VITRINE" ? "Vitrine — só consulta, com “minha seleção”" : "Pedido — carrinho que vai ao painel"}
               </option>
             ))}
           </select>
         </Campo>
+        {/* 🔑 As opções do PEDIDO (fase 2, 115). Valem também como padrão das exceções. */}
+        {cfg.modo === "PEDIDO" && (
+          <div className="flex flex-col gap-2 rounded-lg border border-linha p-3 text-[14px] md:col-span-2">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" disabled={desligado} checked={cfg.exige_confirmacao}
+                     onChange={(e) => mudar("exige_confirmacao", e.target.checked)} />
+              A equipe confirma o pedido antes de ir para a cozinha (desligado: nasce confirmado)
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              Aceita pedido pela mesa das
+              <input type="time" className="campo mono !w-auto" disabled={desligado} value={cfg.pedido_hora_de?.slice(0, 5) ?? ""}
+                     onChange={(e) => mudar("pedido_hora_de", e.target.value || null)} />
+              às
+              <input type="time" className="campo mono !w-auto" disabled={desligado} value={cfg.pedido_hora_ate?.slice(0, 5) ?? ""}
+                     onChange={(e) => mudar("pedido_hora_ate", e.target.value || null)} />
+              <span className="text-[13px] text-suave">vazio = o dia todo; fora do horário, o cardápio vira vitrine com “pedidos com o garçom”</span>
+            </div>
+            <p className="text-[13px] text-suave">
+              O pedido aparece no Painel de pedidos, coluna Mesas. Lançar no PDV continua com a casa; o pagamento, no caixa.
+            </p>
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-[14px]">
+          <input type="checkbox" disabled={desligado} checked={cfg.chamar_garcom}
+                 onChange={(e) => mudar("chamar_garcom", e.target.checked)} />
+          Botões “chamar o garçom” e “pedir a conta” (avisam no Painel de pedidos, com som)
+        </label>
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" disabled={desligado} checked={cfg.esconder_esgotado}
                  onChange={(e) => mudar("esconder_esgotado", e.target.checked)} />

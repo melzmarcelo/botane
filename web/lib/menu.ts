@@ -290,6 +290,15 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Catálogos",
       },
       {
+        // 🔑 **Atenção × Vendas** (fase 2, 115): a atenção do feed cruzada com venda e margem.
+        href: "/cardapio-vivo/atencao",
+        nome: "Atenção × Vendas",
+        icone: "grafico",
+        chave: "cardapio.atencao",
+        soComReservas: true,
+        subgrupo: "Catálogos",
+      },
+      {
         // 🔑 **Pedidos pelo catálogo** (pedido do dono, 28/09/2026: *"uma tela com pedidos
         // e um painel para acompanhar"*). O painel primeiro: é a tela que o balcão deixa aberta.
         href: "/pedidos/painel",

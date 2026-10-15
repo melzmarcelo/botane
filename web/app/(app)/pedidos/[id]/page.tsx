@@ -110,7 +110,10 @@ export default function DetalheDoPedido() {
               <tbody>
                 {p.itens.map((i) => (
                   <tr key={i.id}>
-                    <td>{i.nome}{i.observacao && <span className="block text-[12.5px] text-suave">obs.: {i.observacao}</span>}</td>
+                    <td>{i.nome}
+                      {/* Os adicionais escolhidos na mesa (Cardápio Vivo, 115), já somados no preço. */}
+                      {i.adicionais?.length ? <span className="block text-[12.5px] text-suave">{i.adicionais.map((a) => a.nome).join(" · ")}</span> : null}
+                      {i.observacao && <span className="block text-[12.5px] text-suave">obs.: {i.observacao}</span>}</td>
                     <td className="num">{i.quantidade.toLocaleString("pt-BR")}</td>
                     <td className="num">{reais(i.preco_unitario)}</td>
                     <td className="num">{reais(i.total)}</td>
@@ -129,8 +132,8 @@ export default function DetalheDoPedido() {
         <Cartao titulo="Cliente e entrega">
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[14px]">
             <dt className="text-suave">Cliente</dt><dd>{p.nome}</dd>
-            <dt className="text-suave">Telefone</dt>
-            <dd className="mono"><a className="link-acao" href={`https://wa.me/55${p.telefone}`} target="_blank" rel="noreferrer">{fone(p.telefone)}</a></dd>
+            {p.telefone && <><dt className="text-suave">Telefone</dt>
+            <dd className="mono"><a className="link-acao" href={`https://wa.me/55${p.telefone}`} target="_blank" rel="noreferrer">{fone(p.telefone)}</a></dd></>}
             <dt className="text-suave">Como</dt><dd>{p.modo_rotulo}</dd>
             <dt className="text-suave">Para</dt><dd className="mono">{quando(p.para_quando)}</dd>
             {p.endereco && <><dt className="text-suave">Endereço</dt><dd>{p.endereco}</dd></>}

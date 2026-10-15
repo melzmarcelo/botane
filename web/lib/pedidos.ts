@@ -26,12 +26,13 @@ export type PedidoResumo = {
   id: number;
   numero: number;
   nome: string;
-  telefone: string;
-  modo: "RETIRADA" | "ENTREGA";
+  /** Nulo no pedido da MESA (Cardápio Vivo, 115): ele não pede telefone. */
+  telefone: string | null;
+  modo: "RETIRADA" | "ENTREGA" | "MESA";
   modo_rotulo: string;
   endereco: string | null;
   para_quando: string;
-  forma_pagamento: FormaPagamento;
+  forma_pagamento: FormaPagamento | null;
   pagamento_rotulo: string;
   total: number;
   situacao: Situacao;
@@ -46,6 +47,10 @@ export type PedidoResumo = {
   criado_em: string;
   catalogo: string | null;
   itens: number;
+  /** Cardápio Vivo (115): de onde veio e, se da mesa, qual. */
+  origem?: "SITE" | "CARDAPIO";
+  mesa?: string | null;
+  salao?: string | null;
 };
 
 export type ItemDoPedido = {
@@ -56,6 +61,8 @@ export type ItemDoPedido = {
   preco_unitario: number;
   total: number;
   observacao: string | null;
+  /** Os adicionais escolhidos na mesa, congelados no envio (115). */
+  adicionais?: { nome: string; preco: number | null }[] | null;
 };
 
 export type PedidoCompleto = Omit<PedidoResumo, "itens"> & {
@@ -68,10 +75,15 @@ export type PedidoCompleto = Omit<PedidoResumo, "itens"> & {
 
 export type ItemDoCatalogo = { id_item: number; id_produto: number; nome: string; preco: number };
 
+export type Chamado = { id: number; tipo: "GARCOM" | "CONTA"; criado_em: string; mesa: string; salao: string };
+
 export type Painel = {
   novos: PedidoResumo[];
   sem_pdv: PedidoResumo[];
   confirmados: PedidoResumo[];
+  /** Os pedidos da MESA em aberto (Cardápio Vivo, 115). */
+  mesas: PedidoResumo[];
+  chamados: Chamado[];
   agora: string;
 };
 
@@ -117,7 +129,9 @@ export const imprimir = (id: number) => api.abrir(`/pedidos/${id}/pdf`);
 export const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 export const quando = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
-export const fone = (t: string) => {
+export const fone = (t: string | null) => {
+  // Pedido da mesa (115) não tem telefone.
+  if (!t) return "";
   const m = t.match(/^(\d{2})(\d{4,5})(\d{4})$/);
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : t;
 };
