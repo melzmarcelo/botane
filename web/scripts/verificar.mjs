@@ -3000,7 +3000,9 @@ try {
     await p.evaluate(() => document.querySelector("a.link-voltar")?.click());
     await p.waitForFunction(() => location.pathname === "/precificacao", { timeout: 20000 })
       .catch(() => {});
-    await new Promise((r) => setTimeout(r, 2200));
+    // ⚠️ Espera a LINHA, não um tempo: com a base local crescida, a precificação
+    // passou de 2,2 s para carregar (15/10/2026) e a checagem falhava com a URL certa.
+    await p.waitForSelector("tbody tr.bg-erva-claro", { timeout: 15000 }).catch(() => {});
     const voltaDaPrecificacao = await p.evaluate(() => ({
       url: location.pathname + location.search,
       aberta: !!document.querySelector("tbody tr.bg-erva-claro"),
