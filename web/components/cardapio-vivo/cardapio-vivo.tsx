@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buscarFeed, imagem, previaFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
+import { buscarFeed, enderecoDoSite, imagem, previaFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
 import Chamados from "./chamados";
 import Detalhe from "./detalhe";
 import { useFavoritos } from "./favoritos";
@@ -22,7 +22,10 @@ import TelaPedido from "./tela-pedido";
 import TelaSelecao from "./tela-selecao";
 import { idiomaDoNavegador, nomeRestricao, textos } from "./textos";
 
+// 🔑 As MESMAS do site (15/10/2026: um layout só); FRAUNCES é a do protótipo e o padrão.
 const FONTES: Record<string, { familia: string; url?: string }> = {
+  FRAUNCES: { familia: "Fraunces, Georgia, serif",
+              url: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&display=swap" },
   NEWSREADER: { familia: "'Newsreader', Georgia, serif" },
   PLAYFAIR: { familia: "'Playfair Display', Georgia, serif",
               url: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&display=swap" },
@@ -203,7 +206,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     setAberto(item);
   };
 
-  const fonte = FONTES[feed?.marca.fonte ?? "NEWSREADER"] ?? FONTES.NEWSREADER;
+  const fonte = FONTES[feed?.marca.fonte ?? "FRAUNCES"] ?? FONTES.FRAUNCES;
   const estilo = {
     "--cv-principal": feed?.marca.cor_principal ?? "#3C4A3E",
     "--cv-fundo": feed?.marca.cor_fundo ?? "#F3EFE4",
@@ -251,16 +254,23 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
 
       <header className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3 px-4">
-          {feed.marca.logo && (
-            <img src={imagem(feed.marca.logo, 320) ?? undefined} alt={feed.loja.casa}
-                 className="h-8 w-8 rounded-full bg-white object-contain" />
-          )}
-          <div className="min-w-0 flex-1 leading-tight">
-            <p className="truncate text-sm font-semibold">{feed.loja.casa}</p>
-            <p className="truncate text-xs opacity-80">
-              {feed.mesa ? `${t.mesa} ${feed.mesa.nome} · ${feed.mesa.salao}` : feed.cardapio}
-            </p>
-          </div>
+          {/* 🔑 **A volta ao site da casa** (15/10/2026: "parecia dois sistemas"): a marca no
+              topo leva à página inicial — reservar, fidelidade, contato —, no mesmo endereço.
+              ⚠️ Na prévia do cadastro não há para onde voltar. */}
+          <a href={previa ? undefined : enderecoDoSite()} aria-label={t.siteDaCasa}
+             className="flex min-w-0 flex-1 items-center gap-2 leading-tight">
+            {!previa && <span aria-hidden className="text-lg opacity-80">‹</span>}
+            {feed.marca.logo && (
+              <img src={imagem(feed.marca.logo, 320) ?? undefined} alt=""
+                   className="h-8 w-8 shrink-0 rounded-full bg-white object-contain" />
+            )}
+            <span className="min-w-0">
+              <span className="cv-serif block truncate text-[15px]">{feed.loja.casa}</span>
+              <span className="block truncate text-xs opacity-80">
+                {feed.mesa ? `${t.mesa} ${feed.mesa.nome} · ${feed.mesa.salao}` : feed.cardapio}
+              </span>
+            </span>
+          </a>
           <select value={idioma} onChange={(e) => setIdioma(e.target.value as Idioma)} aria-label="Idioma"
                   className="rounded-full bg-white/15 px-2 py-1 text-xs backdrop-blur">
             <option value="pt">PT</option><option value="en">EN</option><option value="de">DE</option>

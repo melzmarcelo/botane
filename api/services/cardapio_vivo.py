@@ -26,7 +26,7 @@ from services import reservas as reservas_servico
 from services import traducao
 
 MODOS = ("VITRINE", "PEDIDO")
-FONTES = ("NEWSREADER", "PLAYFAIR", "LORA", "CORMORANT")
+FONTES = ("FRAUNCES", "NEWSREADER", "PLAYFAIR", "LORA", "CORMORANT")
 RESTRICOES = {"VEGANO": "Vegano", "SEM_GLUTEN": "Sem glúten", "SEM_LACTOSE": "Sem lactose"}
 DISPOSITIVOS = ("CELULAR", "TABLET", "DESKTOP", "OUTRO")
 TIPOS_EVENTO = ("abriu_cardapio", "viu_item", "tocou_categoria", "abriu_detalhe",
@@ -51,7 +51,7 @@ MODOS_LIBERADOS = ("VITRINE", "PEDIDO")
 # outro lugar. O comportamento de cada cardápio mora em `cardapio_vivos`.
 _PADRAO = {
     "esconder_esgotado": False, "cor_principal": None, "cor_fundo": None,
-    "fonte": "NEWSREADER", "logo_url": None, "retencao_meses": 13,
+    "fonte": "FRAUNCES", "logo_url": None, "retencao_meses": 13,
     "hub_avaliacao": False, "hub_wifi": False,
 }
 

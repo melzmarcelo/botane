@@ -1,5 +1,12 @@
 # O site do cliente — `reservas.botanedeliecafe.com.br`
 
+> 🔴 **Desde 15/10/2026 a fonte do site é `web/public/portal/index.html`** — servido pelo
+> MESMO app do sistema, com a API em `/api` do próprio domínio (pedido do dono: "tudo na mesma
+> URL e com o mesmo layout"). Este `site/index.html` continua servindo
+> `reservas.botanedeliecafe.com.br` só até a virada do domínio (parte (c), `docs/deploy.md`);
+> **não editar mais aqui** — mudança nova vai em `web/public/portal/index.html`.
+
+
 > Esboço, 21/09/2026. **Pedido do dono:** *"agora vamos criar o site para o
 > cliente, onde o front será separado... Os itens serão: Reserva, Catálogos
 > cadastrados e ativos, Entre em Contato (onde vai abrir o whatsapp para enviar

@@ -15,8 +15,9 @@ import { Campo, Cartao } from "@/components/ui";
 import { CardapioVivoService, type ConfigCardapio, type RespostaConfig } from "@/lib/cardapio-vivo";
 import { urlArquivo } from "@/lib/api";
 
+// ⚠️ "a do site" é a FRAUNCES (o protótipo): a Newsreader levava esse rótulo sem ser (118).
 const NOMES_FONTE: Record<string, string> = {
-  NEWSREADER: "Newsreader (a do site)", PLAYFAIR: "Playfair Display", LORA: "Lora",
+  FRAUNCES: "Fraunces (a do site)", NEWSREADER: "Newsreader", PLAYFAIR: "Playfair Display", LORA: "Lora",
   CORMORANT: "Cormorant Garamond",
 };
 
@@ -57,7 +58,7 @@ export default function Configuracao({ dados, podeEditar, aoMudar }: Props) {
   const desligado = !podeEditar;
   return (
     <Cartao titulo="Aparência e opções da casa"
-            descricao="Valem para todos os Cardápios Vivos, na próxima vez que o cliente abrir — sem publicar nada.">
+            descricao="Valem para o site da casa e para todos os Cardápios Vivos, na próxima vez que o cliente abrir — sem publicar nada.">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" disabled={desligado} checked={cfg.esconder_esgotado}

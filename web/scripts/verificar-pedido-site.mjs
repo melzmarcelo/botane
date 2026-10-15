@@ -15,7 +15,8 @@ import puppeteer from "puppeteer-core";
 
 const CHROME = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const API = "http://127.0.0.1:9200";
-const SITE = "http://127.0.0.1:3200";
+// O site é servido pelo app do sistema desde 15/10/2026 (um endereço só): `/portal` aqui.
+const SITE = "http://127.0.0.1:3100/portal";
 const MARCA = String(Date.now()).slice(-6);
 let ok = 0;
 const falhas = [];

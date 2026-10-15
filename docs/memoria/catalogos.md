@@ -631,3 +631,30 @@ O que pegou:
   (o formato de antes, repartido nas duas rotas); as verificações do navegador usam
   `scripts/cardapio-vivo-comum.mjs`. Cobertura nova: seção 11d do `smoke_cardapio_vivo.py` e a fase
   13 do `verificar.mjs`.
+
+## Um endereço e um layout só: o site dentro do app do sistema (15/10/2026)
+
+🔑 **Pedido do dono:** *"mesmo sendo o mesmo sistema, o site de reserva e cardápio ficou
+parecendo dois sistemas separados. Gostaria que tudo estivesse com o mesmo layout, e na mesma
+URL."* Parte (b) de três (ver a seção da 117).
+- 🔑 **O site NÃO foi reescrito em React** (escolha aprovada pelo dono): ele é servido pelo
+  Next como arquivo (`web/public/portal/index.html`), com a API em `/api` do próprio domínio.
+  As 2.900 linhas guardam fluxos que os clientes usam (reserva, fidelidade, carrinho);
+  reescrever arriscava quebrá-los. `site/index.html` fica até a virada do domínio e não se edita.
+- `web/proxy.ts` (o "middleware" do Next 16): em `reservas.*`, `/` abre o site, `/c/` passa e o
+  resto redireciona a `/`; em qualquer domínio, `/portal` abre o site. ⚠️ O redirecionamento
+  monta o destino pelo `Host` pedido — `request.url` é o endereço interno atrás do roteador.
+- 🔑 **A aparência é da CASA e vale para os dois**: `/publico/{loja}/casa` traz `marca` (cores,
+  fonte, logo — a mesma do feed), e o site aplica (`aplicarMarca`). A cor de fundo só vale no
+  tema claro.
+- ⚠️ **A fonte "a do site" era a Fraunces**, e a tela do Cardápio Vivo chamava a Newsreader
+  assim. A 118 põe FRAUNCES como padrão e converte quem estava em NEWSREADER (que tinha
+  escolhido "a do site"). ⚠️ O `db_updater` roda de novo a migração cujo checksum muda — a 118
+  não se edita depois de promovida.
+- A tela de entrada do feed (Hub) ganhou a cara da página inicial do site (capa, medalhão,
+  botões) e o botão "Reservas, fidelidade e contato"; a marca no topo do feed volta ao site
+  (`enderecoDoSite()`: `/` em `reservas.*`, `/portal` nos outros).
+- As verificações do site (`verificar-pedido-site`, `verificar-idioma-site`) passaram a testar
+  `http://127.0.0.1:3100/portal` — o servidor da porta 3200 não é mais preciso.
+- **Falta**: (c) a virada do domínio (painel + DNS, com o dono) e o carrinho de ENCOMENDA no
+  feed sem mesa (o catering).

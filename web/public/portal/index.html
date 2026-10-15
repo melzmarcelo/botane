@@ -1,0 +1,2962 @@
+<!doctype html>
+<html lang="pt-BR" data-loja="1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Botané Deli e Café</title>
+<meta name="description" content="Reserve uma mesa, veja os cardápios e fale com a gente.">
+<meta name="theme-color" content="#3C4A3E">
+<!-- 🔑 **O ícone da aba é a LOGO CADASTRADA**, trocada em tempo de execução por
+     `pintarOIcone()` — a mesma que vira o medalhão. Estava faltando, e o que a
+     aba mostrava era o ícone branco de página sem identidade nenhuma, ao lado
+     de um título que diz o nome da casa.
+     ⚠️ **O `href` daqui é só o ponto de partida**: um SVG desenhado, para a aba
+     não piscar em branco enquanto a API responde. -->
+<link rel="icon" id="icone-da-aba"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%233C4A3E'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" id="icone-do-celular"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%233C4A3E'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* ===========================================================================
+   O site do CLIENTE — reservas.botanedeliecafe.com.br
+   ---------------------------------------------------------------------------
+   🔑 **Pedido do dono (21/09/2026):** *"deixa mais próximo ao protótipo que foi
+   proposto em `apresentacao/reservas-prototipo.html`, utilizando a logo
+   cadastrada, os catálogos colocar tudo na página inicial, no estilo
+   apresentado, e ao clicar no botão, abrir o catálogo."*
+
+   ⚠️ **A identidade é a do PROTÓTIPO, linha a linha**: a capa de 128px com os
+   dois gradientes radiais sobre o oliva, o medalhão redondo de 92px descendo
+   34px por cima dela, a tarja de estado no canto, e a lista de `.item` com
+   ícone à esquerda e subtítulo embaixo. As fontes são as de lá — Fraunces para
+   os títulos, Karla para o corpo, DM Mono para as miudezas.
+
+   🔑 **Os catálogos são ITENS DA PÁGINA INICIAL**, um por cardápio, e clicar
+   abre o PDF. Era uma tela separada com uma lista dentro; o protótipo já os
+   mostrava no hub, e é o que o dono pediu de volta.
+
+   ⚠️ **Nada de build.** São duas telas que leem a API — um arquivo que abre
+   direto carrega mais rápido no celular de quem está na rua do que qualquer
+   bundle, e publica como site estático.
+   =========================================================================== */
+:root {
+  --papel: #F3EFE4;
+  --superficie: #FBF9F3;
+  --superficie-2: #F7F3E9;
+  --tinta: #1B211C;
+  --tinta-suave: #5E6659;
+  --linha: #E0D8C6;
+  --erva: #3C4A3E;
+  --ocre-claro: #F6EDD8;
+  --barro: #9A3B2E;
+  --sombra: 0 1px 2px rgba(27,33,28,.05), 0 10px 30px rgba(27,33,28,.08);
+  --raio: 13px;
+  /* 🔑 A fonte dos títulos é a da CASA (15/10/2026): a mesma do feed do Cardápio Vivo.
+     O padrão é a do protótipo; `aplicarMarca()` troca pela configurada. */
+  --serif: Fraunces, Georgia, serif;
+}
+/* ⚠️ O tema escuro vem do APARELHO: quem reserva às 22h está com o celular no
+   escuro. Só os tokens mudam — os componentes leem sempre daqui. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --papel: #12160F; --superficie: #1A1F18; --superficie-2: #202619;
+    --tinta: #EDE7D8; --tinta-suave: #9AA394; --linha: #2C3328;
+    --ocre-claro: #2A2517;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--papel);
+  color: var(--tinta);
+  font: 400 15px/1.45 Karla, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+/* O cartão central, como no protótipo: o site é um folheto, não uma página. */
+.folha {
+  max-width: 440px; margin: 0 auto; min-height: 100dvh;
+  background: var(--superficie); box-shadow: var(--sombra); overflow: hidden;
+}
+@media (min-width: 480px) {
+  body { padding: 24px 16px; }
+  .folha { min-height: 0; border: 1px solid var(--linha); border-radius: 18px; }
+}
+
+/* ---- a capa ---- */
+.capa {
+  position: relative; height: 128px;
+  background:
+    radial-gradient(120% 90% at 30% 20%, #D8C9A8 0%, transparent 60%),
+    radial-gradient(110% 90% at 80% 30%, #B7C3A6 0%, transparent 55%),
+    linear-gradient(160deg, color-mix(in srgb, var(--erva) 70%, #B7C3A6), var(--erva));
+}
+/* 🔑 O medalhão: 92px, redondo, descendo 34px por cima da capa — é a marca da
+   casa pousando na dobra. Com logo cadastrada ele vira a imagem; sem ela,
+   desenha o nome, como o protótipo. */
+.marca {
+  position: absolute; left: 50%; bottom: -34px; transform: translateX(-50%);
+  width: 92px; height: 92px; border-radius: 50%; background: var(--erva);
+  display: grid; place-content: center; text-align: center; color: #F3EFE4;
+  border: 3px solid var(--superficie); overflow: hidden;
+}
+.marca b { display: block; font: 300 21px/1 var(--serif); }
+.marca span {
+  font: 400 8px/1.4 "DM Mono", monospace; letter-spacing: .18em;
+  text-transform: uppercase; opacity: .8;
+}
+.marca img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 🔑 **Fundo BRANCO atrás da logo** (pedido do dono, 22/09/2026, olhando o site
+   no ar). A logo cadastrada tem transparência — os cantos são alfa zero —, e o
+   oliva do medalhão vazava por trás do brasão, escurecendo-o.
+   ⚠️ **Só quando HÁ logo.** Sem ela, o medalhão desenha o nome da casa em tinta
+   clara (`color: #F3EFE4`); branco sobre branco seria um círculo vazio. Por
+   isso a classe vem do JavaScript, junto com a imagem, e não da folha. */
+.marca.com-logo { background: #FFFFFF; }
+.estado {
+  position: absolute; right: 10px; top: 10px; border-radius: 999px;
+  padding: 5px 10px; font: 500 11px/1 Karla, sans-serif;
+  background: rgba(20,26,22,.72); color: #F1EDE2;
+}
+.idiomas {
+  position: absolute; left: 10px; top: 10px; display: flex; gap: 2px; padding: 3px;
+  border-radius: 999px; background: rgba(20,26,22,.72);
+}
+.idiomas button {
+  border: 0; border-radius: 999px; padding: 3px 8px; cursor: pointer;
+  font: 500 11px/1 Karla, sans-serif; background: transparent; color: #F1EDE2;
+}
+.idiomas button[aria-pressed="true"] { background: #F1EDE2; color: #1B211C; }
+
+/* ---- o corpo ---- */
+.corpo { padding: 46px 20px 26px; display: flex; flex-direction: column; gap: 14px; }
+.corpo h2 { font: 400 22px/1.2 var(--serif); margin: 0; text-align: center; }
+.sub { margin: 0; text-align: center; color: var(--tinta-suave); font-size: 14px; }
+.rot { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+
+.itens { display: flex; flex-direction: column; gap: 9px; }
+/* 🔑 **Texto CENTRALIZADO e só o necessário** (pedido do dono, 21/09/2026:
+   *"nos botões, colocar centralizado o texto, e somente o texto necessário,
+   exemplo: Reserve sua Mesa, Catálogo Y, Entre em Contato"*).
+   ⚠️ **O ícone e a seta saíram junto, e não por descuido.** Um ícone à esquerda
+   ancora o texto à esquerda: centralizar com ele no lugar deixaria o rótulo
+   torto em relação ao botão. E o subtítulo — "leva menos de um minuto",
+   "abrir o PDF" — era exatamente o texto que não era necessário. */
+.item {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; text-align: center;
+  background: var(--superficie-2); border: 1px solid var(--linha);
+  border-radius: var(--raio); padding: 15px 16px;
+  font: 500 16px/1.25 Karla, sans-serif; color: var(--tinta);
+  cursor: pointer; text-decoration: none;
+  /* ⚠️ Alvo de dedo: quem usa este site está no celular, quase sempre andando. */
+  min-height: 52px;
+}
+.item:hover { border-color: var(--erva); }
+.item:focus-visible { outline: 2px solid var(--erva); outline-offset: 2px; }
+.item.destaque { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
+
+/* ⚠️ **`display` explícito VENCE o `[hidden]` do navegador**, e era um defeito
+   calado: `.regras` é flex, então toda caixa de aviso com `hidden` continuava
+   ocupando espaço — uma moldura vazia sob o botão de confirmar, sem texto e sem
+   explicação. Vale para `.itens`, `.horarios` e `.dupla` pela mesma razão. */
+[hidden] { display: none !important; }
+
+.regras {
+  background: var(--ocre-claro); border: 1px solid var(--linha);
+  border-radius: var(--raio); padding: 12px 14px; font-size: 13px;
+  display: flex; flex-direction: column; gap: 6px; color: var(--tinta-suave);
+}
+.regras b { color: var(--tinta); }
+.regras.ruim { background: transparent; border-left: 3px solid var(--barro); border-radius: 0 var(--raio) var(--raio) 0; }
+
+label.campo { display: block; font-size: 13px; color: var(--tinta-suave); }
+label.campo input {
+  width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px; padding: 10px 11px; margin-top: 5px;
+}
+label.campo input:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+/* O seletor de gênero usa a mesma caixa dos campos de texto: um <select> com a
+   cara do navegador ao lado de um <input> desenhado parece defeito. */
+label.campo select {
+  width: 100%; font: 400 15px/1.3 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px; padding: 10px 11px; margin-top: 5px; min-height: 43px;
+}
+label.campo select:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+/* A observação usa a mesma caixa dos outros campos. ⚠️ `resize: vertical`: na
+   horizontal ela estouraria a largura da tela no celular. */
+label.campo textarea {
+  width: 100%; font: 400 15px/1.35 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px; padding: 10px 11px; margin-top: 5px; resize: vertical;
+}
+label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-offset: 1px; }
+.dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* ⚠️ Gênero e cidade lado a lado ficam apertados a 400px — e é onde este site
+   é lido. Abaixo de 420px eles empilham. */
+@media (max-width: 419px) { .dupla { grid-template-columns: 1fr; } }
+.passos { display: flex; flex-direction: column; gap: 12px; }
+
+/* ===========================================================================
+   O CARDÁPIO — estrutura dos prints, paleta da casa
+   ---------------------------------------------------------------------------
+   🔑 **Pedido do dono (22/09/2026):** *"agora devemos apresentar o catálogo na
+   tela. Usar como exemplo estes dois prints."*
+   🔑 **Decisão do dono, perguntada:** a cara é a do SITE — oliva e areia, como
+   o protótipo — e os prints entram como ESTRUTURA. Eles são pretos; pular de
+   uma capa clara para uma tela preta faria o cliente achar que saiu do site.
+   =========================================================================== */
+
+/* A categoria, como no primeiro print: título, descrição e uma foto grande com
+   o botão por cima, no canto. */
+.secao { display: flex; flex-direction: column; gap: 6px; }
+.secao h3 {
+  font: 600 21px/1.15 var(--serif); color: var(--tinta); margin: 0;
+}
+.secao p { margin: 0; font-size: 14px; color: var(--tinta-suave); }
+.capa-secao {
+  position: relative; margin-top: 6px; border-radius: var(--raio);
+  overflow: hidden; background: var(--superficie-2);
+  border: 1px solid var(--linha);
+  /* ⚠️ **Proporção fixa**: sem ela, a página SALTA quando cada foto termina de
+     carregar — e a pessoa que já estava lendo perde a linha. */
+  aspect-ratio: 16 / 10; max-width: 100%;
+}
+.capa-secao img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Sem foto, a moldura não fica vazia: diz o nome, como o medalhão faz. */
+.capa-secao .sem-foto {
+  display: flex; height: 100%; align-items: center; justify-content: center;
+  font: 500 15px/1.2 var(--serif); color: var(--tinta-suave);
+  padding: 0 18px; text-align: center;
+}
+.capa-secao .acessar {
+  position: absolute; right: 12px; bottom: 12px;
+  background: var(--erva); color: #F4F0E5; border: 0; border-radius: 999px;
+  padding: 11px 18px; font: 600 13px/1 Karla, sans-serif; cursor: pointer;
+  letter-spacing: .04em; text-transform: uppercase; min-height: 40px;
+}
+
+/* A tira de subcategorias do segundo print: fotos redondas, rolando de lado. */
+.tira {
+  display: flex; gap: 14px; overflow-x: auto; padding: 2px 0 6px;
+  /* ⚠️ `contain`: chegar ao fim da tira com o dedo não pode arrastar a página. */
+  overscroll-behavior-x: contain;
+}
+.tira button {
+  flex: none; width: 78px; background: none; border: 0; padding: 0;
+  cursor: pointer; color: var(--tinta-suave); font: 500 12px/1.25 Karla, sans-serif;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.tira .bolha {
+  width: 66px; height: 66px; border-radius: 50%; overflow: hidden;
+  background: var(--superficie-2); border: 1px solid var(--linha);
+  display: flex; align-items: center; justify-content: center;
+}
+.tira .bolha img { width: 100%; height: 100%; object-fit: cover; }
+.tira button[aria-current="true"] { color: var(--tinta); }
+.tira button[aria-current="true"] .bolha { border-color: var(--erva); border-width: 2px; }
+
+/* O item: nome à esquerda, preço à direita, descrição embaixo. */
+.grupo { margin-top: 18px; }
+.grupo > .rot-grupo {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+  font: 600 15px/1.2 Karla, sans-serif; color: var(--tinta);
+}
+.grupo > .rot-grupo .bolha-pequena {
+  width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex: none;
+  background: var(--superficie-2); border: 1px solid var(--linha);
+}
+.grupo > .rot-grupo .bolha-pequena img { width: 100%; height: 100%; object-fit: cover; }
+.prato { padding: 11px 0; border-bottom: 1px solid var(--linha); }
+.prato .linha1 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+}
+/* ⚠️ **O nome vem do cadastro de produtos, que grava em CAIXA ALTA.** Não é
+   decisão daqui: forçar minúsculas por CSS quebraria siglas, e "title case"
+   automático em português erra nas preposições ("Suco De Laranja"). Fica como
+   a casa cadastrou. */
+.prato .nome { font: 500 15.5px/1.25 Karla, sans-serif; color: var(--tinta); }
+.prato .preco {
+  font: 500 15.5px/1 "DM Mono", monospace; color: var(--tinta); white-space: nowrap;
+}
+.prato .desc { margin: 3px 0 0; font-size: 13.5px; color: var(--tinta-suave); }
+.prato .foto {
+  margin-top: 9px; border-radius: var(--raio); overflow: hidden;
+  aspect-ratio: 16 / 10; background: var(--superficie-2);
+}
+.prato .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pe-cardapio {
+  margin-top: 18px; font: 400 12px/1.5 "DM Mono", monospace;
+  color: var(--tinta-suave); text-align: center;
+}
+.sub-tela { color: var(--tinta-suave); font-size: 14px; margin: -2px 0 2px; }
+/* A tela de "pronto": o que a casa guardou, em linha, para conferir de relance. */
+.recibo { display: flex; flex-direction: column; gap: 2px; text-align: center; }
+.recibo b { font: 600 22px/1.2 var(--serif); }
+
+.horarios { display: flex; flex-wrap: wrap; gap: 8px; }
+.hora {
+  min-height: 44px; min-width: 76px; padding: 8px 14px;
+  background: var(--superficie); border: 1px solid var(--linha); border-radius: 10px;
+  font: 500 15px/1 "DM Mono", monospace; cursor: pointer; color: inherit;
+}
+.hora:hover { border-color: var(--erva); }
+.hora[aria-pressed="true"] { background: var(--erva); border-color: var(--erva); color: #F4F0E5; }
+/* As escolhas do pedido (retirar/entrega, pagamento) usam o mesmo botão do horário, com
+   a letra do texto em vez da dos números. */
+.hora.texto { font: 500 14.5px/1.2 Karla, sans-serif; }
+
+/* ---- o pedido pelo cardápio (101) ---- */
+.pedir { display: flex; justify-content: flex-end; margin-top: 8px; }
+.pedir .adicionar {
+  min-height: 38px; padding: 6px 16px; border-radius: 999px; cursor: pointer;
+  background: var(--superficie); border: 1px solid var(--erva); color: var(--erva);
+  font: 600 14px/1 Karla, sans-serif;
+}
+.contador { display: inline-flex; align-items: center; gap: 4px; }
+.contador button {
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+  background: var(--erva); border: 0; color: #F4F0E5; font: 600 18px/1 Karla, sans-serif;
+}
+.contador b { min-width: 28px; text-align: center; font: 600 16px/1 "DM Mono", monospace; }
+/* 🔑 A barra do carrinho fica FIXA no pé: é o caminho de volta do cardápio para o pedido,
+   e rolar até o fim de uma seção longa para achá-la é onde o pedido se perde. */
+.barra-carrinho {
+  position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 20;
+  width: min(420px, calc(100% - 24px)); display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; padding: 14px 18px; border: 0; border-radius: 999px;
+  background: var(--erva); color: #F4F0E5; box-shadow: var(--sombra); cursor: pointer;
+  font: 600 15px/1.2 Karla, sans-serif;
+}
+.linha-carrinho { padding: 10px 0; border-bottom: 1px solid var(--linha); }
+.linha-carrinho .topo { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.linha-carrinho input {
+  width: 100%; margin-top: 6px; font: 400 13.5px/1.3 Karla, sans-serif; color: var(--tinta);
+  background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 7px 9px;
+}
+.totais { display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+.totais p { margin: 0; display: flex; justify-content: space-between; }
+.totais .total { font: 600 18px/1.3 Karla, sans-serif; }
+.pedido-meu { border: 1px solid var(--linha); border-radius: var(--raio); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.pedido-meu .situacao { font-weight: 600; }
+
+.voltar {
+  background: none; border: 0; color: var(--tinta-suave); cursor: pointer;
+  font: 500 13px/1 Karla, sans-serif; padding: 4px 0; align-self: flex-start;
+}
+.voltar:hover { color: var(--tinta); }
+
+/* ---- a fidelidade: o cartão de visitas (pedido do dono, 24/09/2026) ---- */
+.carimbos {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  padding: 16px; border: 1px solid var(--linha); border-radius: var(--raio);
+  background: var(--superficie-2);
+}
+.carimbo {
+  aspect-ratio: 1; border-radius: 50%; border: 2px dashed var(--linha);
+  display: grid; place-content: center; font: 500 12px/1 "DM Mono", monospace;
+  color: var(--tinta-suave);
+}
+.carimbo.feito { background: var(--erva); border: 2px solid var(--erva); color: #F4F0E5; }
+.carimbo.premio { border-style: solid; border-color: var(--ocre, #B8893A); }
+.falta { text-align: center; font-size: 15px; margin: 0; }
+.falta b { font: 400 24px/1.2 var(--serif); display: block; }
+.premio-ganho {
+  border: 1px solid var(--erva); border-radius: var(--raio); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 13.5px;
+}
+.premio-ganho .codigo {
+  font: 500 26px/1.1 "DM Mono", monospace; letter-spacing: .18em; color: var(--tinta);
+}
+.premio-ganho.fora { border-color: var(--linha); opacity: .6; }
+.regra-fidelidade { font-size: 13px; color: var(--tinta-suave); margin: 0; }
+
+/* ---- o aceite do termo de consentimento (pedido do dono, 24/09/2026) ---- */
+.aceite {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 14px;
+  color: var(--tinta); cursor: pointer; line-height: 1.4;
+}
+.aceite input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--erva); }
+.link-termo {
+  background: none; border: 0; padding: 0; font: inherit; color: var(--erva);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { .link-termo { color: var(--tinta); } }
+/* 🔑 `<dialog>` nativo: o Esc, o foco preso e o fundo inerte vêm do navegador. */
+.termo {
+  width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+  padding: 0; border: 1px solid var(--linha); border-radius: 16px;
+  background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra);
+}
+.termo::backdrop { background: rgba(20, 24, 18, .5); }
+.termo[open] { display: flex; flex-direction: column; }
+.termo h3 { margin: 0; padding: 18px 20px 12px; font: 400 19px/1.25 var(--serif); }
+.termo .corpo-termo {
+  overflow-y: auto; padding: 0 20px; font-size: 13.5px; color: var(--tinta-suave);
+}
+.termo h4 { margin: 14px 0 4px; font-size: 13.5px; color: var(--tinta); }
+.termo p, .termo ul { margin: 0 0 8px; }
+.termo ul { padding-left: 18px; }
+.termo .pe-termo {
+  display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px;
+  border-top: 1px solid var(--linha);
+}
+.termo .pe-termo button { width: auto; padding: 10px 16px; }
+.vazio { color: var(--tinta-suave); font-size: 14px; }
+/* 🔑 "Suas reservas": uma linha por reserva, data em destaque e o estado à
+   direita — o mesmo desenho do recibo, só que em lista. */
+.minhas { display: flex; flex-direction: column; gap: 6px; }
+.link-sair { font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--tinta-suave); text-decoration: underline; }
+.minhas[hidden] { display: none; }
+.minha {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--superficie); border: 1px solid var(--linha);
+  border-radius: 10px;
+}
+.minha b { font-weight: 600; }
+.minha small { display: block; color: var(--tinta-suave); font-size: 13px; }
+.minha .estado-minha { font-size: 12px; color: var(--tinta-suave); white-space: nowrap; }
+.minha .lado { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+/* ⚠️ Discreto de propósito: cancelar é a ação rara da tela, e um botão cheio
+   competiria com "Confirmar reserva". O segundo toque é que ganha a cor. */
+.cancelar-minha {
+  font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+  background: transparent; color: var(--barro);
+  border: 1px solid var(--linha); border-radius: 8px;
+}
+.cancelar-minha[data-certeza] { background: var(--barro); color: #fff; border-color: var(--barro); }
+.cancelar-minha:disabled { opacity: .6; cursor: default; }
+/* Os dados de contato: rótulo em cima, valor embaixo. Não são botões. */
+.dado { margin: 0; padding: 10px 2px; border-bottom: 1px solid var(--linha); }
+.dado span {
+  display: block; font: 500 11px/1.4 "DM Mono", monospace; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tinta-suave);
+}
+.dado a { color: inherit; }
+.pe {
+  text-align: center; color: var(--tinta-suave);
+  font: 400 11.5px/1.6 "DM Mono", monospace; padding: 4px 0 2px;
+}
+.tela { display: none; }
+.tela[data-ativa] { display: flex; flex-direction: column; gap: 14px; }
+</style>
+</head>
+<body>
+<div class="folha">
+
+  <header class="capa">
+    <span class="estado" id="estado">…</span>
+    <!-- 🔑 PT · EN · DE (pedido do dono, 29/09/2026). Quem monta é o `montarSeletorDeIdioma`. -->
+    <span class="idiomas" id="idiomas" role="group" aria-label="idioma · language · Sprache"></span>
+    <div class="marca" id="marca"><b>Botané</b><span>comida de raiz</span></div>
+  </header>
+
+  <div class="corpo">
+
+    <!-- ================= a página inicial ================= -->
+    <section class="tela" data-tela="inicio" data-ativa>
+      <h2 id="nome-da-casa">Botané Deli e Café</h2>
+      <!-- 🔑 A casa escolhida, e a saída para a outra. Só aparece com mais de
+           uma loja no site — com uma, não há o que trocar. -->
+      <p class="sub" id="loja-atual" hidden></p>
+      <p class="sub" id="linha-dias">…</p>
+      <div class="itens" id="itens">
+        <button class="item destaque" id="ir-reservar">Reserve sua Mesa</button>
+        <!-- 🔑 Os catálogos entram AQUI, um por cardápio, e cada um abre o PDF.
+             Quem os monta é o `carregarCatalogos()`. -->
+      </div>
+    </section>
+
+    <!-- ================= qual casa ================= -->
+    <!-- 🔑 **Pedido do dono (24/09/2026):** duas lojas com reserva no mesmo site.
+         A pergunta vem ANTES de tudo: cardápio, horário e contato são da casa
+         escolhida — mostrar os da Matriz a quem vai à Centro seria o erro caro. -->
+    <section class="tela" data-tela="lojas" aria-labelledby="t-lojas">
+      <h2 id="t-lojas">Qual casa?</h2>
+      <p class="sub-tela">Escolha a unidade — a reserva, o cardápio e o contato são dela.</p>
+      <div class="itens" id="lista-lojas"></div>
+    </section>
+
+    <!-- ================= reservar ================= -->
+    <!-- ================= quem reserva ================= -->
+    <!-- 🔑 **Pedido do dono (21/09/2026):** *"clica em Reserve sua Mesa, abre uma
+         tela com o número do telefone; caso não tenha cadastrada, realiza o
+         cadastro com Nome, telefone, gênero e cidade."*
+         ⚠️ **O telefone vem PRIMEIRO, e sozinho.** Mostrar os quatro campos de
+         uma vez faria quem já é cliente preencher tudo de novo para descobrir
+         que já era conhecido. -->
+    <section class="tela" data-tela="quem" aria-labelledby="t-quem">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-quem">Reserve sua mesa</h2>
+      <p class="sub-tela" id="sub-quem">Comece pelo telefone — é assim que a casa reconhece você.</p>
+      <div class="passos">
+        <label class="campo" for="fone">Seu telefone, com DDD
+          <input id="fone" type="tel" inputmode="tel" autocomplete="tel"
+                 placeholder="(47) 99910-5033">
+        </label>
+
+        <div id="bloco-quem" hidden>
+          <label class="campo" for="nome-cliente">Seu nome
+            <input id="nome-cliente" autocomplete="name" maxlength="120">
+          </label>
+        </div>
+
+        <!-- ⚠️ Gênero e cidade só aparecem para quem NÃO tem cadastro, e só se a
+             casa pedir cadastro completo (`reserva_config.cadastro_completo`). -->
+        <div id="bloco-novo" hidden>
+          <div class="dupla">
+            <label class="campo" for="genero">Gênero
+              <select id="genero">
+                <option value="">escolha…</option>
+                <option value="FEMININO">Feminino</option>
+                <option value="MASCULINO">Masculino</option>
+                <option value="OUTRO">Outro</option>
+                <option value="NAO_INFORMADO">Prefiro não informar</option>
+              </select>
+            </label>
+            <label class="campo" for="cidade">Cidade
+              <input id="cidade" autocomplete="address-level2" maxlength="80">
+            </label>
+          </div>
+          <!-- 🔑 **Pedido do dono (24/09/2026):** *"adicionar data de nascimento
+               no cadastro do cliente."* Vai junto de gênero e cidade: só para
+               quem é novo, e só se a casa pedir cadastro completo. -->
+          <label class="campo" for="nascimento">Data de nascimento
+            <input id="nascimento" type="date" autocomplete="bday">
+          </label>
+        </div>
+
+        <!-- 🔑 **Pedido do dono (24/09/2026):** *"adicionar o item Estou de acordo
+             com o termo de consentimento … para seguir o cadastro é necessário ter
+             marcado."* Só para quem é NOVO: quem já tem cadastro não o vê.
+             ⚠️ O link é um `<button>` DENTRO do rótulo: tocar nele abre o termo
+             sem marcar a caixa — ler não é o mesmo que concordar. -->
+        <label class="aceite" id="bloco-termo" hidden>
+          <input type="checkbox" id="aceite-termo">
+          <span>Estou de acordo com o
+            <button type="button" class="link-termo" id="ver-termo">termo de consentimento</button>.</span>
+        </label>
+
+        <div class="regras" id="aviso-quem" hidden></div>
+        <button class="item destaque" id="avancar">Continuar</button>
+      </div>
+    </section>
+
+    <section class="tela" data-tela="reserva" aria-labelledby="t-reserva">
+      <!-- ⚠️ O voltar depende de por onde a pessoa ENTROU: com reserva online
+           ela veio da identificação; sem, veio da capa. Um alvo fixo mandaria
+           metade dos visitantes para uma tela que eles nunca viram. -->
+      <button class="voltar" id="voltar-reserva" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-reserva">Reservar uma mesa</h2>
+      <!-- 🔑 **Pedido do dono (23/09/2026):** *"uma área dentro de Reserve sua
+           mesa para Suas Reservas."* Só aparece para quem se identificou e tem
+           reserva em aberto — sem nenhuma, é um título sobre coisa nenhuma. -->
+      <p class="sub-tela" id="nao-sou-eu" hidden></p>
+      <div class="minhas" id="suas-reservas" hidden>
+        <span class="rot">Suas reservas</span>
+        <div class="minhas" id="lista-minhas"></div>
+      </div>
+      <!-- 🔑 **As pessoas vêm ANTES do horário, e a ordem é a regra.**
+           "Esgotado" depende do tamanho do grupo: às 19h pode não haver mesa
+           para 6 e haver para 2. Perguntar o horário primeiro faria a tela
+           prometer o que o salão não tem. -->
+      <div class="dupla">
+        <label class="campo">Quantas pessoas
+          <input id="pessoas" type="number" inputmode="numeric" min="1" max="20" value="2">
+        </label>
+        <label class="campo">Que dia
+          <input id="dia" type="date">
+        </label>
+      </div>
+      <div>
+        <span class="rot">Horários com mesa</span>
+        <div class="horarios" id="horarios" role="group" aria-label="horários disponíveis">
+          <span class="vazio">Escolha o dia e quantas pessoas.</span>
+        </div>
+      </div>
+      <!-- 🔑 **Pedido do dono (21/09/2026):** *"adiciona observação na reserva."*
+           ⚠️ **É `observacao_cliente`, e a agenda do balcão JÁ a mostra** — o
+           campo existia no servidor desde a migração 070 e só não tinha por
+           onde ser preenchido pelo site. Campo que ninguém lê do outro lado
+           seria pior que campo nenhum.
+           ⚠️ **Opcional, e dito no rótulo.** Um campo livre obrigatório faz
+           quem não tem nada a dizer escrever "-" para poder seguir. -->
+      <label class="campo" for="observacao">Alguma observação? (opcional)
+        <textarea id="observacao" maxlength="500" rows="2"
+                  placeholder="Aniversário, cadeirinha, alguma restrição…"></textarea>
+      </label>
+      <div class="regras" id="aviso-reserva" hidden></div>
+      <button class="item destaque" id="confirmar" hidden>Confirmar reserva</button>
+      <div class="regras" id="rodape-reserva" hidden></div>
+    </section>
+
+    <!-- ================= pronto ================= -->
+    <!-- ⚠️ **Esta tela só existe porque a reserva agora GRAVA.** Enquanto o site
+         apenas abria o WhatsApp, dizer "reservado" faria o cliente aparecer na
+         porta sem mesa. Agora há mesa — e o texto muda conforme a casa confirme
+         na hora ou vá olhar depois. -->
+    <section class="tela" data-tela="pronto" aria-labelledby="t-pronto">
+      <h2 id="t-pronto">Pronto!</h2>
+      <div class="recibo" id="recibo"></div>
+      <div class="regras" id="aviso-pronto"></div>
+      <button class="item" data-ir="inicio">Voltar ao início</button>
+    </section>
+
+    <!-- ================= o cardápio: as categorias ================= -->
+    <!-- 🔑 **O primeiro print**: cada categoria é título, descrição e uma foto
+         grande com "ACESSAR" por cima. -->
+    <section class="tela" data-tela="cardapio" aria-labelledby="t-cardapio">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-cardapio">Cardápio</h2>
+      <div class="passos" id="secoes-do-cardapio"></div>
+    </section>
+
+    <!-- ================= o cardápio: dentro da categoria ================= -->
+    <!-- 🔑 **O segundo print**: a tira de subcategorias redondas no topo e, em
+         baixo, os itens agrupados, com nome, preço e descrição. -->
+    <section class="tela" data-tela="secao" aria-labelledby="t-secao">
+      <button class="voltar" data-ir="cardapio">‹ cardápio</button>
+      <h2 id="t-secao">Categoria</h2>
+      <p class="sub-tela" id="secao-descricao"></p>
+      <div class="tira" id="tira-subcategorias" role="group"
+           aria-label="partes desta categoria"></div>
+      <div id="pratos"></div>
+      <p class="pe-cardapio" id="pe-cardapio"></p>
+    </section>
+
+    <!-- ================= o pedido pelo cardápio (101) ================= -->
+    <!-- 🔑 **Pedido do dono (28/09/2026):** *"o cliente poder realizar pedidos diretamente
+         na tela de catálogo … um carrinho de compras para enviar pedidos ao sistema. O
+         pagamento não será pelo sistema."* A casa confirma cada pedido. -->
+    <section class="tela" data-tela="carrinho" aria-labelledby="t-carrinho">
+      <button class="voltar" id="voltar-carrinho">‹ cardápio</button>
+      <h2 id="t-carrinho">Seu pedido</h2>
+      <div id="itens-carrinho"></div>
+      <div>
+        <span class="rot">Como você quer receber</span>
+        <div class="horarios" id="modos-pedido" role="radiogroup" aria-label="como receber"></div>
+      </div>
+      <label class="campo" id="campo-endereco" hidden>Endereço de entrega
+        <textarea id="endereco-pedido" rows="2" maxlength="300"
+                  placeholder="Rua, número, bairro e um ponto de referência"></textarea>
+      </label>
+      <div>
+        <span class="rot">Para quando</span>
+        <div class="horarios" id="quando-pedido" role="radiogroup" aria-label="para quando">
+          <button class="hora texto" type="button" data-quando="agora" aria-pressed="true">O quanto antes</button>
+          <button class="hora texto" type="button" data-quando="agendar" aria-pressed="false">Escolher dia e hora</button>
+        </div>
+        <div class="dupla" id="agenda-pedido" hidden style="margin-top:10px">
+          <label class="campo">Dia <select id="dia-pedido"></select></label>
+          <label class="campo">Hora <input id="hora-pedido" type="time"></label>
+        </div>
+      </div>
+      <div>
+        <span class="rot">Como vai pagar</span>
+        <div class="horarios" id="pagamentos-pedido" role="radiogroup" aria-label="pagamento"></div>
+      </div>
+      <div class="regras" id="texto-pagamento" hidden></div>
+      <label class="campo">Observação (opcional)
+        <textarea id="obs-pedido" rows="2" maxlength="500"></textarea>
+      </label>
+      <div class="totais" id="totais-pedido"></div>
+      <div class="regras" id="aviso-pedido" hidden></div>
+      <button class="item destaque" id="enviar-pedido">Enviar pedido</button>
+      <button class="item" id="ir-meus-pedidos">Meus pedidos</button>
+    </section>
+
+    <section class="tela" data-tela="pedido-pronto" aria-labelledby="t-pedido-pronto">
+      <h2 id="t-pedido-pronto">Pedido enviado!</h2>
+      <div class="recibo" id="recibo-pedido"></div>
+      <div class="regras" id="aviso-pedido-pronto"></div>
+      <div id="zap-pedido"></div>
+      <button class="item" id="pronto-meus-pedidos">Meus pedidos</button>
+      <button class="item" data-ir="inicio">Voltar ao início</button>
+    </section>
+
+    <section class="tela" data-tela="meus-pedidos" aria-labelledby="t-meus-pedidos">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-meus-pedidos">Meus pedidos</h2>
+      <div class="regras" id="aviso-meus-pedidos" hidden></div>
+      <div class="itens" id="lista-meus-pedidos"></div>
+    </section>
+
+    <!-- ================= fidelidade ================= -->
+    <!-- 🔑 **Pedido do dono (24/09/2026):** *"no site de Reservas o link acima do
+         Entre em contato, onde o usuário pode ver quantos pontos tem e quanto falta
+         para chegar no prêmio."* O check-in vem do QR da mesa (`?checkin=`). -->
+    <section class="tela" data-tela="fidelidade" aria-labelledby="t-fidelidade">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-fidelidade">Seu cartão fidelidade</h2>
+      <p class="sub-tela" id="sub-fidelidade"></p>
+      <div class="regras" id="aviso-fidelidade" hidden></div>
+      <div class="carimbos" id="carimbos" aria-live="polite"></div>
+      <p class="falta" id="falta"></p>
+      <div id="premios-fidelidade" class="itens"></div>
+      <label class="aceite" id="termo-fidelidade" hidden>
+        <input type="checkbox" id="aceite-fidelidade">
+        <span>Estou de acordo com o
+          <button type="button" class="link-termo" id="ver-termo-fidelidade">termo de consentimento</button>
+          atualizado, que inclui o programa de fidelidade.</span>
+      </label>
+      <button class="item destaque" id="fazer-checkin" hidden>Fazer check-in</button>
+      <!-- 🔑 **O código do caixa** (pedido do dono, 27/09/2026): o cliente leu o QR do
+           caixa; o código aparece na tela do ATENDENTE, que o passa. Nunca aqui. -->
+      <div id="bloco-codigo" class="passos" hidden>
+        <label class="campo" for="codigo-caixa">Código que o caixa passou
+          <input id="codigo-caixa" inputmode="numeric" autocomplete="one-time-code"
+                 maxlength="6" placeholder="0000">
+        </label>
+        <button class="item destaque" id="confirmar-codigo">Confirmar visita</button>
+      </div>
+      <p class="regra-fidelidade" id="regra-fidelidade"></p>
+    </section>
+
+    <!-- ================= contato ================= -->
+    <section class="tela" data-tela="contato" aria-labelledby="t-contato">
+      <button class="voltar" data-ir="inicio">‹ voltar</button>
+      <h2 id="t-contato">Entre em contato</h2>
+      <div class="itens" id="bloco-contato"></div>
+    </section>
+
+    <p class="pe" id="rodape"></p>
+  </div>
+</div>
+<button class="barra-carrinho" id="barra-carrinho" type="button" hidden></button>
+
+<dialog class="termo" id="termo" aria-labelledby="t-termo">
+  <h3 id="t-termo">Termo de consentimento</h3>
+  <div class="corpo-termo" id="texto-termo"><p>Carregando…</p></div>
+  <div class="pe-termo">
+    <button class="item" type="button" id="fechar-termo">Fechar</button>
+    <button class="item destaque" type="button" id="concordar-termo">Li e concordo</button>
+  </div>
+</dialog>
+
+<script>
+/* ===========================================================================
+   ⚠️ **A API é a MESMA do sistema interno.** Não há backend próprio: as rotas
+   `/publico/...` existem para isso, e a regra de disponibilidade é a que a
+   agenda do balcão usa — uma segunda regra aqui divergiria, e a divergência
+   apareceria como mesa prometida ao cliente e não disponível na casa.
+
+   ⚠️ **O endereço é decidido pelo HOSPEDEIRO**, não escrito no código.
+   =========================================================================== */
+/* 🔑 **Desde 15/10/2026 o site é servido pelo MESMO app do sistema** (pedido do dono:
+   "tudo na mesma URL"): a API é `/api` do próprio domínio — reservas.* ou sistema.* —, e
+   o CORS deixa de existir também aqui. Em casa, o Next (3100) e a API (9200) são portas
+   diferentes, e por isso a regra do localhost continua. */
+const LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+const API = LOCAL ? "http://127.0.0.1:9200" : `${location.origin}/api`;
+/* O feed do Cardápio Vivo (`/c/{loja}`) mora no mesmo app — no mesmo domínio. */
+const WEB = location.origin;
+
+/* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
+   (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a
+   loja usada se a lista de casas não responder. */
+let LOJA = document.documentElement.dataset.loja || "1";
+/** A pessoa escolheu a casa nesta aba (ou só há uma, e não houve o que escolher). */
+let lojaEscolhida = false;
+/** As casas que recebem pelo site, para o seletor e o "trocar de loja". */
+let lojasDaCasa = [];
+/** Casa, cardápios e reserva da loja atual já estão na tela. */
+let lojaCarregada = false;
+/** A resposta "esta casa marca pelo site?" — o botão de reservar espera por ela. */
+let aceitaPronta = Promise.resolve();
+
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t ?? "").replace(/[<>&"]/g,
+  (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+/* ===========================================================================
+   🔑 **O site em três idiomas** (pedido do dono, 29/09/2026: "o site nos três
+   idiomas"). PT · EN · DE no alto da capa; a escolha fica na ABA
+   (`sessionStorage`, como a sessão) e, sem escolha, vem do idioma do navegador.
+
+   Duas camadas, de propósito:
+   1. **O cardápio vem traduzido do servidor** (`?idioma=`, migração 103): nomes
+      e descrições que o Claude traduziu e a casa conferiu. Onde falta tradução,
+      o servidor devolve o português — nunca um buraco.
+   2. **Os textos da tela moram AQUI**, num dicionário com a frase em português
+      como chave. ⚠️ Texto FIXO (um nó de texto inteiro, um `placeholder`, um
+      `aria-label`) é traduzido sozinho pelo `traduzirArvore`, que o observador
+      reaplica em tudo o que o JavaScript desenha depois — não precisa de `t()`.
+      Texto MONTADO com dado (`Faltam {n} visitas`) precisa de `t()` com a chave
+      de modelo, senão a frase inteira nunca bate com a chave.
+   ⚠️ **Fica em português, de propósito:** a mensagem que vai para o WhatsApp da
+   CASA (quem lê é a equipe), o termo de consentimento (texto jurídico da casa),
+   o `texto_pagamento` que a casa escreve e as mensagens de erro do servidor.
+   ⚠️ **Trocar de idioma recarrega a página.** O cardápio precisa vir de novo do
+   servidor no idioma novo; carrinho, sessão e tela sobrevivem (estão na aba).
+   =========================================================================== */
+const IDIOMAS = ["pt", "en", "de"];
+const IDIOMA = (() => {
+  try {
+    const salvo = sessionStorage.getItem("botane.idioma");
+    if (IDIOMAS.includes(salvo)) return salvo;
+  } catch { /* sem armazenamento: vale o do navegador */ }
+  const nav = (navigator.language || "pt").slice(0, 2).toLowerCase();
+  return nav === "en" || nav === "de" ? nav : "pt";
+})();
+const LOCALE = { pt: "pt-BR", en: "en-GB", de: "de-DE" }[IDIOMA];
+document.documentElement.lang = LOCALE;
+
+/* O dicionário: "frase em português": ["inglês", "alemão"]. */
+const TRADUCOES = {
+  // ---- capa e navegação
+  "Reserve sua Mesa": ["Book a table", "Tisch reservieren"],
+  "Qual casa?": ["Which location?", "Welcher Standort?"],
+  "Escolha a unidade — a reserva, o cardápio e o contato são dela.":
+    ["Choose the location — the booking, the menu and the contact details are its own.",
+     "Wählen Sie den Standort — Reservierung, Speisekarte und Kontakt gehören zu ihm."],
+  "‹ voltar": ["‹ back", "‹ zurück"],
+  "‹ cardápio": ["‹ menu", "‹ Speisekarte"],
+  "Voltar ao início": ["Back to start", "Zurück zum Anfang"],
+  "Aberto agora": ["Open now", "Jetzt geöffnet"],
+  "Fechado hoje": ["Closed today", "Heute geschlossen"],
+  "Fechado · abre {quando}": ["Closed · opens {quando}", "Geschlossen · öffnet {quando}"],
+  "{dia} às {hora}": ["{dia} at {hora}", "{dia} um {hora}"],
+  "hoje {horas}": ["today {horas}", "heute {horas}"],
+  "Seg": ["Mon", "Mo"], "Ter": ["Tue", "Di"], "Qua": ["Wed", "Mi"], "Qui": ["Thu", "Do"],
+  "Sex": ["Fri", "Fr"], "Sáb": ["Sat", "Sa"], "Dom": ["Sun", "So"],
+  "Reservas": ["Bookings", "Reservierungen"],
+  "Fidelidade": ["Loyalty card", "Treuekarte"],
+  "Entre em Contato": ["Contact us", "Kontakt"],
+  "Entre em contato": ["Contact us", "Kontakt"],
+  "Telefone": ["Phone", "Telefon"],
+  "E-mail": ["E-mail", "E-Mail"],
+  "Onde estamos": ["Where we are", "Hier finden Sie uns"],
+  "O WhatsApp ainda não está cadastrado. Quem cuida do sistema pode preenchê-lo em Administração ▸ Empresa, e ele aparece aqui na hora.":
+    ["WhatsApp is not set up yet.", "WhatsApp ist noch nicht eingerichtet."],
+  "Trocar de loja": ["Change location", "Standort wechseln"],
+  "Não conseguimos carregar agora. Tente em instantes.":
+    ["We couldn't load this right now. Please try again in a moment.",
+     "Das konnte gerade nicht geladen werden. Bitte versuchen Sie es gleich noch einmal."],
+  "Carregando…": ["Loading…", "Wird geladen…"],
+
+  // ---- quem é você
+  "Reserve sua mesa": ["Book your table", "Reservieren Sie Ihren Tisch"],
+  "Comece pelo telefone — é assim que a casa reconhece você.":
+    ["Start with your phone number — that's how we recognise you.",
+     "Beginnen Sie mit Ihrer Telefonnummer — daran erkennen wir Sie."],
+  "Seu telefone, com DDD": ["Your phone number, with area code", "Ihre Telefonnummer, mit Vorwahl"],
+  "Seu nome": ["Your name", "Ihr Name"],
+  "Gênero": ["Gender", "Geschlecht"],
+  "escolha…": ["choose…", "bitte wählen…"],
+  "Feminino": ["Female", "Weiblich"],
+  "Masculino": ["Male", "Männlich"],
+  "Outro": ["Other", "Divers"],
+  "Prefiro não informar": ["Prefer not to say", "Keine Angabe"],
+  "Cidade": ["City", "Stadt"],
+  "Data de nascimento": ["Date of birth", "Geburtsdatum"],
+  "Estou de acordo com o": ["I agree to the", "Ich bin einverstanden mit der"],
+  "termo de consentimento": ["consent terms", "Einwilligungserklärung"],
+  "atualizado, que inclui o programa de fidelidade.":
+    ["(updated), which include the loyalty programme.",
+     "(aktualisiert), die das Treueprogramm einschließt."],
+  "Continuar": ["Continue", "Weiter"],
+  "Faça seu check-in: comece pelo telefone.":
+    ["Check in: start with your phone number.", "Zum Check-in: beginnen Sie mit Ihrer Telefonnummer."],
+  "Veja suas visitas: comece pelo telefone.":
+    ["See your visits: start with your phone number.", "Ihre Besuche: beginnen Sie mit Ihrer Telefonnummer."],
+  "A casa reconhece você pelo telefone.":
+    ["We recognise you by your phone number.", "Wir erkennen Sie an Ihrer Telefonnummer."],
+  "Para abrir este cardápio, a casa pede que você se identifique pelo telefone.":
+    ["To open this menu, please identify yourself with your phone number.",
+     "Um diese Speisekarte zu öffnen, geben Sie bitte Ihre Telefonnummer an."],
+  "Digite seu telefone para continuar.":
+    ["Enter your phone number to continue.", "Geben Sie Ihre Telefonnummer ein, um fortzufahren."],
+  "Não conseguimos consultar agora.":
+    ["We couldn't check right now.", "Das konnte gerade nicht geprüft werden."],
+  "Primeira vez por aqui? Conte quem é você.":
+    ["First time here? Tell us who you are.", "Zum ersten Mal hier? Sagen Sie uns, wer Sie sind."],
+  "Escolher dia e horário": ["Choose day and time", "Tag und Uhrzeit wählen"],
+  "Ver meu cartão": ["See my card", "Meine Karte ansehen"],
+  "Enviar o pedido": ["Send the order", "Bestellung senden"],
+  "Ver meus pedidos": ["See my orders", "Meine Bestellungen ansehen"],
+  "Abrir o cardápio": ["Open the menu", "Speisekarte öffnen"],
+  "Diga seu nome para continuar.": ["Tell us your name to continue.", "Nennen Sie Ihren Namen, um fortzufahren."],
+  "Escolha uma opção de gênero.": ["Choose a gender option.", "Wählen Sie eine Angabe zum Geschlecht."],
+  "Diga sua cidade.": ["Tell us your city.", "Nennen Sie Ihre Stadt."],
+  "Diga sua data de nascimento.": ["Tell us your date of birth.", "Nennen Sie Ihr Geburtsdatum."],
+  "Para seguir com o cadastro, marque que está de acordo com o termo de consentimento.":
+    ["To continue, tick that you agree to the consent terms.",
+     "Um fortzufahren, bestätigen Sie bitte die Einwilligungserklärung."],
+  "Não conseguimos conferir seu cadastro.":
+    ["We couldn't check your details.", "Ihre Angaben konnten nicht geprüft werden."],
+  "Pronto!": ["Done!", "Fertig!"],
+  "Pronto, {nome}!": ["Done, {nome}!", "Fertig, {nome}!"],
+  "Abrir {nome}": ["Open {nome}", "{nome} öffnen"],
+  "Olá, {nome}!": ["Hello, {nome}!", "Hallo, {nome}!"],
+  "Olá!": ["Hello!", "Hallo!"],
+  "Não é você? Trocar telefone": ["Not you? Change phone number", "Nicht Sie? Telefonnummer ändern"],
+
+  // ---- reserva
+  "Reservar uma mesa": ["Book a table", "Einen Tisch reservieren"],
+  "Suas reservas": ["Your bookings", "Ihre Reservierungen"],
+  "Quantas pessoas": ["How many people", "Wie viele Personen"],
+  "Que dia": ["Which day", "Welcher Tag"],
+  "Horários com mesa": ["Times with a free table", "Zeiten mit freiem Tisch"],
+  "horários disponíveis": ["available times", "verfügbare Zeiten"],
+  "Escolha o dia e quantas pessoas.": ["Choose the day and how many people.", "Wählen Sie den Tag und die Personenzahl."],
+  "Alguma observação? (opcional)": ["Anything we should know? (optional)", "Noch etwas, das wir wissen sollten? (optional)"],
+  "Aniversário, cadeirinha, alguma restrição…":
+    ["Birthday, high chair, dietary restrictions…", "Geburtstag, Kinderstuhl, Unverträglichkeiten…"],
+  "Confirmar reserva": ["Confirm booking", "Reservierung bestätigen"],
+  "Procurando mesa…": ["Looking for a table…", "Suche nach einem Tisch…"],
+  "Nenhum horário livre.": ["No free times.", "Keine freien Zeiten."],
+  "Não há mesa para este grupo neste dia.":
+    ["There is no table for this group on this day.", "An diesem Tag gibt es keinen Tisch für diese Gruppe."],
+  "Para <b>{n} pessoas</b> a casa acerta no WhatsApp.":
+    ["For <b>{n} people</b> we arrange it on WhatsApp.", "Für <b>{n} Personen</b> klären wir es per WhatsApp."],
+  "Horário especial neste dia ({abre} às {fecha}): {aviso}.":
+    ["Special hours on this day ({abre}–{fecha}): {aviso}.", "Besondere Öffnungszeiten an diesem Tag ({abre}–{fecha}): {aviso}."],
+  "Você escolheu <b>{hora}</b>, dia {dia}.": ["You chose <b>{hora}</b> on {dia}.", "Sie haben <b>{hora}</b> am {dia} gewählt."],
+  "Você escolheu <b>{hora}</b>. Para confirmar,": ["You chose <b>{hora}</b>. To confirm,", "Sie haben <b>{hora}</b> gewählt. Zur Bestätigung"],
+  "mande a mensagem pronta ›": ["send the ready-made message ›", "senden Sie die vorbereitete Nachricht ›"],
+  "Você escolheu <b>{hora}</b>. Ligue para a casa para confirmar.":
+    ["You chose <b>{hora}</b>. Please call us to confirm.", "Sie haben <b>{hora}</b> gewählt. Bitte rufen Sie uns zur Bestätigung an."],
+  "Não conseguimos marcar agora.": ["We couldn't book it right now.", "Die Reservierung war gerade nicht möglich."],
+  "{n} pessoa": ["{n} person", "{n} Person"],
+  "{n} pessoas": ["{n} people", "{n} Personen"],
+  "{n} pessoas, em nome de {nome}": ["{n} people, under the name {nome}", "{n} Personen, auf den Namen {nome}"],
+  "1 pessoa, em nome de {nome}": ["1 person, under the name {nome}", "1 Person, auf den Namen {nome}"],
+  "Confirmada": ["Confirmed", "Bestätigt"],
+  "Aguardando a casa": ["Waiting for confirmation", "Wartet auf Bestätigung"],
+  "Cancelar": ["Cancel", "Stornieren"],
+  "Cancelar mesmo?": ["Really cancel?", "Wirklich stornieren?"],
+  "Cancelando…": ["Cancelling…", "Wird storniert…"],
+  "Reserva cancelada.": ["Booking cancelled.", "Reservierung storniert."],
+  "Não conseguimos cancelar agora.": ["We couldn't cancel right now.", "Die Stornierung war gerade nicht möglich."],
+  "Sua mesa está reservada. Até lá!": ["Your table is booked. See you then!", "Ihr Tisch ist reserviert. Bis bald!"],
+  "Recebemos seu pedido — a casa confirma em seguida.":
+    ["We've received your request — we'll confirm shortly.", "Wir haben Ihre Anfrage erhalten — wir bestätigen in Kürze."],
+  "Precisando mudar alguma coisa,": ["If you need to change anything,", "Wenn Sie etwas ändern möchten,"],
+  "Se preferir adiantar,": ["If you'd like to speed things up,", "Wenn es schneller gehen soll,"],
+  "fale com a gente": ["talk to us", "schreiben Sie uns"],
+  "Esta é a primeira versão.": ["This is the first version.", "Dies ist die erste Version."],
+  "O site mostra os horários que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.":
+    ["The site shows our free times — to confirm the table, we finalise it on WhatsApp.",
+     "Die Seite zeigt unsere freien Zeiten — bestätigt wird der Tisch per WhatsApp."],
+
+  // ---- cardápio
+  "Cardápio": ["Menu", "Speisekarte"],
+  "Categoria": ["Category", "Kategorie"],
+  "partes desta categoria": ["parts of this category", "Teile dieser Kategorie"],
+  "Carregando o cardápio…": ["Loading the menu…", "Speisekarte wird geladen…"],
+  "Não conseguimos abrir o cardápio agora.": ["We couldn't open the menu right now.", "Die Speisekarte konnte gerade nicht geöffnet werden."],
+  "Este cardápio ainda não tem itens.": ["This menu has no items yet.", "Diese Speisekarte hat noch keine Einträge."],
+  "Acessar ›": ["Open ›", "Öffnen ›"],
+  "Preços sujeitos a alteração.": ["Prices subject to change.", "Preisänderungen vorbehalten."],
+
+  // ---- pedido
+  "Adicionar": ["Add", "Hinzufügen"],
+  "tirar um": ["remove one", "eins weniger"],
+  "pôr mais um": ["add one more", "eins mehr"],
+  "Ver pedido ›": ["View order ›", "Bestellung ansehen ›"],
+  "1 item · R$ {total}": ["1 item · R$ {total}", "1 Artikel · R$ {total}"],
+  "{n} itens · R$ {total}": ["{n} items · R$ {total}", "{n} Artikel · R$ {total}"],
+  "Seu pedido": ["Your order", "Ihre Bestellung"],
+  "Seu pedido está vazio. Volte ao cardápio e toque em “Adicionar”.":
+    ["Your order is empty. Go back to the menu and tap “Add”.",
+     "Ihre Bestellung ist leer. Gehen Sie zurück zur Speisekarte und tippen Sie auf „Hinzufügen“."],
+  "Observação deste item (ex.: sem cebola)": ["Note for this item (e.g. no onion)", "Hinweis zu diesem Artikel (z. B. ohne Zwiebeln)"],
+  "Como você quer receber": ["How would you like to receive it", "Wie möchten Sie es erhalten"],
+  "como receber": ["how to receive", "Art der Übergabe"],
+  "Retirar na loja": ["Pick up in store", "Im Laden abholen"],
+  "Entrega": ["Delivery", "Lieferung"],
+  "Endereço de entrega": ["Delivery address", "Lieferadresse"],
+  "Rua, número, bairro e um ponto de referência":
+    ["Street, number, neighbourhood and a landmark", "Straße, Hausnummer, Viertel und ein Orientierungspunkt"],
+  "Para quando": ["When", "Für wann"],
+  "para quando": ["when", "für wann"],
+  "O quanto antes": ["As soon as possible", "So bald wie möglich"],
+  "Escolher dia e hora": ["Choose day and time", "Tag und Uhrzeit wählen"],
+  "Dia": ["Day", "Tag"],
+  "Hora": ["Time", "Uhrzeit"],
+  "Como vai pagar": ["How will you pay", "Wie zahlen Sie"],
+  "pagamento": ["payment", "Zahlung"],
+  "Na retirada": ["On pick-up", "Bei Abholung"],
+  "Na entrega": ["On delivery", "Bei Lieferung"],
+  "Combinar pelo WhatsApp": ["Arrange on WhatsApp", "Per WhatsApp vereinbaren"],
+  "Observação (opcional)": ["Note (optional)", "Hinweis (optional)"],
+  "Itens": ["Items", "Artikel"],
+  "Total": ["Total", "Gesamt"],
+  "Pedido mínimo: R$ {valor}": ["Minimum order: R$ {valor}", "Mindestbestellwert: R$ {valor}"],
+  "Enviar pedido": ["Send order", "Bestellung senden"],
+  "Meus pedidos": ["My orders", "Meine Bestellungen"],
+  "Escolha o dia e a hora do pedido.": ["Choose the day and time of the order.", "Wählen Sie Tag und Uhrzeit der Bestellung."],
+  "Informe o endereço de entrega.": ["Enter the delivery address.", "Geben Sie die Lieferadresse an."],
+  "Não conseguimos enviar o pedido agora.": ["We couldn't send the order right now.", "Die Bestellung konnte gerade nicht gesendet werden."],
+  "Pedido enviado!": ["Order sent!", "Bestellung gesendet!"],
+  "Pedido nº": ["Order no.", "Bestellung Nr."],
+  "Total: R$ {total} · {pagamento}": ["Total: R$ {total} · {pagamento}", "Gesamt: R$ {total} · {pagamento}"],
+  "A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”":
+    ["We'll check and confirm your order. Follow it in “My orders”",
+     "Wir prüfen und bestätigen Ihre Bestellung. Verfolgen Sie sie unter „Meine Bestellungen“"],
+  "Combinar o pagamento pelo WhatsApp": ["Arrange payment on WhatsApp", "Zahlung per WhatsApp vereinbaren"],
+  "Aguardando a casa confirmar": ["Waiting for confirmation", "Wartet auf Bestätigung"],
+  "Confirmado": ["Confirmed", "Bestätigt"],
+  "Entregue": ["Delivered", "Geliefert"],
+  "Recusado": ["Declined", "Abgelehnt"],
+  "Cancelado": ["Cancelled", "Storniert"],
+  "Nº {numero} · {situacao}": ["No. {numero} · {situacao}", "Nr. {numero} · {situacao}"],
+  "A casa ajustou os itens deste pedido.": ["We adjusted the items in this order.", "Wir haben die Artikel dieser Bestellung angepasst."],
+  "Motivo: {motivo}": ["Reason: {motivo}", "Grund: {motivo}"],
+  "Cancelar este pedido": ["Cancel this order", "Diese Bestellung stornieren"],
+  "Não conseguimos buscar seus pedidos.": ["We couldn't fetch your orders.", "Ihre Bestellungen konnten nicht geladen werden."],
+  "Você ainda não fez pedidos por aqui.": ["You haven't placed any orders here yet.", "Sie haben hier noch nichts bestellt."],
+
+  // ---- fidelidade
+  "Seu cartão fidelidade": ["Your loyalty card", "Ihre Treuekarte"],
+  "Fazer check-in": ["Check in", "Einchecken"],
+  "Pedir código no caixa": ["Ask for a code at the till", "Code an der Kasse anfordern"],
+  "Código que o caixa passou": ["Code from the till", "Code von der Kasse"],
+  "Confirmar visita": ["Confirm visit", "Besuch bestätigen"],
+  "A cada {visitas} visitas: {premio}.": ["Every {visitas} visits: {premio}.", "Alle {visitas} Besuche: {premio}."],
+  "visita {n}": ["visit {n}", "Besuch {n}"],
+  "visita {n} feita": ["visit {n} done", "Besuch {n} erledigt"],
+  "{feitas} de {total}": ["{feitas} of {total}", "{feitas} von {total}"],
+  "falta 1 visita para o prêmio": ["1 visit to go for the reward", "noch 1 Besuch bis zur Prämie"],
+  "faltam {n} visitas para o prêmio": ["{n} visits to go for the reward", "noch {n} Besuche bis zur Prämie"],
+  "Cartão completo!": ["Card complete!", "Karte voll!"],
+  "Mostre este código no caixa:": ["Show this code at the till:", "Zeigen Sie diesen Code an der Kasse:"],
+  "Vale a partir da sua próxima visita ({de}), até {ate}, de {consumo}.":
+    ["Valid from your next visit ({de}) until {ate}, {consumo}.", "Gültig ab Ihrem nächsten Besuch ({de}) bis {ate}, {consumo}."],
+  "Vale até {ate}, de {consumo}.": ["Valid until {ate}, {consumo}.", "Gültig bis {ate}, {consumo}."],
+  "Já usado": ["Already used", "Bereits eingelöst"],
+  "Venceu": ["Expired", "Abgelaufen"],
+  "As visitas contam de {pontua}, uma por dia, com o check-in pelo QR code da mesa":
+    ["Visits count {pontua}, one per day, by checking in with the QR code on the table",
+     "Besuche zählen {pontua}, einer pro Tag, per Check-in mit dem QR-Code am Tisch"],
+  ", estando na casa (o site confirma pela localização). ":
+    [", while you are here (the site confirms it by your location). ", ", wenn Sie vor Ort sind (die Seite prüft es über Ihren Standort). "],
+  "O prêmio vale da visita seguinte em diante, por {dias} dias, de {consumo} — e a visita em que você usa o prêmio não conta carimbo.":
+    ["The reward is valid from the following visit, for {dias} days, {consumo} — and the visit in which you use it earns no stamp.",
+     "Die Prämie gilt ab dem folgenden Besuch für {dias} Tage, {consumo} — und der Besuch, bei dem Sie sie einlösen, zählt keinen Stempel."],
+  "Não conseguimos abrir seu cartão agora.": ["We couldn't open your card right now.", "Ihre Karte konnte gerade nicht geöffnet werden."],
+  "Seu check-in de hoje já está feito. Até a próxima visita!":
+    ["You've already checked in today. See you next time!", "Sie haben heute schon eingecheckt. Bis zum nächsten Besuch!"],
+  "Para participar, marque que está de acordo com o termo de consentimento.":
+    ["To take part, tick that you agree to the consent terms.", "Um teilzunehmen, bestätigen Sie bitte die Einwilligungserklärung."],
+  "Confirmando que você está na casa…": ["Confirming that you are here…", "Wir prüfen, ob Sie vor Ort sind…"],
+  "Este navegador não informa a localização.": ["This browser doesn't share its location.", "Dieser Browser gibt keinen Standort an."],
+  "Para contar a visita, permita o acesso à localização — ela só confirma que você está na casa. Libere nas configurações do navegador e toque em Fazer check-in.":
+    ["To count the visit, allow location access — it only confirms that you are here. Enable it in your browser settings and tap Check in.",
+     "Damit der Besuch zählt, erlauben Sie den Standortzugriff — er bestätigt nur, dass Sie vor Ort sind. Aktivieren Sie ihn in den Browsereinstellungen und tippen Sie auf Einchecken."],
+  "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in.":
+    ["We couldn't get your location. Turn on GPS and tap Check in.", "Ihr Standort konnte nicht ermittelt werden. Schalten Sie GPS ein und tippen Sie auf Einchecken."],
+  "Não conseguimos fazer o check-in agora.": ["We couldn't check you in right now.", "Der Check-in war gerade nicht möglich."],
+  "🎉 Cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.":
+    ["🎉 Card complete! You've won: {premio}. It's valid from your next visit — show code {codigo} at the till.",
+     "🎉 Karte voll! Sie haben gewonnen: {premio}. Gültig ab Ihrem nächsten Besuch — zeigen Sie den Code {codigo} an der Kasse."],
+  "Check-in feito! Falta 1 visita.": ["Checked in! 1 visit to go.", "Eingecheckt! Noch 1 Besuch."],
+  "Check-in feito! Faltam {n} visitas.": ["Checked in! {n} visits to go.", "Eingecheckt! Noch {n} Besuche."],
+  "Não conseguimos pedir o código agora.": ["We couldn't request the code right now.", "Der Code konnte gerade nicht angefordert werden."],
+  "Peça o código no caixa e digite aqui. Ele vale até {ate}.":
+    ["Ask for the code at the till and enter it here. It's valid until {ate}.", "Fragen Sie an der Kasse nach dem Code und geben Sie ihn hier ein. Gültig bis {ate}."],
+  "Digite o código que o caixa passou.": ["Enter the code from the till.", "Geben Sie den Code von der Kasse ein."],
+  "Não conseguimos confirmar agora.": ["We couldn't confirm right now.", "Die Bestätigung war gerade nicht möglich."],
+  "1 selo": ["1 stamp", "1 Stempel"],
+  "{n} selos": ["{n} stamps", "{n} Stempel"],
+  "🎉 Visita confirmada (+{selos}) e cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.":
+    ["🎉 Visit confirmed (+{selos}) and card complete! You've won: {premio}. It's valid from your next visit — show code {codigo} at the till.",
+     "🎉 Besuch bestätigt (+{selos}) und Karte voll! Sie haben gewonnen: {premio}. Gültig ab Ihrem nächsten Besuch — zeigen Sie den Code {codigo} an der Kasse."],
+  "Visita confirmada: +{selos}! Faltam {n}.": ["Visit confirmed: +{selos}! {n} to go.", "Besuch bestätigt: +{selos}! Noch {n}."],
+
+  // ---- o termo
+  "Termo de consentimento": ["Consent terms", "Einwilligungserklärung"],
+  "Fechar": ["Close", "Schließen"],
+  "Li e concordo": ["I have read and agree", "Gelesen und einverstanden"],
+  "Não conseguimos carregar o termo agora. Tente de novo.":
+    ["We couldn't load the terms right now. Please try again.", "Die Erklärung konnte gerade nicht geladen werden. Bitte versuchen Sie es erneut."],
+};
+
+const _chave = (s) => String(s).replace(/\s+/g, " ").trim();
+
+/** A frase no idioma da tela, com os `{valores}` já no lugar. */
+function t(pt, valores = {}) {
+  const par = IDIOMA === "pt" ? null : TRADUCOES[_chave(pt)];
+  const frase = par ? par[IDIOMA === "en" ? 0 : 1] : pt;
+  return frase.replace(/\{(\w+)\}/g, (inteiro, k) => (k in valores ? String(valores[k]) : inteiro));
+}
+
+/** Os dias e horas que o servidor manda em português ("Sáb às 11:00", "08:00 às 18:00"). */
+function tHorario(texto) {
+  if (!texto || IDIOMA === "pt") return texto;
+  const m = /^(\S+) às (\d\d:\d\d)$/.exec(texto);
+  if (m && TRADUCOES[m[1]]) return t("{dia} às {hora}", { dia: t(m[1]), hora: m[2] });
+  return texto.replace(/ às /g, "–");
+}
+
+/* ⚠️ **Só nó INTEIRO e só texto que está no dicionário.** O nome de um prato que
+   por acaso coincida com uma chave seria traduzido — risco aceito: o cardápio já
+   vem traduzido do servidor, e as chaves são frases da tela, não nomes. */
+const _ATRIBUTOS = ["placeholder", "aria-label", "title"];
+function _traduzirNo(no) {
+  if (no.nodeType === Node.TEXT_NODE) {
+    const bruto = no.nodeValue;
+    const chave = _chave(bruto);
+    if (!chave || !(chave in TRADUCOES)) return;
+    const novo = t(chave);
+    const ini = bruto.match(/^\s*/)[0];
+    const fim = bruto.match(/\s*$/)[0];
+    if (bruto !== ini + novo + fim) no.nodeValue = ini + novo + fim;
+    return;
+  }
+  if (no.nodeType !== Node.ELEMENT_NODE || no.tagName === "SCRIPT" || no.tagName === "STYLE") return;
+  for (const a of _ATRIBUTOS) {
+    const v = no.getAttribute(a);
+    if (v && _chave(v) in TRADUCOES) no.setAttribute(a, t(v));
+  }
+  no.childNodes.forEach(_traduzirNo);
+}
+function traduzirArvore(raiz) { if (IDIOMA !== "pt") _traduzirNo(raiz); }
+
+/** O `?idioma=` das rotas do cardápio — em português, nada (é o padrão do servidor). */
+const noIdioma = () => (IDIOMA === "pt" ? "" : `?idioma=${IDIOMA}`);
+
+function montarSeletorDeIdioma() {
+  const caixa = document.getElementById("idiomas");
+  caixa.innerHTML = IDIOMAS.map((i) =>
+    `<button type="button" data-idioma="${i}" aria-pressed="${i === IDIOMA}">${i.toUpperCase()}</button>`).join("");
+  caixa.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-idioma]");
+    if (!b || b.dataset.idioma === IDIOMA) return;
+    try { sessionStorage.setItem("botane.idioma", b.dataset.idioma); } catch { /* sem memória */ }
+    location.reload();
+  });
+}
+
+if (IDIOMA !== "pt") {
+  traduzirArvore(document.body);
+  new MutationObserver((mudancas) => {
+    for (const m of mudancas) {
+      if (m.type === "characterData") _traduzirNo(m.target);
+      else if (m.type === "attributes") _traduzirNo(m.target);
+      else m.addedNodes.forEach(_traduzirNo);
+    }
+  }).observe(document.body, {
+    childList: true, subtree: true, characterData: true,
+    attributes: true, attributeFilter: _ATRIBUTOS,
+  });
+}
+montarSeletorDeIdioma();
+
+/**
+ * Uma chamada à API pública. Sem `corpo` é GET; com `corpo`, POST.
+ *
+ * ⚠️ **O erro carrega a FRASE do servidor**, não só o número. É o servidor que
+ * sabe dizer "falta o DDD", "esse horário acabou de ser tomado" ou "muitas
+ * tentativas em pouco tempo" — e era isso que se perdia quando o erro era só o
+ * código de status. A tela mostrando "500" não ajuda ninguém a reservar.
+ * ⚠️ **Telefone e nome vão no CORPO, nunca na URL.** Dado pessoal em query
+ * string entra em log de servidor, em histórico de navegador e no `Referer` de
+ * qualquer coisa que a página carregue depois.
+ */
+async function pedir(rota, corpo) {
+  const r = await fetch(`${API}/publico/${LOJA}${rota}`, corpo === undefined ? undefined : {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+  if (!r.ok) {
+    let frase = "";
+    try {
+      const erro = await r.json();
+      // O FastAPI devolve `detail` como texto, ou como lista quando é o
+      // Pydantic que recusou — nesse caso a primeira mensagem serve.
+      frase = typeof erro.detail === "string"
+        ? erro.detail
+        : (erro.detail && erro.detail[0] && erro.detail[0].msg) || "";
+    } catch { /* resposta sem corpo: fica só o número */ }
+    const e = new Error(String(r.status));
+    e.status = r.status;
+    e.mensagem = frase;
+    throw e;
+  }
+  return r.json();
+}
+
+function ir(nome) {
+  document.querySelectorAll(".tela").forEach((t) => {
+    if (t.dataset.tela === nome) t.setAttribute("data-ativa", "");
+    else t.removeAttribute("data-ativa");
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  // ⚠️ O botão de VOLTAR do celular precisa funcionar: sem isto, quem está na
+  // reserva e volta sai do site em vez de ir para o início.
+  if (location.hash !== "#" + nome) history.pushState({ tela: nome }, "", "#" + nome);
+  atualizarBarra(nome);
+}
+document.addEventListener("click", (e) => {
+  const alvo = e.target.closest("[data-ir]");
+  if (!alvo) return;
+  e.preventDefault();
+  ir(alvo.dataset.ir);
+});
+window.addEventListener("popstate", () => ir((location.hash || "#inicio").slice(1)));
+
+/* ---- quem é a casa ---- */
+let casa = null;
+
+/**
+ * 🔑 **O texto da mensagem vem da CONFIGURAÇÃO da casa** (migração 081, pedido
+ * do dono): Reservas ▸ Configurações ▸ "A mensagem que abre no WhatsApp".
+ * Estava escrito aqui, e texto que o cliente lê escrito em código só muda
+ * quando alguém publica.
+ *
+ * ⚠️ **Os marcadores são trocados AQUI**, no instante do clique: `{pessoas}`,
+ * `{data}` e `{hora}` só existem depois de a pessoa escolher, e o servidor não
+ * sabe o que ela escolheu.
+ * ⚠️ **O padrão continua no site**, para o caso de a casa apagar o campo: um
+ * WhatsApp que abre com a caixa em branco é pior que um texto genérico.
+ */
+function mensagem(modelo, padrao, valores = {}) {
+  const base = (modelo || "").trim() || padrao;
+  return base.replace(/\{(\w+)\}/g, (inteiro, chave) =>
+    chave in valores ? String(valores[chave]) : inteiro);
+}
+
+function linkZap(texto) {
+  return casa && casa.whatsapp
+    ? `https://wa.me/${casa.whatsapp}?text=${encodeURIComponent(texto)}`
+    : null;
+}
+
+/** A mensagem de quem só quer falar com a casa. */
+function zapDeContato() {
+  return linkZap(mensagem(
+    casa && casa.zap_texto,
+    `Olá! Vim pelo site do ${casa ? casa.casa : "Botané"}.`,
+    { casa: casa ? casa.casa : "Botané" }));
+}
+
+/**
+ * O ícone da aba: a logo da casa, ou a inicial dela desenhada.
+ *
+ * ⚠️ **Não dá para reaproveitar o `<img>` do medalhão.** O favicon é um recurso
+ * do documento, carregado pelo navegador a partir do `href` do `<link>` — e o
+ * navegador só o relê quando o atributo muda.
+ * 🔑 **Sem logo, desenha** — o mesmo princípio do medalhão: inventar uma imagem
+ * faria o cliente ver a marca de outra pessoa. O desenho é a inicial da casa
+ * sobre o oliva, que é a identidade do site.
+ * ⚠️ **O SVG vai como `data:` com os `%` já escapados.** Um `#` cru dentro de um
+ * data URI encerra a URL ali mesmo, e a cor viraria um fragmento — o ícone
+ * some e nada explica.
+ */
+function pintarOIcone(nome, logo) {
+  const href = logo
+    ? API + logo
+    : "data:image/svg+xml," + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+           <circle cx="32" cy="32" r="32" fill="#3C4A3E"/>
+           <text x="32" y="43" text-anchor="middle" fill="#F4F0E5"
+                 font-family="Georgia, serif" font-size="34">${
+                   (nome || "B").trim()[0].toUpperCase()}</text>
+         </svg>`);
+  for (const id of ["#icone-da-aba", "#icone-do-celular"]) {
+    const marca = $(id);
+    if (marca) marca.href = href;
+  }
+}
+
+/* As fontes que a casa pode escolher (as MESMAS do feed — `FONTES` de cardapio_vivo.py). */
+const FONTES_DA_CASA = {
+  FRAUNCES: ["Fraunces, Georgia, serif", null],
+  NEWSREADER: ["'Newsreader', Georgia, serif", "Newsreader:opsz,wght@6..72,400;6..72,500"],
+  PLAYFAIR: ["'Playfair Display', Georgia, serif", "Playfair+Display:wght@500;600"],
+  LORA: ["'Lora', Georgia, serif", "Lora:wght@500;600"],
+  CORMORANT: ["'Cormorant Garamond', Georgia, serif", "Cormorant+Garamond:wght@500;600"],
+};
+
+/**
+ * 🔑 **A aparência da CASA** (pedido do dono, 15/10/2026: "tudo com o mesmo layout").
+ * Cores, fonte e logo vêm de Cardápio Vivo ▸ Aparência — as mesmas do feed. Sem nada
+ * configurado, fica o protótipo (oliva sobre areia, Fraunces).
+ * ⚠️ A cor de fundo só vale no tema claro: no escuro o papel continua escuro, senão a
+ * casa que escolheu areia deixaria o site claro às 22h.
+ */
+function aplicarMarca(marca) {
+  if (!marca) return;
+  const raiz = document.documentElement.style;
+  if (marca.cor_principal) raiz.setProperty("--erva", marca.cor_principal);
+  if (marca.cor_fundo && !matchMedia("(prefers-color-scheme: dark)").matches) {
+    raiz.setProperty("--papel", marca.cor_fundo);
+  }
+  const [familia, google] = FONTES_DA_CASA[marca.fonte] || FONTES_DA_CASA.FRAUNCES;
+  if (google && !document.querySelector(`link[data-fonte="${marca.fonte}"]`)) {
+    const l = document.createElement("link");
+    l.rel = "stylesheet"; l.dataset.fonte = marca.fonte;
+    l.href = `https://fonts.googleapis.com/css2?family=${google}&display=swap`;
+    document.head.appendChild(l);
+  }
+  raiz.setProperty("--serif", familia);
+}
+
+async function carregarCasa() {
+  try {
+    casa = await pedir("/casa");
+  } catch {
+    $("#linha-dias").textContent = "Não conseguimos carregar agora. Tente em instantes.";
+    $("#estado").hidden = true;
+    return;
+  }
+  // A logo da casa (a do Cardápio Vivo, ou a da empresa) é a mesma nos dois lados.
+  if (casa.marca) casa.logo_url = casa.marca.logo || casa.logo_url;
+  aplicarMarca(casa.marca);
+  $("#nome-da-casa").textContent = casa.casa;
+  // 🔑 **Só o nome da casa** (pedido do dono, 05/10/2026): o site deixou de ser só
+  // de reservas — tem cardápio, pedido e fidelidade —, e o "— Reservas" na aba
+  // dizia menos do que ele faz.
+  document.title = casa.casa;
+  pintarOIcone(casa.casa, casa.logo_url);
+
+  // 🔑 **A logo CADASTRADA** (pedido do dono). Sem ela, o medalhão desenha o
+  // nome da casa, como o protótipo — inventar uma imagem seria pior.
+  if (casa.logo_url) {
+    $("#marca").innerHTML =
+      `<img src="${API}${esc(casa.logo_url)}" alt="${esc(casa.casa)}">`;
+    // 🔑 A logo tem transparência: sem o fundo branco, o oliva do medalhão
+    // vaza por trás dela. Ver `.marca.com-logo`.
+    $("#marca").classList.add("com-logo");
+  } else {
+    const primeiro = (casa.casa || "Botané").split(" ")[0];
+    $("#marca").innerHTML = `<b>${esc(primeiro)}</b><span>deli e café</span>`;
+    // ⚠️ Sem logo o medalhão volta ao oliva: a tinta do nome é clara, e branco
+    // sobre branco seria um círculo vazio.
+    $("#marca").classList.remove("com-logo");
+  }
+  // ⚠️ **A capa NÃO usa `empresa.cor_primaria`, e isso foi medido na tela.** A
+  // cor cadastrada é #149445 — um verde vivo, que o sistema interno usa como
+  // acento sobre fundo claro. Chapada numa capa de 128px ela briga com o
+  // medalhão escuro e afasta o site justamente do protótipo, que é terroso
+  // (oliva sobre areia). O pedido foi chegar PERTO do protótipo; o gradiente
+  // dele fica.
+
+  // ⚠️ **"Fechado" sozinho é uma porta na cara.** A tarja diz quando abre.
+  $("#estado").textContent = casa.aberta_agora
+    ? "Aberto agora"
+    : casa.proximo ? t("Fechado · abre {quando}", { quando: tHorario(casa.proximo) }) : "Fechado hoje";
+  $("#linha-dias").textContent = (casa.dias || []).length
+    ? casa.dias.map((d) => t(d)).join(" · ")
+      + (casa.hoje ? " · " + t("hoje {horas}", { horas: tHorario(casa.hoje) }) : "")
+    : [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
+  $("#rodape").textContent =
+    [casa.endereco, casa.cidade && `${casa.cidade}/${casa.uf}`].filter(Boolean).join(" · ");
+
+  montarContato();
+  montarPortaDeFidelidade();
+  montarPortaDeContato();
+}
+
+/* 🔑 **A fidelidade fica logo ACIMA do contato** (pedido do dono, 24/09/2026). Só
+   aparece com o programa ligado nesta loja — a API manda `fidelidade` nulo senão. */
+function montarPortaDeFidelidade() {
+  if (!casa.fidelidade) return;
+  const b = document.createElement("button");
+  b.className = "item";
+  b.id = "ir-fidelidade";
+  b.textContent = "Fidelidade";
+  b.addEventListener("click", () => abrirFidelidade());
+  $("#itens").appendChild(b);
+}
+
+/* 🔑 O contato é o ÚLTIMO item da lista, como no protótipo. Com número
+   cadastrado ele abre o WhatsApp direto; sem, leva à tela com o que existe. */
+function montarPortaDeContato() {
+  const zap = zapDeContato();
+  const porta = document.createElement(zap ? "a" : "button");
+  porta.className = "item";
+  if (zap) {
+    porta.href = zap;
+    porta.target = "_blank";
+    porta.rel = "noopener";
+  } else {
+    porta.dataset.ir = "contato";
+  }
+  // ⚠️ Só o rótulo: o subtítulo dizia o que o botão faz, e o botão já diz.
+  porta.textContent = "Entre em Contato";
+  $("#itens").appendChild(porta);
+}
+
+/**
+ * A tela de contato só aparece quando NÃO há WhatsApp cadastrado — com número,
+ * o item da página inicial abre a conversa direto.
+ *
+ * ⚠️ **Aqui os dados NÃO viram `.item`.** Aquele botão é centralizado e só
+ * rótulo, por decisão do dono; telefone, e-mail e endereço são conteúdo, e
+ * conteúdo centralizado sem rótulo vira adivinhação.
+ */
+function montarContato() {
+  const l = [];
+  const zap = zapDeContato();
+  if (zap) {
+    l.push(`<a class="item" href="${zap}" target="_blank" rel="noopener">WhatsApp</a>`);
+  } else {
+    // ⚠️ **Sem número cadastrado, o site DIZ isso** em vez de mostrar um botão
+    // que não leva a lugar nenhum. O número sai de Administração ▸ Empresa.
+    l.push(`<div class="regras ruim">O WhatsApp ainda não está cadastrado. Quem cuida do
+      sistema pode preenchê-lo em Administração ▸ Empresa, e ele aparece aqui na hora.</div>`);
+  }
+  const linha = (rot, valor, href) => `<p class="dado"><span>${rot}</span>${href
+    ? `<a href="${href}">${valor}</a>` : valor}</p>`;
+  if (casa.telefone) l.push(linha("Telefone", esc(casa.telefone), `tel:${esc(casa.telefone)}`));
+  if (casa.email) l.push(linha("E-mail", esc(casa.email), `mailto:${esc(casa.email)}`));
+  if (casa.endereco) {
+    l.push(linha("Onde estamos", esc(casa.endereco)
+      + (casa.cidade ? " — " + esc(casa.cidade) + "/" + esc(casa.uf) : "")));
+  }
+  $("#bloco-contato").innerHTML = l.join("");
+}
+
+/* ---- os cardápios, na PÁGINA INICIAL ---- */
+/** O que o servidor publicou — para achar o catálogo de cada botão. */
+let catalogosDaCasa = [];
+
+async function carregarCatalogos() {
+  let lista = [];
+  try {
+    lista = await pedir(`/catalogos${noIdioma()}`);
+  } catch {
+    return;
+  }
+  if (!lista.length) return;
+  catalogosDaCasa = lista;
+  // ⚠️ Entram DEPOIS do "Reservar" e ANTES do contato — a ordem da lista é a
+  // ordem de importância, e reservar é o que a casa quer que aconteça.
+  // ⚠️ `#ir-fidelidade` primeiro: a fidelidade fica colada no contato (pedido do dono).
+  const contato = $("#itens").querySelector(
+    "#ir-fidelidade, a.item, button.item[data-ir='contato']");
+  lista.forEach((c) => {
+    // 🔑 **Duas origens, dois destinos.** O catálogo de PDF abre o arquivo em
+    // outra aba, como sempre; o montado por produtos abre DENTRO do site, na
+    // tela de cardápio. Quem decide é o servidor, pelo campo `origem`.
+    // ⚠️ **O nome do catálogo, e só ele** — a data de fim e o "abrir o PDF"
+    // eram o texto que não era necessário.
+    // 🔑 **O que exige cadastro chega SEM conteúdo** — só o id. O botão leva à
+    // identificação; quem já se identificou nesta visita abre direto.
+    if (c.origem === "PRODUTOS" || c.exige_cadastro) {
+      const b = document.createElement("button");
+      b.className = "item";
+      b.textContent = c.nome;
+      b.dataset.catalogo = c.id;
+      b.addEventListener("click", () => abrirCatalogo(c));
+      if (contato) $("#itens").insertBefore(b, contato);
+      else $("#itens").appendChild(b);
+      return;
+    }
+    const a = document.createElement("a");
+    a.className = "item";
+    a.href = `${API}${c.arquivo_url}`;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = c.nome;
+    if (contato) $("#itens").insertBefore(a, contato);
+    else $("#itens").appendChild(a);
+  });
+}
+
+/** Abre um catálogo pelo botão da página inicial. */
+async function abrirCatalogo(c) {
+  if (c.exige_cadastro && !eu.identificado) return identificarPara(c);
+  // 🔑 **O Cardápio Vivo abre o FEED, não a tela de seções** (pedido do dono,
+  // 14/10/2026: "ao acessar pelo site, ficaríamos naquela mesma estrutura").
+  // ⚠️ Antes de ir, o site volta ao início e esquece o catálogo aberto: senão o
+  // "voltar" do celular traria a pessoa a `#cardapio`, que reabriria o feed — e ela
+  // ficaria presa sem conseguir voltar ao site.
+  if (c.cardapio_vivo) {
+    aberto = null;
+    lembrar();
+    history.replaceState(null, "", location.pathname + "#inicio");
+    // 🔑 Vários Cardápios Vivos (117): o que não é o principal vai com `?cardapio=`.
+    const q = new URLSearchParams();
+    if (c.vivo && !c.vivo.principal) q.set("cardapio", c.vivo.slug);
+    if (IDIOMA !== "pt") q.set("idioma", IDIOMA);
+    location.assign(`${WEB}/c/${LOJA}${q.toString() ? `?${q}` : ""}`);
+    return;
+  }
+  if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
+  aberto = { id: c.id, secao: null };
+  lembrar();
+  if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
+  return mostrarCardapio(c.nome, () =>
+    pedir(`/catalogos/${c.id}/abrir${noIdioma()}`, { telefone: eu.telefone })
+      .then((r) => r.cardapio));
+}
+
+/**
+ * Depois da identificação, os PDFs que exigem cadastro viram links de verdade.
+ *
+ * ⚠️ **Um link, e não um `window.open` no toque seguinte**: abrir aba depois de
+ * esperar o servidor é popup para o celular. Buscando o endereço agora, o toque
+ * seguinte já é num `<a>`, que abre sempre.
+ */
+function destravarCatalogos() {
+  $("#itens").querySelectorAll("button[data-catalogo]").forEach(async (b) => {
+    const c = catalogosDaCasa.find((x) => String(x.id) === b.dataset.catalogo);
+    if (!c || !c.exige_cadastro || c.origem === "PRODUTOS") return;
+    try {
+      const r = await pedir(`/catalogos/${c.id}/abrir`,
+        { telefone: eu.telefone });
+      const a = document.createElement("a");
+      a.className = "item";
+      a.href = `${API}${r.arquivo_url}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = c.nome;
+      b.replaceWith(a);
+    } catch { /* fica o botão: tocar de novo leva à identificação */ }
+  });
+}
+
+/* ---- o cardápio montado ----
+ *
+ * 🔑 **Pedido do dono (22/09/2026):** *"agora devemos apresentar o catálogo na
+ * tela. Usar como exemplo estes dois prints."* A estrutura é a deles; a paleta é
+ * a do site, por decisão do dono.
+ */
+
+/** O cardápio carregado, para a tela da categoria não pedir de novo. */
+let cardapio = null;
+
+const dinheiro = (v) => v === null || v === undefined
+  ? ""
+  : v.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Uma foto do servidor, ou a moldura com o nome quando não há. */
+function moldura(url, nome, classe) {
+  return url
+    ? `<img src="${API}${esc(url)}" alt="${esc(nome)}" loading="lazy">`
+    : `<span class="${classe}">${esc(nome)}</span>`;
+}
+
+function abrirCardapio(id, nome) {
+  return mostrarCardapio(nome, () => pedir(`/catalogos/${id}${noIdioma()}`));
+}
+
+/** Desenha o cardápio; `buscar` diz de onde ele vem (aberto, ou com cadastro). */
+async function mostrarCardapio(nome, buscar) {
+  const caixa = $("#secoes-do-cardapio");
+  $("#t-cardapio").textContent = nome;
+  caixa.innerHTML = `<p class="vazio">Carregando o cardápio…</p>`;
+  ir("cardapio");
+  try {
+    cardapio = await buscar();
+  } catch (e) {
+    caixa.innerHTML = `<p class="vazio">${esc(e.mensagem
+      || "Não conseguimos abrir o cardápio agora.")}</p>`;
+    return;
+  }
+  if (!cardapio.categorias.length) {
+    caixa.innerHTML = `<p class="vazio">Este cardápio ainda não tem itens.</p>`;
+    return;
+  }
+  caixa.innerHTML = "";
+  cardapio.categorias.forEach((c, i) => {
+    const bloco = document.createElement("div");
+    bloco.className = "secao";
+    // ⚠️ A descrição é opcional: sem ela, o parágrafo nem é desenhado — um
+    // espaço em branco entre o título e a foto pareceria falta de carregamento.
+    bloco.innerHTML = `
+      <h3>${esc(c.nome)}</h3>
+      ${c.descricao ? `<p>${esc(c.descricao)}</p>` : ""}
+      <div class="capa-secao">
+        ${moldura(c.foto, c.nome, "sem-foto")}
+        <button class="acessar" type="button">Acessar ›</button>
+      </div>`;
+    bloco.querySelector(".acessar").addEventListener("click", () => abrirSecao(i));
+    // 🔑 A foto inteira também abre: é o alvo maior, e no celular é o que o
+    // dedo acerta.
+    bloco.querySelector(".capa-secao").addEventListener("click", (e) => {
+      if (!e.target.closest(".acessar")) abrirSecao(i);
+    });
+    caixa.appendChild(bloco);
+  });
+}
+
+/** Desenha um item: nome e preço na mesma linha, descrição embaixo. */
+function desenharPrato(item) {
+  const el = document.createElement("div");
+  el.className = "prato";
+  el.innerHTML = `
+    <div class="linha1">
+      <span class="nome">${esc(item.nome)}</span>
+      ${item.preco !== null && item.preco !== undefined
+        ? `<span class="preco">${dinheiro(item.preco)}</span>` : ""}
+    </div>
+    ${item.descricao ? `<p class="desc">${esc(item.descricao)}</p>` : ""}
+    ${item.foto ? `<div class="foto"><img src="${API}${esc(item.foto)}"
+       alt="${esc(item.nome)}" loading="lazy"></div>` : ""}`;
+  // 🔑 O carrinho só existe no cardápio que ACEITA pedido, e só para item com preço: sem
+  // preço não há o que somar, e o servidor recusaria de qualquer jeito.
+  if (podePedir() && item.preco !== null && item.preco !== undefined && item.id) {
+    const caixa = document.createElement("div");
+    caixa.className = "pedir";
+    caixa.dataset.item = item.id;
+    el.appendChild(caixa);
+    desenharControle(caixa, item);
+  }
+  return el;
+}
+
+function abrirSecao(indice) {
+  const c = cardapio.categorias[indice];
+  if (!c) return;
+  if (aberto) { aberto.secao = indice; lembrar(); }
+  $("#t-secao").textContent = c.nome;
+  const desc = $("#secao-descricao");
+  desc.textContent = c.descricao || "";
+  desc.hidden = !c.descricao;
+
+  // 🔑 **A tira de subcategorias**, como no segundo print: fotos redondas que
+  // rolam de lado e levam ao grupo lá embaixo.
+  // ⚠️ Só aparece quando HÁ subcategorias — categoria pode ter produto direto,
+  // e uma tira vazia seria uma faixa de nada no topo da tela.
+  const tira = $("#tira-subcategorias");
+  tira.innerHTML = "";
+  tira.hidden = c.subcategorias.length === 0;
+  c.subcategorias.forEach((sc, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    // ⚠️ **Sem foto, a bolha fica VAZIA — não com duas letras.** A primeira
+    // versão punha `sc.nome.slice(0, 2)` ali, e o que aparecia era "Pr" e "Sa"
+    // soltos dentro de um círculo: parece defeito, não desenho. O nome já está
+    // escrito logo abaixo.
+    b.innerHTML = `<span class="bolha">${sc.foto
+      ? `<img src="${API}${esc(sc.foto)}" alt="" loading="lazy">` : ""}</span>
+                   <span>${esc(sc.nome)}</span>`;
+    b.addEventListener("click", () => {
+      const alvo = document.getElementById(`grupo-${i}`);
+      if (alvo) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    tira.appendChild(b);
+  });
+
+  const pratos = $("#pratos");
+  pratos.innerHTML = "";
+  // 🔑 **Os itens soltos vêm ANTES das subcategorias**: eles são da categoria
+  // inteira, e mostrá-los depois faria parecer que pertencem à última parte.
+  c.itens.forEach((i) => pratos.appendChild(desenharPrato(i)));
+  c.subcategorias.forEach((sc, i) => {
+    const grupo = document.createElement("div");
+    grupo.className = "grupo";
+    grupo.id = `grupo-${i}`;
+    grupo.innerHTML = `<div class="rot-grupo">
+        <span class="bolha-pequena">${sc.foto
+          ? `<img src="${API}${esc(sc.foto)}" alt="" loading="lazy">` : ""}</span>
+        <span>${esc(sc.nome)}</span>
+      </div>`;
+    sc.itens.forEach((it) => grupo.appendChild(desenharPrato(it)));
+    pratos.appendChild(grupo);
+  });
+
+  // ⚠️ **O aviso do preço só aparece se houver preço na tela.** Num cardápio
+  // sem preço nenhum ele seria uma ressalva sobre coisa nenhuma.
+  const temPreco = [...c.itens, ...c.subcategorias.flatMap((x) => x.itens)]
+    .some((i) => i.preco !== null && i.preco !== undefined);
+  const pe = $("#pe-cardapio");
+  pe.textContent = temPreco ? "Preços sujeitos a alteração." : "";
+  pe.hidden = !temPreco;
+
+  ir("secao");
+}
+
+/* ---- o pedido pelo cardápio (migração 101) ----
+ *
+ * 🔑 **Pedido do dono (28/09/2026):** *"o cliente poder realizar pedidos diretamente na
+ * tela de catálogo … um carrinho de compras para enviar pedidos ao sistema."*
+ * ⚠️ **O carrinho mora na ABA** (`sessionStorage`), como a sessão: sobrevive ao F5 e some
+ * quando a aba fecha. Nada vai ao servidor antes de "Enviar".
+ * ⚠️ **Nenhum preço sai daqui**: o site manda o item e a quantidade, e quem calcula o valor
+ * é o servidor. O total desta tela é PRÉVIA.
+ */
+const CARRINHO = "botane.carrinho";
+/** { id_catalogo, chave, itens: { [idItem]: {id, nome, preco, quantidade, observacao} } } */
+let carrinho = null;
+let pedidoModo = null;
+let pedidoPagamento = null;
+let pedidoQuando = "agora";
+
+function lerCarrinho() {
+  try { carrinho = JSON.parse(sessionStorage.getItem(CARRINHO) || "null"); } catch { carrinho = null; }
+}
+function guardarCarrinho() {
+  try {
+    if (carrinho && Object.keys(carrinho.itens).length) sessionStorage.setItem(CARRINHO, JSON.stringify(carrinho));
+    else sessionStorage.removeItem(CARRINHO);
+  } catch { /* sem armazenamento: o carrinho vive só na tela */ }
+}
+lerCarrinho();
+
+/** O cardápio aberto aceita pedido? (o servidor manda `pedidos` nulo quando não). */
+function podePedir() { return !!(cardapio && cardapio.pedidos && aberto); }
+
+function chaveNova() {
+  return (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()).slice(0, 60);
+}
+
+/** O carrinho deste cardápio — um carrinho de OUTRO cardápio não se mistura com este. */
+function carrinhoAtual() {
+  if (!podePedir()) return null;
+  if (!carrinho || carrinho.id_catalogo !== aberto.id) {
+    carrinho = { id_catalogo: aberto.id, chave: chaveNova(), itens: {} };
+  }
+  return carrinho;
+}
+
+function quantidadeDe(idItem) {
+  return carrinho && aberto && carrinho.id_catalogo === aberto.id && carrinho.itens[idItem]
+    ? carrinho.itens[idItem].quantidade : 0;
+}
+
+function mudarQuantidade(item, passo) {
+  const c = carrinhoAtual();
+  if (!c) return;
+  const atual = c.itens[item.id] || { id: item.id, nome: item.nome, preco: item.preco, quantidade: 0, observacao: "" };
+  atual.quantidade = Math.max(0, atual.quantidade + passo);
+  if (atual.quantidade) c.itens[item.id] = atual; else delete c.itens[item.id];
+  // ⚠️ Mudou o carrinho, muda a chave: é OUTRO pedido, e não pode ser confundido com um
+  // envio anterior que o servidor já gravou.
+  c.chave = chaveNova();
+  guardarCarrinho();
+  document.querySelectorAll(`.pedir[data-item="${item.id}"]`).forEach((cx) => desenharControle(cx, item));
+  atualizarBarra();
+}
+
+function desenharControle(caixa, item) {
+  const n = quantidadeDe(item.id);
+  caixa.innerHTML = n
+    ? `<span class="contador"><button type="button" aria-label="tirar um">−</button><b>${n}</b>
+       <button type="button" aria-label="pôr mais um">+</button></span>`
+    : `<button type="button" class="adicionar">Adicionar</button>`;
+  const botoes = caixa.querySelectorAll("button");
+  if (n) {
+    botoes[0].addEventListener("click", () => mudarQuantidade(item, -1));
+    botoes[1].addEventListener("click", () => mudarQuantidade(item, 1));
+  } else {
+    botoes[0].addEventListener("click", () => mudarQuantidade(item, 1));
+  }
+}
+
+function somaDoCarrinho() {
+  if (!carrinho) return { n: 0, total: 0 };
+  return Object.values(carrinho.itens).reduce((s, i) =>
+    ({ n: s.n + i.quantidade, total: s.total + i.quantidade * i.preco }), { n: 0, total: 0 });
+}
+
+function atualizarBarra(tela) {
+  const barra = $("#barra-carrinho");
+  if (!barra) return;
+  const onde = tela || (location.hash || "").slice(1);
+  const { n, total } = somaDoCarrinho();
+  const mostra = podePedir() && carrinho && carrinho.id_catalogo === aberto.id && n > 0
+    && (onde === "cardapio" || onde === "secao");
+  barra.hidden = !mostra;
+  if (mostra) {
+    barra.innerHTML = `<span>${t(n === 1 ? "1 item · R$ {total}" : "{n} itens · R$ {total}",
+      { n, total: dinheiro(total) })}</span><span>Ver pedido ›</span>`;
+  }
+}
+
+function escolher(caixa, valor) {
+  caixa.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.valor === valor)));
+}
+
+function abrirCarrinho() {
+  const cfg = cardapio.pedidos;
+  const c = carrinhoAtual();
+  $("#voltar-carrinho").onclick = () => ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
+
+  const lista = $("#itens-carrinho");
+  const itens = Object.values(c.itens);
+  lista.innerHTML = itens.length ? "" : `<p class="vazio">Seu pedido está vazio. Volte ao cardápio e toque em “Adicionar”.</p>`;
+  itens.forEach((i) => {
+    const linha = document.createElement("div");
+    linha.className = "linha-carrinho";
+    linha.innerHTML = `<div class="topo"><span>${esc(i.nome)}<br><small>R$ ${dinheiro(i.preco)}</small></span>
+        <span class="pedir" data-item="${i.id}"></span></div>
+      <input type="text" maxlength="200" placeholder="Observação deste item (ex.: sem cebola)" value="${esc(i.observacao || "")}">`;
+    const cx = linha.querySelector(".pedir");
+    desenharControle(cx, i);
+    // No carrinho, o contador redesenha a tela inteira: tirar o último item tira a linha.
+    cx.addEventListener("click", () => setTimeout(abrirCarrinho, 0));
+    linha.querySelector("input").addEventListener("change", (e) => {
+      i.observacao = e.target.value.trim();
+      c.chave = chaveNova();
+      guardarCarrinho();
+    });
+    lista.appendChild(linha);
+  });
+
+  // Como receber
+  const modos = $("#modos-pedido");
+  modos.innerHTML = cfg.modos.map((m) =>
+    `<button class="hora texto" type="button" data-valor="${m.valor}" aria-pressed="false">${esc(m.rotulo)}</button>`).join("");
+  if (!pedidoModo || !cfg.modos.some((m) => m.valor === pedidoModo)) pedidoModo = cfg.modos[0].valor;
+  escolher(modos, pedidoModo);
+  modos.onclick = (e) => {
+    const b = e.target.closest("button[data-valor]");
+    if (!b) return;
+    pedidoModo = b.dataset.valor;
+    escolher(modos, pedidoModo);
+    abrirCarrinhoTotais();
+  };
+
+  // Para quando: "o quanto antes", ou um dos dias em que a casa atende.
+  $("#dia-pedido").innerHTML = cfg.dias.map((d) => {
+    const nome = new Date(`${d.dia}T12:00`).toLocaleDateString(LOCALE,
+      { weekday: "short", day: "2-digit", month: "2-digit" });
+    return `<option value="${d.dia}">${esc(nome)} · ${d.abre}–${d.fecha}</option>`;
+  }).join("");
+  $("#quando-pedido").onclick = (e) => {
+    const b = e.target.closest("button[data-quando]");
+    if (!b) return;
+    pedidoQuando = b.dataset.quando;
+    $("#quando-pedido").querySelectorAll("button").forEach((x) =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    $("#agenda-pedido").hidden = pedidoQuando !== "agendar";
+  };
+  $("#agenda-pedido").hidden = pedidoQuando !== "agendar";
+  // ⚠️ Sem dia nenhum aberto na janela, só "o quanto antes" — e o servidor diz se dá.
+  $("#quando-pedido").querySelector('[data-quando="agendar"]').hidden = !cfg.dias.length;
+
+  // Pagamento — fora do sistema: o cliente só diz como vai pagar.
+  const pags = $("#pagamentos-pedido");
+  pags.innerHTML = cfg.pagamentos.map((p) =>
+    `<button class="hora texto" type="button" data-valor="${p.valor}" aria-pressed="false">${esc(p.rotulo)}</button>`).join("");
+  if (!pedidoPagamento || !cfg.pagamentos.some((p) => p.valor === pedidoPagamento)) pedidoPagamento = cfg.pagamentos[0].valor;
+  escolher(pags, pedidoPagamento);
+  pags.onclick = (e) => {
+    const b = e.target.closest("button[data-valor]");
+    if (!b) return;
+    pedidoPagamento = b.dataset.valor;
+    escolher(pags, pedidoPagamento);
+  };
+  const texto = $("#texto-pagamento");
+  texto.hidden = !cfg.texto_pagamento;
+  texto.innerHTML = cfg.texto_pagamento ? `<span>${esc(cfg.texto_pagamento)}</span>` : "";
+
+  avisar("#aviso-pedido", "");
+  abrirCarrinhoTotais();
+  ir("carrinho");
+}
+
+function abrirCarrinhoTotais() {
+  const cfg = cardapio.pedidos;
+  const { total } = somaDoCarrinho();
+  const taxa = pedidoModo === "ENTREGA" ? cfg.taxa_entrega : 0;
+  $("#campo-endereco").hidden = pedidoModo !== "ENTREGA";
+  const falta = cfg.pedido_minimo > 0 && total < cfg.pedido_minimo;
+  $("#totais-pedido").innerHTML = `
+    <p><span>Itens</span><span>R$ ${dinheiro(total)}</span></p>
+    ${taxa ? `<p><span>Entrega</span><span>R$ ${dinheiro(taxa)}</span></p>` : ""}
+    <p class="total"><span>Total</span><span>R$ ${dinheiro(total + taxa)}</span></p>
+    ${falta ? `<p><small>${t("Pedido mínimo: R$ {valor}", { valor: dinheiro(cfg.pedido_minimo) })}</small></p>` : ""}`;
+  $("#enviar-pedido").disabled = !total || falta;
+}
+
+async function enviarPedido() {
+  if (!carrinho || !Object.keys(carrinho.itens).length) return abrirCarrinho();
+  // Quem ainda não se identificou passa pelo telefone e volta direto para o envio.
+  if (!eu.identificado) return identificarPara("pedido");
+  let para = null;
+  if (pedidoQuando === "agendar") {
+    const dia = $("#dia-pedido").value;
+    const hora = $("#hora-pedido").value;
+    if (!dia || !hora) { ir("carrinho"); return avisar("#aviso-pedido", "Escolha o dia e a hora do pedido."); }
+    para = `${dia}T${hora}`;
+  }
+  const endereco = $("#endereco-pedido").value.trim();
+  if (pedidoModo === "ENTREGA" && !endereco) {
+    ir("carrinho");
+    return avisar("#aviso-pedido", "Informe o endereço de entrega.");
+  }
+  $("#enviar-pedido").disabled = true;
+  let r;
+  try {
+    r = await pedir(`/catalogos/${carrinho.id_catalogo}/pedido`, {
+      telefone: eu.telefone, chave: carrinho.chave, modo: pedidoModo,
+      endereco: pedidoModo === "ENTREGA" ? endereco : null, para_quando: para,
+      forma_pagamento: pedidoPagamento, observacao: $("#obs-pedido").value.trim() || null,
+      itens: Object.values(carrinho.itens).map((i) => ({
+        id_item: i.id, quantidade: i.quantidade, observacao: i.observacao || null })),
+    });
+  } catch (e) {
+    $("#enviar-pedido").disabled = false;
+    ir("carrinho");
+    return avisar("#aviso-pedido", e.mensagem || "Não conseguimos enviar o pedido agora.");
+  }
+  $("#enviar-pedido").disabled = false;
+  const cfg = cardapio && cardapio.pedidos;
+  carrinho = null;
+  guardarCarrinho();
+  $("#obs-pedido").value = "";
+  const quando = new Date(r.para_quando).toLocaleString(LOCALE,
+    { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  $("#recibo-pedido").innerHTML = `<span>Pedido nº</span><b>${r.numero}</b>
+    <span>${esc(t(r.modo_rotulo))} · ${esc(quando)}</span>
+    <span>${esc(t("Total: R$ {total} · {pagamento}", { total: dinheiro(r.total), pagamento: t(r.forma_pagamento) }))}</span>`;
+  avisar("#aviso-pedido-pronto",
+    t("A casa vai conferir e confirmar seu pedido. Acompanhe em “Meus pedidos”")
+    + (cfg && cfg.texto_pagamento ? ". " + cfg.texto_pagamento : "."), false);
+  const zap = pedidoPagamento === "WHATSAPP" && linkZap(
+    `Olá! Fiz o pedido nº ${r.numero} pelo site e quero combinar o pagamento.`);
+  $("#zap-pedido").innerHTML = zap
+    ? `<a class="item destaque" href="${zap}" target="_blank" rel="noopener">Combinar o pagamento pelo WhatsApp</a>` : "";
+  ir("pedido-pronto");
+}
+
+const SITUACAO_DO_PEDIDO = {
+  NOVO: "Aguardando a casa confirmar", CONFIRMADO: "Confirmado", ENTREGUE: "Entregue",
+  RECUSADO: "Recusado", CANCELADO: "Cancelado",
+};
+
+async function mostrarMeusPedidos() {
+  if (!eu.identificado) return identificarPara("meus-pedidos");
+  const caixa = $("#lista-meus-pedidos");
+  caixa.innerHTML = `<p class="vazio">Carregando…</p>`;
+  ir("meus-pedidos");
+  let r;
+  try {
+    r = await pedir("/pedidos/meus", { telefone: eu.telefone });
+  } catch (e) {
+    caixa.innerHTML = "";
+    return avisar("#aviso-meus-pedidos", e.mensagem || "Não conseguimos buscar seus pedidos.");
+  }
+  avisar("#aviso-meus-pedidos", "");
+  if (!r.pedidos.length) {
+    caixa.innerHTML = `<p class="vazio">Você ainda não fez pedidos por aqui.</p>`;
+    return;
+  }
+  caixa.innerHTML = "";
+  r.pedidos.forEach((p) => {
+    const quando = new Date(p.para_quando).toLocaleString(LOCALE,
+      { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const el = document.createElement("div");
+    el.className = "pedido-meu";
+    el.innerHTML = `<span class="situacao">${esc(t("Nº {numero} · {situacao}",
+      { numero: p.numero, situacao: t(SITUACAO_DO_PEDIDO[p.situacao] || p.situacao) }))}</span>
+      <span>${esc(t(p.modo_rotulo))} · ${esc(quando)} · R$ ${dinheiro(p.total)}</span>
+      <small>${p.itens.map((i) => `${i.quantidade}× ${esc(i.nome)}`).join(", ")}</small>
+      ${p.alterado ? `<small>A casa ajustou os itens deste pedido.</small>` : ""}
+      ${p.motivo ? `<small>${esc(t("Motivo: {motivo}", { motivo: p.motivo }))}</small>` : ""}`;
+    if (p.situacao === "NOVO") {
+      const b = document.createElement("button");
+      b.className = "item";
+      b.textContent = "Cancelar este pedido";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await pedir(`/pedidos/${p.numero}/cancelar`, { telefone: eu.telefone });
+          mostrarMeusPedidos();
+        } catch (e) {
+          b.disabled = false;
+          avisar("#aviso-meus-pedidos", e.mensagem || "Não conseguimos cancelar agora.");
+        }
+      });
+      el.appendChild(b);
+    }
+    caixa.appendChild(el);
+  });
+}
+
+/* ---- quem reserva ----
+ *
+ * 🔑 **Pedido do dono (21/09/2026):** *"para a realização de reserva, precisamos
+ * de um cadastro simples do usuário. Clica em Reserve sua Mesa, abre uma tela
+ * com o número do telefone; caso não tenha cadastrada, realiza o cadastro com
+ * Nome, telefone, gênero e cidade."*
+ *
+ * ⚠️ **O site NÃO guarda quem é a pessoa entre visitas.** Nada de localStorage:
+ * um celular emprestado marcaria a mesa no nome de quem o emprestou. O telefone
+ * é redigitado, e é ele que identifica.
+ */
+let reservaOnline = { aceita: false };
+const eu = { telefone: "", nome: "", cadastrado: false, identificado: false };
+
+/**
+ * Para onde a identificação leva: a reserva, ou um catálogo que exige cadastro.
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"adicionar a validação do cliente ao
+ * acessar o catálogo."* A tela de telefone é a MESMA — duas telas de cadastro
+ * divergiriam na primeira regra nova. Muda só o título, o botão e o destino.
+ */
+let destino = "reserva";
+
+/**
+ * 🔑 **A SESSÃO da aba** (pedido do dono, 24/09/2026: *"trabalhar com sessão —
+ * entrei num catálogo que exigia cadastro; ao entrar na reserva, não preciso
+ * logar novamente"*), e o F5 que volta ao mesmo lugar com dado FRESCO.
+ *
+ * ⚠️ **`sessionStorage`, não `localStorage`.** A decisão de 21/09 era não guardar
+ * nada entre visitas — celular emprestado marcaria mesa no nome do dono. A aba
+ * é o meio-termo: sobrevive ao F5 e some quando a aba fecha. E a tela de
+ * reserva tem o "Não é você?" para quem pegou o celular de alguém.
+ * ⚠️ **Guarda QUEM é e ONDE estava, nunca o conteúdo.** O cardápio é buscado de
+ * novo a cada F5 — é assim que o produto recém-cadastrado aparece.
+ */
+const SESSAO = "botane.sessao";
+/** O catálogo aberto e a seção dentro dele, para o F5 voltar ao mesmo ponto. */
+let aberto = null;
+
+function lembrar() {
+  try {
+    sessionStorage.setItem(SESSAO, JSON.stringify({
+      eu: { telefone: eu.telefone, nome: eu.nome, cadastrado: eu.cadastrado,
+            identificado: eu.identificado },
+      aberto,
+      loja: lojaEscolhida ? LOJA : null,
+    }));
+  } catch { /* aba privada ou armazenamento bloqueado: o site segue sem memória */ }
+}
+
+function recordar() {
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null");
+    if (!salvo) return;
+    Object.assign(eu, salvo.eu || {});
+    aberto = salvo.aberto || null;
+    if (salvo.loja) { LOJA = String(salvo.loja); lojaEscolhida = true; }
+  } catch { /* idem */ }
+}
+
+/** "Não é você?": esquece a pessoa desta aba e recomeça pelo telefone. */
+function esquecer() {
+  // ⚠️ Esquece a PESSOA, não a casa: quem troca de telefone continua na loja
+  // que escolheu.
+  Object.assign(eu, { telefone: "", nome: "", cadastrado: false, identificado: false });
+  lembrar();
+  // ⚠️ Recarrega em vez de limpar à mão: os PDFs destravados viraram links, e
+  // voltar cada um a botão é o tipo de detalhe que se esquece.
+  location.replace(location.pathname + "#quem");
+  location.reload();
+}
+
+async function saberSeAceita() {
+  try {
+    reservaOnline = await pedir("/reserva");
+  } catch {
+    reservaOnline = { aceita: false };
+  }
+}
+
+function avisar(onde, texto, ruim = true) {
+  const caixa = $(onde);
+  caixa.hidden = !texto;
+  caixa.className = ruim ? "regras ruim" : "regras";
+  // ⚠️ Dentro de um `<span>`: `.regras` é flex em coluna, e texto solto vira um
+  // item por trecho — a frase sairia quebrada em pedaços empilhados.
+  caixa.innerHTML = "";
+  if (texto) {
+    const linha = document.createElement("span");
+    linha.textContent = texto;
+    caixa.appendChild(linha);
+  }
+}
+
+/** O passo em que a tela está: "fone" pergunta o número, "dados" o resto. */
+let passo = "fone";
+
+function voltarAoTelefone() {
+  passo = "fone";
+  $("#bloco-quem").hidden = true;
+  $("#bloco-novo").hidden = true;
+  $("#bloco-termo").hidden = true;
+  $("#aceite-termo").checked = false;
+  $("#avancar").hidden = false;
+  $("#avancar").textContent = "Continuar";
+  avisar("#aviso-quem", "");
+  // ⚠️ Três destinos: a reserva, a fidelidade (texto fixo) e um catálogo (objeto).
+  if (destino === "fidelidade") {
+    $("#t-quem").textContent = "Fidelidade";
+    $("#sub-quem").textContent = checkinToken
+      ? "Faça seu check-in: comece pelo telefone."
+      : "Veja suas visitas: comece pelo telefone.";
+    return;
+  }
+  if (destino === "pedido" || destino === "meus-pedidos") {
+    $("#t-quem").textContent = destino === "pedido" ? "Seu pedido" : "Meus pedidos";
+    $("#sub-quem").textContent = "A casa reconhece você pelo telefone.";
+    return;
+  }
+  const catalogo = destino !== "reserva";
+  $("#t-quem").textContent = catalogo ? destino.nome : "Reserve sua mesa";
+  $("#sub-quem").textContent = catalogo
+    ? "Para abrir este cardápio, a casa pede que você se identifique pelo telefone."
+    : "Comece pelo telefone — é assim que a casa reconhece você.";
+}
+
+/** Leva à tela de telefone, a caminho de `para` ("reserva" ou um catálogo). */
+function identificarPara(para) {
+  destino = para;
+  voltarAoTelefone();
+  ir("quem");
+  $("#fone").focus();
+}
+
+async function consultarTelefone() {
+  const fone = $("#fone").value.trim();
+  if (!fone) return avisar("#aviso-quem", "Digite seu telefone para continuar.");
+  $("#avancar").disabled = true;
+  let r;
+  try {
+    // ⚠️ `/cliente/telefone`, e não `/reserva/telefone`: esta serve também ao
+    // catálogo, numa casa que não marca mesa pelo site.
+    r = await pedir("/cliente/telefone", { telefone: fone });
+  } catch (e) {
+    $("#avancar").disabled = false;
+    // ⚠️ **A mensagem do servidor é a que vale** — é ela que sabe dizer que
+    // falta o DDD, ou que houve tentativa demais em pouco tempo.
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos consultar agora.");
+  }
+  $("#avancar").disabled = false;
+  eu.telefone = fone;
+  eu.cadastrado = !!r.cadastrado;
+  // 🔑 **O telefone BASTA** (pedido do dono, 24/09/2026: *"não solicitar a
+  // confirmação do nome, somente com o telefone já confirmamos os dados"*). Até
+  // ali quem tinha cadastro digitava o próprio nome para conferir — a decisão
+  // de 21/09 era "confirma, não revela". O dono trocou atrito por risco: quem
+  // souber um telefone alheio entra como aquela pessoa.
+  if (eu.cadastrado) {
+    eu.nome = r.nome || "";
+    eu.identificado = true;
+    lembrar();
+    destravarCatalogos();
+    return seguirIdentificado();
+  }
+  passo = "dados";
+  $("#bloco-quem").hidden = false;
+  $("#bloco-novo").hidden = !r.cadastro_completo;
+  $("#bloco-termo").hidden = false;
+  avisar("#aviso-quem", "Primeira vez por aqui? Conte quem é você.", false);
+  $("#avancar").textContent = destino === "reserva" ? "Escolher dia e horário"
+    : destino === "fidelidade" ? "Ver meu cartão"
+    : destino === "pedido" ? "Enviar o pedido"
+    : destino === "meus-pedidos" ? "Ver meus pedidos" : "Abrir o cardápio";
+  $("#nome-cliente").focus();
+}
+
+async function guardarDados() {
+  const nome = $("#nome-cliente").value.trim();
+  if (nome.length < 2) return avisar("#aviso-quem", "Diga seu nome para continuar.");
+  if (!$("#bloco-novo").hidden) {
+    if (!$("#genero").value) return avisar("#aviso-quem", "Escolha uma opção de gênero.");
+    if (!$("#cidade").value.trim()) return avisar("#aviso-quem", "Diga sua cidade.");
+    if (!$("#nascimento").value) return avisar("#aviso-quem", "Diga sua data de nascimento.");
+  }
+  // ⚠️ A API confere de novo: a caixa marcada no navegador não prova nada.
+  if (!$("#aceite-termo").checked) {
+    return avisar("#aviso-quem",
+      "Para seguir com o cadastro, marque que está de acordo com o termo de consentimento.");
+  }
+  eu.aceite = true;
+  eu.nome = nome;
+  eu.genero = $("#bloco-novo").hidden ? null : $("#genero").value;
+  eu.cidade = $("#bloco-novo").hidden ? null : $("#cidade").value.trim();
+  eu.nascimento = $("#bloco-novo").hidden ? null : $("#nascimento").value;
+  if (destino !== "reserva") return identificarParaCatalogo();
+  // ⚠️ Quem é NOVO e vai reservar só vira cadastro ao confirmar a mesa — a
+  // reserva e o cadastro nascem na mesma transação.
+  $("#suas-reservas").hidden = true;
+  avisar("#aviso-quem", "");
+  abrirReserva();
+}
+
+/** Já se sabe quem é: segue para onde a pessoa queria ir. */
+async function seguirIdentificado() {
+  avisar("#aviso-quem", "");
+  if (destino === "fidelidade") return mostrarCartao();
+  if (destino === "pedido") return enviarPedido();
+  if (destino === "meus-pedidos") return mostrarMeusPedidos();
+  if (destino === "reserva") {
+    $("#voltar-reserva").dataset.ir = "inicio";
+    await carregarMinhas();
+    return abrirReserva();
+  }
+  return entregarCatalogo(destino, eu.nome);
+}
+
+/** Busca e desenha "Suas reservas". Devolve a frase de erro, se houver. */
+/**
+ * Confere (ou cadastra) quem é, e abre o catálogo que pediu isso.
+ *
+ * ⚠️ **Aqui o cadastro nasce JÁ**, e não na reserva: não há reserva nenhuma a
+ * gravar junto, e o catálogo só abre para quem existe.
+ */
+async function identificarParaCatalogo() {
+  $("#avancar").disabled = true;
+  let quem;
+  try {
+    quem = await pedir("/cliente", {
+      telefone: eu.telefone, nome: eu.nome, genero: eu.genero,
+      cidade: eu.cidade, nascimento: eu.nascimento, aceite_termo: !!eu.aceite,
+    });
+  } catch (e) {
+    $("#avancar").disabled = false;
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos conferir seu cadastro.");
+  }
+  $("#avancar").disabled = false;
+  eu.cadastrado = true;
+  eu.identificado = true;
+  eu.nome = quem.nome || eu.nome;
+  lembrar();
+  destravarCatalogos();
+  if (destino === "fidelidade") return mostrarCartao();
+  if (destino === "pedido") return enviarPedido();
+  if (destino === "meus-pedidos") return mostrarMeusPedidos();
+  return entregarCatalogo(destino, eu.nome);
+}
+
+/** Abre o catálogo que pediu identificação: o cardápio na tela, ou o link do PDF. */
+async function entregarCatalogo(alvo, nome) {
+  if (alvo.origem === "PRODUTOS") return abrirCatalogo(alvo);
+
+  // ⚠️ **O PDF vira um LINK na tela, não um `window.open`.** Depois de esperar a
+  // resposta do servidor o toque já "passou", e o celular bloqueia a aba nova
+  // como popup — a pessoa se identificaria e nada abriria.
+  let r;
+  try {
+    r = await pedir(`/catalogos/${alvo.id}/abrir`, { telefone: eu.telefone });
+  } catch (e) {
+    return avisar("#aviso-quem", e.mensagem || "Não conseguimos abrir o cardápio agora.");
+  }
+  $("#bloco-quem").hidden = true;
+  $("#bloco-novo").hidden = true;
+  $("#avancar").hidden = true;
+  const caixa = $("#aviso-quem");
+  caixa.hidden = false;
+  caixa.className = "regras";
+  // O nome do CADASTRO, não o digitado: quem conferiu com "maria" é a Maria.
+  caixa.innerHTML = `<span>${nome ? t("Pronto, {nome}!", { nome: esc(nome) }) : t("Pronto!")}</span>
+    <a class="item destaque" href="${API}${esc(r.arquivo_url)}" target="_blank"
+       rel="noopener">${t("Abrir {nome}", { nome: esc(alvo.nome) })}</a>`;
+}
+
+async function carregarMinhas() {
+  let r;
+  try {
+    r = await pedir("/reserva/minhas", { telefone: eu.telefone });
+  } catch {
+    // ⚠️ Falha aqui só deixa a lista de fora — não é motivo para impedir uma
+    // reserva nova.
+    return null;
+  }
+  const lista = r.reservas || [];
+  $("#suas-reservas").hidden = !lista.length;
+  $("#lista-minhas").innerHTML = lista.map((x) => {
+    const quando = new Date(x.data + "T12:00")
+      .toLocaleDateString(LOCALE, { weekday: "short", day: "2-digit", month: "2-digit" });
+    return `<div class="minha">
+      <div><b>${esc(quando)} · ${esc(x.hora)}</b>
+        <small>${t(x.pessoas === 1 ? "{n} pessoa" : "{n} pessoas", { n: x.pessoas })}${
+          x.observacao ? " · " + esc(x.observacao) : ""}</small></div>
+      <div class="lado">
+        <span class="estado-minha">${x.confirmada ? "Confirmada" : "Aguardando a casa"}</span>
+        <button class="cancelar-minha" type="button"
+                data-data="${esc(x.data)}" data-hora="${esc(x.hora)}">Cancelar</button>
+      </div>
+    </div>`;
+  }).join("");
+  return null;
+}
+
+/* 🔑 **Cancelar em dois toques.** O site não tem `confirm()` confiável, e um
+   toque só cancelaria a mesa de quem esbarrou no botão rolando a tela. O
+   primeiro toque pergunta; o segundo, no mesmo botão, cancela. */
+$("#lista-minhas").addEventListener("click", async (e) => {
+  const b = e.target.closest(".cancelar-minha");
+  if (!b || b.disabled) return;
+  if (!b.hasAttribute("data-certeza")) {
+    $("#lista-minhas").querySelectorAll("[data-certeza]").forEach((x) => {
+      x.removeAttribute("data-certeza");
+      x.textContent = "Cancelar";
+    });
+    b.setAttribute("data-certeza", "");
+    b.textContent = "Cancelar mesmo?";
+    return;
+  }
+  b.disabled = true;
+  b.textContent = "Cancelando…";
+  try {
+    await pedir("/reserva/cancelar", {
+      telefone: eu.telefone, data: b.dataset.data, hora: b.dataset.hora,
+    });
+  } catch (erro) {
+    b.disabled = false;
+    b.removeAttribute("data-certeza");
+    b.textContent = "Cancelar";
+    avisar("#aviso-reserva", erro.mensagem || "Não conseguimos cancelar agora.");
+    return;
+  }
+  await carregarMinhas();
+  // ⚠️ A mesa que soltou pode ser justamente a do dia na tela: sem recarregar,
+  // o horário continuaria fora da lista.
+  await buscarHorarios();
+  avisar("#aviso-reserva", "Reserva cancelada.", false);
+});
+
+$("#avancar").addEventListener("click", () => {
+  if (passo === "fone") consultarTelefone();
+  else guardarDados();
+});
+// ⚠️ Mudar o telefone depois de consultado volta ao começo: continuar com os
+// dados de um número e gravar em outro é o jeito de a mesa sair no nome errado.
+$("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTelefone(); });
+
+/* ---- a fidelidade ---- */
+// 🔑 **O QR da mesa traz a loja e o segredo do programa** (`?loja=1&checkin=…`).
+// Lidos UMA vez, na chegada, e tirados do endereço: o F5 não repete o check-in
+// (o servidor recusaria, mas a pessoa leria "já fez hoje" sem ter feito nada).
+let checkinToken = null;
+/** O catálogo que veio no QR da mesa (`&catalogo=`), para abrir direto. */
+let catalogoDoQr = null;
+(function lerQrDaMesa() {
+  // 🔑 **Todo QR do Portal diz a loja** (27/09/2026, tela de QR codes): site, reserva,
+  // cardápio e fidelidade. O de cardápio diz também QUAL catálogo; o de fidelidade
+  // traz o segredo do programa.
+  const q = new URLSearchParams(location.search);
+  if (!q.get("loja") && !q.get("checkin")) return;
+  if (q.get("checkin")) checkinToken = q.get("checkin");
+  if (q.get("catalogo")) catalogoDoQr = Number(q.get("catalogo"));
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
+    if (q.get("loja")) salvo.loja = q.get("loja");
+    if (catalogoDoQr) salvo.aberto = { id: catalogoDoQr, secao: null };
+    sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
+  } catch { /* sem memória: o `data-loja` já resolve */ }
+  // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
+  if (q.get("loja")) document.documentElement.dataset.loja = q.get("loja");
+  // Tira os parâmetros do endereço: o F5 não repete o check-in, e o link que a pessoa
+  // compartilhar não carrega o segredo da mesa.
+  const tela = checkinToken ? "#fidelidade" : location.hash;
+  history.replaceState(null, "", location.pathname + tela);
+})();
+
+function abrirFidelidade() {
+  destino = "fidelidade";
+  if (eu.identificado) return mostrarCartao();
+  identificarPara("fidelidade");
+}
+
+/** O último cartão recebido — diz se a casa exige a localização no check-in. */
+let cartaoAtual = null;
+
+/**
+ * A posição do celular, para o servidor medir a distância até a casa (migração 092).
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"validar a localização ao ler o QR code e contar a
+ * visita."* ⚠️ Quem decide é a API; aqui só se pergunta ao aparelho. Recusa ou falha
+ * viram uma frase — nunca um check-in mudo que "não aconteceu".
+ */
+function pedirLocalizacao() {
+  return new Promise((pronto, falhou) => {
+    if (!navigator.geolocation) {
+      return falhou(new Error(t("Este navegador não informa a localização.")));
+    }
+    navigator.geolocation.getCurrentPosition(
+      (p) => pronto({
+        latitude: p.coords.latitude, longitude: p.coords.longitude, precisao: p.coords.accuracy,
+      }),
+      (e) => falhou(new Error(t(e.code === e.PERMISSION_DENIED
+        ? "Para contar a visita, permita o acesso à localização — ela só confirma que você "
+          + "está na casa. Libere nas configurações do navegador e toque em Fazer check-in."
+        : "Não conseguimos obter sua localização. Ligue o GPS e toque em Fazer check-in."))),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 },
+    );
+  });
+}
+
+function desenharCartao(c) {
+  cartaoAtual = c;
+  $("#sub-fidelidade").textContent =
+    t("A cada {visitas} visitas: {premio}.", { visitas: c.visitas, premio: c.premio });
+  const total = c.visitas;
+  // 🔑 Os carimbos: feitos, a fazer e o último marcado como o do prêmio.
+  $("#carimbos").style.gridTemplateColumns = `repeat(${Math.min(total, 5)}, 1fr)`;
+  $("#carimbos").innerHTML = Array.from({ length: total }, (_, i) =>
+    `<span class="carimbo${i < c.no_cartao ? " feito" : ""}${i === total - 1 ? " premio" : ""}"
+       aria-label="${t(i < c.no_cartao ? "visita {n} feita" : "visita {n}", { n: i + 1 })}">${
+       i < c.no_cartao ? "✓" : i === total - 1 ? "★" : i + 1}</span>`).join("");
+  $("#falta").innerHTML = c.faltam
+    ? `<b>${t("{feitas} de {total}", { feitas: c.no_cartao, total })}</b>${t(c.faltam === 1
+      ? "falta 1 visita para o prêmio" : "faltam {n} visitas para o prêmio", { n: c.faltam })}`
+    : `<b>${t("Cartão completo!")}</b>`;
+  const disponiveis = c.premios.filter((p) => p.status === "DISPONIVEL");
+  const outros = c.premios.filter((p) => p.status !== "DISPONIVEL").slice(0, 3);
+  $("#premios-fidelidade").innerHTML = [...disponiveis, ...outros].map((p) => `
+    <div class="premio-ganho${p.status === "DISPONIVEL" ? "" : " fora"}">
+      <b>${esc(p.premio)}</b>
+      ${p.status === "DISPONIVEL"
+        ? `<span>Mostre este código no caixa:</span><span class="codigo">${esc(p.codigo)}</span>
+           <span>${esc(t(p.vale_de > diaIso(0)
+             ? "Vale a partir da sua próxima visita ({de}), até {ate}, de {consumo}."
+             : "Vale até {ate}, de {consumo}.", {
+               de: p.vale_de.split("-").reverse().join("/"),
+               ate: p.vence_em.split("-").reverse().join("/"), consumo: p.consumo }))}</span>`
+        : `<span>${t(p.status === "USADO" ? "Já usado" : "Venceu")} · ${esc(p.codigo)}</span>`}
+    </div>`).join("");
+  $("#regra-fidelidade").textContent =
+    t("As visitas contam de {pontua}, uma por dia, com o check-in pelo QR code da mesa",
+      { pontua: c.pontua }) +
+    (c.exige_local ? t(", estando na casa (o site confirma pela localização). ") : ". ") +
+    t("O prêmio vale da visita seguinte em diante, por {dias} dias, de {consumo} — "
+      + "e a visita em que você usa o prêmio não conta carimbo.",
+      { dias: c.validade_dias, consumo: c.consumo });
+  const podeCheckin = !!checkinToken && !c.hoje_ja_fez;
+  $("#termo-fidelidade").hidden = !(podeCheckin && c.precisa_termo);
+  $("#fazer-checkin").hidden = !podeCheckin;
+  // No caixa, o botão PEDE o código; a visita conta quando o código é digitado.
+  $("#fazer-checkin").textContent = c.metodo === "CODIGO_CAIXA" ? "Pedir código no caixa"
+    : "Fazer check-in";
+  if (!podeCheckin) $("#bloco-codigo").hidden = true;
+}
+
+async function mostrarCartao(recado) {
+  ir("fidelidade");
+  avisar("#aviso-fidelidade", "");
+  let c;
+  try {
+    c = await pedir("/fidelidade/cartao", { telefone: eu.telefone });
+  } catch (e) {
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos abrir seu cartão agora.");
+  }
+  desenharCartao(c);
+  if (recado) avisar("#aviso-fidelidade", recado, false);
+  // 🔑 **Veio pelo QR e já aceitou o termo em vigor: o check-in é automático.** Ler
+  // o QR já é o pedido — um segundo toque só atrasaria quem está na mesa.
+  else if (checkinToken && !c.hoje_ja_fez && !c.precisa_termo) fazerCheckin();
+  else if (checkinToken && c.hoje_ja_fez) {
+    avisar("#aviso-fidelidade", "Seu check-in de hoje já está feito. Até a próxima visita!", false);
+  }
+}
+
+async function fazerCheckin() {
+  const precisa = !$("#termo-fidelidade").hidden;
+  if (precisa && !$("#aceite-fidelidade").checked) {
+    return avisar("#aviso-fidelidade",
+      "Para participar, marque que está de acordo com o termo de consentimento.");
+  }
+  if (cartaoAtual && cartaoAtual.metodo === "CODIGO_CAIXA") return pedirCodigo(precisa);
+  $("#fazer-checkin").disabled = true;
+  let posicao = {};
+  if (cartaoAtual && cartaoAtual.exige_local) {
+    avisar("#aviso-fidelidade", "Confirmando que você está na casa…", false);
+    try {
+      posicao = await pedirLocalizacao();
+    } catch (e) {
+      $("#fazer-checkin").disabled = false;
+      // ⚠️ O botão aparece: depois de liberar a permissão, a pessoa tenta de novo.
+      $("#fazer-checkin").hidden = false;
+      return avisar("#aviso-fidelidade", e.message);
+    }
+  }
+  let r;
+  try {
+    r = await pedir("/fidelidade/checkin", {
+      telefone: eu.telefone, token: checkinToken, aceite_termo: precisa, ...posicao,
+    });
+  } catch (e) {
+    $("#fazer-checkin").disabled = false;
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos fazer o check-in agora.");
+  }
+  $("#fazer-checkin").disabled = false;
+  desenharCartao(r);
+  avisar("#aviso-fidelidade", r.premio_novo
+    ? t("🎉 Cartão completo! Você ganhou: {premio}. Ele vale a partir da sua próxima "
+      + "visita — mostre o código {codigo} no caixa.", r.premio_novo)
+    : t(r.faltam === 1 ? "Check-in feito! Falta 1 visita." : "Check-in feito! Faltam {n} visitas.",
+      { n: r.faltam }), false);
+}
+$("#fazer-checkin").addEventListener("click", () => fazerCheckin());
+
+/** O QR do CAIXA: abre o pedido de código. O código aparece só na tela do atendente. */
+async function pedirCodigo(aceite) {
+  $("#fazer-checkin").disabled = true;
+  let r;
+  try {
+    r = await pedir("/fidelidade/codigo/pedir", {
+      telefone: eu.telefone, token: checkinToken, aceite_termo: !!aceite,
+    });
+  } catch (e) {
+    $("#fazer-checkin").disabled = false;
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos pedir o código agora.");
+  }
+  $("#fazer-checkin").disabled = false;
+  $("#fazer-checkin").hidden = true;
+  $("#termo-fidelidade").hidden = true;
+  $("#bloco-codigo").hidden = false;
+  const ate = new Date(r.expira_em).toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit" });
+  avisar("#aviso-fidelidade", t("Peça o código no caixa e digite aqui. Ele vale até {ate}.", { ate }), false);
+  $("#codigo-caixa").focus();
+}
+
+async function confirmarCodigo() {
+  const codigo = $("#codigo-caixa").value.trim();
+  if (codigo.length < 4) return avisar("#aviso-fidelidade", "Digite o código que o caixa passou.");
+  $("#confirmar-codigo").disabled = true;
+  let r;
+  try {
+    r = await pedir("/fidelidade/codigo/confirmar", { telefone: eu.telefone, codigo });
+  } catch (e) {
+    $("#confirmar-codigo").disabled = false;
+    $("#codigo-caixa").select();
+    return avisar("#aviso-fidelidade", e.mensagem || "Não conseguimos confirmar agora.");
+  }
+  $("#confirmar-codigo").disabled = false;
+  $("#bloco-codigo").hidden = true;
+  $("#codigo-caixa").value = "";
+  desenharCartao(r);
+  const selos = r.selos > 1 ? t("{n} selos", { n: r.selos }) : t("1 selo");
+  avisar("#aviso-fidelidade", r.premio_novo
+    ? t("🎉 Visita confirmada (+{selos}) e cartão completo! Você ganhou: {premio}. "
+      + "Ele vale a partir da sua próxima visita — mostre o código {codigo} no caixa.",
+      { selos, ...r.premio_novo })
+    : t("Visita confirmada: +{selos}! Faltam {n}.", { selos, n: r.faltam }), false);
+}
+$("#confirmar-codigo").addEventListener("click", () => confirmarCodigo());
+$("#codigo-caixa").addEventListener("keydown", (e) => { if (e.key === "Enter") confirmarCodigo(); });
+$("#ver-termo-fidelidade").addEventListener("click", (e) => {
+  e.preventDefault();
+  abrirTermo();
+});
+
+/* ---- o termo de consentimento ---- */
+// 🔑 **O texto vem da API** (`/termo`), com a versão que o aceite grava: o que o
+// cliente lê e o que o cadastro diz que ele aceitou saem do mesmo lugar.
+// Busca uma vez, na primeira abertura — quem já é cliente nunca paga por isto.
+let termoCarregado = false;
+async function abrirTermo() {
+  $("#termo").showModal();
+  if (termoCarregado) return;
+  try {
+    const t = await pedir("/termo");
+    $("#t-termo").textContent = t.titulo;
+    $("#texto-termo").innerHTML = t.secoes.map((s) =>
+      (s.titulo ? `<h4>${esc(s.titulo)}</h4>` : "")
+      + (s.paragrafos || []).map((p) => `<p>${esc(p)}</p>`).join("")
+      + (s.itens ? `<ul>${s.itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : ""),
+    ).join("");
+    termoCarregado = true;
+  } catch {
+    $("#texto-termo").innerHTML = "<p>Não conseguimos carregar o termo agora. Tente de novo.</p>";
+  }
+}
+$("#ver-termo").addEventListener("click", (e) => {
+  e.preventDefault(); // dentro do rótulo: sem isto, o toque marcaria a caixa
+  abrirTermo();
+});
+$("#fechar-termo").addEventListener("click", () => $("#termo").close());
+$("#concordar-termo").addEventListener("click", () => {
+  $("#aceite-termo").checked = true;
+  $("#aceite-fidelidade").checked = true;
+  $("#termo").close();
+  avisar("#aviso-quem", "");
+});
+// Tocar fora da caixa fecha, como qualquer janela do celular.
+$("#termo").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+
+/* ---- os horários que a casa tem livres ---- */
+let buscando = null;
+async function buscarHorarios() {
+  const dia = $("#dia").value;
+  const pessoas = Number($("#pessoas").value || 0);
+  const caixa = $("#horarios");
+  const aviso = $("#aviso-reserva");
+  aviso.hidden = true;
+  if (!dia || !pessoas) {
+    caixa.innerHTML = `<span class="vazio">Escolha o dia e quantas pessoas.</span>`;
+    return;
+  }
+  caixa.innerHTML = `<span class="vazio">Procurando mesa…</span>`;
+  // ⚠️ A última busca é a que vale: digitar "12" em "pessoas" dispara duas, e
+  // sem isto a resposta do "1" podia chegar depois e mandar na tela.
+  const minha = Symbol();
+  buscando = minha;
+  let r;
+  try {
+    r = await pedir(`/horarios?dia=${dia}&pessoas=${pessoas}`);
+  } catch {
+    if (buscando !== minha) return;
+    caixa.innerHTML = `<span class="vazio">Não conseguimos consultar agora.</span>`;
+    return;
+  }
+  if (buscando !== minha) return;
+
+  if (!r.horarios.length) {
+    caixa.innerHTML = `<span class="vazio">Nenhum horário livre.</span>`;
+    aviso.hidden = false;
+    aviso.textContent = r.motivo || "Não há mesa para este grupo neste dia.";
+    return;
+  }
+  caixa.innerHTML = r.horarios.map((h) =>
+    `<button class="hora" type="button" aria-pressed="false">${esc(h)}</button>`).join("");
+  if (r.teto && pessoas > r.teto) {
+    aviso.hidden = false;
+    aviso.innerHTML = t("Para <b>{n} pessoas</b> a casa acerta no WhatsApp.", { n: pessoas });
+  } else if (r.aviso) {
+    // 🔑 Dia especial (pedido do dono, 24/09/2026): a segunda que é feriado e
+    // abre diz POR QUE abre, e com que horário — o cliente conhece o padrão.
+    aviso.hidden = false;
+    aviso.innerHTML = t("Horário especial neste dia ({abre} às {fecha}): {aviso}.",
+      { abre: esc(r.abre), fecha: esc(r.fecha), aviso: esc(r.aviso) });
+  }
+}
+
+$("#horarios").addEventListener("click", (e) => {
+  const b = e.target.closest(".hora");
+  if (!b) return;
+  $("#horarios").querySelectorAll(".hora")
+    .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  const aviso = $("#aviso-reserva");
+  aviso.hidden = false;
+  horaEscolhida = b.textContent;
+  const quando = new Date($("#dia").value + "T12:00").toLocaleDateString(LOCALE);
+
+  // 🔑 **Com reserva online, o site GRAVA** — e o botão diz isso.
+  if (reservaOnline.aceita) {
+    aviso.className = "regras";
+    aviso.innerHTML = `<span>${t("Você escolheu <b>{hora}</b>, dia {dia}.",
+      { hora: esc(horaEscolhida), dia: esc(quando) })}</span>`;
+    $("#confirmar").hidden = false;
+    return;
+  }
+
+  // ⚠️ **Sem reserva online, a tela NÃO promete o que não faz.** Escolher o
+  // horário aqui não grava nada — dizer "reservado" faria o cliente aparecer na
+  // porta sem mesa.
+  $("#confirmar").hidden = true;
+  const zap = linkZap(mensagem(
+    casa && casa.zap_texto_reserva,
+    `Olá! Queria reservar para {pessoas} pessoas no dia {data} às {hora}.`,
+    { casa: casa ? casa.casa : "Botané", pessoas: $("#pessoas").value,
+      data: quando, hora: horaEscolhida }));
+  // ⚠️ Um `<span>` em volta: `.regras` é flex em coluna, e sem ele o link cai
+  // numa linha só dele, separado da frase que o explica.
+  aviso.innerHTML = zap
+    ? `<span>${t("Você escolheu <b>{hora}</b>. Para confirmar,", { hora: esc(horaEscolhida) })}
+       <a href="${zap}" target="_blank" rel="noopener">mande a mensagem pronta ›</a></span>`
+    : `<span>${t("Você escolheu <b>{hora}</b>. Ligue para a casa para confirmar.",
+      { hora: esc(horaEscolhida) })}</span>`;
+});
+
+/** A hora que a pessoa tocou — o que o "Confirmar" vai gravar. */
+let horaEscolhida = null;
+
+$("#confirmar").addEventListener("click", async () => {
+  if (!horaEscolhida) return;
+  $("#confirmar").disabled = true;
+  let feita;
+  try {
+    feita = await pedir("/reserva", {
+      // ⚠️ O nome só vai para quem é NOVO: o cadastrado é reconhecido pelo telefone.
+      telefone: eu.telefone, nome: eu.cadastrado ? null : eu.nome,
+      genero: eu.genero, cidade: eu.cidade, nascimento: eu.nascimento,
+      aceite_termo: !!eu.aceite,
+      data: $("#dia").value, hora: horaEscolhida,
+      pessoas: Number($("#pessoas").value),
+      // ⚠️ Em branco vai como NULO, não como string vazia: a agenda do balcão
+      // mostra a observação quando ela existe, e uma vazia acenderia uma linha
+      // de recado sem recado nenhum.
+      observacao_cliente: $("#observacao").value.trim() || null,
+    });
+  } catch (e) {
+    $("#confirmar").disabled = false;
+    // ⚠️ **O erro fica NA TELA DO HORÁRIO**, não numa tela de erro: a resposta
+    // costuma ser "esse horário acabou de ser tomado", e a pessoa precisa ver a
+    // lista para escolher outro.
+    // ⚠️ **Recarregar a lista ANTES de avisar**: `buscarHorarios` começa
+    // escondendo `#aviso-reserva`, e na ordem inversa o erro piscava e sumia —
+    // o cliente tocava em Confirmar e nada acontecia.
+    horaEscolhida = null;
+    await buscarHorarios();
+    avisar("#aviso-reserva", e.mensagem || "Não conseguimos marcar agora.");
+    return;
+  }
+  $("#confirmar").disabled = false;
+  $("#confirmar").hidden = true;
+  // A nova entra em "Suas reservas" para quando a pessoa voltar à tela.
+  eu.cadastrado = true;
+  if (feita.nome) eu.nome = feita.nome;
+  // ⚠️ A reserva CADASTROU quem era novo: daqui em diante ela está identificada,
+  // e o catálogo que exige cadastro não pergunta de novo.
+  eu.identificado = true;
+  lembrar();
+  destravarCatalogos();
+  carregarMinhas();
+  const quando = new Date(feita.data + "T12:00").toLocaleDateString(LOCALE);
+  $("#recibo").innerHTML =
+    `<b>${esc(quando)} · ${esc(feita.hora)}</b>
+     <span>${t(feita.pessoas === 1 ? "1 pessoa, em nome de {nome}" : "{n} pessoas, em nome de {nome}",
+       { n: feita.pessoas, nome: esc(feita.nome) })}</span>`;
+  // 🔑 **O texto muda conforme a casa confirme na hora ou vá olhar depois**
+  // (`reserva_config.confirmacao`). Dizer "está reservado" numa casa que
+  // confirma à mão seria prometer o que ela ainda não decidiu.
+  const zap = zapDeContato();
+  $("#aviso-pronto").className = "regras";
+  const falar = zap
+    ? ` <a href="${zap}" target="_blank" rel="noopener">${t("fale com a gente")}</a>.` : "";
+  $("#aviso-pronto").innerHTML = feita.confirmada
+    ? `<span>${t("Sua mesa está reservada. Até lá!")}${
+        zap ? " " + t("Precisando mudar alguma coisa,") + falar : ""}</span>`
+    : `<span>${t("Recebemos seu pedido — a casa confirma em seguida.")}${
+        zap ? " " + t("Se preferir adiantar,") + falar : ""}</span>`;
+  ir("pronto");
+});
+
+/* ---- em que dia a tela de reserva abre ---- */
+
+/** A data local como o `<input type=date>` quer, `dias` à frente de hoje. */
+function diaIso(dias = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+/** Se a pessoa já escolheu o dia à mão, a tela não o troca por ela. */
+let diaTocado = false;
+
+/**
+ * Abre a tela de horários já no dia mais provável.
+ *
+ * 🔑 **Pedido do dono (23/09/2026):** *"ao entrar para reservar, posicionar no
+ * dia corrente, caso aberto ainda."* HOJE quando ainda há horário marcável;
+ * senão AMANHÃ, como sempre foi.
+ * ⚠️ **"Aberto" aqui é "ainda dá para marcar", não a tarja da capa.** Às 17h de
+ * uma casa que fecha às 18h ela está aberta, mas a última reserva já passou —
+ * abrir em hoje mostraria uma lista vazia de cara. Quem responde é a mesma rota
+ * de horários, com o mesmo corte de antecedência da gravação.
+ */
+async function abrirReserva() {
+  ir("reserva");
+  // 🔑 Quem está identificado nesta aba vê quem é — e a saída, para o celular
+  // emprestado. Sem ela, a sessão da aba prenderia o próximo a usar o aparelho.
+  const naoSou = $("#nao-sou-eu");
+  naoSou.hidden = !(eu.identificado && reservaOnline.aceita);
+  if (!naoSou.hidden) {
+    naoSou.innerHTML = (eu.nome ? t("Olá, {nome}!", { nome: esc(eu.nome) }) : t("Olá!")) + " " +
+      `<button type="button" class="link-sair">Não é você? Trocar telefone</button>`;
+    naoSou.querySelector("button").addEventListener("click", esquecer);
+  }
+  if (!diaTocado) {
+    let hoje = null;
+    try {
+      hoje = await pedir(`/horarios?dia=${diaIso(0)}&pessoas=${
+        Number($("#pessoas").value || 0) || 2}`);
+    } catch { /* sem resposta, fica amanhã — o seguro */ }
+    if (!diaTocado) {
+      $("#dia").value = hoje && hoje.horarios.length ? diaIso(0) : diaIso(1);
+    }
+  }
+  buscarHorarios();
+}
+
+/* ---- qual casa ---- */
+
+/**
+ * Decide a loja desta visita: a da sessão, a única que houver, ou a que a
+ * pessoa escolher na tela "Qual casa?". Resolve quando há loja.
+ */
+async function escolherLoja() {
+  try {
+    const r = await fetch(`${API}/publico/lojas`);
+    lojasDaCasa = r.ok ? await r.json() : [];
+  } catch {
+    lojasDaCasa = [];
+  }
+  // ⚠️ Sem a lista (rede, ou API antiga), vale o `data-loja` — o site de antes.
+  if (!lojasDaCasa.length) return;
+  if (lojaEscolhida && lojasDaCasa.some((l) => String(l.id) === LOJA)) return;
+  if (lojasDaCasa.length === 1) {
+    LOJA = String(lojasDaCasa[0].id);
+    return;
+  }
+  return new Promise((pronto) => {
+    $("#lista-lojas").innerHTML = "";
+    lojasDaCasa.forEach((l) => {
+      const b = document.createElement("button");
+      // 🔑 **Só o nome** (pedido do dono, 24/09/2026): o endereço aparece no
+      // rodapé DEPOIS da escolha, que é quando ele diz algo a quem vai à casa.
+      b.className = "item";
+      b.textContent = l.nome;
+      b.addEventListener("click", () => {
+        // ⚠️ O "voltar" do celular reabre esta tela com a loja JÁ carregada:
+        // escolher outra ali precisa recarregar tudo, não só trocar de tela.
+        const trocou = lojaCarregada && String(l.id) !== LOJA;
+        LOJA = String(l.id);
+        lojaEscolhida = true;
+        lembrar();
+        if (trocou) {
+          history.replaceState(null, "", location.pathname);
+          return location.reload();
+        }
+        ir("inicio");
+        pronto();
+      });
+      $("#lista-lojas").appendChild(b);
+    });
+    // ⚠️ A tarja "aberto/fechado" é DA LOJA: antes da escolha, ela não tem
+    // de quem falar.
+    $("#estado").hidden = true;
+    ir("lojas");
+  });
+}
+
+/** "Trocar de loja": esquece a casa (a pessoa fica) e recomeça do seletor. */
+function trocarDeLoja() {
+  lojaEscolhida = false;
+  aberto = null;
+  lembrar();
+  // ⚠️ Recarregar é o jeito seguro: cardápios, horários e contato são da loja
+  // velha, e limpar cada um à mão é onde algum ficaria para trás.
+  history.replaceState(null, "", location.pathname);
+  location.reload();
+}
+
+/** Mostra a casa escolhida na página inicial, com a saída para a outra. */
+function mostrarLojaAtual() {
+  const linha = $("#loja-atual");
+  const atual = lojasDaCasa.find((l) => String(l.id) === LOJA);
+  linha.hidden = !(atual && lojasDaCasa.length > 1);
+  if (linha.hidden) return;
+  linha.innerHTML = `${esc(atual.nome)} · ` +
+    `<button type="button" class="link-sair">Trocar de loja</button>`;
+  linha.querySelector("button").addEventListener("click", trocarDeLoja);
+}
+
+/* ---- começo ---- */
+(function inicio() {
+  $("#dia").value = diaIso(1);
+  $("#dia").min = diaIso(0);
+  // ⚠️ Nascimento no futuro é toque errado no seletor — o servidor recusa também.
+  $("#nascimento").max = diaIso(0);
+  $("#nascimento").min = "1900-01-01";
+
+  $("#dia").addEventListener("change", () => { diaTocado = true; buscarHorarios(); });
+  $("#pessoas").addEventListener("input", buscarHorarios);
+
+  // 🔑 **O botão da capa leva a lugares diferentes**, e quem decide é a casa:
+  // aceitando reserva online, ele abre a identificação pelo telefone; não
+  // aceitando, vai direto aos horários e fecha pelo WhatsApp, como antes.
+  // ⚠️ **Sem isso a tela mentiria por um fluxo inteiro**: a pessoa digitaria
+  // telefone, nome, gênero e cidade para descobrir no fim que a casa não marca
+  // pelo site — e a saída dela seria fechar a página, não pegar o WhatsApp.
+  $("#ir-reservar").addEventListener("click", async () => {
+    // ⚠️ **Espera saber se a casa marca pelo site.** Um toque rápido, antes da
+    // resposta, caía no caminho de quem NÃO aceita — sem identificação, sem
+    // "Suas reservas". Visto no teste de duas lojas, ao trocar de casa.
+    await aceitaPronta;
+    // 🔑 **Quem já se identificou para ver um catálogo não repete o telefone.**
+    // A reserva usa o mesmo cadastro — só o "Suas reservas" é buscado.
+    if (reservaOnline.aceita && eu.identificado) {
+      destino = "reserva";
+      $("#voltar-reserva").dataset.ir = "inicio";
+      await carregarMinhas();
+      abrirReserva();
+      return;
+    }
+    if (reservaOnline.aceita) {
+      $("#voltar-reserva").dataset.ir = "quem";
+      identificarPara("reserva");
+    } else {
+      abrirReserva();
+    }
+  });
+
+  // O pedido pelo cardápio (101).
+  $("#barra-carrinho").addEventListener("click", () => abrirCarrinho());
+  $("#enviar-pedido").addEventListener("click", () => {
+    destino = "pedido";
+    enviarPedido();
+  });
+  $("#ir-meus-pedidos").addEventListener("click", () => { destino = "meus-pedidos"; mostrarMeusPedidos(); });
+  $("#pronto-meus-pedidos").addEventListener("click", () => { destino = "meus-pedidos"; mostrarMeusPedidos(); });
+
+  recordar();
+  escolherLoja().then(carregarLoja);
+})();
+
+/** Tudo o que é DA LOJA: casa, cardápios, reserva — depois de saber qual é. */
+function carregarLoja() {
+  lojaCarregada = true;
+  $("#estado").hidden = false;
+  mostrarLojaAtual();
+  const aceita = saberSeAceita();
+  aceitaPronta = aceita;
+  Promise.all([carregarCasa().then(carregarCatalogos), aceita]).then(restaurarTela);
+  aceita.then(() => {
+    // ⚠️ Quem não marca pelo site continua vendo o aviso de que a mesa se
+    // fecha pela conversa; quem marca, não — o rodapé diria o contrário do que
+    // o botão logo acima faz.
+    $("#voltar-reserva").dataset.ir = reservaOnline.aceita ? "quem" : "inicio";
+    const rodape = $("#rodape-reserva");
+    rodape.hidden = reservaOnline.aceita;
+    if (!reservaOnline.aceita) {
+      rodape.innerHTML = `⚠️ <b>${t("Esta é a primeira versão.")}</b> ${t("O site mostra os horários "
+        + "que a casa tem livres — para confirmar a mesa, a gente fecha pelo WhatsApp.")}`;
+    }
+  });
+  buscarHorarios();
+}
+
+/**
+ * O F5 volta à tela em que a pessoa estava — e busca o conteúdo DE NOVO.
+ *
+ * 🔑 **Pedido do dono (24/09/2026):** *"recarregar corretamente as informações
+ * quando der F5, tendo cadastrado um novo produto no catálogo."* O defeito não
+ * era cache: a API responde `private` e o CDN não a guarda. Era o site voltar
+ * para `#cardapio` pelo endereço SEM carregar cardápio nenhum — o F5 mostrava a
+ * tela vazia do HTML, ou a da categoria com o título "Categoria".
+ */
+async function restaurarTela() {
+  if (eu.identificado) destravarCatalogos();
+  const tela = (location.hash || "").slice(1);
+  if (tela === "cardapio" || tela === "secao") {
+    const c = aberto && catalogosDaCasa.find((x) => x.id === aberto.id);
+    // ⚠️ Saiu do ar entre um F5 e outro: volta ao início, não a uma tela vazia.
+    if (!c) return ir("inicio");
+    // 🔑 **O QR de um cardápio em PDF abre o PDF** — ele não tem tela dentro do site.
+    // Na mesma aba: sem um toque da pessoa, o celular bloqueia aba nova como popup.
+    if (catalogoDoQr === c.id && c.origem !== "PRODUTOS" && !c.exige_cadastro
+        && c.arquivo_url) {
+      catalogoDoQr = null;
+      location.assign(`${API}${c.arquivo_url}`);
+      return;
+    }
+    const secao = aberto.secao;
+    await abrirCatalogo(c);
+    if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);
+    return;
+  }
+  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido.
+  if (tela === "carrinho" && carrinho && aberto) {
+    const c = catalogosDaCasa.find((x) => x.id === aberto.id);
+    if (!c) return ir("inicio");
+    await abrirCatalogo(c);
+    if (podePedir()) return abrirCarrinho();
+    return;
+  }
+  if (tela === "meus-pedidos") {
+    if (eu.identificado) return mostrarMeusPedidos();
+    return ir("inicio");
+  }
+  if (tela === "reserva" || tela === "quem") {
+    if (!reservaOnline.aceita) return abrirReserva();
+    destino = "reserva";
+    if (eu.identificado) return seguirIdentificado();
+    return identificarPara("reserva");
+  }
+  // "pronto" é o recibo de uma reserva que já foi: sem ela na memória, é o início.
+  if (tela === "contato") return ir("contato");
+  if (tela === "fidelidade" && casa && casa.fidelidade) return abrirFidelidade();
+  if (tela && tela !== "inicio") ir("inicio");
+}
+</script>
+</body>
+</html>

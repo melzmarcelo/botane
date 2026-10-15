@@ -17,7 +17,7 @@ class ConfigCardapio(BaseModel):
     esconder_esgotado: bool = False
     cor_principal: str | None = Field(None, pattern=_COR)
     cor_fundo: str | None = Field(None, pattern=_COR)
-    fonte: str = "NEWSREADER"
+    fonte: str = "FRAUNCES"
     retencao_meses: int = Field(13, ge=1, le=60)
     # O Hub (114): cada botão se liga à parte; o dado (link, rede) mora no cadastro da loja.
     hub_avaliacao: bool = False

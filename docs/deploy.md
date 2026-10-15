@@ -398,6 +398,24 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
 
 ## O site do cliente — `reservas.botanedeliecafe.com.br`
 
+> 🔑 **A virada de 15/10/2026 (parte (c) do pedido do dono: "tudo no reservas, com o mesmo
+> layout").** O site passou a ser servido pelo app `botane` (`web/public/portal/index.html`),
+> e o `web/proxy.ts` separa por domínio: em `reservas.*`, `/` abre o site, `/c/...` abre o
+> feed do Cardápio Vivo, e qualquer tela interna redireciona ao início. Para virar:
+> 1. **Painel da DO, app `botane` ▸ Settings ▸ Domains**: acrescentar
+>    `reservas.botanedeliecafe.com.br`. ⚠️ Antes, conferir qual app responde hoje por esse
+>    domínio — em 15/10/2026 a resposta trazia o `x-do-app-origin` do próprio `botane`,
+>    embora este roteiro diga app separado (`botane-reservas`). Tirar o domínio do app velho
+>    antes de pô-lo no novo.
+> 2. **CNAME no HostGator**: `reservas` → o endereço `.ondigitalocean.app` do app `botane`
+>    (o mesmo do `sistema`).
+> 3. Conferir: `curl -I https://reservas.botanedeliecafe.com.br/` (200, o site),
+>    `/c/1` (o feed), `/login` (307 para `/`), e `/api/saude`.
+> 4. Depois de confirmado: desligar o app `botane-reservas` e apagar `site/` e
+>    `.do/reservas.yaml`. Os QR impressos das mesas apontam para `sistema.../c/...`, que
+>    CONTINUA abrindo — o mesmo app serve os dois domínios.
+> ⚠️ O que fica abaixo descreve o app separado, que vale até a virada.
+
 🔑 **É um app SEPARADO** (`.do/reservas.yaml`), não um componente do `botane`. O app principal
 roteia por CAMINHO (`web` em `/`, `api` em `/api`, mesmo domínio — foi o que fez o CORS deixar
 de existir lá); pôr o site noutro DOMÍNIO dentro dele exigiria trocar todo o roteamento por

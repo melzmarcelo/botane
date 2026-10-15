@@ -174,6 +174,10 @@ def casa(id_unidade: int) -> dict:
             # A cor da casa, que o cadastro já guarda. O site pinta a capa com
             # ela em vez de trazer um verde escrito no HTML.
             "cor": e.get("cor_primaria"),
+            # 🔑 **A aparência da CASA** (15/10/2026, pedido do dono: "tudo com o mesmo
+            # layout"): a mesma que o feed do Cardápio Vivo recebe — cores, fonte dos títulos
+            # e logo. O site e o feed leem daqui, e a casa muda num lugar só.
+            "marca": _marca_da_casa(cur, id_unidade, e.get("logo_url")),
             **_quando_atende(cur, id_unidade),
             **_textos_do_zap(cur, id_unidade),
             # 🔑 **A fidelidade desta loja** (091): as regras, para o site mostrar o
@@ -182,6 +186,13 @@ def casa(id_unidade: int) -> dict:
             "fidelidade": (fidelidade.regras(fidelidade.config(cur))
                            if fidelidade.ligada(cur, id_unidade) else None),
         }
+
+
+def _marca_da_casa(cur, id_unidade: int, logo_da_empresa: str | None) -> dict:
+    from services import cardapio_vivo
+    cfg = cardapio_vivo.config(cur, id_unidade)
+    return {"cor_principal": cfg["cor_principal"], "cor_fundo": cfg["cor_fundo"],
+            "fonte": cfg["fonte"], "logo": cfg["logo_url"] or logo_da_empresa}
 
 
 def _aceite_do_termo(cur, id_cliente: int, aceitou: bool) -> None:

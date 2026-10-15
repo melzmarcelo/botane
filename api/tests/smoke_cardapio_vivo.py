@@ -546,6 +546,19 @@ meu = next((c for c in lista if c.get("id") == ID_CAT), {})
 checar("o site recebe qual é o Cardápio Vivo e se é o principal",
        meu.get("cardapio_vivo") is True and meu.get("vivo") == {"slug": "cardapio", "principal": True}, meu)
 
+print("\n11e. a aparência da casa vale para o site também (15/10/2026)")
+# 🔑 "Tudo com o mesmo layout": o site lê a mesma marca que o feed.
+gravar_cardapio(chamar, token, {**CFG, "cor_principal": "#2d4a33", "fonte": "LORA"})
+_st, casa = chamar("GET", f"/publico/{U}/casa")
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("a casa pública traz a marca, igual à do feed",
+       casa.get("marca", {}).get("cor_principal") == "#2d4a33" and casa["marca"]["fonte"] == "LORA"
+       and f["marca"]["fonte"] == "LORA" and casa["marca"]["logo"] == f["marca"]["logo"], (casa.get("marca"), f.get("marca")))
+from services import cardapio_vivo as _cv  # noqa: E402
+checar("e a fonte padrão é a do site (Fraunces)", _cv._PADRAO["fonte"] == "FRAUNCES"
+       and _cv.FONTES[0] == "FRAUNCES", _cv.FONTES)
+gravar_cardapio(chamar, token, CFG)
+
 print("\n12. a porta: Portal desligado, cardápio fechado")
 chamar("PUT", f"/unidades/{U}/parametros", {**par, "reservas_ligado": False}, token)
 st, _r = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")

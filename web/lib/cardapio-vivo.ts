@@ -82,6 +82,15 @@ export async function buscarFeed(loja: number, token: string | null, idioma: Idi
   }
 }
 
+/**
+ * A página inicial do site da casa (15/10/2026): no domínio `reservas.*` é a raiz; nos
+ * outros (o do sistema, e em casa) é `/portal`. O feed e o site são o MESMO app.
+ */
+export function enderecoDoSite(): string {
+  if (typeof window === "undefined") return "/portal";
+  return window.location.hostname.startsWith("reservas.") ? "/" : "/portal";
+}
+
 /** A prévia do cadastro — com login, inclui o que está fora do dia e do horário. */
 export const previaFeed = (idCatalogo: number) =>
   api.get<Feed>(`/cardapio-vivo/previa?id_catalogo=${idCatalogo}`);

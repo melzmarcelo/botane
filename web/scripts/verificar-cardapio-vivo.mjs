@@ -186,6 +186,10 @@ try {
          hub.includes("Ver cardápio") && hub.includes("Avaliar no Google") && hub.includes("Wi-Fi"),
          hub.slice(0, 200));
   checar("e o feed ainda não está na tela", (await pagina.$(".cv-item")) === null);
+  // 🔑 Um layout só (15/10/2026): a entrada tem a cara do site e leva a ele.
+  const aoSite = await pagina.evaluate(() => [...document.querySelectorAll("a")]
+    .find((a) => a.textContent.includes("Reservas, fidelidade e contato"))?.getAttribute("href") ?? null);
+  checar("a entrada leva ao site da casa, no mesmo endereço", aoSite === "/portal", aoSite);
   const link = await pagina.$eval('a[href^="https://g.page"]', (a) => a.target);
   checar("o link do Google abre em outra aba", link === "_blank", link);
   await pagina.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Wi-Fi").click());
@@ -195,6 +199,9 @@ try {
   await pagina.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Ver cardápio").click());
   await pagina.waitForSelector(".cv-item");
   checar("Ver cardápio leva ao feed", true);
+  const voltaDoFeed = await pagina.evaluate(() =>
+    document.querySelector('header a[aria-label="Reservas, fidelidade e contato"]')?.getAttribute("href") ?? null);
+  checar("e o topo do feed volta ao site da casa", voltaDoFeed === "/portal", voltaDoFeed);
   await pagina.evaluate(() => window.dispatchEvent(new Event("pagehide")));
   await esperar(300);
   const doHub = new Set();
