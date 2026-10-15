@@ -4350,7 +4350,10 @@ try {
   await p.evaluate(() => {
     [...document.querySelectorAll("button")].find((x) => x.textContent === "Gravar nota")?.click();
   });
-  await new Promise((r) => setTimeout(r, 2200));
+  // ⚠️ Espera a NOTA, não 2,2 s: no servidor de desenvolvimento a página da nota compila na
+  // primeira visita depois de cada mudança no código, e passava disso (15/10/2026).
+  await p.waitForFunction(() => /Nota registrada/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
   const textoGravadaNota = await p.evaluate(() => document.body.innerText);
   checar("a nota digitada grava e abre para conferência",
     /Nota registrada/i.test(textoGravadaNota), textoGravadaNota.slice(0, 160));
@@ -4370,7 +4373,8 @@ try {
   checar("a nota digitada oferece o caminho da correção",
     /\/compras\/\d+\/editar$/.test(linkCorrigir ?? ""), linkCorrigir);
   if (linkCorrigir) await irPara(p, WEB + linkCorrigir);
-  await new Promise((r) => setTimeout(r, 1400));
+  await p.waitForFunction(() => /Corrigir a nota/i.test(document.body.innerText),
+    { timeout: 30000, polling: 300 }).catch(() => {});
   const textoCorrigir = await p.evaluate(() => document.body.innerText);
   checar("a nota digitada oferece correção", /Corrigir a nota/i.test(textoCorrigir),
     textoCorrigir.slice(0, 160));
