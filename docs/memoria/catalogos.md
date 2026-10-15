@@ -548,3 +548,11 @@ Detalhe no estudo, seção 9 (testes A/B de mídia e ordem, sugestões de destaq
   feed. Usa-se `toString()`.
 - 🔑 A verificação no navegador descobre o braço de uma sessão pedindo o feed com `?sessao=`,
   nunca recalculando o hash fora do banco.
+- 🔑 **O teste A/B é da LOJA, não do catálogo** (15/10/2026, varredura da segunda loja).
+  `cardapio_testes.variantes` filtrava só por `id_catalogo`. Mas um catálogo pode estar visível
+  em duas lojas (`catalogo_lojas`) e ser o Cardápio Vivo das duas: o teste aberto na matriz
+  mudava o feed da filial, onde ninguém abriu teste, e o resultado (que conta só os eventos
+  da loja do teste) nunca via essa exposição. Agora recebe `id_unidade`. Coberto pela seção 2
+  do `smoke_cardapio_testes.py`. ⚠️ **Aplicar o vencedor continua valendo para as duas**: ele
+  muda o CATÁLOGO (a mídia preferida, a ordem), e o catálogo é um só. Isso é o modelo, não
+  vazamento.

@@ -8,6 +8,18 @@ ter duas lojas?"* — é **"o que acontece no dia em que existir a segunda?"**.
 
 Este documento responde isso com o que está no código hoje. Ele não implementa nada.
 
+> ✅ **Situação em 15/10/2026: a ordem aprovada (seção 3) está toda feita.** Custo do insumo da
+> loja e transferência entre lojas (31/08), preço por loja (31/08), loja nova com local principal,
+> estoque da rede (`/estoque/saldos-rede`, 01/09) e a bateria `smoke_duas_lojas.py` (05–08/10).
+> As decisões da seção 4 foram tomadas: reserva de custo no fornecedor (da rede), preço da loja
+> com queda para o da casa, transferência como dois movimentos ligados. Fidelidade e cliente
+> são da REDE por decisão do dono.
+> 🔑 **No ar há UMA loja** (15/10/2026). Tudo de duas lojas é provado na base local, com
+> filiais de teste que as suítes criam e desativam — nunca criar loja em produção para testar.
+> A varredura de 15/10/2026 sobre os módulos novos (pedidos, Cardápio Vivo, etiquetas,
+> fidelidade) achou um vazamento só: o teste A/B do Cardápio Vivo valia para toda loja que
+> usasse o mesmo catálogo — corrigido (ver `docs/memoria/catalogos.md`).
+
 ---
 
 ## 1. O que já está pronto

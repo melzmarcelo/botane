@@ -165,6 +165,18 @@ oa = [i["id"] for i in feed(ordens["A"])["itens"]]
 ob = [i["id"] for i in feed(ordens["B"])["itens"]]
 checar("no teste de ordem, A vê a ordem do catálogo", oa == [itens["A"], itens["B"], itens["C"]], oa)
 checar("e B vê a sugerida (a torta em destaque sobe)", ob[0] == itens["C"], ob)
+# ⚠️ O teste é da LOJA: o mesmo catálogo pode ser o Cardápio Vivo de outra loja
+# (`catalogo_lojas`), e lá ninguém abriu teste. Antes a sessão do braço B via a foto
+# também na outra loja — e o resultado, que só conta eventos desta, não via isso.
+from services import cardapio_testes  # noqa: E402
+with get_cursor() as cur:
+    cur.execute("SELECT id FROM unidades WHERE id <> %s ORDER BY id DESC LIMIT 1", (U,))
+    OUTRA = cur.fetchone()["id"]
+    v_aqui = cardapio_testes.variantes(cur, U, ID_CAT, braco["B"])
+    v_outra = cardapio_testes.variantes(cur, OUTRA, ID_CAT, braco["B"])
+checar("na loja do teste, o braço B tem a foto forçada", A in v_aqui["foto"], v_aqui)
+checar("na OUTRA loja, o mesmo catálogo e a mesma sessão não entram em teste nenhum",
+       not v_outra["foto"] and v_outra["ordem_b"] is None, v_outra)
 
 print("\n3. o resultado: taxa de adição por braço, com amostra mínima")
 st, lista = chamar("GET", "/cardapio-vivo/testes", token=token)

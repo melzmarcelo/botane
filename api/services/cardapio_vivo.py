@@ -427,7 +427,7 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
     # 🔑 Os testes A/B (116): a variante sai do id anônimo da sessão, numa conta do banco.
     # ⚠️ A prévia do cadastro não entra em teste nenhum — mostra o cardápio da casa.
     from services import cardapio_testes
-    var = (cardapio_testes.variantes(cur, id_catalogo, sessao)
+    var = (cardapio_testes.variantes(cur, id_unidade, id_catalogo, sessao)
            if sessao and not previa_catalogo else {"foto": set(), "ordem_b": None})
     conteudo = feed(cur, id_unidade, id_catalogo, idioma,
                     esconder_esgotado=cfg["esconder_esgotado"], previa=bool(previa_catalogo),

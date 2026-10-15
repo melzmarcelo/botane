@@ -34,14 +34,19 @@ ROTULOS = {"MIDIA": {"A": "Vídeo", "B": "Foto"}, "ORDEM": {"A": "Ordem atual", 
 
 # ---------------------------------------------------------------- o feed
 
-def variantes(cur, id_catalogo: int, sessao: str) -> dict:
-    """As variantes que esta sessão vê nos testes ABERTOS deste cardápio."""
+def variantes(cur, id_unidade: int, id_catalogo: int, sessao: str) -> dict:
+    """As variantes que esta sessão vê nos testes ABERTOS deste cardápio, NESTA loja.
+
+    ⚠️ O teste é da LOJA, não do catálogo: um catálogo pode estar visível em duas lojas
+    (`catalogo_lojas`) e ser o Cardápio Vivo das duas. Filtrar só pelo catálogo fazia o
+    teste da matriz mudar o feed da filial — e o resultado, que conta só os eventos da
+    loja do teste, nunca enxergava essa mudança."""
     cur.execute(
         f"""SELECT id, tipo, id_produto, ordem_b,
                    {SQL_VARIANTE.format(sessao='%s', teste='id')} AS variante
               FROM cardapio_testes
-             WHERE id_catalogo = %s AND encerrado_em IS NULL""",  # noqa: S608
-        (sessao, id_catalogo))
+             WHERE id_unidade = %s AND id_catalogo = %s AND encerrado_em IS NULL""",  # noqa: S608
+        (sessao, id_unidade, id_catalogo))
     saida = {"foto": set(), "ordem_b": None}
     for t in cur.fetchall():
         if t["variante"] != "B":
