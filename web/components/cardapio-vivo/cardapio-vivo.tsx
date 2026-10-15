@@ -206,6 +206,40 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     setAberto(item);
   };
 
+  /**
+   * 🔑 **A encomenda do catering** (15/10/2026): a seleção vira o carrinho do SITE, que já sabe
+   * retirada/entrega, quando, pagamento e identificação — o site e o feed estão no mesmo
+   * endereço, então a aba é a mesma. ⚠️ O pedido do site não tem adicionais: as escolhas vão
+   * na observação do item, e a casa confere o preço delas ao confirmar.
+   */
+  function encomendar() {
+    if (!feed) return;
+    type ItemCarrinho = { id: number; nome: string; preco: number | null; quantidade: number; observacao: string };
+    const itens: Record<string, ItemCarrinho> = {};
+    for (const l of selecao.linhas) {
+      const atual = itens[l.id_item] ?? { id: l.id_item, nome: l.nome, preco: l.preco, quantidade: 0, observacao: "" };
+      atual.quantidade += l.quantidade;
+      if (l.adicionais.length) {
+        atual.observacao = [atual.observacao, `${l.quantidade}× ${l.adicionais.map((a) => a.nome).join(", ")}`]
+          .filter(Boolean).join("; ").slice(0, 200);
+      }
+      itens[l.id_item] = atual;
+    }
+    try {
+      sessionStorage.setItem("botane.carrinho", JSON.stringify({
+        id_catalogo: feed.vivo.id_catalogo,
+        chave: (crypto.randomUUID?.() ?? `${Date.now()}${Math.random()}`).slice(0, 60),
+        itens,
+      }));
+      sessionStorage.setItem("botane.idioma", idioma);
+    } catch {
+      /* sem armazenamento: o site abre o cardápio, e o pedido se monta lá */
+    }
+    medidor.current?.registrar("enviou_pedido");
+    medidor.current?.enviar();
+    window.location.assign(`${enderecoDoSite()}?loja=${feed.loja.id}&encomenda=${feed.vivo.id_catalogo}#carrinho`);
+  }
+
   const fonte = FONTES[feed?.marca.fonte ?? "FRAUNCES"] ?? FONTES.FRAUNCES;
   const estilo = {
     "--cv-principal": feed?.marca.cor_principal ?? "#3C4A3E",
@@ -435,6 +469,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             selecao.limpar();
           }}
           aoFechar={() => setVerSelecao(false)}
+          aoEncomendar={feed.encomenda && !token ? encomendar : undefined}
         />
       )}
     </main>

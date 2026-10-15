@@ -48,6 +48,8 @@ export type Feed = {
   /** A tela de entrada (114): só o que a loja ligou E preencheu. Nulo = direto ao feed. */
   hub: { avaliacao: string | null; wifi: { rede: string; senha: string } | null } | null;
   previa: boolean;
+  /** Sem mesa, o catálogo aceita pedido pelo site: a seleção vira encomenda (o catering). */
+  encomenda: boolean;
   /** Qual Cardápio Vivo é este (117): o catálogo vai nos eventos. */
   vivo: { id_catalogo: number; slug: string | null; principal: boolean };
   categorias: (SecaoFeed & { subcategorias: SecaoFeed[] })[];

@@ -1464,14 +1464,16 @@ async function carregarCatalogos() {
 }
 
 /** Abre um catálogo pelo botão da página inicial. */
-async function abrirCatalogo(c) {
+async function abrirCatalogo(c, { semFeed = false } = {}) {
   if (c.exige_cadastro && !eu.identificado) return identificarPara(c);
   // 🔑 **O Cardápio Vivo abre o FEED, não a tela de seções** (pedido do dono,
   // 14/10/2026: "ao acessar pelo site, ficaríamos naquela mesma estrutura").
   // ⚠️ Antes de ir, o site volta ao início e esquece o catálogo aberto: senão o
   // "voltar" do celular traria a pessoa a `#cardapio`, que reabriria o feed — e ela
   // ficaria presa sem conseguir voltar ao site.
-  if (c.cardapio_vivo) {
+  // ⚠️ `semFeed`: a encomenda que veio DO feed precisa do cardápio aqui (o carrinho lê preços
+  // e a configuração do pedido dele) — mandar de volta ao feed seria um laço.
+  if (c.cardapio_vivo && !semFeed) {
     aberto = null;
     lembrar();
     history.replaceState(null, "", location.pathname + "#inicio");
@@ -1483,7 +1485,7 @@ async function abrirCatalogo(c) {
     return;
   }
   if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`
-  aberto = { id: c.id, secao: null };
+  aberto = { id: c.id, secao: null, doFeed: semFeed || undefined };
   lembrar();
   if (!c.exige_cadastro) return abrirCardapio(c.id, c.nome);
   return mostrarCardapio(c.nome, () =>
@@ -1772,7 +1774,12 @@ function escolher(caixa, valor) {
 function abrirCarrinho() {
   const cfg = cardapio.pedidos;
   const c = carrinhoAtual();
-  $("#voltar-carrinho").onclick = () => ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
+  // 🔑 Veio do feed (a encomenda do catering): o "voltar" devolve ao feed, onde a pessoa
+  // estava escolhendo — não a uma tela de seções que ela nunca viu.
+  const c0 = aberto && catalogosDaCasa.find((x) => x.id === aberto.id);
+  $("#voltar-carrinho").onclick = () => (aberto && aberto.doFeed && c0)
+    ? abrirCatalogo(c0)
+    : ir(aberto && aberto.secao !== null ? "secao" : "cardapio");
 
   const lista = $("#itens-carrinho");
   const itens = Object.values(c.itens);
@@ -2317,6 +2324,9 @@ $("#fone").addEventListener("input", () => { if (passo === "dados") voltarAoTele
 let checkinToken = null;
 /** O catálogo que veio no QR da mesa (`&catalogo=`), para abrir direto. */
 let catalogoDoQr = null;
+/** 🔑 A ENCOMENDA que veio do feed do Cardápio Vivo (`&encomenda=`, 15/10/2026: o catering).
+ *  O feed já gravou o carrinho nesta aba; o site abre a tela do pedido dele. */
+let encomendaDoFeed = null;
 (function lerQrDaMesa() {
   // 🔑 **Todo QR do Portal diz a loja** (27/09/2026, tela de QR codes): site, reserva,
   // cardápio e fidelidade. O de cardápio diz também QUAL catálogo; o de fidelidade
@@ -2325,10 +2335,12 @@ let catalogoDoQr = null;
   if (!q.get("loja") && !q.get("checkin")) return;
   if (q.get("checkin")) checkinToken = q.get("checkin");
   if (q.get("catalogo")) catalogoDoQr = Number(q.get("catalogo"));
+  if (q.get("encomenda")) encomendaDoFeed = Number(q.get("encomenda"));
   try {
     const salvo = JSON.parse(sessionStorage.getItem(SESSAO) || "null") || {};
     if (q.get("loja")) salvo.loja = q.get("loja");
     if (catalogoDoQr) salvo.aberto = { id: catalogoDoQr, secao: null };
+    if (encomendaDoFeed) salvo.aberto = { id: encomendaDoFeed, secao: null, doFeed: true };
     sessionStorage.setItem(SESSAO, JSON.stringify(salvo));
   } catch { /* sem memória: o `data-loja` já resolve */ }
   // ⚠️ A mesa diz a loja: quem lê o QR da Centro não pode cair no seletor.
@@ -2934,11 +2946,16 @@ async function restaurarTela() {
     if (tela === "secao" && secao !== null && cardapio) abrirSecao(secao);
     return;
   }
-  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido.
-  if (tela === "carrinho" && carrinho && aberto) {
+  // O carrinho mora na aba: o F5 reabre o cardápio dele e volta ao pedido. A encomenda que
+  // veio do feed (`?encomenda=`) chega por aqui também, com o carrinho já gravado.
+  if ((tela === "carrinho" || encomendaDoFeed) && carrinho && aberto) {
     const c = catalogosDaCasa.find((x) => x.id === aberto.id);
     if (!c) return ir("inicio");
-    await abrirCatalogo(c);
+    const doFeed = !!aberto.doFeed;
+    if (encomendaDoFeed) history.replaceState(null, "", location.pathname + "#carrinho");
+    encomendaDoFeed = null;
+    await abrirCatalogo(c, { semFeed: doFeed });
+    if (doFeed) aberto.doFeed = true;
     if (podePedir()) return abrirCarrinho();
     return;
   }

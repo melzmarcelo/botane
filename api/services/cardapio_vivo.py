@@ -565,6 +565,10 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         "modo": modo["modo"], "aviso": modo["aviso"],
         # Fase 2 (115): os botões só aparecem com a opção ligada E numa mesa.
         "chamar_garcom": bool(cv["chamar_garcom"] and mesa),
+        # 🔑 **Encomenda** (15/10/2026, o catering): sem mesa, o catálogo que aceita pedido
+        # pelo site leva a seleção ao carrinho do site — o mesmo, já com retirada/entrega,
+        # quando e pagamento. Na mesa, o pedido é o da mesa (`modo`).
+        "encomenda": bool(not mesa and not previa_catalogo and _aceita_encomenda(cur, id_catalogo)),
         # Qual Cardápio Vivo é este — o feed devolve o catálogo nos eventos.
         "vivo": {"id_catalogo": id_catalogo, "slug": cv.get("slug"),
                  "principal": bool(cv.get("principal"))},
@@ -574,6 +578,11 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         "previa": bool(previa_catalogo),
         **conteudo,
     }
+
+
+def _aceita_encomenda(cur, id_catalogo: int) -> bool:
+    from services import pedidos
+    return bool(pedidos.config(cur, id_catalogo)["aceita"])
 
 
 def _hub(cfg: dict, loja: dict) -> dict | None:

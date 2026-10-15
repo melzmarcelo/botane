@@ -656,5 +656,12 @@ URL."* Parte (b) de três (ver a seção da 117).
   (`enderecoDoSite()`: `/` em `reservas.*`, `/portal` nos outros).
 - As verificações do site (`verificar-pedido-site`, `verificar-idioma-site`) passaram a testar
   `http://127.0.0.1:3100/portal` — o servidor da porta 3200 não é mais preciso.
-- **Falta**: (c) a virada do domínio (painel + DNS, com o dono) e o carrinho de ENCOMENDA no
-  feed sem mesa (o catering).
+- 🔑 **A encomenda do catering**: sem mesa, num catálogo que aceita pedido pelo site, o feed
+  responde `encomenda` e a "Minha seleção" ganha "Fazer encomenda". A seleção é gravada no
+  carrinho do SITE (`sessionStorage["botane.carrinho"]` — a mesma aba, porque é o mesmo
+  endereço) e o site abre em `/portal?loja=&encomenda={catálogo}#carrinho`. O site carrega o
+  cardápio SEM mandar de volta ao feed (`abrirCatalogo(c, { semFeed })`), e o "‹ cardápio" do
+  carrinho devolve ao feed (`aberto.doFeed`). ⚠️ O pedido do site não tem adicionais: as escolhas
+  vão na observação do item, e a casa confere o preço delas ao confirmar. Na mesa, o pedido
+  continua o da mesa. Cobertura: `web/scripts/verificar-encomenda-feed.mjs` (6).
+- **Falta**: (c) a virada do domínio (painel + DNS, com o dono).

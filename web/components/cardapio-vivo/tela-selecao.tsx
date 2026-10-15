@@ -3,6 +3,8 @@
 /**
  * O resumo da seleção, para MOSTRAR AO GARÇOM — letra grande, a mesa no topo.
  * 🔑 Não envia nada: é a VITRINE. O garçom anota (ou lança no PDV) como sempre.
+ * 🔑 **A exceção é a ENCOMENDA** (15/10/2026, o catering): sem mesa, num catálogo que aceita
+ * pedido pelo site, a seleção vira o carrinho do site (`aoEncomendar`).
  */
 
 import { precoDaLinha, type LinhaSelecao } from "./selecao";
@@ -17,16 +19,19 @@ type Props = {
   aoRemover: (linha: LinhaSelecao) => void;
   aoLimpar: () => void;
   aoFechar: () => void;
+  /** Sem mesa e com o catálogo aceitando pedido: leva a seleção ao carrinho do site. */
+  aoEncomendar?: () => void;
 };
 
-export default function TelaSelecao({ linhas, total, algumSemPreco, mesa, t, aoRemover, aoLimpar, aoFechar }: Props) {
+export default function TelaSelecao({ linhas, total, algumSemPreco, mesa, t, aoRemover, aoLimpar, aoFechar,
+                                      aoEncomendar }: Props) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-[var(--cv-fundo)] text-[var(--cv-tinta)]" role="dialog" aria-modal
          aria-label={t.minhaSelecao}>
       <header className="flex items-center justify-between border-b border-current/10 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <div>
           <h2 className="cv-serif text-2xl">{t.minhaSelecao}</h2>
-          <p className="text-sm opacity-70">{mesa ? `${mesa} · ` : ""}{t.mostrarGarcom}</p>
+          <p className="text-sm opacity-70">{mesa ? `${mesa} · ` : ""}{aoEncomendar ? t.encomendaExplica : t.mostrarGarcom}</p>
         </div>
         <button type="button" onClick={aoFechar} className="rounded-full px-3 py-1 text-3xl leading-none opacity-60"
                 aria-label={t.fechar}>×</button>
@@ -67,6 +72,12 @@ export default function TelaSelecao({ linhas, total, algumSemPreco, mesa, t, aoR
             <span className="tabular-nums">{moeda(total)}{algumSemPreco ? " +" : ""}</span>
           </div>
           <p className="mt-1 text-xs opacity-60">{t.precosSujeitos}</p>
+          {aoEncomendar && (
+            <button type="button" onClick={aoEncomendar}
+                    className="mt-3 w-full rounded-full bg-[var(--cv-principal)] py-3 text-[15px] font-semibold text-white">
+              {t.fazerEncomenda}
+            </button>
+          )}
           <button type="button" onClick={aoLimpar} className="mt-3 w-full rounded-full border border-current/25 py-2.5 text-sm">
             {t.limpar}
           </button>
