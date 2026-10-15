@@ -7,13 +7,14 @@
  * o cardápio — a página do catálogo dizia "publique em Catálogos" e mandava a
  * pessoa embora. E qual catálogo é o Cardápio Vivo da loja só se escolhia na tela
  * do Cardápio Vivo. Agora as duas coisas moram aqui, ao lado do conteúdo.
- * ⚠️ A tela do Cardápio Vivo continua escolhendo também: as duas gravam o MESMO
- * `cardapio_config.id_catalogo`, então não há duas verdades.
+ * ⚠️ A tela do Cardápio Vivo continua ligando também: as duas gravam o MESMO
+ * `cardapio_vivos` (117) com a mesma janela, então não há duas verdades.
  */
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
+import JanelaCardapioVivo from "@/components/janela-cardapio-vivo";
 import { Campo, Cartao, Confirmacao, Etiqueta } from "@/components/ui";
 import { CardapioVivoService, type RespostaConfig } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
@@ -28,6 +29,7 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState(false);
   const [vivo, setVivo] = useState<RespostaConfig | null>(null);
+  const [configVivo, setConfigVivo] = useState(false);
 
   useEffect(() => setF(formDa(capa)), [capa]);
   useEffect(() => {
@@ -64,17 +66,11 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
     }, "Publicação salva.");
   }
 
-  async function marcarVivo(ligar: boolean) {
-    if (!vivo) return;
+  async function desligarVivo() {
     try {
-      // ⚠️ A configuração do Cardápio Vivo é gravada INTEIRA (é um PUT só): troca
-      // o catálogo e devolve o resto como estava.
-      const r = await CardapioVivoService.salvarConfig({
-        ...vivo.config,
-        id_catalogo: ligar ? capa.id : null,
-      });
+      const r = await CardapioVivoService.removerVivo(capa.id);
       setVivo(r);
-      aviso.sucesso(ligar ? "Este passa a ser o Cardápio Vivo da loja." : "A loja ficou sem Cardápio Vivo.");
+      aviso.sucesso(r.message ?? "Deixou de ser Cardápio Vivo.");
     } catch (e) {
       aviso.erro(e instanceof Error ? e.message : "Não foi possível gravar");
     }
@@ -90,10 +86,9 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
     }
   }
 
-  const ehVivo = vivo?.config.id_catalogo === capa.id;
-  const outroVivo = vivo?.config.id_catalogo && !ehVivo
-    ? vivo.catalogos.find((c) => c.id === vivo.config.id_catalogo)?.nome ?? "outro catálogo"
-    : null;
+  // 🔑 Vários Cardápios Vivos por loja (117): este catálogo pode ser um deles.
+  const meuVivo = vivo?.vivos.find((v) => v.id_catalogo === capa.id) ?? null;
+  const outrosVivos = (vivo?.vivos ?? []).filter((v) => v.id_catalogo !== capa.id);
 
   return (
     <div className="flex flex-col gap-5">
@@ -144,23 +139,46 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
       </Cartao>
 
       {capa.origem === cat.ORIGEM_PRODUTOS && vivo && (
-        <Cartao titulo="Cardápio Vivo" descricao="O cardápio da mesa, que o cliente abre pelo QR code. Cada loja usa um catálogo.">
-          <label className="flex items-start gap-3">
-            <input type="checkbox" className="mt-1" id="catalogo-vivo" disabled={!podeEditar}
-                   checked={ehVivo} onChange={(e) => void marcarVivo(e.target.checked)} />
-            <span className="text-[14px]">
-              Usar este catálogo como o Cardápio Vivo desta loja
-              <span className="block text-[13px] text-suave">
-                {ehVivo
-                  ? "É ele que a mesa abre hoje."
-                  : outroVivo
-                    ? `Hoje a mesa abre “${outroVivo}”. Marcar aqui troca.`
-                    : "A loja ainda não tem Cardápio Vivo."}{" "}
-                Aparência, modo e mesas ficam em Cardápio Vivo ▸ Configuração.
+        <Cartao titulo="Cardápio Vivo"
+                descricao="O cardápio no celular do cliente, prato a prato. A loja pode ter vários: o principal abre na mesa, os outros pelo link.">
+          {meuVivo ? (
+            <div className="flex flex-col gap-2 text-[14px]">
+              <p>
+                <b>É um Cardápio Vivo</b>
+                {meuVivo.principal ? " — o principal: o QR code da mesa abre este." : " — abre pelo link."}
+                <span className="text-suave"> {meuVivo.modo === "PEDIDO" ? "Pedido na mesa." : "Vitrine."}</span>
+              </p>
+              <p className="mono break-all text-[12.5px] text-suave" id="vivo-link">{meuVivo.link}</p>
+              {podeEditar && (
+                <span className="flex gap-2">
+                  <button type="button" className="link-acao" onClick={() => setConfigVivo(true)}>configurar</button>
+                  <button type="button" className="link-acao link-acao-erro" onClick={() => void desligarVivo()}>
+                    deixar de ser
+                  </button>
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 text-[14px]">
+              <span className="text-suave">
+                {outrosVivos.length
+                  ? `A loja já tem ${outrosVivos.length === 1 ? `“${outrosVivos[0].nome}”` : `${outrosVivos.length} Cardápios Vivos`}. Este pode ser mais um — pelo link, ou como o da mesa.`
+                  : "A loja ainda não tem Cardápio Vivo. O primeiro vira o da mesa."}
               </span>
-            </span>
-          </label>
+              {podeEditar && (
+                <button type="button" className="btn btn-secundario" id="vivo-ligar" onClick={() => setConfigVivo(true)}>
+                  Tornar Cardápio Vivo
+                </button>
+              )}
+            </div>
+          )}
+          <p className="mt-3 text-[13px] text-suave">Aparência e mesas ficam em Cardápio Vivo ▸ Configuração.</p>
         </Cartao>
+      )}
+      {configVivo && (
+        <JanelaCardapioVivo idCatalogo={capa.id} nomeCatalogo={capa.nome} atual={meuVivo}
+                            temOutros={outrosVivos.length > 0}
+                            aoFechar={() => setConfigVivo(false)} aoGravar={setVivo} />
       )}
 
       <Cartao titulo="Capa" descricao="O nome que o cliente lê e quando o catálogo vale.">

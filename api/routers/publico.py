@@ -414,10 +414,13 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                          JOIN catalogo_categorias g ON g.id = i.id_categoria
                          JOIN produtos p ON p.id = i.id_produto
                         WHERE g.id_catalogo = c.id AND p.ativo) AS itens,
-                      -- 🔑 **É o Cardápio Vivo desta loja?** (pedido do dono, 14/10/2026:
-                      -- o site abre o feed, e não a tela antiga de seções).
-                      EXISTS (SELECT 1 FROM cardapio_config k
-                               WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo
+                      -- 🔑 **É um Cardápio Vivo desta loja?** (pedido do dono, 14/10/2026:
+                      -- o site abre o feed, e não a tela antiga de seções). Desde a 117 pode
+                      -- haver vários: vem o nome no link e se é o principal.
+                      (SELECT k.slug FROM cardapio_vivos k
+                        WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo_slug,
+                      (SELECT k.principal FROM cardapio_vivos k
+                        WHERE k.id_unidade = %s AND k.id_catalogo = c.id) AS vivo_principal
                  FROM catalogos c
                 -- 🔑 **Visível NESTA loja** (migração 087), e não "dono é esta
                 -- loja": a casa marca em que lojas cada catálogo aparece.
@@ -427,7 +430,7 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                   AND (c.publica_de IS NULL OR c.publica_de <= current_date)
                   AND (c.publica_ate IS NULL OR c.publica_ate >= current_date)
                 ORDER BY c.publica_de NULLS FIRST, lower(c.nome)""",
-            (id_unidade, id_unidade),
+            (id_unidade, id_unidade, id_unidade),
         )
         saida = []
         for r in cur.fetchall():
@@ -450,8 +453,11 @@ def catalogos(id_unidade: int, idioma: str | None = _IDIOMA) -> list[dict]:
                     "id": r["id"],
                     "arquivo_url": None, "bytes": None,
                     "ate": r["publica_ate"],
-                    # O site leva quem toca neste catálogo ao feed `/c/{loja}`.
-                    "cardapio_vivo": r["vivo"],
+                    # O site leva quem toca neste catálogo ao feed `/c/{loja}` — com
+                    # `?cardapio=` quando não é o principal (117).
+                    "cardapio_vivo": r["vivo_slug"] is not None,
+                    "vivo": (None if r["vivo_slug"] is None else
+                             {"slug": r["vivo_slug"], "principal": bool(r["vivo_principal"])}),
                 })
                 continue
             if not r["arquivo_url"]:

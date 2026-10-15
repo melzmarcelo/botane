@@ -9,6 +9,7 @@
  *    node scripts/verificar-cardapio-vivo.mjs     (API na 9200 e web na 3100 de pé)
  */
 import puppeteer from "puppeteer-core";
+import { devolverVivos, ligarDeTeste } from "./cardapio-vivo-comum.mjs";
 
 const CHROME = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const API = "http://127.0.0.1:9200";
@@ -59,7 +60,7 @@ for (const [sec, n, v] of [[g1, "TELA RISOTO", 58], [g1, "TELA BATATA", 32], [g2
 }
 const { dados: salao } = await api("POST", "/reservas/saloes", { nome: `Tela ${MARCA}` }, token);
 const { dados: mesa } = await api("POST", "/reservas/mesas", { id_salao: salao.id, nome: "T1", lugares: 2 }, token);
-const r = await api("PUT", "/cardapio-vivo/config", { ...antes.config, id_catalogo: cat.id, modo: "VITRINE" }, token);
+const r = await ligarDeTeste(api, token, antes, cat.id);
 checar("a configuração aponta o catálogo", r.status === 200, r.dados);
 const { dados: acesso } = await api("GET", "/cardapio-vivo/mesas", undefined, token);
 const link = acesso.mesas.find((m) => m.id === mesa.id)?.link ?? "";
@@ -176,8 +177,7 @@ try {
   console.log("\n5b. a tela de entrada (Hub)");
   await api("PUT", "/unidades/1", { google_avaliacao_url: "https://g.page/r/teste/review",
                                     wifi_rede: `Rede ${MARCA}`, wifi_senha: "senha123" }, token);
-  await api("PUT", "/cardapio-vivo/config", { ...antes.config, id_catalogo: cat.id, modo: "VITRINE",
-                                              hub_avaliacao: true, hub_wifi: true }, token);
+  await ligarDeTeste(api, token, antes, cat.id, {}, { hub_avaliacao: true, hub_wifi: true });
   await pagina.evaluate(() => { window.__lotes = []; });
   await pagina.reload({ waitUntil: "networkidle2" });
   await pagina.waitForFunction(() => document.body.innerText.includes("Ver cardápio"), { timeout: 15000 }).catch(() => {});
@@ -212,7 +212,7 @@ try {
   checar("depois de gerar outro acesso, o link antigo explica que não vale mais", texto.includes("não vale mais"), texto.slice(0, 200));
 } finally {
   await navegador.close();
-  await api("PUT", "/cardapio-vivo/config", antes.config, token);
+  await devolverVivos(api, token, antes, cat.id);
   await api("PUT", "/unidades/1", { google_avaliacao_url: lojaAntes.google_avaliacao_url ?? null,
                                     wifi_rede: lojaAntes.wifi_rede ?? null, wifi_senha: lojaAntes.wifi_senha ?? null }, token);
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);

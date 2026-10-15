@@ -12,7 +12,9 @@ divergiriam caladas, e o cliente veria um preço na mesa e outro no site.
 ITEM (como o carrinho do 101), e o evento descobre o produto no servidor.
 """
 
+import re
 import secrets
+import unicodedata
 import time as _tempo
 from collections import deque
 from datetime import datetime, time, timedelta
@@ -44,47 +46,46 @@ MIDIAS = ("VIDEO", "FOTO", "NENHUMA")
 # chamados. A tupla continua existindo para o dia de um terceiro modo.
 MODOS_LIBERADOS = ("VITRINE", "PEDIDO")
 
+# 🔑 **O que é da CASA** (117): a aparência do site inteiro, o Hub, esconder esgotado e a
+# retenção. Decisão do dono (15/10/2026): um layout só — o catering não pode ter cara de
+# outro lugar. O comportamento de cada cardápio mora em `cardapio_vivos`.
 _PADRAO = {
-    "id_catalogo": None, "modo": "VITRINE", "exige_confirmacao": True,
-    "pedido_hora_de": None, "pedido_hora_ate": None, "chamar_garcom": False,
     "esconder_esgotado": False, "cor_principal": None, "cor_fundo": None,
     "fonte": "NEWSREADER", "logo_url": None, "retencao_meses": 13,
     "hub_avaliacao": False, "hub_wifi": False,
 }
 
+# O comportamento de UM Cardápio Vivo (117).
+_VIVO_PADRAO = {
+    "slug": None, "principal": False, "modo": "VITRINE", "exige_confirmacao": True,
+    "pedido_hora_de": None, "pedido_hora_ate": None, "chamar_garcom": False,
+}
+_SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
+
 
 # ---------------------------------------------------------------------------
-# Configuração da loja e exceções
+# Configuração da casa, os Cardápios Vivos e as exceções
 # ---------------------------------------------------------------------------
 
 def config(cur, id_unidade: int) -> dict:
-    """A configuração da loja — com o padrão quando ela nunca foi gravada."""
+    """A configuração da casa — com o padrão quando ela nunca foi gravada.
+
+    ⚠️ `id_catalogo` aqui é o do Cardápio Vivo PRINCIPAL, calculado: o painel de atenção e
+    os testes A/B olham o cardápio da mesa, como antes da 117. A coluna antiga de
+    `cardapio_config` não é mais lida.
+    """
     cur.execute("SELECT * FROM cardapio_config WHERE id_unidade = %s", (id_unidade,))
-    linha = cur.fetchone()
-    cfg = dict(_PADRAO) | (dict(linha) if linha else {})
+    linha = dict(cur.fetchone() or {})
+    cfg = dict(_PADRAO) | {k: v for k, v in linha.items() if k in _PADRAO}
     cfg["id_unidade"] = id_unidade
+    principal = vivo(cur, id_unidade)
+    cfg["id_catalogo"] = principal["id_catalogo"] if principal else None
     return cfg
 
 
 def salvar_config(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> dict:
-    if dados.get("modo") not in MODOS_LIBERADOS:
-        raise HTTPException(status_code=409,
-                            detail="O modo PEDIDO chega na fase 2. Por enquanto, só VITRINE.")
     if dados.get("fonte") not in FONTES:
         raise HTTPException(status_code=422, detail="Fonte desconhecida.")
-    if dados.get("id_catalogo"):
-        cur.execute(
-            """SELECT c.origem FROM catalogos c
-                WHERE c.id = %s AND EXISTS (SELECT 1 FROM catalogo_lojas l
-                                             WHERE l.id_catalogo = c.id AND l.id_unidade = %s)""",
-            (dados["id_catalogo"], id_unidade))
-        achado = cur.fetchone()
-        if not achado:
-            raise HTTPException(status_code=404, detail="Catálogo não encontrado nesta loja.")
-        if achado["origem"] != "PRODUTOS":
-            raise HTTPException(status_code=409,
-                                detail="O Cardápio Vivo monta o feed item a item: escolha um "
-                                       "catálogo de origem PRODUTOS, não um PDF.")
     campos = [c for c in _PADRAO if c != "logo_url"]
     valores = [dados.get(c, _PADRAO[c]) for c in campos]
     cur.execute(
@@ -96,6 +97,115 @@ def salvar_config(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> 
         [id_unidade, *valores, id_usuario],
     )
     return config(cur, id_unidade)
+
+
+_SQL_VIVO = """SELECT v.id_unidade, v.id_catalogo, v.slug, v.principal, v.modo,
+                      v.exige_confirmacao, v.pedido_hora_de, v.pedido_hora_ate,
+                      v.chamar_garcom, c.nome, c.situacao
+                 FROM cardapio_vivos v JOIN catalogos c ON c.id = v.id_catalogo
+                WHERE v.id_unidade = %s"""
+
+
+def vivos(cur, id_unidade: int) -> list[dict]:
+    """Os Cardápios Vivos da loja: o principal primeiro, depois pelo nome."""
+    cur.execute(_SQL_VIVO + " ORDER BY v.principal DESC, lower(c.nome)", (id_unidade,))
+    return [dict(r) for r in cur.fetchall()]
+
+
+def vivo(cur, id_unidade: int, slug: str | None = None,
+         id_catalogo: int | None = None) -> dict | None:
+    """Um Cardápio Vivo da loja: pelo nome no link, pelo catálogo, ou o PRINCIPAL."""
+    if slug:
+        cur.execute(_SQL_VIVO + " AND v.slug = %s", (id_unidade, slug))
+    elif id_catalogo:
+        cur.execute(_SQL_VIVO + " AND v.id_catalogo = %s", (id_unidade, id_catalogo))
+    else:
+        cur.execute(_SQL_VIVO + " AND v.principal", (id_unidade,))
+    linha = cur.fetchone()
+    return dict(linha) if linha else None
+
+
+def sugerir_slug(nome: str) -> str:
+    """"Catering da Cafeteria" vira "catering-da-cafeteria": sem acento, minúsculas e hífen."""
+    base = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", base).strip("-")[:40].strip("-") or "cardapio"
+
+
+def salvar_vivo(cur, id_unidade: int, id_catalogo: int, dados: dict, id_usuario: int | None) -> dict:
+    """Liga (ou regrava) um catálogo como Cardápio Vivo da loja.
+
+    🔑 **O primeiro da loja nasce PRINCIPAL**: sem principal o QR da mesa não abre nada, e
+    quem liga o primeiro cardápio espera que a mesa já o mostre.
+    🔑 **Marcar um como principal desmarca o outro** — um por loja; o índice único garante.
+    """
+    cur.execute(
+        """SELECT c.nome, c.origem FROM catalogos c
+            WHERE c.id = %s AND EXISTS (SELECT 1 FROM catalogo_lojas l
+                                         WHERE l.id_catalogo = c.id AND l.id_unidade = %s)""",
+        (id_catalogo, id_unidade))
+    cat = cur.fetchone()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Catálogo não encontrado nesta loja.")
+    if cat["origem"] != "PRODUTOS":
+        raise HTTPException(status_code=409,
+                            detail="O Cardápio Vivo monta o feed item a item: escolha um "
+                                   "catálogo de origem PRODUTOS, não um PDF.")
+    if dados.get("modo", "VITRINE") not in MODOS_LIBERADOS:
+        raise HTTPException(status_code=422, detail="Modo desconhecido.")
+    atual = vivo(cur, id_unidade, id_catalogo=id_catalogo)
+    slug = (dados.get("slug") or (atual or {}).get("slug") or sugerir_slug(cat["nome"])).strip().lower()
+    if len(slug) > 40 or not _SLUG.fullmatch(slug):
+        raise HTTPException(status_code=422,
+                            detail="O nome no link usa só letras minúsculas sem acento, números e "
+                                   "hífen — como “catering” ou “cafe-da-manha”.")
+    cur.execute("""SELECT c.nome FROM cardapio_vivos v JOIN catalogos c ON c.id = v.id_catalogo
+                    WHERE v.id_unidade = %s AND v.slug = %s AND v.id_catalogo <> %s""",
+                (id_unidade, slug, id_catalogo))
+    outro = cur.fetchone()
+    if outro:
+        raise HTTPException(status_code=409,
+                            detail=f"O link “{slug}” já é do Cardápio Vivo “{outro['nome']}”.")
+    cur.execute("SELECT count(*) AS n FROM cardapio_vivos WHERE id_unidade = %s AND id_catalogo <> %s",
+                (id_unidade, id_catalogo))
+    primeiro = cur.fetchone()["n"] == 0
+    principal = True if primeiro else bool(dados.get("principal", (atual or {}).get("principal", False)))
+    campos = {k: dados.get(k, _VIVO_PADRAO[k]) for k in _VIVO_PADRAO if k not in ("slug", "principal")}
+    if (campos["pedido_hora_de"] is None) != (campos["pedido_hora_ate"] is None):
+        raise HTTPException(status_code=422,
+                            detail="Informe as duas pontas do horário do pedido, ou nenhuma.")
+    if principal:
+        cur.execute("UPDATE cardapio_vivos SET principal = false WHERE id_unidade = %s AND principal "
+                    "AND id_catalogo <> %s", (id_unidade, id_catalogo))
+    cur.execute(
+        """INSERT INTO cardapio_vivos (id_unidade, id_catalogo, slug, principal, modo,
+                                       exige_confirmacao, pedido_hora_de, pedido_hora_ate,
+                                       chamar_garcom, atualizado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           ON CONFLICT (id_unidade, id_catalogo) DO UPDATE SET
+             slug = EXCLUDED.slug, principal = EXCLUDED.principal, modo = EXCLUDED.modo,
+             exige_confirmacao = EXCLUDED.exige_confirmacao,
+             pedido_hora_de = EXCLUDED.pedido_hora_de, pedido_hora_ate = EXCLUDED.pedido_hora_ate,
+             chamar_garcom = EXCLUDED.chamar_garcom, atualizado_por = EXCLUDED.atualizado_por,
+             atualizado_em = now()""",
+        (id_unidade, id_catalogo, slug, principal, campos["modo"], campos["exige_confirmacao"],
+         campos["pedido_hora_de"], campos["pedido_hora_ate"], campos["chamar_garcom"], id_usuario))
+    return vivo(cur, id_unidade, id_catalogo=id_catalogo) | {"antes": atual}
+
+
+def remover_vivo(cur, id_unidade: int, id_catalogo: int) -> dict:
+    """Desliga o catálogo como Cardápio Vivo. O catálogo continua; o link deixa de abrir.
+
+    ⚠️ Tirar o PRINCIPAL deixa a mesa sem cardápio — a frase diz, para a casa marcar outro.
+    """
+    atual = vivo(cur, id_unidade, id_catalogo=id_catalogo)
+    if not atual:
+        raise HTTPException(status_code=404, detail="Este catálogo não é um Cardápio Vivo da loja.")
+    cur.execute("DELETE FROM cardapio_vivos WHERE id_unidade = %s AND id_catalogo = %s",
+                (id_unidade, id_catalogo))
+    msg = f"“{atual['nome']}” deixou de ser Cardápio Vivo."
+    if atual["principal"]:
+        msg += " Era o principal: a mesa fica sem cardápio até outro ser marcado como principal."
+    return {"message": msg, "antes": atual}
 
 
 def listar_excecoes(cur, id_unidade: int) -> list[dict]:
@@ -154,7 +264,8 @@ def _na_faixa(agora: time, de: time | None, ate: time | None) -> bool:
     return agora >= de or agora < ate
 
 
-def modo_efetivo(cur, id_unidade: int, id_mesa: int | None, agora: datetime | None = None) -> dict:
+def modo_efetivo(cur, id_unidade: int, id_mesa: int | None, agora: datetime | None = None,
+                 cv: dict | None = None) -> dict:
     """O modo que vale AGORA para esta mesa: loja ← salão ← mesa, e o horário do pedido.
 
     🔑 **A mais específica vence**, campo a campo: uma exceção de mesa que só diz
@@ -162,8 +273,9 @@ def modo_efetivo(cur, id_unidade: int, id_mesa: int | None, agora: datetime | No
     ⚠️ Fora do horário do pedido, cai para VITRINE com o aviso "pedidos com o garçom" —
     o cardápio continua abrindo; o que fecha é o envio.
     """
-    cfg = config(cur, id_unidade)
-    efetivo = {k: cfg[k] for k in ("modo", "exige_confirmacao", "pedido_hora_de", "pedido_hora_ate")}
+    # 🔑 O comportamento é do Cardápio Vivo aberto (117); sem nenhum, o da mesa — o principal.
+    cv = cv if cv is not None else (vivo(cur, id_unidade) or dict(_VIVO_PADRAO))
+    efetivo = {k: cv[k] for k in ("modo", "exige_confirmacao", "pedido_hora_de", "pedido_hora_ate")}
     if id_mesa:
         cur.execute(
             """SELECT e.* FROM cardapio_excecoes e
@@ -230,8 +342,10 @@ def link_da_mesa(web_url: str, id_unidade: int, token: str) -> str:
     return f"{web_url.rstrip('/')}/c/{id_unidade}/{token}"
 
 
-def link_da_loja(web_url: str, id_unidade: int) -> str:
-    return f"{web_url.rstrip('/')}/c/{id_unidade}"
+def link_da_loja(web_url: str, id_unidade: int, slug: str | None = None) -> str:
+    """O link sem mesa: o principal em `/c/{loja}`, os outros com `?cardapio=`."""
+    base = f"{web_url.rstrip('/')}/c/{id_unidade}"
+    return f"{base}?cardapio={slug}" if slug else base
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +510,8 @@ def _adicionais(cur, id_unidade: int, produtos: list[int]) -> dict[int, list[dic
 
 
 def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None,
-                     previa_catalogo: int | None = None, sessao: str | None = None) -> dict:
+                     previa_catalogo: int | None = None, sessao: str | None = None,
+                     slug: str | None = None) -> dict:
     """Tudo que a tela do cliente precisa numa resposta: casa, marca, modo e feed.
 
     ⚠️ **404 quando a loja não ligou o Cardápio Vivo** (sem catálogo apontado): para o
@@ -410,9 +525,15 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
     if not loja or not reservas_servico.ligado(cur, id_unidade):
         raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
     cfg = config(cur, id_unidade)
-    id_catalogo = previa_catalogo or cfg["id_catalogo"]
-    if not id_catalogo:
-        raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+    # 🔑 **Qual Cardápio Vivo** (117): a mesa abre o PRINCIPAL; o link sem mesa abre o do
+    # `?cardapio=` (o catering), ou o principal. A prévia usa o do catálogo, se houver.
+    if previa_catalogo:
+        cv = vivo(cur, id_unidade, id_catalogo=previa_catalogo) or dict(_VIVO_PADRAO)
+    else:
+        cv = vivo(cur, id_unidade) if mesa else vivo(cur, id_unidade, slug=slug)
+        if not cv:
+            raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
+    id_catalogo = previa_catalogo or cv["id_catalogo"]
     cur.execute("""SELECT nome, nome_en, nome_de, situacao FROM catalogos
                     WHERE id = %s AND origem = 'PRODUTOS'""", (id_catalogo,))
     capa = cur.fetchone()
@@ -423,7 +544,7 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
 
     cur.execute("SELECT nome_fantasia, razao_social, logo_url FROM empresa WHERE id = 1")
     empresa = cur.fetchone() or {}
-    modo = modo_efetivo(cur, id_unidade, mesa["id"] if mesa else None)
+    modo = modo_efetivo(cur, id_unidade, mesa["id"] if mesa else None, cv=cv)
     # 🔑 Os testes A/B (116): a variante sai do id anônimo da sessão, numa conta do banco.
     # ⚠️ A prévia do cadastro não entra em teste nenhum — mostra o cardápio da casa.
     from services import cardapio_testes
@@ -443,7 +564,10 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         "cardapio": traducao.escolher(capa["nome"], capa["nome_en"], capa["nome_de"], idioma),
         "modo": modo["modo"], "aviso": modo["aviso"],
         # Fase 2 (115): os botões só aparecem com a opção ligada E numa mesa.
-        "chamar_garcom": bool(cfg["chamar_garcom"] and mesa),
+        "chamar_garcom": bool(cv["chamar_garcom"] and mesa),
+        # Qual Cardápio Vivo é este — o feed devolve o catálogo nos eventos.
+        "vivo": {"id_catalogo": id_catalogo, "slug": cv.get("slug"),
+                 "principal": bool(cv.get("principal"))},
         # 🔑 **O Hub** (114): só o que a loja LIGOU e PREENCHEU. Nenhum dos dois → nulo, e a
         # tela pula direto para o feed.
         "hub": _hub(cfg, loja),
@@ -521,8 +645,10 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
     _freio_da_origem(origem)
     eventos = lote["eventos"][:LOTE_MAXIMO]
     id_unidade = lote["loja"]
-    cfg = config(cur, id_unidade)
-    if not cfg["id_catalogo"] or not reservas_servico.ligado(cur, id_unidade):
+    # 🔑 O lote diz de qual Cardápio Vivo veio (117); sem dizer, é o principal (o feed antigo).
+    cv = (vivo(cur, id_unidade, id_catalogo=lote["catalogo"]) if lote.get("catalogo")
+          else vivo(cur, id_unidade))
+    if not cv or not reservas_servico.ligado(cur, id_unidade):
         raise HTTPException(status_code=404, detail="Cardápio não encontrado.")
     id_mesa = None
     if lote.get("mesa"):
@@ -553,7 +679,7 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
             """SELECT i.id, i.id_produto FROM catalogo_itens i
                  JOIN catalogo_categorias g ON g.id = i.id_categoria
                 WHERE i.id = ANY(%s) AND g.id_catalogo = %s""",
-            (itens, cfg["id_catalogo"]))
+            (itens, cv["id_catalogo"]))
         produto_do_item = {r["id"]: r["id_produto"] for r in cur.fetchall()}
 
     linhas = []

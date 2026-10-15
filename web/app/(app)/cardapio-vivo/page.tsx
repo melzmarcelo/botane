@@ -9,6 +9,7 @@ import { useSessao } from "@/lib/sessao";
 import AcessoMesas from "./acesso-mesas";
 import Configuracao from "./configuracao";
 import Excecoes from "./excecoes";
+import Vivos from "./vivos";
 
 /**
  * Portal de Clientes → Catálogos → Cardápio Vivo.
@@ -39,15 +40,20 @@ export default function PaginaCardapioVivo() {
         <p className="rotulo">Portal de Clientes · Catálogos</p>
         <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-[30px]">Cardápio Vivo</h1>
         <ExplicaTela>
-          O cardápio da mesa no celular do cliente: um prato por tela, com vídeo ou foto. Abre pelo
-          QR code ou pela etiqueta NFC da mesa, sem app e sem login. Vídeo, restrições e adicionais
+          O cardápio no celular do cliente: um prato por tela, com vídeo ou foto. O principal abre pelo
+          QR code ou pela etiqueta NFC da mesa; os outros (o catering, por exemplo), pelo link de cada um —
+          sem app e sem login. Vídeo, restrições e adicionais
           ficam no cadastro do produto (aba Catálogo); destaque, esgotado e o horário das seções,
           no <Link href={id ? `/catalogos/${id}` : "/catalogos"} className="link-acao">catálogo</Link>.
         </ExplicaTela>
       </header>
 
-      <Configuracao dados={dados} podeEditar={pode("catalogos.editar")} aoMudar={setDados} />
+      <Vivos dados={dados} podeEditar={pode("catalogos.editar")} aoMudar={setDados} />
 
+      <Configuracao key={JSON.stringify(dados.config)} dados={dados} podeEditar={pode("catalogos.editar")}
+                    aoMudar={setDados} />
+
+      {/* ⚠️ O aviso e a prévia abaixo são do PRINCIPAL; os outros têm a prévia no catálogo. */}
       {id && dados.sem_midia.length > 0 && (
         <Cartao titulo={`${dados.sem_midia.length} prato(s) publicado(s) sem foto e sem vídeo`}
                 descricao="No feed, eles aparecem com a foto da seção — ou com a cor de fundo, se a seção também não tiver.">

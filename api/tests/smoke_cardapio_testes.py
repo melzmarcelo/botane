@@ -74,6 +74,9 @@ init_pool()
 _st, eu = chamar("GET", "/auth/me", token=token)
 U = (eu.get("unidades") or [{}])[0].get("id") or 1
 preservar_reserva(U)
+# 🔑 Desde a 117, o Cardápio Vivo da loja são DUAS tabelas — a suíte devolve as duas.
+from comum import gravar_cardapio, preservar_cardapio_vivo  # noqa: E402
+preservar_cardapio_vivo(U)
 with get_cursor() as cur:
     cur.execute("SELECT * FROM cardapio_config WHERE id_unidade = %s", (U,))
     _CFG = cur.fetchone()
@@ -116,8 +119,8 @@ enviar_foto(f"/produtos/{A}/foto", token)
 with get_cursor() as cur:
     # O vídeo de verdade é coberto pela suíte da fase 1; aqui basta o produto TER um.
     cur.execute("UPDATE produtos SET video_url = '/arquivos/teste-ab.mp4', video_capa_url = NULL WHERE id = %s", (A,))
-chamar("PUT", "/cardapio-vivo/config", {"id_catalogo": ID_CAT, "modo": "VITRINE", "fonte": "NEWSREADER",
-                                        "retencao_meses": 13}, token)
+gravar_cardapio(chamar, token, {"id_catalogo": ID_CAT, "modo": "VITRINE", "fonte": "NEWSREADER",
+                                "retencao_meses": 13})
 
 print("\n1. criar os testes")
 st, r = chamar("POST", "/cardapio-vivo/testes", {"tipo": "MIDIA", "id_item": itens["B"]}, token)

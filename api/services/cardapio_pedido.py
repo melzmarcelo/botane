@@ -146,7 +146,9 @@ def chamar(cur, mesa: dict, tipo: str, sessao: str | None) -> dict:
 
     ⚠️ Só com a opção ligada na loja: botão que ninguém atende é pior que botão nenhum.
     """
-    if not cv.config(cur, mesa["id_unidade"])["chamar_garcom"]:
+    # A mesa é do Cardápio Vivo PRINCIPAL (117): é ele que diz se há garçom a chamar.
+    principal = cv.vivo(cur, mesa["id_unidade"])
+    if not (principal and principal["chamar_garcom"]):
         raise HTTPException(status_code=409, detail="Nesta casa, chame o garçom pessoalmente.")
     cur.execute(
         """INSERT INTO cardapio_chamados (id_unidade, id_mesa, id_sessao, tipo)

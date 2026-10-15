@@ -55,9 +55,9 @@ _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
                 JOIN catalogo_categorias k ON k.id = i.id_categoria
                 JOIN produtos p ON p.id = i.id_produto
                WHERE k.id_catalogo = c.id) AS resumo,
-             -- É o feed da mesa de alguma loja (`cardapio_config`, 113)?
-             EXISTS (SELECT 1 FROM cardapio_config cc
-                      WHERE cc.id_catalogo = c.id) AS cardapio_vivo"""
+             -- É um Cardápio Vivo de alguma loja (`cardapio_vivos`, 117)?
+             EXISTS (SELECT 1 FROM cardapio_vivos cv
+                      WHERE cv.id_catalogo = c.id) AS cardapio_vivo"""
 
 
 def _publicado_hoje(linha: dict, hoje: date) -> bool:

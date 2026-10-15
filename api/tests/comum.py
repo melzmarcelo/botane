@@ -480,3 +480,55 @@ def preservar_logo(base: str, token: str) -> None:
                f"multipart/form-data; boundary={lim}")
 
     atexit.register(devolver)
+
+
+def preservar_cardapio_vivo(unidade: int) -> None:
+    """Guarda a configuração do Cardápio Vivo da loja (casa E cardápios) e a devolve no fim.
+
+    🔑 **Desde a 117 são DUAS tabelas**: `cardapio_config` (a aparência da casa) e
+    `cardapio_vivos` (cada cardápio, com o principal da mesa). Devolver só a primeira
+    deixaria a mesa da loja sem cardápio depois da bateria. ⚠️ Pede o pool já iniciado.
+    """
+    import atexit
+
+    from database import get_cursor
+
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM cardapio_config WHERE id_unidade = %s", (unidade,))
+        cfg = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT * FROM cardapio_vivos WHERE id_unidade = %s", (unidade,))
+        vivos = [dict(r) for r in cur.fetchall()]
+
+    def devolver():
+        with get_cursor() as cur:
+            for tabela, linhas in (("cardapio_config", cfg), ("cardapio_vivos", vivos)):
+                cur.execute(f"DELETE FROM {tabela} WHERE id_unidade = %s", (unidade,))  # noqa: S608
+                for linha in linhas:
+                    # ⚠️ O catálogo pode ter sido apagado no meio (suíte que cria e apaga o seu).
+                    if tabela == "cardapio_vivos":
+                        cur.execute("SELECT 1 FROM catalogos WHERE id = %s", (linha["id_catalogo"],))
+                        if not cur.fetchone():
+                            continue
+                    cols = list(linha)
+                    cur.execute(f"INSERT INTO {tabela} ({', '.join(cols)}) "  # noqa: S608
+                                f"VALUES ({', '.join(['%s'] * len(cols))})", [linha[c] for c in cols])
+
+    atexit.register(devolver)
+
+
+_CAMPOS_DO_VIVO = ("modo", "exige_confirmacao", "pedido_hora_de", "pedido_hora_ate", "chamar_garcom")
+
+
+def gravar_cardapio(chamar, token, cfg: dict) -> tuple[int, dict]:
+    """Grava a configuração no formato de ANTES da 117, repartida nas duas rotas de hoje.
+
+    A parte da casa vai a `/cardapio-vivo/config`; o catálogo e o comportamento viram o
+    Cardápio Vivo PRINCIPAL (`/cardapio-vivo/vivos/{id}`). Devolve a primeira recusa, ou a
+    última resposta — que traz `config` e `vivos`.
+    """
+    casa = {k: v for k, v in cfg.items() if k not in _CAMPOS_DO_VIVO and k != "id_catalogo"}
+    st, r = chamar("PUT", "/cardapio-vivo/config", casa, token)
+    if st != 200 or not cfg.get("id_catalogo"):
+        return st, r
+    vivo = {k: cfg[k] for k in _CAMPOS_DO_VIVO if k in cfg} | {"principal": True}
+    return chamar("PUT", f"/cardapio-vivo/vivos/{cfg['id_catalogo']}", vivo, token)

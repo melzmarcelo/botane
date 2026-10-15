@@ -19,9 +19,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#000000", width: "device-width", initialScale: 1,
                                     viewportFit: "cover" };
 
-export default async function Pagina({ params }: { params: Promise<{ loja: string; mesa?: string[] }> }) {
+export default async function Pagina({ params, searchParams }: {
+  params: Promise<{ loja: string; mesa?: string[] }>;
+  searchParams: Promise<{ cardapio?: string }>;
+}) {
   const { loja, mesa } = await params;
+  const { cardapio } = await searchParams;
   const id = Number(loja);
   if (!Number.isInteger(id) || id <= 0 || (mesa && mesa.length > 1)) notFound();
-  return <CardapioVivo loja={id} token={mesa?.[0] ?? null} />;
+  // 🔑 Vários Cardápios Vivos (117): `?cardapio=catering` abre aquele; sem ele, o principal.
+  // ⚠️ A mesa (token) abre SEMPRE o principal — o `?cardapio=` só vale sem mesa.
+  const qual = !mesa?.[0] && cardapio && /^[a-z0-9-]{1,40}$/.test(cardapio) ? cardapio : null;
+  return <CardapioVivo loja={id} token={mesa?.[0] ?? null} cardapio={qual} />;
 }

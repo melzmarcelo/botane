@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * O cartão da configuração da loja: qual cardápio a mesa abre, o modo, as opções e a
- * identidade visual (cores, fonte, logo).
+ * O cartão do que é da CASA: a aparência (cores, fonte, logo), a tela de entrada, esconder
+ * esgotado e a retenção.
  *
- * ⚠️ O modo PEDIDO aparece desabilitado com "fase 2": quem vê a especificação procura a
- * opção, e escondê-la faria parecer esquecida. Quem recusa de verdade é o servidor.
+ * 🔑 **Desde a 117, qual cardápio, o modo, o horário do pedido e o garçom são de CADA
+ * Cardápio Vivo** (cartão "Os Cardápios Vivos"). A aparência ficou aqui, uma só: decisão
+ * do dono — um layout só para o site inteiro.
  */
 
 import { useState } from "react";
@@ -30,12 +31,8 @@ export default function Configuracao({ dados, podeEditar, aoMudar }: Props) {
   async function gravar() {
     setGravando(true);
     try {
-      const { id_unidade: _u, logo_url: _l, ...corpo } = cfg;
-      const r = await CardapioVivoService.salvarConfig({
-        ...corpo,
-        pedido_hora_de: corpo.pedido_hora_de || null,
-        pedido_hora_ate: corpo.pedido_hora_ate || null,
-      });
+      const { id_unidade: _u, logo_url: _l, id_catalogo: _c, ...corpo } = cfg;
+      const r = await CardapioVivoService.salvarConfig(corpo);
       aoMudar(r);
       setCfg(r.config);
       aviso.sucesso(r.message ?? "Configuração gravada.");
@@ -59,55 +56,9 @@ export default function Configuracao({ dados, podeEditar, aoMudar }: Props) {
 
   const desligado = !podeEditar;
   return (
-    <Cartao titulo="Configuração da loja"
-            descricao="Vale na próxima vez que o cliente abrir o cardápio — sem publicar nada.">
+    <Cartao titulo="Aparência e opções da casa"
+            descricao="Valem para todos os Cardápios Vivos, na próxima vez que o cliente abrir — sem publicar nada.">
       <div className="grid gap-4 md:grid-cols-2">
-        <Campo rotulo="Cardápio que a mesa abre" dica="Só catálogos de origem Produtos.">
-          <select className="campo" disabled={desligado} value={cfg.id_catalogo ?? ""}
-                  onChange={(e) => mudar("id_catalogo", e.target.value ? Number(e.target.value) : null)}>
-            <option value="">— desligado —</option>
-            {dados.catalogos.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}{c.situacao !== "ATIVO" ? ` (${c.situacao.toLowerCase()})` : ""}</option>
-            ))}
-          </select>
-        </Campo>
-        <Campo rotulo="Modo">
-          <select className="campo" disabled={desligado} value={cfg.modo}
-                  onChange={(e) => mudar("modo", e.target.value as ConfigCardapio["modo"])}>
-            {dados.opcoes.modos.map((m) => (
-              <option key={m} value={m} disabled={!dados.opcoes.modos_liberados.includes(m)}>
-                {m === "VITRINE" ? "Vitrine — só consulta, com “minha seleção”" : "Pedido — carrinho que vai ao painel"}
-              </option>
-            ))}
-          </select>
-        </Campo>
-        {/* 🔑 As opções do PEDIDO (fase 2, 115). Valem também como padrão das exceções. */}
-        {cfg.modo === "PEDIDO" && (
-          <div className="flex flex-col gap-2 rounded-lg border border-linha p-3 text-[14px] md:col-span-2">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" disabled={desligado} checked={cfg.exige_confirmacao}
-                     onChange={(e) => mudar("exige_confirmacao", e.target.checked)} />
-              A equipe confirma o pedido antes de ir para a cozinha (desligado: nasce confirmado)
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              Aceita pedido pela mesa das
-              <input type="time" className="campo mono !w-auto" disabled={desligado} value={cfg.pedido_hora_de?.slice(0, 5) ?? ""}
-                     onChange={(e) => mudar("pedido_hora_de", e.target.value || null)} />
-              às
-              <input type="time" className="campo mono !w-auto" disabled={desligado} value={cfg.pedido_hora_ate?.slice(0, 5) ?? ""}
-                     onChange={(e) => mudar("pedido_hora_ate", e.target.value || null)} />
-              <span className="text-[13px] text-suave">vazio = o dia todo; fora do horário, o cardápio vira vitrine com “pedidos com o garçom”</span>
-            </div>
-            <p className="text-[13px] text-suave">
-              O pedido aparece no Painel de pedidos, coluna Mesas. Lançar no PDV continua com a casa; o pagamento, no caixa.
-            </p>
-          </div>
-        )}
-        <label className="flex items-center gap-2 text-[14px]">
-          <input type="checkbox" disabled={desligado} checked={cfg.chamar_garcom}
-                 onChange={(e) => mudar("chamar_garcom", e.target.checked)} />
-          Botões “chamar o garçom” e “pedir a conta” (avisam no Painel de pedidos, com som)
-        </label>
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" disabled={desligado} checked={cfg.esconder_esgotado}
                  onChange={(e) => mudar("esconder_esgotado", e.target.checked)} />

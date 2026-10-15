@@ -1435,7 +1435,11 @@ async function abrirCatalogo(c) {
     aberto = null;
     lembrar();
     history.replaceState(null, "", location.pathname + "#inicio");
-    location.assign(`${WEB}/c/${LOJA}${IDIOMA === "pt" ? "" : `?idioma=${IDIOMA}`}`);
+    // 🔑 Vários Cardápios Vivos (117): o que não é o principal vai com `?cardapio=`.
+    const q = new URLSearchParams();
+    if (c.vivo && !c.vivo.principal) q.set("cardapio", c.vivo.slug);
+    if (IDIOMA !== "pt") q.set("idioma", IDIOMA);
+    location.assign(`${WEB}/c/${LOJA}${q.toString() ? `?${q}` : ""}`);
     return;
   }
   if (c.origem !== "PRODUTOS") return;  // o PDF já virou link em `destravarCatalogos`

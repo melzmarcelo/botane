@@ -9,12 +9,11 @@ _COR = r"^#[0-9a-fA-F]{6}$"
 
 
 class ConfigCardapio(BaseModel):
-    id_catalogo: int | None = None
-    modo: str = Field("VITRINE", pattern="^(VITRINE|PEDIDO)$")
-    exige_confirmacao: bool = True
-    pedido_hora_de: time | None = None
-    pedido_hora_ate: time | None = None
-    chamar_garcom: bool = False
+    """O que é da CASA (117): aparência do site inteiro, Hub, esgotado e retenção.
+
+    ⚠️ O catálogo, o modo, a confirmação, o horário do pedido e o garçom saíram daqui: são
+    de cada Cardápio Vivo (`VivoCardapio`). Campo antigo que chegar é ignorado.
+    """
     esconder_esgotado: bool = False
     cor_principal: str | None = Field(None, pattern=_COR)
     cor_fundo: str | None = Field(None, pattern=_COR)
@@ -23,6 +22,18 @@ class ConfigCardapio(BaseModel):
     # O Hub (114): cada botão se liga à parte; o dado (link, rede) mora no cadastro da loja.
     hub_avaliacao: bool = False
     hub_wifi: bool = False
+
+
+class VivoCardapio(BaseModel):
+    """Um Cardápio Vivo (117): o nome no link, se é o da mesa, e como ele se comporta."""
+    # Vazio = sugerido pelo nome do catálogo ("Catering" → "catering").
+    slug: str | None = Field(None, max_length=40)
+    principal: bool = False
+    modo: str = Field("VITRINE", pattern="^(VITRINE|PEDIDO)$")
+    exige_confirmacao: bool = True
+    pedido_hora_de: time | None = None
+    pedido_hora_ate: time | None = None
+    chamar_garcom: bool = False
 
     @model_validator(mode="after")
     def _faixa(self):
@@ -71,6 +82,8 @@ class LoteEventos(BaseModel):
     modo: str = Field(pattern="^(VITRINE|PEDIDO)$")
     dispositivo: str = Field("OUTRO", pattern="^(CELULAR|TABLET|DESKTOP|OUTRO)$")
     idioma: str | None = Field(None, pattern="^(pt|en|de)$")
+    # De qual Cardápio Vivo (117). Ausente = o principal (o feed de antes da 117).
+    catalogo: int | None = None
     eventos: list[Evento] = Field(max_length=200)
 
 

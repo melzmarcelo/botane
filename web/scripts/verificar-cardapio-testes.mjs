@@ -10,6 +10,7 @@
  *    node scripts/verificar-cardapio-testes.mjs     (API na 9200 e web na 3100 de pé)
  */
 import puppeteer from "puppeteer-core";
+import { devolverVivos, ligarDeTeste } from "./cardapio-vivo-comum.mjs";
 
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const API = "http://127.0.0.1:9200";
@@ -54,7 +55,7 @@ for (const [n, v] of [["ABT PRIMEIRO", 10], ["ABT SEGUNDO", 11], ["ABT TERCEIRO"
   const { dados: it } = await api("POST", `/catalogos/categorias/${g.id}/itens`, { id_produto: await produto(n, v) }, token);
   itens.push(it.id);
 }
-await api("PUT", "/cardapio-vivo/config", { ...antes.config, id_catalogo: cat.id, modo: "VITRINE" }, token);
+await ligarDeTeste(api, token, antes, cat.id);
 await api("PUT", `/catalogos/itens/${itens[2]}/marcas`, { destaque: true }, token);
 const { status: stT, dados: teste } = await api("POST", "/cardapio-vivo/testes", { tipo: "ORDEM" }, token);
 checar("o teste de ordem começa pela API", stT === 201, teste);
@@ -118,7 +119,7 @@ try {
          f2.itens.map((i) => [i.nome, i.destaque]));
 } finally {
   await navegador.close();
-  await api("PUT", "/cardapio-vivo/config", antes.config, token);
+  await devolverVivos(api, token, antes, cat.id);
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
   await api("PUT", "/unidades/1/parametros", par, token);
 }

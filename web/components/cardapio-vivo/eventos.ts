@@ -94,6 +94,8 @@ export class Medidor {
     private modo: string,
     private idioma: string,
     desligado = false,
+    /** O catálogo do Cardápio Vivo aberto (117) — o servidor confere os itens contra ele. */
+    private catalogo: number | null = null,
   ) {
     this.sessao = lerOuCriarSessao();
     this.desligado = desligado || medicaoRecusada();
@@ -169,7 +171,7 @@ export class Medidor {
     const eventos = this.fila.splice(0, 60).map(({ quando, ...e }) => ({ ...e, idade_ms: agora - quando }));
     const corpo = JSON.stringify({
       sessao: this.sessao, loja: this.loja, mesa: this.mesa, modo: this.modo,
-      dispositivo: dispositivo(), idioma: this.idioma, eventos,
+      dispositivo: dispositivo(), idioma: this.idioma, catalogo: this.catalogo, eventos,
     });
     const blob = new Blob([corpo], { type: "text/plain" });
     const foi = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(enderecoEventos(), blob);

@@ -67,6 +67,9 @@ U = (eu.get("unidades") or [{}])[0].get("id") or 1
 
 # 🔑 Suíte devolve o que encontrou: reserva e pedidos da loja, e o Cardápio Vivo dela.
 preservar_reserva(U)
+# 🔑 Desde a 117, o Cardápio Vivo da loja são DUAS tabelas — a suíte devolve as duas.
+from comum import gravar_cardapio, preservar_cardapio_vivo  # noqa: E402
+preservar_cardapio_vivo(U)
 with get_cursor() as cur:
     cur.execute("SELECT * FROM cardapio_config WHERE id_unidade = %s", (U,))
     _CFG_ANTES = cur.fetchone()
@@ -126,8 +129,8 @@ TOK = {m["id"]: m["link"].rsplit("/", 1)[1] for m in ac["mesas"]}
 T1, T2 = TOK[m1["id"]], TOK[m2["id"]]
 CFG = {"id_catalogo": ID_CAT, "modo": "PEDIDO", "exige_confirmacao": True, "chamar_garcom": False,
        "fonte": "NEWSREADER", "retencao_meses": 13}
-st, r = chamar("PUT", "/cardapio-vivo/config", CFG, token)
-checar("a loja liga o modo PEDIDO", st == 200 and r["config"]["modo"] == "PEDIDO", (st, r))
+st, r = gravar_cardapio(chamar, token, CFG)
+checar("a loja liga o modo PEDIDO", st == 200 and r["vivos"][0]["modo"] == "PEDIDO", (st, r))
 
 print("\n1. o feed diz o modo")
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{T1}")
@@ -189,10 +192,10 @@ checar("confirmado, ele espera o lançamento no PDV como os do site",
        ID1 in [x["id"] for x in pn["sem_pdv"]], pn["sem_pdv"])
 
 print("\n4. sem confirmação da equipe, nasce confirmado")
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "exige_confirmacao": False}, token)
+gravar_cardapio(chamar, token, {**CFG, "exige_confirmacao": False})
 st, p2 = pedir(T1, [{"item": itens["C"], "quantidade": 1}])
 checar("nasce CONFIRMADO", st == 201 and p2.get("situacao") == "CONFIRMADO", (st, p2))
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
+gravar_cardapio(chamar, token, CFG)
 
 print("\n5. o que o feed não oferece, a mesa não pede")
 chamar("PUT", f"/catalogos/itens/{itens['C']}/marcas", {"esgotado": True}, token)
@@ -210,13 +213,13 @@ from relogio import agora_da_casa  # noqa: E402
 agora = agora_da_casa().replace(tzinfo=None)
 fora_de = (agora + timedelta(hours=2)).time().replace(second=0, microsecond=0)
 fora_ate = (agora + timedelta(hours=3)).time().replace(second=0, microsecond=0)
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "pedido_hora_de": str(fora_de), "pedido_hora_ate": str(fora_ate)}, token)
+gravar_cardapio(chamar, token, {**CFG, "pedido_hora_de": str(fora_de), "pedido_hora_ate": str(fora_ate)})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{T1}")
 checar("fora do horário, o feed cai para VITRINE com 'pedidos com o garçom'",
        f.get("modo") == "VITRINE" and f.get("aviso") == "Pedidos com o garçom.", (f.get("modo"), f.get("aviso")))
 st, r = pedir(T1, [{"item": itens["B"], "quantidade": 1}])
 checar("e o pedido é recusado com a mesma frase", st == 409 and "garçom" in r["detail"], (st, r))
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
+gravar_cardapio(chamar, token, CFG)
 
 print("\n6. o pedido do site continua exigindo tudo (a CHECK nova)")
 with get_cursor() as cur:
@@ -232,7 +235,7 @@ with get_cursor() as cur:
 print("\n7. chamar garçom e pedir a conta")
 st, r = chamar("POST", f"/publico/cardapio/mesa/{T1}/chamado", {"tipo": "GARCOM", "sessao": S})
 checar("com a opção desligada, 409", st == 409, (st, r))
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "chamar_garcom": True}, token)
+gravar_cardapio(chamar, token, {**CFG, "chamar_garcom": True})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{T1}")
 checar("ligada, o feed mostra os botões", f.get("chamar_garcom") is True)
 st, r = chamar("POST", f"/publico/cardapio/mesa/{T1}/chamado", {"tipo": "GARCOM", "sessao": S})

@@ -84,6 +84,9 @@ U = (eu.get("unidades") or [{}])[0].get("id") or 1
 
 # 🔑 Suíte devolve o que encontrou: reserva da loja (o módulo ligado) e o Cardápio Vivo dela.
 preservar_reserva(U)
+# 🔑 Desde a 117, o Cardápio Vivo da loja são DUAS tabelas — a suíte devolve as duas.
+from comum import gravar_cardapio, preservar_cardapio_vivo  # noqa: E402
+preservar_cardapio_vivo(U)
 with get_cursor() as cur:
     cur.execute("SELECT * FROM cardapio_config WHERE id_unidade = %s", (U,))
     _CFG_ANTES = cur.fetchone()
@@ -152,26 +155,27 @@ checar("a mesa nova nasce com token (o padrão da migração não é só para as
 print("\n1. sem configuração, a mesa não tem cardápio")
 with get_cursor() as cur:
     cur.execute("DELETE FROM cardapio_config WHERE id_unidade = %s", (U,))
+    cur.execute("DELETE FROM cardapio_vivos WHERE id_unidade = %s", (U,))
 st, r = chamar("GET", f"/publico/cardapio/mesa/{M1['token']}")
 checar("404 enquanto a loja não aponta um catálogo", st == 404, (st, r))
 
 print("\n2. a configuração da loja")
 st, r = chamar("GET", "/cardapio-vivo/config", token=token)
-checar("nasce em VITRINE, sem catálogo", st == 200 and r["config"]["modo"] == "VITRINE"
+checar("nasce sem Cardápio Vivo nenhum", st == 200 and r["vivos"] == []
        and r["config"]["id_catalogo"] is None, (st, r))
 checar("oferece só os catálogos de PRODUTOS",
        ID_CAT in [c["id"] for c in r["catalogos"]] and pdf["id"] not in [c["id"] for c in r["catalogos"]])
 CFG = {"id_catalogo": ID_CAT, "modo": "VITRINE", "cor_principal": "#3d5a3a",
        "cor_fundo": "#f5efe4", "fonte": "NEWSREADER", "retencao_meses": 13}
-st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "id_catalogo": pdf["id"]}, token)
+st, r = gravar_cardapio(chamar, token, {**CFG, "id_catalogo": pdf["id"]})
 checar("apontar um PDF é recusado (409)", st == 409, (st, r))
-st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "modo": "PEDIDO"}, token)
+st, r = gravar_cardapio(chamar, token, {**CFG, "modo": "PEDIDO"})
 # Fase 2 (115): o PEDIDO foi liberado — a suíte dele é `smoke_cardapio_pedido.py`.
-checar("o modo PEDIDO é aceito desde a fase 2", st == 200 and r["config"]["modo"] == "PEDIDO", (st, r))
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
-st, r = chamar("PUT", "/cardapio-vivo/config", {**CFG, "cor_principal": "verde"}, token)
+checar("o modo PEDIDO é aceito desde a fase 2", st == 200 and r["vivos"][0]["modo"] == "PEDIDO", (st, r))
+gravar_cardapio(chamar, token, CFG)
+st, r = gravar_cardapio(chamar, token, {**CFG, "cor_principal": "verde"})
 checar("cor que não é #RRGGBB é recusada", st == 422, st)
-st, r = chamar("PUT", "/cardapio-vivo/config", CFG, token)
+st, r = gravar_cardapio(chamar, token, CFG)
 checar("a configuração grava", st == 200 and r["config"]["id_catalogo"] == ID_CAT, (st, r))
 checar("e devolve o link da loja (vitrine, balcão)", r["link_loja"].endswith(f"/c/{U}"), r.get("link_loja"))
 checar("e avisa os itens publicados sem foto e sem vídeo",
@@ -266,10 +270,10 @@ por_id = {i["id"]: i for i in f["itens"]}
 checar("o esgotado CONTINUA no feed, marcado", por_id.get(itens["D"], {}).get("esgotado") is True)
 checar("as restrições e o destaque saem no feed",
        por_id[itens["B"]]["restricoes"] == ["VEGANO", "SEM_GLUTEN"] and por_id[itens["B"]]["destaque"])
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "esconder_esgotado": True}, token)
+gravar_cardapio(chamar, token, {**CFG, "esconder_esgotado": True})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{M1['token']}")
 checar("com a opção da loja, o esgotado some", itens["D"] not in [i["id"] for i in f["itens"]])
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
+gravar_cardapio(chamar, token, CFG)
 st, r = chamar("PUT", f"/catalogos/itens/999999/marcas", {"destaque": True}, token)
 checar("item que não existe: 404", st == 404, st)
 
@@ -315,11 +319,10 @@ checar("a faixa que vira a meia-noite vale nos dois lados",
 
 print("\n7. exceções: a mais específica vence")
 with get_cursor() as cur:
-    cur.execute("""INSERT INTO cardapio_config (id_unidade, id_catalogo, modo, pedido_hora_de,
-                                                pedido_hora_ate)
-                   VALUES (%s, %s, 'PEDIDO', '11:00', '15:00')
-                   ON CONFLICT (id_unidade) DO UPDATE SET modo = 'PEDIDO',
-                       pedido_hora_de = '11:00', pedido_hora_ate = '15:00'""", (U, ID_CAT))
+    # Desde a 117 o modo é do Cardápio Vivo PRINCIPAL (o da mesa), não da loja.
+    cur.execute("""UPDATE cardapio_vivos SET modo = 'PEDIDO', pedido_hora_de = '11:00',
+                          pedido_hora_ate = '15:00'
+                    WHERE id_unidade = %s AND id_catalogo = %s""", (U, ID_CAT))
     meio_dia = datetime(2026, 10, 14, 12, 0)
     checar("a loja em PEDIDO, dentro do horário", sv.modo_efetivo(cur, U, M1["id"], meio_dia)["modo"] == "PEDIDO")
     noite = sv.modo_efetivo(cur, U, M1["id"], datetime(2026, 10, 14, 20, 0))
@@ -335,7 +338,7 @@ with get_cursor() as cur:
            sv.modo_efetivo(cur, U, M2["id"], meio_dia)["modo"] == "VITRINE")
     checar("a mesa 1 continua com o salão", sv.modo_efetivo(cur, U, M1["id"], meio_dia)["modo"] == "VITRINE")
     cur.execute("DELETE FROM cardapio_excecoes WHERE id_unidade = %s", (U,))
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
+gravar_cardapio(chamar, token, CFG)
 st, r = chamar("PUT", "/cardapio-vivo/excecoes", {"id_salao": SALAO, "id_mesa": M1["id"]}, token)
 checar("exceção de salão E mesa ao mesmo tempo é recusada", st == 422, st)
 st, r = chamar("PUT", "/cardapio-vivo/excecoes", {"id_mesa": M1["id"], "modo": "VITRINE"}, token)
@@ -440,16 +443,16 @@ chamar("PUT", f"/unidades/{U}", {"google_avaliacao_url": "https://g.page/r/botan
                                  "wifi_rede": "Botane Clientes", "wifi_senha": "cafe2026"}, token)
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
 checar("com o dado na loja mas o botão desligado, continua sem Hub", f.get("hub") is None, f.get("hub"))
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "hub_wifi": True}, token)
+gravar_cardapio(chamar, token, {**CFG, "hub_wifi": True})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
 checar("ligado o Wi-Fi, o Hub traz rede e senha (e não a avaliação, desligada)",
        f.get("hub") == {"avaliacao": None, "wifi": {"rede": "Botane Clientes", "senha": "cafe2026"}},
        f.get("hub"))
-chamar("PUT", "/cardapio-vivo/config", {**CFG, "hub_wifi": True, "hub_avaliacao": True}, token)
+gravar_cardapio(chamar, token, {**CFG, "hub_wifi": True, "hub_avaliacao": True})
 _st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
 checar("e com a avaliação também",
        (f.get("hub") or {}).get("avaliacao") == "https://g.page/r/botane/review", f.get("hub"))
-chamar("PUT", "/cardapio-vivo/config", CFG, token)
+gravar_cardapio(chamar, token, CFG)
 
 print("\n11c. eventos novos, atenção estimada e sessão engajada")
 S1, S2 = str(uuid.uuid4()), str(uuid.uuid4())
@@ -488,6 +491,60 @@ with get_cursor() as cur:
            rs.get("sessoes", 0) >= 2 and 1 <= rs.get("engajadas", 0) < rs["sessoes"], rs)
     checar("e conta os cliques do Hub", rs.get("hubs", 0) >= 1 and rs.get("cliques_wifi", 0) >= 1
            and rs.get("cliques_avaliacao", 0) >= 1, rs)
+
+print("\n11d. vários Cardápios Vivos na loja (117)")
+# 🔑 Pedido do dono (15/10/2026): a cafeteria (o principal, da mesa) e o Catering, pelo link.
+_st, cat2 = chamar("POST", "/catalogos", {"nome": f"Catering {MARCA}", "origem": "PRODUTOS",
+                                          "situacao": "ATIVO"}, token)
+_st, gc = chamar("POST", f"/catalogos/{cat2['id']}/categorias", {"nome": "Kits"}, token)
+_st, itc = chamar("POST", f"/catalogos/categorias/{gc['id']}/itens", {"id_produto": A}, token)
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{cat2['id']}", {"slug": "catering"}, token)
+checar("ligar um segundo Cardápio Vivo grava", st == 200, (st, r))
+v2 = next((v for v in r.get("vivos", []) if v["id_catalogo"] == cat2["id"]), {})
+checar("e ele NÃO toma o lugar do principal", v2.get("principal") is False
+       and next(v for v in r["vivos"] if v["id_catalogo"] == ID_CAT)["principal"] is True, r.get("vivos"))
+SLUG1 = next(v for v in r["vivos"] if v["id_catalogo"] == ID_CAT)["slug"]
+checar("o principal ganhou um nome de link tirado do nome do catálogo",
+       SLUG1.startswith("vivo-"), SLUG1)
+checar("e tem o link próprio, com ?cardapio=", v2.get("link", "").endswith(f"/c/{U}?cardapio=catering"), v2)
+_st, f = chamar("GET", f"/publico/cardapio/loja/{U}?cardapio=catering")
+checar("o link abre o catering", f.get("cardapio") == f"Catering {MARCA}"
+       and f.get("vivo", {}).get("slug") == "catering" and [i["id"] for i in f["itens"]] == [itc["id"]], f.get("vivo"))
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("e a mesa continua abrindo o principal", f.get("vivo", {}).get("id_catalogo") == ID_CAT, f.get("vivo"))
+_st, f = chamar("GET", f"/publico/cardapio/loja/{U}")
+checar("sem ?cardapio=, o link da loja é o principal", f.get("vivo", {}).get("id_catalogo") == ID_CAT)
+st, _r = chamar("GET", f"/publico/cardapio/loja/{U}?cardapio=nao-existe")
+checar("nome de link que não existe é 404", st == 404, st)
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{cat2['id']}", {"slug": SLUG1}, token)
+checar("o mesmo nome de link de outro cardápio é recusado (409)", st == 409 and "já é do" in r.get("detail", ""), (st, r))
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{cat2['id']}", {"slug": "Catering Ç"}, token)
+checar("nome de link com espaço ou acento é recusado (422)", st == 422, st)
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{pdf['id']}", {}, token)
+checar("PDF não vira Cardápio Vivo (409)", st == 409, st)
+# Eventos do catering contam o produto pelo catálogo DELE.
+S3 = str(uuid.uuid4())
+st, _r = chamar("POST", "/publico/cardapio/eventos", {"sessao": S3, "loja": U, "modo": "VITRINE",
+                "catalogo": cat2["id"], "eventos": [{"tipo": "viu_item", "item": itc["id"], "duracao_ms": 900}]})
+with get_cursor() as cur:
+    cur.execute("SELECT id_produto FROM cardapio_eventos WHERE id_sessao = %s", (S3,))
+    ev = cur.fetchone()
+checar("o evento do catering é aceito e acha o produto pelo item dele", st == 204 and ev and ev["id_produto"] == A, (st, ev))
+# Trocar o principal: a mesa passa a abrir o catering; e volta.
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{cat2['id']}", {"slug": "catering", "principal": True}, token)
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("marcar outro como principal: a mesa passa a abrir ele, e o antigo deixa de ser",
+       f.get("vivo", {}).get("id_catalogo") == cat2["id"]
+       and [v["principal"] for v in r["vivos"]].count(True) == 1, r.get("vivos"))
+chamar("PUT", f"/cardapio-vivo/vivos/{ID_CAT}", {"slug": "cardapio", "principal": True}, token)
+st, r = chamar("DELETE", f"/cardapio-vivo/vivos/{cat2['id']}", token=token)
+checar("deixar de ser Cardápio Vivo responde 200", st == 200, (st, r))
+st, _r = chamar("GET", f"/publico/cardapio/loja/{U}?cardapio=catering")
+checar("e o link dele deixa de abrir", st == 404, st)
+_st, lista = chamar("GET", f"/publico/{U}/catalogos")
+meu = next((c for c in lista if c.get("id") == ID_CAT), {})
+checar("o site recebe qual é o Cardápio Vivo e se é o principal",
+       meu.get("cardapio_vivo") is True and meu.get("vivo") == {"slug": "cardapio", "principal": True}, meu)
 
 print("\n12. a porta: Portal desligado, cardápio fechado")
 chamar("PUT", f"/unidades/{U}/parametros", {**par, "reservas_ligado": False}, token)

@@ -594,3 +594,40 @@ coisas foram construídas, não a ordem em que se monta um cardápio.
   confirmação dentro voltava ao TOPO: o Esc fecharia a gaveta, não a pergunta.
 - Cobertura: `smoke_catalogo_produtos.py` (preço, resumo, mover) e as fases 11 e 13 da bateria do
   navegador (criação em dois passos, PDF, publicar, cartões, abas, gaveta, lote, o que falta, mover).
+
+## Vários Cardápios Vivos por loja (migração 117, 15/10/2026)
+
+🔑 **Pedido do dono:** *"hoje podemos ter somente 1 cardápio vivo, poderíamos ter mais de um.
+Exemplo: no Botané vai ter um que é o da cafeteria, e ela pode configurar outro que é destinado
+ao Catering."* É a parte (a) de três; (b) traz o site para dentro do Next com um layout só e
+(c) põe tudo em `reservas.botanedeliecafe.com.br`.
+
+Decisões do dono (as recomendações aceitas):
+- 🔑 **Um PRINCIPAL por loja**, que o QR da mesa abre; os outros, só pelo link
+  (`/c/{loja}?cardapio={slug}`). O primeiro Cardápio Vivo da loja nasce principal; marcar outro
+  desmarca o anterior (índice único parcial). Tirar o principal deixa a mesa sem cardápio — a
+  frase avisa.
+- 🔑 **A aparência é da CASA**, uma só para o site inteiro: `cardapio_config` ficou com cores,
+  fonte, logo, Hub, esconder esgotado e retenção. Cada Cardápio Vivo (`cardapio_vivos`, chave
+  `(id_unidade, id_catalogo)`) tem o nome no link, o principal e o comportamento: modo,
+  confirmação, horário do pedido e garçom.
+- **O catering pede como ENCOMENDA**, reusando a configuração de pedidos pelo site do catálogo.
+  ⚠️ Ainda não: sem mesa o feed é sempre VITRINE. O carrinho de encomenda entra no feed na (b),
+  junto com o site.
+
+O que pegou:
+- ⚠️ **`cardapio_config.id_catalogo` NÃO é zerado pela 117**, e as colunas de comportamento ficam
+  sem uso: o contêiner antigo convive um ou dois minutos com o novo no deploy e ainda as lê —
+  zerar faria a mesa responder 404 nesse minuto. Nada desta versão em diante as lê ou grava.
+- `config()` devolve `id_catalogo` CALCULADO (o do principal): o painel de atenção, os testes A/B
+  e o pedido da mesa continuam olhando o cardápio da mesa, como antes.
+- O feed responde `vivo` (catálogo, slug, principal) e o lote de eventos manda `catalogo`; o
+  servidor confere os itens contra o catálogo DESTE Cardápio Vivo. A seleção guardada no aparelho
+  é por cardápio (`cardapio-{slug}`): a do catering não aparece na da mesa.
+- O site manda `?cardapio=` quando o Cardápio Vivo não é o principal (`vivo` na lista pública).
+- Uma janela só para configurar (`components/janela-cardapio-vivo.tsx`), usada pela tela do
+  Cardápio Vivo (cartão "Os Cardápios Vivos") e pela aba Publicação do catálogo.
+- Testes: `tests/comum.py` ganhou `preservar_cardapio_vivo` (as DUAS tabelas) e `gravar_cardapio`
+  (o formato de antes, repartido nas duas rotas); as verificações do navegador usam
+  `scripts/cardapio-vivo-comum.mjs`. Cobertura nova: seção 11d do `smoke_cardapio_vivo.py` e a fase
+  13 do `verificar.mjs`.

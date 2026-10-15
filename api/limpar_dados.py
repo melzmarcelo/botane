@@ -414,7 +414,7 @@ PRESERVADAS = [
     # Se o catálogo aceita pedido é configuração dele, como o próprio catálogo.
     "catalogo_pedidos_config",
     # O modo do Cardápio Vivo e as exceções por salão/mesa (113) descrevem a casa.
-    "cardapio_config", "cardapio_excecoes",
+    "cardapio_config", "cardapio_excecoes", "cardapio_vivos",
 ]
 
 

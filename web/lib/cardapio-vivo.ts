@@ -48,6 +48,8 @@ export type Feed = {
   /** A tela de entrada (114): só o que a loja ligou E preencheu. Nulo = direto ao feed. */
   hub: { avaliacao: string | null; wifi: { rede: string; senha: string } | null } | null;
   previa: boolean;
+  /** Qual Cardápio Vivo é este (117): o catálogo vai nos eventos. */
+  vivo: { id_catalogo: number; slug: string | null; principal: boolean };
   categorias: (SecaoFeed & { subcategorias: SecaoFeed[] })[];
   itens: ItemFeed[];
   restricoes: { chave: string; nome: string }[];
@@ -57,7 +59,7 @@ export type Idioma = "pt" | "en" | "de";
 
 /** O feed da mesa (token) ou da loja (sem mesa). `null` quando não existe (404). */
 export async function buscarFeed(loja: number, token: string | null, idioma: Idioma,
-                                 sessao: string | null = null): Promise<
+                                 sessao: string | null = null, cardapio: string | null = null): Promise<
   { feed: Feed } | { erro: string; status: number }
 > {
   const caminho = token ? `/publico/cardapio/mesa/${encodeURIComponent(token)}`
@@ -66,6 +68,7 @@ export async function buscarFeed(loja: number, token: string | null, idioma: Idi
   const params = new URLSearchParams();
   if (idioma !== "pt") params.set("idioma", idioma);
   if (sessao) params.set("sessao", sessao);
+  if (cardapio && !token) params.set("cardapio", cardapio);
   const q = params.toString() ? `?${params}` : "";
   try {
     const r = await fetch(`${BASE_API}${caminho}${q}`, { cache: "no-store" });
@@ -100,14 +103,11 @@ export const enderecoEventos = () => `${BASE_API}/publico/cardapio/eventos`;
 
 // ------------------------------------------------------------------ gestão
 
+/** O que é da CASA (117): a aparência do site inteiro, o Hub, esgotado e retenção. */
 export type ConfigCardapio = {
   id_unidade: number;
+  /** O catálogo do Cardápio Vivo PRINCIPAL (o da mesa) — calculado, só leitura. */
   id_catalogo: number | null;
-  modo: "VITRINE" | "PEDIDO";
-  exige_confirmacao: boolean;
-  pedido_hora_de: string | null;
-  pedido_hora_ate: string | null;
-  chamar_garcom: boolean;
   esconder_esgotado: boolean;
   cor_principal: string | null;
   cor_fundo: string | null;
@@ -118,8 +118,29 @@ export type ConfigCardapio = {
   hub_wifi: boolean;
 };
 
+/** Um Cardápio Vivo (117): o catálogo, o nome no link, se é o da mesa e o comportamento. */
+export type VivoCardapio = {
+  id_catalogo: number;
+  nome: string;
+  situacao: string;
+  slug: string;
+  principal: boolean;
+  modo: "VITRINE" | "PEDIDO";
+  exige_confirmacao: boolean;
+  pedido_hora_de: string | null;
+  pedido_hora_ate: string | null;
+  chamar_garcom: boolean;
+  /** O link sem mesa — o principal sem `?cardapio=`. */
+  link: string;
+};
+
+export type GravarVivo = Omit<VivoCardapio, "id_catalogo" | "nome" | "situacao" | "link" | "slug"> & {
+  slug: string | null;
+};
+
 export type RespostaConfig = {
   config: ConfigCardapio;
+  vivos: VivoCardapio[];
   catalogos: { id: number; nome: string; situacao: string }[];
   opcoes: { modos: string[]; modos_liberados: string[]; fontes: string[] };
   link_loja: string;
@@ -139,8 +160,13 @@ export type MesaAcesso = {
 
 export const CardapioVivoService = {
   config: () => api.get<RespostaConfig>("/cardapio-vivo/config"),
-  salvarConfig: (c: Omit<ConfigCardapio, "id_unidade" | "logo_url">) =>
+  salvarConfig: (c: Omit<ConfigCardapio, "id_unidade" | "logo_url" | "id_catalogo">) =>
     api.put<RespostaConfig>("/cardapio-vivo/config", c),
+  /** Liga o catálogo como Cardápio Vivo, ou regrava o comportamento dele (117). */
+  salvarVivo: (idCatalogo: number, v: GravarVivo) =>
+    api.put<RespostaConfig>(`/cardapio-vivo/vivos/${idCatalogo}`, v),
+  removerVivo: (idCatalogo: number) =>
+    api.delete<RespostaConfig>(`/cardapio-vivo/vivos/${idCatalogo}`),
   enviarLogo: (arquivo: File) => {
     const f = new FormData();
     f.append("arquivo", arquivo);

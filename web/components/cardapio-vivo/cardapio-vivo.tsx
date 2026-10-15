@@ -38,9 +38,10 @@ function economiaDeDados(): boolean {
   return !!c && (c.saveData === true || ["slow-2g", "2g"].includes(c.effectiveType ?? ""));
 }
 
-type Props = { loja: number; token: string | null; idCatalogoPrevia?: number };
+/** `cardapio`: o nome no link de um Cardápio Vivo que não é o principal (117). */
+type Props = { loja: number; token: string | null; cardapio?: string | null; idCatalogoPrevia?: number };
 
-export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
+export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoPrevia }: Props) {
   const [idioma, setIdioma] = useState<Idioma>("pt");
   const [feed, setFeed] = useState<Feed | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -62,7 +63,8 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
   const rolagem = useRef<HTMLDivElement>(null);
   const barra = useRef<HTMLDivElement>(null);
   const medidor = useRef<Medidor | null>(null);
-  const selecao = useSelecao(loja, token);
+  // ⚠️ A seleção guardada é de CADA cardápio: a do catering não pode aparecer na da mesa.
+  const selecao = useSelecao(loja, token ?? (cardapio ? `cardapio-${cardapio}` : null));
   const previa = idCatalogoPrevia !== undefined;
   // 🔑 **No modo PEDIDO** (fase 2, 115), a "minha seleção" vira o carrinho que vai ao painel —
   // a mesma lista no aparelho, com os rótulos de pedido. Sem mesa, nunca há pedido.
@@ -96,17 +98,17 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
       }
       return;
     }
-    const r = await buscarFeed(loja, token, idioma, sessaoParaTestes());
+    const r = await buscarFeed(loja, token, idioma, sessaoParaTestes(), cardapio);
     if ("feed" in r) setFeed(r.feed);
     else setErro(r.erro);
-  }, [loja, token, idioma, previa, idCatalogoPrevia]);
+  }, [loja, token, cardapio, idioma, previa, idCatalogoPrevia]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
   // O medidor nasce com o feed (o modo vem dele) e morre com a página.
   useEffect(() => {
     if (!feed || previa) return;
-    const m = new Medidor(feed.loja.id, token, feed.modo, idioma);
+    const m = new Medidor(feed.loja.id, token, feed.modo, idioma, false, feed.vivo?.id_catalogo ?? null);
     medidor.current = m;
     m.iniciar();
     if (!hubDecidido.current) {

@@ -10,6 +10,7 @@
  *    node scripts/verificar-cardapio-pedido.mjs     (API na 9200 e web na 3100 de pé)
  */
 import puppeteer from "puppeteer-core";
+import { devolverVivos, ligarDeTeste } from "./cardapio-vivo-comum.mjs";
 
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const API = "http://127.0.0.1:9200";
@@ -55,9 +56,8 @@ await api("PUT", `/produtos/${risoto}/adicionais`, [{ nome: "Ponto", minimo: 1, 
   opcoes: [{ nome: "Al dente" }, { nome: "Macio" }] }], token);
 const { dados: salao } = await api("POST", "/reservas/saloes", { nome: `Pede ${MARCA}` }, token);
 const { dados: mesa } = await api("POST", "/reservas/mesas", { id_salao: salao.id, nome: "P1", lugares: 2 }, token);
-await api("PUT", "/cardapio-vivo/config", { ...antes.config, id_catalogo: cat.id, modo: "PEDIDO",
-                                            exige_confirmacao: true, chamar_garcom: true,
-                                            pedido_hora_de: null, pedido_hora_ate: null }, token);
+await ligarDeTeste(api, token, antes, cat.id, { modo: "PEDIDO", exige_confirmacao: true, chamar_garcom: true,
+                                               pedido_hora_de: null, pedido_hora_ate: null });
 const { dados: acesso } = await api("GET", "/cardapio-vivo/mesas", undefined, token);
 const caminho = new URL(acesso.mesas.find((m) => m.id === mesa.id).link).pathname;
 
@@ -140,7 +140,7 @@ try {
   checar("e explica as métricas", at.includes("O que cada número quer dizer"));
 } finally {
   await navegador.close();
-  await api("PUT", "/cardapio-vivo/config", antes.config, token);
+  await devolverVivos(api, token, antes, cat.id);
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
   await api("DELETE", `/reservas/mesas/${mesa.id}`, undefined, token);
   await api("DELETE", `/reservas/saloes/${salao.id}`, undefined, token);

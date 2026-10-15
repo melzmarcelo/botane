@@ -10199,8 +10199,30 @@ try {
 
   // Publicar mora na própria página.
   await irPara(p, `${WEB}/catalogos/${catPed.id}?aba=publicacao`);
-  checar("a aba Publicação tem a situação, o botão e a escolha do Cardápio Vivo",
-    await esperarTexto(p, "Tirar do ar", 8000) && !!(await p.$("#catalogo-vivo")) && !!(await p.$("#catalogo-nome")));
+  checar("a aba Publicação tem a situação, o botão e o Cardápio Vivo",
+    await esperarTexto(p, "Tirar do ar", 8000) && !!(await p.$("#vivo-ligar")) && !!(await p.$("#catalogo-nome")));
+  // 🔑 **Vários Cardápios Vivos por loja** (117, pedido do dono: a cafeteria e o Catering).
+  // Este catálogo vira MAIS UM, pelo link — sem tomar a mesa do principal da loja.
+  aoTerminar.push(() => api("DELETE", `/cardapio-vivo/vivos/${catPed.id}`, null, token));
+  const { dados: vivosAntes } = await api("GET", "/cardapio-vivo/config", null, token);
+  await p.click("#vivo-ligar");
+  await p.waitForSelector("#vivo-slug", { timeout: 8000 }).catch(() => {});
+  const principalTravado = await p.evaluate(() => document.querySelector("#vivo-principal")?.checked);
+  await p.type("#vivo-slug", `tela-${marcaNota}`.toLowerCase());
+  checar("e liga como Cardápio Vivo pela janela", await clicarQuando(p, "Ligar", { exato: true }));
+  await p.waitForSelector("#vivo-link", { timeout: 10000 }).catch(() => {});
+  const linkVivo = await p.evaluate(() => document.querySelector("#vivo-link")?.textContent ?? "");
+  const temPrincipal = (vivosAntes?.vivos ?? []).some((v) => v.principal);
+  checar("com o link próprio (?cardapio=), quando a loja já tem o principal",
+    !temPrincipal || (principalTravado === false && linkVivo.includes(`?cardapio=tela-${marcaNota}`.toLowerCase())),
+    { linkVivo, principalTravado, temPrincipal });
+  const { dados: vivosDepois } = await api("GET", "/cardapio-vivo/config", null, token);
+  checar("e o principal da loja continua o mesmo",
+    JSON.stringify((vivosDepois?.vivos ?? []).filter((v) => v.principal).map((v) => v.id_catalogo))
+      === JSON.stringify((vivosAntes?.vivos ?? []).filter((v) => v.principal).map((v) => v.id_catalogo)
+        .concat(temPrincipal ? [] : [catPed.id])), vivosDepois?.vivos);
+  checar("e deixa de ser pelo mesmo cartão", await clicarQuando(p, "deixar de ser", { exato: true })
+    && await esperarTexto(p, "Tornar Cardápio Vivo", 8000));
 
   // 🔑 A tradução do cardápio (103): o cartão conta o que falta e a seção se corrige à mão.
   await irPara(p, `${WEB}/catalogos/${catPed.id}?aba=idiomas`);

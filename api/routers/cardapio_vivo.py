@@ -17,7 +17,8 @@ import auditoria
 import relogio
 from config import WEB_URL
 from database import get_cursor
-from models.cardapio_vivo import ChamadoDaMesa, ConfigCardapio, ExcecaoCardapio, LoteEventos, PedidoDaMesa
+from models.cardapio_vivo import (ChamadoDaMesa, ConfigCardapio, ExcecaoCardapio, LoteEventos,
+                                  PedidoDaMesa, VivoCardapio)
 from models.reservas import IdentificacaoDoSite
 from routers.reservas import _unidade
 from seguranca import Contexto, ip_do_cliente, requer_permissao
@@ -50,11 +51,20 @@ def _catalogos_produtos(cur, id_unidade: int) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
 
 
+def _com_link(id_unidade: int, v: dict) -> dict:
+    """O Cardápio Vivo com o link de quem abre sem mesa — o principal sem `?cardapio=`."""
+    v = {k: (val.strftime("%H:%M") if isinstance(val, time) else val) for k, val in v.items()}
+    return v | {"link": servico.link_da_loja(WEB_URL, id_unidade,
+                                             None if v["principal"] else v["slug"])}
+
+
 def _resposta_config(cur, id_unidade: int) -> dict:
     cfg = servico.config(cur, id_unidade)
     cfg.pop("atualizado_por", None)
     return {
         "config": cfg,
+        # 🔑 Os Cardápios Vivos da loja (117), o principal primeiro.
+        "vivos": [_com_link(id_unidade, v) for v in servico.vivos(cur, id_unidade)],
         "catalogos": _catalogos_produtos(cur, id_unidade),
         "opcoes": {"modos": list(servico.MODOS), "modos_liberados": list(servico.MODOS_LIBERADOS),
                    "fontes": list(servico.FONTES)},
@@ -79,6 +89,33 @@ def salvar_config(body: ConfigCardapio, ctx: Contexto = Depends(_EDITAR)) -> dic
                             antes={k: str(antes.get(k)) for k in body.model_dump()},
                             depois={k: str(v) for k, v in body.model_dump().items()})
         return _resposta_config(cur, id_unidade) | {"message": "Configuração gravada."}
+
+
+@router.put("/vivos/{id_catalogo}")
+def salvar_vivo(id_catalogo: int, body: VivoCardapio, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Liga o catálogo como Cardápio Vivo da loja, ou regrava o comportamento dele."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = servico.salvar_vivo(cur, id_unidade, id_catalogo, body.model_dump(), ctx.id_usuario)
+        antes = feito.pop("antes")
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_vivo", id_catalogo,
+                            "alterar" if antes else "ligar",
+                            antes={k: str(v) for k, v in (antes or {}).items()},
+                            depois={k: str(v) for k, v in body.model_dump().items()},
+                            id_unidade=id_unidade)
+        return _resposta_config(cur, id_unidade) | {
+            "message": f"“{feito['nome']}” é Cardápio Vivo" + (" — o principal, o da mesa." if feito["principal"] else ".")}
+
+
+@router.delete("/vivos/{id_catalogo}")
+def remover_vivo(id_catalogo: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = servico.remover_vivo(cur, id_unidade, id_catalogo)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_vivo", id_catalogo, "desligar",
+                            antes={k: str(v) for k, v in feito.pop("antes").items()},
+                            id_unidade=id_unidade)
+        return _resposta_config(cur, id_unidade) | feito
 
 
 @router.post("/config/logo")
@@ -236,10 +273,11 @@ def cardapio_da_mesa(token: str, idioma: str | None = _IDIOMA, sessao: str | Non
 
 
 @publico.get("/loja/{id_unidade}")
-def cardapio_da_loja(id_unidade: int, idioma: str | None = _IDIOMA, sessao: str | None = _SESSAO) -> dict:
-    """O cardápio sem mesa (vitrine, balcão): o modo da LOJA, sem exceção de salão."""
+def cardapio_da_loja(id_unidade: int, idioma: str | None = _IDIOMA, sessao: str | None = _SESSAO,
+                     cardapio: str | None = Query(None, pattern=r"^[a-z0-9-]{1,40}$")) -> dict:
+    """O cardápio sem mesa: o principal, ou o do `?cardapio=` (o catering, 117)."""
     with get_cursor() as cur:
-        return servico.cardapio_publico(cur, id_unidade, None, idioma, sessao=sessao)
+        return servico.cardapio_publico(cur, id_unidade, None, idioma, sessao=sessao, slug=cardapio)
 
 
 @router.get("/previa")
