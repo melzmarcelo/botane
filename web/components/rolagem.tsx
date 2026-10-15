@@ -35,7 +35,10 @@ import { useEffect, useRef } from "react";
  * sair por um link no meio da espera, a restauração morre.
  */
 const CHAVE = "botane:rolagem";
-const ESPERA_MAXIMA = 3000;
+// ⚠️ **8 s, não 3** (15/10/2026): com a lista de produtos lenta (base grande, celular ou máquina
+// carregada) ela passava de 3 s para chegar, e a volta caía no TOPO — medido na bateria, uma
+// rodada em três. Esperar mais não briga com ninguém: quem rola durante a espera manda (`desistir`).
+const ESPERA_MAXIMA = 8000;
 
 function ler(): Record<string, number> {
   try {

@@ -2965,7 +2965,10 @@ try {
   await p.goBack();
   await p.waitForFunction(() => location.pathname === "/produtos", { timeout: 20000 })
     .catch(() => {});
-  await new Promise((r) => setTimeout(r, 2800));
+  // ⚠️ Espera a ROLAGEM voltar (até 9 s, um pouco mais que a espera de `rolagem.tsx`), não um
+  // tempo fixo: com a máquina carregada a lista passa de 3 s para chegar.
+  await p.waitForFunction((antes) => Math.abs(window.scrollY - antes) < 60,
+    { timeout: 9000, polling: 200 }, navRolagemAntes).catch(() => {});
   const navRolagemDepois = await p.evaluate(() => window.scrollY);
   // ⚠️ Só vale quando a lista é longa o bastante para rolar: numa base vazia a
   // rolagem é zero dos dois lados, e a checagem não mediria nada.
@@ -4356,13 +4359,17 @@ try {
 
   // Corrigir a nota digitada, pela tela, antes de ela virar estoque. O botão
   // virou LINK para a página de correção — a nota inteira já tem endereço.
+  // ⚠️ Espera o LINK, não um tempo: com a máquina carregada ele chegava depois dos 2,2 s, e
+  // seguir sem ele levava a bateria a abrir `…null` e parar no meio (15/10/2026).
+  await p.waitForFunction(() => [...document.querySelectorAll("a")]
+    .some((x) => x.textContent?.trim() === "Corrigir"), { timeout: 15000, polling: 250 }).catch(() => {});
   const linkCorrigir = await p.evaluate(() => {
     const a = [...document.querySelectorAll("a")].find((x) => x.textContent?.trim() === "Corrigir");
     return a ? a.getAttribute("href") : null;
   });
   checar("a nota digitada oferece o caminho da correção",
     /\/compras\/\d+\/editar$/.test(linkCorrigir ?? ""), linkCorrigir);
-  await irPara(p, WEB + linkCorrigir);
+  if (linkCorrigir) await irPara(p, WEB + linkCorrigir);
   await new Promise((r) => setTimeout(r, 1400));
   const textoCorrigir = await p.evaluate(() => document.body.innerText);
   checar("a nota digitada oferece correção", /Corrigir a nota/i.test(textoCorrigir),

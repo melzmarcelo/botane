@@ -21,7 +21,7 @@
   3. **A rolagem volta** (`components/rolagem.tsx`, montado na casca). O filtro e a página já
      voltavam pela URL; a rolagem não, porque o navegador restaura cedo demais — a tela ainda
      está no "carregando" e não há para onde rolar. O componente anota a posição por endereço
-     e, no voltar, espera a página crescer (até 3 s).
+     e, no voltar, espera a página crescer (até 8 s — eram 3, e a lista lenta caía no topo; 15/10/2026).
      ⚠️ **Quem arma é o `popstate`, não o efeito de `usePathname`**: o Next conclui a troca de
      tela DENTRO do tratador dele, que roda antes do nosso, e o efeito já passou quando a
      marca chega. A primeira versão nunca restaurou por isso.
