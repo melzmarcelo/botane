@@ -299,6 +299,15 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Catálogos",
       },
       {
+        // 🔑 **Testes A/B** (fase 3, 116): vídeo × foto e ordem atual × sugerida.
+        href: "/cardapio-vivo/testes",
+        nome: "Testes A/B",
+        icone: "grafico",
+        chave: "cardapio.atencao",
+        soComReservas: true,
+        subgrupo: "Catálogos",
+      },
+      {
         // 🔑 **Pedidos pelo catálogo** (pedido do dono, 28/09/2026: *"uma tela com pedidos
         // e um painel para acompanhar"*). O painel primeiro: é a tela que o balcão deixa aberta.
         href: "/pedidos/painel",

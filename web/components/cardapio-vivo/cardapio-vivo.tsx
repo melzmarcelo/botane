@@ -15,7 +15,7 @@ import Chamados from "./chamados";
 import Detalhe from "./detalhe";
 import { useFavoritos } from "./favoritos";
 import Hub from "./hub";
-import { Medidor, medicaoRecusada, recusarMedicao } from "./eventos";
+import { Medidor, medicaoRecusada, recusarMedicao, sessaoParaTestes } from "./eventos";
 import ItemFeed from "./item-feed";
 import { useSelecao, type EscolhaAdicional } from "./selecao";
 import TelaPedido from "./tela-pedido";
@@ -96,7 +96,7 @@ export default function CardapioVivo({ loja, token, idCatalogoPrevia }: Props) {
       }
       return;
     }
-    const r = await buscarFeed(loja, token, idioma);
+    const r = await buscarFeed(loja, token, idioma, sessaoParaTestes());
     if ("feed" in r) setFeed(r.feed);
     else setErro(r.erro);
   }, [loja, token, idioma, previa, idCatalogoPrevia]);

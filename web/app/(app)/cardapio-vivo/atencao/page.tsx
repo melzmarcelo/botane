@@ -13,14 +13,17 @@ import { useCallback, useEffect, useState } from "react";
 import CabecalhoTela from "@/components/cabecalho-tela";
 import { Aviso, Carregando } from "@/components/ui";
 import { AtencaoService, CardapioVivoService, type PainelAtencao } from "@/lib/cardapio-vivo";
+import { useSessao } from "@/lib/sessao";
 import Indicadores from "./indicadores";
 import Mapa from "./mapa";
+import SugestoesDestaque from "./sugestoes-destaque";
 import TabelaItens from "./tabela-itens";
 
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function PaginaAtencao() {
+  const { pode } = useSessao();
   const hoje = new Date();
   const [de, setDe] = useState(iso(new Date(hoje.getTime() - 29 * 86400_000)));
   const [ate, setAte] = useState(iso(hoje));
@@ -108,6 +111,8 @@ export default function PaginaAtencao() {
             <Aviso tipo="info">Os eventos guardados começam em {dados.bruto_desde.split("-").reverse().join("/")} — antes disso não há dado para este painel.</Aviso>
           )}
           <Indicadores p={dados} />
+          {/* 🔑 Fase 3 (116): o sistema sugere, o gerente aprova. */}
+          <SugestoesDestaque de={de} ate={ate} podeAplicar={pode("catalogos.editar")} aoAplicar={() => void carregar()} />
           <TabelaItens itens={dados.itens} idCatalogo={idCatalogo} />
           <Mapa mapa={dados.mapa} />
         </>

@@ -212,3 +212,28 @@ que a loja exigir).
 - Cobertura: `smoke_cardapio_pedido.py` (59) e `web/scripts/verificar-cardapio-pedido.mjs` (16).
 
 **Fase 3 (não começou):** testes A/B de mídia e ordem, e sugestões automáticas de destaque.
+
+## 9. Fase 3 — construída em 15/10/2026 (migração 116)
+
+Decisões do dono no início da fase: **A/B de mídia = vídeo × foto** no mesmo prato (só prato
+que tem os dois); **vencedor pela taxa de adição** (quem viu e adicionou — atribuível à
+sessão); **A/B de ordem = a do catálogo × a sugerida pelo painel**; **destaque: o sistema
+sugere, o gerente aprova**.
+
+- **A variante não é gravada**: `mod(abs(hashtext(sessao || ':' || teste)), 2)` no banco, a
+  mesma conta no feed e na análise. O feed recebe a sessão anônima (`?sessao=`); quem recusou
+  a medição não manda e fica fora dos testes; a prévia do cadastro também.
+- **Um teste aberto por prato (mídia) e um de ordem por cardápio** (índices únicos parciais).
+  A ordem B fica CONGELADA no início (`ordem_b`), para a variante não mudar no meio.
+- **Resultado**: sessões expostas (viram o prato — ou qualquer prato, no de ordem) e quantas
+  adicionaram, por braço; teste de duas proporções bicaudal; abaixo de 100 sessões por braço
+  é "amostra pequena" e não aponta vencedor; p < 0,05 aponta.
+- **Aplicar** é sempre um clique de quem edita o catálogo, auditado: mídia B grava
+  `catalogo_itens.midia_preferida = 'FOTO'` (o feed passa a mostrar a foto); ordem B grava a
+  ordem congelada no catálogo, lista a lista, com passo 10.
+- **Sugestões de destaque**: pôr = o painel diz DESTACAR e o prato não está em destaque;
+  tirar = está em destaque e é candidato a sair, ou tem margem baixa sem ser lançamento.
+  Aplicar passa pela mesma porta da marca manual do catálogo.
+- Telas: **Testes A/B** (começar, resultado por braço, encerrar, aplicar A/B) e o cartão
+  **Sugestões de destaque** no painel Atenção × Vendas.
+- Cobertura: `smoke_cardapio_testes.py` (29) e `web/scripts/verificar-cardapio-testes.mjs` (10).

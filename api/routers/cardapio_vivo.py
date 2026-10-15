@@ -10,7 +10,7 @@ só sai o que a casa publicou, e só grava evento anônimo com freio.
 from datetime import date, time
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 import arquivos
 import auditoria
@@ -23,6 +23,7 @@ from routers.reservas import _unidade
 from seguranca import Contexto, ip_do_cliente, requer_permissao
 from services import cardapio_atencao
 from services import cardapio_pedido
+from services import cardapio_testes
 from services import cardapio_vivo as servico
 from services import fidelidade_qr
 from services import reserva_clientes as clientes
@@ -218,8 +219,12 @@ def qr_pdf(ids: str | None = Query(None, max_length=2000, description="ids separ
 _IDIOMA = Query(None, pattern="^(pt|en|de)$")
 
 
+# A sessão anônima do aparelho (só o uuid): é dela que sai a variante dos testes A/B (116).
+_SESSAO = Query(None, pattern=r"^[0-9a-f-]{36}$")
+
+
 @publico.get("/mesa/{token}")
-def cardapio_da_mesa(token: str, idioma: str | None = _IDIOMA) -> dict:
+def cardapio_da_mesa(token: str, idioma: str | None = _IDIOMA, sessao: str | None = _SESSAO) -> dict:
     """O cardápio da mesa: a loja e a mesa saem do TOKEN, nunca de um número na URL."""
     with get_cursor() as cur:
         mesa = servico.mesa_por_token(cur, token)
@@ -227,14 +232,14 @@ def cardapio_da_mesa(token: str, idioma: str | None = _IDIOMA) -> dict:
             # ⚠️ Token trocado (QR antigo) ou inventado: o mesmo 404, sem dizer qual.
             raise HTTPException(status_code=404, detail="Este QR code não vale mais. "
                                                         "Peça o cardápio ao garçom.")
-        return servico.cardapio_publico(cur, mesa["id_unidade"], mesa, idioma)
+        return servico.cardapio_publico(cur, mesa["id_unidade"], mesa, idioma, sessao=sessao)
 
 
 @publico.get("/loja/{id_unidade}")
-def cardapio_da_loja(id_unidade: int, idioma: str | None = _IDIOMA) -> dict:
+def cardapio_da_loja(id_unidade: int, idioma: str | None = _IDIOMA, sessao: str | None = _SESSAO) -> dict:
     """O cardápio sem mesa (vitrine, balcão): o modo da LOJA, sem exceção de salão."""
     with get_cursor() as cur:
-        return servico.cardapio_publico(cur, id_unidade, None, idioma)
+        return servico.cardapio_publico(cur, id_unidade, None, idioma, sessao=sessao)
 
 
 @router.get("/previa")
@@ -370,3 +375,77 @@ def painel_atencao(de: date, ate: date, id_salao: int | None = None,
         return cardapio_atencao.painel(
             cur, _unidade(cur, ctx), de, ate, id_salao,
             [int(d) for d in dias.split(",")] if dias else None, hora_de, hora_ate)
+
+
+# ------------------------------------------------------------------ fase 3 (116)
+
+class NovoTeste(BaseModel):
+    tipo: str = Field(pattern="^(MIDIA|ORDEM)$")
+    # Só no de mídia: o ITEM do cardápio (o prato tem de ter vídeo E foto).
+    id_item: int | None = None
+
+
+class AplicarTeste(BaseModel):
+    variante: str = Field(pattern="^(A|B)$")
+
+
+class EscolhaDestaque(BaseModel):
+    id_item: int
+    destaque: bool
+
+
+@router.get("/testes")
+def testes(ctx: Contexto = Depends(_ATENCAO)) -> list[dict]:
+    """Os testes A/B da loja, com o resultado de cada um (abertos primeiro)."""
+    with get_cursor() as cur:
+        return cardapio_testes.listar(cur, _unidade(cur, ctx))
+
+
+@router.post("/testes", status_code=201)
+def criar_teste(body: NovoTeste, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = cardapio_testes.criar(cur, id_unidade, body.model_dump(), ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_teste", r["id"], "criar",
+                            depois={"tipo": body.tipo, "nome": r["nome"]})
+        return r
+
+
+@router.post("/testes/{id_teste}/encerrar")
+def encerrar_teste(id_teste: int, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    with get_cursor() as cur:
+        r = cardapio_testes.encerrar(cur, _unidade(cur, ctx), id_teste, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_teste", id_teste, "encerrar",
+                            depois={"vencedor": r["vencedor"]})
+        return r
+
+
+@router.post("/testes/{id_teste}/aplicar")
+def aplicar_teste(id_teste: int, body: AplicarTeste, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Leva a variante ao cardápio. ⚠️ Sempre um clique de quem edita o catálogo, auditado."""
+    with get_cursor() as cur:
+        r = cardapio_testes.aplicar(cur, _unidade(cur, ctx), id_teste, body.variante, ctx.id_usuario)
+        auditoria.registrar(cur, ctx.id_usuario, "cardapio_teste", id_teste, "aplicar",
+                            depois={"variante": body.variante})
+        return r
+
+
+@router.get("/destaques/sugestoes")
+def sugestoes_de_destaque(de: date, ate: date, ctx: Contexto = Depends(_ATENCAO)) -> list[dict]:
+    with get_cursor() as cur:
+        return cardapio_testes.sugestoes_destaque(cur, _unidade(cur, ctx), de, ate)
+
+
+@router.post("/destaques/aplicar")
+def aplicar_destaques(body: list[EscolhaDestaque], ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """As sugestões que o gerente APROVOU — nada muda no cardápio sem este clique."""
+    if not body or len(body) > 100:
+        raise HTTPException(status_code=422, detail="Escolha de 1 a 100 itens.")
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        r = cardapio_testes.aplicar_destaques(cur, id_unidade, [b.model_dump() for b in body])
+        for f in r["feitos"]:
+            auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", f["id_item"], "destaque_sugerido",
+                                antes={"destaque": f["antes"]}, depois={"destaque": f["depois"]},
+                                id_unidade=id_unidade)
+        return r

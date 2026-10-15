@@ -49,6 +49,14 @@ function lerOuCriarSessao(): string {
   }
 }
 
+/**
+ * O id anônimo da sessão, para quem precisa dele ANTES do medidor — o feed o manda ao servidor
+ * para sortear o braço dos testes A/B (116). ⚠️ Quem recusou a medição não entra em teste.
+ */
+export function sessaoParaTestes(): string | null {
+  return medicaoRecusada() ? null : lerOuCriarSessao();
+}
+
 export function medicaoRecusada(): boolean {
   try {
     return localStorage.getItem(CHAVE_RECUSA) === "1";

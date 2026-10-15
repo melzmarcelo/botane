@@ -259,7 +259,7 @@ def _preco_sql(alias_produto: str) -> str:
 
 def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
          agora: datetime | None = None, esconder_esgotado: bool = False,
-         previa: bool = False) -> dict:
+         previa: bool = False, foto_forcada: set[int] | None = None) -> dict:
     """As seções e os itens do feed, na ordem do cardápio.
 
     🔑 **Mídia por item: vídeo → foto do item → foto da subcategoria → da categoria.**
@@ -285,7 +285,7 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                    s.descricao_de AS subcategoria_descricao_de,
                    s.foto_url AS subcategoria_foto, s.dias AS s_dias, s.hora_de AS s_de,
                    s.hora_ate AS s_ate, s.horario_especial AS s_especial,
-                   i.id AS id_item, i.destaque, i.esgotado, p.id AS id_produto,
+                   i.id AS id_item, i.destaque, i.esgotado, i.midia_preferida, p.id AS id_produto,
                    coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
                    p.nome_catalogo_en AS produto_en, p.nome_catalogo_de AS produto_de,
                    p.informacao_adicional, p.informacao_adicional_en AS informacao_en,
@@ -339,7 +339,10 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                 "descricao": t(l, "subcategoria_descricao"), "foto": l["subcategoria_foto"],
                 "fora_do_horario": not sub_vis})
 
-        if l["video_url"]:
+        # 🔑 Fase 3 (116): a FOTO ganha do vídeo quando a casa aplicou esse vencedor
+        # (`midia_preferida`) ou quando esta sessão caiu no braço "foto" de um teste A/B.
+        usa_foto = l["midia_preferida"] == "FOTO" or l["id_produto"] in (foto_forcada or set())
+        if l["video_url"] and not (usa_foto and l["foto_url"]):
             midia = {"tipo": "VIDEO", "video": l["video_url"],
                      "capa": l["video_capa_url"] or l["foto_url"]}
         else:
@@ -393,7 +396,7 @@ def _adicionais(cur, id_unidade: int, produtos: list[int]) -> dict[int, list[dic
 
 
 def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None,
-                     previa_catalogo: int | None = None) -> dict:
+                     previa_catalogo: int | None = None, sessao: str | None = None) -> dict:
     """Tudo que a tela do cliente precisa numa resposta: casa, marca, modo e feed.
 
     ⚠️ **404 quando a loja não ligou o Cardápio Vivo** (sem catálogo apontado): para o
@@ -421,8 +424,16 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
     cur.execute("SELECT nome_fantasia, razao_social, logo_url FROM empresa WHERE id = 1")
     empresa = cur.fetchone() or {}
     modo = modo_efetivo(cur, id_unidade, mesa["id"] if mesa else None)
+    # 🔑 Os testes A/B (116): a variante sai do id anônimo da sessão, numa conta do banco.
+    # ⚠️ A prévia do cadastro não entra em teste nenhum — mostra o cardápio da casa.
+    from services import cardapio_testes
+    var = (cardapio_testes.variantes(cur, id_catalogo, sessao)
+           if sessao and not previa_catalogo else {"foto": set(), "ordem_b": None})
     conteudo = feed(cur, id_unidade, id_catalogo, idioma,
-                    esconder_esgotado=cfg["esconder_esgotado"], previa=bool(previa_catalogo))
+                    esconder_esgotado=cfg["esconder_esgotado"], previa=bool(previa_catalogo),
+                    foto_forcada=var["foto"])
+    if var["ordem_b"]:
+        conteudo["itens"] = cardapio_testes.reordenar(conteudo["itens"], var["ordem_b"])
     return {
         "loja": {"id": id_unidade, "nome": loja["nome"],
                  "casa": empresa.get("nome_fantasia") or empresa.get("razao_social") or "Nossa casa"},

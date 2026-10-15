@@ -538,3 +538,13 @@ Detalhe no estudo, seção 8. O que pegou no caminho:
   alargado para `string`.
 - Pedido da mesa vai à coluna Mesas e, confirmado, à "lançar no PDV" como os do site. O
   pedido de teste da verificação FICA (pedido não se apaga pela rota).
+
+## Cardápio Vivo, fase 3 (migração 116, 15/10/2026)
+
+Detalhe no estudo, seção 9 (testes A/B de mídia e ordem, sugestões de destaque).
+- ⚠️ **`% 2` dentro de SQL com parâmetros quebra o psycopg2** ("argument formats can't be
+  mixed"): a conta da variante usa `mod(…, 2)`. Pego pela suíte no primeiro POST.
+- ⚠️ `URLSearchParams.size` não existe no Safari antigo — o idioma sumiria do endereço do
+  feed. Usa-se `toString()`.
+- 🔑 A verificação no navegador descobre o braço de uma sessão pedindo o feed com `?sessao=`,
+  nunca recalculando o hash fora do banco.

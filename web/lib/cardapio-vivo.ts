@@ -56,12 +56,17 @@ export type Feed = {
 export type Idioma = "pt" | "en" | "de";
 
 /** O feed da mesa (token) ou da loja (sem mesa). `null` quando não existe (404). */
-export async function buscarFeed(loja: number, token: string | null, idioma: Idioma): Promise<
+export async function buscarFeed(loja: number, token: string | null, idioma: Idioma,
+                                 sessao: string | null = null): Promise<
   { feed: Feed } | { erro: string; status: number }
 > {
   const caminho = token ? `/publico/cardapio/mesa/${encodeURIComponent(token)}`
                         : `/publico/cardapio/loja/${loja}`;
-  const q = idioma === "pt" ? "" : `?idioma=${idioma}`;
+  // A sessão anônima sorteia o braço dos testes A/B (116); sem ela, ninguém entra em teste.
+  const params = new URLSearchParams();
+  if (idioma !== "pt") params.set("idioma", idioma);
+  if (sessao) params.set("sessao", sessao);
+  const q = params.toString() ? `?${params}` : "";
   try {
     const r = await fetch(`${BASE_API}${caminho}${q}`, { cache: "no-store" });
     const corpo = await r.json().catch(() => ({}));
@@ -294,4 +299,38 @@ export const AtencaoService = {
     return api.get<PainelAtencao>(`/cardapio-vivo/atencao?${q}`);
   },
   atenderChamado: (id: number) => api.post<{ message: string }>(`/cardapio-vivo/chamados/${id}/atender`),
+};
+
+// ------------------------------------------------------------------ fase 3 (116): testes A/B e destaque
+
+export type BracoTeste = { rotulo: string; sessoes: number; adicionaram: number };
+export type TesteAB = {
+  id: number;
+  tipo: "MIDIA" | "ORDEM";
+  nome: string;
+  id_produto: number | null;
+  inicio: string;
+  encerrado_em: string | null;
+  vencedor: "A" | "B" | null;
+  aplicado_em: string | null;
+  aberto: boolean;
+  resultado: {
+    A: BracoTeste; B: BracoTeste; minimo_por_braco: number;
+    taxa_a: number | null; taxa_b: number | null; p_valor: number | null;
+    conclusao: "AMOSTRA_PEQUENA" | "SEM_DIFERENCA" | "A_VENCE" | "B_VENCE";
+  };
+};
+export type SugestaoDestaque = { id_item: number; nome: string; acao: "POR" | "TIRAR"; motivo: string; prioridade: number };
+
+export const TestesService = {
+  listar: () => api.get<TesteAB[]>("/cardapio-vivo/testes"),
+  criar: (tipo: "MIDIA" | "ORDEM", idItem?: number) =>
+    api.post<TesteAB & { message: string }>("/cardapio-vivo/testes", { tipo, id_item: idItem ?? null }),
+  encerrar: (id: number) => api.post<TesteAB & { message: string }>(`/cardapio-vivo/testes/${id}/encerrar`),
+  aplicar: (id: number, variante: "A" | "B") =>
+    api.post<TesteAB & { message: string }>(`/cardapio-vivo/testes/${id}/aplicar`, { variante }),
+  sugestoes: (de: string, ate: string) =>
+    api.get<SugestaoDestaque[]>(`/cardapio-vivo/destaques/sugestoes?de=${de}&ate=${ate}`),
+  aplicarDestaques: (escolhas: { id_item: number; destaque: boolean }[]) =>
+    api.post<{ message: string }>("/cardapio-vivo/destaques/aplicar", escolhas),
 };
