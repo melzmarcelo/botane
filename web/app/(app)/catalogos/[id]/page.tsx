@@ -8,6 +8,7 @@ import CabecalhoTela from "@/components/cabecalho-tela";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import { useSessao } from "@/lib/sessao";
 import * as cat from "@/lib/catalogos";
+import AbaArquivo from "./aba-arquivo";
 import AbaCardapio from "./aba-cardapio";
 import AbaPublicacao from "./aba-publicacao";
 import PedidosDoCatalogo from "./pedidos";
@@ -34,14 +35,19 @@ const ABAS = [
   { v: "publicacao", r: "Publicação" },
   { v: "pedidos", r: "Pedidos" },
   { v: "idiomas", r: "Idiomas" },
-] as const;
+];
+/** ⚠️ O catálogo de PDF não tem seções, pedidos nem tradução: só o arquivo e a capa. */
+const ABAS_PDF = [
+  { v: "arquivo", r: "Arquivo" },
+  { v: "publicacao", r: "Publicação" },
+];
 
 export default function EditorDoCatalogo() {
   const { id } = useParams<{ id: string }>();
   const idCatalogo = Number(id);
   const { pode } = useSessao();
   const podeEditar = pode("catalogos.editar");
-  const [aba, setAba] = useEstadoNaUrl<string>("aba", "cardapio", { atraso: 0 });
+  const [abaNaUrl, setAba] = useEstadoNaUrl<string>("aba", "", { atraso: 0 });
 
   const [capa, setCapa] = useState<cat.Catalogo | null>(null);
   const [erro, setErro] = useState("");
@@ -62,12 +68,19 @@ export default function EditorDoCatalogo() {
   if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
   if (!capa) return <Carregando />;
 
+  const pdf = capa.origem !== cat.ORIGEM_PRODUTOS;
+  const abas = pdf ? ABAS_PDF : ABAS;
+  // Aba que não existe neste tipo (ou nenhuma) cai na primeira.
+  const aba = abas.some((x) => x.v === abaNaUrl) ? abaNaUrl : abas[0].v;
+
   return (
     <div className="flex flex-col gap-5">
       <CabecalhoTela
         caminho="Catálogos"
         titulo={capa.nome}
-        explica="O cardápio que o site e o Cardápio Vivo mostram: as seções, os pratos de cada uma e quando ele vai ao ar."
+        explica={pdf
+          ? "Um cardápio em PDF: o arquivo que o site mostra e quando ele vai ao ar."
+          : "O cardápio que o site e o Cardápio Vivo mostram: as seções, os pratos de cada uma e quando ele vai ao ar."}
         acoes={
           <span className="flex flex-wrap items-center gap-2">
             {/* 🔑 Um selo só responde "o cliente está vendo?" — "no ar" não é o
@@ -101,7 +114,7 @@ export default function EditorDoCatalogo() {
       )}
 
       <div className="flex gap-1 overflow-x-auto border-b border-linha" role="tablist" aria-label="partes do catálogo">
-        {ABAS.map((o) => (
+        {abas.map((o) => (
           <button key={o.v} type="button" role="tab" aria-selected={aba === o.v}
                   onClick={() => setAba(o.v)}
                   className={`-mb-px shrink-0 border-b-2 px-4 py-2 text-[14px] font-semibold ${
@@ -117,6 +130,8 @@ export default function EditorDoCatalogo() {
         <PedidosDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
       ) : aba === "idiomas" ? (
         <TraducoesDoCatalogo idCatalogo={idCatalogo} podeEditar={podeEditar} />
+      ) : aba === "arquivo" ? (
+        <AbaArquivo capa={capa} podeEditar={podeEditar} aoMudar={recarregarCapa} />
       ) : (
         <AbaCardapio idCatalogo={idCatalogo} podeEditar={podeEditar} />
       )}

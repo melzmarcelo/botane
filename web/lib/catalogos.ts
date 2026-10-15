@@ -33,6 +33,10 @@ export type Catalogo = {
   arquivo_nome: string | null;
   arquivo_bytes: number | null;
   arquivo_em: string | null;
+  /** O resumo do cardápio montado — pratos distintos e o que falta neles. */
+  resumo: { pratos: number; sem_foto: number; sem_descricao: number; inativos: number } | null;
+  /** É o Cardápio Vivo (o feed da mesa) de alguma loja. */
+  cardapio_vivo: boolean;
 };
 
 /** O vocabulário vem do SERVIDOR: manter a lista aqui seria a segunda cópia. */
@@ -48,6 +52,24 @@ export const ROTULO_SITUACAO: Record<Situacao, string> = {
   RASCUNHO: "Rascunho",
   ATIVO: "Ativo",
   INATIVO: "Inativo",
+};
+
+/**
+ * Como cada ORIGEM se apresenta na escolha do tipo.
+ * ⚠️ Só o texto é daqui: os valores vêm de `/catalogos/opcoes`, e uma origem que
+ * o servidor mandar sem rótulo aparece com o próprio código, em vez de sumir.
+ */
+export const APRESENTA_ORIGEM: Record<string, { titulo: string; curto: string; explica: string }> = {
+  PRODUTOS: {
+    titulo: "Montar com os produtos do PDV",
+    curto: "Montado com produtos",
+    explica: "Seções e pratos escolhidos aqui, com foto, preço e descrição. Serve ao site, ao Cardápio Vivo da mesa e aos pedidos.",
+  },
+  PDF: {
+    titulo: "Enviar um PDF pronto",
+    curto: "PDF",
+    explica: "O cardápio já diagramado, em arquivo. O site o mostra como ele é.",
+  },
 };
 
 export const opcoes = () => api.get<Opcoes>("/catalogos/opcoes");
@@ -228,6 +250,10 @@ export const vincularProduto = (
 ) => api.post<{ id: number; produto: string; message: string }>(
   `/catalogos/categorias/${idCategoria}/itens`, corpo,
 );
+
+/** 🔑 Mover não é tirar e pôr: o item leva destaque, esgotado, objetivo e margem. */
+export const moverItem = (id: number, lugar: { id_categoria: number; id_subcategoria: number | null }) =>
+  api.put<{ message: string }>(`/catalogos/itens/${id}/lugar`, lugar);
 
 export const desvincularProduto = (id: number) =>
   api.delete<{ message: string }>(`/catalogos/itens/${id}`);

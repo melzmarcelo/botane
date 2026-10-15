@@ -15,17 +15,23 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAviso } from "@/components/aviso-flutuante";
 import { Campo, Gaveta } from "@/components/ui";
 import { urlArquivo } from "@/lib/api";
-import { CardapioVivoService, ProdutoCardapioService, type CardapioDoProduto } from "@/lib/cardapio-vivo";
+import { CardapioVivoService } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
 import { reais } from "@/lib/numeros";
 import { MARGENS, OBJETIVOS } from "./cardapio-vivo";
+import VideoERestricoes from "./video-e-restricoes";
+
+/** Uma lista do cardápio para onde o prato pode ir. */
+export type Lugar = { rotulo: string; id_categoria: number; id_subcategoria: number | null };
 
 type Props = {
   item: cat.ItemDoCatalogo;
+  /** Todas as listas do catálogo, para o "mover para". */
+  lugares: Lugar[];
   /** Onde ele está: "Menu Principal ▸ Pra Dividir". */
   onde: string;
   podeEditar: boolean;
@@ -34,20 +40,13 @@ type Props = {
   aoFechar: () => void;
 };
 
-export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, aoMudar, aoFechar }: Props) {
+export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, podeProduto, aoMudar, aoFechar }: Props) {
   const aviso = useAviso();
   const falhou = (e: unknown, padrao: string) => aviso.erro(e instanceof Error ? e.message : padrao);
   const [nome, setNome] = useState(i.nome_catalogo ?? "");
   const [descricao, setDescricao] = useState(i.informacao_adicional ?? "");
   const [gravando, setGravando] = useState(false);
-  const [enviando, setEnviando] = useState<"" | "foto" | "video">("");
-  const [extra, setExtra] = useState<CardapioDoProduto | null>(null);
-
-  // O vídeo e as restrições vêm da rota do produto, que pede a permissão dele.
-  useEffect(() => {
-    if (!podeProduto) return;
-    ProdutoCardapioService.obter(i.id_produto).then(setExtra).catch(() => setExtra(null));
-  }, [i.id_produto, podeProduto]);
+  const [enviando, setEnviando] = useState(false);
 
   const mudouTexto = nome.trim() !== (i.nome_catalogo ?? "") || descricao.trim() !== (i.informacao_adicional ?? "");
 
@@ -79,7 +78,7 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
 
   async function foto(arquivo: File | undefined) {
     if (!arquivo) return;
-    setEnviando("foto");
+    setEnviando(true);
     try {
       await cat.enviarFotoDoProduto(i.id_produto, arquivo);
       await aoMudar();
@@ -87,7 +86,7 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
     } catch (e) {
       falhou(e, "Não foi possível enviar a foto.");
     } finally {
-      setEnviando("");
+      setEnviando(false);
     }
   }
 
@@ -101,41 +100,15 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
     }
   }
 
-  async function video(arquivo: File | undefined) {
-    if (!arquivo) return;
-    setEnviando("video");
+  async function mover(chave: string) {
+    const l = lugares.find((x) => `${x.id_categoria}-${x.id_subcategoria ?? ""}` === chave);
+    if (!l) return;
     try {
-      const r = await ProdutoCardapioService.enviarVideo(i.id_produto, arquivo);
-      setExtra((x) => x && { ...x, video: r.video });
+      const r = await cat.moverItem(i.id, { id_categoria: l.id_categoria, id_subcategoria: l.id_subcategoria });
       await aoMudar();
       aviso.sucesso(r.message);
     } catch (e) {
-      falhou(e, "Não foi possível enviar o vídeo.");
-    } finally {
-      setEnviando("");
-    }
-  }
-
-  async function tirarVideo() {
-    try {
-      const r = await ProdutoCardapioService.removerVideo(i.id_produto);
-      setExtra((x) => x && { ...x, video: null });
-      await aoMudar();
-      aviso.sucesso(r.message);
-    } catch (e) {
-      falhou(e, "Não foi possível tirar o vídeo.");
-    }
-  }
-
-  async function restricao(chave: string) {
-    if (!extra) return;
-    const novas = extra.restricoes.includes(chave)
-      ? extra.restricoes.filter((r) => r !== chave) : [...extra.restricoes, chave];
-    try {
-      const r = await ProdutoCardapioService.restricoes(i.id_produto, novas);
-      setExtra({ ...extra, restricoes: r.restricoes });
-    } catch (e) {
-      falhou(e, "Não foi possível gravar a restrição.");
+      falhou(e, "Não foi possível mover.");
     }
   }
 
@@ -173,6 +146,21 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
           <h3 className="rotulo">Neste cardápio</h3>
           <p className="text-[13.5px] text-suave">Em <b className="text-tinta">{onde}</b>
             {" · "}{i.preco !== null ? <>preço {reais(i.preco)}</> : "sem preço na loja"}</p>
+          {/* 🔑 Mover não é tirar e pôr: leva as marcas e entra no fim da lista nova. */}
+          {podeEditar && lugares.length > 1 && (
+            <Campo rotulo="Mover para" dica="Leva junto destaque, esgotado, objetivo e margem.">
+              <select className="campo" id="prato-mover" value=""
+                      onChange={(e) => void mover(e.target.value)}>
+                <option value="">— escolha a seção —</option>
+                {lugares
+                  .filter((l) => !(l.id_categoria === i.id_categoria && l.id_subcategoria === i.id_subcategoria))
+                  .map((l) => (
+                    <option key={`${l.id_categoria}-${l.id_subcategoria ?? ""}`}
+                            value={`${l.id_categoria}-${l.id_subcategoria ?? ""}`}>{l.rotulo}</option>
+                  ))}
+              </select>
+            </Campo>
+          )}
           <label className="flex items-center gap-2 text-[14px]">
             <input type="checkbox" disabled={!podeEditar} checked={i.destaque}
                    onChange={(e) => void marcar({ destaque: e.target.checked })} />
@@ -221,10 +209,10 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
               <span className="flex flex-col items-start gap-2">
                 {/* ⚠️ `relative` no rótulo: o input `sr-only` é absoluto, e sem
                     ancestral posicionado escapa e faz a página rolar de lado. */}
-                <label className={`btn btn-secundario relative cursor-pointer ${enviando === "foto" ? "opacity-60" : ""}`}>
-                  {enviando === "foto" ? "Enviando…" : i.foto_url ? "Trocar foto" : "Pôr foto"}
+                <label className={`btn btn-secundario relative cursor-pointer ${enviando ? "opacity-60" : ""}`}>
+                  {enviando ? "Enviando…" : i.foto_url ? "Trocar foto" : "Pôr foto"}
                   <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" id="prato-foto"
-                         disabled={!!enviando}
+                         disabled={enviando}
                          onChange={(e) => { void foto(e.target.files?.[0]); e.target.value = ""; }} />
                 </label>
                 {i.foto_url && (
@@ -253,47 +241,11 @@ export default function GavetaDoPrato({ item: i, onde, podeEditar, podeProduto, 
             </div>
           )}
 
-          {extra && (
-            <>
-              <div>
-                <span className="rotulo-campo">Vídeo</span>
-                <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13.5px]">
-                  <span className="text-suave">
-                    {extra.video
-                      ? `${extra.video.nome ?? "vídeo"} · ${extra.video.segundos?.toFixed(0) ?? "?"} s — aparece no lugar da foto`
-                      : "Sem vídeo. Até 15 s, sem som."}
-                  </span>
-                  <label className={`btn btn-secundario relative cursor-pointer ${enviando === "video" ? "opacity-60" : ""}`}>
-                    {enviando === "video" ? "Convertendo…" : extra.video ? "Trocar vídeo" : "Enviar vídeo"}
-                    <input type="file" accept="video/mp4,video/quicktime,video/webm" className="sr-only"
-                           disabled={!!enviando}
-                           onChange={(e) => { void video(e.target.files?.[0]); e.target.value = ""; }} />
-                  </label>
-                  {extra.video && (
-                    <button type="button" className="link-acao link-acao-erro" onClick={() => void tirarVideo()}>
-                      tirar
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div>
-                <span className="rotulo-campo">Restrições alimentares</span>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-2 text-[14px]">
-                  {extra.opcoes_restricoes.map((r) => (
-                    <label key={r.chave} className="flex items-center gap-2">
-                      <input type="checkbox" checked={extra.restricoes.includes(r.chave)}
-                             onChange={() => void restricao(r.chave)} />
-                      {r.nome}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <p className="text-[13px] text-suave">
-                Adicionais e opções (ponto da carne, acompanhamentos) ficam no{" "}
-                <Link href={`/produtos/${i.id_produto}`} className="link-registro">cadastro do produto</Link>, aba Catálogo.
-              </p>
-            </>
-          )}
+          {podeProduto && <VideoERestricoes idProduto={i.id_produto} aoMudar={aoMudar} />}
+          <p className="text-[13px] text-suave">
+            Adicionais e opções (ponto da carne, acompanhamentos) ficam no{" "}
+            <Link href={`/produtos/${i.id_produto}`} className="link-registro">cadastro do produto</Link>, aba Catálogo.
+          </p>
         </section>
 
         {podeEditar && (

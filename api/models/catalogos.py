@@ -121,6 +121,10 @@ class CatalogoResponse(BaseModel):
     arquivo_nome: str | None = None
     arquivo_bytes: int | None = None
     arquivo_em: datetime | None = None
+    # O resumo do cardápio montado: pratos, sem foto, sem descrição, inativos.
+    resumo: dict | None = None
+    # É o Cardápio Vivo (o feed da mesa) de alguma loja.
+    cardapio_vivo: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +173,17 @@ class ItemCreate(BaseModel):
     id_produto: int
     id_subcategoria: int | None = None
     ordem: int = Field(default=0, ge=0, le=999)
+
+
+class ItemLugar(BaseModel):
+    """Para onde o prato vai: outra seção do MESMO catálogo.
+
+    🔑 Mover não é tirar e pôr: o item leva junto destaque, esgotado, objetivo e
+    margem (15/10/2026). Nulo em `id_subcategoria` = direto na categoria.
+    """
+
+    id_categoria: int
+    id_subcategoria: int | None = None
 
 
 class ItemOrdem(BaseModel):

@@ -470,6 +470,67 @@ def reordenar(cur, id_unidade: int, ordens: list) -> dict:
     return {"message": f"{len(ordens)} item(ns) reordenado(s)."}
 
 
+def mover(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
+    """Leva o prato para outra seção do MESMO catálogo (reforma de 15/10/2026).
+
+    🔑 **Mover não é tirar e pôr.** Tirar e pôr de novo era o único caminho, e
+    perdia destaque, esgotado, objetivo e margem — e o lugar na fila. Aqui o item
+    é o mesmo; muda a seção, e ele entra no FIM da lista nova, como quem chega.
+    ⚠️ **Só dentro do mesmo catálogo**: o item pertence a um cardápio, e levá-lo
+    a outro seria um vínculo novo — que é o "+ pratos" de lá.
+    ⚠️ **Repetido na lista de destino é recusado com frase**, como no vincular: o
+    índice único garantiria, mas não explicaria.
+    """
+    cur.execute(
+        """SELECT i.id, i.id_produto, i.id_categoria, i.id_subcategoria, c.id_catalogo, p.nome
+             FROM catalogo_itens i
+             JOIN produtos p ON p.id = i.id_produto
+             JOIN catalogo_categorias c ON c.id = i.id_categoria
+             JOIN catalogos k ON k.id = c.id_catalogo
+            WHERE i.id = %s AND k.id_unidade = %s""",
+        (id_item, id_unidade),
+    )
+    atual = cur.fetchone()
+    if not atual:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    id_cat, id_sub = dados["id_categoria"], dados.get("id_subcategoria")
+    destino = _categoria(cur, id_unidade, id_cat)
+    if destino["id_catalogo"] != atual["id_catalogo"]:
+        raise HTTPException(status_code=409,
+                            detail="O prato só se move dentro do mesmo catálogo.")
+    if id_sub and _subcategoria(cur, id_unidade, id_sub)["id_categoria"] != id_cat:
+        raise HTTPException(status_code=409, detail="Essa subcategoria é de outra categoria.")
+    if atual["id_categoria"] == id_cat and atual["id_subcategoria"] == id_sub:
+        return {"id": id_item, "antes": {}, "message": f'"{atual["nome"]}" já está aí.'}
+
+    cur.execute(
+        """SELECT 1 FROM catalogo_itens
+            WHERE id_produto = %s AND id <> %s
+              AND ((%s::int IS NULL AND id_subcategoria IS NULL AND id_categoria = %s)
+                OR (%s::int IS NOT NULL AND id_subcategoria = %s))""",
+        (atual["id_produto"], id_item, id_sub, id_cat, id_sub, id_sub),
+    )
+    if cur.fetchone():
+        raise HTTPException(status_code=409,
+                            detail=f'"{atual["nome"]}" já está na lista de destino.')
+    cur.execute(
+        """SELECT coalesce(max(ordem), 0) AS ultima FROM catalogo_itens
+            WHERE id_categoria = %s
+              AND ((%s::int IS NULL AND id_subcategoria IS NULL) OR id_subcategoria = %s)""",
+        (id_cat, id_sub, id_sub),
+    )
+    proxima = min(int(cur.fetchone()["ultima"]) + 10, 999)
+    cur.execute(
+        """UPDATE catalogo_itens SET id_categoria = %s, id_subcategoria = %s, ordem = %s
+            WHERE id = %s""",
+        (id_cat, id_sub, proxima, id_item),
+    )
+    return {"id": id_item,
+            "antes": {"id_categoria": atual["id_categoria"],
+                      "id_subcategoria": atual["id_subcategoria"]},
+            "message": f'"{atual["nome"]}" mudou de seção.'}
+
+
 def desvincular(cur, id_unidade: int, id_item: int) -> dict:
     cur.execute(
         """SELECT i.id, p.nome

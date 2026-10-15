@@ -9078,77 +9078,38 @@ try {
       .some((b) => /^\s*Cat[áa]logos\s*$/i.test(b.textContent ?? "")));
   checar("e Catálogos é um subgrupo, com Cadastro dentro", subCatalogos);
 
+  // 🔑 **Novo catálogo em DOIS passos** (reforma de 15/10/2026, pedido do dono: *"o
+  // cadastro de catálogos não está muito intuitivo"*): primeiro o TIPO, depois o nome.
+  // Nasce rascunho e abre direto na página dele.
   checar("a tela abre e oferece criar",
     await clicarQuando(p, "Novo catálogo", { exato: true }));
-  await p.waitForSelector("#catalogo-nome", { timeout: 15000 }).catch(() => {});
-  // ⚠️ A janela diz o que o VAZIO quer dizer em cada ponta do período: sem isso
-  // a pessoa inventa uma data de fim para o cardápio permanente da casa.
-  const janelaCat = await p.evaluate(() => {
+  await p.waitForSelector('[role="radiogroup"] [data-origem]', { timeout: 15000 }).catch(() => {});
+  const tiposCat = await p.evaluate(() =>
+    [...document.querySelectorAll('[role="radiogroup"] [data-origem]')].map((b) => b.getAttribute("data-origem")));
+  // 🔑 O vocabulário vem do SERVIDOR — as duas origens que ele manda, e o montado
+  // com produtos PRIMEIRO, que é o caso de hoje. ⚠️ **PDF é ARQUIVO, não PDV.**
+  checar("o primeiro passo pergunta o tipo: montado com produtos ou PDF",
+    JSON.stringify(tiposCat) === JSON.stringify(["PRODUTOS", "PDF"]), tiposCat);
+  await p.click('[role="radiogroup"] [data-origem="PDF"]');
+  await p.waitForSelector("#catalogo-nome", { timeout: 8000 }).catch(() => {});
+  const passo2 = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
-    return {
-      campos: ["#catalogo-nome", "#catalogo-origem", "#catalogo-situacao",
-               "#catalogo-de", "#catalogo-ate"].filter((x) => !!d?.querySelector(x)),
-      origens: [...(d?.querySelector("#catalogo-origem")?.options ?? [])]
-        .map((o) => o.value),
-      situacoes: [...(d?.querySelector("#catalogo-situacao")?.options ?? [])]
-        .map((o) => o.value),
-      texto: d?.innerText ?? "",
-    };
+    return { campos: d?.querySelectorAll("input, select, textarea").length ?? 0, texto: d?.innerText ?? "" };
   });
-  checar("a janela tem os cinco campos do cabecalho",
-    janelaCat.campos.length === 5, janelaCat.campos);
-  // 🔑 O vocabulário vem do SERVIDOR — uma cópia na tela divergiria calada no
-  // dia da segunda origem. 🔑 **E esse dia chegou** (22/09/2026, migração 084):
-  // a tela ganhou PRODUTOS sem uma linha de mudança, porque a lista nunca foi
-  // dela. O que precisou mudar foi ESTA checagem, que afirmava "a única origem
-  // de hoje" — afirmação sobre o que ainda não existe envelhece no dia em que
-  // passa a existir.
-  // ⚠️ **PDF e ARQUIVO, nao PDV** — o modulo nasceu com a sigla errada.
-  checar("com as duas origens: o PDF importado e o cardapio montado aqui",
-    JSON.stringify(janelaCat.origens) === JSON.stringify(["PDF", "PRODUTOS"]),
-    janelaCat.origens);
-  checar("e as tres situacoes",
-    JSON.stringify(janelaCat.situacoes)
-      === JSON.stringify(["RASCUNHO", "ATIVO", "INATIVO"]), janelaCat.situacoes);
-  checar("e a tela diz o que o periodo em branco quer dizer",
-    /sem prazo/i.test(janelaCat.texto) && /desde j[áa]/i.test(janelaCat.texto),
-    janelaCat.texto.slice(0, 200));
-
+  checar("e o segundo pede só o nome", passo2.campos === 1 && /rascunho/i.test(passo2.texto), passo2);
   await p.type("#catalogo-nome", `Cardapio tela ${mCat}`);
-  await p.evaluate(() => {
-    const sel = document.querySelector("#catalogo-situacao");
-    const set = Object.getOwnPropertyDescriptor(
-      window.HTMLSelectElement.prototype, "value").set;
-    set.call(sel, "ATIVO");
-    sel.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  checar("e salva", await clicarQuando(p, "Salvar", { exato: true }));
-  await p.waitForFunction((m) => document.body.innerText.includes(`Cardapio tela ${m}`),
-    { timeout: 20000, polling: 300 }, mCat).catch(() => {});
-
-  const linhaCat = await p.evaluate((m) => {
-    const tr = [...document.querySelectorAll("tbody tr")]
-      .find((x) => x.textContent.includes(`Cardapio tela ${m}`));
-    return tr ? [...tr.querySelectorAll("td")].map((td) => td.innerText.trim()) : null;
-  }, mCat);
-  checar("o catalogo aparece na lista", !!linhaCat, linhaCat);
-  // 🔑 **"No ar" e coluna PROPRIA, separada da situacao.** Um ativo sem periodo
-  // vale sem prazo — e esta no ar. A confusao entre os dois faria a casa
-  // procurar no site um cardapio que saiu sozinho.
-  checar("ativo e sem periodo aparece como no ar",
-    (linhaCat ?? []).some((c) => /no ar/i.test(c)), linhaCat);
-  checar("e a tela explica que sem periodo vale enquanto estiver ativo",
-    /sem per[íi]odo/i.test(await p.evaluate(() => document.body.innerText)));
-  // ⚠️ **Excluir so aparece no RASCUNHO.** O que ja esteve no ar se inativa —
-  // alguem leu aquele cardapio.
-  // ⚠️ **Exige a LINHA.** `[].some()` é falso, e a negação passava trivialmente
-  // quando o catálogo nem tinha sido criado — a checagem media a si mesma.
-  checar("e um ATIVO nao oferece excluir",
-    !!linhaCat && !linhaCat.some((c) => /excluir/i.test(c)), linhaCat);
-  // 🔑 **Ativo sem PDF e AVISADO, nao escondido.** E o estado que faz o site
-  // anunciar um cardapio e nao ter o que mostrar.
-  checar("e avisa que um ATIVO sem PDF nao tem o que exibir",
-    (linhaCat ?? []).some((c) => /sem PDF/i.test(c)), linhaCat);
+  checar("e cria", await clicarQuando(p, "Criar e abrir", { exato: true }));
+  await p.waitForFunction(() => /\/catalogos\/\d+/.test(location.pathname), { timeout: 15000 }).catch(() => {});
+  const idCat = Number((p.url().match(/\/catalogos\/(\d+)/) ?? [])[1]) || null;
+  checar("e abre a página do catálogo criado", !!idCat, p.url());
+  // ⚠️ A página nasce em "Carregando…": espera as abas, não um tempo.
+  await p.waitForSelector('[role="tab"]', { timeout: 20000 }).catch(() => {});
+  const { dados: capaCriada } = idCat ? await api("GET", `/catalogos/${idCat}`, null, token) : { dados: null };
+  checar("que nasce como RASCUNHO", capaCriada?.situacao === "RASCUNHO", capaCriada?.situacao);
+  // ⚠️ O catálogo de PDF tem só duas abas: o arquivo e a capa.
+  const abasPdf = await p.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((b) => b.textContent.trim()));
+  checar("o de PDF abre nas abas Arquivo e Publicação",
+    JSON.stringify(abasPdf) === JSON.stringify(["Arquivo", "Publicação"]), abasPdf);
 
   // 🔑 **O PDF, que e o que o site EXIBE** (pedido do dono, 21/09/2026: *"criei
   // o catalogo, agora tenho que poder carregar o PDF, neste caso para ele ser
@@ -9160,63 +9121,68 @@ try {
     "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
     "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n" +
     "trailer<</Root 1 0 R>>\n%%EOF\n", "latin1"));
-  const { dados: catsAntesDoPdf } = await api("GET", "/catalogos", null, token);
-  const idCat = (catsAntesDoPdf ?? []).find((c) => c.nome === `Cardapio tela ${mCat}`)?.id;
   const campoPdf = idCat ? await p.$(`#arquivo-catalogo-${idCat}`) : null;
-  checar("a linha tem o seletor de arquivo", !!campoPdf, idCat);
+  checar("a aba Arquivo tem o seletor de PDF", !!campoPdf, idCat);
   if (campoPdf) {
     await campoPdf.uploadFile(pdfDaFase);
-    await p.waitForFunction((m) => {
-      const tr = [...document.querySelectorAll("tbody tr")]
-        .find((x) => x.textContent.includes(`Cardapio tela ${m}`));
-      return tr && /\.pdf/i.test(tr.textContent);
-    }, { timeout: 30000, polling: 300 }, mCat).catch(() => {});
+    await p.waitForFunction(() => /_tmp-cardapio-bateria\.pdf/.test(document.body.innerText),
+      { timeout: 30000, polling: 300 }).catch(() => {});
   }
-  const comPdfNaTela = await p.evaluate((m) => {
-    const tr = [...document.querySelectorAll("tbody tr")]
-      .find((x) => x.textContent.includes(`Cardapio tela ${m}`));
-    const a = tr?.querySelector("a[href*='/arquivos/']");
-    return tr ? { celulas: [...tr.querySelectorAll("td")].map((td) => td.innerText.trim()),
-                  href: a?.getAttribute("href") ?? null,
-                  alvo: a?.getAttribute("target") ?? null,
-                  rel: a?.getAttribute("rel") ?? null } : null;
-  }, mCat);
-  // 🔑 **O nome ORIGINAL na tela**, nao o da URL: quem confere se subiu o
-  // arquivo certo precisa reconhecer o proprio arquivo.
-  checar("depois de enviar, a tela mostra o nome do PDF",
-    (comPdfNaTela?.celulas ?? []).some((c) => /_tmp-cardapio-bateria\.pdf/i.test(c)),
-    comPdfNaTela?.celulas);
-  checar("e some o aviso de que nao ha o que exibir",
-    !(comPdfNaTela?.celulas ?? []).some((c) => /sem PDF/i.test(c)),
-    comPdfNaTela?.celulas);
-  // ⚠️ `target="_blank"` com `rel="noreferrer"`: abre para conferir sem perder a
-  // tela, e sem dar a aba nova acesso a esta.
+  const comPdf = await p.evaluate(() => {
+    const a = document.querySelector("main a[href*='/arquivos/']");
+    return { texto: document.querySelector("main")?.innerText ?? "", href: a?.getAttribute("href") ?? null,
+             alvo: a?.getAttribute("target") ?? null, rel: a?.getAttribute("rel") ?? null };
+  });
+  // 🔑 **O nome ORIGINAL na tela**, nao o da URL.
+  checar("depois de enviar, a tela mostra o nome do PDF", /_tmp-cardapio-bateria\.pdf/.test(comPdf.texto), comPdf.texto.slice(0, 300));
   checar("com link que abre o PDF em outra aba",
-    !!comPdfNaTela?.href && comPdfNaTela.alvo === "_blank"
-      && /noreferrer/.test(comPdfNaTela.rel ?? ""), comPdfNaTela);
-  checar("e a linha passa a oferecer trocar e tirar o PDF",
-    (comPdfNaTela?.celulas ?? []).some((c) => /trocar PDF/i.test(c))
-      && (comPdfNaTela?.celulas ?? []).some((c) => /tirar PDF/i.test(c)),
-    comPdfNaTela?.celulas);
+    !!comPdf.href && comPdf.alvo === "_blank" && /noreferrer/.test(comPdf.rel ?? ""), comPdf);
+  checar("e passa a oferecer trocar e tirar o PDF",
+    /Trocar PDF/.test(comPdf.texto) && /tirar PDF/i.test(comPdf.texto), comPdf.texto.slice(0, 300));
   unlinkSync(pdfDaFase);
 
-  // 🔑 **A pagina nao pode rolar de lado no telefone.** O `<input>` do arquivo e
-  // `sr-only` (position: absolute) e, sem ancestral posicionado, ESCAPA do
-  // clipping do `overflow-x-auto` da tabela: medido, 330px de rolagem numa
-  // janela de 400. A celula ganhou `relative`, e esta checagem e o que impede
-  // isso de voltar.
-  await p.setViewport({ width: 400, height: 900 });
+  // 🔑 Publicar mora na página do catálogo; o período em branco diz o que quer dizer.
+  checar("a aba Publicação abre", await clicarQuando(p, "Publicação", { exato: true }));
+  checar("e a tela diz o que o periodo em branco quer dizer",
+    await esperarTexto(p, "vale sem prazo", 8000) && await esperarTexto(p, "vale desde já", 2000));
+  checar("e publica", await clicarQuando(p, "Publicar", { exato: true }));
+  await p.waitForFunction(() => /No ar hoje/.test(document.body.innerText), { timeout: 15000, polling: 300 }).catch(() => {});
+  checar("e o catálogo fica no ar", await esperarTexto(p, "No ar hoje", 2000));
+  // ⚠️ Excluir só aparece no RASCUNHO: o que já esteve no ar se inativa.
+  checar("e um ATIVO nao oferece excluir", !(await esperarTexto(p, "Excluir rascunho", 800)));
+
+  // 🔑 **A lista em CARTÕES**: um selo só para o estado e o que falta, e "Abrir".
   await irPara(p, `${WEB}/catalogos`);
-  await p.waitForFunction(() => /Os cat[áa]logos desta loja/i.test(document.body.innerText),
-    { timeout: 30000, polling: 300 }).catch(() => {});
-  const rolagemCat = await p.evaluate(() => {
-    window.scrollTo(9999, 0);
-    const x = Math.round(window.scrollX);
-    window.scrollTo(0, 0);
-    return { rolou: x, doc: document.documentElement.scrollWidth, janela: window.innerWidth };
-  });
-  checar("no telefone a tela nao rola de lado", rolagemCat.rolou === 0, rolagemCat);
+  await p.waitForFunction((m) => document.body.innerText.includes(`Cardapio tela ${m}`),
+    { timeout: 20000, polling: 300 }, mCat).catch(() => {});
+  const cartaoCat = await p.evaluate((id) => document.querySelector(`[data-catalogo="${id}"]`)?.innerText ?? null, idCat);
+  checar("o catalogo aparece na lista como cartão", !!cartaoCat, cartaoCat);
+  // 🔑 **"No ar" ≠ ATIVO**: o selo diz se o cliente vê HOJE.
+  checar("ativo e sem periodo aparece como no ar", /no ar/i.test(cartaoCat ?? ""), cartaoCat);
+  checar("e a lista explica que sem periodo vale enquanto estiver ativo", /sem per[íi]odo/i.test(cartaoCat ?? ""), cartaoCat);
+  checar("e mostra o PDF e nada pendente",
+    /_tmp-cardapio-bateria\.pdf/.test(cartaoCat ?? "") && /nada pendente/.test(cartaoCat ?? ""), cartaoCat);
+  checar("e o filtro de situação tem as três do servidor", await p.evaluate(() =>
+    JSON.stringify([...(document.querySelector("#filtro-situacao")?.options ?? [])].map((o) => o.value).slice(1))
+      === JSON.stringify(["RASCUNHO", "ATIVO", "INATIVO"])));
+
+  // 🔑 **A pagina nao pode rolar de lado no telefone** — nem a lista, nem o arquivo
+  // (o `<input>` `sr-only` sem ancestral posicionado escapava: 330px medidos).
+  await p.setViewport({ width: 400, height: 900 });
+  const rolagens = [];
+  for (const url of [`${WEB}/catalogos`, `${WEB}/catalogos/${idCat}`]) {
+    await irPara(p, url);
+    await new Promise((r) => setTimeout(r, 1500));
+    rolagens.push(await p.evaluate(() => {
+      window.scrollTo(9999, 0);
+      const x = Math.round(window.scrollX);
+      window.scrollTo(0, 0);
+      return x;
+    }));
+  }
+  checar("no telefone a tela nao rola de lado", rolagens.every((x) => x === 0), rolagens);
   await p.setViewport({ width: 1440, height: 1000 });
+  await irPara(p, `${WEB}/catalogos`);
   await new Promise((r) => setTimeout(r, 600));
   await foto(p, "37-catalogos");
 
@@ -10206,9 +10172,12 @@ try {
     await p.evaluate(() => !document.querySelector('main select[aria-label="Objetivo de negócio"]')));
   await p.evaluate((nome) => [...document.querySelectorAll('button[aria-label^="abrir "]')]
     .find((x) => x.textContent.includes(nome))?.click(), `TELA COXINHA ${marcaNota}`);
+  // ⚠️ "Neste cardápio" é `.rotulo`, em maiúsculas por CSS — e o `innerText` devolve
+  // o texto JÁ transformado. Espera-se o campo, e o texto que não é rótulo.
+  await p.waitForSelector("#prato-descricao", { timeout: 8000 }).catch(() => {});
   checar("clicar no prato abre a gaveta com o que é do cardápio e o que é do produto",
-    await esperarTexto(p, "Neste cardápio", 6000) && await esperarTexto(p, "vale em todo", 2000)
-      && !!(await p.$("#prato-descricao")));
+    !!(await p.$("#prato-descricao")) && await esperarTexto(p, "Em destaque", 2000)
+      && await esperarTexto(p, "vale em todo", 2000));
   // 🔑 A descrição se grava DALI, sem ir ao cadastro do produto.
   await p.type("#prato-descricao", "Massa crocante, recheio de frango.");
   checar("e grava a descrição do prato pela gaveta", await clicarQuando(p, "Salvar nome e descrição", { exato: true }));
@@ -10270,6 +10239,26 @@ try {
   const { dados: trG } = await api("GET", `/traducao/categoria/${gPed.id}`, null, token);
   checar("o servidor gravou o inglês corrigido à mão",
     trG && trG.en.nome === "Savoury" && trG.editada.includes("nome_en"), trG);
+  // 🔑 **"O que falta" e "mover para"** (reforma de 15/10/2026). O prato da fase não
+  // tem foto: aparece no painel. E muda de seção pela gaveta, levando as marcas.
+  const { dados: gDoces } = await api("POST", `/catalogos/${catPed.id}/categorias`, { nome: "Doces tela" }, token);
+  await api("PUT", `/catalogos/itens/${itPed.id}/marcas`, { destaque: true }, token);
+  await irPara(p, `${WEB}/catalogos/${catPed.id}`);
+  checar("a coluna das seções oferece 'O que falta'", await clicarQuando(p, "O que falta"));
+  checar("e o painel lista o prato sem foto", await esperarTexto(p, "Abra um, arrume, e ele sai daqui", 6000)
+    && await p.evaluate((nome) => !!document.querySelector('section[aria-label="o que falta"]')?.innerText.includes(nome),
+      `TELA COXINHA ${marcaNota}`));
+  await p.evaluate((nome) => [...document.querySelectorAll('button[aria-label^="abrir "]')]
+    .find((x) => x.textContent.includes(nome))?.click(), `TELA COXINHA ${marcaNota}`);
+  await p.waitForSelector("#prato-mover", { timeout: 8000 }).catch(() => {});
+  const moveu = await p.select("#prato-mover", `${gDoces.id}-`).then((v) => v.length > 0).catch(() => false);
+  checar("a gaveta oferece 'mover para' outra seção", moveu);
+  await new Promise((r) => setTimeout(r, 1500));
+  const { dados: arvMov } = await api("GET", `/catalogos/${catPed.id}/conteudo`, null, token);
+  const noDoce = arvMov?.categorias?.find((c) => c.id === gDoces.id)?.itens?.[0];
+  checar("e o prato muda de seção como o MESMO item, com o destaque",
+    noDoce?.id === itPed.id && noDoce?.destaque === true, noDoce);
+  await p.keyboard.press("Escape");
   // 🔑 A chave é cadastrada no SISTEMA (pedido do dono, 29/09/2026), não no servidor.
   await irPara(p, `${WEB}/integracoes?aba=traducao`);
   checar("Integrações tem a aba Tradução, com a chave da Anthropic",

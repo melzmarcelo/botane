@@ -20,10 +20,11 @@ import { useSessao } from "@/lib/sessao";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
 import { resumoDaExibicao } from "./cardapio-vivo";
-import GavetaDoPrato from "./gaveta-do-prato";
+import GavetaDoPrato, { type Lugar } from "./gaveta-do-prato";
 import JanelaPratos from "./janela-pratos";
 import JanelaSecao, { type Editando } from "./janela-secao";
-import LinhaDoPrato from "./linha-do-prato";
+import LinhaDoPrato, { faltasDo } from "./linha-do-prato";
+import { BotaoSecao, PainelFaltas } from "./painel-faltas";
 
 type Selecao = { tipo: cat.TipoDeSecao; id: number };
 
@@ -37,6 +38,9 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
   const [editando, setEditando] = useState<Editando | null>(null);
   const [pondo, setPondo] = useState(false);
   const [gaveta, setGaveta] = useState<number | null>(null);
+  /** 🔑 "Só o que falta": os pratos sem foto, descrição ou preço, de todas as
+   *  seções, para arrumar em sequência — quem conserta um vê ele sair da lista. */
+  const [soFaltas, setSoFaltas] = useState(false);
 
   const recarregar = useCallback(async () => {
     try {
@@ -71,6 +75,17 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
   }, [categorias, sel]);
 
   const totalDa = (c: cat.Categoria) => c.itens.length + c.subcategorias.reduce((t, s) => t + s.itens.length, 0);
+
+  /** Todas as listas do cardápio, na ordem da tela: a categoria e as subdivisões dela. */
+  const lugares = useMemo<(Lugar & { itens: cat.ItemDoCatalogo[] })[]>(() => categorias.flatMap((c) => [
+    { rotulo: c.nome, id_categoria: c.id, id_subcategoria: null, itens: c.itens },
+    ...c.subcategorias.map((s) => ({ rotulo: `${c.nome} ▸ ${s.nome}`, id_categoria: c.id, id_subcategoria: s.id, itens: s.itens })),
+  ]), [categorias]);
+
+  const comFaltas = useMemo(
+    () => lugares.map((l) => ({ ...l, itens: l.itens.filter((i) => faltasDo(i).length) })).filter((l) => l.itens.length),
+    [lugares]);
+  const totalFaltas = new Set(comFaltas.flatMap((l) => l.itens.map((i) => i.id_produto))).size;
 
   /** Onde está o item da gaveta — procurado no conteúdo de agora. */
   const naGaveta = useMemo(() => {
@@ -183,14 +198,22 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
       <nav aria-label="seções do cardápio"
            className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:sticky md:top-4 md:mx-0 md:flex-col md:gap-0.5 md:overflow-visible md:px-0">
         <span className="rotulo hidden px-2 pb-1 md:block">Seções</span>
+        {totalFaltas > 0 && (
+          <button type="button" aria-pressed={soFaltas} onClick={() => setSoFaltas(!soFaltas)}
+                  className={`flex shrink-0 items-center justify-between gap-3 rounded-md border px-3 py-1.5 text-left text-[13.5px] md:mb-2 md:w-full ${
+                    soFaltas ? "border-alerta bg-alerta-claro text-alerta" : "border-alerta/40 text-alerta hover:bg-alerta-claro"}`}>
+            <span>⚠ O que falta</span>
+            <span className="mono text-[12px]">{totalFaltas}</span>
+          </button>
+        )}
         {categorias.map((c) => (
           <div key={c.id} className="contents md:block">
-            <BotaoSecao nome={c.nome} total={totalDa(c)} ativo={ehSel("categoria", c.id)}
-                        aoClicar={() => setSel({ tipo: "categoria", id: c.id })} />
+            <BotaoSecao nome={c.nome} total={totalDa(c)} ativo={!soFaltas && ehSel("categoria", c.id)}
+                        aoClicar={() => { setSoFaltas(false); setSel({ tipo: "categoria", id: c.id }); }} />
             {c.subcategorias.map((s) => (
               <BotaoSecao key={s.id} nome={s.nome} total={s.itens.length} sub
-                          ativo={ehSel("subcategoria", s.id)}
-                          aoClicar={() => setSel({ tipo: "subcategoria", id: s.id })} />
+                          ativo={!soFaltas && ehSel("subcategoria", s.id)}
+                          aoClicar={() => { setSoFaltas(false); setSel({ tipo: "subcategoria", id: s.id }); }} />
             ))}
           </div>
         ))}
@@ -201,7 +224,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
         )}
       </nav>
 
-      {/* ----------------------------------------- a seção escolhida --- */}
+      {/* ------------------------------------------- o que falta --- */}
+      {soFaltas && totalFaltas > 0 ? (
+        <PainelFaltas listas={comFaltas} aoAbrir={setGaveta} />
+      ) : (
+      /* ----------------------------------------- a seção escolhida --- */
       <section className="cartao min-w-0" aria-label={`seção ${secao.nome}`}>
         <header className="flex flex-wrap items-start gap-3 border-b border-linha px-5 py-4">
           {secao.foto_url && (
@@ -282,6 +309,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
           )}
         </div>
       </section>
+      )}
 
       {editandoAgora && (
         <JanelaSecao editando={editandoAgora} podeEditar={podeEditar} aoFechar={() => setEditando(null)}
@@ -295,24 +323,10 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
                       aoFechar={() => setPondo(false)} aoPor={recarregar} />
       )}
       {naGaveta && (
-        <GavetaDoPrato key={naGaveta.item.id} item={naGaveta.item} onde={naGaveta.onde}
+        <GavetaDoPrato key={naGaveta.item.id} item={naGaveta.item} onde={naGaveta.onde} lugares={lugares}
                        podeEditar={podeEditar} podeProduto={podeProduto}
                        aoMudar={recarregar} aoFechar={() => setGaveta(null)} />
       )}
     </div>
-  );
-}
-
-function BotaoSecao({ nome, total, ativo, sub, aoClicar }: {
-  nome: string; total: number; ativo: boolean; sub?: boolean; aoClicar: () => void;
-}) {
-  return (
-    <button type="button" onClick={aoClicar} aria-current={ativo ? "true" : undefined}
-            className={`flex shrink-0 items-center justify-between gap-3 rounded-md border px-3 py-1.5 text-left text-[14px] md:w-full md:border-0 ${
-              sub ? "md:pl-6 text-[13.5px]" : "font-semibold"} ${
-              ativo ? "border-erva bg-erva-claro text-erva" : "border-linha text-tinta hover:bg-superficie2"}`}>
-      <span className="truncate">{sub && <span className="text-suave">▸ </span>}{nome}</span>
-      <span className="mono text-[12px] text-suave">{total}</span>
-    </button>
   );
 }

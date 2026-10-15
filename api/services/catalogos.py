@@ -40,7 +40,24 @@ _CAMPOS = """c.id, c.nome, c.origem, c.publica_de, c.publica_ate, c.situacao,
              c.observacao, c.exige_cadastro, u.nome AS criado_por,
              ARRAY(SELECT l.id_unidade FROM catalogo_lojas l
                     WHERE l.id_catalogo = c.id ORDER BY l.id_unidade) AS lojas,
-             c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em"""
+             c.arquivo_url, c.arquivo_nome, c.arquivo_bytes, c.arquivo_em,
+             -- 🔑 O que a LISTA mostra de cada cardápio montado (reforma de
+             -- 15/10/2026): quantos pratos e o que falta neles. Distintos por
+             -- PRODUTO — o mesmo prato em duas listas é um prato só a arrumar.
+             (SELECT json_build_object(
+                       'pratos', count(DISTINCT p.id),
+                       'sem_foto', count(DISTINCT p.id) FILTER (
+                           WHERE p.foto_url IS NULL AND p.video_url IS NULL),
+                       'sem_descricao', count(DISTINCT p.id) FILTER (
+                           WHERE coalesce(btrim(p.informacao_adicional), '') = ''),
+                       'inativos', count(DISTINCT p.id) FILTER (WHERE NOT p.ativo))
+                FROM catalogo_itens i
+                JOIN catalogo_categorias k ON k.id = i.id_categoria
+                JOIN produtos p ON p.id = i.id_produto
+               WHERE k.id_catalogo = c.id) AS resumo,
+             -- É o feed da mesa de alguma loja (`cardapio_config`, 113)?
+             EXISTS (SELECT 1 FROM cardapio_config cc
+                      WHERE cc.id_catalogo = c.id) AS cardapio_vivo"""
 
 
 def _publicado_hoje(linha: dict, hoje: date) -> bool:

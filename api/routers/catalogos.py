@@ -30,7 +30,7 @@ import auditoria
 from database import get_cursor
 from models.catalogos import (
     CatalogoCreate, CatalogoResponse, CatalogoUpdate, CategoriaCreate, ItemCreate,
-    ItemOrdem,
+    ItemLugar, ItemOrdem,
     ORIGENS, SITUACOES, SubcategoriaCreate,
 )
 from models.cardapio_vivo import ExibicaoDaSecao, MarcasDoItem
@@ -410,6 +410,20 @@ def reordenar_itens(body: list[ItemOrdem], ctx: Contexto = Depends(_EDITAR)) -> 
         feito = conteudo.reordenar(cur, id_unidade, body)
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", 0, "reordenar",
                             depois={"itens": len(body)}, id_unidade=id_unidade)
+        return feito
+
+
+@router.put("/itens/{id_item}/lugar")
+def mover_produto(id_item: int, body: ItemLugar, ctx: Contexto = Depends(_EDITAR)) -> dict:
+    """Leva o prato para outra seção do mesmo catálogo, com as marcas dele."""
+    with get_cursor() as cur:
+        id_unidade = _unidade(cur, ctx)
+        feito = conteudo.mover(cur, id_unidade, id_item, body.model_dump())
+        auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "mover",
+                            antes=feito.pop("antes"),
+                            depois={"id_categoria": body.id_categoria,
+                                    "id_subcategoria": body.id_subcategoria},
+                            id_unidade=id_unidade)
         return feito
 
 

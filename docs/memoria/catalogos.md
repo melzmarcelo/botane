@@ -556,3 +556,41 @@ Detalhe no estudo, seção 9 (testes A/B de mídia e ordem, sugestões de destaq
   do `smoke_cardapio_testes.py`. ⚠️ **Aplicar o vencedor continua valendo para as duas**: ele
   muda o CATÁLOGO (a mídia preferida, a ordem), e o catálogo é um só. Isso é o modelo, não
   vazamento.
+
+## A reforma do cadastro (15/10/2026)
+
+🔑 **Pedido do dono:** *"o cadastro de catálogos não está muito intuitivo e fácil de realizar.
+Analise uma melhor estrutura."* Análise apresentada e aprovada (*"pode seguir nesta sequência"*),
+com as três recomendações aceitas: o que é do produto continua no produto, setas (não arrastar)
+mais um "mover para", e o Cardápio Vivo escolhido também na aba Publicação.
+O diagnóstico: cada fase pendurou o seu cartão onde coube, e a tela seguia a ordem em que as
+coisas foram construídas, não a ordem em que se monta um cardápio.
+
+- **Lista em cartões** (`catalogos/page.tsx`): um selo só (no ar / ativo, fora do período /
+  rascunho / inativo), "Cardápio Vivo", pratos e o que falta (`resumo` e `cardapio_vivo` na
+  resposta da lista, `services/catalogos._CAMPOS`), e **Abrir**. Nada se edita na lista.
+- **Novo catálogo em dois passos** (`novo-catalogo.tsx`): o TIPO (montado com produtos primeiro,
+  rótulos em `APRESENTA_ORIGEM`, valores do servidor), depois só o nome. Nasce RASCUNHO e ABRE.
+- **Todo catálogo tem página**, inclusive o de PDF: abas Arquivo e Publicação. O de produtos:
+  Cardápio (abre aqui), Publicação, Pedidos, Idiomas. A aba vai na URL (`?aba=`).
+- **Aba Cardápio**: seções à esquerda (faixa que rola de lado no celular), a seção escolhida à
+  direita. Sem escolha, abre a primeira seção que TEM pratos. Linha do prato enxuta (foto, nome
+  de vitrine, preço, ★, esgotado, o que falta, ↑↓); o resto na **gaveta do prato**
+  (`Gaveta` em `components/ui`). ⚠️ Foto, nome de vitrine, descrição, vídeo e restrições na
+  gaveta gravam no PRODUTO, com a permissão `cadastros.produtos`, e a gaveta diz que valem em
+  todo cardápio. Adicionais continuam só no cadastro do produto.
+- **"+ pratos" com seleção múltipla**; o que já está na lista aparece travado ("já está aqui").
+  Uma chamada de vincular por prato: é ela que confere ativo/PDV/repetido.
+- **Seção**: foto, horário do Cardápio Vivo, traduções e excluir na janela dela. O campo numérico
+  de ordem saiu: setas, que regravam a ordem de todas as irmãs (`reordenarSecoes`).
+- **"O que falta"**: sem foto (e sem vídeo), sem descrição, sem preço ou inativo, de todas as
+  seções numa lista — conserta-se e o prato sai dela.
+- **Mover de seção**: `PUT /catalogos/itens/{id}/lugar`. Mover NÃO é tirar e pôr: o item leva
+  destaque, esgotado, objetivo e margem e entra no fim da lista nova. Só dentro do mesmo catálogo;
+  repetido no destino é 409 com frase.
+- O conteúdo do catálogo traz `preco` (loja → casa, a mesma cascata do site e do feed).
+- ⚠️ **`usePilhaDeJanelas` registra a janela UMA vez** (o `aoFechar` vai num ref). Com a
+  dependência no callback, cada render tirava e repunha a janela na pilha, e uma gaveta com uma
+  confirmação dentro voltava ao TOPO: o Esc fecharia a gaveta, não a pergunta.
+- Cobertura: `smoke_catalogo_produtos.py` (preço, resumo, mover) e as fases 11 e 13 da bateria do
+  navegador (criação em dois passos, PDF, publicar, cartões, abas, gaveta, lote, o que falta, mover).

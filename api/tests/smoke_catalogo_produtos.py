@@ -337,6 +337,42 @@ checar("o item traz o nome do produto e se ele está ativo",
 # 🔑 E com o PREÇO (15/10/2026): a linha do editor mostra o prato como o cliente o
 # lê. Nulo quando não há preço — nunca zero, que seria uma promessa.
 checar("e traz o preço (ou nulo, nunca ausente)", "preco" in item, sorted(item))
+# 🔑 A LISTA de catálogos resume o cardápio montado (15/10/2026): pratos distintos
+# por produto e o que falta neles — é o que o cartão da lista mostra.
+st, capa = chamar("GET", f"/catalogos/{ID_CAT}", token=token)
+distintos = {i["id_produto"] for c in cats for i in c["itens"]} | {
+    i["id_produto"] for c in cats for s in c["subcategorias"] for i in s["itens"]}
+resumo = capa.get("resumo") or {}
+checar("a capa traz o resumo: pratos distintos e o que falta",
+       resumo.get("pratos") == len(distintos)
+       and {"sem_foto", "sem_descricao", "inativos"} <= set(resumo), (resumo, len(distintos)))
+checar("e se é o Cardápio Vivo de alguma loja", capa.get("cardapio_vivo") is False, capa.get("cardapio_vivo"))
+
+print("\n7b. mover o prato de seção (15/10/2026)")
+# 🔑 Mover não é tirar e pôr: o item leva as marcas, e entra no fim da lista nova.
+beb = next(c for c in cats if c["id"] == ID_BEB)
+ITEM_DOIS = next(i["id"] for i in beb["itens"] if i["id_produto"] == P_DOIS)
+chamar("PUT", f"/catalogos/itens/{ITEM_DOIS}/marcas", {"destaque": True}, token)
+st, r = chamar("PUT", f"/catalogos/itens/{ITEM_DOIS}/lugar",
+               {"id_categoria": ID_PRINC, "id_subcategoria": ID_DIV}, token)
+checar("mover para outra seção responde 200", st == 200, (st, r))
+st, arvore = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
+div = next(c for c in arvore["categorias"] if c["id"] == ID_PRINC)["subcategorias"][0]
+checar("e o prato chega no FIM da lista nova, com o destaque",
+       div["itens"][-1]["id"] == ITEM_DOIS and div["itens"][-1]["destaque"] is True,
+       [(i["id"], i["destaque"]) for i in div["itens"]])
+st, r = chamar("PUT", f"/catalogos/itens/{ITEM_SUB}/lugar",
+               {"id_categoria": ID_PRINC, "id_subcategoria": None}, token)
+checar("mover para uma lista que JÁ tem o produto é recusado com frase",
+       st == 409 and "já está" in (r.get("detail") or ""), (st, r))
+st, r = chamar("PUT", f"/catalogos/itens/{ITEM_DOIS}/lugar",
+               {"id_categoria": ID_BEB, "id_subcategoria": ID_DIV}, token)
+checar("subcategoria de OUTRA categoria é recusada", st == 409, (st, r))
+st, r = chamar("PUT", "/catalogos/itens/999999999/lugar", {"id_categoria": ID_BEB}, token)
+checar("item que não existe é 404", st == 404, (st, r))
+# Devolve, para a contagem da seção 9 continuar valendo.
+st, r = chamar("PUT", f"/catalogos/itens/{ITEM_DOIS}/lugar", {"id_categoria": ID_BEB}, token)
+checar("e volta para onde estava", st == 200, (st, r))
 
 print("\n8. a foto da seção")
 st, r = enviar_foto(f"/catalogos/secoes/categoria/{ID_PRINC}/foto", token)
