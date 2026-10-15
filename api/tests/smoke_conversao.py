@@ -84,6 +84,11 @@ token = r["access_token"]
 local = garantir_local(chamar, token)
 forn = garantir_fornecedor(chamar, token, "Conversao fornecedor", "11444777000161")
 suf = uuid.uuid4().hex[:6]
+# ⚠️ **O número da nota com 12 caracteres, não 4** (14/10/2026). O fornecedor é o
+# MESMO a cada rodada (mesmo CNPJ), e `7{suf[:4]}` dava ~65 mil números: com as
+# notas acumulando na base de teste, uma rodada sorteou um que já existia, a API
+# recusou com 409 ("Já existe uma nota") e a suíte quebrou sem resumo.
+num = uuid.uuid4().hex[:11]
 
 print("1. o produto que se estoca em pacote e se compra em caixa")
 st, r = chamar("POST", "/produtos", {"nome": f"Conversao pacote {suf}", "tipo": "INSUMO",
@@ -99,7 +104,7 @@ checar("a unidade padrão vira o fator de compra do cadastro",
        (p.get("um_compra"), p.get("fator_compra")))
 
 print("2. a nota de 1 CX a 12,00 entra como 12 PCT a 1,00")
-st, r = chamar("POST", "/notas", {"id_fornecedor": forn, "numero": f"7{suf[:4]}", "serie": "1",
+st, r = chamar("POST", "/notas", {"id_fornecedor": forn, "numero": f"7{num}", "serie": "1",
                                   "data_emissao": "2026-08-20",
                                   "itens": [{"descricao_fornecedor": "Caixa com 12 pacotes",
                                              "id_produto": prod, "quantidade": 1, "um": "CX",
@@ -221,7 +226,7 @@ checar("e devolve o nome para a tela", p.get("local_padrao") == camara["nome"],
 st, r = chamar("POST", "/produtos", {"nome": f"Conversao seco {suf}", "tipo": "INSUMO",
                                      "um_estoque": "KG"}, token=token)
 seco = r["id"]
-st, r = chamar("POST", "/notas", {"id_fornecedor": forn, "numero": f"8{suf[:4]}", "serie": "1",
+st, r = chamar("POST", "/notas", {"id_fornecedor": forn, "numero": f"8{num}", "serie": "1",
                                   "data_emissao": "2026-08-20", "id_local": reserva["id"],
                                   "itens": [
                                       {"descricao_fornecedor": "Congelado", "id_produto": congelado,
