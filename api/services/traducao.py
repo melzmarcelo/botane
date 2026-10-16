@@ -64,6 +64,15 @@ ENTIDADES: dict[str, dict] = {
         "tabela": "catalogos",
         "campos": {"nome": ("nome", {"en": "nome_en", "de": "nome_de"})},
     },
+    # 🔑 Os cartões do Cardápio Vivo (120): o título faz o papel do nome, e o texto o da
+    # descrição — o prompt e a resposta continuam com as mesmas duas chaves.
+    "cartao": {
+        "tabela": "catalogo_cartoes",
+        "campos": {
+            "nome": ("titulo", {"en": "titulo_en", "de": "titulo_de"}),
+            "descricao": ("texto", {"en": "texto_en", "de": "texto_de"}),
+        },
+    },
 }
 
 _SISTEMA = """Você traduz o cardápio de um café e restaurante brasileiro{casa} \
@@ -282,8 +291,10 @@ def do_catalogo(cur, id_catalogo: int, forcar: bool = False) -> dict:
                 "ON c.id = i.id_categoria WHERE c.id_catalogo = %s", (id_catalogo,))
     prods = [r["id_produto"] for r in cur.fetchall()]
     total, erro = 0, None
+    cur.execute("SELECT id FROM catalogo_cartoes WHERE id_catalogo = %s", (id_catalogo,))
+    cartoes = [r["id"] for r in cur.fetchall()]
     for tipo, ids in (("catalogo", [id_catalogo]), ("categoria", cats), ("subcategoria", subs),
-                      ("produto", prods)):
+                      ("produto", prods), ("cartao", cartoes)):
         r = traduzir(cur, tipo, ids, forcar)
         total += r["traduzidos"]
         erro = erro or r["erro"]
@@ -301,8 +312,10 @@ def pendentes_do_catalogo(cur, id_catalogo: int) -> int:
     cur.execute("SELECT DISTINCT i.id_produto FROM catalogo_itens i JOIN catalogo_categorias c "
                 "ON c.id = i.id_categoria WHERE c.id_catalogo = %s", (id_catalogo,))
     prods = [r["id_produto"] for r in cur.fetchall()]
+    cur.execute("SELECT id FROM catalogo_cartoes WHERE id_catalogo = %s", (id_catalogo,))
+    cartoes = [r["id"] for r in cur.fetchall()]
     for tipo, ids in (("catalogo", [id_catalogo]), ("categoria", cats), ("subcategoria", subs),
-                      ("produto", prods)):
+                      ("produto", prods), ("cartao", cartoes)):
         if not ids:
             continue
         for l in _linhas(cur, tipo, ids):

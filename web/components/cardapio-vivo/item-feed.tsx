@@ -19,6 +19,8 @@ import type { Idioma } from "@/lib/cardapio-vivo";
 type Props = {
   item: ItemFeed;
   indice: number;
+  /** A posição na sequência do feed (120) — o observador lê `data-pos`. */
+  posicao: number;
   ativo: boolean;
   perto: boolean;
   economia: boolean;
@@ -32,7 +34,7 @@ type Props = {
   aoFavoritar: () => void;
 };
 
-export default function ItemFeed({ item, indice, ativo, perto, economia, selecionados, favorito, t, idioma,
+export default function ItemFeed({ item, indice, posicao, ativo, perto, economia, selecionados, favorito, t, idioma,
                                    aoAbrir, aoAdicionar, aoFavoritar }: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const [tocarNoToque, setTocarNoToque] = useState(false);
@@ -53,6 +55,7 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
   return (
     <section
       data-item={item.id}
+      data-pos={posicao}
       data-categoria={item.id_categoria}
       className="cv-item relative h-full w-full snap-start snap-always overflow-hidden"
       aria-label={item.nome}

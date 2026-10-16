@@ -66,9 +66,13 @@ class Evento(BaseModel):
                               # 🔑 Os do complemento (114).
                               "deslizou_frente|deslizou_tras|favoritou|desfavoritou|"
                               "abriu_personalizacao|escolheu_opcao|abriu_hub|clicou_avaliacao|"
-                              "clicou_wifi)$")
+                              "clicou_wifi|"
+                              # 🔑 Os cartões de conteúdo (120).
+                              "viu_cartao|viu_secao|clicou_cartao)$")
     item: int | None = None
     categoria: int | None = None
+    subcategoria: int | None = None
+    cartao: int | None = None
     midia: str | None = Field(None, pattern="^(VIDEO|FOTO|NENHUMA)$")
     duracao_ms: int | None = Field(None, ge=0)
     # Há quanto tempo aconteceu, no relógio do navegador — o servidor recua a PRÓPRIA hora.
@@ -171,3 +175,18 @@ class PedidoDaMesa(BaseModel):
 class ChamadoDaMesa(BaseModel):
     tipo: str = Field(pattern="^(GARCOM|CONTA)$")
     sessao: UUID | None = None
+
+
+class CartaoCreate(BaseModel):
+    """Um cartão de conteúdo do Cardápio Vivo (120).
+
+    `id_categoria` nulo = abertura do cardápio. `antes_do_item` nulo = no fim da lista.
+    A mídia (foto OU vídeo) sobe depois, pelas rotas próprias.
+    """
+    id_categoria: int | None = None
+    id_subcategoria: int | None = None
+    antes_do_item: int | None = None
+    titulo: str | None = Field(None, max_length=120)
+    texto: str | None = Field(None, max_length=700)
+    id_item_link: int | None = None
+    ativo: bool = True

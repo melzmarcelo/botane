@@ -17,12 +17,19 @@ export type TipoEvento =
   | "removeu" | "enviou_pedido" | "chamou_garcom" | "pediu_conta" | "saiu"
   // O complemento do dono (114).
   | "deslizou_frente" | "deslizou_tras" | "favoritou" | "desfavoritou" | "abriu_personalizacao"
-  | "escolheu_opcao" | "abriu_hub" | "clicou_avaliacao" | "clicou_wifi";
+  | "escolheu_opcao" | "abriu_hub" | "clicou_avaliacao" | "clicou_wifi"
+  // Os cartões de conteúdo (120).
+  | "viu_cartao" | "viu_secao" | "clicou_cartao";
 
 type Evento = {
-  tipo: TipoEvento; item?: number; categoria?: number; midia?: string; duracao_ms?: number;
-  quando: number;
+  tipo: TipoEvento; item?: number; categoria?: number; subcategoria?: number; cartao?: number;
+  midia?: string; duracao_ms?: number; quando: number;
 };
+
+/** O que um cartão (ou a abertura de uma seção) vira quando sai da tela. */
+export type ConteudoVisto =
+  | { tipo: "viu_cartao"; cartao: number; midia?: string }
+  | { tipo: "viu_secao"; categoria: number; subcategoria?: number; midia?: string };
 
 const CHAVE_SESSAO = "cardapio.sessao";
 const CHAVE_RECUSA = "cardapio.sem_medicao";
@@ -85,6 +92,8 @@ export class Medidor {
   private fila: Evento[] = [];
   private relogio: ReturnType<typeof setInterval> | null = null;
   private vendo = new Map<number, { inicio: number; midia: string }>();
+  /** 120: os cartões e as aberturas de seção na tela, pela chave do passo ("c12", "s3-7"). */
+  private vendoConteudo = new Map<string, { inicio: number; evento: ConteudoVisto }>();
   private sessao: string;
   private desligado: boolean;
 
@@ -148,8 +157,23 @@ export class Medidor {
     if (duracao >= 300) this.registrar("viu_item", { item, midia: v.midia, duracao_ms: duracao });
   }
 
+  /** Um cartão ou uma abertura de seção passou a ocupar ≥ 50% da tela (120). */
+  comecouAVerConteudo(chave: string, evento: ConteudoVisto) {
+    if (!this.vendoConteudo.has(chave)) this.vendoConteudo.set(chave, { inicio: Date.now(), evento });
+  }
+
+  /** Saiu: vira `viu_cartao` ou `viu_secao`, com a duração — o mesmo piso de 300 ms do prato. */
+  parouDeVerConteudo(chave: string) {
+    const v = this.vendoConteudo.get(chave);
+    if (!v) return;
+    this.vendoConteudo.delete(chave);
+    const duracao = Date.now() - v.inicio;
+    if (duracao >= 300) this.registrar(v.evento.tipo, { ...v.evento, duracao_ms: duracao });
+  }
+
   private fecharVisualizacoes() {
     for (const item of [...this.vendo.keys()]) this.parouDeVer(item);
+    for (const chave of [...this.vendoConteudo.keys()]) this.parouDeVerConteudo(chave);
   }
 
   private aoEsconder = () => {

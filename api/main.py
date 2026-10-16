@@ -46,6 +46,7 @@ from routers import (
     autenticacao,
     cadastros,
     cardapio_vivo,
+    catalogo_cartoes,
     catalogos,
     etiquetas,
     fidelidade,
@@ -504,6 +505,8 @@ app.include_router(inicio.router)
 app.include_router(ajustes.router)
 app.include_router(alertas.router)
 app.include_router(exportacoes.router)
+# ⚠️ Os cartões (120) ANTES dos catálogos: lá há `/{id_catalogo}` de um segmento.
+app.include_router(catalogo_cartoes.router)
 app.include_router(catalogos.router)
 # ⚠️ Antes do `publico`: `/publico/whatsapp/webhook` não pode cair em `/publico/{id_unidade}`.
 app.include_router(whatsapp.publico)

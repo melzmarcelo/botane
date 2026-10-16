@@ -89,7 +89,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     cur.execute(
         """SELECT id, nome, descricao, foto_url, foto_nome, ordem,
-                  dias, hora_de, hora_ate, horario_especial
+                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url
              FROM catalogo_categorias
             WHERE id_catalogo = %s
             ORDER BY ordem, lower(nome)""",
@@ -102,7 +102,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
     ids = [c["id"] for c in categorias]
     cur.execute(
         """SELECT id, id_categoria, nome, descricao, foto_url, foto_nome, ordem,
-                  dias, hora_de, hora_ate, horario_especial
+                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url
              FROM catalogo_subcategorias
             WHERE id_categoria = ANY(%s)
             ORDER BY ordem, lower(nome)""",

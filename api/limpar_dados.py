@@ -48,6 +48,9 @@ OPERACAO = [
     # linha a guarda recusava a limpeza inteira (achado em 28/09/2026). O catálogo em si, as
     # categorias e a configuração de pedidos ficam — são a vitrine, não a operação.
     "catalogo_itens",
+    # ⚠️ Os cartões do feed (120) apontam para os itens (a posição "antes do prato" e o botão
+    # "Ver o prato"): sem eles aqui, o TRUNCATE dos itens seria recusado. Saem junto.
+    "catalogo_cartoes",
     # O Cardápio Vivo (113): a atenção medida e os adicionais apontam para `produtos`.
     "cardapio_eventos", "cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_sessoes",
     # Os chamados da mesa (115) apontam para mesa e usuário: são operação.

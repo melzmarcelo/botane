@@ -20,6 +20,8 @@ import { useSessao } from "@/lib/sessao";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
 import { resumoDaExibicao } from "./cardapio-vivo";
+import { AberturaDoCardapio, PratosECartoes, useCartoes } from "./cartoes-do-catalogo";
+import JanelaCartao, { type AbrindoCartao } from "./janela-cartao";
 import GavetaDoPrato, { type Lugar } from "./gaveta-do-prato";
 import JanelaPratos from "./janela-pratos";
 import JanelaSecao, { type Editando } from "./janela-secao";
@@ -41,6 +43,9 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
   /** 🔑 "Só o que falta": os pratos sem foto, descrição ou preço, de todas as
    *  seções, para arrumar em sequência — quem conserta um vê ele sair da lista. */
   const [soFaltas, setSoFaltas] = useState(false);
+  // 🔑 Os cartões do Cardápio Vivo (120), na mesma lista dos pratos.
+  const { lista: listaCartoes, recarregar: recarregarCartoes } = useCartoes(idCatalogo);
+  const [abrindoCartao, setAbrindoCartao] = useState<AbrindoCartao | null>(null);
 
   const recarregar = useCallback(async () => {
     try {
@@ -81,6 +86,9 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
     { rotulo: c.nome, id_categoria: c.id, id_subcategoria: null, itens: c.itens },
     ...c.subcategorias.map((s) => ({ rotulo: `${c.nome} ▸ ${s.nome}`, id_categoria: c.id, id_subcategoria: s.id, itens: s.itens })),
   ]), [categorias]);
+
+  const todosOsPratos = useMemo(() => lugares.flatMap((l) => l.itens), [lugares]);
+  const cartoes = listaCartoes?.cartoes ?? [];
 
   const comFaltas = useMemo(
     () => lugares.map((l) => ({ ...l, itens: l.itens.filter((i) => faltasDo(i).length) })).filter((l) => l.itens.length),
@@ -193,6 +201,10 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
     setEditando({ tipo, secao: s, idPai, ordemNova: s.ordem, itens: itensDela });
 
   return (
+    <div className="flex flex-col gap-4">
+    <AberturaDoCardapio cartoes={cartoes} podeEditar={podeEditar}
+                        aoNovo={() => setAbrindoCartao({ cartao: null, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })}
+                        aoAbrir={(c) => setAbrindoCartao({ cartao: c, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })} />
     <div className="flex flex-col gap-4 md:grid md:grid-cols-[250px_minmax(0,1fr)] md:items-start md:gap-6">
       {/* --------------------------------------------------- as seções --- */}
       <nav aria-label="seções do cardápio"
@@ -242,7 +254,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
             {secao.descricao && <p className="mt-0.5 text-[13.5px] text-suave">{secao.descricao}</p>}
             <p className="mt-1 text-[12.5px] text-suave">
               No Cardápio Vivo: <span className="text-tinta">{resumoDaExibicao(secao)}</span>
-              {!secao.foto_url && " · sem foto"}
+              {secao.video_url ? " · abre com vídeo" : secao.foto_url ? " · abre com a foto" : " · sem foto, sem abertura"}
             </p>
           </div>
           <span className="flex flex-wrap items-center gap-1.5">
@@ -292,21 +304,27 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
               {itens.length > 0 && ` · ${itens.length}`}
             </span>
             {podeEditar && (
-              <button type="button" className="btn btn-primario" onClick={() => setPondo(true)}>+ pratos</button>
+              <span className="flex flex-wrap gap-2">
+                <button type="button" className="btn btn-secundario" id="novo-cartao"
+                        onClick={() => setAbrindoCartao({ cartao: null, id_categoria: a.categoria.id,
+                                                          id_subcategoria: a.sub?.id ?? null, onde })}>
+                  + cartão
+                </button>
+                <button type="button" className="btn btn-primario" onClick={() => setPondo(true)}>+ pratos</button>
+              </span>
             )}
           </div>
 
-          {itens.length === 0 ? (
-            <p className="py-4 text-[13.5px] text-suave">Nenhum prato aqui ainda.</p>
-          ) : (
-            <ul className="mt-2 flex flex-col gap-px bg-linha">
-              {itens.map((i, n) => (
-                <LinhaDoPrato key={i.id} item={i} primeiro={n === 0} ultimo={n === itens.length - 1}
-                              podeEditar={podeEditar} aoAbrir={() => setGaveta(i.id)}
-                              aoMover={(passo) => void moverPrato(itens, n, passo)} />
-              ))}
-            </ul>
-          )}
+          {itens.length === 0 && <p className="py-4 text-[13.5px] text-suave">Nenhum prato aqui ainda.</p>}
+          <PratosECartoes itens={itens} idCategoria={a.categoria.id} idSubcategoria={a.sub?.id ?? null}
+                          cartoes={cartoes} pratosPorCartao={listaCartoes?.pratos_por_cartao ?? 4}
+                          aoAbrirCartao={(c) => setAbrindoCartao({ cartao: c, id_categoria: a.categoria.id,
+                                                                   id_subcategoria: a.sub?.id ?? null, onde })}
+                          desenharPrato={(i, n) => (
+                            <LinhaDoPrato key={i.id} item={i} primeiro={n === 0} ultimo={n === itens.length - 1}
+                                          podeEditar={podeEditar} aoAbrir={() => setGaveta(i.id)}
+                                          aoMover={(passo) => void moverPrato(itens, n, passo)} />
+                          )} />
         </div>
       </section>
       )}
@@ -322,11 +340,20 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
                       jaEstao={new Set(itens.map((i) => i.id_produto))}
                       aoFechar={() => setPondo(false)} aoPor={recarregar} />
       )}
+      {abrindoCartao && (
+        <JanelaCartao idCatalogo={idCatalogo} abrindo={abrindoCartao} podeEditar={podeEditar}
+                      pratosDaLista={abrindoCartao.id_categoria === null ? []
+                        : lugares.find((l) => l.id_categoria === abrindoCartao.id_categoria
+                            && l.id_subcategoria === abrindoCartao.id_subcategoria)?.itens ?? []}
+                      todosOsPratos={todosOsPratos}
+                      aoFechar={() => setAbrindoCartao(null)} aoMudar={recarregarCartoes} />
+      )}
       {naGaveta && (
         <GavetaDoPrato key={naGaveta.item.id} item={naGaveta.item} onde={naGaveta.onde} lugares={lugares}
                        podeEditar={podeEditar} podeProduto={podeProduto}
                        aoMudar={recarregar} aoFechar={() => setGaveta(null)} />
       )}
+    </div>
     </div>
   );
 }

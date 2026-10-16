@@ -34,7 +34,24 @@ export type ItemFeed = {
 
 export type SecaoFeed = {
   id: number; nome: string; descricao: string | null; foto: string | null;
+  /** 120: o vídeo da abertura automática da seção (ganha da foto) e a capa dele. */
+  video?: string | null; capa?: string | null;
   fora_do_horario: boolean;
+};
+
+/**
+ * Um cartão de conteúdo do feed (120): a abertura do cardápio (`id_categoria` nulo) ou um
+ * cartão entre os pratos, ANTES do prato `antes_do_item` (nulo = no fim da lista dele).
+ */
+export type CartaoFeed = {
+  id: number;
+  id_categoria: number | null;
+  id_subcategoria: number | null;
+  antes_do_item: number | null;
+  id_item_link: number | null;
+  titulo: string | null;
+  texto: string | null;
+  midia: { tipo: "VIDEO"; video: string; capa: string | null } | { tipo: "FOTO"; foto: string } | { tipo: "NENHUMA" };
 };
 
 export type Feed = {
@@ -54,6 +71,8 @@ export type Feed = {
   encomenda: boolean;
   /** Qual Cardápio Vivo é este (117): o catálogo vai nos eventos. */
   vivo: { id_catalogo: number; slug: string | null; principal: boolean };
+  /** Os cartões de conteúdo (120). Só no feed. */
+  cartoes: CartaoFeed[];
   categorias: (SecaoFeed & { subcategorias: SecaoFeed[] })[];
   itens: ItemFeed[];
   restricoes: { chave: string; nome: string }[];

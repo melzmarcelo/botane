@@ -16,7 +16,9 @@ import Detalhe from "./detalhe";
 import { useFavoritos } from "./favoritos";
 import Hub from "./hub";
 import { Medidor, medicaoRecusada, recusarMedicao, sessaoParaTestes } from "./eventos";
+import CartaoFeed from "./cartao-feed";
 import ItemFeed from "./item-feed";
+import { montarSequencia } from "./sequencia";
 import { useSelecao, type EscolhaAdicional } from "./selecao";
 import TelaPedido from "./tela-pedido";
 import TelaSelecao from "./tela-selecao";
@@ -130,28 +132,38 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
 
   const itens = useMemo(() => (feed?.itens ?? []).filter(
     (i) => filtro.every((r) => i.restricoes.includes(r))), [feed, filtro]);
+  // 🔑 Os pratos com os cartões de conteúdo entre eles (120). Com filtro, só pratos.
+  const seq = useMemo(() => montarSequencia(itens, feed?.categorias ?? [], feed?.cartoes ?? [],
+                                            filtro.length === 0), [itens, feed, filtro]);
 
-  // 🔑 Quem decide o "visível" é o observador: ≥ 50% da tela é ver o prato.
+  // 🔑 Quem decide o "visível" é o observador: ≥ 50% da tela é ver o prato (ou o cartão).
   useEffect(() => {
     const raiz = rolagem.current;
-    if (!raiz || !itens.length) return;
+    if (!raiz || !seq.length) return;
     const obs = new IntersectionObserver((entradas) => {
       for (const e of entradas) {
-        const id = Number((e.target as HTMLElement).dataset.item);
-        const item = itens.find((i) => i.id === id);
-        if (!item) continue;
-        if (e.intersectionRatio >= 0.5) {
-          setAtivo(itens.indexOf(item));
-          medidor.current?.comecouAVer(id, item.midia.tipo);
+        const pos = Number((e.target as HTMLElement).dataset.pos);
+        const passo = seq[pos];
+        if (!passo) continue;
+        const visto = e.intersectionRatio >= 0.5;
+        if (visto) setAtivo(pos);
+        if (passo.tipo === "prato") {
+          if (visto) medidor.current?.comecouAVer(passo.item.id, passo.item.midia.tipo);
+          else medidor.current?.parouDeVer(passo.item.id);
+        } else if (visto) {
+          medidor.current?.comecouAVerConteudo(passo.chave, passo.tipo === "cartao"
+            ? { tipo: "viu_cartao", cartao: passo.cartao.id, midia: passo.cartao.midia.tipo }
+            : { tipo: "viu_secao", categoria: passo.id_categoria, subcategoria: passo.id_subcategoria ?? undefined,
+                midia: passo.secao.video ? "VIDEO" : "FOTO" });
         } else {
-          medidor.current?.parouDeVer(id);
+          medidor.current?.parouDeVerConteudo(passo.chave);
         }
       }
     }, { root: raiz, threshold: [0, 0.5] });
-    raiz.querySelectorAll(".cv-item").forEach((el) => obs.observe(el));
+    raiz.querySelectorAll("[data-pos]").forEach((el) => obs.observe(el));
     anterior.current = null;
     return () => obs.disconnect();
-  }, [itens, noHub]);
+  }, [seq, noHub]);
 
   // 🔑 **O deslize** (114): para a frente, ou de volta a um prato já visto — o segundo é
   // sinal de interesse. ⚠️ Ignora a rolagem que a própria tela fez ao tocar numa categoria.
@@ -159,12 +171,14 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     const antes = anterior.current;
     anterior.current = ativo;
     if (antes === null || antes === ativo || rolagemDaTela.current) return;
-    const item = itens[ativo];
-    if (item) medidor.current?.registrar(ativo > antes ? "deslizou_frente" : "deslizou_tras",
-                                         { item: item.id, midia: item.midia.tipo });
-  }, [ativo, itens]);
+    // O deslize é do PRATO: chegar a um cartão não conta (120).
+    const passo = seq[ativo];
+    if (passo?.tipo === "prato") medidor.current?.registrar(ativo > antes ? "deslizou_frente" : "deslizou_tras",
+                                                             { item: passo.item.id, midia: passo.item.midia.tipo });
+  }, [ativo, seq]);
 
-  const categoriaAtiva = itens[ativo]?.id_categoria;
+  // A abertura do cardápio não é de seção nenhuma: acende a primeira.
+  const categoriaAtiva = seq[ativo]?.id_categoria ?? itens[0]?.id_categoria;
   const categorias = useMemo(() => (feed?.categorias ?? []).filter(
     (c) => itens.some((i) => i.id_categoria === c.id)), [feed, itens]);
 
@@ -392,21 +406,32 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             </button>
           </div>
         )}
-        {itens.map((item, i) => (
+        {seq.map((passo, i) => passo.tipo !== "prato" ? (
+          <CartaoFeed key={passo.chave} passo={passo} posicao={i} ativo={i === ativo}
+                      perto={Math.abs(i - ativo) <= 1} economia={economia} t={t}
+                      aoVerPrato={passo.tipo === "cartao" && passo.cartao.id_item_link
+                        && itens.some((x) => x.id === passo.cartao.id_item_link)
+                        ? () => {
+                            medidor.current?.registrar("clicou_cartao", { cartao: passo.cartao.id, item: passo.cartao.id_item_link! });
+                            irParaItem(passo.cartao.id_item_link!);
+                          }
+                        : undefined} />
+        ) : (
           <ItemFeed
-            key={item.id}
-            item={item}
+            key={passo.chave}
+            item={passo.item}
             indice={i}
+            posicao={i}
             ativo={i === ativo}
             perto={Math.abs(i - ativo) <= 1}
             economia={economia}
-            selecionados={selecao.linhas.filter((l) => l.id_item === item.id).reduce((s, l) => s + l.quantidade, 0)}
-            favorito={favoritos.eh(item.id)}
-            aoFavoritar={() => favoritar(item)}
+            selecionados={selecao.linhas.filter((l) => l.id_item === passo.item.id).reduce((s, l) => s + l.quantidade, 0)}
+            favorito={favoritos.eh(passo.item.id)}
+            aoFavoritar={() => favoritar(passo.item)}
             t={t}
             idioma={idioma}
-            aoAbrir={() => abrirDetalhe(item)}
-            aoAdicionar={feed.selecao ? () => adicionar(item, 1, []) : undefined}
+            aoAbrir={() => abrirDetalhe(passo.item)}
+            aoAdicionar={feed.selecao ? () => adicionar(passo.item, 1, []) : undefined}
           />
         ))}
       </div>

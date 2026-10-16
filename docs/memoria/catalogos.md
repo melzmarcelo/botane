@@ -713,3 +713,41 @@ mudando. Vamos manter como se estivesse tudo no mesmo ambiente."*
 ### O telefone de exemplo (16/10/2026)
 ⚠️ O exemplo nos campos de telefone era `(47) 99910-5033` — um número que pode existir. Pedido do
 dono: tudo com 9. Virou `(99) 99999-9999` no site, no cadastro da loja e no WhatsApp.
+
+## Cartões de conteúdo no feed (migração 120, 16/10/2026)
+
+🔑 **Pedido do dono:** *"quando estamos em formato de feed, gostaria de colocar algo entre os pratos
+que vai além de pratos — um cardápio de massas, e antes postar um vídeo, texto ou foto com uma
+introdução, bem como seções entre os pratos"*. Proposta aprovada com três respostas: abertura de
+seção **automática**, vídeo **subido no sistema**, cartões **só no feed** (site e PDF sem mudança).
+- `catalogo_cartoes`: `id_categoria` nulo = **abertura do cardápio**; senão o cartão é da lista
+  (seção ou subdivisão) e fica **antes do prato `antes_do_item`** — nulo, ou o prato fora da tela
+  (horário, esgotado escondido, tirado do cardápio: `ON DELETE SET NULL`), vai ao FIM da lista.
+  ⚠️ Posição colada no prato, não número de ordem: as setas e o vencedor do A/B de ordem mexem
+  nos pratos, e o cartão vai junto sem ninguém tocar nele.
+- ⚠️ **Cartão não é item**: item é produto (preço, PDV, A/B, eventos por produto); um `id_produto`
+  nulo em `catalogo_itens` espalharia o caso especial por tudo. Tabela própria.
+- **Abertura de seção automática**: seção/subdivisão com foto OU vídeo ganha tela própria (nome e
+  descrição) antes do primeiro prato. Vídeo novo em `catalogo_categorias/subcategorias.video_url`
+  (janela da seção), que ganha da foto. Sem foto nem vídeo, não há abertura.
+- **A sequência é montada NA TELA** (`components/cardapio-vivo/sequencia.ts`), não no servidor:
+  os pratos chegam filtrados e reordenados, e o cartão cola no que sobrou. Com filtro de restrição
+  ligado, só pratos. ⚠️ Seção sem prato direto (tudo em subdivisões): o cartão "no fim" dela vai
+  logo depois da abertura, senão nunca apareceria.
+- Feed: `cartao-feed.tsx`, classe `cv-conteudo` (⚠️ NÃO `cv-item`: as verificações contam os
+  pratos por ela). O observador lê `data-pos` (posição na sequência) para prato e cartão.
+  Sem mídia, o fundo é a capa da casa e o texto vai ao centro; com mídia, ao pé, sobre o véu.
+- Mídia do cartão: foto OU vídeo (a última enviada troca a outra); vídeo pela mesma conversão do
+  prato. Cartão vazio (só vídeo, antes do vídeo) grava e NÃO aparece no feed.
+- Medição: `viu_cartao` (id_cartao), `viu_secao` (id_categoria + id_subcategoria, colunas novas
+  em `cardapio_eventos`), `clicou_cartao` (o "Ver o prato"). O cartão de outro cardápio vira nulo,
+  como o item. O editor mostra vistas, segundos médios e cliques dos últimos 30 dias.
+- Editor: painel "Abertura no Cardápio Vivo" acima das seções; "+ cartão" ao lado de "+ pratos";
+  o cartão aparece NA lista dos pratos, no lugar dele (`cartoes-do-catalogo.tsx`,
+  `janela-cartao.tsx`). Criar deixa a janela aberta para pôr a mídia. Aviso (não trava) acima de
+  um cartão a cada 4 pratos — a recomendação dada ao dono.
+- Tradução: entidade `cartao` em `services/traducao.py` (título = nome, texto = descrição), no
+  automático e no "traduzir o catálogo". ⚠️ Ainda não há janela de correção manual para cartão.
+- `limpar_dados.py`: `catalogo_cartoes` sai junto dos itens (aponta para eles; sem isso o
+  TRUNCATE era recusado).
+- Cobertura: `smoke_cardapio_cartoes.py` (35) e `web/scripts/verificar-cartoes-feed.mjs` (13).

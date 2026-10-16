@@ -16,6 +16,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Campo, Confirmacao, Modal } from "@/components/ui";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
+import { CartoesService } from "@/lib/cartoes";
 import { ExibicaoDaSecao } from "./cardapio-vivo";
 import { JanelaDeTraducao } from "./traducoes-do-catalogo";
 
@@ -51,6 +52,8 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
   const [apagando, setApagando] = useState(false);
   const [traduzindo, setTraduzindo] = useState(false);
   const seletor = useRef<HTMLInputElement>(null);
+  const seletorVideo = useRef<HTMLInputElement>(null);
+  const [convertendo, setConvertendo] = useState(false);
   const s = e.secao;
 
   async function salvar() {
@@ -95,6 +98,33 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
       await cat.removerFotoDaSecao(e.tipo, s.id);
       await aoMudar();
       aviso.sucesso("Foto removida.");
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível remover");
+    }
+  }
+
+  /** 120: o vídeo da abertura da seção no Cardápio Vivo — ganha da foto quando existe. */
+  async function video(arquivo: File | undefined) {
+    if (!arquivo || !s) return;
+    setConvertendo(true);
+    try {
+      const r = await CartoesService.enviarVideoDaSecao(e.tipo, s.id, arquivo);
+      await aoMudar();
+      aviso.sucesso(r.message);
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível enviar o vídeo");
+    } finally {
+      setConvertendo(false);
+      if (seletorVideo.current) seletorVideo.current.value = "";
+    }
+  }
+
+  async function tirarVideo() {
+    if (!s) return;
+    try {
+      await CartoesService.removerVideoDaSecao(e.tipo, s.id);
+      await aoMudar();
+      aviso.sucesso("Vídeo removido — a abertura volta a usar a foto.");
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível remover");
     }
@@ -182,7 +212,32 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
               </div>
               <p className="mt-1 text-[12.5px] text-suave">
                 É a capa da seção no site e a foto de reserva dos pratos sem foto no Cardápio Vivo.
+                No Cardápio Vivo, com foto (ou vídeo) a seção ganha uma tela de abertura com o nome e a descrição.
               </p>
+            </div>
+
+            <div>
+              <span className="rotulo-campo">Vídeo da abertura (Cardápio Vivo)</span>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13.5px]">
+                <span className="text-suave">
+                  {s.video_url ? "A abertura da seção mostra este vídeo no lugar da foto." : "Sem vídeo. Até 15 s, sem som."}
+                </span>
+                {podeEditar && (
+                  <>
+                    <input ref={seletorVideo} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden"
+                           onChange={(ev) => void video(ev.target.files?.[0])} />
+                    <button type="button" className="link-acao" disabled={convertendo}
+                            onClick={() => seletorVideo.current?.click()}>
+                      {convertendo ? "convertendo…" : s.video_url ? "trocar vídeo" : "pôr vídeo"}
+                    </button>
+                    {s.video_url && (
+                      <button type="button" className="link-acao link-acao-erro" onClick={() => void tirarVideo()}>
+                        tirar vídeo
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             <ExibicaoDaSecao key={`${s.dias}${s.hora_de}${s.hora_ate}${s.horario_especial}`}

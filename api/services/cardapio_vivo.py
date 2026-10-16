@@ -22,6 +22,7 @@ from datetime import datetime, time, timedelta
 from fastapi import HTTPException
 
 from relogio import agora_da_casa
+from services import catalogo_cartoes
 from services import reservas as reservas_servico
 from services import traducao
 
@@ -395,13 +396,15 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
         f"""SELECT g.id AS id_categoria, g.nome AS categoria, g.nome_en AS categoria_en,
                    g.nome_de AS categoria_de, g.descricao AS categoria_descricao,
                    g.descricao_en AS categoria_descricao_en, g.descricao_de AS categoria_descricao_de,
-                   g.foto_url AS categoria_foto, g.dias AS g_dias, g.hora_de AS g_de,
+                   g.foto_url AS categoria_foto, g.video_url AS categoria_video,
+                   g.video_capa_url AS categoria_capa, g.dias AS g_dias, g.hora_de AS g_de,
                    g.hora_ate AS g_ate, g.horario_especial AS g_especial,
                    s.id AS id_subcategoria, s.nome AS subcategoria, s.nome_en AS subcategoria_en,
                    s.nome_de AS subcategoria_de, s.descricao AS subcategoria_descricao,
                    s.descricao_en AS subcategoria_descricao_en,
                    s.descricao_de AS subcategoria_descricao_de,
-                   s.foto_url AS subcategoria_foto, s.dias AS s_dias, s.hora_de AS s_de,
+                   s.foto_url AS subcategoria_foto, s.video_url AS subcategoria_video,
+                   s.video_capa_url AS subcategoria_capa, s.dias AS s_dias, s.hora_de AS s_de,
                    s.hora_ate AS s_ate, s.horario_especial AS s_especial,
                    i.id AS id_item, i.destaque, i.esgotado, i.midia_preferida, p.id AS id_produto,
                    coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
@@ -447,6 +450,8 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
         if cat is None:
             cat = {"id": l["id_categoria"], "nome": t(l, "categoria"),
                    "descricao": t(l, "categoria_descricao"), "foto": l["categoria_foto"],
+                   # 🔑 120: a abertura automática da seção mostra o vídeo, se houver.
+                   "video": l["categoria_video"], "capa": l["categoria_capa"],
                    "fora_do_horario": not cat_vis, "subcategorias": []}
             por_cat[l["id_categoria"]] = cat
             categorias.append(cat)
@@ -455,6 +460,7 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
             cat["subcategorias"].append({
                 "id": l["id_subcategoria"], "nome": t(l, "subcategoria"),
                 "descricao": t(l, "subcategoria_descricao"), "foto": l["subcategoria_foto"],
+                "video": l["subcategoria_video"], "capa": l["subcategoria_capa"],
                 "fora_do_horario": not sub_vis})
 
         # 🔑 Fase 3 (116): a FOTO ganha do vídeo quando a casa aplicou esse vencedor
@@ -584,6 +590,9 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         # tela pula direto para o feed.
         "hub": _hub(cfg, loja),
         "previa": bool(previa_catalogo),
+        # 🔑 Os cartões de conteúdo (120): a abertura do cardápio e os cartões entre os pratos.
+        # Só no feed — o site e o PDF continuam só com os pratos (decisão do dono).
+        "cartoes": catalogo_cartoes.do_feed(cur, id_catalogo, idioma),
         **conteudo,
     }
 
@@ -699,6 +708,14 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
             (itens, cv["id_catalogo"]))
         produto_do_item = {r["id"]: r["id_produto"] for r in cur.fetchall()}
 
+    # 🔑 O cartão (120), como o item: só o DESTE cardápio entra; id inventado vira nulo.
+    cartoes = sorted({e["cartao"] for e in eventos if e.get("cartao")})
+    do_catalogo: set[int] = set()
+    if cartoes:
+        cur.execute("SELECT id FROM catalogo_cartoes WHERE id = ANY(%s) AND id_catalogo = %s",
+                    (cartoes, cv["id_catalogo"]))
+        do_catalogo = {r["id"] for r in cur.fetchall()}
+
     linhas = []
     for e in eventos:
         item = e.get("item") if e.get("item") in produto_do_item else None
@@ -708,13 +725,15 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
             duracao = min(max(int(duracao), 0), 30 * 60 * 1000)
         linhas.append((lote["sessao"], id_unidade, id_mesa, e["tipo"], item,
                        produto_do_item.get(item) if item else None, e.get("categoria"),
+                       e.get("subcategoria"),
+                       e.get("cartao") if e.get("cartao") in do_catalogo else None,
                        lote["modo"], e.get("midia"), duracao, idade))
     if linhas:
         cur.executemany(
             """INSERT INTO cardapio_eventos (id_sessao, id_unidade, id_mesa, tipo, id_item,
-                                             id_produto, id_categoria, modo, midia, duracao_ms,
-                                             quando)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                             id_produto, id_categoria, id_subcategoria, id_cartao,
+                                             modo, midia, duracao_ms, quando)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                        now() - make_interval(secs => %s / 1000.0))""",
             linhas)
         cur.execute("UPDATE cardapio_sessoes SET eventos = eventos + %s WHERE id = %s",
