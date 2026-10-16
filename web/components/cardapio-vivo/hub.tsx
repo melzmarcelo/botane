@@ -12,7 +12,8 @@
  */
 
 import { useState } from "react";
-import { enderecoDoSite, imagem, type Feed } from "@/lib/cardapio-vivo";
+import { enderecoDoSite, imagem, type Feed, type Idioma } from "@/lib/cardapio-vivo";
+import SeletorDeIdioma from "./seletor-idioma";
 import type { Textos } from "./textos";
 
 type Props = {
@@ -21,9 +22,11 @@ type Props = {
   aoVerCardapio: () => void;
   aoAvaliar: () => void;
   aoAbrirWifi: () => void;
+  idioma: Idioma;
+  aoEscolherIdioma: (i: Idioma) => void;
 };
 
-export default function Hub({ feed, t, aoVerCardapio, aoAvaliar, aoAbrirWifi }: Props) {
+export default function Hub({ feed, t, aoVerCardapio, aoAvaliar, aoAbrirWifi, idioma, aoEscolherIdioma }: Props) {
   const [wifiAberto, setWifiAberto] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const hub = feed.hub!;
@@ -50,6 +53,8 @@ export default function Hub({ feed, t, aoVerCardapio, aoAvaliar, aoAbrirWifi }: 
       <div className="mx-auto min-h-[100dvh] max-w-[440px] overflow-hidden bg-[#FBF9F3] text-[#1B211C] shadow-[0_1px_2px_rgba(27,33,28,.05),0_10px_30px_rgba(27,33,28,.08)] sm:min-h-0 sm:rounded-[18px] sm:border sm:border-[#E0D8C6]">
         <header className="relative h-32"
                 style={{ background: "radial-gradient(120% 90% at 30% 20%, #D8C9A8 0%, transparent 60%), radial-gradient(110% 90% at 80% 30%, #B7C3A6 0%, transparent 55%), linear-gradient(160deg, color-mix(in srgb, var(--cv-principal) 70%, #B7C3A6), var(--cv-principal))" }}>
+          {/* O seletor de idioma no MESMO lugar do site: no alto, à esquerda da capa. */}
+          <SeletorDeIdioma idioma={idioma} aoEscolher={aoEscolherIdioma} className="absolute left-[10px] top-[10px]" />
           <div className={`absolute -bottom-[34px] left-1/2 grid h-[92px] w-[92px] -translate-x-1/2 place-content-center overflow-hidden rounded-full border-[3px] border-[#FBF9F3] text-center ${feed.marca.logo ? "bg-white" : "bg-[var(--cv-principal)] text-[#F3EFE4]"}`}>
             {feed.marca.logo
               ? <img src={imagem(feed.marca.logo, 320) ?? undefined} alt="" className="h-full w-full object-cover" />

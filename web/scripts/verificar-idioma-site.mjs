@@ -14,7 +14,9 @@ const CHROME = process.env.CHROME_PATH ?? "C:\\Program Files\\Google\\Chrome\\Ap
 const API = "http://127.0.0.1:9200";
 // O site é servido pelo app do sistema desde 15/10/2026 (um endereço só): `/portal` aqui.
 const SITE = "http://127.0.0.1:3100/portal";
+const WEB = "http://127.0.0.1:3100";
 const MARCA = String(Date.now()).slice(-6);
+const SLUG = `idioma-${MARCA}`;
 let ok = 0;
 const falhas = [];
 const checar = (nome, cond, detalhe = "") => {
@@ -105,8 +107,30 @@ try {
   await pg.waitForSelector(`#itens [data-catalogo="${cat.id}"]`, { timeout: 15000 });
   checar("tudo em português de novo", await texto(pg, "#ir-reservar") === "Reserve sua Mesa"
     && await texto(pg, `#itens [data-catalogo="${cat.id}"]`) === NOME_CAT);
+
+  console.log("\n5. o idioma atravessa o site e o Cardápio Vivo, nos dois sentidos");
+  // 🔑 Pedido do dono (16/10/2026): "se selecionar dentro do catálogo, ao voltar, se perde a
+  // seleção. E manter o mesmo estilo de seleção em todas as páginas." Mesma aba, mesma chave.
+  await api("PUT", `/cardapio-vivo/vivos/${cat.id}`, { slug: SLUG }, token);
+  await pg.goto(`${WEB}/c/1?cardapio=${SLUG}`, { waitUntil: "networkidle2" });
+  await pg.waitForSelector("[data-idioma]", { timeout: 20000 });
+  checar("o feed tem a MESMA pílula PT · EN · DE do site, com o PT da aba marcado",
+    (await pg.$$eval("[data-idioma]", (bs) => bs.map((b) => b.textContent))).join() === "PT,EN,DE"
+    && await pg.$eval('[data-idioma="pt"]', (b) => b.getAttribute("aria-pressed")) === "true");
+  await pg.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Ver cardápio")?.click());
+  await pg.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Entendi")?.click());
+  await pg.waitForSelector("header [data-idioma]", { timeout: 15000 });
+  await pg.click('header [data-idioma="de"]');
+  await pg.waitForFunction(() => document.querySelector("nav")?.innerText.includes("Herzhaftes"), { timeout: 15000 }).catch(() => {});
+  checar("escolher DE no feed traduz o feed", (await pg.$eval("nav", (n) => n.innerText)).includes("Herzhaftes"));
+  await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click("header a")]);
+  await pg.waitForSelector("#idiomas button", { timeout: 15000 });
+  checar("🔑 e voltar ao site MANTÉM o alemão", await pg.$eval('#idiomas [data-idioma="de"]', (b) => b.getAttribute("aria-pressed")) === "true"
+    && await texto(pg, "#ir-reservar") === "Tisch reservieren", await texto(pg, "#ir-reservar"));
+  await Promise.all([pg.waitForNavigation({ waitUntil: "networkidle2" }), pg.click('#idiomas [data-idioma="pt"]')]);
 } finally {
   await navegador.close();
+  await api("DELETE", `/cardapio-vivo/vivos/${cat.id}`, undefined, token);
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
   await api("PUT", "/unidades/1/parametros", { reservas_ligado: par.reservas_ligado }, token);
 }

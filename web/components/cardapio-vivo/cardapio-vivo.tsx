@@ -18,6 +18,7 @@ import Hub from "./hub";
 import { Medidor, medicaoRecusada, recusarMedicao, sessaoParaTestes } from "./eventos";
 import CartaoFeed from "./cartao-feed";
 import ItemFeed from "./item-feed";
+import SeletorDeIdioma, { idiomaDaAba, lembrarIdioma } from "./seletor-idioma";
 import { montarSequencia } from "./sequencia";
 import { useSelecao, type EscolhaAdicional } from "./selecao";
 import TelaPedido from "./tela-pedido";
@@ -85,8 +86,13 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
   useEffect(() => {
     // O site de reservas manda o idioma que a pessoa escolheu lá (`?idioma=en`); sem
     // ele, vale o do navegador.
+    // 🔑 16/10/2026: o `?idioma=` do link, senão o que a pessoa já escolheu NESTA aba (no site
+    // ou aqui, a mesma chave), senão o do navegador. O do link é gravado na aba, para o "voltar
+    // ao site" manter a escolha.
     const pedido = new URLSearchParams(window.location.search).get("idioma");
-    setIdioma(pedido === "en" || pedido === "de" || pedido === "pt" ? pedido : idiomaDoNavegador());
+    const doLink = pedido === "en" || pedido === "de" || pedido === "pt" ? pedido : null;
+    if (doLink) lembrarIdioma(doLink);
+    setIdioma(doLink ?? idiomaDaAba() ?? idiomaDoNavegador());
     setEconomia(economiaDeDados());
     try {
       setAviso(!previa && !localStorage.getItem(CHAVE_AVISO));
@@ -293,7 +299,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     return (
       <div style={estilo} className="cv-corpo">
         {letras}
-        <Hub feed={feed} t={t}
+        <Hub feed={feed} t={t} idioma={idioma} aoEscolherIdioma={setIdioma}
              aoVerCardapio={() => { setNoHub(false); medidor.current?.registrar("abriu_cardapio"); }}
              aoAvaliar={() => medidor.current?.registrar("clicou_avaliacao")}
              aoAbrirWifi={() => medidor.current?.registrar("clicou_wifi")} />
@@ -319,7 +325,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
           foto até sumir, e a marca entra no medalhão de borda clara, como no site. */}
       <header className="absolute inset-x-0 top-0 z-30 pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]"
               style={{ background: "linear-gradient(to bottom, color-mix(in srgb, var(--cv-principal) 92%, transparent) 0%, color-mix(in srgb, var(--cv-principal) 60%, transparent) 55%, transparent 100%)" }}>
-        <div className="flex items-center gap-3 px-4">
+        <div className="flex items-center gap-2 px-4">
           {/* 🔑 **A volta ao site da casa** (15/10/2026: "parecia dois sistemas"): a marca no
               topo leva à página inicial — reservar, fidelidade, contato —, no mesmo endereço.
               ⚠️ Na prévia do cadastro não há para onde voltar. */}
@@ -347,12 +353,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
               idiomas fica todo branco"): elas herdavam a letra clara do feed, e a lista que o
               navegador do computador abre é branca — branco sobre branco. No celular a lista é
               do sistema e não herda, por isso só aparecia na web. */}
-          <select value={idioma} onChange={(e) => setIdioma(e.target.value as Idioma)} aria-label="Idioma"
-                  className="rounded-full bg-white/15 px-2 py-1 text-xs backdrop-blur">
-            {(["pt", "en", "de"] as const).map((i) => (
-              <option key={i} value={i} className="bg-[#FBF9F3] text-[#1B211C]">{i.toUpperCase()}</option>
-            ))}
-          </select>
+          <SeletorDeIdioma idioma={idioma} aoEscolher={setIdioma} />
           <button type="button" onClick={() => setFiltroAberto((v) => !v)} aria-expanded={filtroAberto}
                   className={`rounded-full px-3 py-1 text-xs backdrop-blur ${filtro.length ? "bg-white text-black" : "bg-white/15"}`}>
             {t.filtrar}{filtro.length ? ` (${filtro.length})` : ""}

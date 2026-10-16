@@ -756,3 +756,17 @@ seção **automática**, vídeo **subido no sistema**, cartões **só no feed** 
   15 px e véu na altura toda; o bloco de texto nunca sobe por baixo do topo (7rem) e, no limite,
   rola dentro do cartão. Sem mídia, `justify-[safe_center]` centraliza sem cortar o começo.
   As quebras de linha que a casa digitou são mantidas (o outro cartão dela é uma citação em versos).
+
+### O idioma, um só para o site e o feed (16/10/2026)
+🔑 **Pedido do dono:** *"ao selecionar o idioma na primeira página, leva para as demais; mas se
+selecionar dentro do catálogo, ao voltar, se perde a seleção. E manter o mesmo estilo de seleção
+em todas as páginas."*
+- O feed passou do `<select>` para a MESMA pílula PT · EN · DE do site
+  (`components/cardapio-vivo/seletor-idioma.tsx`), no topo do feed e no alto da capa do Hub (o
+  lugar dela no site).
+- 🔑 **A escolha mora na ABA, na chave do site** (`sessionStorage["botane.idioma"]`): site e feed
+  estão no mesmo endereço, então o que se escolhe num vale no outro. Ordem no feed: `?idioma=` do
+  link (gravado na aba), depois a aba, depois o navegador.
+- ⚠️ Antes, no computador, as opções do `<select>` herdavam a letra clara do feed e saíam branco
+  sobre branco (no celular a lista é do sistema). A pílula acaba com isso.
+- Cobertura: `verificar-idioma-site.mjs` seção 5 (ida e volta site ↔ feed).
