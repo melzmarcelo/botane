@@ -45,6 +45,7 @@ from routers import (
     alertas,
     autenticacao,
     cadastros,
+    cardapio_anuncios,
     cardapio_vivo,
     catalogo_cartoes,
     catalogos,
@@ -512,6 +513,8 @@ app.include_router(catalogos.router)
 app.include_router(whatsapp.publico)
 # ⚠️ Antes do `publico` também: `/publico/cardapio/...` é do Cardápio Vivo (113).
 app.include_router(cardapio_vivo.publico)
+# Os anúncios (121) antes do Cardápio Vivo: o prefixo deles é mais comprido.
+app.include_router(cardapio_anuncios.router)
 app.include_router(cardapio_vivo.router)
 app.include_router(publico.router)
 app.include_router(whatsapp.router)

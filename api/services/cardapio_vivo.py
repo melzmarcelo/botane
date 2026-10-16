@@ -22,6 +22,7 @@ from datetime import datetime, time, timedelta
 from fastapi import HTTPException
 
 from relogio import agora_da_casa
+from services import cardapio_anuncios as catalogo_anuncios
 from services import catalogo_cartoes
 from services import reservas as reservas_servico
 from services import traducao
@@ -62,6 +63,8 @@ _VIVO_PADRAO = {
     "pedido_hora_de": None, "pedido_hora_ate": None, "chamar_garcom": False,
     # 119: na vitrine, False = só consulta (sem "minha seleção").
     "selecao": True,
+    # 121: AUTOMATICA (seção com foto ou vídeo abre), SO_VIDEO ou NUNCA.
+    "aberturas": "AUTOMATICA",
 }
 _SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -104,7 +107,7 @@ def salvar_config(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> 
 
 _SQL_VIVO = """SELECT v.id_unidade, v.id_catalogo, v.slug, v.principal, v.modo,
                       v.exige_confirmacao, v.pedido_hora_de, v.pedido_hora_ate,
-                      v.chamar_garcom, v.selecao, c.nome, c.situacao
+                      v.chamar_garcom, v.selecao, v.aberturas, c.nome, c.situacao
                  FROM cardapio_vivos v JOIN catalogos c ON c.id = v.id_catalogo
                 WHERE v.id_unidade = %s"""
 
@@ -182,18 +185,19 @@ def salvar_vivo(cur, id_unidade: int, id_catalogo: int, dados: dict, id_usuario:
     cur.execute(
         """INSERT INTO cardapio_vivos (id_unidade, id_catalogo, slug, principal, modo,
                                        exige_confirmacao, pedido_hora_de, pedido_hora_ate,
-                                       chamar_garcom, selecao, atualizado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                       chamar_garcom, selecao, aberturas, atualizado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (id_unidade, id_catalogo) DO UPDATE SET
              slug = EXCLUDED.slug, principal = EXCLUDED.principal, modo = EXCLUDED.modo,
              exige_confirmacao = EXCLUDED.exige_confirmacao,
              pedido_hora_de = EXCLUDED.pedido_hora_de, pedido_hora_ate = EXCLUDED.pedido_hora_ate,
              chamar_garcom = EXCLUDED.chamar_garcom, selecao = EXCLUDED.selecao,
+             aberturas = EXCLUDED.aberturas,
              atualizado_por = EXCLUDED.atualizado_por,
              atualizado_em = now()""",
         (id_unidade, id_catalogo, slug, principal, campos["modo"], campos["exige_confirmacao"],
          campos["pedido_hora_de"], campos["pedido_hora_ate"], campos["chamar_garcom"],
-         bool(campos["selecao"]), id_usuario))
+         bool(campos["selecao"]), campos["aberturas"], id_usuario))
     return vivo(cur, id_unidade, id_catalogo=id_catalogo) | {"antes": atual}
 
 
@@ -397,14 +401,16 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                    g.nome_de AS categoria_de, g.descricao AS categoria_descricao,
                    g.descricao_en AS categoria_descricao_en, g.descricao_de AS categoria_descricao_de,
                    g.foto_url AS categoria_foto, g.video_url AS categoria_video,
-                   g.video_capa_url AS categoria_capa, g.dias AS g_dias, g.hora_de AS g_de,
+                   g.video_capa_url AS categoria_capa, g.abertura AS categoria_abertura,
+                   g.dias AS g_dias, g.hora_de AS g_de,
                    g.hora_ate AS g_ate, g.horario_especial AS g_especial,
                    s.id AS id_subcategoria, s.nome AS subcategoria, s.nome_en AS subcategoria_en,
                    s.nome_de AS subcategoria_de, s.descricao AS subcategoria_descricao,
                    s.descricao_en AS subcategoria_descricao_en,
                    s.descricao_de AS subcategoria_descricao_de,
                    s.foto_url AS subcategoria_foto, s.video_url AS subcategoria_video,
-                   s.video_capa_url AS subcategoria_capa, s.dias AS s_dias, s.hora_de AS s_de,
+                   s.video_capa_url AS subcategoria_capa, s.abertura AS subcategoria_abertura,
+                   s.dias AS s_dias, s.hora_de AS s_de,
                    s.hora_ate AS s_ate, s.horario_especial AS s_especial,
                    i.id AS id_item, i.destaque, i.esgotado, i.midia_preferida, p.id AS id_produto,
                    coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
@@ -452,6 +458,7 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                    "descricao": t(l, "categoria_descricao"), "foto": l["categoria_foto"],
                    # 🔑 120: a abertura automática da seção mostra o vídeo, se houver.
                    "video": l["categoria_video"], "capa": l["categoria_capa"],
+                   "abertura": l["categoria_abertura"],
                    "fora_do_horario": not cat_vis, "subcategorias": []}
             por_cat[l["id_categoria"]] = cat
             categorias.append(cat)
@@ -461,6 +468,7 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                 "id": l["id_subcategoria"], "nome": t(l, "subcategoria"),
                 "descricao": t(l, "subcategoria_descricao"), "foto": l["subcategoria_foto"],
                 "video": l["subcategoria_video"], "capa": l["subcategoria_capa"],
+                "abertura": l["subcategoria_abertura"],
                 "fora_do_horario": not sub_vis})
 
         # 🔑 Fase 3 (116): a FOTO ganha do vídeo quando a casa aplicou esse vencedor
@@ -593,6 +601,11 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         # 🔑 Os cartões de conteúdo (120): a abertura do cardápio e os cartões entre os pratos.
         # Só no feed — o site e o PDF continuam só com os pratos (decisão do dono).
         "cartoes": catalogo_cartoes.do_feed(cur, id_catalogo, idioma),
+        # 🔑 121: quais seções abrem (deste Cardápio Vivo) e os anúncios que valem agora, com as
+        # regras de exibição da casa. ⚠️ A prévia do cadastro não mostra anúncio.
+        "aberturas": cv.get("aberturas") or "AUTOMATICA",
+        **(catalogo_anuncios.do_feed(cur, id_unidade, id_catalogo, bool(mesa), idioma)
+           if not previa_catalogo else {"anuncios": [], "regras_anuncio": None}),
         **conteudo,
     }
 
@@ -716,6 +729,13 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
                     (cartoes, cv["id_catalogo"]))
         do_catalogo = {r["id"] for r in cur.fetchall()}
 
+    anuncios = sorted({e["anuncio"] for e in eventos if e.get("anuncio")})
+    da_loja: set[int] = set()
+    if anuncios:
+        cur.execute("SELECT id FROM cardapio_anuncios WHERE id = ANY(%s) AND id_unidade = %s",
+                    (anuncios, id_unidade))
+        da_loja = {r["id"] for r in cur.fetchall()}
+
     linhas = []
     for e in eventos:
         item = e.get("item") if e.get("item") in produto_do_item else None
@@ -727,13 +747,14 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
                        produto_do_item.get(item) if item else None, e.get("categoria"),
                        e.get("subcategoria"),
                        e.get("cartao") if e.get("cartao") in do_catalogo else None,
+                       e.get("anuncio") if e.get("anuncio") in da_loja else None,
                        lote["modo"], e.get("midia"), duracao, idade))
     if linhas:
         cur.executemany(
             """INSERT INTO cardapio_eventos (id_sessao, id_unidade, id_mesa, tipo, id_item,
                                              id_produto, id_categoria, id_subcategoria, id_cartao,
-                                             modo, midia, duracao_ms, quando)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                             id_anuncio, modo, midia, duracao_ms, quando)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                        now() - make_interval(secs => %s / 1000.0))""",
             linhas)
         cur.execute("UPDATE cardapio_sessoes SET eventos = eventos + %s WHERE id = %s",

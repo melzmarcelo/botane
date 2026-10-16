@@ -179,6 +179,8 @@ export type Secao = {
   /** 120: o vídeo da abertura da seção no Cardápio Vivo (ganha da foto). */
   video_url?: string | null;
   video_capa_url?: string | null;
+  /** 121: a seção abre com tela própria no Cardápio Vivo. */
+  abertura?: boolean;
 };
 
 export type Subcategoria = Secao & { id_categoria: number; itens: ItemDoCatalogo[] };

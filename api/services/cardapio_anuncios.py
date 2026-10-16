@@ -1,0 +1,309 @@
+"""Os anúncios do Cardápio Vivo (121, fase 1): cadastro, regras da casa, feed e relatório.
+
+🔑 Pedido do dono (16/10/2026): anúncios no meio do cardápio — da casa (o catálogo do Dia dos
+Namorados) ou de outra marca —, com período, dias e links; formas e tempo de exibição; métricas;
+e "nada pesado": algo orgânico. A casa cadastra; o parceiro recebe o RELATÓRIO, sem acesso.
+🔑 **Quem decide ONDE e QUAL é a tela**, pelas regras da casa (5º prato, 8 de distância,
+máximo 2 — 1 na mesa): o servidor manda só os anúncios que valem AGORA neste cardápio.
+⚠️ O que o cliente fez fica na sessão anônima de sempre; nada liga anúncio a pessoa.
+"""
+
+from datetime import date, datetime, timedelta
+import re
+
+import arquivos
+from fastapi import HTTPException
+from relogio import agora_da_casa
+from services import traducao
+
+ORIGENS = ("CASA", "EXTERNO")
+ACOES = ("NENHUMA", "CATALOGO", "PRATO", "LINK")
+CANAIS = ("AMBOS", "MESA", "LINK")
+# Abaixo disto, o anúncio passou na rolagem: a pessoa NÃO parou para ver ("pulou").
+PULOU_MS = 1500
+_REGRAS = ("anuncio_depois_de", "anuncio_intervalo", "anuncio_maximo", "anuncio_maximo_mesa")
+_REGRAS_PADRAO = {"anuncio_depois_de": 5, "anuncio_intervalo": 8, "anuncio_maximo": 2, "anuncio_maximo_mesa": 1}
+_URL = re.compile(r"^https?://\S+$", re.IGNORECASE)
+
+_COLUNAS = """a.id, a.id_unidade, a.nome, a.origem, a.anunciante, a.titulo, a.texto, a.foto_url,
+              a.video_url, a.video_capa_url, a.video_segundos, a.acao, a.acao_catalogo,
+              a.acao_item, a.acao_url, a.acao_rotulo, a.inicio, a.fim, a.dias, a.hora_de,
+              a.hora_ate, a.horario_especial, a.cardapios, a.canal, a.peso, a.ativo, a.criado_em"""
+
+
+def _anuncio(cur, id_unidade: int, id_anuncio: int) -> dict:
+    cur.execute(f"SELECT {_COLUNAS} FROM cardapio_anuncios a WHERE a.id = %s AND a.id_unidade = %s",  # noqa: S608
+                (id_anuncio, id_unidade))
+    achado = cur.fetchone()
+    if not achado:
+        raise HTTPException(status_code=404, detail="Anúncio não encontrado.")
+    return dict(achado)
+
+
+def _texto(v: str | None) -> str | None:
+    return (v or "").strip() or None
+
+
+def _conferir(cur, id_unidade: int, d: dict) -> None:
+    """O que o anúncio aponta tem de ser DESTA loja, e o botão tem de ter destino."""
+    if d["origem"] == "EXTERNO" and not _texto(d.get("anunciante")):
+        raise HTTPException(status_code=422, detail="Anúncio de outra marca precisa do nome do anunciante — "
+                                                    "é ele que aparece no “Patrocinado”.")
+    if d.get("inicio") and d.get("fim") and d["inicio"] > d["fim"]:
+        raise HTTPException(status_code=422, detail="O período termina antes de começar.")
+    if (d.get("hora_de") is None) != (d.get("hora_ate") is None):
+        raise HTTPException(status_code=422, detail="Informe as duas pontas do horário, ou nenhuma.")
+    visivel = """EXISTS (SELECT 1 FROM catalogo_lojas l WHERE l.id_catalogo = c.id AND l.id_unidade = %s)"""
+    if d["acao"] == "CATALOGO":
+        cur.execute(f"SELECT 1 FROM catalogos c WHERE c.id = %s AND {visivel}", (d.get("acao_catalogo"), id_unidade))  # noqa: S608
+        if not d.get("acao_catalogo") or not cur.fetchone():
+            raise HTTPException(status_code=422, detail="Escolha o catálogo da casa que o botão abre.")
+    if d["acao"] == "PRATO":
+        cur.execute(f"""SELECT 1 FROM catalogo_itens i JOIN catalogo_categorias g ON g.id = i.id_categoria
+                          JOIN catalogos c ON c.id = g.id_catalogo
+                         WHERE i.id = %s AND {visivel}""", (d.get("acao_item"), id_unidade))  # noqa: S608
+        if not d.get("acao_item") or not cur.fetchone():
+            raise HTTPException(status_code=422, detail="Escolha o prato que o botão mostra.")
+    if d["acao"] == "LINK" and not _URL.match((d.get("acao_url") or "").strip()):
+        raise HTTPException(status_code=422, detail="O link precisa começar com https:// (ou http://).")
+    for idc in d.get("cardapios") or []:
+        cur.execute(f"SELECT 1 FROM catalogos c WHERE c.id = %s AND {visivel}", (idc, id_unidade))  # noqa: S608
+        if not cur.fetchone():
+            raise HTTPException(status_code=422, detail="Um dos cardápios escolhidos não é desta loja.")
+
+
+def _valores(d: dict) -> tuple:
+    acao = d["acao"]
+    return (_texto(d.get("nome")) or "Anúncio", d["origem"], _texto(d.get("anunciante")),
+            _texto(d.get("titulo")), _texto(d.get("texto")), acao,
+            d.get("acao_catalogo") if acao == "CATALOGO" else None,
+            d.get("acao_item") if acao == "PRATO" else None,
+            (d.get("acao_url") or "").strip() or None if acao == "LINK" else None,
+            _texto(d.get("acao_rotulo")) if acao != "NENHUMA" else None,
+            d.get("inicio"), d.get("fim"), d.get("dias") or None, d.get("hora_de"), d.get("hora_ate"),
+            bool(d.get("horario_especial")), d.get("cardapios") or None, d.get("canal", "AMBOS"),
+            d.get("peso", 1), d.get("ativo", True))
+
+
+_CAMPOS = """nome, origem, anunciante, titulo, texto, acao, acao_catalogo, acao_item, acao_url,
+             acao_rotulo, inicio, fim, dias, hora_de, hora_ate, horario_especial, cardapios, canal,
+             peso, ativo"""
+
+
+def criar(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> dict:
+    _conferir(cur, id_unidade, dados)
+    cur.execute(f"""INSERT INTO cardapio_anuncios (id_unidade, {_CAMPOS}, criado_por)
+                    VALUES (%s, {', '.join(['%s'] * 20)}, %s) RETURNING id""",  # noqa: S608
+                (id_unidade, *_valores(dados), id_usuario))
+    novo = cur.fetchone()["id"]
+    traducao.tentar(cur, "anuncio", novo)
+    return _anuncio(cur, id_unidade, novo)
+
+
+def atualizar(cur, id_unidade: int, id_anuncio: int, dados: dict) -> dict:
+    _anuncio(cur, id_unidade, id_anuncio)
+    _conferir(cur, id_unidade, dados)
+    sets = ", ".join(f"{c.strip()} = %s" for c in _CAMPOS.split(","))
+    cur.execute(f"UPDATE cardapio_anuncios SET {sets} WHERE id = %s",  # noqa: S608
+                (*_valores(dados), id_anuncio))
+    traducao.tentar(cur, "anuncio", id_anuncio)
+    return _anuncio(cur, id_unidade, id_anuncio)
+
+
+def remover(cur, id_unidade: int, id_anuncio: int) -> dict:
+    """Apaga o anúncio e a mídia dele. ⚠️ Os EVENTOS ficam (o relatório de um anúncio apagado
+    some da tela, mas a atenção medida continua no agregado da loja)."""
+    atual = _anuncio(cur, id_unidade, id_anuncio)
+    for velho in (atual["foto_url"], atual["video_url"], atual["video_capa_url"]):
+        arquivos.remover(velho, cur)
+    cur.execute("DELETE FROM cardapio_anuncios WHERE id = %s", (id_anuncio,))
+    return {"message": f"Anúncio “{atual['nome']}” removido."}
+
+
+# ------------------------------------------------------------------ a mídia (foto OU vídeo)
+
+def guardar_foto(cur, id_unidade: int, id_anuncio: int, conteudo: bytes, mime: str, extensao: str) -> dict:
+    atual = _anuncio(cur, id_unidade, id_anuncio)
+    url = arquivos.gravar(cur, conteudo, mime, extensao, f"anuncio-{id_anuncio}")
+    cur.execute("""UPDATE cardapio_anuncios SET foto_url = %s, video_url = NULL, video_capa_url = NULL,
+                          video_segundos = NULL WHERE id = %s""", (url, id_anuncio))
+    for velho in (atual["foto_url"], atual["video_url"], atual["video_capa_url"]):
+        if velho and velho != url:
+            arquivos.remover(velho, cur)
+    return _anuncio(cur, id_unidade, id_anuncio)
+
+
+def guardar_video(cur, id_unidade: int, id_anuncio: int, mp4: bytes, capa: bytes, segundos: float) -> dict:
+    atual = _anuncio(cur, id_unidade, id_anuncio)
+    url = arquivos.gravar(cur, mp4, arquivos.VIDEO_TIPO, ".mp4", f"anuncio-video-{id_anuncio}")
+    url_capa = arquivos.gravar(cur, capa, "image/webp", ".webp", f"anuncio-capa-{id_anuncio}")
+    cur.execute("""UPDATE cardapio_anuncios SET video_url = %s, video_capa_url = %s, video_segundos = %s,
+                          foto_url = NULL WHERE id = %s""", (url, url_capa, segundos, id_anuncio))
+    for velho in (atual["foto_url"], atual["video_url"], atual["video_capa_url"]):
+        if velho:
+            arquivos.remover(velho, cur)
+    return _anuncio(cur, id_unidade, id_anuncio)
+
+
+def remover_midia(cur, id_unidade: int, id_anuncio: int) -> dict:
+    atual = _anuncio(cur, id_unidade, id_anuncio)
+    cur.execute("""UPDATE cardapio_anuncios SET foto_url = NULL, video_url = NULL, video_capa_url = NULL,
+                          video_segundos = NULL WHERE id = %s""", (id_anuncio,))
+    for velho in (atual["foto_url"], atual["video_url"], atual["video_capa_url"]):
+        if velho:
+            arquivos.remover(velho, cur)
+    return _anuncio(cur, id_unidade, id_anuncio)
+
+
+# ------------------------------------------------------------------ as regras da casa
+
+def regras(cur, id_unidade: int) -> dict:
+    cur.execute(f"SELECT {', '.join(_REGRAS)} FROM cardapio_config WHERE id_unidade = %s", (id_unidade,))  # noqa: S608
+    linha = cur.fetchone()
+    return dict(linha) if linha else dict(_REGRAS_PADRAO)
+
+
+def salvar_regras(cur, id_unidade: int, dados: dict) -> dict:
+    """⚠️ Só as quatro colunas: o resto da configuração da casa não é tocado (e uma loja que
+    nunca gravou a aparência nasce com o padrão dela)."""
+    valores = [dados[c] for c in _REGRAS]
+    cur.execute(
+        f"""INSERT INTO cardapio_config (id_unidade, {', '.join(_REGRAS)}) VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (id_unidade) DO UPDATE SET
+              {', '.join(f'{c} = EXCLUDED.{c}' for c in _REGRAS)}""",  # noqa: S608
+        (id_unidade, *valores))
+    return regras(cur, id_unidade)
+
+
+# ------------------------------------------------------------------ a lista, com a atenção
+
+def _metricas_sql(filtro: str) -> str:
+    return f"""count(e.id) FILTER (WHERE e.tipo = 'viu_anuncio' {filtro}) AS aparicoes,
+               count(DISTINCT e.id_sessao) FILTER (WHERE e.tipo = 'viu_anuncio' {filtro}) AS sessoes,
+               round(avg(e.duracao_ms) FILTER (WHERE e.tipo = 'viu_anuncio' {filtro}) / 1000.0, 1) AS segundos,
+               count(e.id) FILTER (WHERE e.tipo = 'viu_anuncio' AND e.duracao_ms < {PULOU_MS} {filtro}) AS pulados,
+               count(e.id) FILTER (WHERE e.tipo = 'clicou_anuncio' {filtro}) AS toques,
+               count(DISTINCT e.id_sessao) FILTER (WHERE e.tipo = 'clicou_anuncio' {filtro}) AS sessoes_tocaram"""
+
+
+def listar(cur, id_unidade: int) -> dict:
+    """Os anúncios da loja com a atenção dos últimos 30 dias, e as regras de exibição."""
+    cur.execute(
+        f"""SELECT {_COLUNAS}, {_metricas_sql("AND e.quando > now() - interval '30 days'")}
+              FROM cardapio_anuncios a
+              LEFT JOIN cardapio_eventos e ON e.id_anuncio = a.id AND e.id_unidade = a.id_unidade
+             WHERE a.id_unidade = %s
+             GROUP BY a.id
+             ORDER BY a.ativo DESC, a.criado_em DESC""",  # noqa: S608
+        (id_unidade,))
+    hoje = agora_da_casa().date()
+    saida = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["situacao"] = ("DESLIGADO" if not d["ativo"] else "ENCERRADO" if d["fim"] and d["fim"] < hoje
+                         else "AGENDADO" if d["inicio"] and d["inicio"] > hoje else "NO_AR")
+        saida.append(d)
+    return {"anuncios": saida, "regras": regras(cur, id_unidade), "pulou_ms": PULOU_MS}
+
+
+# ------------------------------------------------------------------ o relatório
+
+def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dict:
+    """Os números de UM anúncio num período — para a casa apresentar ao parceiro.
+
+    🔑 Pessoas = sessões anônimas que viram (uma visita ao cardápio); "pularam" = passou em
+    menos de 1,5 s; taxa de toque = sessões que tocaram ÷ sessões que viram.
+    ⚠️ Vem do bruto dos eventos: o que passou da retenção da loja (13 meses) não entra.
+    """
+    a = _anuncio(cur, id_unidade, id_anuncio)
+    if de > ate:
+        raise HTTPException(status_code=422, detail="O período termina antes de começar.")
+    janela = """AND e.quando >= %(de)s::date AND e.quando < (%(ate)s::date + 1)"""
+    p = {"a": id_anuncio, "u": id_unidade, "de": de, "ate": ate}
+    cur.execute(f"""SELECT {_metricas_sql(janela)} FROM cardapio_eventos e
+                     WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s""", p)  # noqa: S608
+    total = dict(cur.fetchone())
+    cur.execute(f"""SELECT (e.quando AT TIME ZONE 'America/Sao_Paulo')::date AS dia, {_metricas_sql('')}
+                      FROM cardapio_eventos e
+                     WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
+                     GROUP BY 1 ORDER BY 1""", p)  # noqa: S608
+    por_dia = [dict(r) for r in cur.fetchall()]
+    cur.execute(f"""SELECT CASE WHEN e.id_mesa IS NULL THEN 'LINK' ELSE 'MESA' END AS canal, {_metricas_sql('')}
+                      FROM cardapio_eventos e
+                     WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
+                     GROUP BY 1 ORDER BY 1""", p)  # noqa: S608
+    por_canal = [dict(r) for r in cur.fetchall()]
+    cur.execute(f"""SELECT extract(hour FROM e.quando AT TIME ZONE 'America/Sao_Paulo')::int AS hora,
+                           count(*) FILTER (WHERE e.tipo = 'viu_anuncio') AS aparicoes
+                      FROM cardapio_eventos e
+                     WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
+                     GROUP BY 1 ORDER BY 1""", p)  # noqa: S608
+    por_hora = [dict(r) for r in cur.fetchall()]
+    cur.execute("SELECT nome_fantasia, razao_social FROM empresa WHERE id = 1")
+    e = cur.fetchone() or {}
+    sessoes = total["sessoes"] or 0
+    return {
+        "anuncio": a, "de": de, "ate": ate,
+        "casa": e.get("nome_fantasia") or e.get("razao_social"),
+        "total": total | {"taxa_toque": round(total["sessoes_tocaram"] / sessoes, 4) if sessoes else None,
+                          "taxa_pulou": round(total["pulados"] / total["aparicoes"], 4) if total["aparicoes"] else None},
+        "por_dia": por_dia, "por_canal": por_canal, "por_hora": por_hora, "pulou_ms": PULOU_MS,
+    }
+
+
+# ------------------------------------------------------------------ o que o feed recebe
+
+def do_feed(cur, id_unidade: int, id_catalogo: int, mesa: bool, idioma: str | None,
+            agora: datetime | None = None) -> dict:
+    """Os anúncios que valem AGORA neste Cardápio Vivo, e as regras de exibição da casa.
+
+    🔑 Na mesa o teto é o da mesa (1, por padrão): quem está sentado quer achar o prato.
+    ⚠️ O anúncio que leva a ESTE mesmo catálogo não aparece aqui (seria um convite para onde a
+    pessoa já está).
+    """
+    from services.cardapio_vivo import _secao_visivel  # ⚠️ aqui dentro: aquele importa este
+    agora = agora or agora_da_casa().replace(tzinfo=None)
+    cur.execute("SELECT 1 FROM reserva_dias_especiais WHERE id_unidade = %s AND data = %s",
+                (id_unidade, agora.date()))
+    especial = cur.fetchone() is not None
+    cur.execute(
+        """SELECT a.*, v.slug AS acao_slug
+             FROM cardapio_anuncios a
+             LEFT JOIN cardapio_vivos v ON v.id_unidade = a.id_unidade AND v.id_catalogo = a.acao_catalogo
+            WHERE a.id_unidade = %(u)s AND a.ativo
+              AND (a.inicio IS NULL OR a.inicio <= %(hoje)s) AND (a.fim IS NULL OR a.fim >= %(hoje)s)
+              AND (a.cardapios IS NULL OR %(c)s = ANY(a.cardapios))
+              AND a.canal IN ('AMBOS', %(canal)s)
+              AND (a.acao <> 'CATALOGO' OR a.acao_catalogo IS DISTINCT FROM %(c)s)
+              AND (coalesce(btrim(a.titulo), '') <> '' OR coalesce(btrim(a.texto), '') <> ''
+                   OR a.foto_url IS NOT NULL OR a.video_url IS NOT NULL)
+            ORDER BY a.id""",
+        {"u": id_unidade, "hoje": agora.date(), "c": id_catalogo, "canal": "MESA" if mesa else "LINK"})
+    anuncios = []
+    for r in cur.fetchall():
+        if not _secao_visivel({"dias": r["dias"], "hora_de": r["hora_de"], "hora_ate": r["hora_ate"],
+                               "horario_especial": r["horario_especial"]}, agora, especial):
+            continue
+        if r["video_url"]:
+            midia = {"tipo": "VIDEO", "video": r["video_url"], "capa": r["video_capa_url"]}
+        elif r["foto_url"]:
+            midia = {"tipo": "FOTO", "foto": r["foto_url"]}
+        else:
+            midia = {"tipo": "NENHUMA"}
+        acao = {"tipo": r["acao"], "rotulo": r["acao_rotulo"], "catalogo": r["acao_catalogo"],
+                "slug": r["acao_slug"], "item": r["acao_item"], "url": r["acao_url"]}
+        anuncios.append({
+            "id": r["id"], "origem": r["origem"], "anunciante": r["anunciante"], "peso": r["peso"],
+            "titulo": traducao.escolher(r["titulo"], r["titulo_en"], r["titulo_de"], idioma),
+            "texto": traducao.escolher(r["texto"], r["texto_en"], r["texto_de"], idioma),
+            "midia": midia, "acao": acao,
+        })
+    rg = regras(cur, id_unidade)
+    return {"anuncios": anuncios,
+            "regras_anuncio": {"depois_de": rg["anuncio_depois_de"], "intervalo": rg["anuncio_intervalo"],
+                               "maximo": rg["anuncio_maximo_mesa"] if mesa else rg["anuncio_maximo"]}}
+
+
+def periodo_padrao() -> tuple[date, date]:
+    hoje = agora_da_casa().date()
+    return hoje - timedelta(days=29), hoje

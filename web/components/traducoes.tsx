@@ -22,12 +22,14 @@ const IDIOMAS = [
 ];
 const ROTULO = { nome: "Nome", descricao: "Descrição" };
 
-export default function Traducoes({ tipo, id, aoMudar, rotulos = ROTULO, maxNome = 160 }: {
+export default function Traducoes({ tipo, id, aoMudar, rotulos = ROTULO, maxNome = 160, maxDescricao = 700 }: {
   tipo: TipoTraduzivel; id: number; aoMudar?: () => void;
   /** O nome dos dois campos na tela — o cartão do Cardápio Vivo chama de "Título" e "Texto". */
   rotulos?: { nome: string; descricao: string };
   /** Quantas letras o nome traduzido aceita (o título do cartão: 120). */
   maxNome?: number;
+  /** E a descrição (o texto do anúncio: 500). */
+  maxDescricao?: number;
 }) {
   const aviso = useAviso();
   const [t, setT] = useState<Traducao | null>(null);
@@ -114,7 +116,7 @@ export default function Traducoes({ tipo, id, aoMudar, rotulos = ROTULO, maxNome
                       {rotulos[c]}{manual ? " · corrigido à mão" : ""}
                     </span>
                     {c === "descricao" ? (
-                      <textarea className="campo" rows={2} maxLength={700} value={form[i.v][c] ?? ""}
+                      <textarea className="campo" rows={2} maxLength={maxDescricao} value={form[i.v][c] ?? ""}
                                 placeholder={t.ligada ? "será traduzido ao salvar" : "em branco = o site mostra o português"}
                                 onChange={(e) => setForm({ ...form, [i.v]: { ...form[i.v], [c]: e.target.value } })} />
                     ) : (

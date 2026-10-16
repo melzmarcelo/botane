@@ -19,17 +19,20 @@ export type TipoEvento =
   | "deslizou_frente" | "deslizou_tras" | "favoritou" | "desfavoritou" | "abriu_personalizacao"
   | "escolheu_opcao" | "abriu_hub" | "clicou_avaliacao" | "clicou_wifi"
   // Os cartões de conteúdo (120).
-  | "viu_cartao" | "viu_secao" | "clicou_cartao";
+  | "viu_cartao" | "viu_secao" | "clicou_cartao"
+  // Os anúncios (121).
+  | "viu_anuncio" | "clicou_anuncio";
 
 type Evento = {
-  tipo: TipoEvento; item?: number; categoria?: number; subcategoria?: number; cartao?: number;
+  tipo: TipoEvento; item?: number; categoria?: number; subcategoria?: number; cartao?: number; anuncio?: number;
   midia?: string; duracao_ms?: number; quando: number;
 };
 
 /** O que um cartão (ou a abertura de uma seção) vira quando sai da tela. */
 export type ConteudoVisto =
   | { tipo: "viu_cartao"; cartao: number; midia?: string }
-  | { tipo: "viu_secao"; categoria: number; subcategoria?: number; midia?: string };
+  | { tipo: "viu_secao"; categoria: number; subcategoria?: number; midia?: string }
+  | { tipo: "viu_anuncio"; anuncio: number; midia?: string };
 
 const CHAVE_SESSAO = "cardapio.sessao";
 const CHAVE_RECUSA = "cardapio.sem_medicao";

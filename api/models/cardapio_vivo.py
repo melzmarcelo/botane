@@ -1,6 +1,6 @@
 """O que entra e sai do Cardápio Vivo (113). Nada de `body: dict` — regra da casa."""
 
-from datetime import time
+from datetime import date, time
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -36,6 +36,8 @@ class VivoCardapio(BaseModel):
     chamar_garcom: bool = False
     # 119: na vitrine, False = só consulta, sem a "minha seleção".
     selecao: bool = True
+    # 121: quais seções abrem com tela própria no feed.
+    aberturas: str = Field("AUTOMATICA", pattern="^(AUTOMATICA|SO_VIDEO|NUNCA)$")
 
     @model_validator(mode="after")
     def _faixa(self):
@@ -68,11 +70,14 @@ class Evento(BaseModel):
                               "abriu_personalizacao|escolheu_opcao|abriu_hub|clicou_avaliacao|"
                               "clicou_wifi|"
                               # 🔑 Os cartões de conteúdo (120).
-                              "viu_cartao|viu_secao|clicou_cartao)$")
+                              "viu_cartao|viu_secao|clicou_cartao|"
+                              # 🔑 Os anúncios (121).
+                              "viu_anuncio|clicou_anuncio)$")
     item: int | None = None
     categoria: int | None = None
     subcategoria: int | None = None
     cartao: int | None = None
+    anuncio: int | None = None
     midia: str | None = Field(None, pattern="^(VIDEO|FOTO|NENHUMA)$")
     duracao_ms: int | None = Field(None, ge=0)
     # Há quanto tempo aconteceu, no relógio do navegador — o servidor recua a PRÓPRIA hora.
@@ -190,3 +195,45 @@ class CartaoCreate(BaseModel):
     texto: str | None = Field(None, max_length=700)
     id_item_link: int | None = None
     ativo: bool = True
+
+
+class AnuncioCreate(BaseModel):
+    """Um anúncio do Cardápio Vivo (121). A mídia (foto OU vídeo) sobe depois, por rota própria.
+
+    `cardapios` nulo = em todos os Cardápios Vivos da loja; `dias` 1=seg … 7=dom.
+    """
+    nome: str = Field(min_length=2, max_length=120)
+    origem: str = Field("CASA", pattern="^(CASA|EXTERNO)$")
+    anunciante: str | None = Field(None, max_length=120)
+    titulo: str | None = Field(None, max_length=120)
+    texto: str | None = Field(None, max_length=500)
+    acao: str = Field("NENHUMA", pattern="^(NENHUMA|CATALOGO|PRATO|LINK)$")
+    acao_catalogo: int | None = None
+    acao_item: int | None = None
+    acao_url: str | None = Field(None, max_length=500)
+    acao_rotulo: str | None = Field(None, max_length=40)
+    inicio: date | None = None
+    fim: date | None = None
+    dias: list[int] | None = None
+    hora_de: time | None = None
+    hora_ate: time | None = None
+    horario_especial: bool = False
+    cardapios: list[int] | None = None
+    canal: str = Field("AMBOS", pattern="^(AMBOS|MESA|LINK)$")
+    peso: int = Field(1, ge=1, le=10)
+    ativo: bool = True
+
+    @model_validator(mode="after")
+    def _dias(self):
+        if self.dias and any(d < 1 or d > 7 for d in self.dias):
+            raise ValueError("Dia da semana vai de 1 (segunda) a 7 (domingo).")
+        return self
+
+
+class RegrasAnuncio(BaseModel):
+    """O ritmo dos anúncios no feed, da casa (121): o 1º depois de N pratos, N pratos entre um e
+    outro, e o máximo por visita — menor na mesa."""
+    anuncio_depois_de: int = Field(5, ge=1, le=50)
+    anuncio_intervalo: int = Field(8, ge=2, le=50)
+    anuncio_maximo: int = Field(2, ge=0, le=10)
+    anuncio_maximo_mesa: int = Field(1, ge=0, le=10)

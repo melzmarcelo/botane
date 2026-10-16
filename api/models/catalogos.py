@@ -150,6 +150,9 @@ class SecaoBase(BaseModel):
     # ⚠️ **A ordem é do CARDÁPIO, não alfabética**: "Entradas" antes de
     # "Sobremesas" é a sequência da refeição, e só a casa sabe qual é.
     ordem: int = Field(default=0, ge=0, le=999)
+    # 121: a seção abre com tela própria no Cardápio Vivo. ⚠️ Nulo = NÃO MUDA: a janela
+    # antiga (e a do conector) que não manda o campo não religa a abertura que a casa desligou.
+    abertura: bool | None = None
 
 
 class CategoriaCreate(SecaoBase):

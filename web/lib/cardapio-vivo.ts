@@ -36,8 +36,26 @@ export type SecaoFeed = {
   id: number; nome: string; descricao: string | null; foto: string | null;
   /** 120: o vídeo da abertura automática da seção (ganha da foto) e a capa dele. */
   video?: string | null; capa?: string | null;
+  /** 121: a seção abre com tela própria (a casa pode desligar a de cada uma). */
+  abertura?: boolean;
   fora_do_horario: boolean;
 };
+
+/** Um anúncio que vale AGORA neste Cardápio Vivo (121). Quem decide onde entra é a tela. */
+export type AnuncioFeed = {
+  id: number;
+  origem: "CASA" | "EXTERNO";
+  anunciante: string | null;
+  peso: number;
+  titulo: string | null;
+  texto: string | null;
+  midia: CartaoFeed["midia"];
+  acao: { tipo: "NENHUMA" | "CATALOGO" | "PRATO" | "LINK"; rotulo: string | null; catalogo: number | null;
+          slug: string | null; item: number | null; url: string | null };
+};
+
+export type RegrasAnuncioFeed = { depois_de: number; intervalo: number; maximo: number };
+export type Aberturas = "AUTOMATICA" | "SO_VIDEO" | "NUNCA";
 
 /**
  * Um cartão de conteúdo do feed (120): a abertura do cardápio (`id_categoria` nulo) ou um
@@ -73,6 +91,10 @@ export type Feed = {
   vivo: { id_catalogo: number; slug: string | null; principal: boolean };
   /** Os cartões de conteúdo (120). Só no feed. */
   cartoes: CartaoFeed[];
+  /** 121: quais seções abrem, os anúncios que valem agora e as regras de exibição da casa. */
+  aberturas: Aberturas;
+  anuncios: AnuncioFeed[];
+  regras_anuncio: RegrasAnuncioFeed | null;
   categorias: (SecaoFeed & { subcategorias: SecaoFeed[] })[];
   itens: ItemFeed[];
   restricoes: { chave: string; nome: string }[];
@@ -164,6 +186,8 @@ export type VivoCardapio = {
   chamar_garcom: boolean;
   /** Na vitrine, falso = só consulta (119). */
   selecao: boolean;
+  /** 121: quais seções abrem com tela própria no feed. */
+  aberturas: "AUTOMATICA" | "SO_VIDEO" | "NUNCA";
   /** O link sem mesa — o principal sem `?cardapio=`. */
   link: string;
 };

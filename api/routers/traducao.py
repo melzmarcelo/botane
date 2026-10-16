@@ -19,7 +19,7 @@ from services import traducao as servico
 router = APIRouter(prefix="/traducao", tags=["Tradução"])
 
 # `cartao`: os cartões de conteúdo do Cardápio Vivo (120) — a correção à mão (16/10/2026).
-Tipo = Literal["produto", "categoria", "subcategoria", "catalogo", "cartao"]
+Tipo = Literal["produto", "categoria", "subcategoria", "catalogo", "cartao", "anuncio"]
 # ⚠️ O título do cartão em inglês e alemão cabe em 120 letras (a coluna da 120), não em 160.
 _TITULO_DO_CARTAO = 120
 # Quem vê o catálogo vê as traduções; quem edita catálogo ou produto corrige.
@@ -162,9 +162,11 @@ def corrigir(tipo: Tipo, id_: int, body: TraducaoManual, ctx: Contexto = Depends
     """A tradução corrigida à mão — e a automática não a sobrescreve mais."""
     dados = {k: v.model_dump(exclude_unset=True) for k, v in
              (("en", body.en), ("de", body.de)) if v is not None}
-    if tipo == "cartao" and any(len((d.get("nome") or "").strip()) > _TITULO_DO_CARTAO for d in dados.values()):
+    if tipo == "anuncio" and any(len((d.get("descricao") or "").strip()) > 500 for d in dados.values()):
+        raise HTTPException(status_code=422, detail="O texto do anúncio cabe em 500 letras, em cada idioma.")
+    if tipo in ("cartao", "anuncio") and any(len((d.get("nome") or "").strip()) > _TITULO_DO_CARTAO for d in dados.values()):
         raise HTTPException(status_code=422,
-                            detail=f"O título do cartão cabe em {_TITULO_DO_CARTAO} letras, em cada idioma.")
+                            detail=f"O título cabe em {_TITULO_DO_CARTAO} letras, em cada idioma.")
     with get_cursor() as cur:
         r = servico.gravar_manual(cur, tipo, id_, dados)
         auditoria.registrar(cur, ctx.id_usuario, tipo, id_, "traducao_manual", depois=dados)

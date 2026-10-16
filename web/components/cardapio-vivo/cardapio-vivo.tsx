@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buscarFeed, enderecoDoSite, imagem, previaFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
+import { buscarFeed, enderecoDoSite, imagem, previaFeed, type AnuncioFeed, type Feed, type Idioma, type ItemFeed as Item } from "@/lib/cardapio-vivo";
 import Chamados from "./chamados";
 import Detalhe from "./detalhe";
 import { useFavoritos } from "./favoritos";
@@ -138,9 +138,14 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
 
   const itens = useMemo(() => (feed?.itens ?? []).filter(
     (i) => filtro.every((r) => i.restricoes.includes(r))), [feed, filtro]);
-  // 🔑 Os pratos com os cartões de conteúdo entre eles (120). Com filtro, só pratos.
+  // 🔑 Os pratos com os cartões de conteúdo entre eles (120) e os anúncios pelas regras da casa
+  // (121). Com filtro, só pratos. A semente do sorteio é a sessão anônima: mesma visita, mesma ordem.
+  const [semente] = useState(() => (typeof window === "undefined" ? "" : sessaoParaTestes() ?? String(Math.random())));
   const seq = useMemo(() => montarSequencia(itens, feed?.categorias ?? [], feed?.cartoes ?? [],
-                                            filtro.length === 0), [itens, feed, filtro]);
+                                            filtro.length === 0, {
+                                              aberturas: feed?.aberturas, anuncios: feed?.anuncios,
+                                              regras: feed?.regras_anuncio, semente,
+                                            }), [itens, feed, filtro, semente]);
 
   // 🔑 Quem decide o "visível" é o observador: ≥ 50% da tela é ver o prato (ou o cartão).
   useEffect(() => {
@@ -157,8 +162,9 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
           if (visto) medidor.current?.comecouAVer(passo.item.id, passo.item.midia.tipo);
           else medidor.current?.parouDeVer(passo.item.id);
         } else if (visto) {
-          medidor.current?.comecouAVerConteudo(passo.chave, passo.tipo === "cartao"
-            ? { tipo: "viu_cartao", cartao: passo.cartao.id, midia: passo.cartao.midia.tipo }
+          medidor.current?.comecouAVerConteudo(passo.chave,
+            passo.tipo === "cartao" ? { tipo: "viu_cartao", cartao: passo.cartao.id, midia: passo.cartao.midia.tipo }
+            : passo.tipo === "anuncio" ? { tipo: "viu_anuncio", anuncio: passo.anuncio.id, midia: passo.anuncio.midia.tipo }
             : { tipo: "viu_secao", categoria: passo.id_categoria, subcategoria: passo.id_subcategoria ?? undefined,
                 midia: passo.secao.video ? "VIDEO" : "FOTO" });
         } else {
@@ -209,6 +215,31 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     el?.scrollIntoView();
     setTimeout(() => { rolagemDaTela.current = false; }, 600);
   };
+
+  /**
+   * 🔑 O botão do anúncio (121): abrir um catálogo da casa (o feed dele, se for Cardápio Vivo;
+   * senão o site), ir a um prato DESTE cardápio, ou um link — em outra aba, para o cardápio ficar.
+   * ⚠️ O toque é medido e o lote sai ANTES de trocar de página, senão o clique se perde.
+   */
+  function acaoDoAnuncio(a: AnuncioFeed): (() => void) | undefined {
+    const medir = () => {
+      medidor.current?.registrar("clicou_anuncio", { anuncio: a.id });
+      medidor.current?.enviar();
+    };
+    const { tipo, slug, catalogo, item, url } = a.acao;
+    if (tipo === "CATALOGO" && catalogo && feed) {
+      return () => {
+        medir();
+        const q = new URLSearchParams(idioma !== "pt" ? { idioma } : {});
+        window.location.assign(slug
+          ? `/c/${feed.loja.id}?${new URLSearchParams({ cardapio: slug, ...(idioma !== "pt" ? { idioma } : {}) })}`
+          : `${enderecoDoSite()}?loja=${feed.loja.id}&catalogo=${catalogo}${q.toString() ? `&${q}` : ""}`);
+      };
+    }
+    if (tipo === "PRATO" && item && itens.some((x) => x.id === item)) return () => { medir(); irParaItem(item); };
+    if (tipo === "LINK" && url) return () => { medir(); window.open(url, "_blank", "noopener"); };
+    return undefined;
+  }
 
   const favoritar = (item: Item) => {
     const ficou = favoritos.alternar(item.id);
@@ -413,7 +444,11 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             </button>
           </div>
         )}
-        {seq.map((passo, i) => passo.tipo !== "prato" ? (
+        {seq.map((passo, i) => passo.tipo === "anuncio" ? (
+          <CartaoFeed key={passo.chave} passo={passo} posicao={i} ativo={i === ativo}
+                      perto={Math.abs(i - ativo) <= 1} economia={economia} t={t}
+                      aoVerPrato={acaoDoAnuncio(passo.anuncio)} />
+        ) : passo.tipo !== "prato" ? (
           <CartaoFeed key={passo.chave} passo={passo} posicao={i} ativo={i === ativo}
                       perto={Math.abs(i - ativo) <= 1} economia={economia} t={t}
                       aoVerPrato={passo.tipo === "cartao" && passo.cartao.id_item_link

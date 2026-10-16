@@ -89,7 +89,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     cur.execute(
         """SELECT id, nome, descricao, foto_url, foto_nome, ordem,
-                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url
+                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url, abertura
              FROM catalogo_categorias
             WHERE id_catalogo = %s
             ORDER BY ordem, lower(nome)""",
@@ -102,7 +102,7 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
     ids = [c["id"] for c in categorias]
     cur.execute(
         """SELECT id, id_categoria, nome, descricao, foto_url, foto_nome, ordem,
-                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url
+                  dias, hora_de, hora_ate, horario_especial, video_url, video_capa_url, abertura
              FROM catalogo_subcategorias
             WHERE id_categoria = ANY(%s)
             ORDER BY ordem, lower(nome)""",
@@ -228,11 +228,11 @@ def atualizar_categoria(cur, id_unidade: int, id_categoria: int, dados: dict) ->
                            "uma categoria")
     cur.execute(
         """UPDATE catalogo_categorias
-              SET nome = %s, descricao = %s, ordem = %s
+              SET nome = %s, descricao = %s, ordem = %s, abertura = coalesce(%s, abertura)
             WHERE id = %s
-        RETURNING id, nome, descricao, foto_url, foto_nome, ordem""",
+        RETURNING id, nome, descricao, foto_url, foto_nome, ordem, abertura""",
         (dados["nome"].strip(), (dados.get("descricao") or "").strip() or None,
-         dados.get("ordem", 0), id_categoria),
+         dados.get("ordem", 0), dados.get("abertura"), id_categoria),
     )
     return dict(cur.fetchone())
 
@@ -296,11 +296,11 @@ def atualizar_subcategoria(cur, id_unidade: int, id_sub: int, dados: dict) -> di
                            "uma subcategoria")
     cur.execute(
         """UPDATE catalogo_subcategorias
-              SET nome = %s, descricao = %s, ordem = %s
+              SET nome = %s, descricao = %s, ordem = %s, abertura = coalesce(%s, abertura)
             WHERE id = %s
-        RETURNING id, id_categoria, nome, descricao, foto_url, foto_nome, ordem""",
+        RETURNING id, id_categoria, nome, descricao, foto_url, foto_nome, ordem, abertura""",
         (dados["nome"].strip(), (dados.get("descricao") or "").strip() or None,
-         dados.get("ordem", 0), id_sub),
+         dados.get("ordem", 0), dados.get("abertura"), id_sub),
     )
     return dict(cur.fetchone())
 

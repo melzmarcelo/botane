@@ -39,6 +39,7 @@ export default function JanelaCardapioVivo({ idCatalogo, nomeCatalogo, atual, te
     pedido_hora_ate: atual?.pedido_hora_ate ?? "",
     chamar_garcom: atual?.chamar_garcom ?? false,
     selecao: atual?.selecao ?? true,
+    aberturas: atual?.aberturas ?? "AUTOMATICA",
   });
   // 🔑 **Três escolhas, duas colunas** (119): "só consulta" é a vitrine com `selecao` falso.
   // ⚠️ No PEDIDO a seleção volta a valer — é o carrinho, e é o que sobra fora do horário.
@@ -129,6 +130,15 @@ export default function JanelaCardapioVivo({ idCatalogo, nomeCatalogo, atual, te
             </div>
           </div>
         )}
+        {/* 🔑 121 (pedido do dono: "isto poderia ser configurado como vai aparecer"). */}
+        <Campo rotulo="Aberturas de seção" dica="A tela com o nome e a descrição da seção, antes dos pratos dela. Cada seção também pode desligar a sua.">
+          <select className="campo" id="vivo-aberturas" value={v.aberturas}
+                  onChange={(e) => mudar({ aberturas: e.target.value as VivoCardapio["aberturas"] })}>
+            <option value="AUTOMATICA">Automática — toda seção com foto ou vídeo abre</option>
+            <option value="SO_VIDEO">Só as seções com vídeo</option>
+            <option value="NUNCA">Nenhuma — direto aos pratos</option>
+          </select>
+        </Campo>
         <label className="flex items-center gap-2 text-[14px]">
           <input type="checkbox" checked={v.chamar_garcom} onChange={(e) => mudar({ chamar_garcom: e.target.checked })} />
           Botões “chamar o garçom” e “pedir a conta” (só na mesa)

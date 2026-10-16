@@ -17,7 +17,7 @@ import type { Passo } from "./sequencia";
 import type { Textos } from "./textos";
 
 type Props = {
-  passo: Extract<Passo, { tipo: "cartao" | "secao" }>;
+  passo: Extract<Passo, { tipo: "cartao" | "secao" | "anuncio" }>;
   posicao: number;
   ativo: boolean;
   perto: boolean;
@@ -33,14 +33,22 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
   const video = useRef<HTMLVideoElement>(null);
   const [tocarNoToque, setTocarNoToque] = useState(false);
 
-  // As duas origens falam a mesma língua aqui: título, texto e mídia.
+  // As três origens falam a mesma língua aqui: título, texto e mídia.
   const ehSecao = passo.tipo === "secao";
-  const titulo = ehSecao ? passo.secao.nome : passo.cartao.titulo;
-  const texto = ehSecao ? passo.secao.descricao : passo.cartao.texto;
-  const m = ehSecao
-    ? (passo.secao.video ? { tipo: "VIDEO" as const, video: passo.secao.video, capa: passo.secao.capa ?? passo.secao.foto }
-       : { tipo: "FOTO" as const, foto: passo.secao.foto! })
-    : passo.cartao.midia;
+  const anuncio = passo.tipo === "anuncio" ? passo.anuncio : null;
+  const conteudo = passo.tipo === "secao"
+    ? { titulo: passo.secao.nome, texto: passo.secao.descricao,
+        midia: passo.secao.video
+          ? { tipo: "VIDEO" as const, video: passo.secao.video, capa: passo.secao.capa ?? passo.secao.foto }
+          : { tipo: "FOTO" as const, foto: passo.secao.foto! } }
+    : passo.tipo === "anuncio"
+      ? { titulo: passo.anuncio.titulo, texto: passo.anuncio.texto, midia: passo.anuncio.midia }
+      : { titulo: passo.cartao.titulo, texto: passo.cartao.texto, midia: passo.cartao.midia };
+  const { titulo, texto } = conteudo;
+  const m = conteudo.midia;
+  // 🔑 O rótulo do botão do anúncio: o que a casa escreveu, ou o padrão do tipo de ação.
+  const rotuloAnuncio = anuncio && (anuncio.acao.rotulo
+    || (anuncio.acao.tipo === "CATALOGO" ? t.verCardapioAnuncio : anuncio.acao.tipo === "PRATO" ? t.verOPrato : t.saibaMais));
   const capa = m.tipo === "VIDEO" ? m.capa : m.tipo === "FOTO" ? m.foto : null;
   const temMidia = m.tipo !== "NENHUMA";
   const podeTocar = m.tipo === "VIDEO" && ativo && (!economia || tocarNoToque);
@@ -60,7 +68,8 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
     <section
       data-pos={posicao}
       {...(ehSecao ? { "data-categoria": passo.id_categoria } : {})}
-      data-cartao={ehSecao ? undefined : passo.cartao.id}
+      data-cartao={passo.tipo === "cartao" ? passo.cartao.id : undefined}
+      data-anuncio={anuncio?.id}
       className="cv-conteudo relative h-full w-full snap-start snap-always overflow-hidden"
       aria-label={titulo ?? t.verCardapio}
     >
@@ -90,11 +99,19 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
       )}
 
       {/* ⚠️ O topo do feed (marca, filtros, categorias) ocupa uns 7rem: o texto nunca sobe
-          por baixo dele — o que não cabe rola aqui dentro. `safe center` centraliza sem cortar
-          o começo quando o texto é maior que a tela. */}
+          por baixo dele — o que não cabe rola aqui dentro. Sem mídia, o miolo vai ao CENTRO pela
+          margem automática (`my-auto`), que não corta o começo quando o texto é maior que a tela.
+          ⚠️ Era `justify-[safe_center]`, que o Tailwind não gerou: o texto ficava no alto. */}
       <div className={`absolute inset-x-0 overflow-y-auto px-6 text-[#F4F0E5] [scrollbar-width:none] ${temMidia
         ? "bottom-0 max-h-[calc(100%-7rem)] pb-[max(2rem,env(safe-area-inset-bottom))]"
-        : "bottom-0 top-[7rem] flex flex-col justify-[safe_center] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center"}`}>
+        : "bottom-0 top-[7rem] flex flex-col pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center"}`}>
+        <div className={temMidia ? "" : "my-auto flex flex-col"}>
+        {/* 🔑 Propaganda tem de ser reconhecível (121): "Patrocinado · marca" ou "Da casa". */}
+        {anuncio && (
+          <p className={`mb-2 inline-flex rounded-full bg-[rgba(20,26,22,.72)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${temMidia ? "" : "self-center"}`}>
+            {anuncio.origem === "EXTERNO" ? `${t.patrocinado}${anuncio.anunciante ? ` · ${anuncio.anunciante}` : ""}` : t.daCasa}
+          </p>
+        )}
         {ehSecao && passo.dentroDe && (
           <p className="mb-1 text-[12px] font-semibold uppercase tracking-[0.18em] opacity-80">{passo.dentroDe}</p>
         )}
@@ -109,9 +126,10 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
         {aoVerPrato && (
           <button type="button" onClick={aoVerPrato}
                   className={`mt-5 rounded-full bg-[var(--cv-fundo)] px-5 py-2.5 text-sm font-semibold text-[var(--cv-tinta)] shadow-lg active:scale-95 ${temMidia ? "" : "self-center"}`}>
-            {t.verOPrato}
+            {rotuloAnuncio ?? t.verOPrato}
           </button>
         )}
+        </div>
       </div>
     </section>
   );

@@ -773,3 +773,39 @@ em todas as páginas."*
 - ⚠️ Antes, no computador, as opções do `<select>` herdavam a letra clara do feed e saíam branco
   sobre branco (no celular a lista é do sistema). A pílula acaba com isso.
 - Cobertura: `verificar-idioma-site.mjs` seção 5 (ida e volta site ↔ feed).
+
+## Anúncios no Cardápio Vivo, fase 1 (migração 121, 16/10/2026)
+
+🔑 **Pedido do dono:** *"um plano de anúncios no meio do cardápio"* — texto, foto ou vídeo; período e
+dias; externo (outra marca) ou da casa (o catálogo do Dia dos Namorados); links; formas e tempo de
+exibição; métricas; *"nada pesado… algo bem orgânico"* e, depois, variações e um ritmo que aprende.
+Proposta em três fases aprovada, com as respostas: **a casa cadastra e apresenta o RELATÓRIO** ao
+parceiro (sem acesso de anunciante); **na mesa e pelo link**; ritmo de partida **5º prato / 8 de
+distância / máximo 2 (1 na mesa)**, ajustável; **grupo de controle de 10%** pode (fase 2).
+- `cardapio_anuncios` é da LOJA. ⚠️ Anúncio ≠ cartão (120): o cartão é editorial e fixo; o anúncio
+  tem período (datas, dias, horário, dias especiais — a regra `_secao_visivel` das seções) e a TELA
+  decide onde entra. Origem CASA ("Da casa") ou EXTERNO ("Patrocinado · marca", anunciante
+  obrigatório): propaganda tem de ser reconhecível. Botão: abrir catálogo da casa (o feed dele, se for
+  Cardápio Vivo; senão o site com `?catalogo=`), ir a um prato deste cardápio, ou link (outra aba).
+- **O ritmo é da casa** (`cardapio_config.anuncio_*`, tela Anúncios). ⚠️ Colunas FORA do `_PADRAO` da
+  configuração: o "Aparência" grava só as dele e não volta o ritmo ao padrão (testado).
+- `sequencia.ts` → `intercalarAnuncios`: o 1º depois de N pratos, M pratos entre eles, no máximo K
+  (o servidor já manda o K da mesa), nunca o mesmo duas vezes, sempre ANTES de um prato (nunca no
+  fim). Sorteio por PESO com semente = sessão anônima: a mesma visita vê a mesma ordem ao redesenhar.
+  Com filtro de restrição: nenhum. O anúncio que leva ao PRÓPRIO catálogo não aparece nele. A prévia
+  do cadastro não mostra anúncio.
+- Medição: `viu_anuncio` / `clicou_anuncio` com `id_anuncio` (anúncio de outra loja vira nulo).
+  "Pulou" = menos de 1,5 s na tela. ⚠️ O toque que troca de página manda o lote ANTES de navegar.
+- **Relatório** (`/cardapio-vivo/anuncios/{id}/relatorio`): pessoas (sessões), aparições, tempo médio,
+  tocaram, taxa de toque, passaram direto; por dia, por canal (mesa × link) e por hora; impressão do
+  navegador ("Imprimir / salvar em PDF"). ⚠️ Vem do bruto: o que passou da retenção (13 meses) sai.
+- **Aberturas de seção configuráveis** (mesmo pedido: "isto poderia ser configurado"):
+  `cardapio_vivos.aberturas` AUTOMATICA / SO_VIDEO / NUNCA e `abertura` por seção. ⚠️ No modelo da
+  seção o campo é OPCIONAL (nulo = não muda): renomear pela janela antiga não religa o que a casa
+  desligou.
+- ⚠️ `justify-[safe_center]` (o centro do cartão só de texto, 1.1.104) NÃO gerava CSS: o texto ficava
+  no alto. Virou um envoltório `my-auto`, que centraliza e não corta o começo do texto longo.
+- `limpar_dados.py`: `cardapio_anuncios` sai com os itens (o botão aponta para um).
+- Cobertura: `smoke_cardapio_anuncios.py` (34) e `web/scripts/verificar-anuncios-feed.mjs` (12).
+- **Falta (fases 2 e 3):** recuo adaptativo (pulou → distância dobra; ignorou 2 → acabou na visita),
+  relevância pelo que a pessoa está vendo, grupo de controle de 10% e variações com vencedora.

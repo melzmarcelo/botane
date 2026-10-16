@@ -47,6 +47,8 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
   const nomeTipo = e.tipo === "categoria" ? "categoria" : "subcategoria";
   const [nome, setNome] = useState(e.secao?.nome ?? "");
   const [descricao, setDescricao] = useState(e.secao?.descricao ?? "");
+  // 121: a seção abre com tela própria no Cardápio Vivo (a casa pode desligar a de cada uma).
+  const [abertura, setAbertura] = useState(e.secao?.abertura ?? true);
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [apagando, setApagando] = useState(false);
@@ -57,7 +59,7 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
   const s = e.secao;
 
   async function salvar() {
-    const corpo = { nome: nome.trim(), descricao: descricao.trim() || null, ordem: s?.ordem ?? e.ordemNova };
+    const corpo = { nome: nome.trim(), descricao: descricao.trim() || null, ordem: s?.ordem ?? e.ordemNova, abertura };
     setSalvando(true);
     try {
       let id: number;
@@ -215,6 +217,18 @@ export default function JanelaSecao({ editando: e, podeEditar, aoFechar, aoSalva
                 No Cardápio Vivo, com foto (ou vídeo) a seção ganha uma tela de abertura com o nome e a descrição.
               </p>
             </div>
+
+            <label className="flex items-start gap-2 text-[14px]">
+              <input type="checkbox" className="mt-1" id="secao-abertura" checked={abertura} disabled={!podeEditar}
+                     onChange={(ev) => setAbertura(ev.target.checked)} />
+              <span>
+                Abrir com tela própria no Cardápio Vivo
+                <span className="block text-[12.5px] text-suave">
+                  O nome e a descrição, sobre a foto ou o vídeo, antes dos pratos — se o Cardápio Vivo usar aberturas.
+                  Vale ao salvar.
+                </span>
+              </span>
+            </label>
 
             <div>
               <span className="rotulo-campo">Vídeo da abertura (Cardápio Vivo)</span>

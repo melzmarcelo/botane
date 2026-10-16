@@ -290,6 +290,16 @@ export const MENU: GrupoMenu[] = [
         subgrupo: "Catálogos",
       },
       {
+        // 🔑 **Anúncios** (121, pedido do dono, 16/10/2026): da casa ou de outra marca, no meio do
+        // Cardápio Vivo, com o ritmo da casa e o relatório para apresentar ao parceiro.
+        href: "/cardapio-vivo/anuncios",
+        nome: "Anúncios",
+        icone: "grafico",
+        chave: ["catalogos.ver", "catalogos.editar"],
+        soComReservas: true,
+        subgrupo: "Catálogos",
+      },
+      {
         // 🔑 **Atenção × Vendas** (fase 2, 115): a atenção do feed cruzada com venda e margem.
         href: "/cardapio-vivo/atencao",
         nome: "Atenção × Vendas",

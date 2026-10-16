@@ -51,6 +51,8 @@ OPERACAO = [
     # ⚠️ Os cartões do feed (120) apontam para os itens (a posição "antes do prato" e o botão
     # "Ver o prato"): sem eles aqui, o TRUNCATE dos itens seria recusado. Saem junto.
     "catalogo_cartoes",
+    # ⚠️ Os anúncios (121) também: o botão "ver o prato" aponta para um item.
+    "cardapio_anuncios",
     # O Cardápio Vivo (113): a atenção medida e os adicionais apontam para `produtos`.
     "cardapio_eventos", "cardapio_agregados_dia", "cardapio_resumo_dia", "cardapio_sessoes",
     # Os chamados da mesa (115) apontam para mesa e usuário: são operação.
