@@ -6,7 +6,8 @@
  */
 import { api } from "@/lib/api";
 
-export type TipoTraduzivel = "produto" | "categoria" | "subcategoria" | "catalogo";
+/** `cartao`: os cartões de conteúdo do Cardápio Vivo (120). */
+export type TipoTraduzivel = "produto" | "categoria" | "subcategoria" | "catalogo" | "cartao";
 export type Textos = { nome?: string | null; descricao?: string | null };
 
 export type Traducao = {

@@ -747,7 +747,10 @@ seção **automática**, vídeo **subido no sistema**, cartões **só no feed** 
   `janela-cartao.tsx`). Criar deixa a janela aberta para pôr a mídia. Aviso (não trava) acima de
   um cartão a cada 4 pratos — a recomendação dada ao dono.
 - Tradução: entidade `cartao` em `services/traducao.py` (título = nome, texto = descrição), no
-  automático e no "traduzir o catálogo". ⚠️ Ainda não há janela de correção manual para cartão.
+  automático e no "traduzir o catálogo". A correção à mão (16/10/2026) fica na janela do cartão
+  ("traduções"; `Traducoes` com rótulos Título/Texto). ⚠️ O título traduzido cabe em 120 letras
+  (coluna da 120): a rota `/traducao/cartao/{id}` recusa acima disso com 422, em vez de deixar o
+  banco estourar.
 - `limpar_dados.py`: `catalogo_cartoes` sai junto dos itens (aponta para eles; sem isso o
   TRUNCATE era recusado).
 - Cobertura: `smoke_cardapio_cartoes.py` (35) e `web/scripts/verificar-cartoes-feed.mjs` (13).

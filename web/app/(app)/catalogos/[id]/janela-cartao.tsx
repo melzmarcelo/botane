@@ -15,6 +15,7 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Campo, Confirmacao, Modal } from "@/components/ui";
 import { urlArquivo } from "@/lib/api";
 import type * as cat from "@/lib/catalogos";
+import Traducoes from "@/components/traducoes";
 import { CartoesService, type Cartao } from "@/lib/cartoes";
 
 export type AbrindoCartao = {
@@ -50,6 +51,7 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState<"" | "foto" | "video">("");
   const [apagando, setApagando] = useState(false);
+  const [traduzindo, setTraduzindo] = useState(false);
   const foto = useRef<HTMLInputElement>(null);
   const video = useRef<HTMLInputElement>(null);
   const abertura = abrindo.id_categoria === null;
@@ -218,6 +220,23 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
           </div>
         ) : (
           <p className="text-[13px] text-suave">A foto ou o vídeo entram depois de criar o cartão.</p>
+        )}
+
+        {/* 🔑 A correção da tradução (16/10/2026, pedido do dono): o Claude traduz ao gravar, e
+            aqui se confere e se corrige — o campo corrigido à mão a tradução automática não
+            sobrescreve. ⚠️ Vale o que está GRAVADO: mudou o português, grave antes. */}
+        {atual && podeEditar && (
+          traduzindo ? (
+            <Traducoes key={`${atual.titulo}|${atual.texto}`} tipo="cartao" id={atual.id}
+                       rotulos={{ nome: "Título", descricao: "Texto" }} maxNome={120} />
+          ) : (
+            <p className="text-[13.5px]">
+              <button type="button" className="link-acao" id="cartao-traducoes" onClick={() => setTraduzindo(true)}>
+                traduções
+              </button>
+              <span className="ml-2 text-suave">o título e o texto em inglês e alemão</span>
+            </p>
+          )
         )}
       </div>
 

@@ -228,6 +228,19 @@ checar("o editor vê as vistas, os segundos e os cliques do cartão",
 checar("e a atenção da abertura da seção",
        any(a["id_subcategoria"] == sub["id"] and a["vistas"] == 1 for a in lista["aberturas"]), lista["aberturas"])
 
+print("\n5b. a tradução corrigida à mão (16/10/2026)")
+st, tr = chamar("GET", f"/traducao/cartao/{harmon['id']}", token=token)
+checar("a tradução do cartão abre, com o título como origem",
+       st == 200 and tr["origem"]["nome"] == "Vai bem com o Chianti" and tr["campos"] == ["nome", "descricao"], (st, tr))
+st, tr = chamar("PUT", f"/traducao/cartao/{harmon['id']}", {"en": {"nome": "Pairs well with Chianti"}}, token)
+checar("corrigir o inglês grava e marca como feito à mão",
+       st == 200 and tr["en"]["nome"] == "Pairs well with Chianti" and "titulo_en" in tr["editada"], (st, tr))
+_st, f = chamar("GET", LINK + "&idioma=en")
+c = next(x for x in f["cartoes"] if x["id"] == harmon["id"])
+checar("e o feed em inglês mostra a correção", c["titulo"] == "Pairs well with Chianti", c)
+st, r = chamar("PUT", f"/traducao/cartao/{harmon['id']}", {"de": {"nome": "x" * 130}}, token)
+checar("título traduzido maior que 120 letras é recusado (422), não um erro do banco", st == 422, (st, r))
+
 print("\n6. mexer e apagar")
 st, r = chamar("PUT", f"/catalogos/cartoes/{harmon['id']}",
                {"id_categoria": g1["id"], "antes_do_item": it["tal"], "titulo": "Vai bem com o Chianti",

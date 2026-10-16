@@ -145,6 +145,14 @@ try {
   await e.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "Pôr vídeo"), { timeout: 10000 }).catch(() => {});
   const aberta = await e.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "Pôr vídeo"));
   checar("criar deixa a janela aberta, já com foto e vídeo", aberta);
+  // 🔑 16/10/2026: a correção da tradução do cartão, na mesma janela.
+  await e.click("#cartao-traducoes");
+  await e.waitForFunction(() => document.body.innerText.includes("Para o site em inglês e alemão"), { timeout: 10000 }).catch(() => {});
+  const traducoes = await e.evaluate(() => {
+    const janela = document.querySelector('[role="dialog"]')?.innerText ?? "";
+    return { tem: janela.includes("Para o site em inglês e alemão"), titulo: janela.includes("Título"), ingles: janela.includes("Inglês") };
+  });
+  checar("o cartão abre as traduções do título, em inglês e alemão", traducoes.tem && traducoes.titulo && traducoes.ingles, traducoes);
   const { dados: lista } = await api("GET", `/catalogos/${cat.id}/cartoes`, undefined, token);
   checar("e o cartão novo está gravado, no fim da seção",
     lista.cartoes.some((c) => c.titulo === `Cartão novo ${MARCA}` && c.id_categoria === g.id && c.antes_do_item === null), lista.cartoes);
