@@ -668,5 +668,30 @@ URL."* Parte (b) de três (ver a seção da 117).
   carrinho devolve ao feed (`aberto.doFeed`). ⚠️ O pedido do site não tem adicionais: as escolhas
   vão na observação do item, e a casa confere o preço delas ao confirmar. Na mesa, o pedido
   continua o da mesa. Cobertura: `web/scripts/verificar-encomenda-feed.mjs` (6).
-- **Falta (opcional)**: (c) pôr `reservas.*` no app `botane` — aí o feed e o site ficam no mesmo
-  domínio e a identificação não se perde entre os dois (ver `docs/deploy.md`).
+- ✅ (c) feita em 16/10/2026: a regra de ingress de `reservas.*` no app `botane` passou do
+  componente estático para o `web` (sem DNS — ver `docs/deploy.md`). Na 1.1.100 o botão do
+  cardápio no site deixou de ir a `sistema...`: `WEB = location.origin` (só a porta 3200 de casa
+  vai à 3100). ⚠️ Desfazer a virada exige desfazer isto — o estático não tem `/c/`.
+
+### O feed com a cara do site (16/10/2026)
+
+🔑 **Pedido do dono, já no ar em `reservas`:** *"quando entro na primeira página está com uma
+formatação e quando vou para o cardápio vivo é outra… até a logo no título da página está
+mudando. Vamos manter como se estivesse tudo no mesmo ambiente."*
+- **A aba**: `/c/{loja}` gera título e ícone no SERVIDOR (`generateMetadata`, lendo
+  `/publico/{loja}/casa` com cache de 5 min): o nome da casa e a logo da marca — o que o site
+  põe na aba dele. Era "Cardápio" com o ícone do sistema. `theme-color` = cor da casa (era preto).
+  ⚠️ O `icons` da página vence o `app/icon.svg` da raiz (conferido no HTML servido).
+- **As letras**: Karla no corpo e DM Mono no preço (`.cv-corpo`, `.cv-mono` em `globals.css`),
+  as do site; o feed herdava a Inter do sistema. A serifa continua a da casa (`--cv-serif`).
+- **As cores**: o topo é um degradê da cor da casa (era véu preto), a categoria ativa é a pílula
+  clara com a letra na cor da casa, o fundo enquanto carrega é o areia (era cinza-escuro), o
+  prato sem foto usa a capa do site, e o véu sob o texto puxa a cor da casa — mas continua
+  ESCURO, porque é ele que deixa o nome legível sobre qualquer foto.
+- **No computador**: a coluna do feed é a FOLHA do site — 440 px, cantos de 18 px, a mesma sombra,
+  sobre o areia. Os pratos passaram de `h-[100dvh]` para `h-full` da coluna, que no computador
+  é a tela menos 48 px.
+- ⚠️ Com logo, o topo do feed mostra SÓ a logo (e, na mesa, "Mesa X" e o salão): o nome da casa,
+  e depois o do cardápio, saíam cortados ("Botan…", "Cardá…") entre o medalhão e os botões a
+  400 px. A aba já diz o nome da casa. Sem logo, volta o nome por extenso.
+- Cobertura: `verificar-cardapio-vivo.mjs` confere título, ícone e letra (34).

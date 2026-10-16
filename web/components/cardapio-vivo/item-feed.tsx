@@ -53,7 +53,7 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
     <section
       data-item={item.id}
       data-categoria={item.id_categoria}
-      className="cv-item relative h-[100dvh] w-full snap-start snap-always overflow-hidden"
+      className="cv-item relative h-full w-full snap-start snap-always overflow-hidden"
       aria-label={item.nome}
     >
       <button type="button" onClick={aoAbrir} className="absolute inset-0 block h-full w-full"
@@ -72,7 +72,9 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
             decoding="async"
           />
         ) : (
-          <div className="absolute inset-0 bg-[var(--cv-principal)] opacity-90" />
+          // Sem foto, a capa do SITE (os dois brilhos sobre a cor da casa), não um chapado.
+          <div className="absolute inset-0"
+               style={{ background: "radial-gradient(120% 60% at 30% 20%, #D8C9A8 0%, transparent 60%), radial-gradient(110% 60% at 80% 30%, #B7C3A6 0%, transparent 55%), linear-gradient(160deg, color-mix(in srgb, var(--cv-principal) 70%, #B7C3A6), var(--cv-principal))" }} />
         )}
         {m.tipo === "VIDEO" && (perto || ativo) && (!economia || tocarNoToque) && (
           <video
@@ -87,7 +89,10 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
             aria-hidden
           />
         )}
-        <div className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-black/85 via-black/45 to-transparent" />
+        {/* ⚠️ O véu sob o texto continua ESCURO — é o que deixa o nome legível sobre qualquer
+            foto —, mas puxado para a cor da casa, e não preto puro. */}
+        <div className="absolute inset-x-0 bottom-0 h-[62%]"
+             style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--cv-principal) 30%, rgba(0,0,0,.9)) 0%, color-mix(in srgb, var(--cv-principal) 25%, rgba(0,0,0,.45)) 50%, transparent 100%)" }} />
       </button>
 
       {m.tipo === "VIDEO" && economia && !tocarNoToque && (
@@ -126,7 +131,7 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
           <p className="mt-2 line-clamp-3 max-w-prose text-[15px] leading-snug text-white/90">{item.descricao}</p>
         )}
         <div className="pointer-events-auto mt-4 flex items-center justify-between gap-3">
-          <span className="text-xl font-semibold tabular-nums">
+          <span className="cv-mono text-xl font-medium">
             {item.preco !== null ? moeda(item.preco) : ""}
           </span>
           {item.esgotado ? (

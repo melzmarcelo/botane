@@ -99,6 +99,17 @@ try {
   checar("cada prato ocupa a tela inteira", alturas.every((h) => h === 844), alturas);
   const rola = await pagina.evaluate(() => { window.scrollTo(9999, 0); return window.scrollX; });
   checar("a página não rola de lado", rola === 0, rola);
+  // 🔑 16/10/2026 ("parecem dois sistemas"): a aba e as letras são as do SITE.
+  const { dados: daCasa } = await api("GET", "/publico/1/casa");
+  const aba = await pagina.evaluate(() => ({
+    titulo: document.title,
+    icone: document.querySelector('link[rel="icon"]')?.getAttribute("href") ?? "",
+    letra: getComputedStyle(document.querySelector("main")).fontFamily,
+  }));
+  checar("a aba diz o nome da casa, como o site", aba.titulo === daCasa.casa, aba.titulo);
+  const logoDaCasa = daCasa.marca?.logo ?? daCasa.logo_url;
+  checar("e o ícone da aba é a logo da casa", !logoDaCasa || aba.icone.endsWith(logoDaCasa), aba.icone);
+  checar("o texto do feed é na Karla, a letra do site", aba.letra.startsWith("Karla"), aba.letra);
 
   console.log("\n2. o aviso de cookies");
   const aviso = await pagina.$$eval("button", (bs) => bs.some((b) => b.textContent === "Entendi"));

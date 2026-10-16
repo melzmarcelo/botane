@@ -791,3 +791,9 @@ select.etiqueta-loja { appearance: auto; }
 
 /* Cardápio Vivo (113): o nome do prato em serifa — a fonte é da loja (`--cv-serif`). */
 .cv-serif { font-family: var(--cv-serif, "Newsreader", Georgia, serif); font-weight: 500; }
+/* 🔑 **O corpo e os números são os do SITE** (16/10/2026, pedido do dono: "ao ir para o
+   cardápio vivo é outra formatação"): Karla no texto e DM Mono no preço, como em
+   `site/index.html`. O feed herdava a Inter do sistema, e a troca de letra entre o site e o
+   cardápio era o que mais denunciava "dois sistemas". */
+.cv-corpo { font-family: Karla, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.cv-mono { font-family: "DM Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }

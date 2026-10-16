@@ -34,6 +34,8 @@ const FONTES: Record<string, { familia: string; url?: string }> = {
   CORMORANT: { familia: "'Cormorant Garamond', Georgia, serif",
                url: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap" },
 };
+/* As letras do corpo e dos números do SITE (Karla e DM Mono), em todas as telas do feed. */
+const LETRAS_DO_SITE = "https://fonts.googleapis.com/css2?family=Karla:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap";
 const CHAVE_AVISO = "cardapio.aviso_cookies";
 
 function economiaDeDados(): boolean {
@@ -248,9 +250,17 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     "--cv-serif": fonte.familia,
   } as React.CSSProperties;
 
+  const letras = (
+    <>
+      <link rel="stylesheet" href={LETRAS_DO_SITE} />
+      {fonte.url && <link rel="stylesheet" href={fonte.url} />}
+    </>
+  );
+
   if (erro) {
     return (
-      <main style={estilo} className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-[var(--cv-fundo)] px-8 text-center text-[var(--cv-tinta)]">
+      <main style={estilo} className="cv-corpo flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-[var(--cv-fundo)] px-8 text-center text-[var(--cv-tinta)]">
+        {letras}
         <p className="cv-serif text-2xl">{t.erro}</p>
         <p className="opacity-70">{erro}</p>
         <button type="button" onClick={() => void carregar()} className="rounded-full bg-[var(--cv-principal)] px-5 py-2.5 text-white">
@@ -260,13 +270,15 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     );
   }
   if (!feed) {
-    return <main style={estilo} className="min-h-[100dvh] animate-pulse bg-[#2a2f28]" aria-busy />;
+    // ⚠️ O carregando é da cor do SITE, não um cinza-escuro: quem vem da página inicial não
+    // pode ver a tela apagar antes do cardápio aparecer.
+    return <main style={estilo} className="min-h-[100dvh] animate-pulse bg-[var(--cv-fundo)]" aria-busy />;
   }
 
   if (noHub && feed.hub) {
     return (
-      <div style={estilo}>
-        {fonte.url && <link rel="stylesheet" href={fonte.url} />}
+      <div style={estilo} className="cv-corpo">
+        {letras}
         <Hub feed={feed} t={t}
              aoVerCardapio={() => { setNoHub(false); medidor.current?.registrar("abriu_cardapio"); }}
              aoAvaliar={() => medidor.current?.registrar("clicou_avaliacao")}
@@ -281,12 +293,18 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     // largura do monitor, a foto vertical virava um recorte ampliado e os controles
     // iam para cantos opostos. ⚠️ O `transform` não é enfeite: ele faz as camadas
     // `fixed inset-0` (detalhe, favoritos, seleção) ficarem presas DENTRO da coluna.
-    <div className="min-h-[100dvh] bg-[#0f0f0f] md:flex md:justify-center">
+    // 🔑 **E a coluna é a FOLHA do site** (16/10/2026, "parecem dois sistemas"): o fundo areia
+    // da casa em volta, 440 px, cantos de 18 px e a mesma sombra — no computador, o site e o
+    // cardápio são o mesmo cartão no centro. Era uma coluna preta sobre fundo quase preto.
+    <div style={estilo} className="cv-corpo min-h-[100dvh] bg-[var(--cv-fundo)] md:flex md:justify-center md:py-6">
     <main style={estilo}
-          className="relative h-[100dvh] w-full overflow-hidden bg-black text-white md:max-w-[480px] md:shadow-[0_0_80px_rgba(0,0,0,0.7)] md:[transform:translateZ(0)]">
-      {fonte.url && <link rel="stylesheet" href={fonte.url} />}
+          className="relative h-[100dvh] w-full overflow-hidden bg-[var(--cv-principal)] text-[#F4F0E5] md:h-[calc(100dvh-3rem)] md:max-w-[440px] md:rounded-[18px] md:border md:border-[#E0D8C6] md:shadow-[0_1px_2px_rgba(27,33,28,.05),0_10px_30px_rgba(27,33,28,.08)] md:[transform:translateZ(0)]">
+      {letras}
 
-      <header className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/70 to-transparent pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      {/* 🔑 O topo é da COR DA CASA (a capa do site), e não um véu preto: ele desce sobre a
+          foto até sumir, e a marca entra no medalhão de borda clara, como no site. */}
+      <header className="absolute inset-x-0 top-0 z-30 pb-6 pt-[max(0.75rem,env(safe-area-inset-top))]"
+              style={{ background: "linear-gradient(to bottom, color-mix(in srgb, var(--cv-principal) 92%, transparent) 0%, color-mix(in srgb, var(--cv-principal) 60%, transparent) 55%, transparent 100%)" }}>
         <div className="flex items-center gap-3 px-4">
           {/* 🔑 **A volta ao site da casa** (15/10/2026: "parecia dois sistemas"): a marca no
               topo leva à página inicial — reservar, fidelidade, contato —, no mesmo endereço.
@@ -296,14 +314,20 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             {!previa && <span aria-hidden className="text-lg opacity-80">‹</span>}
             {feed.marca.logo && (
               <img src={imagem(feed.marca.logo, 320) ?? undefined} alt=""
-                   className="h-8 w-8 shrink-0 rounded-full bg-white object-contain" />
+                   className="h-9 w-9 shrink-0 rounded-full border-2 border-[#FBF9F3] bg-white object-cover" />
             )}
-            <span className="min-w-0">
-              <span className="cv-serif block truncate text-[15px]">{feed.loja.casa}</span>
-              <span className="block truncate text-xs opacity-80">
-                {feed.mesa ? `${t.mesa} ${feed.mesa.nome} · ${feed.mesa.salao}` : feed.cardapio}
+            {/* ⚠️ Com logo, o medalhão JÁ diz de quem é a casa: o nome dela ao lado saía
+                cortado ("Botan…", e depois "Cardá…") entre a marca e os botões, a 400 px. Fica
+                só a logo — e, na mesa, qual é a mesa, que é curto e é o que importa ali. */}
+            {(!feed.marca.logo || feed.mesa) && (
+              <span className="min-w-0">
+                {!feed.marca.logo && <span className="cv-serif block truncate text-[15px]">{feed.loja.casa}</span>}
+                <span className={feed.marca.logo ? "cv-serif block truncate text-[15px]" : "block truncate text-xs opacity-80"}>
+                  {feed.mesa ? `${t.mesa} ${feed.mesa.nome}` : feed.cardapio}
+                </span>
+                {feed.marca.logo && feed.mesa && <span className="block truncate text-xs opacity-80">{feed.mesa.salao}</span>}
               </span>
-            </span>
+            )}
           </a>
           <select value={idioma} onChange={(e) => setIdioma(e.target.value as Idioma)} aria-label="Idioma"
                   className="rounded-full bg-white/15 px-2 py-1 text-xs backdrop-blur">
@@ -345,7 +369,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             <button key={c.id} type="button" data-cat={c.id} onClick={() => irPara(c.id)}
                     aria-current={c.id === categoriaAtiva}
                     className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm transition ${
-                      c.id === categoriaAtiva ? "bg-white font-semibold text-black" : "bg-white/15 backdrop-blur"}`}>
+                      c.id === categoriaAtiva ? "bg-[#FBF9F3] font-semibold text-[var(--cv-principal)]" : "bg-[#FBF9F3]/15 backdrop-blur"}`}>
               {c.nome}
             </button>
           ))}
@@ -357,9 +381,9 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
         )}
       </header>
 
-      <div ref={rolagem} className="h-[100dvh] snap-y snap-mandatory overflow-y-scroll overscroll-y-contain [scrollbar-width:none]">
+      <div ref={rolagem} className="h-full snap-y snap-mandatory overflow-y-scroll overscroll-y-contain [scrollbar-width:none]">
         {itens.length === 0 && (
-          <div className="flex h-[100dvh] flex-col items-center justify-center gap-3 px-8 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
             <p>{t.nenhumComFiltro}</p>
             <button type="button" onClick={() => setFiltro([])} className="rounded-full bg-white px-4 py-2 text-black">
               {t.limparFiltro}
