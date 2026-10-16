@@ -754,8 +754,14 @@ label.campo textarea:focus-visible { outline: 2px solid var(--erva); outline-off
    API e o feed moram no sistema nos dois casos; em casa, nas portas locais. */
 const LOCAL = location.hostname === "localhost" || location.hostname === "127.0.0.1";
 const API = LOCAL ? "http://127.0.0.1:9200" : "https://sistema.botanedeliecafe.com.br/api";
-/* O sistema web, onde mora o Cardápio Vivo (`/c/{loja}`). Mesma regra da API. */
-const WEB = LOCAL ? "http://127.0.0.1:3100" : "https://sistema.botanedeliecafe.com.br";
+/* O sistema web, onde mora o Cardápio Vivo (`/c/{loja}`).
+   🔑 **16/10/2026 — o MESMO endereço do site.** Desde a virada, `reservas.*` é servido pelo
+   app web (regra de ingress), que abre o feed em `reservas.../c/...`: o cliente não sai do
+   domínio que digitou. Em `sistema.../portal` dá o mesmo. Só o site cru da porta 3200 (em
+   casa) não tem o feed ao lado, e vai à 3100.
+   ⚠️ Desfazer a virada (a regra de volta ao componente estático) exige desfazer isto: o
+   estático não tem `/c/`. */
+const WEB = LOCAL && location.port !== "3100" ? "http://127.0.0.1:3100" : location.origin;
 
 /* 🔑 **A loja é ESCOLHIDA pelo cliente** quando há mais de uma com reserva
    (pedido do dono, 24/09/2026). O `<html data-loja>` ficou como reserva: é a

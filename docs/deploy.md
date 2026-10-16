@@ -409,6 +409,17 @@ cota. Uma chave vazada de quem tem `integracao.omie` poderia gastá-la. Ver
 > (a identificação da pessoa deixa de se perder entre um e outro), e `site/` +
 > `.do/reservas.yaml` podem ser aposentados. Conferir antes qual componente serve `reservas`
 > hoje. Os QR impressos (`sistema.../c/...`) continuam abrindo.
+> ⚠️ **Conferido em 16/10/2026: o que está no ar NÃO é o `.do/reservas.yaml`.** O CNAME de
+> `reservas` já aponta para `botane-app-zqokg.ondigitalocean.app` e a resposta traz
+> `x-do-app-origin: 0daa9b68…` — o MESMO app do sistema. Lá dentro, um site estático (a pasta
+> `site/`) atende `reservas` por regra de *ingress* (`/c/1`, `/api/saude` e `/login` dão o 404
+> genérico da DO). Então a virada **não mexe no DNS**: é trocar, no painel do app `botane`, o
+> componente da regra de `reservas` do site estático para o `web`. Desfazer é trocar de volta.
+> ✅ **Feita em 16/10/2026** (App Spec, `ingress` → regra `authority: reservas…`: `name: reservas`
+> → `name: web`, `preserve_path_prefix: true` mantido). Conferido: `reservas/` abre o site,
+> `reservas/c/1` o feed, caminho desconhecido 307 → `reservas/`, `sistema/c/1` (QR) e
+> `/api/saude` normais, CORS da API continua aceitando `reservas`. O componente estático
+> `reservas` ficou no app, parado, como volta — remover quando estiver estável.
 
 🔑 **É um app SEPARADO** (`.do/reservas.yaml`), não um componente do `botane`. O app principal
 roteia por CAMINHO (`web` em `/`, `api` em `/api`, mesmo domínio — foi o que fez o CORS deixar
