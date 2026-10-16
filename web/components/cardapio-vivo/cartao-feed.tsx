@@ -44,6 +44,10 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
   const capa = m.tipo === "VIDEO" ? m.capa : m.tipo === "FOTO" ? m.foto : null;
   const temMidia = m.tipo !== "NENHUMA";
   const podeTocar = m.tipo === "VIDEO" && ativo && (!economia || tocarNoToque);
+  // ⚠️ **Texto longo não se corta** (16/10/2026: a abertura do Catering, 465 letras com quebra a
+  // cada ~30, saía cortada em 6 linhas). Ele ganha letra um pouco menor, véu mais alto e, no
+  // limite, rola dentro do cartão — o que a casa escreveu aparece inteiro.
+  const longo = (texto?.length ?? 0) > 220 || (texto?.split("\n").length ?? 0) > 6;
 
   useEffect(() => {
     const v = video.current;
@@ -73,7 +77,7 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
                  muted loop playsInline preload={ativo ? "auto" : "metadata"} aria-hidden />
         )}
         {temMidia && (
-          <div className="absolute inset-x-0 bottom-0 h-[70%]"
+          <div className={`absolute inset-x-0 bottom-0 ${longo ? "h-full" : "h-[70%]"}`}
                style={{ background: "linear-gradient(to top, color-mix(in srgb, var(--cv-principal) 30%, rgba(0,0,0,.9)) 0%, color-mix(in srgb, var(--cv-principal) 25%, rgba(0,0,0,.45)) 55%, transparent 100%)" }} />
         )}
       </div>
@@ -85,9 +89,12 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
         </button>
       )}
 
-      <div className={`absolute inset-x-0 px-6 text-[#F4F0E5] ${temMidia
-        ? "bottom-0 pb-[max(2rem,env(safe-area-inset-bottom))]"
-        : "inset-y-0 flex flex-col justify-center text-center"}`}>
+      {/* ⚠️ O topo do feed (marca, filtros, categorias) ocupa uns 7rem: o texto nunca sobe
+          por baixo dele — o que não cabe rola aqui dentro. `safe center` centraliza sem cortar
+          o começo quando o texto é maior que a tela. */}
+      <div className={`absolute inset-x-0 overflow-y-auto px-6 text-[#F4F0E5] [scrollbar-width:none] ${temMidia
+        ? "bottom-0 max-h-[calc(100%-7rem)] pb-[max(2rem,env(safe-area-inset-bottom))]"
+        : "bottom-0 top-[7rem] flex flex-col justify-[safe_center] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center"}`}>
         {ehSecao && passo.dentroDe && (
           <p className="mb-1 text-[12px] font-semibold uppercase tracking-[0.18em] opacity-80">{passo.dentroDe}</p>
         )}
@@ -95,7 +102,7 @@ export default function CartaoFeed({ passo, posicao, ativo, perto, economia, t, 
           <h2 className={`cv-serif leading-[1.08] drop-shadow ${ehSecao ? "text-[2.6rem]" : "text-[2.1rem]"}`}>{titulo}</h2>
         )}
         {texto && (
-          <p className={`mt-3 whitespace-pre-line text-[16px] leading-relaxed text-[#F4F0E5]/90 ${temMidia ? "line-clamp-6" : "mx-auto max-w-[30ch]"}`}>
+          <p className={`mt-3 whitespace-pre-line text-[#F4F0E5]/90 ${longo ? "text-[15px] leading-normal" : "text-[16px] leading-relaxed"} ${temMidia ? "" : "mx-auto max-w-[34ch]"}`}>
             {texto}
           </p>
         )}

@@ -751,3 +751,8 @@ seção **automática**, vídeo **subido no sistema**, cartões **só no feed** 
 - `limpar_dados.py`: `catalogo_cartoes` sai junto dos itens (aponta para eles; sem isso o
   TRUNCATE era recusado).
 - Cobertura: `smoke_cardapio_cartoes.py` (35) e `web/scripts/verificar-cartoes-feed.mjs` (13).
+- ⚠️ **Texto longo não se corta** (16/10/2026, a abertura do Catering no ar: 465 letras com quebra a
+  cada ~30, cortada pelo `line-clamp-6`). Acima de 220 letras ou 6 linhas o cartão usa letra de
+  15 px e véu na altura toda; o bloco de texto nunca sobe por baixo do topo (7rem) e, no limite,
+  rola dentro do cartão. Sem mídia, `justify-[safe_center]` centraliza sem cortar o começo.
+  As quebras de linha que a casa digitou são mantidas (o outro cartão dela é uma citação em versos).
