@@ -343,9 +343,15 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
               </span>
             )}
           </a>
+          {/* ⚠️ **As opções têm cor PRÓPRIA** (16/10/2026, pedido do dono: "na web o seletor de
+              idiomas fica todo branco"): elas herdavam a letra clara do feed, e a lista que o
+              navegador do computador abre é branca — branco sobre branco. No celular a lista é
+              do sistema e não herda, por isso só aparecia na web. */}
           <select value={idioma} onChange={(e) => setIdioma(e.target.value as Idioma)} aria-label="Idioma"
                   className="rounded-full bg-white/15 px-2 py-1 text-xs backdrop-blur">
-            <option value="pt">PT</option><option value="en">EN</option><option value="de">DE</option>
+            {(["pt", "en", "de"] as const).map((i) => (
+              <option key={i} value={i} className="bg-[#FBF9F3] text-[#1B211C]">{i.toUpperCase()}</option>
+            ))}
           </select>
           <button type="button" onClick={() => setFiltroAberto((v) => !v)} aria-expanded={filtroAberto}
                   className={`rounded-full px-3 py-1 text-xs backdrop-blur ${filtro.length ? "bg-white text-black" : "bg-white/15"}`}>
