@@ -4809,16 +4809,27 @@ try {
       // volta. O numero estava salvo o tempo todo e so nao aparecia, e por isso
       // recarregar "resolvia" — que e o que faz esse tipo de defeito passar
       // despercebido.
+      // ⚠️ **Digitar e clicar em DOIS passos, e esperar o resultado** (16/10/2026): no mesmo
+      // `evaluate`, o clique às vezes chegava antes de o React gravar o rascunho, e o Gravar
+      // mandava o valor velho; e os 2,5 s fixos não bastavam com a rota compilando no dev.
       await p.evaluate(() => {
         const c = document.querySelector('input[aria-label^="conversão de"]');
         const s2 = Object.getOwnPropertyDescriptor(
           window.HTMLInputElement.prototype, "value").set;
         s2.call(c, "0.5");
         c.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      await p.evaluate(() => {
+        const c = document.querySelector('input[aria-label^="conversão de"]');
         [...c.closest("tr").querySelectorAll("button")]
           .find((b) => /Gravar/i.test(b.textContent ?? ""))?.click();
       });
-      await new Promise((r) => setTimeout(r, 2500));
+      await p.waitForFunction(() => {
+        const c = document.querySelector('input[aria-label^="conversão de"]');
+        return Number(String(c?.value).replace(",", ".")) === 0.5
+          && !/não informada/i.test(c?.closest("tr")?.innerText ?? "");
+      }, { timeout: 10000, polling: 250 }).catch(() => {});
       const depoisDeGravar = await p.evaluate(() => {
         const c = document.querySelector('input[aria-label^="conversão de"]');
         return { valor: c?.value, naoInformada: /não informada/i.test(c?.closest("tr")?.innerText ?? "") };
