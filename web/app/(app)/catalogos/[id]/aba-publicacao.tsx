@@ -146,7 +146,7 @@ export default function AbaPublicacao({ capa, podeEditar, aoMudar }: Props) {
               <p>
                 <b>É um Cardápio Vivo</b>
                 {meuVivo.principal ? " — o principal: o QR code da mesa abre este." : " — abre pelo link."}
-                <span className="text-suave"> {meuVivo.modo === "PEDIDO" ? "Pedido na mesa." : "Vitrine."}</span>
+                <span className="text-suave"> {meuVivo.modo === "PEDIDO" ? "Pedido na mesa." : meuVivo.selecao ? "Vitrine." : "Só consulta."}</span>
               </p>
               <p className="mono break-all text-[12.5px] text-suave" id="vivo-link">{meuVivo.link}</p>
               {podeEditar && (

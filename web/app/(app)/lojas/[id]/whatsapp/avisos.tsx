@@ -65,7 +65,7 @@ export default function AvisosDoWhatsapp({
       descricao="O que a loja envia, e quando. Salve depois de mudar."
       acao={
         <Campo rotulo="Telefone para teste">
-          <input className="campo mono w-[170px]" inputMode="tel" placeholder="(47) 99999-9999"
+          <input className="campo mono w-[170px]" inputMode="tel" placeholder="(99) 99999-9999"
                  value={fone} onChange={(e) => setFone(e.target.value)} />
         </Campo>
       }

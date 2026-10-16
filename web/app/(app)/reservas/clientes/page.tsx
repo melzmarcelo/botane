@@ -26,7 +26,7 @@ const GENERO: Record<string, string> = {
   NAO_INFORMADO: "Não informado",
 };
 
-/** "47999105033" → "(47) 99910-5033". O que não tiver 10 ou 11 dígitos sai como veio. */
+/** "99999999999" → "(99) 99999-9999". O que não tiver 10 ou 11 dígitos sai como veio. */
 function telefone(t: string) {
   const m = t.match(/^(\d{2})(\d{4,5})(\d{4})$/);
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : t;

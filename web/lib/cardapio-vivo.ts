@@ -45,6 +45,8 @@ export type Feed = {
   modo: "VITRINE" | "PEDIDO";
   aviso: string | null;
   chamar_garcom: boolean;
+  /** Falso = só consulta (119): sem o botão de adicionar e sem a "minha seleção". */
+  selecao: boolean;
   /** A tela de entrada (114): só o que a loja ligou E preencheu. Nulo = direto ao feed. */
   hub: { avaliacao: string | null; wifi: { rede: string; senha: string } | null } | null;
   previa: boolean;
@@ -141,6 +143,8 @@ export type VivoCardapio = {
   pedido_hora_de: string | null;
   pedido_hora_ate: string | null;
   chamar_garcom: boolean;
+  /** Na vitrine, falso = só consulta (119). */
+  selecao: boolean;
   /** O link sem mesa — o principal sem `?cardapio=`. */
   link: string;
 };

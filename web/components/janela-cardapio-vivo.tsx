@@ -38,7 +38,14 @@ export default function JanelaCardapioVivo({ idCatalogo, nomeCatalogo, atual, te
     pedido_hora_de: atual?.pedido_hora_de ?? "",
     pedido_hora_ate: atual?.pedido_hora_ate ?? "",
     chamar_garcom: atual?.chamar_garcom ?? false,
+    selecao: atual?.selecao ?? true,
   });
+  // 🔑 **Três escolhas, duas colunas** (119): "só consulta" é a vitrine com `selecao` falso.
+  // ⚠️ No PEDIDO a seleção volta a valer — é o carrinho, e é o que sobra fora do horário.
+  const escolha = v.modo === "PEDIDO" ? "PEDIDO" : v.selecao ? "VITRINE" : "CONSULTA";
+  const escolher = (e: string) =>
+    mudar(e === "PEDIDO" ? { modo: "PEDIDO", selecao: true }
+                         : { modo: "VITRINE", selecao: e === "VITRINE" });
   const [gravando, setGravando] = useState(false);
   const mudar = (m: Partial<typeof v>) => setV((x) => ({ ...x, ...m }));
 
@@ -96,10 +103,11 @@ export default function JanelaCardapioVivo({ idCatalogo, nomeCatalogo, atual, te
           <input className="campo mono" id="vivo-slug" maxLength={40} placeholder="catering"
                  value={v.slug} onChange={(e) => mudar({ slug: e.target.value.toLowerCase() })} />
         </Campo>
-        <Campo rotulo="Modo na mesa" dica="Sem mesa (pelo link), o cardápio é sempre vitrine.">
-          <select className="campo" id="vivo-modo" value={v.modo}
-                  onChange={(e) => mudar({ modo: e.target.value as VivoCardapio["modo"] })}>
-            <option value="VITRINE">Vitrine — só consulta, com “minha seleção”</option>
+        <Campo rotulo="Modo na mesa" dica="Sem mesa (pelo link), o pedido não vale: fica a vitrine — ou só consulta, se escolhida.">
+          <select className="campo" id="vivo-modo" value={escolha}
+                  onChange={(e) => escolher(e.target.value)}>
+            <option value="CONSULTA">Só consulta — o cardápio, sem “minha seleção”</option>
+            <option value="VITRINE">Vitrine — com “minha seleção” para mostrar ao garçom</option>
             <option value="PEDIDO">Pedido — carrinho que vai ao painel</option>
           </select>
         </Campo>

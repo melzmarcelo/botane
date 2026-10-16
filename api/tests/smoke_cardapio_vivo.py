@@ -546,6 +546,23 @@ meu = next((c for c in lista if c.get("id") == ID_CAT), {})
 checar("o site recebe qual é o Cardápio Vivo e se é o principal",
        meu.get("cardapio_vivo") is True and meu.get("vivo") == {"slug": "cardapio", "principal": True}, meu)
 
+print("\n11d2. só consulta: a vitrine sem a 'minha seleção' (119)")
+# 🔑 Pedido do dono (16/10/2026): "no modo da mesa, uma opção vitrine só consulta".
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("por padrão a vitrine tem a 'minha seleção'", f.get("selecao") is True, f.get("selecao"))
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{ID_CAT}",
+               {"slug": "cardapio", "principal": True, "modo": "VITRINE", "selecao": False}, token)
+meu = next((v for v in r.get("vivos", []) if v["id_catalogo"] == ID_CAT), {})
+checar("desligar a seleção grava", st == 200 and meu.get("selecao") is False, (st, meu))
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("e a mesa abre só para consulta", f.get("selecao") is False and f.get("modo") == "VITRINE", f.get("selecao"))
+chamar("PUT", f"/cardapio-vivo/vivos/{ID_CAT}",
+       {"slug": "cardapio", "principal": True, "modo": "PEDIDO", "selecao": False}, token)
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{NOVO}")
+checar("no modo PEDIDO a seleção é o carrinho e vale sempre",
+       f.get("modo") != "PEDIDO" or f.get("selecao") is True, (f.get("modo"), f.get("selecao")))
+gravar_cardapio(chamar, token, CFG)
+
 print("\n11e. a aparência da casa vale para o site também (15/10/2026)")
 # 🔑 "Tudo com o mesmo layout": o site lê a mesma marca que o feed.
 gravar_cardapio(chamar, token, {**CFG, "cor_principal": "#2d4a33", "fonte": "LORA"})

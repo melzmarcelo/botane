@@ -34,6 +34,8 @@ class VivoCardapio(BaseModel):
     pedido_hora_de: time | None = None
     pedido_hora_ate: time | None = None
     chamar_garcom: bool = False
+    # 119: na vitrine, False = só consulta, sem a "minha seleção".
+    selecao: bool = True
 
     @model_validator(mode="after")
     def _faixa(self):

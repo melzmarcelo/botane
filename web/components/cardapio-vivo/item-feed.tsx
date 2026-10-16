@@ -27,7 +27,8 @@ type Props = {
   t: Textos;
   idioma: Idioma;
   aoAbrir: () => void;
-  aoAdicionar: () => void;
+  /** Ausente = só consulta (119): sem o botão de adicionar. */
+  aoAdicionar?: () => void;
   aoFavoritar: () => void;
 };
 
@@ -136,7 +137,7 @@ export default function ItemFeed({ item, indice, ativo, perto, economia, selecio
           </span>
           {item.esgotado ? (
             <span className="rounded-full bg-white/20 px-4 py-2.5 text-sm font-semibold backdrop-blur">{t.esgotado}</span>
-          ) : (
+          ) : aoAdicionar && (
             <button
               type="button"
               onClick={item.adicionais.length ? aoAbrir : aoAdicionar}

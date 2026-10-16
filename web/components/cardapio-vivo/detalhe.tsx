@@ -18,7 +18,8 @@ type Props = {
   t: Textos;
   idioma: Idioma;
   aoFechar: () => void;
-  aoAdicionar: (quantidade: number, adicionais: EscolhaAdicional[]) => void;
+  /** Ausente = só consulta (119): a janela mostra o prato e o preço, sem adicionar. */
+  aoAdicionar?: (quantidade: number, adicionais: EscolhaAdicional[]) => void;
   /** Cada opção MARCADA vira um `escolheu_opcao` (114). */
   aoEscolher?: () => void;
 };
@@ -103,6 +104,9 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
             </fieldset>
           ))}
 
+          {!aoAdicionar ? (
+            unitario !== null && <p className="cv-mono mt-6 text-xl">{moeda(unitario)}</p>
+          ) : (
           <div className="mt-6 flex items-center gap-3">
             <div className="flex items-center rounded-full border border-current/20" aria-label={t.quantidade}>
               <button type="button" className="px-4 py-2.5 text-lg" onClick={() => setQuantidade((q) => Math.max(1, q - 1))}
@@ -125,6 +129,7 @@ export default function Detalhe({ item, t, idioma, aoFechar, aoAdicionar, aoEsco
               )}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

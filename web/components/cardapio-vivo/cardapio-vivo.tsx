@@ -345,10 +345,12 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
                   className="rounded-full bg-white/15 px-3 py-1 text-xs backdrop-blur">
             ♥ {favoritos.ids.filter((id) => feed.itens.some((i) => i.id === id)).length}
           </button>
-          <button type="button" onClick={() => setVerSelecao(true)}
+          {/* 🔑 Só consulta (119): sem a estrela, sem botão de adicionar e sem o "adicionar"
+              da janela do prato — o cliente vê o cardápio e fala com o garçom. */}
+          {feed.selecao && <button type="button" onClick={() => setVerSelecao(true)}
                   className="rounded-full bg-[var(--cv-fundo)] px-3 py-1 text-xs font-semibold text-[var(--cv-tinta)]">
             {modoPedido ? "🛒" : "★"} {selecao.quantidade}
-          </button>
+          </button>}
         </div>
         {filtroAberto && (
           <div className="mt-2 flex flex-wrap gap-2 px-4" role="group" aria-label={t.filtros}>
@@ -404,7 +406,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
             t={t}
             idioma={idioma}
             aoAbrir={() => abrirDetalhe(item)}
-            aoAdicionar={() => adicionar(item, 1, [])}
+            aoAdicionar={feed.selecao ? () => adicionar(item, 1, []) : undefined}
           />
         ))}
       </div>
@@ -431,7 +433,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
       {aberto && (
         <Detalhe item={aberto} t={t} idioma={idioma} aoFechar={() => setAberto(null)}
                  aoEscolher={() => medidor.current?.registrar("escolheu_opcao", { item: aberto.id, midia: aberto.midia.tipo })}
-                 aoAdicionar={(q, ad) => adicionar(aberto, q, ad)} />
+                 aoAdicionar={feed.selecao ? (q, ad) => adicionar(aberto, q, ad) : undefined} />
       )}
       {verFavoritos && (
         <div className="fixed inset-0 z-40 flex flex-col bg-[var(--cv-fundo)] text-[var(--cv-tinta)]" role="dialog"

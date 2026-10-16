@@ -139,7 +139,7 @@ reserva, cada uma publica o seu com o número dela — sem tocar no código.
   no envio automático de confirmação — *abrir* a conversa custa isto.
   ⚠️ **Sem número cadastrado o site DIZ isso**, em vez de mostrar um botão que não
   leva a lugar nenhum. Sai de Administração ▸ Empresa ▸ WhatsApp, e o servidor
-  limpa a máscara: o cadastro aceita "(47) 99910-5033" e o `wa.me` só aceita
+  limpa a máscara: o cadastro aceita "(99) 99999-9999" e o `wa.me` só aceita
   dígitos.
 - ✅ **Reserva** — o cliente marca sozinho, e a reserva cai na agenda do balcão.
   🔑 **O telefone vem primeiro** (pedido do dono, 21/09/2026): quem já tem

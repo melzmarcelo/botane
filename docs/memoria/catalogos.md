@@ -679,7 +679,7 @@ URL."* Parte (b) de três (ver a seção da 117).
 formatação e quando vou para o cardápio vivo é outra… até a logo no título da página está
 mudando. Vamos manter como se estivesse tudo no mesmo ambiente."*
 - **A aba**: `/c/{loja}` gera título e ícone no SERVIDOR (`generateMetadata`, lendo
-  `/publico/{loja}/casa` com cache de 5 min): o nome da casa e a logo da marca — o que o site
+  `/publico/{loja}/casa` com cache de 1 min): o nome da casa e a logo da marca — o que o site
   põe na aba dele. Era "Cardápio" com o ícone do sistema. `theme-color` = cor da casa (era preto).
   ⚠️ O `icons` da página vence o `app/icon.svg` da raiz (conferido no HTML servido).
 - **As letras**: Karla no corpo e DM Mono no preço (`.cv-corpo`, `.cv-mono` em `globals.css`),
@@ -695,3 +695,21 @@ mudando. Vamos manter como se estivesse tudo no mesmo ambiente."*
   e depois o do cardápio, saíam cortados ("Botan…", "Cardá…") entre o medalhão e os botões a
   400 px. A aba já diz o nome da casa. Sem logo, volta o nome por extenso.
 - Cobertura: `verificar-cardapio-vivo.mjs` confere título, ícone e letra (34).
+
+### Só consulta: a vitrine sem a "minha seleção" (migração 119, 16/10/2026)
+
+🔑 **Pedido do dono:** *"no modo da mesa, ter uma opção vitrine só consulta, sem minha seleção."*
+- `cardapio_vivos.selecao` (padrão `true`). Na tela, o "Modo na mesa" tem TRÊS escolhas — Só
+  consulta, Vitrine (com "minha seleção") e Pedido —, gravadas em duas colunas: só consulta é
+  `modo = VITRINE` + `selecao = false`.
+- ⚠️ **Chave, não terceiro `modo`**: o modo continua VITRINE para os eventos, os testes A/B e as
+  exceções por mesa/salão (113), que não precisaram mudar. No PEDIDO a seleção É o carrinho e o
+  feed responde `selecao: true` sempre — inclusive fora do horário, quando o pedido cai para vitrine.
+- O feed sem seleção: some a estrela do topo, o botão "Adicionar" de cada prato e o "adicionar"
+  da janela do prato (que mostra o preço no lugar). Favoritos ficam — são sinal de interesse.
+- Vale também pelo link (sem mesa): o Cardápio Vivo só consulta não oferece encomenda.
+- Cobertura: `smoke_cardapio_vivo.py` 11d2 e `verificar-cardapio-vivo.mjs` 5c.
+
+### O telefone de exemplo (16/10/2026)
+⚠️ O exemplo nos campos de telefone era `(47) 99910-5033` — um número que pode existir. Pedido do
+dono: tudo com 9. Virou `(99) 99999-9999` no site, no cadastro da loja e no WhatsApp.

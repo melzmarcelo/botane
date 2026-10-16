@@ -67,7 +67,7 @@ export default function ConexaoDoWhatsapp({
         </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Campo rotulo="Número (como aparece)" dica="só para exibir — ex.: (47) 99910-5033">
+          <Campo rotulo="Número (como aparece)" dica="só para exibir — ex.: (99) 99999-9999">
             <input className="campo mono" disabled={!podeEditar} value={form.numero ?? ""}
                    onChange={(e) => mudar("numero", e.target.value)} />
           </Campo>

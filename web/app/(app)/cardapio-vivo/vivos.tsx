@@ -60,7 +60,7 @@ export default function Vivos({ dados, podeEditar, aoMudar }: Props) {
                 </Link>
                 {v.principal && <Etiqueta cor="erva">principal · mesa</Etiqueta>}
                 {v.situacao !== "ATIVO" && <Etiqueta cor="alerta">{v.situacao.toLowerCase()} — não abre</Etiqueta>}
-                <span className="text-[13px] text-suave">{v.modo === "PEDIDO" ? "pedido na mesa" : "vitrine"}</span>
+                <span className="text-[13px] text-suave">{v.modo === "PEDIDO" ? "pedido na mesa" : v.selecao ? "vitrine" : "só consulta"}</span>
                 <span className="basis-full mono text-[12.5px] text-suave break-all">
                   {v.link}{" "}
                   <button type="button" className="link-acao ml-1" onClick={() => void copiar(v.link)}>copiar</button>

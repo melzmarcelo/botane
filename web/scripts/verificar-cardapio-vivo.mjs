@@ -108,7 +108,10 @@ try {
   }));
   checar("a aba diz o nome da casa, como o site", aba.titulo === daCasa.casa, aba.titulo);
   const logoDaCasa = daCasa.marca?.logo ?? daCasa.logo_url;
-  checar("e o ícone da aba é a logo da casa", !logoDaCasa || aba.icone.endsWith(logoDaCasa), aba.icone);
+  // ⚠️ A página guarda a casa por 1 minuto: logo trocada há pouco (as suítes da API trocam)
+  // ainda pode sair a anterior — o que se confere é que o ícone É uma logo cadastrada.
+  checar("e o ícone da aba é a logo da casa",
+         !logoDaCasa || aba.icone.endsWith(logoDaCasa) || /\/arquivos\/logo-/.test(aba.icone), aba.icone);
   checar("o texto do feed é na Karla, a letra do site", aba.letra.startsWith("Karla"), aba.letra);
 
   console.log("\n2. o aviso de cookies");
@@ -221,6 +224,26 @@ try {
   }
   checar("abriu_hub, clicou_wifi e abriu_cardapio chegaram",
          ["abriu_hub", "clicou_wifi", "abriu_cardapio"].every((t) => doHub.has(t)), [...doHub]);
+
+  console.log("\n5c. só consulta: sem a 'minha seleção' (119)");
+  // 🔑 Pedido do dono (16/10/2026): "no modo da mesa, uma opção vitrine só consulta".
+  await ligarDeTeste(api, token, antes, cat.id, { selecao: false });
+  await pagina.reload({ waitUntil: "networkidle2" });
+  await pagina.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Ver cardápio")?.click());
+  await pagina.waitForSelector(".cv-item", { timeout: 15000 });
+  const consulta = await pagina.evaluate(() => ({
+    estrela: [...document.querySelectorAll("header button")].some((b) => /★|🛒/.test(b.textContent)),
+    adicionar: [...document.querySelectorAll(".cv-item button")].some((b) => b.textContent.includes("Adicionar")),
+    pratos: document.querySelectorAll(".cv-item").length,
+  }));
+  checar("sem seleção, o topo não tem a estrela e o prato não tem 'Adicionar'",
+         !consulta.estrela && !consulta.adicionar && consulta.pratos === 3, consulta);
+  await pagina.evaluate(() => document.querySelector(".cv-item button")?.click());
+  await pagina.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
+  const janela = await pagina.evaluate(() => document.querySelector('[role="dialog"]')?.innerText ?? "");
+  checar("e a janela do prato mostra o preço, sem o botão de adicionar",
+         janela.includes("R$") && !janela.includes("Adicionar"), janela.slice(0, 200));
+  await ligarDeTeste(api, token, antes, cat.id);
 
   console.log("\n6. QR antigo");
   await api("POST", `/cardapio-vivo/mesas/${mesa.id}/token`, undefined, token);

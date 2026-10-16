@@ -16,6 +16,7 @@ import CardapioVivo from "@/components/cardapio-vivo/cardapio-vivo";
  * mesma rota que o site lê (`/publico/{loja}/casa`). Antes a aba dizia "Cardápio" com o ícone
  * do sistema, e quem saía da página inicial via a aba trocar de dono.
  * ⚠️ Sem a API (fora do ar, lenta), a página abre do mesmo jeito, com o padrão.
+ * ⚠️ A casa fica guardada por 1 minuto: trocar a logo leva até isso para chegar à aba.
  */
 const API = process.env.NEXT_PUBLIC_API ?? "http://127.0.0.1:9200";
 type Casa = { casa?: string; logo_url?: string | null; marca?: { logo?: string | null; cor_principal?: string | null } };
@@ -23,7 +24,7 @@ type Casa = { casa?: string; logo_url?: string | null; marca?: { logo?: string |
 async function casa(loja: string): Promise<Casa | null> {
   if (!/^\d+$/.test(loja)) return null;
   try {
-    const r = await fetch(`${API}/publico/${loja}/casa`, { next: { revalidate: 300 }, signal: AbortSignal.timeout(3000) });
+    const r = await fetch(`${API}/publico/${loja}/casa`, { next: { revalidate: 60 }, signal: AbortSignal.timeout(3000) });
     return r.ok ? ((await r.json()) as Casa) : null;
   } catch {
     return null;

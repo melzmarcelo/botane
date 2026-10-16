@@ -311,7 +311,7 @@ export default function FormularioLoja({
             <input
               className="campo mono"
               disabled={!podeEditar}
-              placeholder="(47) 99910-5033"
+              placeholder="(99) 99999-9999"
               value={valor.whatsapp}
               onChange={(e) => troca("whatsapp", e.target.value)}
             />

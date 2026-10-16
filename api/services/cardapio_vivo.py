@@ -59,6 +59,8 @@ _PADRAO = {
 _VIVO_PADRAO = {
     "slug": None, "principal": False, "modo": "VITRINE", "exige_confirmacao": True,
     "pedido_hora_de": None, "pedido_hora_ate": None, "chamar_garcom": False,
+    # 119: na vitrine, False = só consulta (sem "minha seleção").
+    "selecao": True,
 }
 _SLUG = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -101,7 +103,7 @@ def salvar_config(cur, id_unidade: int, dados: dict, id_usuario: int | None) -> 
 
 _SQL_VIVO = """SELECT v.id_unidade, v.id_catalogo, v.slug, v.principal, v.modo,
                       v.exige_confirmacao, v.pedido_hora_de, v.pedido_hora_ate,
-                      v.chamar_garcom, c.nome, c.situacao
+                      v.chamar_garcom, v.selecao, c.nome, c.situacao
                  FROM cardapio_vivos v JOIN catalogos c ON c.id = v.id_catalogo
                 WHERE v.id_unidade = %s"""
 
@@ -179,16 +181,18 @@ def salvar_vivo(cur, id_unidade: int, id_catalogo: int, dados: dict, id_usuario:
     cur.execute(
         """INSERT INTO cardapio_vivos (id_unidade, id_catalogo, slug, principal, modo,
                                        exige_confirmacao, pedido_hora_de, pedido_hora_ate,
-                                       chamar_garcom, atualizado_por)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                       chamar_garcom, selecao, atualizado_por)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            ON CONFLICT (id_unidade, id_catalogo) DO UPDATE SET
              slug = EXCLUDED.slug, principal = EXCLUDED.principal, modo = EXCLUDED.modo,
              exige_confirmacao = EXCLUDED.exige_confirmacao,
              pedido_hora_de = EXCLUDED.pedido_hora_de, pedido_hora_ate = EXCLUDED.pedido_hora_ate,
-             chamar_garcom = EXCLUDED.chamar_garcom, atualizado_por = EXCLUDED.atualizado_por,
+             chamar_garcom = EXCLUDED.chamar_garcom, selecao = EXCLUDED.selecao,
+             atualizado_por = EXCLUDED.atualizado_por,
              atualizado_em = now()""",
         (id_unidade, id_catalogo, slug, principal, campos["modo"], campos["exige_confirmacao"],
-         campos["pedido_hora_de"], campos["pedido_hora_ate"], campos["chamar_garcom"], id_usuario))
+         campos["pedido_hora_de"], campos["pedido_hora_ate"], campos["chamar_garcom"],
+         bool(campos["selecao"]), id_usuario))
     return vivo(cur, id_unidade, id_catalogo=id_catalogo) | {"antes": atual}
 
 
@@ -565,6 +569,10 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         "modo": modo["modo"], "aviso": modo["aviso"],
         # Fase 2 (115): os botões só aparecem com a opção ligada E numa mesa.
         "chamar_garcom": bool(cv["chamar_garcom"] and mesa),
+        # 🔑 **Só consulta** (119, pedido do dono, 16/10/2026): na vitrine, a casa pode tirar a
+        # "minha seleção" — o feed some com o botão de adicionar e a estrela do topo. No modo
+        # PEDIDO a seleção é o carrinho, e vale sempre.
+        "selecao": bool(modo["modo"] == "PEDIDO" or cv.get("selecao", True)),
         # 🔑 **Encomenda** (15/10/2026, o catering): sem mesa, o catálogo que aceita pedido
         # pelo site leva a seleção ao carrinho do site — o mesmo, já com retirada/entrega,
         # quando e pagamento. Na mesa, o pedido é o da mesa (`modo`).

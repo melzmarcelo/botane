@@ -27,6 +27,7 @@ export async function devolverVivos(api, token, antes, idCatalogoDeTeste) {
     await api("PUT", `/cardapio-vivo/vivos/${v.id_catalogo}`, {
       slug: v.slug, principal: v.principal, modo: v.modo, exige_confirmacao: v.exige_confirmacao,
       pedido_hora_de: v.pedido_hora_de, pedido_hora_ate: v.pedido_hora_ate, chamar_garcom: v.chamar_garcom,
+      selecao: v.selecao ?? true,
     }, token);
   }
 }
