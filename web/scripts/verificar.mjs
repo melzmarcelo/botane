@@ -8375,11 +8375,16 @@ try {
   // a venda do dia 12 ja ter saido. A venda saiu por custo estimado (nao havia
   // saldo) e o saldo ficou negativo — e nada disso se acerta sozinho, porque o
   // custo medio e calculado no instante do lancamento.
-  const mRep = Date.now().toString().slice(-5);
+  // ⚠️ **Oito dígitos, não cinco** (16/10/2026): o código `TREP-` mais os 5 últimos do relógio
+  // repete a cada ~100 s de calendário, e o produto de teste fica INATIVO (não some), com o código
+  // ocupado — a rodada de um dia caiu no número da véspera, a criação foi recusada e o resto da
+  // fase desabou até derrubar a bateria inteira.
+  const mRep = Date.now().toString().slice(-8);
   const { dados: prodRep } = await api("POST", "/produtos", {
     codigo: `TREP-${mRep}`, nome: `VINHO REPRO TELA ${mRep}`, tipo: "REVENDA",
     um_estoque: "UN", controla_estoque: true, status: "ATIVO",
   }, token);
+  if (!prodRep?.id) throw new Error(`o produto do reprocessamento não foi criado: ${JSON.stringify(prodRep)}`);
   aoTerminar.push(() => api("DELETE", `/produtos/${prodRep.id}`, null, token));
   // 🔑 **E o RAZAO deste produto some junto** — `DELETE /produtos` so inativa o
   // cadastro, que e o certo para o sistema e insuficiente aqui. Esta fase lanca
