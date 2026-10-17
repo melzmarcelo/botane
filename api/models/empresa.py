@@ -133,3 +133,8 @@ class ParametrosUpdate(BaseModel):
 
 class ParametrosResponse(ParametrosUpdate):
     id_unidade: int
+
+
+class ApagarOrfaos(BaseModel):
+    """Os arquivos sem dono que a pessoa conferiu na lista e mandou apagar."""
+    nomes: list[str] = Field(..., max_length=5000)

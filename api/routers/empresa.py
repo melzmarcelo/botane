@@ -10,6 +10,7 @@ import arquivos
 import auditoria
 from database import get_cursor
 from models.empresa import (
+    ApagarOrfaos,
     EmpresaResponse,
     EmpresaUpdate,
     ParametrosResponse,
@@ -19,7 +20,7 @@ from models.empresa import (
     UnidadeUpdate,
 )
 from seguranca import Contexto, contexto_atual, requer_permissao
-from services import periodos
+from services import arquivos_orfaos, periodos
 
 router = APIRouter(tags=["empresa"])
 
@@ -114,6 +115,27 @@ def remover_logo(ctx: Contexto = Depends(requer_permissao("admin.empresa"))) -> 
         )
     arquivos.remover(atual["logo_url"] if atual else None)
     return {"message": "Logo removida"}
+
+
+# ---------------------------------------------------------------- arquivos sem dono
+
+
+@router.get("/empresa/arquivos-orfaos")
+def listar_orfaos(ctx: Contexto = Depends(requer_permissao("admin.empresa"))) -> dict:
+    """Fotos, vídeos e PDFs guardados que nenhum registro aponta mais (17/10/2026)."""
+    with get_cursor() as cur:
+        return arquivos_orfaos.listar(cur)
+
+
+@router.post("/empresa/arquivos-orfaos/apagar")
+def apagar_orfaos(body: ApagarOrfaos,
+                  ctx: Contexto = Depends(requer_permissao("admin.empresa"))) -> dict:
+    """Apaga os que a pessoa conferiu — e só os que continuam sem dono agora."""
+    with get_cursor() as cur:
+        r = arquivos_orfaos.apagar(cur, body.nomes)
+        auditoria.registrar(cur, ctx.id_usuario, "arquivos", 0, "apagar_orfaos",
+                            depois={"apagados": r["apagados"], "bytes": r["bytes"]})
+        return r
 
 
 # ---------------------------------------------------------------- lojas

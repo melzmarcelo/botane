@@ -54,9 +54,15 @@ SUGESTOES = {
 }
 
 
-def _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate) -> tuple[str, list]:
+def _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate,
+                     id_catalogo: int | None = None) -> tuple[str, list]:
     onde = ["e.id_unidade = %s", "e.quando >= %s::date", "e.quando < %s::date + 1"]
     valores: list = [id_unidade, de, ate]
+    if id_catalogo:
+        # 🔑 Só o que veio DESTE Cardápio Vivo (122). O evento sem cardápio é anterior à 122 e
+        # não se sabe de onde veio: conta, como contava.
+        onde.append("coalesce(e.id_catalogo, %s) = %s")
+        valores += [id_catalogo, id_catalogo]
     if id_salao:
         onde.append("e.id_mesa IN (SELECT id FROM mesas WHERE id_salao = %s)")
         valores.append(id_salao)
@@ -139,7 +145,8 @@ def painel(cur, id_unidade: int, de: date, ate: date, id_salao: int | None = Non
     if (ate - de).days > 400:
         raise HTTPException(status_code=422, detail="Período de no máximo 400 dias.")
     cfg = cv.config(cur, id_unidade)
-    onde, valores = _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate)
+    onde, valores = _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate,
+                                     cfg["id_catalogo"])
     teto = cv.ATENCAO_MAX_MS
 
     # ---------------------------------------------------------------- topo e funil

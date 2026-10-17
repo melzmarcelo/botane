@@ -237,6 +237,38 @@ def atualizar_categoria(cur, id_unidade: int, id_categoria: int, dados: dict) ->
     return dict(cur.fetchone())
 
 
+_MIDIA = "unnest(ARRAY[foto_url, video_url, video_capa_url])"
+
+
+def midias_do_conteudo(cur, *, catalogo: int | None = None, categoria: int | None = None,
+                       subcategoria: int | None = None) -> list[str]:
+    """Toda foto e todo vídeo que saem junto quando se apaga um catálogo, uma seção ou uma
+    subdivisão — a dela, a das subdivisões de baixo e a dos cartões (120) que o CASCADE leva.
+
+    ⚠️ **Os arquivos moram no banco** (`arquivos`), e o CASCADE só apaga as linhas que
+    APONTAM para eles. Até 17/10/2026 a exclusão da seção levava só a `foto_url`: o vídeo e a
+    capa dela, a mídia das subdivisões e a dos cartões ficavam no banco sem dono, crescendo
+    o backup sem nada à vista. Quem apaga chama `arquivos.remover` em cada uma, no MESMO cursor.
+    """
+    if subcategoria:
+        cur.execute(f"""SELECT {_MIDIA} AS u FROM catalogo_subcategorias WHERE id = %(s)s
+                        UNION ALL SELECT {_MIDIA} FROM catalogo_cartoes WHERE id_subcategoria = %(s)s""",
+                    {"s": subcategoria})  # noqa: S608 - expressão constante
+    elif categoria:
+        cur.execute(f"""SELECT {_MIDIA} AS u FROM catalogo_categorias WHERE id = %(c)s
+                        UNION ALL SELECT {_MIDIA} FROM catalogo_subcategorias WHERE id_categoria = %(c)s
+                        UNION ALL SELECT {_MIDIA} FROM catalogo_cartoes WHERE id_categoria = %(c)s""",
+                    {"c": categoria})  # noqa: S608
+    else:
+        cur.execute(f"""SELECT {_MIDIA} AS u FROM catalogo_categorias WHERE id_catalogo = %(k)s
+                        UNION ALL SELECT {_MIDIA} FROM catalogo_subcategorias
+                                  WHERE id_categoria IN (SELECT id FROM catalogo_categorias
+                                                          WHERE id_catalogo = %(k)s)
+                        UNION ALL SELECT {_MIDIA} FROM catalogo_cartoes WHERE id_catalogo = %(k)s""",
+                    {"k": catalogo})  # noqa: S608
+    return sorted({r["u"] for r in cur.fetchall() if r["u"]})
+
+
 def excluir_categoria(cur, id_unidade: int, id_categoria: int) -> dict:
     """Apaga a categoria — e, com ela, subcategorias e vínculos.
 
@@ -249,8 +281,10 @@ def excluir_categoria(cur, id_unidade: int, id_categoria: int) -> dict:
     cur.execute("SELECT count(*) AS n FROM catalogo_itens WHERE id_categoria = %s",
                 (id_categoria,))
     itens = cur.fetchone()["n"]
-    arquivos.remover(atual.get("foto_url"), cur)
+    midias = midias_do_conteudo(cur, categoria=id_categoria)
     cur.execute("DELETE FROM catalogo_categorias WHERE id = %s", (id_categoria,))
+    for url in midias:
+        arquivos.remover(url, cur)
     return {"message": f'Categoria "{atual["nome"]}" removida.', "itens_removidos": itens}
 
 
@@ -310,8 +344,10 @@ def excluir_subcategoria(cur, id_unidade: int, id_sub: int) -> dict:
     cur.execute("SELECT count(*) AS n FROM catalogo_itens WHERE id_subcategoria = %s",
                 (id_sub,))
     itens = cur.fetchone()["n"]
-    arquivos.remover(atual.get("foto_url"), cur)
+    midias = midias_do_conteudo(cur, subcategoria=id_sub)
     cur.execute("DELETE FROM catalogo_subcategorias WHERE id = %s", (id_sub,))
+    for url in midias:
+        arquivos.remover(url, cur)
     return {"message": f'Subcategoria "{atual["nome"]}" removida.',
             "itens_removidos": itens}
 

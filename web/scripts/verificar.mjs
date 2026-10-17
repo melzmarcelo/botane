@@ -7885,10 +7885,10 @@ try {
   // seções dos módulos novos são cobradas pelo id: se uma sumir, a bateria acusa.
   const secoesNovas = await p.evaluate(() => {
     const d = document.querySelector("iframe")?.contentDocument;
-    return ["navegar", "pessoas", "etiquetas", "portal", "fidelidade", "whatsapp", "claude",
-            "novidades"].filter((id) => !d?.getElementById(id));
+    return ["navegar", "pessoas", "etiquetas", "portal", "cardapio-vivo", "fidelidade", "whatsapp",
+            "claude", "novidades"].filter((id) => !d?.getElementById(id));
   });
-  checar("com os módulos novos: pessoas, etiquetas, portal, fidelidade, WhatsApp e Claude",
+  checar("com os módulos novos: pessoas, etiquetas, portal, Cardápio Vivo, fidelidade, WhatsApp e Claude",
     secoesNovas.length === 0, secoesNovas);
   checar("com o custo médio ponderado, o custo congelado e a fórmula do CMV",
     trilha.custoMedio && trilha.congelado && trilha.resumo, trilha);

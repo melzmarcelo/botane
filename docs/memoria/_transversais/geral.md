@@ -16,6 +16,9 @@
   notas existem só como rota/script — descrevê-los mandaria o usuário procurar um botão que
   não existe. Conferir o rótulo do botão e o nome do menu no código antes de citar.
   O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento e parou em 13/09.
+  ⚠️ **Parou de novo depois da 1.1.60**: em 17/10/2026 (1.1.108) entraram só catálogos e o
+  Cardápio Vivo (seção `cardapio-vivo`, 17; Fidelidade, WhatsApp e Claude viraram 18–20).
+  Precificação e as demais entregas de 28/09 a 17/10 continuam fora do manual.
 
 - 🔑 **A bateria do navegador tinha 26 falhas e NENHUMA era defeito do sistema** (28/09/2026) —
   eram testes que não acompanharam telas que mudaram. Três causas, todas de SELETOR:

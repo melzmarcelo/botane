@@ -323,6 +323,20 @@ checar("filtrar outro dia da semana zera a atenção de hoje",
        all(l["visualizacoes"] == 0 for l in pa2.get("itens", [])), pa2.get("itens"))
 st, r = chamar("GET", f"/cardapio-vivo/atencao?de={hoje}&ate={hoje}&hora_de=10:00", token=token)
 checar("só uma ponta do horário é recusada", st == 422, st)
+# 🔑 (122) O painel olha o cardápio PRINCIPAL: o mesmo prato visto noutro Cardápio Vivo da loja
+# (o catering) não soma aqui. Sessão engajada (favoritou) de outro catálogo, gravada direto.
+with get_cursor() as cur:
+    s_outro = str(uuid.uuid4())
+    cur.execute("INSERT INTO cardapio_sessoes (id, id_unidade, modo) VALUES (%s, %s, 'VITRINE')", (s_outro, U))
+    for tipo in ("viu_item", "favoritou"):
+        cur.execute("""INSERT INTO cardapio_eventos (id_sessao, id_unidade, tipo, id_produto, id_catalogo,
+                                                     modo, duracao_ms)
+                       VALUES (%s, %s, %s, %s, -1, 'VITRINE', 5000)""", (s_outro, U, tipo, A))
+st, pa3 = chamar("GET", f"/cardapio-vivo/atencao?de={hoje}&ate={hoje}", token=token)
+la3 = {l["id_produto"]: l for l in pa3.get("itens", [])}.get(A, {})
+checar("o prato visto noutro Cardápio Vivo da loja não soma no painel do principal",
+       la3.get("visualizacoes") == la.get("visualizacoes") and pa3["topo"]["sessoes"] == pa["topo"]["sessoes"],
+       (la3.get("visualizacoes"), la.get("visualizacoes")))
 from services import cardapio_atencao as ca  # noqa: E402
 from decimal import Decimal  # noqa: E402
 checar("nível de margem pela margem-alvo (meta 30%): 35 alta, 25 média, 15 baixa, sem meta nulo",

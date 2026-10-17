@@ -196,14 +196,86 @@ def listar(cur, id_unidade: int) -> dict:
              GROUP BY a.id
              ORDER BY a.ativo DESC, a.criado_em DESC""",  # noqa: S608
         (id_unidade,))
-    hoje = agora_da_casa().date()
+    linhas = [dict(r) for r in cur.fetchall()]
+    agora = agora_da_casa().replace(tzinfo=None)
+    hoje = agora.date()
+    contexto = _contexto_dos_avisos(cur, id_unidade, linhas, hoje)
+    from services.cardapio_vivo import _secao_visivel  # ⚠️ aqui dentro: aquele importa este
     saida = []
-    for r in cur.fetchall():
-        d = dict(r)
+    for d in linhas:
         d["situacao"] = ("DESLIGADO" if not d["ativo"] else "ENCERRADO" if d["fim"] and d["fim"] < hoje
                          else "AGENDADO" if d["inicio"] and d["inicio"] > hoje else "NO_AR")
+        d["avisos"] = _avisos(d, contexto) if d["situacao"] in ("NO_AR", "AGENDADO") else []
+        if d["avisos"]:
+            d["situacao"] = "COM_PROBLEMA"
+        # Informativo: no período, mas fora do dia ou do horário DESTE momento.
+        d["fora_do_horario_agora"] = d["situacao"] == "NO_AR" and not _secao_visivel(
+            {"dias": d["dias"], "hora_de": d["hora_de"], "hora_ate": d["hora_ate"],
+             "horario_especial": d["horario_especial"]}, agora, contexto["especial"])
         saida.append(d)
     return {"anuncios": saida, "regras": regras(cur, id_unidade), "pulou_ms": PULOU_MS}
+
+
+def _contexto_dos_avisos(cur, id_unidade: int, anuncios: list[dict], hoje: date) -> dict:
+    """O que os avisos precisam saber da loja, buscado UMA vez para a lista inteira."""
+    cur.execute("SELECT id_catalogo, principal FROM cardapio_vivos WHERE id_unidade = %s", (id_unidade,))
+    vivos = {r["id_catalogo"]: r["principal"] for r in cur.fetchall()}
+    cur.execute(
+        """SELECT c.id, c.nome, c.situacao = 'ATIVO' AND (c.publica_de IS NULL OR c.publica_de <= %s)
+                  AND (c.publica_ate IS NULL OR c.publica_ate >= %s) AS no_ar
+             FROM catalogos c
+            WHERE EXISTS (SELECT 1 FROM catalogo_lojas l WHERE l.id_catalogo = c.id AND l.id_unidade = %s)""",
+        (hoje, hoje, id_unidade))
+    catalogos = {r["id"]: dict(r) for r in cur.fetchall()}
+    itens = sorted({a["acao_item"] for a in anuncios if a["acao_item"]})
+    item_catalogo: dict[int, int] = {}
+    if itens:
+        cur.execute("""SELECT i.id, g.id_catalogo FROM catalogo_itens i
+                         JOIN catalogo_categorias g ON g.id = i.id_categoria WHERE i.id = ANY(%s)""", (itens,))
+        item_catalogo = {r["id"]: r["id_catalogo"] for r in cur.fetchall()}
+    cur.execute("SELECT 1 FROM reserva_dias_especiais WHERE id_unidade = %s AND data = %s", (id_unidade, hoje))
+    return {"vivos": vivos, "catalogos": catalogos, "item_catalogo": item_catalogo,
+            "especial": cur.fetchone() is not None}
+
+
+def _avisos(a: dict, ctx: dict) -> list[str]:
+    """Por que um anúncio ligado e no período NÃO aparece, ou aparece pela metade.
+
+    🔑 **Achado da análise de 17/10/2026**: o anúncio cujo destino sumiu (catálogo apagado ou
+    fora do ar, prato tirado do cardápio — as chaves são `SET NULL`) continuava "no ar", e o
+    feed o mostrava sem botão. As regras abaixo são as MESMAS de `do_feed` e de
+    `acaoDoAnuncio` (na tela), lidas do lado de quem cadastra.
+    """
+    avisos: list[str] = []
+    cat, vivos = ctx["catalogos"], ctx["vivos"]
+    nome = lambda c: f"“{cat[c]['nome']}”" if c in cat else "o catálogo"  # noqa: E731
+    if not (_texto(a["titulo"]) or _texto(a["texto"]) or a["foto_url"] or a["video_url"]):
+        avisos.append("Sem título, texto, foto nem vídeo — não aparece no cardápio.")
+    if a["acao"] == "CATALOGO":
+        if not a["acao_catalogo"] or a["acao_catalogo"] not in cat:
+            avisos.append("O catálogo do botão foi apagado ou saiu desta loja — o anúncio aparece sem botão.")
+        elif not cat[a["acao_catalogo"]]["no_ar"]:
+            avisos.append(f"O catálogo do botão ({nome(a['acao_catalogo'])}) está fora do ar — "
+                          "quem tocar não vai achar o cardápio.")
+    if a["acao"] == "PRATO":
+        dono = ctx["item_catalogo"].get(a["acao_item"]) if a["acao_item"] else None
+        if not dono:
+            avisos.append("O prato do botão saiu do cardápio — o anúncio aparece sem botão.")
+        elif dono not in vivos:
+            avisos.append(f"O prato do botão é de {nome(dono)}, que não é Cardápio Vivo — o botão não aparece.")
+    # Onde ele pode aparecer: os Cardápios Vivos da loja (os escolhidos, se houver escolha), menos
+    # o que o próprio botão abre, e — só na mesa — o principal.
+    onde = set(vivos) & set(a["cardapios"]) if a["cardapios"] else set(vivos)
+    if a["acao"] == "CATALOGO":
+        onde.discard(a["acao_catalogo"])
+    if not vivos:
+        avisos.append("A loja não tem nenhum Cardápio Vivo — não há onde aparecer.")
+    elif not onde:
+        avisos.append("Nenhum dos cardápios escolhidos é Cardápio Vivo (ou é o mesmo que o botão abre) — "
+                      "não há onde aparecer.")
+    elif a["canal"] == "MESA" and not any(vivos[c] for c in onde):
+        avisos.append("Só na mesa, mas a mesa abre o cardápio principal, que não está entre os escolhidos.")
+    return avisos
 
 
 # ------------------------------------------------------------------ o relatório
@@ -233,6 +305,12 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
                      WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
                      GROUP BY 1 ORDER BY 1""", p)  # noqa: S608
     por_canal = [dict(r) for r in cur.fetchall()]
+    # 🔑 Em qual Cardápio Vivo (122): o mesmo anúncio na cafeteria e no catering.
+    cur.execute(f"""SELECT e.id_catalogo, c.nome AS cardapio, {_metricas_sql('')}
+                      FROM cardapio_eventos e LEFT JOIN catalogos c ON c.id = e.id_catalogo
+                     WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
+                     GROUP BY 1, 2 ORDER BY 3 DESC""", p)  # noqa: S608
+    por_cardapio = [dict(r) for r in cur.fetchall()]
     cur.execute(f"""SELECT extract(hour FROM e.quando AT TIME ZONE 'America/Sao_Paulo')::int AS hora,
                            count(*) FILTER (WHERE e.tipo = 'viu_anuncio') AS aparicoes
                       FROM cardapio_eventos e
@@ -247,7 +325,8 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
         "casa": e.get("nome_fantasia") or e.get("razao_social"),
         "total": total | {"taxa_toque": round(total["sessoes_tocaram"] / sessoes, 4) if sessoes else None,
                           "taxa_pulou": round(total["pulados"] / total["aparicoes"], 4) if total["aparicoes"] else None},
-        "por_dia": por_dia, "por_canal": por_canal, "por_hora": por_hora, "pulou_ms": PULOU_MS,
+        "por_dia": por_dia, "por_canal": por_canal, "por_cardapio": por_cardapio,
+        "por_hora": por_hora, "pulou_ms": PULOU_MS,
     }
 
 

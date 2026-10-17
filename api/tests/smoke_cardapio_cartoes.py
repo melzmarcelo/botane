@@ -257,6 +257,76 @@ checar("e ele não existe mais (404)", st == 404, st)
 st, _r = chamar("GET", f"/catalogos/{ID}/cartoes")
 checar("sem login, a lista recusa (401)", st == 401, st)
 
+
+def _arquivos_de(sql: str, valores: tuple) -> list[str]:
+    """Os nomes guardados em `arquivos` que as URLs do SELECT apontam."""
+    with get_cursor() as cur:
+        cur.execute(sql, valores)
+        return [u.split("/arquivos/", 1)[1] for r in cur.fetchall() for u in r.values() if u]
+
+
+def _existem(nomes: list[str]) -> int:
+    with get_cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM arquivos WHERE nome = ANY(%s)", (nomes,))
+        return cur.fetchone()["n"]
+
+
+print("\n7. excluir leva a mídia junto (17/10/2026)")
+# ⚠️ Até a 1.1.108 excluir a seção apagava só a FOTO dela: o vídeo, a mídia das subdivisões e a
+# dos cartões ficavam na tabela `arquivos` sem ninguém apontando para eles.
+enviar(f"/catalogos/secoes/subcategoria/{sub['id']}/video", token, VIDEO, "rec.mp4", "video/mp4")
+enviar(f"/catalogos/cartoes/{harmon['id']}/foto", token, FOTO, "h.png", "image/png")
+_st, na_sub = chamar("POST", f"/catalogos/{ID}/cartoes",
+                     {"id_categoria": g1["id"], "id_subcategoria": sub["id"], "titulo": "Na subdivisão"}, token)
+enviar(f"/catalogos/cartoes/{na_sub['id']}/foto", token, FOTO, "s.png", "image/png")
+midias = _arquivos_de(
+    """SELECT foto_url, video_url, video_capa_url FROM catalogo_categorias WHERE id = %s
+       UNION ALL SELECT foto_url, video_url, video_capa_url FROM catalogo_subcategorias WHERE id = %s
+       UNION ALL SELECT foto_url, video_url, video_capa_url FROM catalogo_cartoes WHERE id IN (%s, %s)""",
+    (g1["id"], sub["id"], harmon["id"], na_sub["id"]))
+checar("o cenário tem a foto da seção, o vídeo e a capa da subdivisão e a foto de dois cartões",
+       len(midias) == 5 and _existem(midias) == 5, midias)
+st, r = chamar("DELETE", f"/catalogos/categorias/{g1['id']}", token=token)
+checar("excluir a seção", st == 200, (st, r))
+checar("e NENHUM desses arquivos fica no banco", _existem(midias) == 0, _existem(midias))
+
+_st, rasc = chamar("POST", "/catalogos", {"nome": f"Rascunho {MARCA}", "origem": "PRODUTOS"}, token)
+_st, gr = chamar("POST", f"/catalogos/{rasc['id']}/categorias", {"nome": "Uma"}, token)
+enviar(f"/catalogos/secoes/categoria/{gr['id']}/foto", token, FOTO, "r.png", "image/png")
+_st, ab = chamar("POST", f"/catalogos/{rasc['id']}/cartoes", {"titulo": "Abertura"}, token)
+enviar(f"/catalogos/cartoes/{ab['id']}/foto", token, FOTO, "a.png", "image/png")
+midias = _arquivos_de(
+    """SELECT foto_url FROM catalogo_categorias WHERE id = %s
+       UNION ALL SELECT foto_url FROM catalogo_cartoes WHERE id = %s""", (gr["id"], ab["id"]))
+st, r = chamar("DELETE", f"/catalogos/{rasc['id']}", token=token)
+checar("excluir o catálogo rascunho leva a foto da seção e a da abertura",
+       st == 200 and len(midias) == 2 and _existem(midias) == 0, (st, midias, _existem(midias)))
+
+print("\n8. a varredura dos arquivos sem dono (Administração ▸ Empresa)")
+with get_cursor() as cur:
+    for nome, idade in ((f"orfao-velho-{MARCA}.png", "3 days"), (f"orfao-novo-{MARCA}.png", "1 minute")):
+        cur.execute(f"""INSERT INTO arquivos (nome, dono, tipo, conteudo, bytes, criado_em)
+                        VALUES (%s, 'teste', 'image/png', %s, %s, now() - interval '{idade}')""",  # noqa: S608
+                    (nome, FOTO, len(FOTO)))
+st, orf = chamar("GET", "/empresa/arquivos-orfaos", token=token)
+nomes = {o["nome"] for o in (orf or {}).get("orfaos", [])}
+checar("a varredura acha o arquivo velho sem dono", st == 200 and f"orfao-velho-{MARCA}.png" in nomes, st)
+checar("e deixa de fora o enviado há menos de um dia", f"orfao-novo-{MARCA}.png" not in nomes, "")
+with get_cursor() as cur:
+    cur.execute("SELECT foto_url FROM produtos WHERE foto_url IS NOT NULL LIMIT 1")
+    em_uso = cur.fetchone()
+if em_uso:
+    checar("e nunca lista um arquivo em uso (a foto de um produto)",
+           em_uso["foto_url"].split("/arquivos/", 1)[1] not in nomes, em_uso)
+alvo = [f"orfao-velho-{MARCA}.png", f"orfao-novo-{MARCA}.png"] + ([em_uso["foto_url"].split("/arquivos/", 1)[1]] if em_uso else [])
+st, r = chamar("POST", "/empresa/arquivos-orfaos/apagar", {"nomes": alvo}, token)
+checar("apagar leva só o órfão velho — o novo e o em uso ficam, mesmo pedidos",
+       st == 200 and r["apagados"] == 1 and _existem(alvo[1:]) == len(alvo) - 1, (st, r))
+st, _r = chamar("GET", "/empresa/arquivos-orfaos")
+checar("sem login, a varredura recusa (401)", st == 401, st)
+with get_cursor() as cur:
+    cur.execute("DELETE FROM arquivos WHERE nome LIKE %s", (f"orfao-%-{MARCA}.png",))
+
 print()
 print(f"{ok} passaram, {len(falhas)} falharam")
 for x in falhas:

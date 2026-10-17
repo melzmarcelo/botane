@@ -246,12 +246,14 @@ def resultado(cur, t: dict) -> dict:
                   FROM cardapio_eventos e
                  WHERE e.id_unidade = %(u)s AND e.quando >= %(de)s
                    AND (%(ate)s::timestamptz IS NULL OR e.quando <= %(ate)s)
+                   -- 🔑 Só o cardápio do teste (122): ver o catering não expõe ninguém à ordem B
+                   AND coalesce(e.id_catalogo, %(c)s) = %(c)s
                  GROUP BY e.id_sessao)
             SELECT variante, count(*) FILTER (WHERE viu) AS expostas,
                    count(*) FILTER (WHERE viu AND adicionou) AS adicionaram
               FROM s GROUP BY variante""",  # noqa: S608 - expressão constante do módulo
         {"t": t["id"], "p": t["id_produto"], "u": t["id_unidade"], "de": t["inicio"],
-         "ate": t["encerrado_em"]})
+         "ate": t["encerrado_em"], "c": t["id_catalogo"]})
     braco = {r["variante"]: r for r in cur.fetchall()}
     a, b = braco.get("A", {}), braco.get("B", {})
     n_a, s_a = int(a.get("expostas") or 0), int(a.get("adicionaram") or 0)

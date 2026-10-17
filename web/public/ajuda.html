@@ -300,10 +300,11 @@
       <li><a href="#etiquetas">15 · Etiquetas de validade</a></li>
       <li class="grupo"><span class="rotulo">Portal de Clientes</span></li>
       <li><a href="#portal">16 · Site, reservas, catálogos e pedidos</a></li>
-      <li><a href="#fidelidade">17 · Fidelidade</a></li>
-      <li><a href="#whatsapp">18 · WhatsApp</a></li>
+      <li><a href="#cardapio-vivo">17 · Cardápio Vivo</a></li>
+      <li><a href="#fidelidade">18 · Fidelidade</a></li>
+      <li><a href="#whatsapp">19 · WhatsApp</a></li>
       <li class="grupo"><span class="rotulo">Conectado</span></li>
-      <li><a href="#claude">19 · O Claude dentro do sistema</a></li>
+      <li><a href="#claude">20 · O Claude dentro do sistema</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
@@ -776,7 +777,7 @@
           <tr><td><strong>Vendas</strong></td><td><strong>Períodos</strong> (os ciclos de consumo) e <strong>Documentos</strong> (os cupons do PDV e os lançados à mão, com Lançar, Consumo por pessoa e Sem vínculo)</td></tr>
           <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
           <tr><td><strong>CMV</strong></td><td>Item direto: o painel de CMV</td></tr>
-          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos e pedidos (painel e lista) — só aparece na loja que ligou o módulo</td></tr>
+          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos (cadastro, Cardápio Vivo, anúncios, Atenção × Vendas, testes A/B) e pedidos (painel e lista) — só aparece na loja que ligou o módulo</td></tr>
           <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
           <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), visão da rede (com mais de uma loja), usuários, papéis, integrações, auditoria</td></tr>
 </tbody>
@@ -2958,6 +2959,40 @@
         rascunho se apaga; o resto se inativa. Um catálogo pode exigir cadastro para abrir.
       </p>
 
+      <h3>Montar um catálogo</h3>
+      <p>
+        <strong>Catálogos ▸ Cadastro</strong> lista os catálogos em cartões, cada um com um selo só
+        (<em>no ar</em>, <em>ativo, fora do período</em>, <em>rascunho</em>, <em>inativo</em>), o
+        número de pratos e o que falta neles. <strong>Novo catálogo</strong> pede primeiro o
+        <strong>tipo</strong> (montado com produtos, ou PDF) e depois só o nome: ele nasce
+        <em>rascunho</em> e abre. O catálogo de produtos tem quatro abas:
+      </p>
+      <table>
+        <thead><tr><th>Aba</th><th>O que se faz nela</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Cardápio</strong></td><td>As seções à esquerda e os pratos da seção escolhida à direita. <em>+ pratos</em> escolhe vários de uma vez (o que já está aparece travado); as setas ↑↓ mudam a ordem (das seções e dos pratos); <em>+ seção</em> e <em>+ cartão</em> ficam ali também. Tocar no prato abre a <strong>gaveta</strong>: foto, nome de vitrine, descrição, vídeo e restrições — que gravam no PRODUTO e valem em todo cardápio — e o <em>mover para</em>, que leva o prato a outra seção com destaque e esgotado junto. A lista <strong>O que falta</strong> junta os pratos sem foto, sem descrição, sem preço ou inativos</td></tr>
+          <tr><td><strong>Publicação</strong></td><td>Situação, período, lojas onde aparece, se exige cadastro — e se é um <strong>Cardápio Vivo</strong></td></tr>
+          <tr><td><strong>Pedidos</strong></td><td>Se o catálogo recebe pedidos pelo site, e como (ver abaixo)</td></tr>
+          <tr><td><strong>Idiomas</strong></td><td>O inglês e o alemão do catálogo e o <em>Traduzir o que falta</em></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Na janela da <strong>seção</strong> ficam a foto, o vídeo de abertura, o dia e o horário em
+        que ela aparece no Cardápio Vivo, as traduções e o excluir. ⚠️ Excluir uma seção leva junto
+        os pratos vinculados a ela (os produtos continuam no cadastro) — a pergunta diz quantos —, e
+        as fotos e vídeos dela, das subdivisões e dos cartões de dentro.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Arquivos sem dono</p>
+        <p>
+          Fotos, vídeos e PDFs ficam guardados no banco. <strong>Administração ▸ Empresa ▸ Arquivos sem
+          dono</strong> procura os que nenhum produto, seção, cartão, anúncio ou catálogo usa mais (os
+          que versões antigas deixaram para trás ao excluir uma seção), mostra quantos são, de onde
+          vieram e quanto ocupam, e só apaga depois de <em>Apagar os N</em> e da confirmação. O que
+          chegou há menos de um dia fica de fora.
+        </p>
+      </div>
+
       <h3>O cardápio em inglês e alemão</h3>
       <p>
         O site tem <strong>PT · EN · DE</strong> no canto da capa. Botões, avisos e telas mudam de
@@ -3042,9 +3077,137 @@
       </p>
     </section>
 
+    <!-- ======================================================== cardapio vivo -->
+    <section id="cardapio-vivo">
+      <h2>17 · Cardápio Vivo</h2>
+      <p class="chamada">
+        O cardápio no celular do cliente como um feed: um prato por tela, com vídeo ou foto — e,
+        para a casa, quanto cada prato prendeu a atenção.
+      </p>
+
+      <p>
+        Não há cadastro novo de prato: um Cardápio Vivo é um <strong>catálogo de produtos</strong>
+        marcado como tal (aba <em>Publicação ▸ Cardápio Vivo</em>, ou em <strong>Catálogos ▸ Cardápio
+        Vivo ▸ Os Cardápios Vivos</strong>). O que é do prato — foto, vídeo, restrições, adicionais —
+        continua no produto; destaque e esgotado ficam no prato do catálogo; o dia e o horário, na
+        seção. Sem app e sem login para o cliente.
+      </p>
+
+      <h3>Um principal e os outros</h3>
+      <p>
+        A loja pode ter vários (a cafeteria e o catering, por exemplo). Um deles é o
+        <strong>principal</strong>: é o que o QR e a etiqueta NFC da mesa abrem, e o que o site abre
+        no botão do cardápio. Os outros abrem pelo link de cada um. Marcar outro como principal
+        desmarca o anterior. Cada Cardápio Vivo tem o seu comportamento:
+      </p>
+      <table>
+        <thead><tr><th>Opção</th><th>O que muda</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Só consulta</strong></td><td>O cardápio e nada mais — sem estrela, sem “Adicionar”</td></tr>
+          <tr><td><strong>Vitrine</strong></td><td>O cliente monta a <em>minha seleção</em> para mostrar ao garçom. Nada é enviado</td></tr>
+          <tr><td><strong>Pedido</strong></td><td>A seleção vira carrinho e vai ao <strong>Pedidos ▸ Painel</strong>, com ou sem confirmação, dentro do horário do pedido (fora dele, cai para vitrine)</td></tr>
+          <tr><td><strong>Chamar garçom</strong></td><td>Botões de chamar e pedir a conta na mesa</td></tr>
+          <tr><td><strong>Aberturas de seção</strong></td><td>Automática (toda seção com foto ou vídeo ganha uma tela de abertura), só as com vídeo, ou nenhuma — direto aos pratos. Cada seção ainda pode desligar a dela</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Pelo link (sem mesa), num catálogo que aceita pedido pelo site, a seleção ganha
+        <em>Fazer encomenda</em> e segue para o carrinho do site.
+      </p>
+
+      <h3>A aparência é da casa</h3>
+      <p>
+        <strong>Aparência e opções da casa</strong>: cores, fonte, logo, a tela de entrada (avaliação
+        no Google e Wi-Fi, que vêm do cadastro da loja), esconder o esgotado e quanto tempo a medição
+        fica guardada. Vale ao mesmo tempo para o site e para todos os Cardápios Vivos, na próxima vez
+        que o cliente abrir — não há o que publicar. O idioma escolhido no site (PT · EN · DE) segue
+        no feed, e o do feed volta ao site.
+      </p>
+
+      <h3>As mesas</h3>
+      <p>
+        <strong>Acesso das mesas</strong> dá o link de cada mesa, com um segredo — o número sozinho
+        não abre nada —, o QR de cada uma e o PDF de todas para imprimir (três tamanhos). Se um
+        impresso vazar, <em>gerar outro</em> troca o segredo daquela mesa. <strong>Exceções por salão ou
+        mesa</strong> mudam o modo, a confirmação ou o horário do pedido só ali: a mais específica
+        vence (mesa, depois salão, depois a loja), e campo em branco herda.
+      </p>
+
+      <h3>Cartões entre os pratos</h3>
+      <p>
+        No catálogo, aba <em>Cardápio</em>: o painel <strong>Abertura no Cardápio Vivo</strong> é a
+        primeira tela do feed, e <strong>+ cartão</strong> põe um texto, foto ou vídeo
+        <strong>antes de um prato</strong> (uma introdução às massas, uma citação). O cartão fica
+        colado no prato: se o prato muda de lugar, ele vai junto; se o prato sai da tela, o cartão vai
+        para o fim da lista. Um botão opcional leva a um prato. Cartão só aparece no feed — o site e o
+        PDF não mudam. A recomendação é um a cada quatro pratos, no máximo; a tela avisa acima disso.
+      </p>
+
+      <h3>Anúncios</h3>
+      <p>
+        <strong>Catálogos ▸ Anúncios</strong>: um anúncio <strong>da casa</strong> (o catálogo de uma
+        data especial) ou de <strong>outra marca</strong> (aparece como <em>Patrocinado · marca</em> —
+        propaganda tem de ser reconhecível). Cada um tem período, dias, horário, em quais cardápios,
+        mesa e/ou link, e o peso no sorteio. O botão abre um catálogo da casa, mostra um prato deste
+        cardápio ou leva a um link.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O ritmo é da casa, não do anúncio</p>
+        <p>
+          <strong>O ritmo dos anúncios</strong> vale para todos: o primeiro depois do 5º prato, 8
+          pratos entre um e outro, no máximo 2 por visita (1 na mesa). Nunca o mesmo duas vezes na
+          mesma visita, nunca com filtro de restrição ligado, e nunca o que leva ao próprio cardápio
+          em que a pessoa está.
+        </p>
+      </div>
+      <p>
+        O <strong>relatório</strong> de cada anúncio mostra pessoas, aparições, tempo médio, quantos
+        tocaram e quantos <em>passaram direto</em> (menos de 1,5 s), por dia, por canal e por hora — e
+        sai em PDF para apresentar ao parceiro. Quando o anúncio aparece em mais de um Cardápio
+        Vivo, o relatório separa os números por cardápio.
+      </p>
+      <p>
+        Na lista, o anúncio ligado que não vai aparecer — ou vai aparecer pela metade — fica
+        <strong>com problema</strong>, com o motivo embaixo do nome: sem título, texto nem mídia; o
+        catálogo do botão apagado ou fora do ar; o prato do botão tirado do cardápio; só na mesa num
+        cardápio que não é o principal. O que está no ar mas fora do dia ou do horário daquele momento
+        mostra <em>fora do horário agora</em>.
+      </p>
+
+      <h3>A medição</h3>
+      <p>
+        O feed mede, sem identificar ninguém, o que cada pessoa viu e por quanto tempo. O aviso de
+        cookies tem <em>Não medir</em>, que desliga a medição naquele aparelho. O bruto é resumido por
+        dia e apagado depois do prazo da casa (13 meses, por padrão).
+      </p>
+      <table>
+        <thead><tr><th>Tela</th><th>Para quê</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Catálogos ▸ Atenção × Vendas</strong></td><td>A atenção de cada prato cruzada com o que o PDV vendeu e a margem; o funil da sessão; mesa × hora; e as <strong>sugestões de destaque</strong> — pôr ou tirar do destaque, pelo painel do período e pelo objetivo de cada prato; nada muda sem aplicar</td></tr>
+          <tr><td><strong>Catálogos ▸ Testes A/B</strong></td><td><em>Vídeo × foto</em> num prato que tem os dois, e <em>ordem atual × sugerida</em>. Metade das visitas vê cada versão, sempre a mesma para a mesma pessoa; ganha a que faz mais gente adicionar o prato. Nada muda até alguém <em>Aplicar</em></td></tr>
+          <tr><td><strong>O editor do catálogo</strong></td><td>Cada cartão mostra vistas, segundos e cliques dos últimos 30 dias</td></tr>
+        </tbody>
+      </table>
+      <div class="regra perigo">
+        <p class="rotulo">A atenção é estimada, não lida</p>
+        <p>
+          “Atenção” é o tempo em que o prato ficou na tela, com teto de 60 s — o celular deixado na
+          mesa não conta como interesse. É um sinal para comparar pratos, não uma medida de quem leu.
+          Atenção × Vendas e os testes A/B olham o Cardápio Vivo <strong>principal</strong> — e, desde
+          17/10/2026, só ele: o prato visto no catering não soma no painel da cafeteria.
+        </p>
+      </div>
+      <p>
+        A <strong>Pré-visualização</strong> da tela do Cardápio Vivo (e o <em>Ver como o cliente vê</em>
+        da aba Publicação) mostra o feed como o cliente vê, inclusive as seções fora do dia ou do
+        horário, marcadas. Ela não mostra os
+        anúncios.
+      </p>
+    </section>
+
     <!-- =========================================================== fidelidade -->
     <section id="fidelidade">
-      <h2>17 · Fidelidade</h2>
+      <h2>18 · Fidelidade</h2>
       <p class="chamada">O cartão de visitas: a cada tantas visitas, um prêmio.</p>
 
       <div class="regra">
@@ -3103,7 +3266,7 @@
 
     <!-- ============================================================= whatsapp -->
     <section id="whatsapp">
-      <h2>18 · WhatsApp</h2>
+      <h2>19 · WhatsApp</h2>
       <p class="chamada">
         Avisos automáticos ao cliente, pela API oficial da Meta — configurados loja a loja.
       </p>
@@ -3161,7 +3324,7 @@
 
     <!-- =============================================================== claude -->
     <section id="claude">
-      <h2>19 · O Claude dentro do sistema</h2>
+      <h2>20 · O Claude dentro do sistema</h2>
       <p class="chamada">
         Perguntar ao sistema em português, e pedir que ele faça.
       </p>
@@ -3425,6 +3588,30 @@
               <td>Portal de Clientes ▸ Catálogos</td>
             </tr>
             <tr>
+              <td>Cardápio Vivo: qual catálogo, modo, link, aparência da casa</td>
+              <td>Cadastro do Cardápio Vivo</td>
+              <td><code>cardapio_vivos</code>, <code>cardapio_config</code></td>
+              <td>Catálogos ▸ Cardápio Vivo</td>
+            </tr>
+            <tr>
+              <td>Cartões entre os pratos e a abertura</td>
+              <td>O editor do catálogo</td>
+              <td><code>catalogo_cartoes</code></td>
+              <td>Catálogos ▸ o catálogo ▸ Cardápio</td>
+            </tr>
+            <tr>
+              <td>Anúncios e o ritmo deles</td>
+              <td>Cadastro de anúncios</td>
+              <td><code>cardapio_anuncios</code>, <code>cardapio_config</code></td>
+              <td>Catálogos ▸ Anúncios</td>
+            </tr>
+            <tr>
+              <td>O que o cliente viu no feed, e por quanto tempo</td>
+              <td>O próprio feed, sem identificar ninguém</td>
+              <td><code>cardapio_sessoes</code>, <code>cardapio_eventos</code>, <code>cardapio_agregados_dia</code></td>
+              <td>Atenção × Vendas, Testes A/B, relatório do anúncio</td>
+            </tr>
+            <tr>
               <td>Visitas, selos e prêmios</td>
               <td>Check-in pelo QR, código do caixa, painel</td>
               <td><code>fidelidade_checkins</code>, <code>fidelidade_premios</code></td>
@@ -3493,15 +3680,19 @@
             <tr><td class="mono">14/09</td><td>Código do produto por fornecedor; trocar o produto de um item na conferência; <strong>Reservas</strong>: configuração e salões</td><td><a href="#nota">3</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">15/09</td><td>Menu novo: <strong>Ctrl+K</strong>, atalhos, ícones; <strong>reprocessar</strong> o estoque de um produto; produzir em porções ou receitas</td><td><a href="#navegar">navegar</a>, <a href="#ajustes">6</a>, <a href="#producao">5</a></td></tr>
             <tr><td class="mono">16/09</td><td><strong>Modos de rendimento</strong>; folha da produção com o que realmente saiu; produto em quatro abas; <strong>CMV em sete abas</strong>; venda com hora no razão</td><td><a href="#ficha">4</a>, <a href="#producao">5</a>, <a href="#cmv">9</a></td></tr>
-            <tr><td class="mono">19–21/09</td><td>Trocar a unidade de produto com estoque; <strong>conector do Claude</strong> (ler e gravar); catálogos; o <strong>site do cliente</strong> com reserva</td><td><a href="#produto">2</a>, <a href="#claude">19</a>, <a href="#portal">16</a></td></tr>
-            <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">17</a></td></tr>
-            <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">17</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
-            <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">17</a></td></tr>
+            <tr><td class="mono">19–21/09</td><td>Trocar a unidade de produto com estoque; <strong>conector do Claude</strong> (ler e gravar); catálogos; o <strong>site do cliente</strong> com reserva</td><td><a href="#produto">2</a>, <a href="#claude">20</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">22–24/09</td><td>Cardápio montado com produtos e aba Catálogo; duas lojas no site; <strong>Portal de Clientes</strong>; agenda em calendário; exceção do dia; termo de consentimento; <strong>fidelidade</strong> com QR e localização</td><td><a href="#portal">16</a>, <a href="#fidelidade">18</a></td></tr>
+            <tr><td class="mono">26/09</td><td>“A cada 10, a próxima é grátis”; <strong>custo da ficha pela porção</strong>; consumo por pessoa por documento; <strong>consumo interno</strong>; incluir produto achado na contagem</td><td><a href="#fidelidade">18</a>, <a href="#trilha">custos</a>, <a href="#pessoas">14</a>, <a href="#inventario">7</a></td></tr>
+            <tr><td class="mono">27/09</td><td>Fidelidade: código do caixa, selos, tela de QR codes e o <strong>painel</strong></td><td><a href="#fidelidade">18</a></td></tr>
             <tr><td class="mono">28/09</td><td>Menu: <strong>CMV</strong> direto; grupo <strong>Vendas</strong> com Períodos e Documentos; Visão da rede em Administração</td><td><a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">29/09</td><td><strong>Cardápio e site em inglês e alemão</strong>: seletor PT · EN · DE no site, tradução pelo Claude ao salvar, correção à mão</td><td><a href="#portal">16</a></td></tr>
             <tr><td class="mono">29/09</td><td><strong>Tela inicial nova</strong>: o dia numa faixa, o período ao lado da atenção, as listas lado a lado; meta de food cost da loja</td><td><a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
-            <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">18</a>, <a href="#etiquetas">15</a></td></tr>
+            <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">19</a>, <a href="#etiquetas">15</a></td></tr>
+            <tr><td class="mono">14/10</td><td><strong>Cardápio Vivo</strong>: o cardápio da mesa como feed, QR e NFC por mesa, tela de entrada com avaliação e Wi-Fi, favoritos</td><td><a href="#cardapio-vivo">17</a></td></tr>
+            <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
+            <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
           </tbody>
         </table>
       </div>
@@ -3511,7 +3702,8 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026); catálogos e Cardápio Vivo revistos na
+    1.1.108 (17/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

@@ -7,6 +7,7 @@ import { useSessao } from "@/lib/sessao";
 import { avisarEmpresaMudou } from "@/lib/eventos";
 import { Aviso, Campo, Carregando, Cartao } from "@/components/ui";
 import ExplicaTela from "@/components/explica-tela";
+import ArquivosSemDono from "./arquivos-sem-dono";
 
 type Empresa = Record<string, string | null>;
 
@@ -101,6 +102,7 @@ export default function PaginaEmpresa() {
   });
 
   return (
+    <div className="flex flex-col gap-6">
     <form onSubmit={salvar} className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -308,5 +310,7 @@ export default function PaginaEmpresa() {
         </div>
       )}
     </form>
+    {podeEditar && <ArquivosSemDono />}
+    </div>
   );
 }

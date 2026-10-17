@@ -809,3 +809,32 @@ distância / máximo 2 (1 na mesa)**, ajustável; **grupo de controle de 10%** p
 - Cobertura: `smoke_cardapio_anuncios.py` (34) e `web/scripts/verificar-anuncios-feed.mjs` (12).
 - **Falta (fases 2 e 3):** recuo adaptativo (pulou → distância dobra; ignorou 2 → acabou na visita),
   relevância pelo que a pessoa está vendo, grupo de controle de 10% e variações com vencedora.
+
+## Análise de integridade, visualização e processo (17/10/2026)
+
+🔑 **Pedido do dono:** *"agora que temos o cardápio completinho, uma análise para melhorar a
+integridade dos dados, melhor visualização, possíveis melhorias no processo e atualização do
+Ajuda"*. O manual ganhou a seção `cardapio-vivo` (17) e a parte de catálogos refeita. Da proposta,
+o dono aprovou os três de integridade (*"pode seguir nessa ordem: 1, 2 e 3"*), feitos na 1.1.108:
+- **1. Excluir leva a mídia.** `catalogo_conteudo.midias_do_conteudo` junta foto, vídeo e capa da
+  seção, das subdivisões e dos cartões (que o CASCADE leva); `excluir_categoria/subcategoria` e
+  `catalogos.excluir` apagam cada uma no mesmo cursor. Antes saía só a `foto_url` (e, do catálogo,
+  só o PDF). ⚠️ Na junção das subdivisões, `foto_url` sem alias é AMBÍGUA (500 pego pela suíte).
+- **Arquivos sem dono** (`services/arquivos_orfaos.py`, `/empresa/arquivos-orfaos`, cartão na tela
+  Empresa, `admin.empresa`): quem aponta é descoberto pelo `information_schema` (toda coluna de
+  texto com `url` no nome, tabela base), não por lista escrita à mão; nada com menos de 1 dia; o
+  apagar refaz a conferência e grava auditoria. Na base local: 235 de 373, 4,7 MB.
+- **2. A medição diz de qual Cardápio Vivo veio** (migração 122): `cardapio_eventos.id_catalogo`,
+  NO EVENTO (a sessão anônima é a mesma ao passar da mesa para o catering), sem FK como os outros
+  ids do evento. Preenche o passado pelo item/cartão/seção e depois pela sessão de um cardápio só.
+  Atenção × Vendas e o resultado do A/B filtram `coalesce(e.id_catalogo, X) = X` (o evento sem
+  cardápio é anterior e conta, como contava); o relatório do anúncio ganhou `por_cardapio`.
+- **3. Anúncio "com problema".** `listar` calcula `avisos` (as mesmas regras de `do_feed` e de
+  `acaoDoAnuncio`): sem conteúdo, catálogo do botão apagado ou fora do ar, prato do botão fora do
+  cardápio ou de catálogo que não é vivo, nenhum cardápio onde aparecer, só-mesa fora do principal.
+  Com aviso, a situação vira `COM_PROBLEMA`; `fora_do_horario_agora` é só informativo.
+- Ficaram como proposta: A/B e Atenção por cardápio (não só o principal), o "O que falta" com
+  traduções e cartões, prévia com anúncios, esgotado que volta sozinho, Spaces, anúncios fases 2/3,
+  e o resumo diário de cartões/seções/anúncios (hoje só pratos — somem na retenção).
+- ⚠️ `verificar-cardapio-testes.mjs` falhou uma vez em "a ordem sugerida passa a valer para todos"
+  logo após "Aplicar B" e passou ao rodar de novo — corrida entre o clique e o GET do feed.

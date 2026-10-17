@@ -365,9 +365,13 @@ def excluir(cur, id_unidade: int, id_catalogo: int) -> dict:
                     f"Um catálogo que já esteve no ar é o que a casa publicou — "
                     f"deixe-o INATIVO em vez de apagar."),
         )
+    from services.catalogo_conteudo import midias_do_conteudo
+    midias = midias_do_conteudo(cur, catalogo=id_catalogo)
     cur.execute("DELETE FROM catalogos WHERE id = %s AND id_unidade = %s",
                 (id_catalogo, id_unidade))
-    # ⚠️ **O arquivo vai junto.** Sem isto os bytes do PDF ficariam no banco
-    # sem dono nenhum apontando para eles — invisíveis, e crescendo.
-    arquivos.remover(atual.get("arquivo_url"), cur)
+    # ⚠️ **O arquivo vai junto** — o PDF e, desde 17/10/2026, a mídia das seções, das
+    # subdivisões e dos cartões. Sem isto os bytes ficariam no banco sem dono nenhum
+    # apontando para eles — invisíveis, e crescendo.
+    for url in [atual.get("arquivo_url"), *midias]:
+        arquivos.remover(url, cur)
     return {"message": f"Catálogo “{atual['nome']}” excluído."}

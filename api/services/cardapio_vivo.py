@@ -685,6 +685,8 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
     eventos = lote["eventos"][:LOTE_MAXIMO]
     id_unidade = lote["loja"]
     # 🔑 O lote diz de qual Cardápio Vivo veio (117); sem dizer, é o principal (o feed antigo).
+    # ⚠️ E desde a 122 isso fica GRAVADO em cada evento: antes se usava só para conferir os
+    # itens, e a medição da cafeteria e a do catering se somavam.
     cv = (vivo(cur, id_unidade, id_catalogo=lote["catalogo"]) if lote.get("catalogo")
           else vivo(cur, id_unidade))
     if not cv or not reservas_servico.ligado(cur, id_unidade):
@@ -748,13 +750,14 @@ def registrar_eventos(cur, lote: dict, origem: str | None) -> dict:
                        e.get("subcategoria"),
                        e.get("cartao") if e.get("cartao") in do_catalogo else None,
                        e.get("anuncio") if e.get("anuncio") in da_loja else None,
-                       lote["modo"], e.get("midia"), duracao, idade))
+                       cv["id_catalogo"], lote["modo"], e.get("midia"), duracao, idade))
     if linhas:
         cur.executemany(
             """INSERT INTO cardapio_eventos (id_sessao, id_unidade, id_mesa, tipo, id_item,
                                              id_produto, id_categoria, id_subcategoria, id_cartao,
-                                             id_anuncio, modo, midia, duracao_ms, quando)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                             id_anuncio, id_catalogo, modo, midia, duracao_ms,
+                                             quando)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                        now() - make_interval(secs => %s / 1000.0))""",
             linhas)
         cur.execute("UPDATE cardapio_sessoes SET eventos = eventos + %s WHERE id = %s",

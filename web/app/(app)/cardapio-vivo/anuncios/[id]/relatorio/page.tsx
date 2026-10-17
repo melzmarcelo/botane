@@ -115,6 +115,18 @@ export default function RelatorioDoAnuncio() {
               </tbody>
             </table>
           )}
+          {rel.por_cardapio.length > 0 && (
+            <table className="tabela mt-4 w-full" id="relatorio-por-cardapio">
+              <thead><tr><th>Em qual cardápio</th><th className="text-right">Pessoas</th><th className="text-right">Tocaram</th></tr></thead>
+              <tbody>
+                {rel.por_cardapio.map((c) => (
+                  <tr key={c.id_catalogo ?? 0}>
+                    <td>{c.cardapio ?? (c.id_catalogo ? "(catálogo apagado)" : "(sem registro)")}</td>
+                    <td className="mono text-right">{c.sessoes}</td><td className="mono text-right">{c.sessoes_tocaram}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Cartao>
         <Cartao titulo="A que horas">
           {rel.por_hora.length === 0 ? <p className="text-[13.5px] text-suave">—</p> : (

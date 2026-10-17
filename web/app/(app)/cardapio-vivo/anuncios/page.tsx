@@ -22,6 +22,7 @@ import JanelaAnuncio, { type Opcoes } from "./janela-anuncio";
 
 const SITUACAO: Record<SituacaoAnuncio, [string, "erva" | "alerta" | "neutro"]> = {
   NO_AR: ["no ar", "erva"], AGENDADO: ["agendado", "neutro"], ENCERRADO: ["encerrado", "neutro"], DESLIGADO: ["desligado", "alerta"],
+  COM_PROBLEMA: ["com problema", "alerta"],
 };
 
 export default function PaginaAnuncios() {
@@ -129,8 +130,14 @@ export default function PaginaAnuncios() {
                           {a.origem === "EXTERNO" ? `Patrocinado · ${a.anunciante ?? ""}` : "Da casa"}
                           {a.inicio || a.fim ? ` · ${a.inicio ?? "…"} a ${a.fim ?? "…"}` : ""}
                         </span>
+                        {(a.avisos ?? []).map((t) => (
+                          <span key={t} className="block text-[12.5px] text-alerta" data-anuncio-aviso>⚠ {t}</span>
+                        ))}
                       </td>
-                      <td><Etiqueta cor={cor}>{rotulo}</Etiqueta></td>
+                      <td>
+                        <Etiqueta cor={cor}>{rotulo}</Etiqueta>
+                        {a.fora_do_horario_agora && <span className="block text-[12px] text-suave">fora do horário agora</span>}
+                      </td>
                       <td className="mono text-right">{a.sessoes ?? 0}</td>
                       <td className="mono text-right">{porcento(a.aparicoes ? (a.pulados ?? 0) / a.aparicoes : null)}</td>
                       <td className="mono text-right">{porcento(a.sessoes ? (a.sessoes_tocaram ?? 0) / a.sessoes : null)}</td>

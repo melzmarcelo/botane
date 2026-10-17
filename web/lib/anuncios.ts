@@ -10,7 +10,8 @@ import { api } from "@/lib/api";
 export type OrigemAnuncio = "CASA" | "EXTERNO";
 export type AcaoAnuncio = "NENHUMA" | "CATALOGO" | "PRATO" | "LINK";
 export type CanalAnuncio = "AMBOS" | "MESA" | "LINK";
-export type SituacaoAnuncio = "NO_AR" | "AGENDADO" | "ENCERRADO" | "DESLIGADO";
+/** `COM_PROBLEMA` = ligado e no período, mas com destino quebrado ou sem onde aparecer (`avisos`). */
+export type SituacaoAnuncio = "NO_AR" | "AGENDADO" | "ENCERRADO" | "DESLIGADO" | "COM_PROBLEMA";
 
 export type Anuncio = {
   id: number;
@@ -46,6 +47,10 @@ export type Anuncio = {
   toques?: number;
   sessoes_tocaram?: number;
   situacao?: SituacaoAnuncio;
+  /** Por que não aparece, ou aparece pela metade (na lista). */
+  avisos?: string[];
+  /** No ar, mas fora do dia ou do horário neste momento. */
+  fora_do_horario_agora?: boolean;
 };
 
 export type RegrasAnuncio = {
@@ -56,7 +61,8 @@ export type RegrasAnuncio = {
 };
 
 export type GravarAnuncio = Omit<Anuncio, "id" | "foto_url" | "video_url" | "video_capa_url" | "video_segundos"
-  | "aparicoes" | "sessoes" | "segundos" | "pulados" | "toques" | "sessoes_tocaram" | "situacao">;
+  | "aparicoes" | "sessoes" | "segundos" | "pulados" | "toques" | "sessoes_tocaram" | "situacao" | "avisos"
+  | "fora_do_horario_agora">;
 
 type Metricas = { aparicoes: number; sessoes: number; segundos: number | null; pulados: number; toques: number;
                   sessoes_tocaram: number };
@@ -69,6 +75,8 @@ export type Relatorio = {
   total: Metricas & { taxa_toque: number | null; taxa_pulou: number | null };
   por_dia: (Metricas & { dia: string })[];
   por_canal: (Metricas & { canal: "MESA" | "LINK" })[];
+  /** Em qual Cardápio Vivo (122). `cardapio` nulo = medido antes da 122, ou catálogo apagado. */
+  por_cardapio: (Metricas & { id_catalogo: number | null; cardapio: string | null })[];
   por_hora: { hora: number; aparicoes: number }[];
   pulou_ms: number;
 };

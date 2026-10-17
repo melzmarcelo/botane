@@ -134,11 +134,16 @@ try {
   await e.goto(WEB + "/login");
   await e.evaluate((a, r) => { localStorage.setItem("botane.access", a); localStorage.setItem("botane.refresh", r); localStorage.setItem("botane.unidade", "1"); },
                    login.access_token, login.refresh_token);
+  // 🔑 (17/10/2026) O anúncio que não aparece diz por quê, em vez de "no ar".
+  const { dados: vazioAd } = await api("POST", "/cardapio-vivo/anuncios", { nome: `Vazio ${MARCA}` }, token);
   await e.goto(`${WEB}/cardapio-vivo/anuncios`, { waitUntil: "networkidle2" });
   await e.waitForSelector(`[data-anuncio-linha='${externo.id}']`, { timeout: 20000 }).catch(() => {});
   const tela = await e.evaluate(() => document.body.innerText);
   checar("a tela mostra o ritmo e os anúncios", tela.includes("O ritmo dos anúncios") && tela.includes(`Cerveja ${MARCA}`)
     && (await e.$eval("#regra-anuncio_depois_de", (i) => i.value)) === "2", tela.slice(0, 300));
+  const linhaVazio = await e.$eval(`[data-anuncio-linha='${vazioAd.id}']`, (tr) => tr.innerText).catch(() => "");
+  checar("o anúncio sem conteúdo aparece COM PROBLEMA, dizendo por quê",
+    /com problema/i.test(linhaVazio) && /não aparece no cardápio/.test(linhaVazio), linhaVazio);
   await e.click("#anuncio-novo");
   await e.waitForSelector("#anuncio-nome", { timeout: 5000 });
   await e.type("#anuncio-nome", `Novo ${MARCA}`);
@@ -153,6 +158,20 @@ try {
   checar("o relatório abre, com as pessoas, a taxa de toque e o dia a dia",
     rel.includes("Pessoas que viram") && rel.includes("Taxa de toque") && rel.includes("Dia a dia")
     && rel.includes("Imprimir / salvar em PDF"), rel.slice(0, 400));
+  const { dados: relApi } = await api("GET", `/cardapio-vivo/anuncios/${daCasa.id}/relatorio`, undefined, token);
+  checar("e, quando foi visto, em qual cardápio (122)",
+    relApi.por_cardapio.length === 0 || (await e.$("#relatorio-por-cardapio")) !== null, relApi.por_cardapio);
+
+  // A varredura dos arquivos sem dono (Administração ▸ Empresa): procurar e MOSTRAR, sem apagar.
+  await e.goto(`${WEB}/empresa`, { waitUntil: "networkidle2" });
+  await e.waitForSelector("#orfaos-procurar", { timeout: 20000 }).catch(() => {});
+  await e.click("#orfaos-procurar").catch(() => {});
+  await e.waitForFunction(() => document.querySelector("#orfaos-resultado")
+    || document.body.innerText.includes("Nenhum arquivo sem dono"), { timeout: 30000 }).catch(() => {});
+  const orf = await e.evaluate(() => (document.querySelector("#orfaos-resultado")?.innerText
+    ?? (document.body.innerText.includes("Nenhum arquivo sem dono") ? "nenhum" : "")));
+  checar("a Empresa procura os arquivos sem dono e mostra o que achou, sem apagar",
+    orf === "nenhum" || (/não têm dono/.test(orf) && /Apagar os \d+/.test(orf)), orf.slice(0, 200));
 } finally {
   await navegador.close();
   const { dados: agora } = await api("GET", "/cardapio-vivo/anuncios", undefined, token);

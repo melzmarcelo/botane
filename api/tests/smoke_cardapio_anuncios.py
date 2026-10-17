@@ -225,6 +225,49 @@ checar("e o dia, o canal e a hora", len(rel["por_dia"]) >= 1 and rel["por_canal"
 st, _r = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio?de={hoje}&ate={hoje - timedelta(days=1)}", token=token)
 checar("período ao contrário é recusado (422)", st == 422, st)
 
+print("\n5b. de qual Cardápio Vivo veio o evento (122)")
+with get_cursor() as cur:
+    cur.execute("SELECT DISTINCT id_catalogo FROM cardapio_eventos WHERE id_sessao IN (%s, %s)", (S1, S2))
+    gravados = {x["id_catalogo"] for x in cur.fetchall()}
+checar("cada evento grava o cardápio do lote", gravados == {ID}, gravados)
+S3 = str(uuid.uuid4())
+chamar("POST", "/publico/cardapio/eventos", {"sessao": S3, "loja": U, "modo": "VITRINE", "catalogo": NAM,
+                                             "eventos": [{"tipo": "viu_anuncio", "anuncio": externo["id"], "duracao_ms": 3000}]})
+_st, rel = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio", token=token)
+pc = {x["id_catalogo"]: x for x in rel.get("por_cardapio", [])}
+checar("o relatório separa o anúncio por cardápio (a cafeteria e o do Dia dos Namorados)",
+       pc.get(ID, {}).get("sessoes") == 2 and pc.get(NAM, {}).get("sessoes") == 1
+       and pc[NAM]["cardapio"] == f"Namorados {MARCA}", rel.get("por_cardapio"))
+
+print("\n5c. o anúncio que não aparece diz por quê (17/10/2026)")
+st, vazio_ad = chamar("POST", "/cardapio-vivo/anuncios", {"nome": f"Vazio {MARCA}"}, token)
+st, mesa_nam = chamar("POST", "/cardapio-vivo/anuncios", {"nome": f"Mesa errada {MARCA}", "titulo": "x",
+                                                          "canal": "MESA", "cardapios": [NAM]}, token)
+st, sem_prato = chamar("POST", "/cardapio-vivo/anuncios", {"nome": f"Sem prato {MARCA}", "titulo": "x",
+                                                           "acao": "PRATO", "acao_item": it["id"]}, token)
+with get_cursor() as cur:
+    # O que o `ON DELETE SET NULL` faz quando o prato sai do cardápio.
+    cur.execute("UPDATE cardapio_anuncios SET acao_item = NULL WHERE id = %s", (sem_prato["id"],))
+    cur.execute("UPDATE catalogos SET situacao = 'INATIVO' WHERE id = %s", (NAM,))
+_st, lista = chamar("GET", "/cardapio-vivo/anuncios", token=token)
+por = {x["id"]: x for x in lista["anuncios"]}
+checar("o anúncio vazio fica COM PROBLEMA, dizendo que não aparece",
+       por[vazio_ad["id"]]["situacao"] == "COM_PROBLEMA" and "Sem título" in por[vazio_ad["id"]]["avisos"][0],
+       por[vazio_ad["id"]].get("avisos"))
+checar("o do botão para um catálogo fora do ar avisa",
+       por[casa_ad["id"]]["situacao"] == "COM_PROBLEMA"
+       and any("fora do ar" in t for t in por[casa_ad["id"]]["avisos"]), por[casa_ad["id"]].get("avisos"))
+checar("o do prato que saiu do cardápio avisa que aparece sem botão",
+       any("saiu do cardápio" in t for t in por[sem_prato["id"]]["avisos"]), por[sem_prato["id"]].get("avisos"))
+checar("o só-da-mesa num cardápio que não é o principal avisa",
+       any("Só na mesa" in t for t in por[mesa_nam["id"]]["avisos"]), por[mesa_nam["id"]].get("avisos"))
+checar("e o que está certo continua NO AR, sem aviso",
+       por[externo["id"]]["situacao"] == "NO_AR" and por[externo["id"]]["avisos"] == [], por[externo["id"]])
+checar("o de outro dia está no ar, mas FORA DO HORÁRIO AGORA",
+       por[outrodia["id"]]["fora_do_horario_agora"] is True and por[externo["id"]]["fora_do_horario_agora"] is False, "")
+with get_cursor() as cur:
+    cur.execute("UPDATE catalogos SET situacao = 'ATIVO' WHERE id = %s", (NAM,))
+
 print("\n6. as aberturas de seção configuráveis")
 enviar(f"/catalogos/secoes/categoria/{g['id']}/foto", token, FOTO, "massas.png", "image/png")
 _st, f = chamar("GET", LINK)
