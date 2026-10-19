@@ -779,7 +779,7 @@
           <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
           <tr><td><strong>CMV</strong></td><td>Item direto: o painel de CMV</td></tr>
           <tr><td><strong>Precificação</strong></td><td>A análise e o aplicar dos preços, o preço × custo de um produto no tempo e a configuração da loja (impostos, taxas, custo operacional, margem)</td></tr>
-          <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos (cadastro, Cardápio Vivo, anúncios, Atenção × Vendas, testes A/B) e pedidos (painel e lista) — só aparece na loja que ligou o módulo</td></tr>
+          <tr><td><strong>Portal de Clientes</strong></td><td>Clientes e QR codes; <strong>Reservas</strong> (agenda, salão, configuração); <strong>Fidelidade</strong> (painel, códigos, prêmios, configuração); <strong>Catálogos</strong> (cadastro, Cardápio Vivo, anúncios, Atenção × Vendas, testes A/B); <strong>Pedidos</strong> (painel e lista) — só aparece na loja que ligou o módulo. A busca de telas (Ctrl+K) mostra o subgrupo de cada uma</td></tr>
           <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
           <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), visão da rede (com mais de uma loja), usuários, papéis, integrações, auditoria</td></tr>
 </tbody>
@@ -793,10 +793,11 @@
           </p>
         </div>
         <div class="cartao">
-          <p class="rotulo">Atalhos fixados</p>
+          <p class="rotulo">De uma tela à outra</p>
           <p style="margin:6px 0 0">
-            O alfinete ao lado de cada item fixa a tela no alto do menu (até cinco). A cozinha
-            não abre as mesmas telas que o escritório.
+            O nome do produto e o documento de origem viram link onde aparecem — no razão, no
+            ajuste, na venda, no alerta. E voltar devolve a tela como estava: a rolagem e o que
+            estava aberto.
           </p>
         </div>
       </div>
@@ -1079,7 +1080,7 @@
         é a resposta certa na loja dele.
       </p>
 
-      <h3>A tela do produto, em quatro abas</h3>
+      <h3>A tela do produto, em abas</h3>
       <p>
         A divisão segue a pergunta que trouxe a pessoa até ali, não a camada do dado:
       </p>
@@ -1088,7 +1089,8 @@
         <tbody>
           <tr><td><strong>Principal</strong></td><td>arrumar o cadastro</td><td>Identificação (com o interruptor <em>ativo</em> no cabeçalho), unidade e conversão, <strong>Valores</strong> (preço e custo juntos), códigos e medidas (EAN, NCM, marca, pesos), natureza</td></tr>
           <tr><td><strong>Fornecedores</strong></td><td>negociar</td><td>Quem fornece, código e embalagem de cada um, último preço</td></tr>
-          <tr><td><strong>Estoque</strong></td><td>conferir prateleira</td><td>Onde o produto fica, saldo e custo de cada prateleira, lotes</td></tr>
+          <tr><td><strong>Vinculados</strong></td><td>conferir de onde vem cada nota</td><td>Os códigos de fora que respondem por este produto (de fornecedor, de fusão), com a contagem na própria aba. Cada linha corrige a conversão e tem o <em>desvincular</em></td></tr>
+          <tr><td><strong>Estoque</strong></td><td>conferir prateleira</td><td>Onde o produto fica, saldo e custo de cada prateleira, lotes, o bloco de custo e a <strong>validade por situação</strong> (as regras das <a href="#etiquetas">etiquetas</a>)</td></tr>
           <tr><td><strong>Movimentação</strong></td><td>investigar um saldo</td><td>O razão do produto, só leitura — com o link para Saldos e movimentos já filtrado</td></tr>
         </tbody>
       </table>
@@ -1109,6 +1111,20 @@
         O <strong>código de barras (EAN)</strong> fica em <em>Códigos e medidas</em>, na aba
         Principal. Ele é a chave mais confiável para a nota achar o produto (ver a
         conciliação, adiante) — vale preencher.
+      </p>
+
+      <p>
+        <strong>Desvincular um código</strong> (aba Vinculados) desfaz um vínculo errado: a nota
+        seguinte daquele código volta a procurar dono. Se o código veio de uma <em>fusão</em>, a
+        janela oferece devolvê-lo ao cadastro que foi absorvido — e reativá-lo —, marcado por
+        padrão.
+      </p>
+      <p>
+        <strong>Produto sem estoque que tem custo</strong> — a água da torneira, o gelo — recebe o
+        custo à mão em <strong>Informar custo</strong>, no bloco de custo. É o último recurso: só
+        responde quando não há custo médio nem preço de fornecedor, e a carga do Omie não passa
+        por cima dele. Em produto com estoque, a janela avisa que o número fica guardado sem valer
+        — para corrigir o médio, o caminho é o ajuste de custo.
       </p>
 
       <h3>Alterar vários de uma vez</h3>
@@ -1136,7 +1152,9 @@
         <p>
           O saldo sai inteiro na unidade antiga e volta inteiro na nova, <strong>pelo mesmo
           valor</strong>. O custo por unidade é convertido junto, as embalagens de compra e as
-          fichas que usam o produto também. Cada linha do razão guarda a unidade em que foi
+          fichas que usam o produto também — e, com o estoque zerado, o custo guardado na
+          prateleira vazia e o último preço do fornecedor, que senão continuariam valendo o quilo
+          inteiro para o pacote de 250 g. Cada linha do razão guarda a unidade em que foi
           gravada, então o passado continua legível na unidade da época — e nada precisa ser
           reescrito. A conversão não é compra nem perda: fica fora do CMV.
         </p>
@@ -1477,6 +1495,22 @@
         reescreve.
       </p>
 
+      <h3>Lançar várias de uma vez, e o que o Omie diz depois</h3>
+      <p>
+        Na lista de notas, <strong>Lançar as conciliadas</strong> lança de uma vez as que já estão
+        prontas. Antes, a prévia faz o lançamento de verdade e o desfaz, para mostrar o que entra,
+        o que fica de fora e por quê — nota com conversão diferente da do cadastro fica para a tela
+        dela —, quais cadastros seguram mais notas, e a nota com data anterior a movimentos que já
+        existem (que vai pedir reprocessar o produto).
+      </p>
+      <p>
+        <strong>Atualizar do Omie</strong>, na mesma lista, relê todas as notas ainda não lançadas,
+        em levas — o mesmo que o botão de dentro da nota fazia uma a uma. A nota que o Omie
+        <strong>cancelou</strong> vira <em>cancelada</em> aqui (ao importar, ao atualizar e na busca
+        automática): sai da fila e não se lança. Se já tinha sido lançada, não é estornada sozinha
+        — a busca avisa, e o estorno é de quem decide.
+      </p>
+
       <h3>O custo de aquisição não é o valor da nota</h3>
       <p>
         Caixa de 12 a R$ 60 com R$ 6 de frete dá <strong>R$ 5,50 por unidade</strong>, não R$ 5.
@@ -1658,6 +1692,11 @@
         </p>
       </div>
 
+      <p>
+        Em cada modo, como na ficha, informar as porções calcula o tamanho de cada uma, e o
+        contrário.
+      </p>
+
       <h3>Duplicar, excluir, e a lista de fichas</h3>
       <ul>
         <li>
@@ -1673,7 +1712,32 @@
           A lista mostra <strong>uma linha por produto</strong> — a versão que vale. As outras
           versões ficam num seletor dentro da ficha.
         </li>
+        <li>
+          O campo <strong>Observações</strong>, no cartão Preparo, sai na ficha impressa depois do
+          modo de preparo. (A observação do ingrediente e a do modo são outras.)
+        </li>
+        <li>
+          <strong>Imprimir operacional</strong> tira a ficha para a parede da cozinha: sem nenhum
+          valor em dinheiro — mesmo para quem vê custo — e com rendimento, porções, tempo e
+          alergênicos. A versão fica no subtítulo, para dizer se o papel ainda é a receita que vale.
+        </li>
       </ul>
+
+      <h3>Por onde começar</h3>
+      <p>
+        No alto da lista de fichas, <strong>Por onde começar</strong> ordena pela receita os
+        produtos <em>vendidos</em> sem custo, e diz, linha a linha, quanto da receita fica coberta
+        resolvendo dali para cima. Produto sem ficha que ninguém vende não distorce nada e não
+        entra. Cada linha diz o que falta — a ficha (o botão abre a ficha nova já com o produto),
+        o custo de um ingrediente, ou o custo de compra — e leva para lá. O custo da venda é
+        congelado: a ficha feita hoje custeia as vendas de amanhã.
+      </p>
+      <p>
+        <strong>Ingrediente que a casa produz e ainda não produziu</strong> não tem custo apurado.
+        Dentro de outra receita, ele vale o que a ficha <em>dele</em> prevê, e a linha e o total
+        avisam que é previsão; produzido uma vez, o aviso some. A Precificação mostra essa
+        sugestão com a etiqueta <em>custo provisório</em>.
+      </p>
 
       <h3>A foto do prato pronto</h3>
       <p>
@@ -1758,12 +1822,13 @@
         ninguém conta.
       </p>
 
-      <h3>Porções ou receitas</h3>
+      <h3>Porções, receitas ou o rendimento</h3>
       <p>
         “Produzir 2” é ambíguo: dois cookies ou duas receitas? A produção pergunta em que se
-        está digitando — <strong>porções</strong> (a unidade do produto: 130 cookies) ou
-        <strong>receitas</strong> (voltas inteiras da ficha: 2 receitas de 65). O estoque grava
-        sempre em porções.
+        está digitando — <strong>porções</strong> (a unidade do produto: 130 cookies),
+        <strong>receitas</strong> (voltas inteiras da ficha: 2 receitas de 65) ou <strong>no
+        rendimento</strong> (a receita rende 10 kg; produzir 5 kg é meia receita). O estoque grava
+        sempre na unidade do produto. Vale igual na agenda.
       </p>
 
       <h3>A folha é da cozinha: o que realmente saiu</h3>
@@ -1792,6 +1857,22 @@
         <strong>Imprimir etiquetas</strong> leva direto às <a href="#etiquetas">etiquetas</a>,
         com o produto, o lote e a quantidade já preenchidos.
       </p>
+
+      <h3>Produções recentes, e desfazer uma</h3>
+      <p>
+        A lista mostra as produções <strong>desta loja</strong> e a prateleira onde o produzido
+        <em>entrou</em>. O botão <strong>estornar</strong> desfaz a produção inteira: sai o
+        produzido, voltam os insumos — e a linha fica na lista, marcada. Pede a permissão de
+        ajuste de estoque, não a de produzir.
+      </p>
+      <div class="regra">
+        <p class="rotulo">Só se desfaz o que ainda está lá</p>
+        <p>
+          Se parte do produzido já foi usada, o estorno é recusado com os dois números, e o caminho
+          é o ajuste. A produção que nasceu de uma <strong>venda</strong> (o café <em>na hora</em>)
+          se desfaz cancelando a venda — que, desde 08/10, devolve junto o insumo da produção.
+        </p>
+      </div>
     </section>
 
     <!-- ============================================================== ajustes -->
@@ -1842,6 +1923,19 @@
         A transferência <strong>não cria nem destrói valor</strong> — o mesmo custo sai de um
         local e entra no outro. Já a perda é valor que evapora, e é ela que aparece na
         variância com nome.
+      </p>
+
+      <p>
+        <strong>Lançar com data anterior a um movimento que já existe</strong> — a nota do dia 9
+        depois da venda do dia 12 — faz o sistema avisar na hora e mandar reprocessar o produto.
+        Não é bloqueio: é o lembrete do segundo passo.
+      </p>
+      <p>
+        Na aba <strong>Ajuste de custo</strong>, o cartão <strong>Custo de referência a
+        conferir</strong> procura os produtos cujo custo de referência (o que veio do Omie, usado
+        enquanto não há compra) discorda do que o resto do sistema sabe — o vinho que aparecia
+        custando a caixa de seis. Mostra a referência de hoje, o que o estoque diz, o preço de
+        venda e o que ela <em>passa a ser</em>; corrige o que se marcar, com confirmação.
       </p>
 
       <h3>Entre lojas: a remessa</h3>
@@ -2137,6 +2231,17 @@
         </li>
       </ul>
 
+      <h3>Cancelar, e a venda que o banco recusa</h3>
+      <p>
+        <strong>Cancelar a venda devolve tudo o que ela movimentou</strong> — inclusive a produção
+        que um produto <em>na hora</em> disparou: volta o insumo, não só o produzido.
+      </p>
+      <p>
+        Na importação, <strong>cada venda entra por conta própria</strong>: a que o banco recusa
+        fica de fora e as outras entram. A busca termina em <em>erro</em>, com o aviso em vermelho
+        dizendo qual ficou, em vez de perder o lote inteiro em silêncio.
+      </p>
+
       <h3>O que foi vendido e não saiu do estoque</h3>
       <p>
         O item que ficou sem vínculo e foi vinculado <em>depois</em> já tinha vendido sem baixar.
@@ -2206,6 +2311,13 @@
       <p>
         Reabrir é possível e fica registrado. O que não se faz é mexer no passado sem que nada
         acuse.
+      </p>
+      <p>
+        A janela de fechar começa por <strong>Antes de fechar</strong>: o que ainda distorce o
+        período — nota não lançada, saída com custo provisório, saldo negativo, venda sem vínculo,
+        estoque inicial ou CMV negativos, movimentação que não fecha —, cada item com o caminho
+        para resolver. <strong>Avisa e não impede</strong>; o fechamento grava na auditoria com
+        quais pendências foi feito. O painel mostra a mesma lista enquanto o período está aberto.
       </p>
 
       <h3>Separar o que não é comida</h3>
@@ -2316,12 +2428,14 @@
           <tr><td>Etiqueta vencida, ou que vence hoje</td><td>O painel de validades, já filtrado</td></tr>
           <tr><td>Saída com custo provisório</td><td>A entrada que ninguém lançou</td></tr>
           <tr><td>Nota esperando conciliação, ou conciliada e não lançada</td><td>A nota</td></tr>
-          <tr><td>Produto em rascunho</td><td>O cadastro a completar</td></tr>
+          <tr><td>Produto em rascunho <em>em uso</em> (nota aberta, venda recente ou saldo)</td><td>Produtos, já filtrado em <em>Rascunho em uso</em></td></tr>
           <tr><td>Produto de produção própria sem ficha homologada</td><td>A ficha</td></tr>
           <tr><td>Item vendido sem produto no cadastro</td><td>Vendas ▸ Documentos ▸ Sem vínculo</td></tr>
           <tr><td>Período anterior ainda não fechado</td><td>O fechamento do CMV</td></tr>
           <tr><td>Pedido do site esperando confirmação há 15 minutos</td><td>O painel de pedidos</td></tr>
           <tr><td>Pedido confirmado sem lançar no PDV</td><td>A lista, já filtrada</td></tr>
+          <tr><td>Busca do PDV ou do Omie que falhou</td><td>Integrações</td></tr>
+          <tr><td>Três dias ou mais sem venda do PDV, com a integração ligada</td><td>As vendas, para buscar no PDV</td></tr>
         </tbody>
       </table>
 
@@ -2358,6 +2472,12 @@
       <p>
         Credenciais de integração ficam <strong>cifradas</strong> e nunca voltam pela API —
         só mascaradas. Nem o administrador relê uma chave que já salvou.
+      </p>
+      <p>
+        Erro que o sistema não esperava fica guardado em <strong>Auditoria ▸ Erros</strong>, com
+        a tela, a hora e o detalhe técnico. A mensagem que a pessoa vê traz o número do registro
+        (“registro 92 em Auditoria ▸ Erros”) — é esse número que se informa ao pedir ajuda. As
+        falhas das buscas automáticas (PDV, Omie, WhatsApp) também vão para lá.
       </p>
 
       <h3>A sessão, e a caixinha do login</h3>
@@ -2514,6 +2634,17 @@
         cai no <em>último preço do fornecedor</em>, que vale para as duas — preço negociado é da
         casa, não da prateleira. É isso que deixa a filial nova calcular ficha e CMV antes da
         primeira compra dela.
+      </p>
+
+      <p>
+        <strong>Cada loja só enxerga o que é dela.</strong> As notas e a fila de pendências são da
+        loja do seletor; a contagem só aceita prateleira da loja; um local de outra loja é recusado
+        em qualquer lançamento; e a ficha custeia pela loja escolhida no topo.
+      </p>
+      <p>
+        O <strong>nome e a logo da casa</strong> — no login, na aba do navegador, no aplicativo
+        instalado, nos e-mails e no rodapé dos relatórios — vêm de <strong>Administração ▸
+        Empresa</strong>.
       </p>
 
       <h3>O preço de venda também pode ser por loja</h3>
@@ -2788,7 +2919,8 @@
       <h3>A validade depende do que aconteceu e de como se guarda</h3>
       <p>
         O mesmo molho dura 3 dias refrigerado e 60 congelado; o creme de leite, 3 dias depois de
-        aberto. Em <strong>Etiquetas ▸ Configuração</strong>, cada produto recebe as suas regras:
+        aberto. No <strong>cadastro do produto</strong> (aba Estoque, cartão <em>Validade por
+        situação</em>), cada produto recebe as suas regras:
         evento (<em>produção, abertura, descongelamento</em>) × conservação
         (<em>refrigerado, congelado, ambiente</em>), em dias ou em horas, com uma conservação
         padrão por evento. É ali que entra a tabela de validades da nutricionista.
@@ -2842,6 +2974,7 @@
         feito, validade, onde está, lote, quantidade, alergênicos. E as ações:
       </p>
       <ul>
+        <li><strong>Usei uma parte</strong> — o pote continua ativo com o que sobrou: diz-se quanto saiu, ou quanto sobrou. Não mexe no estoque nem na validade; tirar tudo encerra a etiqueta. Descartar depois lança como perda só o que restava. Também no painel.</li>
         <li><strong>Usei tudo</strong> — sai das etiquetas ativas. Não mexe no estoque: o consumo já entrou pela venda ou pela produção que usou o pote.</li>
         <li><strong>Descartar</strong> — lança a <strong>perda</strong> no estoque, com motivo e valor. É isto que transforma “jogamos fora” em número. (Dá para só tirar das ativas, quando a perda já foi lançada por outro caminho.)</li>
         <li><strong>Descongelei</strong> — nova etiqueta com o prazo do descongelado, nunca além do pote antigo, que deixa de valer.</li>
@@ -2897,17 +3030,31 @@
 
       <h3>Salões e mesas</h3>
       <p>
-        Cada salão numa aba, com as mesas dele: <strong>lugares</strong> (o confortável) e
-        <strong>capacidade máxima</strong> (apertando), e com quais mesas ela
-        <strong>junta</strong> — é assim que um grupo de 8 senta em duas mesas de 4. O salão se
-        monta em lote (“mesas 1 a 12, de 4 lugares”). Desligar um salão tira as mesas dele da
-        oferta sem apagar nada.
+        Cada salão numa aba, aberto na <strong>planta</strong>: as mesas desenhadas onde estão, no
+        formato delas (redonda, quadrada, retangular). Arrastar move — as setas do teclado também —,
+        e nada vale antes de <strong>Salvar planta</strong> (ou <em>Desfazer</em>). O botão
+        <em>Lista</em> mostra as mesas em tabela. O salão se monta em lote (“mesas 1 a 12, de 4
+        lugares”).
+      </p>
+      <p>
+        Clicar numa mesa abre o <strong>painel dela</strong>: nome, <strong>lugares</strong> (o
+        confortável), <strong>máximo</strong> (apertando), formato e as características (janela,
+        sofá, acessível, cadeirão, tomada, coberta). Também aqui, só vale depois de Salvar.
+      </p>
+      <p>
+        <strong>Conjuntos de mesas</strong> são as que se juntam: de 2 a 4, com a capacidade que a
+        casa informa (não a soma — duas mesas de 4 juntas nem sempre sentam 8). O salão diz
+        <strong>em que dias atende</strong> e se <strong>aceita reserva pelo site</strong>, com um
+        <em>Salvar salão</em>. Desligar um salão tira as mesas dele da oferta sem apagar nada.
       </p>
       <div class="regra">
         <p class="rotulo">A menor mesa que serve</p>
         <p>
-          A reserva escolhe a mesa inteira antes de juntar, e a menor que comporta o grupo — pôr
-          um casal na mesa de 8 é o que faz a casa recusar o grupo de 8 que liga depois.
+          A reserva tenta primeiro uma mesa sozinha, a menor que comporta o grupo; só depois o
+          menor conjunto com todas as mesas livres — pôr um casal na mesa de 8 é o que faz a casa
+          recusar o grupo de 8 que liga depois. Para conferir o cadastro, <strong>Onde um grupo
+          sentaria?</strong> responde, para um tamanho de grupo e um dia, com a mesa ou o conjunto
+          que a reserva escolheria.
         </p>
       </div>
 
@@ -3358,10 +3505,12 @@
         CMV, consumo por pessoa, reservas.
       </p>
       <p>
-        E ele também <strong>grava</strong>, quando se pede: conciliar item de nota, cadastrar e
-        corrigir produto (inclusive prateleiras, unidades e desativar), criar e corrigir ficha
-        técnica — até a partir do PDF de uma ficha, com a foto do prato —, lançar no estoque e
-        juntar cadastros repetidos, sempre olhando a prévia antes.
+        E ele também <strong>grava</strong>, quando se pede: conciliar item de nota e atualizá-la
+        do Omie, cadastrar e corrigir produto (inclusive prateleiras, unidades e desativar), criar
+        e corrigir ficha técnica — até a partir do PDF de uma ficha, com a foto do prato —, lançar
+        e estornar no estoque, acertar saldo e custo, produzir e agendar produção, inventário,
+        etiquetas, remessas entre lojas, vendas, preços, CMV, reservas, pedidos, fidelidade e
+        catálogos — sempre olhando a prévia antes. Homologar ficha continua só na tela.
       </p>
       <div class="regra">
         <p class="rotulo">O Claude é você</p>
@@ -3692,9 +3841,9 @@
             </tr>
             <tr>
               <td>Validade por evento e conservação</td>
-              <td>Configuração das etiquetas</td>
+              <td>Cadastro do produto (aba Estoque)</td>
               <td><code>produto_validades</code></td>
-              <td>Etiquetas ▸ Configuração</td>
+              <td>Produto ▸ Estoque ▸ Validade por situação</td>
             </tr>
             <tr>
               <td>Etiqueta</td>
@@ -3840,8 +3989,15 @@
             <tr><td class="mono">29/09</td><td><strong>Tela inicial nova</strong>: o dia numa faixa, o período ao lado da atenção, as listas lado a lado; meta de food cost da loja</td><td><a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">19</a>, <a href="#etiquetas">15</a></td></tr>
+            <tr><td class="mono">03/10</td><td>Ficha: campo <strong>Observações</strong>; as porções também nos modos</td><td><a href="#ficha">4</a></td></tr>
             <tr><td class="mono">05/10</td><td><strong>Precificação</strong>: configuração por loja, o preço mínimo de cada produto, aplicar e o <strong>preço × custo</strong> no tempo</td><td><a href="#precificacao">21</a></td></tr>
+            <tr><td class="mono">05/10</td><td><strong>Lançar as conciliadas</strong> de uma vez; <strong>Antes de fechar</strong> no CMV; <strong>Por onde começar</strong> nas fichas; rascunho <em>em uso</em>; aviso de data retroativa; conferir o custo de referência; nome e logo da casa pela Empresa; o menu sem os atalhos fixados</td><td><a href="#nota">3</a>, <a href="#cmv">9</a>, <a href="#ficha">4</a>, <a href="#ajustes">6</a></td></tr>
+            <tr><td class="mono">06/10</td><td>Cada loja só vê o que é dela; links entre telas; aba <strong>Vinculados</strong> e <em>desvincular</em>; validade por situação no produto; <strong>usei uma parte</strong> na etiqueta; o painel da mesa</td><td><a href="#lojas">12</a>, <a href="#produto">2</a>, <a href="#etiquetas">15</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">07/10</td><td>A <strong>planta do salão</strong>; <strong>conjuntos de mesas</strong>; os dias do salão e a reserva pelo site</td><td><a href="#portal">16</a></td></tr>
             <tr><td class="mono">08/10</td><td><strong>Preços a acertar no PDV</strong>; a sugestão de custo provisório avisa</td><td><a href="#precificacao">21</a></td></tr>
+            <tr><td class="mono">08/10</td><td>Cancelar a venda devolve a produção; produções da loja, com onde entrou; <strong>no rendimento</strong>; <strong>Informar custo</strong>; ficha <strong>operacional</strong>; ingrediente ainda não produzido custa o que a ficha prevê</td><td><a href="#venda">8</a>, <a href="#producao">5</a>, <a href="#produto">2</a>, <a href="#ficha">4</a></td></tr>
+            <tr><td class="mono">09/10</td><td><strong>Estornar produção</strong>; nota <strong>cancelada no Omie</strong> e <strong>Atualizar do Omie</strong> na lista; o Claude grava em quase todo o sistema</td><td><a href="#producao">5</a>, <a href="#nota">3</a>, <a href="#claude">20</a></td></tr>
+            <tr><td class="mono">14/10</td><td>A venda recusada não derruba a importação; <strong>integração parada</strong> vira alerta; <strong>Auditoria ▸ Erros</strong>; menu do Portal em subgrupos</td><td><a href="#venda">8</a>, <a href="#alertas">10</a>, <a href="#acesso">11</a>, <a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">14/10</td><td><strong>Cardápio Vivo</strong>: o cardápio da mesa como feed, QR e NFC por mesa, tela de entrada com avaliação e Wi-Fi, favoritos</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
@@ -3856,8 +4012,7 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026); catálogos e Cardápio Vivo revistos e
-    Precificação incluída na 1.1.109 (19/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.110 (19/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

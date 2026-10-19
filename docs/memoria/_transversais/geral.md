@@ -20,7 +20,8 @@
   Cardápio Vivo (seção `cardapio-vivo`, 17; Fidelidade, WhatsApp e Claude viraram 18–20).
   Em 19/10/2026 (1.1.109) entrou a **Precificação** como seção `precificacao`, **21** — no
   FIM, para não renumerar o resto (o número na tela não tem de seguir a ordem do menu). As
-  demais entregas de 28/09 a 17/10 (etiquetas, CMV, compras…) continuam a conferir.
+  demais entregas de 28/09 a 17/10 entraram na 1.1.110 (19/10/2026): o manual cobre tudo até
+  ela. A lacuna era 1.1.66–1.1.95 (as versões até a 1.1.65 já tinham linha em novidades).
 
 - 🔑 **A bateria do navegador tinha 26 falhas e NENHUMA era defeito do sistema** (28/09/2026) —
   eram testes que não acompanharam telas que mudaram. Três causas, todas de SELETOR:
