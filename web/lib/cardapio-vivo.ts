@@ -137,8 +137,8 @@ export function enderecoDoSite(): string {
 }
 
 /** A prévia do cadastro — com login, inclui o que está fora do dia e do horário. */
-export const previaFeed = (idCatalogo: number) =>
-  api.get<Feed>(`/cardapio-vivo/previa?id_catalogo=${idCatalogo}`);
+export const previaFeed = (idCatalogo: number, comAnuncios = false) =>
+  api.get<Feed>(`/cardapio-vivo/previa?id_catalogo=${idCatalogo}${comAnuncios ? "&anuncios=true" : ""}`);
 
 /** A imagem no tamanho da tela, em WebP (`?w=` da rota de arquivos). */
 export function imagem(url: string | null | undefined, largura: number): string | null {
@@ -239,10 +239,12 @@ export const CardapioVivoService = {
     api.post<{ link: string; message: string }>(`/cardapio-vivo/mesas/${idMesa}/token`),
   semMidia: (idCatalogo: number) =>
     api.get<RespostaConfig["sem_midia"]>(`/cardapio-vivo/sem-midia?id_catalogo=${idCatalogo}`),
-  marcarItem: (idItem: number, marcas: { destaque?: boolean; esgotado?: boolean; objetivo?: string;
+  marcarItem: (idItem: number, marcas: { destaque?: boolean; esgotado?: boolean;
+                                         /** 123: quando o esgotado volta sozinho. */
+                                         esgotado_volta?: "AMANHA" | "MANUAL"; objetivo?: string;
                                          margem_nivel?: string }) =>
-    api.put<{ destaque: boolean; esgotado: boolean; objetivo: string | null; margem_nivel: string | null;
-              message: string }>(`/catalogos/itens/${idItem}/marcas`, marcas),
+    api.put<{ destaque: boolean; esgotado: boolean; esgotado_ate: string | null; objetivo: string | null;
+              margem_nivel: string | null; message: string }>(`/catalogos/itens/${idItem}/marcas`, marcas),
   exibicaoSecao: (tipo: "categoria" | "subcategoria", id: number, dados: ExibicaoSecao) =>
     api.put<ExibicaoSecao & { message: string }>(`/catalogos/secoes/${tipo}/${id}/exibicao`, dados),
 };
@@ -362,7 +364,12 @@ export type ItemAtencao = {
   quadrante: string; sugestao: string | null; sugestao_rotulo: string | null; prioridade: number;
 };
 
+export type CardapioDoPainel = { id_catalogo: number; nome: string; principal: boolean };
+
 export type PainelAtencao = {
+  /** O Cardápio Vivo medido (1.1.109) e os outros da loja, para escolher. */
+  cardapio: CardapioDoPainel | null;
+  cardapios: CardapioDoPainel[];
   definicoes: Record<string, string>;
   topo: { sessoes: number; engajadas: number; hubs: number; cliques_avaliacao: number; cliques_wifi: number };
   funil: { sessoes: number; viram: number; adicionaram: number; enviaram: number };
@@ -375,8 +382,10 @@ export type PainelAtencao = {
 };
 
 export const AtencaoService = {
-  painel: (f: { de: string; ate: string; id_salao?: number | null; dias?: number[]; hora_de?: string; hora_ate?: string }) => {
+  painel: (f: { de: string; ate: string; id_salao?: number | null; dias?: number[]; hora_de?: string; hora_ate?: string;
+           id_catalogo?: number | null }) => {
     const q = new URLSearchParams({ de: f.de, ate: f.ate });
+    if (f.id_catalogo) q.set("id_catalogo", String(f.id_catalogo));
     if (f.id_salao) q.set("id_salao", String(f.id_salao));
     if (f.dias?.length) q.set("dias", f.dias.join(","));
     if (f.hora_de && f.hora_ate) { q.set("hora_de", f.hora_de); q.set("hora_ate", f.hora_ate); }
@@ -393,6 +402,9 @@ export type TesteAB = {
   tipo: "MIDIA" | "ORDEM";
   nome: string;
   id_produto: number | null;
+  id_catalogo: number;
+  /** O nome do Cardápio Vivo do teste. */
+  cardapio: string | null;
   inicio: string;
   encerrado_em: string | null;
   vencedor: "A" | "B" | null;
@@ -408,13 +420,15 @@ export type SugestaoDestaque = { id_item: number; nome: string; acao: "POR" | "T
 
 export const TestesService = {
   listar: () => api.get<TesteAB[]>("/cardapio-vivo/testes"),
-  criar: (tipo: "MIDIA" | "ORDEM", idItem?: number) =>
-    api.post<TesteAB & { message: string }>("/cardapio-vivo/testes", { tipo, id_item: idItem ?? null }),
+  criar: (tipo: "MIDIA" | "ORDEM", idItem?: number, idCatalogo?: number | null) =>
+    api.post<TesteAB & { message: string }>("/cardapio-vivo/testes",
+                                            { tipo, id_item: idItem ?? null, id_catalogo: idCatalogo ?? null }),
   encerrar: (id: number) => api.post<TesteAB & { message: string }>(`/cardapio-vivo/testes/${id}/encerrar`),
   aplicar: (id: number, variante: "A" | "B") =>
     api.post<TesteAB & { message: string }>(`/cardapio-vivo/testes/${id}/aplicar`, { variante }),
-  sugestoes: (de: string, ate: string) =>
-    api.get<SugestaoDestaque[]>(`/cardapio-vivo/destaques/sugestoes?de=${de}&ate=${ate}`),
+  sugestoes: (de: string, ate: string, idCatalogo?: number | null) =>
+    api.get<SugestaoDestaque[]>(`/cardapio-vivo/destaques/sugestoes?de=${de}&ate=${ate}`
+                                + (idCatalogo ? `&id_catalogo=${idCatalogo}` : "")),
   aplicarDestaques: (escolhas: { id_item: number; destaque: boolean }[]) =>
     api.post<{ message: string }>("/cardapio-vivo/destaques/aplicar", escolhas),
 };

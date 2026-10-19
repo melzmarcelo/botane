@@ -88,6 +88,8 @@ checar("traduzir o catálogo responde 503 dizendo que falta a chave e ONDE cadas
        st == 503 and "Integrações" in str(r.get("detail")), (st, r))
 st, r = chamar("GET", f"/traducao/catalogo/{ID_CAT}/pendentes", token=token)
 checar("e conta o que está pendente (catálogo, categoria e produto)", r.get("pendentes") == 3, r)
+checar("e diz QUAL, por tipo e id — o 'O que falta' do catálogo lista por nome (1.1.109)",
+       r.get("por_tipo") == {"catalogo": [ID_CAT], "categoria": [g["id"]], "produto": [PID]}, r.get("por_tipo"))
 
 print("\n2. corrigir à mão")
 st, t = chamar("GET", f"/traducao/produto/{PID}", token=token)

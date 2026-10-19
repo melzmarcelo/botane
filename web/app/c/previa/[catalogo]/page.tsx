@@ -9,8 +9,12 @@ import CardapioVivo from "@/components/cardapio-vivo/cardapio-vivo";
  */
 export const metadata: Metadata = { title: "Pré-visualização", robots: { index: false, follow: false } };
 
-export default async function Previa({ params }: { params: Promise<{ catalogo: string }> }) {
+export default async function Previa({ params, searchParams }: {
+  params: Promise<{ catalogo: string }>; searchParams: Promise<{ anuncios?: string }>;
+}) {
   const id = Number((await params).catalogo);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  return <CardapioVivo loja={0} token={null} idCatalogoPrevia={id} />;
+  // `?anuncios=1` (1.1.109): com os anúncios que valem agora.
+  const comAnuncios = (await searchParams).anuncios === "1";
+  return <CardapioVivo loja={0} token={null} idCatalogoPrevia={id} previaComAnuncios={comAnuncios} />;
 }

@@ -131,7 +131,9 @@ def estado(ctx: Contexto = Depends(_VER)) -> dict:
 @router.get("/catalogo/{id_catalogo}/pendentes")
 def pendentes(id_catalogo: int, ctx: Contexto = Depends(_VER)) -> dict:
     with get_cursor() as cur:
-        return {"pendentes": servico.pendentes_do_catalogo(cur, id_catalogo), **servico.estado(cur)}
+        por_tipo = servico.pendentes_por_tipo(cur, id_catalogo)
+        return {"pendentes": sum(len(v) for v in por_tipo.values()), "por_tipo": por_tipo,
+                **servico.estado(cur)}
 
 
 @router.post("/catalogo/{id_catalogo}/traduzir")

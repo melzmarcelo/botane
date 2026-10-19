@@ -276,6 +276,33 @@ checar("com a opção da loja, o esgotado some", itens["D"] not in [i["id"] for 
 gravar_cardapio(chamar, token, CFG)
 st, r = chamar("PUT", f"/catalogos/itens/999999/marcas", {"destaque": True}, token)
 checar("item que não existe: 404", st == 404, st)
+# 🔑 123: o esgotado que volta sozinho. Sem dizer quando, fica até alguém tirar (como era).
+_st, arv = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
+def _item_d(arvore):  # noqa: E302
+    return next(i for c in arvore["categorias"] for i in [*c["itens"], *[x for s in c["subcategorias"] for x in s["itens"]]]
+                if i["id"] == itens["D"])
+checar("o esgotado manual não tem hora para voltar", _item_d(arv)["esgotado"] and _item_d(arv)["esgotado_ate"] is None,
+       _item_d(arv))
+st, r = chamar("PUT", f"/catalogos/itens/{itens['D']}/marcas", {"esgotado": True, "esgotado_volta": "AMANHA"}, token)
+from services.catalogo_conteudo import HORA_DA_VOLTA  # noqa: E402
+volta = datetime.fromisoformat(str(r.get("esgotado_ate")))
+checar("'volta amanhã' grava a hora: as 4h do próximo dia da casa, nas próximas 24 h",
+       st == 200 and volta.hour == HORA_DA_VOLTA and timedelta(0) < volta - datetime.now(volta.tzinfo) <= timedelta(hours=24)
+       and "até amanhã" in r.get("message", ""), r)
+st, r = chamar("PUT", f"/catalogos/itens/{itens['D']}/marcas", {"destaque": False}, token)
+checar("mexer no destaque não apaga a hora da volta", r.get("esgotado") is True and r.get("esgotado_ate") is not None, r)
+st, r = chamar("PUT", f"/catalogos/itens/{itens['D']}/marcas", {"esgotado_volta": "SEMPRE"}, token)
+checar("volta fora da lista: 422", st == 422, st)
+with get_cursor() as cur:  # a hora chegou
+    cur.execute("UPDATE catalogo_itens SET esgotado_ate = now() - interval '1 minute' WHERE id = %s", (itens["D"],))
+_st, f = chamar("GET", f"/publico/cardapio/mesa/{M1['token']}")
+checar("passada a hora, o feed já o oferece de novo — sem esperar o agendador",
+       {i["id"]: i for i in f["itens"]}.get(itens["D"], {}).get("esgotado") is False)
+_st, arv = chamar("GET", f"/catalogos/{ID_CAT}/conteudo", token=token)
+checar("e o editor também o mostra disponível", _item_d(arv)["esgotado"] is False and _item_d(arv)["esgotado_ate"] is None)
+st, r = chamar("PUT", f"/catalogos/itens/{itens['D']}/marcas", {"destaque": True}, token)
+checar("e gravar outra marca não o ressuscita", r.get("esgotado") is False and r.get("esgotado_ate") is None, r)
+chamar("PUT", f"/catalogos/itens/{itens['D']}/marcas", {"destaque": False}, token)
 
 print("\n6. a seção por dia e horário")
 from relogio import agora_da_casa  # noqa: E402

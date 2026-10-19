@@ -50,6 +50,8 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
 
   const mudouTexto = nome.trim() !== (i.nome_catalogo ?? "") || descricao.trim() !== (i.informacao_adicional ?? "");
 
+  const [volta, setVolta] = useState<"AMANHA" | "MANUAL">("AMANHA");
+
   async function marcar(marcas: Parameters<typeof CardapioVivoService.marcarItem>[1]) {
     try {
       const r = await CardapioVivoService.marcarItem(i.id, marcas);
@@ -166,11 +168,28 @@ export default function GavetaDoPrato({ item: i, lugares, onde, podeEditar, pode
                    onChange={(e) => void marcar({ destaque: e.target.checked })} />
             ★ Em destaque
           </label>
-          <label className="flex items-center gap-2 text-[14px]">
-            <input type="checkbox" disabled={!podeEditar} checked={i.esgotado}
-                   onChange={(e) => void marcar({ esgotado: e.target.checked })} />
-            Esgotado <span className="text-[13px] text-suave">(fica no cardápio, sem poder pedir)</span>
-          </label>
+          {/* 🔑 123: o esgotado volta sozinho no próximo dia (o padrão), ou só quando alguém tirar. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[14px]">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="prato-esgotado" disabled={!podeEditar} checked={i.esgotado}
+                     onChange={(e) => void marcar(e.target.checked
+                       ? { esgotado: true, esgotado_volta: volta } : { esgotado: false })} />
+              Esgotado <span className="text-[13px] text-suave">(fica no cardápio, sem poder pedir)</span>
+            </label>
+            {i.esgotado ? (
+              <span className="text-[13px] text-suave" id="prato-esgotado-volta">
+                {i.esgotado_ate
+                  ? `volta sozinho ${new Date(i.esgotado_ate).toLocaleString("pt-BR", { weekday: "long", hour: "2-digit", minute: "2-digit" })}`
+                  : "até alguém tirar"}
+              </span>
+            ) : podeEditar && (
+              <select className="campo !w-auto !py-1 text-[13px]" aria-label="Quando o esgotado volta"
+                      value={volta} onChange={(e) => setVolta(e.target.value as "AMANHA" | "MANUAL")}>
+                <option value="AMANHA">volta sozinho amanhã (4h)</option>
+                <option value="MANUAL">só quando alguém tirar</option>
+              </select>
+            )}
+          </div>
           {/* 🔑 Fase 2 (115): o painel Atenção × Vendas usa os dois para priorizar. */}
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo rotulo="Objetivo">

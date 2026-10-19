@@ -79,6 +79,8 @@ export type Relatorio = {
   por_cardapio: (Metricas & { id_catalogo: number | null; cardapio: string | null })[];
   por_hora: { hora: number; aparicoes: number }[];
   pulou_ms: number;
+  /** 124: os dias que o bruto já não tinha vieram do resumo diário — e a frase que o diz. */
+  resumido: { ate: string; dias: number; aviso: string } | null;
 };
 
 const arquivo = (a: File) => {

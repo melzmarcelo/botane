@@ -285,7 +285,9 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
 
     🔑 Pessoas = sessões anônimas que viram (uma visita ao cardápio); "pularam" = passou em
     menos de 1,5 s; taxa de toque = sessões que tocaram ÷ sessões que viram.
-    ⚠️ Vem do bruto dos eventos: o que passou da retenção da loja (13 meses) não entra.
+    🔑 **O que passou da retenção vem do resumo do dia** (124, 1.1.109): os dias que o bruto já
+    não tem saem de `cardapio_conteudo_dia`. ⚠️ Ali as pessoas são contadas por DIA — quem
+    voltou noutro dia conta duas vezes — e não há hora; a resposta diz até quando foi assim.
     """
     a = _anuncio(cur, id_unidade, id_anuncio)
     if de > ate:
@@ -317,6 +319,7 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
                      WHERE e.id_anuncio = %(a)s AND e.id_unidade = %(u)s {janela}
                      GROUP BY 1 ORDER BY 1""", p)  # noqa: S608
     por_hora = [dict(r) for r in cur.fetchall()]
+    resumido = _somar_resumo(cur, id_unidade, id_anuncio, de, ate, total, por_dia, por_canal, por_cardapio)
     cur.execute("SELECT nome_fantasia, razao_social FROM empresa WHERE id = 1")
     e = cur.fetchone() or {}
     sessoes = total["sessoes"] or 0
@@ -326,8 +329,62 @@ def relatorio(cur, id_unidade: int, id_anuncio: int, de: date, ate: date) -> dic
         "total": total | {"taxa_toque": round(total["sessoes_tocaram"] / sessoes, 4) if sessoes else None,
                           "taxa_pulou": round(total["pulados"] / total["aparicoes"], 4) if total["aparicoes"] else None},
         "por_dia": por_dia, "por_canal": por_canal, "por_cardapio": por_cardapio,
-        "por_hora": por_hora, "pulou_ms": PULOU_MS,
+        "por_hora": por_hora, "pulou_ms": PULOU_MS, "resumido": resumido,
     }
+
+
+_SOMAVEIS = ("aparicoes", "sessoes", "pulados", "toques", "sessoes_tocaram")
+
+
+def _juntar(alvo: dict, r: dict) -> None:
+    """Soma uma linha do resumo (124) a uma linha de métricas do bruto."""
+    vistas_antes = alvo.get("aparicoes") or 0
+    seg_antes = float(alvo.get("segundos") or 0) * vistas_antes
+    for c in _SOMAVEIS:
+        alvo[c] = (alvo.get(c) or 0) + (r[c] or 0)
+    alvo["segundos"] = (round((seg_antes + r["soma_ms"] / 1000) / alvo["aparicoes"], 1)
+                        if alvo["aparicoes"] else None)
+
+
+def _somar_resumo(cur, id_unidade: int, id_anuncio: int, de: date, ate: date, total: dict,
+                  por_dia: list, por_canal: list, por_cardapio: list) -> dict | None:
+    """Os dias do período que o bruto já não tem, lidos do resumo e somados às listas."""
+    cur.execute("SELECT min(quando)::date AS desde FROM cardapio_eventos WHERE id_unidade = %s", (id_unidade,))
+    desde = cur.fetchone()["desde"]
+    corte = min(desde, ate + timedelta(days=1)) if desde else ate + timedelta(days=1)
+    if de >= corte:
+        return None
+    cur.execute(
+        """SELECT r.dia, r.canal, r.id_catalogo, c.nome AS cardapio, r.vistas AS aparicoes, r.sessoes,
+                  r.soma_ms, r.pulados, r.cliques AS toques, r.sessoes_clicaram AS sessoes_tocaram
+             FROM cardapio_conteudo_dia r LEFT JOIN catalogos c ON c.id = r.id_catalogo
+            WHERE r.tipo = 'ANUNCIO' AND r.id_ref = %s AND r.id_unidade = %s
+              AND r.dia >= %s AND r.dia < %s ORDER BY r.dia""",
+        (id_anuncio, id_unidade, de, corte))
+    linhas = [dict(r) for r in cur.fetchall()]
+    if not linhas:
+        return None
+    dias: dict = {}
+    for r in linhas:
+        _juntar(total, r)
+        _juntar(dias.setdefault(r["dia"], {"dia": r["dia"]}), r)
+        canal = next((x for x in por_canal if x["canal"] == r["canal"]), None)
+        if canal is None:
+            canal = {"canal": r["canal"]}
+            por_canal.append(canal)
+        _juntar(canal, r)
+        id_cat = r["id_catalogo"] or None
+        cardapio = next((x for x in por_cardapio if x["id_catalogo"] == id_cat), None)
+        if cardapio is None:
+            cardapio = {"id_catalogo": id_cat, "cardapio": r["cardapio"]}
+            por_cardapio.append(cardapio)
+        _juntar(cardapio, r)
+    por_dia[:0] = list(dias.values())
+    por_cardapio.sort(key=lambda x: -(x.get("aparicoes") or 0))
+    return {"ate": corte - timedelta(days=1), "dias": len(dias),
+            "aviso": "Os dias até {} vêm do resumo diário: as pessoas são contadas por dia (quem "
+                     "voltou noutro dia conta de novo) e não entram na distribuição por hora."
+                     .format((corte - timedelta(days=1)).strftime("%d/%m/%Y"))}
 
 
 # ------------------------------------------------------------------ o que o feed recebe

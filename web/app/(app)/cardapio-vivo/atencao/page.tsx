@@ -14,6 +14,7 @@ import CabecalhoTela from "@/components/cabecalho-tela";
 import { Aviso, Carregando } from "@/components/ui";
 import { AtencaoService, CardapioVivoService, type PainelAtencao } from "@/lib/cardapio-vivo";
 import { useSessao } from "@/lib/sessao";
+import EscolhaCardapio from "../escolha-cardapio";
 import Indicadores from "./indicadores";
 import Mapa from "./mapa";
 import SugestoesDestaque from "./sugestoes-destaque";
@@ -32,13 +33,13 @@ export default function PaginaAtencao() {
   const [horaDe, setHoraDe] = useState("");
   const [horaAte, setHoraAte] = useState("");
   const [saloes, setSaloes] = useState<[number, string][]>([]);
+  // 🔑 Qual Cardápio Vivo (1.1.109): nulo = o principal, que a API resolve.
   const [idCatalogo, setIdCatalogo] = useState<number | null>(null);
   const [dados, setDados] = useState<PainelAtencao | null>(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
-    CardapioVivoService.config().then((r) => setIdCatalogo(r.config.id_catalogo)).catch(() => {});
     // Os salões saem das mesas; sem permissão de salão, o filtro simplesmente não aparece.
     CardapioVivoService.mesas()
       .then((r) => setSaloes([...new Map(r.mesas.map((m) => [m.id_salao, m.salao])).entries()]))
@@ -49,14 +50,15 @@ export default function PaginaAtencao() {
     setCarregando(true);
     try {
       setDados(await AtencaoService.painel({ de, ate, id_salao: salao, dias,
-                                              hora_de: horaDe || undefined, hora_ate: horaAte || undefined }));
+                                              hora_de: horaDe || undefined, hora_ate: horaAte || undefined,
+                                              id_catalogo: idCatalogo }));
       setErro("");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar o painel");
     } finally {
       setCarregando(false);
     }
-  }, [de, ate, salao, dias, horaDe, horaAte]);
+  }, [de, ate, salao, dias, horaDe, horaAte, idCatalogo]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -69,6 +71,8 @@ export default function PaginaAtencao() {
       />
 
       <div className="flex flex-wrap items-end gap-3 text-[14px]" role="group" aria-label="Filtros">
+        <EscolhaCardapio opcoes={dados?.cardapios ?? []} valor={dados?.cardapio?.id_catalogo ?? idCatalogo}
+                         aoMudar={setIdCatalogo} />
         <label className="flex flex-col gap-1"><span className="text-[12.5px] text-suave">De</span>
           <input type="date" className="campo mono !w-auto" value={de} onChange={(e) => setDe(e.target.value)} /></label>
         <label className="flex flex-col gap-1"><span className="text-[12.5px] text-suave">Até</span>
@@ -112,8 +116,8 @@ export default function PaginaAtencao() {
           )}
           <Indicadores p={dados} />
           {/* 🔑 Fase 3 (116): o sistema sugere, o gerente aprova. */}
-          <SugestoesDestaque de={de} ate={ate} podeAplicar={pode("catalogos.editar")} aoAplicar={() => void carregar()} />
-          <TabelaItens itens={dados.itens} idCatalogo={idCatalogo} />
+          <SugestoesDestaque de={de} ate={ate} idCatalogo={dados.cardapio?.id_catalogo ?? null} podeAplicar={pode("catalogos.editar")} aoAplicar={() => void carregar()} />
+          <TabelaItens itens={dados.itens} idCatalogo={dados.cardapio?.id_catalogo ?? null} />
           <Mapa mapa={dados.mapa} />
         </>
       )}

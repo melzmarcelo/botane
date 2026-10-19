@@ -1,7 +1,8 @@
 /**
  * Cardápio Vivo, fase 3 (migração 116), no navegador: a sessão que cai no braço B de um teste
  * de ORDEM vê a ordem sugerida no feed; a tela Testes A/B mostra o teste e aplica a variante;
- * e o painel Atenção × Vendas sugere destaque e aplica o que o gerente aprova.
+ * e o painel Atenção × Vendas sugere destaque e aplica o que o gerente aprova. Desde a 1.1.109,
+ * os dois deixam escolher qual Cardápio Vivo da loja medir.
  *
  * 🔑 Decisões do dono (15/10/2026) — ver `docs/cardapio-vivo-estudo.md`, seção 9.
  * O braço de uma sessão é descoberto pela própria API (feed com `?sessao=`), nunca recalculado
@@ -69,6 +70,7 @@ for (let i = 0; i < 60 && Object.keys(sessoes).length < 2; i++) {
 }
 checar("há sessões dos dois braços", sessoes.A && sessoes.B, sessoes);
 
+let idOutro = null;
 const navegador = await puppeteer.launch({ executablePath: CHROME, headless: true });
 try {
   console.log("\n1. o feed respeita o braço da sessão do aparelho");
@@ -102,7 +104,13 @@ try {
   await e.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Aplicar B").click());
   await e.waitForFunction(() => document.body.innerText.includes("aplicado"), { timeout: 10000 }).catch(() => {});
   checar("aplicar B marca o teste como aplicado", (await e.evaluate(() => document.body.innerText)).includes("aplicado"));
-  const { dados: f } = await api("GET", "/publico/cardapio/loja/1");
+  // ⚠️ O clique volta antes de a gravação terminar: espera o feed mudar (era a intermitência).
+  let f;
+  for (let i = 0; i < 20; i++) {
+    ({ dados: f } = await api("GET", "/publico/cardapio/loja/1"));
+    if (f.itens[0].id === itens[2]) break;
+    await esperar(500);
+  }
   checar("e a ordem sugerida passa a valer para todos", f.itens[0].id === itens[2], f.itens.map((i) => i.nome));
 
   console.log("\n3. sugestões de destaque no painel");
@@ -117,8 +125,32 @@ try {
   const { dados: f2 } = await api("GET", "/publico/cardapio/loja/1");
   checar("aprovado, o prato entra em destaque no feed", f2.itens.find((i) => i.id === itens[1])?.destaque === true,
          f2.itens.map((i) => [i.nome, i.destaque]));
+
+  console.log("\n4. o painel mede os outros Cardápios Vivos da loja (1.1.109)");
+  const { dados: cat2 } = await api("POST", "/catalogos", { nome: `AB outro ${MARCA}`, origem: "PRODUTOS", situacao: "ATIVO" }, token);
+  idOutro = cat2.id;
+  const { dados: g2 } = await api("POST", `/catalogos/${cat2.id}/categorias`, { nome: "Pratos" }, token);
+  await api("POST", `/catalogos/categorias/${g2.id}/itens`, { id_produto: await produto("ABT OUTRO", 13) }, token);
+  await api("PUT", `/cardapio-vivo/vivos/${cat2.id}`, { modo: "VITRINE", principal: false }, token);
+  await e.goto(WEB + "/cardapio-vivo/atencao", { waitUntil: "networkidle2" });
+  await e.waitForSelector("#escolha-cardapio", { timeout: 20000 }).catch(() => {});
+  const opcoes = await e.$$eval("#escolha-cardapio option", (os) => os.map((o) => o.textContent)).catch(() => []);
+  checar("com dois Cardápios Vivos, o painel oferece a escolha (o principal marcado)",
+         opcoes.some((o) => o.startsWith(`AB tela ${MARCA}`) && o.includes("principal")) && opcoes.some((o) => o.startsWith(`AB outro ${MARCA}`)), opcoes);
+  await e.select("#escolha-cardapio", String(cat2.id));
+  await e.waitForFunction(() => document.body.innerText.includes("ABT OUTRO"), { timeout: 15000 }).catch(() => {});
+  const at2 = await e.evaluate(() => document.body.innerText);
+  checar("escolhido o outro, a tabela mostra os pratos dele, não os do principal",
+         at2.includes("ABT OUTRO") && !at2.includes("ABT PRIMEIRO"), at2.slice(0, 600));
+  await e.goto(WEB + "/cardapio-vivo/testes", { waitUntil: "networkidle2" });
+  await e.waitForSelector("#escolha-cardapio", { timeout: 15000 }).catch(() => {});
+  checar("a tela de testes também deixa escolher o cardápio do teste novo", !!(await e.$("#escolha-cardapio")));
 } finally {
   await navegador.close();
+  if (idOutro) {
+    await api("DELETE", `/cardapio-vivo/vivos/${idOutro}`, undefined, token);
+    await api("PUT", `/catalogos/${idOutro}`, { situacao: "INATIVO" }, token);
+  }
   await devolverVivos(api, token, antes, cat.id);
   await api("PUT", `/catalogos/${cat.id}`, { situacao: "INATIVO" }, token);
   await api("PUT", "/unidades/1/parametros", par, token);

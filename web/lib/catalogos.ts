@@ -155,6 +155,8 @@ export type ItemDoCatalogo = {
   /** Cardápio Vivo (113): marcas DESTE cardápio, e o que vem do produto. */
   destaque: boolean;
   esgotado: boolean;
+  /** 123: até quando o esgotado vale — nulo = até alguém tirar. */
+  esgotado_ate: string | null;
   tem_video: boolean;
   restricoes: string[];
   /** Fase 2 (115): o objetivo de negócio e o ajuste manual do nível de margem. */

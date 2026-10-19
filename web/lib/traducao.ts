@@ -33,7 +33,9 @@ export const corrigir = (tipo: TipoTraduzivel, id: number, corpo: { en?: Textos;
 export const gerar = (tipo: TipoTraduzivel, id: number) =>
   api.post<Traducao & { message: string }>(`/traducao/${tipo}/${id}/gerar`);
 export const pendentesDoCatalogo = (id: number) =>
-  api.get<{ pendentes: number; ligada: boolean }>(`/traducao/catalogo/${id}/pendentes`);
+  api.get<{ pendentes: number; ligada: boolean;
+            /** O que falta, por tipo e id (1.1.109) — o "O que falta" diz qual. */
+            por_tipo: Partial<Record<TipoTraduzivel, number[]>> }>(`/traducao/catalogo/${id}/pendentes`);
 export const traduzirCatalogo = (id: number) =>
   api.post<{ traduzidos: number; pendentes: number; message: string }>(`/traducao/catalogo/${id}/traduzir`);
 

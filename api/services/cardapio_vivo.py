@@ -412,7 +412,8 @@ def feed(cur, id_unidade: int, id_catalogo: int, idioma: str | None = None,
                    s.video_capa_url AS subcategoria_capa, s.abertura AS subcategoria_abertura,
                    s.dias AS s_dias, s.hora_de AS s_de,
                    s.hora_ate AS s_ate, s.horario_especial AS s_especial,
-                   i.id AS id_item, i.destaque, i.esgotado, i.midia_preferida, p.id AS id_produto,
+                   -- 🔑 123: o esgotado com hora para voltar deixa de valer sozinho.
+                   i.id AS id_item, i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado, i.midia_preferida, p.id AS id_produto,
                    coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS produto,
                    p.nome_catalogo_en AS produto_en, p.nome_catalogo_de AS produto_de,
                    p.informacao_adicional, p.informacao_adicional_en AS informacao_en,
@@ -529,7 +530,7 @@ def _adicionais(cur, id_unidade: int, produtos: list[int]) -> dict[int, list[dic
 
 def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None,
                      previa_catalogo: int | None = None, sessao: str | None = None,
-                     slug: str | None = None) -> dict:
+                     slug: str | None = None, previa_anuncios: bool = False) -> dict:
     """Tudo que a tela do cliente precisa numa resposta: casa, marca, modo e feed.
 
     ⚠️ **404 quando a loja não ligou o Cardápio Vivo** (sem catálogo apontado): para o
@@ -602,10 +603,12 @@ def cardapio_publico(cur, id_unidade: int, mesa: dict | None, idioma: str | None
         # Só no feed — o site e o PDF continuam só com os pratos (decisão do dono).
         "cartoes": catalogo_cartoes.do_feed(cur, id_catalogo, idioma),
         # 🔑 121: quais seções abrem (deste Cardápio Vivo) e os anúncios que valem agora, com as
-        # regras de exibição da casa. ⚠️ A prévia do cadastro não mostra anúncio.
+        # regras de exibição da casa. ⚠️ A prévia do cadastro não mostra anúncio — a não ser
+        # que se peça (1.1.109): aí, os que valem AGORA, como na mesa se for o principal.
         "aberturas": cv.get("aberturas") or "AUTOMATICA",
-        **(catalogo_anuncios.do_feed(cur, id_unidade, id_catalogo, bool(mesa), idioma)
-           if not previa_catalogo else {"anuncios": [], "regras_anuncio": None}),
+        **(catalogo_anuncios.do_feed(cur, id_unidade, id_catalogo,
+                                     bool(mesa) or bool(previa_catalogo and cv.get("principal")), idioma)
+           if not previa_catalogo or previa_anuncios else {"anuncios": [], "regras_anuncio": None}),
         **conteudo,
     }
 
@@ -796,7 +799,45 @@ def agregar_dia(cur, dia, id_unidade: int | None = None) -> int:
         (ATENCAO_MAX_MS, dia, dia, id_unidade, id_unidade))
     linhas = cur.rowcount
     _resumir_dia(cur, dia, id_unidade)
+    _resumir_conteudo(cur, dia, id_unidade)
     return linhas
+
+
+def _resumir_conteudo(cur, dia, id_unidade: int | None = None) -> None:
+    """Anúncios, cartões e aberturas de seção do dia em `cardapio_conteudo_dia` (124).
+
+    🔑 O que o feed mostra ENTRE os pratos também sobrevive à retenção: o relatório do anúncio
+    lê daqui os dias que o bruto já não tem. Idempotente: refaz o dia (da loja, se dada).
+    """
+    cur.execute("DELETE FROM cardapio_conteudo_dia WHERE dia = %s "
+                "AND (%s::int IS NULL OR id_unidade = %s)", (dia, id_unidade, id_unidade))
+    cur.execute(
+        """INSERT INTO cardapio_conteudo_dia
+               (dia, id_unidade, tipo, id_ref, id_sub, id_catalogo, canal, vistas, sessoes,
+                soma_ms, pulados, cliques, sessoes_clicaram)
+           SELECT quando::date, id_unidade, t_tipo, ref, sub, coalesce(id_catalogo, 0),
+                  CASE WHEN id_mesa IS NULL THEN 'LINK' ELSE 'MESA' END,
+                  count(*) FILTER (WHERE viu),
+                  count(DISTINCT id_sessao) FILTER (WHERE viu),
+                  coalesce(sum(duracao_ms) FILTER (WHERE viu), 0),
+                  count(*) FILTER (WHERE viu AND duracao_ms < %s),
+                  count(*) FILTER (WHERE NOT viu),
+                  count(DISTINCT id_sessao) FILTER (WHERE NOT viu)
+             FROM (SELECT e.*, e.tipo LIKE 'viu%%' AS viu,
+                          CASE WHEN e.tipo IN ('viu_anuncio', 'clicou_anuncio') THEN 'ANUNCIO'
+                               WHEN e.tipo IN ('viu_cartao', 'clicou_cartao') THEN 'CARTAO'
+                               ELSE 'SECAO' END AS t_tipo,
+                          CASE WHEN e.tipo IN ('viu_anuncio', 'clicou_anuncio') THEN e.id_anuncio
+                               WHEN e.tipo IN ('viu_cartao', 'clicou_cartao') THEN e.id_cartao
+                               ELSE e.id_categoria END AS ref,
+                          CASE WHEN e.tipo = 'viu_secao' THEN coalesce(e.id_subcategoria, 0) ELSE 0 END AS sub
+                     FROM cardapio_eventos e
+                    WHERE e.tipo IN ('viu_anuncio', 'clicou_anuncio', 'viu_cartao', 'clicou_cartao', 'viu_secao')
+                      AND e.quando >= %s::date AND e.quando < %s::date + 1
+                      AND (%s::int IS NULL OR e.id_unidade = %s)) x
+            WHERE ref IS NOT NULL
+            GROUP BY 1, 2, 3, 4, 5, 6, 7""",
+        (catalogo_anuncios.PULOU_MS, dia, dia, id_unidade, id_unidade))
 
 
 # 🔑 **"Sessão engajada"** = ao menos 3 itens DIFERENTES vistos, ou 1 interação (favorito,
@@ -836,6 +877,9 @@ def reter(cur, hoje=None) -> dict:
     """
     hoje = hoje or agora_da_casa().date()
     agregados = agregar_dia(cur, hoje - timedelta(days=1))
+    # 🔑 123: o esgotado que já voltou sai da linha (a leitura já o ignorava).
+    cur.execute("""UPDATE catalogo_itens SET esgotado = false, esgotado_ate = NULL
+                    WHERE esgotado_ate IS NOT NULL AND esgotado_ate <= now()""")
     cur.execute(
         """SELECT u.id, coalesce(c.retencao_meses, 13) AS meses
              FROM unidades u LEFT JOIN cardapio_config c ON c.id_unidade = u.id""")

@@ -16,6 +16,7 @@ import { Aviso, Cartao, Carregando, Etiqueta, Vazio } from "@/components/ui";
 import { CardapioVivoService, TestesService, type TesteAB } from "@/lib/cardapio-vivo";
 import * as cat from "@/lib/catalogos";
 import { useSessao } from "@/lib/sessao";
+import EscolhaCardapio from "../escolha-cardapio";
 
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1).replace(".", ",")}%`);
 const CONCLUSAO: Record<TesteAB["resultado"]["conclusao"], string> = {
@@ -59,6 +60,9 @@ export default function PaginaTestes() {
   const [lista, setLista] = useState<TesteAB[] | null>(null);
   const [pratos, setPratos] = useState<{ id: number; nome: string }[]>([]);
   const [prato, setPrato] = useState("");
+  // 🔑 Em qual Cardápio Vivo o teste novo roda (1.1.109); começa no principal.
+  const [vivos, setVivos] = useState<{ id_catalogo: number; nome: string; principal: boolean }[]>([]);
+  const [idCatalogo, setIdCatalogo] = useState<number | null>(null);
   const [erro, setErro] = useState("");
   const editar = pode("catalogos.editar");
 
@@ -67,15 +71,22 @@ export default function PaginaTestes() {
 
   useEffect(() => {
     void carregar();
-    // Os pratos que valem um teste de mídia: os do cardápio da mesa com vídeo E foto.
-    CardapioVivoService.config().then(async (r) => {
-      if (!r.config.id_catalogo) return;
-      const k = await cat.conteudo(r.config.id_catalogo);
+    CardapioVivoService.config().then((r) => {
+      setVivos(r.vivos.map((v) => ({ id_catalogo: v.id_catalogo, nome: v.nome, principal: v.principal })));
+      setIdCatalogo(r.config.id_catalogo);
+    }).catch(() => setVivos([]));
+  }, [carregar]);
+
+  useEffect(() => {
+    // Os pratos que valem um teste de mídia: os do cardápio escolhido com vídeo E foto.
+    setPrato("");
+    if (!idCatalogo) { setPratos([]); return; }
+    cat.conteudo(idCatalogo).then((k) => {
       const todos = k.categorias.flatMap((c) => [...c.itens, ...c.subcategorias.flatMap((s) => s.itens)]);
       setPratos(todos.filter((i) => i.tem_video && i.foto_url && i.ativo)
         .map((i) => ({ id: i.id, nome: i.nome_catalogo || i.produto })));
     }).catch(() => setPratos([]));
-  }, [carregar]);
+  }, [idCatalogo]);
 
   async function acao(p: Promise<{ message: string }>) {
     try {
@@ -95,30 +106,31 @@ export default function PaginaTestes() {
       />
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
+      {editar && <EscolhaCardapio opcoes={vivos} valor={idCatalogo} aoMudar={setIdCatalogo} />}
       {editar && (
         <div className="grid gap-4 md:grid-cols-2">
           <Cartao titulo="Vídeo × foto" descricao="Num prato que tem os dois: A mostra o vídeo, B a foto.">
-            {pratos.length === 0 ? <Vazio>Nenhum prato do cardápio da mesa tem vídeo e foto.</Vazio> : (
+            {pratos.length === 0 ? <Vazio>Nenhum prato deste cardápio tem vídeo e foto.</Vazio> : (
               <div className="flex flex-wrap gap-2">
                 <select className="campo !w-auto flex-1" value={prato} onChange={(e) => setPrato(e.target.value)} aria-label="Prato">
                   <option value="">— escolha o prato —</option>
                   {pratos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                 </select>
                 <button className="btn btn-primario" disabled={!prato}
-                        onClick={() => void acao(TestesService.criar("MIDIA", Number(prato)))}>Começar</button>
+                        onClick={() => void acao(TestesService.criar("MIDIA", Number(prato), idCatalogo))}>Começar</button>
               </div>
             )}
           </Cartao>
           <Cartao titulo="Ordem atual × sugerida"
                   descricao="B mostra, dentro de cada seção, a ordem que o painel Atenção × Vendas sugere (destaques e pratos a destacar sobem). A ordem B fica congelada no início.">
-            <button className="btn btn-primario" onClick={() => void acao(TestesService.criar("ORDEM"))}>Começar</button>
+            <button className="btn btn-primario" onClick={() => void acao(TestesService.criar("ORDEM", undefined, idCatalogo))}>Começar</button>
           </Cartao>
         </div>
       )}
 
       {!lista ? <Carregando /> : lista.length === 0 ? <Vazio>Nenhum teste ainda.</Vazio> : lista.map((t) => (
         <Cartao key={t.id} titulo={t.nome}
-                descricao={`${t.aberto ? "Aberto desde" : "Encerrado em"} ${new Date(t.aberto ? t.inicio : t.encerrado_em!).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`}
+                descricao={`${vivos.length > 1 && t.cardapio ? `${t.cardapio} · ` : ""}${t.aberto ? "Aberto desde" : "Encerrado em"} ${new Date(t.aberto ? t.inicio : t.encerrado_em!).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`}
                 acao={<div className="flex flex-wrap items-center gap-2">
                   {t.aplicado_em && <Etiqueta cor="erva">aplicado</Etiqueta>}
                   {!t.aberto && t.vencedor && <Etiqueta cor="erva">venceu {t.vencedor}</Etiqueta>}

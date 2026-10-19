@@ -54,15 +54,32 @@ SUGESTOES = {
 }
 
 
+def cardapio_do_painel(cur, id_unidade: int, id_catalogo: int | None = None) -> dict | None:
+    """O Cardápio Vivo que o painel (e os testes A/B) olham: o pedido, ou o PRINCIPAL.
+
+    ⚠️ Só vale catálogo que é Cardápio Vivo DESTA loja — outro não tem evento para medir.
+    """
+    if not id_catalogo:
+        return cv.vivo(cur, id_unidade)
+    v = cv.vivo(cur, id_unidade, id_catalogo=id_catalogo)
+    if not v:
+        raise HTTPException(status_code=404, detail="Este catálogo não é um Cardápio Vivo desta loja.")
+    return v
+
+
 def _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate,
-                     id_catalogo: int | None = None) -> tuple[str, list]:
+                     id_catalogo: int | None = None, principal: bool = True) -> tuple[str, list]:
     onde = ["e.id_unidade = %s", "e.quando >= %s::date", "e.quando < %s::date + 1"]
     valores: list = [id_unidade, de, ate]
-    if id_catalogo:
+    if id_catalogo and principal:
         # 🔑 Só o que veio DESTE Cardápio Vivo (122). O evento sem cardápio é anterior à 122 e
-        # não se sabe de onde veio: conta, como contava.
+        # não se sabe de onde veio: conta para o principal, como contava.
         onde.append("coalesce(e.id_catalogo, %s) = %s")
         valores += [id_catalogo, id_catalogo]
+    elif id_catalogo:
+        # ⚠️ Nos outros, só o evento que diz que veio dele — o sem cardápio não é deles.
+        onde.append("e.id_catalogo = %s")
+        valores.append(id_catalogo)
     if id_salao:
         onde.append("e.id_mesa IN (SELECT id FROM mesas WHERE id_salao = %s)")
         valores.append(id_salao)
@@ -139,14 +156,16 @@ def _sugestao(atencao_alta: bool, venda_alta: bool, margem: str | None,
 
 def painel(cur, id_unidade: int, de: date, ate: date, id_salao: int | None = None,
            dias: list[int] | None = None, hora_de: time | None = None,
-           hora_ate: time | None = None) -> dict:
+           hora_ate: time | None = None, id_catalogo: int | None = None) -> dict:
+    """🔑 Por Cardápio Vivo (1.1.109): `id_catalogo` escolhe qual; sem ele, o principal."""
     if ate < de:
         raise HTTPException(status_code=422, detail="O fim do período é antes do começo.")
     if (ate - de).days > 400:
         raise HTTPException(status_code=422, detail="Período de no máximo 400 dias.")
-    cfg = cv.config(cur, id_unidade)
+    vivo = cardapio_do_painel(cur, id_unidade, id_catalogo)
+    cfg = {"id_catalogo": vivo["id_catalogo"] if vivo else None}
     onde, valores = _filtros_eventos(id_unidade, de, ate, id_salao, dias, hora_de, hora_ate,
-                                     cfg["id_catalogo"])
+                                     cfg["id_catalogo"], bool(vivo and vivo["principal"]))
     teto = cv.ATENCAO_MAX_MS
 
     # ---------------------------------------------------------------- topo e funil
@@ -316,6 +335,10 @@ def painel(cur, id_unidade: int, de: date, ate: date, id_salao: int | None = Non
                 for r in cur.fetchall()}
 
     return {
+        "cardapio": ({"id_catalogo": vivo["id_catalogo"], "nome": vivo["nome"],
+                      "principal": vivo["principal"]} if vivo else None),
+        "cardapios": [{"id_catalogo": v["id_catalogo"], "nome": v["nome"], "principal": v["principal"]}
+                      for v in cv.vivos(cur, id_unidade)],
         "definicoes": DEFINICOES,
         "topo": {k: topo[k] for k in ("sessoes", "engajadas", "hubs", "cliques_avaliacao", "cliques_wifi")},
         "funil": {k: topo[k] for k in ("sessoes", "viram", "adicionaram", "enviaram")},

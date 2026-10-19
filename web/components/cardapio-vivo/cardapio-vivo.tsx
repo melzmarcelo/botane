@@ -47,9 +47,11 @@ function economiaDeDados(): boolean {
 }
 
 /** `cardapio`: o nome no link de um Cardápio Vivo que não é o principal (117). */
-type Props = { loja: number; token: string | null; cardapio?: string | null; idCatalogoPrevia?: number };
+type Props = { loja: number; token: string | null; cardapio?: string | null; idCatalogoPrevia?: number;
+                /** Na prévia, com os anúncios que valem agora (1.1.109). */
+                previaComAnuncios?: boolean };
 
-export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoPrevia }: Props) {
+export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoPrevia, previaComAnuncios = false }: Props) {
   const [idioma, setIdioma] = useState<Idioma>("pt");
   const [feed, setFeed] = useState<Feed | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     setErro(null);
     if (previa) {
       try {
-        setFeed(await previaFeed(idCatalogoPrevia!));
+        setFeed(await previaFeed(idCatalogoPrevia!, previaComAnuncios));
       } catch (e) {
         setErro((e as Error).message);
       }
@@ -114,7 +116,7 @@ export default function CardapioVivo({ loja, token, cardapio = null, idCatalogoP
     const r = await buscarFeed(loja, token, idioma, sessaoParaTestes(), cardapio);
     if ("feed" in r) setFeed(r.feed);
     else setErro(r.erro);
-  }, [loja, token, cardapio, idioma, previa, idCatalogoPrevia]);
+  }, [loja, token, cardapio, idioma, previa, idCatalogoPrevia, previaComAnuncios]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

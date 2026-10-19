@@ -101,6 +101,9 @@ class LoteEventos(BaseModel):
 class MarcasDoItem(BaseModel):
     destaque: bool | None = None
     esgotado: bool | None = None
+    # 123: ao marcar esgotado, quando volta. AMANHA = às 4h do próximo dia; MANUAL ou nulo =
+    # até alguém tirar (como era).
+    esgotado_volta: str | None = Field(None, pattern="^(AMANHA|MANUAL)$")
     # Fase 2 (115). Nulo = não mexe; "" = limpa (volta ao calculado / sem objetivo).
     objetivo: str | None = Field(None, pattern="^(AUMENTAR_VENDA|GIRAR_ESTOQUE|LANCAMENTO|MANTER|)$")
     margem_nivel: str | None = Field(None, pattern="^(ALTA|MEDIA|BAIXA|)$")

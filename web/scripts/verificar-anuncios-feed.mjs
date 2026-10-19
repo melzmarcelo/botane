@@ -152,6 +152,17 @@ try {
   await e.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "Pôr vídeo"), { timeout: 10000 }).catch(() => {});
   checar("criar deixa a janela aberta, já com foto e vídeo",
     await e.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent === "Pôr vídeo")));
+  // 🔑 (1.1.109) A prévia do cadastro mostra os anúncios só quando se pede.
+  const contarNaPrevia = async (sufixo) => {
+    await e.goto(`${WEB}/c/previa/${cat.id}${sufixo}`, { waitUntil: "networkidle2" });
+    await e.waitForSelector("[data-pos]", { timeout: 20000 }).catch(() => {});
+    await e.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent === "Ver cardápio")?.click());
+    await esperar(800);
+    return e.$$eval("[data-anuncio]", (els) => els.length);
+  };
+  const semAds = await contarNaPrevia("");
+  const comAds = await contarNaPrevia("?anuncios=1");
+  checar("a prévia segue sem anúncio, e com '?anuncios=1' mostra os de agora", semAds === 0 && comAds > 0, { semAds, comAds });
   await e.goto(`${WEB}/cardapio-vivo/anuncios/${daCasa.id}/relatorio`, { waitUntil: "networkidle2" });
   await e.waitForFunction(() => document.body.innerText.includes("Pessoas que viram"), { timeout: 20000 }).catch(() => {});
   const rel = await e.evaluate(() => document.body.innerText);

@@ -838,3 +838,33 @@ o dono aprovou os três de integridade (*"pode seguir nessa ordem: 1, 2 e 3"*), 
   e o resumo diário de cartões/seções/anúncios (hoje só pratos — somem na retenção).
 - ⚠️ `verificar-cardapio-testes.mjs` falhou uma vez em "a ordem sugerida passa a valer para todos"
   logo após "Aplicar B" e passou ao rodar de novo — corrida entre o clique e o GET do feed.
+  Corrigido na 1.1.109: o roteiro espera o feed mudar (até 10 s) antes de conferir.
+
+## As propostas da análise, entregues (1.1.109, 19/10/2026)
+
+- **Atenção × Vendas e Testes A/B por Cardápio Vivo.** `?id_catalogo=` no painel e nas sugestões
+  de destaque, `id_catalogo` no corpo do teste novo; sem ele, o principal.
+  `cardapio_atencao.cardapio_do_painel` só aceita Cardápio Vivo DA LOJA (404 com frase).
+  ⚠️ O evento sem cardápio (anterior à 122) conta só para o PRINCIPAL (`coalesce`); nos outros o
+  filtro é `e.id_catalogo = X` exato. A resposta traz `cardapio` e `cardapios`; a tela mostra o
+  campo *Cardápio* (`escolha-cardapio.tsx`) só com dois ou mais. O teste A/B lista o nome do
+  cardápio quando a loja tem mais de um.
+- **"O que falta" com cartões e traduções.** `GET /traducao/catalogo/{id}/pendentes` ganhou
+  `por_tipo` (`pendentes_por_tipo`, a MESMA regra da contagem). O painel junta: pratos (como
+  antes), cartões vazios ("não aparece") ou com botão para prato inativo (`faltasDoCartao`), e o
+  que está só em português (nomes, e o atalho para a aba Idiomas). O contador do botão soma os três.
+- **Prévia com anúncios**: `GET /cardapio-vivo/previa?anuncios=true`; na mesa (teto da mesa,
+  só-mesa entra) quando o catálogo é o principal. A prévia não tem medidor, então não conta
+  impressão. A tela do Cardápio Vivo tem a caixa "com os anúncios de agora" (`?anuncios=1` no iframe).
+- **Esgotado que volta sozinho** (migração 123, `catalogo_itens.esgotado_ate`). 🔑 A conta é NA
+  LEITURA (`esgotado AND (esgotado_ate IS NULL OR esgotado_ate > now())`, no feed, no conteúdo e
+  na marca); o `reter` da madrugada só limpa a linha. `esgotado_volta: AMANHA` = 4h do próximo dia
+  da casa (antes das 4h, as 4h de hoje); `MANUAL` ou ausente = até alguém tirar — ⚠️ ausente fica
+  como era de propósito: o conector e quem já chamava a rota não mudam de comportamento. A gaveta
+  pergunta antes de marcar, com "volta sozinho amanhã (4h)" como padrão.
+- **Resumo diário de anúncios, cartões e aberturas** (migração 124, `cardapio_conteudo_dia`),
+  feito por `agregar_dia` junto com os pratos. O relatório do anúncio soma o resumo nos dias
+  ANTES do primeiro evento bruto da loja (`_somar_resumo`) e devolve `resumido` com a frase:
+  pessoas contadas POR DIA, sem distribuição por hora. Cartões e aberturas só são guardados — as
+  telas deles olham 30 dias, dentro de qualquer retenção.
+- Ficaram: Spaces + CDN, anúncios fases 2/3, e conferir o resto do manual (etiquetas, CMV…).

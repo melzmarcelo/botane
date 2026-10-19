@@ -18,7 +18,6 @@ from fastapi import HTTPException
 
 from relogio import agora_da_casa
 from services import cardapio_atencao
-from services import cardapio_vivo as cv
 from services import catalogo_conteudo
 
 # A conta da variante: metade das sessões em cada braço, estável para a mesma sessão.
@@ -74,7 +73,8 @@ def ordem_sugerida(cur, id_unidade: int, id_catalogo: int) -> list[int]:
     candidato a sair. Empate mantém a ordem da casa — a sugestão mexe só no que tem motivo.
     """
     hoje = agora_da_casa().date()
-    painel = cardapio_atencao.painel(cur, id_unidade, hoje - timedelta(days=29), hoje)
+    painel = cardapio_atencao.painel(cur, id_unidade, hoje - timedelta(days=29), hoje,
+                                     id_catalogo=id_catalogo)
     peso_sugestao = {"DESTACAR": 3, "PROTEGER": 2, "REVISAR": 0, None: 0, "SAIR": -2}
     por_produto = {l["id_produto"]: l for l in painel["itens"]}
     cur.execute(
@@ -104,15 +104,16 @@ def ordem_sugerida(cur, id_unidade: int, id_catalogo: int) -> list[int]:
 
 # ---------------------------------------------------------------- criar, encerrar, aplicar
 
-def _catalogo_da_loja(cur, id_unidade: int) -> int:
-    cfg = cv.config(cur, id_unidade)
-    if not cfg["id_catalogo"]:
+def _catalogo_da_loja(cur, id_unidade: int, id_catalogo: int | None = None) -> int:
+    """O Cardápio Vivo do teste: o escolhido (1.1.109) ou o principal."""
+    v = cardapio_atencao.cardapio_do_painel(cur, id_unidade, id_catalogo)
+    if not v:
         raise HTTPException(status_code=409, detail="Aponte o cardápio da mesa antes de testar.")
-    return cfg["id_catalogo"]
+    return v["id_catalogo"]
 
 
 def criar(cur, id_unidade: int, dados: dict, id_usuario: int) -> dict:
-    id_catalogo = _catalogo_da_loja(cur, id_unidade)
+    id_catalogo = _catalogo_da_loja(cur, id_unidade, dados.get("id_catalogo"))
     if dados["tipo"] == "MIDIA":
         cur.execute(
             """SELECT p.id, coalesce(nullif(btrim(p.nome_catalogo), ''), p.nome) AS nome,
@@ -122,7 +123,7 @@ def criar(cur, id_unidade: int, dados: dict, id_usuario: int) -> dict:
                 WHERE i.id = %s AND g.id_catalogo = %s""", (dados.get("id_item"), id_catalogo))
         p = cur.fetchone()
         if not p:
-            raise HTTPException(status_code=404, detail="Prato não encontrado no cardápio da mesa.")
+            raise HTTPException(status_code=404, detail="Prato não encontrado neste Cardápio Vivo.")
         if not (p["video_url"] and p["foto_url"]):
             raise HTTPException(status_code=409,
                                 detail=f"{p['nome']} precisa ter vídeo E foto para comparar os dois.")
@@ -156,8 +157,9 @@ def criar(cur, id_unidade: int, dados: dict, id_usuario: int) -> dict:
 
 
 def _teste(cur, id_unidade: int, id_teste: int, travar: bool = False) -> dict:
-    cur.execute("SELECT * FROM cardapio_testes WHERE id = %s AND id_unidade = %s"
-                + (" FOR UPDATE" if travar else ""), (id_teste, id_unidade))
+    cur.execute("""SELECT t.*, (SELECT nome FROM catalogos WHERE id = t.id_catalogo) AS cardapio
+                     FROM cardapio_testes t WHERE t.id = %s AND t.id_unidade = %s"""
+                + (" FOR UPDATE OF t" if travar else ""), (id_teste, id_unidade))
     t = cur.fetchone()
     if not t:
         raise HTTPException(status_code=404, detail="Teste não encontrado.")
@@ -266,6 +268,7 @@ def resultado(cur, t: dict) -> dict:
 def _linha(cur, t: dict) -> dict:
     return {
         "id": t["id"], "tipo": t["tipo"], "nome": t["nome"], "id_produto": t["id_produto"],
+        "id_catalogo": t["id_catalogo"], "cardapio": t.get("cardapio"),
         "inicio": t["inicio"], "encerrado_em": t["encerrado_em"], "vencedor": t["vencedor"],
         "aplicado_em": t["aplicado_em"], "aberto": t["encerrado_em"] is None,
         "resultado": resultado(cur, t),
@@ -277,21 +280,23 @@ def obter(cur, id_unidade: int, id_teste: int) -> dict:
 
 
 def listar(cur, id_unidade: int) -> list[dict]:
-    cur.execute("""SELECT * FROM cardapio_testes WHERE id_unidade = %s
-                    ORDER BY encerrado_em IS NOT NULL, inicio DESC LIMIT 50""", (id_unidade,))
+    cur.execute("""SELECT t.*, c.nome AS cardapio
+                     FROM cardapio_testes t LEFT JOIN catalogos c ON c.id = t.id_catalogo
+                    WHERE t.id_unidade = %s
+                    ORDER BY t.encerrado_em IS NOT NULL, t.inicio DESC LIMIT 50""", (id_unidade,))
     return [_linha(cur, dict(t)) for t in cur.fetchall()]
 
 
 # ---------------------------------------------------------------- sugestões de destaque
 
-def sugestoes_destaque(cur, id_unidade: int, de, ate) -> list[dict]:
+def sugestoes_destaque(cur, id_unidade: int, de, ate, id_catalogo: int | None = None) -> list[dict]:
     """Pôr e tirar destaque, com o motivo — para o gerente aprovar (decisão do dono).
 
     🔑 **Pôr**: o painel diz DESTACAR (margem alta ou lançamento/girar estoque com pouca
     atenção) e o prato não está em destaque. **Tirar**: está em destaque e mesmo assim é
     candidato a sair, ou tem margem BAIXA sem ser lançamento — destaque é vitrine cara.
     """
-    p = cardapio_atencao.painel(cur, id_unidade, de, ate)
+    p = cardapio_atencao.painel(cur, id_unidade, de, ate, id_catalogo=id_catalogo)
     saida = []
     for l in p["itens"]:
         if l["sugestao"] == "DESTACAR" and not l["destaque"]:

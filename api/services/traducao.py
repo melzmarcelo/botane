@@ -311,7 +311,16 @@ def do_catalogo(cur, id_catalogo: int, forcar: bool = False) -> dict:
 
 def pendentes_do_catalogo(cur, id_catalogo: int) -> int:
     """Quantas coisas do catálogo estão sem tradução, ou com o português mudado."""
-    n = 0
+    return sum(len(ids) for ids in pendentes_por_tipo(cur, id_catalogo).values())
+
+
+def pendentes_por_tipo(cur, id_catalogo: int) -> dict[str, list[int]]:
+    """O que está sem tradução (ou com o português mudado), por tipo e id.
+
+    🔑 É o que o "O que falta" do catálogo usa (1.1.109) para dizer QUAL prato, seção ou
+    cartão falta traduzir — o total sozinho não diz por onde começar.
+    """
+    saida: dict[str, list[int]] = {}
     cur.execute("SELECT id FROM catalogo_categorias WHERE id_catalogo = %s", (id_catalogo,))
     cats = [r["id"] for r in cur.fetchall()]
     cur.execute("SELECT s.id FROM catalogo_subcategorias s JOIN catalogo_categorias c "
@@ -329,8 +338,8 @@ def pendentes_do_catalogo(cur, id_catalogo: int) -> int:
         for l in _linhas(cur, tipo, ids):
             o = _origem(tipo, l)
             if any(o.values()) and l["traducao_origem"] != _impressao(o):
-                n += 1
-    return n
+                saida.setdefault(tipo, []).append(l["id"])
+    return saida
 
 
 def escolher(pt: str | None, en: str | None, de: str | None, idioma: str | None) -> str | None:

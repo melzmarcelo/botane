@@ -112,7 +112,9 @@ def montar(cur, id_unidade: int, id_catalogo: int) -> dict:
 
     cur.execute(
         """SELECT i.id, i.id_categoria, i.id_subcategoria, i.id_produto, i.ordem,
-                  i.destaque, i.esgotado, i.objetivo, i.margem_nivel,
+                  i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
+                  CASE WHEN (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) THEN i.esgotado_ate END AS esgotado_ate,
+                  i.objetivo, i.margem_nivel,
                   p.nome AS produto, p.codigo, p.ativo, p.foto_url,
                   p.video_url IS NOT NULL AS tem_video, p.restricoes,
                   -- 🔑 O nome que o CLIENTE vai ler, para a tela de
@@ -593,9 +595,12 @@ def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
 
     ⚠️ Esgotado revoga a decisão 6 de 28/09 ("não haverá pausa"), por pedido do dono
     em 14/10/2026: o item fica no cardápio, marcado, e não pode ser adicionado.
+    🔑 **Volta sozinho** (123): `esgotado_volta = "AMANHA"` grava até as 4h do próximo dia
+    da casa; `"MANUAL"` (ou nada — o conector e quem chamava antes) fica até alguém tirar.
     """
     cur.execute(
-        """SELECT i.id, i.destaque, i.esgotado, i.objetivo, i.margem_nivel, p.nome
+        """SELECT i.id, i.destaque, (i.esgotado AND (i.esgotado_ate IS NULL OR i.esgotado_ate > now())) AS esgotado,
+                  i.esgotado_ate, i.objetivo, i.margem_nivel, p.nome
              FROM catalogo_itens i
              JOIN produtos p ON p.id = i.id_produto
              JOIN catalogo_categorias c ON c.id = i.id_categoria
@@ -607,19 +612,40 @@ def marcar_item(cur, id_unidade: int, id_item: int, dados: dict) -> dict:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     destaque = atual["destaque"] if dados.get("destaque") is None else dados["destaque"]
     esgotado = atual["esgotado"] if dados.get("esgotado") is None else dados["esgotado"]
+    if dados.get("esgotado") is None:
+        esgotado_ate = atual["esgotado_ate"] if atual["esgotado"] else None
+    elif dados["esgotado"] and dados.get("esgotado_volta") == "AMANHA":
+        esgotado_ate = proxima_volta()
+    else:
+        esgotado_ate = None
     # Fase 2 (115): nulo = não mexe; "" = limpa (sem objetivo / nível calculado).
     objetivo = atual["objetivo"] if dados.get("objetivo") is None else (dados["objetivo"] or None)
     nivel = atual["margem_nivel"] if dados.get("margem_nivel") is None else (dados["margem_nivel"] or None)
-    cur.execute("""UPDATE catalogo_itens SET destaque = %s, esgotado = %s, objetivo = %s,
-                          margem_nivel = %s WHERE id = %s""",
-                (destaque, esgotado, objetivo, nivel, id_item))
-    return {"id": id_item, "destaque": destaque, "esgotado": esgotado,
+    cur.execute("""UPDATE catalogo_itens SET destaque = %s, esgotado = %s, esgotado_ate = %s,
+                          objetivo = %s, margem_nivel = %s WHERE id = %s""",
+                (destaque, esgotado, esgotado_ate, objetivo, nivel, id_item))
+    return {"id": id_item, "destaque": destaque, "esgotado": esgotado, "esgotado_ate": esgotado_ate,
             "objetivo": objetivo, "margem_nivel": nivel,
             "antes": {"destaque": atual["destaque"], "esgotado": atual["esgotado"],
                       "objetivo": atual["objetivo"], "margem_nivel": atual["margem_nivel"]},
             "message": f'"{atual["nome"]}": ' + ", ".join(
                 [("em destaque" if destaque else "sem destaque"),
-                 ("esgotado" if esgotado else "disponível")]) + "."}
+                 (("esgotado até amanhã" if esgotado_ate else "esgotado") if esgotado
+                  else "disponível")]) + "."}
+
+
+HORA_DA_VOLTA = 4  # ⚠️ Depois do fechamento de quem vira a noite e antes de quem abre cedo.
+
+
+def proxima_volta():
+    """As 4h da casa do PRÓXIMO dia de trabalho: marcado às 2h da madrugada, volta às 4h de
+    hoje — a noite de ontem ainda é o mesmo turno."""
+    from datetime import timedelta
+
+    from relogio import agora_da_casa
+    agora = agora_da_casa()
+    volta = agora.replace(hour=HORA_DA_VOLTA, minute=0, second=0, microsecond=0)
+    return volta if agora < volta else volta + timedelta(days=1)
 
 
 def exibicao_da_secao(cur, id_unidade: int, tipo: str, id_secao: int, dados: dict) -> dict:

@@ -18,7 +18,9 @@
   O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento e parou em 13/09.
   ⚠️ **Parou de novo depois da 1.1.60**: em 17/10/2026 (1.1.108) entraram só catálogos e o
   Cardápio Vivo (seção `cardapio-vivo`, 17; Fidelidade, WhatsApp e Claude viraram 18–20).
-  Precificação e as demais entregas de 28/09 a 17/10 continuam fora do manual.
+  Em 19/10/2026 (1.1.109) entrou a **Precificação** como seção `precificacao`, **21** — no
+  FIM, para não renumerar o resto (o número na tela não tem de seguir a ordem do menu). As
+  demais entregas de 28/09 a 17/10 (etiquetas, CMV, compras…) continuam a conferir.
 
 - 🔑 **A bateria do navegador tinha 26 falhas e NENHUMA era defeito do sistema** (28/09/2026) —
   eram testes que não acompanharam telas que mudaram. Três causas, todas de SELETOR:

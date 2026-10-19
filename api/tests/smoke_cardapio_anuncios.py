@@ -190,6 +190,15 @@ checar("o anúncio do Dia dos Namorados NÃO aparece no próprio cardápio do Di
        casa_ad["id"] not in {x["id"] for x in fn.get("anuncios", [])}, "")
 _st, site = chamar("GET", f"/publico/{U}/catalogos")
 checar("o site não recebe anúncio (só no feed)", "anuncios" not in json.dumps(site), "")
+# 🔑 (1.1.109) A prévia do cadastro: sem anúncio, a não ser que se peça — e então como na mesa
+# (o principal é o cardápio da mesa), com o teto da mesa.
+_st, pv = chamar("GET", f"/cardapio-vivo/previa?id_catalogo={ID}", token=token)
+checar("a prévia, por padrão, segue sem anúncio", pv.get("anuncios") == [], pv.get("anuncios"))
+st, pv = chamar("GET", f"/cardapio-vivo/previa?id_catalogo={ID}&anuncios=true", token=token)
+idsp = {x["id"] for x in pv.get("anuncios", [])}
+checar("pedida com anúncios, mostra os que valem agora (o só-da-mesa, porque é o principal)",
+       st == 200 and {casa_ad["id"], externo["id"], so_mesa["id"]} <= idsp and futuro["id"] not in idsp
+       and pv["regras_anuncio"]["maximo"] == 1, (st, idsp, pv.get("regras_anuncio")))
 
 print("\n4. a mídia")
 st, r = enviar(f"/cardapio-vivo/anuncios/{externo['id']}/foto", token, FOTO, "cerveja.png", "image/png")
@@ -238,6 +247,39 @@ pc = {x["id_catalogo"]: x for x in rel.get("por_cardapio", [])}
 checar("o relatório separa o anúncio por cardápio (a cafeteria e o do Dia dos Namorados)",
        pc.get(ID, {}).get("sessoes") == 2 and pc.get(NAM, {}).get("sessoes") == 1
        and pc[NAM]["cardapio"] == f"Namorados {MARCA}", rel.get("por_cardapio"))
+
+print("\n5d. o resumo do dia guarda o anúncio, e o relatório o lê depois da retenção (124)")
+from services import cardapio_vivo as cvs  # noqa: E402
+with get_cursor() as cur:
+    cvs.agregar_dia(cur, hoje, U)
+    cur.execute("""SELECT id_catalogo, canal, vistas, sessoes, pulados, cliques, sessoes_clicaram
+                     FROM cardapio_conteudo_dia
+                    WHERE dia = %s AND id_unidade = %s AND tipo = 'ANUNCIO' AND id_ref = %s""",
+                (hoje, U, externo["id"]))
+    resumo = {x["id_catalogo"]: dict(x) for x in cur.fetchall()}
+checar("o agendador resume o anúncio por cardápio e canal: 2 vistas, 2 pessoas, 1 pulou, 1 toque",
+       resumo.get(ID) == {"id_catalogo": ID, "canal": "LINK", "vistas": 2, "sessoes": 2, "pulados": 1,
+                          "cliques": 1, "sessoes_clicaram": 1} and resumo.get(NAM, {}).get("vistas") == 1, resumo)
+with get_cursor() as cur:
+    cur.execute("SELECT min(quando)::date AS d FROM cardapio_eventos WHERE id_unidade = %s", (U,))
+    velho = cur.fetchone()["d"] - timedelta(days=10)  # um dia que o bruto já não tem
+    cur.execute("""INSERT INTO cardapio_conteudo_dia (dia, id_unidade, tipo, id_ref, id_catalogo, canal,
+                                                      vistas, sessoes, soma_ms, pulados, cliques, sessoes_clicaram)
+                   VALUES (%s, %s, 'ANUNCIO', %s, %s, 'MESA', 4, 3, 20000, 0, 2, 2)""",
+                (velho, U, externo["id"], ID))
+_st, r_novo = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio?de={hoje}&ate={hoje}", token=token)
+st, r_velho = chamar("GET", f"/cardapio-vivo/anuncios/{externo['id']}/relatorio?de={velho}&ate={hoje}", token=token)
+checar("o período que vai antes do bruto soma o resumo: +4 aparições, +2 toques, um dia a mais",
+       st == 200 and r_velho["total"]["aparicoes"] == r_novo["total"]["aparicoes"] + 4
+       and r_velho["total"]["toques"] == r_novo["total"]["toques"] + 2
+       and r_velho["por_dia"][0]["dia"] == str(velho), (st, r_velho.get("total"), r_velho.get("por_dia", [])[:1]))
+checar("e diz até quando veio do resumo, e o porquê das pessoas",
+       r_velho.get("resumido") and r_velho["resumido"]["dias"] == 1 and "por dia" in r_velho["resumido"]["aviso"]
+       and r_novo.get("resumido") is None, r_velho.get("resumido"))
+checar("o canal da mesa do resumo aparece junto do link do bruto",
+       {x["canal"] for x in r_velho["por_canal"]} == {"MESA", "LINK"}, r_velho.get("por_canal"))
+with get_cursor() as cur:
+    cur.execute("DELETE FROM cardapio_conteudo_dia WHERE dia = %s AND id_ref = %s", (velho, externo["id"]))
 
 print("\n5c. o anúncio que não aparece diz por quê (17/10/2026)")
 st, vazio_ad = chamar("POST", "/cardapio-vivo/anuncios", {"nome": f"Vazio {MARCA}"}, token)

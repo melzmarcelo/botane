@@ -281,12 +281,13 @@ def cardapio_da_loja(id_unidade: int, idioma: str | None = _IDIOMA, sessao: str 
 
 
 @router.get("/previa")
-def previa(id_catalogo: int, idioma: str | None = _IDIOMA,
+def previa(id_catalogo: int, idioma: str | None = _IDIOMA, anuncios: bool = False,
            ctx: Contexto = Depends(_VER)) -> dict:
     """O feed de um catálogo ANTES de publicar — a pré-visualização do cadastro.
 
     ⚠️ Com login, e não pública: rascunho não é para o público, e a prévia mostra
-    também as seções fora do dia e do horário.
+    também as seções fora do dia e do horário. `anuncios=true` põe os anúncios que valem
+    agora (1.1.109); a prévia não mede nada, então ver o anúncio aqui não conta impressão.
     """
     with get_cursor() as cur:
         id_unidade = _unidade(cur, ctx)
@@ -296,7 +297,8 @@ def previa(id_catalogo: int, idioma: str | None = _IDIOMA,
                     (id_catalogo, id_unidade))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Catálogo não encontrado.")
-        return servico.cardapio_publico(cur, id_unidade, None, idioma, previa_catalogo=id_catalogo)
+        return servico.cardapio_publico(cur, id_unidade, None, idioma, previa_catalogo=id_catalogo,
+                                        previa_anuncios=anuncios)
 
 
 @publico.post("/eventos", status_code=204)
@@ -402,6 +404,7 @@ _ATENCAO = requer_permissao("cardapio.atencao")
 def painel_atencao(de: date, ate: date, id_salao: int | None = None,
                    dias: str | None = Query(None, pattern=r"^[1-7](,[1-7])*$"),
                    hora_de: time | None = None, hora_ate: time | None = None,
+                   id_catalogo: int | None = None,
                    ctx: Contexto = Depends(_ATENCAO)) -> dict:
     """O painel Atenção × Vendas: atenção estimada, vendas do PDV e margem por prato.
 
@@ -412,7 +415,7 @@ def painel_atencao(de: date, ate: date, id_salao: int | None = None,
     with get_cursor() as cur:
         return cardapio_atencao.painel(
             cur, _unidade(cur, ctx), de, ate, id_salao,
-            [int(d) for d in dias.split(",")] if dias else None, hora_de, hora_ate)
+            [int(d) for d in dias.split(",")] if dias else None, hora_de, hora_ate, id_catalogo)
 
 
 # ------------------------------------------------------------------ fase 3 (116)
@@ -421,6 +424,8 @@ class NovoTeste(BaseModel):
     tipo: str = Field(pattern="^(MIDIA|ORDEM)$")
     # Só no de mídia: o ITEM do cardápio (o prato tem de ter vídeo E foto).
     id_item: int | None = None
+    # Qual Cardápio Vivo (1.1.109); sem ele, o principal.
+    id_catalogo: int | None = None
 
 
 class AplicarTeste(BaseModel):
@@ -469,9 +474,10 @@ def aplicar_teste(id_teste: int, body: AplicarTeste, ctx: Contexto = Depends(_ED
 
 
 @router.get("/destaques/sugestoes")
-def sugestoes_de_destaque(de: date, ate: date, ctx: Contexto = Depends(_ATENCAO)) -> list[dict]:
+def sugestoes_de_destaque(de: date, ate: date, id_catalogo: int | None = None,
+                          ctx: Contexto = Depends(_ATENCAO)) -> list[dict]:
     with get_cursor() as cur:
-        return cardapio_testes.sugestoes_destaque(cur, _unidade(cur, ctx), de, ate)
+        return cardapio_testes.sugestoes_destaque(cur, _unidade(cur, ctx), de, ate, id_catalogo)
 
 
 @router.post("/destaques/aplicar")

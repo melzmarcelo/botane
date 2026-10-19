@@ -449,7 +449,7 @@ def marcar_item(id_item: int, body: MarcasDoItem, ctx: Contexto = Depends(_EDITA
         feito = conteudo.marcar_item(cur, id_unidade, id_item, body.model_dump())
         auditoria.registrar(cur, ctx.id_usuario, "catalogo_item", id_item, "marcas",
                             antes=feito.pop("antes"),
-                            depois={k: feito[k] for k in ("destaque", "esgotado", "objetivo",
+                            depois={k: feito[k] for k in ("destaque", "esgotado", "esgotado_ate", "objetivo",
                                                           "margem_nivel")},
                             id_unidade=id_unidade)
         return feito

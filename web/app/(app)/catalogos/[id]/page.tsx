@@ -133,7 +133,7 @@ export default function EditorDoCatalogo() {
       ) : aba === "arquivo" ? (
         <AbaArquivo capa={capa} podeEditar={podeEditar} aoMudar={recarregarCapa} />
       ) : (
-        <AbaCardapio idCatalogo={idCatalogo} podeEditar={podeEditar} />
+        <AbaCardapio idCatalogo={idCatalogo} podeEditar={podeEditar} aoIdiomas={() => setAba("idiomas")} />
       )}
     </div>
   );

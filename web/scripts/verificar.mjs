@@ -7886,9 +7886,9 @@ try {
   const secoesNovas = await p.evaluate(() => {
     const d = document.querySelector("iframe")?.contentDocument;
     return ["navegar", "pessoas", "etiquetas", "portal", "cardapio-vivo", "fidelidade", "whatsapp",
-            "claude", "novidades"].filter((id) => !d?.getElementById(id));
+            "claude", "precificacao", "novidades"].filter((id) => !d?.getElementById(id));
   });
-  checar("com os módulos novos: pessoas, etiquetas, portal, Cardápio Vivo, fidelidade, WhatsApp e Claude",
+  checar("com os módulos novos: pessoas, etiquetas, portal, Cardápio Vivo, fidelidade, WhatsApp, Claude e Precificação",
     secoesNovas.length === 0, secoesNovas);
   checar("com o custo médio ponderado, o custo congelado e a fórmula do CMV",
     trilha.custoMedio && trilha.congelado && trilha.resumo, trilha);
@@ -10294,11 +10294,20 @@ try {
   // tem foto: aparece no painel. E muda de seção pela gaveta, levando as marcas.
   const { dados: gDoces } = await api("POST", `/catalogos/${catPed.id}/categorias`, { nome: "Doces tela" }, token);
   await api("PUT", `/catalogos/itens/${itPed.id}/marcas`, { destaque: true }, token);
+  // 🔑 (1.1.109) O cartão vazio não aparece no feed: o "O que falta" também o lista.
+  await api("POST", `/catalogos/${catPed.id}/cartoes`, { id_categoria: gPed.id, id_subcategoria: null,
+    antes_do_item: null, titulo: null, texto: null, id_item_link: null, ativo: true }, token);
+  const { dados: pendTr } = await api("GET", `/traducao/catalogo/${catPed.id}/pendentes`, null, token);
   await irPara(p, `${WEB}/catalogos/${catPed.id}`);
   checar("a coluna das seções oferece 'O que falta'", await clicarQuando(p, "O que falta"));
   checar("e o painel lista o prato sem foto", await esperarTexto(p, "Abra um, arrume, e ele sai daqui", 6000)
     && await p.evaluate((nome) => !!document.querySelector('section[aria-label="o que falta"]')?.innerText.includes(nome),
       `TELA COXINHA ${marcaNota}`));
+  checar("e o cartão vazio, dizendo que ele não aparece",
+    await p.evaluate(() => !!document.querySelector("#faltas-cartoes")?.innerText.includes("vazio — não aparece")));
+  checar("e o que ainda está só em português, quando há (com o caminho para Idiomas)",
+    !pendTr?.pendentes || await p.evaluate(() => !!document.querySelector("#faltas-traducao")?.innerText.includes("Abrir a aba Idiomas")),
+    pendTr);
   await p.evaluate((nome) => [...document.querySelectorAll('button[aria-label^="abrir "]')]
     .find((x) => x.textContent.includes(nome))?.click(), `TELA COXINHA ${marcaNota}`);
   await p.waitForSelector("#prato-mover", { timeout: 8000 }).catch(() => {});

@@ -24,6 +24,7 @@ export default function PaginaCardapioVivo() {
   const [dados, setDados] = useState<RespostaConfig | null>(null);
   const [erro, setErro] = useState("");
   const [previa, setPrevia] = useState(false);
+  const [previaAnuncios, setPreviaAnuncios] = useState(false);
 
   useEffect(() => {
     CardapioVivoService.config().then(setDados)
@@ -71,11 +72,19 @@ export default function PaginaCardapioVivo() {
       {id && (
         <Cartao titulo="Pré-visualização"
                 descricao="O feed como o cliente vê — inclusive as seções fora do dia ou do horário, marcadas."
-                acao={<button className="btn btn-secundario" onClick={() => setPrevia((v) => !v)}>
-                  {previa ? "Fechar" : "Abrir"}</button>}>
+                acao={<span className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-[13.5px]">
+                    <input type="checkbox" id="previa-anuncios" checked={previaAnuncios}
+                           onChange={(e) => setPreviaAnuncios(e.target.checked)} />
+                    com os anúncios de agora
+                  </label>
+                  <button className="btn btn-secundario" onClick={() => setPrevia((v) => !v)}>
+                    {previa ? "Fechar" : "Abrir"}</button>
+                </span>}>
           {previa ? (
             <div className="flex justify-center">
-              <iframe src={`/c/previa/${id}`} title="Pré-visualização do cardápio"
+              <iframe key={String(previaAnuncios)} src={`/c/previa/${id}${previaAnuncios ? "?anuncios=1" : ""}`}
+                      title="Pré-visualização do cardápio"
                       className="h-[720px] w-[360px] rounded-[28px] border-[6px] border-[var(--color-linha)]" />
             </div>
           ) : null}

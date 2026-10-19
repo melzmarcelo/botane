@@ -305,6 +305,7 @@
       <li><a href="#whatsapp">19 · WhatsApp</a></li>
       <li class="grupo"><span class="rotulo">Conectado</span></li>
       <li><a href="#claude">20 · O Claude dentro do sistema</a></li>
+      <li><a href="#precificacao">21 · Precificação</a></li>
       <li class="grupo"><span class="rotulo">Referência</span></li>
       <li><a href="#regras">As regras que não se negociam</a></li>
       <li><a href="#onde">Onde cada dado mora</a></li>
@@ -777,6 +778,7 @@
           <tr><td><strong>Vendas</strong></td><td><strong>Períodos</strong> (os ciclos de consumo) e <strong>Documentos</strong> (os cupons do PDV e os lançados à mão, com Lançar, Consumo por pessoa e Sem vínculo)</td></tr>
           <tr><td><strong>Estoque</strong></td><td>Saldos e movimentos, ajustes, remessas entre lojas, produção, inventário</td></tr>
           <tr><td><strong>CMV</strong></td><td>Item direto: o painel de CMV</td></tr>
+          <tr><td><strong>Precificação</strong></td><td>A análise e o aplicar dos preços, o preço × custo de um produto no tempo e a configuração da loja (impostos, taxas, custo operacional, margem)</td></tr>
           <tr><td><strong>Portal de Clientes</strong></td><td>Configuração, reservas (agenda e salão), clientes, fidelidade, QR codes, catálogos (cadastro, Cardápio Vivo, anúncios, Atenção × Vendas, testes A/B) e pedidos (painel e lista) — só aparece na loja que ligou o módulo</td></tr>
           <tr><td><strong>Etiquetas</strong></td><td>Imprimir, painel de validades, configuração</td></tr>
           <tr><td><strong>Administração</strong></td><td>Empresa, lojas (com a aba WhatsApp), visão da rede (com mais de uma loja), usuários, papéis, integrações, auditoria</td></tr>
@@ -2970,7 +2972,7 @@
       <table>
         <thead><tr><th>Aba</th><th>O que se faz nela</th></tr></thead>
         <tbody>
-          <tr><td><strong>Cardápio</strong></td><td>As seções à esquerda e os pratos da seção escolhida à direita. <em>+ pratos</em> escolhe vários de uma vez (o que já está aparece travado); as setas ↑↓ mudam a ordem (das seções e dos pratos); <em>+ seção</em> e <em>+ cartão</em> ficam ali também. Tocar no prato abre a <strong>gaveta</strong>: foto, nome de vitrine, descrição, vídeo e restrições — que gravam no PRODUTO e valem em todo cardápio — e o <em>mover para</em>, que leva o prato a outra seção com destaque e esgotado junto. A lista <strong>O que falta</strong> junta os pratos sem foto, sem descrição, sem preço ou inativos</td></tr>
+          <tr><td><strong>Cardápio</strong></td><td>As seções à esquerda e os pratos da seção escolhida à direita. <em>+ pratos</em> escolhe vários de uma vez (o que já está aparece travado); as setas ↑↓ mudam a ordem (das seções e dos pratos); <em>+ seção</em> e <em>+ cartão</em> ficam ali também. Tocar no prato abre a <strong>gaveta</strong>: foto, nome de vitrine, descrição, vídeo e restrições — que gravam no PRODUTO e valem em todo cardápio — e o <em>mover para</em>, que leva o prato a outra seção com destaque e esgotado junto. A lista <strong>O que falta</strong> junta os pratos sem foto, sem descrição, sem preço ou inativos; os <strong>cartões</strong> que não funcionam (vazio, que não aparece, ou com o botão levando a um prato inativo — tocar abre o cartão); e o que ainda está <strong>só em português</strong> (seções, pratos e cartões sem inglês e alemão), com o atalho para a aba Idiomas</td></tr>
           <tr><td><strong>Publicação</strong></td><td>Situação, período, lojas onde aparece, se exige cadastro — e se é um <strong>Cardápio Vivo</strong></td></tr>
           <tr><td><strong>Pedidos</strong></td><td>Se o catálogo recebe pedidos pelo site, e como (ver abaixo)</td></tr>
           <tr><td><strong>Idiomas</strong></td><td>O inglês e o alemão do catálogo e o <em>Traduzir o que falta</em></td></tr>
@@ -3092,6 +3094,12 @@
         continua no produto; destaque e esgotado ficam no prato do catálogo; o dia e o horário, na
         seção. Sem app e sem login para o cliente.
       </p>
+      <p>
+        <strong>Esgotado que volta sozinho.</strong> Ao marcar <em>Esgotado</em> na gaveta do prato,
+        escolha antes quando ele volta: <em>volta sozinho amanhã (4h)</em> — o padrão — ou <em>só
+        quando alguém tirar</em>. Marcado de madrugada (antes das 4h), volta às 4h do mesmo dia, porque
+        a noite ainda é o turno de ontem. A gaveta e a linha do prato dizem qual dos dois vale.
+      </p>
 
       <h3>Um principal e os outros</h3>
       <p>
@@ -3167,6 +3175,13 @@
         Vivo, o relatório separa os números por cardápio.
       </p>
       <p>
+        Os eventos guardam o detalhe só pelo tempo de <em>retenção</em> da loja. Antes de apagá-los, o
+        sistema faz um <strong>resumo por dia</strong> de cada anúncio (e dos cartões e das aberturas
+        de seção). O relatório de uma campanha mais longa que a retenção soma esse resumo e avisa
+        acima dos números: nesses dias, as pessoas são contadas <em>por dia</em> (quem voltou noutro
+        dia conta de novo), e o gráfico por hora não os inclui.
+      </p>
+      <p>
         Na lista, o anúncio ligado que não vai aparecer — ou vai aparecer pela metade — fica
         <strong>com problema</strong>, com o motivo embaixo do nome: sem título, texto nem mídia; o
         catálogo do botão apagado ou fora do ar; o prato do botão tirado do cardápio; só na mesa num
@@ -3193,15 +3208,19 @@
         <p>
           “Atenção” é o tempo em que o prato ficou na tela, com teto de 60 s — o celular deixado na
           mesa não conta como interesse. É um sinal para comparar pratos, não uma medida de quem leu.
-          Atenção × Vendas e os testes A/B olham o Cardápio Vivo <strong>principal</strong> — e, desde
-          17/10/2026, só ele: o prato visto no catering não soma no painel da cafeteria.
+          Atenção × Vendas e os testes A/B olham <strong>um Cardápio Vivo de cada vez</strong>: o
+          principal, ou o que se escolhe no campo <em>Cardápio</em> (ele só aparece quando a loja
+          tem mais de um). O prato visto no catering não soma no painel da cafeteria. Os outros
+          cardápios só têm dado a partir de 17/10/2026; antes disso, toda visita contava para o
+          principal.
         </p>
       </div>
       <p>
         A <strong>Pré-visualização</strong> da tela do Cardápio Vivo (e o <em>Ver como o cliente vê</em>
         da aba Publicação) mostra o feed como o cliente vê, inclusive as seções fora do dia ou do
-        horário, marcadas. Ela não mostra os
-        anúncios.
+        horário, marcadas. Os anúncios ficam de fora, a não ser que se marque <em>com os anúncios de
+        agora</em>: aí entram os que valem naquele momento, com o teto da mesa quando o cardápio é o
+        principal. Ver o anúncio na prévia não conta como visualização no relatório.
       </p>
     </section>
 
@@ -3352,6 +3371,138 @@
           auditoria em nome de quem conectou.
         </p>
       </div>
+    </section>
+
+    <!-- ========================================================= precificacao -->
+    <section id="precificacao">
+      <h2>21 · Precificação</h2>
+      <p class="chamada">
+        O menor preço que paga a conta inteira — e quais produtos estão abaixo dele.
+      </p>
+
+      <p>
+        Três telas, no grupo <strong>Precificação</strong> do menu:
+      </p>
+      <table>
+        <thead><tr><th>Tela</th><th>Responde</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Configuração</strong></td><td>O que sai de cada real vendido (impostos, cartão, o custo de manter a casa aberta), os custos por unidade e quanto a casa quer que sobre — por loja</td></tr>
+          <tr><td><strong>Precificação</strong></td><td>Os produtos vendidos nos últimos 30 dias comparados com o menor preço que paga essa conta, o que mais pesa no mês primeiro; e o botão de aplicar</td></tr>
+          <tr><td><strong>Preço × custo</strong></td><td>Como o preço e o custo de UM produto andaram no tempo, e a margem bruta entre eles</td></tr>
+        </tbody>
+      </table>
+
+      <h3>A conta</h3>
+      <div class="regra">
+        <p class="rotulo">O percentual sai do preço, não se soma ao custo</p>
+        <p>
+          Imposto e taxa do cartão incidem sobre o <strong>preço</strong>. Por isso o preço mínimo é
+          <em>custo direto ÷ (1 − a soma dos percentuais, com a margem)</em>. Um prato de custo
+          R$ 10,00 com 48,5% de percentuais custa no mínimo <strong>R$ 19,42</strong> — e não
+          R$ 14,85, que é o que dá somar 48,5% ao custo. <em>Custo direto</em> é o custo de hoje
+          (da ficha técnica, ou o de compra) mais os custos por unidade da configuração.
+        </p>
+      </div>
+      <p>
+        A conta é feita pelo servidor, sempre — inclusive a do simulador. O custo usado é o de
+        <strong>hoje</strong>: precifica-se para a frente. (A tela Preço × custo, que olha para trás,
+        usa o custo congelado em cada venda.)
+      </p>
+
+      <h3>Configuração</h3>
+      <table>
+        <thead><tr><th>Cartão</th><th>O que vai nele</th></tr></thead>
+        <tbody>
+          <tr><td><strong>O que sai de cada real vendido</strong></td><td>Percentuais sobre o preço: impostos, taxa do cartão, custo operacional, taxa de aplicativo. Mostra a soma das linhas que valem para tudo, com e sem a margem</td></tr>
+          <tr><td><strong>Quanto a casa quer que sobre</strong></td><td>A margem, também sobre a venda — e como arredondar o preço sugerido: para cima em ,90; para cima em ,00 ou ,50; ou sem arredondar</td></tr>
+          <tr><td><strong>Custos por unidade vendida</strong></td><td>Reais por unidade do que acompanha o produto e não está na ficha: embalagem de viagem, sachê, canudo. O que já está na ficha não entra aqui — contaria duas vezes</td></tr>
+          <tr><td><strong>Calculadora do custo operacional</strong></td><td>A despesa fixa do mês dividida pelo faturamento médio dos últimos meses fechados; <em>usar este percentual</em> preenche a linha <em>Custo operacional</em></td></tr>
+          <tr><td><strong>Calculadora do Simples Nacional</strong></td><td>A alíquota efetiva (Anexo I) a partir do faturamento de 12 meses; <em>usar em Impostos</em> preenche a linha <em>Impostos</em></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Cada linha tem um <strong>Vale para</strong>: tudo, só uma categoria ou só um setor. A linha
+        de mesmo nome mais específica <strong>substitui</strong> a geral — categoria ganha de setor,
+        que ganha de tudo. Assim, “Taxa do aplicativo” pode valer só para a categoria do delivery, e
+        “Margem” de 20% na loja vira 35% numa categoria. A margem é uma só por produto.
+      </p>
+      <p>
+        Com a soma chegando a 100%, não existe preço que pague a conta: a tela avisa e o servidor
+        recusa a configuração geral. <em>Salvar configuração</em> grava a tela inteira como ela está.
+      </p>
+      <div class="regra perigo">
+        <p class="rotulo">Imposto aqui é estimativa</p>
+        <p>
+          O percentual serve para precificar; não é apuração fiscal. O sistema não emite nota de
+          venda nem apura imposto — confirme o número com a contabilidade e troque-o quando mudar.
+        </p>
+      </div>
+      <p>
+        Com mais de uma loja, o cartão <strong>De quem é a configuração</strong> deixa uma loja
+        <em>seguir</em> a de outra. Seguindo, a tela dela fica só para consulta e os preços sugeridos
+        saem da outra. Só se segue quem tem configuração própria, e quem é seguida não segue
+        ninguém. <em>Voltar a ter configuração própria</em> começa com uma cópia da que era seguida.
+      </p>
+
+      <h3>Precificação: o que rever primeiro</h3>
+      <p>
+        No alto, quatro números: quantos estão <strong>abaixo da margem</strong>, quantos
+        <strong>vendendo com prejuízo</strong> (o preço não paga nem o custo direto e as taxas), a
+        <strong>diferença no mês</strong> se todos fossem corrigidos e quantos estão <strong>sem
+        custo</strong> — sem ficha técnica nem custo de compra, não há sugestão.
+      </p>
+      <p>
+        A lista mostra custo direto, preço atual, lucro líquido, o <strong>mínimo sugerido</strong>,
+        a diferença, o quanto vendeu e o <strong>impacto no mês</strong> (diferença × quantidade).
+        Ela vem ordenada pelo impacto, com o prejuízo na frente. A etiqueta de cada linha diz a
+        situação: <em>prejuízo</em>, <em>abaixo da margem</em>, <em>na margem</em>, <em>sem custo</em>,
+        <em>sem preço</em> ou <em>sem conta possível</em> (os percentuais daquele produto chegam a
+        100%). <em>Custo provisório</em> marca a sugestão que nasce de ficha em rascunho ou de
+        ingrediente produzido que ainda não foi feito.
+      </p>
+      <div class="regra">
+        <p class="rotulo">O sugerido é o piso, não o alvo</p>
+        <p>
+          É o menor preço que entrega a margem. Quem já vende acima dele aparece com a
+          <em>folga</em> e sem caixa de marcar — a tela não manda baixar preço. E o impacto é
+          “se vender a mesma quantidade”: o sistema não prevê se a venda cai com o preço novo.
+        </p>
+      </div>
+      <p>
+        Clicar num produto abre a conta dele: a barra <em>de cada venda</em> no preço atual e no
+        sugerido — para onde vai cada real —, e o controle <strong>E se o preço fosse…</strong>, que
+        mostra o lucro por unidade e no mês a qualquer preço. O link <em>ver preço × custo no
+        tempo</em> leva ao gráfico do mesmo produto.
+      </p>
+
+      <h3>Aplicar</h3>
+      <p>
+        Marque os produtos (só quem está abaixo do mínimo tem caixa) e <strong>Aplicar N
+        preço(s)</strong>; a confirmação lista cada um, de quanto para quanto. O preço novo vale no
+        sistema <strong>na hora</strong> — no site, no Cardápio Vivo e nas próximas contas. Se o
+        produto já tem preço desta loja, é ele que muda; numa casa de uma loja só, muda o preço da
+        casa; com mais de uma loja, nasce um preço da loja, para não mexer no cardápio das outras.
+      </p>
+      <p>
+        O caixa só recebe o preço se a loja envia cadastro ao PDV; a resposta diz qual foi o caso.
+        Quando não envia, o botão <strong>Preços a acertar no PDV</strong> tira um relatório com o
+        que está diferente lá agora — código no PDV, produto, preço no PDV, preço certo e a
+        diferença —, para alguém acertar no caixa.
+      </p>
+
+      <h3>Preço × custo</h3>
+      <p>
+        Escolha o produto e o período (3, 6, 12 ou 24 meses). Os quatro números dizem como o
+        preço, o custo e a margem bruta andaram, e o <strong>preço médio cobrado</strong> nas vendas,
+        já com desconto. O gráfico mostra as duas linhas — a distância entre elas é a margem; vê-la
+        fechar é o custo subindo com o preço parado — e <em>ver como tabela</em> troca o desenho
+        pelos números. O custo da ficha só existe nos dias em que houve venda, e a tela não o
+        mostra como linha contínua.
+      </p>
+      <p>
+        Permissões: <em>ver a análise</em>, <em>aplicar os preços sugeridos</em> e
+        <em>configurar</em> são separadas; administrador e gerente têm as três.
+      </p>
     </section>
 
     <!-- =============================================================== regras -->
@@ -3689,10 +3840,13 @@
             <tr><td class="mono">29/09</td><td><strong>Tela inicial nova</strong>: o dia numa faixa, o período ao lado da atenção, as listas lado a lado; meta de food cost da loja</td><td><a href="#navegar">navegar</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>Pedidos pelo cardápio</strong>: carrinho no site, confirmação com troca de produtos, lançado no PDV, painel e aviso no Início</td><td><a href="#portal">16</a></td></tr>
             <tr><td class="mono">28/09</td><td><strong>WhatsApp</strong> por loja com confirmação de presença; <strong>etiquetas de validade</strong> e a produção com lote</td><td><a href="#whatsapp">19</a>, <a href="#etiquetas">15</a></td></tr>
+            <tr><td class="mono">05/10</td><td><strong>Precificação</strong>: configuração por loja, o preço mínimo de cada produto, aplicar e o <strong>preço × custo</strong> no tempo</td><td><a href="#precificacao">21</a></td></tr>
+            <tr><td class="mono">08/10</td><td><strong>Preços a acertar no PDV</strong>; a sugestão de custo provisório avisa</td><td><a href="#precificacao">21</a></td></tr>
             <tr><td class="mono">14/10</td><td><strong>Cardápio Vivo</strong>: o cardápio da mesa como feed, QR e NFC por mesa, tela de entrada com avaliação e Wi-Fi, favoritos</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">19/10</td><td>Atenção × Vendas e testes A/B <strong>por Cardápio Vivo</strong>; <strong>O que falta</strong> com cartões e traduções; prévia <strong>com os anúncios</strong>; <strong>esgotado que volta sozinho</strong>; relatório do anúncio além da retenção</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
           </tbody>
         </table>
       </div>
@@ -3702,8 +3856,8 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026); catálogos e Cardápio Vivo revistos na
-    1.1.108 (17/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.60 (28/09/2026); catálogos e Cardápio Vivo revistos e
+    Precificação incluída na 1.1.109 (19/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

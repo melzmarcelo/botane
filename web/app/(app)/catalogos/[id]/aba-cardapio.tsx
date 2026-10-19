@@ -19,6 +19,7 @@ import { Aviso, Carregando, Vazio } from "@/components/ui";
 import { useSessao } from "@/lib/sessao";
 import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
+import { pendentesDoCatalogo, type TipoTraduzivel } from "@/lib/traducao";
 import { resumoDaExibicao } from "./cardapio-vivo";
 import { AberturaDoCardapio, PratosECartoes, useCartoes } from "./cartoes-do-catalogo";
 import JanelaCartao, { type AbrindoCartao } from "./janela-cartao";
@@ -26,11 +27,13 @@ import GavetaDoPrato, { type Lugar } from "./gaveta-do-prato";
 import JanelaPratos from "./janela-pratos";
 import JanelaSecao, { type Editando } from "./janela-secao";
 import LinhaDoPrato, { faltasDo } from "./linha-do-prato";
-import { BotaoSecao, PainelFaltas } from "./painel-faltas";
+import { BotaoSecao, PainelFaltas, faltasDoCartao, totalTraduzir, type FaltaTraduzir } from "./painel-faltas";
 
 type Selecao = { tipo: cat.TipoDeSecao; id: number };
 
-export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: number; podeEditar: boolean }) {
+export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
+  idCatalogo: number; podeEditar: boolean; aoIdiomas?: () => void;
+}) {
   const aviso = useAviso();
   const { pode } = useSessao();
   const podeProduto = pode("cadastros.produtos");
@@ -46,8 +49,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
   // 🔑 Os cartões do Cardápio Vivo (120), na mesma lista dos pratos.
   const { lista: listaCartoes, recarregar: recarregarCartoes } = useCartoes(idCatalogo);
   const [abrindoCartao, setAbrindoCartao] = useState<AbrindoCartao | null>(null);
+  // 🔑 O que está sem tradução, por tipo e id (1.1.109) — entra no "O que falta".
+  const [semTraducao, setSemTraducao] = useState<Partial<Record<TipoTraduzivel, number[]>>>({});
 
   const recarregar = useCallback(async () => {
+    pendentesDoCatalogo(idCatalogo).then((r) => setSemTraducao(r.por_tipo ?? {})).catch(() => setSemTraducao({}));
     try {
       setConteudo(await cat.conteudo(idCatalogo));
       setErro("");
@@ -88,12 +94,34 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
   ]), [categorias]);
 
   const todosOsPratos = useMemo(() => lugares.flatMap((l) => l.itens), [lugares]);
-  const cartoes = listaCartoes?.cartoes ?? [];
+  const cartoes = useMemo(() => listaCartoes?.cartoes ?? [], [listaCartoes]);
 
   const comFaltas = useMemo(
     () => lugares.map((l) => ({ ...l, itens: l.itens.filter((i) => faltasDo(i).length) })).filter((l) => l.itens.length),
     [lugares]);
-  const totalFaltas = new Set(comFaltas.flatMap((l) => l.itens.map((i) => i.id_produto))).size;
+  const pratosComFalta = new Set(comFaltas.flatMap((l) => l.itens.map((i) => i.id_produto))).size;
+
+  /** Onde mora cada lista, pelo id — para dizer onde está o cartão. */
+  const cartoesComFalta = useMemo(() => cartoes.map((c) => ({
+    cartao: c,
+    onde: c.id_categoria === null ? "Antes do primeiro prato"
+      : lugares.find((l) => l.id_categoria === c.id_categoria && l.id_subcategoria === c.id_subcategoria)?.rotulo ?? "",
+    faltas: faltasDoCartao(c, todosOsPratos),
+  })).filter((c) => c.faltas.length), [cartoes, lugares, todosOsPratos]);
+
+  const traduzir = useMemo<FaltaTraduzir>(() => {
+    const produtos = new Set(semTraducao.produto ?? []);
+    const cats = new Set(semTraducao.categoria ?? []), subs = new Set(semTraducao.subcategoria ?? []);
+    const pratos = [...new Map(todosOsPratos.filter((i) => produtos.has(i.id_produto))
+      .map((i) => [i.id_produto, i.nome_catalogo || i.produto])).values()];
+    const secoes = categorias.flatMap((c) => [
+      ...(cats.has(c.id) ? [c.nome] : []),
+      ...c.subcategorias.filter((s) => subs.has(s.id)).map((s) => `${c.nome} ▸ ${s.nome}`),
+    ]);
+    return { pratos, secoes, cartoes: (semTraducao.cartao ?? []).length, catalogo: (semTraducao.catalogo ?? []).length > 0 };
+  }, [semTraducao, todosOsPratos, categorias]);
+
+  const totalFaltas = pratosComFalta + cartoesComFalta.length + totalTraduzir(traduzir);
 
   /** Onde está o item da gaveta — procurado no conteúdo de agora. */
   const naGaveta = useMemo(() => {
@@ -238,7 +266,10 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
 
       {/* ------------------------------------------- o que falta --- */}
       {soFaltas && totalFaltas > 0 ? (
-        <PainelFaltas listas={comFaltas} aoAbrir={setGaveta} />
+        <PainelFaltas listas={comFaltas} aoAbrir={setGaveta} cartoes={cartoesComFalta} traduzir={traduzir}
+                      aoIdiomas={aoIdiomas}
+                      aoAbrirCartao={(c) => setAbrindoCartao({ cartao: c.cartao, id_categoria: c.cartao.id_categoria,
+                                                                id_subcategoria: c.cartao.id_subcategoria, onde: c.onde })} />
       ) : (
       /* ----------------------------------------- a seção escolhida --- */
       <section className="cartao min-w-0" aria-label={`seção ${secao.nome}`}>
@@ -346,7 +377,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar }: { idCatalogo: nu
                         : lugares.find((l) => l.id_categoria === abrindoCartao.id_categoria
                             && l.id_subcategoria === abrindoCartao.id_subcategoria)?.itens ?? []}
                       todosOsPratos={todosOsPratos}
-                      aoFechar={() => setAbrindoCartao(null)} aoMudar={recarregarCartoes} />
+                      aoFechar={() => setAbrindoCartao(null)}
+                      aoMudar={async () => {
+                        void pendentesDoCatalogo(idCatalogo).then((r) => setSemTraducao(r.por_tipo ?? {})).catch(() => {});
+                        await recarregarCartoes();
+                      }} />
       )}
       {naGaveta && (
         <GavetaDoPrato key={naGaveta.item.id} item={naGaveta.item} onde={naGaveta.onde} lugares={lugares}

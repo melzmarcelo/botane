@@ -10,18 +10,18 @@ import { useAviso } from "@/components/aviso-flutuante";
 import { Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { TestesService, type SugestaoDestaque } from "@/lib/cardapio-vivo";
 
-type Props = { de: string; ate: string; podeAplicar: boolean; aoAplicar: () => void };
+type Props = { de: string; ate: string; idCatalogo: number | null; podeAplicar: boolean; aoAplicar: () => void };
 
-export default function SugestoesDestaque({ de, ate, podeAplicar, aoAplicar }: Props) {
+export default function SugestoesDestaque({ de, ate, idCatalogo, podeAplicar, aoAplicar }: Props) {
   const aviso = useAviso();
   const [lista, setLista] = useState<SugestaoDestaque[]>([]);
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
 
-  const carregar = () => TestesService.sugestoes(de, ate).then((l) => {
+  const carregar = () => TestesService.sugestoes(de, ate, idCatalogo).then((l) => {
     setLista(l);
     setMarcadas(new Set());
   }).catch(() => setLista([]));
-  useEffect(() => { void carregar(); }, [de, ate]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void carregar(); }, [de, ate, idCatalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function aplicar() {
     try {

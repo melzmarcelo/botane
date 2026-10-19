@@ -337,6 +337,42 @@ la3 = {l["id_produto"]: l for l in pa3.get("itens", [])}.get(A, {})
 checar("o prato visto noutro Cardápio Vivo da loja não soma no painel do principal",
        la3.get("visualizacoes") == la.get("visualizacoes") and pa3["topo"]["sessoes"] == pa["topo"]["sessoes"],
        (la3.get("visualizacoes"), la.get("visualizacoes")))
+# 🔑 (1.1.109) E o painel mede também os OUTROS Cardápios Vivos da loja, um de cada vez.
+_st, cat2 = chamar("POST", "/catalogos", {"nome": f"Catering {MARCA}", "origem": "PRODUTOS",
+                                          "situacao": "ATIVO"}, token)
+ID_CAT2 = cat2["id"]
+_st, g2 = chamar("POST", f"/catalogos/{ID_CAT2}/categorias", {"nome": "Pratos"}, token)
+_st, it2 = chamar("POST", f"/catalogos/categorias/{g2['id']}/itens", {"id_produto": A}, token)
+st, r = chamar("PUT", f"/cardapio-vivo/vivos/{ID_CAT2}", {"modo": "VITRINE", "principal": False}, token)
+checar("um segundo Cardápio Vivo na loja, sem ser o principal", st == 200, (st, r))
+lote3 = {"sessao": str(uuid.uuid4()), "loja": U, "catalogo": ID_CAT2, "modo": "VITRINE",
+         "dispositivo": "CELULAR", "eventos": [
+             {"tipo": "viu_item", "item": it2["id"], "midia": "FOTO", "duracao_ms": 7000},
+             {"tipo": "favoritou", "item": it2["id"]}]}
+req = urllib.request.Request(BASE + "/publico/cardapio/eventos", data=json.dumps(lote3).encode(),
+                             method="POST", headers={"Content-Type": "text/plain"})
+urllib.request.urlopen(req).read()
+st, pc = chamar("GET", f"/cardapio-vivo/atencao?de={hoje}&ate={hoje}&id_catalogo={ID_CAT2}", token=token)
+lc2 = {l["id_produto"]: l for l in pc.get("itens", [])}.get(A, {})
+checar("o painel do outro cardápio diz qual é e lista os da loja para escolher",
+       st == 200 and pc["cardapio"]["id_catalogo"] == ID_CAT2 and not pc["cardapio"]["principal"]
+       and {ID_CAT, ID_CAT2} <= {c["id_catalogo"] for c in pc["cardapios"]}, (st, pc.get("cardapio")))
+checar("e conta só o que veio dele: uma sessão, uma visualização de 7 s",
+       pc["topo"]["sessoes"] == 1 and lc2.get("visualizacoes") == 1 and lc2.get("atencao_ms") == 7000,
+       (pc.get("topo"), lc2))
+checar("os pratos são os do cardápio escolhido", [l["id_produto"] for l in pc["itens"]] == [A], pc.get("itens"))
+_st, pa4 = chamar("GET", f"/cardapio-vivo/atencao?de={hoje}&ate={hoje}", token=token)
+checar("sem escolher, segue o principal — e ele não ganhou a sessão do outro",
+       pa4["cardapio"]["id_catalogo"] == ID_CAT and pa4["topo"]["sessoes"] == pa["topo"]["sessoes"],
+       (pa4.get("cardapio"), pa4.get("topo")))
+st, r = chamar("GET", f"/cardapio-vivo/atencao?de={hoje}&ate={hoje}&id_catalogo=999999", token=token)
+checar("catálogo que não é Cardápio Vivo da loja: 404", st == 404, (st, r))
+st, r = chamar("GET", f"/cardapio-vivo/destaques/sugestoes?de={hoje}&ate={hoje}&id_catalogo={ID_CAT2}", token=token)
+checar("as sugestões de destaque também por cardápio", st == 200 and isinstance(r, list), (st, r))
+st, r = chamar("POST", "/cardapio-vivo/testes", {"tipo": "MIDIA", "id_item": itens["A"], "id_catalogo": ID_CAT2}, token)
+checar("o teste A/B procura o prato no cardápio ESCOLHIDO (o item do principal não serve)",
+       st == 404 and "neste Cardápio Vivo" in r.get("detail", ""), (st, r))
+chamar("DELETE", f"/cardapio-vivo/vivos/{ID_CAT2}", token=token)
 from services import cardapio_atencao as ca  # noqa: E402
 from decimal import Decimal  # noqa: E402
 checar("nível de margem pela margem-alvo (meta 30%): 35 alta, 25 média, 15 baixa, sem meta nulo",

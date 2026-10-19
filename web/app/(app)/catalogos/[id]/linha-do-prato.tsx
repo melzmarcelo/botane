@@ -59,7 +59,7 @@ export default function LinhaDoPrato({ item: i, primeiro, ultimo, podeEditar, ao
               reconhece por ele, mas o cardápio mostra o de vitrine. */}
           <span className="block truncate text-[12.5px] text-suave">
             {i.nome_catalogo ? `${i.produto} · ` : ""}{i.codigo}
-            {i.esgotado && <span className="font-semibold text-erro"> · esgotado</span>}
+            {i.esgotado && <span className="font-semibold text-erro"> · esgotado{i.esgotado_ate ? " (volta sozinho)" : ""}</span>}
             {faltas.length > 0 && <span className="text-alerta"> · ⚠ {faltas.join(", ")}</span>}
           </span>
         </span>

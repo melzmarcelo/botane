@@ -77,6 +77,8 @@ export default function RelatorioDoAnuncio() {
         {erro && <span className="text-[13px] text-erro">{erro}</span>}
       </div>
 
+      {rel.resumido && <Aviso tipo="info"><span id="relatorio-resumido">{rel.resumido.aviso}</span></Aviso>}
+
       <section aria-label="resumo" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Numero rotulo="Pessoas que viram" valor={String(t.sessoes)} nota="visitas ao cardápio, sem identificação" />
         <Numero rotulo="Vezes que apareceu" valor={String(t.aparicoes)} />
