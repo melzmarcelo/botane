@@ -1679,11 +1679,27 @@ FERRAMENTAS: list[Ferramenta] = [
         "/producao-agenda/{id_agenda}",
         {"id_agenda": Param("integer", "Id da linha da agenda.", obrigatorio=True)},
         metodo="DELETE"),
-    # ⚠️ **Homologar NÃO entra, e a ausência é decisão antiga** (ver
-    # `criar_ficha_tecnica`, mais abaixo): a ficha lida de arquivo nasce RASCUNHO, e
-    # é na tela, com o custo do lado, que alguém confere antes de liberar a produção.
-    # O lote de 09/10/2026 abriu quase tudo de estoque e produção; isto ficou de fora
-    # até o dono dizer o contrário.
+    # 🔑 **Homologar pelo conector — liberado pelo dono em 09/10/2026** (*"pode liberar
+    # a homologação"*). Até aqui a homologação ficava só na TELA, de propósito: a
+    # ficha lida de arquivo nasce RASCUNHO, e era com o custo do lado que alguém
+    # conferia antes de liberar a produção — numa leva de dezenas de fichas, um "10"
+    # que era "100" só aparece quando alguém olha.
+    # ⚠️ **A conferência não sumiu: mudou de lugar.** A descrição manda MOSTRAR a
+    # ficha (ingredientes, quantidades, rendimento e custo) e esperar o sim, UMA por
+    # vez. A permissão continua sendo `fichas.homologar`, da rota.
+    Ferramenta(
+        "homologar_ficha", "Homologar uma ficha técnica",
+        "Aprova a ficha: ela passa a valer para PRODUZIR, a receita fica congelada e a "
+        "versão anterior sai de linha. ⚠️ **Uma ficha por vez, e só depois de a pessoa "
+        "conferir.** Antes de chamar: leia `ficha_tecnica` e mostre os ingredientes com as "
+        "quantidades e unidades, o rendimento, as porções e o custo — avisando se há "
+        "`itens_sem_custo` ou custo provisório. Erro de quantidade aqui vira estoque "
+        "baixado errado em toda produção. Ficha homologada não se edita: correção é "
+        "`nova_versao_da_ficha`.",
+        "/fichas/{id_ficha}/homologar",
+        {"id_ficha": Param("integer", "Id da ficha em rascunho (de `fichas_tecnicas`).",
+                           obrigatorio=True)},
+        metodo="POST"),
     Ferramenta(
         "duplicar_ficha", "Copiar uma ficha para outro produto",
         "Cria, em RASCUNHO, uma ficha para outro produto com a mesma receita desta.",
@@ -1967,11 +1983,12 @@ FERRAMENTAS: list[Ferramenta] = [
     # facilitaria muito a importação/criação destas fichas."* O arquivo (planilha,
     # PDF, foto do caderno) é lido pelo Claude; aqui chega só a receita já
     # traduzida para os ids da casa, pela MESMA rota da tela.
-    # ⚠️ **Nasce RASCUNHO, e a homologação fica na TELA.** Rascunho já custeia o
-    # prato no CMV (é o degrau reserva da cascata), então a importação serve na
-    # hora; mas é a homologação que libera PRODUZIR e congela a receita. Numa
-    # leva de dezenas de fichas lidas de arquivo, um "10" que era "100" só
-    # aparece quando alguém olha — e é na tela, com o custo do lado, que se olha.
+    # ⚠️ **Nasce RASCUNHO.** Rascunho já custeia o prato no CMV (é o degrau reserva
+    # da cascata), então a importação serve na hora; mas é a homologação que libera
+    # PRODUZIR e congela a receita. Numa leva de dezenas de fichas lidas de arquivo,
+    # um "10" que era "100" só aparece quando alguém olha — por isso homologar é um
+    # passo SEPARADO (`homologar_ficha`, liberado em 09/10/2026), uma ficha por vez
+    # e depois de mostrada à pessoa.
     Ferramenta(
         "criar_ficha_tecnica", "Criar ficha técnica",
         "Cria a ficha técnica (receita) de um produto, como RASCUNHO. Roteiro: "
@@ -1985,7 +2002,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "como `id_subficha`; (4) `um` do item na unidade da receita (`unidades_medida`); "
         "(5) depois de criar, leia `ficha_tecnica` e avise os `itens_sem_custo`; "
         "(6) se o arquivo tem a foto do prato, `enviar_foto_da_ficha`. "
-        "⚠️ Homologar é na tela do sistema.",
+        "⚠️ A ficha nasce em rascunho: homologar é um passo separado (`homologar_ficha`), "
+        "só depois de a pessoa conferir.",
         "/fichas",
         {"id_produto": Param("integer", "O prato (produto PRODUZIDO ou KIT).",
                              obrigatorio=True, no_corpo=True),
@@ -2029,8 +2047,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "nova_versao_da_ficha", "Abrir nova versão de uma ficha",
         "Copia uma ficha (itens, modos e foto) para uma versão NOVA em rascunho, para "
         "mudar a receita de um prato que já tem ficha homologada. A vigente continua "
-        "valendo até alguém homologar a nova, na tela. Depois, corrija a nova com "
-        "`atualizar_ficha_tecnica`.",
+        "valendo até a nova ser homologada (`homologar_ficha`, ou na tela). Depois, "
+        "corrija a nova com `atualizar_ficha_tecnica`.",
         "/fichas/{id_ficha}/nova-versao",
         {"id_ficha": Param("integer", "A ficha de origem.", obrigatorio=True)},
         metodo="POST"),

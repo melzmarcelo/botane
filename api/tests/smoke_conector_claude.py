@@ -601,8 +601,8 @@ checar("e o do portal de clientes",
 _todas = {t["name"] for t in r_lista["result"]["tools"]} if (r_lista := rpc(
     escrita, "tools/list")[2]) else set()
 _proibido = [n for n in _todas if any(p in n for p in (
-    "usuario", "papel", "senha", "token", "credencial", "homologar", "enviar_ao_pdv"))]
-checar("o conector não oferece usuários, papéis, senhas, credenciais nem homologação",
+    "usuario", "papel", "senha", "token", "credencial", "enviar_ao_pdv"))]
+checar("o conector não oferece usuários, papéis, senhas nem credenciais",
        not _proibido, _proibido)
 
 # Leituras novas: respondem, e não como erro.
@@ -968,10 +968,20 @@ checar("e grava as quantidades novas e as porções",
        and sorted(float(i["qtd_bruta"]) for i in lida.get("itens") or []) == [4.0, 600.0],
        lida.get("itens"))
 
-# 🔑 A homologação fica na TELA — o conector nem oferece.
-checar("não existe ferramenta de homologar", "homologar_ficha" not in nomes_gravam)
-st, _, _r = pedir("POST", f"/fichas/{id_ficha}/homologar", token=admin)
-checar("preparo: a casa homologa pela tela", st == 200, (st, _r))
+# 🔑 **Homologar pelo conector — liberado pelo dono em 09/10/2026.** Até ali a
+# homologação ficava só na tela, e esta checagem cobrava a AUSÊNCIA da ferramenta.
+# ⚠️ A conferência não sumiu, mudou de lugar: a descrição manda mostrar a ficha e
+# esperar o sim, uma por vez — e é isso que se cobra agora.
+_homologar = next((t for t in gravam if t["name"] == "homologar_ficha"), {})
+checar("homologar_ficha existe, e manda conferir com a pessoa antes",
+       "Uma ficha por vez" in _homologar.get("description", "")
+       and "ficha_tecnica" in _homologar.get("description", ""), _homologar.get("description"))
+erro, r = ferramenta("homologar_ficha", {"id_ficha": id_ficha})
+checar("homologar_ficha homologa de verdade", not erro, r)
+erro, lida = ferramenta("ficha_tecnica", {"id_ficha": id_ficha})
+checar("e a ficha passa a HOMOLOGADA", lida.get("status") == "HOMOLOGADA", lida.get("status"))
+erro, r = ferramenta("homologar_ficha", {"id_ficha": 99999999})
+checar("homologar ficha que não existe vira isError", erro, r)
 erro, r = ferramenta("atualizar_ficha_tecnica", {"id_ficha": id_ficha, "porcoes": 8})
 checar("ficha homologada não se edita pelo conector",
        erro and "nova versão" in str(r), r)

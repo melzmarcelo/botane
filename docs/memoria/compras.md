@@ -335,7 +335,7 @@
   `CANCELADA` existia no schema desde a 009 e as filas já o excluíam — mas nada o aplicava.
   - `mapeadores.situacao_no_omie(bruto)` lê a marca pelo SENTIDO do nome do campo (qualquer
     chave com "canc" nos blocos de cadastro e cabeçalho: valor S, ou data preenchida), e
-    devolve as marcas lidas. ⚠️ **O nome real do campo NÃO foi confirmado**: as fixtures não
+    devolve as marcas lidas. ✅ **Confirmado no ar em 09/10/2026, na NF 87313** — o Omie manda, em `infoCadastro`: `cCancelada: "S"`, `dCanc: "08/10/2026"`, `hCanc`, `cUsuarioCanc: "WEBSERVICE"` (e `cFaturado`, `cRecebido`, `cBloqueado`, `cDevolvido`; a etapa seguiu 40). ⚠️ Ela foi cancelada às 11:19 e importada às 19:00 do mesmo dia: JÁ CHEGOU cancelada, que é o caminho do `gravar_nota`. Antes disso valia o aviso: ⚠️ **O nome real do campo NÃO foi confirmado**: as fixtures não
     trazem nota cancelada, e a da suíte usa `infoCadastro.cCancelada` por suposição. Por isso
     `GET /notas/{id}` devolve `situacao_no_omie` (etapa e marcas, tiradas do `bruto` guardado)
     — é por ali que se confere no ar.

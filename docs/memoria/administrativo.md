@@ -796,3 +796,16 @@ uma prateleira — e o conector só sabia LER as duas coisas.
   - ⚠️ A suíte NÃO cria salão nem período de consumo: cada rodada deixaria mais um na base
     local (salão não se apaga com reserva), que é o acúmulo que já quebrou a bateria do
     navegador. Essas ferramentas são cobertas só pela conferência contra a API.
+
+- 🔑 **Homologar ficha pelo conector — LIBERADO pelo dono em 09/10/2026** (*"pode liberar a
+  homologação"*), ferramenta `homologar_ficha`. Isto REVOGA o que as notas acima dizem
+  ("homologar não entrou", "fica na tela", "a suíte cobra a ausência"): elas valeram até aqui.
+  - ⚠️ **A conferência não sumiu, mudou de lugar.** A razão da regra antiga continua de pé —
+    numa leva de fichas lidas de arquivo, um "10" que era "100" só aparece quando alguém olha.
+    Por isso a descrição da ferramenta manda mostrar a ficha (ingredientes, quantidades,
+    rendimento, porções, custo, itens sem custo) e esperar o sim, UMA ficha por vez. É
+    orientação ao modelo, não trava de código: nada impede tecnicamente homologar várias em
+    seguida.
+  - A permissão é a da rota (`fichas.homologar`), e a chave precisa permitir alterar.
+  - `smoke_conector_claude` trocou a checagem: cobrava a ausência, agora cobra que a
+    ferramenta exista, que a descrição mande conferir, e que homologue de verdade.
