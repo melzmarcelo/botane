@@ -912,6 +912,11 @@ de controle e as variações. Pedido do dono na hora de seguir: *"pode seguir no
   `anuncio_recuo: false` no cenário, e testa os dois na seção 1b. O `smoke_cardapio_anuncios.py`
   restaura as seis colunas de regras no fim.
 - Cobertura: `smoke_cardapio_anuncios.py` 73 (25 novas, 5e e 5f) e `verificar-anuncios-feed.mjs` 26.
+- 🔑 (20/10/2026) `verificar-anuncios-feed.mjs` e `verificar-cartoes-feed.mjs` **entraram na bateria**:
+  o `verificar.mjs` os roda no fim, depois de fechar o navegador, e soma no resumo que o
+  `promover.ps1` lê (o resumo deles sai renomeado para não ser a última linha "passaram,").
+  Os outros `verificar-*.mjs` (pedido no site, idioma, cardápio vivo/pedido/testes, encomenda)
+  continuam avulsos.
 
 ## Excluir catálogo e apagar a medição de um período (1.1.113, 20/10/2026)
 

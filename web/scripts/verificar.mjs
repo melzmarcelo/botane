@@ -10373,6 +10373,33 @@ try {
   await navegador.close();
 }
 
+// 🔑 (20/10/2026, pedido do dono) Os anúncios e os cartões no feed têm roteiro próprio —
+// cada um liga e desliga o que precisa —, e ficavam fora da bateria: uma promoção passava
+// sem eles. Rodam aqui, DEPOIS do navegador fechar, e a soma entra no resumo de baixo, que
+// é a linha que o `promover.ps1` lê. Roteiro que estoura sem resumo conta como falha.
+for (const roteiro of ["verificar-anuncios-feed.mjs", "verificar-cartoes-feed.mjs"]) {
+  console.log(`\n== ${roteiro}`);
+  let saida;
+  try {
+    saida = execFileSync(process.execPath, [`scripts/${roteiro}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  } catch (e) {
+    saida = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+  }
+  // ⚠️ O resumo dele sai renomeado: o `promover.ps1` pega a ÚLTIMA linha "passaram,".
+  console.log(saida.trimEnd().replace(/(\d+) passaram, (\d+) falharam/g, "$1 ok, $2 com falha"));
+  const resumo = [...saida.matchAll(/(\d+) passaram, (\d+) falharam/g)].pop();
+  if (!resumo) {
+    falhas.push(`${roteiro}: estourou antes do resumo`);
+    continue;
+  }
+  ok += Number(resumo[1]);
+  const linhas = saida.split(/\r?\n/);
+  const depois = linhas.slice(linhas.findIndex((l) => l.includes(resumo[0])) + 1)
+    .filter((l) => /^\s+- /.test(l)).map((l) => `${roteiro}: ${l.replace(/^\s+- /, "")}`);
+  for (let i = 0; i < Number(resumo[2]); i++) falhas.push(depois[i] ?? `${roteiro}: falha ${i + 1}`);
+}
+
 console.log(`\n${ok} passaram, ${falhas.length} falharam`);
 falhas.forEach((f) => console.log(`  - ${f}`));
 console.log(`fotos em ${FOTOS}`);
