@@ -138,6 +138,15 @@ try {
   }, { meio: meio.id });
   checar("o cartão aparece na lista, antes do prato dele", naLista.iCartao > 0 && naLista.depois.includes("PAPPARDELLE"), naLista);
   checar("e a seção diz que abre com a foto", tela.includes("abre com a foto"));
+  // 🔑 1.1.111: a atenção da abertura da seção aparece, e o período é escolhido.
+  const atencao = await e.$eval("[data-abertura-atencao]", (x) => x.textContent).catch(() => "");
+  checar("a seção mostra quantas vezes a abertura dela foi vista", /abertura vista \d+×/.test(atencao) && atencao.includes("30 dias"), atencao);
+  const pedido90 = e.waitForResponse((r) => r.url().includes(`/catalogos/${cat.id}/cartoes?dias=90`), { timeout: 10000 }).catch(() => null);
+  await e.select("#cartoes-periodo", "90");
+  const r90 = await pedido90;
+  await e.waitForFunction(() => document.querySelector("[data-abertura-atencao]")?.textContent?.includes("90 dias"), { timeout: 10000 }).catch(() => {});
+  const atencao90 = await e.$eval("[data-abertura-atencao]", (x) => x.textContent).catch(() => "");
+  checar("trocar o período para 90 dias pede de novo e a seção diz de quando é", r90?.status() === 200 && atencao90.includes("90 dias"), atencao90);
   await e.click("#novo-cartao");
   await e.waitForSelector("#cartao-titulo", { timeout: 5000 });
   await e.type("#cartao-titulo", `Cartão novo ${MARCA}`);

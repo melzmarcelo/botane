@@ -867,4 +867,13 @@ o dono aprovou os três de integridade (*"pode seguir nessa ordem: 1, 2 e 3"*), 
   ANTES do primeiro evento bruto da loja (`_somar_resumo`) e devolve `resumido` com a frase:
   pessoas contadas POR DIA, sem distribuição por hora. Cartões e aberturas só são guardados — as
   telas deles olham 30 dias, dentro de qualquer retenção.
+- **1.1.111 (20/10/2026): o editor do catálogo lê o resumo.** `GET /catalogos/{id}/cartoes?dias=`
+  aceita SÓ 30, 90 ou 365 (422 no resto) — ⚠️ com 30 o resumo nunca entra, porque a retenção
+  mínima é 1 mês = 30 dias; foi por isso que o período virou escolha. `catalogo_cartoes._somar_resumo`
+  soma, nos dias antes do primeiro bruto da loja, vistas, `soma_ms` e cliques; os segundos médios
+  saem de `soma_ms ÷ vistas` DEPOIS da soma (média de médias erraria). Seção do resumo que o bruto
+  não tem nasce na lista; `id_sub = 0` volta como `id_subcategoria` nulo. Na tela: o campo
+  `#cartoes-periodo` ("Atenção dos") no painel Abertura no Cardápio Vivo, o aviso `#cartoes-resumido`
+  e — novo — a atenção da abertura de cada seção no cabeçalho dela (`[data-abertura-atencao]`):
+  a API já devolvia `aberturas` desde a 120 e nenhuma tela mostrava.
 - Ficaram: Spaces + CDN, anúncios fases 2/3, e conferir o resto do manual (etiquetas, CMV…).

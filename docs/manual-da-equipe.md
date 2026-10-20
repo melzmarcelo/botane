@@ -4,6 +4,9 @@ O que cada pessoa faz no sistema, no dia a dia. Uma página por rotina, sem
 jargão. Se algo aqui não bater com a tela, a tela está certa e este texto está
 velho — avise.
 
+*Atualizado na versão 1.1.111 (20/10/2026). O manual completo, com o porquê de
+cada regra, fica no próprio sistema: **Ajuda**, no menu.*
+
 ---
 
 ## Antes de tudo: por que registrar
@@ -556,6 +559,56 @@ Menu **Estoque → Produção**. Escolha o prato, quanto vai produzir e **a
 prateleira**: o sistema baixa os ingredientes pela ficha e dá entrada no
 produzido. Não precisa apontar ingrediente por ingrediente.
 
+**Diga em que você está contando.** "Produzir 2" pode ser dois cookies ou duas
+receitas, então a tela pergunta: **porções** (130 cookies), **receitas** (2
+receitas de 65) ou **no rendimento** (a receita rende 10 kg; produzir 5 kg é meia
+receita).
+
+**A folha é para a bancada.** Ela mostra quantidades, modo de preparo, tempo e
+alergênicos — sem custo — e se imprime. A coluna **usado de verdade** vem com o
+que a receita pede: foram seis ovos em vez de cinco? Corrija ali. Sem isso, o
+sexto ovo aparece só no inventário, como falta sem explicação.
+
+Depois de produzir, **Imprimir etiquetas** já leva o produto, o lote e a
+quantidade para a tela das etiquetas.
+
+### Desfazer uma produção
+
+Na lista **Produções recentes**, o botão **estornar** desfaz a produção inteira:
+sai o produzido e voltam os ingredientes. A linha continua na lista, marcada.
+
+⚠️ Só se desfaz o que ainda está na prateleira. Se parte já foi usada, o sistema
+recusa e mostra os dois números — aí o caminho é um ajuste. E o café feito *na
+hora* pela venda se desfaz cancelando a venda.
+
+### Etiquetas de validade
+
+Menu **Etiquetas → Imprimir**. Escolha o produto, toque em **Produzi**, **Abri**
+ou **Descongelei**, escolha a conservação e quantas etiquetas (uma por pote). A
+prévia mostra a validade antes de gastar papel. O responsável é quem está logado
+— no tablet de todos, digite o seu nome.
+
+- **Abriu uma embalagem?** Informe a validade dela. "3 dias depois de aberto" de
+  um creme que vence amanhã é amanhã.
+- O prazo conta **da hora** em que a etiqueta foi feita, e ela imprime data e
+  hora.
+
+**O QR do pote**, lido no celular, abre tudo sobre ele e as ações:
+
+| Ação | Quando |
+|---|---|
+| **Usei uma parte** | Saiu um pouco e o pote continua: diga quanto saiu ou quanto sobrou |
+| **Usei tudo** | O pote acabou. Não mexe no estoque — a venda ou a produção já baixou |
+| **Descartar** | Foi para o lixo. Lança a **perda**, com motivo — é o que vira número |
+| **Descongelei** | Etiqueta nova, com o prazo do descongelado |
+| **Reetiquetar** | Dividiu o pote ou mudou de lugar: etiqueta nova com a **mesma** validade |
+
+Quando o QR não lê, digite no painel o código de seis letras impresso embaixo
+dele.
+
+**De manhã:** **Etiquetas → Painel de validades** mostra o que venceu, o que vence
+hoje e o que vence amanhã. O Início também avisa.
+
 ### Apontar o que consumiu fora da ficha
 
 Provou, queimou, refez? **Perda**, com motivo. É rápido e é o que mantém o
@@ -565,13 +618,63 @@ número honesto.
 
 ## Salão
 
-Se as vendas vêm do PDV por planilha: menu **CMV → Vendas → Importar**. Cole ou
-suba o relatório do dia. **Importar o mesmo arquivo duas vezes não duplica** —
-pode repetir sem medo.
+As vendas entram sozinhas do PDV. Para trazer na hora: **Vendas → Documentos →
+Buscar no PDV**. No dia em que a integração estiver fora do ar, **Lançar** aceita
+a venda à mão ou a planilha colada. **Importar a mesma venda duas vezes não
+duplica** — pode repetir sem medo.
 
 Item de venda que o sistema não reconhece fica marcado como **sem vínculo**.
 Enquanto estiver assim, aquele prato não entra no custo teórico — vale avisar
 quem cuida do cadastro.
+
+### Reservas
+
+**Portal de Clientes → Reservas → Agenda**: o mês, o dia por horário e cada
+reserva. Pelo balcão se marca, remarca e cancela. A reserva anda por *pendente →
+confirmada → chegou → encerrada* (ou *cancelada*, *não compareceu*) — marque
+**chegou** quando o grupo sentar. O ✓ ao lado diz que o cliente confirmou
+presença pelo WhatsApp.
+
+- Reserva do site com confirmação manual chega **pendente**: é a casa que
+  confirma.
+- Feriado aberto, ou um dia fechado para evento? No próprio calendário se **abre**
+  ou **fecha** o dia, com o motivo — o site passa a mostrar isso.
+- Dúvida de onde caberia um grupo? **Onde um grupo sentaria?**, na tela do Salão,
+  responde com a mesa ou o conjunto que a reserva escolheria.
+
+### Pedidos do site
+
+**Portal de Clientes → Pedidos → Painel** é a tela do balcão: *confirmar*, *falta
+lançar no PDV* e *para quando*. Ela se atualiza sozinha e toca um som quando chega
+pedido.
+
+1. **Confirme** — e, se preciso, troque produtos antes (quantidade, tirar, pôr
+   outro do mesmo cardápio). O cliente vê o pedido como ficou.
+2. **Lance no PDV**, como qualquer venda, e marque **Lançado no PDV** (com o
+   número do cupom, se quiser).
+3. Recebeu? Marque **pago**. Entregou? **Entregue**.
+
+⚠️ **O pedido NÃO vira venda aqui.** A venda chega pela busca do PDV, como todas.
+Lançar uma segunda venda no sistema contaria tudo em dobro, sem nada avisar.
+
+⚠️ O Início avisa pedido novo parado há 15 minutos e pedido confirmado que ainda
+não foi lançado no PDV.
+
+### Fidelidade no balcão
+
+O cliente lê o QR do caixa e recebe um código. Em **Portal de Clientes →
+Fidelidade → Códigos** você vê o código, diz quantos **selos** a visita vale e
+confirma — o código vale por poucos minutos. Prêmio completo: em **Prêmios**,
+confira o código do prêmio e marque como entregue.
+
+### Prato esgotado
+
+No catálogo, toque no prato e marque **Esgotado**: ele continua no cardápio, sem
+poder ser pedido. Antes, escolha quando ele volta:
+
+- **volta sozinho amanhã (4h)** — o padrão. Marcado de madrugada (antes das 4h),
+  volta às 4h do mesmo dia, porque a noite ainda é o turno de ontem;
+- **só quando alguém tirar**.
 
 ---
 
@@ -672,6 +775,62 @@ aberto — e período aberto ainda pode mudar depois de o arquivo sair daqui.
 No painel, **Fechar o mês**. Depois disso, lançamento com data daquele período é
 recusado — é o que impede o número já apresentado de mudar sozinho. Reabrir
 exige permissão e fica registrado.
+
+A janela começa por **Antes de fechar**: o que ainda distorce o período — nota não
+lançada, saída com custo provisório, saldo negativo, venda sem vínculo —, cada
+item com o caminho para resolver. Ela **avisa e não impede**, mas o fechamento
+grava com quais pendências foi feito.
+
+### Preço: quem está abaixo do mínimo
+
+Menu **Precificação**:
+
+- **Configuração** — o que sai de cada real vendido (impostos, cartão, custo de
+  manter a casa aberta), os custos por unidade (embalagem, sachê) e a margem que a
+  casa quer. ⚠️ O imposto ali é estimativa para precificar: confirme com a
+  contabilidade.
+- **Precificação** — os produtos vendidos nos últimos 30 dias contra o **menor
+  preço que paga a conta**, o que mais pesa no mês primeiro. Marque os que quer
+  corrigir e **Aplicar**: o preço novo vale na hora, no sistema, no site e no
+  Cardápio Vivo. Se o caixa não recebe o preço sozinho, **Preços a acertar no
+  PDV** tira a lista para alguém acertar lá.
+- **Preço × custo** — como o preço e o custo de um produto andaram no tempo.
+
+⚠️ O sugerido é o **piso**, não o alvo: quem já vende acima dele não tem caixa de
+marcar — a tela não manda baixar preço.
+
+### O Cardápio Vivo: o que olhar
+
+O cardápio da mesa, no celular do cliente, mede o que cada pessoa viu e por quanto
+tempo — sem identificar ninguém.
+
+| Tela | Responde |
+|---|---|
+| **Catálogos → Atenção × Vendas** | Quais pratos prendem o olho e quais vendem — e o que pôr ou tirar do destaque. Nada muda sem **aplicar** |
+| **Catálogos → Testes A/B** | Vídeo ou foto? Esta ordem ou a sugerida? Metade das visitas vê cada versão; nada muda até alguém **Aplicar** |
+| **Catálogos → Anúncios** | O relatório de cada anúncio, em PDF para mostrar ao parceiro |
+| **O catálogo, aba Cardápio** | Quantas vezes cada cartão e cada abertura de seção foram vistos, e por quanto tempo |
+
+No catálogo, o painel **Abertura no Cardápio Vivo** tem o campo **Atenção dos**:
+últimos 30 dias, 90 dias ou 12 meses. Ele vale para os cartões e para a linha de
+cada seção. O que já passou do tempo de guarda dos dados vem do resumo diário, e a
+tela avisa até quando.
+
+⚠️ Com mais de um Cardápio Vivo na loja, Atenção × Vendas e os testes olham **um de
+cada vez** — escolha no campo **Cardápio**.
+
+### Perguntar ao Claude
+
+Em **Perfil → Claude** está o endereço para ligar o sistema ao Claude (claude.ai).
+Depois disso dá para perguntar *"quanto custa o cappuccino?"*, *"o que subiu de
+preço este mês?"*, *"quais reservas temos sábado?"*.
+
+Para ele também **fazer** — lançar, corrigir, produzir, reservar —, marque **Deixar o
+Claude alterar cadastros** na tela de entrada, ao conectar. Sem marcar, ele só
+consulta. Gravando, ele mostra a prévia antes.
+
+⚠️ **O Claude é você**: tem as suas permissões e as suas lojas, e tudo o que ele
+grava sai na auditoria em seu nome.
 
 ---
 

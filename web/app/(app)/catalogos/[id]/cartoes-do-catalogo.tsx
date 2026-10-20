@@ -12,20 +12,31 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type * as cat from "@/lib/catalogos";
-import { CartoesService, type Cartao, type ListaDeCartoes } from "@/lib/cartoes";
+import { CartoesService, type AberturaMedida, type Cartao, type ListaDeCartoes, type PeriodoDaAtencao } from "@/lib/cartoes";
 
-/** Os cartões do catálogo, com a atenção dos últimos 30 dias. */
+/** Os cartões do catálogo, com a atenção do período escolhido (30 dias, de partida). */
 export function useCartoes(idCatalogo: number) {
   const [lista, setLista] = useState<ListaDeCartoes | null>(null);
+  const [dias, setDias] = useState<PeriodoDaAtencao>(30);
   const recarregar = useCallback(async () => {
     try {
-      setLista(await CartoesService.listar(idCatalogo));
+      setLista(await CartoesService.listar(idCatalogo, dias));
     } catch {
       setLista({ cartoes: [], aberturas: [], pratos_por_cartao: 4 });
     }
-  }, [idCatalogo]);
+  }, [idCatalogo, dias]);
   useEffect(() => { void recarregar(); }, [recarregar]);
-  return { lista, recarregar };
+  return { lista, recarregar, dias, setDias };
+}
+
+export const NOME_DO_PERIODO: Record<PeriodoDaAtencao, string> = {
+  30: "últimos 30 dias", 90: "últimos 90 dias", 365: "últimos 12 meses",
+};
+
+/** A atenção da abertura automática de UMA seção (ou subdivisão), em texto curto. */
+export function atencaoDaAbertura(aberturas: AberturaMedida[] | undefined, idCategoria: number, idSubcategoria: number | null) {
+  const a = aberturas?.find((x) => x.id_categoria === idCategoria && (x.id_subcategoria ?? null) === idSubcategoria);
+  return a?.vistas ? `abertura vista ${a.vistas}× (${a.segundos ?? 0} s em média)` : "";
 }
 
 const descreverMidia = (c: Cartao) =>
@@ -101,8 +112,9 @@ function PratoComCartoes({ antes, aoAbrirCartao, children }: { antes: Cartao[]; 
 }
 
 /** A abertura do cardápio: os cartões que vêm antes do primeiro prato, acima das seções. */
-export function AberturaDoCardapio({ cartoes, podeEditar, aoNovo, aoAbrir }: {
+export function AberturaDoCardapio({ cartoes, podeEditar, aoNovo, aoAbrir, dias, aoDias, resumido }: {
   cartoes: Cartao[]; podeEditar: boolean; aoNovo: () => void; aoAbrir: (c: Cartao) => void;
+  dias: PeriodoDaAtencao; aoDias: (d: PeriodoDaAtencao) => void; resumido?: ListaDeCartoes["resumido"];
 }) {
   const abertura = cartoes.filter((c) => c.id_categoria === null);
   return (
@@ -115,8 +127,19 @@ export function AberturaDoCardapio({ cartoes, podeEditar, aoNovo, aoAbrir }: {
             ou vídeo já abrem sozinhas com o nome e a descrição delas. Só no Cardápio Vivo — o site e o PDF não mostram.
           </p>
         </div>
-        {podeEditar && <button type="button" className="btn btn-secundario" onClick={aoNovo}>+ abertura</button>}
+        <span className="flex flex-wrap items-center gap-2">
+          {/* 🔑 1.1.111: de quando é a atenção que os cartões e as seções mostram. */}
+          <label className="flex items-center gap-1.5 text-[13px] text-suave">
+            Atenção dos
+            <select id="cartoes-periodo" className="campo py-1 text-[13px]" value={dias}
+                    onChange={(e) => aoDias(Number(e.target.value) as PeriodoDaAtencao)}>
+              {([30, 90, 365] as const).map((d) => <option key={d} value={d}>{NOME_DO_PERIODO[d]}</option>)}
+            </select>
+          </label>
+          {podeEditar && <button type="button" className="btn btn-secundario" onClick={aoNovo}>+ abertura</button>}
+        </span>
       </div>
+      {resumido && <p id="cartoes-resumido" className="mt-2 text-[12.5px] text-suave">{resumido.aviso}</p>}
       {abertura.length > 0 && (
         <ul className="mt-3 flex flex-col gap-px bg-linha">
           {abertura.map((c) => <LinhaDoCartao key={c.id} cartao={c} aoAbrir={() => aoAbrir(c)} />)}

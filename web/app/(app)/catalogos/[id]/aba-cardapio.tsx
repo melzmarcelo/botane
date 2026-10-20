@@ -21,7 +21,7 @@ import { urlArquivo } from "@/lib/api";
 import * as cat from "@/lib/catalogos";
 import { pendentesDoCatalogo, type TipoTraduzivel } from "@/lib/traducao";
 import { resumoDaExibicao } from "./cardapio-vivo";
-import { AberturaDoCardapio, PratosECartoes, useCartoes } from "./cartoes-do-catalogo";
+import { AberturaDoCardapio, NOME_DO_PERIODO, PratosECartoes, atencaoDaAbertura, useCartoes } from "./cartoes-do-catalogo";
 import JanelaCartao, { type AbrindoCartao } from "./janela-cartao";
 import GavetaDoPrato, { type Lugar } from "./gaveta-do-prato";
 import JanelaPratos from "./janela-pratos";
@@ -47,7 +47,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
    *  seções, para arrumar em sequência — quem conserta um vê ele sair da lista. */
   const [soFaltas, setSoFaltas] = useState(false);
   // 🔑 Os cartões do Cardápio Vivo (120), na mesma lista dos pratos.
-  const { lista: listaCartoes, recarregar: recarregarCartoes } = useCartoes(idCatalogo);
+  const { lista: listaCartoes, recarregar: recarregarCartoes, dias: diasAtencao, setDias: setDiasAtencao } = useCartoes(idCatalogo);
   const [abrindoCartao, setAbrindoCartao] = useState<AbrindoCartao | null>(null);
   // 🔑 O que está sem tradução, por tipo e id (1.1.109) — entra no "O que falta".
   const [semTraducao, setSemTraducao] = useState<Partial<Record<TipoTraduzivel, number[]>>>({});
@@ -231,6 +231,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
   return (
     <div className="flex flex-col gap-4">
     <AberturaDoCardapio cartoes={cartoes} podeEditar={podeEditar}
+                        dias={diasAtencao} aoDias={setDiasAtencao} resumido={listaCartoes?.resumido}
                         aoNovo={() => setAbrindoCartao({ cartao: null, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })}
                         aoAbrir={(c) => setAbrindoCartao({ cartao: c, id_categoria: null, id_subcategoria: null, onde: "Antes do primeiro prato" })} />
     <div className="flex flex-col gap-4 md:grid md:grid-cols-[250px_minmax(0,1fr)] md:items-start md:gap-6">
@@ -286,6 +287,11 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
             <p className="mt-1 text-[12.5px] text-suave">
               No Cardápio Vivo: <span className="text-tinta">{resumoDaExibicao(secao)}</span>
               {secao.video_url ? " · abre com vídeo" : secao.foto_url ? " · abre com a foto" : " · sem foto, sem abertura"}
+              {(() => {
+                // 🔑 1.1.111: a abertura automática também é medida (`viu_secao`) — agora aparece.
+                const t = atencaoDaAbertura(listaCartoes?.aberturas, a.categoria.id, a.sub?.id ?? null);
+                return t && <span data-abertura-atencao> · {t} nos {NOME_DO_PERIODO[diasAtencao]}</span>;
+              })()}
             </p>
           </div>
           <span className="flex flex-wrap items-center gap-1.5">
@@ -376,7 +382,7 @@ export default function AbaCardapio({ idCatalogo, podeEditar, aoIdiomas }: {
                       pratosDaLista={abrindoCartao.id_categoria === null ? []
                         : lugares.find((l) => l.id_categoria === abrindoCartao.id_categoria
                             && l.id_subcategoria === abrindoCartao.id_subcategoria)?.itens ?? []}
-                      todosOsPratos={todosOsPratos}
+                      todosOsPratos={todosOsPratos} periodo={NOME_DO_PERIODO[diasAtencao]}
                       aoFechar={() => setAbrindoCartao(null)}
                       aoMudar={async () => {
                         void pendentesDoCatalogo(idCatalogo).then((r) => setSemTraducao(r.por_tipo ?? {})).catch(() => {});

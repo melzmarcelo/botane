@@ -15,7 +15,11 @@
   ⚠️ **Só entra no manual o que tem porta na TELA.** Open Food Facts e a colheita de EAN das
   notas existem só como rota/script — descrevê-los mandaria o usuário procurar um botão que
   não existe. Conferir o rótulo do botão e o nome do menu no código antes de citar.
-  O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento e parou em 13/09.
+  O `docs/manual-da-equipe.md` (passo a passo por função) é outro documento; parou em 13/09 e
+  foi posto em dia na 1.1.111 (20/10/2026): produção (porções/receitas/no rendimento, usado de
+  verdade, estornar), etiquetas, reservas, pedidos do site, fidelidade no balcão, esgotado,
+  Antes de fechar, Precificação, Cardápio Vivo e o Claude. Ele é o CURTO — o porquê fica no
+  `ajuda.html`; não duplicar regra inteira lá.
   ⚠️ **Parou de novo depois da 1.1.60**: em 17/10/2026 (1.1.108) entraram só catálogos e o
   Cardápio Vivo (seção `cardapio-vivo`, 17; Fidelidade, WhatsApp e Claude viraram 18–20).
   Em 19/10/2026 (1.1.109) entrou a **Precificação** como seção `precificacao`, **21** — no

@@ -187,8 +187,8 @@ desconectar a qualquer momento no sistema, em Perfil ▸ Claude.</p>
 <label class="escolha" for="escrita">
 <input type="checkbox" id="escrita" name="escrita" value="1" {marcado}>
 <span><b>Deixar o Claude alterar cadastros</b>
-Conciliar notas, criar e corrigir produtos, juntar cadastros repetidos e lançar notas no
-estoque — sempre com as suas permissões, e cada alteração fica registrada na Auditoria.
+Cadastros, fichas, notas, estoque, produção, etiquetas, vendas, preços, CMV, reservas,
+pedidos e catálogos — sempre com as suas permissões, e cada alteração fica registrada na Auditoria.
 Sem marcar, ele só consulta.</span></label>
 <div class="acoes">
 <button class="sim" name="decisao" value="permitir">Entrar e permitir</button>

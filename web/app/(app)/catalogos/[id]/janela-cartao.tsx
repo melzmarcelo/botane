@@ -34,13 +34,15 @@ type Props = {
   /** Todos os pratos do cardápio — o "Ver o prato" pode levar a qualquer um. */
   todosOsPratos: cat.ItemDoCatalogo[];
   podeEditar: boolean;
+  /** De quando é a atenção mostrada ("últimos 30 dias"…), o que a aba escolheu. */
+  periodo: string;
   aoFechar: () => void;
   aoMudar: () => Promise<void>;
 };
 
 const nomeDo = (i: cat.ItemDoCatalogo) => i.nome_catalogo || i.produto;
 
-export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todosOsPratos, podeEditar, aoFechar, aoMudar }: Props) {
+export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todosOsPratos, podeEditar, periodo, aoFechar, aoMudar }: Props) {
   const aviso = useAviso();
   const [atual, setAtual] = useState<Cartao | null>(abrindo.cartao);
   const [titulo, setTitulo] = useState(atual?.titulo ?? "");
@@ -213,7 +215,7 @@ export default function JanelaCartao({ idCatalogo, abrindo, pratosDaLista, todos
             <p className="mt-1 text-[12.5px] text-suave">Vídeo de até 15 s, sem som. A foto troca o vídeo, e o vídeo a foto.</p>
             {(atual.vistas ?? 0) > 0 && (
               <p className="mt-3 text-[13px]">
-                Nos últimos 30 dias: visto <b>{atual.vistas}×</b>, <b>{atual.segundos ?? 0} s</b> em média
+                Nos {periodo}: visto <b>{atual.vistas}×</b>, <b>{atual.segundos ?? 0} s</b> em média
                 {atual.cliques ? <>, <b>{atual.cliques}</b> toques no “Ver o prato”</> : null}.
               </p>
             )}

@@ -227,8 +227,8 @@ export default function ChavesDeAcesso({
                 autoFocus
               />
             </Campo>
-            {/* 🔑 A conexão feita pelo claude.ai é sempre só leitura; alterar só
-                por uma chave gerada aqui, de propósito. */}
+            {/* 🔑 Nasce só leitura, aqui e na entrada do claude.ai: alterar é marcado
+                de propósito ("Deixar o Claude alterar cadastros", no `oauth.py`). */}
             <Campo rotulo="O que ela pode fazer">
               <select
                 className="campo"
@@ -241,8 +241,8 @@ export default function ChavesDeAcesso({
             </Campo>
             {podeAlterar && (
               <p className="aviso aviso-info text-[13.5px]" role="status">
-                Com esta chave o Claude pode conciliar notas, corrigir e criar produtos e
-                lançar notas no estoque — sempre como esta pessoa, e cada alteração fica
+                Com esta chave o Claude pode alterar cadastros, fichas, notas, estoque, produção,
+                vendas, preços, CMV, reservas e catálogos — sempre como esta pessoa, e cada alteração fica
                 marcada na Auditoria. Lançamento no estoque só se desfaz por estorno.
               </p>
             )}

@@ -23,9 +23,9 @@ _SECOES = ("categoria", "subcategoria")
 
 
 @router.get("/{id_catalogo}/cartoes")
-def listar(id_catalogo: int, ctx: Contexto = Depends(_VER)) -> dict:
+def listar(id_catalogo: int, dias: int = 30, ctx: Contexto = Depends(_VER)) -> dict:
     with get_cursor() as cur:
-        return servico.listar(cur, _unidade(cur, ctx), id_catalogo)
+        return servico.listar(cur, _unidade(cur, ctx), id_catalogo, dias)
 
 
 @router.post("/{id_catalogo}/cartoes", status_code=201)

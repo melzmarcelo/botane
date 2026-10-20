@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 import uuid
 from base64 import b64decode
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, ".")
@@ -227,6 +228,39 @@ checar("o editor vê as vistas, os segundos e os cliques do cartão",
        h["vistas"] == 1 and float(h["segundos"]) == 4.0 and h["cliques"] == 1, h)
 checar("e a atenção da abertura da seção",
        any(a["id_subcategoria"] == sub["id"] and a["vistas"] == 1 for a in lista["aberturas"]), lista["aberturas"])
+
+print("\n5a. o período escolhido, e o resumo do dia além da retenção (1.1.111)")
+st, _r = chamar("GET", f"/catalogos/{ID}/cartoes?dias=45", token=token)
+checar("período fora de 30, 90 ou 365 é recusado", st == 422, st)
+with get_cursor() as cur:
+    cur.execute("SELECT min(quando)::date AS d, current_date AS hoje FROM cardapio_eventos WHERE id_unidade = %s", (U,))
+    r = cur.fetchone()
+    velho = r["d"] - timedelta(days=1)  # um dia que o bruto já não tem
+    PERIODO = next((p for p in (30, 90, 365) if (r["hoje"] - velho).days <= p), None)
+    cur.execute("""INSERT INTO cardapio_conteudo_dia (dia, id_unidade, tipo, id_ref, id_sub, id_catalogo, canal,
+                                                      vistas, sessoes, soma_ms, pulados, cliques, sessoes_clicaram)
+                   VALUES (%s, %s, 'CARTAO', %s, 0, %s, 'MESA', 3, 3, 6000, 0, 2, 2),
+                          (%s, %s, 'SECAO', %s, %s, %s, 'LINK', 2, 2, 8000, 0, 0, 0),
+                          (%s, %s, 'SECAO', %s, 0, %s, 'LINK', 5, 5, 5000, 0, 0, 0)""",
+                (velho, U, harmon["id"], ID, velho, U, g1["id"], sub["id"], ID, velho, U, g1["id"], ID))
+if PERIODO is None:
+    checar("o bruto local é recente o bastante para o teste do resumo", False, velho)
+else:
+    st, longo = chamar("GET", f"/catalogos/{ID}/cartoes?dias={PERIODO}", token=token)
+    h2 = next(x for x in longo["cartoes"] if x["id"] == harmon["id"])
+    checar("o cartão soma o resumo: 4 vistas, 3 cliques, (4 + 6) s ÷ 4 = 2,5 s",
+           st == 200 and h2["vistas"] == 4 and h2["cliques"] == 3 and float(h2["segundos"]) == 2.5, (st, h2))
+    ab = {(a["id_categoria"], a["id_subcategoria"]): a for a in longo["aberturas"]}
+    checar("a subdivisão soma o resumo (3 vistas) e a seção sem subdivisão nasce dele (5 vistas, 1 s)",
+           ab.get((g1["id"], sub["id"]), {}).get("vistas") == 3
+           and ab.get((g1["id"], None), {}).get("vistas") == 5 and float(ab[(g1["id"], None)]["segundos"]) == 1.0,
+           longo["aberturas"])
+    checar("e diz até quando veio do resumo; o período curto, sem resumo, não diz",
+           longo["dias"] == PERIODO and longo["resumido"] and longo["resumido"]["ate"] == str(velho)
+           and (PERIODO == 30 or lista["resumido"] is None), (longo.get("resumido"), lista.get("resumido")))
+with get_cursor() as cur:
+    cur.execute("DELETE FROM cardapio_conteudo_dia WHERE dia = %s AND id_unidade = %s AND id_catalogo = %s",
+                (velho, U, ID))
 
 print("\n5b. a tradução corrigida à mão (16/10/2026)")
 st, tr = chamar("GET", f"/traducao/cartao/{harmon['id']}", token=token)

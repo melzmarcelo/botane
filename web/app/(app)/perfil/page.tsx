@@ -123,7 +123,7 @@ export default function PaginaPerfil() {
         <ChavesDeAcesso
           fonte={minhasChaves}
           titulo="Claude"
-          descricao="Consulte o sistema conversando com o Claude: produtos, estoque, compras, vendas e CMV, com as suas permissões e lojas. Só leitura — o Claude não altera nada."
+          descricao="Consulte o sistema conversando com o Claude: produtos, estoque, compras, vendas e CMV, com as suas permissões e lojas. Ele só altera se, ao conectar, você marcar “Deixar o Claude alterar cadastros” — e mostra a prévia antes de gravar."
           topo={<ConectarClaude />}
         />
       )}

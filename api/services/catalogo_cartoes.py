@@ -11,6 +11,8 @@ o cartão acompanha a reordenação (setas, vencedor do A/B) sem ninguém mexer 
 ⚠️ A loja é conferida pelo catálogo em toda função, como em `catalogo_conteudo`.
 """
 
+from datetime import timedelta
+
 import arquivos
 from fastapi import HTTPException
 from services import catalogo_conteudo, traducao
@@ -72,37 +74,92 @@ def _texto(v: str | None) -> str | None:
     return (v or "").strip() or None
 
 
-def listar(cur, id_unidade: int, id_catalogo: int) -> dict:
-    """Os cartões do catálogo, com quantas vezes cada um foi visto nos últimos 30 dias.
+PERIODOS = (30, 90, 365)
+
+
+def listar(cur, id_unidade: int, id_catalogo: int, dias: int = 30) -> dict:
+    """Os cartões do catálogo, com quantas vezes cada um foi visto nos últimos `dias`.
 
     🔑 **A atenção vem junto** (pedido do dono: saber se o vídeo de abertura prende ou se o
     cliente passa direto): vistas, segundos em média e cliques no "Ver o prato".
+    🔑 **O período passa da retenção** (1.1.111): os dias que o bruto já não tem saem do resumo
+    do dia (124), como no relatório do anúncio. Aqui não há pessoas — só vistas e cliques, que
+    somam igual dos dois lados.
     """
+    if dias not in PERIODOS:
+        raise HTTPException(status_code=422, detail="O período é de 30, 90 ou 365 dias.")
     catalogo_conteudo._catalogo_de_produtos(cur, id_unidade, id_catalogo)
+    janela = "AND e.quando >= current_date - %(dias)s::int"
+    p = {"u": id_unidade, "c": id_catalogo, "dias": dias}
     cur.execute(
         f"""SELECT {_COLUNAS},
                    count(e.id) FILTER (WHERE e.tipo = 'viu_cartao') AS vistas,
-                   round(avg(e.duracao_ms) FILTER (WHERE e.tipo = 'viu_cartao') / 1000.0, 1) AS segundos,
+                   coalesce(sum(e.duracao_ms) FILTER (WHERE e.tipo = 'viu_cartao'), 0) AS soma_ms,
                    count(e.id) FILTER (WHERE e.tipo = 'clicou_cartao') AS cliques
               FROM catalogo_cartoes k
-              LEFT JOIN cardapio_eventos e ON e.id_cartao = k.id AND e.id_unidade = %s
-                    AND e.quando > now() - interval '30 days'
-             WHERE k.id_catalogo = %s
+              LEFT JOIN cardapio_eventos e ON e.id_cartao = k.id AND e.id_unidade = %(u)s {janela}
+             WHERE k.id_catalogo = %(c)s
              GROUP BY k.id
              ORDER BY k.id""",  # noqa: S608
-        (id_unidade, id_catalogo))
+        p)
     cartoes = [dict(r) for r in cur.fetchall()]
     # A abertura AUTOMÁTICA das seções também é medida (`viu_secao`).
     cur.execute(
-        """SELECT id_categoria, id_subcategoria, count(*) AS vistas,
-                  round(avg(duracao_ms) / 1000.0, 1) AS segundos
-             FROM cardapio_eventos
-            WHERE tipo = 'viu_secao' AND id_unidade = %s AND quando > now() - interval '30 days'
-              AND id_categoria IN (SELECT id FROM catalogo_categorias WHERE id_catalogo = %s)
-            GROUP BY id_categoria, id_subcategoria""",
-        (id_unidade, id_catalogo))
+        f"""SELECT e.id_categoria, e.id_subcategoria, count(*) AS vistas,
+                   coalesce(sum(e.duracao_ms), 0) AS soma_ms
+              FROM cardapio_eventos e
+             WHERE e.tipo = 'viu_secao' AND e.id_unidade = %(u)s {janela}
+               AND e.id_categoria IN (SELECT id FROM catalogo_categorias WHERE id_catalogo = %(c)s)
+             GROUP BY 1, 2""",  # noqa: S608
+        p)
     secoes = [dict(r) for r in cur.fetchall()]
-    return {"cartoes": cartoes, "aberturas": secoes, "pratos_por_cartao": PRATOS_POR_CARTAO}
+    resumido = _somar_resumo(cur, id_unidade, id_catalogo, dias, cartoes, secoes)
+    for linha in cartoes + secoes:
+        soma = linha.pop("soma_ms")
+        linha["segundos"] = round(float(soma) / 1000 / linha["vistas"], 1) if linha["vistas"] else None
+    return {"cartoes": cartoes, "aberturas": secoes, "pratos_por_cartao": PRATOS_POR_CARTAO,
+            "dias": dias, "resumido": resumido}
+
+
+def _somar_resumo(cur, id_unidade: int, id_catalogo: int, dias: int,
+                  cartoes: list[dict], secoes: list[dict]) -> dict | None:
+    """Os dias do período antes do primeiro evento bruto da loja, lidos do resumo (124)."""
+    cur.execute("""SELECT current_date - %s::int AS de, current_date AS hoje,
+                          (SELECT min(quando)::date FROM cardapio_eventos WHERE id_unidade = %s) AS desde""",
+                (dias, id_unidade))
+    r = cur.fetchone()
+    corte = min(r["desde"], r["hoje"] + timedelta(days=1)) if r["desde"] else r["hoje"] + timedelta(days=1)
+    if r["de"] >= corte:
+        return None
+    cur.execute(
+        """SELECT d.tipo, d.id_ref, d.id_sub, count(DISTINCT d.dia) AS dias,
+                  sum(d.vistas) AS vistas, sum(d.soma_ms) AS soma_ms, sum(d.cliques) AS cliques
+             FROM cardapio_conteudo_dia d
+            WHERE d.id_unidade = %(u)s AND d.dia >= %(de)s AND d.dia < %(corte)s
+              AND ((d.tipo = 'CARTAO' AND d.id_ref IN (SELECT id FROM catalogo_cartoes WHERE id_catalogo = %(c)s))
+                OR (d.tipo = 'SECAO' AND d.id_ref IN (SELECT id FROM catalogo_categorias WHERE id_catalogo = %(c)s)))
+            GROUP BY 1, 2, 3""",
+        {"u": id_unidade, "de": r["de"], "corte": corte, "c": id_catalogo})
+    linhas = cur.fetchall()
+    if not linhas:
+        return None
+    por_cartao = {k["id"]: k for k in cartoes}
+    for d in linhas:
+        if d["tipo"] == "CARTAO":
+            alvo = por_cartao.get(d["id_ref"])
+            if alvo is None:
+                continue
+            alvo["cliques"] += d["cliques"]
+        else:
+            sub = d["id_sub"] or None
+            alvo = next((s for s in secoes if s["id_categoria"] == d["id_ref"] and s["id_subcategoria"] == sub), None)
+            if alvo is None:
+                alvo = {"id_categoria": d["id_ref"], "id_subcategoria": sub, "vistas": 0, "soma_ms": 0}
+                secoes.append(alvo)
+        alvo["vistas"] += d["vistas"]
+        alvo["soma_ms"] += d["soma_ms"]
+    ate = corte - timedelta(days=1)
+    return {"ate": ate, "aviso": "Os dias até {} vêm do resumo diário.".format(ate.strftime("%d/%m/%Y"))}
 
 
 def criar(cur, id_unidade: int, id_catalogo: int, dados: dict, id_usuario: int | None) -> dict:
