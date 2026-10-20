@@ -858,6 +858,12 @@ st, _, r = rpc(escrita, "tools/call", {"name": "produtos_duplicados",
 # que é o comportamento certo, mas deixa de ser JSON. O `json.loads` estourava e
 # a suíte morria sem resumo, por causa do tamanho da base e não do conector.
 lista_de_repetidos = r["result"]["content"][0]["text"]
+# ⚠️ (20/10/2026) A base passou de 160 "AZEITE EXTRA VIRGEM 500ML" repetidos e o par desta
+# rodada ficou DEPOIS do corte: cortada com o aviso, a resposta está certa — o par então é
+# conferido na rota que a ferramenta chama, sem o limite de tamanho do conector.
+if nome_igual not in lista_de_repetidos and "[CORTADO:" in lista_de_repetidos:
+    _st, _h, _rota = pedir("GET", "/produtos/duplicados?limite=1000", token=admin)
+    lista_de_repetidos += json.dumps(_rota, ensure_ascii=False)
 checar("produtos_duplicados acha o par",
        not r["result"]["isError"] and nome_igual in lista_de_repetidos,
        lista_de_repetidos[:200])
@@ -1053,6 +1059,23 @@ checar("e grava o fator, confirmado", cod and float(cod["fator"]) == 0.5
 erro, r = ferramenta("converter_codigo_vinculado", {"id_produto": id_h, "sistema": "FORNECEDOR",
                                                     "codigo": "NAO-EXISTE", "fator": 2})
 checar("código que não é deste produto: 404", erro and "404" in str(r), r)
+
+# 🔑 Desvincular pelo conector (20/10/2026): a prévia, e depois tirar o código.
+erro, pv = ferramenta("previa_desvinculo_de_codigo", {"id_produto": id_h, "sistema": "FORNECEDOR",
+                                                      "codigo": f"MEIO-{marca_h}"})
+checar("previa_desvinculo_de_codigo mostra o código e não muda nada",
+       not erro and pv.get("codigo") == f"MEIO-{marca_h}" and "itens_de_nota_abertos" in pv, pv)
+erro, r = ferramenta("desvincular_codigo", {"id_produto": id_h, "sistema": "FORNECEDOR",
+                                            "codigo": f"MEIO-{marca_h}"})
+checar("desvincular_codigo tira o código do produto", not erro, r)
+with get_cursor() as cur:
+    cur.execute("SELECT 1 FROM codigos_externos WHERE codigo = %s AND id_produto = %s",
+                (f"MEIO-{marca_h}", id_h))
+    sobrou = cur.fetchone()
+checar("e o código deixa de apontar para ele", sobrou is None, sobrou)
+erro, r = ferramenta("desvincular_codigo", {"id_produto": id_h, "sistema": "FORNECEDOR",
+                                            "codigo": "NAO-EXISTE"})
+checar("desvincular código que não é deste produto: 404", erro and "404" in str(r), r)
 
 # A foto da ficha em base64: um PNG de verdade, pequeno.
 from io import BytesIO  # noqa: E402

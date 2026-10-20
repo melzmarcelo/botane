@@ -809,3 +809,13 @@ uma prateleira — e o conector só sabia LER as duas coisas.
   - A permissão é a da rota (`fichas.homologar`), e a chave precisa permitir alterar.
   - `smoke_conector_claude` trocou a checagem: cobrava a ausência, agora cobra que a
     ferramenta exista, que a descrição mande conferir, e que homologue de verdade.
+
+- 🔑 **Desvincular código pelo conector** (pedido do dono, 20/10/2026): `previa_desvinculo_de_codigo`
+  (leitura) e `desvincular_codigo` — as MESMAS rotas da aba Vinculados
+  (`/produtos/{id}/codigos/desvinculo/previa` e `/codigos/desvincular`). Nasceu do código Lupato
+  000172 (a sêmola) vinculado ao TOMATE CEREJA: o conector só sabia mudar o fator
+  (`converter_codigo_vinculado`), e tirar o vínculo ficava para a tela. Vale para a frente; o que
+  já entrou fica (corrigir é estorno ou ajuste).
+  - ⚠️ `produtos_duplicados acha o par` passou a conferir na ROTA quando a resposta da ferramenta
+    vem `[CORTADO:` — a base local acumulou 160+ "AZEITE EXTRA VIRGEM 500ML" e o par da rodada
+    ficava depois do corte de 60 mil caracteres.

@@ -1967,6 +1967,39 @@ FERRAMENTAS: list[Ferramenta] = [
          "fator": Param("number", "Unidades de estoque em 1 unidade daquele código.",
                         obrigatorio=True, no_corpo=True)},
         metodo="PUT"),
+    # 🔑 **Desvincular pelo conector** (pedido do dono, 20/10/2026, depois do código da
+    # sêmola que caiu no tomate cereja e só a tela conseguia tirar). A MESMA rota da aba
+    # Vinculados; a prévia antes, como na tela.
+    Ferramenta(
+        "previa_desvinculo_de_codigo", "O que desvincular um código faria",
+        "Antes de `desvincular_codigo`: mostra o código, o fornecedor, se há um cadastro "
+        "absorvido que volta a existir com ele (`devolve_para`) e quantos itens de nota "
+        "ainda não lançada apontam para este produto. Não muda nada.",
+        "/produtos/{id_produto}/codigos/desvinculo/previa",
+        {"id_produto": Param("integer", "O produto que tem o código.", obrigatorio=True),
+         "sistema": Param("string", "Como está em `detalhe_produto` → `codigos_externos`.",
+                          obrigatorio=True),
+         "codigo": Param("string", "O código, como está em `codigos_externos`.",
+                         obrigatorio=True),
+         "id_fornecedor": Param("integer", "O fornecedor da linha, quando ela tiver um.")}),
+    Ferramenta(
+        "desvincular_codigo", "Tirar um código de um produto",
+        "Tira um código de fora (de nota, do Omie, EAN) de um produto — o vínculo errado, "
+        "como a nota de um insumo que cai em outro. ⚠️ Rode `previa_desvinculo_de_codigo` e "
+        "mostre à pessoa antes. Vale daqui para a frente: o que já entrou no estoque por "
+        "aquele código fica onde está (corrigir é estorno ou ajuste). Com `devolver`, o "
+        "código volta ao cadastro absorvido indicado na prévia, em vez de ficar sem dono.",
+        "/produtos/{id_produto}/codigos/desvincular",
+        {"id_produto": Param("integer", "O produto que tem o código.", obrigatorio=True),
+         "sistema": Param("string", "Como está em `codigos_externos`.", obrigatorio=True,
+                          no_corpo=True),
+         "codigo": Param("string", "O código, como está em `codigos_externos`.",
+                         obrigatorio=True, no_corpo=True),
+         "id_fornecedor": Param("integer", "O fornecedor da linha, quando ela tiver um.",
+                                no_corpo=True),
+         "devolver": Param("boolean", "Devolver o código ao cadastro absorvido da prévia.",
+                           padrao=False, no_corpo=True)},
+        metodo="POST"),
     Ferramenta(
         "desativar_produto", "Desativar um produto",
         "Tira o produto das buscas e das telas. Produto não se exclui — o histórico dele "
