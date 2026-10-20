@@ -1367,3 +1367,8 @@ são cadastro, esperando a vitrine que os mostre. Ver [`catalogos.md`](catalogos
   usou códigos reais (`7891000315507`) que já eram de produtos do catálogo: o cenário não
   subia e três checagens caíam acusando um código intacto — e uma rodada que quebrasse no meio
   deixava produtos donos daqueles números, envenenando a seguinte.
+- 🔑 **Pessoas: o filtro por tipo e o relatório** (1.1.114, pedido do dono). A tela passa
+  `so_fornecedores` (que os seletores de compra já usavam) pelo seletor "Tipo", na URL (`?tipo=`).
+  O botão **Baixar** abre o relatório `pessoas` com os filtros da tela já escolhidos.
+- 🔑 **O cadastro de produtos inteiro na planilha** (1.1.114, pedido do dono: *"listar todos os campos
+  do cadastro, principalmente na planilha"*). Ver `_transversais/exportacao-e-relatorios.md`.

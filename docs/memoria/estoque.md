@@ -679,3 +679,9 @@
     lugar errado? Fora do lugar, devolver e contar onde mora — contado aqui, vira sobra aqui e
     falta lá. Setor errado no cadastro se corrige no cadastro; a contagem não muda setor.
   - Cobertura: `smoke_inventario_incluir.py` (14).
+- 🔑 **Perda: o motivo Descarte e a observação obrigatória** (1.1.114, migração 126, pedido do dono).
+  - `POST /estoque/saidas` com `SAIDA_PERDA` recusa (400) sem observação — em branco não vale. ⚠️ Na
+    ROTA, não no motor: o descarte de etiqueta e o inventário lançam perda pelo motor, com a frase
+    deles. A tela e o conector (`saida_de_estoque`) passam pela rota.
+  - "Descarte" entra em `perda_motivos` só se faltar (índice por `lower(nome)`).
+  - Cobertura: `smoke_estoque.py` (recusa sem observação, Descarte na lista) e `verificar.mjs` 11zz.

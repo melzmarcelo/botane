@@ -144,7 +144,7 @@ def levantar(cur, id_unidade: int) -> list[dict]:
         SELECT count(DISTINCT i.id_nota) AS n FROM nota_itens i
           JOIN notas_entrada n ON n.id = i.id_nota
          WHERE n.id_unidade = %s AND i.id_produto IS NULL AND NOT i.ignorado
-           AND n.status <> 'CANCELADA'""", (id_unidade,))
+           AND n.status NOT IN ('CANCELADA', 'NAO_ENCONTRADA')""", (id_unidade,))
     juntar("compras.pendencias", ATENCAO, "Nota parada esperando conciliação", r.get("n"),
            "Tem item sem produto vinculado — a nota inteira não entra no estoque assim.",
            "conciliar agora", "/compras")

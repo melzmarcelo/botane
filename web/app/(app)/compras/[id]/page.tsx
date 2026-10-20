@@ -18,7 +18,7 @@ import {
   Etiqueta,
   Vazio,
 } from "@/components/ui";
-import { CORES, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
+import { CORES, rotuloStatus, dataBr, ItemNota, NotaDetalhe, ORIGENS } from "../tipos";
 import ConversaoDoItem from "./conversao-do-item";
 import Voltar from "@/components/voltar";
 
@@ -233,6 +233,8 @@ export default function PaginaNota() {
    * ao "atualizar do Omie"; a tela só deixa de oferecer o que não cabe mais.
    */
   const cancelada = nota.status === "CANCELADA";
+  // 🔑 Excluída no Omie depois de importada (20/10/2026): igual à cancelada.
+  const naoEncontrada = nota.status === "NAO_ENCONTRADA";
   // A soma dos itens, como ela aparece na nota — antes de frete, desconto e
   // IPI/ST. É esta linha que se bate contra o papel do fornecedor.
   const somaItens = nota.itens.reduce(
@@ -250,7 +252,7 @@ export default function PaginaNota() {
           NF {nota.numero ?? "—"}
         </h1>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <Etiqueta cor={CORES[nota.status]}>{nota.status.toLowerCase()}</Etiqueta>
+          <Etiqueta cor={CORES[nota.status]}>{rotuloStatus(nota.status)}</Etiqueta>
           <Etiqueta>{ORIGENS[nota.origem] ?? nota.origem.toLowerCase()}</Etiqueta>
           {nota.chave_nfe && (
             <Etiqueta>
@@ -271,9 +273,17 @@ export default function PaginaNota() {
             de conciliação. Se o cancelamento for desfeito lá, use “atualizar do Omie”.
           </p>
         )}
+        {naoEncontrada && (
+          <p id="nota-nao-encontrada"
+             className="mt-3 max-w-[70ch] rounded border border-linha bg-superficie px-3 py-2 text-[14px]">
+            Esta nota <b>não foi encontrada no Omie</b> — foi excluída lá depois de importada.
+            Ela não entra no estoque e saiu da fila de conciliação. Se ela voltar a existir lá,
+            use “atualizar do Omie”.
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {!lancada && !cancelada && pode("compras.lancar") && (
+          {!lancada && !cancelada && !naoEncontrada && pode("compras.lancar") && (
             <button
               className="btn btn-primario"
               onClick={lancar}

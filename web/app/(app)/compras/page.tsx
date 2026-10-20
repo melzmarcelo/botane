@@ -10,7 +10,7 @@ import { useSessao } from "@/lib/sessao";
 import { reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Confirmacao, Etiqueta, Modal, Vazio } from "@/components/ui";
 import { qtd } from "@/lib/numeros";
-import { CORES, dataBr, Nota } from "./tipos";
+import { CORES, dataBr, Nota, rotuloStatus } from "./tipos";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
 import LancarLote from "./lote";
@@ -150,55 +150,102 @@ export default function PaginaCompras() {
    * centenas morreria no tempo limite com metade feita. O servidor devolve
    * `proximo`, e o laço segue até ele vir nulo, mostrando onde está.
    */
-  const [confirmandoAtualizar, setConfirmandoAtualizar] = useState(false);
+  const [confirmandoSincronizar, setConfirmandoSincronizar] = useState(false);
   const [andamento, setAndamento] = useState("");
 
-  async function atualizarTodasDoOmie() {
-    setConfirmandoAtualizar(false);
-    setOcupado(true);
-    setErro("");
+  /**
+   * Relê do Omie as notas abertas, em levas, e devolve a frase do que mudou.
+   *
+   * ⚠️ Lança erro só quando a primeira leva falha; o resto vira frase, com o que já
+   * foi conferido. Quem chama decide o que fazer com ela.
+   */
+  async function releituraDasAbertas(): Promise<{ frase: string; parou: boolean }> {
     type Leva = {
       conferidas: number; iguais: number; restantes: number; proximo: number | null;
-      atualizadas: unknown[]; canceladas: unknown[]; falhas: { motivo: string }[];
-      parou_por_falhas: boolean; modo: string; message: string;
+      atualizadas: unknown[]; canceladas: unknown[]; nao_encontradas?: unknown[];
+      falhas: { motivo: string }[]; parou_por_falhas: boolean; modo: string; message: string;
     };
-    const soma = { conferidas: 0, atualizadas: 0, canceladas: 0, falhas: 0 };
+    const soma = { conferidas: 0, atualizadas: 0, canceladas: 0, naoEncontradas: 0, falhas: 0 };
     let antesDe: number | null = null;
     let parou = false;
     let simulado = false;
+    // ⚠️ Teto de voltas: se o servidor um dia devolvesse sempre o mesmo `proximo`,
+    // o laço não pode rodar para sempre em cima da cota do Omie.
+    for (let volta = 0; volta < 40; volta++) {
+      const r: Leva = await api.post<Leva>("/notas/atualizar-do-omie", { antes_de: antesDe });
+      soma.conferidas += r.conferidas;
+      soma.atualizadas += r.atualizadas.length;
+      soma.canceladas += r.canceladas.length;
+      soma.naoEncontradas += r.nao_encontradas?.length ?? 0;
+      soma.falhas += r.falhas.length;
+      simulado = r.modo === "simulado";
+      parou = r.parou_por_falhas;
+      if (!r.proximo) break;
+      antesDe = r.proximo;
+      setAndamento(`${soma.conferidas} conferida(s), faltam ${r.restantes}…`);
+    }
+    const nada = !soma.atualizadas && !soma.canceladas && !soma.naoEncontradas && !soma.falhas;
+    const frase =
+      soma.conferidas === 0
+        ? "nenhuma nota do Omie aberta para reler"
+        : `${soma.conferidas} nota(s) aberta(s) relida(s)` +
+          (soma.atualizadas ? `, ${soma.atualizadas} com valor diferente` : "") +
+          (soma.canceladas ? `, ${soma.canceladas} cancelada(s) lá` : "") +
+          (soma.naoEncontradas ? `, ${soma.naoEncontradas} não encontrada(s) lá (excluídas)` : "") +
+          (soma.falhas ? `, ${soma.falhas} não abriram` : "") +
+          (nada ? " — nada mudou" : "") +
+          (simulado ? " (modo simulado — dados de demonstração)" : "");
+    return { frase, parou };
+  }
+
+  /**
+   * 🔑 **Um botão só: Sincronizar** (pedido do dono, 20/10/2026: "criar um botão único
+   * de Sincronizar, unindo o buscar no Omie e o atualizar do Omie"). Primeiro traz as
+   * notas NOVAS; depois relê as que ainda não foram lançadas — valor corrigido, item
+   * trocado, nota cancelada ou excluída lá.
+   * ⚠️ Cada metade exige a chave dela: a busca é `integracao.omie`, a releitura é
+   * `compras.notas`. Quem tem uma só faz a sua parte, e a frase diz qual.
+   */
+  async function sincronizar() {
+    setConfirmandoSincronizar(false);
+    setOcupado(true);
+    setErro("");
+    const partes: string[] = [];
+    let falhou = false;
     try {
-      // ⚠️ Teto de voltas: se o servidor um dia devolvesse sempre o mesmo `proximo`,
-      // o laço não pode rodar para sempre em cima da cota do Omie.
-      for (let volta = 0; volta < 40; volta++) {
-        const r: Leva = await api.post<Leva>("/notas/atualizar-do-omie", { antes_de: antesDe });
-        soma.conferidas += r.conferidas;
-        soma.atualizadas += r.atualizadas.length;
-        soma.canceladas += r.canceladas.length;
-        soma.falhas += r.falhas.length;
-        simulado = r.modo === "simulado";
-        parou = r.parou_por_falhas;
-        if (!r.proximo) break;
-        antesDe = r.proximo;
-        setAndamento(`${soma.conferidas} conferida(s), faltam ${r.restantes}…`);
+      if (pode("integracao.omie")) {
+        setAndamento("buscando as novas…");
+        try {
+          // Sem período: a janela vai desde a última sincronização, com folga.
+          const r = await api.post<{ novas: number; modo: string; message: string }>(
+            "/omie/sincronizar",
+          );
+          partes.push(
+            (r.message ?? "busca concluída") +
+              (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
+          );
+        } catch (e) {
+          falhou = true;
+          partes.push(`a busca das novas falhou: ${e instanceof Error ? e.message : "sem resposta"}`);
+        }
       }
-      const frase =
-        soma.conferidas === 0
-          ? "Não há nota do Omie aberta para atualizar."
-          : `${soma.conferidas} nota(s) conferida(s) no Omie` +
-            (soma.atualizadas ? `, ${soma.atualizadas} com valor diferente` : "") +
-            (soma.canceladas ? `, ${soma.canceladas} cancelada(s) lá` : "") +
-            (soma.falhas ? `, ${soma.falhas} não abriram` : "") +
-            (!soma.atualizadas && !soma.canceladas && !soma.falhas ? " — nada mudou" : "") +
-            (simulado ? " (modo simulado — dados de demonstração)" : "");
+      if (pode("compras.notas")) {
+        setAndamento("relendo as abertas…");
+        try {
+          const r = await releituraDasAbertas();
+          partes.push(r.frase);
+          if (r.parou) {
+            falhou = true;
+            partes.push("parei: o Omie recusou várias notas seguidas — tente daqui a pouco");
+          }
+        } catch (e) {
+          falhou = true;
+          partes.push(`a releitura falhou: ${e instanceof Error ? e.message : "sem resposta"}`);
+        }
+      }
+      const frase = partes.join(" · ");
       // ⚠️ Parar no meio é ERRO para quem lê: a frase verde faria parecer que acabou.
-      if (parou) aviso.erro(`${frase}. Parei: o Omie recusou várias notas seguidas — tente daqui a pouco.`);
-      else aviso.sucesso(frase);
-      await carregar();
-    } catch (e) {
-      aviso.erro(
-        (e instanceof Error ? e.message : "Não foi possível atualizar do Omie") +
-          (soma.conferidas ? ` (${soma.conferidas} nota(s) já tinham sido conferidas)` : ""),
-      );
+      (falhou ? aviso.erro : aviso.sucesso)(frase.charAt(0).toUpperCase() + frase.slice(1));
       await carregar();
     } finally {
       setAndamento("");
@@ -206,25 +253,36 @@ export default function PaginaCompras() {
     }
   }
 
-  async function sincronizar() {
+  /**
+   * 🔑 **Antes do lote, a releitura** (pedido do dono, 20/10/2026: "no botão lançar as
+   * conciliadas, antes de abrir a tela, rodar o Atualizar no Omie para garantir a
+   * igualdade"). A prévia do lote só sai depois que as abertas estão iguais às do Omie:
+   * a cancelada ou excluída lá não entra no estoque por estar desatualizada aqui.
+   * ⚠️ Sem `compras.notas` não há releitura (a chave é dela) — o lote abre direto.
+   * ⚠️ Releitura que falha NÃO abre o lote calado: a frase diz que ele pode estar velho.
+   */
+  async function abrirLote() {
+    if (!pode("compras.notas")) {
+      setVendoLote(true);
+      return;
+    }
     setOcupado(true);
-    setErro("");
+    setAndamento("relendo do Omie…");
     try {
-      // Sem período: a janela vai desde a última sincronização, com folga. A
-      // resposta já vem com a frase de qual janela foi usada.
-      const r = await api.post<{ novas: number; modo: string; message: string }>(
-        "/omie/sincronizar",
-      );
-      aviso.sucesso(
-        (r.message ?? "Busca concluída") +
-          (r.modo === "simulado" ? " (modo simulado — dados de demonstração)" : ""),
-      );
+      const r = await releituraDasAbertas();
+      if (r.parou) aviso.erro(`${r.frase}. O Omie recusou várias notas seguidas — a prévia pode estar desatualizada.`);
+      else aviso.sucesso(`Antes do lote: ${r.frase}.`);
       await carregar();
     } catch (e) {
-      aviso.erro(e instanceof Error ? e.message : "Não foi possível sincronizar");
+      aviso.erro(
+        `Não deu para reler do Omie antes do lote (${e instanceof Error ? e.message : "sem resposta"}) — ` +
+          "a prévia pode estar desatualizada.",
+      );
     } finally {
+      setAndamento("");
       setOcupado(false);
     }
+    setVendoLote(true);
   }
 
   /**
@@ -326,29 +384,27 @@ export default function PaginaCompras() {
                 quantas estão prontas, quantas travam e o que destrava. */}
             {pode("compras.lancar") && (
               <button
+                id="notas-lancar-conciliadas"
                 className="btn btn-secundario"
-                onClick={() => setVendoLote(true)}
-                title="Lança de uma vez as notas que já estão conciliadas, com prévia"
+                onClick={() => void abrirLote()}
+                aria-busy={ocupado} disabled={ocupado}
+                title="Relê do Omie as notas abertas e então lança de uma vez as conciliadas, com prévia"
               >
                 Lançar as conciliadas
               </button>
             )}
-            {pode("integracao.omie") && (
-              <button className="btn btn-secundario" onClick={sincronizar} aria-busy={ocupado} disabled={ocupado}>
-                Buscar no Omie
-              </button>
-            )}
-            {/* ⚠️ `compras.notas`, a mesma chave do botão de dentro da nota — e não a
-                da integração: quem confere nota precisa disto, tenha ou não acesso
-                às credenciais do Omie. */}
-            {pode("compras.notas") && (
+            {/* 🔑 Um botão só (20/10/2026): buscar as novas + reler as abertas. Cada
+                metade com a chave dela — a busca é da integração, a releitura de quem
+                confere nota, e quem tem só uma das duas faz a sua parte. */}
+            {(pode("integracao.omie") || pode("compras.notas")) && (
               <button
+                id="notas-sincronizar"
                 className="btn btn-secundario"
-                onClick={() => setConfirmandoAtualizar(true)}
+                onClick={() => setConfirmandoSincronizar(true)}
                 aria-busy={ocupado} disabled={ocupado}
-                title="Relê do Omie todas as notas que ainda não foram lançadas"
+                title="Traz as notas novas do Omie e relê as que ainda não foram lançadas"
               >
-                {andamento || "Atualizar do Omie"}
+                {andamento || "Sincronizar com o Omie"}
               </button>
             )}
             {(arquivados?.itens.length ?? 0) > 0 && (
@@ -475,7 +531,7 @@ export default function PaginaCompras() {
                 </Link>
                 <span className="flex items-center gap-2">
                   {n.pendentes > 0 && <Etiqueta cor="alerta">{n.pendentes} pendente(s)</Etiqueta>}
-                  <Etiqueta cor={CORES[n.status]}>{n.status.toLowerCase()}</Etiqueta>
+                  <Etiqueta cor={CORES[n.status]}>{rotuloStatus(n.status)}</Etiqueta>
                 </span>
               </li>
             ))}
@@ -488,17 +544,18 @@ export default function PaginaCompras() {
           dezenas de linhas de uma vez, e aprovar uma a uma seria um dia de
           trabalho — mas repontar às cegas é pior. A janela mostra de onde para
           onde cada item vai, e o botão faz tudo o que está listado. */}
-      {confirmandoAtualizar && (
+      {confirmandoSincronizar && (
         <Confirmacao
-          titulo="Atualizar do Omie as notas não lançadas?"
-          rotuloConfirmar="Atualizar"
-          aoConfirmar={() => void atualizarTodasDoOmie()}
-          aoCancelar={() => setConfirmandoAtualizar(false)}
+          titulo="Sincronizar com o Omie?"
+          rotuloConfirmar="Sincronizar"
+          aoConfirmar={() => void sincronizar()}
+          aoCancelar={() => setConfirmandoSincronizar(false)}
         >
           <p>
-            Cada nota do Omie que ainda não foi lançada é relida de lá: valor corrigido, item
-            trocado e nota <b>cancelada</b> chegam aqui. Os produtos que você já vinculou são
-            mantidos.
+            Duas coisas, nesta ordem: as notas <b>novas</b> do Omie entram, e cada nota que
+            ainda não foi lançada é <b>relida</b> de lá — valor corrigido, item trocado e nota{" "}
+            <b>cancelada</b> ou <b>excluída</b> chegam aqui. Os produtos que você já vinculou
+            são mantidos.
           </p>
           <p className="mt-2 text-[13.5px] text-suave">
             É uma consulta por nota, com uma pequena espera entre elas para não bloquear a

@@ -319,7 +319,7 @@ def painel(ctx: Contexto = Depends(contexto_atual)) -> dict:
                    WHERE id_unidade = %s AND status IN ('IMPORTADA', 'CONCILIADA')) AS notas_abertas,
                  (SELECT count(*) FROM nota_itens i JOIN notas_entrada n ON n.id = i.id_nota
                    WHERE n.id_unidade = %s AND i.id_produto IS NULL AND NOT i.ignorado
-                     AND n.status <> 'CANCELADA') AS itens_a_vincular,
+                     AND n.status NOT IN ('CANCELADA', 'NAO_ENCONTRADA')) AS itens_a_vincular,
                  (SELECT count(*) FROM estoque_lotes l JOIN produtos p ON p.id = l.id_produto
                    WHERE l.id_unidade = %s AND p.ativo AND l.quantidade > 0
                      AND l.validade IS NOT NULL

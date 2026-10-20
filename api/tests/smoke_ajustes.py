@@ -266,7 +266,8 @@ print("\n7. lançar SEM saldo é permitido — só o local é exigido")
 zerado2 = criar("W", "UN")
 st, r = chamar("POST", "/estoque/saidas", {
     "id_produto": zerado2, "quantidade": 2, "tipo": "SAIDA_PERDA",
-    "id_local": local["id"], "id_motivo_perda": motivo_perda}, token=token)
+    "id_local": local["id"], "id_motivo_perda": motivo_perda,
+    "observacao": "perda de teste"}, token=token)
 checar("perda de produto sem saldo nenhum é aceita", st == 201, (st, r))
 checar("e o custo sai marcado como provisório", r.get("custo_provisorio") is True, r)
 

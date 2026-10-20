@@ -218,7 +218,8 @@ FERRAMENTAS: list[Ferramenta] = [
         "/notas",
         {"busca": Param("string", "Número da NF ou nome do fornecedor."),
          "status": Param("string", "Situação da nota.",
-                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "LANCADA", "CANCELADA"]),
+                         enum=["PENDENTE", "IMPORTADA", "CONCILIADA", "LANCADA", "CANCELADA",
+                               "NAO_ENCONTRADA"]),
          **_PERIODO, "limite": _lim(25, 200), "offset": _OFFSET}),
     Ferramenta(
         "nota_entrada", "Uma nota de compra",
@@ -1616,7 +1617,8 @@ FERRAMENTAS: list[Ferramenta] = [
          "id_motivo_perda": Param("integer", "Motivo, quando é perda.", no_corpo=True),
          "id_local": Param("integer", "De que prateleira sai. Sem ela, a do produto.",
                            no_corpo=True),
-         "observacao": Param("string", "O que aconteceu.", no_corpo=True)},
+         "observacao": Param("string", "O que aconteceu. Obrigatória na PERDA.",
+                             no_corpo=True)},
         metodo="POST"),
     Ferramenta(
         "estornar_movimento", "Estornar um movimento do estoque",

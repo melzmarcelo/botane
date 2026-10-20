@@ -36,9 +36,28 @@ type ItemManual = {
   rotulo: string;
   quantidade: string;
   valor_unitario: string;
+  /**
+   * O valor foi o SISTEMA que pôs (o preço do dia), não quem lança. É o que deixa a
+   * troca da data reescrevê-lo sem apagar um preço digitado à mão.
+   */
+  preco_auto?: boolean;
 };
 
 const ITEM_VAZIO: ItemManual = { id_produto: "", rotulo: "", quantidade: "", valor_unitario: "" };
+
+/**
+ * 🔑 **O preço do DIA DA VENDA, não o de hoje** (pedido do dono, 20/10/2026: "o preço
+ * considerado na venda é o preço atual, devemos considerar o preço de venda como o do
+ * dia da venda não do dia do lançamento"). Quem responde é o servidor, pelo histórico
+ * de `produto_precos` — a mesma conta que a importação faz na linha sem valor.
+ */
+async function precosNoDia(data: string, ids: number[]): Promise<Record<string, number | null>> {
+  if (!data || !ids.length) return {};
+  const q = new URLSearchParams({ data });
+  ids.forEach((id) => q.append("ids", String(id)));
+  const r = await api.get<{ precos: Record<string, number | null> }>(`/vendas/precos?${q}`);
+  return r.precos;
+}
 
 /** O que o servidor responde quando perguntam quanto o cupom vai sair. */
 type Previa = {
@@ -178,6 +197,60 @@ export default function PaginaLancarVenda() {
   function trocar(indice: number, mudanca: Partial<ItemManual>) {
     setItens(itens.map((i, n) => (n === indice ? { ...i, ...mudanca } : i)));
   }
+
+  /** Escolheu o produto: o preço daquele dia entra, se o campo estiver em branco. */
+  async function escolherProduto(indice: number, item: ItemBusca | null) {
+    // ⚠️ **Só preenche o que está EM BRANCO (ou o que o sistema pôs).** Sobrescrever
+    // um valor digitado apagaria a correção de quem cobrou diferente.
+    const linha = itens[indice];
+    const podePor = !linha.valor_unitario.trim() || !!linha.preco_auto;
+    setItens((atual) =>
+      atual.map((i, n) =>
+        n === indice
+          ? { ...i, id_produto: item ? String(item.id) : "", rotulo: item ? rotuloDe(item) : "" }
+          : i,
+      ),
+    );
+    if (!item || !podePor) return;
+    try {
+      const preco = (await precosNoDia(data, [item.id]))[String(item.id)];
+      if (preco && preco > 0) {
+        setItens((atual) =>
+          atual.map((i, n) =>
+            n === indice && i.id_produto === String(item.id) && (!i.valor_unitario.trim() || i.preco_auto)
+              ? { ...i, valor_unitario: numeroParaMoeda(preco), preco_auto: true }
+              : i,
+          ),
+        );
+      }
+    } catch {
+      // Sem a resposta, o campo fica em branco e o servidor põe o preço do dia.
+    }
+  }
+
+  // 🔑 **Mudou a data, muda o preço** das linhas que o sistema preencheu. A digitada
+  // fica: quem a escreveu decidiu o valor daquele cupom.
+  useEffect(() => {
+    const ids = itens.filter((i) => i.id_produto && i.preco_auto).map((i) => Number(i.id_produto));
+    if (!ids.length) return;
+    let valeu = true;
+    precosNoDia(data, ids)
+      .then((achados) => {
+        if (!valeu) return;
+        setItens((atual) =>
+          atual.map((i) => {
+            const preco = i.preco_auto ? achados[i.id_produto] : undefined;
+            return preco && preco > 0 ? { ...i, valor_unitario: numeroParaMoeda(preco) } : i;
+          }),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      valeu = false;
+    };
+    // ⚠️ Só pela data: as linhas mudam a cada tecla, e o preço só muda com o dia.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   /** Manda o lote e leva quem lançou para a venda que acabou de nascer. */
   async function enviar(corpo: object, quantos: number) {
@@ -466,28 +539,9 @@ export default function PaginaLancarVenda() {
                           selecionado={
                             i.id_produto ? { id: Number(i.id_produto), rotulo: i.rotulo } : null
                           }
-                          aoEscolher={(item: ItemBusca | null) => {
-                            // 🔑 **O preço vem junto do produto** (04/09/2026,
-                            // relato do dono: escolhi o produto e o valor não
-                            // veio). Ele já viaja na lista (`bruto.preco_venda`)
-                            // e ninguém o usava — quem lançava relia o preço na
-                            // tela do produto e digitava de novo.
-                            // ⚠️ **Só preenche o que está EM BRANCO.** Sobrescrever
-                            // um valor digitado apagaria a correção de quem
-                            // cobrou diferente, que é o motivo de o campo ser
-                            // editável.
-                            const preco = Number(
-                              (item?.bruto as { preco_venda?: number } | undefined)
-                                ?.preco_venda ?? 0,
-                            );
-                            trocar(n, {
-                              id_produto: item ? String(item.id) : "",
-                              rotulo: item ? rotuloDe(item) : "",
-                              ...(preco > 0 && !itens[n].valor_unitario.trim()
-                                ? { valor_unitario: numeroParaMoeda(preco) }
-                                : {}),
-                            });
-                          }}
+                          // 🔑 **O preço vem junto do produto** (04/09/2026) — e,
+                          // desde 20/10/2026, o preço do DIA da venda, não o de hoje.
+                          aoEscolher={(item: ItemBusca | null) => void escolherProduto(n, item)}
                         />
                       </td>
                       <td>
@@ -503,7 +557,7 @@ export default function PaginaLancarVenda() {
                       <td>
                         <CampoMoeda
                           valor={i.valor_unitario}
-                          aoMudar={(v) => trocar(n, { valor_unitario: v })}
+                          aoMudar={(v) => trocar(n, { valor_unitario: v, preco_auto: false })}
                         />
                       </td>
                       {mudaAlgo && (
@@ -595,7 +649,7 @@ export default function PaginaLancarVenda() {
       ) : (
         <Cartao
           titulo="Colar planilha"
-          descricao="As linhas do relatório do PDV: código; descrição; quantidade; valor unitário."
+          descricao="As linhas do relatório do PDV: código; descrição; quantidade; valor unitário. Sem o valor, vale o preço de venda do dia da venda."
         >
           <form onSubmit={importarPlanilha} className="flex flex-col gap-4">
             <Campo rotulo="Linhas">
@@ -628,9 +682,15 @@ export default function PaginaLancarVenda() {
                         <td className="mono text-[13px]">{l.codigo || "—"}</td>
                         <td>{l.descricao || "—"}</td>
                         <td className="num tabular-nums">{l.quantidade}</td>
-                        <td className="num tabular-nums">{reais(l.valor_unitario)}</td>
+                        {/* 🔑 Linha sem valor sai pelo preço DO DIA da venda: quem
+                            resolve é o servidor, pelo histórico de preços. */}
                         <td className="num tabular-nums">
-                          {reais(l.quantidade * l.valor_unitario)}
+                          {l.valor_unitario ? reais(l.valor_unitario) : (
+                            <span className="text-suave">preço do dia</span>
+                          )}
+                        </td>
+                        <td className="num tabular-nums">
+                          {l.valor_unitario ? reais(l.quantidade * l.valor_unitario) : "—"}
                         </td>
                       </tr>
                     ))}

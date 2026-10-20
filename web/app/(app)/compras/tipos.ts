@@ -89,7 +89,15 @@ export const CORES: Record<string, "erva" | "alerta" | "neutro"> = {
   IMPORTADA: "neutro",
   // Cancelada no Omie: fora da fila e fora do estoque.
   CANCELADA: "neutro",
+  // 🔑 Excluída no Omie depois de importada (20/10/2026): igual à cancelada.
+  NAO_ENCONTRADA: "neutro",
 };
+
+/** O status em português — `NAO_ENCONTRADA` em caixa baixa não se lê. */
+export const ROTULO_STATUS: Record<string, string> = {
+  NAO_ENCONTRADA: "não encontrada no Omie",
+};
+export const rotuloStatus = (status: string) => ROTULO_STATUS[status] ?? status.toLowerCase();
 
 export const ORIGENS: Record<string, string> = {
   XML: "XML da NF-e",

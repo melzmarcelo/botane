@@ -13,6 +13,7 @@ import Voltar from "@/components/voltar";
 
 import { custo } from "@/lib/numeros";
 import LinkProduto from "@/components/link-produto";
+import AcrescentarItens from "./acrescentar-itens";
 /**
  * Uma venda, inteira, numa página só.
  *
@@ -284,6 +285,18 @@ export default function PaginaVenda() {
           </table>
         </div>
       </Cartao>
+
+      {/* 🔑 Mais itens no MESMO documento (pedido do dono, 20/10/2026), enquanto o
+          período não fechou. ⚠️ A venda do PDV não oferece: o cupom é dele. */}
+      {podeCancelar && venda.pode_acrescentar && (
+        <AcrescentarItens idVenda={venda.id} data={venda.data} aoAcrescentar={() => void carregar()} />
+      )}
+      {podeCancelar && !venda.pode_acrescentar && !venda.cancelada &&
+        (venda.origem === "MANUAL" || venda.origem === "PLANILHA") && venda.por_que_nao_acrescenta && (
+        <p className="text-[13px] text-suave" id="venda-sem-acrescentar">
+          Não dá para acrescentar itens: {venda.por_que_nao_acrescenta}
+        </p>
+      )}
 
       {/* ⚠️ Vender é sair do estoque. Esta tabela é a PROVA disso — e, quando a
           venda é cancelada, é onde se vê que o produto voltou para a prateleira

@@ -104,7 +104,7 @@ for rotulo, setor, custo in (("cozinha", setor_a, 10), ("bar", setor_b, 4)):
     }, token=token)
     chamar("POST", "/estoque/saidas", {
         "tipo": "SAIDA_PERDA", "id_produto": p["id"], "quantidade": 6,
-        "id_local": local["id"], "id_motivo_perda": 1,
+        "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
     }, token=token)
 
 # Um produto sem setor nenhum: ele não pode sumir do relatório.
@@ -117,7 +117,7 @@ chamar("POST", "/estoque/entradas", {
 }, token=token)
 chamar("POST", "/estoque/saidas", {
     "tipo": "SAIDA_PERDA", "id_produto": sem_setor["id"], "quantidade": 5,
-    "id_local": local["id"], "id_motivo_perda": 1,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
 }, token=token)
 
 print("1. cada setor com o seu")

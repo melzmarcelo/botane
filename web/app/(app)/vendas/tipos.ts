@@ -73,6 +73,10 @@ export type MovimentoDaVenda = {
 
 export type VendaDetalhe = {
   id: number;
+  /** 20/10/2026: a venda aceita item novo? Quem decide é o servidor. */
+  pode_acrescentar?: boolean;
+  /** E por que não, em português — período fechado, ciclo cobrado, venda do PDV. */
+  por_que_nao_acrescenta?: string | null;
   data: string;
   hora: string | null;
   origem: string;

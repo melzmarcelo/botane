@@ -78,6 +78,16 @@ class PreviaCupomRequest(BaseModel):
     itens: list[ItemVenda]
 
 
+class AcrescentarItensRequest(BaseModel):
+    """Itens que entram DEPOIS numa venda já lançada (pedido do dono, 20/10/2026).
+
+    ⚠️ Mesmo `ItemVenda` da importação: a linha que chega depois custa, baixa e
+    segue a política da pessoa exatamente como a que entrou junto.
+    """
+
+    itens: list[ItemVenda] = Field(min_length=1)
+
+
 class VendaResponse(BaseModel):
     id: int
     data: date

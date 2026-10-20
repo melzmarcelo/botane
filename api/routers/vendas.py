@@ -16,12 +16,14 @@ from psycopg2 import errors as erros_pg
 import auditoria
 from database import get_cursor
 from paginacao import pagina
-from models.cmv import ImportarVendasRequest, PreviaCupomRequest, VendaResponse
+from models.cmv import (AcrescentarItensRequest, ImportarVendasRequest, PreviaCupomRequest,
+                        VendaResponse)
 from seguranca import Contexto, requer_permissao, unidade_atual
 from services import cmv as motor
 from services import consumo_pessoa as consumo
 from services import consumo_periodo as ciclo
 from services import estoque as motor_estoque
+from services import precos
 from services import producao_agenda as agenda
 
 router = APIRouter(prefix="/vendas", tags=["vendas"])
@@ -230,6 +232,24 @@ def previa(body: PreviaCupomRequest, ctx: Contexto = Depends(_editar)) -> dict:
         }
 
 
+@router.get("/precos")
+def precos_na_data(data: date, ids: list[int] = Query(default=[]),
+                   ctx: Contexto = Depends(_editar)) -> dict:
+    """O preço de venda de cada produto NO DIA da venda — para a tela preencher.
+
+    🔑 **Pedido do dono (20/10/2026):** a venda lançada com outra data saía pelo preço
+    de hoje. A tela pergunta aqui quando escolhe o produto e quando muda a data.
+    ⚠️ Chave em TEXTO: o JSON não tem chave inteira, e a tela lê `r.precos["12"]`.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        achados = {}
+        for id_produto in dict.fromkeys(ids):
+            preco = precos.na_data(cur, id_produto, id_unidade, data)
+            achados[str(id_produto)] = float(preco) if preco is not None else None
+    return {"data": data.isoformat(), "precos": achados}
+
+
 def _motivo(e: Exception) -> str:
     """O erro numa linha, para a tela e para a agenda.
 
@@ -267,6 +287,131 @@ def _quando(data, hora):
     inventar meia-noite explicitamente seria a mesma mentira com mais código.
     """
     return datetime.combine(data, hora) if hora else data
+
+
+def _preparar_itens(cur, id_unidade: int, origem: str, data, itens) -> None:
+    """O produto e o preço de cada linha, ANTES da política e da gravação.
+
+    🔑 **O produto resolvido antes do preço** (20/10/2026). A linha da planilha chega
+    pelo código ou pelo nome; achar o produto aqui é o que deixa a linha sem valor
+    sair pelo preço DO DIA da venda.
+    🔑 **Sem valor, vale o preço do DIA DA VENDA** (pedido do dono, 20/10/2026:
+    "considerar o preço de venda como o do dia da venda não do dia do lançamento").
+    ⚠️ Só no lançamento da CASA (à mão e planilha): o cupom do PDV traz o valor
+    cobrado, e zero ali é zero.
+    """
+    for item in itens:
+        if not item.id_produto and item.codigo:
+            cur.execute("SELECT id FROM produtos WHERE lower(codigo) = lower(%s)",
+                        (item.codigo,))
+            achado = cur.fetchone()
+            item.id_produto = achado["id"] if achado else None
+        if not item.id_produto and item.descricao:
+            # Último recurso: nome exato. Semelhança só sugere, nunca vincula.
+            cur.execute("SELECT id FROM produtos WHERE lower(nome) = lower(%s) AND ativo",
+                        (item.descricao,))
+            achado = cur.fetchone()
+            item.id_produto = achado["id"] if achado else None
+        if origem in ("MANUAL", "PLANILHA") and item.id_produto and not item.valor_unitario:
+            preco = precos.na_data(cur, item.id_produto, id_unidade, data)
+            if preco is not None:
+                item.valor_unitario = float(preco)
+
+
+def _gravar_item(cur, id_unidade: int, id_venda: int, venda, item, id_usuario: int,
+                 custos_cache: dict) -> dict:
+    """Grava UMA linha da venda: congela o custo e baixa o estoque.
+
+    ⚠️ **Uma função só para a importação e para o "acrescentar itens"** (20/10/2026):
+    a linha que entra depois tem de custar e baixar exatamente como a que entrou junto,
+    senão o mesmo cupom teria duas contas de CMV conforme o momento em que a linha veio.
+    `venda` é o cabeçalho: data, hora, documento, cancelada e consumo interno.
+    """
+    id_produto = item.id_produto
+    r = {"sem_vinculo": 0, "sem_custo": 0, "de_rascunho": 0, "produzido": 0, "baixado": 0}
+    custo, origem = (None, "sem_produto")
+    if id_produto:
+        if id_produto not in custos_cache:
+            # 🔑 A loja vai junto: este custo é CONGELADO no item de venda. Calculado
+            # com o estoque das duas lojas, o erro fica gravado no CMV daquele mês.
+            custos_cache[id_produto] = motor.custo_teorico_do_produto(
+                cur, id_produto, id_unidade=id_unidade)
+        custo, origem = custos_cache[id_produto]
+    else:
+        r["sem_vinculo"] = 1
+    if custo is None:
+        r["sem_custo"] = 1
+    if origem.startswith("ficha_rascunho"):
+        r["de_rascunho"] = 1
+
+    cur.execute(
+        """INSERT INTO venda_itens (id_venda, codigo_pdv, descricao_pdv, id_produto,
+                                    quantidade, valor_unitario, valor_total,
+                                    valor_unitario_cheio,
+                                    custo_ficha_unitario, origem_custo)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (id_venda, item.codigo, item.descricao, id_produto, item.quantidade,
+         item.valor_unitario, item.quantidade * item.valor_unitario,
+         item.valor_unitario_cheio, custo, origem),
+    )
+
+    # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
+    # continuava na prateleira do sistema: o CMV real ficava
+    # subestimado e a primeira contagem cobria o buraco inteiro
+    # como "ajuste de inventário", que é onde a diferença some.
+    #
+    # O que é feito NA HORA nasce e morre aqui: produz e baixa no
+    # mesmo lançamento, e o saldo volta a zero. O que é PARA
+    # ESTOQUE só baixa — foi produzido antes.
+    # ⚠️ **Cupom cancelado NÃO baixa estoque**, e é a razão de ele
+    # poder entrar. Ele existe aqui para a conferência com o PDV
+    # fechar e para aparecer no painel — mercadoria que voltou para
+    # a prateleira (ou nunca saiu) não pode sair do razão, que é
+    # append-only e não teria como desfazer.
+    if id_produto and not venda.cancelada:
+        cur.execute(
+            # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
+            # ele existe** (migração 066, pedido do dono). A mesma
+            # massa de pizza pode estar na câmara como insumo e na
+            # vitrine para vender: a venda tem de tirar da VITRINE, e
+            # o consumo da receita da pizza, da câmara.
+            # ⚠️ `id_local_padrao` continua respondendo por quem não
+            # configurou nada — que é o caso de todos os produtos de
+            # hoje. O `coalesce` é o que faz esta mudança não mexer em
+            # nenhum deles.
+            """SELECT controla_estoque,
+                      coalesce(id_local_venda, id_local_padrao) AS id_local_padrao
+                 FROM produtos WHERE id = %s""",
+            (id_produto,),
+        )
+        p_venda = cur.fetchone() or {}
+        if p_venda.get("controla_estoque"):
+            feito = agenda.producao_da_venda(
+                cur, id_unidade, id_produto, item.quantidade, id_usuario,
+                documento=venda.documento, id_venda=id_venda)
+            if feito:
+                r["produzido"] = 1
+            motor_estoque.lancar(
+                cur, id_unidade=id_unidade,
+                id_local=(feito or {}).get("id_local")
+                         or p_venda.get("id_local_padrao"),
+                id_produto=id_produto,
+                # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
+                # o que o põe na linha "dos quais: consumo interno" da
+                # apuração, com o custo dele. ⚠️ A origem continua VENDA:
+                # é por ela que o cancelamento acha o movimento a estornar.
+                tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
+                      else "SAIDA_VENDA"),
+                quantidade=item.quantidade,
+                data_movimento=_quando(venda.data, venda.hora),
+                origem_tipo="VENDA", origem_id=id_venda,
+                documento=venda.documento, id_usuario=id_usuario,
+                observacao=("Consumo interno" if venda.consumo_interno
+                            else "Produzido e vendido na hora" if feito
+                            else "Baixa da venda"),
+            )
+            r["baixado"] = 1
+    return r
 
 
 @router.post("/importar", status_code=201)
@@ -348,6 +493,8 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                           len(politicas_aplicadas))
             cur.execute("SAVEPOINT uma_venda")
             try:
+                _preparar_itens(cur, id_unidade, venda.origem, venda.data, venda.itens)
+
                 # 🔑 **A política de cupom da PESSOA** (04/09/2026, pedido do dono).
                 # A venda à mão sempre puxa o preço de venda; informando a pessoa,
                 # o item passa a valer o CUSTO, ou o preço com desconto. É o
@@ -405,106 +552,14 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
                     importadas += 1
 
                 for item in venda.itens:
-                    id_produto = item.id_produto
-                    if not id_produto and item.codigo:
-                        cur.execute(
-                            "SELECT id FROM produtos WHERE lower(codigo) = lower(%s)", (item.codigo,)
-                        )
-                        achado = cur.fetchone()
-                        id_produto = achado["id"] if achado else None
-                    if not id_produto and item.descricao:
-                        # Último recurso: nome exato. Semelhança só sugere, nunca vincula.
-                        cur.execute(
-                            "SELECT id FROM produtos WHERE lower(nome) = lower(%s) AND ativo",
-                            (item.descricao,),
-                        )
-                        achado = cur.fetchone()
-                        id_produto = achado["id"] if achado else None
-
-                    custo, origem = (None, "sem_produto")
-                    if id_produto:
-                        if id_produto not in custos_cache:
-                            # 🔑 A loja vai junto: este custo é CONGELADO no item de
-                            # venda. Calculado com o estoque das duas lojas, o erro
-                            # fica gravado no CMV daquele mês, sem conserto.
-                            custos_cache[id_produto] = motor.custo_teorico_do_produto(
-                                cur, id_produto, id_unidade=id_unidade)
-                        custo, origem = custos_cache[id_produto]
-                    else:
-                        sem_vinculo += 1
-                    if custo is None:
-                        sem_custo += 1
-                    if origem.startswith("ficha_rascunho"):
-                        de_rascunho += 1
-
-                    cur.execute(
-                        """INSERT INTO venda_itens (id_venda, codigo_pdv, descricao_pdv, id_produto,
-                                                    quantidade, valor_unitario, valor_total,
-                                                    valor_unitario_cheio,
-                                                    custo_ficha_unitario, origem_custo)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (id_venda, item.codigo, item.descricao, id_produto, item.quantidade,
-                         item.valor_unitario, item.quantidade * item.valor_unitario,
-                         item.valor_unitario_cheio, custo, origem),
-                    )
+                    r_item = _gravar_item(cur, id_unidade, id_venda, venda, item,
+                                          ctx.id_usuario, custos_cache)
                     itens_total += 1
-
-                    # VENDER É SAIR DO ESTOQUE. Sem esta baixa, o que foi vendido
-                    # continuava na prateleira do sistema: o CMV real ficava
-                    # subestimado e a primeira contagem cobria o buraco inteiro
-                    # como "ajuste de inventário", que é onde a diferença some.
-                    #
-                    # O que é feito NA HORA nasce e morre aqui: produz e baixa no
-                    # mesmo lançamento, e o saldo volta a zero. O que é PARA
-                    # ESTOQUE só baixa — foi produzido antes.
-                    # ⚠️ **Cupom cancelado NÃO baixa estoque**, e é a razão de ele
-                    # poder entrar. Ele existe aqui para a conferência com o PDV
-                    # fechar e para aparecer no painel — mercadoria que voltou para
-                    # a prateleira (ou nunca saiu) não pode sair do razão, que é
-                    # append-only e não teria como desfazer.
-                    if id_produto and not venda.cancelada:
-                        cur.execute(
-                            # 🔑 **De onde a venda baixa é o `id_local_venda`, quando
-                            # ele existe** (migração 066, pedido do dono). A mesma
-                            # massa de pizza pode estar na câmara como insumo e na
-                            # vitrine para vender: a venda tem de tirar da VITRINE, e
-                            # o consumo da receita da pizza, da câmara.
-                            # ⚠️ `id_local_padrao` continua respondendo por quem não
-                            # configurou nada — que é o caso de todos os produtos de
-                            # hoje. O `coalesce` é o que faz esta mudança não mexer em
-                            # nenhum deles.
-                            """SELECT controla_estoque,
-                                      coalesce(id_local_venda, id_local_padrao) AS id_local_padrao
-                                 FROM produtos WHERE id = %s""",
-                            (id_produto,),
-                        )
-                        p_venda = cur.fetchone() or {}
-                        if p_venda.get("controla_estoque"):
-                            feito = agenda.producao_da_venda(
-                                cur, id_unidade, id_produto, item.quantidade, ctx.id_usuario,
-                                documento=venda.documento, id_venda=id_venda)
-                            if feito:
-                                produzidos_na_hora += 1
-                            motor_estoque.lancar(
-                                cur, id_unidade=id_unidade,
-                                id_local=(feito or {}).get("id_local")
-                                         or p_venda.get("id_local_padrao"),
-                                id_produto=id_produto,
-                                # 🔑 **Consumo interno sai como CONSUMO INTERNO** (095): é
-                                # o que o põe na linha "dos quais: consumo interno" da
-                                # apuração, com o custo dele. ⚠️ A origem continua VENDA:
-                                # é por ela que o cancelamento acha o movimento a estornar.
-                                tipo=("SAIDA_CONSUMO_INTERNO" if venda.consumo_interno
-                                      else "SAIDA_VENDA"),
-                                quantidade=item.quantidade,
-                                data_movimento=_quando(venda.data, venda.hora),
-                                origem_tipo="VENDA", origem_id=id_venda,
-                                documento=venda.documento, id_usuario=ctx.id_usuario,
-                                observacao=("Consumo interno" if venda.consumo_interno
-                                            else "Produzido e vendido na hora" if feito
-                                            else "Baixa da venda"),
-                            )
-                            baixados += 1
+                    sem_vinculo += r_item["sem_vinculo"]
+                    sem_custo += r_item["sem_custo"]
+                    de_rascunho += r_item["de_rascunho"]
+                    produzidos_na_hora += r_item["produzido"]
+                    baixados += r_item["baixado"]
                 cur.execute("RELEASE SAVEPOINT uma_venda")
             except Exception as e:  # noqa: BLE001 — uma venda não derruba o lote
                 cur.execute("ROLLBACK TO SAVEPOINT uma_venda")
@@ -564,6 +619,123 @@ def importar(body: ImportarVendasRequest, ctx: Contexto = Depends(_editar)) -> d
         # pelo preço cheio.
         + (f" · {politicas_sem_custo} item(ns) sem custo conhecido saíram pelo "
            "preço de venda" if politicas_sem_custo else ""),
+    }
+
+
+def _por_que_nao_edita(cur, id_unidade: int, venda: dict) -> str | None:
+    """Por que esta venda NÃO aceita item novo — ou nada, se aceita.
+
+    🔑 **A regra do dono (20/10/2026):** *"permitir editar um documento, adicionar mais
+    itens, desde que o período que ele esteja já não foi fechado"*. Fechado aqui é
+    qualquer um dos dois que fotografam a venda: o PERÍODO do CMV (o fechamento
+    congela a apuração) e o CICLO de consumo da pessoa (o recibo já foi cobrado).
+    ⚠️ **Venda do PDV não se edita aqui.** O cupom é do PDV, e a importação seguinte o
+    compararia com um documento que o PDV nunca emitiu; a correção é lá.
+    ⚠️ **Sem exceção para `estoque.retroativo`**: o pedido é "desde que não foi fechado",
+    e quem precisa mexer num período fechado o reabre — fica registrado quem foi.
+    """
+    if venda["cancelada"]:
+        return "Esta venda está cancelada."
+    if venda["origem"] not in ("MANUAL", "PLANILHA"):
+        return ("Esta venda veio do PDV: o cupom é dele, e a correção se faz lá — a próxima "
+                "busca traz o documento corrigido.")
+    if venda["id_consumo_periodo"]:
+        cur.execute("SELECT nome, inicio, fim FROM consumo_periodos WHERE id = %s",
+                    (venda["id_consumo_periodo"],))
+        c = cur.fetchone() or {}
+        nome = c.get("nome") or (f"{c['inicio']:%d/%m/%Y} a {c['fim']:%d/%m/%Y}" if c else "")
+        return (f"Esta venda já foi cobrada no ciclo de consumo {nome}. Reabra o ciclo "
+                "para acrescentar itens.")
+    cur.execute(
+        """SELECT inicio, fim, ciclo FROM cmv_fechamentos
+            WHERE id_unidade = %s AND status = 'FECHADO' AND %s BETWEEN inicio AND fim""",
+        (id_unidade, venda["data"]),
+    )
+    fechado = cur.fetchone()
+    if fechado:
+        from services import periodos
+
+        nome = periodos.rotulo(fechado["inicio"], fechado["fim"], fechado["ciclo"] or "MENSAL")
+        return (f"O período de {nome} está fechado no CMV. Reabra o período para "
+                "acrescentar itens a esta venda.")
+    return None
+
+
+@router.post("/{id_venda}/itens", status_code=201)
+def acrescentar_itens(id_venda: int, body: AcrescentarItensRequest,
+                      ctx: Contexto = Depends(_editar)) -> dict:
+    """Acrescenta itens a uma venda já lançada — o mesmo documento, mais linhas.
+
+    🔑 **Pedido do dono (20/10/2026).** Antes, o item esquecido virava uma segunda venda
+    com outro documento (ou cancelar e lançar tudo de novo), e o cupom deixava de ser um.
+    ⚠️ **Só acrescenta.** O que já entrou está no razão, que é append-only; tirar uma
+    linha é cancelar a venda (o estorno devolve tudo) e lançar de novo.
+    ⚠️ A política vale a CONGELADA na venda, não a de hoje do cadastro: o cupom inteiro
+    tem de sair pela mesma regra.
+    """
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT v.id, v.data, v.hora, v.origem, v.documento, v.cancelada, v.id_pessoa,
+                      v.consumo_interno, v.cupom_base, v.cupom_desconto_pct,
+                      v.id_consumo_periodo, v.valor_total, f.nome AS pessoa
+                 FROM vendas v
+                 LEFT JOIN fornecedores f ON f.id = v.id_pessoa
+                WHERE v.id = %s AND v.id_unidade = %s
+                  FOR UPDATE OF v""",
+            (id_venda, id_unidade),
+        )
+        venda = cur.fetchone()
+        if not venda:
+            raise HTTPException(status_code=404, detail="Venda não encontrada")
+        venda = dict(venda)
+        motivo = _por_que_nao_edita(cur, id_unidade, venda)
+        if motivo:
+            raise HTTPException(status_code=409, detail=motivo)
+
+        _preparar_itens(cur, id_unidade, venda["origem"], venda["data"], body.itens)
+        for item in body.itens:
+            item.valor_unitario_cheio = None
+        custos_cache: dict[int, tuple] = {}
+        sem_custo_politica = 0
+        if venda["cupom_base"]:
+            politica = {"nome": venda["pessoa"] or "", "cupom_base": venda["cupom_base"],
+                        "cupom_desconto_pct": venda["cupom_desconto_pct"]}
+            sem_custo_politica = len(_aplicar_politica(
+                cur, id_unidade, SimpleNamespace(itens=body.itens), politica, custos_cache))
+
+        cabecalho = SimpleNamespace(data=venda["data"], hora=venda["hora"],
+                                    documento=venda["documento"], cancelada=False,
+                                    consumo_interno=bool(venda["consumo_interno"]))
+        soma = {"sem_vinculo": 0, "sem_custo": 0, "de_rascunho": 0, "produzido": 0, "baixado": 0}
+        for item in body.itens:
+            r_item = _gravar_item(cur, id_unidade, id_venda, cabecalho, item,
+                                  ctx.id_usuario, custos_cache)
+            for k in soma:
+                soma[k] += r_item[k]
+        acrescimo = round(sum(i.quantidade * i.valor_unitario for i in body.itens), 2)
+        # ⚠️ `valor_total` é o LÍQUIDO: o desconto do cabeçalho continua o mesmo, e a
+        # linha nova soma inteira.
+        cur.execute("UPDATE vendas SET valor_total = valor_total + %s WHERE id = %s",
+                    (acrescimo, id_venda))
+        auditoria.registrar(cur, ctx.id_usuario, "vendas", id_venda, "acrescentar_itens",
+                            antes={"valor_total": float(venda["valor_total"])},
+                            depois={"itens": len(body.itens), "acrescimo": acrescimo,
+                                    "baixados": soma["baixado"]},
+                            id_unidade=id_unidade)
+
+    return {
+        "itens": len(body.itens),
+        "acrescimo": acrescimo,
+        "valor_total": round(float(venda["valor_total"]) + acrescimo, 2),
+        "itens_sem_vinculo": soma["sem_vinculo"],
+        "itens_sem_custo": soma["sem_custo"],
+        "itens_baixados": soma["baixado"],
+        "message": (f"{len(body.itens)} item(ns) acrescentado(s) — mais R$ {acrescimo:.2f}"
+                    .replace(".", ",")
+                    + (f", {soma['baixado']} baixado(s) do estoque" if soma["baixado"] else "")
+                    + (f" · {sem_custo_politica} sem custo conhecido saíram pelo preço de venda"
+                       if sem_custo_politica else "")),
     }
 
 
@@ -1067,10 +1239,17 @@ def detalhe(id_venda: int, ctx: Contexto = Depends(_ver)) -> dict:
         )
         movimentos = [dict(r) for r in cur.fetchall()]
 
+        # 🔑 Se aceita item novo, e por que não (20/10/2026) — a regra é do servidor.
+        cur.execute("SELECT id_consumo_periodo FROM vendas WHERE id = %s", (id_venda,))
+        por_que_nao = _por_que_nao_edita(
+            cur, id_unidade, dict(venda) | dict(cur.fetchone() or {}))
+
     custo = sum(float(i["quantidade"]) * float(i["custo_ficha_unitario"] or 0) for i in itens)
     receita = sum(float(i["valor_total"] or 0) for i in itens)
     return {
         **dict(venda),
+        "pode_acrescentar": por_que_nao is None,
+        "por_que_nao_acrescenta": por_que_nao,
         "itens": itens,
         "movimentos": movimentos,
         "receita": receita,

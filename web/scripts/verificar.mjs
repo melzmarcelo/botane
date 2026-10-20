@@ -4055,47 +4055,43 @@ try {
   checar("a credencial aparece mascarada",
     /•/.test(textoInt) || /não configurada/i.test(textoInt), textoInt.slice(0, 200));
 
-  // Sincroniza pela tela de compras e concilia um item.
+  // 🔑 **Um botão só: Sincronizar** (pedido do dono, 20/10/2026: "unindo o buscar no
+  // Omie e o atualizar do Omie"). Ele PERGUNTA antes — é uma consulta por nota aberta —
+  // e então traz as novas e relê as abertas. A regra da releitura é da suíte da API
+  // (`smoke_nota_atualizada`, `smoke_nota_cancelada`); aqui se mede o botão e a frase.
   await p.goto(`${WEB}/compras`, { waitUntil: "networkidle2" });
   await new Promise((r) => setTimeout(r, 1100));
-  await p.evaluate(() => {
-    const b = [...document.querySelectorAll("button")].find((x) =>
-      x.textContent === "Buscar no Omie");
-    b?.click();
-  });
-  await new Promise((r) => setTimeout(r, 2500));
-  const textoCompras = await p.evaluate(() => document.body.innerText);
-  // 🔑 **Atualizar do Omie, para todas as notas abertas** (pedido do dono,
-  // 09/10/2026: *"hoje temos o Atualizar do Omie somente quando estamos na nota"*).
-  // A regra é da suíte da API (`smoke_nota_cancelada`). Aqui se mede que o botão
-  // está na LISTAGEM e que ele PERGUNTA antes — é uma consulta por nota ao Omie.
-  // ⚠️ Não se confirma: a base local tem centenas de notas abertas de rodadas
-  // anteriores, e a releitura de todas não é o que esta checagem veio provar.
-  await p.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((b) => b.textContent?.trim() === "Atualizar do Omie")?.click();
-  });
+  const botoesOmie = await p.evaluate(() => [...document.querySelectorAll("button")]
+    .map((b) => b.textContent?.trim() ?? ""));
+  checar("a listagem tem UM botão de sincronizar, sem o Buscar e o Atualizar soltos",
+    botoesOmie.includes("Sincronizar com o Omie") && !botoesOmie.includes("Buscar no Omie")
+      && !botoesOmie.includes("Atualizar do Omie"), botoesOmie);
+  await p.click("#notas-sincronizar").catch(() => {});
   await p.waitForSelector('[role="dialog"]', { timeout: 5000 }).catch(() => {});
   const perguntaDoOmie = await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     return {
       abriu: !!d,
       titulo: d?.querySelector("h2")?.textContent ?? "",
-      falaDeCancelada: /cancelada/i.test(d?.innerText ?? ""),
+      texto: d?.innerText ?? "",
     };
   });
-  checar("a listagem de notas oferece Atualizar do Omie, e pergunta antes",
-    perguntaDoOmie.abriu && /não lançadas/i.test(perguntaDoOmie.titulo)
-      && perguntaDoOmie.falaDeCancelada, perguntaDoOmie);
+  checar("e pergunta antes, dizendo que traz as novas e relê as abertas (cancelada e excluída)",
+    perguntaDoOmie.abriu && /Sincronizar/i.test(perguntaDoOmie.titulo)
+      && /novas/i.test(perguntaDoOmie.texto) && /cancelada/i.test(perguntaDoOmie.texto)
+      && /excluída/i.test(perguntaDoOmie.texto), perguntaDoOmie);
   await p.evaluate(() => {
     const d = document.querySelector('[role="dialog"]');
     [...(d?.querySelectorAll("button") ?? [])]
-      .find((b) => /cancelar/i.test(b.textContent ?? ""))?.click();
+      .find((b) => b.textContent?.trim() === "Sincronizar")?.click();
   });
-  await p.waitForFunction(() => !document.querySelector('[role="dialog"]'), { timeout: 5000 })
-    .catch(() => {});
-  checar("sincroniza pela tela", /nota\(s\) nova\(s\)/i.test(textoCompras),
-    textoCompras.slice(0, 120));
+  await p.waitForFunction(() => /nota\(s\) nova\(s\)/i.test(document.body.innerText),
+    { timeout: 90000, polling: 500 }).catch(() => {});
+  const textoCompras = await p.evaluate(() => document.body.innerText);
+  checar("sincroniza pela tela: as novas e a releitura na mesma frase",
+    /nota\(s\) nova\(s\)/i.test(textoCompras)
+      && /relida\(s\)|nenhuma nota do Omie aberta/i.test(textoCompras),
+    textoCompras.slice(0, 300));
   // ⚠️ A fila de conciliação é da CASA INTEIRA e vem do servidor — antes a tela
   // somava só as notas da página carregada, e numa base com centenas de notas a
   // pendente caía na página 4 e o botão sumia. O teste confere pelo mesmo
@@ -5234,7 +5230,7 @@ try {
   // A baixa tem de dizer de qual pote saiu.
   const { dados: baixa } = await api("POST", "/estoque/saidas", {
     tipo: "SAIDA_PERDA", id_produto: perecivel.id, quantidade: 8,
-    id_local: localFefo, id_motivo_perda: 1,
+    id_local: localFefo, id_motivo_perda: 1, observacao: "teste FEFO",
   }, token);
   checar("a saída quebra em dois lotes", (baixa.lotes ?? []).length === 2, baixa.lotes);
   checar("começando pelo que vence antes",
@@ -10358,6 +10354,89 @@ try {
   checar("Integrações tem a aba Tradução, com a chave da Anthropic",
     await esperarTexto(p, "Tradução do cardápio (Claude)", 10000)
     && await esperarTexto(p, "Chave da Anthropic", 4000));
+
+  // ------------------------------------------------------------------
+  // 🔑 As melhorias de 20/10/2026, nas telas. As regras são das suítes da API
+  // (smoke_estoque, smoke_vendas, smoke_consumo_periodo, smoke_exportacoes); aqui se
+  // mede que cada tela oferece o que o servidor faz.
+  console.log("\n11zz. melhorias de 20/10: perda, pessoas, ciclo e venda");
+  const m2010 = String(Date.now()).slice(-6);
+
+  // A perda: o motivo Descarte e a observação obrigatória.
+  await irPara(p, `${WEB}/ajustes`);
+  await new Promise((r) => setTimeout(r, 1200));
+  await p.evaluate(() => [...document.querySelectorAll("main button[aria-pressed]")]
+    .find((b) => b.querySelector("span")?.textContent?.trim() === "Perda")?.click());
+  await p.waitForSelector("#ajuste-observacao", { timeout: 8000 }).catch(() => {});
+  const telaPerda = await p.evaluate(() => ({
+    obrigatoria: !!document.querySelector("#ajuste-observacao")?.required,
+    motivos: [...document.querySelectorAll("main select option")].map((o) => o.textContent?.trim()),
+  }));
+  checar("na perda a observação é obrigatória", telaPerda.obrigatoria, telaPerda);
+  checar("e o motivo Descarte está na lista", telaPerda.motivos.includes("Descarte"), telaPerda.motivos);
+
+  // Pessoas: o filtro por tipo e o relatório.
+  await irPara(p, `${WEB}/fornecedores`);
+  await p.waitForSelector("#pessoas-tipo", { timeout: 10000 }).catch(() => {});
+  const filtroTipo = await p.$$eval("#pessoas-tipo option", (os) => os.map((o) => o.textContent?.trim()))
+    .catch(() => []);
+  checar("Pessoas filtra por tipo: todas, fornecedores e não fornecedores",
+    filtroTipo.join("|") === "todas|fornecedores|não fornecedores", filtroTipo);
+  await p.select("#pessoas-tipo", "outras").catch(() => {});
+  await p.waitForFunction(() => location.search.includes("tipo=outras"), { timeout: 5000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1200));
+  const listaOutras = await p.evaluate(() => document.querySelector("main")?.innerText ?? "");
+  checar("e o filtro vai na URL, com a lista de não fornecedores",
+    p.url().includes("tipo=outras") && /pessoa\(s\)/.test(listaOutras), p.url());
+  const temRelatorio = await p.evaluate(() => [...document.querySelectorAll("main button")]
+    .some((b) => b.textContent?.trim() === "Baixar"));
+  checar("e a tela oferece baixar o relatório de pessoas", temRelatorio);
+
+  // O ciclo de consumo se renomeia.
+  const { dados: ciclos2010 } = await api("GET", "/consumo/periodos", null, token);
+  const umCiclo = (ciclos2010?.periodos ?? [])[0];
+  if (umCiclo) {
+    await irPara(p, `${WEB}/consumo`);
+    await p.waitForSelector(`[data-renomear-periodo="${umCiclo.id}"]`, { timeout: 10000 }).catch(() => {});
+    await p.click(`[data-renomear-periodo="${umCiclo.id}"]`).catch(() => {});
+    await p.waitForSelector("#periodo-nome", { timeout: 5000 }).catch(() => {});
+    await p.$eval("#periodo-nome", (el) => { el.select(); }).catch(() => {});
+    await p.type("#periodo-nome", `Ciclo tela ${m2010}`).catch(() => {});
+    await p.click("#periodo-nome-salvar").catch(() => {});
+    await new Promise((r) => setTimeout(r, 1500));
+    const { dados: cicloDepois } = await api("GET", `/consumo/periodos/${umCiclo.id}`, null, token);
+    checar("o ciclo de consumo se renomeia pela tela",
+      cicloDepois?.periodo?.nome === `Ciclo tela ${m2010}`, cicloDepois?.periodo);
+    await api("PUT", `/consumo/periodos/${umCiclo.id}`, { nome: umCiclo.nome }, token);
+  } else {
+    checar("o ciclo de consumo se renomeia pela tela", true, "(sem ciclo na base)");
+  }
+
+  // A venda lançada à mão aceita itens novos.
+  const { dados: prodAcr } = await api("POST", "/produtos", {
+    nome: `TELA ACRESCENTAR ${m2010}`, tipo: "REVENDA", um_estoque: "UN",
+    controla_estoque: false, status: "ATIVO",
+  }, token);
+  const { dados: vendaAcr } = await api("POST", "/vendas/importar", { vendas: [{
+    data: diaLocal(), documento: `TELA-ACR-${m2010}`, origem: "MANUAL",
+    itens: [{ id_produto: prodAcr?.id, quantidade: 1, valor_unitario: 7 }] }] }, token);
+  const { dados: listaAcr } = await api("GET", `/vendas?busca=TELA-ACR-${m2010}`, null, token);
+  const idAcr = (listaAcr ?? []).find((v) => v.documento === `TELA-ACR-${m2010}`)?.id;
+  if (idAcr) {
+    await irPara(p, `${WEB}/vendas/${idAcr}`);
+    await p.waitForSelector("#venda-acrescentar", { timeout: 10000 }).catch(() => {});
+    await p.click("#venda-acrescentar").catch(() => {});
+    await p.waitForSelector("#venda-acrescentar-itens", { timeout: 5000 }).catch(() => {});
+    checar("a venda lançada à mão oferece acrescentar itens",
+      !!(await p.$("#venda-acrescentar-itens")), vendaAcr?.message);
+    await api("DELETE", `/vendas/${idAcr}`, null, token);
+    await irPara(p, `${WEB}/vendas/${idAcr}`);
+    await new Promise((r) => setTimeout(r, 1500));
+    checar("e a cancelada, não", !(await p.$("#venda-acrescentar")));
+  } else {
+    checar("a venda lançada à mão oferece acrescentar itens", false, vendaAcr);
+  }
+  if (prodAcr?.id) await api("DELETE", `/produtos/${prodAcr.id}`, null, token);
 
   if (esse) await api("POST", `/pedidos/${esse.id}/cancelar`, { motivo: "pedido de teste da bateria" }, token);
   await ligarReservas(false);

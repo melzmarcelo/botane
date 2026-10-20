@@ -140,7 +140,7 @@ print("3. lote nunca barra a operação")
 # passar: o resto sai como "sem lote".
 st, saida2 = chamar("POST", "/estoque/saidas", {
     "tipo": "SAIDA_PERDA", "id_produto": pid, "quantidade": 12,
-    "id_local": local["id"], "id_motivo_perda": 1,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
 }, token=token)
 checar("saída maior que o saldo em lote passa mesmo assim", st == 201, saida2)
 checar("consumiu os 8 que havia em lote",
@@ -165,7 +165,7 @@ st, r = chamar("POST", "/estoque/entradas", {
 checar("entra lote com validade distante", st == 201, r)
 st, saida3 = chamar("POST", "/estoque/saidas", {
     "tipo": "SAIDA_PERDA", "id_produto": pid, "quantidade": 3,
-    "id_local": local["id"], "id_motivo_perda": 1,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
 }, token=token)
 usados = [l["lote"] for l in (saida3.get("lotes") or [])]
 checar("saiu do que tem validade, não do sem-data", usados == [f"D{marca}"], usados)
@@ -190,7 +190,7 @@ checar("e o lote sem validade não foi tocado",
 print("6. estornar uma SAÍDA devolve ao lote de onde saiu")
 st, saida4 = chamar("POST", "/estoque/saidas", {
     "tipo": "SAIDA_PERDA", "id_produto": pid, "quantidade": 2,
-    "id_local": local["id"], "id_motivo_perda": 1,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
 }, token=token)
 de_onde = [l["lote"] for l in (saida4.get("lotes") or [])]
 st, r = chamar("POST", f"/estoque/movimentos/{saida4['id']}/estornar", {"motivo": "teste FEFO"}, token=token)
@@ -207,7 +207,7 @@ chamar("POST", "/estoque/entradas", {
 }, token=token)
 st, r = chamar("POST", "/estoque/saidas", {
     "tipo": "SAIDA_PERDA", "id_produto": simples["id"], "quantidade": 3,
-    "id_local": local["id"], "id_motivo_perda": 1,
+    "id_local": local["id"], "id_motivo_perda": 1, "observacao": "perda de teste",
 }, token=token)
 checar("saída normal continua funcionando", st == 201, r)
 checar("e não inventa lote nenhum", not r.get("lotes"), r.get("lotes"))

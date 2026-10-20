@@ -978,3 +978,30 @@
     cancelada". Quem lista produções vê a que foi desfeita.
   - Cobertura: `smoke_vendas.py`, seção 6 (três movimentos estornados, insumo de volta,
     prato em zero).
+- 🔑 **O preço do DIA DA VENDA, não o de hoje** (1.1.114, 20/10/2026, pedido do dono: *"o preço
+  considerado na venda é o preço atual, devemos considerar o preço de venda como o do dia da venda
+  não do dia do lançamento"*).
+  - `services/precos.na_data(cur, id_produto, id_unidade, data)`: vigência `[vigente_de,
+    vigente_ate)` — `gravar` fecha o velho com `ate = hoje` e abre o novo com `de = hoje`, então no
+    dia da troca vale o NOVO (o `>` estrito). Loja antes da casa, como no `vigente`.
+  - ⚠️ Data anterior ao primeiro preço conhecido cai no PRIMEIRO preço (a casa cadastrou preço
+    depois de já vender; sair de graça seria pior).
+  - `GET /vendas/precos?data=&ids=` alimenta a tela (chave em texto). A tela marca `preco_auto` na
+    linha que ELA preencheu: mudar a data reescreve só essas; o valor digitado fica.
+  - Na importação, `_preparar_itens` resolve o produto (código, depois nome exato) ANTES do preço,
+    e a linha MANUAL/PLANILHA sem valor sai pelo preço do dia. ⚠️ O PDV com zero continua zero:
+    o cupom traz o valor cobrado.
+- 🔑 **Acrescentar itens a uma venda** (1.1.114, pedido do dono: *"permitir editar um documento,
+  adicionar mais itens, desde que o período que ele esteja já não foi fechado"*).
+  - `POST /vendas/{id}/itens`. A linha passa por `_preparar_itens` + `_gravar_item` — a MESMA
+    função da importação (custo congelado, baixa, produção na hora); a política aplicada é a
+    CONGELADA na venda (`cupom_base`/`cupom_desconto_pct`), não a de hoje.
+  - `_por_que_nao_edita`: cancelada; origem fora de MANUAL/PLANILHA (o cupom do PDV é do PDV);
+    `id_consumo_periodo` (o ciclo já cobrou); `cmv_fechamentos` FECHADO na data. ⚠️ Sem exceção
+    para `estoque.retroativo` — quem precisa reabre o período.
+  - O detalhe devolve `pode_acrescentar` e `por_que_nao_acrescenta`; a tela só mostra o botão então.
+  - ⚠️ Só ACRESCENTA. Tirar linha é cancelar a venda (o estorno devolve tudo) e lançar de novo.
+  - Cobertura: `smoke_vendas.py` (seções "O PRECO DO DIA" e "ACRESCENTAR ITENS"), `verificar.mjs` 11zz.
+- 🔑 **Renomear o ciclo de consumo** (1.1.114): `PUT /consumo/periodos/{id}` `{nome}` — aberto ou
+  fechado, só o nome (`consumo.periodos`). Vazio = sem nome (valem as datas). Cobertura:
+  `smoke_consumo_periodo.py` seção 9.

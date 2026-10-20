@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 import auditoria
 from database import get_cursor
-from models.consumo import PeriodoAbrir, PeriodoFechar
+from models.consumo import PeriodoAbrir, PeriodoFechar, PeriodoRenomear
 from seguranca import Contexto, contexto_atual, requer_permissao, unidade_atual
 from services import consumo_periodo as motor
 
@@ -205,6 +205,33 @@ def abrir(body: PeriodoAbrir, ctx: Contexto = Depends(_gerir)) -> dict:
                             "abrir",
                             depois={"inicio": str(body.inicio), "fim": str(body.fim)})
         return {"id": id_periodo, "message": "Período aberto"}
+
+
+@router.put("/periodos/{id_periodo}")
+def renomear(id_periodo: int, body: PeriodoRenomear, ctx: Contexto = Depends(_gerir)) -> dict:
+    """Muda o NOME do ciclo — aberto ou fechado (pedido do dono, 20/10/2026).
+
+    ⚠️ **Só o nome.** As datas decidem o que o ciclo cobra, e no fechado o recibo já
+    foi emitido sobre elas; o nome é só como a casa o chama, e mudar não mexe em venda
+    nem em recibo. Para as datas erradas de um ciclo aberto existe o `excluir`.
+    """
+    nome = (body.nome or "").strip() or None
+    with get_cursor() as cur:
+        id_unidade = unidade_atual(cur, ctx)
+        cur.execute(
+            """SELECT id, nome FROM consumo_periodos WHERE id = %s AND id_unidade = %s""",
+            (id_periodo, id_unidade),
+        )
+        periodo = cur.fetchone()
+        if not periodo:
+            raise HTTPException(status_code=404, detail="Período não encontrado")
+        cur.execute("UPDATE consumo_periodos SET nome = %s WHERE id = %s", (nome, id_periodo))
+        auditoria.registrar(cur, ctx.id_usuario, "consumo_periodo", id_periodo, "renomear",
+                            antes={"nome": periodo["nome"]}, depois={"nome": nome},
+                            id_unidade=id_unidade)
+        return {"id": id_periodo, "nome": nome,
+                "message": f"Período renomeado para “{nome}”" if nome
+                           else "O período ficou sem nome — vale o das datas"}
 
 
 @router.post("/periodos/{id_periodo}/fechar")

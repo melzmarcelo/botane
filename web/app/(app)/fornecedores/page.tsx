@@ -10,6 +10,7 @@ import { Fornecedor, mascaraCnpj, reais } from "@/lib/cadastros";
 import { Aviso, Carregando, Cartao, Etiqueta, Vazio } from "@/components/ui";
 import { useEstadoNaUrl } from "@/lib/estado-na-url";
 import ExplicaTela from "@/components/explica-tela";
+import BotaoExportar from "@/components/exportar";
 
 /**
  * A lista dos fornecedores — só a lista.
@@ -28,8 +29,12 @@ export default function PaginaFornecedores() {
   const [lista, setLista] = useState<Fornecedor[] | null>(null);
   const [busca, setBusca] = useEstadoNaUrl<string>("busca", "");
   const [inativos, setInativos] = useEstadoNaUrl<boolean>("inativos", false);
+  // 🔑 Fornecedor ou não (pedido do dono, 20/10/2026): a tabela guarda também quem
+  // trabalha na casa e quem consome dela. O servidor já filtrava (`so_fornecedores`,
+  // que os seletores de compra usam); faltava a tela oferecer.
+  const [tipo, setTipo] = useEstadoNaUrl<string>("tipo", "");
   const [erro, setErro] = useState("");
-  const pag = usePaginacao("fornecedores", { filtros: [busca, inativos] });
+  const pag = usePaginacao("fornecedores", { filtros: [busca, inativos, tipo] });
 
   const carregar = useCallback(async () => {
     // ⚠️ Espera a preferencia de "por pagina" ser resolvida: buscar antes
@@ -39,6 +44,8 @@ export default function PaginaFornecedores() {
     const q = new URLSearchParams(pag.parametros);
     if (busca.trim()) q.set("busca", busca.trim());
     if (inativos) q.set("incluir_inativos", "true");
+    if (tipo === "fornecedores") q.set("so_fornecedores", "true");
+    if (tipo === "outras") q.set("so_fornecedores", "false");
     try {
       const r = await api.listar<Fornecedor>(`/fornecedores?${q}`);
       setLista(r.itens);
@@ -47,7 +54,7 @@ export default function PaginaFornecedores() {
       setErro(e instanceof Error ? e.message : "Falha ao carregar");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pag.pronto, busca, inativos, pag.offset, pag.porPagina]);
+  }, [pag.pronto, busca, inativos, tipo, pag.offset, pag.porPagina]);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), busca ? 300 : 0);
@@ -77,11 +84,23 @@ export default function PaginaFornecedores() {
             ele, a conciliação vira trabalho manual.
           </ExplicaTela>
         </div>
-        {podeEditar && (
-          <Link href="/fornecedores/novo" className="btn btn-primario">
-            Nova pessoa
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {/* 🔑 O relatório de pessoas (pedido do dono, 20/10/2026), com os filtros
+              desta tela já escolhidos. */}
+          <BotaoExportar
+            relatorio="pessoas"
+            iniciais={{
+              ...(tipo ? { tipo_pessoa: [tipo === "fornecedores" ? "fornecedor" : "outra"] } : {}),
+              ...(inativos ? {} : { situacao_pessoa: ["ativas"] }),
+              ...(busca.trim() ? { busca_pessoa: busca.trim() } : {}),
+            }}
+          />
+          {podeEditar && (
+            <Link href="/fornecedores/novo" className="btn btn-primario">
+              Nova pessoa
+            </Link>
+          )}
+        </div>
       </header>
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
@@ -97,6 +116,15 @@ export default function PaginaFornecedores() {
               onChange={(e) => setBusca(e.target.value)}
             />
           </label>
+          <label className="sm:w-[220px]">
+            <span className="rotulo-campo">Tipo</span>
+            <select id="pessoas-tipo" className="campo mt-1.5" value={tipo}
+                    onChange={(e) => setTipo(e.target.value)}>
+              <option value="">todas</option>
+              <option value="fornecedores">fornecedores</option>
+              <option value="outras">não fornecedores</option>
+            </select>
+          </label>
           <label className="flex items-center gap-2 pb-2">
             <input
               type="checkbox"
@@ -109,11 +137,11 @@ export default function PaginaFornecedores() {
         </div>
       </Cartao>
 
-      <Cartao titulo={lista ? `${pag.total ?? lista.length} fornecedor(es)` : "Fornecedores"}>
+      <Cartao titulo={lista ? `${pag.total ?? lista.length} pessoa(s)` : "Pessoas"}>
         {!lista ? (
           <Carregando />
         ) : !lista.length ? (
-          <Vazio>Nenhum fornecedor encontrado.</Vazio>
+          <Vazio>Nenhuma pessoa encontrada.</Vazio>
         ) : (
           <ul className="flex flex-col gap-px bg-linha">
             {lista.map((x) => (
@@ -131,6 +159,7 @@ export default function PaginaFornecedores() {
                     {x.telefone ? ` · ${x.telefone}` : ""}
                   </span>
                   <span className="mt-1.5 flex flex-wrap gap-1.5">
+                    {x.fornecedor === false && <Etiqueta cor="neutro">não fornecedor</Etiqueta>}
                     {!!x.produtos && <Etiqueta cor="erva">{x.produtos} produto(s)</Etiqueta>}
                     {x.dias_entrega && <Etiqueta>entrega {x.dias_entrega}</Etiqueta>}
                     {x.pedido_minimo ? (
@@ -147,7 +176,7 @@ export default function PaginaFornecedores() {
             ))}
           </ul>
         )}
-        <Paginacao p={pag} rotulo="fornecedor(es)" />
+        <Paginacao p={pag} rotulo="pessoa(s)" />
       </Cartao>
     </div>
   );

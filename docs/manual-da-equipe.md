@@ -51,7 +51,7 @@ Menu **Compras → Notas de entrada**. Três caminhos, escolha o que couber:
 |---|---|
 | O fornecedor mandou o XML por e-mail | **Importar XML** — pode selecionar vários de uma vez |
 | Compra no mercado, açougue, feira (só cupom) | **Digitar nota** |
-| A nota já está no Omie | **Buscar no Omie** |
+| A nota já está no Omie | **Sincronizar com o Omie** (traz as novas e relê as abertas) |
 
 Depois de a nota entrar, **confira os itens**. Item que o sistema não reconheceu
 aparece na fila de pendências: escolha o produto certo e marque **vincular**.
@@ -96,9 +96,12 @@ alto quase sempre é erro de digitação (vírgula no lugar errado, unidade troc
 ### Perda
 
 Menu **Estoque → Saldos e movimentos → Perda**. Sempre com **motivo**: quebra,
-validade, erro de preparo, cortesia. O motivo é o que permite, no fim do mês,
+validade, erro de preparo, cortesia, descarte. O motivo é o que permite, no fim do mês,
 separar "perdemos R$ 400" de "perdemos R$ 400 **em cortesia**", que são
 problemas diferentes.
+
+E sempre com **observação**: o que aconteceu ("caiu da prateleira na entrega",
+"passou do ponto no forno"). Sem ela o sistema não lança a perda.
 
 **Perda não apontada não desaparece** — ela reaparece como variância no fim do
 mês, sem nome e sem responsável. Apontar é melhor para todo mundo.
@@ -623,6 +626,11 @@ Buscar no PDV**. No dia em que a integração estiver fora do ar, **Lançar** ac
 a venda à mão ou a planilha colada. **Importar a mesma venda duas vezes não
 duplica** — pode repetir sem medo.
 
+O preço que entra sozinho é o **do dia da venda**, não o de hoje: lançando a
+venda de semana passada, vale o preço de semana passada. Esqueceu um item? Na tela
+da venda, **Acrescentar itens** põe mais linhas no mesmo documento — enquanto o
+período do CMV daquela data não foi fechado.
+
 Item de venda que o sistema não reconhece fica marcado como **sem vínculo**.
 Enquanto estiver assim, aquele prato não entra no custo teórico — vale avisar
 quem cuida do cadastro.
@@ -955,6 +963,9 @@ estiveram — agora ele guarda também quem trabalha na casa e quem consome dela
 nos seletores da nota de entrada e do produto. Desmarcada, ela continua aqui e
 some de lá — é o caso do funcionário e do sócio.
 
+A lista filtra por **tipo** (fornecedores ou não fornecedores), e **Baixar** leva
+o cadastro de pessoas em planilha ou PDF, com os mesmos filtros.
+
 ### O cupom da pessoa
 
 No cadastro da pessoa, o cartão **No cupom desta pessoa**:
@@ -1025,6 +1036,9 @@ sempre. A tela avisa quantos cupons são, antes de você confirmar.
 
 **Errou as datas?** Apague o período (só funciona enquanto ele está aberto) e
 abra de novo. Não feche para "corrigir" — fechar cobra todo mundo.
+
+**Quer mudar o nome?** **renomear**, na lista — vale para o aberto e para o
+fechado, e só o nome muda.
 
 **Fechou por engano?** **Reabrir** desfaz: os cupons voltam para em aberto e o
 recibo é apagado. Só o último fechado se reabre, e só se não houver outro aberto.

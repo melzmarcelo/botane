@@ -44,6 +44,26 @@ INTERVALO_MINIMO = 0.6
 _ultima_chamada = 0.0
 _SEGUNDOS_PEDIDOS = re.compile(r"[Aa]guarde\s+(\d+)\s*segundo")
 
+# 🔑 **O Omie dizendo que o registro NÃO EXISTE** (20/10/2026, pedido do dono: notas
+# importadas e depois excluídas lá). É recusa, não falha: insistir não faz a nota voltar,
+# e cada tentativa gasta a cota da conta. ⚠️ As frases são as do Omie para "não achei":
+# "não cadastrado", "não encontrado", "não existem registros" (Client-5113) e "excluído".
+NAO_EXISTE = re.compile(
+    r"n[ãa]o\s+(foi\s+|foram\s+)?(encontrad|localizad|cadastrad)|n[ãa]o\s+exist|"
+    r"inexistente|exclu[ií]d|Client-5113", re.IGNORECASE)
+# ⚠️ **Credencial e bloqueio NÃO são "não existe"**, mesmo quando a frase parece ("aplicação
+# não cadastrada", "chave não encontrada"). Confundir os dois marcaria TODAS as notas abertas
+# como excluídas no dia em que a chave vencesse.
+NAO_E_REGISTRO = re.compile(
+    r"chave|app_?key|app_?secret|aplica[çc][ãa]o|aplicativo|credencia|token|bloque|"
+    r"consumo|redundante|aguarde", re.IGNORECASE)
+
+
+def nao_existe(mensagem: str | None) -> bool:
+    """O Omie disse que o REGISTRO pedido não existe — e não que a conta falhou."""
+    texto = mensagem or ""
+    return bool(NAO_EXISTE.search(texto)) and not NAO_E_REGISTRO.search(texto)
+
 
 # ⚠️ **O Omie tem DOIS dialetos de paginação**, e o mesmo importador fala os
 # dois. Os módulos antigos usam nomes em português (`pagina`,
@@ -145,6 +165,8 @@ class ErroOmie(Exception):
         super().__init__(mensagem)
         self.mensagem = mensagem
         self.status = status
+        # O registro pedido não existe lá — a nota excluída no Omie depois de importada.
+        self.nao_existe = nao_existe(mensagem)
 
 
 class ClienteOmie:
@@ -196,6 +218,10 @@ class ClienteOmie:
                 if "Client-5001" in (r.text or "") or "não faz parte da estrutura" in (r.text or ""):
                     raise ErroOmie(f"o Omie recusou os parâmetros de {call}: "
                                    f"{r.text[:200]}", r.status_code)
+                # ⚠️ "Não existe" também não melhora com insistência (20/10/2026).
+                if nao_existe(r.text):
+                    raise ErroOmie(f"{call}: o Omie não encontrou o registro — "
+                                   f"{r.text[:200]}", r.status_code)
                 # "Aguarde N segundos": o Omie diz o tempo. Chutar menos é
                 # garantir outra recusa; chutar mais é perder tempo à toa.
                 pedidos = _SEGUNDOS_PEDIDOS.search(r.text or "")
@@ -219,6 +245,10 @@ class ClienteOmie:
             achado = dados.get(str(param["nIdReceb"]))
             if achado is None:
                 raise ErroOmie(f"modo simulado: recebimento {param['nIdReceb']} não está na fixture")
+            # A fixture também sabe dizer "isto foi excluído lá" (20/10/2026): é como a
+            # suíte prova a nota NÃO ENCONTRADA sem precisar apagar nada no Omie.
+            if isinstance(achado, dict) and achado.get("faultstring"):
+                raise ErroOmie(str(achado["faultstring"]), 500)
             return achado
         # Simula a paginação: a fixture traz tudo, a chamada devolve a página.
         pagina = int(param.get("pagina") or param.get("nPagina") or 1)

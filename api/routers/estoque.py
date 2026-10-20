@@ -620,6 +620,15 @@ def saida(body: SaidaRequest, ctx: Contexto = Depends(contexto_atual)) -> dict:
         raise HTTPException(status_code=403, detail=f"Sem permissão para esta ação ({chave})")
     if body.tipo not in motor.SAIDAS or body.tipo.startswith(("TRANSFERENCIA", "ESTORNO", "AJUSTE")):
         raise HTTPException(status_code=400, detail="Tipo de saída inválido para este endpoint.")
+    # 🔑 **A perda diz o que aconteceu** (pedido do dono, 20/10/2026: "colocar o campo
+    # observação como obrigatório"). O motivo é uma lista fechada; a observação é o
+    # caso — "caiu da prateleira na entrega", "passou do ponto no forno" — e é ela que
+    # explica a perda no CMV semanas depois.
+    # ⚠️ No SERVIDOR, e só nesta rota: a tela e o conector passam por aqui. O descarte
+    # de etiqueta e o inventário lançam perda pelo motor, com a frase deles.
+    if body.tipo == "SAIDA_PERDA" and not (body.observacao or "").strip():
+        raise HTTPException(status_code=400,
+                            detail="Informe a observação da perda: o que aconteceu.")
 
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)

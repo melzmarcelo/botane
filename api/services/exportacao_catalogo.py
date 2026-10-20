@@ -47,6 +47,11 @@ from services import periodos as periodos_motor
 from services import relatorios
 
 SITUACOES = [("ativos", "Ativos"), ("inativos", "Inativos"), ("rascunhos", "Rascunhos")]
+# 🔑 As pessoas (20/10/2026): fornecedor ou não, e ativa ou não — os mesmos recortes
+# da tela de Pessoas, para o arquivo sair igual ao que se vê.
+TIPOS_PESSOA = [("fornecedor", "Fornecedores"),
+                ("outra", "Não fornecedores (equipe, sócios, clientes)")]
+SITUACOES_PESSOA = [("ativas", "Ativas"), ("inativas", "Inativas")]
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +88,14 @@ def _opcoes_tipos_movimento(_cur, _id_unidade: int) -> list[dict]:
 
 def _opcoes_situacao(_cur, _id_unidade: int) -> list[dict]:
     return [{"valor": v, "nome": n} for v, n in SITUACOES]
+
+
+def _opcoes_tipo_pessoa(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in TIPOS_PESSOA]
+
+
+def _opcoes_situacao_pessoa(_cur, _id_unidade: int) -> list[dict]:
+    return [{"valor": v, "nome": n} for v, n in SITUACOES_PESSOA]
 
 
 def _opcoes_pessoas(cur, id_unidade: int) -> list[dict]:
@@ -253,6 +266,12 @@ FILTROS: dict[str, dict] = {
     # com doze opções isso viraria doze caixinhas para uma escolha só.
     "aba": {"tipo": "escolha", "rotulo": "O que levar junto",
             "ajuda": "a aba em que você está no painel", "opcoes": _opcoes_aba},
+    "tipo_pessoa": {"tipo": "multipla", "rotulo": "Tipo", "ajuda": "fornecedores e não fornecedores",
+                    "opcoes": _opcoes_tipo_pessoa},
+    "situacao_pessoa": {"tipo": "multipla", "rotulo": "Situação", "ajuda": "ativas e inativas",
+                        "opcoes": _opcoes_situacao_pessoa},
+    "busca_pessoa": {"tipo": "texto", "rotulo": "Nome ou CNPJ contém",
+                     "ajuda": "parte do nome, do nome fantasia ou do CNPJ"},
 }
 
 
@@ -465,17 +484,32 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
     # está para não mexer na assinatura que o catálogo inteiro compartilha.
     situacao = _lista(f.get("situacao"))
     cur.execute(
-        """SELECT p.codigo, p.nome AS produto, p.tipo, c.nome AS categoria,
+        """SELECT p.codigo, p.nome AS produto, p.nome_curto, p.tipo, c.nome AS categoria,
                   s.nome AS setor, p.um_estoque, p.um_compra, p.fator_compra,
-                  p.estoque_minimo, p.perecivel, p.validade_dias, p.controla_lote,
-                  p.ncm, p.codigo_barras, p.status, p.ativo,
+                  p.estoque_minimo, p.estoque_maximo, p.perecivel, p.validade_dias,
+                  p.controla_lote, p.controla_validade, p.controla_estoque,
+                  p.producao_propria, p.modo_producao,
+                  lp.nome AS local_padrao, lv.nome AS local_venda,
+                  p.marca, p.peso_liquido, p.peso_bruto,
+                  p.ncm, p.cest, p.codigo_barras, p.codigo_omie, p.um_omie,
+                  p.codigo_pdv, p.integrado_pdv, p.origem,
+                  p.nome_catalogo, p.informacao_adicional,
+                  array_to_string(p.restricoes, ', ') AS restricoes,
+                  p.custo_referencia, p.custo_referencia_em, p.custo_referencia_origem,
+                  p.observacao, p.status, p.ativo, p.criado_em, p.revisado_em,
+                  p.sincronizado_em,
                   (SELECT pp.preco_venda FROM produto_precos pp
                     WHERE pp.id_produto = p.id AND pp.vigente_ate IS NULL
                       AND (pp.id_unidade = %(uni)s OR pp.id_unidade IS NULL)
-                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda
+                    ORDER BY pp.id_unidade NULLS LAST LIMIT 1) AS preco_venda,
+                  (SELECT string_agg(f.nome, ' / ' ORDER BY pf.preferencial DESC, lower(f.nome))
+                     FROM produto_fornecedor pf JOIN fornecedores f ON f.id = pf.id_fornecedor
+                    WHERE pf.id_produto = p.id) AS fornecedores
              FROM produtos p
              LEFT JOIN categorias c ON c.id = p.id_categoria
              LEFT JOIN setores s ON s.id = p.id_setor
+             LEFT JOIN locais_estoque lp ON lp.id = p.id_local_padrao
+             LEFT JOIN locais_estoque lv ON lv.id = p.id_local_venda
             WHERE (%(tipos)s::varchar[] IS NULL OR p.tipo = ANY(%(tipos)s))
               AND (%(categorias)s::int[] IS NULL OR p.id_categoria = ANY(%(categorias)s))
               AND (%(setores)s::int[] IS NULL OR p.id_setor = ANY(%(setores)s))
@@ -489,17 +523,116 @@ def _produtos(cur, _id_unidade: int, f: dict) -> Saida:
          "situacao": situacao, "uni": _id_unidade},
     )
     linhas = [dict(r) for r in cur.fetchall()]
+    # 🔑 **Na planilha, TODOS os campos do cadastro** (pedido do dono, 20/10/2026:
+    # "listar todos os campos do cadastro, principalmente na planilha"). O PDF fica
+    # com os de sempre: quarenta colunas numa folha deitada viram letra de bula.
+    # ⚠️ O custo de referência só sai para quem vê custo (`estoque.saldos`) — a mesma
+    # regra do `GET /produtos/{id}`: custo é dado de estoque, não de cadastro.
+    resumidas = [
+        ("codigo", "Código"), ("produto", "Produto"), ("tipo", "Tipo"),
+        ("categoria", "Categoria"), ("setor", "Setor"), ("um_estoque", "Un. estoque"),
+        ("um_compra", "Un. compra"), ("fator_compra", "Fator"),
+        ("preco_venda", "Preço de venda"), ("estoque_minimo", "Estoque mínimo"),
+        ("perecivel", "Perecível"), ("validade_dias", "Validade (dias)"),
+        ("controla_lote", "Controla lote"), ("ncm", "NCM"),
+        ("codigo_barras", "Código de barras"), ("status", "Situação"), ("ativo", "Ativo")]
+    if f.get("_formato") == "pdf":
+        colunas = resumidas
+    else:
+        colunas = [
+            ("codigo", "Código"), ("produto", "Produto"), ("nome_curto", "Nome curto"),
+            ("tipo", "Tipo"), ("categoria", "Categoria"), ("setor", "Setor"),
+            ("status", "Situação"), ("ativo", "Ativo"),
+            ("um_estoque", "Un. estoque"), ("um_compra", "Un. compra"),
+            ("fator_compra", "Fator de compra"), ("um_omie", "Un. no Omie"),
+            ("preco_venda", "Preço de venda"),
+            ("controla_estoque", "Controla estoque"), ("producao_propria", "Produção própria"),
+            ("modo_producao", "Modo de produção"),
+            ("local_padrao", "Local padrão"), ("local_venda", "Local de venda"),
+            ("estoque_minimo", "Estoque mínimo"), ("estoque_maximo", "Estoque máximo"),
+            ("perecivel", "Perecível"), ("validade_dias", "Validade (dias)"),
+            ("controla_validade", "Controla validade"), ("controla_lote", "Controla lote"),
+            ("marca", "Marca"), ("peso_liquido", "Peso líquido"), ("peso_bruto", "Peso bruto"),
+            ("ncm", "NCM"), ("cest", "CEST"), ("codigo_barras", "Código de barras"),
+            ("codigo_omie", "Código no Omie"), ("codigo_pdv", "Código no PDV"),
+            ("integrado_pdv", "Integrado ao PDV"), ("origem", "Origem do cadastro"),
+            ("fornecedores", "Fornecedores"),
+            ("nome_catalogo", "Nome no cardápio"), ("informacao_adicional", "Informação adicional"),
+            ("restricoes", "Restrições"),
+        ]
+        if f.get("_ve_custo"):
+            colunas += [("custo_referencia", "Custo de referência"),
+                        ("custo_referencia_em", "Custo de referência em"),
+                        ("custo_referencia_origem", "Origem do custo de referência")]
+        colunas += [("observacao", "Observação"), ("criado_em", "Cadastrado em"),
+                    ("revisado_em", "Revisado em"), ("sincronizado_em", "Sincronizado em")]
+    if not f.get("_ve_custo"):
+        for linha in linhas:
+            for campo in ("custo_referencia", "custo_referencia_em", "custo_referencia_origem"):
+                linha.pop(campo, None)
+    return Saida(linhas, colunas, "Cadastro de produtos", [("Produtos", len(linhas))])
+
+
+def _pessoas(cur, _id_unidade: int, f: dict) -> Saida:
+    """O cadastro de pessoas, com os recortes da tela (pedido do dono, 20/10/2026).
+
+    ⚠️ Pessoa é da CASA, não da loja (a tabela não tem `id_unidade`) — por isso a
+    loja não entra no filtro.
+    """
+    tipos = _lista(f.get("tipo_pessoa")) or []
+    situacoes = _lista(f.get("situacao_pessoa")) or []
+    # Os dois marcados, ou nenhum, é "todos" — igual às caixinhas dos outros relatórios.
+    so_fornecedor = None if len(set(tipos)) != 1 else (tipos[0] == "fornecedor")
+    so_ativas = None if len(set(situacoes)) != 1 else (situacoes[0] == "ativas")
+    busca = (f.get("busca_pessoa") or "").strip() or None
+    cur.execute(
+        """SELECT f.nome, f.nome_fantasia, f.cnpj, f.fornecedor,
+                  f.email, f.telefone, f.whatsapp, f.contato, f.cidade, f.uf,
+                  f.prazo_entrega_dias, f.dias_entrega, f.pedido_minimo,
+                  f.cupom_base, f.cupom_desconto_pct, f.codigo_omie, f.ativo,
+                  f.observacao, f.criado_em,
+                  (SELECT count(*) FROM produto_fornecedor pf
+                    WHERE pf.id_fornecedor = f.id) AS produtos,
+                  (SELECT max(pf.ultima_compra) FROM produto_fornecedor pf
+                    WHERE pf.id_fornecedor = f.id) AS ultima_compra,
+                  (SELECT u.nome FROM usuarios u
+                    WHERE u.id_pessoa = f.id AND u.ativo LIMIT 1) AS usuario
+             FROM fornecedores f
+            WHERE (%(forn)s::bool IS NULL OR f.fornecedor = %(forn)s)
+              AND (%(ativas)s::bool IS NULL OR f.ativo = %(ativas)s)
+              AND (%(busca)s::varchar IS NULL
+                   OR lower(f.nome) LIKE lower('%%' || %(busca)s || '%%')
+                   OR lower(coalesce(f.nome_fantasia, '')) LIKE lower('%%' || %(busca)s || '%%')
+                   OR coalesce(f.cnpj, '') LIKE '%%' || %(busca)s || '%%')
+            ORDER BY f.ativo DESC, lower(f.nome)""",
+        {"forn": so_fornecedor, "ativas": so_ativas, "busca": busca},
+    )
+    linhas = [dict(r) for r in cur.fetchall()]
+    for linha in linhas:
+        linha["tipo"] = "fornecedor" if linha["fornecedor"] else "não fornecedor"
+        desconto = float(linha["cupom_desconto_pct"] or 0)
+        linha["politica"] = (("pelo custo" if linha["cupom_base"] == "CUSTO" else "preço de venda")
+                             + (f", {desconto:g}% de desconto" if desconto else ""))
+    if f.get("_formato") == "pdf":
+        colunas = [("nome", "Nome"), ("tipo", "Tipo"), ("cnpj", "CNPJ"),
+                   ("telefone", "Telefone"), ("email", "E-mail"), ("cidade", "Cidade"),
+                   ("uf", "UF"), ("ativo", "Ativa")]
+    else:
+        colunas = [("nome", "Nome"), ("nome_fantasia", "Nome fantasia"), ("tipo", "Tipo"),
+                   ("cnpj", "CNPJ"), ("ativo", "Ativa"), ("email", "E-mail"),
+                   ("telefone", "Telefone"), ("whatsapp", "WhatsApp"), ("contato", "Contato"),
+                   ("cidade", "Cidade"), ("uf", "UF"),
+                   ("prazo_entrega_dias", "Prazo de entrega (dias)"),
+                   ("dias_entrega", "Dias de entrega"), ("pedido_minimo", "Pedido mínimo"),
+                   ("politica", "Política do cupom"), ("codigo_omie", "Código no Omie"),
+                   ("produtos", "Produtos"), ("ultima_compra", "Última compra"),
+                   ("usuario", "Login no sistema"), ("observacao", "Observação"),
+                   ("criado_em", "Cadastrada em")]
     return Saida(
-        linhas,
-        [("codigo", "Código"), ("produto", "Produto"), ("tipo", "Tipo"),
-         ("categoria", "Categoria"), ("setor", "Setor"), ("um_estoque", "Un. estoque"),
-         ("um_compra", "Un. compra"), ("fator_compra", "Fator"),
-         ("preco_venda", "Preço de venda"), ("estoque_minimo", "Estoque mínimo"),
-         ("perecivel", "Perecível"), ("validade_dias", "Validade (dias)"),
-         ("controla_lote", "Controla lote"), ("ncm", "NCM"),
-         ("codigo_barras", "Código de barras"), ("status", "Situação"), ("ativo", "Ativo")],
-        "Cadastro de produtos",
-        [("Produtos", len(linhas))],
+        linhas, colunas, "Cadastro de pessoas",
+        [("Pessoas", len(linhas)),
+         ("Fornecedores", sum(1 for x in linhas if x["fornecedor"])),
+         ("Não fornecedores", sum(1 for x in linhas if not x["fornecedor"]))],
     )
 
 
@@ -1173,9 +1306,16 @@ RELATORIOS: dict[str, Relatorio] = {
         ("periodo", "tipos_movimento", "locais", "produtos", "busca", "provisorio"),
         _movimentos),
     "produtos": Relatorio(
-        "Cadastro de produtos", "A ficha de cadastro de cada item, com unidade e preço.",
+        "Cadastro de produtos",
+        "A ficha de cadastro de cada item. A planilha leva todos os campos; o PDF, os principais.",
         "cadastros.produtos", "produtos",
         ("tipos_produto", "categorias", "setores", "situacao"), _produtos),
+    "pessoas": Relatorio(
+        "Cadastro de pessoas",
+        "Fornecedores, equipe e quem consome: contato, política do cupom e compras. "
+        "A planilha leva todos os campos; o PDF, os principais.",
+        "cadastros.fornecedores", "pessoas",
+        ("tipo_pessoa", "situacao_pessoa", "busca_pessoa"), _pessoas),
     "vencimentos": Relatorio(
         "Lotes a vencer", "O que vence, quando, onde e quanto vale.",
         "estoque.saldos", "vencimentos", ("dias", "locais"), _vencimentos),

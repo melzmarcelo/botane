@@ -161,6 +161,10 @@ class _Filtros:
         # existem, e um 422 aqui transformaria um valor novo numa tela que nao
         # baixa nada. Valor desconhecido cai no padrao do relatorio.
         aba: str | None = None,
+        # 🔑 O relatório de pessoas (20/10/2026): os recortes da tela de Pessoas.
+        tipo_pessoa: list[str] | None = Query(default=None),
+        situacao_pessoa: list[str] | None = Query(default=None),
+        busca_pessoa: str | None = Query(default=None, max_length=80),
     ):
         self.como_dict = {
             "inicio": inicio, "fim": fim, "data": data, "aba": aba,
@@ -170,6 +174,8 @@ class _Filtros:
             "classes": classes, "produtos": produtos, "busca": busca, "dias": dias,
             "provisorio": provisorio,
             "ciclo": ciclo, "pessoas": pessoas, "detalhe": detalhe,
+            "tipo_pessoa": tipo_pessoa, "situacao_pessoa": situacao_pessoa,
+            "busca_pessoa": busca_pessoa,
         }
 
     def preenchidos(self) -> dict:
@@ -642,6 +648,9 @@ def _com_as_lojas(cur, ctx: Contexto, filtros: dict) -> dict:
     """
     cur.execute("SELECT id FROM unidades WHERE ativo ORDER BY matriz DESC, id")
     filtros["_lojas"] = [r["id"] for r in cur.fetchall() if ctx.ve_unidade(r["id"])]
+    # ⚠️ Também interno: o cadastro de produtos leva o custo de referência só para
+    # quem vê custo — a mesma chave do `GET /produtos/{id}`.
+    filtros["_ve_custo"] = ctx.pode("estoque.saldos")
     return filtros
 
 
@@ -686,8 +695,11 @@ def exportar(relatorio: str, formato: str | None = None, filtros: _Filtros = Dep
     _exige(ctx, rel.permissao)
     with get_cursor() as cur:
         id_unidade = unidade_atual(cur, ctx)
+        # ⚠️ O formato vai junto (interno, com `_`): o cadastro sai com TODOS os campos
+        # na planilha e só com os principais no PDF (20/10/2026).
         saida = catalogo_motor.montar(cur, chave, id_unidade,
-                                      _com_as_lojas(cur, ctx, filtros.como_dict))
+                                      _com_as_lojas(cur, ctx, filtros.como_dict)
+                                      | {"_formato": ext})
         timbre = catalogo_motor.papel_timbrado(cur)
         auditoria.registrar(
             cur, ctx.id_usuario, "exportacao", chave, "exportar",

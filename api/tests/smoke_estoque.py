@@ -342,13 +342,28 @@ st, motivos = chamar("GET", "/estoque/motivos-perda", token=token)
 checar("motivos de perda semeados", st == 200 and len(motivos) >= 5, len(motivos))
 st, r = chamar("POST", "/estoque/saidas", {
     "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_PERDA", "id_local": principal["id"],
+    "observacao": "caiu no chão",
 }, token=token)
-checar("recusa perda sem motivo", st == 400, (st, r))
+checar("recusa perda sem motivo", st == 400 and "motivo" in str(r.get("detail")), (st, r))
+# 🔑 (20/10/2026, pedido do dono) A observação da perda é obrigatória, e o motivo
+# Descarte entrou na lista (migração 126).
 st, r = chamar("POST", "/estoque/saidas", {
     "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_PERDA", "id_local": principal["id"],
-    "id_motivo_perda": motivos[0]["id"],
+    "id_motivo_perda": motivos[0]["id"], "observacao": "   ",
 }, token=token)
-checar("aceita perda com motivo", st == 201, r)
+checar("recusa perda sem observação (em branco não vale)",
+       st == 400 and "observação" in str(r.get("detail")), (st, r))
+checar("e o motivo Descarte está na lista",
+       any(m["nome"] == "Descarte" for m in motivos), [m["nome"] for m in motivos])
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_PERDA", "id_local": principal["id"],
+    "id_motivo_perda": motivos[0]["id"], "observacao": "caiu no chão",
+}, token=token)
+checar("aceita perda com motivo e observação", st == 201, r)
+st, r = chamar("POST", "/estoque/saidas", {
+    "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_CONSUMO_INTERNO",
+    "id_local": principal["id"]}, token=token)
+checar("o consumo interno continua sem exigir observação", st == 201, (st, r))
 
 print("6. o custo do insumo agora vem do estoque")
 st, fornecedores = chamar("GET", "/fornecedores?incluir_inativos=true&busca=Est", token=token)
@@ -533,7 +548,7 @@ st, r = chamar("POST", "/estoque/entradas", {
 checar("cozinha NÃO lança entrada (403)", st == 403, st)
 st, r = chamar("POST", "/estoque/saidas", {
     "id_produto": cafe, "quantidade": 1, "tipo": "SAIDA_PERDA",
-    "id_motivo_perda": motivos[0]["id"]}, token=tk)
+    "id_motivo_perda": motivos[0]["id"], "observacao": "quebrou"}, token=tk)
 checar("cozinha PODE apontar perda", st == 201, (st, r))
 st, r = chamar("POST", f"/inventarios/{id_inv}/fechar", token=tk)
 checar("cozinha NÃO fecha inventário (403)", st == 403, st)

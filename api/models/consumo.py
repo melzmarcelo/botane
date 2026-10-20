@@ -18,3 +18,12 @@ class PeriodoAbrir(BaseModel):
 
 class PeriodoFechar(BaseModel):
     observacao: str | None = None
+
+
+class PeriodoRenomear(BaseModel):
+    """O nome do ciclo, aberto ou fechado (pedido do dono, 20/10/2026).
+
+    ⚠️ Vazio volta a ser "sem nome": a tela mostra as datas, que já identificam.
+    """
+
+    nome: str | None = Field(default=None, max_length=60)

@@ -325,6 +325,31 @@ chamar("POST", f"/consumo/periodos/{periodo}/fechar", {}, token=token)
 st9, _q = chamar("DELETE", f"/consumo/periodos/{periodo}", token=token)
 checar("um periodo FECHADO nao se apaga", st9 == 409, (st9, _q))
 
+# 🔑 (20/10/2026, pedido do dono) Mudar o NOME do ciclo — aberto ou fechado. So o nome:
+# as datas decidem o que ele cobrou, e o recibo do fechado ja foi emitido sobre elas.
+st, _det_antes = chamar("GET", f"/consumo/periodos/{periodo}", token=token)
+st, _ren = chamar("PUT", f"/consumo/periodos/{periodo}", {"nome": "  Quinzena renomeada  "},
+                  token=token)
+checar("o ciclo FECHADO se renomeia", st == 200 and _ren.get("nome") == "Quinzena renomeada",
+       (st, _ren))
+st, _det = chamar("GET", f"/consumo/periodos/{periodo}", token=token)
+checar("e so o nome muda: datas, situacao e recibo ficam",
+       _det["periodo"]["nome"] == "Quinzena renomeada"
+       and _det["periodo"]["inicio"] == _det_antes["periodo"]["inicio"]
+       and _det["periodo"]["status"] == "FECHADO"
+       and perto(_det.get("total"), _det_antes.get("total")), _det["periodo"])
+st, _ren = chamar("PUT", f"/consumo/periodos/{periodo}", {"nome": ""}, token=token)
+checar("nome em branco volta a ser 'sem nome' (valem as datas)",
+       st == 200 and _ren.get("nome") is None, (st, _ren))
+st, _ren = chamar("PUT", "/consumo/periodos/999999999", {"nome": "x"}, token=token)
+checar("ciclo que nao existe responde 404", st == 404, (st, _ren))
+# ⚠️ Com a Cozinha das suites: o login desta suite nasce com o primeiro papel da lista.
+from comum import garantir_cozinha  # noqa: E402
+
+_tk_cozinha = garantir_cozinha(chamar, token)
+st, _ren = chamar("PUT", f"/consumo/periodos/{periodo}", {"nome": "x"}, token=_tk_cozinha)
+checar("quem nao gere ciclos nao renomeia (403)", st == 403, (st, _ren))
+
 st, r9 = chamar("POST", "/consumo/periodos", {
     "inicio": "2027-01-01", "fim": "2027-01-31", "nome": "engano"}, token=token)
 descartavel = r9.get("id")

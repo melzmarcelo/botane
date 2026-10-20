@@ -95,7 +95,8 @@ checar("a sincronizacao responde", st == 200, (st, r))
 # esta suite exercita.
 with get_cursor() as cur:
     cur.execute("""SELECT id, id_omie, status, valor_total FROM notas_entrada
-                    WHERE id_omie IS NOT NULL AND status <> 'LANCADA'
+                    WHERE id_omie IS NOT NULL AND status IN ('IMPORTADA', 'CONCILIADA')
+                      AND id_omie <> '990000126'
                     ORDER BY id DESC LIMIT 1""")
     alvo = dict(cur.fetchone() or {})
 checar("ha uma nota do Omie nao lancada para exercitar", bool(alvo.get("id")), alvo)
@@ -203,6 +204,60 @@ if manual:
 else:
     checar("a nota digitada e recusada", True, "(sem nota manual na base)")
     checar("com a frase explicando por que", True, "(idem)")
+
+
+print("\n5b. a nota EXCLUIDA no Omie fica NAO ENCONTRADA (20/10/2026)")
+# 🔑 **Pedido do dono:** *"no omie, temos situacao de notas lancadas e por algum motivo
+# elas foram excluidas; caso elas ja tenham sido importadas, ao atualizar, elas devem
+# ficar com um status de nao encontrada no Omie. E ficar igual a cancelada, sem poder
+# lancar."* A fixture tem um recebimento que responde "nao existe" (990000126); a
+# suite aponta a nota para ele e depois a devolve.
+id_omie_certo = alvo.get("id_omie")
+
+
+def _apontar(id_omie):
+    with get_cursor() as cur:
+        cur.execute("UPDATE notas_entrada SET id_omie = %s WHERE id = %s", (id_omie, id_nota))
+
+
+try:
+    _apontar("990000126")
+    st, r = chamar("POST", f"/notas/{id_nota}/atualizar-do-omie", {}, token=token)
+    checar("o botao da nota reconhece a excluida (nao e erro 502)",
+           st == 200 and r.get("nao_encontrada") is True, (st, r))
+    checar("e a nota fica NAO_ENCONTRADA",
+           do_banco(id_nota, ["status"])["status"] == "NAO_ENCONTRADA", do_banco(id_nota, ["status"]))
+    checar("com a frase dizendo que foi excluida la",
+           "não foi encontrada" in str(r.get("message")), r.get("message"))
+    st, r = chamar("POST", f"/notas/{id_nota}/lancar", {}, token=token)
+    checar("e, igual a cancelada, NAO se lanca (409)",
+           st == 409 and "não foi encontrada" in str(r.get("detail")), (st, r))
+    st, fila = chamar("GET", "/notas/pendencias", token=token)
+    checar("e sai da fila de conciliacao",
+           not any(i.get("id_nota") == id_nota for i in (fila or [])), "")
+
+    # Voltou a existir no Omie: a releitura a traz de volta para a fila.
+    _apontar(id_omie_certo)
+    st, r = chamar("POST", f"/notas/{id_nota}/atualizar-do-omie", {}, token=token)
+    checar("se ela voltar a existir la, a releitura a devolve",
+           st == 200 and do_banco(id_nota, ["status"])["status"] in ("IMPORTADA", "CONCILIADA"),
+           (st, r, do_banco(id_nota, ["status"])))
+
+    # A releitura de TODAS tambem reconhece — e nao conta como falha.
+    _apontar("990000126")
+    st, r = chamar("POST", "/notas/atualizar-do-omie", {"antes_de": id_nota + 1, "limite": 1},
+                   token=token)
+    checar("a releitura das abertas marca a excluida",
+           st == 200 and any(n.get("id") == id_nota for n in r.get("nao_encontradas") or [])
+           and do_banco(id_nota, ["status"])["status"] == "NAO_ENCONTRADA", (st, r))
+    checar("sem contar como falha, e dizendo na frase",
+           not r.get("falhas") and "não encontrada" in str(r.get("message")), r)
+finally:
+    _apontar(id_omie_certo)
+    chamar("POST", f"/notas/{id_nota}/atualizar-do-omie", {}, token=token)
+checar("e a nota da suite volta ao normal",
+       do_banco(id_nota, ["status"])["status"] in ("IMPORTADA", "CONCILIADA"),
+       do_banco(id_nota, ["status"]))
 
 
 print("\n6. devolvendo a integracao ao que era")

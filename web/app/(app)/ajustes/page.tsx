@@ -696,10 +696,15 @@ export default function PaginaAjustes() {
                 </Campo>
               </>
             )}
-            <Campo rotulo="Observação" className="sm:col-span-2">
+            {/* 🔑 Na perda é obrigatória (pedido do dono, 20/10/2026): o motivo é a
+                lista; a observação é o caso, e o servidor recusa sem ela. */}
+            <Campo rotulo="Observação" dica={tipo === "perda" ? "obrigatória na perda" : undefined}
+                   className="sm:col-span-2">
               <input
+                id="ajuste-observacao"
                 className="campo"
                 placeholder="o que aconteceu"
+                required={tipo === "perda"}
                 value={f.observacao}
                 onChange={(e) => setF({ ...f, observacao: e.target.value })}
               />

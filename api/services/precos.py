@@ -57,6 +57,44 @@ def vigente(cur, id_produto: int, id_unidade: int | None = None):
     return linha["preco_venda"] if linha else None
 
 
+def na_data(cur, id_produto: int, id_unidade: int | None, data):
+    """O preço que valia NAQUELE dia nesta loja, ou `None`.
+
+    🔑 **Pedido do dono (20/10/2026):** *"o preço considerado na venda é o preço
+    atual, devemos considerar o preço de venda como o do dia da venda"*. A venda
+    lançada à mão com a data de semana passada saía pelo preço de hoje — e a
+    receita daquele dia ficava com um número que o caixa nunca cobrou.
+
+    ⚠️ **A vigência é `[vigente_de, vigente_ate)`**: `gravar` fecha o antigo com
+    `vigente_ate = hoje` e abre o novo com `vigente_de = hoje`, então no dia da troca
+    vale o NOVO — o `>` estrito é o que impede os dois de valerem juntos.
+    ⚠️ **Data anterior ao primeiro preço conhecido cai no primeiro preço.** A casa
+    cadastrou os preços depois de já vender; sem isto, a venda de antes do cadastro
+    sairia de graça, que é pior do que pelo preço mais antigo que se tem.
+    ⚠️ O da LOJA antes do da casa, como no `vigente`.
+    """
+    parametros = {"p": id_produto, "u": id_unidade, "d": data}
+    cur.execute(
+        """SELECT preco_venda FROM produto_precos
+            WHERE id_produto = %(p)s AND (id_unidade = %(u)s OR id_unidade IS NULL)
+              AND vigente_de <= %(d)s AND (vigente_ate IS NULL OR vigente_ate > %(d)s)
+            ORDER BY id_unidade NULLS LAST, vigente_de DESC, id DESC LIMIT 1""",
+        parametros,
+    )
+    linha = cur.fetchone()
+    if linha:
+        return linha["preco_venda"]
+    cur.execute(
+        """SELECT preco_venda FROM produto_precos
+            WHERE id_produto = %(p)s AND (id_unidade = %(u)s OR id_unidade IS NULL)
+              AND vigente_de > %(d)s
+            ORDER BY id_unidade NULLS LAST, vigente_de, id LIMIT 1""",
+        parametros,
+    )
+    linha = cur.fetchone()
+    return linha["preco_venda"] if linha else None
+
+
 def gravar(cur, id_produto: int, preco, id_usuario: int,
            id_unidade: int | None = None) -> bool:
     """Fecha o preço vigente DAQUELE dono e abre outro. Devolve se mudou.

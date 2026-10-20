@@ -687,6 +687,131 @@ checar("com o documento da venda na linha",
 chamar("DELETE", f"/produtos/{_prod_hora}", token=token)
 
 
+
+print()
+print("O PRECO DO DIA DA VENDA, e nao o de hoje (20/10/2026)")
+# 🔑 **Pedido do dono:** *"ao lancar vendas a mao ou a planilha, podemos selecionar a
+# data. Mas o preco considerado na venda e o preco atual, devemos considerar o preco
+# de venda como o do dia da venda nao do dia do lancamento"*. O historico de
+# `produto_precos` responde; a suite monta um historico conhecido direto no banco.
+from database import get_cursor, init_pool  # noqa: E402
+
+init_pool()
+_suf = str(time.time_ns() // 100)[-5:]
+_dia = date.today()
+st, _r = chamar("POST", "/produtos", {
+    "nome": f"PRECO DO DIA {_suf}", "codigo": f"PDD{_suf}", "tipo": "REVENDA",
+    "um_estoque": "UN", "controla_estoque": False, "status": "ATIVO"}, token=token)
+_pdd = (_r or {}).get("id")
+checar("o produto do historico de preco nasce", st in (200, 201) and _pdd, (st, _r))
+with get_cursor() as cur:
+    cur.execute("DELETE FROM produto_precos WHERE id_produto = %s", (_pdd,))
+    cur.execute(
+        """INSERT INTO produto_precos (id_produto, id_unidade, preco_venda, vigente_de, vigente_ate)
+           VALUES (%s, NULL, 10, %s, %s), (%s, NULL, 15, %s, NULL)""",
+        (_pdd, _dia - timedelta(days=30), _dia - timedelta(days=10),
+         _pdd, _dia - timedelta(days=10)))
+
+
+def _preco(dias_atras):
+    q = f"/vendas/precos?data={(_dia - timedelta(days=dias_atras)).isoformat()}&ids={_pdd}"
+    st, r = chamar("GET", q, token=token)
+    return (r or {}).get("precos", {}).get(str(_pdd)) if st == 200 else (st, r)
+
+
+checar("ha 20 dias valia o preco de entao (10)", _preco(20) == 10, _preco(20))
+checar("hoje vale o de hoje (15)", _preco(0) == 15, _preco(0))
+# ⚠️ No dia da troca vale o NOVO: a vigencia e [de, ate).
+checar("no dia da troca vale o novo", _preco(10) == 15, _preco(10))
+checar("antes do primeiro preco conhecido, vale o primeiro", _preco(40) == 10, _preco(40))
+
+_quando = (_dia - timedelta(days=20)).isoformat()
+st, _r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": _quando, "documento": f"PDD-PLAN-{_suf}", "origem": "PLANILHA",
+    "itens": [{"codigo": f"PDD{_suf}", "descricao": "x", "quantidade": 2,
+               "valor_unitario": 0}]}]}, token=token)
+checar("a planilha sem valor e importada", st in (200, 201) and _r.get("importadas") == 1, (st, _r))
+with get_cursor() as cur:
+    cur.execute("""SELECT v.id, v.id_unidade, v.valor_total, i.valor_unitario
+                     FROM vendas v JOIN venda_itens i ON i.id_venda = v.id
+                    WHERE v.documento = %s""", (f"PDD-PLAN-{_suf}",))
+    _vp = dict(cur.fetchone() or {})
+checar("e a linha sem valor saiu pelo preco DO DIA DA VENDA (10), nao o de hoje",
+       float(_vp.get("valor_unitario") or 0) == 10 and float(_vp.get("valor_total") or 0) == 20, _vp)
+
+st, _r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": _quando, "documento": f"PDD-PDV-{_suf}", "origem": "PDV",
+    "itens": [{"id_produto": _pdd, "quantidade": 1, "valor_unitario": 0}]}]}, token=token)
+with get_cursor() as cur:
+    cur.execute("""SELECT i.valor_unitario FROM vendas v JOIN venda_itens i ON i.id_venda = v.id
+                    WHERE v.documento = %s""", (f"PDD-PDV-{_suf}",))
+    _vpdv = dict(cur.fetchone() or {})
+# ⚠️ O cupom do PDV traz o valor cobrado: zero ali e zero.
+checar("o cupom do PDV com zero continua zero", float(_vpdv.get("valor_unitario", -1)) == 0, _vpdv)
+
+print()
+print("ACRESCENTAR ITENS a uma venda ja lancada (20/10/2026)")
+# 🔑 **Pedido do dono:** *"permitir editar um documento, adicionar mais itens, desde
+# que o periodo que ele esteja ja nao foi fechado"*.
+st, _det = chamar("GET", f"/vendas/{_vp.get('id')}", token=token)
+checar("o detalhe diz que a venda da casa aceita item novo",
+       _det.get("pode_acrescentar") is True and _det.get("por_que_nao_acrescenta") is None, _det)
+st, _r = chamar("POST", f"/vendas/{_vp.get('id')}/itens", {
+    "itens": [{"id_produto": _pdd, "quantidade": 3, "valor_unitario": 0}]}, token=token)
+checar("acrescenta o item", st == 201 and _r.get("itens") == 1, (st, _r))
+checar("pelo preco do dia da venda, somando no total (20 + 3 x 10)",
+       _r.get("acrescimo") == 30 and _r.get("valor_total") == 50, _r)
+st, _det = chamar("GET", f"/vendas/{_vp.get('id')}", token=token)
+checar("e o detalhe mostra as duas linhas, com a receita somada",
+       len(_det.get("itens") or []) == 2 and abs(float(_det.get("receita") or 0) - 50) < 0.01,
+       (_det.get("itens"), _det.get("receita")))
+
+st, _vpdv_det = chamar("GET", "/vendas?busca=" + f"PDD-PDV-{_suf}", token=token)
+_id_pdv = next((v["id"] for v in (_vpdv_det or []) if v.get("documento") == f"PDD-PDV-{_suf}"), None)
+st, _r = chamar("POST", f"/vendas/{_id_pdv}/itens", {
+    "itens": [{"id_produto": _pdd, "quantidade": 1}]}, token=token)
+checar("a venda do PDV NAO aceita item (o cupom e do PDV)",
+       st == 409 and "PDV" in str(_r.get("detail")), (st, _r))
+
+# O periodo FECHADO: uma venda em 2001, com um fechamento de mentira so para ela.
+st, _r = chamar("POST", "/vendas/importar", {"vendas": [{
+    "data": "2001-01-15", "documento": f"PDD-2001-{_suf}", "origem": "MANUAL",
+    "itens": [{"id_produto": _pdd, "quantidade": 1, "valor_unitario": 5}]}]}, token=token)
+with get_cursor() as cur:
+    cur.execute("SELECT id, id_unidade FROM vendas WHERE documento = %s", (f"PDD-2001-{_suf}",))
+    _v2001 = dict(cur.fetchone() or {})
+    cur.execute("""INSERT INTO cmv_fechamentos (id_unidade, competencia, inicio, fim, status, ciclo)
+                   VALUES (%s, '2001-01-01', '2001-01-01', '2001-01-31', 'FECHADO', 'MENSAL')
+                   RETURNING id""",
+                (_v2001.get("id_unidade"),))
+    _fech = (cur.fetchone() or {}).get("id")
+try:
+    st, _det = chamar("GET", f"/vendas/{_v2001.get('id')}", token=token)
+    checar("no periodo FECHADO o detalhe diz que nao aceita, e por que",
+           _det.get("pode_acrescentar") is False
+           and "fechado" in str(_det.get("por_que_nao_acrescenta")), _det)
+    st, _r = chamar("POST", f"/vendas/{_v2001.get('id')}/itens", {
+        "itens": [{"id_produto": _pdd, "quantidade": 1, "valor_unitario": 5}]}, token=token)
+    checar("e o servidor recusa o item novo (409)",
+           st == 409 and "fechado" in str(_r.get("detail")), (st, _r))
+finally:
+    with get_cursor() as cur:
+        if _fech:
+            cur.execute("DELETE FROM cmv_fechamentos WHERE id = %s", (_fech,))
+
+st, _r = chamar("DELETE", f"/vendas/{_vp.get('id')}", token=token)
+st, _r = chamar("POST", f"/vendas/{_vp.get('id')}/itens", {
+    "itens": [{"id_produto": _pdd, "quantidade": 1}]}, token=token)
+checar("a venda CANCELADA nao aceita item", st == 409 and "cancelada" in str(_r.get("detail")),
+       (st, _r))
+for _doc in (f"PDD-PDV-{_suf}", f"PDD-2001-{_suf}"):
+    with get_cursor() as cur:
+        cur.execute("SELECT id FROM vendas WHERE documento = %s AND NOT cancelada", (_doc,))
+        _l = cur.fetchone()
+    if _l:
+        chamar("DELETE", f"/vendas/{_l['id']}", token=token)
+
+
 print(f"\n{ok} passaram, {len(falhas)} falharam")
 for f in falhas:
     print(f"  - {f}")

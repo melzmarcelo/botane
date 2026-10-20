@@ -144,6 +144,7 @@ st, motivos = chamar("GET", "/estoque/motivos-perda", token=token)
 chamar("POST", "/estoque/saidas", {
     "id_produto": insumo, "quantidade": 6, "tipo": "SAIDA_PERDA",
     "id_local": local["id"], "id_motivo_perda": motivos[0]["id"],
+    "observacao": "perda de teste",
 }, token=token)
 
 st, a = chamar("GET", f"/cmv/apuracao?{periodo}", token=token)

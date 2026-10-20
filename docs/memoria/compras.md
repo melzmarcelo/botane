@@ -376,3 +376,26 @@
   - No conector: `atualizar_nota_do_omie` e `atualizar_notas_abertas_do_omie`.
   - Cobertura: `smoke_nota_cancelada.py`, seção 6 (36 no total), e o botão no `verificar.mjs`.
     ⚠️ O navegador NÃO confirma a releitura: a base local tem centenas de notas abertas.
+- 🔑 **A nota EXCLUÍDA no Omie fica `NAO_ENCONTRADA`** (1.1.114, migração 126, pedido do dono:
+  *"notas … excluídas [no Omie]; caso já tenham sido importadas, ao atualizar, devem ficar com um
+  status de não encontrada no Omie. E ficar igual a cancelada, sem poder lançar"*).
+  - `cliente.nao_existe(texto)`: as frases do Omie para "não achei" (não cadastrado/encontrado,
+    não existem registros, Client-5113, excluído) — e o `ErroOmie.nao_existe`. ⚠️ **Credencial e
+    bloqueio NÃO contam** (`NAO_E_REGISTRO`: chave, aplicação, token, bloqueio, consumo
+    redundante, aguarde): confundir marcaria TODAS as abertas no dia em que a chave vencesse.
+  - Essa recusa não é mais repetida 4 vezes (era o caminho do HTTP 500) — insistir não traz a nota.
+  - `importador.marcar_nao_encontrada` (nunca a LANÇADA: o estoque dela está no razão). O botão da
+    nota responde 200 com `nao_encontrada`; a releitura em levas a põe em `nao_encontradas` e NÃO
+    conta como falha seguida. `atualizar_nota` a devolve a IMPORTADA se o Omie voltar a responder.
+  - Todo `<> 'CANCELADA'` das filas virou `NOT IN ('CANCELADA', 'NAO_ENCONTRADA')` (pendências,
+    início, alertas, reconciliar, vincular fornecedores, `calcular_nota`); o `lancar` recusa com 409.
+  - ⚠️ `status` era varchar(12); a 126 alarga para 20.
+  - Fixture: o recebimento `990000126` responde a falta (`_fixture` levanta o `faultstring`).
+  - Cobertura: `smoke_nota_atualizada.py` seção 5b.
+- 🔑 **Um botão só: "Sincronizar com o Omie"** (1.1.114, pedido do dono: *"unindo o buscar no Omie e
+  o atualizar do Omie"*). Busca as NOVAS (`integracao.omie`) e relê as abertas (`compras.notas`);
+  cada metade com a chave dela, e a frase junta as duas. ⚠️ Pergunta antes (é uma consulta por nota).
+- 🔑 **"Lançar as conciliadas" relê do Omie antes de abrir** (pedido do dono: *"para garantir a
+  igualdade"*). Sem `compras.notas` abre direto; releitura que falha abre o lote COM o aviso de que a
+  prévia pode estar velha.
+- ⚠️ O `verificar.mjs` agora CONFIRMA a sincronização (traz as novas e relê as abertas da base local).

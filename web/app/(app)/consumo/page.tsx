@@ -81,6 +81,8 @@ export default function PaginaConsumoPeriodos() {
   const [inicio, setInicio] = useState(primeiroDiaDoMes());
   const [fim, setFim] = useState(hoje());
   const [nome, setNome] = useState("");
+  // 🔑 Renomear o ciclo (pedido do dono, 20/10/2026), aberto ou fechado: só o nome.
+  const [renomeando, setRenomeando] = useState<{ id: number; nome: string } | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -122,6 +124,23 @@ export default function PaginaConsumoPeriodos() {
       await carregar();
     } catch (err) {
       aviso.erro(err instanceof Error ? err.message : "Não foi possível fechar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function renomear() {
+    if (!renomeando) return;
+    setOcupado(true);
+    try {
+      const r = await api.put<{ message: string }>(`/consumo/periodos/${renomeando.id}`, {
+        nome: renomeando.nome.trim() || null,
+      });
+      aviso.sucesso(r.message);
+      setRenomeando(null);
+      await carregar();
+    } catch (err) {
+      aviso.erro(err instanceof Error ? err.message : "Não foi possível renomear");
     } finally {
       setOcupado(false);
     }
@@ -349,9 +368,36 @@ export default function PaginaConsumoPeriodos() {
                 {(dados?.periodos ?? []).map((p) => (
                   <tr key={p.id}>
                     <td className="whitespace-nowrap">
-                      <Link href={`/consumo/${p.id}`} className="link-registro">
-                        {p.nome || `${dataBr(p.inicio)} a ${dataBr(p.fim)}`}
-                      </Link>
+                      {renomeando?.id === p.id ? (
+                        <form
+                          className="flex flex-wrap items-center gap-2"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void renomear();
+                          }}
+                        >
+                          <input
+                            id="periodo-nome"
+                            className="campo w-[220px]"
+                            maxLength={60}
+                            autoFocus
+                            placeholder="as datas, se vazio"
+                            value={renomeando.nome}
+                            onChange={(e) => setRenomeando({ id: p.id, nome: e.target.value })}
+                          />
+                          <button id="periodo-nome-salvar" className="btn btn-primario" type="submit"
+                                  aria-busy={ocupado} disabled={ocupado}>
+                            Salvar
+                          </button>
+                          <button type="button" className="link-acao" onClick={() => setRenomeando(null)}>
+                            cancelar
+                          </button>
+                        </form>
+                      ) : (
+                        <Link href={`/consumo/${p.id}`} className="link-registro">
+                          {p.nome || `${dataBr(p.inicio)} a ${dataBr(p.fim)}`}
+                        </Link>
+                      )}
                       <span className="block text-[12.5px] text-suave">
                         {dataBr(p.inicio)} a {dataBr(p.fim)}
                       </span>
@@ -376,7 +422,17 @@ export default function PaginaConsumoPeriodos() {
                     <td className="num font-semibold tabular-nums">
                       {p.status === "FECHADO" ? reais(p.total) : "—"}
                     </td>
-                    <td className="text-right">
+                    <td className="whitespace-nowrap text-right">
+                      {gerir && renomeando?.id !== p.id && (
+                        <button
+                          className="link-acao mr-3"
+                          data-renomear-periodo={p.id}
+                          onClick={() => setRenomeando({ id: p.id, nome: p.nome ?? "" })}
+                          title="Muda só o nome; as datas e o que foi cobrado ficam"
+                        >
+                          renomear
+                        </button>
+                      )}
                       {/* ⚠️ Só o ÚLTIMO fechado se reabre: reabrir um antigo
                           devolveria para "em aberto" vendas que os ciclos
                           seguintes já cobraram, e a mesma dívida seria cobrada

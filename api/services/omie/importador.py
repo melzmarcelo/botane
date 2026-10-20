@@ -393,7 +393,7 @@ def calcular_nota(cur, id_nota: int) -> dict:
     # IMPORTADA/CONCILIADA — de volta à fila de onde o cancelamento a tirou.
     cur.execute(
         """UPDATE notas_entrada SET status = %s
-            WHERE id = %s AND status NOT IN ('LANCADA', 'CANCELADA')""",
+            WHERE id = %s AND status NOT IN ('LANCADA', 'CANCELADA', 'NAO_ENCONTRADA')""",
         ("IMPORTADA" if pendentes else "CONCILIADA", id_nota),
     )
     return {"itens": len(itens), "pendentes": pendentes}
@@ -489,7 +489,7 @@ def vincular_fornecedores(cur, id_unidade: int) -> dict:
               JOIN notas_entrada n ON n.id = ni.id_nota
              WHERE n.id_unidade = %s
                AND ni.id_produto IS NOT NULL AND n.id_fornecedor IS NOT NULL
-               AND n.status <> 'CANCELADA'
+               AND n.status NOT IN ('CANCELADA', 'NAO_ENCONTRADA')
              GROUP BY ni.id_produto, n.id_fornecedor
         )
         INSERT INTO produto_fornecedor (id_produto, id_fornecedor, codigo_no_fornecedor,
@@ -536,7 +536,8 @@ def reconciliar(cur, id_unidade: int, id_nota: int | None = None,
                    i.ncm, i.descricao_fornecedor, n.id_fornecedor
               FROM nota_itens i
               JOIN notas_entrada n ON n.id = i.id_nota
-             WHERE n.id_unidade = %s AND n.status NOT IN ('LANCADA', 'CANCELADA')
+             WHERE n.id_unidade = %s
+               AND n.status NOT IN ('LANCADA', 'CANCELADA', 'NAO_ENCONTRADA')
                AND i.id_produto IS NULL AND NOT i.ignorado {onde}
              ORDER BY i.id_nota, i.seq""",
         parametros,
@@ -609,6 +610,11 @@ def lancar_nota(cur, id_nota: int, id_usuario: int, id_local: int | None = None,
             status_code=409,
             detail=("Esta nota foi cancelada no Omie e não entra no estoque. Se o "
                     "cancelamento foi desfeito lá, use 'atualizar do Omie'."))
+    if nota["status"] == "NAO_ENCONTRADA":
+        raise HTTPException(
+            status_code=409,
+            detail=("Esta nota não foi encontrada no Omie — foi excluída lá — e não entra "
+                    "no estoque. Se ela voltar a existir, use 'atualizar do Omie'."))
 
     calcular_nota(cur, id_nota)
 
@@ -1026,9 +1032,10 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
     # cancelada lá e continuava IMPORTADA: "atualizar do Omie" reescrevia os itens
     # e a devolvia à fila. ⚠️ E o caminho de volta existe: cancelamento desfeito no
     # Omie tira a marca daqui, senão a nota ficaria presa para sempre.
+    # ⚠️ A NÃO ENCONTRADA que o Omie voltou a responder volta também (20/10/2026).
     if nota.get("cancelada"):
         cur.execute("UPDATE notas_entrada SET status = 'CANCELADA' WHERE id = %s", (id_nota,))
-    elif atual["status"] == "CANCELADA":
+    elif atual["status"] in ("CANCELADA", "NAO_ENCONTRADA"):
         cur.execute("UPDATE notas_entrada SET status = 'IMPORTADA' WHERE id = %s", (id_nota,))
     calcular_nota(cur, id_nota)
 
@@ -1042,6 +1049,24 @@ def atualizar_nota(cur, id_nota: int, nota: dict, bruto: dict | None = None) -> 
         "valor_antes": float(antes.get("valor_total") or 0),
         "valor_depois": float(depois["valor_total"] or 0),
     }
+
+
+def marcar_nao_encontrada(cur, id_nota: int) -> bool:
+    """A nota que o Omie diz não ter mais: sai da fila, como a cancelada.
+
+    🔑 **Pedido do dono (20/10/2026):** *"temos situação de notas lançadas [no Omie] e
+    por algum motivo elas foram excluídas; caso elas já tenham sido importadas, ao
+    atualizar, elas devem ficar com um status de não encontrada no Omie. E ficar igual
+    a cancelada, sem poder lançar."*
+    ⚠️ **A LANÇADA fica como está.** O estoque dela já está no razão, que é append-only;
+    trocar o status esconderia uma entrada que aconteceu. Devolve se marcou.
+    """
+    cur.execute(
+        """UPDATE notas_entrada SET status = 'NAO_ENCONTRADA'
+            WHERE id = %s AND status NOT IN ('LANCADA', 'NAO_ENCONTRADA')""",
+        (id_nota,),
+    )
+    return cur.rowcount > 0
 
 
 def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 30,
@@ -1078,6 +1103,7 @@ def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 
     notas = [dict(r) for r in cur.fetchall()]
 
     atualizadas, canceladas, iguais, falhas, seguidas = [], [], 0, [], 0
+    nao_encontradas: list[dict] = []
     ultima = None
     for n in notas:
         ultima = n["id"]
@@ -1091,6 +1117,13 @@ def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 
             seguidas = 0
         except Exception as e:  # noqa: BLE001 — uma nota não derruba a leva
             cur.execute("ROLLBACK TO SAVEPOINT atualizar_aberta")
+            # 🔑 "Não existe lá" não é falha: é a resposta (20/10/2026). A nota sai da
+            # fila, e a sequência de falhas não conta — o Omie respondeu direito.
+            if getattr(e, "nao_existe", False):
+                marcar_nao_encontrada(cur, n["id"])
+                nao_encontradas.append(rotulo)
+                seguidas = 0
+                continue
             motivo = (getattr(e, "mensagem", None) or getattr(e, "detail", None)
                       or f"{type(e).__name__}: {e}")
             falhas.append(rotulo | {"motivo": str(motivo)[:200]})
@@ -1116,8 +1149,10 @@ def atualizar_abertas(cur, id_unidade: int, cliente: ClienteOmie, limite: int = 
         restantes = cur.fetchone()["n"]
     parou = seguidas >= FALHAS_SEGUIDAS
     return {
-        "conferidas": len(atualizadas) + len(canceladas) + iguais + len(falhas),
+        "conferidas": (len(atualizadas) + len(canceladas) + iguais + len(falhas)
+                       + len(nao_encontradas)),
         "atualizadas": atualizadas, "canceladas": canceladas, "iguais": iguais,
+        "nao_encontradas": nao_encontradas,
         "falhas": falhas, "restantes": restantes,
         # De onde a leva seguinte continua. Nulo = acabou, ou parou por falha.
         "proximo": ultima if (restantes and not parou) else None,

@@ -208,5 +208,9 @@
         }
       }
     ]
+  },
+  "990000126": {
+    "faultcode": "SOAP-ENV:Client-5113",
+    "faultstring": "ERROR: Não existem registros para a página [1]!"
   }
 }

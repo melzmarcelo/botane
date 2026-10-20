@@ -1498,17 +1498,25 @@
       <h3>Lançar várias de uma vez, e o que o Omie diz depois</h3>
       <p>
         Na lista de notas, <strong>Lançar as conciliadas</strong> lança de uma vez as que já estão
-        prontas. Antes, a prévia faz o lançamento de verdade e o desfaz, para mostrar o que entra,
+        prontas. Antes de abrir a janela ele <strong>relê do Omie</strong> as notas abertas, para a
+        prévia sair igual ao que está lá. Então a prévia faz o lançamento de verdade e o desfaz, para mostrar o que entra,
         o que fica de fora e por quê — nota com conversão diferente da do cadastro fica para a tela
         dela —, quais cadastros seguram mais notas, e a nota com data anterior a movimentos que já
         existem (que vai pedir reprocessar o produto).
       </p>
       <p>
-        <strong>Atualizar do Omie</strong>, na mesma lista, relê todas as notas ainda não lançadas,
-        em levas — o mesmo que o botão de dentro da nota fazia uma a uma. A nota que o Omie
+        <strong>Sincronizar com o Omie</strong>, na mesma lista, faz as duas coisas de uma vez:
+        traz as notas <strong>novas</strong> e relê todas as ainda não lançadas, em levas — o mesmo
+        que o botão de dentro da nota faz uma a uma. A nota que o Omie
         <strong>cancelou</strong> vira <em>cancelada</em> aqui (ao importar, ao atualizar e na busca
         automática): sai da fila e não se lança. Se já tinha sido lançada, não é estornada sozinha
         — a busca avisa, e o estorno é de quem decide.
+      </p>
+      <p>
+        A nota que foi <strong>excluída no Omie</strong> depois de importada fica
+        <em>não encontrada no Omie</em>: igual à cancelada, sai da fila e não se lança. Se um dia
+        ela voltar a existir lá, “Atualizar do Omie” a traz de volta. A já lançada fica como está —
+        o estoque dela está no razão.
       </p>
 
       <h3>O custo de aquisição não é o valor da nota</h3>
@@ -1885,7 +1893,7 @@
         <tbody>
           <tr><td><strong>Entrada</strong></td><td>Compra sem nota, sobra, acerto</td><td>Soma quantidade e recalcula o médio</td></tr>
           <tr><td><strong>Saída</strong></td><td>Consumo interno, cortesia</td><td>Baixa pelo custo médio do momento</td></tr>
-          <tr><td><strong>Perda</strong></td><td>Quebra, validade, erro de preparo</td><td>Baixa com <em>motivo obrigatório</em></td></tr>
+          <tr><td><strong>Perda</strong></td><td>Quebra, validade, erro de preparo, descarte</td><td>Baixa com <em>motivo e observação obrigatórios</em> — o motivo é a lista; a observação conta o que aconteceu</td></tr>
           <tr><td><strong>Transferência</strong></td><td>Mover entre locais</td><td>Duas linhas: sai de um, entra no outro</td></tr>
           <tr><td><strong>Ajuste de estoque</strong></td><td>“Tem 12, o sistema diz 15” fora de um inventário</td><td>Informa-se o que <em>realmente</em> tem; o sistema lança a diferença</td></tr>
           <tr><td><strong>Ajuste de custo</strong></td><td>O custo médio está errado</td><td>Informa-se quanto <em>realmente</em> custa; muda o valor, não a quantidade</td></tr>
@@ -2218,6 +2226,12 @@
       <h3>A venda leva a hora, o documento e o preço</h3>
       <ul>
         <li>
+          Lançada à mão ou pela planilha, a venda sai pelo <strong>preço do dia da venda</strong>,
+          não o de hoje: escolher o produto preenche o preço que valia na data escolhida, e mudar
+          a data troca o preço que o sistema pôs (o digitado fica). Linha da planilha sem valor
+          também sai pelo preço daquele dia.
+        </li>
+        <li>
           A baixa no razão leva a <strong>hora do cupom</strong>, e o movimento mostra o número
           do documento — quem investiga um saldo acha a venda que o mexeu.
         </li>
@@ -2230,6 +2244,16 @@
           <a href="#trilha">De onde vem cada número</a>).
         </li>
       </ul>
+
+      <h3>Acrescentar itens a uma venda</h3>
+      <p>
+        A venda lançada à mão ou pela planilha aceita <strong>itens novos</strong> no mesmo
+        documento — o botão <strong>Acrescentar itens</strong>, na tela da venda. Eles custam,
+        baixam o estoque e seguem a política da pessoa como os outros. Só enquanto o período do
+        CMV daquela data não foi fechado (e, se for consumo de pessoa, enquanto o ciclo não foi
+        cobrado); a tela diz por que não, quando não dá. Tirar um item é cancelar a venda e lançar
+        de novo — o que já saiu da prateleira está no razão. A venda do PDV se corrige no PDV.
+      </p>
 
       <h3>Cancelar, e a venda que o banco recusa</h3>
       <p>
@@ -2767,6 +2791,11 @@
         “1284532,1” não. O PDF tem teto de linhas; acima dele a resposta manda usar a planilha,
         que não tem teto.
       </p>
+      <p>
+        O <strong>cadastro de produtos</strong> e o <strong>de pessoas</strong> saem na planilha com
+        <strong>todos os campos</strong> do cadastro; no PDF, só os principais, para caber na folha.
+        O custo de referência só vai para quem enxerga custo.
+      </p>
       <div class="regra">
         <p class="rotulo">Todo PDF sai em papel timbrado, e com o carimbo de quem emitiu</p>
         <p>
@@ -2835,6 +2864,12 @@
         continua sendo fornecedor (é uma marca no cadastro, e só quem a tem aparece na nota e
         no produto); o funcionário e o sócio entram no mesmo lugar, sem a marca.
       </p>
+      <p>
+        A lista filtra por <strong>tipo</strong> — fornecedores ou não fornecedores — e o botão
+        <strong>Baixar</strong> leva o <strong>cadastro de pessoas</strong> com os mesmos filtros:
+        tipo, situação e busca. A planilha leva todos os campos (contato, entrega, política do
+        cupom, produtos e última compra); o PDF, os principais.
+      </p>
 
       <h3>A política de cupom da pessoa</h3>
       <p>
@@ -2885,6 +2920,7 @@
         <li>Um ciclo aberto por loja. O fechamento leva tudo o que está em aberto <em>até</em> a data final — inclusive o que ficou de antes, e a tela mostra isso antes do clique.</li>
         <li>O recibo é congelado: o que se cobrou naquele dia não muda se alguém corrigir uma venda antiga.</li>
         <li>Só o último ciclo fechado se reabre. O ciclo aberto com datas erradas se exclui (nada foi carimbado nele).</li>
+        <li>O <strong>nome</strong> do ciclo se muda a qualquer hora, aberto ou fechado (“renomear”, na lista) — só o nome: as datas e o que foi cobrado ficam.</li>
       </ul>
 
       <h3>Quem consumiu o quê</h3>
@@ -4045,6 +4081,7 @@
             <tr><td class="mono">15/10</td><td>Pedido pela mesa e chamar garçom; <strong>Atenção × Vendas</strong>; <strong>testes A/B</strong>; o cadastro de catálogos refeito em abas; <strong>vários Cardápios Vivos</strong> por loja (o principal e os do link)</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
             <tr><td class="mono">16/10</td><td>Site e feed num endereço só, com a mesma cara e o mesmo idioma; modo <strong>só consulta</strong>; <strong>cartões</strong> entre os pratos e aberturas de seção; <strong>anúncios</strong> com relatório</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">17/10</td><td>Excluir seção leva as fotos e os vídeos junto; <strong>arquivos sem dono</strong> na Empresa; a medição diz de qual Cardápio Vivo veio; anúncio <strong>com problema</strong> diz por quê</td><td><a href="#cardapio-vivo">17</a>, <a href="#portal">16</a></td></tr>
+            <tr><td class="mono">20/10</td><td>Venda pelo <strong>preço do dia da venda</strong> e <strong>acrescentar itens</strong>; perda com <strong>Descarte</strong> e observação obrigatória; Pessoas por tipo e o <strong>relatório de pessoas</strong>; o cadastro de produtos inteiro na planilha; <strong>Sincronizar com o Omie</strong>, a releitura antes do lote e a nota <strong>não encontrada no Omie</strong>; renomear o ciclo de consumo</td><td><a href="#venda">8</a>, <a href="#ajustes">6</a>, <a href="#pessoas">14</a>, <a href="#exportar">13</a>, <a href="#nota">3</a></td></tr>
             <tr><td class="mono">20/10</td><td><strong>Excluir catálogo</strong> que já esteve no ar (com o nome digitado); <strong>apagar a medição de um período</strong>; o Claude também desvincula código e homologa ficha</td><td><a href="#portal">16</a>, <a href="#cardapio-vivo">17</a>, <a href="#claude">20</a></td></tr>
             <tr><td class="mono">20/10</td><td>Anúncios: o <strong>ritmo que aprende</strong>, as seções em que combina, o <strong>grupo de controle</strong> com o efeito dos anúncios e as <strong>variações do texto</strong> com vencedora</td><td><a href="#cardapio-vivo">17</a></td></tr>
             <tr><td class="mono">20/10</td><td>A atenção dos cartões e das <strong>aberturas de seção</strong> no editor do catálogo, por 30 dias, 90 dias ou 12 meses, com o resumo diário além da retenção</td><td><a href="#cardapio-vivo">17</a></td></tr>
@@ -4058,7 +4095,7 @@
 
 <footer>
   <p style="margin:0">
-    Manual de referência do sistema, atualizado na versão 1.1.113 (20/10/2026). A
+    Manual de referência do sistema, atualizado na versão 1.1.114 (20/10/2026). A
     versão do sistema está no rodapé de cada tela. Para o passo a passo por função — o que a
     cozinha faz, o que o conferente faz —, veja o <strong>manual da equipe</strong>.
   </p>

@@ -238,6 +238,71 @@ st, so_tipo, _ = chamar("GET", "/exportar/produtos.csv?tipos_produto=UTENSILIO",
 checar("o cadastro filtrado por tipo não traz o insumo desta rodada",
        nome not in so_tipo.decode("utf-8"))
 
+# 🔑 (20/10/2026, pedido do dono: "listar todos os campos do cadastro, principalmente
+# na planilha") A planilha leva o cadastro inteiro; o PDF, os principais.
+st, cad, _ = chamar("GET", f"/exportar/produtos.csv?tipos_produto=INSUMO", token=token, bruto=True)
+cad = cad.decode("utf-8")
+_cabecalho = next((l for l in cad.splitlines() if l.startswith("Código;")), "")
+checar("a planilha do cadastro traz todos os campos (nome curto, locais, Omie, PDV, "
+       "fornecedores, cardápio, datas)",
+       all(c in _cabecalho for c in ("Nome curto", "Local padrão", "Local de venda",
+                                     "Controla estoque", "Código no Omie", "Código no PDV",
+                                     "Fornecedores", "Nome no cardápio", "Observação",
+                                     "Cadastrado em")), _cabecalho)
+checar("e o custo de referência, para quem vê custo", "Custo de referência" in _cabecalho,
+       _cabecalho)
+# ⚠️ O PDF tem teto de linhas: o recorte é o primeiro tipo que cabe nele.
+_tipo_pdf = next((t for t in ("KIT", "UTENSILIO", "MATERIAL_LIMPEZA", "EMBALAGEM", "PRODUZIDO")
+                  if (chamar("GET", f"/exportar/produtos/previa?tipos_produto={t}",
+                             token=token)[1] or {}).get("cabe_no_pdf")), "KIT")
+st, pdf_cad, _ = chamar("GET", f"/exportar/produtos.pdf?tipos_produto={_tipo_pdf}",
+                        token=token, bruto=True)
+checar("o PDF do cadastro continua saindo", st == 200 and pdf_cad[:4] == b"%PDF", (st, _tipo_pdf))
+
+print("4b. o relatório de pessoas")
+# 🔑 (20/10/2026, pedido do dono: "baixar um relatório de pessoas, com filtros padrões")
+checar("o catálogo tem o relatório de pessoas, com tipo, situação e busca",
+       "pessoas" in chaves
+       and set(filtros_de("pessoas")) == {"tipo_pessoa", "situacao_pessoa", "busca_pessoa"},
+       filtros_de("pessoas") if "pessoas" in chaves else sorted(chaves))
+st, _forn = chamar("POST", "/fornecedores", {"nome": f"Exp Pessoa Fornece {marca}",
+                                             "fornecedor": True}, token=token)
+st, _func = chamar("POST", "/fornecedores", {"nome": f"Exp Pessoa Equipe {marca}",
+                                             "fornecedor": False, "cupom_base": "CUSTO"},
+                   token=token)
+try:
+    st, pes, cab = chamar("GET", f"/exportar/pessoas.csv?busca_pessoa={marca}",
+                          token=token, bruto=True)
+    pes = pes.decode("utf-8")
+    checar("a planilha de pessoas sai, com o nome do arquivo certo",
+           st == 200 and "pessoas" in exportado_do_nome(cab.get("content-disposition", "")),
+           (st, cab.get("content-disposition")))
+    checar("e a busca traz as duas desta rodada",
+           f"EXP PESSOA FORNECE {marca}" in pes.upper() and f"EXP PESSOA EQUIPE {marca}" in pes.upper(),
+           pes[:300])
+    checar("com tipo e política do cupom na linha",
+           "não fornecedor" in pes and "pelo custo" in pes, pes[-400:])
+    st, so_outras, _ = chamar(
+        "GET", f"/exportar/pessoas.csv?busca_pessoa={marca}&tipo_pessoa=outra",
+        token=token, bruto=True)
+    so_outras = so_outras.decode("utf-8").upper()
+    checar("o filtro 'não fornecedores' deixa só a da equipe",
+           f"EXP PESSOA EQUIPE {marca}" in so_outras
+           and f"EXP PESSOA FORNECE {marca}" not in so_outras, so_outras[:300])
+    chamar("DELETE", f"/fornecedores/{_forn.get('id')}", token=token)
+    st, so_ativas, _ = chamar(
+        "GET", f"/exportar/pessoas.csv?busca_pessoa={marca}&situacao_pessoa=ativas",
+        token=token, bruto=True)
+    checar("e 'ativas' deixa de fora a que foi desativada",
+           f"EXP PESSOA FORNECE {marca}" not in so_ativas.decode("utf-8").upper())
+    st, pdf_pes, _ = chamar("GET", f"/exportar/pessoas.pdf?busca_pessoa={marca}",
+                            token=token, bruto=True)
+    checar("o PDF de pessoas sai", st == 200 and pdf_pes[:4] == b"%PDF", st)
+finally:
+    for _p in (_forn, _func):
+        if (_p or {}).get("id"):
+            chamar("DELETE", f"/fornecedores/{_p['id']}", token=token)
+
 
 print("5. o produto do razão deixou de ser ignorado")
 # ⚠️ Era o defeito que o próprio endpoint dizia existir para evitar: a tela

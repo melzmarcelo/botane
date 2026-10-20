@@ -454,7 +454,8 @@ def pendencias(ctx: Contexto = Depends(requer_permissao("compras.notas"))) -> li
                  FROM nota_itens i
                  JOIN notas_entrada n ON n.id = i.id_nota
                  LEFT JOIN produtos s ON s.id = i.sugestao_produto
-                WHERE i.id_produto IS NULL AND NOT i.ignorado AND n.status <> 'CANCELADA'
+                WHERE i.id_produto IS NULL AND NOT i.ignorado
+                  AND n.status NOT IN ('CANCELADA', 'NAO_ENCONTRADA')
                   -- A fila é a da loja do seletor, como o alerta que aponta para ela.
                   AND n.id_unidade = %s
                 ORDER BY n.data_emissao DESC NULLS LAST, i.seq
@@ -721,6 +722,9 @@ def _item_de_nota_aberta(cur, id_item: int) -> dict:
         )
     if item["status"] == "CANCELADA":
         raise HTTPException(status_code=409, detail="Esta nota está cancelada.")
+    if item["status"] == "NAO_ENCONTRADA":
+        raise HTTPException(status_code=409,
+                            detail="Esta nota não foi encontrada no Omie (foi excluída lá).")
     return item
 
 
@@ -966,6 +970,7 @@ def atualizar_abertas_do_omie(
                 depois={"conferidas": r["conferidas"],
                         "atualizadas": [n["id"] for n in r["atualizadas"]],
                         "canceladas": [n["id"] for n in r["canceladas"]],
+                        "nao_encontradas": [n["id"] for n in r["nao_encontradas"]],
                         "falhas": len(r["falhas"])},
                 id_unidade=id_unidade)
 
@@ -974,6 +979,8 @@ def atualizar_abertas_do_omie(
         partes.append(f"{len(r['atualizadas'])} com valor diferente")
     if r["canceladas"]:
         partes.append(f"{len(r['canceladas'])} cancelada(s) lá")
+    if r["nao_encontradas"]:
+        partes.append(f"{len(r['nao_encontradas'])} não encontrada(s) lá (excluídas)")
     if r["falhas"]:
         partes.append(f"{len(r['falhas'])} não abriram")
     return r | {"message": (
@@ -1051,6 +1058,19 @@ def atualizar_do_omie(id_nota: int,
             detalhe = cliente.chamar(importador.MODULO_NOTAS, importador.ITENS_DA_NOTA,
                                      {"nIdReceb": int(nota["id_omie"])})
         except ErroOmie as e:
+            # 🔑 **Excluída no Omie** (pedido do dono, 20/10/2026): a nota fica NÃO
+            # ENCONTRADA — fora da fila e sem lançar, como a cancelada. ⚠️ Volta sozinha
+            # se um dia o Omie a responder de novo (`atualizar_nota`).
+            if e.nao_existe:
+                importador.marcar_nao_encontrada(cur, id_nota)
+                auditoria.registrar(cur, ctx.id_usuario, "nota", id_nota, "nao_encontrada_no_omie",
+                                    antes={"status": nota["status"]},
+                                    depois={"status": "NAO_ENCONTRADA", "omie": e.mensagem[:200]},
+                                    id_unidade=id_unidade)
+                return {"id": id_nota, "nao_encontrada": True, "cancelada": False, "mudou": True,
+                        "message": ("Esta nota não foi encontrada no Omie — foi excluída lá. "
+                                    "Ficou como NÃO ENCONTRADA: saiu da fila de conciliação e "
+                                    "não entra no estoque.")}
             raise HTTPException(status_code=502, detail=f"Omie: {e.mensagem}")
         except (TypeError, ValueError):
             raise HTTPException(
